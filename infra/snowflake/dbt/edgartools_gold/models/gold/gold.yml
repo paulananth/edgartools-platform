@@ -1,0 +1,87 @@
+version: 2
+
+models:
+  - name: company
+    description: Business-facing company mirror published as the `EDGARTOOLS_GOLD.COMPANY` dynamic table.
+    columns:
+      - name: company_key
+        tests:
+          - not_null
+      - name: cik
+        tests:
+          - not_null
+  - name: filing_activity
+    description: Business-facing filing activity mirror published as the `EDGARTOOLS_GOLD.FILING_ACTIVITY` dynamic table.
+    columns:
+      - name: fact_key
+        tests:
+          - not_null
+      - name: accession_number
+        tests:
+          - not_null
+  - name: ownership_activity
+    description: Business-facing ownership activity mirror published as the `EDGARTOOLS_GOLD.OWNERSHIP_ACTIVITY` dynamic table.
+    columns:
+      - name: fact_key
+        tests:
+          - not_null
+      - name: accession_number
+        tests:
+          - not_null
+  - name: ownership_holdings
+    description: Business-facing ownership holdings mirror published as the `EDGARTOOLS_GOLD.OWNERSHIP_HOLDINGS` dynamic table.
+    columns:
+      - name: fact_key
+        tests:
+          - not_null
+      - name: accession_number
+        tests:
+          - not_null
+  - name: adviser_offices
+    description: Business-facing adviser offices mirror published as the `EDGARTOOLS_GOLD.ADVISER_OFFICES` dynamic table.
+    columns:
+      - name: fact_key
+        tests:
+          - not_null
+      - name: accession_number
+        tests:
+          - not_null
+  - name: adviser_disclosures
+    description: Business-facing adviser disclosures mirror published as the `EDGARTOOLS_GOLD.ADVISER_DISCLOSURES` dynamic table.
+    columns:
+      - name: fact_key
+        tests:
+          - not_null
+      - name: accession_number
+        tests:
+          - not_null
+  - name: private_funds
+    description: Business-facing private funds mirror published as the `EDGARTOOLS_GOLD.PRIVATE_FUNDS` dynamic table.
+    columns:
+      - name: fact_key
+        tests:
+          - not_null
+      - name: accession_number
+        tests:
+          - not_null
+  - name: filing_detail
+    description: Business-facing filing detail mirror published as the `EDGARTOOLS_GOLD.FILING_DETAIL` dynamic table.
+    columns:
+      - name: filing_key
+        tests:
+          - not_null
+      - name: accession_number
+        tests:
+          - not_null
+  - name: edgartools_gold_status
+    description: Business-facing freshness view for the Snowflake gold mirror.
+    columns:
+      - name: environment
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - not_null
+      - name: updated_at
+        tests:
+          - not_null

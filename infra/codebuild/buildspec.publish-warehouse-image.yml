@@ -1,0 +1,33 @@
+version: 0.2
+
+env:
+  shell: bash
+
+phases:
+  install:
+    commands:
+      - docker version
+      - docker buildx version
+  pre_build:
+    commands:
+      - export AWS_REGION="${AWS_REGION:-${AWS_DEFAULT_REGION}}"
+      - export IMAGE_TAG="${IMAGE_TAG:-${CODEBUILD_RESOLVED_SOURCE_VERSION:0:12}}"
+      - export OUTPUT_FILE="${OUTPUT_FILE:-image-ref.txt}"
+      - export PUBLISH_LOG="${PUBLISH_LOG:-publish.log}"
+      - test -n "${IMAGE_REPOSITORY_NAME}"
+      - test -n "${AWS_REGION}"
+  build:
+    commands:
+      - docker buildx ls | tee buildx-ls.txt
+      - set -o pipefail; bash infra/scripts/publish-warehouse-image.sh --aws-region "${AWS_REGION}" --ecr-repository "${IMAGE_REPOSITORY_NAME}" --image-tag "${IMAGE_TAG}" --mode linux --output-file "${OUTPUT_FILE}" 2>&1 | tee "${PUBLISH_LOG}"
+  post_build:
+    commands:
+      - test -s "${OUTPUT_FILE}"
+      - cat "${OUTPUT_FILE}"
+
+artifacts:
+  files:
+    - image-ref.txt
+    - publish.log
+    - buildx-ls.txt
+  discard-paths: yes

@@ -1,0 +1,13 @@
+-- 05_refresher_keypair.sql
+--
+-- Deprecated bootstrap step retained as a compatibility marker.
+--
+-- The Snowflake mirror no longer relies on an AWS-managed Snowflake sync task or
+-- RSA key-pair authentication from ECS. Ingestion now happens through:
+--   1. AWS writing Parquet export packages to S3
+--   2. AWS writing one final run manifest under the manifests/ prefix
+--   3. Snowpipe auto-ingesting the run manifest via SNS notification
+--   4. A Snowflake task calling EDGARTOOLS_SOURCE.LOAD_EXPORTS_FOR_RUN(...)
+--   5. The Snowflake refresh wrapper advancing status for dbt-owned gold models
+--
+-- No action is required in this file for the Snowflake-native pull architecture.

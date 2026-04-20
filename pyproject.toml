@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling>=1.26.3"]
+build-backend = "hatchling.build"
+
+[project]
+name = "edgartools-platform"
+version = "0.1.0"
+description = "Data platform for SEC EDGAR: warehouse ETL, Snowflake dbt gold layer, dashboards"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+  { name = "Paul Ananth", email = "thepaulananth@gmail.com" },
+]
+dependencies = [
+    "edgartools>=5.29.0",
+    "pyarrow>=17.0.0",
+    "duckdb>=1.0.0",
+    "fsspec>=2023.1.0",
+    "pytz>=2024.1",
+    "zstandard>=0.20.0",
+    "httpx>=0.25.0",
+]
+
+[project.optional-dependencies]
+s3 = [
+    "fsspec>=2023.1.0",
+    "s3fs>=2023.1.0",
+]
+snowflake = [
+    "snowflake-connector-python>=3.7",
+]
+dashboard = [
+    "streamlit>=1.32",
+    "plotly>=5.20",
+    "pandas>=2.1",
+    "snowflake-connector-python>=3.7",
+]
+
+[project.scripts]
+edgar-warehouse = "edgar_warehouse.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/paulananth/edgartools-platform"
+Source = "https://github.com/paulananth/edgartools-platform"
+
+[tool.hatch.build]
+include = [
+  "edgar_warehouse/**/*.py",
+]

@@ -1,0 +1,27 @@
+version: 2
+
+sources:
+  - name: edgartools_source
+    database: "{{ env_var('DBT_SNOWFLAKE_DATABASE') }}"
+    schema: EDGARTOOLS_SOURCE
+    tables:
+      - name: COMPANY
+        description: Current company source table loaded natively by Snowflake from the AWS export manifest.
+      - name: FILING_ACTIVITY
+        description: Current filing-activity source table loaded natively by Snowflake from the AWS export manifest.
+      - name: OWNERSHIP_ACTIVITY
+        description: Current ownership-activity source table loaded natively by Snowflake from the AWS export manifest.
+      - name: OWNERSHIP_HOLDINGS
+        description: Current ownership-holdings source table loaded natively by Snowflake from the AWS export manifest.
+      - name: ADVISER_OFFICES
+        description: Current adviser-office source table loaded natively by Snowflake from the AWS export manifest.
+      - name: ADVISER_DISCLOSURES
+        description: Current adviser-disclosure source table loaded natively by Snowflake from the AWS export manifest.
+      - name: PRIVATE_FUNDS
+        description: Current private-fund source table loaded natively by Snowflake from the AWS export manifest.
+      - name: FILING_DETAIL
+        description: Current filing-detail source table loaded natively by Snowflake from the AWS export manifest.
+      - name: TICKER_REFERENCE
+        description: CIK-to-ticker reference table loaded natively by Snowflake from the seed-universe export manifest.
+      - name: SNOWFLAKE_REFRESH_STATUS
+        description: Per-run Snowflake-native load and refresh status table populated by SnowCLI bootstrap procedures and tasks.

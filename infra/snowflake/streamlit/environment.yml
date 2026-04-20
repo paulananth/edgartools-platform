@@ -1,0 +1,7 @@
+name: edgartools-dashboard
+channels:
+  - snowflake
+dependencies:
+  - streamlit
+  - pandas
+  - plotly
