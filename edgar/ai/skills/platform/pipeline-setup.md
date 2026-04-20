@@ -53,61 +53,99 @@ Follow these steps in order. Each step depends on the previous.
 pip install -e ".[s3,snowflake]" && pip install dbt-snowflake
 ```
 
-**2. Bootstrap AWS Terraform (four sub-modules in order)**
+**2. Bootstrap AWS Terraform**
 ```bash
-cd infra/terraform/accounts/bootstrap-state && terraform init && terraform apply
-cd ../network                                && terraform init && terraform apply
-cd ../storage                                && terraform init && terraform apply
-cd ../warehouse_runtime                      && terraform init && terraform apply
+# Step 2a: create Terraform state bucket (one-time, per account)
+cd infra/terraform/bootstrap-state && terraform init && terraform apply
+
+# Step 2b: provision AWS infrastructure
+cd infra/terraform/accounts/prod
+cp backend.hcl.example backend.hcl            # fill in state bucket name
+cp terraform.tfvars.example terraform.tfvars  # fill in edgar_identity_value
+terraform init -backend-config=backend.hcl
+terraform apply -target module.network_runtime
+terraform apply -target module.storage
+# (pause — build and push Docker image in step 3, then continue)
 ```
 
 **3. Build and push Docker image**
 
-Linux/macOS:
+Linux/CI (preferred):
 ```bash
-scripts/publish-warehouse-image.sh
+bash infra/scripts/publish-warehouse-image.sh \
+  --aws-region <region> \
+  --ecr-repository edgartools-prod-warehouse \
+  --image-tag $(git rev-parse HEAD) \
+  --mode linux
 ```
 
-Windows (requires WSL):
+Windows (Git Bash + WSL):
 ```bash
-scripts/publish-warehouse-image-via-wsl.sh
+bash infra/scripts/publish-warehouse-image-via-wsl.sh \
+  --aws-region <region> \
+  --ecr-repository edgartools-prod-warehouse \
+  --image-tag $(git rev-parse HEAD)
 ```
 
-**4. Update container image reference and re-apply**
+**4. Complete AWS Terraform with the verified image digest**
 ```bash
-# Copy the ECR image URI printed by step 3, then:
-# Edit infra/terraform/accounts/warehouse_runtime/terraform.tfvars
-# Set: container_image = "<ECR_URI>"
-cd infra/terraform/accounts/warehouse_runtime && terraform apply
+# Add the @digest output from step 3 to terraform.tfvars:
+# container_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse@sha256:..."
+
+cd infra/terraform/accounts/prod
+terraform apply -target module.runtime   # provisions ECS + Step Functions
+terraform apply                          # full apply
 ```
 
-**5. Populate AWS Secrets Manager secrets**
-- `edgar-identity` — SEC EDGAR identity header (name + email)
-- `runner-credentials` — Snowflake credentials used by the warehouse runner
+**5. Populate AWS Secrets Manager secrets manually**
+```bash
+# SEC EDGAR identity (required by SEC rate-limiting policy)
+aws secretsmanager put-secret-value \
+  --secret-id edgartools-prod-edgar-identity \
+  --secret-string "Your Name your@email.com"
+
+# Runner IAM credentials
+aws iam create-access-key --user-name edgartools-prod-runner
+# Put the keys into edgartools-prod-runner-credentials secret
+```
 
 **6. Apply Snowflake Terraform**
 ```bash
-cd infra/terraform/snowflake && terraform init && terraform apply
+cd infra/terraform/snowflake/accounts/prod
+cp backend.hcl.example backend.hcl
+cp terraform.tfvars.example terraform.tfvars  # fill in Snowflake creds
+terraform init -backend-config=backend.hcl
+terraform apply
 ```
 
 **7. Run the Snowflake bootstrap (two-pass)**
 
-First pass — creates storage integration and emits external ID:
+First pass — creates storage integration and emits `snowflake_storage_external_id`:
 ```bash
-python infra/snowflake/sql/bootstrap_native_pull.py
-# Note the STORAGE_AWS_EXTERNAL_ID printed to stdout
+uv run python infra/snowflake/sql/bootstrap_native_pull.py \
+  --aws-root infra/terraform/accounts/prod \
+  --snowflake-root infra/terraform/snowflake/accounts/prod \
+  --connection snowconn \
+  --artifact-path infra/snowflake/sql/prod_native_pull_handshake.json
+# Note the snowflake_storage_external_id in the artifact JSON
 ```
 
-Feed external ID back to AWS Terraform:
+Feed external ID back to AWS Terraform and re-apply:
 ```bash
-# Edit infra/terraform/accounts/storage/terraform.tfvars
-# Set: snowflake_external_id = "<EXTERNAL_ID>"
-cd infra/terraform/accounts/storage && terraform apply
+# Add to infra/terraform/accounts/prod/terraform.tfvars:
+# snowflake_storage_external_id = "<id-from-artifact-json>"
+cd infra/terraform/accounts/prod && terraform apply
 ```
 
-Second pass — completes bootstrap now that trust policy is in place:
+Second pass — validates LIST and COPY_HISTORY work end-to-end:
 ```bash
-python infra/snowflake/sql/bootstrap_native_pull.py
+uv run python infra/snowflake/sql/bootstrap_native_pull.py \
+  --aws-root infra/terraform/accounts/prod \
+  --snowflake-root infra/terraform/snowflake/accounts/prod \
+  --connection snowconn \
+  --artifact-path infra/snowflake/sql/prod_native_pull_handshake.json \
+  --storage-external-id "<id-from-artifact-json>" \
+  --validate-native-pull
 ```
 
 **8. Run the warehouse bootstrap**
