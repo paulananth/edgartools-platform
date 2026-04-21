@@ -10,6 +10,8 @@ from typing import Any
 
 from bs4 import BeautifulSoup
 
+from edgar_warehouse.infrastructure.storage import read_bytes
+
 
 def extract_text_for_accession(
     *,
@@ -33,7 +35,7 @@ def extract_text_for_accession(
     if storage_path is None:
         raise ValueError(f"No primary raw artifact registered for {accession_number}")
 
-    payload = _read_bytes(storage_path)
+    payload = read_bytes(storage_path)
     normalized_text = _normalize_text(payload=payload, source_document_name=source_document_name or "")
     cik = int(filing["cik"])
     relative_path = f"text/sec/cik={cik}/accession={accession_number}/{text_version}.txt"
@@ -49,18 +51,6 @@ def extract_text_for_accession(
     }
     db.upsert_filing_text(row)
     return row
-
-
-def _read_bytes(storage_path: str) -> bytes:
-    if "://" in storage_path:
-        protocol = storage_path.split("://", 1)[0]
-        import fsspec
-
-        fs = fsspec.filesystem(protocol)
-        with fs.open(storage_path, "rb") as handle:
-            return handle.read()
-    return Path(storage_path).read_bytes()
-
 
 def _normalize_text(*, payload: bytes, source_document_name: str) -> str:
     suffix = Path(source_document_name).suffix.lower()
