@@ -1,0 +1,11 @@
+"""Reference-data workflow entrypoints."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from edgar_warehouse.application.workflows.command_execution import execute_standard_command
+
+
+def run_seed_universe(args: Any) -> int:
+    return execute_standard_command("seed-universe", args)

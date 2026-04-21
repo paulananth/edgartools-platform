@@ -11,6 +11,8 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
+from edgar_warehouse.infrastructure.storage import sanitize_filename
+
 
 def fetch_filing_artifacts(
     *,
@@ -196,7 +198,8 @@ def _artifact_relative_path(
     is_primary: bool,
 ) -> str:
     section = "primary" if is_primary else "attachments"
-    return f"filings/sec/cik={cik}/accession={accession_number}/{section}/{document_name}"
+    safe_name = sanitize_filename(document_name)
+    return f"filings/sec/cik={cik}/accession={accession_number}/{section}/{safe_name}"
 
 
 def _build_filing_index_url(cik: int, accession_digits: str) -> str:

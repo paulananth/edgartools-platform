@@ -17,6 +17,7 @@ except ImportError as exc:  # pragma: no cover
     ) from exc
 
 from edgar_warehouse.silver import SilverDatabase
+from edgar_warehouse.silver_support.access import get_connection
 
 _TXN_CODE_DESCRIPTIONS = {
     "A": "grant, award, or other acquisition",
@@ -910,7 +911,7 @@ def _build_fact_adv_private_fund(conn: Any) -> pa.Table:
 
 
 def build_gold(db: SilverDatabase) -> dict[str, pa.Table]:
-    conn = db._conn
+    conn = get_connection(db)
     return {
         "dim_company": _build_dim_company(conn),
         "dim_form": _build_dim_form(conn),
