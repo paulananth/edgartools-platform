@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from edgar_warehouse.artifacts import fetch_filing_artifacts
-from edgar_warehouse.text_extraction import extract_text_for_accession
+from edgar_warehouse.bronze_filing_artifacts import fetch_filing_artifacts
+from edgar_warehouse.filing_text_projection import extract_text_for_accession
 
 
 def refresh_filing_artifacts(*, context: Any, db: Any, accession_number: str, sync_run_id: str, download_bytes, force: bool) -> dict[str, Any]:

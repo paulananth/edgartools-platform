@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from edgar_warehouse.application.workflows.accession_resync import run_targeted_resync
+from edgar_warehouse.application.workflows.filing_resync import run_targeted_resync
 
 
 def execute(args: Any) -> int:

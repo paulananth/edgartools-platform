@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from edgar_warehouse.application.errors import WarehouseRuntimeError
+from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory, default_path_resolver
 
 SNOWFLAKE_EXPORT_TABLES = {
     "COMPANY": "company",
@@ -20,33 +21,12 @@ SNOWFLAKE_EXPORT_TABLES = {
 
 
 def planned_writes(command_name: str, command_path: str, run_id: str, scope: dict[str, Any]) -> dict[str, str]:
-    bronze_rel = f"runs/{command_path}/{run_id}/manifest.json"
-    shared = {
-        "artifacts": f"artifacts/runs/{command_path}/{run_id}/manifest.json",
-        "staging": f"staging/runs/{command_path}/{run_id}/manifest.json",
-    }
-    if command_name in {"bootstrap-recent-10", "bootstrap-full", "bootstrap-batch", "daily-incremental", "targeted-resync", "full-reconcile"}:
-        shared["silver"] = f"silver/sec/runs/{command_path}/{run_id}/manifest.json"
-        shared["gold"] = f"gold/runs/{command_path}/{run_id}/manifest.json"
-        shared["bronze"] = bronze_rel
-        return {key: shared[key] for key in ("bronze", "staging", "silver", "gold", "artifacts")}
-    if command_name == "seed-universe":
-        return {"bronze": bronze_rel, "staging": shared["staging"], "artifacts": shared["artifacts"]}
-    if command_name == "load-daily-form-index-for-date":
-        target_date = scope["target_date"]
-        return {
-            "bronze": f"daily-index/date={target_date}/{run_id}/manifest.json",
-            "staging": f"staging/daily-index/date={target_date}/{run_id}/manifest.json",
-            "artifacts": shared["artifacts"],
-        }
-    if command_name == "catch-up-daily-form-index":
-        end_date = scope["end_date"]
-        return {
-            "bronze": f"daily-index/catch-up/end-date={end_date}/{run_id}/manifest.json",
-            "staging": f"staging/daily-index/catch-up/end-date={end_date}/{run_id}/manifest.json",
-            "artifacts": shared["artifacts"],
-        }
-    raise WarehouseRuntimeError(f"Unsupported warehouse command: {command_name}")
+    return default_path_resolver().planned_manifest_paths(
+        command_name=command_name,
+        command_path=command_path,
+        run_id=run_id,
+        scope={key: str(value) for key, value in scope.items()},
+    )
 
 
 def layer_manifest(
@@ -100,7 +80,11 @@ def snowflake_export_manifest(
 
 
 def snowflake_export_run_manifest_relative_path(workflow_name: str, business_date: str, run_id: str) -> str:
-    return f"manifests/workflow_name={workflow_name}/business_date={business_date}/run_id={run_id}/run_manifest.json"
+    return default_path_resolver().snowflake_export_run_manifest_path(
+        workflow_name=workflow_name,
+        business_date=business_date,
+        run_id=run_id,
+    )
 
 
 def snowflake_export_run_manifest(
@@ -141,7 +125,11 @@ def snowflake_export_run_manifest_table(
     business_date: str,
     row_count: int,
 ) -> dict[str, Any]:
-    relative_path = f"{table_path}/business_date={business_date}/run_id={run_id}/{table_path}.parquet"
+    relative_path = default_capture_spec_factory().snowflake_export_table(
+        table_path=table_path,
+        business_date=business_date,
+        run_id=run_id,
+    ).relative_path
     return {
         "file_count": 1,
         "relative_path": relative_path,
