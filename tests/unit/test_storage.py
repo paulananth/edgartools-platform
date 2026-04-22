@@ -23,4 +23,4 @@ class StorageTests(unittest.TestCase):
             destination = location.write_json("runs/test/manifest.json", {"ok": True})
             payload = json.loads((Path(tmp) / "runs" / "test" / "manifest.json").read_text())
             self.assertEqual(payload, {"ok": True})
-            self.assertTrue(destination.endswith("runs/test/manifest.json"))
+            self.assertTrue(destination.replace("\\", "/").endswith("runs/test/manifest.json"))

@@ -82,7 +82,7 @@ class BronzeFileContractTests(unittest.TestCase):
             )
             expected_relative_path = default_capture_spec_factory().cik_universe_batches("run-123").relative_path
             self.assertEqual(destination, str(batch_file))
-            self.assertTrue(destination.endswith(expected_relative_path))
+            self.assertTrue(destination.replace("\\", "/").endswith(expected_relative_path))
             self.assertTrue(batch_file.exists())
             self.assertEqual(
                 batch_file.read_text().splitlines(),

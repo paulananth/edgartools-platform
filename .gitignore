@@ -59,3 +59,7 @@ Thumbs.db
 
 # Temp files
 .tmp/
+
+# AI agent tooling
+.claude/
+.codex
