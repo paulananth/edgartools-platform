@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from edgar_warehouse.application.runtime_facade import (
+from edgar_warehouse.application.command_router import (
     StorageLocation,
     WarehouseCommandContext,
     WarehouseRuntimeError,

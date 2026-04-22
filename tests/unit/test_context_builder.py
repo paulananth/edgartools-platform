@@ -5,11 +5,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from edgar_warehouse.application.context_builder import build_warehouse_context
+from edgar_warehouse.application.command_context_factory import build_warehouse_context
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 
 
-class ContextBuilderTests(unittest.TestCase):
+class CommandContextFactoryTests(unittest.TestCase):
     def test_build_warehouse_context_uses_explicit_roots(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             env = {

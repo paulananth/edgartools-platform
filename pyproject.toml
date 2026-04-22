@@ -47,4 +47,5 @@ Source = "https://github.com/paulananth/edgartools-platform"
 [tool.hatch.build]
 include = [
   "edgar_warehouse/**/*.py",
+  "edgar_warehouse/config/*.properties",
 ]

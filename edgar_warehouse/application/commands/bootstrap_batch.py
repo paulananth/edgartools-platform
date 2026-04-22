@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from edgar_warehouse.application.workflows.submissions_sync import run_bootstrap_batch
+from edgar_warehouse.application.workflows.bronze_submissions_ingest import run_bootstrap_batch
 
 
 def execute(args: Any) -> int:

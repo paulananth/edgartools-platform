@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from edgar_warehouse.infrastructure.storage import StorageLocation
+from edgar_warehouse.infrastructure.object_storage import StorageLocation
 
 if TYPE_CHECKING:
-    from edgar_warehouse.silver import SilverDatabase
+    from edgar_warehouse.silver_store import SilverDatabase
 
 def open_silver_database(silver_root: StorageLocation) -> "SilverDatabase":
-    from edgar_warehouse.silver import SilverDatabase
+    from edgar_warehouse.silver_store import SilverDatabase
 
     db_path = silver_root.join("silver", "sec", "silver.duckdb")
     return SilverDatabase(db_path)

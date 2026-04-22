@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from edgar_warehouse.application.errors import WarehouseRuntimeError
-from edgar_warehouse.infrastructure.storage import StorageLocation, sanitize_filename, sanitize_relative_path
+from edgar_warehouse.infrastructure.object_storage import StorageLocation, sanitize_filename, sanitize_relative_path
 
 
 class StorageTests(unittest.TestCase):

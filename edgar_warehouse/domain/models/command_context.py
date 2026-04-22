@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from edgar_warehouse.infrastructure.storage import StorageLocation
+from edgar_warehouse.infrastructure.object_storage import StorageLocation
 
 
 @dataclass(frozen=True)
