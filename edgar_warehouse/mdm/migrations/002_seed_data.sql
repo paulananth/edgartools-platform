@@ -12,7 +12,7 @@
 INSERT INTO mdm_entity_type_definition (entity_type, neo4j_label, domain_table, api_path_prefix, primary_id_field, display_name) VALUES
     ('company',  'Company',  'mdm_company',  '/companies',  'cik',        'Company'),
     ('adviser',  'Adviser',  'mdm_adviser',  '/advisers',   'crd_number', 'Investment Adviser'),
-    ('person',   'Person',   'mdm_person',   '/persons',    'owner_cik',  'Person'),
+    ('person',   'Person',   'mdm_person',   '/persons',    'entity_id',  'Person'),
     ('security', 'Security', 'mdm_security', '/securities', 'entity_id',  'Security'),
     ('fund',     'Fund',     'mdm_fund',     '/funds',      'entity_id',  'Private Fund')
 ON CONFLICT (entity_type) DO NOTHING;
@@ -304,6 +304,11 @@ ON CONFLICT (rel_type_id, property_name) DO NOTHING;
 -- ---------------------------------------------------------------------------
 
 -- IS_INSIDER from ownership_filing / sec_ownership_reporting_owner
+-- Silver schema: accession_number, owner_index, owner_cik, owner_name,
+--                is_director, is_officer, is_ten_percent_owner, is_other, officer_title.
+-- Pipeline must derive: (a) issuer_cik via sec_filing join on accession_number,
+--                       (b) role from the four boolean flags,
+--                       (c) effective_from from sec_filing.filed_date / period_of_report.
 INSERT INTO mdm_relationship_source_mapping (
     rel_type_id, source_system, source_table,
     source_entity_field, target_entity_field,
@@ -317,18 +322,22 @@ SELECT
     'ownership_filing',
     'sec_ownership_reporting_owner',
     'owner_cik',
-    'issuer_cik',
+    'accession_number',
     'person',
     'company',
-    '{"role": "relationship_type", "title": "reporting_owner_title", "source_accession": "accession_number"}'::JSONB,
-    'period_of_report',
+    '{"title": "officer_title", "source_accession": "accession_number", "role_derivation": {"is_director": "Director", "is_officer": "Officer", "is_ten_percent_owner": "10PctOwner", "is_other": "Other"}}'::JSONB,
     NULL,
-    'IS_INSIDER sourced from Form 3/4/5 reporting owner records'
+    NULL,
+    'IS_INSIDER from Form 3/4/5 reporting owner rows. Pipeline derives issuer_cik via sec_filing join on accession_number and role via boolean flags.'
 FROM mdm_relationship_type rt
 WHERE rt.rel_type_name = 'IS_INSIDER'
-ON CONFLICT DO NOTHING;
+ON CONFLICT (rel_type_id, source_system, source_table) DO NOTHING;
 
 -- MANAGES_FUND from adv_filing / sec_adv_private_fund
+-- Silver schema: accession_number, fund_index, fund_name, fund_type, jurisdiction, aum_amount.
+-- Pipeline must derive: (a) adviser CRD via sec_adv_filing.crd_number join on accession_number,
+--                       (b) fund identity from (adviser_entity_id, fund_name) dedup key,
+--                       (c) effective_from from sec_adv_filing.effective_date.
 INSERT INTO mdm_relationship_source_mapping (
     rel_type_id, source_system, source_table,
     source_entity_field, target_entity_field,
@@ -341,17 +350,17 @@ SELECT
     rt.rel_type_id,
     'adv_filing',
     'sec_adv_private_fund',
-    'adviser_crd_number',
-    'fund_id',
+    'accession_number',
+    'fund_name',
     'adviser',
     'fund',
-    '{"since_date": "fund_created_date", "source_accession": "accession_number"}'::JSONB,
-    'filing_date',
+    '{"source_accession": "accession_number", "fund_type": "fund_type", "jurisdiction": "jurisdiction", "aum_amount": "aum_amount"}'::JSONB,
     NULL,
-    'MANAGES_FUND sourced from Form ADV Schedule D private fund listings'
+    NULL,
+    'MANAGES_FUND from Form ADV Schedule D private funds. Pipeline derives adviser via sec_adv_filing.crd_number and effective_from via sec_adv_filing.effective_date.'
 FROM mdm_relationship_type rt
 WHERE rt.rel_type_name = 'MANAGES_FUND'
-ON CONFLICT DO NOTHING;
+ON CONFLICT (rel_type_id, source_system, source_table) DO NOTHING;
 
 -- IS_ENTITY_OF derived from adviser CIK matching company CIK
 INSERT INTO mdm_relationship_source_mapping (
@@ -378,4 +387,4 @@ SELECT
     'IS_ENTITY_OF derived by matching adviser CIK to company CIK in mdm_company'
 FROM mdm_relationship_type rt
 WHERE rt.rel_type_name = 'IS_ENTITY_OF'
-ON CONFLICT DO NOTHING;
+ON CONFLICT (rel_type_id, source_system, source_table) DO NOTHING;

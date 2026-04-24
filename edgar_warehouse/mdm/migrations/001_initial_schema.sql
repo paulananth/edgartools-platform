@@ -15,6 +15,9 @@
 --                          mdm_relationship_instance
 -- =============================================================================
 
+-- pgcrypto provides gen_random_uuid(). Required for PG < 13; no-op otherwise.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- ---------------------------------------------------------------------------
 -- REGISTRY TABLES
 -- ---------------------------------------------------------------------------
@@ -261,7 +264,8 @@ CREATE TABLE IF NOT EXISTS mdm_relationship_source_mapping (
     effective_to_field   TEXT,
     filter_condition    JSONB,
     is_active           BOOLEAN NOT NULL DEFAULT TRUE,
-    description         TEXT
+    description         TEXT,
+    UNIQUE (rel_type_id, source_system, source_table)
 );
 
 CREATE TABLE IF NOT EXISTS mdm_relationship_instance (
