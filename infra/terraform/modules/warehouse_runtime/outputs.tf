@@ -48,6 +48,11 @@ output "snowflake_manifest_subscriber_arn" {
   value       = var.snowflake_manifest_subscriber_arn
 }
 
+output "snowflake_storage_external_id" {
+  description = "External ID required by the Snowflake export reader IAM role."
+  value       = var.snowflake_storage_external_id
+}
+
 output "state_machine_arns" {
   description = "State machine ARNs keyed by workflow."
   value       = { for name, workflow in aws_sfn_state_machine.workflow : name => workflow.arn }

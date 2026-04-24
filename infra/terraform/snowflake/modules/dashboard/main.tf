@@ -14,7 +14,7 @@ resource "snowflake_schema" "dashboard" {
   }
 }
 
-resource "snowflake_stage" "dashboard_src" {
+resource "snowflake_stage_internal" "dashboard_src" {
   database = var.database_name
   schema   = snowflake_schema.dashboard.name
   name     = var.stage_name

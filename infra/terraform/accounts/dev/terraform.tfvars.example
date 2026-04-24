@@ -2,8 +2,10 @@ container_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-w
 warehouse_runtime_mode = "bronze_capture"
 warehouse_bronze_cik_limit = 10
 
-# Optional after the Snowflake integration handshake:
+# The deploy wrapper manages these automatically. Only set them manually if you are
+# operating the AWS root outside `infra/scripts/deploy-snowflake-stack.sh`.
+# snowflake_bootstrap_enabled = true
 # snowflake_manifest_subscriber_arn = "arn:aws:iam::<SNOWFLAKE_SUBSCRIBER_ACCOUNT_ID>:user/example"
-# snowflake_storage_external_id = "replace-me-after-bootstrap"
+# snowflake_storage_external_id = "edgartools-dev-snowflake-native-pull"
 
 edgar_identity_value = "Your Name your.email@example.com"

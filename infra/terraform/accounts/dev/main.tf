@@ -2,6 +2,7 @@ locals {
   environment           = "dev"
   bronze_bucket_name    = coalesce(var.bronze_bucket_name, "edgartools-dev-bronze")
   warehouse_bucket_name = coalesce(var.warehouse_bucket_name, "edgartools-dev-warehouse")
+  storage_external_id   = coalesce(var.snowflake_storage_external_id, "edgartools-${local.environment}-snowflake-native-pull")
   snowflake_export_bucket_name = coalesce(
     var.snowflake_export_bucket_name,
     "edgartools-dev-snowflake-export",
@@ -45,7 +46,8 @@ module "runtime" {
   snowflake_export_bucket_arn       = module.storage.snowflake_export_bucket_arn
   snowflake_export_kms_key_arn      = module.storage.snowflake_export_kms_key_arn
   snowflake_manifest_subscriber_arn = var.snowflake_manifest_subscriber_arn
-  snowflake_storage_external_id     = var.snowflake_storage_external_id
+  snowflake_bootstrap_enabled       = var.snowflake_bootstrap_enabled
+  snowflake_storage_external_id     = local.storage_external_id
   public_subnet_ids                 = module.network.public_subnet_ids
   public_security_group_id          = module.network.public_ecs_security_group_id
   edgar_identity_secret_arn         = var.edgar_identity_secret_arn

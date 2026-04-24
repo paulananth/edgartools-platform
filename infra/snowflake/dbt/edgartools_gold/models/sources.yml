@@ -24,4 +24,4 @@ sources:
       - name: TICKER_REFERENCE
         description: CIK-to-ticker reference table loaded natively by Snowflake from the seed-universe export manifest.
       - name: SNOWFLAKE_REFRESH_STATUS
-        description: Per-run Snowflake-native load and refresh status table populated by SnowCLI bootstrap procedures and tasks.
+        description: Per-run Snowflake-native load and refresh status table populated by the Terraform-managed native-pull procedures and task.

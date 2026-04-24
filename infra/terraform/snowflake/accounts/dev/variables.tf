@@ -32,6 +32,30 @@ variable "snowflake_admin_role" {
   default     = "ACCOUNTADMIN"
 }
 
+variable "snowflake_storage_role_arn" {
+  description = "AWS IAM role ARN that Snowflake assumes for native export reads."
+  type        = string
+  default     = null
+}
+
+variable "snowflake_export_root_url" {
+  description = "S3 URL prefix for Snowflake export packages, including trailing slash."
+  type        = string
+  default     = null
+}
+
+variable "snowflake_manifest_sns_topic_arn" {
+  description = "SNS topic ARN used by Snowpipe auto-ingest."
+  type        = string
+  default     = null
+}
+
+variable "snowflake_storage_external_id" {
+  description = "Deterministic external ID Snowflake presents when assuming the AWS export reader role."
+  type        = string
+  default     = null
+}
+
 variable "refresh_warehouse_size" {
   description = "Warehouse size for the Snowflake refresh warehouse."
   type        = string

@@ -1,16 +1,4 @@
--- Create the source-side load wrapper for EdgarTools export runs.
---
--- Required session variables:
---   set database_name = 'EDGARTOOLS_DEV';
---   set source_schema_name = 'EDGARTOOLS_SOURCE';
---   set deployer_role_name = 'EDGARTOOLS_DEV_DEPLOYER';
---   set source_load_procedure_name = 'LOAD_EXPORTS_FOR_RUN';
-
-USE ROLE IDENTIFIER($deployer_role_name);
-USE DATABASE IDENTIFIER($database_name);
-USE SCHEMA IDENTIFIER($source_schema_name);
-
-CREATE OR REPLACE PROCEDURE IDENTIFIER($source_load_procedure_name)(workflow_name STRING, run_id STRING)
+CREATE OR REPLACE PROCEDURE __SOURCE_LOAD_PROCEDURE_NAME__(workflow_name STRING, run_id STRING)
 RETURNS VARIANT
 LANGUAGE JAVASCRIPT
 EXECUTE AS OWNER
@@ -19,11 +7,11 @@ $$
 const currentDatabase = snowflake.createStatement({sqlText: "SELECT CURRENT_DATABASE()"}).execute();
 currentDatabase.next();
 const databaseName = currentDatabase.getColumnValue(1);
-const sourceSchema = "EDGARTOOLS_SOURCE";
-const statusTable = `${databaseName}.${sourceSchema}.SNOWFLAKE_REFRESH_STATUS`;
-const manifestInboxTable = `${databaseName}.${sourceSchema}.SNOWFLAKE_RUN_MANIFEST_INBOX`;
-const parquetStage = `${databaseName}.${sourceSchema}.EDGARTOOLS_SOURCE_EXPORT_STAGE`;
-const parquetFileFormat = `${databaseName}.${sourceSchema}.EDGARTOOLS_SOURCE_EXPORT_FILE_FORMAT`;
+const sourceSchema = "__SOURCE_SCHEMA__";
+const statusTable = `${databaseName}.${sourceSchema}.__STATUS_TABLE_NAME__`;
+const manifestInboxTable = `${databaseName}.${sourceSchema}.__MANIFEST_INBOX_TABLE_NAME__`;
+const parquetStage = `${databaseName}.${sourceSchema}.__STAGE_NAME__`;
+const parquetFileFormat = `${databaseName}.${sourceSchema}.__PARQUET_FILE_FORMAT_NAME__`;
 
 const targetTables = {
   COMPANY: `${databaseName}.${sourceSchema}.COMPANY`,
@@ -265,30 +253,22 @@ try {
     status: "succeeded",
     workflow_name: WORKFLOW_NAME,
     run_id: RUN_ID,
-    environment: environmentName,
-    business_date: businessDate,
-    tables_loaded: stagedTables.length,
-    source_row_count: totalRows
+    row_count: totalRows,
+    tables_loaded: stagedTables.length
   };
 } catch (error) {
-  try {
-    exec("ROLLBACK");
-  } catch (rollbackError) {
-    // Ignore rollback failures when no transaction is active.
-  }
-
+  exec("ROLLBACK");
   upsertStatus(
     environmentName,
     businessDate,
     manifestCompletedAt,
     "failed",
-    "pending",
+    "failed",
     "failed",
     null,
     null,
     error.message
   );
-
   throw error;
 }
 $$;

@@ -7,6 +7,17 @@ locals {
   snowflake_export_root_url = "${local.snowflake_export_root}/"
   snowflake_export_prefix   = "warehouse/artifacts/snowflake_exports/"
   snowflake_manifest_prefix = "warehouse/artifacts/snowflake_exports/manifests/"
+  # SNS topic policies can bootstrap with a wildcard principal, but IAM role trust policies cannot.
+  snowflake_sns_principal_arn = (
+    var.snowflake_manifest_subscriber_arn != null
+    ? var.snowflake_manifest_subscriber_arn
+    : (var.snowflake_bootstrap_enabled ? "*" : null)
+  )
+  snowflake_role_trust_principal_arn = (
+    var.snowflake_manifest_subscriber_arn != null
+    ? var.snowflake_manifest_subscriber_arn
+    : (var.snowflake_bootstrap_enabled ? "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" : null)
+  )
   tags = merge(
     {
       Environment = var.environment
@@ -104,13 +115,6 @@ locals {
       warehouse_command_expression               = "States.Array('catch-up-daily-form-index', '--run-id', $$.Execution.Name)"
       warehouse_command_with_cik_list_expression = null
     }
-    seed_universe = {
-      task_profile                               = local.task_profile_by_workflow.seed_universe
-      schedule_expression                        = null
-      gold_affecting                             = false
-      warehouse_command_expression               = "States.Array('seed-universe', '--run-id', $$.Execution.Name)"
-      warehouse_command_with_cik_list_expression = null
-    }
   }
 
   scheduled_workflows = {
@@ -175,12 +179,12 @@ resource "aws_sns_topic_policy" "snowflake_manifest_events" {
           }
         }
       ],
-      var.snowflake_manifest_subscriber_arn == null ? [] : [
+      local.snowflake_sns_principal_arn == null ? [] : [
         {
           Sid    = "AllowSnowflakeSubscribeToManifestTopic"
           Effect = "Allow"
           Principal = {
-            AWS = var.snowflake_manifest_subscriber_arn
+            AWS = local.snowflake_sns_principal_arn
           }
           Action   = "SNS:Subscribe"
           Resource = aws_sns_topic.snowflake_manifest_events.arn
@@ -204,7 +208,7 @@ resource "aws_s3_bucket_notification" "snowflake_manifest_events" {
 }
 
 resource "aws_iam_role" "snowflake_storage_reader" {
-  count = var.snowflake_manifest_subscriber_arn == null ? 0 : 1
+  count = local.snowflake_role_trust_principal_arn == null ? 0 : 1
 
   name = "${local.name_prefix}-snowflake-s3"
 
@@ -215,7 +219,7 @@ resource "aws_iam_role" "snowflake_storage_reader" {
         {
           Effect = "Allow"
           Principal = {
-            AWS = var.snowflake_manifest_subscriber_arn
+            AWS = local.snowflake_role_trust_principal_arn
           }
           Action = "sts:AssumeRole"
         },

@@ -63,6 +63,11 @@ output "snowflake_manifest_subscriber_arn" {
   value       = module.runtime.snowflake_manifest_subscriber_arn
 }
 
+output "snowflake_storage_external_id" {
+  description = "Prod external ID required by the Snowflake export reader role."
+  value       = module.runtime.snowflake_storage_external_id
+}
+
 output "runner_user_name" {
   description = "Prod runner IAM user name. Create access keys with: aws iam create-access-key --user-name <value>"
   value       = module.runtime.runner_user_name

@@ -14,7 +14,7 @@ This project owns:
 It does not own:
 
 - Snowflake platform objects created by Terraform
-- storage integrations, stages, or procedures created by SnowCLI bootstrap SQL
+- storage integrations, stages, source-side procedures, or tasks created by the Terraform-managed native-pull layer
 
 ## Current scope
 
@@ -28,8 +28,9 @@ The project publishes these objects in `EDGARTOOLS_GOLD`:
 - `ADVISER_DISCLOSURES`
 - `PRIVATE_FUNDS`
 - `FILING_DETAIL`
+- `TICKER_REFERENCE`
 - `EDGARTOOLS_GOLD_STATUS`
 
-All eight business tables are dbt-managed Snowflake dynamic tables with `TARGET_LAG = DOWNSTREAM`.
-The Snowflake bootstrap wrapper triggers and waits for these dynamic tables before marking a run
+All nine business tables are dbt-managed Snowflake dynamic tables with `TARGET_LAG = DOWNSTREAM`.
+The deployment wrapper triggers and waits for these dynamic tables before marking a run
 successful in `EDGARTOOLS_SOURCE.SNOWFLAKE_REFRESH_STATUS`.

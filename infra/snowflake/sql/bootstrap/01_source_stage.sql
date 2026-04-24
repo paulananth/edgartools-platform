@@ -186,6 +186,14 @@ CREATE TABLE IF NOT EXISTS FILING_DETAIL (
 )
 COMMENT = 'Current filing-detail dimension mirrored from the canonical warehouse gold export.';
 
+CREATE TABLE IF NOT EXISTS TICKER_REFERENCE (
+  cik NUMBER(38, 0),
+  ticker STRING,
+  exchange STRING,
+  last_sync_run_id STRING
+)
+COMMENT = 'Current ticker-reference dimension mirrored from the canonical warehouse gold export.';
+
 BEGIN
   EXECUTE IMMEDIATE
     $$CREATE OR REPLACE PIPE $$ || $manifest_pipe_name || $$
