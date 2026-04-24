@@ -59,6 +59,12 @@ variable "snowflake_manifest_subscriber_arn" {
   default     = null
 }
 
+variable "snowflake_bootstrap_enabled" {
+  description = "Whether to use temporary bootstrap trust for the Snowflake export reader role."
+  type        = bool
+  default     = false
+}
+
 variable "snowflake_storage_external_id" {
   description = "Optional external ID that Snowflake must present when assuming the Snowflake S3 reader role."
   type        = string

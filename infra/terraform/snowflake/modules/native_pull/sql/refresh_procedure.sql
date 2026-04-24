@@ -1,22 +1,4 @@
--- Create the public Snowflake refresh wrapper and triggered manifest-processing task.
---
--- Required session variables:
---   set database_name = 'EDGARTOOLS_DEV';
---   set source_schema_name = 'EDGARTOOLS_SOURCE';
---   set gold_schema_name = 'EDGARTOOLS_GOLD';
---   set deployer_role_name = 'EDGARTOOLS_DEV_DEPLOYER';
---   set refresh_warehouse_name = 'EDGARTOOLS_DEV_REFRESH_WH';
---   set manifest_stream_name = 'SNOWFLAKE_RUN_MANIFEST_STREAM';
---   set source_load_procedure_name = 'LOAD_EXPORTS_FOR_RUN';
---   set refresh_procedure_name = 'REFRESH_AFTER_LOAD';
---   set stream_processor_procedure_name = 'PROCESS_RUN_MANIFEST_STREAM';
---   set manifest_task_name = 'SNOWFLAKE_RUN_MANIFEST_TASK';
-
-USE ROLE IDENTIFIER($deployer_role_name);
-USE DATABASE IDENTIFIER($database_name);
-USE SCHEMA IDENTIFIER($gold_schema_name);
-
-CREATE OR REPLACE PROCEDURE IDENTIFIER($refresh_procedure_name)(workflow_name STRING, run_id STRING)
+CREATE OR REPLACE PROCEDURE __REFRESH_PROCEDURE_NAME__(workflow_name STRING, run_id STRING)
 RETURNS VARIANT
 LANGUAGE JAVASCRIPT
 EXECUTE AS OWNER
@@ -25,9 +7,9 @@ $$
 const currentDatabase = snowflake.createStatement({sqlText: "SELECT CURRENT_DATABASE()"}).execute();
 currentDatabase.next();
 const databaseName = currentDatabase.getColumnValue(1);
-const sourceSchema = "EDGARTOOLS_SOURCE";
-const goldSchema = "EDGARTOOLS_GOLD";
-const statusTable = `${databaseName}.${sourceSchema}.SNOWFLAKE_REFRESH_STATUS`;
+const sourceSchema = "__SOURCE_SCHEMA__";
+const goldSchema = "__GOLD_SCHEMA__";
+const statusTable = `${databaseName}.${sourceSchema}.__STATUS_TABLE_NAME__`;
 const refreshHistoryFunction = `${databaseName}.INFORMATION_SCHEMA.DYNAMIC_TABLE_REFRESH_HISTORY`;
 const goldTables = [
   "COMPANY",
@@ -159,37 +141,3 @@ try {
   throw error;
 }
 $$;
-
-CREATE OR REPLACE PROCEDURE IDENTIFIER($stream_processor_procedure_name)()
-RETURNS VARIANT
-LANGUAGE SQL
-EXECUTE AS OWNER
-AS
-$$
-BEGIN
-  FOR manifest_record IN (
-    SELECT DISTINCT workflow_name, run_id
-    FROM EDGARTOOLS_SOURCE.SNOWFLAKE_RUN_MANIFEST_STREAM
-    WHERE METADATA$ACTION = 'INSERT'
-  ) DO
-    CALL EDGARTOOLS_SOURCE.LOAD_EXPORTS_FOR_RUN(manifest_record.workflow_name, manifest_record.run_id);
-    CALL EDGARTOOLS_GOLD.REFRESH_AFTER_LOAD(manifest_record.workflow_name, manifest_record.run_id);
-  END FOR;
-
-  RETURN OBJECT_CONSTRUCT('status', 'succeeded');
-END;
-$$;
-
-BEGIN
-  EXECUTE IMMEDIATE
-    'CREATE OR REPLACE TASK ' || $manifest_task_name || '
-       WAREHOUSE = ' || $refresh_warehouse_name || '
-       WHEN SYSTEM$STREAM_HAS_DATA(''' || $database_name || '.' || $source_schema_name || '.' || $manifest_stream_name || ''')
-       AS
-       CALL ' || $database_name || '.' || $gold_schema_name || '.' || $stream_processor_procedure_name || '()';
-END;
-
-BEGIN
-  EXECUTE IMMEDIATE
-    'ALTER TASK ' || $manifest_task_name || ' RESUME';
-END;

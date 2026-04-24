@@ -3,3 +3,9 @@ snowflake_account_name      = "replace-me"
 snowflake_user              = "replace-me"
 snowflake_authenticator     = "externalbrowser"
 snowflake_admin_role        = "ACCOUNTADMIN"
+
+# The deploy wrapper passes the AWS-native-pull inputs at apply time:
+# snowflake_storage_role_arn
+# snowflake_export_root_url
+# snowflake_manifest_sns_topic_arn
+# snowflake_storage_external_id

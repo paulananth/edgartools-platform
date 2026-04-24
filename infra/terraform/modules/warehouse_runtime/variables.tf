@@ -67,6 +67,12 @@ variable "snowflake_manifest_subscriber_arn" {
   default     = null
 }
 
+variable "snowflake_bootstrap_enabled" {
+  description = "Whether to use a temporary bootstrap trust for the Snowflake manifest subscriber and storage-reader role."
+  type        = bool
+  default     = false
+}
+
 variable "snowflake_storage_external_id" {
   description = "Optional external ID that Snowflake must present when assuming the Snowflake export reader IAM role."
   type        = string

@@ -9,7 +9,7 @@ successfully.
 ```
 SEC EDGAR API → edgar-warehouse Python CLI → AWS S3 (Parquet, bronze)
   → Snowflake storage integration (EDGARTOOLS_SOURCE)
-  → dbt run → EDGARTOOLS_GOLD dynamic tables (8 tables + 1 status view)
+  → dbt run → EDGARTOOLS_GOLD dynamic tables (9 tables + 1 status view)
   → Streamlit dashboard
 ```
 
@@ -41,7 +41,7 @@ Layers:
 | GitHub CLI (`gh`) | >= 2.0 | `winget install GitHub.cli` |
 | Docker Desktop | >= 24 | docker.com |
 | AWS CLI | v2 | aws.amazon.com/cli |
-| Terraform | **exactly 1.14.7** | terraform.io |
+| Terraform | **1.14.8 or later in the 1.14.x line** | terraform.io |
 | SnowCLI (`snow`) | latest | `pip install snowflake-cli-labs` |
 | Bash | any | native on Linux/Mac; WSL on Windows |
 | dbt-snowflake | >= 1.7 | `pip install dbt-snowflake` |
@@ -201,9 +201,10 @@ terraform apply
 
 ---
 
-## Step 4 — Terraform: Snowflake Baseline Objects
+## Step 4 — Prepare the Snowflake Terraform Root
 
-This creates the `EDGARTOOLS_PROD` database, schemas, roles, and warehouses.
+Prepare the Snowflake root so the wrapper in Step 5 can initialize it and apply both the
+baseline and native-pull objects.
 
 ```bash
 cd infra/terraform/snowflake/accounts/prod
@@ -225,58 +226,43 @@ cp terraform.tfvars.example terraform.tfvars
 #   snowflake_authenticator     = "externalbrowser"  # or "snowflake_jwt"
 #   snowflake_admin_role        = "ACCOUNTADMIN"
 
-terraform apply
 ```
+
+If you use the wrapper in Step 5, you do not need to run a separate manual `terraform apply`
+in this root.
 
 ---
 
-## Step 5 — Snowflake Bootstrap SQL (Two-Pass)
+## Step 5 — Deploy Snowflake, dbt, and Dashboard
 
-This wires up the Snowflake storage integration to the AWS S3 export bucket and installs
-the Snowpipe, manifest stream, and refresh wrapper procedures.
-
-### Pass 1 — Create the Storage Integration
+Use the wrapper script to coordinate the AWS and Snowflake Terraform states, reconcile the
+Snowflake IAM trust automatically, run dbt, validate the native-pull contract, and upload the
+Streamlit dashboard artifacts.
 
 ```bash
 # Run from the repo root
-uv run python infra/snowflake/sql/bootstrap_native_pull.py \
-  --aws-root infra/terraform/accounts/prod \
-  --snowflake-root infra/terraform/snowflake/accounts/prod \
-  --connection snowconn \
-  --artifact-path infra/snowflake/sql/prod_native_pull_handshake.json
+bash infra/scripts/deploy-snowflake-stack.sh \
+  --env prod \
+  --snow-connection edgartools-prod
 ```
 
-The script reads Terraform output values automatically. After it completes:
+The wrapper performs these stages in order:
 
-1. Open `infra/snowflake/sql/prod_native_pull_handshake.json`.
-2. Note the `snowflake_storage_external_id` value.
-3. Add it to `infra/terraform/accounts/prod/terraform.tfvars`:
+1. AWS Terraform bootstrap apply with temporary trust and deterministic external ID.
+2. Snowflake Terraform apply for the storage integration, stage, source tables, pipe, stream, procedures, and task.
+3. AWS Terraform reconcile apply narrowed to the exact Snowflake-managed AWS principal.
+4. Snowflake Terraform re-apply.
+5. Native-pull validation artifact generation in `infra/snowflake/sql/prod_native_pull_handshake.json`.
+6. `dbt deps`, `dbt run`, and `dbt test`.
+7. Streamlit artifact upload to the Terraform-managed dashboard stage.
 
-   ```hcl
-   snowflake_storage_external_id = "<id-from-artifact-json>"
-   ```
-
-4. Re-apply the AWS root to grant Snowflake the IAM trust:
-
-   ```bash
-   cd infra/terraform/accounts/prod
-   terraform apply
-   ```
-
-### Pass 2 — Validate Native Pull
+If you need to skip parts of the wrapper during troubleshooting, use:
 
 ```bash
-uv run python infra/snowflake/sql/bootstrap_native_pull.py \
-  --aws-root infra/terraform/accounts/prod \
-  --snowflake-root infra/terraform/snowflake/accounts/prod \
-  --connection snowconn \
-  --artifact-path infra/snowflake/sql/prod_native_pull_handshake.json \
-  --storage-external-id "<id-from-artifact-json>" \
-  --validate-native-pull
+bash infra/scripts/deploy-snowflake-stack.sh --env prod --skip-validation
+bash infra/scripts/deploy-snowflake-stack.sh --env prod --skip-dbt
+bash infra/scripts/deploy-snowflake-stack.sh --env prod --skip-dashboard
 ```
-
-A successful pass 2 confirms that Snowflake can `LIST` and read `COPY_HISTORY` from the S3
-export bucket.
 
 ---
 
@@ -310,7 +296,7 @@ edgar-warehouse bootstrap --tracking-status-filter active
 
 ---
 
-## Step 7 — Run dbt (Bronze to Gold)
+## Step 7 — Run dbt Separately (Optional)
 
 dbt reads Parquet data staged in Snowflake and materialises the gold dynamic tables.
 
@@ -340,8 +326,8 @@ dbt run --target prod
 dbt test --target prod
 ```
 
-This creates 9 objects in `EDGARTOOLS_PROD.EDGARTOOLS_GOLD`:
-- 8 dynamic tables: `COMPANY`, `FILING_DETAIL`, `FILING_ACTIVITY`, `TICKER_REFERENCE`,
+This creates 10 objects in `EDGARTOOLS_PROD.EDGARTOOLS_GOLD`:
+- 9 dynamic tables: `COMPANY`, `FILING_DETAIL`, `FILING_ACTIVITY`, `TICKER_REFERENCE`,
   `OWNERSHIP_ACTIVITY`, `OWNERSHIP_HOLDINGS`, `ADVISER_DISCLOSURES`, `ADVISER_OFFICES`,
   `PRIVATE_FUNDS`
 - 1 view: `EDGARTOOLS_GOLD_STATUS`
@@ -351,7 +337,7 @@ This creates 9 objects in `EDGARTOOLS_PROD.EDGARTOOLS_GOLD`:
 
 ---
 
-## Step 8 — Deploy the Dashboard
+## Step 8 — Deploy the Dashboard Separately (Optional)
 
 ### Option A — Streamlit-in-Snowflake (production)
 
@@ -437,7 +423,8 @@ SELECT * FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
 
 ### Terraform
 
-- **Terraform CLI must be exactly `1.14.7`.** Other versions are not tested and may fail
+- **Terraform CLI should be `1.14.8` or another compatible `1.14.x` release.** The Snowflake
+  roots require `~> 1.14.8`.
   due to provider version pins.
 - **Publish the warehouse image (Step 3) before running `terraform apply` on `accounts/prod`
   with `container_image` set.** Terraform validates the image reference during plan.
@@ -453,18 +440,17 @@ SELECT * FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
   error unless you remove the lifecycle rule manually first.
 - **S3 state locking uses `use_lockfile = true`** — no DynamoDB table is required.
 
-### Snowflake Bootstrap
+### Snowflake Native Pull
 
-- **Use the Python driver**, not raw SQL files directly. The driver sets the required
-  session variables and runs the SQL files in the correct order.
-- **Two-pass loop**: pass 1 captures `snowflake_storage_external_id`; feed it back to AWS
-  Terraform; then run pass 2 with `--storage-external-id` and `--validate-native-pull`.
+- **Use the deploy wrapper** for normal deployments. It coordinates the AWS bootstrap apply,
+  Snowflake apply, AWS trust reconciliation, Snowflake re-apply, validation, dbt, and dashboard
+  upload in one flow.
 - **`export_root_url` must have a trailing slash** on `snowflake_exports/` — the value
   must match the Snowflake integration allow-list exactly.
-- **SQL files use `IDENTIFIER($variable_name)`** — do not run them manually without setting
-  all session variables listed in `infra/snowflake/sql/README.md`.
-- **SnowCLI connection name** (`--connection snowconn`) must match a connection defined in
+- **SnowCLI connection name** (`--snow-connection`) must match a connection defined in
   your SnowCLI config (`~/.snowflake/config.toml`).
+- **The SQL files in `infra/snowflake/sql/bootstrap/` are retained as implementation reference**.
+  They are no longer the operator-facing deployment path.
 
 ### dbt
 

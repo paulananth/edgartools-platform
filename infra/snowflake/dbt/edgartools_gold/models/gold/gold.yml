@@ -73,6 +73,15 @@ models:
       - name: accession_number
         tests:
           - not_null
+  - name: ticker_reference
+    description: Business-facing ticker reference mirror published as the `EDGARTOOLS_GOLD.TICKER_REFERENCE` dynamic table.
+    columns:
+      - name: cik
+        tests:
+          - not_null
+      - name: ticker
+        tests:
+          - not_null
   - name: edgartools_gold_status
     description: Business-facing freshness view for the Snowflake gold mirror.
     columns:

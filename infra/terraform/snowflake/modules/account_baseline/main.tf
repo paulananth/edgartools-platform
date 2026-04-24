@@ -92,6 +92,12 @@ resource "snowflake_grant_privileges_to_account_role" "database_usage" {
   }
 }
 
+resource "snowflake_grant_privileges_to_account_role" "deployer_account_privileges" {
+  account_role_name = snowflake_account_role.roles["deployer"].name
+  privileges        = ["CREATE INTEGRATION"]
+  on_account        = true
+}
+
 resource "snowflake_grant_privileges_to_account_role" "schema_usage" {
   for_each = {
     for grant in flatten([
@@ -99,7 +105,7 @@ resource "snowflake_grant_privileges_to_account_role" "schema_usage" {
         id         = "deployer_source"
         role_key   = "deployer"
         schema_key = "source"
-        privileges = ["USAGE", "CREATE TABLE", "CREATE VIEW", "CREATE STAGE", "CREATE FILE FORMAT", "CREATE PROCEDURE", "CREATE TASK"]
+        privileges = ["USAGE", "CREATE TABLE", "CREATE VIEW", "CREATE STAGE", "CREATE FILE FORMAT", "CREATE PROCEDURE", "CREATE TASK", "CREATE PIPE", "CREATE STREAM"]
       },
       {
         id         = "deployer_gold"
