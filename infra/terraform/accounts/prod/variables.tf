@@ -127,3 +127,47 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "mdm_enabled" {
+  description = "Whether to provision the MDM RDS + Secrets Manager stack."
+  type        = bool
+  default     = false
+}
+
+variable "mdm_private_subnet_cidrs" {
+  description = "CIDR blocks for the MDM private subnets (one per AZ)."
+  type        = list(string)
+  default     = []
+}
+
+variable "mdm_db_instance_class" {
+  description = "RDS instance class for the MDM database."
+  type        = string
+  default     = "db.t3.micro"
+}
+
+variable "mdm_neo4j_uri" {
+  description = "Neo4j AuraDB Bolt URI. Stored in Secrets Manager."
+  type        = string
+  default     = ""
+}
+
+variable "mdm_neo4j_user" {
+  description = "Neo4j AuraDB username. Stored in Secrets Manager."
+  type        = string
+  default     = ""
+}
+
+variable "mdm_neo4j_password" {
+  description = "Neo4j AuraDB password. Stored in Secrets Manager."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "mdm_api_keys" {
+  description = "Initial API keys for the MDM REST API. Stored in Secrets Manager."
+  type        = list(string)
+  default     = []
+  sensitive   = true
+}
