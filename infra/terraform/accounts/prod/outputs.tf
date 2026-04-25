@@ -82,3 +82,28 @@ output "runner_credentials_secret_arn" {
   description = "Prod runner credentials secret ARN. Populate it after creating a runner access key."
   value       = module.runtime.runner_credentials_secret_arn
 }
+
+output "mdm_db_endpoint" {
+  description = "Prod MDM PostgreSQL endpoint hostname (only set when var.mdm_enabled = true)."
+  value       = try(module.mdm[0].db_endpoint, null)
+}
+
+output "mdm_postgres_dsn_secret_arn" {
+  description = "Prod Secrets Manager ARN holding the MDM PostgreSQL DSN."
+  value       = try(module.mdm[0].postgres_dsn_secret_arn, null)
+}
+
+output "mdm_neo4j_secret_arn" {
+  description = "Prod Secrets Manager ARN holding the Neo4j AuraDB connection details."
+  value       = try(module.mdm[0].neo4j_secret_arn, null)
+}
+
+output "mdm_api_keys_secret_arn" {
+  description = "Prod Secrets Manager ARN holding the MDM API keys."
+  value       = try(module.mdm[0].api_keys_secret_arn, null)
+}
+
+output "mdm_db_security_group_id" {
+  description = "Prod MDM RDS security group ID."
+  value       = try(module.mdm[0].db_security_group_id, null)
+}
