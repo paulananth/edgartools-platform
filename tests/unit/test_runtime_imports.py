@@ -46,6 +46,7 @@ class RuntimeImportTests(unittest.TestCase):
                 "edgar_warehouse.silver_store",
                 "edgar_warehouse.silver",
                 "edgar_warehouse.serving.gold_models",
+                "edgar_warehouse.serving.targets.databricks",
                 "edgar_warehouse.serving.targets.snowflake",
                 "edgar_warehouse.gold",
             ]:
@@ -56,6 +57,7 @@ class RuntimeImportTests(unittest.TestCase):
 
         self.assertTrue(hasattr(silver, "SilverDatabase"))
         self.assertTrue(callable(gold.build_gold))
+        self.assertTrue(callable(gold.write_gold_to_databricks_export))
         self.assertTrue(callable(gold.write_gold_to_snowflake_export))
 
     def test_command_registry_contains_all_cli_commands(self) -> None:

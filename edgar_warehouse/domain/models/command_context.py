@@ -18,3 +18,9 @@ class WarehouseCommandContext:
     environment_name: str
     identity: str
     runtime_mode: str
+
+    @property
+    def serving_export_root(self) -> StorageLocation | None:
+        """Provider-neutral alias for the serving export root."""
+
+        return self.snowflake_export_root

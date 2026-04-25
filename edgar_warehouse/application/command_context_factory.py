@@ -18,19 +18,19 @@ def build_warehouse_context(command_name: str) -> WarehouseCommandContext:
             "WAREHOUSE_BRONZE_ROOT and WAREHOUSE_STORAGE_ROOT must be different locations"
         )
 
-    snowflake_export_root = None
-    if settings.snowflake_export_root is not None:
-        snowflake_export_root = StorageLocation(settings.snowflake_export_root)
-        if snowflake_export_root.root in {bronze_root.root, storage_root.root}:
+    serving_export_root = None
+    if settings.serving_export_root is not None:
+        serving_export_root = StorageLocation(settings.serving_export_root)
+        if serving_export_root.root in {bronze_root.root, storage_root.root}:
             raise WarehouseRuntimeError(
-                "SNOWFLAKE_EXPORT_ROOT must be isolated from bronze and warehouse roots"
+                "SERVING_EXPORT_ROOT must be isolated from bronze and warehouse roots"
             )
 
     return WarehouseCommandContext(
         bronze_root=bronze_root,
         storage_root=storage_root,
         silver_root=silver_root,
-        snowflake_export_root=snowflake_export_root,
+        snowflake_export_root=serving_export_root,
         environment_name=settings.environment_name,
         identity=settings.identity,
         runtime_mode=settings.runtime_mode,

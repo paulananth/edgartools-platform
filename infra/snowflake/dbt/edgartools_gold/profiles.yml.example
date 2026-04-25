@@ -23,3 +23,21 @@ edgartools_gold:
       schema: EDGARTOOLS_GOLD
       threads: 4
       client_session_keep_alive: false
+    databricks_dev:
+      type: databricks
+      method: http
+      host: "{{ env_var('DBT_DATABRICKS_HOST') }}"
+      http_path: "{{ env_var('DBT_DATABRICKS_HTTP_PATH') }}"
+      token: "{{ env_var('DBT_DATABRICKS_TOKEN') }}"
+      catalog: "{{ env_var('DBT_DATABRICKS_CATALOG', 'edgartools_dev') }}"
+      schema: "{{ env_var('DBT_GOLD_SCHEMA', 'edgartools_gold') }}"
+      threads: 4
+    databricks_prod:
+      type: databricks
+      method: http
+      host: "{{ env_var('DBT_DATABRICKS_HOST') }}"
+      http_path: "{{ env_var('DBT_DATABRICKS_HTTP_PATH') }}"
+      token: "{{ env_var('DBT_DATABRICKS_TOKEN') }}"
+      catalog: "{{ env_var('DBT_DATABRICKS_CATALOG', 'edgartools_prod') }}"
+      schema: "{{ env_var('DBT_GOLD_SCHEMA', 'edgartools_gold') }}"
+      threads: 4

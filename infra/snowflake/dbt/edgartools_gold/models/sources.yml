@@ -2,26 +2,27 @@ version: 2
 
 sources:
   - name: edgartools_source
-    database: "{{ env_var('DBT_SNOWFLAKE_DATABASE') }}"
-    schema: EDGARTOOLS_SOURCE
+    database: "{{ env_var('DBT_SOURCE_CATALOG', env_var('DBT_DATABRICKS_CATALOG', env_var('DBT_SNOWFLAKE_DATABASE', 'EDGARTOOLS_DEV'))) }}"
+    schema: "{{ env_var('DBT_SOURCE_SCHEMA', 'EDGARTOOLS_SOURCE') }}"
     tables:
       - name: COMPANY
-        description: Current company source table loaded natively by Snowflake from the AWS export manifest.
+        description: Current company source table loaded from serving Parquet exports.
       - name: FILING_ACTIVITY
-        description: Current filing-activity source table loaded natively by Snowflake from the AWS export manifest.
+        description: Current filing-activity source table loaded from serving Parquet exports.
       - name: OWNERSHIP_ACTIVITY
-        description: Current ownership-activity source table loaded natively by Snowflake from the AWS export manifest.
+        description: Current ownership-activity source table loaded from serving Parquet exports.
       - name: OWNERSHIP_HOLDINGS
-        description: Current ownership-holdings source table loaded natively by Snowflake from the AWS export manifest.
+        description: Current ownership-holdings source table loaded from serving Parquet exports.
       - name: ADVISER_OFFICES
-        description: Current adviser-office source table loaded natively by Snowflake from the AWS export manifest.
+        description: Current adviser-office source table loaded from serving Parquet exports.
       - name: ADVISER_DISCLOSURES
-        description: Current adviser-disclosure source table loaded natively by Snowflake from the AWS export manifest.
+        description: Current adviser-disclosure source table loaded from serving Parquet exports.
       - name: PRIVATE_FUNDS
-        description: Current private-fund source table loaded natively by Snowflake from the AWS export manifest.
+        description: Current private-fund source table loaded from serving Parquet exports.
       - name: FILING_DETAIL
-        description: Current filing-detail source table loaded natively by Snowflake from the AWS export manifest.
+        description: Current filing-detail source table loaded from serving Parquet exports.
       - name: TICKER_REFERENCE
-        description: CIK-to-ticker reference table loaded natively by Snowflake from the seed-universe export manifest.
-      - name: SNOWFLAKE_REFRESH_STATUS
-        description: Per-run Snowflake-native load and refresh status table populated by the Terraform-managed native-pull procedures and task.
+        description: CIK-to-ticker reference table loaded from serving Parquet exports.
+      - name: SERVING_REFRESH_STATUS
+        identifier: "{{ env_var('DBT_REFRESH_STATUS_IDENTIFIER', 'SNOWFLAKE_REFRESH_STATUS') }}"
+        description: Per-run serving load and refresh status table for the active warehouse target.

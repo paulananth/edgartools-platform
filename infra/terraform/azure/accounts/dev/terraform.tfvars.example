@@ -1,0 +1,10 @@
+location                = "eastus"
+storage_account_name    = "edgartoolsdevlake01"
+container_registry_name = "edgartoolsdevacr01"
+key_vault_name          = "edgartools-dev-kv-01"
+container_image         = "edgartoolsdevacr01.azurecr.io/edgar-warehouse:replace-me"
+
+# Store EDGAR_IDENTITY in Key Vault with infra/scripts/bootstrap-azure-secrets.sh.
+
+# Optional scheduled run after validation:
+# daily_incremental_schedule = "0 7 * * *"

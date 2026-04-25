@@ -23,12 +23,13 @@ RUN pip install --no-compile \
 RUN pip install --no-compile \
         "aiobotocore" \
         "aiohttp" \
+        "adlfs>=2024.4.0" \
         "fsspec>=2023.1.0" \
         "s3fs>=2023.1.0" \
         "httpx>=0.25.0" \
         "zstandard>=0.20.0"
 
-RUN pip install --no-compile ".[s3]"
+RUN pip install --no-compile ".[s3,azure]"
 
 ENTRYPOINT ["edgar-warehouse"]
 CMD ["--help"]

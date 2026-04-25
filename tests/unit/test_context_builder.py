@@ -18,7 +18,7 @@ class CommandContextFactoryTests(unittest.TestCase):
                 "WAREHOUSE_BRONZE_ROOT": os.path.join(tmp, "bronze"),
                 "WAREHOUSE_STORAGE_ROOT": os.path.join(tmp, "warehouse"),
                 "WAREHOUSE_SILVER_ROOT": os.path.join(tmp, "silver"),
-                "SNOWFLAKE_EXPORT_ROOT": os.path.join(tmp, "snowflake"),
+                "SERVING_EXPORT_ROOT": os.path.join(tmp, "serving"),
             }
             with patch.dict(os.environ, env, clear=False):
                 context = build_warehouse_context("bootstrap-full")
@@ -27,7 +27,22 @@ class CommandContextFactoryTests(unittest.TestCase):
             self.assertTrue(context.bronze_root.root.endswith("bronze"))
             self.assertTrue(context.storage_root.root.endswith("warehouse"))
             self.assertTrue(context.silver_root.root.endswith("silver"))
+            self.assertIsNotNone(context.serving_export_root)
+
+    def test_build_warehouse_context_accepts_legacy_snowflake_export_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {
+                "EDGAR_IDENTITY": "dev@example.com",
+                "WAREHOUSE_RUNTIME_MODE": "infrastructure_validation",
+                "WAREHOUSE_BRONZE_ROOT": os.path.join(tmp, "bronze"),
+                "WAREHOUSE_STORAGE_ROOT": os.path.join(tmp, "warehouse"),
+                "SNOWFLAKE_EXPORT_ROOT": os.path.join(tmp, "snowflake"),
+            }
+            with patch.dict(os.environ, env, clear=False):
+                context = build_warehouse_context("bootstrap-full")
+
             self.assertIsNotNone(context.snowflake_export_root)
+            self.assertEqual(context.serving_export_root, context.snowflake_export_root)
 
     def test_build_warehouse_context_requires_distinct_roots(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

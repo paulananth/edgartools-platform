@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 
 RUNTIME_MODES = frozenset({"bronze_capture", "infrastructure_validation"})
-SNOWFLAKE_EXPORT_COMMANDS = frozenset(
+SERVING_EXPORT_COMMANDS = frozenset(
     {
         "bootstrap-full",
         "bootstrap-recent-10",
@@ -31,7 +31,13 @@ class WarehouseSettings:
     bronze_root: str
     storage_root: str
     silver_root: str
-    snowflake_export_root: str | None
+    serving_export_root: str | None
+
+    @property
+    def snowflake_export_root(self) -> str | None:
+        """Backward-compatible alias during the Snowflake to Databricks migration."""
+
+        return self.serving_export_root
 
     @classmethod
     def from_env(cls, command_name: str) -> "WarehouseSettings":
@@ -63,12 +69,17 @@ class WarehouseSettings:
         else:
             silver_root = storage_root
 
-        snowflake_export_root = None
-        if command_name in SNOWFLAKE_EXPORT_COMMANDS:
-            value = os.environ.get("SNOWFLAKE_EXPORT_ROOT", "").strip()
+        serving_export_root = None
+        if command_name in SERVING_EXPORT_COMMANDS:
+            value = os.environ.get("SERVING_EXPORT_ROOT", "").strip()
             if not value:
-                raise WarehouseRuntimeError("SNOWFLAKE_EXPORT_ROOT is required for gold-affecting warehouse commands")
-            snowflake_export_root = value
+                value = os.environ.get("SNOWFLAKE_EXPORT_ROOT", "").strip()
+            if not value:
+                raise WarehouseRuntimeError(
+                    "SERVING_EXPORT_ROOT is required for gold-affecting warehouse commands "
+                    "(SNOWFLAKE_EXPORT_ROOT is accepted as a temporary migration fallback)"
+                )
+            serving_export_root = value
         return cls(
             identity=identity,
             runtime_mode=runtime_mode,
@@ -76,5 +87,5 @@ class WarehouseSettings:
             bronze_root=bronze_root,
             storage_root=storage_root,
             silver_root=silver_root,
-            snowflake_export_root=snowflake_export_root,
+            serving_export_root=serving_export_root,
         )

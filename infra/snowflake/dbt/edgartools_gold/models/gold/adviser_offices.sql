@@ -1,4 +1,4 @@
-{{ config(alias='ADVISER_OFFICES', materialized='dynamic_table', target_lag='DOWNSTREAM', snowflake_warehouse=env_var('DBT_SNOWFLAKE_WAREHOUSE')) }}
+{{ gold_model_config('ADVISER_OFFICES') }}
 
 select
   fact_key,

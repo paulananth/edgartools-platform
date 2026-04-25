@@ -1,0 +1,4 @@
+resource_group_name  = "replace-me-tfstate-rg"
+storage_account_name = "replacemetfstate"
+container_name       = "tfstate"
+key                  = "azure/prod/terraform.tfstate"

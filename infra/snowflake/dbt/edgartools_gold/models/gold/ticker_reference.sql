@@ -1,4 +1,4 @@
-{{ config(alias='TICKER_REFERENCE', materialized='dynamic_table', target_lag='DOWNSTREAM', snowflake_warehouse=env_var('DBT_SNOWFLAKE_WAREHOUSE')) }}
+{{ gold_model_config('TICKER_REFERENCE') }}
 
 select
   cik,

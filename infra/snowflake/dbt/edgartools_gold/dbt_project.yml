@@ -26,7 +26,6 @@ clean-targets:
 
 models:
   edgartools_gold:
-    +database: "{{ env_var('DBT_SNOWFLAKE_DATABASE') }}"
     gold:
-      +schema: EDGARTOOLS_GOLD
+      +schema: "{{ env_var('DBT_GOLD_SCHEMA', 'EDGARTOOLS_GOLD') }}"
       +materialized: view

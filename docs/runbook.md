@@ -1,8 +1,8 @@
 # EdgarTools Platform — End-to-End Setup Runbook
 
-This guide walks from zero to a working gold layer in Snowflake, including the Streamlit
-dashboard. Follow each section in order; each step depends on the previous one completing
-successfully.
+This guide walks from zero to the legacy AWS/Snowflake gold layer and documents the
+Azure/Databricks parallel-run path used for migration. Keep AWS/Snowflake running until
+Azure/Databricks output validation has passed.
 
 ## Architecture Overview
 
@@ -13,11 +13,21 @@ SEC EDGAR API → edgar-warehouse Python CLI → AWS S3 (Parquet, bronze)
   → Streamlit dashboard
 ```
 
+Migration target:
+
+```
+SEC EDGAR API → edgar-warehouse Python CLI → ADLS Gen2 (Parquet)
+  → Unity Catalog external tables / Databricks SQL
+  → dbt-databricks → EDGARTOOLS_GOLD tables/views
+```
+
 Layers:
 - **Source**: SEC EDGAR API (live pull by the warehouse CLI)
 - **Bronze**: AWS S3 Parquet exports written by `edgar-warehouse`
+- **Azure Bronze**: ADLS Gen2 Parquet exports written by the same runtime during parallel runs
 - **Silver** (internal): DuckDB intermediate processing inside the warehouse container
 - **Gold**: Snowflake `EDGARTOOLS_GOLD` dynamic tables managed by dbt
+- **Databricks Gold**: Databricks tables/views managed by `dbt-databricks`
 
 ---
 
@@ -41,10 +51,12 @@ Layers:
 | GitHub CLI (`gh`) | >= 2.0 | `winget install GitHub.cli` |
 | Docker Desktop | >= 24 | docker.com |
 | AWS CLI | v2 | aws.amazon.com/cli |
+| Azure CLI | latest | learn.microsoft.com/cli/azure |
 | Terraform | **1.14.8 or later in the 1.14.x line** | terraform.io |
 | SnowCLI (`snow`) | latest | `pip install snowflake-cli-labs` |
 | Bash | any | native on Linux/Mac; WSL on Windows |
 | dbt-snowflake | >= 1.7 | `pip install dbt-snowflake` |
+| dbt-databricks | >= 1.8 | `pip install dbt-databricks` |
 
 ### Clone the Repository
 
@@ -53,6 +65,10 @@ git clone https://github.com/paulananth/edgartools-platform
 cd edgartools-platform
 pip install -e ".[s3,snowflake]"
 pip install dbt-snowflake
+
+# Azure/Databricks parallel run
+pip install -e ".[azure,databricks]"
+pip install dbt-databricks
 ```
 
 ### Environment Variables
@@ -70,6 +86,111 @@ Set these before running any steps. The exact names are used by scripts and dbt.
 | `TF_VAR_snowflake_user` | Snowflake Terraform provider | From Snowflake creds |
 | `STATE_MACHINE_ARN` | `trigger-next-100.sh` | From Terraform outputs (Step 1) |
 | `EDGAR_USER_AGENT` | `trigger-next-100.sh` | `"Your Name your@email.com"` |
+
+Azure/Databricks migration variables:
+
+| Variable | Used By | Notes |
+|----------|---------|-------|
+| `SERVING_EXPORT_ROOT` | Warehouse runtime | Preferred export root for Databricks/Snowflake serving Parquet |
+| `SNOWFLAKE_EXPORT_ROOT` | Warehouse runtime | Temporary fallback during migration |
+| `DBT_DATABRICKS_HOST` | dbt | Databricks workspace host |
+| `DBT_DATABRICKS_HTTP_PATH` | dbt | SQL warehouse HTTP path |
+| `DBT_DATABRICKS_TOKEN` | dbt | Personal access token or service-principal token |
+| `DBT_DATABRICKS_CATALOG` | dbt | Unity Catalog catalog for source and gold models |
+| `DBT_SOURCE_SCHEMA` | dbt | Source schema, default `EDGARTOOLS_SOURCE` |
+| `DBT_GOLD_SCHEMA` | dbt | Gold schema, default `EDGARTOOLS_GOLD` |
+
+---
+
+## Credential Strategy
+
+Azure/Databricks uses managed identity for cloud resources and Key Vault for unavoidable
+secret values.
+
+- **EDGAR identity**: Store the SEC User-Agent contact string in Key Vault secret
+  `edgar-identity`. The runtime receives it as `EDGAR_IDENTITY`. Use an app/operator
+  name and monitored email, for example `EdgarTools Platform data-ops@example.com`.
+- **Azure storage**: Container Apps Jobs use managed identity with `Storage Blob Data
+  Contributor` on the ADLS Gen2 account. Do not use account keys, SAS tokens, or
+  connection strings.
+- **Databricks dbt**: Store local/dev dbt fallback values in Key Vault secrets
+  `databricks-host`, `databricks-http-path`, `databricks-token`, and optionally
+  `databricks-catalog`, `dbt-source-schema`, and `dbt-gold-schema`. Production should
+  use a service principal or workload identity from CI/Databricks Jobs rather than a
+  personal token.
+- **Databricks storage**: Use Unity Catalog storage credentials and external locations
+  backed by managed identity/access connector. Do not grant Databricks ADLS account keys.
+
+The Azure CLI and Databricks CLI are operator tools for bootstrapping and validation;
+production runtime auth should not depend on a local CLI login session.
+
+---
+
+## Azure/Databricks Parallel Run
+
+Use this path to stand up the replacement platform without removing AWS/Snowflake.
+
+```bash
+# Build and push the warehouse image to ACR
+bash infra/scripts/publish-warehouse-image-acr.sh \
+  --acr-name edgartoolsdevacr01 \
+  --image-tag "$(git rev-parse --short HEAD)"
+
+# Apply Azure infrastructure and run the validation job
+cd infra/terraform/azure/accounts/dev
+cp backend.hcl.example backend.hcl
+cp terraform.tfvars.example terraform.tfvars
+# Edit backend.hcl and terraform.tfvars, especially container_image.
+cd ../../../../..
+
+# First create the resource group and Key Vault.
+bash infra/scripts/deploy-azure-stack.sh --env dev --key-vault-only
+
+# Store EDGAR identity and optional dbt/Databricks settings outside Terraform state.
+bash infra/scripts/bootstrap-azure-secrets.sh \
+  --key-vault-name edgartools-dev-kv-01 \
+  --edgar-identity "EdgarTools Platform data-ops@example.com" \
+  --databricks-host "https://adb-..." \
+  --databricks-http-path "/sql/1.0/warehouses/..." \
+  --databricks-token "..."
+
+# Then apply the full Azure stack and start the validation job.
+bash infra/scripts/deploy-azure-stack.sh --env dev --start-validation-job
+```
+
+Terraform outputs the runtime roots:
+
+```bash
+terraform -chdir=infra/terraform/azure/accounts/dev output warehouse_bronze_root
+terraform -chdir=infra/terraform/azure/accounts/dev output warehouse_storage_root
+terraform -chdir=infra/terraform/azure/accounts/dev output serving_export_root
+```
+
+Register Databricks external tables with
+`infra/databricks/sql/register_external_tables.sql`, then run dbt:
+
+```bash
+export DBT_DATABRICKS_HOST="https://adb-..."
+export DBT_DATABRICKS_HTTP_PATH="/sql/1.0/warehouses/..."
+export DBT_DATABRICKS_TOKEN="..."
+export DBT_DATABRICKS_CATALOG="edgartools_dev"
+export DBT_SOURCE_SCHEMA="EDGARTOOLS_SOURCE"
+export DBT_GOLD_SCHEMA="EDGARTOOLS_GOLD"
+
+bash infra/scripts/run-databricks-dbt.sh --target databricks_dev
+
+# Or hydrate DBT_* values from Azure Key Vault:
+bash infra/scripts/run-databricks-dbt.sh \
+  --target databricks_dev \
+  --key-vault-name edgartools-dev-kv-01
+```
+
+Acceptance before cutover:
+
+- Run the same bounded scope on both paths, starting with `bootstrap-recent-10`.
+- Compare row counts for company, filing activity/detail, ownership, adviser, private funds, and ticker reference.
+- Compare key samples by CIK and accession number.
+- Run at least one daily incremental and one reconciliation-style run successfully before production cutover.
 
 ---
 

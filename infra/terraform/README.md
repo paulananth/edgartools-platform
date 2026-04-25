@@ -1,11 +1,23 @@
 # Terraform Layout
 
-This directory contains the AWS reference deployment for the SEC warehouse.
+This directory contains the AWS/Snowflake reference deployment and the Azure/Databricks
+parallel-run deployment for the SEC warehouse.
 
 ## Structure
 
 ```text
 bootstrap-state/
+azure/
+  accounts/
+    dev/
+    prod/
+  modules/
+    container_apps_jobs/
+    container_registry/
+    databricks_workspace/
+    key_vault/
+    resource_group/
+    storage_account/
 accounts/
   dev/
   prod/
@@ -22,7 +34,7 @@ modules/
   warehouse_runtime/
 ```
 
-## Apply order
+## AWS/Snowflake Apply Order
 
 1. Run `bootstrap-state` in the target account to create the Terraform state bucket.
 2. Copy `backend.hcl.example` to `backend.hcl` in the target account root.
@@ -61,3 +73,26 @@ modules/
   module keeps the bronze bucket behind `prevent_destroy`.
 - Snowflake baseline objects are provisioned from `infra/terraform/snowflake/` and use separate
   state keys from the AWS account roots.
+
+## Azure/Databricks Apply Order
+
+1. Create an Azure Storage backend for Terraform state, then copy
+   `infra/terraform/azure/accounts/<env>/backend.hcl.example` to `backend.hcl`.
+2. Publish the warehouse image to ACR:
+   `bash infra/scripts/publish-warehouse-image-acr.sh --acr-name <acr> --image-tag <git-sha>`.
+3. Set `container_image`, `storage_account_name`, `container_registry_name`, and
+   `key_vault_name` in `terraform.tfvars`.
+4. Apply only the resource group and Key Vault:
+   `bash infra/scripts/deploy-azure-stack.sh --env dev --key-vault-only`.
+5. Populate runtime secrets outside Terraform state:
+   `bash infra/scripts/bootstrap-azure-secrets.sh --key-vault-name <kv> --edgar-identity "EdgarTools Platform data-ops@example.com"`.
+6. Apply the full Azure root:
+   `bash infra/scripts/deploy-azure-stack.sh --env dev --start-validation-job`.
+7. Register Unity Catalog external tables over the serving export root using
+   `infra/databricks/sql/register_external_tables.sql`.
+8. Run dbt with the Databricks target:
+   `bash infra/scripts/run-databricks-dbt.sh --target databricks_dev --key-vault-name <kv>`.
+
+The Azure path writes the same serving Parquet contract used by the Snowflake export path,
+but the preferred runtime variable is now `SERVING_EXPORT_ROOT`. `SNOWFLAKE_EXPORT_ROOT`
+remains accepted as a temporary fallback for parallel runs.

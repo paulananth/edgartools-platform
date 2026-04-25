@@ -276,6 +276,9 @@ class WarehousePathResolver:
         )
 
     def snowflake_export_table_path(self, table_path: str, business_date: str, run_id: str) -> str:
+        return self.serving_export_table_path(table_path, business_date, run_id)
+
+    def serving_export_table_path(self, table_path: str, business_date: str, run_id: str) -> str:
         document_name = self._render("snowflake_export.table.filename", table_path=table_path)
         return self._render(
             "snowflake_export.table.path",
@@ -286,6 +289,19 @@ class WarehousePathResolver:
         )
 
     def snowflake_export_run_manifest_path(
+        self,
+        *,
+        workflow_name: str,
+        business_date: str,
+        run_id: str,
+    ) -> str:
+        return self.serving_export_run_manifest_path(
+            workflow_name=workflow_name,
+            business_date=business_date,
+            run_id=run_id,
+        )
+
+    def serving_export_run_manifest_path(
         self,
         *,
         workflow_name: str,
@@ -417,9 +433,12 @@ class CaptureSpecFactory:
         )
 
     def snowflake_export_table(self, table_path: str, business_date: str, run_id: str) -> CaptureSpec:
+        return self.serving_export_table(table_path, business_date, run_id)
+
+    def serving_export_table(self, table_path: str, business_date: str, run_id: str) -> CaptureSpec:
         return CaptureSpec(
-            source_name="snowflake_export_table",
-            relative_path=self._resolver.snowflake_export_table_path(table_path, business_date, run_id),
+            source_name="serving_export_table",
+            relative_path=self._resolver.serving_export_table_path(table_path, business_date, run_id),
         )
 
     def snowflake_export_run_manifest(
@@ -429,9 +448,22 @@ class CaptureSpecFactory:
         business_date: str,
         run_id: str,
     ) -> CaptureSpec:
+        return self.serving_export_run_manifest(
+            workflow_name=workflow_name,
+            business_date=business_date,
+            run_id=run_id,
+        )
+
+    def serving_export_run_manifest(
+        self,
+        *,
+        workflow_name: str,
+        business_date: str,
+        run_id: str,
+    ) -> CaptureSpec:
         return CaptureSpec(
-            source_name="snowflake_export_run_manifest",
-            relative_path=self._resolver.snowflake_export_run_manifest_path(
+            source_name="serving_export_run_manifest",
+            relative_path=self._resolver.serving_export_run_manifest_path(
                 workflow_name=workflow_name,
                 business_date=business_date,
                 run_id=run_id,

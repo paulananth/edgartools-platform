@@ -512,7 +512,7 @@ def _capture_bronze_raw(
     now: datetime,
     sync_run_id: str,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Capture and apply bronze/silver workflow state for a warehouse command."""
+    """Capture bronze first, then apply silver state for a warehouse command."""
     raw_writes: list[dict[str, Any]] = []
     metrics: dict[str, Any] = {"rows_inserted": 0, "rows_skipped": 0, "sync_status": "succeeded"}
 
@@ -553,20 +553,19 @@ def _capture_bronze_raw(
         impacted_ciks = _filter_ciks_to_universe(impacted_ciks, db)
         selected_ciks = _apply_bronze_cik_limit(impacted_ciks)
         if selected_ciks:
-            for cik in selected_ciks:
-                result = submissions_orchestrator(
-                    context=context,
-                    db=db,
-                    sync_run_id=sync_run_id,
-                    cik=cik,
-                    include_pagination=False,
-                    fetch_date=now.date(),
-                    force=bool(arguments.get("force")),
-                    load_mode="daily_incremental",
-                )
-                raw_writes.extend(result["raw_writes"])
-                metrics["rows_inserted"] += result["rows_written"]
-                metrics["rows_skipped"] += result["rows_skipped"]
+            result = _run_submissions_bronze_then_silver(
+                context=context,
+                db=db,
+                sync_run_id=sync_run_id,
+                ciks=selected_ciks,
+                include_pagination=False,
+                fetch_date=now.date(),
+                force=bool(arguments.get("force")),
+                load_mode="daily_incremental",
+            )
+            raw_writes.extend(result["raw_writes"])
+            metrics["rows_inserted"] += result["rows_written"]
+            metrics["rows_skipped"] += result["rows_skipped"]
         return raw_writes, metrics
 
     if command_name == "load-daily-form-index-for-date":
@@ -592,21 +591,20 @@ def _capture_bronze_raw(
             command_name=command_name,
             tracking_status_filter=str(scope.get("tracking_status_filter", "active")),
         )
-        for cik in ciks:
-            result = submissions_orchestrator(
-                context=context,
-                db=db,
-                sync_run_id=sync_run_id,
-                cik=cik,
-                include_pagination=False,
-                fetch_date=now.date(),
-                force=bool(arguments.get("force")),
-                load_mode="bootstrap_recent_10",
-                recent_limit=arguments.get("recent_limit"),
-            )
-            raw_writes.extend(result["raw_writes"])
-            metrics["rows_inserted"] += result["rows_written"]
-            metrics["rows_skipped"] += result["rows_skipped"]
+        result = _run_submissions_bronze_then_silver(
+            context=context,
+            db=db,
+            sync_run_id=sync_run_id,
+            ciks=ciks,
+            include_pagination=False,
+            fetch_date=now.date(),
+            force=bool(arguments.get("force")),
+            load_mode="bootstrap_recent_10",
+            recent_limit=arguments.get("recent_limit"),
+        )
+        raw_writes.extend(result["raw_writes"])
+        metrics["rows_inserted"] += result["rows_written"]
+        metrics["rows_skipped"] += result["rows_skipped"]
         return raw_writes, metrics
 
     if command_name == "bootstrap-full":
@@ -616,20 +614,19 @@ def _capture_bronze_raw(
             command_name=command_name,
             tracking_status_filter=str(scope.get("tracking_status_filter", "active")),
         )
-        for cik in ciks:
-            result = submissions_orchestrator(
-                context=context,
-                db=db,
-                sync_run_id=sync_run_id,
-                cik=cik,
-                include_pagination=True,
-                fetch_date=now.date(),
-                force=bool(arguments.get("force")),
-                load_mode="bootstrap_full",
-            )
-            raw_writes.extend(result["raw_writes"])
-            metrics["rows_inserted"] += result["rows_written"]
-            metrics["rows_skipped"] += result["rows_skipped"]
+        result = _run_submissions_bronze_then_silver(
+            context=context,
+            db=db,
+            sync_run_id=sync_run_id,
+            ciks=ciks,
+            include_pagination=True,
+            fetch_date=now.date(),
+            force=bool(arguments.get("force")),
+            load_mode="bootstrap_full",
+        )
+        raw_writes.extend(result["raw_writes"])
+        metrics["rows_inserted"] += result["rows_written"]
+        metrics["rows_skipped"] += result["rows_skipped"]
         return raw_writes, metrics
 
     if command_name == "targeted-resync":
@@ -814,20 +811,19 @@ def _capture_bronze_raw(
     if command_name == "bootstrap-batch":
         cik_list = list(arguments.get("cik_list") or [])
         include_pagination = bool(arguments.get("include_pagination", True))
-        for cik in cik_list:
-            result = submissions_orchestrator(
-                context=context,
-                db=db,
-                sync_run_id=sync_run_id,
-                cik=cik,
-                include_pagination=include_pagination,
-                fetch_date=now.date(),
-                force=bool(arguments.get("force", False)),
-                load_mode="bootstrap_batch",
-            )
-            raw_writes.extend(result["raw_writes"])
-            metrics["rows_inserted"] += result["rows_written"]
-            metrics["rows_skipped"] += result["rows_skipped"]
+        result = _run_submissions_bronze_then_silver(
+            context=context,
+            db=db,
+            sync_run_id=sync_run_id,
+            ciks=cik_list,
+            include_pagination=include_pagination,
+            fetch_date=now.date(),
+            force=bool(arguments.get("force", False)),
+            load_mode="bootstrap_batch",
+        )
+        raw_writes.extend(result["raw_writes"])
+        metrics["rows_inserted"] += result["rows_written"]
+        metrics["rows_skipped"] += result["rows_skipped"]
         return raw_writes, metrics
 
     raise WarehouseRuntimeError(f"bronze_capture mode does not support {command_name}")
@@ -845,19 +841,95 @@ def submissions_orchestrator(
     load_mode: str,
     recent_limit: int | None = None,
 ) -> dict[str, Any]:
-    """Fetch one submissions main file, stage rowsets, and merge silver state."""
-    raw_writes: list[dict[str, Any]] = []
+    """Fetch one submissions main file, then stage and merge silver state."""
+    result = _run_submissions_bronze_then_silver(
+        context=context,
+        db=db,
+        sync_run_id=sync_run_id,
+        ciks=[cik],
+        include_pagination=include_pagination,
+        fetch_date=fetch_date,
+        force=force,
+        load_mode=load_mode,
+        recent_limit=recent_limit,
+    )
+    return {
+        "raw_writes": result["raw_writes"],
+        "rows_written": result["rows_written"],
+        "rows_skipped": result["rows_skipped"],
+        "recent_accessions": result["recent_accessions"],
+        "pagination_accessions": result["pagination_accessions"],
+    }
+
+
+def _run_submissions_bronze_then_silver(
+    *,
+    context: WarehouseCommandContext,
+    db: SilverDatabase,
+    sync_run_id: str,
+    ciks: list[int],
+    include_pagination: bool,
+    fetch_date: date,
+    force: bool,
+    load_mode: str,
+    recent_limit: int | None = None,
+) -> dict[str, Any]:
+    """Capture every selected SEC submission into bronze before applying silver."""
+    bronze_snapshots = [
+        _capture_submission_bronze_snapshot(
+            context=context,
+            cik=cik,
+            include_pagination=include_pagination,
+            fetch_date=fetch_date,
+        )
+        for cik in ciks
+    ]
+    raw_writes = [
+        write_record
+        for snapshot in bronze_snapshots
+        for write_record in snapshot["raw_writes"]
+    ]
+
     rows_written = 0
     rows_skipped = 0
+    recent_accessions: list[str] = []
+    pagination_accessions: list[str] = []
     now = datetime.now(UTC)
-    existing_state = db.get_company_sync_state(cik) or {"tracking_status": "bootstrap_pending"}
+    for snapshot in bronze_snapshots:
+        result = _apply_submission_snapshot_to_silver(
+            db=db,
+            sync_run_id=sync_run_id,
+            snapshot=snapshot,
+            force=force,
+            load_mode=load_mode,
+            recent_limit=recent_limit,
+            now=now,
+        )
+        rows_written += int(result["rows_written"])
+        rows_skipped += int(result["rows_skipped"])
+        recent_accessions.extend(result["recent_accessions"])
+        pagination_accessions.extend(result["pagination_accessions"])
 
+    return {
+        "raw_writes": raw_writes,
+        "rows_written": rows_written,
+        "rows_skipped": rows_skipped,
+        "recent_accessions": _dedupe_strings(recent_accessions),
+        "pagination_accessions": _dedupe_strings(pagination_accessions),
+    }
+
+
+def _capture_submission_bronze_snapshot(
+    *,
+    context: WarehouseCommandContext,
+    cik: int,
+    include_pagination: bool,
+    fetch_date: date,
+) -> dict[str, Any]:
     main_snapshot = _capture_submissions_main(context=context, cik=cik, fetch_date=fetch_date)
-    raw_writes.append(main_snapshot["write_record"])
+    raw_writes = [main_snapshot["write_record"]]
     main_payload = main_snapshot["payload"]
-    pagination_payloads: list[tuple[str, dict[str, Any]]] = []
-    pagination_write_records: list[dict[str, Any]] = []
-    pagination_same = True
+    pagination_snapshots: list[dict[str, Any]] = []
 
     manifest_file_names = _pagination_file_names(main_payload) if include_pagination else []
     for file_name in manifest_file_names:
@@ -867,22 +939,70 @@ def submissions_orchestrator(
             file_name=file_name,
             fetch_date=fetch_date,
         )
-        pagination_write_records.append(pagination_snapshot["write_record"])
+        pagination_snapshots.append(
+            {
+                "file_name": file_name,
+                "payload": pagination_snapshot["payload"],
+                "write_record": pagination_snapshot["write_record"],
+            }
+        )
         raw_writes.append(pagination_snapshot["write_record"])
-        pagination_payloads.append((file_name, pagination_snapshot["payload"]))
+
+    return {
+        "cik": cik,
+        "include_pagination": include_pagination,
+        "main_payload": main_payload,
+        "main_write_record": main_snapshot["write_record"],
+        "manifest_file_names": manifest_file_names,
+        "pagination_snapshots": pagination_snapshots,
+        "raw_writes": raw_writes,
+    }
+
+
+def _apply_submission_snapshot_to_silver(
+    *,
+    db: SilverDatabase,
+    sync_run_id: str,
+    snapshot: dict[str, Any],
+    force: bool,
+    load_mode: str,
+    recent_limit: int | None,
+    now: datetime,
+) -> dict[str, Any]:
+    raw_writes: list[dict[str, Any]] = []
+    rows_written = 0
+    rows_skipped = 0
+    cik = int(snapshot["cik"])
+    existing_state = db.get_company_sync_state(cik) or {"tracking_status": "bootstrap_pending"}
+    main_write_record = snapshot["main_write_record"]
+    main_payload = snapshot["main_payload"]
+    raw_writes.append(main_write_record)
+    pagination_snapshots = list(snapshot["pagination_snapshots"])
+    pagination_payloads = [
+        (str(item["file_name"]), item["payload"])
+        for item in pagination_snapshots
+    ]
+    pagination_write_records = [
+        item["write_record"]
+        for item in pagination_snapshots
+    ]
+    pagination_same = True
+
+    for file_name, write_record in zip(snapshot["manifest_file_names"], pagination_write_records):
+        raw_writes.append(write_record)
         checkpoint = db.get_source_checkpoint("submissions_pagination", f"file:{file_name}")
-        if force or checkpoint is None or checkpoint.get("last_sha256") != pagination_snapshot["write_record"]["sha256"]:
+        if force or checkpoint is None or checkpoint.get("last_sha256") != write_record["sha256"]:
             pagination_same = False
 
     main_checkpoint = db.get_source_checkpoint("submissions_main", f"cik:{cik}")
     main_same = (
         (not force)
         and main_checkpoint is not None
-        and main_checkpoint.get("last_sha256") == main_snapshot["write_record"]["sha256"]
+        and main_checkpoint.get("last_sha256") == main_write_record["sha256"]
     )
     all_same = main_same and pagination_same
 
-    for write_record in [main_snapshot["write_record"], *pagination_write_records]:
+    for write_record in [main_write_record, *pagination_write_records]:
         source_name = write_record["source_name"]
         source_key = f"cik:{cik}" if source_name == "submissions_main" else f"file:{Path(write_record['relative_path']).name}"
         db.upsert_source_checkpoint(
@@ -902,14 +1022,14 @@ def submissions_orchestrator(
             main_payload,
             cik,
             sync_run_id,
-            main_snapshot["write_record"]["sha256"],
+            main_write_record["sha256"],
             load_mode,
             recent_limit=recent_limit,
         )
         result = {
             "rows_written": 0,
             "recent_rows": recent_rows,
-            "manifest_rows": stage_manifest_loader(main_payload, cik, sync_run_id, main_snapshot["write_record"]["sha256"], load_mode),
+            "manifest_rows": stage_manifest_loader(main_payload, cik, sync_run_id, main_write_record["sha256"], load_mode),
             "recent_accessions": [
                 row["accession_number"]
                 for row in recent_rows
@@ -922,7 +1042,7 @@ def submissions_orchestrator(
             db=db,
             sync_run_id=sync_run_id,
             cik=cik,
-            raw_object_id=main_snapshot["write_record"]["sha256"],
+            raw_object_id=main_write_record["sha256"],
             load_mode=load_mode,
             main_payload=main_payload,
             pagination_payloads=pagination_payloads,
@@ -937,15 +1057,16 @@ def submissions_orchestrator(
                 pagination_payload,
                 cik,
                 sync_run_id,
-                main_snapshot["write_record"]["sha256"],
+                main_write_record["sha256"],
                 load_mode,
             )
         )
 
     latest_filing_date = _latest_filing_date(all_filing_rows)
     latest_acceptance_datetime = _latest_acceptance_datetime(all_filing_rows)
-    pagination_files_expected = len(manifest_file_names)
-    pagination_files_loaded = len(manifest_file_names) if include_pagination else 0
+    include_pagination = bool(snapshot["include_pagination"])
+    pagination_files_expected = len(snapshot["manifest_file_names"])
+    pagination_files_loaded = len(snapshot["manifest_file_names"]) if include_pagination else 0
     bootstrap_completed_at = existing_state.get("bootstrap_completed_at")
     pagination_completed_at = existing_state.get("pagination_completed_at")
     tracking_status = existing_state.get("tracking_status", "active")
@@ -968,8 +1089,8 @@ def submissions_orchestrator(
             "tracking_status": tracking_status,
             "bootstrap_completed_at": bootstrap_completed_at,
             "last_main_sync_at": now,
-            "last_main_raw_object_id": main_snapshot["write_record"]["sha256"],
-            "last_main_sha256": main_snapshot["write_record"]["sha256"],
+            "last_main_raw_object_id": main_write_record["sha256"],
+            "last_main_sha256": main_write_record["sha256"],
             "latest_filing_date_seen": latest_filing_date,
             "latest_acceptance_datetime_seen": latest_acceptance_datetime,
             "pagination_files_expected": pagination_files_expected if include_pagination else 0,

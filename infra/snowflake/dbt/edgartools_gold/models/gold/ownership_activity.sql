@@ -1,4 +1,4 @@
-{{ config(alias='OWNERSHIP_ACTIVITY', materialized='dynamic_table', target_lag='DOWNSTREAM', snowflake_warehouse=env_var('DBT_SNOWFLAKE_WAREHOUSE')) }}
+{{ gold_model_config('OWNERSHIP_ACTIVITY') }}
 
 select
   fact_key,

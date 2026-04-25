@@ -1,4 +1,4 @@
-{{ config(alias='PRIVATE_FUNDS', materialized='dynamic_table', target_lag='DOWNSTREAM', snowflake_warehouse=env_var('DBT_SNOWFLAKE_WAREHOUSE')) }}
+{{ gold_model_config('PRIVATE_FUNDS') }}
 
 select
   fact_key,

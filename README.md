@@ -2,12 +2,12 @@
 
 Data platform for SEC EDGAR built on [edgartools](https://github.com/dgunning/edgartools).
 
-Extracts SEC EDGAR filing data from source through a bronze AWS S3 layer to a gold Snowflake analytics layer.
+Extracts SEC EDGAR filing data from source through bronze object storage to a gold analytics layer. The legacy/reference path uses AWS S3, ECS, Step Functions, and Snowflake; the migration path adds Azure ADLS Gen2, ACR, Container Apps Jobs, and Databricks for parallel validation.
 
 ## Architecture
 
 ```
-SEC EDGAR API → edgar-warehouse (Python) → S3 (Parquet) → Snowflake source tables → dbt → Gold dynamic tables → Streamlit dashboard
+SEC EDGAR API → edgar-warehouse (Python) → S3 or ADLS Gen2 (Parquet) → Snowflake or Databricks source tables → dbt → Gold tables → dashboard
 ```
 
 ### Where `edgartools` fits
@@ -38,8 +38,9 @@ See [docs/runbook.md](docs/runbook.md) for complete end-to-end setup.
 | Directory | Purpose |
 |---|---|
 | `edgar_warehouse/` | Python ETL runtime — exports SEC data to S3 |
-| `infra/terraform/` | AWS + Snowflake infrastructure (IaC) |
-| `infra/snowflake/dbt/` | dbt project that creates Snowflake gold tables |
+| `infra/terraform/` | AWS/Snowflake and Azure/Databricks infrastructure (IaC) |
+| `infra/snowflake/dbt/` | dbt project for Snowflake and Databricks gold tables |
+| `infra/databricks/sql/` | Unity Catalog external table registration templates |
 | `infra/snowflake/sql/bootstrap/` | Bootstrap SQL for Snowflake native S3 pull |
 | `infra/snowflake/streamlit/` | Streamlit-in-Snowflake production dashboard |
 | `scripts/batch/` | Batch processing scripts for individual form types |
@@ -97,4 +98,11 @@ This section describes the code paths used by the warehouse runtime in developme
 git clone https://github.com/paulananth/edgartools-platform
 cd edgartools-platform
 pip install -e ".[s3,snowflake]"
+# Azure/Databricks parallel-run install:
+# pip install -e ".[azure,databricks]"
 ```
+
+Azure runtime credentials use managed identity for ACR/ADLS and Azure Key Vault for
+the mandatory SEC EDGAR User-Agent identity plus optional Databricks/dbt settings.
+Use `infra/scripts/bootstrap-azure-secrets.sh` to populate those values outside
+Terraform state.
