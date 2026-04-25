@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 
+from edgar_warehouse.mdm.cli import register_mdm_subparser
 from edgar_warehouse.runtime import run_command
 
 
@@ -304,6 +305,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(bootstrap_batch)
     bootstrap_batch.set_defaults(handler=_handle_bootstrap_batch)
+
+    register_mdm_subparser(subparsers)
 
     return parser
 
