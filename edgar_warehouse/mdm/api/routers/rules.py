@@ -32,7 +32,7 @@ router = APIRouter(prefix="/stewardship/rules", tags=["rules"])
 def list_source_priority(
     entity_type: Optional[str] = None, session: Session = Depends(get_db)
 ):
-    q = select(db.MdmSourcePriority).where(db.MdmSourcePriority.is_active.is_(True))
+    q = select(db.MdmSourcePriority).where(db.MdmSourcePriority.is_active == True)
     if entity_type:
         q = q.where(db.MdmSourcePriority.entity_type == entity_type)
     return [
@@ -79,7 +79,7 @@ def patch_source_priority(
 def list_survivorship(
     entity_type: Optional[str] = None, session: Session = Depends(get_db)
 ):
-    q = select(db.MdmFieldSurvivorship).where(db.MdmFieldSurvivorship.is_active.is_(True))
+    q = select(db.MdmFieldSurvivorship).where(db.MdmFieldSurvivorship.is_active == True)
     if entity_type:
         q = q.where(db.MdmFieldSurvivorship.entity_type == entity_type)
     return [
@@ -129,7 +129,7 @@ def patch_survivorship(
 @router.get("/match-thresholds")
 def list_match_thresholds(session: Session = Depends(get_db)):
     rows = session.scalars(
-        select(db.MdmMatchThreshold).where(db.MdmMatchThreshold.is_active.is_(True))
+        select(db.MdmMatchThreshold).where(db.MdmMatchThreshold.is_active == True)
     ).all()
     return [
         {
@@ -175,7 +175,7 @@ def patch_match_threshold(
 def list_normalization(
     rule_type: Optional[str] = None, session: Session = Depends(get_db)
 ):
-    q = select(db.MdmNormalizationRule).where(db.MdmNormalizationRule.is_active.is_(True))
+    q = select(db.MdmNormalizationRule).where(db.MdmNormalizationRule.is_active == True)
     if rule_type:
         q = q.where(db.MdmNormalizationRule.rule_type == rule_type)
     return [

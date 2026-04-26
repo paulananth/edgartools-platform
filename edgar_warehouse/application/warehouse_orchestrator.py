@@ -7,6 +7,7 @@ import importlib
 import json
 import os
 import re
+import sys
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -270,6 +271,7 @@ def _execute_warehouse_bronze_capture(
     command_path = command_name.replace("_", "-")
     scope = _resolve_scope(command_name=command_name, arguments=arguments, now=now, silver_root=context.silver_root)
     db = _open_silver_database(context.silver_root)
+    db_closed = False
     sync_mode = _sync_mode_for_command(command_name)
     sync_scope_type = _sync_scope_type_for_command(command_name, scope)
     db.start_sync_run(
@@ -288,6 +290,7 @@ def _execute_warehouse_bronze_capture(
     gold_row_counts: dict[str, int] | None = None
     snowflake_export_counts: dict[str, int] | None = None
     snowflake_export_manifest_write: dict[str, Any] | None = None
+    silver_database_write: dict[str, Any] | None = None
     silver_table_counts: dict[str, int] | None = None
     try:
         raw_writes, metrics = _capture_bronze_raw(
@@ -319,9 +322,16 @@ def _execute_warehouse_bronze_capture(
             rows_inserted=int(metrics.get("rows_inserted", 0) or 0),
             rows_skipped=int(metrics.get("rows_skipped", 0) or 0),
         )
+        db.close()
+        db_closed = True
+        silver_database_write = _publish_silver_database_if_remote(context)
     except Exception as exc:
-        db.complete_sync_run(run_id, status="failed", error_message=str(exc))
+        if not db_closed:
+            db.complete_sync_run(run_id, status="failed", error_message=str(exc))
         raise
+    finally:
+        if not db_closed:
+            db.close()
 
     writes = []
     for layer, relative_path in _planned_writes(command_name=command_name, command_path=command_path, run_id=run_id, scope=scope).items():
@@ -365,6 +375,9 @@ def _execute_warehouse_bronze_capture(
             "relative_path": run_manifest_relative_path,
         }
         writes.append(snowflake_export_manifest_write)
+
+    if silver_database_write is not None:
+        writes.append(silver_database_write)
 
     ticker_reference_rows = metrics.pop("_ticker_reference_rows", None)
     if (
@@ -440,6 +453,7 @@ def _execute_warehouse_bronze_capture(
         "scope": scope,
         "gold_row_counts": gold_row_counts,
         "silver_table_counts": silver_table_counts,
+        "silver_database": silver_database_write,
         "snowflake_export_manifest": snowflake_export_manifest_write,
         "snowflake_export_row_counts": snowflake_export_counts,
         "started_at": now.isoformat().replace("+00:00", "Z"),
@@ -452,6 +466,21 @@ def _execute_warehouse_bronze_capture(
 
 def _open_silver_database(silver_root: StorageLocation) -> SilverDatabase:
     return open_silver_database(silver_root)
+
+
+def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict[str, Any] | None:
+    if not context.storage_root.is_remote:
+        return None
+    source_path = Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
+    if not source_path.exists():
+        raise WarehouseRuntimeError(f"Silver DuckDB file was not found: {source_path}")
+    relative_path = "silver/sec/silver.duckdb"
+    return {
+        "layer": "silver_database",
+        "path": context.storage_root.write_bytes(relative_path, source_path.read_bytes()),
+        "relative_path": relative_path,
+        "size_bytes": source_path.stat().st_size,
+    }
 
 
 def _apply_silver_from_submissions(
@@ -585,12 +614,20 @@ def _capture_bronze_raw(
         return raw_writes, metrics
 
     if command_name == "bootstrap-recent-10":
-        ciks = _resolve_target_ciks(
+        ciks, reference_result = _resolve_bootstrap_target_ciks(
+            context=context,
             db=db,
+            sync_run_id=sync_run_id,
             raw_ciks=scope.get("cik_list"),
             command_name=command_name,
             tracking_status_filter=str(scope.get("tracking_status_filter", "active")),
+            fetch_date=now.date(),
         )
+        if reference_result is not None:
+            raw_writes.extend(reference_result["raw_writes"])
+            metrics["rows_inserted"] += reference_result["rows_written"]
+            metrics["rows_skipped"] += reference_result["rows_skipped"]
+        ciks = _apply_bronze_cik_limit(ciks)
         result = _run_submissions_bronze_then_silver(
             context=context,
             db=db,
@@ -608,12 +645,20 @@ def _capture_bronze_raw(
         return raw_writes, metrics
 
     if command_name == "bootstrap-full":
-        ciks = _resolve_target_ciks(
+        ciks, reference_result = _resolve_bootstrap_target_ciks(
+            context=context,
             db=db,
+            sync_run_id=sync_run_id,
             raw_ciks=scope.get("cik_list"),
             command_name=command_name,
             tracking_status_filter=str(scope.get("tracking_status_filter", "active")),
+            fetch_date=now.date(),
         )
+        if reference_result is not None:
+            raw_writes.extend(reference_result["raw_writes"])
+            metrics["rows_inserted"] += reference_result["rows_written"]
+            metrics["rows_skipped"] += reference_result["rows_skipped"]
+        ciks = _apply_bronze_cik_limit(ciks)
         result = _run_submissions_bronze_then_silver(
             context=context,
             db=db,
@@ -875,15 +920,43 @@ def _run_submissions_bronze_then_silver(
     recent_limit: int | None = None,
 ) -> dict[str, Any]:
     """Capture every selected SEC submission into bronze before applying silver."""
-    bronze_snapshots = [
-        _capture_submission_bronze_snapshot(
+    bronze_snapshots = []
+    total_ciks = len(ciks)
+    print(
+        json.dumps(
+            {
+                "event": "bronze_capture_started",
+                "cik_count": total_ciks,
+                "include_pagination": include_pagination,
+                "load_mode": load_mode,
+            },
+            sort_keys=True,
+        ),
+        file=sys.stderr,
+        flush=True,
+    )
+    for index, cik in enumerate(ciks, start=1):
+        bronze_snapshots.append(
+            _capture_submission_bronze_snapshot(
             context=context,
             cik=cik,
             include_pagination=include_pagination,
             fetch_date=fetch_date,
         )
-        for cik in ciks
-    ]
+        )
+        if index == total_ciks or index % 10 == 0:
+            print(
+                json.dumps(
+                    {
+                        "event": "bronze_capture_progress",
+                        "captured": index,
+                        "cik_count": total_ciks,
+                    },
+                    sort_keys=True,
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
     raw_writes = [
         write_record
         for snapshot in bronze_snapshots
@@ -1724,6 +1797,34 @@ def _resolve_target_ciks(
     if ciks:
         return ciks
     raise WarehouseRuntimeError(f"{command_name} requires --cik-list or a seeded tracked universe")
+
+
+def _resolve_bootstrap_target_ciks(
+    *,
+    context: WarehouseCommandContext,
+    db: SilverDatabase,
+    sync_run_id: str,
+    raw_ciks: Any,
+    command_name: str,
+    tracking_status_filter: str,
+    fetch_date: date,
+) -> tuple[list[int], dict[str, Any] | None]:
+    if raw_ciks:
+        return [_parse_cik(value) for value in raw_ciks], None
+    ciks = db.get_tracked_universe_ciks(status_filter=tracking_status_filter)
+    if ciks:
+        return ciks, None
+
+    reference_result = _sync_reference_data(
+        context=context,
+        db=db,
+        sync_run_id=sync_run_id,
+        fetch_date=fetch_date,
+    )
+    ciks = db.get_tracked_universe_ciks(status_filter=tracking_status_filter)
+    if not ciks:
+        raise WarehouseRuntimeError(f"{command_name} could not seed a tracked universe from SEC reference data")
+    return ciks, reference_result
 
 
 def _resolve_reconcile_ciks(

@@ -47,7 +47,7 @@ def get_insiders(
     edges_q = select(db.MdmRelationshipInstance).where(
         db.MdmRelationshipInstance.rel_type_id == rt.rel_type_id,
         db.MdmRelationshipInstance.target_entity_id == company.entity_id,
-        db.MdmRelationshipInstance.is_active.is_(True),
+        db.MdmRelationshipInstance.is_active == True,
     )
     if as_of is not None:
         edges_q = edges_q.where(

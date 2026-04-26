@@ -52,8 +52,8 @@ def list_entities(
         base = base.where(db.MdmEntity.entity_type == type)
         count_q = count_q.where(db.MdmEntity.entity_type == type)
     if not include_quarantined:
-        base = base.where(db.MdmEntity.is_quarantined.is_(False))
-        count_q = count_q.where(db.MdmEntity.is_quarantined.is_(False))
+        base = base.where(db.MdmEntity.is_quarantined == False)
+        count_q = count_q.where(db.MdmEntity.is_quarantined == False)
     if q:
         # Search canonical_name on whichever domain table matches `type`. If
         # `type` is not given, only filter by source_id substring as a generic

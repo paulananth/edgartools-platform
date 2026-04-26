@@ -1,6 +1,7 @@
 """Shared FastAPI dependencies: DB session, Neo4j client."""
 from __future__ import annotations
 
+import json
 import os
 from typing import Iterator, Optional
 
@@ -28,6 +29,11 @@ def get_neo4j() -> Optional[Neo4jGraphClient]:
     uri = os.environ.get("NEO4J_URI")
     user = os.environ.get("NEO4J_USER")
     password = os.environ.get("NEO4J_PASSWORD")
+    if not (uri and user and password) and os.environ.get("NEO4J_SECRET_JSON"):
+        payload = json.loads(os.environ["NEO4J_SECRET_JSON"])
+        uri = uri or payload.get("uri")
+        user = user or payload.get("user")
+        password = password or payload.get("password")
     if not (uri and user and password):
         return None
     return Neo4jGraphClient(uri=uri, user=user, password=password)

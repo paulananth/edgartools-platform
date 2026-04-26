@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Iterable, Optional
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from edgar_warehouse.mdm.database import MdmEntityAttributeStage
@@ -186,7 +186,7 @@ def run_survivorship_for_entity(
     results: dict[str, MergeResult] = {}
     for fname in fields:
         rows = session.scalars(
-            MdmEntityAttributeStage.__table__.select().where(
+            select(MdmEntityAttributeStage).where(
                 (MdmEntityAttributeStage.entity_id == entity_id)
                 & (MdmEntityAttributeStage.field_name == fname)
             )

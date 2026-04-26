@@ -58,12 +58,12 @@ class MDMRuleEngine:
 
     @staticmethod
     def _load_source_priority(session: Session) -> dict[tuple[str, str], int]:
-        stmt = select(MdmSourcePriority).where(MdmSourcePriority.is_active.is_(True))
+        stmt = select(MdmSourcePriority).where(MdmSourcePriority.is_active == True)
         return {(r.entity_type, r.source_system): r.priority for r in session.scalars(stmt)}
 
     @staticmethod
     def _load_field_survivorship(session: Session) -> dict[tuple[str, str], FieldRule]:
-        stmt = select(MdmFieldSurvivorship).where(MdmFieldSurvivorship.is_active.is_(True))
+        stmt = select(MdmFieldSurvivorship).where(MdmFieldSurvivorship.is_active == True)
         out: dict[tuple[str, str], FieldRule] = {}
         for row in session.scalars(stmt):
             out[(row.entity_type, row.field_name)] = FieldRule(
@@ -79,7 +79,7 @@ class MDMRuleEngine:
 
     @staticmethod
     def _load_match_thresholds(session: Session) -> dict[tuple[str, str], tuple[float, float]]:
-        stmt = select(MdmMatchThreshold).where(MdmMatchThreshold.is_active.is_(True))
+        stmt = select(MdmMatchThreshold).where(MdmMatchThreshold.is_active == True)
         return {
             (r.entity_type, r.match_method): (r.auto_merge_min, r.review_min)
             for r in session.scalars(stmt)
@@ -87,7 +87,7 @@ class MDMRuleEngine:
 
     @staticmethod
     def _load_normalization_rules(session: Session) -> dict[str, dict[str, str]]:
-        stmt = select(MdmNormalizationRule).where(MdmNormalizationRule.is_active.is_(True))
+        stmt = select(MdmNormalizationRule).where(MdmNormalizationRule.is_active == True)
         out: dict[str, dict[str, str]] = {}
         for row in session.scalars(stmt):
             out.setdefault(row.rule_type, {})[row.input_value.upper()] = row.canonical_value

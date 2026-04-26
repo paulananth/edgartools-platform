@@ -36,7 +36,7 @@ def _registry(session: Session) -> GraphRegistry:
 @router.get("/relationship-types", response_model=list[RelTypeOut])
 def list_relationship_types(session: Session = Depends(get_db)) -> list[RelTypeOut]:
     rows = session.scalars(
-        select(db.MdmRelationshipType).where(db.MdmRelationshipType.is_active.is_(True))
+        select(db.MdmRelationshipType).where(db.MdmRelationshipType.is_active == True)
     ).all()
     return [
         RelTypeOut(
@@ -143,7 +143,7 @@ def neighborhood(
         if not frontier:
             break
         q = select(db.MdmRelationshipInstance).where(
-            db.MdmRelationshipInstance.is_active.is_(True),
+            db.MdmRelationshipInstance.is_active == True,
             (
                 db.MdmRelationshipInstance.source_entity_id.in_(frontier)
                 | db.MdmRelationshipInstance.target_entity_id.in_(frontier)
@@ -225,7 +225,7 @@ def shared_insiders(
         q = select(db.MdmRelationshipInstance.source_entity_id).where(
             db.MdmRelationshipInstance.rel_type_id == rt.rel_type_id,
             db.MdmRelationshipInstance.target_entity_id == company_eid,
-            db.MdmRelationshipInstance.is_active.is_(True),
+            db.MdmRelationshipInstance.is_active == True,
         )
         if as_of is not None:
             q = q.where(

@@ -1,27 +1,30 @@
-"""SQLAlchemy models for the MDM PostgreSQL layer."""
+"""SQLAlchemy models for the MDM relational layer."""
 from __future__ import annotations
 
 import os
+import uuid
 from typing import Optional
 
 from sqlalchemy import (
-    UUID,
     BigInteger,
     Boolean,
+    CHAR,
     CheckConstraint,
     Date,
     Float,
     ForeignKey,
     Index,
     Integer,
+    JSON,
     Numeric,
+    String,
     Text,
     TIMESTAMP,
     UniqueConstraint,
     create_engine,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -30,10 +33,41 @@ from sqlalchemy.orm import (
     mapped_column,
     relationship,
 )
+from sqlalchemy.types import TypeDecorator
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class GUID(TypeDecorator):
+    """Portable UUID/GUID type.
+
+    PostgreSQL keeps native UUID columns; Azure SQL uses text GUIDs so it can
+    interoperate with the explicit T-SQL migration schema.
+    """
+
+    impl = CHAR(36)
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(PG_UUID(as_uuid=False))
+        return dialect.type_descriptor(String(36))
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return str(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return str(value)
+
+
+def _uuid_string() -> str:
+    return str(uuid.uuid4())
 
 
 def get_engine(url: str | None = None) -> Engine:
@@ -53,7 +87,7 @@ class MdmEntity(Base):
     __tablename__ = "mdm_entity"
 
     entity_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+        GUID(), primary_key=True, default=_uuid_string
     )
     entity_type: Mapped[str] = mapped_column(
         Text,
@@ -103,7 +137,7 @@ class MdmSourceRef(Base):
     __tablename__ = "mdm_source_ref"
 
     entity_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_entity.entity_id"),
         primary_key=True,
         nullable=False,
@@ -127,7 +161,7 @@ class MdmCompany(Base):
     __tablename__ = "mdm_company"
 
     entity_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_entity.entity_id"),
         primary_key=True,
     )
@@ -153,7 +187,7 @@ class MdmAdviser(Base):
     __tablename__ = "mdm_adviser"
 
     entity_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_entity.entity_id"),
         primary_key=True,
     )
@@ -167,7 +201,7 @@ class MdmAdviser(Base):
     aum_total: Mapped[Optional[object]] = mapped_column(Numeric, nullable=True)
     fund_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     linked_company_entity_id: Mapped[Optional[str]] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_entity.entity_id"),
         nullable=True,
     )
@@ -183,15 +217,15 @@ class MdmPerson(Base):
     __tablename__ = "mdm_person"
 
     entity_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_entity.entity_id"),
         primary_key=True,
     )
     owner_cik: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     canonical_name: Mapped[str] = mapped_column(Text, nullable=False)
-    name_variants: Mapped[Optional[object]] = mapped_column(type_=JSONB, nullable=True)
+    name_variants: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
     primary_role: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    role_titles: Mapped[Optional[object]] = mapped_column(type_=JSONB, nullable=True)
+    role_titles: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
     affiliated_company_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
@@ -207,12 +241,12 @@ class MdmSecurity(Base):
     __tablename__ = "mdm_security"
 
     entity_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_entity.entity_id"),
         primary_key=True,
     )
     issuer_entity_id: Mapped[Optional[str]] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_entity.entity_id"),
         nullable=True,
     )
@@ -232,12 +266,12 @@ class MdmFund(Base):
     __tablename__ = "mdm_fund"
 
     entity_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_entity.entity_id"),
         primary_key=True,
     )
     adviser_entity_id: Mapped[Optional[str]] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_entity.entity_id"),
         nullable=True,
     )
@@ -262,7 +296,7 @@ class MdmSourcePriority(Base):
     __tablename__ = "mdm_source_priority"
 
     rule_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+        GUID(), primary_key=True, default=_uuid_string
     )
     entity_type: Mapped[str] = mapped_column(Text, nullable=False)
     source_system: Mapped[str] = mapped_column(Text, nullable=False)
@@ -287,14 +321,14 @@ class MdmFieldSurvivorship(Base):
     __tablename__ = "mdm_field_survivorship"
 
     rule_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+        GUID(), primary_key=True, default=_uuid_string
     )
     entity_type: Mapped[str] = mapped_column(Text, nullable=False)
     field_name: Mapped[str] = mapped_column(Text, nullable=False)
     rule_type: Mapped[str] = mapped_column(Text, nullable=False)
     source_system: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     preferred_source_order: Mapped[Optional[object]] = mapped_column(
-        type_=JSONB, nullable=True
+        type_=JSON, nullable=True
     )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(
@@ -320,7 +354,7 @@ class MdmMatchThreshold(Base):
     __tablename__ = "mdm_match_threshold"
 
     rule_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+        GUID(), primary_key=True, default=_uuid_string
     )
     entity_type: Mapped[str] = mapped_column(Text, nullable=False)
     match_method: Mapped[str] = mapped_column(Text, nullable=False)
@@ -349,7 +383,7 @@ class MdmNormalizationRule(Base):
     __tablename__ = "mdm_normalization_rule"
 
     rule_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+        GUID(), primary_key=True, default=_uuid_string
     )
     rule_type: Mapped[str] = mapped_column(Text, nullable=False)
     input_value: Mapped[str] = mapped_column(Text, nullable=False)
@@ -382,10 +416,10 @@ class MdmEntityAttributeStage(Base):
     __tablename__ = "mdm_entity_attribute_stage"
 
     stage_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+        GUID(), primary_key=True, default=_uuid_string
     )
     entity_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_entity.entity_id"),
         nullable=False,
     )
@@ -416,20 +450,20 @@ class MdmMatchReview(Base):
     __tablename__ = "mdm_match_review"
 
     review_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+        GUID(), primary_key=True, default=_uuid_string
     )
     entity_id_a: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_entity.entity_id"),
         nullable=False,
     )
     entity_id_b: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_entity.entity_id"),
         nullable=False,
     )
     match_score: Mapped[float] = mapped_column(Float, nullable=False)
-    match_evidence: Mapped[Optional[object]] = mapped_column(type_=JSONB, nullable=True)
+    match_evidence: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
     status: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=text("'pending'")
     )
@@ -453,15 +487,15 @@ class MdmChangeLog(Base):
     __tablename__ = "mdm_change_log"
 
     change_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+        GUID(), primary_key=True, default=_uuid_string
     )
     entity_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_entity.entity_id"),
         nullable=False,
     )
     entity_type: Mapped[str] = mapped_column(Text, nullable=False)
-    changed_fields: Mapped[Optional[object]] = mapped_column(type_=JSONB, nullable=True)
+    changed_fields: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
     changed_at: Mapped[Optional[object]] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
     )
@@ -504,7 +538,7 @@ class MdmRelationshipType(Base):
     __tablename__ = "mdm_relationship_type"
 
     rel_type_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+        GUID(), primary_key=True, default=_uuid_string
     )
     rel_type_name: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     source_node_type: Mapped[str] = mapped_column(
@@ -521,7 +555,7 @@ class MdmRelationshipType(Base):
     is_temporal: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("TRUE")
     )
-    dedup_key_fields: Mapped[Optional[object]] = mapped_column(type_=JSONB, nullable=True)
+    dedup_key_fields: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
     merge_strategy: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=text("'extend_temporal'")
     )
@@ -559,10 +593,10 @@ class MdmRelationshipPropertyDef(Base):
     __tablename__ = "mdm_relationship_property_def"
 
     prop_def_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+        GUID(), primary_key=True, default=_uuid_string
     )
     rel_type_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_relationship_type.rel_type_id"),
         nullable=False,
     )
@@ -591,10 +625,10 @@ class MdmRelationshipSourceMapping(Base):
     __tablename__ = "mdm_relationship_source_mapping"
 
     mapping_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+        GUID(), primary_key=True, default=_uuid_string
     )
     rel_type_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_relationship_type.rel_type_id"),
         nullable=False,
     )
@@ -612,10 +646,10 @@ class MdmRelationshipSourceMapping(Base):
         ForeignKey("mdm_entity_type_definition.entity_type"),
         nullable=False,
     )
-    property_mapping: Mapped[object] = mapped_column(type_=JSONB, nullable=False)
+    property_mapping: Mapped[object] = mapped_column(type_=JSON, nullable=False)
     effective_from_field: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     effective_to_field: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    filter_condition: Mapped[Optional[object]] = mapped_column(type_=JSONB, nullable=True)
+    filter_condition: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("TRUE")
     )
@@ -639,24 +673,24 @@ class MdmRelationshipInstance(Base):
     __tablename__ = "mdm_relationship_instance"
 
     instance_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+        GUID(), primary_key=True, default=_uuid_string
     )
     rel_type_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_relationship_type.rel_type_id"),
         nullable=False,
     )
     source_entity_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_entity.entity_id"),
         nullable=False,
     )
     target_entity_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
+        GUID(),
         ForeignKey("mdm_entity.entity_id"),
         nullable=False,
     )
-    properties: Mapped[Optional[object]] = mapped_column(type_=JSONB, nullable=True)
+    properties: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
     effective_from: Mapped[Optional[object]] = mapped_column(Date, nullable=True)
     effective_to: Mapped[Optional[object]] = mapped_column(Date, nullable=True)
     source_system: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

@@ -6,9 +6,10 @@ register_mdm_subparser.
 from __future__ import annotations
 
 import argparse
+import json
 import os
+from pathlib import Path
 import sys
-from typing import Callable
 
 from sqlalchemy.orm import Session
 
@@ -17,11 +18,32 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     mdm = subparsers.add_parser("mdm", help="MDM pipeline, review, export operations")
     mdm_sub = mdm.add_subparsers(dest="mdm_command", required=True)
 
+    migrate = mdm_sub.add_parser("migrate", help="Create/upgrade MDM schema and seed reference data")
+    migrate.add_argument("--no-seed", dest="seed", action="store_false", default=True)
+    migrate.set_defaults(handler=_handle_migrate)
+
+    counts = mdm_sub.add_parser("counts", help="Print MDM relational table row counts")
+    counts.set_defaults(handler=_handle_counts)
+
+    check = mdm_sub.add_parser("check-connectivity", help="Check MDM SQL and optional Neo4j connectivity")
+    check.add_argument("--neo4j", action="store_true", help="Also check NEO4J_URI/NEO4J_USER/NEO4J_PASSWORD")
+    check.set_defaults(handler=_handle_check_connectivity)
+
     # run
     run = mdm_sub.add_parser("run", help="Run MDM pipeline for one or all domains")
     run.add_argument("--entity-type", choices=["company", "adviser", "all"], default="all")
     run.add_argument("--limit", type=int, default=None)
     run.set_defaults(handler=_handle_run)
+
+    sync = mdm_sub.add_parser("sync-graph", help="Sync pending MDM relationship rows to Neo4j")
+    sync.add_argument("--limit", type=int, default=None)
+    sync.set_defaults(handler=_handle_sync_graph)
+
+    api = mdm_sub.add_parser("api", help="Run the MDM FastAPI service with uvicorn")
+    api.add_argument("--host", default="0.0.0.0")
+    api.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
+    api.set_defaults(handler=_handle_api)
+
 
     # review
     rev = mdm_sub.add_parser("review", help="Curation queue operations")
@@ -73,11 +95,34 @@ def _session() -> Session:
     return get_session(get_engine())
 
 
+def _neo4j_client():
+    from edgar_warehouse.mdm.graph import Neo4jGraphClient
+
+    uri = os.environ.get("NEO4J_URI")
+    user = os.environ.get("NEO4J_USER")
+    password = os.environ.get("NEO4J_PASSWORD")
+    if not (uri and user and password) and os.environ.get("NEO4J_SECRET_JSON"):
+        payload = json.loads(os.environ["NEO4J_SECRET_JSON"])
+        uri = uri or payload.get("uri")
+        user = user or payload.get("user")
+        password = password or payload.get("password")
+    if not (uri and user and password):
+        return None
+    return Neo4jGraphClient(uri=uri, user=user, password=password)
+
+
 def _silver_reader():
     """Thin DuckDB reader. Returns None in local/dev mode so CLI shows intent only."""
     duckdb_path = os.environ.get("MDM_SILVER_DUCKDB")
     if duckdb_path is None:
         return None
+    if "://" in duckdb_path:
+        from edgar_warehouse.infrastructure.object_storage import read_bytes
+
+        local_path = Path(os.environ.get("MDM_LOCAL_SILVER_DUCKDB", "/tmp/mdm-silver.duckdb"))
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(read_bytes(duckdb_path))
+        duckdb_path = str(local_path)
     import duckdb  # type: ignore
 
     class _DuckReader:
@@ -103,13 +148,79 @@ def _handle_run(args) -> int:
         print("MDM_SILVER_DUCKDB not set; nothing to do.", file=sys.stderr)
         return 1
 
-    pipeline = MDMPipeline(session=session, silver=silver)
-    if args.entity_type in ("all", "company"):
+    pipeline = MDMPipeline(session=session, silver=silver, neo4j=_neo4j_client())
+    if args.entity_type == "all":
+        stats = pipeline.run_all(limit=args.limit)
+        print(json.dumps(stats.__dict__, indent=2, sort_keys=True))
+        return 0
+    if args.entity_type == "company":
         n = pipeline.run_companies(limit=args.limit)
         print(f"companies: {n}")
-    if args.entity_type in ("all", "adviser"):
+    if args.entity_type == "adviser":
         n = pipeline.run_advisers(limit=args.limit)
         print(f"advisers: {n}")
+    return 0
+
+
+def _handle_migrate(args) -> int:
+    from edgar_warehouse.mdm.database import get_engine
+    from edgar_warehouse.mdm.migrations.runtime import migrate
+
+    payload = migrate(get_engine(), seed=args.seed)
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def _handle_counts(args) -> int:
+    from edgar_warehouse.mdm.database import get_engine
+    from edgar_warehouse.mdm.migrations.runtime import count_tables
+
+    print(json.dumps(count_tables(get_engine()), indent=2, sort_keys=True))
+    return 0
+
+
+def _handle_check_connectivity(args) -> int:
+    from edgar_warehouse.mdm.database import get_engine
+    from edgar_warehouse.mdm.migrations.runtime import check_connectivity
+
+    payload = {"sql": check_connectivity(get_engine())}
+    if args.neo4j:
+        client = _neo4j_client()
+        if client is None:
+            payload["neo4j"] = {"connected": False, "error": "NEO4J_URI/NEO4J_USER/NEO4J_PASSWORD not configured"}
+        else:
+            try:
+                with client.session() as session:
+                    record = session.run("RETURN 1 AS ok").single()
+                payload["neo4j"] = {"connected": bool(record and record["ok"] == 1)}
+            finally:
+                client.close()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def _handle_sync_graph(args) -> int:
+    from edgar_warehouse.mdm.graph import GraphSyncEngine
+
+    client = _neo4j_client()
+    if client is None:
+        print("NEO4J_URI/NEO4J_USER/NEO4J_PASSWORD not configured", file=sys.stderr)
+        return 1
+    session = _session()
+    try:
+        count = GraphSyncEngine.build(session, client).sync_pending(limit=args.limit)
+        session.commit()
+    finally:
+        client.close()
+        session.close()
+    print(json.dumps({"graph_edges_synced": count}, indent=2, sort_keys=True))
+    return 0
+
+
+def _handle_api(args) -> int:
+    import uvicorn
+
+    uvicorn.run("edgar_warehouse.mdm.api.main:app", host=args.host, port=args.port)
     return 0
 
 

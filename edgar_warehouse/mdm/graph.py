@@ -49,7 +49,7 @@ class GraphRegistry:
         reg = cls()
         for et in session.scalars(
             select(MdmEntityTypeDefinition).where(
-                MdmEntityTypeDefinition.is_active.is_(True)
+                MdmEntityTypeDefinition.is_active == True
             )
         ):
             reg.labels_by_entity_type[et.entity_type] = et.neo4j_label
@@ -57,7 +57,7 @@ class GraphRegistry:
             reg.primary_id_fields[et.entity_type] = et.primary_id_field
 
         for rt in session.scalars(
-            select(MdmRelationshipType).where(MdmRelationshipType.is_active.is_(True))
+            select(MdmRelationshipType).where(MdmRelationshipType.is_active == True)
         ):
             record = {
                 "rel_type_id": rt.rel_type_id,
@@ -195,7 +195,7 @@ class GraphSyncEngine:
             return 0
         stmt = select(MdmRelationshipInstance).where(
             MdmRelationshipInstance.graph_synced_at.is_(None),
-            MdmRelationshipInstance.is_active.is_(True),
+            MdmRelationshipInstance.is_active == True,
         )
         if limit:
             stmt = stmt.limit(limit)

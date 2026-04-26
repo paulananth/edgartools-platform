@@ -47,3 +47,43 @@ output "databricks_workspace_url" {
   description = "Databricks workspace URL."
   value       = module.databricks.workspace_url
 }
+
+output "mdm_sql_server_fqdn" {
+  description = "Azure SQL Server FQDN for MDM."
+  value       = try(module.mdm[0].sql_server_fqdn, null)
+}
+
+output "mdm_sql_database_name" {
+  description = "Azure SQL database name for MDM."
+  value       = try(module.mdm[0].sql_database_name, null)
+}
+
+output "mdm_database_url_secret_id" {
+  description = "Key Vault secret ID for MDM_DATABASE_URL."
+  value       = try(module.mdm[0].database_url_secret_id, null)
+}
+
+output "mdm_neo4j_uri" {
+  description = "Neo4j Bolt URI for MDM."
+  value       = try(module.mdm[0].neo4j_uri, null)
+}
+
+output "mdm_neo4j_secret_id" {
+  description = "Key Vault secret ID for Neo4j connection details."
+  value       = try(module.mdm[0].neo4j_secret_id, null)
+}
+
+output "mdm_api_keys_secret_id" {
+  description = "Key Vault secret ID for MDM API keys."
+  value       = try(module.mdm[0].api_keys_secret_id, null)
+}
+
+output "mdm_api_fqdn" {
+  description = "MDM API Container App FQDN."
+  value       = try(module.mdm[0].mdm_api_fqdn, null)
+}
+
+output "mdm_container_app_job_names" {
+  description = "MDM Container Apps Job names by workflow."
+  value       = try(module.mdm[0].mdm_job_names, null)
+}

@@ -1,10 +1,19 @@
-FROM python:3.12-slim
+FROM python:3.12-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg unixodbc \
+    && curl -fsSL -o /tmp/packages-microsoft-prod.deb https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb \
+    && dpkg -i /tmp/packages-microsoft-prod.deb \
+    && rm /tmp/packages-microsoft-prod.deb \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md /app/
 COPY edgar /app/edgar
@@ -29,7 +38,7 @@ RUN pip install --no-compile \
         "httpx>=0.25.0" \
         "zstandard>=0.20.0"
 
-RUN pip install --no-compile ".[s3,azure]"
+RUN pip install --no-compile ".[s3,azure,mdm]"
 
 ENTRYPOINT ["edgar-warehouse"]
 CMD ["--help"]

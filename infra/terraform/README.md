@@ -96,3 +96,19 @@ modules/
 The Azure path writes the same serving Parquet contract used by the Snowflake export path,
 but the preferred runtime variable is now `SERVING_EXPORT_ROOT`. `SNOWFLAKE_EXPORT_ROOT`
 remains accepted as a temporary fallback for parallel runs.
+
+Optional Azure MDM data plane:
+
+- Set `enable_mdm = true` in `infra/terraform/azure/accounts/<env>/terraform.tfvars`.
+- Set globally unique names for `mdm_sql_server_name` and
+  `mdm_neo4j_storage_account_name`.
+- Terraform provisions Azure SQL Server/Database for MDM relational state and a
+  single-node Neo4j Container App backed by Azure Files.
+- Terraform also creates an MDM FastAPI Container App plus manual Container Apps
+  Jobs for `mdm migrate`, `mdm run`, and `mdm counts`.
+- Runtime secrets are written to Key Vault:
+  `mdm-database-url`, `mdm-sql-admin-username`, `mdm-sql-admin-password`,
+  `mdm-neo4j`, split `mdm-neo4j-*` values, `mdm-api-keys`, and
+  `mdm-api-keys-csv`.
+- Validate MDM e2e with
+  `EDGAR_WAREHOUSE_CMD="uv run --extra mdm edgar-warehouse" bash infra/scripts/test-mdm-e2e.sh --env dev`.

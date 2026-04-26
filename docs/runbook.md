@@ -120,6 +120,16 @@ secret values.
   personal token.
 - **Databricks storage**: Use Unity Catalog storage credentials and external locations
   backed by managed identity/access connector. Do not grant Databricks ADLS account keys.
+- **MDM Azure SQL**: When the Azure MDM data plane is enabled, Terraform creates Key
+  Vault secret `mdm-database-url` for `MDM_DATABASE_URL`. It uses a generated SQL
+  admin password stored in `mdm-sql-admin-password`.
+- **MDM Neo4j**: Terraform runs Neo4j as a Container App with Azure Files persistence.
+  Key Vault secret `mdm-neo4j` stores a JSON object with `uri`, `user`, and
+  `password`; Terraform also writes split secrets `mdm-neo4j-uri`,
+  `mdm-neo4j-user`, and `mdm-neo4j-password` for Container Apps env vars.
+- **MDM API keys**: Terraform stores API keys in Key Vault secret `mdm-api-keys`. If
+  `mdm_api_keys` is empty, a generated key is stored there. Container Apps use
+  `mdm-api-keys-csv` as `MDM_API_KEYS`.
 
 The Azure CLI and Databricks CLI are operator tools for bootstrapping and validation;
 production runtime auth should not depend on a local CLI login session.
@@ -141,6 +151,8 @@ cd infra/terraform/azure/accounts/dev
 cp backend.hcl.example backend.hcl
 cp terraform.tfvars.example terraform.tfvars
 # Edit backend.hcl and terraform.tfvars, especially container_image.
+# To provision MDM, set enable_mdm=true plus globally unique
+# mdm_sql_server_name and mdm_neo4j_storage_account_name.
 cd ../../../../..
 
 # First create the resource group and Key Vault.
@@ -164,7 +176,30 @@ Terraform outputs the runtime roots:
 terraform -chdir=infra/terraform/azure/accounts/dev output warehouse_bronze_root
 terraform -chdir=infra/terraform/azure/accounts/dev output warehouse_storage_root
 terraform -chdir=infra/terraform/azure/accounts/dev output serving_export_root
+terraform -chdir=infra/terraform/azure/accounts/dev output mdm_sql_server_fqdn
+terraform -chdir=infra/terraform/azure/accounts/dev output mdm_neo4j_uri
+terraform -chdir=infra/terraform/azure/accounts/dev output mdm_container_app_job_names
 ```
+
+Run the MDM e2e checks after Azure SQL and Neo4j are provisioned:
+
+```bash
+EDGAR_WAREHOUSE_CMD="uv run --extra mdm edgar-warehouse" \
+  bash infra/scripts/test-mdm-e2e.sh --env dev
+```
+
+The script hydrates `MDM_DATABASE_URL`, `NEO4J_URI`, `NEO4J_USER`,
+`NEO4J_PASSWORD`, and `MDM_API_KEYS` from Key Vault, then runs:
+
+- `edgar-warehouse mdm check-connectivity --neo4j`
+- `edgar-warehouse mdm migrate`
+- `edgar-warehouse mdm counts`
+
+To validate from inside Container Apps instead of the operator machine, add
+`--start-container-jobs`. That starts the Terraform-managed MDM migrate, run, and
+counts jobs. The MDM run job receives `MDM_SILVER_DUCKDB`; by default it points to
+`<WAREHOUSE_STORAGE_ROOT>/silver/sec/silver.duckdb`, and can be overridden with
+`mdm_silver_duckdb_path`.
 
 Register Databricks external tables with
 `infra/databricks/sql/register_external_tables.sql`, then run dbt:

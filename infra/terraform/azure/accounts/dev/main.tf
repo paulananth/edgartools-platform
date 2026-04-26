@@ -98,3 +98,34 @@ module "databricks" {
   location            = module.resource_group.location
   tags                = local.tags
 }
+
+module "mdm" {
+  count  = var.enable_mdm ? 1 : 0
+  source = "../../modules/mdm_data_plane"
+
+  environment                  = local.environment
+  name_prefix                  = var.name_prefix
+  resource_group_name          = module.resource_group.name
+  location                     = module.resource_group.location
+  key_vault_id                 = module.key_vault.id
+  container_app_environment_id = module.container_jobs.environment_id
+  container_image              = var.container_image
+  acr_login_server             = module.acr.login_server
+  workload_identity_id         = module.container_jobs.identity_id
+  workload_identity_client_id  = module.container_jobs.identity_client_id
+  sql_server_name              = var.mdm_sql_server_name
+  sql_location                 = var.mdm_sql_location
+  sql_database_name            = var.mdm_sql_database_name
+  sql_admin_username           = var.mdm_sql_admin_username
+  sql_database_sku_name        = var.mdm_sql_database_sku_name
+  sql_database_max_size_gb     = var.mdm_sql_database_max_size_gb
+  sql_firewall_rules           = var.mdm_sql_firewall_rules
+  neo4j_storage_account_name   = var.mdm_neo4j_storage_account_name
+  neo4j_external_enabled       = var.mdm_neo4j_external_enabled
+  mdm_api_external_enabled     = var.mdm_api_external_enabled
+  mdm_silver_duckdb_path       = coalesce(var.mdm_silver_duckdb_path, "${module.storage.warehouse_storage_root}/silver/sec/silver.duckdb")
+  api_keys                     = var.mdm_api_keys
+  tags                         = local.tags
+
+  depends_on = [module.key_vault, module.container_jobs]
+}

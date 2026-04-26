@@ -71,7 +71,7 @@ def get_affiliations(
     edges_q = select(db.MdmRelationshipInstance).where(
         db.MdmRelationshipInstance.rel_type_id == rt.rel_type_id,
         db.MdmRelationshipInstance.source_entity_id == entity_id,
-        db.MdmRelationshipInstance.is_active.is_(True),
+        db.MdmRelationshipInstance.is_active == True,
     )
     if as_of is not None:
         edges_q = edges_q.where(
@@ -107,7 +107,7 @@ def get_holdings(
     edges_q = select(db.MdmRelationshipInstance).where(
         db.MdmRelationshipInstance.rel_type_id == rt.rel_type_id,
         db.MdmRelationshipInstance.source_entity_id == entity_id,
-        db.MdmRelationshipInstance.is_active.is_(True),
+        db.MdmRelationshipInstance.is_active == True,
     )
     if as_of is not None:
         edges_q = edges_q.where(
