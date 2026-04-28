@@ -31,7 +31,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
 
     # run
     run = mdm_sub.add_parser("run", help="Run MDM pipeline for one or all domains")
-    run.add_argument("--entity-type", choices=["company", "adviser", "all"], default="all")
+    run.add_argument("--entity-type", choices=["company", "adviser", "security", "person", "fund", "all"], default="all")
     run.add_argument("--limit", type=int, default=None)
     run.set_defaults(handler=_handle_run)
 
@@ -183,6 +183,15 @@ def _handle_run(args) -> int:
     if args.entity_type == "adviser":
         n = pipeline.run_advisers(limit=args.limit)
         print(f"advisers: {n}")
+    if args.entity_type == "security":
+        n = pipeline.run_securities(limit=args.limit)
+        print(f"securities: {n}")
+    if args.entity_type == "person":
+        n = pipeline.run_persons(limit=args.limit)
+        print(f"persons: {n}")
+    if args.entity_type == "fund":
+        n = pipeline.run_funds(limit=args.limit)
+        print(f"funds: {n}")
     return 0
 
 
@@ -248,15 +257,21 @@ def _handle_verify_graph(args) -> int:
         return 1
     try:
         with client.session() as s:
-            nodes   = s.run("MATCH (n)                    RETURN count(n) AS n").single()["n"]
-            manages = s.run("MATCH ()-[r:MANAGES_FUND]->() RETURN count(r) AS n").single()["n"]
-            issued  = s.run("MATCH ()-[r:ISSUED_BY]->()   RETURN count(r) AS n").single()["n"]
+            nodes     = s.run("MATCH (n)                     RETURN count(n) AS n").single()["n"]
+            manages   = s.run("MATCH ()-[r:MANAGES_FUND]->()  RETURN count(r) AS n").single()["n"]
+            issued    = s.run("MATCH ()-[r:ISSUED_BY]->()     RETURN count(r) AS n").single()["n"]
+            insider   = s.run("MATCH ()-[r:IS_INSIDER]->()    RETURN count(r) AS n").single()["n"]
+            entity_of = s.run("MATCH ()-[r:IS_ENTITY_OF]->()  RETURN count(r) AS n").single()["n"]
+            person_of = s.run("MATCH ()-[r:IS_PERSON_OF]->()  RETURN count(r) AS n").single()["n"]
     finally:
         client.close()
     print(json.dumps({
-        "neo4j_nodes_total":        nodes,
-        "neo4j_MANAGES_FUND_edges": manages,
-        "neo4j_ISSUED_BY_edges":    issued,
+        "neo4j_nodes_total":          nodes,
+        "neo4j_MANAGES_FUND_edges":   manages,
+        "neo4j_ISSUED_BY_edges":      issued,
+        "neo4j_IS_INSIDER_edges":     insider,
+        "neo4j_IS_ENTITY_OF_edges":   entity_of,
+        "neo4j_IS_PERSON_OF_edges":   person_of,
     }, indent=2, sort_keys=True))
     return 0
 

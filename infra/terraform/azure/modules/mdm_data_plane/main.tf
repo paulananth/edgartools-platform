@@ -254,7 +254,7 @@ locals {
     }
     run = {
       name    = "${var.name_prefix}-mdm-run"
-      command = ["mdm", "run", "--entity-type", "all"]
+      command = var.mdm_run_limit > 0 ? ["mdm", "run", "--entity-type", "all", "--limit", tostring(var.mdm_run_limit)] : ["mdm", "run", "--entity-type", "all"]
     }
     counts = {
       name    = "${var.name_prefix}-mdm-counts"

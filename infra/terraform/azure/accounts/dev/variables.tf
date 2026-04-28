@@ -134,6 +134,12 @@ variable "mdm_silver_duckdb_path" {
   default     = null
 }
 
+variable "mdm_run_limit" {
+  description = "Optional --limit N for mdm run Container App Job. 0 = no limit."
+  type        = number
+  default     = 0
+}
+
 variable "mdm_api_keys" {
   description = "Initial MDM API keys. A generated key is used when empty."
   type        = list(string)

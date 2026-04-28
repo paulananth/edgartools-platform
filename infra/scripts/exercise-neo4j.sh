@@ -107,6 +107,7 @@ JOBS_JSON="$(terraform_output_json mdm_container_app_job_names)"
 
 get_job() { echo "$JOBS_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['$1'])"; }
 
+RUN_JOB="$(get_job run)"
 BACKFILL_JOB="$(get_job backfill_relationships)"
 COUNTS_JOB="$(get_job counts)"
 VERIFY_JOB="$(get_job verify_graph)"
@@ -116,17 +117,49 @@ LOG_WORKSPACE="$(az monitor log-analytics workspace list \
   --query "[0].customerId" -o tsv 2>/dev/null || echo "")"
 
 echo "    resource_group  : ${RESOURCE_GROUP}"
+echo "    run job         : ${RUN_JOB}"
 echo "    backfill job    : ${BACKFILL_JOB}"
 echo "    counts job      : ${COUNTS_JOB}"
 echo "    verify job      : ${VERIFY_JOB}"
 echo "    log workspace   : ${LOG_WORKSPACE:-none}"
 
 # ---------------------------------------------------------------------------
-# 2. Backfill relationship instances -> Neo4j
+# 2. Run entity pipeline (loads companies, advisers, persons, securities, funds)
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> [1/3] Backfilling up to ${LIMIT} graph relationships ..."
-BACKFILL_EXEC="$(run_job "${BACKFILL_JOB}" "${RESOURCE_GROUP}")"
+echo "==> [1/4] Running MDM entity pipeline (limit set by Terraform mdm_run_limit) ..."
+RUN_EXEC="$(run_job "${RUN_JOB}" "${RESOURCE_GROUP}")"
+
+if [[ -n "${LOG_WORKSPACE}" ]]; then
+  echo "--- run output ---"
+  fetch_job_logs "${LOG_WORKSPACE}" "${RUN_EXEC}"
+  echo "-----------------"
+fi
+
+# ---------------------------------------------------------------------------
+# 3. Backfill relationship instances -> Neo4j
+#    Pass --limit at runtime to honour the script's --limit flag.
+# ---------------------------------------------------------------------------
+echo ""
+echo "==> [2/4] Backfilling up to ${LIMIT} graph relationships ..."
+BACKFILL_EXEC="$(az containerapp job start \
+  --name "${BACKFILL_JOB}" --resource-group "${RESOURCE_GROUP}" \
+  --args "mdm backfill-relationships --limit ${LIMIT}" \
+  --query "name" -o tsv)"
+echo "    started: ${BACKFILL_EXEC}"
+
+while true; do
+  _status="$(az containerapp job execution show \
+    --name "${BACKFILL_JOB}" --resource-group "${RESOURCE_GROUP}" \
+    --job-execution-name "${BACKFILL_EXEC}" \
+    --query "properties.status" -o tsv 2>/dev/null || echo "Running")"
+  echo "    [${BACKFILL_JOB}] ${_status}"
+  case "$_status" in
+    Succeeded) echo "    done."; break ;;
+    Failed|Stopped) echo "ERROR: ${BACKFILL_JOB} ended with ${_status}" >&2; exit 1 ;;
+  esac
+  sleep 15
+done
 
 if [[ -n "${LOG_WORKSPACE}" ]]; then
   echo "--- backfill output ---"
@@ -135,10 +168,10 @@ if [[ -n "${LOG_WORKSPACE}" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 3. MDM table counts  (confirms mdm_relationship_instance rows written)
+# 4. MDM table counts  (confirms mdm_relationship_instance rows written)
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> [2/3] Running MDM table counts ..."
+echo "==> [3/4] Running MDM table counts ..."
 COUNTS_EXEC="$(run_job "${COUNTS_JOB}" "${RESOURCE_GROUP}")"
 
 if [[ -n "${LOG_WORKSPACE}" ]]; then
@@ -148,10 +181,10 @@ if [[ -n "${LOG_WORKSPACE}" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 4. Verify Neo4j graph
+# 5. Verify Neo4j graph
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> [3/3] Verifying Neo4j graph node/edge counts ..."
+echo "==> [4/4] Verifying Neo4j graph node/edge counts ..."
 VERIFY_EXEC="$(run_job "${VERIFY_JOB}" "${RESOURCE_GROUP}")"
 
 if [[ -n "${LOG_WORKSPACE}" ]]; then
@@ -165,10 +198,11 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "==> All steps complete."
+echo "    run      : ${RUN_EXEC}"
 echo "    backfill : ${BACKFILL_EXEC}"
 echo "    counts   : ${COUNTS_EXEC}"
 echo "    verify   : ${VERIFY_EXEC}"
 echo ""
 echo "To inspect full job logs in Azure portal:"
 echo "  Resource group : ${RESOURCE_GROUP}"
-echo "  Jobs           : ${BACKFILL_JOB}  ${COUNTS_JOB}  ${VERIFY_JOB}"
+echo "  Jobs           : ${RUN_JOB}  ${BACKFILL_JOB}  ${COUNTS_JOB}  ${VERIFY_JOB}"

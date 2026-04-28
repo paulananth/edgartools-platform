@@ -236,7 +236,8 @@ class MDMPipeline:
 
         # --- MANAGES_FUND + ISSUED_BY (keep existing backfill) ---
         from edgar_warehouse.mdm.graph import backfill_relationship_instances
-        backfill_relationship_instances(self.session, neo4j=None, limit=10_000)
+        backfill_limit = limit if limit is not None else 10_000
+        backfill_relationship_instances(self.session, neo4j=None, limit=backfill_limit)
 
         return written
 

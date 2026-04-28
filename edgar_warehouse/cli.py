@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 
-from edgar_warehouse.mdm.cli import register_mdm_subparser
 from edgar_warehouse.runtime import run_command
 
 
@@ -344,7 +343,11 @@ def build_parser() -> argparse.ArgumentParser:
     _add_run_id_arg(bootstrap_next)
     bootstrap_next.set_defaults(handler=_handle_bootstrap_next)
 
-    register_mdm_subparser(subparsers)
+    try:
+        from edgar_warehouse.mdm.cli import register_mdm_subparser
+        register_mdm_subparser(subparsers)
+    except ImportError:
+        pass  # MDM extras not installed (pipelines image)
 
     return parser
 

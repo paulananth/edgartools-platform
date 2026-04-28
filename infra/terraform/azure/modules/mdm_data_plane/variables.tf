@@ -164,6 +164,12 @@ variable "mdm_silver_duckdb_path" {
   default     = null
 }
 
+variable "mdm_run_limit" {
+  description = "Optional --limit N passed to `mdm run`. 0 = no limit (production default)."
+  type        = number
+  default     = 0
+}
+
 variable "mdm_api_external_enabled" {
   description = "Expose the MDM FastAPI app externally."
   type        = bool

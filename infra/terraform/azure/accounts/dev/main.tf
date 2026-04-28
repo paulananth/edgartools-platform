@@ -124,6 +124,7 @@ module "mdm" {
   neo4j_external_enabled       = var.mdm_neo4j_external_enabled
   mdm_api_external_enabled     = var.mdm_api_external_enabled
   mdm_silver_duckdb_path       = coalesce(var.mdm_silver_duckdb_path, "${module.storage.warehouse_storage_root}/silver/sec/silver.duckdb")
+  mdm_run_limit                = var.mdm_run_limit
   api_keys                     = var.mdm_api_keys
   tags                         = local.tags
 
