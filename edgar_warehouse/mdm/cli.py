@@ -80,6 +80,26 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     mg.add_argument("--reason", default="")
     mg.set_defaults(handler=_handle_merge)
 
+    # verify-graph
+    vg = mdm_sub.add_parser(
+        "verify-graph",
+        help="Query Neo4j for node and relationship counts and print JSON",
+    )
+    vg.set_defaults(handler=_handle_verify_graph)
+
+    # backfill-relationships
+    br = mdm_sub.add_parser(
+        "backfill-relationships",
+        help="Derive relationship instances from mdm_fund/mdm_security and sync to Neo4j",
+    )
+    br.add_argument(
+        "--limit",
+        type=int,
+        default=100,
+        help="Maximum number of relationship instances to backfill and sync (default: 100)",
+    )
+    br.set_defaults(handler=_handle_backfill_relationships)
+
     # export
     ex = mdm_sub.add_parser("export")
     ex.add_argument("--since", default=None, help="ISO timestamp for incremental export")
@@ -108,6 +128,10 @@ def _neo4j_client():
         password = password or payload.get("password")
     if not (uri and user and password):
         return None
+    # neo4j:// triggers bolt routing which fails on single-instance deployments
+    # without NEO4J_server_bolt_advertised__address configured; use bolt:// directly.
+    if uri and uri.startswith("neo4j://"):
+        uri = "bolt://" + uri[len("neo4j://"):]
     return Neo4jGraphClient(uri=uri, user=user, password=password)
 
 
@@ -214,6 +238,41 @@ def _handle_sync_graph(args) -> int:
         client.close()
         session.close()
     print(json.dumps({"graph_edges_synced": count}, indent=2, sort_keys=True))
+    return 0
+
+
+def _handle_verify_graph(args) -> int:
+    client = _neo4j_client()
+    if client is None:
+        print(json.dumps({"error": "NEO4J_URI/NEO4J_USER/NEO4J_PASSWORD not configured"}), file=sys.stderr)
+        return 1
+    try:
+        with client.session() as s:
+            nodes   = s.run("MATCH (n)                    RETURN count(n) AS n").single()["n"]
+            manages = s.run("MATCH ()-[r:MANAGES_FUND]->() RETURN count(r) AS n").single()["n"]
+            issued  = s.run("MATCH ()-[r:ISSUED_BY]->()   RETURN count(r) AS n").single()["n"]
+    finally:
+        client.close()
+    print(json.dumps({
+        "neo4j_nodes_total":        nodes,
+        "neo4j_MANAGES_FUND_edges": manages,
+        "neo4j_ISSUED_BY_edges":    issued,
+    }, indent=2, sort_keys=True))
+    return 0
+
+
+def _handle_backfill_relationships(args) -> int:
+    from edgar_warehouse.mdm.graph import backfill_relationship_instances
+
+    session = _session()
+    client = _neo4j_client()
+    try:
+        result = backfill_relationship_instances(session, neo4j=client, limit=args.limit)
+    finally:
+        if client is not None:
+            client.close()
+        session.close()
+    print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
 

@@ -106,6 +106,10 @@ def _handle_bootstrap_batch(args: argparse.Namespace) -> int:
     return run_command("bootstrap-batch", args)
 
 
+def _handle_bootstrap_next(args: argparse.Namespace) -> int:
+    return run_command("bootstrap-next", args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="edgar-warehouse",
@@ -305,6 +309,40 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(bootstrap_batch)
     bootstrap_batch.set_defaults(handler=_handle_bootstrap_batch)
+
+    bootstrap_next = subparsers.add_parser(
+        "bootstrap-next",
+        help="Bootstrap the next N pending companies (tracking_status=bootstrap_pending).",
+    )
+    bootstrap_next.add_argument(
+        "--limit",
+        type=int,
+        default=100,
+        help="Maximum number of companies to bootstrap in this run (default: 100)",
+    )
+    bootstrap_next.add_argument(
+        "--tracking-status-filter",
+        default="bootstrap_pending",
+        help="Tracked universe status filter (default: bootstrap_pending)",
+    )
+    bootstrap_next.add_argument(
+        "--artifact-policy",
+        default="all_attachments",
+        help="Artifact fetch policy",
+    )
+    bootstrap_next.add_argument(
+        "--parser-policy",
+        default="configured_forms",
+        help="Parser execution policy",
+    )
+    bootstrap_next.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Force re-fetch even if already loaded",
+    )
+    _add_run_id_arg(bootstrap_next)
+    bootstrap_next.set_defaults(handler=_handle_bootstrap_next)
 
     register_mdm_subparser(subparsers)
 

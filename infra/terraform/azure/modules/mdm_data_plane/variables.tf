@@ -124,13 +124,13 @@ variable "neo4j_user" {
 variable "neo4j_cpu" {
   description = "Neo4j Container App CPU."
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "neo4j_memory" {
   description = "Neo4j Container App memory."
   type        = string
-  default     = "2Gi"
+  default     = "4Gi"
 }
 
 variable "neo4j_external_enabled" {
@@ -173,13 +173,25 @@ variable "mdm_api_external_enabled" {
 variable "mdm_api_min_replicas" {
   description = "Minimum MDM API replicas."
   type        = number
-  default     = 0
+  default     = 1
 }
 
 variable "mdm_api_max_replicas" {
   description = "Maximum MDM API replicas."
   type        = number
+  default     = 3
+}
+
+variable "mdm_api_cpu" {
+  description = "MDM API container CPU."
+  type        = number
   default     = 1
+}
+
+variable "mdm_api_memory" {
+  description = "MDM API container memory."
+  type        = string
+  default     = "2Gi"
 }
 
 variable "tags" {

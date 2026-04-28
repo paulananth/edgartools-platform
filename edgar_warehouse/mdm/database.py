@@ -72,7 +72,10 @@ def _uuid_string() -> str:
 
 def get_engine(url: str | None = None) -> Engine:
     url = url or os.environ["MDM_DATABASE_URL"]
-    return create_engine(url, pool_pre_ping=True)
+    kwargs: dict = {"pool_pre_ping": True}
+    if url.startswith("mssql"):
+        kwargs["fast_executemany"] = True
+    return create_engine(url, **kwargs)
 
 
 def get_session(engine: Engine) -> Session:

@@ -29,8 +29,10 @@ except ImportError:  # pragma: no cover
 from edgar_warehouse.mdm.database import (
     MdmEntity,
     MdmEntityTypeDefinition,
+    MdmFund,
     MdmRelationshipInstance,
     MdmRelationshipType,
+    MdmSecurity,
 )
 
 
@@ -273,3 +275,80 @@ class GraphSyncEngine:
     @classmethod
     def _domain_entity_id_col(cls, table_name: str):
         return cls._domain_selectable(table_name).c.entity_id
+
+
+def backfill_relationship_instances(
+    session: Session,
+    neo4j: Optional[Neo4jGraphClient] = None,
+    limit: int = 100,
+) -> dict:
+    """Derive mdm_relationship_instance rows from existing mdm_fund and
+    mdm_security data, then sync up to *limit* rows to Neo4j.
+
+    Sources:
+      MANAGES_FUND : mdm_fund.adviser_entity_id  -> mdm_fund.entity_id
+      ISSUED_BY    : mdm_security.entity_id       -> mdm_security.issuer_entity_id
+
+    Rows already present in mdm_relationship_instance are skipped.
+    Returns a summary dict with keys backfilled, synced.
+    """
+    registry = GraphRegistry.load(session)
+    manages_fund = registry.rel_type_by_name.get("MANAGES_FUND")
+    issued_by = registry.rel_type_by_name.get("ISSUED_BY")
+
+    existing: set[tuple] = {
+        (r.rel_type_id, r.source_entity_id, r.target_entity_id)
+        for r in session.scalars(select(MdmRelationshipInstance))
+    }
+
+    backfilled = 0
+
+    if manages_fund and backfilled < limit:
+        for fund in session.scalars(
+            select(MdmFund)
+            .where(MdmFund.adviser_entity_id.isnot(None))
+            .limit(limit - backfilled)
+        ):
+            key = (manages_fund["rel_type_id"], fund.adviser_entity_id, fund.entity_id)
+            if key in existing:
+                continue
+            session.add(
+                MdmRelationshipInstance(
+                    rel_type_id=manages_fund["rel_type_id"],
+                    source_entity_id=fund.adviser_entity_id,
+                    target_entity_id=fund.entity_id,
+                    source_system="mdm_backfill",
+                )
+            )
+            existing.add(key)
+            backfilled += 1
+
+    if issued_by and backfilled < limit:
+        for sec in session.scalars(
+            select(MdmSecurity)
+            .where(MdmSecurity.issuer_entity_id.isnot(None))
+            .limit(limit - backfilled)
+        ):
+            key = (issued_by["rel_type_id"], sec.entity_id, sec.issuer_entity_id)
+            if key in existing:
+                continue
+            session.add(
+                MdmRelationshipInstance(
+                    rel_type_id=issued_by["rel_type_id"],
+                    source_entity_id=sec.entity_id,
+                    target_entity_id=sec.issuer_entity_id,
+                    source_system="mdm_backfill",
+                )
+            )
+            existing.add(key)
+            backfilled += 1
+
+    session.commit()
+
+    synced = 0
+    if neo4j is not None and backfilled > 0:
+        engine = GraphSyncEngine.build(session, neo4j)
+        synced = engine.sync_pending(limit=limit)
+        session.commit()
+
+    return {"backfilled": backfilled, "synced": synced}

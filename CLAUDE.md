@@ -76,12 +76,17 @@ When the `edgartools` version is bumped, run the batch scripts in `scripts/batch
 
 ## Development Commands
 
-```bash
-# Install (standard)
-pip install -e ".[s3,snowflake]"
+> **Tooling:** always use `uv` for Python dependency management in this repo.
+> The lockfile is `uv.lock`; never invoke bare `pip` (it bypasses the lock and
+> can desync the env). Use `uv sync` for the project deps and `uv pip install`
+> for one-off installs.
 
-# Install dbt
-pip install dbt-snowflake
+```bash
+# Install project deps (uses uv.lock)
+uv sync --extra s3 --extra snowflake
+
+# Install dbt (one-off, not in pyproject)
+uv pip install dbt-snowflake
 
 # Warehouse CLI
 edgar-warehouse --help
@@ -118,7 +123,7 @@ bash infra/scripts/publish-warehouse-image-via-wsl.sh \
 
 # Standalone dashboard (local)
 cd examples/dashboard
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 streamlit run edgar_universe_dashboard.py
 ```
 

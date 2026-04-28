@@ -560,6 +560,7 @@ def _seed_relationship_types(session: Session) -> None:
         ("ISSUED_BY", "security", "company", "outbound", ["source_entity_id", "target_entity_id"], "extend_temporal", "Security is issued by company"),
         ("IS_ENTITY_OF", "adviser", "company", "outbound", ["source_entity_id", "target_entity_id"], "replace", "Adviser is the same legal entity as a registered company"),
         ("MANAGES_FUND", "adviser", "fund", "outbound", ["source_entity_id", "target_entity_id"], "extend_temporal", "Adviser manages a private fund"),
+        ("IS_PERSON_OF", "adviser", "person", "outbound", ["source_entity_id", "target_entity_id"], "replace", "Individual investment adviser is the same natural person as an ownership reporting owner"),
     ]
     for rel_type_name, src, tgt, direction, dedup, strategy, description in rows:
         _add_if_missing(

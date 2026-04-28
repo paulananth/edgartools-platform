@@ -39,6 +39,12 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TF_ROOT="${REPO_ROOT}/infra/terraform/azure/accounts/${ENVIRONMENT}"
 CMD="${EDGAR_WAREHOUSE_CMD:-edgar-warehouse}"
 
+# Auto-install the package if edgar-warehouse is not on PATH
+if [[ "$CMD" == "edgar-warehouse" ]] && ! command -v edgar-warehouse &>/dev/null; then
+  echo "edgar-warehouse not found; installing from ${REPO_ROOT} ..." >&2
+  pip install -e "${REPO_ROOT}[mdm]" --quiet
+fi
+
 terraform_output() {
   terraform -chdir="$TF_ROOT" output -raw "$1"
 }
@@ -109,7 +115,7 @@ import sys
 
 jobs = json.loads(sys.argv[1])
 resource_group = sys.argv[2]
-for key in ("migrate", "run", "counts"):
+for key in ("migrate", "run", "counts", "backfill_relationships", "sync_graph"):
     name = jobs.get(key)
     if not name:
         continue

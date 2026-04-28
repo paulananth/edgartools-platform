@@ -58,7 +58,8 @@ resource "azurerm_storage_account" "neo4j" {
   name                            = var.neo4j_storage_account_name
   resource_group_name             = var.resource_group_name
   location                        = var.location
-  account_tier                    = "Standard"
+  account_tier                    = "Premium"
+  account_kind                    = "FileStorage"
   account_replication_type        = "LRS"
   min_tls_version                 = "TLS1_2"
   allow_nested_items_to_be_public = false
@@ -68,7 +69,7 @@ resource "azurerm_storage_account" "neo4j" {
 resource "azurerm_storage_share" "neo4j" {
   name                 = "neo4j-data"
   storage_account_name = azurerm_storage_account.neo4j.name
-  quota                = 50
+  quota                = 100
 }
 
 resource "azurerm_container_app_environment_storage" "neo4j" {
@@ -138,6 +139,7 @@ resource "azurerm_container_app" "neo4j" {
   ingress {
     external_enabled = var.neo4j_external_enabled
     target_port      = 7687
+    exposed_port     = 7687
     transport        = "tcp"
 
     traffic_weight {
@@ -156,7 +158,13 @@ locals {
     local.sql_server_fqdn,
     azurerm_mssql_database.mdm.name,
   )
-  neo4j_bolt_uri = "neo4j://${azurerm_container_app.neo4j.latest_revision_fqdn}:7687"
+  # Use bolt:// not neo4j:// — the neo4j:// scheme triggers routing discovery
+  # which fails on single-instance deployments without bolt_advertised_address set.
+  # Use short app name (not the full .internal. FQDN) — Azure Container Apps routes
+  # internal TCP by app name through Envoy. The .internal. FQDN causes TCP timeouts
+  # because Envoy's HTTP host-based routing doesn't carry into TCP connections.
+  # Ref: https://learn.microsoft.com/en-us/azure/container-apps/connect-apps
+  neo4j_bolt_uri = "bolt://${azurerm_container_app.neo4j.name}:7687"
   api_keys       = length(var.api_keys) > 0 ? var.api_keys : [random_password.api_key.result]
   api_keys_csv   = join(",", local.api_keys)
 }
@@ -252,6 +260,18 @@ locals {
       name    = "${var.name_prefix}-mdm-counts"
       command = ["mdm", "counts"]
     }
+    backfill_relationships = {
+      name    = "${var.name_prefix}-mdm-graph-load"
+      command = ["mdm", "backfill-relationships", "--limit", "100"]
+    }
+    sync_graph = {
+      name    = "${var.name_prefix}-mdm-graph-sync"
+      command = ["mdm", "sync-graph", "--limit", "100"]
+    }
+    verify_graph = {
+      name    = "${var.name_prefix}-mdm-graph-verify"
+      command = ["mdm", "verify-graph"]
+    }
   }
 }
 
@@ -288,8 +308,8 @@ resource "azurerm_container_app" "mdm_api" {
     container {
       name   = "mdm-api"
       image  = var.container_image
-      cpu    = 0.5
-      memory = "1Gi"
+      cpu    = var.mdm_api_cpu
+      memory = var.mdm_api_memory
       args   = ["mdm", "api", "--host", "0.0.0.0", "--port", "8080"]
 
       env {

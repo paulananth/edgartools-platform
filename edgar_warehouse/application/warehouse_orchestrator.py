@@ -78,6 +78,7 @@ if TYPE_CHECKING:
 
 GOLD_AFFECTING_COMMANDS = {
     "bootstrap-full",
+    "bootstrap-next",
     "bootstrap-recent-10",
     "bootstrap-batch",
     "daily-incremental",
@@ -659,6 +660,37 @@ def _capture_bronze_raw(
             metrics["rows_inserted"] += reference_result["rows_written"]
             metrics["rows_skipped"] += reference_result["rows_skipped"]
         ciks = _apply_bronze_cik_limit(ciks)
+        result = _run_submissions_bronze_then_silver(
+            context=context,
+            db=db,
+            sync_run_id=sync_run_id,
+            ciks=ciks,
+            include_pagination=True,
+            fetch_date=now.date(),
+            force=bool(arguments.get("force")),
+            load_mode="bootstrap_full",
+        )
+        raw_writes.extend(result["raw_writes"])
+        metrics["rows_inserted"] += result["rows_written"]
+        metrics["rows_skipped"] += result["rows_skipped"]
+        return raw_writes, metrics
+
+    if command_name == "bootstrap-next":
+        ciks, reference_result = _resolve_bootstrap_target_ciks(
+            context=context,
+            db=db,
+            sync_run_id=sync_run_id,
+            raw_ciks=None,
+            command_name=command_name,
+            tracking_status_filter=str(scope.get("tracking_status_filter", "bootstrap_pending")),
+            fetch_date=now.date(),
+        )
+        if reference_result is not None:
+            raw_writes.extend(reference_result["raw_writes"])
+            metrics["rows_inserted"] += reference_result["rows_written"]
+            metrics["rows_skipped"] += reference_result["rows_skipped"]
+        cik_limit = int(scope.get("cik_limit") or 100)
+        ciks = _apply_bronze_cik_limit(ciks[:cik_limit])
         result = _run_submissions_bronze_then_silver(
             context=context,
             db=db,
@@ -1991,6 +2023,12 @@ def _resolve_scope(
         return {
             "cik_list": arguments.get("cik_list"),
             "tracking_status_filter": arguments.get("tracking_status_filter"),
+        }
+
+    if command_name == "bootstrap-next":
+        return {
+            "cik_limit": arguments.get("limit", 100),
+            "tracking_status_filter": arguments.get("tracking_status_filter", "bootstrap_pending"),
         }
 
     if command_name == "daily-incremental":
