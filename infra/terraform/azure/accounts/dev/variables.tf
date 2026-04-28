@@ -31,8 +31,13 @@ variable "key_vault_name" {
   type        = string
 }
 
-variable "container_image" {
-  description = "Warehouse image reference in ACR."
+variable "transform_container_image" {
+  description = "edgar-warehouse-pipelines image reference in ACR (warehouse ETL jobs)."
+  type        = string
+}
+
+variable "mdm_container_image" {
+  description = "edgar-warehouse-mdm-neo4j image reference in ACR (MDM pipeline + API)."
   type        = string
 }
 

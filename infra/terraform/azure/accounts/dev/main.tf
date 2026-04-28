@@ -75,7 +75,7 @@ module "container_jobs" {
   name_prefix               = var.name_prefix
   resource_group_name       = module.resource_group.name
   location                  = module.resource_group.location
-  container_image           = var.container_image
+  container_image           = var.transform_container_image
   acr_id                    = module.acr.id
   acr_login_server          = module.acr.login_server
   storage_account_id        = module.storage.id
@@ -109,7 +109,7 @@ module "mdm" {
   location                     = module.resource_group.location
   key_vault_id                 = module.key_vault.id
   container_app_environment_id = module.container_jobs.environment_id
-  container_image              = var.container_image
+  container_image              = var.mdm_container_image
   acr_login_server             = module.acr.login_server
   workload_identity_id         = module.container_jobs.identity_id
   workload_identity_client_id  = module.container_jobs.identity_client_id

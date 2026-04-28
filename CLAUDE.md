@@ -127,6 +127,49 @@ uv pip install -r requirements.txt
 streamlit run edgar_universe_dashboard.py
 ```
 
+## Image management
+
+Two ACR images, one per concern. **Image names never change.**
+
+| Image | Dockerfile | Installs | Runs |
+|-------|------------|----------|------|
+| `edgar-warehouse-pipelines` | `Dockerfile.pipelines` | `.[s3,azure]` | `bootstrap-recent-10`, `daily-incremental`, `full-reconcile` |
+| `edgar-warehouse-mdm-neo4j` | `Dockerfile.mdm-neo4j` | `.[mdm]` + ODBC | all `mdm *` commands, MDM API |
+
+**Tagging strategy** — `terraform.tfvars` always references `:dev` and never changes for a normal deploy:
+
+| Tag | Meaning |
+|-----|---------|
+| `:dev` | Mutable — always latest from `main` |
+| `:sha-<hash>` | Immutable — auto-pushed alongside `:dev` for rollback/audit |
+| `:prod` | Promoted manually from `:dev` when ready for production |
+
+**CI (automated):** both images rebuild on every merge to `main` via `.github/workflows/build-images.yml`.
+
+**Manual build (ACR):**
+```bash
+# Warehouse ETL image
+bash infra/scripts/publish-warehouse-image-acr.sh \
+  --acr-name edgdev7659acr --image-role pipelines
+
+# MDM Neo4j image
+bash infra/scripts/publish-warehouse-image-acr.sh \
+  --acr-name edgdev7659acr --image-role mdm-neo4j
+
+# Push prod tag (promote from dev)
+bash infra/scripts/publish-warehouse-image-acr.sh \
+  --acr-name edgdev7659acr --image-role mdm-neo4j --image-tag prod
+```
+
+**Rollback to a previous SHA:**
+```bash
+ACR=edgdev7659acr.azurecr.io
+SHA=sha-abc1234
+docker pull $ACR/edgar-warehouse-mdm-neo4j:$SHA
+docker tag  $ACR/edgar-warehouse-mdm-neo4j:$SHA $ACR/edgar-warehouse-mdm-neo4j:dev
+docker push $ACR/edgar-warehouse-mdm-neo4j:dev
+```
+
 ## Key Large Files (Read in Chunks)
 
 These files exceed 30 KB. When modifying them, read section by section rather than all at once:
