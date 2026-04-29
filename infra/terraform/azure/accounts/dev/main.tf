@@ -14,11 +14,21 @@ locals {
   )
   workflows = merge(
     {
+      seed_universe = {
+        command         = ["seed-universe"]
+        cpu             = 1
+        memory          = "2Gi"
+        schedule        = null
+        retry_limit     = 0
+        timeout_seconds = 3600
+      }
       bootstrap_recent_10 = {
-        command  = ["bootstrap-recent-10"]
-        cpu      = 1
-        memory   = "2Gi"
-        schedule = null
+        command         = ["bootstrap-recent-10", "--no-include-reference-refresh"]
+        cpu             = 2
+        memory          = "4Gi"
+        schedule        = null
+        retry_limit     = 0
+        timeout_seconds = 21600
       }
     },
     var.daily_incremental_schedule == null ? {} : {

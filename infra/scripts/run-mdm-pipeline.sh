@@ -1,32 +1,40 @@
 #!/usr/bin/env bash
-# Run the full MDM ingestion sequence end-to-end:
+# Run the full MDM ingestion sequence end-to-end.
 #
-#   Step 1  bootstrap-recent-10   Populate silver.duckdb (skipped if already populated)
-#   Step 2  mdm migrate           Apply schema + seed reference data
-#   Step 3  mdm run               Load entities from silver into Azure SQL (company/adviser/…)
-#   Step 4  mdm sync-graph        Push pending relationship instances to Neo4j
-#   Step 5  mdm verify-graph      Query Neo4j for node/edge counts (pass/fail check)
-#   Step 6  mdm counts            Print all MDM table row counts
+# Architecture:
+#   sec_tracked_universe in silver.duckdb controls which companies are bootstrapped.
+#   seed-universe populates it; bootstrap-recent-10 reads from it.
+#   Never pass a CIK list at runtime — the seed table IS the scope control.
+#
+# Steps:
+#   1  seed-universe         Seed sec_tracked_universe in silver.duckdb (scope control)
+#   2  bootstrap-recent-10   Fetch 10 most recent submissions per tracked company → silver.duckdb
+#   3  mdm migrate           Apply schema + seed reference data in Azure SQL
+#   4  mdm run               Load entities from silver into Azure SQL
+#   5  mdm sync-graph        Push pending relationship instances to Neo4j
+#   6  mdm verify-graph      Query Neo4j for node/edge counts
+#   7  mdm counts            Print all MDM table row counts
 #
 # Usage:
-#   ./run-mdm-pipeline.sh --env dev
-#   ./run-mdm-pipeline.sh --env dev --cik-list 320193,789019,1018724
-#   ./run-mdm-pipeline.sh --env dev --skip-bootstrap   # silver already populated
-#   ./run-mdm-pipeline.sh --env dev --skip-migrate     # schema already current
+#   ./run-mdm-pipeline.sh --env dev --universe-limit 100
+#   ./run-mdm-pipeline.sh --env dev --skip-seed --skip-bootstrap   # silver already populated
+#   ./run-mdm-pipeline.sh --env dev --skip-migrate                 # schema already current
 #
 # Options:
-#   --env ENV            dev or prod (required)
-#   --cik-list CIKS      Comma-separated CIK list for bootstrap (avoids full-universe run).
-#                        Omit to run the full tracked universe.
-#   --skip-bootstrap     Skip step 1 (use when silver.duckdb is already populated).
-#   --skip-migrate       Skip step 2 (use when schema is already current).
-#   --graph-limit N      Max relationships to sync to Neo4j in step 4 (default: 100).
-#   --fail-fast          Exit immediately if any step fails (default: continue + report).
+#   --env ENV              dev or prod (required)
+#   --universe-limit N     Limit companies seeded into sec_tracked_universe (default: all).
+#                          Use 100 for dev to avoid OOM on full 7993-company universe.
+#   --skip-seed            Skip step 1 (sec_tracked_universe already seeded).
+#   --skip-bootstrap       Skip step 2 (silver.duckdb already populated).
+#   --skip-migrate         Skip step 3 (schema already current).
+#   --graph-limit N        Max relationships to sync to Neo4j in step 5 (default: 100).
+#   --fail-fast            Exit immediately if any step fails.
 
 set -euo pipefail
 
 ENVIRONMENT=""
-CIK_LIST=""
+UNIVERSE_LIMIT=""
+SKIP_SEED=false
 SKIP_BOOTSTRAP=false
 SKIP_MIGRATE=false
 GRAPH_LIMIT=100
@@ -34,12 +42,13 @@ FAIL_FAST=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env)             ENVIRONMENT="${2:?}";  shift 2 ;;
-    --cik-list)        CIK_LIST="${2:?}";     shift 2 ;;
-    --skip-bootstrap)  SKIP_BOOTSTRAP=true;  shift ;;
-    --skip-migrate)    SKIP_MIGRATE=true;    shift ;;
-    --graph-limit)     GRAPH_LIMIT="${2:?}"; shift 2 ;;
-    --fail-fast)       FAIL_FAST=true;       shift ;;
+    --env)              ENVIRONMENT="${2:?}";     shift 2 ;;
+    --universe-limit)   UNIVERSE_LIMIT="${2:?}";  shift 2 ;;
+    --skip-seed)        SKIP_SEED=true;          shift ;;
+    --skip-bootstrap)   SKIP_BOOTSTRAP=true;     shift ;;
+    --skip-migrate)     SKIP_MIGRATE=true;       shift ;;
+    --graph-limit)      GRAPH_LIMIT="${2:?}";    shift 2 ;;
+    --fail-fast)        FAIL_FAST=true;          shift ;;
     -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -60,8 +69,12 @@ WAREHOUSE_ROOT="$(tf_out warehouse_storage_root)"
 STORAGE_ACCOUNT="$(echo "$WAREHOUSE_ROOT" | python3 -c \
   "import sys,re; m=re.search(r'@([^.]+)',sys.stdin.read()); print(m.group(1) if m else '')" 2>/dev/null || true)"
 
-BOOT_JOB="$(tf_out_json container_app_job_names | \
-  python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('bootstrap_recent_10',''))" 2>/dev/null || true)"
+get_warehouse_job() {
+  tf_out_json container_app_job_names | \
+  python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('$1',''))" 2>/dev/null || true
+}
+SEED_JOB="$(get_warehouse_job seed_universe)"
+BOOT_JOB="$(get_warehouse_job bootstrap_recent_10)"
 
 get_mdm_job() {
   tf_out_json mdm_container_app_job_names | \
@@ -87,7 +100,14 @@ declare -A STEP_STATUS
 #
 # Usage:
 #   start_job_rest <subscription> <rg> <job> <container> [arg1 arg2 ...]
-# Returns the execution name on stdout; exits non-zero on failure.
+# Returns the execution name on stdout.
+#
+# Body format note (5-whys root cause of previous silent failure):
+#   Why the {"template":{...}} wrapper was wrong: ARM API type is
+#   StartJobExecutionTemplate — the body IS the template content directly.
+#   Wrapping in {"template":{...}} returns HTTP 400 "Unknown properties".
+#   Correct format: {"containers":[{"name":"...","image":"...","args":[...]}]}
+#   The "image" field is required; without it Azure ignores the container override.
 # ---------------------------------------------------------------------------
 start_job_rest() {
   local subscription="$1" rg="$2" job="$3" container="$4"
@@ -95,19 +115,22 @@ start_job_rest() {
 
   local body
   if [[ $# -gt 0 ]]; then
-    # Build {"template":{"containers":[{"name":"<c>","args":[...]}]}}
+    # Fetch the image from the job definition so we can include it in the override
+    local image
+    image="$(az containerapp job show --name "$job" --resource-group "$rg" \
+      --query "properties.template.containers[0].image" -o tsv 2>/dev/null)"
     body="$(python3 -c "
 import json, sys
-args = sys.argv[1:]
-print(json.dumps({'template':{'containers':[{'name': args[0], 'args': args[1:]}]}}))
-" -- "$container" "$@")"
+container, image, *args = sys.argv[1:]
+print(json.dumps({'containers':[{'name': container, 'image': image, 'args': args}]}))
+" -- "$container" "$image" "$@")"
   else
     body="{}"
   fi
 
   az rest \
     --method post \
-    --url "https://management.azure.com/subscriptions/${subscription}/resourceGroups/${rg}/providers/Microsoft.App/jobs/${job}/start?api-version=2023-05-01" \
+    --url "https://management.azure.com/subscriptions/${subscription}/resourceGroups/${rg}/providers/Microsoft.App/jobs/${job}/start?api-version=2024-03-01" \
     --body "${body}" \
     --query "name" -o tsv 2>/dev/null
 }
@@ -208,7 +231,7 @@ print_summary() {
   echo " PIPELINE RUN SUMMARY — env=${ENVIRONMENT}"
   echo "================================================"
   local all_ok=true
-  for step in bootstrap migrate run sync-graph verify-graph counts; do
+  for step in seed bootstrap migrate run sync-graph verify-graph counts; do
     local s="${STEP_STATUS[$step]:-SKIP}"
     local icon="✓"
     [[ "$s" == "FAIL" ]] && { icon="✗"; all_ok=false; }
@@ -226,57 +249,68 @@ print_summary() {
 
 echo "================================================"
 echo " MDM Pipeline Run — env=${ENVIRONMENT}"
-echo " Resource group : ${RESOURCE_GROUP}"
-echo " Storage account: ${STORAGE_ACCOUNT}"
-[[ -n "$CIK_LIST" ]] && echo " CIK list       : $(echo "$CIK_LIST" | tr ',' '\n' | wc -l | tr -d ' ') CIKs"
+echo " Resource group  : ${RESOURCE_GROUP}"
+echo " Storage account : ${STORAGE_ACCOUNT}"
+[[ -n "$UNIVERSE_LIMIT" ]] && echo " Universe limit  : ${UNIVERSE_LIMIT} companies"
 echo "================================================"
 
 # ---------------------------------------------------------------------------
-# STEP 1: Bootstrap (populate silver.duckdb)
+# STEP 1: Seed universe (populate sec_tracked_universe in silver.duckdb)
+# sec_tracked_universe is the scope control for bootstrap-recent-10.
+# --universe-limit scopes dev to N companies, avoiding OOM on the full universe.
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> [1/6] BOOTSTRAP (populate silver.duckdb)"
+echo "==> [1/7] SEED UNIVERSE (populate sec_tracked_universe in silver.duckdb)"
 
-if [[ "$SKIP_BOOTSTRAP" == "true" ]]; then
-  echo "  --skip-bootstrap set — checking current silver.duckdb size..."
-  SIZE="$(silver_size)"
-  if [[ "${SIZE:-0}" -gt 0 ]]; then
-    echo "  silver.duckdb: ${SIZE} bytes — OK, skipping bootstrap"
-    STEP_STATUS["bootstrap"]="SKIP"
-  else
-    echo "  WARNING: silver.duckdb is 0 bytes but --skip-bootstrap was set"
-    echo "  MDM run will find no data. Remove --skip-bootstrap to re-run bootstrap."
-    STEP_STATUS["bootstrap"]="SKIP"
-  fi
+if [[ "$SKIP_SEED" == "true" ]]; then
+  echo "  --skip-seed set — skipping"
+  STEP_STATUS["seed"]="SKIP"
 else
-  if [[ -n "$CIK_LIST" ]]; then
-    echo "  Mode: explicit CIK list ($(echo "$CIK_LIST" | tr ',' '\n' | wc -l | tr -d ' ') CIKs)"
-    run_job "bootstrap" "$BOOT_JOB" "$RESOURCE_GROUP" "edgar-warehouse" \
-      bootstrap-recent-10 --cik-list "$CIK_LIST"
+  if [[ -n "$UNIVERSE_LIMIT" ]]; then
+    echo "  universe-limit: ${UNIVERSE_LIMIT} companies"
+    run_job "seed" "$SEED_JOB" "$RESOURCE_GROUP" "edgar-warehouse" \
+      seed-universe --limit "$UNIVERSE_LIMIT"
   else
-    echo "  Mode: full tracked universe (WAREHOUSE_RUNTIME_MODE must be bronze_capture)"
-    run_job "bootstrap" "$BOOT_JOB" "$RESOURCE_GROUP" "edgar-warehouse"
-  fi
-
-  echo ""
-  SIZE="$(silver_size)"
-  SIZE="${SIZE:-0}"
-  if [[ "$SIZE" -gt 0 ]]; then
-    MB=$(python3 -c "print(f'{${SIZE}/1048576:.1f}')" 2>/dev/null || echo "?")
-    echo "  silver.duckdb: ${SIZE} bytes (${MB} MB) — POPULATED"
-  else
-    echo "  ERROR: silver.duckdb is still 0 bytes after bootstrap"
-    echo "  Cannot proceed with MDM run — no silver data to read"
-    STEP_STATUS["bootstrap"]="FAIL"
-    if [[ "$FAIL_FAST" == "true" ]]; then print_summary; exit 1; fi
+    echo "  universe-limit: all (full SEC universe — may OOM in dev; use --universe-limit)"
+    run_job "seed" "$SEED_JOB" "$RESOURCE_GROUP" "edgar-warehouse"
   fi
 fi
 
 # ---------------------------------------------------------------------------
-# STEP 2: MDM migrate (schema + seed)
+# STEP 2: Bootstrap (fetch 10 most recent submissions per tracked company)
+# Reads sec_tracked_universe; uses --no-include-reference-refresh so it does
+# NOT rebuild the universe from the full SEC tickers file.
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> [2/6] MDM MIGRATE (schema + seed reference data)"
+echo "==> [2/7] BOOTSTRAP (fetch submissions for tracked companies → silver.duckdb)"
+
+if [[ "$SKIP_BOOTSTRAP" == "true" ]]; then
+  SIZE="$(silver_size)"; SIZE="${SIZE:-0}"
+  if [[ "$SIZE" -gt 0 ]]; then
+    echo "  --skip-bootstrap: silver.duckdb is ${SIZE} bytes — OK"
+  else
+    echo "  WARNING: --skip-bootstrap set but silver.duckdb is 0 bytes — MDM will find no data"
+  fi
+  STEP_STATUS["bootstrap"]="SKIP"
+else
+  run_job "bootstrap" "$BOOT_JOB" "$RESOURCE_GROUP" "edgar-warehouse"
+
+  SIZE="$(silver_size)"; SIZE="${SIZE:-0}"
+  if [[ "$SIZE" -gt 0 ]]; then
+    MB=$(python3 -c "print(f'{${SIZE}/1048576:.1f}')" 2>/dev/null || echo "?")
+    echo "  silver.duckdb: ${SIZE} bytes (${MB} MB) — POPULATED"
+  else
+    echo "  ERROR: silver.duckdb still 0 bytes after bootstrap"
+    STEP_STATUS["bootstrap"]="FAIL"
+    [[ "$FAIL_FAST" == "true" ]] && { print_summary; exit 1; }
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# STEP 3: MDM migrate (schema + seed)
+# ---------------------------------------------------------------------------
+echo ""
+echo "==> [3/7] MDM MIGRATE (schema + seed reference data)"
 
 if [[ "$SKIP_MIGRATE" == "true" ]]; then
   echo "  --skip-migrate set — skipping"
@@ -286,34 +320,34 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# STEP 3: MDM run (load entities from silver)
+# STEP 4: MDM run (load entities from silver)
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> [3/6] MDM RUN (load entities: company → adviser → security → person → fund)"
+echo "==> [4/7] MDM RUN (load entities: company → adviser → security → person → fund)"
 echo "  (limit is baked into the job via Terraform mdm_run_limit)"
 run_job "run" "$RUN_JOB" "$RESOURCE_GROUP" "mdm"
 
 # ---------------------------------------------------------------------------
-# STEP 4: MDM sync-graph (push pending relationships to Neo4j)
+# STEP 5: MDM sync-graph (push pending relationships to Neo4j)
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> [4/6] MDM SYNC-GRAPH (push pending relationship instances to Neo4j)"
+echo "==> [5/7] MDM SYNC-GRAPH (push pending relationship instances to Neo4j)"
 echo "  limit: ${GRAPH_LIMIT}"
 run_job "sync-graph" "$SYNC_JOB" "$RESOURCE_GROUP" "mdm" \
   mdm sync-graph --limit "$GRAPH_LIMIT"
 
 # ---------------------------------------------------------------------------
-# STEP 5: Verify Neo4j graph
+# STEP 6: Verify Neo4j graph
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> [5/6] MDM VERIFY-GRAPH (node + edge counts in Neo4j)"
+echo "==> [6/7] MDM VERIFY-GRAPH (node + edge counts in Neo4j)"
 run_job "verify-graph" "$VERIFY_JOB" "$RESOURCE_GROUP" "mdm"
 
 # ---------------------------------------------------------------------------
-# STEP 6: MDM counts (final row counts in Azure SQL)
+# STEP 7: MDM counts (final row counts in Azure SQL)
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> [6/6] MDM COUNTS (Azure SQL table row counts)"
+echo "==> [7/7] MDM COUNTS (Azure SQL table row counts)"
 run_job "counts" "$COUNTS_JOB" "$RESOURCE_GROUP" "mdm"
 
 # ---------------------------------------------------------------------------

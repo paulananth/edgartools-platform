@@ -67,8 +67,8 @@ resource "azurerm_container_app_job" "workflow" {
   resource_group_name          = var.resource_group_name
   location                     = var.location
   container_app_environment_id = azurerm_container_app_environment.this.id
-  replica_timeout_in_seconds   = 7200
-  replica_retry_limit          = 1
+  replica_timeout_in_seconds   = try(each.value.timeout_seconds, 7200)
+  replica_retry_limit          = try(each.value.retry_limit, 1)
   tags                         = var.tags
 
   identity {

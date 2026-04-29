@@ -280,6 +280,12 @@ def build_parser() -> argparse.ArgumentParser:
         "seed-universe",
         help="Fetch company_tickers_exchange.json and write CIK universe to S3 as pre-batched JSON Lines.",
     )
+    seed_universe.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Limit the number of companies seeded into sec_tracked_universe (default: all)",
+    )
     _add_run_id_arg(seed_universe)
     seed_universe.set_defaults(handler=_handle_seed_universe)
 

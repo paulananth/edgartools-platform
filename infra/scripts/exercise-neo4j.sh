@@ -63,17 +63,20 @@ start_job_rest() {
   shift 3
   local body
   if [[ $# -gt 0 ]]; then
+    local image
+    image="$(az containerapp job show --name "$job" --resource-group "$rg" \
+      --query "properties.template.containers[0].image" -o tsv 2>/dev/null)"
     body="$(python3 -c "
 import json, sys
-args = sys.argv[1:]
-print(json.dumps({'template':{'containers':[{'name': args[0], 'args': args[1:]}]}}))
-" -- "$container" "$@")"
+container, image, *args = sys.argv[1:]
+print(json.dumps({'containers':[{'name': container, 'image': image, 'args': args}]}))
+" -- "$container" "$image" "$@")"
   else
     body="{}"
   fi
   az rest \
     --method post \
-    --url "https://management.azure.com/subscriptions/${SUBSCRIPTION}/resourceGroups/${rg}/providers/Microsoft.App/jobs/${job}/start?api-version=2023-05-01" \
+    --url "https://management.azure.com/subscriptions/${SUBSCRIPTION}/resourceGroups/${rg}/providers/Microsoft.App/jobs/${job}/start?api-version=2024-03-01" \
     --body "${body}" \
     --query "name" -o tsv 2>/dev/null
 }
