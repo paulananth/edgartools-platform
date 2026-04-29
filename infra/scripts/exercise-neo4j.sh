@@ -52,15 +52,38 @@ TF_ROOT="${REPO_ROOT}/infra/terraform/azure/accounts/${ENVIRONMENT}"
 terraform_output()      { terraform -chdir="$TF_ROOT" output -raw  "$1"; }
 terraform_output_json() { terraform -chdir="$TF_ROOT" output -json "$1"; }
 
-# Run a job and block until Succeeded or Failed.
-# Prints job name + execution name + final status.
-# Returns 0 on Succeeded, 1 on Failed/Stopped.
+SUBSCRIPTION="$(az account show --query id -o tsv 2>/dev/null)"
+
+# Start a Container App Job via REST API with an optional container args override.
+# Bypasses the Azure CLI parser, which eats flags like --limit and --cik-list.
+# Usage: start_job_rest <rg> <job> <container> [arg1 arg2 ...]
+# Prints the execution name on stdout.
+start_job_rest() {
+  local rg="$1" job="$2" container="$3"
+  shift 3
+  local body
+  if [[ $# -gt 0 ]]; then
+    body="$(python3 -c "
+import json, sys
+args = sys.argv[1:]
+print(json.dumps({'template':{'containers':[{'name': args[0], 'args': args[1:]}]}}))
+" -- "$container" "$@")"
+  else
+    body="{}"
+  fi
+  az rest \
+    --method post \
+    --url "https://management.azure.com/subscriptions/${SUBSCRIPTION}/resourceGroups/${rg}/providers/Microsoft.App/jobs/${job}/start?api-version=2023-05-01" \
+    --body "${body}" \
+    --query "name" -o tsv 2>/dev/null
+}
+
+# Start a job (no args override) and block until Succeeded or Failed.
+# Returns the execution name on the last stdout line.
 run_job() {
   local job="$1" rg="$2"
   local exec_name
-  exec_name="$(az containerapp job start \
-    --name "${job}" --resource-group "${rg}" \
-    --query "name" -o tsv)"
+  exec_name="$(start_job_rest "$rg" "$job" "")"
   echo "    started: ${exec_name}"
 
   while true; do
@@ -77,7 +100,7 @@ run_job() {
     sleep 15
   done
 
-  echo "${exec_name}"   # last line = execution name for log query
+  echo "${exec_name}"
 }
 
 # Query Log Analytics for a job execution's console output.
@@ -142,10 +165,8 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "==> [2/4] Backfilling up to ${LIMIT} graph relationships ..."
-BACKFILL_EXEC="$(az containerapp job start \
-  --name "${BACKFILL_JOB}" --resource-group "${RESOURCE_GROUP}" \
-  --args "mdm backfill-relationships --limit ${LIMIT}" \
-  --query "name" -o tsv)"
+BACKFILL_EXEC="$(start_job_rest "${RESOURCE_GROUP}" "${BACKFILL_JOB}" "mdm" \
+  mdm backfill-relationships --limit "${LIMIT}")"
 echo "    started: ${BACKFILL_EXEC}"
 
 while true; do
