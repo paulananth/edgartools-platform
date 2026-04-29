@@ -87,7 +87,10 @@ VERIFY_JOB="$(get_mdm_job verify_graph)"
 COUNTS_JOB="$(get_mdm_job counts)"
 
 # Track results for summary
-declare -A STEP_STATUS
+# Step status — stored as plain variables (STEP_<name>) for bash 3.2 compat
+# (macOS ships bash 3.2 which does not support declare -A associative arrays)
+_step_set()  { eval "STEP_${1}=${2}"; }
+_step_get()  { eval "echo \${STEP_${1}:-SKIP}"; }
 
 # ---------------------------------------------------------------------------
 # Helper: start a Container App Job via REST API with an optional args override.
@@ -146,7 +149,7 @@ run_job() {
 
   if [[ -z "$job" ]]; then
     echo "  SKIP — job name not found in terraform outputs"
-    STEP_STATUS["$label"]="SKIP"
+    _step_set \1 \2
     return 0
   fi
 
@@ -154,7 +157,7 @@ run_job() {
   exec_name="$(start_job_rest "$SUBSCRIPTION" "$rg" "$job" "$container_name" "$@")"
   if [[ -z "$exec_name" ]]; then
     echo "  ERROR — failed to start job $job"
-    STEP_STATUS["$label"]="FAIL"
+    _step_set \1 \2
     [[ "$FAIL_FAST" == "true" ]] && { print_summary; exit 1; }
     return 0
   fi
@@ -167,9 +170,9 @@ run_job() {
       --job-execution-name "$exec_name" \
       --query "properties.status" -o tsv 2>/dev/null || echo "Running")"
     case "$status" in
-      Succeeded) echo "  done: $status"; STEP_STATUS["$label"]="OK"; break ;;
+      Succeeded) echo "  done: $status"; _step_set \1 \2; break ;;
       Failed|Stopped)
-        echo "  ERROR: $status"; STEP_STATUS["$label"]="FAIL"
+        echo "  ERROR: $status"; _step_set \1 \2
         _print_job_logs "$job" "$rg" "$exec_name" "$container_name" 40
         [[ "$FAIL_FAST" == "true" ]] && { print_summary; exit 1; }
         break ;;
@@ -178,7 +181,7 @@ run_job() {
   done
 
   # Best-effort log output on success too (shows counts/stats)
-  [[ "${STEP_STATUS[$label]}" == "OK" ]] && \
+  [[ "$(_step_get $label)" == "OK" ]] && \
     _print_job_logs "$job" "$rg" "$exec_name" "$container_name" 60
 }
 
@@ -232,7 +235,7 @@ print_summary() {
   echo "================================================"
   local all_ok=true
   for step in seed bootstrap migrate run sync-graph verify-graph counts; do
-    local s="${STEP_STATUS[$step]:-SKIP}"
+    local s="$(_step_get $step)"
     local icon="✓"
     [[ "$s" == "FAIL" ]] && { icon="✗"; all_ok=false; }
     [[ "$s" == "SKIP" ]] && icon="-"
@@ -264,7 +267,7 @@ echo "==> [1/7] SEED UNIVERSE (populate sec_tracked_universe in silver.duckdb)"
 
 if [[ "$SKIP_SEED" == "true" ]]; then
   echo "  --skip-seed set — skipping"
-  STEP_STATUS["seed"]="SKIP"
+  _step_set \1 \2
 else
   if [[ -n "$UNIVERSE_LIMIT" ]]; then
     echo "  universe-limit: ${UNIVERSE_LIMIT} companies"
@@ -291,7 +294,7 @@ if [[ "$SKIP_BOOTSTRAP" == "true" ]]; then
   else
     echo "  WARNING: --skip-bootstrap set but silver.duckdb is 0 bytes — MDM will find no data"
   fi
-  STEP_STATUS["bootstrap"]="SKIP"
+  _step_set \1 \2
 else
   run_job "bootstrap" "$BOOT_JOB" "$RESOURCE_GROUP" "edgar-warehouse"
 
@@ -301,7 +304,7 @@ else
     echo "  silver.duckdb: ${SIZE} bytes (${MB} MB) — POPULATED"
   else
     echo "  ERROR: silver.duckdb still 0 bytes after bootstrap"
-    STEP_STATUS["bootstrap"]="FAIL"
+    _step_set \1 \2
     [[ "$FAIL_FAST" == "true" ]] && { print_summary; exit 1; }
   fi
 fi
@@ -314,7 +317,7 @@ echo "==> [3/7] MDM MIGRATE (schema + seed reference data)"
 
 if [[ "$SKIP_MIGRATE" == "true" ]]; then
   echo "  --skip-migrate set — skipping"
-  STEP_STATUS["migrate"]="SKIP"
+  _step_set \1 \2
 else
   run_job "migrate" "$MIGRATE_JOB" "$RESOURCE_GROUP" "mdm"
 fi
