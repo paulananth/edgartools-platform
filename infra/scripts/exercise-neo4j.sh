@@ -70,7 +70,7 @@ start_job_rest() {
 import json, sys
 container, image, *args = sys.argv[1:]
 print(json.dumps({'containers':[{'name': container, 'image': image, 'args': args}]}))
-" -- "$container" "$image" "$@")"
+" "$container" "$image" "$@")"
   else
     body="{}"
   fi

@@ -126,7 +126,7 @@ start_job_rest() {
 import json, sys
 container, image, *args = sys.argv[1:]
 print(json.dumps({'containers':[{'name': container, 'image': image, 'args': args}]}))
-" -- "$container" "$image" "$@")"
+" "$container" "$image" "$@")"
   else
     body="{}"
   fi
@@ -149,7 +149,7 @@ run_job() {
 
   if [[ -z "$job" ]]; then
     echo "  SKIP — job name not found in terraform outputs"
-    _step_set \1 \2
+    _step_set "$label" SKIP
     return 0
   fi
 
@@ -157,7 +157,7 @@ run_job() {
   exec_name="$(start_job_rest "$SUBSCRIPTION" "$rg" "$job" "$container_name" "$@")"
   if [[ -z "$exec_name" ]]; then
     echo "  ERROR — failed to start job $job"
-    _step_set \1 \2
+    _step_set "$label" FAIL
     [[ "$FAIL_FAST" == "true" ]] && { print_summary; exit 1; }
     return 0
   fi
@@ -170,9 +170,9 @@ run_job() {
       --job-execution-name "$exec_name" \
       --query "properties.status" -o tsv 2>/dev/null || echo "Running")"
     case "$status" in
-      Succeeded) echo "  done: $status"; _step_set \1 \2; break ;;
+      Succeeded) echo "  done: $status"; _step_set "$label" OK; break ;;
       Failed|Stopped)
-        echo "  ERROR: $status"; _step_set \1 \2
+        echo "  ERROR: $status"; _step_set "$label" FAIL
         _print_job_logs "$job" "$rg" "$exec_name" "$container_name" 40
         [[ "$FAIL_FAST" == "true" ]] && { print_summary; exit 1; }
         break ;;
@@ -267,9 +267,14 @@ echo "==> [1/7] SEED UNIVERSE (populate sec_tracked_universe in silver.duckdb)"
 
 if [[ "$SKIP_SEED" == "true" ]]; then
   echo "  --skip-seed set — skipping"
-  _step_set \1 \2
+  _step_set seed SKIP
 else
-  if [[ -n "$UNIVERSE_LIMIT" ]]; then
+  # Idempotency: skip if silver already has a non-empty tracked universe
+  SILVER_BYTES="$(silver_size)"; SILVER_BYTES="${SILVER_BYTES:-0}"
+  if [[ "$SILVER_BYTES" -gt 0 ]]; then
+    echo "  silver.duckdb already populated (${SILVER_BYTES} bytes) — skipping seed (data unchanged at source)"
+    _step_set seed SKIP
+  elif [[ -n "$UNIVERSE_LIMIT" ]]; then
     echo "  universe-limit: ${UNIVERSE_LIMIT} companies"
     run_job "seed" "$SEED_JOB" "$RESOURCE_GROUP" "edgar-warehouse" \
       seed-universe --limit "$UNIVERSE_LIMIT"
@@ -294,7 +299,7 @@ if [[ "$SKIP_BOOTSTRAP" == "true" ]]; then
   else
     echo "  WARNING: --skip-bootstrap set but silver.duckdb is 0 bytes — MDM will find no data"
   fi
-  _step_set \1 \2
+  _step_set bootstrap SKIP
 else
   run_job "bootstrap" "$BOOT_JOB" "$RESOURCE_GROUP" "edgar-warehouse"
 
@@ -304,7 +309,7 @@ else
     echo "  silver.duckdb: ${SIZE} bytes (${MB} MB) — POPULATED"
   else
     echo "  ERROR: silver.duckdb still 0 bytes after bootstrap"
-    _step_set \1 \2
+    _step_set bootstrap FAIL
     [[ "$FAIL_FAST" == "true" ]] && { print_summary; exit 1; }
   fi
 fi
@@ -317,7 +322,7 @@ echo "==> [3/7] MDM MIGRATE (schema + seed reference data)"
 
 if [[ "$SKIP_MIGRATE" == "true" ]]; then
   echo "  --skip-migrate set — skipping"
-  _step_set \1 \2
+  _step_set migrate SKIP
 else
   run_job "migrate" "$MIGRATE_JOB" "$RESOURCE_GROUP" "mdm"
 fi
