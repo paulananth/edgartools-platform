@@ -422,6 +422,7 @@ class SilverDatabase:
             "ALTER TABLE sec_tracked_universe ADD COLUMN IF NOT EXISTS added_at TIMESTAMPTZ",
             "ALTER TABLE sec_tracked_universe ADD COLUMN IF NOT EXISTS removed_at TIMESTAMPTZ",
             "ALTER TABLE sec_parse_run ADD COLUMN IF NOT EXISTS rows_written INTEGER",
+            "ALTER TABLE sec_source_checkpoint ADD COLUMN IF NOT EXISTS bronze_path TEXT",
         ]
         for statement in migration_statements:
             self._conn.execute(statement)
@@ -1625,8 +1626,9 @@ class SilverDatabase:
             """
             INSERT INTO sec_source_checkpoint
                 (source_name, source_key, raw_object_id, last_success_at, last_sha256,
-                 last_etag, last_modified_at, last_acceptance_datetime_seen, last_accession_number_seen)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 last_etag, last_modified_at, last_acceptance_datetime_seen,
+                 last_accession_number_seen, bronze_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (source_name, source_key) DO UPDATE SET
                 raw_object_id = excluded.raw_object_id,
                 last_success_at = excluded.last_success_at,
@@ -1634,7 +1636,8 @@ class SilverDatabase:
                 last_etag = excluded.last_etag,
                 last_modified_at = excluded.last_modified_at,
                 last_acceptance_datetime_seen = excluded.last_acceptance_datetime_seen,
-                last_accession_number_seen = excluded.last_accession_number_seen
+                last_accession_number_seen = excluded.last_accession_number_seen,
+                bronze_path = excluded.bronze_path
             """,
             [
                 row["source_name"],
@@ -1646,6 +1649,7 @@ class SilverDatabase:
                 row.get("last_modified_at"),
                 row.get("last_acceptance_datetime_seen"),
                 row.get("last_accession_number_seen"),
+                row.get("bronze_path"),
             ],
         )
 

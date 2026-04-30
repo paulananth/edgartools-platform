@@ -776,8 +776,10 @@ def _capture_bronze_raw(
         for cik in ciks:
             snapshot = _capture_reconcile_snapshot(
                 context=context,
+                db=db,
                 cik=cik,
                 fetch_date=now.date(),
+                force=bool(arguments.get("force", True)),
             )
             raw_writes.append(snapshot["write_record"])
             findings = build_reconcile_findings(
@@ -971,9 +973,11 @@ def _run_submissions_bronze_then_silver(
         bronze_snapshots.append(
             _capture_submission_bronze_snapshot(
             context=context,
+            db=db,
             cik=cik,
             include_pagination=include_pagination,
             fetch_date=fetch_date,
+            force=force,
         )
         )
         if index == total_ciks or index % 10 == 0:
@@ -1027,11 +1031,15 @@ def _run_submissions_bronze_then_silver(
 def _capture_submission_bronze_snapshot(
     *,
     context: WarehouseCommandContext,
+    db: "SilverDatabase",
     cik: int,
     include_pagination: bool,
     fetch_date: date,
+    force: bool,
 ) -> dict[str, Any]:
-    main_snapshot = _capture_submissions_main(context=context, cik=cik, fetch_date=fetch_date)
+    main_snapshot = _capture_submissions_main(
+        context=context, db=db, cik=cik, fetch_date=fetch_date, force=force,
+    )
     raw_writes = [main_snapshot["write_record"]]
     main_payload = main_snapshot["payload"]
     pagination_snapshots: list[dict[str, Any]] = []
@@ -1040,9 +1048,11 @@ def _capture_submission_bronze_snapshot(
     for file_name in manifest_file_names:
         pagination_snapshot = _capture_submissions_pagination(
             context=context,
+            db=db,
             cik=cik,
             file_name=file_name,
             fetch_date=fetch_date,
+            force=force,
         )
         pagination_snapshots.append(
             {
@@ -1117,6 +1127,8 @@ def _apply_submission_snapshot_to_silver(
                 "raw_object_id": write_record["sha256"],
                 "last_success_at": now,
                 "last_sha256": write_record["sha256"],
+                # Store the bronze path so future runs can read without re-downloading
+                "bronze_path": write_record.get("path", ""),
             }
         )
 
@@ -1319,33 +1331,28 @@ def _reference_sources_for_scope(scope_key: str) -> list[str]:
 def _capture_submissions_main(
     *,
     context: WarehouseCommandContext,
+    db: "SilverDatabase",
     cik: int,
     fetch_date: date,
+    force: bool,
 ) -> dict[str, Any]:
     capture_spec = default_capture_spec_factory().submissions_main(cik, fetch_date)
-    main_payload_bytes = _download_sec_bytes(url=capture_spec.source_url or "", identity=context.identity)
-    write_record = _write_bronze_object(
-        context=context,
-        relative_path=capture_spec.relative_path,
-        source_name=capture_spec.source_name,
-        source_url=capture_spec.source_url or "",
-        payload=main_payload_bytes,
-        cik=cik,
-    )
-    return {
-        "payload": _decode_json_bytes(main_payload_bytes, capture_spec.source_url or ""),
-        "write_record": write_record,
-    }
 
+    # Idempotency: consult the silver checkpoint before hitting the SEC API.
+    # If force=False and the bronze file we wrote last time is still intact,
+    # reuse it.  This prevents duplicate bronze files across bootstrap re-runs
+    # and eliminates redundant SEC API calls for data that hasn't changed.
+    if not force:
+        cached = _read_bronze_if_cached(
+            bronze_root=context.bronze_root,
+            db=db,
+            source_name=capture_spec.source_name,
+            source_key=f"cik:{cik}",
+            cik=cik,
+        )
+        if cached is not None:
+            return cached
 
-def _capture_submissions_pagination(
-    *,
-    context: WarehouseCommandContext,
-    cik: int,
-    file_name: str,
-    fetch_date: date,
-) -> dict[str, Any]:
-    capture_spec = default_capture_spec_factory().submissions_pagination(cik, file_name, fetch_date)
     payload_bytes = _download_sec_bytes(url=capture_spec.source_url or "", identity=context.identity)
     write_record = _write_bronze_object(
         context=context,
@@ -1361,13 +1368,100 @@ def _capture_submissions_pagination(
     }
 
 
+def _capture_submissions_pagination(
+    *,
+    context: WarehouseCommandContext,
+    db: "SilverDatabase",
+    cik: int,
+    file_name: str,
+    fetch_date: date,
+    force: bool,
+) -> dict[str, Any]:
+    capture_spec = default_capture_spec_factory().submissions_pagination(cik, file_name, fetch_date)
+
+    if not force:
+        cached = _read_bronze_if_cached(
+            bronze_root=context.bronze_root,
+            db=db,
+            source_name=capture_spec.source_name,
+            source_key=f"file:{file_name}",
+            cik=cik,
+        )
+        if cached is not None:
+            return cached
+
+    payload_bytes = _download_sec_bytes(url=capture_spec.source_url or "", identity=context.identity)
+    write_record = _write_bronze_object(
+        context=context,
+        relative_path=capture_spec.relative_path,
+        source_name=capture_spec.source_name,
+        source_url=capture_spec.source_url or "",
+        payload=payload_bytes,
+        cik=cik,
+    )
+    return {
+        "payload": _decode_json_bytes(payload_bytes, capture_spec.source_url or ""),
+        "write_record": write_record,
+    }
+
+
+def _read_bronze_if_cached(
+    *,
+    bronze_root: "StorageLocation",
+    db: "SilverDatabase",
+    source_name: str,
+    source_key: str,
+    cik: int | None = None,
+) -> "dict[str, Any] | None":
+    """Return cached write_record+payload if a valid bronze file exists for this source_key.
+
+    Looks up the silver checkpoint for the previously stored bronze_path and SHA256.
+    If the file is still readable and the SHA matches, returns it so the caller
+    can skip the SEC API call entirely — no duplicate bronze file is written.
+    Returns None when no valid cache entry exists (first run, or force=True caller).
+    """
+    checkpoint = db.get_source_checkpoint(source_name, source_key)
+    if checkpoint is None:
+        return None
+    bronze_path: str | None = checkpoint.get("bronze_path")
+    last_sha256: str | None = checkpoint.get("last_sha256")
+    if not bronze_path or not last_sha256:
+        return None
+    try:
+        payload_bytes = read_bytes(bronze_path)
+    except Exception:
+        return None
+    if hashlib.sha256(payload_bytes).hexdigest() != last_sha256:
+        return None
+    record: dict[str, Any] = {
+        "layer": "bronze_raw",
+        "path": bronze_path,
+        "relative_path": bronze_path,
+        "sha256": last_sha256,
+        "size_bytes": len(payload_bytes),
+        "source_name": source_name,
+        "source_url": checkpoint.get("source_url", ""),
+        "cached": True,
+    }
+    if cik is not None:
+        record["cik"] = cik
+    return {
+        "payload": _decode_json_bytes(payload_bytes, checkpoint.get("source_url", "")),
+        "write_record": record,
+    }
+
+
 def _capture_reconcile_snapshot(
     *,
     context: WarehouseCommandContext,
+    db: "SilverDatabase",
     cik: int,
     fetch_date: date,
+    force: bool = True,
 ) -> dict[str, Any]:
-    snapshot = _capture_submissions_main(context=context, cik=cik, fetch_date=fetch_date)
+    snapshot = _capture_submissions_main(
+        context=context, db=db, cik=cik, fetch_date=fetch_date, force=force,
+    )
     snapshot["write_record"]["source_name"] = "submissions_main"
     return snapshot
 
