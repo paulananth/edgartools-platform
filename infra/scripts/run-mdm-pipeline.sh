@@ -28,26 +28,35 @@
 #   --skip-bootstrap       Skip step 2 (silver.duckdb already populated).
 #   --skip-migrate         Skip step 3 (schema already current).
 #   --graph-limit N        Max relationships to sync to Neo4j in step 5 (default: 100).
+#   --mdm-run-limit N      Override mdm run with --limit N. Default uses deployed job args.
+#   --resource-group RG    Resource group override.
+#   --name-prefix PREFIX   Runtime resource prefix. Default: edgartools-<env>.
 #   --fail-fast            Exit immediately if any step fails.
 
 set -euo pipefail
 
 ENVIRONMENT=""
+RESOURCE_GROUP=""
+NAME_PREFIX=""
 UNIVERSE_LIMIT=""
 SKIP_SEED=false
 SKIP_BOOTSTRAP=false
 SKIP_MIGRATE=false
 GRAPH_LIMIT=100
+MDM_RUN_LIMIT=""
 FAIL_FAST=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env)              ENVIRONMENT="${2:?}";     shift 2 ;;
+    --resource-group)   RESOURCE_GROUP="${2:?}";  shift 2 ;;
+    --name-prefix)      NAME_PREFIX="${2:?}";     shift 2 ;;
     --universe-limit)   UNIVERSE_LIMIT="${2:?}";  shift 2 ;;
     --skip-seed)        SKIP_SEED=true;          shift ;;
     --skip-bootstrap)   SKIP_BOOTSTRAP=true;     shift ;;
     --skip-migrate)     SKIP_MIGRATE=true;       shift ;;
     --graph-limit)      GRAPH_LIMIT="${2:?}";    shift 2 ;;
+    --mdm-run-limit)    MDM_RUN_LIMIT="${2:?}";  shift 2 ;;
     --fail-fast)        FAIL_FAST=true;          shift ;;
     -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -58,33 +67,43 @@ done
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TF_ROOT="${REPO_ROOT}/infra/terraform/azure/accounts/${ENVIRONMENT}"
+NAME_PREFIX="${NAME_PREFIX:-edgartools-${ENVIRONMENT}}"
 
 tf_out()      { terraform -chdir="$TF_ROOT" output -raw  "$1" 2>/dev/null || true; }
 tf_out_json() { terraform -chdir="$TF_ROOT" output -json "$1" 2>/dev/null || echo "{}"; }
 
 SUBSCRIPTION="$(az account show --query id -o tsv 2>/dev/null)"
 
-RESOURCE_GROUP="$(tf_out resource_group_name)"
+RESOURCE_GROUP="${RESOURCE_GROUP:-$(tf_out resource_group_name)}"
+RESOURCE_GROUP="${RESOURCE_GROUP:-${NAME_PREFIX}-rg}"
 WAREHOUSE_ROOT="$(tf_out warehouse_storage_root)"
 STORAGE_ACCOUNT="$(echo "$WAREHOUSE_ROOT" | python3 -c \
   "import sys,re; m=re.search(r'@([^.]+)',sys.stdin.read()); print(m.group(1) if m else '')" 2>/dev/null || true)"
 
-get_warehouse_job() {
-  tf_out_json container_app_job_names | \
-  python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('$1',''))" 2>/dev/null || true
-}
-SEED_JOB="$(get_warehouse_job seed_universe)"
-BOOT_JOB="$(get_warehouse_job bootstrap_recent_10)"
+json_output_value() {
+  local output_name="$1" key="$2" default_value="$3"
+  tf_out_json "$output_name" | python3 - "$key" "$default_value" <<'PY' 2>/dev/null || true
+import json
+import sys
 
-get_mdm_job() {
-  tf_out_json mdm_container_app_job_names | \
-  python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('$1',''))" 2>/dev/null || true
+key, default = sys.argv[1:]
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    data = {}
+if not isinstance(data, dict):
+    data = {}
+print(data.get(key) or default)
+PY
 }
-MIGRATE_JOB="$(get_mdm_job migrate)"
-RUN_JOB="$(get_mdm_job run)"
-SYNC_JOB="$(get_mdm_job sync_graph)"
-VERIFY_JOB="$(get_mdm_job verify_graph)"
-COUNTS_JOB="$(get_mdm_job counts)"
+
+SEED_JOB="$(json_output_value container_app_job_names seed_universe "${NAME_PREFIX}-seed-universe")"
+BOOT_JOB="$(json_output_value container_app_job_names bootstrap_recent_10 "${NAME_PREFIX}-boot-recent-10")"
+MIGRATE_JOB="$(json_output_value mdm_container_app_job_names migrate "${NAME_PREFIX}-mdm-migrate")"
+RUN_JOB="$(json_output_value mdm_container_app_job_names run "${NAME_PREFIX}-mdm-run")"
+SYNC_JOB="$(json_output_value mdm_container_app_job_names sync_graph "${NAME_PREFIX}-mdm-graph-sync")"
+VERIFY_JOB="$(json_output_value mdm_container_app_job_names verify_graph "${NAME_PREFIX}-mdm-graph-verify")"
+COUNTS_JOB="$(json_output_value mdm_container_app_job_names counts "${NAME_PREFIX}-mdm-counts")"
 
 # Track results for summary
 # Step status — stored as plain variables (STEP_<name>) for bash 3.2 compat
@@ -332,8 +351,14 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "==> [4/7] MDM RUN (load entities: company → adviser → security → person → fund)"
-echo "  (limit is baked into the job via Terraform mdm_run_limit)"
-run_job "run" "$RUN_JOB" "$RESOURCE_GROUP" "mdm"
+if [[ -n "$MDM_RUN_LIMIT" ]]; then
+  echo "  limit override: ${MDM_RUN_LIMIT}"
+  run_job "run" "$RUN_JOB" "$RESOURCE_GROUP" "mdm" \
+    mdm run --entity-type all --limit "$MDM_RUN_LIMIT"
+else
+  echo "  using deployed job default args; pass --mdm-run-limit to override"
+  run_job "run" "$RUN_JOB" "$RESOURCE_GROUP" "mdm"
+fi
 
 # ---------------------------------------------------------------------------
 # STEP 5: MDM sync-graph (push pending relationships to Neo4j)

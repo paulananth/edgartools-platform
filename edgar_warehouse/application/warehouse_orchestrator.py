@@ -1243,23 +1243,38 @@ def _sync_reference_data(
     capture_specs = default_capture_spec_factory()
 
     for spec in capture_specs.references(fetch_date, selected_sources):
-        payload = _download_sec_bytes(url=spec.source_url or "", identity=context.identity)
-        write_record = _write_bronze_object(
-            context=context,
-            relative_path=spec.relative_path,
-            source_name=spec.source_name,
-            source_url=spec.source_url or "",
-            payload=payload,
-        )
-        raw_writes.append(write_record)
-        document = _decode_json_bytes(payload, spec.source_url or "")
         from edgar_warehouse.silver_store import _parse_company_ticker_rows
 
-        rows = _parse_company_ticker_rows(document)
-        checkpoint = db.get_source_checkpoint(spec.source_name, "global")
-        if checkpoint and checkpoint.get("last_sha256") == write_record["sha256"]:
+        # Idempotency: check bronze cache before hitting SEC API.
+        # Reference data (company tickers) changes infrequently — re-downloading
+        # on every bootstrap run is unnecessary and wastes API quota.
+        cached_ref = _read_bronze_if_cached(
+            bronze_root=context.bronze_root,
+            db=db,
+            source_name=spec.source_name,
+            source_key="global",
+            source_url=spec.source_url or "",
+            relative_path=spec.relative_path,
+        )
+        if cached_ref is not None:
+            write_record = cached_ref["write_record"]
+            document = cached_ref["payload"]
             rows_skipped += 1
         else:
+            raw_payload = _download_sec_bytes(url=spec.source_url or "", identity=context.identity)
+            write_record = _write_bronze_object(
+                context=context,
+                relative_path=spec.relative_path,
+                source_name=spec.source_name,
+                source_url=spec.source_url or "",
+                payload=raw_payload,
+            )
+            document = _decode_json_bytes(raw_payload, spec.source_url or "")
+
+        raw_writes.append(write_record)
+        rows = _parse_company_ticker_rows(document)
+        checkpoint = db.get_source_checkpoint(spec.source_name, "global")
+        if cached_ref is None and (not checkpoint or checkpoint.get("last_sha256") != write_record["sha256"]):
             rows_written += db.replace_company_tickers(rows, sync_run_id, source_name=spec.source_name)
         db.upsert_source_checkpoint(
             {
@@ -1268,6 +1283,7 @@ def _sync_reference_data(
                 "raw_object_id": write_record["sha256"],
                 "last_success_at": now,
                 "last_sha256": write_record["sha256"],
+                "bronze_path": write_record.get("path", ""),
             }
         )
         if rows and (spec.source_name == "company_tickers_exchange" or seed_document is None):
@@ -1348,6 +1364,8 @@ def _capture_submissions_main(
             db=db,
             source_name=capture_spec.source_name,
             source_key=f"cik:{cik}",
+            source_url=capture_spec.source_url or "",
+            relative_path=capture_spec.relative_path,
             cik=cik,
         )
         if cached is not None:
@@ -1385,6 +1403,8 @@ def _capture_submissions_pagination(
             db=db,
             source_name=capture_spec.source_name,
             source_key=f"file:{file_name}",
+            source_url=capture_spec.source_url or "",
+            relative_path=capture_spec.relative_path,
             cik=cik,
         )
         if cached is not None:
@@ -1411,14 +1431,18 @@ def _read_bronze_if_cached(
     db: "SilverDatabase",
     source_name: str,
     source_key: str,
+    source_url: str,
+    relative_path: str,
     cik: int | None = None,
 ) -> "dict[str, Any] | None":
     """Return cached write_record+payload if a valid bronze file exists for this source_key.
 
     Looks up the silver checkpoint for the previously stored bronze_path and SHA256.
     If the file is still readable and the SHA matches, returns it so the caller
-    can skip the SEC API call entirely — no duplicate bronze file is written.
-    Returns None when no valid cache entry exists (first run, or force=True caller).
+    skips the SEC API call entirely — no duplicate bronze file is written.
+    source_url and relative_path come from the caller's capture_spec (they are
+    not stored in the checkpoint table).
+    Returns None when no valid cache entry exists (first run, force=True, or corrupt file).
     """
     checkpoint = db.get_source_checkpoint(source_name, source_key)
     if checkpoint is None:
@@ -1436,17 +1460,17 @@ def _read_bronze_if_cached(
     record: dict[str, Any] = {
         "layer": "bronze_raw",
         "path": bronze_path,
-        "relative_path": bronze_path,
+        "relative_path": relative_path,   # caller's spec — semantically correct
         "sha256": last_sha256,
         "size_bytes": len(payload_bytes),
         "source_name": source_name,
-        "source_url": checkpoint.get("source_url", ""),
+        "source_url": source_url,          # caller's spec — not stored in checkpoint
         "cached": True,
     }
     if cik is not None:
         record["cik"] = cik
     return {
-        "payload": _decode_json_bytes(payload_bytes, checkpoint.get("source_url", "")),
+        "payload": _decode_json_bytes(payload_bytes, source_url),
         "write_record": record,
     }
 

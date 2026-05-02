@@ -18,7 +18,7 @@ locals {
       ]
     }
     (var.status_table_name) = {
-      comment = "Per-run Snowflake mirror status for EdgarTools source loads and gold refreshes."
+      comment     = "Per-run Snowflake mirror status for EdgarTools source loads and gold refreshes."
       primary_key = ["ENVIRONMENT", "SOURCE_WORKFLOW", "RUN_ID"]
       columns = [
         { name = "ENVIRONMENT", type = "STRING", nullable = false },

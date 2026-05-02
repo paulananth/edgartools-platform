@@ -28,8 +28,6 @@ module "baseline" {
   reader_warehouse_size          = var.reader_warehouse_size
   warehouse_auto_suspend_seconds = var.warehouse_auto_suspend_seconds
   data_retention_time_in_days    = var.data_retention_time_in_days
-  grant_roles_to_admin           = var.grant_roles_to_admin
-  parent_admin_role_name         = var.parent_admin_role_name
 }
 
 module "dashboard" {

@@ -31,28 +31,6 @@ variable "key_vault_name" {
   type        = string
 }
 
-variable "transform_container_image" {
-  description = "edgar-warehouse-pipelines image reference in ACR (warehouse ETL jobs)."
-  type        = string
-}
-
-variable "mdm_container_image" {
-  description = "edgar-warehouse-mdm-neo4j image reference in ACR (MDM pipeline + API)."
-  type        = string
-}
-
-variable "warehouse_runtime_mode" {
-  description = "WAREHOUSE_RUNTIME_MODE for Container Apps Jobs."
-  type        = string
-  default     = "infrastructure_validation"
-}
-
-variable "daily_incremental_schedule" {
-  description = "Optional cron expression for daily incremental Container Apps Job."
-  type        = string
-  default     = null
-}
-
 variable "databricks_workspace_name" {
   description = "Optional Databricks workspace name."
   type        = string
@@ -83,16 +61,22 @@ variable "mdm_sql_database_name" {
   default     = "mdm"
 }
 
-variable "mdm_sql_admin_username" {
-  description = "Azure SQL administrator username for MDM."
-  type        = string
-  default     = "mdmadmin"
-}
-
 variable "mdm_sql_database_sku_name" {
   description = "Azure SQL database SKU for MDM."
   type        = string
   default     = "Basic"
+}
+
+variable "mdm_sql_aad_admin_login_username" {
+  description = "Login username for the Azure SQL Entra administrator."
+  type        = string
+  default     = "terraform-deployer"
+}
+
+variable "mdm_sql_aad_admin_object_id" {
+  description = "Optional object ID for the Azure SQL Entra administrator. Defaults to the current Terraform principal."
+  type        = string
+  default     = null
 }
 
 variable "mdm_sql_database_max_size_gb" {
@@ -114,37 +98,6 @@ variable "mdm_neo4j_storage_account_name" {
   description = "Globally unique storage account name for Neo4j Azure Files persistence."
   type        = string
   default     = null
-}
-
-variable "mdm_neo4j_external_enabled" {
-  description = "Expose Neo4j Bolt ingress externally."
-  type        = bool
-  default     = false
-}
-
-variable "mdm_api_external_enabled" {
-  description = "Expose the MDM FastAPI app externally."
-  type        = bool
-  default     = false
-}
-
-variable "mdm_silver_duckdb_path" {
-  description = "Optional MDM_SILVER_DUCKDB value for MDM run jobs."
-  type        = string
-  default     = null
-}
-
-variable "mdm_run_limit" {
-  description = "Optional --limit N for mdm run Container App Job. 0 = no limit."
-  type        = number
-  default     = 0
-}
-
-variable "mdm_api_keys" {
-  description = "Initial MDM API keys. A generated key is used when empty."
-  type        = list(string)
-  default     = []
-  sensitive   = true
 }
 
 variable "tags" {

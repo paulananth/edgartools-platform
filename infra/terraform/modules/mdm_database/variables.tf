@@ -63,32 +63,6 @@ variable "db_master_username" {
   default     = "mdm_admin"
 }
 
-variable "neo4j_uri" {
-  type        = string
-  description = "Bolt URI for Neo4j AuraDB. Stored in Secrets Manager."
-  default     = ""
-}
-
-variable "neo4j_user" {
-  type        = string
-  description = "Neo4j username. Stored in Secrets Manager."
-  default     = ""
-}
-
-variable "neo4j_password" {
-  type        = string
-  description = "Neo4j password. Stored in Secrets Manager."
-  default     = ""
-  sensitive   = true
-}
-
-variable "api_keys" {
-  type        = list(string)
-  description = "Initial set of API keys for the MDM API. Stored in Secrets Manager."
-  default     = []
-  sensitive   = true
-}
-
 variable "tags" {
   type        = map(string)
   description = "Common resource tags."

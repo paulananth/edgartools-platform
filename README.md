@@ -2,7 +2,12 @@
 
 Data platform for SEC EDGAR built on [edgartools](https://github.com/dgunning/edgartools).
 
-Extracts SEC EDGAR filing data from source through bronze object storage to a gold analytics layer. The legacy/reference path uses AWS S3, ECS, Step Functions, and Snowflake; the migration path adds Azure ADLS Gen2, ACR, Container Apps Jobs, and Databricks for parallel validation.
+Extracts SEC EDGAR filing data from source through bronze object storage to a gold analytics layer. Terraform now separates passive AWS/Azure/Snowflake provisioning from access-control roots; workload jobs, image rollout, secret values, schema migrations, and analytics refreshes run through explicit operator actions.
+
+AWS application rollout is handled by `infra/scripts/deploy-aws-application.sh`
+after the AWS provisioning and access Terraform roots have been applied. That
+script builds/pushes the warehouse image when requested, registers ECS task
+definitions, and deploys Step Functions outside Terraform.
 
 ## Architecture
 
@@ -37,8 +42,8 @@ See [docs/runbook.md](docs/runbook.md) for complete end-to-end setup.
 
 | Directory | Purpose |
 |---|---|
-| `edgar_warehouse/` | Python ETL runtime — exports SEC data to S3 |
-| `infra/terraform/` | AWS/Snowflake and Azure/Databricks infrastructure (IaC) |
+| `edgar_warehouse/` | Python ETL runtime — exports SEC data to object storage |
+| `infra/terraform/` | Passive AWS/Azure/Snowflake provisioning roots plus separate access-control roots |
 | `infra/snowflake/dbt/` | dbt project for Snowflake and Databricks gold tables |
 | `infra/databricks/sql/` | Unity Catalog external table registration templates |
 | `infra/snowflake/sql/bootstrap/` | Bootstrap SQL for Snowflake native S3 pull |

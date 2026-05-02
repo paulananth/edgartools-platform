@@ -13,6 +13,11 @@ output "db_port" {
   value       = aws_db_instance.mdm.port
 }
 
+output "db_master_user_secret_arn" {
+  description = "AWS-managed RDS master user secret ARN."
+  value       = try(aws_db_instance.mdm.master_user_secret[0].secret_arn, null)
+}
+
 output "db_security_group_id" {
   description = "Security group attached to the RDS instance."
   value       = aws_security_group.rds.id
@@ -24,16 +29,16 @@ output "private_subnet_ids" {
 }
 
 output "postgres_dsn_secret_arn" {
-  description = "Secrets Manager ARN for the PostgreSQL DSN."
+  description = "Secrets Manager ARN for the empty operator-populated PostgreSQL DSN container."
   value       = aws_secretsmanager_secret.postgres_dsn.arn
 }
 
 output "neo4j_secret_arn" {
-  description = "Secrets Manager ARN for Neo4j connection details."
+  description = "Secrets Manager ARN for the empty operator-populated Neo4j connection container."
   value       = aws_secretsmanager_secret.neo4j.arn
 }
 
 output "api_keys_secret_arn" {
-  description = "Secrets Manager ARN for MDM API keys."
+  description = "Secrets Manager ARN for the empty operator-populated MDM API key container."
   value       = aws_secretsmanager_secret.api_keys.arn
 }

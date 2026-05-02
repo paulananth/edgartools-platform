@@ -37,7 +37,7 @@ Layers:
 
 | Account | Notes |
 |---------|-------|
-| AWS (admin access) | ECS, ECR, S3, CodeBuild, Step Functions, Secrets Manager |
+| AWS (admin access) | ECS, ECR, S3, CodeBuild, Secrets Manager |
 | Snowflake (Enterprise+) | Dynamic tables require Enterprise edition or higher |
 | GitHub (read/write) | Source repository access |
 
@@ -84,8 +84,7 @@ Set these before running any steps. The exact names are used by scripts and dbt.
 | `TF_VAR_snowflake_organization_name` | Snowflake Terraform provider | From Snowflake creds |
 | `TF_VAR_snowflake_account_name` | Snowflake Terraform provider | From Snowflake creds |
 | `TF_VAR_snowflake_user` | Snowflake Terraform provider | From Snowflake creds |
-| `STATE_MACHINE_ARN` | `trigger-next-100.sh` | From Terraform outputs (Step 1) |
-| `EDGAR_USER_AGENT` | `trigger-next-100.sh` | `"Your Name your@email.com"` |
+| `EDGAR_IDENTITY` | Warehouse runtime | `"Your Name your@email.com"` |
 
 Azure/Databricks migration variables:
 
@@ -120,15 +119,15 @@ secret values.
   personal token.
 - **Databricks storage**: Use Unity Catalog storage credentials and external locations
   backed by managed identity/access connector. Do not grant Databricks ADLS account keys.
-- **MDM Azure SQL**: When the Azure MDM data plane is enabled, Terraform creates Key
-  Vault secret `mdm-database-url` for `MDM_DATABASE_URL`. It uses a generated SQL
-  admin password stored in `mdm-sql-admin-password`.
-- **MDM Neo4j**: Terraform runs Neo4j as a Container App with Azure Files persistence.
-  Key Vault secret `mdm-neo4j` stores a JSON object with `uri`, `user`, and
-  `password`; Terraform also writes split secrets `mdm-neo4j-uri`,
-  `mdm-neo4j-user`, and `mdm-neo4j-password` for Container Apps env vars.
-- **MDM API keys**: Terraform stores API keys in Key Vault secret `mdm-api-keys`. If
-  `mdm_api_keys` is empty, a generated key is stored there. Container Apps use
+- **MDM Azure SQL**: When the Azure MDM data plane is enabled, Terraform creates
+  the Azure SQL shell only. Operators store `mdm-database-url` for
+  `MDM_DATABASE_URL` with `infra/scripts/bootstrap-azure-secrets.sh`.
+- **MDM Neo4j**: Terraform creates the Azure Files persistence shell only.
+  Operators deploy the Neo4j Container App with `deploy-azure-runtime.sh` and
+  store `mdm-neo4j`, `mdm-neo4j-uri`, `mdm-neo4j-user`,
+  `mdm-neo4j-password`, and `mdm-neo4j-auth` in Key Vault.
+- **MDM API keys**: Operators store API keys in Key Vault with
+  `infra/scripts/bootstrap-azure-secrets.sh`. Container Apps use
   `mdm-api-keys-csv` as `MDM_API_KEYS`.
 
 The Azure CLI and Databricks CLI are operator tools for bootstrapping and validation;
@@ -141,33 +140,48 @@ production runtime auth should not depend on a local CLI login session.
 Use this path to stand up the replacement platform without removing AWS/Snowflake.
 
 ```bash
-# Build and push the warehouse image to ACR
-bash infra/scripts/publish-warehouse-image-acr.sh \
+# Build and push the Azure runtime images to ACR
+bash infra/scripts/build-azure-images.sh \
+  --env dev \
   --acr-name edgartoolsdevacr01 \
-  --image-tag "$(git rev-parse --short HEAD)"
+  --image-tag dev
 
-# Apply Azure infrastructure and run the validation job
+# Apply Azure passive infrastructure
 cd infra/terraform/azure/accounts/dev
 cp backend.hcl.example backend.hcl
 cp terraform.tfvars.example terraform.tfvars
-# Edit backend.hcl and terraform.tfvars, especially container_image.
+# Edit backend.hcl and terraform.tfvars.
 # To provision MDM, set enable_mdm=true plus globally unique
 # mdm_sql_server_name and mdm_neo4j_storage_account_name.
 cd ../../../../..
 
-# First create the resource group and Key Vault.
-bash infra/scripts/deploy-azure-stack.sh --env dev --key-vault-only
+# Apply the full passive Azure stack.
+bash infra/scripts/deploy-azure-stack.sh --env dev
 
-# Store EDGAR identity and optional dbt/Databricks settings outside Terraform state.
+# Apply managed identity, RBAC, and Key Vault access policies.
+cd infra/terraform/access/azure/accounts/dev
+cp backend.hcl.example backend.hcl
+cp terraform.tfvars.example terraform.tfvars
+# Edit backend.hcl and terraform.tfvars to point at the Azure provisioning state.
+terraform init -backend-config=backend.hcl
+terraform apply
+cd ../../../../../..
+
+# Store runtime secrets outside Terraform state after access is applied.
 bash infra/scripts/bootstrap-azure-secrets.sh \
   --key-vault-name edgartools-dev-kv-01 \
   --edgar-identity "EdgarTools Platform data-ops@example.com" \
+  --mdm-database-url "mssql+pyodbc://..." \
+  --mdm-neo4j-uri "bolt://edgartools-dev-neo4j:7687" \
+  --mdm-neo4j-user neo4j \
+  --mdm-neo4j-password "<neo4j-password>" \
+  --mdm-api-key "<api-key>" \
   --databricks-host "https://adb-..." \
   --databricks-http-path "/sql/1.0/warehouses/..." \
   --databricks-token "..."
 
-# Then apply the full Azure stack and start the validation job.
-bash infra/scripts/deploy-azure-stack.sh --env dev --start-validation-job
+# Deploy apps/jobs outside Terraform and apply the MDM schema.
+bash infra/scripts/deploy-azure-runtime.sh --env dev --run-schema
 ```
 
 Terraform outputs the runtime roots:
@@ -177,8 +191,7 @@ terraform -chdir=infra/terraform/azure/accounts/dev output warehouse_bronze_root
 terraform -chdir=infra/terraform/azure/accounts/dev output warehouse_storage_root
 terraform -chdir=infra/terraform/azure/accounts/dev output serving_export_root
 terraform -chdir=infra/terraform/azure/accounts/dev output mdm_sql_server_fqdn
-terraform -chdir=infra/terraform/azure/accounts/dev output mdm_neo4j_uri
-terraform -chdir=infra/terraform/azure/accounts/dev output mdm_container_app_job_names
+terraform -chdir=infra/terraform/azure/accounts/dev output mdm_runtime_secret_uris
 ```
 
 Run the MDM e2e checks after Azure SQL and Neo4j are provisioned:
@@ -196,10 +209,11 @@ The script hydrates `MDM_DATABASE_URL`, `NEO4J_URI`, `NEO4J_USER`,
 - `edgar-warehouse mdm counts`
 
 To validate from inside Container Apps instead of the operator machine, add
-`--start-container-jobs`. That starts the Terraform-managed MDM migrate, run, and
-counts jobs. The MDM run job receives `MDM_SILVER_DUCKDB`; by default it points to
+`--start-container-jobs`. That starts the operator-managed MDM migrate, run, and
+counts jobs. The MDM run job receives `MDM_SILVER_DUCKDB`; by default
+`deploy-azure-runtime.sh` points it to
 `<WAREHOUSE_STORAGE_ROOT>/silver/sec/silver.duckdb`, and can be overridden with
-`mdm_silver_duckdb_path`.
+`--mdm-silver-duckdb`.
 
 Register Databricks external tables with
 `infra/databricks/sql/register_external_tables.sql`, then run dbt:
@@ -248,8 +262,9 @@ this in every subsequent backend configuration.
 
 ## Step 2 — Terraform: AWS Infrastructure
 
-Apply the AWS account root. This creates ECR, ECS, S3 buckets, Step Functions, Secrets
-Manager containers, and the Snowflake export IAM role.
+Apply the AWS account root. This creates passive infrastructure: ECR, the ECS
+cluster and logs, S3 buckets, SNS topic, and empty Secrets Manager containers.
+It does not create IAM roles, task definitions, schedules, or workflow engines.
 
 ```bash
 cd infra/terraform/accounts/prod
@@ -267,43 +282,68 @@ terraform init -backend-config=backend.hcl
 
 # Configure inputs
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars:
-#   edgar_identity_value = "Your Name your@email.com"
-#   container_image      = (leave placeholder for now — set after Step 3)
+# Edit terraform.tfvars for account-specific storage, Snowflake export, and tags.
 ```
 
-Apply in dependency order (the image does not exist yet, so apply the ECR repo first):
+Apply the passive AWS infrastructure:
 
 ```bash
-terraform apply -target module.storage
-terraform apply -target module.runtime
+terraform apply
 ```
 
 > **Note**: `accounts/prod` has `prevent_destroy = true` on the bronze bucket.
 > `terraform destroy` will fail unless you remove that guard manually.
 
-After apply, record the following outputs — you will need them in later steps:
+After apply, record the following provisioning outputs — you will need them in
+later steps:
 
 ```bash
-terraform output ecr_repository_url             # used in Step 3
+terraform output ecr_repository_url                # used in Step 3
+terraform output cluster_arn                       # used in Step 3
+terraform output public_subnet_ids                 # used in Step 3
+terraform output public_ecs_security_group_id      # used in Step 3
 terraform output snowflake_manifest_sns_topic_arn  # used in Step 4
-terraform output snowflake_storage_role_arn      # used in Step 4
-terraform output snowflake_export_root_url        # used in Step 4
-terraform output runner_user_name                # used below
-terraform output state_machine_arns              # set STATE_MACHINE_ARN from this
+terraform output snowflake_export_root_url          # used in Step 4
+```
+
+### Apply AWS Access Control
+
+Apply the separate AWS access root after the provisioning root. This creates the
+ECS task roles, Step Functions role, runner IAM user, S3/KMS/Secrets Manager
+policies, and Snowflake export trust policy.
+
+```bash
+cd infra/terraform/access/aws/accounts/prod
+cp backend.hcl.example backend.hcl
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars so provisioning_state_bucket matches Step 1.
+
+terraform init -backend-config=backend.hcl
+terraform apply
+
+terraform output ecs_task_execution_role_arn
+terraform output ecs_task_role_arn
+terraform output step_functions_role_arn
+terraform output snowflake_storage_role_arn
 ```
 
 ### Populate Secrets
 
-Two secrets are created as empty containers by Terraform; populate them now:
+Terraform creates the EDGAR identity as an empty Secrets Manager container.
+Populate it before running any warehouse workload:
 
 ```bash
 # EDGAR identity (used by the warehouse CLI as the SEC User-Agent header)
 aws secretsmanager put-secret-value \
   --secret-id edgartools-prod-edgar-identity \
   --secret-string "Your Name your@email.com"
+```
 
-# Runner IAM credentials (ECS task runner)
+The runner credentials secret is also an empty container. Populate it only if a
+separate operator workflow needs a stored access key; the AWS application deploy
+script does not use this secret.
+
+```bash
 aws iam create-access-key --user-name edgartools-prod-runner \
   | jq -r '{"access_key_id": .AccessKey.AccessKeyId, "secret_access_key": .AccessKey.SecretAccessKey}' \
   | aws secretsmanager put-secret-value \
@@ -313,54 +353,62 @@ aws iam create-access-key --user-name edgartools-prod-runner \
 
 ---
 
-## Step 3 — Build and Push the Warehouse Docker Image
+## Step 3 — Deploy AWS Application Components
 
-The ECR repository now exists. Build the `linux/amd64` image and push it.
+The ECR repository, ECS cluster, access roles, subnets, log group, and empty secret
+container now exist. Deploy the active application layer outside Terraform:
+build/push the image, register ECS task definitions, and create or update Step
+Functions state machines.
 
 ### Linux / CI (preferred)
 
 ```bash
-bash infra/scripts/publish-warehouse-image.sh \
+bash infra/scripts/deploy-aws-application.sh \
+  --env prod \
   --aws-region us-east-1 \
-  --ecr-repository edgartools-prod-warehouse \
-  --image-tag "$(git rev-parse HEAD)" \
-  --mode linux
+  --build-image \
+  --publish-mode linux \
+  --output-file infra/aws-prod-application.json
 ```
 
 ### Windows (Git Bash + WSL)
 
 ```bash
+IMAGE_REF_FILE=infra/aws-prod-image.txt
 bash infra/scripts/publish-warehouse-image-via-wsl.sh \
   --aws-region us-east-1 \
   --ecr-repository edgartools-prod-warehouse \
-  --image-tag "$(git rev-parse HEAD)"
+  --image-tag "$(git rev-parse HEAD)" \
+  --output-file "$IMAGE_REF_FILE"
+
+bash infra/scripts/deploy-aws-application.sh \
+  --env prod \
+  --aws-region us-east-1 \
+  --skip-build \
+  --image-ref "$(cat "$IMAGE_REF_FILE")" \
+  --output-file infra/aws-prod-application.json
 ```
 
-Both scripts print a `@digest` reference when done, for example:
+The deployment script prints a JSON summary with the image digest, ECS task
+definition ARNs, and Step Functions state machine ARNs. It does not create
+EventBridge schedules; schedule activation remains an explicit operator action.
+
+The image reference in the summary is a verified `@digest` reference, for example:
 
 ```
 123456789012.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse@sha256:abc123...
 ```
 
-Copy that `@digest` value into `terraform.tfvars`:
-
-```hcl
-container_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse@sha256:abc123..."
-```
-
-Then complete the AWS apply:
-
-```bash
-cd infra/terraform/accounts/prod
-terraform apply
-```
+Do not copy this image reference into Terraform. Image rollout, workflow
+deployment, and workload execution are explicit operator actions outside the AWS
+infrastructure root.
 
 ---
 
 ## Step 4 — Prepare the Snowflake Terraform Root
 
-Prepare the Snowflake root so the wrapper in Step 5 can initialize it and apply both the
-baseline and native-pull objects.
+Prepare the Snowflake provisioning and access roots so the wrapper in Step 5 can
+initialize them and apply database objects plus grants.
 
 ```bash
 cd infra/terraform/snowflake/accounts/prod
@@ -387,13 +435,26 @@ cp terraform.tfvars.example terraform.tfvars
 If you use the wrapper in Step 5, you do not need to run a separate manual `terraform apply`
 in this root.
 
+Also prepare the Snowflake access root:
+
+```bash
+cd infra/terraform/access/snowflake/accounts/prod
+
+cp backend.hcl.example backend.hcl
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars so provisioning_state_bucket matches Step 1 and
+# Snowflake provider credentials match the provisioning root.
+
+terraform init -backend-config=backend.hcl
+```
+
 ---
 
 ## Step 5 — Deploy Snowflake, dbt, and Dashboard
 
-Use the wrapper script to coordinate the AWS and Snowflake Terraform states, reconcile the
-Snowflake IAM trust automatically, run dbt, validate the native-pull contract, and upload the
-Streamlit dashboard artifacts.
+Use the wrapper script to coordinate the AWS and Snowflake Terraform states and
+reconcile the Snowflake IAM trust automatically. Validation, dbt, and dashboard
+upload run only when their flags are passed.
 
 ```bash
 # Run from the repo root
@@ -404,20 +465,21 @@ bash infra/scripts/deploy-snowflake-stack.sh \
 
 The wrapper performs these stages in order:
 
-1. AWS Terraform bootstrap apply with temporary trust and deterministic external ID.
+1. AWS access Terraform bootstrap apply with temporary trust and deterministic external ID.
 2. Snowflake Terraform apply for the storage integration, stage, source tables, pipe, stream, procedures, and task.
-3. AWS Terraform reconcile apply narrowed to the exact Snowflake-managed AWS principal.
+3. AWS access Terraform reconcile apply narrowed to the exact Snowflake-managed AWS principal.
 4. Snowflake Terraform re-apply.
-5. Native-pull validation artifact generation in `infra/snowflake/sql/prod_native_pull_handshake.json`.
-6. `dbt deps`, `dbt run`, and `dbt test`.
-7. Streamlit artifact upload to the Terraform-managed dashboard stage.
+5. Snowflake access Terraform apply for roles and grants.
+6. Native-pull validation artifact generation in `infra/snowflake/sql/prod_native_pull_handshake.json`.
+7. `dbt deps`, `dbt run`, and `dbt test`.
+8. Streamlit artifact upload to the Terraform-managed dashboard stage.
 
-If you need to skip parts of the wrapper during troubleshooting, use:
+Validation, dbt, and dashboard upload are opt-in:
 
 ```bash
-bash infra/scripts/deploy-snowflake-stack.sh --env prod --skip-validation
-bash infra/scripts/deploy-snowflake-stack.sh --env prod --skip-dbt
-bash infra/scripts/deploy-snowflake-stack.sh --env prod --skip-dashboard
+bash infra/scripts/deploy-snowflake-stack.sh --env prod --run-validation
+bash infra/scripts/deploy-snowflake-stack.sh --env prod --run-dbt
+bash infra/scripts/deploy-snowflake-stack.sh --env prod --upload-dashboard
 ```
 
 ---
@@ -426,28 +488,35 @@ bash infra/scripts/deploy-snowflake-stack.sh --env prod --skip-dashboard
 
 The warehouse CLI fetches filings from SEC EDGAR and writes Parquet files to S3.
 
-### Trigger via Step Functions (production)
+### Step Functions Run
+
+Terraform does not create Step Functions or schedules. After Step 3, start an
+operator-managed state machine explicitly:
 
 ```bash
-export STATE_MACHINE_ARN="arn:aws:states:us-east-1:<aws-account-id>:stateMachine:edgartools-prod-bootstrap-recent-10"
-export SNOWFLAKE_ACCOUNT="ORGNAME-ACCOUNTNAME"
-export SNOWFLAKE_USER="your_user"
-export SNOWFLAKE_PASSWORD="your_password"
-export EDGAR_USER_AGENT="Your Name your@email.com"
+STATE_MACHINE_ARN="$(
+  python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["state_machines"]["bootstrap_recent_10"])' \
+    infra/aws-prod-application.json
+)"
 
-# Triggers Step Functions for the next 100 CIKs not yet loaded
-bash infra/scripts/trigger-next-100.sh
+aws stepfunctions start-execution \
+  --state-machine-arn "$STATE_MACHINE_ARN" \
+  --input '{"trigger":"operator","workflow":"bootstrap_recent_10"}'
 ```
 
-The script queries `EDGARTOOLS_SOURCE.COMPANY` to find CIKs not yet loaded, then starts a
-Step Functions execution. Monitor progress with the `aws stepfunctions describe-execution`
-command printed at the end.
+For a bounded replay, pass a `cik_list` string to workflows that support it:
+
+```bash
+aws stepfunctions start-execution \
+  --state-machine-arn "$STATE_MACHINE_ARN" \
+  --input '{"trigger":"operator","workflow":"bootstrap_recent_10","cik_list":"0000320193,0000789019"}'
+```
 
 ### Local Run (development / testing)
 
 ```bash
-export EDGAR_USER_AGENT="Your Name your@email.com"
-edgar-warehouse bootstrap --tracking-status-filter active
+export EDGAR_IDENTITY="Your Name your@email.com"
+edgar-warehouse bootstrap-recent-10 --tracking-status-filter active
 ```
 
 ---
@@ -571,26 +640,22 @@ SELECT * FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
   ```bash
   go install github.com/google/go-containerregistry/cmd/crane@latest
   ```
-- **Feed the `@digest`, not the tag, into `container_image`** in `terraform.tfvars`.
-  The script prints the verified digest; copy it verbatim.
 - **`docker buildx` is required** regardless of mode. Docker Desktop >= 24 ships it.
 - **ECR repository must exist before the image push.** It is created by the
-  `module.runtime` apply in Step 2.
+  AWS infrastructure apply in Step 2.
 
 ### Terraform
 
 - **Terraform CLI should be `1.14.8` or another compatible `1.14.x` release.** The Snowflake
   roots require `~> 1.14.8`.
   due to provider version pins.
-- **Publish the warehouse image (Step 3) before running `terraform apply` on `accounts/prod`
-  with `container_image` set.** Terraform validates the image reference during plan.
 - **After apply, populate both secrets manually** — `edgartools-prod-edgar-identity` and
   `edgartools-prod-runner-credentials` (see Step 2).
-- **Runner IAM access key is created outside Terraform:**
+- **Runner IAM user is created in the AWS access root; its access key is created outside Terraform:**
   ```bash
   aws iam create-access-key --user-name edgartools-prod-runner
   ```
-- **Capture `snowflake_manifest_sns_topic_arn`** from Terraform outputs — the bootstrap
+- **Capture `snowflake_manifest_sns_topic_arn`** from provisioning outputs — the bootstrap
   script needs it to subscribe Snowflake's Snowpipe to the SNS topic.
 - **`accounts/prod` has `prevent_destroy` on the bronze bucket.** `terraform destroy` will
   error unless you remove the lifecycle rule manually first.
@@ -620,14 +685,10 @@ SELECT * FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
   `{{ env_var('DBT_SNOWFLAKE_DATABASE') }}` and will fail at parse time if the variable is
   missing.
 
-### Warehouse CLI / Step Functions
+### Warehouse CLI
 
-- **`STATE_MACHINE_ARN` must be set** before calling `trigger-next-100.sh`. Retrieve it
-  from `terraform output state_machine_arns` after Step 2.
-- **`EDGAR_USER_AGENT`** must be a valid SEC User-Agent string (`"Name email@example.com"`).
+- **`EDGAR_IDENTITY`** must be a valid SEC User-Agent string (`"Name email@example.com"`).
   SEC EDGAR returns HTTP 403 for requests without a compliant User-Agent.
-- **`snowflake-connector-python` must be installed** for `trigger-next-100.sh` to work.
-  Install with `pip install snowflake-connector-python`.
 
 ### Streamlit Deployment (Option A)
 

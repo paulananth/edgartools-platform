@@ -25,6 +25,7 @@ htmlcov/
 !*.tfvars.example
 terraform.tfstate
 terraform.tfstate.*
+*.tfplan
 .terraform/
 .terraform.lock.hcl
 

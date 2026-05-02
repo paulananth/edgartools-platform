@@ -18,10 +18,10 @@
 #         use in shared or production accounts.
 #
 #   prod  Creates and attaches five scoped customer-managed policies
-#         (S3, Compute, IAM, Orchestration, VPC). Each policy is
+#         (S3/KMS, Compute, IAM, Support, VPC/RDS). Each policy is
 #         kept under the 6,144-character AWS limit. Together they
-#         cover the exact surface area Terraform needs and nothing
-#         more.
+#         cover the passive AWS infrastructure surface area Terraform
+#         needs and nothing more.
 #
 # Usage:
 #   ./create-deployer.sh <env> [region] [--no-key]
@@ -367,14 +367,13 @@ setup_dev() {
 # Prod setup: five scoped customer-managed policies
 #
 # Policy split:
-#   tf-s3           : S3 bucket lifecycle (state, bronze, warehouse)
-#   tf-compute      : ECR image management + ECS cluster/task management
+#   tf-s3           : S3 bucket lifecycle plus Snowflake export KMS keys
+#   tf-compute      : ECR repository and ECS cluster shell management
 #   tf-iam          : IAM role and policy management for Terraform-created
-#                     roles (ECS execution, ECS task, Step Functions,
-#                     EventBridge Scheduler)
-#   tf-orchestration: Step Functions, EventBridge Scheduler, Secrets
-#                     Manager, CloudWatch Logs, CloudWatch Alarms, STS
-#   tf-vpc          : VPC, subnets, IGW, route tables, security groups
+#                     passive identities
+#   tf-support      : SNS, Secrets Manager, CloudWatch Logs, and STS
+#   tf-vpc          : VPC, subnets, IGW, route tables, security groups,
+#                     VPC endpoints, and optional RDS shell
 #
 # All policies use "Resource": "*" because Terraform generates resource
 # names at plan time. Scope down Resource to ARN patterns after the
@@ -382,9 +381,8 @@ setup_dev() {
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Policy 1 of 5: S3
-# Covers Terraform state bucket, bronze bucket, and warehouse bucket.
-# Character count: ~780 (limit: 6,144)
+# Policy 1 of 5: S3 + KMS
+# Covers Terraform state, warehouse buckets, Snowflake export bucket, and export KMS key.
 # -----------------------------------------------------------------------------
 
 policy_s3() {
@@ -410,11 +408,37 @@ policy_s3() {
         "s3:PutBucketOwnershipControls",
         "s3:GetBucketTagging",
         "s3:PutBucketTagging",
+        "s3:DeleteBucketTagging",
         "s3:GetObject",
         "s3:PutObject",
         "s3:DeleteObject",
         "s3:GetBucketPolicy",
-        "s3:GetLifecycleConfiguration"
+        "s3:PutBucketPolicy",
+        "s3:GetLifecycleConfiguration",
+        "s3:PutLifecycleConfiguration",
+        "s3:DeleteLifecycleConfiguration",
+        "s3:DeleteBucketPolicy"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "KMSManagement",
+      "Effect": "Allow",
+      "Action": [
+        "kms:CreateKey",
+        "kms:ScheduleKeyDeletion",
+        "kms:DescribeKey",
+        "kms:EnableKeyRotation",
+        "kms:GetKeyRotationStatus",
+        "kms:ListAliases",
+        "kms:CreateAlias",
+        "kms:UpdateAlias",
+        "kms:DeleteAlias",
+        "kms:TagResource",
+        "kms:UntagResource",
+        "kms:ListResourceTags",
+        "kms:GetKeyPolicy",
+        "kms:PutKeyPolicy"
       ],
       "Resource": "*"
     }
@@ -424,12 +448,9 @@ JSON
 }
 
 # -----------------------------------------------------------------------------
-# Policy 2 of 5: Compute (ECR + ECS)
-# ECR: manage the warehouse container repository and push images.
-# ECS: manage clusters and task definitions; run/stop tasks via
-#      Step Functions (not directly by this user at runtime, but
-#      Terraform needs ecs:RunTask to validate task definitions).
-# Character count: ~900 (limit: 6,144)
+# Policy 2 of 5: Compute (ECR + ECS cluster shell)
+# ECR remains passive repository infrastructure. ECS is limited to cluster shell
+# management; Terraform does not create task definitions or run tasks.
 # -----------------------------------------------------------------------------
 
 policy_compute() {
@@ -467,13 +488,6 @@ policy_compute() {
         "ecs:DeleteCluster",
         "ecs:DescribeClusters",
         "ecs:UpdateClusterSettings",
-        "ecs:RegisterTaskDefinition",
-        "ecs:DeregisterTaskDefinition",
-        "ecs:DescribeTaskDefinition",
-        "ecs:ListTaskDefinitions",
-        "ecs:RunTask",
-        "ecs:DescribeTasks",
-        "ecs:StopTask",
         "ecs:TagResource",
         "ecs:ListTagsForResource"
       ],
@@ -486,9 +500,7 @@ JSON
 
 # -----------------------------------------------------------------------------
 # Policy 3 of 5: IAM
-# Terraform creates four roles and five-plus policies. PassRole is
-# required so Step Functions and EventBridge can assume ECS roles.
-# Character count: ~760 (limit: 6,144)
+# Terraform creates passive roles, policies, and the optional runner IAM user.
 # -----------------------------------------------------------------------------
 
 policy_iam() {
@@ -504,7 +516,6 @@ policy_iam() {
         "iam:DeleteRole",
         "iam:GetRole",
         "iam:UpdateAssumeRolePolicy",
-        "iam:PassRole",
         "iam:AttachRolePolicy",
         "iam:DetachRolePolicy",
         "iam:ListAttachedRolePolicies",
@@ -521,7 +532,12 @@ policy_iam() {
         "iam:ListPolicies",
         "iam:ListPolicyVersions",
         "iam:DeletePolicyVersion",
-        "iam:CreatePolicyVersion"
+        "iam:CreatePolicyVersion",
+        "iam:CreateUser",
+        "iam:DeleteUser",
+        "iam:GetUser",
+        "iam:TagUser",
+        "iam:ListUserTags"
       ],
       "Resource": "*"
     }
@@ -531,46 +547,28 @@ JSON
 }
 
 # -----------------------------------------------------------------------------
-# Policy 4 of 5: Orchestration + Observability
-# Covers Step Functions, EventBridge Scheduler, Secrets Manager,
-# CloudWatch Logs, CloudWatch Alarms, and STS identity lookup.
-# Character count: ~1,400 (limit: 6,144)
+# Policy 4 of 5: Passive support resources
+# Covers SNS, Secrets Manager, CloudWatch Logs, and STS identity lookup.
 # -----------------------------------------------------------------------------
 
-policy_orchestration() {
+policy_support() {
     cat <<'JSON'
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "StepFunctions",
+      "Sid": "SNSManagement",
       "Effect": "Allow",
       "Action": [
-        "states:CreateStateMachine",
-        "states:DeleteStateMachine",
-        "states:DescribeStateMachine",
-        "states:UpdateStateMachine",
-        "states:StartExecution",
-        "states:DescribeExecution",
-        "states:ListExecutions",
-        "states:TagResource",
-        "states:ListTagsForResource"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "EventBridgeScheduler",
-      "Effect": "Allow",
-      "Action": [
-        "scheduler:CreateSchedule",
-        "scheduler:DeleteSchedule",
-        "scheduler:GetSchedule",
-        "scheduler:UpdateSchedule",
-        "scheduler:ListSchedules",
-        "scheduler:CreateScheduleGroup",
-        "scheduler:GetScheduleGroup",
-        "scheduler:ListScheduleGroups",
-        "scheduler:TagResource"
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:GetTopicAttributes",
+        "sns:SetTopicAttributes",
+        "sns:ListTagsForResource",
+        "sns:TagResource",
+        "sns:UntagResource",
+        "sns:Subscribe",
+        "sns:Unsubscribe"
       ],
       "Resource": "*"
     },
@@ -584,6 +582,7 @@ policy_orchestration() {
         "secretsmanager:GetSecretValue",
         "secretsmanager:PutSecretValue",
         "secretsmanager:TagResource",
+        "secretsmanager:UntagResource",
         "secretsmanager:ListSecrets"
       ],
       "Resource": "*"
@@ -597,22 +596,12 @@ policy_orchestration() {
         "logs:DescribeLogGroups",
         "logs:PutRetentionPolicy",
         "logs:ListTagsLogGroup",
+        "logs:ListTagsForResource",
+        "logs:TagResource",
+        "logs:UntagResource",
         "logs:FilterLogEvents",
         "logs:GetLogEvents",
         "logs:DescribeLogStreams"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "CloudWatchAlarms",
-      "Effect": "Allow",
-      "Action": [
-        "cloudwatch:PutMetricAlarm",
-        "cloudwatch:DeleteAlarms",
-        "cloudwatch:DescribeAlarms",
-        "cloudwatch:SetAlarmState",
-        "cloudwatch:DescribeAlarmHistory",
-        "cloudwatch:ListTagsForResource"
       ],
       "Resource": "*"
     },
@@ -630,11 +619,8 @@ JSON
 }
 
 # -----------------------------------------------------------------------------
-# Policy 5 of 5: VPC and Networking
-# Covers the public-subnet network created by the network_public
-# module: VPC, Internet Gateway, subnets, route tables, security
-# groups. No private networking (NAT, VPC endpoints) in v1.
-# Character count: ~1,150 (limit: 6,144)
+# Policy 5 of 5: VPC, Networking, and optional RDS shell
+# Covers the network_runtime module and optional passive MDM RDS data-plane shell.
 # -----------------------------------------------------------------------------
 
 policy_vpc() {
@@ -667,17 +653,45 @@ policy_vpc() {
         "ec2:DeleteRoute",
         "ec2:AssociateRouteTable",
         "ec2:DisassociateRouteTable",
+        "ec2:CreateVpcEndpoint",
+        "ec2:DeleteVpcEndpoints",
+        "ec2:DescribeVpcEndpoints",
+        "ec2:ModifyVpcEndpoint",
         "ec2:CreateSecurityGroup",
         "ec2:DeleteSecurityGroup",
         "ec2:DescribeSecurityGroups",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:RevokeSecurityGroupIngress",
         "ec2:AuthorizeSecurityGroupEgress",
         "ec2:RevokeSecurityGroupEgress",
         "ec2:DescribeSecurityGroupRules",
+        "ec2:DescribePrefixLists",
         "ec2:CreateTags",
         "ec2:DeleteTags",
         "ec2:DescribeTags",
         "ec2:DescribeAvailabilityZones",
         "ec2:DescribeAccountAttributes"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "RDSManagement",
+      "Effect": "Allow",
+      "Action": [
+        "rds:AddTagsToResource",
+        "rds:CreateDBInstance",
+        "rds:CreateDBSnapshot",
+        "rds:CreateDBSubnetGroup",
+        "rds:DeleteDBInstance",
+        "rds:DeleteDBSnapshot",
+        "rds:DeleteDBSubnetGroup",
+        "rds:DescribeDBInstances",
+        "rds:DescribeDBSnapshots",
+        "rds:DescribeDBSubnetGroups",
+        "rds:ListTagsForResource",
+        "rds:ModifyDBInstance",
+        "rds:ModifyDBSubnetGroup",
+        "rds:RemoveTagsFromResource"
       ],
       "Resource": "*"
     }
@@ -702,8 +716,8 @@ setup_prod() {
         "$(policy_iam)"
 
     create_and_attach_policy \
-        "${PROJECT}-${ENV}-tf-orchestration" \
-        "$(policy_orchestration)"
+        "${PROJECT}-${ENV}-tf-support" \
+        "$(policy_support)"
 
     create_and_attach_policy \
         "${PROJECT}-${ENV}-tf-vpc" \

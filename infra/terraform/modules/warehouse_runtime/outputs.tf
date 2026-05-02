@@ -14,18 +14,13 @@ output "ecr_repository_url" {
 }
 
 output "edgar_identity_secret_arn" {
-  description = "EDGAR identity secret ARN used by ECS tasks."
+  description = "Empty EDGAR identity secret container ARN."
   value       = local.resolved_edgar_identity_secret_arn
 }
 
 output "snowflake_manifest_sns_topic_arn" {
-  description = "SNS topic ARN that receives Snowflake export run-manifest object notifications."
+  description = "SNS topic ARN reserved for operator-managed Snowflake export manifest notifications."
   value       = aws_sns_topic.snowflake_manifest_events.arn
-}
-
-output "snowflake_storage_role_arn" {
-  description = "IAM role ARN that Snowflake assumes for native S3 export reads."
-  value       = try(aws_iam_role.snowflake_storage_reader[0].arn, null)
 }
 
 output "snowflake_export_root_url" {
@@ -38,47 +33,12 @@ output "snowflake_export_prefix" {
   value       = local.snowflake_export_prefix
 }
 
-output "snowflake_export_kms_key_arn" {
-  description = "KMS key ARN used to encrypt Snowflake export artifacts."
-  value       = var.snowflake_export_kms_key_arn
-}
-
-output "snowflake_manifest_subscriber_arn" {
-  description = "Snowflake-managed AWS principal ARN subscribed to manifest events."
-  value       = var.snowflake_manifest_subscriber_arn
-}
-
-output "snowflake_storage_external_id" {
-  description = "External ID required by the Snowflake export reader IAM role."
-  value       = var.snowflake_storage_external_id
-}
-
-output "state_machine_arns" {
-  description = "State machine ARNs keyed by workflow."
-  value       = { for name, workflow in aws_sfn_state_machine.workflow : name => workflow.arn }
-}
-
 output "log_group_name" {
   description = "CloudWatch log group for ECS tasks."
   value       = aws_cloudwatch_log_group.ecs.name
 }
 
-output "step_functions_log_group_name" {
-  description = "CloudWatch log group for Step Functions workflow logs."
-  value       = aws_cloudwatch_log_group.step_functions.name
-}
-
-output "runner_user_name" {
-  description = "IAM user name for the runner account (start/monitor Step Functions only). Create access keys with: aws iam create-access-key --user-name <value>"
-  value       = aws_iam_user.runner.name
-}
-
-output "runner_user_arn" {
-  description = "IAM user ARN for the runner account."
-  value       = aws_iam_user.runner.arn
-}
-
 output "runner_credentials_secret_arn" {
-  description = "Secrets Manager ARN holding the runner access key credentials. The secret value is populated out-of-band after aws iam create-access-key."
+  description = "Secrets Manager ARN for the empty runner credential container. Populate a value out-of-band only if an operator workflow needs it."
   value       = aws_secretsmanager_secret.runner_credentials.arn
 }

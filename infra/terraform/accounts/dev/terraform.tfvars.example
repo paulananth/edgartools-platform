@@ -1,11 +1,8 @@
-container_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@sha256:replace-me"
-warehouse_runtime_mode = "bronze_capture"
-warehouse_bronze_cik_limit = 10
+# The AWS dev root provisions passive infrastructure only:
+# VPC/subnets/security groups, S3/KMS, ECR, ECS cluster/logs, and empty secret
+# containers. IAM roles, runner users, and Snowflake trust policies live in
+# infra/terraform/access/aws/accounts/dev.
 
-# The deploy wrapper manages these automatically. Only set them manually if you are
-# operating the AWS root outside `infra/scripts/deploy-snowflake-stack.sh`.
-# snowflake_bootstrap_enabled = true
-# snowflake_manifest_subscriber_arn = "arn:aws:iam::<SNOWFLAKE_SUBSCRIBER_ACCOUNT_ID>:user/example"
-# snowflake_storage_external_id = "edgartools-dev-snowflake-native-pull"
-
-edgar_identity_value = "Your Name your.email@example.com"
+# Optional: point at an existing empty EDGAR identity secret container instead of
+# letting this root create edgartools-dev-edgar-identity.
+# edgar_identity_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:edgartools-dev-edgar-identity"

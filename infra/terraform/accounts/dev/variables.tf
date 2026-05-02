@@ -4,24 +4,6 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
-variable "container_image" {
-  description = "Warehouse container image tag or digest."
-  type        = string
-  default     = null
-}
-
-variable "warehouse_runtime_mode" {
-  description = "Canonical warehouse runtime mode for the dev ECS warehouse task."
-  type        = string
-  default     = "infrastructure_validation"
-}
-
-variable "warehouse_bronze_cik_limit" {
-  description = "Optional bounded-validation cap for daily bronze submissions capture in dev."
-  type        = number
-  default     = null
-}
-
 variable "bronze_bucket_name" {
   description = "Optional override for the bronze bucket name."
   type        = string
@@ -46,31 +28,6 @@ variable "edgar_identity_secret_arn" {
   default     = null
 }
 
-variable "edgar_identity_value" {
-  description = "EDGAR identity string to store in Secrets Manager (e.g. 'MyApp admin@example.com')."
-  type        = string
-  sensitive   = true
-  default     = null
-}
-
-variable "snowflake_manifest_subscriber_arn" {
-  description = "Optional Snowflake-managed AWS principal ARN allowed to subscribe to the manifest SNS topic for Snowpipe auto-ingest."
-  type        = string
-  default     = null
-}
-
-variable "snowflake_bootstrap_enabled" {
-  description = "Whether to use temporary bootstrap trust for the Snowflake export reader role."
-  type        = bool
-  default     = false
-}
-
-variable "snowflake_storage_external_id" {
-  description = "Optional external ID that Snowflake must present when assuming the Snowflake S3 reader role."
-  type        = string
-  default     = null
-}
-
 variable "vpc_cidr" {
   description = "CIDR block for the dev VPC."
   type        = string
@@ -87,39 +44,6 @@ variable "availability_zones" {
   description = "Availability zones for the dev public subnets."
   type        = list(string)
   default     = ["us-east-1a", "us-east-1b"]
-}
-
-variable "daily_incremental_schedule" {
-  description = "Schedule for daily incremental runs."
-  type        = string
-  default     = "cron(30 6 ? * MON-FRI *)"
-}
-
-variable "full_reconcile_schedule" {
-  description = "Schedule for full reconcile runs."
-  type        = string
-  default     = "cron(0 9 ? * SAT *)"
-}
-
-variable "schedule_timezone" {
-  description = "Timezone for scheduled workflows."
-  type        = string
-  default     = "America/New_York"
-}
-
-variable "task_profiles" {
-  description = "CPU and memory settings per ECS task profile."
-  type = map(object({
-    cpu    = number
-    memory = number
-  }))
-  default = {}
-}
-
-variable "task_profile_by_workflow" {
-  description = "Task profile name for each workflow."
-  type        = map(string)
-  default     = {}
 }
 
 variable "tags" {
