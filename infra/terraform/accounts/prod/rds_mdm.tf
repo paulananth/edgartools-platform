@@ -20,10 +20,5 @@ module "mdm" {
 
   db_instance_class = var.mdm_db_instance_class
 
-  neo4j_uri      = var.mdm_neo4j_uri
-  neo4j_user     = var.mdm_neo4j_user
-  neo4j_password = var.mdm_neo4j_password
-  api_keys       = var.mdm_api_keys
-
   tags = var.tags
 }

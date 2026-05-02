@@ -5,7 +5,7 @@
 # or credentials are required.
 #
 # Steps:
-#   1. Pull job names + resource group from Terraform state
+#   1. Resolve resource group and operator-managed job names
 #   2. Run  mdm-graph-load   (backfill-relationships --limit N)
 #   3. Run  mdm-counts       (show mdm_relationship_instance row count)
 #   4. Run  mdm-graph-verify (query Neo4j for node/edge counts)
@@ -16,7 +16,7 @@
 #
 # Prerequisites:
 #   az login  (already authenticated)
-#   terraform state initialised for the target environment
+#   Azure runtime jobs deployed with deploy-azure-runtime.sh
 set -euo pipefail
 
 usage() {
@@ -27,15 +27,21 @@ Usage:
 Options:
   --env   dev or prod (required)
   --limit Max relationships to backfill (default: 100)
+  --resource-group Azure resource group override
+  --name-prefix Runtime resource prefix (default: edgartools-<env>)
 USAGE
 }
 
 ENVIRONMENT=""
+RESOURCE_GROUP=""
+NAME_PREFIX=""
 LIMIT="100"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env)   ENVIRONMENT="${2:?}"; shift 2 ;;
+    --resource-group) RESOURCE_GROUP="${2:?}"; shift 2 ;;
+    --name-prefix) NAME_PREFIX="${2:?}"; shift 2 ;;
     --limit) LIMIT="${2:?}";       shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 2 ;;
@@ -48,9 +54,9 @@ fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TF_ROOT="${REPO_ROOT}/infra/terraform/azure/accounts/${ENVIRONMENT}"
+NAME_PREFIX="${NAME_PREFIX:-edgartools-${ENVIRONMENT}}"
 
 terraform_output()      { terraform -chdir="$TF_ROOT" output -raw  "$1"; }
-terraform_output_json() { terraform -chdir="$TF_ROOT" output -json "$1"; }
 
 SUBSCRIPTION="$(az account show --query id -o tsv 2>/dev/null)"
 
@@ -128,15 +134,13 @@ fetch_job_logs() {
 # ---------------------------------------------------------------------------
 echo "==> Resolving infrastructure for env=${ENVIRONMENT} ..."
 
-RESOURCE_GROUP="$(terraform_output resource_group_name)"
-JOBS_JSON="$(terraform_output_json mdm_container_app_job_names)"
+RESOURCE_GROUP="${RESOURCE_GROUP:-$(terraform_output resource_group_name 2>/dev/null || true)}"
+RESOURCE_GROUP="${RESOURCE_GROUP:-${NAME_PREFIX}-rg}"
 
-get_job() { echo "$JOBS_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['$1'])"; }
-
-RUN_JOB="$(get_job run)"
-BACKFILL_JOB="$(get_job backfill_relationships)"
-COUNTS_JOB="$(get_job counts)"
-VERIFY_JOB="$(get_job verify_graph)"
+RUN_JOB="${NAME_PREFIX}-mdm-run"
+BACKFILL_JOB="${NAME_PREFIX}-mdm-graph-load"
+COUNTS_JOB="${NAME_PREFIX}-mdm-counts"
+VERIFY_JOB="${NAME_PREFIX}-mdm-graph-verify"
 
 LOG_WORKSPACE="$(az monitor log-analytics workspace list \
   --resource-group "${RESOURCE_GROUP}" \
@@ -153,7 +157,7 @@ echo "    log workspace   : ${LOG_WORKSPACE:-none}"
 # 2. Run entity pipeline (loads companies, advisers, persons, securities, funds)
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> [1/4] Running MDM entity pipeline (limit set by Terraform mdm_run_limit) ..."
+echo "==> [1/4] Running MDM entity pipeline ..."
 RUN_EXEC="$(run_job "${RUN_JOB}" "${RESOURCE_GROUP}")"
 
 if [[ -n "${LOG_WORKSPACE}" ]]; then

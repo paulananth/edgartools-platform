@@ -1,0 +1,9 @@
+snowflake_organization_name = "replace-me"
+snowflake_account_name      = "replace-me"
+snowflake_user              = "replace-me"
+snowflake_authenticator     = "externalbrowser"
+snowflake_admin_role        = "ACCOUNTADMIN"
+
+provisioning_state_bucket = "edgartools-dev-tfstate"
+provisioning_state_key    = "snowflake/dev/terraform.tfstate"
+provisioning_state_region = "us-east-1"

@@ -12,11 +12,8 @@ output "schema_names" {
 }
 
 output "role_names" {
-  description = "Provisioned Snowflake account roles."
-  value = {
-    for key, role in snowflake_account_role.roles :
-    key => role.name
-  }
+  description = "Snowflake account role names expected by the access-control root."
+  value       = local.roles
 }
 
 output "warehouse_names" {

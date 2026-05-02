@@ -3,14 +3,29 @@ output "bronze_bucket_name" {
   value       = module.storage.bronze_bucket_name
 }
 
+output "bronze_bucket_arn" {
+  description = "Dev bronze bucket ARN."
+  value       = module.storage.bronze_bucket_arn
+}
+
 output "warehouse_bucket_name" {
   description = "Dev warehouse bucket name."
   value       = module.storage.warehouse_bucket_name
 }
 
+output "warehouse_bucket_arn" {
+  description = "Dev warehouse bucket ARN."
+  value       = module.storage.warehouse_bucket_arn
+}
+
 output "snowflake_export_bucket_name" {
   description = "Dev Snowflake export bucket name."
   value       = module.storage.snowflake_export_bucket_name
+}
+
+output "snowflake_export_bucket_arn" {
+  description = "Dev Snowflake export bucket ARN."
+  value       = module.storage.snowflake_export_bucket_arn
 }
 
 output "ecr_repository_url" {
@@ -23,24 +38,34 @@ output "cluster_name" {
   value       = module.runtime.cluster_name
 }
 
+output "cluster_arn" {
+  description = "Dev ECS cluster ARN."
+  value       = module.runtime.cluster_arn
+}
+
+output "public_subnet_ids" {
+  description = "Dev public subnet IDs for operator-managed ECS tasks."
+  value       = module.network.public_subnet_ids
+}
+
+output "public_ecs_security_group_id" {
+  description = "Dev outbound-only security group ID for operator-managed ECS tasks."
+  value       = module.network.public_ecs_security_group_id
+}
+
+output "log_group_name" {
+  description = "Dev CloudWatch log group for ECS tasks."
+  value       = module.runtime.log_group_name
+}
+
 output "edgar_identity_secret_arn" {
-  description = "Dev EDGAR identity secret ARN."
+  description = "Dev empty EDGAR identity secret container ARN."
   value       = module.runtime.edgar_identity_secret_arn
 }
 
-output "state_machine_arns" {
-  description = "Dev Step Functions state machines."
-  value       = module.runtime.state_machine_arns
-}
-
 output "snowflake_manifest_sns_topic_arn" {
-  description = "Dev SNS topic ARN for Snowflake export run-manifest notifications."
+  description = "Dev SNS topic ARN reserved for operator-managed Snowflake export run-manifest notifications."
   value       = module.runtime.snowflake_manifest_sns_topic_arn
-}
-
-output "snowflake_storage_role_arn" {
-  description = "Dev IAM role ARN that Snowflake assumes for native export reads."
-  value       = module.runtime.snowflake_storage_role_arn
 }
 
 output "snowflake_export_root_url" {
@@ -55,30 +80,10 @@ output "snowflake_export_prefix" {
 
 output "snowflake_export_kms_key_arn" {
   description = "Dev KMS key ARN for Snowflake export artifacts."
-  value       = module.runtime.snowflake_export_kms_key_arn
-}
-
-output "snowflake_manifest_subscriber_arn" {
-  description = "Dev Snowflake-managed AWS principal ARN subscribed to manifest notifications."
-  value       = module.runtime.snowflake_manifest_subscriber_arn
-}
-
-output "snowflake_storage_external_id" {
-  description = "Dev external ID required by the Snowflake export reader role."
-  value       = module.runtime.snowflake_storage_external_id
-}
-
-output "runner_user_name" {
-  description = "Dev runner IAM user name. Create access keys with: aws iam create-access-key --user-name <value>"
-  value       = module.runtime.runner_user_name
-}
-
-output "runner_user_arn" {
-  description = "Dev runner IAM user ARN."
-  value       = module.runtime.runner_user_arn
+  value       = module.storage.snowflake_export_kms_key_arn
 }
 
 output "runner_credentials_secret_arn" {
-  description = "Dev runner credentials secret ARN. Populate it after creating a runner access key."
+  description = "Dev empty runner credentials secret container ARN."
   value       = module.runtime.runner_credentials_secret_arn
 }

@@ -28,6 +28,8 @@
 set -euo pipefail
 
 ENVIRONMENT=""
+RESOURCE_GROUP_OVERRIDE=""
+NAME_PREFIX=""
 SKIP_NEO4J=false
 SKIP_GOLD=false
 SKIP_MDM=false
@@ -39,6 +41,8 @@ SKIP_ACR=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env)         ENVIRONMENT="${2:?}"; shift 2 ;;
+    --resource-group) RESOURCE_GROUP_OVERRIDE="${2:?}"; shift 2 ;;
+    --name-prefix) NAME_PREFIX="${2:?}"; shift 2 ;;
     --skip-neo4j)  SKIP_NEO4J=true;  shift ;;
     --skip-gold)   SKIP_GOLD=true;   shift ;;
     --skip-mdm)    SKIP_MDM=true;    shift ;;
@@ -55,12 +59,14 @@ done
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TF_ROOT="${REPO_ROOT}/infra/terraform/azure/accounts/${ENVIRONMENT}"
+NAME_PREFIX="${NAME_PREFIX:-edgartools-${ENVIRONMENT}}"
 
 tf_out()      { terraform -chdir="$TF_ROOT" output -raw  "$1" 2>/dev/null || true; }
 tf_out_json() { terraform -chdir="$TF_ROOT" output -json "$1" 2>/dev/null || echo "{}"; }
 
 # Resolve infra names from Terraform outputs
-RESOURCE_GROUP="$(tf_out resource_group_name)"
+RESOURCE_GROUP="${RESOURCE_GROUP_OVERRIDE:-$(tf_out resource_group_name)}"
+RESOURCE_GROUP="${RESOURCE_GROUP:-${NAME_PREFIX}-rg}"
 KEY_VAULT="$(tf_out key_vault_name)"
 ACR_NAME="$(tf_out container_registry_login_server 2>/dev/null | cut -d. -f1 || true)"
 SQL_HOST="$(tf_out mdm_sql_server_fqdn)"
@@ -72,14 +78,28 @@ BRONZE_ROOT="$(tf_out warehouse_bronze_root)"
 STORAGE_ACCOUNT="$(echo "$WAREHOUSE_ROOT" | python3 -c \
   "import sys,re; m=re.search(r'@([^.]+)',sys.stdin.read()); print(m.group(1) if m else '')" 2>/dev/null || true)"
 
-# Job names
-BOOT_JOB="$(tf_out_json container_app_job_names | \
-  python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('bootstrap_recent_10',''))" 2>/dev/null || true)"
-MDM_JOBS_JSON="$(tf_out_json mdm_container_app_job_names)"
-get_mdm_job() { echo "$MDM_JOBS_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('$1',''))" 2>/dev/null || true; }
-COUNTS_JOB="$(get_mdm_job counts)"
-VERIFY_JOB="$(get_mdm_job verify_graph)"
-RUN_JOB="$(get_mdm_job run)"
+# Runtime job names. Older Terraform state may still expose these outputs; the
+# operator script uses the deterministic defaults below.
+json_output_value() {
+  local output_name="$1" key="$2" default_value="$3"
+  tf_out_json "$output_name" | python3 - "$key" "$default_value" <<'PY' 2>/dev/null || true
+import json
+import sys
+
+key, default = sys.argv[1:]
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    data = {}
+if not isinstance(data, dict):
+    data = {}
+print(data.get(key) or default)
+PY
+}
+BOOT_JOB="$(json_output_value container_app_job_names bootstrap_recent_10 "${NAME_PREFIX}-boot-recent-10")"
+COUNTS_JOB="$(json_output_value mdm_container_app_job_names counts "${NAME_PREFIX}-mdm-counts")"
+VERIFY_JOB="$(json_output_value mdm_container_app_job_names verify_graph "${NAME_PREFIX}-mdm-graph-verify")"
+RUN_JOB="$(json_output_value mdm_container_app_job_names run "${NAME_PREFIX}-mdm-run")"
 
 # Helper: run a Container App Job and wait for completion; echoes execution name
 run_job_wait() {
@@ -363,7 +383,7 @@ if [[ "$SKIP_NEO4J" == "false" ]]; then
   divider 5 "NEO4J GRAPH"
 
   if [[ -z "$VERIFY_JOB" ]]; then
-    echo "  Skipping — verify_graph job not found in terraform outputs"
+    echo "  Skipping - verify_graph job name not configured"
   else
     echo "  Running ${VERIFY_JOB} ..."
     EXEC="$(run_job_wait "$VERIFY_JOB" "$RESOURCE_GROUP" 2>/tmp/_neo4j_status_$$)"
@@ -390,7 +410,7 @@ if [[ -n "$BOOT_JOB" ]]; then
   if [[ "$RUNTIME_MODE" == "infrastructure_validation" ]]; then
     echo "  !! WARNING: Mode is infrastructure_validation"
     echo "              ETL does NOT run — silver.duckdb will NOT be populated"
-    echo "              Fix: set warehouse_runtime_mode = \"bronze_capture\" in terraform.tfvars and apply"
+    echo "              Fix: redeploy runtime jobs with --warehouse-runtime-mode bronze_capture"
   elif [[ "$RUNTIME_MODE" == "bronze_capture" ]]; then
     echo "  OK: Mode is bronze_capture — bootstrap populates silver.duckdb"
   fi

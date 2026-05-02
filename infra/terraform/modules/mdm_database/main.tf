@@ -60,33 +60,27 @@ resource "aws_security_group_rule" "rds_egress_vpc" {
 # RDS PostgreSQL instance.
 ###############################################################################
 
-resource "random_password" "db_master" {
-  length           = 24
-  special          = true
-  override_special = "!#$%*-_=+"
-}
-
 resource "aws_db_instance" "mdm" {
-  identifier                = "${var.name_prefix}-mdm"
-  engine                    = "postgres"
-  engine_version            = var.db_engine_version
-  instance_class            = var.db_instance_class
-  allocated_storage         = var.db_allocated_storage
-  storage_type              = "gp3"
-  storage_encrypted         = true
-  db_name                   = var.db_name
-  username                  = var.db_master_username
-  password                  = random_password.db_master.result
-  port                      = 5432
-  publicly_accessible       = false
-  multi_az                  = false
-  db_subnet_group_name      = aws_db_subnet_group.mdm.name
-  vpc_security_group_ids    = [aws_security_group.rds.id]
-  skip_final_snapshot       = false
-  final_snapshot_identifier = "${var.name_prefix}-mdm-final-${formatdate("YYYYMMDDhhmmss", timestamp())}"
-  backup_retention_period   = 7
-  deletion_protection       = true
-  apply_immediately         = false
+  identifier                  = "${var.name_prefix}-mdm"
+  engine                      = "postgres"
+  engine_version              = var.db_engine_version
+  instance_class              = var.db_instance_class
+  allocated_storage           = var.db_allocated_storage
+  storage_type                = "gp3"
+  storage_encrypted           = true
+  db_name                     = var.db_name
+  username                    = var.db_master_username
+  manage_master_user_password = true
+  port                        = 5432
+  publicly_accessible         = false
+  multi_az                    = false
+  db_subnet_group_name        = aws_db_subnet_group.mdm.name
+  vpc_security_group_ids      = [aws_security_group.rds.id]
+  skip_final_snapshot         = false
+  final_snapshot_identifier   = "${var.name_prefix}-mdm-final-${formatdate("YYYYMMDDhhmmss", timestamp())}"
+  backup_retention_period     = 7
+  deletion_protection         = true
+  apply_immediately           = false
 
   tags = merge(var.tags, {
     Name = "${var.name_prefix}-mdm"
@@ -98,55 +92,23 @@ resource "aws_db_instance" "mdm" {
 }
 
 ###############################################################################
-# Secrets Manager: PostgreSQL DSN, Neo4j config, MDM API keys.
+# Secrets Manager: empty containers for operator-populated runtime values.
 ###############################################################################
-
-locals {
-  postgres_dsn = format(
-    "postgresql://%s:%s@%s:%d/%s",
-    var.db_master_username,
-    random_password.db_master.result,
-    aws_db_instance.mdm.address,
-    aws_db_instance.mdm.port,
-    var.db_name,
-  )
-}
 
 resource "aws_secretsmanager_secret" "postgres_dsn" {
   name        = "${var.name_prefix}/mdm/postgres_dsn"
-  description = "PostgreSQL connection string for MDM"
+  description = "Empty PostgreSQL connection string container for MDM. Populate the value out-of-band."
   tags        = var.tags
-}
-
-resource "aws_secretsmanager_secret_version" "postgres_dsn" {
-  secret_id     = aws_secretsmanager_secret.postgres_dsn.id
-  secret_string = local.postgres_dsn
 }
 
 resource "aws_secretsmanager_secret" "neo4j" {
   name        = "${var.name_prefix}/mdm/neo4j"
-  description = "Neo4j AuraDB connection details for MDM"
+  description = "Empty Neo4j connection details container for MDM. Populate the value out-of-band."
   tags        = var.tags
-}
-
-resource "aws_secretsmanager_secret_version" "neo4j" {
-  secret_id = aws_secretsmanager_secret.neo4j.id
-  secret_string = jsonencode({
-    uri      = var.neo4j_uri
-    user     = var.neo4j_user
-    password = var.neo4j_password
-  })
 }
 
 resource "aws_secretsmanager_secret" "api_keys" {
   name        = "${var.name_prefix}/mdm/api_keys"
-  description = "MDM API X-API-Key values"
+  description = "Empty MDM API key container. Populate the value out-of-band."
   tags        = var.tags
-}
-
-resource "aws_secretsmanager_secret_version" "api_keys" {
-  secret_id = aws_secretsmanager_secret.api_keys.id
-  secret_string = jsonencode({
-    keys = var.api_keys
-  })
 }

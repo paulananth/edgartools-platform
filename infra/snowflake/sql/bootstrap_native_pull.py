@@ -173,7 +173,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="bootstrap_native_pull.py",
         description="Validate the Terraform-managed Snowflake native-pull path and emit a deployment artifact.",
     )
-    parser.add_argument("--aws-root", required=True, type=Path, help="AWS Terraform account root with runtime outputs.")
+    parser.add_argument("--aws-root", required=True, type=Path, help="AWS access Terraform root with Snowflake trust outputs.")
     parser.add_argument("--snowflake-root", required=True, type=Path, help="Snowflake Terraform account root with native-pull outputs.")
     parser.add_argument("--connection", default="default", help="Snowflake connection name for SnowCLI.")
     parser.add_argument("--storage-integration-name", help="Override the integration name when validating.")

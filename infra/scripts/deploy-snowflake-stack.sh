@@ -9,9 +9,12 @@ Usage: bash infra/scripts/deploy-snowflake-stack.sh [options]
 Options:
   --env <dev|prod>           Target environment. Default: dev
   --snow-connection <name>   SnowCLI connection used for validation and dashboard upload.
-  --skip-validation          Skip SnowCLI-based native-pull validation artifact generation.
-  --skip-dbt                 Skip dbt deps/run/test.
-  --skip-dashboard           Skip dashboard stage upload.
+  --run-validation           Run SnowCLI-based native-pull validation artifact generation.
+  --run-dbt                  Run dbt deps/run/test.
+  --upload-dashboard         Upload dashboard artifacts.
+
+This is an explicit post-infra Snowflake/database-object operator script. dbt,
+dashboard upload, and validation are opt-in.
 EOF
 }
 
@@ -26,9 +29,9 @@ require_command() {
 
 ENVIRONMENT="dev"
 SNOW_CONNECTION=""
-SKIP_VALIDATION=0
-SKIP_DBT=0
-SKIP_DASHBOARD=0
+RUN_VALIDATION=0
+RUN_DBT=0
+UPLOAD_DASHBOARD=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -40,16 +43,20 @@ while [[ $# -gt 0 ]]; do
       SNOW_CONNECTION="${2:-}"
       shift 2
       ;;
-    --skip-validation)
-      SKIP_VALIDATION=1
+    --run-validation)
+      RUN_VALIDATION=1
       shift
       ;;
-    --skip-dbt)
-      SKIP_DBT=1
+    --run-dbt)
+      RUN_DBT=1
       shift
       ;;
-    --skip-dashboard)
-      SKIP_DASHBOARD=1
+    --upload-dashboard)
+      UPLOAD_DASHBOARD=1
+      shift
+      ;;
+    --skip-validation|--skip-dbt|--skip-dashboard)
+      echo "$1 is no longer needed; validation, dbt, and dashboard upload are opt-in." >&2
       shift
       ;;
     -h|--help)
@@ -75,8 +82,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 TMP_DIR="${REPO_ROOT}/.tmp"
 
-AWS_ROOT="${REPO_ROOT}/infra/terraform/accounts/${ENVIRONMENT}"
+AWS_ROOT="${REPO_ROOT}/infra/terraform/access/aws/accounts/${ENVIRONMENT}"
 SNOWFLAKE_ROOT="${REPO_ROOT}/infra/terraform/snowflake/accounts/${ENVIRONMENT}"
+SNOWFLAKE_ACCESS_ROOT="${REPO_ROOT}/infra/terraform/access/snowflake/accounts/${ENVIRONMENT}"
 DBT_ROOT="${REPO_ROOT}/infra/snowflake/dbt/edgartools_gold"
 VALIDATION_ARTIFACT="${REPO_ROOT}/infra/snowflake/sql/${ENVIRONMENT}_native_pull_handshake.json"
 
@@ -86,6 +94,7 @@ AWS_RECONCILE_OVERLAY="$(mktemp "${TMP_DIR}/aws-reconcile-${ENVIRONMENT}-XXXXXX.
 SNOWFLAKE_OVERLAY="$(mktemp "${TMP_DIR}/snowflake-native-pull-${ENVIRONMENT}-XXXXXX.tfvars.json")"
 AWS_OUTPUTS_FILE="$(mktemp "${TMP_DIR}/aws-outputs-${ENVIRONMENT}-XXXXXX.json")"
 SNOWFLAKE_OUTPUTS_FILE="$(mktemp "${TMP_DIR}/snowflake-outputs-${ENVIRONMENT}-XXXXXX.json")"
+SNOWFLAKE_ACCESS_OUTPUTS_FILE="$(mktemp "${TMP_DIR}/snowflake-access-outputs-${ENVIRONMENT}-XXXXXX.json")"
 
 cleanup() {
   rm -f \
@@ -93,18 +102,19 @@ cleanup() {
     "${AWS_RECONCILE_OVERLAY}" \
     "${SNOWFLAKE_OVERLAY}" \
     "${AWS_OUTPUTS_FILE}" \
-    "${SNOWFLAKE_OUTPUTS_FILE}"
+    "${SNOWFLAKE_OUTPUTS_FILE}" \
+    "${SNOWFLAKE_ACCESS_OUTPUTS_FILE}"
 }
 trap cleanup EXIT
 
 require_command terraform
 require_command python3
 
-if [[ ${SKIP_VALIDATION} -eq 0 || ${SKIP_DASHBOARD} -eq 0 ]]; then
+if [[ ${RUN_VALIDATION} -eq 1 || ${UPLOAD_DASHBOARD} -eq 1 ]]; then
   require_command snow
 fi
 
-if [[ ${SKIP_DBT} -eq 0 ]]; then
+if [[ ${RUN_DBT} -eq 1 ]]; then
   require_command dbt
   [[ -n "${DBT_SNOWFLAKE_ACCOUNT:-}" ]] || die "DBT_SNOWFLAKE_ACCOUNT must be set when dbt is enabled"
   [[ -n "${DBT_SNOWFLAKE_USER:-}" ]] || die "DBT_SNOWFLAKE_USER must be set when dbt is enabled"
@@ -113,6 +123,7 @@ fi
 
 [[ -f "${AWS_ROOT}/backend.hcl" ]] || die "Missing backend.hcl in ${AWS_ROOT}"
 [[ -f "${SNOWFLAKE_ROOT}/backend.hcl" ]] || die "Missing backend.hcl in ${SNOWFLAKE_ROOT}"
+[[ -f "${SNOWFLAKE_ACCESS_ROOT}/backend.hcl" ]] || die "Missing backend.hcl in ${SNOWFLAKE_ACCESS_ROOT}"
 
 terraform_init() {
   local dir="$1"
@@ -123,6 +134,11 @@ terraform_apply() {
   local dir="$1"
   local overlay="$2"
   terraform -chdir="${dir}" apply -auto-approve -input=false -no-color -var-file="${overlay}"
+}
+
+terraform_apply_root() {
+  local dir="$1"
+  terraform -chdir="${dir}" apply -auto-approve -input=false -no-color
 }
 
 terraform_output_json() {
@@ -211,6 +227,7 @@ PY
 echo "Initializing Terraform backends"
 terraform_init "${AWS_ROOT}"
 terraform_init "${SNOWFLAKE_ROOT}"
+terraform_init "${SNOWFLAKE_ACCESS_ROOT}"
 
 EXTERNAL_ID="edgartools-${ENVIRONMENT}-snowflake-native-pull"
 
@@ -244,7 +261,11 @@ echo "Re-applying Snowflake after AWS trust reconciliation"
 terraform_apply "${SNOWFLAKE_ROOT}" "${SNOWFLAKE_OVERLAY}"
 terraform_output_json "${SNOWFLAKE_ROOT}" "${SNOWFLAKE_OUTPUTS_FILE}"
 
-if [[ ${SKIP_VALIDATION} -eq 0 ]]; then
+echo "Applying Snowflake access-control grants"
+terraform_apply_root "${SNOWFLAKE_ACCESS_ROOT}"
+terraform_output_json "${SNOWFLAKE_ACCESS_ROOT}" "${SNOWFLAKE_ACCESS_OUTPUTS_FILE}"
+
+if [[ ${RUN_VALIDATION} -eq 1 ]]; then
   echo "Validating Terraform-managed native-pull contract"
   python3 "${REPO_ROOT}/infra/snowflake/sql/bootstrap_native_pull.py" \
     --aws-root "${AWS_ROOT}" \
@@ -254,7 +275,7 @@ if [[ ${SKIP_VALIDATION} -eq 0 ]]; then
     --validate-native-pull
 fi
 
-if [[ ${SKIP_DBT} -eq 0 ]]; then
+if [[ ${RUN_DBT} -eq 1 ]]; then
   echo "Running dbt deps/run/test"
   export DBT_SNOWFLAKE_DATABASE
   DBT_SNOWFLAKE_DATABASE="$(json_value "${SNOWFLAKE_OUTPUTS_FILE}" "database_name")"
@@ -275,7 +296,7 @@ if [[ ${SKIP_DBT} -eq 0 ]]; then
   )
 fi
 
-if [[ ${SKIP_DASHBOARD} -eq 0 ]]; then
+if [[ ${UPLOAD_DASHBOARD} -eq 1 ]]; then
   echo "Uploading Streamlit dashboard artifacts"
   DASHBOARD_DATABASE="$(json_value "${SNOWFLAKE_OUTPUTS_FILE}" "database_name")"
   SNOW_CONNECTION="${SNOW_CONNECTION}" \

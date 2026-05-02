@@ -23,6 +23,11 @@ output "dashboard_stage_qualified_name" {
   value       = module.dashboard.stage_qualified_name
 }
 
+output "dashboard_schema_name" {
+  description = "Prod Streamlit dashboard schema name."
+  value       = module.dashboard.schema_name
+}
+
 output "dashboard_streamlit_qualified_name" {
   description = "Prod Streamlit app qualified name."
   value       = module.dashboard.streamlit_qualified_name

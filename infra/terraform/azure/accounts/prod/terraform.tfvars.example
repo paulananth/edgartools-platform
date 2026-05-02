@@ -1,26 +1,16 @@
-location                = "eastus"
-storage_account_name    = "edgartoolsprodlake01"
+storage_account_name    = "edgartoolsprodstorage01"
 container_registry_name = "edgartoolsprodacr01"
 key_vault_name          = "edgartools-prod-kv-01"
-container_image         = "edgartoolsprodacr01.azurecr.io/edgar-warehouse:replace-me"
 
-# Store EDGAR_IDENTITY in Key Vault with infra/scripts/bootstrap-azure-secrets.sh.
+# Store runtime values in Key Vault with post-infra operator scripts.
+# Terraform does not create Container Apps jobs/apps, schedules, or Key Vault
+# secret values.
 
-# Enable only after dev validation and parallel-run acceptance:
-# daily_incremental_schedule = "0 7 * * *"
-# full_reconcile_schedule   = "0 8 * * 0"
-
-# Optional MDM data plane. Names must be globally unique.
-# enable_mdm                        = true
-# mdm_sql_server_name               = "edgartools-prod-mdm-sql-01"
-# mdm_sql_location                  = "eastus2"
-# mdm_neo4j_storage_account_name    = "edgartoolsprodneo4j01"
-# mdm_neo4j_external_enabled        = false
-# mdm_api_external_enabled          = false
-# mdm_silver_duckdb_path            = "abfss://warehouse@<account>.dfs.core.windows.net/warehouse/silver/sec/silver.duckdb"
-# mdm_api_keys                      = ["replace-with-prod-api-key"]
-#
-# Optional operator firewall rule for direct SQL access:
+# Optional MDM database/storage shell. Names must be globally unique.
+# enable_mdm                     = true
+# mdm_sql_server_name            = "edgartools-prod-mdm-sql-01"
+# mdm_sql_location               = "eastus2"
+# mdm_neo4j_storage_account_name = "edgartoolsprodneo4j01"
 # mdm_sql_firewall_rules = {
 #   operator = {
 #     start_ip_address = "203.0.113.10"

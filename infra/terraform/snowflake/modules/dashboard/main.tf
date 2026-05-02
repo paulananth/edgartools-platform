@@ -31,22 +31,3 @@ resource "snowflake_streamlit" "dashboard" {
   title           = var.streamlit_title
   comment         = "EdgarTools ${var.environment} gold-mirror dashboard."
 }
-
-resource "snowflake_grant_privileges_to_account_role" "reader_schema_usage" {
-  account_role_name = var.reader_role_name
-  privileges        = ["USAGE"]
-
-  on_schema {
-    schema_name = local.dashboard_schema_fqn
-  }
-}
-
-resource "snowflake_grant_privileges_to_account_role" "reader_streamlit_usage" {
-  account_role_name = var.reader_role_name
-  privileges        = ["USAGE"]
-
-  on_schema_object {
-    object_type = "STREAMLIT"
-    object_name = local.streamlit_fqn
-  }
-}

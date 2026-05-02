@@ -1,0 +1,7 @@
+provisioning_state_resource_group_name  = "replace-me-tfstate-rg"
+provisioning_state_storage_account_name = "replacemetfstate"
+provisioning_state_container_name       = "tfstate"
+provisioning_state_key                  = "azure/dev/terraform.tfstate"
+
+# Optional. Defaults to the current Terraform principal.
+# operator_object_ids = ["00000000-0000-0000-0000-000000000000"]

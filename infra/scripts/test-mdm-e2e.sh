@@ -6,7 +6,7 @@ usage() {
 Usage:
   test-mdm-e2e.sh --env <dev|prod> [--skip-neo4j] [--skip-migrate] [--start-container-jobs]
 
-Hydrates MDM secrets from Azure Key Vault/Terraform outputs, checks Azure SQL
+Hydrates MDM secrets from Azure Key Vault runtime secret names, checks Azure SQL
 and Neo4j connectivity, applies MDM migrations, and prints MDM table counts.
 
 Set EDGAR_WAREHOUSE_CMD to override the local command, for example:
@@ -15,6 +15,8 @@ USAGE
 }
 
 ENVIRONMENT=""
+RESOURCE_GROUP=""
+NAME_PREFIX=""
 SKIP_NEO4J="false"
 SKIP_MIGRATE="false"
 START_CONTAINER_JOBS="false"
@@ -22,6 +24,8 @@ START_CONTAINER_JOBS="false"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env) ENVIRONMENT="${2:?}"; shift 2 ;;
+    --resource-group) RESOURCE_GROUP="${2:?}"; shift 2 ;;
+    --name-prefix) NAME_PREFIX="${2:?}"; shift 2 ;;
     --skip-neo4j) SKIP_NEO4J="true"; shift ;;
     --skip-migrate) SKIP_MIGRATE="true"; shift ;;
     --start-container-jobs) START_CONTAINER_JOBS="true"; shift ;;
@@ -37,6 +41,7 @@ fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TF_ROOT="${REPO_ROOT}/infra/terraform/azure/accounts/${ENVIRONMENT}"
+NAME_PREFIX="${NAME_PREFIX:-edgartools-${ENVIRONMENT}}"
 CMD="${EDGAR_WAREHOUSE_CMD:-edgar-warehouse}"
 
 # Auto-install the package if edgar-warehouse is not on PATH
@@ -46,21 +51,7 @@ if [[ "$CMD" == "edgar-warehouse" ]] && ! command -v edgar-warehouse &>/dev/null
 fi
 
 terraform_output() {
-  terraform -chdir="$TF_ROOT" output -raw "$1"
-}
-
-secret_value() {
-  az keyvault secret show --id "$1" --query value -o tsv --only-show-errors
-}
-
-json_field() {
-  python3 - "$1" "$2" <<'PY'
-import json
-import sys
-
-payload = json.loads(sys.argv[1])
-print(payload[sys.argv[2]])
-PY
+  terraform -chdir="$TF_ROOT" output -raw "$1" 2>/dev/null || true
 }
 
 run_cmd() {
@@ -68,30 +59,32 @@ run_cmd() {
   $CMD "$@"
 }
 
-DB_SECRET_ID="$(terraform_output mdm_database_url_secret_id)"
-NEO4J_SECRET_ID="$(terraform_output mdm_neo4j_secret_id)"
-API_SECRET_ID="$(terraform_output mdm_api_keys_secret_id)"
+KEY_VAULT="$(terraform_output key_vault_name)"
 
-if [[ -z "$DB_SECRET_ID" || "$DB_SECRET_ID" == "null" ]]; then
-  echo "ERROR: MDM is not enabled or mdm_database_url_secret_id is unavailable." >&2
+secret_name() {
+  az keyvault secret show \
+    --vault-name "$KEY_VAULT" \
+    --name "$1" \
+    --query value -o tsv --only-show-errors
+}
+
+if [[ -z "$KEY_VAULT" || "$KEY_VAULT" == "null" ]]; then
+  echo "ERROR: Key Vault output is unavailable; run Azure infra apply or pass environment with Terraform outputs." >&2
   exit 1
 fi
 
 export MDM_DATABASE_URL
-MDM_DATABASE_URL="$(secret_value "$DB_SECRET_ID")"
+MDM_DATABASE_URL="$(secret_name mdm-database-url)"
 
 if [[ "$SKIP_NEO4J" == "false" ]]; then
-  NEO4J_JSON="$(secret_value "$NEO4J_SECRET_ID")"
   export NEO4J_URI NEO4J_USER NEO4J_PASSWORD
-  NEO4J_URI="$(json_field "$NEO4J_JSON" uri)"
-  NEO4J_USER="$(json_field "$NEO4J_JSON" user)"
-  NEO4J_PASSWORD="$(json_field "$NEO4J_JSON" password)"
+  NEO4J_URI="$(secret_name mdm-neo4j-uri)"
+  NEO4J_USER="$(secret_name mdm-neo4j-user)"
+  NEO4J_PASSWORD="$(secret_name mdm-neo4j-password)"
 fi
 
-if [[ -n "${API_SECRET_ID:-}" && "$API_SECRET_ID" != "null" ]]; then
-  export MDM_API_KEYS
-  MDM_API_KEYS="$(secret_value "$API_SECRET_ID")"
-fi
+export MDM_API_KEYS
+MDM_API_KEYS="$(secret_name mdm-api-keys-csv 2>/dev/null || true)"
 
 if [[ "$SKIP_NEO4J" == "true" ]]; then
   run_cmd mdm check-connectivity
@@ -106,19 +99,21 @@ fi
 run_cmd mdm counts
 
 if [[ "$START_CONTAINER_JOBS" == "true" ]]; then
-  RESOURCE_GROUP="$(terraform_output resource_group_name)"
-  JOBS_JSON="$(terraform -chdir="$TF_ROOT" output -json mdm_container_app_job_names)"
-  python3 - "$JOBS_JSON" "$RESOURCE_GROUP" <<'PY'
-import json
+  RESOURCE_GROUP="${RESOURCE_GROUP:-$(terraform_output resource_group_name)}"
+  RESOURCE_GROUP="${RESOURCE_GROUP:-${NAME_PREFIX}-rg}"
+  python3 - "$NAME_PREFIX" "$RESOURCE_GROUP" <<'PY'
 import subprocess
 import sys
 
-jobs = json.loads(sys.argv[1])
-resource_group = sys.argv[2]
-for key in ("migrate", "run", "counts", "backfill_relationships", "sync_graph"):
-    name = jobs.get(key)
-    if not name:
-        continue
+prefix, resource_group = sys.argv[1:]
+jobs = {
+    "migrate": f"{prefix}-mdm-migrate",
+    "run": f"{prefix}-mdm-run",
+    "counts": f"{prefix}-mdm-counts",
+    "backfill_relationships": f"{prefix}-mdm-graph-load",
+    "sync_graph": f"{prefix}-mdm-graph-sync",
+}
+for key, name in jobs.items():
     print(f"Starting MDM Container Apps Job {key}: {name}", flush=True)
     subprocess.run(
         ["az", "containerapp", "job", "start", "--name", name, "--resource-group", resource_group],
