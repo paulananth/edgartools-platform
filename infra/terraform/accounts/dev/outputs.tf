@@ -84,6 +84,36 @@ output "snowflake_export_kms_key_arn" {
 }
 
 output "runner_credentials_secret_arn" {
-  description = "Dev empty runner credentials secret container ARN."
+  description = "Dev legacy empty operator credential container ARN. Normal AWS runtime uses sec_platform_runner service roles without access keys."
   value       = module.runtime.runner_credentials_secret_arn
+}
+
+output "mdm_db_endpoint" {
+  description = "Dev MDM PostgreSQL endpoint hostname (only set when var.mdm_enabled = true)."
+  value       = try(module.mdm[0].db_endpoint, null)
+}
+
+output "mdm_db_master_user_secret_arn" {
+  description = "Dev AWS-managed RDS master user secret ARN."
+  value       = try(module.mdm[0].db_master_user_secret_arn, null)
+}
+
+output "mdm_postgres_dsn_secret_arn" {
+  description = "Dev empty Secrets Manager container ARN for an operator-populated MDM PostgreSQL DSN."
+  value       = try(module.mdm[0].postgres_dsn_secret_arn, null)
+}
+
+output "mdm_neo4j_secret_arn" {
+  description = "Dev empty Secrets Manager container ARN for operator-populated Neo4j connection details."
+  value       = try(module.mdm[0].neo4j_secret_arn, null)
+}
+
+output "mdm_api_keys_secret_arn" {
+  description = "Dev empty Secrets Manager container ARN for operator-populated MDM API keys."
+  value       = try(module.mdm[0].api_keys_secret_arn, null)
+}
+
+output "mdm_db_security_group_id" {
+  description = "Dev MDM RDS security group ID."
+  value       = try(module.mdm[0].db_security_group_id, null)
 }

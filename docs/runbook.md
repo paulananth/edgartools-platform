@@ -77,7 +77,7 @@ Set these before running any steps. The exact names are used by scripts and dbt.
 
 | Variable | Used By | How to Get |
 |----------|---------|------------|
-| `AWS_PROFILE` or `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Terraform, CLI, ECR | AWS IAM |
+| `AWS_PROFILE` or `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Terraform, CLI, ECR | Use an admin profile for Terraform; use `sec_platform_deployer` for application rollout and executions |
 | `SNOWFLAKE_ACCOUNT` | Scripts, dbt | Snowflake admin — format: `ORGNAME-ACCOUNTNAME` |
 | `SNOWFLAKE_USER` | Scripts, dbt | Snowflake admin |
 | `SNOWFLAKE_PASSWORD` | Scripts, dbt | Snowflake admin |
@@ -103,6 +103,22 @@ Azure/Databricks migration variables:
 
 ## Credential Strategy
 
+AWS uses a split-principal model:
+
+- **AWS admin profile**: Applies `bootstrap-state`, AWS provisioning Terraform,
+  and AWS access Terraform in the target account.
+- **`sec_platform_deployer`**: Deploys the warehouse image, ECS task
+  definitions, Step Functions state machines, and starts executions. Prefer IAM
+  Identity Center or a CI OIDC role with this name. Use
+  `infra/scripts/create-deployer.sh` only as an IAM user fallback; store any
+  access key in a secret manager or CI secret store, rotate it regularly, and do
+  not use it for Terraform admin applies.
+- **`sec_platform_runner`**: Runtime is a family of service-assumed roles, not
+  an IAM user. The concrete roles are `sec_platform_runner_execution` for ECS
+  image pulls/logging/secret reads, `sec_platform_runner_task` for application
+  task permissions, and `sec_platform_runner_step_functions` for Step Functions
+  service execution. These roles have no long-lived access keys.
+
 Azure/Databricks uses managed identity for cloud resources and Key Vault for unavoidable
 secret values.
 
@@ -125,7 +141,8 @@ secret values.
 - **MDM Neo4j**: Terraform creates the Azure Files persistence shell only.
   Operators deploy the Neo4j Container App with `deploy-azure-runtime.sh` and
   store `mdm-neo4j`, `mdm-neo4j-uri`, `mdm-neo4j-user`,
-  `mdm-neo4j-password`, and `mdm-neo4j-auth` in Key Vault.
+  `mdm-neo4j-password`, and `mdm-neo4j-auth` in Key Vault. For external Neo4j
+  and Aura connection details, see `docs/neo4j.md`.
 - **MDM API keys**: Operators store API keys in Key Vault with
   `infra/scripts/bootstrap-azure-secrets.sh`. Container Apps use
   `mdm-api-keys-csv` as `MDM_API_KEYS`.
@@ -246,8 +263,10 @@ Acceptance before cutover:
 ## Step 1 — Terraform: Bootstrap State Bucket
 
 The state bucket must exist before any other Terraform root can initialise its backend.
+Run this with an AWS admin profile in the target account.
 
 ```bash
+export AWS_PROFILE=aws-admin-prod
 cd infra/terraform/bootstrap-state
 cp terraform.tfvars.example terraform.tfvars
 # Edit terraform.tfvars — set environment ("dev" or "prod") and aws_region
@@ -265,8 +284,10 @@ this in every subsequent backend configuration.
 Apply the AWS account root. This creates passive infrastructure: ECR, the ECS
 cluster and logs, S3 buckets, SNS topic, and empty Secrets Manager containers.
 It does not create IAM roles, task definitions, schedules, or workflow engines.
+Use the same AWS admin profile that created the state bucket.
 
 ```bash
+export AWS_PROFILE=aws-admin-prod
 cd infra/terraform/accounts/prod
 
 # Configure the remote state backend
@@ -309,8 +330,8 @@ terraform output snowflake_export_root_url          # used in Step 4
 ### Apply AWS Access Control
 
 Apply the separate AWS access root after the provisioning root. This creates the
-ECS task roles, Step Functions role, runner IAM user, S3/KMS/Secrets Manager
-policies, and Snowflake export trust policy.
+runtime service roles, S3/KMS/Secrets Manager policies, and Snowflake export
+trust policy. It does not create a runner IAM user.
 
 ```bash
 cd infra/terraform/access/aws/accounts/prod
@@ -321,11 +342,16 @@ cp terraform.tfvars.example terraform.tfvars
 terraform init -backend-config=backend.hcl
 terraform apply
 
-terraform output ecs_task_execution_role_arn
-terraform output ecs_task_role_arn
-terraform output step_functions_role_arn
+terraform output runner_execution_role_arn
+terraform output runner_task_role_arn
+terraform output runner_step_functions_role_arn
 terraform output snowflake_storage_role_arn
 ```
+
+The runner roles are named `sec_platform_runner_execution`,
+`sec_platform_runner_task`, and `sec_platform_runner_step_functions`. ECS tasks
+assume the first two through `ecs-tasks.amazonaws.com`; Step Functions assumes
+the third through `states.amazonaws.com`.
 
 ### Populate Secrets
 
@@ -339,17 +365,38 @@ aws secretsmanager put-secret-value \
   --secret-string "Your Name your@email.com"
 ```
 
-The runner credentials secret is also an empty container. Populate it only if a
-separate operator workflow needs a stored access key; the AWS application deploy
-script does not use this secret.
+The `edgartools-prod-runner-credentials` secret is a legacy empty container for
+backward-compatible operator storage only. Do not create runner access keys for
+normal runtime or deployment; runtime uses the `sec_platform_runner_*` service
+roles, and deployment uses `sec_platform_deployer`.
+
+---
+
+## Step 2a — Configure the AWS Application Deployer
+
+Create or map an operator principal named `sec_platform_deployer` after the AWS
+access root exists. Prefer IAM Identity Center for humans or a CI OIDC role for
+automation. The deployer needs application rollout permissions and scoped
+`iam:PassRole` only:
+
+- Pass `sec_platform_runner_execution` and `sec_platform_runner_task` only to
+  `ecs-tasks.amazonaws.com`.
+- Pass `sec_platform_runner_step_functions` only to `states.amazonaws.com`.
+- Push to the environment ECR repository, register ECS task definitions, create
+  or update `edgartools-<env>-*` Step Functions state machines, read the
+  Terraform state outputs, and start/inspect/stop executions.
+
+If a long-lived IAM user is unavoidable, use the fallback helper with admin
+credentials, then store the printed key in a secret manager or CI secret store
+and rotate it regularly:
 
 ```bash
-aws iam create-access-key --user-name edgartools-prod-runner \
-  | jq -r '{"access_key_id": .AccessKey.AccessKeyId, "secret_access_key": .AccessKey.SecretAccessKey}' \
-  | aws secretsmanager put-secret-value \
-    --secret-id edgartools-prod-runner-credentials \
-    --secret-string file:///dev/stdin
+export AWS_PROFILE=aws-admin-prod
+bash infra/scripts/create-deployer.sh prod us-east-1
 ```
+
+The helper creates `sec_platform_deployer`; the older
+`edgartools-<env>-deployer` naming is legacy.
 
 ---
 
@@ -365,6 +412,7 @@ Functions state machines.
 ```bash
 bash infra/scripts/deploy-aws-application.sh \
   --env prod \
+  --aws-profile sec_platform_deployer \
   --aws-region us-east-1 \
   --build-image \
   --publish-mode linux \
@@ -376,6 +424,7 @@ bash infra/scripts/deploy-aws-application.sh \
 ```bash
 IMAGE_REF_FILE=infra/aws-prod-image.txt
 bash infra/scripts/publish-warehouse-image-via-wsl.sh \
+  --aws-profile sec_platform_deployer \
   --aws-region us-east-1 \
   --ecr-repository edgartools-prod-warehouse \
   --image-tag "$(git rev-parse HEAD)" \
@@ -383,6 +432,7 @@ bash infra/scripts/publish-warehouse-image-via-wsl.sh \
 
 bash infra/scripts/deploy-aws-application.sh \
   --env prod \
+  --aws-profile sec_platform_deployer \
   --aws-region us-east-1 \
   --skip-build \
   --image-ref "$(cat "$IMAGE_REF_FILE")" \
@@ -500,6 +550,7 @@ STATE_MACHINE_ARN="$(
 )"
 
 aws stepfunctions start-execution \
+  --profile sec_platform_deployer \
   --state-machine-arn "$STATE_MACHINE_ARN" \
   --input '{"trigger":"operator","workflow":"bootstrap_recent_10"}'
 ```
@@ -508,6 +559,7 @@ For a bounded replay, pass a `cik_list` string to workflows that support it:
 
 ```bash
 aws stepfunctions start-execution \
+  --profile sec_platform_deployer \
   --state-machine-arn "$STATE_MACHINE_ARN" \
   --input '{"trigger":"operator","workflow":"bootstrap_recent_10","cik_list":"0000320193,0000789019"}'
 ```
@@ -649,12 +701,13 @@ SELECT * FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
 - **Terraform CLI should be `1.14.8` or another compatible `1.14.x` release.** The Snowflake
   roots require `~> 1.14.8`.
   due to provider version pins.
-- **After apply, populate both secrets manually** — `edgartools-prod-edgar-identity` and
-  `edgartools-prod-runner-credentials` (see Step 2).
-- **Runner IAM user is created in the AWS access root; its access key is created outside Terraform:**
-  ```bash
-  aws iam create-access-key --user-name edgartools-prod-runner
-  ```
+- **After apply, populate the EDGAR identity secret manually** —
+  `edgartools-prod-edgar-identity` (see Step 2).
+- **Do not create runner access keys.** The AWS access root creates
+  `sec_platform_runner_execution`, `sec_platform_runner_task`, and
+  `sec_platform_runner_step_functions` service roles. The
+  `edgartools-prod-runner-credentials` secret is retained only as a legacy
+  compatibility container for non-runtime operator storage.
 - **Capture `snowflake_manifest_sns_topic_arn`** from provisioning outputs — the bootstrap
   script needs it to subscribe Snowflake's Snowpipe to the SNS topic.
 - **`accounts/prod` has `prevent_destroy` on the bronze bucket.** `terraform destroy` will

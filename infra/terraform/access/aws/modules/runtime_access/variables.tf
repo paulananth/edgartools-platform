@@ -48,11 +48,6 @@ variable "edgar_identity_secret_arn" {
   type        = string
 }
 
-variable "runner_credentials_secret_arn" {
-  description = "Runner credentials secret ARN."
-  type        = string
-}
-
 variable "mdm_secret_arns" {
   description = "Optional MDM runtime secret ARNs readable by ECS task execution."
   type        = list(string)
@@ -74,12 +69,6 @@ variable "snowflake_bootstrap_enabled" {
 variable "snowflake_storage_external_id" {
   description = "External ID Snowflake must present when assuming the export-reader role."
   type        = string
-}
-
-variable "runner_user_force_destroy" {
-  description = "Whether Terraform may delete the runner IAM user even if out-of-band access keys exist."
-  type        = bool
-  default     = false
 }
 
 variable "tags" {

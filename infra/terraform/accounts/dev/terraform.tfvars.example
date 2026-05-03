@@ -1,8 +1,14 @@
 # The AWS dev root provisions passive infrastructure only:
 # VPC/subnets/security groups, S3/KMS, ECR, ECS cluster/logs, and empty secret
-# containers. IAM roles, runner users, and Snowflake trust policies live in
+# containers. IAM roles, service-assumed runner roles, and Snowflake trust policies live in
 # infra/terraform/access/aws/accounts/dev.
 
 # Optional: point at an existing empty EDGAR identity secret container instead of
 # letting this root create edgartools-dev-edgar-identity.
 # edgar_identity_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:edgartools-dev-edgar-identity"
+
+# Enable for the AWS MDM data plane used by ECS MDM jobs.
+# mdm_enabled              = true
+# mdm_private_subnet_cidrs = ["10.20.10.0/24", "10.20.11.0/24"]
+# mdm_db_instance_class    = "db.t3.micro"
+# mdm_db_engine_version    = null

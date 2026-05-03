@@ -49,11 +49,9 @@ module "runtime_access" {
   snowflake_export_prefix           = local.provisioning.snowflake_export_prefix
   snowflake_manifest_sns_topic_arn  = local.provisioning.snowflake_manifest_sns_topic_arn
   edgar_identity_secret_arn         = local.provisioning.edgar_identity_secret_arn
-  runner_credentials_secret_arn     = local.provisioning.runner_credentials_secret_arn
   mdm_secret_arns                   = local.mdm_secret_arns
   snowflake_manifest_subscriber_arn = local.subscriber_arn
   snowflake_bootstrap_enabled       = var.snowflake_bootstrap_enabled
   snowflake_storage_external_id     = local.storage_ext_id
-  runner_user_force_destroy         = var.runner_user_force_destroy
   tags                              = local.effective_tags
 }

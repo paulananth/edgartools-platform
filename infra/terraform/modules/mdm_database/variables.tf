@@ -47,8 +47,9 @@ variable "db_allocated_storage" {
 
 variable "db_engine_version" {
   type        = string
-  description = "PostgreSQL engine version."
-  default     = "15.5"
+  description = "Optional PostgreSQL engine version. When null, RDS selects the current default version for the region."
+  default     = null
+  nullable    = true
 }
 
 variable "db_name" {

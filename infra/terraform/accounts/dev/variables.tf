@@ -51,3 +51,28 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "mdm_enabled" {
+  description = "Whether to provision the MDM RDS + Secrets Manager stack."
+  type        = bool
+  default     = false
+}
+
+variable "mdm_private_subnet_cidrs" {
+  description = "CIDR blocks for the MDM private subnets (one per AZ)."
+  type        = list(string)
+  default     = ["10.20.10.0/24", "10.20.11.0/24"]
+}
+
+variable "mdm_db_instance_class" {
+  description = "RDS instance class for the MDM database."
+  type        = string
+  default     = "db.t3.micro"
+}
+
+variable "mdm_db_engine_version" {
+  description = "Optional RDS PostgreSQL engine version for MDM. Null lets RDS choose the current regional default."
+  type        = string
+  default     = null
+  nullable    = true
+}

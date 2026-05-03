@@ -55,61 +55,69 @@ pip install -e ".[s3,snowflake]" && pip install dbt-snowflake
 
 **2. Bootstrap AWS Terraform**
 ```bash
+export AWS_PROFILE=aws-admin-prod
+
 # Step 2a: create Terraform state bucket (one-time, per account)
 cd infra/terraform/bootstrap-state && terraform init && terraform apply
 
-# Step 2b: provision AWS infrastructure
+# Step 2b: provision passive AWS infrastructure
 cd infra/terraform/accounts/prod
 cp backend.hcl.example backend.hcl            # fill in state bucket name
-cp terraform.tfvars.example terraform.tfvars  # fill in edgar_identity_value
+cp terraform.tfvars.example terraform.tfvars
 terraform init -backend-config=backend.hcl
-terraform apply -target module.network_runtime
-terraform apply -target module.storage
-# (pause — build and push Docker image in step 3, then continue)
+terraform apply
+
+# Step 2c: provision AWS access and runner service roles
+cd ../../access/aws/accounts/prod
+cp backend.hcl.example backend.hcl
+cp terraform.tfvars.example terraform.tfvars
+terraform init -backend-config=backend.hcl
+terraform apply
 ```
 
-**3. Build and push Docker image**
+**3. Deploy AWS application components**
+
+Use `sec_platform_deployer` for application rollout. Runtime uses service-assumed
+roles named `sec_platform_runner_execution`, `sec_platform_runner_task`, and
+`sec_platform_runner_step_functions`; do not create a runner IAM user or runner
+access keys.
 
 Linux/CI (preferred):
 ```bash
-bash infra/scripts/publish-warehouse-image.sh \
+bash infra/scripts/deploy-aws-application.sh \
+  --env prod \
+  --aws-profile sec_platform_deployer \
   --aws-region <region> \
-  --ecr-repository edgartools-prod-warehouse \
-  --image-tag $(git rev-parse HEAD) \
-  --mode linux
+  --build-image \
+  --publish-mode linux
 ```
 
 Windows (Git Bash + WSL):
 ```bash
 bash infra/scripts/publish-warehouse-image-via-wsl.sh \
+  --aws-profile sec_platform_deployer \
   --aws-region <region> \
   --ecr-repository edgartools-prod-warehouse \
-  --image-tag $(git rev-parse HEAD)
+  --image-tag "$(git rev-parse HEAD)" \
+  --output-file infra/aws-prod-image.txt
+
+bash infra/scripts/deploy-aws-application.sh \
+  --env prod \
+  --aws-profile sec_platform_deployer \
+  --aws-region <region> \
+  --skip-build \
+  --image-ref "$(cat infra/aws-prod-image.txt)"
 ```
 
-**4. Complete AWS Terraform with the verified image digest**
-```bash
-# Add the @digest output from step 3 to terraform.tfvars:
-# container_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse@sha256:..."
-
-cd infra/terraform/accounts/prod
-terraform apply -target module.runtime   # provisions ECS + Step Functions
-terraform apply                          # full apply
-```
-
-**5. Populate AWS Secrets Manager secrets manually**
+**4. Populate AWS Secrets Manager secrets manually**
 ```bash
 # SEC EDGAR identity (required by SEC rate-limiting policy)
 aws secretsmanager put-secret-value \
   --secret-id edgartools-prod-edgar-identity \
   --secret-string "Your Name your@email.com"
-
-# Runner IAM credentials
-aws iam create-access-key --user-name edgartools-prod-runner
-# Put the keys into edgartools-prod-runner-credentials secret
 ```
 
-**6. Apply Snowflake Terraform**
+**5. Apply Snowflake Terraform**
 ```bash
 cd infra/terraform/snowflake/accounts/prod
 cp backend.hcl.example backend.hcl
@@ -118,7 +126,7 @@ terraform init -backend-config=backend.hcl
 terraform apply
 ```
 
-**7. Run the Snowflake bootstrap (two-pass)**
+**6. Run the Snowflake bootstrap (two-pass)**
 
 First pass — creates storage integration and emits `snowflake_storage_external_id`:
 ```bash
@@ -148,14 +156,14 @@ uv run python infra/snowflake/sql/bootstrap_native_pull.py \
   --validate-native-pull
 ```
 
-**8. Run the warehouse bootstrap**
+**7. Run the warehouse bootstrap**
 ```bash
 edgar-warehouse bootstrap
 ```
 
 This populates the S3 bronze layer with initial parquet exports.
 
-**9. Run dbt to create gold tables**
+**8. Run dbt to create gold tables**
 ```bash
 cd infra/snowflake/dbt/edgartools_gold
 dbt run
@@ -163,7 +171,7 @@ dbt run
 
 Gold dynamic tables are created in `EDGARTOOLS.EDGARTOOLS_GOLD`.
 
-**10. Deploy the dashboard**
+**9. Deploy the dashboard**
 
 Production (Snowflake Streamlit — requires Snowflake account access):
 ```bash

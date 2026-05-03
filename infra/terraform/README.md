@@ -49,23 +49,36 @@ modules/
   warehouse_runtime/     # ECR, ECS cluster/logs, SNS topic, empty secrets only
 ```
 
+## AWS Principal Model
+
+- Apply `bootstrap-state`, `accounts/<env>`, and `access/aws/accounts/<env>`
+  with an AWS admin profile in the target account.
+- Deploy images, task definitions, state machines, and executions with
+  `sec_platform_deployer`, preferably an IAM Identity Center permission set or
+  CI OIDC role. The IAM user helper in `infra/scripts/create-deployer.sh` is a
+  fallback for environments that cannot federate yet.
+- Runtime does not use a runner IAM user. It uses service-assumed roles named
+  `sec_platform_runner_execution`, `sec_platform_runner_task`, and
+  `sec_platform_runner_step_functions`.
+
 ## AWS Infra Apply
 
-1. Run `bootstrap-state` in the target account to create the Terraform state bucket.
+1. Run `bootstrap-state` with an admin profile in the target account to create
+   the Terraform state bucket.
 2. Copy `backend.hcl.example` to `backend.hcl` in the target account root.
 3. Run `terraform init -backend-config=backend.hcl`.
 4. Run `terraform plan` and `terraform apply`.
 5. Apply the AWS access root:
    `cd infra/terraform/access/aws/accounts/<env>`, copy `backend.hcl.example`
    and `terraform.tfvars.example`, then run `terraform init`, `terraform plan`,
-   and `terraform apply`.
+   and `terraform apply` with the same admin profile.
 6. Populate runtime secrets out-of-band if an operator workflow needs them:
    - `edgartools-<env>-edgar-identity`
-   - `edgartools-<env>-runner-credentials` only if a separate operator workflow
-     needs a stored AWS access key
-   - `edgartools-<env>/mdm/*` when the prod MDM database shell is enabled
+   - `edgartools-<env>-runner-credentials` only as a legacy compatibility
+     container for non-runtime operator credentials
+   - `edgartools-<env>/mdm/*` when the AWS MDM database shell is enabled
 7. Deploy active AWS application components from the operator script:
-   `bash infra/scripts/deploy-aws-application.sh --env dev --build-image`.
+   `bash infra/scripts/deploy-aws-application.sh --env dev --aws-profile sec_platform_deployer --build-image`.
 
 AWS Terraform no longer accepts warehouse image, workflow schedule, app command,
 Snowflake trust principal, IAM role, or EDGAR identity value inputs.
@@ -112,8 +125,10 @@ secret names, but it does not create `azurerm_key_vault_secret` values.
 For environments where IAM/RBAC/Snowflake grant resources already exist in the
 old provisioning states, migrate state before applying the new access roots:
 
-- Move AWS IAM, SNS topic policy, and runner user resources from
+- Move AWS IAM role and SNS topic policy resources from
   `infra/terraform/accounts/<env>` to `infra/terraform/access/aws/accounts/<env>`.
+  Retire any old `edgartools-<env>-runner` IAM user after its access keys have
+  been deleted; the new runner model is service-role based.
 - Move Azure managed identity, role assignments, and Key Vault access policies
   from `infra/terraform/azure/accounts/<env>` to
   `infra/terraform/access/azure/accounts/<env>`.
@@ -146,10 +161,13 @@ Run workload actions explicitly after infra has been applied:
 - Run MDM ingestion with `infra/scripts/run-mdm-pipeline.sh`; it starts the
   operator-managed Container Apps Jobs.
 - Deploy AWS application components with
-  `infra/scripts/deploy-aws-application.sh`. This script can build/push the
+  `infra/scripts/deploy-aws-application.sh --aws-profile sec_platform_deployer`.
+  This script can build/push the
   warehouse image, registers ECS task definitions, and creates or updates Step
-  Functions state machines using AWS CLI calls. IAM roles are read from the AWS
-  access root when available.
+  Functions state machines using AWS CLI calls. When MDM secret ARNs are present
+  in Terraform outputs, it also registers MDM task definitions and state
+  machines for migrate, connectivity, run, graph sync/verify, and counts.
+  Runner role ARNs are read from the AWS access root when available.
 - Publish a standalone AWS image with `infra/scripts/publish-warehouse-image.sh`
   when you need to separate image build from application rollout.
 - Run Databricks dbt with `infra/scripts/run-databricks-dbt.sh`.

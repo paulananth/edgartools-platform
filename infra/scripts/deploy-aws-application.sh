@@ -9,14 +9,15 @@ Usage:
 Deploys active AWS application components outside Terraform:
   - optional warehouse Docker image build and ECR push
   - ECS Fargate task definitions for warehouse task profiles
-  - Step Functions IAM role, log group, and state machines
+  - Step Functions log group and state machines
 
 Terraform outputs are used only for passive infrastructure discovery. Pass
 --no-terraform-discovery and explicit resource flags to avoid Terraform CLI use.
+Use the sec_platform_deployer AWS profile/principal for normal application rollout.
 
 Options:
   --env <dev|prod>                  Environment name. Required.
-  --aws-profile <profile>           AWS CLI profile.
+  --aws-profile <profile>           AWS CLI profile. Normal rollout profile: sec_platform_deployer.
   --aws-region <region>             AWS region. Default: AWS_REGION, AWS_DEFAULT_REGION, or us-east-1.
   --terraform-root <path>           AWS Terraform root. Default: infra/terraform/accounts/<env>.
   --access-terraform-root <path>    AWS access Terraform root. Default: infra/terraform/access/aws/accounts/<env>.
@@ -33,9 +34,9 @@ Options:
   --snowflake-export-bucket-name <name>
                                     Snowflake export bucket name.
   --edgar-identity-secret-arn <arn> EDGAR identity secret ARN.
-  --execution-role-arn <arn>        ECS task execution role ARN.
-  --task-role-arn <arn>             ECS task role ARN.
-  --step-functions-role-arn <arn>   Step Functions role ARN. Defaults to access root output.
+  --execution-role-arn <arn>        ECS task execution role ARN. Must be sec_platform_runner_execution.
+  --task-role-arn <arn>             ECS task role ARN. Must be sec_platform_runner_task.
+  --step-functions-role-arn <arn>   Step Functions role ARN. Must be sec_platform_runner_step_functions.
   --log-group-name <name>           ECS task log group name.
   --image-tag <tag>                 Image tag for build/push. Default: git short SHA.
   --image-ref <ref>                 Existing image ref to deploy. Skips build unless --build-image is set.
@@ -49,6 +50,15 @@ Options:
   --warehouse-runtime-mode <mode>   bronze_capture or infrastructure_validation. Default: bronze_capture.
   --warehouse-bronze-cik-limit <n>  Optional WAREHOUSE_BRONZE_CIK_LIMIT.
   --bootstrap-batch-concurrency <n> Distributed Map bootstrap concurrency. Default: 10.
+  --enable-mdm                      Deploy MDM ECS task definitions and state machines; fail if MDM secret ARNs are missing.
+  --skip-mdm                        Do not deploy MDM ECS task definitions or state machines.
+  --mdm-postgres-dsn-secret-arn <arn>
+                                    Secrets Manager ARN injected as MDM_DATABASE_URL.
+  --mdm-neo4j-secret-arn <arn>      Secrets Manager ARN injected as NEO4J_SECRET_JSON.
+  --mdm-api-keys-secret-arn <arn>   Secrets Manager ARN injected as MDM_API_KEYS.
+  --mdm-silver-duckdb <uri>         MDM_SILVER_DUCKDB. Default: s3://<warehouse-bucket>/warehouse/silver/sec/silver.duckdb.
+  --mdm-run-limit <n>               Default limit for mdm run state machine. Default: 100; 0 means no default limit.
+  --mdm-graph-limit <n>             Default limit for mdm graph backfill/sync. Default: 100; 0 means no default limit.
   --output-file <path>              Write deployment summary JSON.
   -h, --help                        Show this help.
 USAGE
@@ -115,6 +125,13 @@ DOCKERFILE_PATH=""
 WAREHOUSE_RUNTIME_MODE="bronze_capture"
 WAREHOUSE_BRONZE_CIK_LIMIT=""
 BOOTSTRAP_BATCH_CONCURRENCY=10
+MDM_DEPLOYMENT_MODE="auto"
+MDM_POSTGRES_DSN_SECRET_ARN=""
+MDM_NEO4J_SECRET_ARN=""
+MDM_API_KEYS_SECRET_ARN=""
+MDM_SILVER_DUCKDB=""
+MDM_RUN_LIMIT=100
+MDM_GRAPH_LIMIT=100
 OUTPUT_FILE=""
 
 while [[ $# -gt 0 ]]; do
@@ -152,6 +169,14 @@ while [[ $# -gt 0 ]]; do
     --warehouse-runtime-mode) WAREHOUSE_RUNTIME_MODE="${2:?}"; shift 2 ;;
     --warehouse-bronze-cik-limit) WAREHOUSE_BRONZE_CIK_LIMIT="${2:?}"; shift 2 ;;
     --bootstrap-batch-concurrency) BOOTSTRAP_BATCH_CONCURRENCY="${2:?}"; shift 2 ;;
+    --enable-mdm) MDM_DEPLOYMENT_MODE="enabled"; shift ;;
+    --skip-mdm) MDM_DEPLOYMENT_MODE="disabled"; shift ;;
+    --mdm-postgres-dsn-secret-arn) MDM_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
+    --mdm-neo4j-secret-arn) MDM_NEO4J_SECRET_ARN="${2:?}"; shift 2 ;;
+    --mdm-api-keys-secret-arn) MDM_API_KEYS_SECRET_ARN="${2:?}"; shift 2 ;;
+    --mdm-silver-duckdb) MDM_SILVER_DUCKDB="${2:?}"; shift 2 ;;
+    --mdm-run-limit) MDM_RUN_LIMIT="${2:?}"; shift 2 ;;
+    --mdm-graph-limit) MDM_GRAPH_LIMIT="${2:?}"; shift 2 ;;
     --output-file) OUTPUT_FILE="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -162,6 +187,8 @@ done
 [[ "$WAREHOUSE_RUNTIME_MODE" == "bronze_capture" || "$WAREHOUSE_RUNTIME_MODE" == "infrastructure_validation" ]] || fail "--warehouse-runtime-mode must be bronze_capture or infrastructure_validation"
 [[ "$PUSH_ATTEMPTS" =~ ^[1-9][0-9]*$ ]] || fail "--push-attempts must be a positive integer"
 [[ "$BOOTSTRAP_BATCH_CONCURRENCY" =~ ^[1-9][0-9]*$ ]] || fail "--bootstrap-batch-concurrency must be a positive integer"
+[[ "$MDM_RUN_LIMIT" =~ ^[0-9]+$ ]] || fail "--mdm-run-limit must be a non-negative integer"
+[[ "$MDM_GRAPH_LIMIT" =~ ^[0-9]+$ ]] || fail "--mdm-graph-limit must be a non-negative integer"
 if ! is_empty "$WAREHOUSE_BRONZE_CIK_LIMIT"; then
   [[ "$WAREHOUSE_BRONZE_CIK_LIMIT" =~ ^[0-9]+$ ]] || fail "--warehouse-bronze-cik-limit must be a non-negative integer"
 fi
@@ -179,6 +206,9 @@ SCRIPT_DIR="${REPO_ROOT}/infra/scripts"
 TF_ROOT="${TF_ROOT:-${REPO_ROOT}/infra/terraform/accounts/${ENVIRONMENT}}"
 ACCESS_TF_ROOT="${ACCESS_TF_ROOT:-${REPO_ROOT}/infra/terraform/access/aws/accounts/${ENVIRONMENT}}"
 NAME_PREFIX="${NAME_PREFIX:-edgartools-${ENVIRONMENT}}"
+RUNNER_EXECUTION_ROLE_NAME="sec_platform_runner_execution"
+RUNNER_TASK_ROLE_NAME="sec_platform_runner_task"
+RUNNER_STEP_FUNCTIONS_ROLE_NAME="sec_platform_runner_step_functions"
 BUILD_CONTEXT="${BUILD_CONTEXT:-${REPO_ROOT}}"
 DOCKERFILE_PATH="${DOCKERFILE_PATH:-${REPO_ROOT}/Dockerfile}"
 IMAGE_TAG="${IMAGE_TAG:-$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD 2>/dev/null || printf '%s' "$ENVIRONMENT")}"
@@ -220,6 +250,14 @@ tf_access_raw() {
   terraform -chdir="$ACCESS_TF_ROOT" output -raw "$1" 2>/dev/null || true
 }
 
+require_runner_role_name() {
+  local arn="$1" expected_name="$2" option_name="$3" actual_name
+  actual_name="${arn##*/}"
+  if [[ "$actual_name" != "$expected_name" ]]; then
+    fail "${option_name} must reference IAM role ${expected_name}; got ${arn}"
+  fi
+}
+
 csv_to_json_array() {
   python3 - "$1" <<'PY'
 import json
@@ -254,9 +292,13 @@ BRONZE_BUCKET_NAME="$(first_nonempty "$BRONZE_BUCKET_NAME" "$(tf_raw bronze_buck
 WAREHOUSE_BUCKET_NAME="$(first_nonempty "$WAREHOUSE_BUCKET_NAME" "$(tf_raw warehouse_bucket_name)")"
 SNOWFLAKE_EXPORT_BUCKET_NAME="$(first_nonempty "$SNOWFLAKE_EXPORT_BUCKET_NAME" "$(tf_raw snowflake_export_bucket_name)")"
 EDGAR_IDENTITY_SECRET_ARN="$(first_nonempty "$EDGAR_IDENTITY_SECRET_ARN" "$(tf_raw edgar_identity_secret_arn)")"
-EXECUTION_ROLE_ARN="$(first_nonempty "$EXECUTION_ROLE_ARN" "$(tf_access_raw ecs_task_execution_role_arn)" "$(tf_raw ecs_task_execution_role_arn)")"
-TASK_ROLE_ARN="$(first_nonempty "$TASK_ROLE_ARN" "$(tf_access_raw ecs_task_role_arn)" "$(tf_raw ecs_task_role_arn)")"
+EXECUTION_ROLE_ARN="$(first_nonempty "$EXECUTION_ROLE_ARN" "$(tf_access_raw runner_execution_role_arn)" "$(tf_access_raw ecs_task_execution_role_arn)" "$(tf_raw ecs_task_execution_role_arn)")"
+TASK_ROLE_ARN="$(first_nonempty "$TASK_ROLE_ARN" "$(tf_access_raw runner_task_role_arn)" "$(tf_access_raw ecs_task_role_arn)" "$(tf_raw ecs_task_role_arn)")"
+STEP_FUNCTIONS_ROLE_ARN="$(first_nonempty "$STEP_FUNCTIONS_ROLE_ARN" "$(tf_access_raw runner_step_functions_role_arn)" "$(tf_access_raw step_functions_role_arn)")"
 LOG_GROUP_NAME="$(first_nonempty "$LOG_GROUP_NAME" "$(tf_raw log_group_name)" "/aws/ecs/${NAME_PREFIX}-warehouse")"
+MDM_POSTGRES_DSN_SECRET_ARN="$(first_nonempty "$MDM_POSTGRES_DSN_SECRET_ARN" "$(tf_raw mdm_postgres_dsn_secret_arn)")"
+MDM_NEO4J_SECRET_ARN="$(first_nonempty "$MDM_NEO4J_SECRET_ARN" "$(tf_raw mdm_neo4j_secret_arn)")"
+MDM_API_KEYS_SECRET_ARN="$(first_nonempty "$MDM_API_KEYS_SECRET_ARN" "$(tf_raw mdm_api_keys_secret_arn)")"
 
 if is_empty "$PUBLIC_SUBNET_IDS_JSON"; then
   if ! is_empty "$PUBLIC_SUBNET_IDS_CSV"; then
@@ -286,10 +328,13 @@ if is_empty "$CLUSTER_NAME" && ! is_empty "$CLUSTER_ARN"; then
   CLUSTER_NAME="${CLUSTER_ARN##*/}"
 fi
 if is_empty "$EXECUTION_ROLE_ARN"; then
-  EXECUTION_ROLE_ARN="$(aws_cli iam get-role --role-name "${NAME_PREFIX}-warehouse-execution" --query 'Role.Arn' --output text 2>/dev/null || true)"
+  EXECUTION_ROLE_ARN="$(aws_cli iam get-role --role-name "$RUNNER_EXECUTION_ROLE_NAME" --query 'Role.Arn' --output text 2>/dev/null || true)"
 fi
 if is_empty "$TASK_ROLE_ARN"; then
-  TASK_ROLE_ARN="$(aws_cli iam get-role --role-name "${NAME_PREFIX}-warehouse-task" --query 'Role.Arn' --output text 2>/dev/null || true)"
+  TASK_ROLE_ARN="$(aws_cli iam get-role --role-name "$RUNNER_TASK_ROLE_NAME" --query 'Role.Arn' --output text 2>/dev/null || true)"
+fi
+if is_empty "$STEP_FUNCTIONS_ROLE_ARN"; then
+  STEP_FUNCTIONS_ROLE_ARN="$(aws_cli iam get-role --role-name "$RUNNER_STEP_FUNCTIONS_ROLE_NAME" --query 'Role.Arn' --output text 2>/dev/null || true)"
 fi
 if is_empty "$ECR_REPOSITORY_URL"; then
   ECR_REPOSITORY_URL="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION_NAME}.amazonaws.com/${NAME_PREFIX}-warehouse"
@@ -320,6 +365,10 @@ is_empty "$SNOWFLAKE_EXPORT_BUCKET_NAME" && fail "could not resolve Snowflake ex
 is_empty "$EDGAR_IDENTITY_SECRET_ARN" && fail "could not resolve EDGAR identity secret ARN; pass --edgar-identity-secret-arn"
 is_empty "$EXECUTION_ROLE_ARN" && fail "could not resolve ECS task execution role ARN; pass --execution-role-arn"
 is_empty "$TASK_ROLE_ARN" && fail "could not resolve ECS task role ARN; pass --task-role-arn"
+is_empty "$STEP_FUNCTIONS_ROLE_ARN" && fail "could not resolve Step Functions role ARN; apply the AWS access root or pass --step-functions-role-arn"
+require_runner_role_name "$EXECUTION_ROLE_ARN" "$RUNNER_EXECUTION_ROLE_NAME" "--execution-role-arn"
+require_runner_role_name "$TASK_ROLE_ARN" "$RUNNER_TASK_ROLE_NAME" "--task-role-arn"
+require_runner_role_name "$STEP_FUNCTIONS_ROLE_ARN" "$RUNNER_STEP_FUNCTIONS_ROLE_NAME" "--step-functions-role-arn"
 is_empty "$PUBLIC_SUBNET_IDS_JSON" && fail "could not resolve public subnet IDs; pass --public-subnet-ids"
 is_empty "$SECURITY_GROUP_IDS_JSON" && fail "could not resolve ECS security group IDs; pass --security-group-ids"
 if json_array_is_empty "$PUBLIC_SUBNET_IDS_JSON"; then
@@ -331,6 +380,34 @@ fi
 if [[ "$BUILD_IMAGE" != "true" ]] && is_empty "$IMAGE_REF"; then
   fail "--skip-build requires --image-ref"
 fi
+
+MDM_SILVER_DUCKDB="$(first_nonempty "$MDM_SILVER_DUCKDB" "s3://${WAREHOUSE_BUCKET_NAME}/warehouse/silver/sec/silver.duckdb")"
+DEPLOY_MDM=false
+missing_mdm_values=()
+is_empty "$MDM_POSTGRES_DSN_SECRET_ARN" && missing_mdm_values+=("mdm_postgres_dsn_secret_arn")
+is_empty "$MDM_NEO4J_SECRET_ARN" && missing_mdm_values+=("mdm_neo4j_secret_arn")
+is_empty "$MDM_API_KEYS_SECRET_ARN" && missing_mdm_values+=("mdm_api_keys_secret_arn")
+case "$MDM_DEPLOYMENT_MODE" in
+  enabled)
+    if [[ ${#missing_mdm_values[@]} -gt 0 ]]; then
+      fail "--enable-mdm requires MDM secret ARNs; missing: ${missing_mdm_values[*]}"
+    fi
+    DEPLOY_MDM=true
+    ;;
+  disabled)
+    DEPLOY_MDM=false
+    ;;
+  auto)
+    if [[ ${#missing_mdm_values[@]} -eq 0 ]]; then
+      DEPLOY_MDM=true
+    else
+      log "Skipping MDM task definitions/state machines; missing Terraform outputs or flags: ${missing_mdm_values[*]}"
+    fi
+    ;;
+  *)
+    fail "invalid internal MDM deployment mode: ${MDM_DEPLOYMENT_MODE}"
+    ;;
+esac
 
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/edgartools-aws-application-XXXXXX")"
 cleanup() {
@@ -449,9 +526,92 @@ register_task_definition() {
   printf '%s\n' "$task_def_arn"
 }
 
+write_mdm_container_definitions() {
+  local output_file="$1" profile="$2"
+  python3 - "$output_file" "$profile" "$IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
+    "$WAREHOUSE_BUCKET_NAME" "$MDM_SILVER_DUCKDB" "$MDM_POSTGRES_DSN_SECRET_ARN" \
+    "$MDM_NEO4J_SECRET_ARN" "$MDM_API_KEYS_SECRET_ARN" "$LOG_GROUP_NAME" <<'PY'
+import json
+import pathlib
+import sys
+
+(
+    output_file,
+    profile,
+    image_ref,
+    aws_region,
+    environment,
+    warehouse_bucket,
+    mdm_silver_duckdb,
+    mdm_database_secret_arn,
+    neo4j_secret_arn,
+    api_keys_secret_arn,
+    log_group_name,
+) = sys.argv[1:]
+
+environment_values = [
+    {"name": "AWS_REGION", "value": aws_region},
+    {"name": "WAREHOUSE_ENVIRONMENT", "value": environment},
+    {"name": "WAREHOUSE_STORAGE_ROOT", "value": f"s3://{warehouse_bucket}/warehouse"},
+    {"name": "MDM_SILVER_DUCKDB", "value": mdm_silver_duckdb},
+]
+
+container_definitions = [{
+    "name": "edgar-warehouse",
+    "image": image_ref,
+    "essential": True,
+    "command": ["mdm", "--help"],
+    "environment": environment_values,
+    "secrets": [
+        {"name": "MDM_DATABASE_URL", "valueFrom": mdm_database_secret_arn},
+        {"name": "NEO4J_SECRET_JSON", "valueFrom": neo4j_secret_arn},
+        {"name": "MDM_API_KEYS", "valueFrom": api_keys_secret_arn},
+    ],
+    "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+            "awslogs-group": log_group_name,
+            "awslogs-region": aws_region,
+            "awslogs-stream-prefix": f"mdm-{profile}",
+        },
+    },
+}]
+
+pathlib.Path(output_file).write_text(json.dumps(container_definitions, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
+register_mdm_task_definition() {
+  local profile="$1" cpu="$2" memory="$3" container_file task_def_arn
+  container_file="$(json_file "container-${profile}")"
+  write_mdm_container_definitions "$container_file" "$profile"
+  log "Registering ECS task definition ${NAME_PREFIX}-${profile}"
+  task_def_arn="$(
+    aws_cli ecs register-task-definition \
+      --family "${NAME_PREFIX}-${profile}" \
+      --requires-compatibilities FARGATE \
+      --network-mode awsvpc \
+      --cpu "$cpu" \
+      --memory "$memory" \
+      --execution-role-arn "$EXECUTION_ROLE_ARN" \
+      --task-role-arn "$TASK_ROLE_ARN" \
+      --container-definitions "file://${container_file}" \
+      --tags key=Environment,value="$ENVIRONMENT" key=ManagedBy,value=operator-script key=Project,value=edgartools key=TaskProfile,value="$profile" key=Runtime,value=mdm \
+      --query 'taskDefinition.taskDefinitionArn' \
+      --output text
+  )"
+  printf '%s\n' "$task_def_arn"
+}
+
 TASK_DEF_SMALL_ARN="$(register_task_definition small 512 1024)"
 TASK_DEF_MEDIUM_ARN="$(register_task_definition medium 1024 2048)"
 TASK_DEF_LARGE_ARN="$(register_task_definition large 2048 4096)"
+TASK_DEF_MDM_SMALL_ARN=""
+TASK_DEF_MDM_MEDIUM_ARN=""
+if [[ "$DEPLOY_MDM" == "true" ]]; then
+  TASK_DEF_MDM_SMALL_ARN="$(register_mdm_task_definition mdm-small 512 1024)"
+  TASK_DEF_MDM_MEDIUM_ARN="$(register_mdm_task_definition mdm-medium 1024 2048)"
+fi
 
 task_definition_for_profile() {
   case "$1" in
@@ -459,6 +619,14 @@ task_definition_for_profile() {
     medium) printf '%s\n' "$TASK_DEF_MEDIUM_ARN" ;;
     large) printf '%s\n' "$TASK_DEF_LARGE_ARN" ;;
     *) fail "unknown task profile: $1" ;;
+  esac
+}
+
+task_definition_for_mdm_workflow() {
+  case "$1" in
+    mdm_migrate|mdm_check_connectivity|mdm_verify_graph|mdm_counts) printf '%s\n' "$TASK_DEF_MDM_SMALL_ARN" ;;
+    mdm_run|mdm_backfill_relationships|mdm_sync_graph) printf '%s\n' "$TASK_DEF_MDM_MEDIUM_ARN" ;;
+    *) fail "unknown MDM workflow: $1" ;;
   esac
 }
 
@@ -497,122 +665,44 @@ workflow_cik_command_expression() {
   esac
 }
 
-write_step_functions_policy() {
-  local output_file="$1"
-  python3 - "$output_file" "$AWS_REGION_NAME" "$ACCOUNT_ID" "$BRONZE_BUCKET_NAME" \
-    "$EXECUTION_ROLE_ARN" "$TASK_ROLE_ARN" "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" <<'PY'
-import json
-import pathlib
-import sys
-
-(
-    output_file,
-    region,
-    account_id,
-    bronze_bucket,
-    execution_role_arn,
-    task_role_arn,
-    small_task_definition,
-    medium_task_definition,
-    large_task_definition,
-) = sys.argv[1:]
-
-policy = {
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": ["ecs:RunTask"],
-            "Resource": [small_task_definition, medium_task_definition, large_task_definition],
-        },
-        {
-            "Effect": "Allow",
-            "Action": ["ecs:DescribeTasks", "ecs:StopTask"],
-            "Resource": "*",
-        },
-        {
-            "Effect": "Allow",
-            "Action": ["iam:PassRole"],
-            "Resource": [execution_role_arn, task_role_arn],
-        },
-        {
-            "Effect": "Allow",
-            "Action": ["events:PutTargets", "events:PutRule", "events:DescribeRule"],
-            "Resource": f"arn:aws:events:{region}:{account_id}:rule/StepFunctionsGetEventsForECSTaskRule",
-        },
-        {
-            "Effect": "Allow",
-            "Action": [
-                "logs:CreateLogDelivery",
-                "logs:GetLogDelivery",
-                "logs:UpdateLogDelivery",
-                "logs:DeleteLogDelivery",
-                "logs:ListLogDeliveries",
-                "logs:PutResourcePolicy",
-                "logs:DescribeResourcePolicies",
-                "logs:DescribeLogGroups",
-            ],
-            "Resource": "*",
-        },
-        {
-            "Effect": "Allow",
-            "Action": ["s3:GetObject", "s3:ListBucket"],
-            "Resource": [
-                f"arn:aws:s3:::{bronze_bucket}",
-                f"arn:aws:s3:::{bronze_bucket}/*",
-            ],
-        },
-        {
-            "Effect": "Allow",
-            "Action": ["states:StartExecution", "states:DescribeExecution", "states:StopExecution"],
-            "Resource": "*",
-        },
-    ],
+mdm_workflow_command_expression() {
+  case "$1" in
+    mdm_migrate) printf '%s\n' "States.Array('mdm', 'migrate')" ;;
+    mdm_check_connectivity) printf '%s\n' "States.Array('mdm', 'check-connectivity', '--neo4j')" ;;
+    mdm_run)
+      if [[ "$MDM_RUN_LIMIT" -gt 0 ]]; then
+        printf '%s\n' "States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '${MDM_RUN_LIMIT}')"
+      else
+        printf '%s\n' "States.Array('mdm', 'run', '--entity-type', 'all')"
+      fi
+      ;;
+    mdm_backfill_relationships)
+      if [[ "$MDM_GRAPH_LIMIT" -gt 0 ]]; then
+        printf '%s\n' "States.Array('mdm', 'backfill-relationships', '--limit', '${MDM_GRAPH_LIMIT}')"
+      else
+        printf '%s\n' "States.Array('mdm', 'backfill-relationships')"
+      fi
+      ;;
+    mdm_sync_graph)
+      if [[ "$MDM_GRAPH_LIMIT" -gt 0 ]]; then
+        printf '%s\n' "States.Array('mdm', 'sync-graph', '--limit', '${MDM_GRAPH_LIMIT}')"
+      else
+        printf '%s\n' "States.Array('mdm', 'sync-graph')"
+      fi
+      ;;
+    mdm_verify_graph) printf '%s\n' "States.Array('mdm', 'verify-graph')" ;;
+    mdm_counts) printf '%s\n' "States.Array('mdm', 'counts')" ;;
+    *) fail "unknown MDM workflow: $1" ;;
+  esac
 }
 
-pathlib.Path(output_file).write_text(json.dumps(policy, indent=2) + "\n", encoding="utf-8")
-PY
-}
-
-ensure_step_functions_role() {
-  local role_name="$1" trust_file policy_file role_arn
-  trust_file="$(json_file step-functions-trust)"
-  policy_file="$(json_file step-functions-policy)"
-  python3 - "$trust_file" <<'PY'
-import json
-import pathlib
-import sys
-
-trust = {
-    "Version": "2012-10-17",
-    "Statement": [{
-        "Effect": "Allow",
-        "Principal": {"Service": "states.amazonaws.com"},
-        "Action": "sts:AssumeRole",
-    }],
-}
-pathlib.Path(sys.argv[1]).write_text(json.dumps(trust, indent=2) + "\n", encoding="utf-8")
-PY
-  if aws_cli iam get-role --role-name "$role_name" >/dev/null 2>&1; then
-    log "Updating Step Functions role ${role_name}"
-    aws_cli iam update-assume-role-policy \
-      --role-name "$role_name" \
-      --policy-document "file://${trust_file}" >/dev/null
-  else
-    log "Creating Step Functions role ${role_name}"
-    aws_cli iam create-role \
-      --role-name "$role_name" \
-      --assume-role-policy-document "file://${trust_file}" \
-      --tags Key=Environment,Value="$ENVIRONMENT" Key=ManagedBy,Value=operator-script Key=Project,Value=edgartools >/dev/null
-  fi
-
-  write_step_functions_policy "$policy_file"
-  aws_cli iam put-role-policy \
-    --role-name "$role_name" \
-    --policy-name "${NAME_PREFIX}-step-functions-runtime" \
-    --policy-document "file://${policy_file}" >/dev/null
-  role_arn="$(aws_cli iam get-role --role-name "$role_name" --query 'Role.Arn' --output text)"
-  printf '%s\n' "$role_arn"
+mdm_workflow_limit_command_expression() {
+  case "$1" in
+    mdm_run) printf '%s\n' "States.Array('mdm', 'run', '--entity-type', 'all', '--limit', States.Format('{}', $.limit))" ;;
+    mdm_backfill_relationships) printf '%s\n' "States.Array('mdm', 'backfill-relationships', '--limit', States.Format('{}', $.limit))" ;;
+    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'sync-graph', '--limit', States.Format('{}', $.limit))" ;;
+    *) return 0 ;;
+  esac
 }
 
 ensure_log_group() {
@@ -730,6 +820,91 @@ else:
         "Comment": "Run an EdgarTools warehouse workflow on ECS Fargate.",
         "StartAt": "RunWarehouseTask",
         "States": {"RunWarehouseTask": run_task_state(default_command)},
+    }
+
+pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
+write_mdm_workflow_definition() {
+  local output_file="$1" task_definition_arn="$2" default_command="$3" limit_command="$4"
+  python3 - "$output_file" "$CLUSTER_ARN" "$task_definition_arn" "edgar-warehouse" \
+    "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" "$default_command" "$limit_command" <<'PY'
+import json
+import pathlib
+import sys
+
+(
+    output_file,
+    cluster_arn,
+    task_definition_arn,
+    container_name,
+    subnet_json,
+    security_group_json,
+    default_command,
+    limit_command,
+) = sys.argv[1:]
+
+subnets = json.loads(subnet_json)
+security_groups = json.loads(security_group_json)
+
+def run_task_state(command_expression):
+    return {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::ecs:runTask.sync",
+        "Parameters": {
+            "LaunchType": "FARGATE",
+            "Cluster": cluster_arn,
+            "TaskDefinition": task_definition_arn,
+            "PropagateTags": "TASK_DEFINITION",
+            "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                    "AssignPublicIp": "ENABLED",
+                    "SecurityGroups": security_groups,
+                    "Subnets": subnets,
+                },
+            },
+            "Overrides": {
+                "ContainerOverrides": [{
+                    "Name": container_name,
+                    "Command.$": command_expression,
+                }],
+            },
+        },
+        "Retry": [{
+            "ErrorEquals": ["States.TaskFailed"],
+            "IntervalSeconds": 60,
+            "BackoffRate": 2.0,
+            "MaxAttempts": 2,
+        }],
+        "End": True,
+    }
+
+if limit_command:
+    definition = {
+        "Comment": "Run an EdgarTools MDM workflow on ECS Fargate with an optional numeric limit override.",
+        "StartAt": "HasLimitOverride",
+        "States": {
+            "HasLimitOverride": {
+                "Type": "Choice",
+                "Choices": [{
+                    "And": [
+                        {"Variable": "$.limit", "IsPresent": True},
+                        {"Variable": "$.limit", "IsNumeric": True},
+                    ],
+                    "Next": "RunMdmTaskWithLimit",
+                }],
+                "Default": "RunMdmTaskDefault",
+            },
+            "RunMdmTaskDefault": run_task_state(default_command),
+            "RunMdmTaskWithLimit": run_task_state(limit_command),
+        },
+    }
+else:
+    definition = {
+        "Comment": "Run an EdgarTools MDM workflow on ECS Fargate.",
+        "StartAt": "RunMdmTask",
+        "States": {"RunMdmTask": run_task_state(default_command)},
     }
 
 pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
@@ -871,10 +1046,7 @@ upsert_state_machine() {
   fi
 }
 
-STEP_FUNCTIONS_ROLE_ARN="$(first_nonempty "$STEP_FUNCTIONS_ROLE_ARN" "$(tf_access_raw step_functions_role_arn)")"
-if is_empty "$STEP_FUNCTIONS_ROLE_ARN"; then
-  STEP_FUNCTIONS_ROLE_ARN="$(ensure_step_functions_role "${NAME_PREFIX}-step-functions")"
-fi
+require_runner_role_name "$STEP_FUNCTIONS_ROLE_ARN" "$RUNNER_STEP_FUNCTIONS_ROLE_NAME" "--step-functions-role-arn"
 STEP_FUNCTIONS_LOG_GROUP_NAME="/aws/states/${NAME_PREFIX}-warehouse"
 STEP_FUNCTIONS_LOG_GROUP_ARN="$(ensure_log_group "$STEP_FUNCTIONS_LOG_GROUP_NAME")"
 LOGGING_CONFIGURATION_FILE="$(json_file step-functions-logging)"
@@ -917,13 +1089,34 @@ import sys
 
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
+
+if [[ "$DEPLOY_MDM" == "true" ]]; then
+  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts; do
+    task_definition_arn="$(task_definition_for_mdm_workflow "$workflow")"
+    command_expression="$(mdm_workflow_command_expression "$workflow")"
+    limit_command_expression="$(mdm_workflow_limit_command_expression "$workflow")"
+    definition_file="$(json_file "sfn-${workflow}")"
+    write_mdm_workflow_definition "$definition_file" "$task_definition_arn" "$command_expression" "$limit_command_expression"
+    state_machine_arn="$(upsert_state_machine "$workflow" "$definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+    printf ',\n' >> "$WORKFLOW_ARNS_FILE"
+    python3 - "$workflow" "$state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+import json
+import sys
+
+print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
+PY
+  done
+fi
 printf '\n}\n' >> "$WORKFLOW_ARNS_FILE"
 
 SUMMARY_FILE="$(json_file deployment-summary)"
 python3 - "$SUMMARY_FILE" "$ENVIRONMENT" "$AWS_REGION_NAME" "$NAME_PREFIX" "$IMAGE_REF" \
   "$CLUSTER_NAME" "$CLUSTER_ARN" "$ECR_REPOSITORY_URL" "$LOG_GROUP_NAME" \
   "$STEP_FUNCTIONS_ROLE_ARN" "$STEP_FUNCTIONS_LOG_GROUP_NAME" \
-  "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" "$WORKFLOW_ARNS_FILE" <<'PY'
+  "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
+  "$DEPLOY_MDM" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$MDM_SILVER_DUCKDB" \
+  "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_NEO4J_SECRET_ARN" "$MDM_API_KEYS_SECRET_ARN" \
+  "$WORKFLOW_ARNS_FILE" <<'PY'
 import json
 import pathlib
 import sys
@@ -943,8 +1136,24 @@ import sys
     small_task_definition,
     medium_task_definition,
     large_task_definition,
+    deploy_mdm,
+    mdm_small_task_definition,
+    mdm_medium_task_definition,
+    mdm_silver_duckdb,
+    mdm_database_secret_arn,
+    neo4j_secret_arn,
+    api_keys_secret_arn,
     workflow_arns_file,
 ) = sys.argv[1:]
+
+task_definitions = {
+    "small": small_task_definition,
+    "medium": medium_task_definition,
+    "large": large_task_definition,
+}
+if deploy_mdm == "true":
+    task_definitions["mdm_small"] = mdm_small_task_definition
+    task_definitions["mdm_medium"] = mdm_medium_task_definition
 
 summary = {
     "environment": environment,
@@ -961,13 +1170,18 @@ summary = {
         "step_functions": step_functions_log_group_name,
     },
     "step_functions_role_arn": step_functions_role_arn,
-    "task_definitions": {
-        "small": small_task_definition,
-        "medium": medium_task_definition,
-        "large": large_task_definition,
-    },
+    "task_definitions": task_definitions,
     "state_machines": json.loads(pathlib.Path(workflow_arns_file).read_text(encoding="utf-8")),
 }
+if deploy_mdm == "true":
+    summary["mdm"] = {
+        "silver_duckdb": mdm_silver_duckdb,
+        "secrets": {
+            "postgres_dsn": mdm_database_secret_arn,
+            "neo4j": neo4j_secret_arn,
+            "api_keys": api_keys_secret_arn,
+        },
+    }
 
 pathlib.Path(output_file).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
 PY

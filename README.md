@@ -9,6 +9,13 @@ after the AWS provisioning and access Terraform roots have been applied. That
 script builds/pushes the warehouse image when requested, registers ECS task
 definitions, and deploys Step Functions outside Terraform.
 
+AWS uses three principal classes. An admin profile applies the Terraform roots.
+`sec_platform_deployer` deploys images, task definitions, state machines, and
+starts executions. Runtime runs as service-assumed runner roles:
+`sec_platform_runner_execution`, `sec_platform_runner_task`, and
+`sec_platform_runner_step_functions`; no runner IAM user or long-lived runner
+access key is part of the normal path.
+
 ## Architecture
 
 ```
@@ -37,6 +44,7 @@ flowchart LR
 ## Quick Start
 
 See [docs/runbook.md](docs/runbook.md) for complete end-to-end setup.
+For MDM graph configuration, see [docs/neo4j.md](docs/neo4j.md).
 
 ## Structure
 

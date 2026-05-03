@@ -14,6 +14,9 @@ locals {
   )
   aws_region                  = data.aws_region.current.region
   ecs_task_definition_pattern = "arn:aws:ecs:${local.aws_region}:${data.aws_caller_identity.current.account_id}:task-definition/${var.name_prefix}-*:*"
+  runner_execution_role_name  = "sec_platform_runner_execution"
+  runner_task_role_name       = "sec_platform_runner_task"
+  runner_sfn_role_name        = "sec_platform_runner_step_functions"
   tags = merge(
     {
       Environment = var.environment
@@ -143,7 +146,7 @@ resource "aws_iam_role_policy" "snowflake_storage_reader" {
 }
 
 resource "aws_iam_role" "ecs_task_execution_warehouse" {
-  name = "${var.name_prefix}-warehouse-execution"
+  name = local.runner_execution_role_name
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -158,7 +161,12 @@ resource "aws_iam_role" "ecs_task_execution_warehouse" {
     ]
   })
 
-  tags = local.tags
+  tags = merge(local.tags, {
+    Name         = local.runner_execution_role_name
+    Principal    = "sec_platform_runner"
+    RunnerRole   = "execution"
+    ServiceTrust = "ecs-tasks.amazonaws.com"
+  })
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_task_execution_warehouse_managed" {
@@ -167,7 +175,7 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_warehouse_managed"
 }
 
 resource "aws_iam_role_policy" "ecs_task_execution_warehouse_secret" {
-  name = "${var.name_prefix}-warehouse-execution-secret"
+  name = "sec_platform_runner_execution_secret"
   role = aws_iam_role.ecs_task_execution_warehouse.id
 
   policy = jsonencode({
@@ -183,7 +191,7 @@ resource "aws_iam_role_policy" "ecs_task_execution_warehouse_secret" {
 }
 
 resource "aws_iam_role" "ecs_task_warehouse" {
-  name = "${var.name_prefix}-warehouse-task"
+  name = local.runner_task_role_name
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -198,11 +206,16 @@ resource "aws_iam_role" "ecs_task_warehouse" {
     ]
   })
 
-  tags = local.tags
+  tags = merge(local.tags, {
+    Name         = local.runner_task_role_name
+    Principal    = "sec_platform_runner"
+    RunnerRole   = "task"
+    ServiceTrust = "ecs-tasks.amazonaws.com"
+  })
 }
 
 resource "aws_iam_role_policy" "ecs_task_warehouse_storage" {
-  name = "${var.name_prefix}-warehouse-storage"
+  name = "sec_platform_runner_task_storage"
   role = aws_iam_role.ecs_task_warehouse.id
 
   policy = jsonencode({
@@ -266,7 +279,7 @@ resource "aws_iam_role_policy" "ecs_task_warehouse_storage" {
 }
 
 resource "aws_iam_role" "step_functions" {
-  name = "${var.name_prefix}-step-functions"
+  name = local.runner_sfn_role_name
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -281,11 +294,16 @@ resource "aws_iam_role" "step_functions" {
     ]
   })
 
-  tags = merge(local.tags, { Name = "${var.name_prefix}-step-functions", Role = "step-functions" })
+  tags = merge(local.tags, {
+    Name         = local.runner_sfn_role_name
+    Principal    = "sec_platform_runner"
+    RunnerRole   = "step-functions"
+    ServiceTrust = "states.amazonaws.com"
+  })
 }
 
 resource "aws_iam_role_policy" "step_functions_runtime" {
-  name = "${var.name_prefix}-step-functions-runtime"
+  name = "sec_platform_runner_step_functions_runtime"
   role = aws_iam_role.step_functions.id
 
   policy = jsonencode({
@@ -313,6 +331,11 @@ resource "aws_iam_role_policy" "step_functions_runtime" {
           aws_iam_role.ecs_task_execution_warehouse.arn,
           aws_iam_role.ecs_task_warehouse.arn
         ]
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = "ecs-tasks.amazonaws.com"
+          }
+        }
       },
       {
         Effect = "Allow"
@@ -356,31 +379,6 @@ resource "aws_iam_role_policy" "step_functions_runtime" {
           "states:StopExecution"
         ]
         Resource = "*"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_user" "runner" {
-  name          = "${var.name_prefix}-runner"
-  force_destroy = var.runner_user_force_destroy
-  tags          = merge(local.tags, { Name = "${var.name_prefix}-runner", Role = "runner" })
-}
-
-resource "aws_iam_user_policy" "runner_credentials" {
-  name = "${var.name_prefix}-runner-credentials"
-  user = aws_iam_user.runner.name
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:PutSecretValue"
-        ]
-        Resource = var.runner_credentials_secret_arn
       }
     ]
   })
