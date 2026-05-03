@@ -1,6 +1,6 @@
 # The AWS prod root provisions passive infrastructure only:
 # VPC/subnets/security groups, S3/KMS, ECR, ECS cluster/logs, RDS infrastructure
-# when enabled, and empty secret containers. IAM roles, runner users, and
+# when enabled, and empty secret containers. IAM roles, service-assumed runner roles, and
 # Snowflake trust policies live in infra/terraform/access/aws/accounts/prod.
 
 # Optional: point at an existing empty EDGAR identity secret container instead of

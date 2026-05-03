@@ -1,15 +1,30 @@
+output "runner_execution_role_arn" {
+  description = "Dev sec_platform_runner_execution role ARN for ECS task image pulls, logging, and runtime secret reads."
+  value       = module.runtime_access.runner_execution_role_arn
+}
+
+output "runner_task_role_arn" {
+  description = "Dev sec_platform_runner_task role ARN for warehouse application task permissions."
+  value       = module.runtime_access.runner_task_role_arn
+}
+
+output "runner_step_functions_role_arn" {
+  description = "Dev sec_platform_runner_step_functions role ARN assumed by Step Functions state machines."
+  value       = module.runtime_access.runner_step_functions_role_arn
+}
+
 output "ecs_task_execution_role_arn" {
-  description = "Dev ECS task execution role ARN for operator-managed task definitions."
+  description = "Dev compatibility output for the sec_platform_runner_execution role ARN."
   value       = module.runtime_access.ecs_task_execution_role_arn
 }
 
 output "ecs_task_role_arn" {
-  description = "Dev ECS task role ARN for operator-managed task definitions."
+  description = "Dev compatibility output for the sec_platform_runner_task role ARN."
   value       = module.runtime_access.ecs_task_role_arn
 }
 
 output "step_functions_role_arn" {
-  description = "Dev Step Functions execution role ARN for operator-managed state machines."
+  description = "Dev compatibility output for the sec_platform_runner_step_functions role ARN."
   value       = module.runtime_access.step_functions_role_arn
 }
 
@@ -36,14 +51,4 @@ output "snowflake_storage_external_id" {
 output "snowflake_manifest_subscriber_arn" {
   description = "Dev Snowflake-managed AWS principal ARN used by AWS access, if known."
   value       = local.subscriber_arn
-}
-
-output "runner_user_name" {
-  description = "Dev out-of-band runner IAM user name."
-  value       = module.runtime_access.runner_user_name
-}
-
-output "runner_user_arn" {
-  description = "Dev runner IAM user ARN."
-  value       = module.runtime_access.runner_user_arn
 }

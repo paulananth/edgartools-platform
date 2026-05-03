@@ -67,8 +67,8 @@ resource "aws_ecs_cluster" "warehouse" {
 
 resource "aws_secretsmanager_secret" "runner_credentials" {
   name                    = "${local.name_prefix}-runner-credentials"
-  description             = "Empty runner credential secret container. Populate the value out-of-band if an operator workflow needs it."
+  description             = "Legacy empty operator credential container. Do not use for sec_platform_runner runtime roles."
   recovery_window_in_days = 0
 
-  tags = merge(local.tags, { Name = "${local.name_prefix}-runner-credentials", Role = "runner" })
+  tags = merge(local.tags, { Name = "${local.name_prefix}-runner-credentials", Legacy = "runner-credentials" })
 }

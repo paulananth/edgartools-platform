@@ -57,12 +57,6 @@ variable "snowflake_storage_external_id" {
   default     = null
 }
 
-variable "runner_user_force_destroy" {
-  description = "Whether Terraform may delete the runner IAM user even if out-of-band access keys exist."
-  type        = bool
-  default     = false
-}
-
 variable "tags" {
   description = "Additional tags applied to prod access-control resources."
   type        = map(string)

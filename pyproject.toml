@@ -71,4 +71,5 @@ Source = "https://github.com/paulananth/edgartools-platform"
 include = [
   "edgar_warehouse/**/*.py",
   "edgar_warehouse/config/*.properties",
+  "edgar_warehouse/mdm/migrations/*.sql",
 ]

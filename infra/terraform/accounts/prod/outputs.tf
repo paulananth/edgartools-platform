@@ -84,7 +84,7 @@ output "snowflake_export_kms_key_arn" {
 }
 
 output "runner_credentials_secret_arn" {
-  description = "Prod empty runner credentials secret container ARN."
+  description = "Prod legacy empty operator credential container ARN. Normal AWS runtime uses sec_platform_runner service roles without access keys."
   value       = module.runtime.runner_credentials_secret_arn
 }
 

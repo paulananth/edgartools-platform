@@ -377,13 +377,6 @@ elif mode == "prod-runtime-force":
         count=1,
         flags=re.MULTILINE,
     )
-    text = re.sub(
-        r"^(\s*runner_user_force_destroy\s*=\s*)false\s*$",
-        r"\1true",
-        text,
-        count=1,
-        flags=re.MULTILINE,
-    )
 elif mode == "mdm-destructive-delete":
     text = re.sub(
         r"^(\s*skip_final_snapshot\s*=\s*)false\s*$",

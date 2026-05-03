@@ -39,6 +39,6 @@ output "log_group_name" {
 }
 
 output "runner_credentials_secret_arn" {
-  description = "Secrets Manager ARN for the empty runner credential container. Populate a value out-of-band only if an operator workflow needs it."
+  description = "Secrets Manager ARN for a legacy empty operator credential container. Normal AWS runtime uses sec_platform_runner service roles without access keys."
   value       = aws_secretsmanager_secret.runner_credentials.arn
 }
