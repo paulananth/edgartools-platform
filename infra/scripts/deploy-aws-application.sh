@@ -226,10 +226,12 @@ if is_empty "$BUILD_IMAGE"; then
 fi
 
 aws_cli() {
+  # MSYS_NO_PATHCONV=1 prevents Git Bash from translating /aws/states/... style
+  # CloudWatch log group names into Windows filesystem paths (e.g. C:/Program Files/Git/aws/...).
   if [[ -n "$AWS_PROFILE_NAME" ]]; then
-    aws --profile "$AWS_PROFILE_NAME" --region "$AWS_REGION_NAME" "$@"
+    MSYS_NO_PATHCONV=1 aws --profile "$AWS_PROFILE_NAME" --region "$AWS_REGION_NAME" "$@"
   else
-    aws --region "$AWS_REGION_NAME" "$@"
+    MSYS_NO_PATHCONV=1 aws --region "$AWS_REGION_NAME" "$@"
   fi
 }
 
@@ -423,6 +425,30 @@ json_file() {
   mktemp "${TMP_DIR}/$1-XXXXXX.json"
 }
 
+# On Windows Git Bash, /tmp is remapped by the shell but AWS CLI (native exe) reads
+# file:// paths as literal Windows paths (C:\tmp\...), not the remapped location.
+# cygpath -m converts /tmp/foo → C:/Users/.../AppData/Local/Temp/foo, which AWS CLI
+# can resolve correctly on both Windows and Unix.
+file_url() {
+  if command -v cygpath &>/dev/null 2>&1; then
+    printf 'file://%s' "$(cygpath -m "$1")"
+  else
+    printf 'file://%s' "$1"
+  fi
+}
+
+# Returns a native-OS path suitable for passing to Python on Windows.
+# On Windows Git Bash, cygpath -w converts /tmp/foo → C:\Users\...\AppData\Local\Temp\foo
+# so Python (which maps /tmp → C:\tmp\) can find the file.
+# On Linux/Mac this is a no-op.
+win_path() {
+  if command -v cygpath &>/dev/null 2>&1; then
+    cygpath -w "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
+
 ECR_REPOSITORY_NAME="${ECR_REPOSITORY_URL##*/}"
 
 if [[ "$BUILD_IMAGE" == "true" ]]; then
@@ -450,7 +476,10 @@ log "Deploying image reference ${IMAGE_REF}"
 
 write_container_definitions() {
   local output_file="$1" profile="$2"
-  python3 - "$output_file" "$profile" "$IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
+  # MSYS_NO_PATHCONV=1 prevents Git Bash from translating /aws/ecs/... log group names
+  # into Windows filesystem paths. win_path() converts output_file to native Windows
+  # form so Python can locate it regardless of /tmp remapping differences.
+  MSYS_NO_PATHCONV=1 python3 - "$(win_path "$output_file")" "$profile" "$IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
     "$WAREHOUSE_RUNTIME_MODE" "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" \
     "$SNOWFLAKE_EXPORT_BUCKET_NAME" "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" \
     "$WAREHOUSE_BRONZE_CIK_LIMIT" <<'PY'
@@ -522,7 +551,7 @@ register_task_definition() {
       --memory "$memory" \
       --execution-role-arn "$EXECUTION_ROLE_ARN" \
       --task-role-arn "$TASK_ROLE_ARN" \
-      --container-definitions "file://${container_file}" \
+      --container-definitions "$(file_url "$container_file")" \
       --tags key=Environment,value="$ENVIRONMENT" key=ManagedBy,value=operator-script key=Project,value=edgartools key=TaskProfile,value="$profile" key=Runtime,value=warehouse \
       --query 'taskDefinition.taskDefinitionArn' \
       --output text
@@ -532,7 +561,7 @@ register_task_definition() {
 
 write_mdm_container_definitions() {
   local output_file="$1" profile="$2"
-  python3 - "$output_file" "$profile" "$IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
+  MSYS_NO_PATHCONV=1 python3 - "$(win_path "$output_file")" "$profile" "$IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
     "$WAREHOUSE_BUCKET_NAME" "$MDM_SILVER_DUCKDB" "$MDM_POSTGRES_DSN_SECRET_ARN" \
     "$MDM_NEO4J_SECRET_ARN" "$MDM_API_KEYS_SECRET_ARN" "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" <<'PY'
 import json
@@ -601,7 +630,7 @@ register_mdm_task_definition() {
       --memory "$memory" \
       --execution-role-arn "$EXECUTION_ROLE_ARN" \
       --task-role-arn "$TASK_ROLE_ARN" \
-      --container-definitions "file://${container_file}" \
+      --container-definitions "$(file_url "$container_file")" \
       --tags key=Environment,value="$ENVIRONMENT" key=ManagedBy,value=operator-script key=Project,value=edgartools key=TaskProfile,value="$profile" key=Runtime,value=mdm \
       --query 'taskDefinition.taskDefinitionArn' \
       --output text
@@ -1034,9 +1063,9 @@ upsert_state_machine() {
     aws_cli stepfunctions create-state-machine \
       --name "$name" \
       --role-arn "$role_arn" \
-      --definition "file://${definition_file}" \
+      --definition "$(file_url "$definition_file")" \
       --type STANDARD \
-      --logging-configuration "file://${logging_file}" \
+      --logging-configuration "$(file_url "$logging_file")" \
       --tags key=Environment,value="$ENVIRONMENT" key=ManagedBy,value=operator-script key=Project,value=edgartools key=Workflow,value="$workflow" \
       --query 'stateMachineArn' \
       --output text
@@ -1045,8 +1074,8 @@ upsert_state_machine() {
     aws_cli stepfunctions update-state-machine \
       --state-machine-arn "$arn" \
       --role-arn "$role_arn" \
-      --definition "file://${definition_file}" \
-      --logging-configuration "file://${logging_file}" >/dev/null
+      --definition "$(file_url "$definition_file")" \
+      --logging-configuration "$(file_url "$logging_file")" >/dev/null
     aws_cli stepfunctions tag-resource \
       --resource-arn "$arn" \
       --tags key=Environment,value="$ENVIRONMENT" key=ManagedBy,value=operator-script key=Project,value=edgartools key=Workflow,value="$workflow" >/dev/null
