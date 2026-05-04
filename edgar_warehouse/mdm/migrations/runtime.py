@@ -330,6 +330,7 @@ _MSSQL_SCHEMA_STATEMENTS = [
     "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_change_log_pending') CREATE INDEX idx_change_log_pending ON mdm_change_log(exported_at) WHERE exported_at IS NULL",
     "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_rel_instance_dedup') CREATE INDEX idx_rel_instance_dedup ON mdm_relationship_instance(source_entity_id, target_entity_id, rel_type_id)",
     "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_rel_instance_pending_sync') CREATE INDEX idx_rel_instance_pending_sync ON mdm_relationship_instance(graph_synced_at) WHERE graph_synced_at IS NULL",
+    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_mdm_company_tracking_status') CREATE INDEX idx_mdm_company_tracking_status ON mdm_company(tracking_status)",
 ]
 
 
@@ -342,6 +343,7 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
                 conn.execute(text(statement))
     else:
         _apply_sql_file(engine, "001_initial_schema.sql")
+        _apply_sql_file(engine, "003_tracking_status_index.sql")
 
     if seed:
         with Session(engine) as session:

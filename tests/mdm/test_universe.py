@@ -110,3 +110,45 @@ def test_bulk_upsert_handles_missing_ticker_gracefully(engine):
     count = bulk_upsert_universe(engine, rows)
     assert count == 1
     assert get_tracked_ciks(engine, "active") == [9999]
+
+
+# ---------------------------------------------------------------------------
+# Migration 003 tests
+# ---------------------------------------------------------------------------
+
+def test_migration_003_sql_applies_to_sqlite(engine):
+    """003_tracking_status_index.sql must be valid SQL that SQLite can run."""
+    from pathlib import Path
+    sql_path = (
+        Path(__file__).parent.parent.parent
+        / "edgar_warehouse" / "mdm" / "migrations" / "003_tracking_status_index.sql"
+    )
+    assert sql_path.exists(), "Migration file 003_tracking_status_index.sql must exist"
+    sql = sql_path.read_text(encoding="utf-8").strip()
+    assert sql, "Migration file must not be empty"
+    with engine.begin() as conn:
+        conn.execute(text(sql))
+
+
+def test_migration_003_is_idempotent(engine):
+    """Applying migration 003 twice must not raise."""
+    from pathlib import Path
+    sql_path = (
+        Path(__file__).parent.parent.parent
+        / "edgar_warehouse" / "mdm" / "migrations" / "003_tracking_status_index.sql"
+    )
+    sql = sql_path.read_text(encoding="utf-8").strip()
+    with engine.begin() as conn:
+        conn.execute(text(sql))
+    with engine.begin() as conn:
+        conn.execute(text(sql))
+
+
+def test_migrate_runtime_includes_003_for_postgres_path():
+    """migrate() must call _apply_sql_file for 003 on non-MSSQL dialects."""
+    import inspect
+    from edgar_warehouse.mdm.migrations import runtime as rt
+    source = inspect.getsource(rt.migrate)
+    assert "003_tracking_status_index.sql" in source, (
+        "migrate() must call _apply_sql_file(engine, '003_tracking_status_index.sql')"
+    )
