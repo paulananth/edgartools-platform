@@ -1217,6 +1217,7 @@ def _apply_submission_snapshot_to_silver(
             "last_error_message": None,
         }
     )
+    _sync_mdm_tracking_status(cik, tracking_status)
     return {
         "raw_writes": raw_writes,
         "rows_written": rows_written,
@@ -1934,6 +1935,38 @@ def _parse_cik(value: Any) -> int:
     return parse_cik(value)
 
 
+def _get_mdm_tracked_ciks(status_filter: str) -> list[int]:
+    """Query MDM for tracked CIKs when MDM_DATABASE_URL is configured.
+
+    Returns empty list — not an error — when MDM is unconfigured or unreachable,
+    so callers fall through to the DuckDB path.
+    """
+    import os
+    url = os.environ.get("MDM_DATABASE_URL")
+    if not url:
+        return []
+    try:
+        from edgar_warehouse.mdm.database import get_engine
+        from edgar_warehouse.mdm.universe import get_tracked_ciks
+        return get_tracked_ciks(get_engine(url), status_filter=status_filter)
+    except Exception:
+        return []
+
+
+def _sync_mdm_tracking_status(cik: int, status: str) -> None:
+    """Fire-and-forget: update mdm_company.tracking_status when MDM_DATABASE_URL is set."""
+    import os
+    url = os.environ.get("MDM_DATABASE_URL")
+    if not url:
+        return
+    try:
+        from edgar_warehouse.mdm.database import get_engine
+        from edgar_warehouse.mdm.universe import update_tracking_status
+        update_tracking_status(get_engine(url), cik, status)
+    except Exception:
+        pass
+
+
 def _resolve_target_ciks(
     *,
     db: SilverDatabase,
@@ -1943,7 +1976,7 @@ def _resolve_target_ciks(
 ) -> list[int]:
     if raw_ciks:
         return [_parse_cik(value) for value in raw_ciks]
-    ciks = db.get_tracked_universe_ciks(status_filter=tracking_status_filter)
+    ciks = _get_mdm_tracked_ciks(tracking_status_filter) or db.get_tracked_universe_ciks(status_filter=tracking_status_filter)
     if ciks:
         return ciks
     raise WarehouseRuntimeError(f"{command_name} requires --cik-list or a seeded tracked universe")
@@ -1961,7 +1994,7 @@ def _resolve_bootstrap_target_ciks(
 ) -> tuple[list[int], dict[str, Any] | None]:
     if raw_ciks:
         return [_parse_cik(value) for value in raw_ciks], None
-    ciks = db.get_tracked_universe_ciks(status_filter=tracking_status_filter)
+    ciks = _get_mdm_tracked_ciks(tracking_status_filter) or db.get_tracked_universe_ciks(status_filter=tracking_status_filter)
     if ciks:
         return ciks, None
 
@@ -1971,7 +2004,7 @@ def _resolve_bootstrap_target_ciks(
         sync_run_id=sync_run_id,
         fetch_date=fetch_date,
     )
-    ciks = db.get_tracked_universe_ciks(status_filter=tracking_status_filter)
+    ciks = _get_mdm_tracked_ciks(tracking_status_filter) or db.get_tracked_universe_ciks(status_filter=tracking_status_filter)
     if not ciks:
         raise WarehouseRuntimeError(f"{command_name} could not seed a tracked universe from SEC reference data")
     return ciks, reference_result
@@ -2022,7 +2055,7 @@ def _filter_ciks_to_universe(impacted_ciks: list[int], db: "SilverDatabase | Non
     """
     if db is None:
         return impacted_ciks
-    tracked = db.get_tracked_universe_ciks(status_filter="active")
+    tracked = _get_mdm_tracked_ciks("active") or db.get_tracked_universe_ciks(status_filter="active")
     if not tracked:
         return impacted_ciks  # cold-start: empty universe, pass all through
     tracked_set = set(tracked)

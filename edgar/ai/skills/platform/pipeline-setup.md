@@ -41,6 +41,101 @@ The `edgar-warehouse` CLI runs in AWS ECS Fargate (containerized), reads from SE
 | External dashboard | `examples/dashboard/edgar_universe_dashboard.py` |
 | Batch scripts | `scripts/batch/` |
 | Setup runbook | `docs/runbook.md` |
+| MDM universe client | `edgar_warehouse/mdm/universe.py` |
+| MDM CLI commands | `edgar_warehouse/mdm/cli.py` |
+
+---
+
+## MDM Setup
+
+The MDM system (Master Data Management) owns the canonical company/adviser/person/fund registry and the **tracked universe** — the list of CIKs the warehouse processes. It uses PostgreSQL (prod) or Azure SQL (Azure path) as its relational store and Neo4j AuraDB for the graph layer.
+
+**Required env vars:**
+```bash
+export MDM_DATABASE_URL="postgresql://user:pass@host:5432/mdm"  # PostgreSQL
+# OR for Azure SQL:
+export MDM_DATABASE_URL="mssql+pyodbc://user:pass@server.database.windows.net/mdm?driver=ODBC+Driver+18+for+SQL+Server"
+
+export NEO4J_URI="neo4j+s://<id>.databases.neo4j.io"
+export NEO4J_USER="neo4j"
+export NEO4J_PASSWORD="<password>"
+export MDM_API_KEYS='["<key1>"]'
+export EDGAR_IDENTITY="Your Name your@email.com"
+```
+
+**MDM setup sequence:**
+```bash
+# 1. Apply schema + seed reference data (idempotent)
+edgar-warehouse mdm migrate
+
+# 2. Verify connectivity
+edgar-warehouse mdm check-connectivity --neo4j
+
+# 3. Seed the tracked universe from SEC reference data
+edgar-warehouse mdm seed-universe
+#    Add --limit 100 for a quick smoke test
+
+# 4. Run entity resolution pipeline
+edgar-warehouse mdm run --entity-type company
+
+# 5. Sync relationships to Neo4j
+edgar-warehouse mdm sync-graph
+```
+
+---
+
+## MDM Health Checks
+
+```bash
+# Table row counts
+edgar-warehouse mdm counts
+
+# SQL + Neo4j connectivity
+edgar-warehouse mdm check-connectivity --neo4j
+
+# List pending curation reviews
+edgar-warehouse mdm review list --status pending
+
+# Verify Neo4j graph (node/edge counts)
+edgar-warehouse mdm verify-graph
+```
+
+**Windows-specific E2E notes:**
+
+The bash E2E scripts (`infra/scripts/test-mdm-e2e.sh`, `infra/scripts/run-neo4j-e2e.sh`) run in Git Bash or WSL. Before running them on Windows:
+
+```powershell
+# Install sqlcmd (required by run-neo4j-e2e.sh)
+winget install Microsoft.SQLCmdUtils
+
+# Verify az CLI is present
+az version
+```
+
+Run the MDM E2E from Git Bash:
+```bash
+bash infra/scripts/test-mdm-e2e.sh --env dev
+# Skip Neo4j check if AuraDB not yet provisioned:
+bash infra/scripts/test-mdm-e2e.sh --env dev --skip-neo4j
+```
+
+---
+
+## Seed Universe
+
+The warehouse only processes companies in its **tracked universe**. With MDM connected, the universe lives in `mdm_company.tracking_status`. Without MDM, it falls back to DuckDB's `sec_tracked_universe` table (local-only).
+
+```bash
+# With MDM configured (preferred):
+edgar-warehouse mdm seed-universe
+edgar-warehouse mdm seed-universe --limit 500 --tracking-status bootstrap_pending
+
+# Without MDM (legacy / local-only):
+edgar-warehouse seed-universe
+edgar-warehouse seed-universe --limit 500
+```
+
+After seeding, `bootstrap-next` or `bootstrap-full` reads the universe automatically. The warehouse always tries MDM first (if `MDM_DATABASE_URL` is set) and falls back to DuckDB if MDM returns no rows.
 
 ---
 
@@ -205,6 +300,12 @@ cd infra/snowflake/dbt/edgartools_gold && dbt test
 
 # Gold layer status (run in Snowflake worksheet or snowsql)
 SELECT * FROM EDGARTOOLS.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
+
+# MDM table row counts
+edgar-warehouse mdm counts
+
+# MDM connectivity
+edgar-warehouse mdm check-connectivity --neo4j
 ```
 
 ---
@@ -220,6 +321,10 @@ SELECT * FROM EDGARTOOLS.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
 | `SNOWFLAKE_ACCOUNT not set` error | Default removed for security | Set `export SNOWFLAKE_ACCOUNT=ORGNAME-ACCOUNTNAME` before running |
 | dbt target lag slow on first query | `TARGET_LAG = DOWNSTREAM` setting | Normal — refreshes on query; run `dbt run` first to pre-warm |
 | `terraform destroy` fails on prod bronze bucket | `prevent_destroy = true` on storage | By design — prod storage is protected; remove lifecycle block manually only if intentionally tearing down |
+| `MDM_DATABASE_URL not set` when running `edgar-warehouse mdm ...` | Env var missing | `export MDM_DATABASE_URL=postgresql://...` before running MDM commands |
+| `edgar-warehouse mdm seed-universe` 403 from SEC | Missing `EDGAR_IDENTITY` env var | `export EDGAR_IDENTITY="Your Name your@email.com"` |
+| `edgar-warehouse bootstrap` fails with "requires seeded tracked universe" | Neither MDM nor DuckDB has universe data | Run `edgar-warehouse mdm seed-universe` (with MDM) or `edgar-warehouse seed-universe` (without MDM) first |
+| `sqlcmd` not found on Windows in `run-neo4j-e2e.sh` | MSSQL tools not installed | `winget install Microsoft.SQLCmdUtils` |
 
 ---
 
