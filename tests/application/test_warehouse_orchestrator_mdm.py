@@ -138,6 +138,37 @@ def test_filter_ciks_to_universe_falls_back_to_duckdb(monkeypatch):
     assert result == [100, 200]
 
 
+# ---------------------------------------------------------------------------
+# _sync_mdm_tracking_status
+# ---------------------------------------------------------------------------
+
+def test_sync_mdm_tracking_status_no_op_without_url(monkeypatch):
+    monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
+    from edgar_warehouse.application.warehouse_orchestrator import _sync_mdm_tracking_status
+    _sync_mdm_tracking_status(1234, "active")
+
+
+def test_sync_mdm_tracking_status_calls_update_when_url_set(monkeypatch):
+    monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://localhost/test")
+    from edgar_warehouse.application.warehouse_orchestrator import _sync_mdm_tracking_status
+
+    with patch("edgar_warehouse.mdm.database.get_engine", return_value=MagicMock()):
+        with patch("edgar_warehouse.mdm.universe.update_tracking_status", return_value=True) as mock_update:
+            _sync_mdm_tracking_status(1234, "active")
+    mock_update.assert_called_once()
+    args = mock_update.call_args[0]
+    assert args[1] == 1234
+    assert args[2] == "active"
+
+
+def test_sync_mdm_tracking_status_swallows_exceptions(monkeypatch):
+    monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://localhost/test")
+    from edgar_warehouse.application.warehouse_orchestrator import _sync_mdm_tracking_status
+
+    with patch("edgar_warehouse.mdm.database.get_engine", side_effect=Exception("DB down")):
+        _sync_mdm_tracking_status(1234, "active")
+
+
 def test_filter_ciks_to_universe_passes_through_when_tracked_empty(monkeypatch):
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
     from edgar_warehouse.application.warehouse_orchestrator import _filter_ciks_to_universe

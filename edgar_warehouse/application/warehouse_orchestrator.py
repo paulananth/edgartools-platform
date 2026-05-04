@@ -1217,6 +1217,7 @@ def _apply_submission_snapshot_to_silver(
             "last_error_message": None,
         }
     )
+    _sync_mdm_tracking_status(cik, tracking_status)
     return {
         "raw_writes": raw_writes,
         "rows_written": rows_written,
