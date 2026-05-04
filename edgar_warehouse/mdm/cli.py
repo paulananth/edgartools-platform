@@ -44,6 +44,18 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     api.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
     api.set_defaults(handler=_handle_api)
 
+    seed_u = mdm_sub.add_parser(
+        "seed-universe",
+        help="Seed tracked-universe CIKs from SEC company_tickers_exchange.json into MDM",
+    )
+    seed_u.add_argument("--limit", type=int, default=None, help="Cap rows upserted (for testing)")
+    seed_u.add_argument(
+        "--tracking-status",
+        default="active",
+        choices=["active", "bootstrap_pending", "paused"],
+        help="tracking_status assigned to new companies (default: active)",
+    )
+    seed_u.set_defaults(handler=_handle_seed_universe)
 
     # review
     rev = mdm_sub.add_parser("review", help="Curation queue operations")
@@ -113,6 +125,19 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
 def _session() -> Session:
     from edgar_warehouse.mdm.database import get_engine, get_session
     return get_session(get_engine())
+
+
+def _download_sec_bytes(url: str) -> bytes:
+    import urllib.request
+    edgar_identity = os.environ.get("EDGAR_IDENTITY", "edgartools-platform contact@example.com")
+    req = urllib.request.Request(url, headers={"User-Agent": edgar_identity})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return resp.read()
+
+
+def _get_mdm_engine():
+    from edgar_warehouse.mdm.database import get_engine
+    return get_engine()
 
 
 def _neo4j_client():
@@ -192,6 +217,27 @@ def _handle_run(args) -> int:
     if args.entity_type == "fund":
         n = pipeline.run_funds(limit=args.limit)
         print(f"funds: {n}")
+    return 0
+
+
+def _handle_seed_universe(args) -> int:
+    from edgar_warehouse.loaders import seed_universe_loader
+    from edgar_warehouse.mdm.universe import bulk_upsert_universe
+
+    url = "https://www.sec.gov/files/company_tickers_exchange.json"
+    payload = json.loads(_download_sec_bytes(url))
+    rows = seed_universe_loader(
+        payload,
+        sync_run_id="mdm-seed-universe",
+        raw_object_id="",
+        load_mode="seed_universe",
+    )
+    if args.limit is not None:
+        rows = rows[: args.limit]
+
+    engine = _get_mdm_engine()
+    count = bulk_upsert_universe(engine, rows, default_status=args.tracking_status)
+    print(json.dumps({"rows_seeded": count, "status": "ok"}, indent=2))
     return 0
 
 

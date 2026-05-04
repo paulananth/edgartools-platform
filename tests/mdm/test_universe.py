@@ -152,3 +152,58 @@ def test_migrate_runtime_includes_003_for_postgres_path():
     assert "003_tracking_status_index.sql" in source, (
         "migrate() must call _apply_sql_file(engine, '003_tracking_status_index.sql')"
     )
+
+
+# ---------------------------------------------------------------------------
+# CLI seed-universe handler tests
+# ---------------------------------------------------------------------------
+
+def test_seed_universe_cli_handler(engine, monkeypatch):
+    """_handle_seed_universe must download SEC JSON, parse it, and upsert into MDM."""
+    import argparse
+    import edgar_warehouse.mdm.cli as mdm_cli
+
+    captured: dict = {}
+
+    def fake_download(url: str) -> bytes:
+        captured["url"] = url
+        return b'{"0":{"cik_str":1234,"ticker":"AAPL","exchange":"NASDAQ"},"1":{"cik_str":5678,"ticker":"MSFT","exchange":"NASDAQ"}}'
+
+    monkeypatch.setattr(mdm_cli, "_download_sec_bytes", fake_download)
+    monkeypatch.setattr(mdm_cli, "_get_mdm_engine", lambda: engine)
+
+    args = argparse.Namespace(limit=None, tracking_status="active")
+    result = mdm_cli._handle_seed_universe(args)
+
+    assert result == 0
+    assert "sec.gov" in captured["url"]
+    assert sorted(get_tracked_ciks(engine, "active")) == [1234, 5678]
+
+
+def test_seed_universe_cli_handler_respects_limit(engine, monkeypatch):
+    import argparse
+    import edgar_warehouse.mdm.cli as mdm_cli
+
+    payload = b'{"0":{"cik_str":1,"ticker":"A","exchange":"NYSE"},"1":{"cik_str":2,"ticker":"B","exchange":"NYSE"},"2":{"cik_str":3,"ticker":"C","exchange":"NYSE"}}'
+
+    monkeypatch.setattr(mdm_cli, "_download_sec_bytes", lambda url: payload)
+    monkeypatch.setattr(mdm_cli, "_get_mdm_engine", lambda: engine)
+
+    args = argparse.Namespace(limit=1, tracking_status="active")
+    mdm_cli._handle_seed_universe(args)
+
+    assert len(get_tracked_ciks(engine, "active")) == 1
+
+
+def test_seed_universe_cli_handler_respects_tracking_status(engine, monkeypatch):
+    import argparse
+    import edgar_warehouse.mdm.cli as mdm_cli
+
+    monkeypatch.setattr(mdm_cli, "_download_sec_bytes", lambda url: b'{"0":{"cik_str":99,"ticker":"ZZZ","exchange":"NYSE"}}')
+    monkeypatch.setattr(mdm_cli, "_get_mdm_engine", lambda: engine)
+
+    args = argparse.Namespace(limit=None, tracking_status="bootstrap_pending")
+    mdm_cli._handle_seed_universe(args)
+
+    assert get_tracked_ciks(engine, "bootstrap_pending") == [99]
+    assert get_tracked_ciks(engine, "active") == []
