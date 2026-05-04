@@ -59,6 +59,8 @@ Options:
   --mdm-silver-duckdb <uri>         MDM_SILVER_DUCKDB. Default: s3://<warehouse-bucket>/warehouse/silver/sec/silver.duckdb.
   --mdm-run-limit <n>               Default limit for mdm run state machine. Default: 100; 0 means no default limit.
   --mdm-graph-limit <n>             Default limit for mdm graph backfill/sync. Default: 100; 0 means no default limit.
+  --mdm-seed-universe-tracking-status <status>
+                                    tracking_status baked into mdm_seed_universe state machine. Default: bootstrap_pending.
   --output-file <path>              Write deployment summary JSON.
   -h, --help                        Show this help.
 USAGE
@@ -132,6 +134,7 @@ MDM_API_KEYS_SECRET_ARN=""
 MDM_SILVER_DUCKDB=""
 MDM_RUN_LIMIT=100
 MDM_GRAPH_LIMIT=100
+MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"
 OUTPUT_FILE=""
 
 while [[ $# -gt 0 ]]; do
@@ -177,6 +180,7 @@ while [[ $# -gt 0 ]]; do
     --mdm-silver-duckdb) MDM_SILVER_DUCKDB="${2:?}"; shift 2 ;;
     --mdm-run-limit) MDM_RUN_LIMIT="${2:?}"; shift 2 ;;
     --mdm-graph-limit) MDM_GRAPH_LIMIT="${2:?}"; shift 2 ;;
+    --mdm-seed-universe-tracking-status) MDM_SEED_UNIVERSE_TRACKING_STATUS="${2:?}"; shift 2 ;;
     --output-file) OUTPUT_FILE="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -530,7 +534,7 @@ write_mdm_container_definitions() {
   local output_file="$1" profile="$2"
   python3 - "$output_file" "$profile" "$IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
     "$WAREHOUSE_BUCKET_NAME" "$MDM_SILVER_DUCKDB" "$MDM_POSTGRES_DSN_SECRET_ARN" \
-    "$MDM_NEO4J_SECRET_ARN" "$MDM_API_KEYS_SECRET_ARN" "$LOG_GROUP_NAME" <<'PY'
+    "$MDM_NEO4J_SECRET_ARN" "$MDM_API_KEYS_SECRET_ARN" "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" <<'PY'
 import json
 import pathlib
 import sys
@@ -546,6 +550,7 @@ import sys
     mdm_database_secret_arn,
     neo4j_secret_arn,
     api_keys_secret_arn,
+    edgar_secret_arn,
     log_group_name,
 ) = sys.argv[1:]
 
@@ -566,6 +571,7 @@ container_definitions = [{
         {"name": "MDM_DATABASE_URL", "valueFrom": mdm_database_secret_arn},
         {"name": "NEO4J_SECRET_JSON", "valueFrom": neo4j_secret_arn},
         {"name": "MDM_API_KEYS", "valueFrom": api_keys_secret_arn},
+        {"name": "EDGAR_IDENTITY", "valueFrom": edgar_secret_arn},
     ],
     "logConfiguration": {
         "logDriver": "awslogs",
@@ -624,7 +630,7 @@ task_definition_for_profile() {
 
 task_definition_for_mdm_workflow() {
   case "$1" in
-    mdm_migrate|mdm_check_connectivity|mdm_verify_graph|mdm_counts) printf '%s\n' "$TASK_DEF_MDM_SMALL_ARN" ;;
+    mdm_migrate|mdm_check_connectivity|mdm_verify_graph|mdm_counts|mdm_seed_universe) printf '%s\n' "$TASK_DEF_MDM_SMALL_ARN" ;;
     mdm_run|mdm_backfill_relationships|mdm_sync_graph) printf '%s\n' "$TASK_DEF_MDM_MEDIUM_ARN" ;;
     *) fail "unknown MDM workflow: $1" ;;
   esac
@@ -692,6 +698,7 @@ mdm_workflow_command_expression() {
       ;;
     mdm_verify_graph) printf '%s\n' "States.Array('mdm', 'verify-graph')" ;;
     mdm_counts) printf '%s\n' "States.Array('mdm', 'counts')" ;;
+    mdm_seed_universe) printf '%s\n' "States.Array('mdm', 'seed-universe', '--tracking-status', '${MDM_SEED_UNIVERSE_TRACKING_STATUS}')" ;;
     *) fail "unknown MDM workflow: $1" ;;
   esac
 }
@@ -701,6 +708,7 @@ mdm_workflow_limit_command_expression() {
     mdm_run) printf '%s\n' "States.Array('mdm', 'run', '--entity-type', 'all', '--limit', States.Format('{}', $.limit))" ;;
     mdm_backfill_relationships) printf '%s\n' "States.Array('mdm', 'backfill-relationships', '--limit', States.Format('{}', $.limit))" ;;
     mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'sync-graph', '--limit', States.Format('{}', $.limit))" ;;
+    mdm_seed_universe) printf '%s\n' "States.Array('mdm', 'seed-universe', '--tracking-status', '${MDM_SEED_UNIVERSE_TRACKING_STATUS}', '--limit', States.Format('{}', $.limit))" ;;
     *) return 0 ;;
   esac
 }
@@ -1091,7 +1099,7 @@ print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
 
 if [[ "$DEPLOY_MDM" == "true" ]]; then
-  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts; do
+  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts mdm_seed_universe; do
     task_definition_arn="$(task_definition_for_mdm_workflow "$workflow")"
     command_expression="$(mdm_workflow_command_expression "$workflow")"
     limit_command_expression="$(mdm_workflow_limit_command_expression "$workflow")"
