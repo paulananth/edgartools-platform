@@ -139,6 +139,85 @@ After seeding, `bootstrap-next` or `bootstrap-full` reads the universe automatic
 
 ---
 
+## AWS MDM E2E Runbook
+
+Use this sequence to provision MDM in AWS and run the seed-universe E2E. All commands run from the repo root. Neo4j is not required for this flow.
+
+**Prerequisites:** AWS CLI configured with `sec_platform_deployer` profile, Terraform for the warehouse base infrastructure already applied, `EDGAR_IDENTITY` secret already populated.
+
+**Step 1 — Enable MDM RDS in Terraform**
+
+Add to `infra/terraform/accounts/dev/terraform.tfvars` (or prod):
+```hcl
+mdm_enabled = true
+```
+Then apply:
+```bash
+cd infra/terraform/accounts/dev
+terraform apply
+```
+This creates the RDS PostgreSQL instance, private subnets, and three empty Secrets Manager containers (`postgres_dsn`, `neo4j`, `api_keys`).
+
+**Step 2 — Populate `postgres_dsn` Secrets Manager secret**
+
+```bash
+# Dry-run first to verify the DSN looks correct:
+bash infra/scripts/bootstrap-aws-mdm-secrets.sh \
+  --env dev --aws-profile sec_platform_deployer --aws-region <region> --dry-run
+
+# Then write it:
+bash infra/scripts/bootstrap-aws-mdm-secrets.sh \
+  --env dev --aws-profile sec_platform_deployer --aws-region <region>
+```
+Reads the AWS-managed RDS master password and writes `postgresql://<user>:<pass>@<endpoint>:5432/mdm` to `edgartools-dev/mdm/postgres_dsn`.
+
+**Step 3 — Deploy application with MDM enabled**
+
+```bash
+bash infra/scripts/deploy-aws-application.sh \
+  --env dev \
+  --aws-profile sec_platform_deployer \
+  --aws-region <region> \
+  --enable-mdm \
+  --skip-build \
+  --image-ref "$(cat infra/aws-dev-image.txt)"
+```
+Registers `mdm-small`/`mdm-medium` ECS task definitions and Step Functions state machines including `edgartools-dev-mdm-migrate`, `edgartools-dev-mdm-seed-universe`, `edgartools-dev-mdm-counts`, and others.
+
+Pass `--mdm-seed-universe-tracking-status active` to change the default tracking status (default: `bootstrap_pending`).
+
+**Step 4 — Run `mdm migrate` (schema setup, one-time per env)**
+
+```bash
+aws stepfunctions start-execution \
+  --state-machine-arn arn:aws:states:<region>:<account>:stateMachine:edgartools-dev-mdm-migrate \
+  --input '{}' \
+  --profile sec_platform_deployer
+```
+Wait for execution to reach `SUCCEEDED` status.
+
+**Step 5 — Seed 100 companies with `bootstrap_pending` status**
+
+```bash
+aws stepfunctions start-execution \
+  --state-machine-arn arn:aws:states:<region>:<account>:stateMachine:edgartools-dev-mdm-seed-universe \
+  --input '{"limit": 100}' \
+  --profile sec_platform_deployer
+```
+The `--tracking-status` is baked in at deploy time (default `bootstrap_pending`). Pass `--limit` in the execution input to cap rows.
+
+**Step 6 — Verify 100 companies seeded**
+
+```bash
+aws stepfunctions start-execution \
+  --state-machine-arn arn:aws:states:<region>:<account>:stateMachine:edgartools-dev-mdm-counts \
+  --input '{}' \
+  --profile sec_platform_deployer
+```
+Check CloudWatch Logs under `/aws/ecs/edgartools-dev-warehouse` for the `mdm-counts` task output — `mdm_company` row count should be 100.
+
+---
+
 ## Quick Setup Checklist
 
 Follow these steps in order. Each step depends on the previous.
@@ -325,6 +404,10 @@ edgar-warehouse mdm check-connectivity --neo4j
 | `edgar-warehouse mdm seed-universe` 403 from SEC | Missing `EDGAR_IDENTITY` env var | `export EDGAR_IDENTITY="Your Name your@email.com"` |
 | `edgar-warehouse bootstrap` fails with "requires seeded tracked universe" | Neither MDM nor DuckDB has universe data | Run `edgar-warehouse mdm seed-universe` (with MDM) or `edgar-warehouse seed-universe` (without MDM) first |
 | `sqlcmd` not found on Windows in `run-neo4j-e2e.sh` | MSSQL tools not installed | `winget install Microsoft.SQLCmdUtils` |
+| `mdm_db_master_user_secret_arn` missing from Terraform output | `mdm_enabled = false` in tfvars | Add `mdm_enabled = true` to `terraform.tfvars` and re-apply |
+| `postgres_dsn` secret has empty value in ECS | `bootstrap-aws-mdm-secrets.sh` not run | Run `bash infra/scripts/bootstrap-aws-mdm-secrets.sh --env dev ...` after Terraform apply |
+| `mdm-seed-universe` Step Functions state machine not found | Deployed without `--enable-mdm` | Re-run `deploy-aws-application.sh --enable-mdm` with valid MDM secret ARNs |
+| `mdm seed-universe` ECS task uses default EDGAR identity | `EDGAR_IDENTITY` secret not populated | Populate `edgar-identity` secret: `aws secretsmanager put-secret-value --secret-id edgartools-dev-edgar-identity --secret-string "Name email"` |
 
 ---
 

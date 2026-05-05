@@ -389,21 +389,38 @@ def seed_defaults(session: Session) -> None:
 
 
 def _apply_sql_file(engine: Engine, filename: str) -> None:
+    import re
     path = Path(__file__).with_name(filename)
     sql = path.read_text(encoding="utf-8")
-    statements = [statement.strip() for statement in _split_sql(sql) if statement.strip()]
+    # Filter: skip statements that consist only of whitespace and -- comments
+    def _has_sql(stmt: str) -> bool:
+        return bool(re.sub(r"--[^\n]*", "", stmt).strip())
+    statements = [s.strip() for s in _split_sql(sql) if s.strip() and _has_sql(s)]
     with engine.begin() as conn:
         for statement in statements:
             conn.execute(text(statement))
 
 
 def _split_sql(sql: str) -> list[str]:
+    """Split SQL on statement-terminating semicolons, ignoring ; inside strings or -- comments."""
     statements: list[str] = []
     current: list[str] = []
     in_single = False
+    in_line_comment = False
     index = 0
     while index < len(sql):
         char = sql[index]
+        if in_line_comment:
+            if char == "\n":
+                in_line_comment = False
+            current.append(char)
+            index += 1
+            continue
+        if char == "-" and index + 1 < len(sql) and sql[index + 1] == "-" and not in_single:
+            in_line_comment = True
+            current.append(char)
+            index += 1
+            continue
         if char == "'" and (index + 1 >= len(sql) or sql[index + 1] != "'"):
             in_single = not in_single
         if char == ";" and not in_single:
