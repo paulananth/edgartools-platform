@@ -35,7 +35,7 @@ RUN pip install --no-compile \
         "httpx>=0.25.0" \
         "zstandard>=0.20.0"
 
-RUN pip install --no-compile ".[mdm]"
+RUN pip install --no-compile ".[mdm,s3]"
 
 ENTRYPOINT ["edgar-warehouse"]
 CMD ["--help"]
