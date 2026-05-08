@@ -27,8 +27,15 @@ for file in streamlit_app.py environment.yml; do
     echo "Missing source file: ${src_path}" >&2
     exit 1
   fi
-  # Convert Windows backslashes to forward slashes for file:// URI
-  src_uri="file://${src_path//\\//}"
+  # Snow CLI on Windows runs as a native exe and rejects Git Bash MSYS paths
+  # like /c/Users/... — convert to a forward-slash absolute path snow accepts.
+  if command -v cygpath >/dev/null 2>&1; then
+    src_path_native="$(cygpath -m "${src_path}")"
+  else
+    src_path_native="${src_path}"
+  fi
+  # Convert backslashes to forward slashes for file:// URI compatibility.
+  src_uri="file://${src_path_native//\\//}"
   snow sql --connection "${CONNECTION}" --stdin <<SQL
 PUT ${src_uri} @${STAGE_FQN}
     AUTO_COMPRESS=FALSE

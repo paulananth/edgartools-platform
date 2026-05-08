@@ -1,4 +1,4 @@
-FROM python:3.12-slim-bookworm
+FROM public.ecr.aws/docker/library/python:3.12-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -35,7 +35,7 @@ RUN pip install --no-compile \
         "httpx>=0.25.0" \
         "zstandard>=0.20.0"
 
-RUN pip install --no-compile ".[mdm]"
+RUN pip install --no-compile ".[mdm,s3]"
 
 ENTRYPOINT ["edgar-warehouse"]
 CMD ["--help"]

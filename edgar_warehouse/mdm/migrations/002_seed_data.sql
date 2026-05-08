@@ -240,7 +240,12 @@ INSERT INTO mdm_relationship_type (rel_type_name, source_node_type, target_node_
      'adviser',  'fund',     'outbound', TRUE,
      '["source_entity_id","target_entity_id"]',
      'extend_temporal',
-     'Adviser manages a private fund')
+     'Adviser manages a private fund'),
+    ('IS_PERSON_OF',
+     'adviser',  'person',   'outbound', FALSE,
+     '["source_entity_id","target_entity_id"]',
+     'replace',
+     'Individual adviser CIK is the same natural person')
 ON CONFLICT (rel_type_name) DO NOTHING;
 
 -- ---------------------------------------------------------------------------
