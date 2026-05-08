@@ -136,6 +136,34 @@ resource "snowflake_grant_privileges_to_account_role" "warehouse_usage" {
   }
 }
 
+resource "snowflake_grant_privileges_to_account_role" "deployer_source_all_objects" {
+  for_each = toset(["TABLES", "VIEWS", "DYNAMIC TABLES"])
+
+  account_role_name = snowflake_account_role.roles["deployer"].name
+  privileges        = ["SELECT"]
+
+  on_schema_object {
+    all {
+      object_type_plural = each.value
+      in_schema          = local.schema_fqns["source"]
+    }
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "deployer_source_future_objects" {
+  for_each = toset(["TABLES", "VIEWS", "DYNAMIC TABLES"])
+
+  account_role_name = snowflake_account_role.roles["deployer"].name
+  privileges        = ["SELECT"]
+
+  on_schema_object {
+    future {
+      object_type_plural = each.value
+      in_schema          = local.schema_fqns["source"]
+    }
+  }
+}
+
 resource "snowflake_grant_privileges_to_account_role" "reader_all_schema_objects" {
   for_each = toset(["TABLES", "VIEWS", "DYNAMIC TABLES"])
 

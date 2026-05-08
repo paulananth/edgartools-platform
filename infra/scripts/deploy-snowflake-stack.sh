@@ -82,6 +82,46 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 TMP_DIR="${REPO_ROOT}/.tmp"
 
+# Auto-source the Snowflake password from snow CLI's config.toml when no
+# password env var is set. This lets you run the deploy with just
+# --snow-connection <name>; otherwise everything still works as before
+# because env vars take precedence.
+load_password_from_snow_config() {
+  if [[ -n "${TF_VAR_snowflake_password:-}" || -n "${SNOWFLAKE_PASSWORD:-}" ]]; then
+    return 0
+  fi
+  local config_path="${SNOWFLAKE_HOME:-$HOME/.snowflake}/config.toml"
+  if [[ ! -f "${config_path}" ]]; then
+    # Windows path fallback when running under Git Bash (where $HOME may be /c/Users/<u>).
+    local win_config_path
+    win_config_path="$(cygpath -w "${config_path}" 2>/dev/null || echo "${config_path}")"
+    [[ -f "${win_config_path}" ]] && config_path="${win_config_path}"
+  fi
+  [[ -f "${config_path}" ]] || return 0
+
+  local pwd_value
+  pwd_value="$(SNOW_CONFIG_PATH="${config_path}" SNOW_CONN="${SNOW_CONNECTION}" python3 - <<'PY'
+import os, sys
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib  # type: ignore
+path = os.environ["SNOW_CONFIG_PATH"]
+conn = os.environ["SNOW_CONN"]
+with open(path, "rb") as fh:
+    data = tomllib.loads(fh.read().decode("utf-8"))
+print(data.get("connections", {}).get(conn, {}).get("password", ""))
+PY
+)"
+  if [[ -n "${pwd_value}" ]]; then
+    export TF_VAR_snowflake_password="${pwd_value}"
+    export DBT_SNOWFLAKE_PASSWORD="${pwd_value}"
+    echo "Loaded Snowflake password for connection '${SNOW_CONNECTION}' from ${config_path}"
+  fi
+}
+
+load_password_from_snow_config
+
 AWS_ROOT="${REPO_ROOT}/infra/terraform/access/aws/accounts/${ENVIRONMENT}"
 SNOWFLAKE_ROOT="${REPO_ROOT}/infra/terraform/snowflake/accounts/${ENVIRONMENT}"
 SNOWFLAKE_ACCESS_ROOT="${REPO_ROOT}/infra/terraform/access/snowflake/accounts/${ENVIRONMENT}"
@@ -116,9 +156,17 @@ fi
 
 if [[ ${RUN_DBT} -eq 1 ]]; then
   require_command dbt
-  [[ -n "${DBT_SNOWFLAKE_ACCOUNT:-}" ]] || die "DBT_SNOWFLAKE_ACCOUNT must be set when dbt is enabled"
-  [[ -n "${DBT_SNOWFLAKE_USER:-}" ]] || die "DBT_SNOWFLAKE_USER must be set when dbt is enabled"
-  [[ -n "${DBT_SNOWFLAKE_PASSWORD:-}" ]] || die "DBT_SNOWFLAKE_PASSWORD must be set when dbt is enabled"
+  # Auto-derive dbt connection inputs from the TF_VAR_snowflake_* values that
+  # Terraform already requires. Lets the deploy run with one source of truth.
+  if [[ -z "${DBT_SNOWFLAKE_ACCOUNT:-}" && -n "${TF_VAR_snowflake_organization_name:-}" && -n "${TF_VAR_snowflake_account_name:-}" ]]; then
+    export DBT_SNOWFLAKE_ACCOUNT="${TF_VAR_snowflake_organization_name}-${TF_VAR_snowflake_account_name}"
+  fi
+  : "${DBT_SNOWFLAKE_USER:=${TF_VAR_snowflake_user:-}}"
+  : "${DBT_SNOWFLAKE_PASSWORD:=${TF_VAR_snowflake_password:-}}"
+  export DBT_SNOWFLAKE_USER DBT_SNOWFLAKE_PASSWORD
+  [[ -n "${DBT_SNOWFLAKE_ACCOUNT:-}" ]] || die "DBT_SNOWFLAKE_ACCOUNT (or TF_VAR_snowflake_organization_name + TF_VAR_snowflake_account_name) must be set when dbt is enabled"
+  [[ -n "${DBT_SNOWFLAKE_USER:-}" ]] || die "DBT_SNOWFLAKE_USER (or TF_VAR_snowflake_user) must be set when dbt is enabled"
+  [[ -n "${DBT_SNOWFLAKE_PASSWORD:-}" ]] || die "DBT_SNOWFLAKE_PASSWORD (or TF_VAR_snowflake_password) must be set when dbt is enabled"
 fi
 
 [[ -f "${AWS_ROOT}/backend.hcl" ]] || die "Missing backend.hcl in ${AWS_ROOT}"
@@ -134,6 +182,17 @@ terraform_apply() {
   local dir="$1"
   local overlay="$2"
   terraform -chdir="${dir}" apply -auto-approve -input=false -no-color -var-file="${overlay}"
+}
+
+# Apply only the resources needed to emit the Snowflake-managed AWS principal,
+# so the AWS trust can be reconciled before the manifest pipe is created.
+# Pipe creation tests the IAM trust at CREATE time; without reconciliation, it
+# fails with "Error assuming AWS_ROLE". Argument list mirrors terraform_apply.
+terraform_apply_storage_integration_only() {
+  local dir="$1"
+  local overlay="$2"
+  terraform -chdir="${dir}" apply -auto-approve -input=false -no-color -var-file="${overlay}" \
+    -target='module.native_pull[0].snowflake_storage_integration_aws.native_pull'
 }
 
 terraform_apply_root() {
@@ -244,20 +303,20 @@ MANIFEST_SNS_TOPIC_ARN="$(json_value "${AWS_OUTPUTS_FILE}" "snowflake_manifest_s
 [[ -n "${EXPORT_ROOT_URL}" ]] || die "AWS bootstrap apply did not produce snowflake_export_root_url"
 [[ -n "${MANIFEST_SNS_TOPIC_ARN}" ]] || die "AWS bootstrap apply did not produce snowflake_manifest_sns_topic_arn"
 
-echo "Applying Snowflake native-pull module"
+echo "Applying Snowflake storage integration only (to emit AWS principal for trust reconciliation)"
 write_snowflake_overlay "${SNOWFLAKE_OVERLAY}" "${STORAGE_ROLE_ARN}" "${EXPORT_ROOT_URL}" "${MANIFEST_SNS_TOPIC_ARN}" "${EXTERNAL_ID}"
-terraform_apply "${SNOWFLAKE_ROOT}" "${SNOWFLAKE_OVERLAY}"
+terraform_apply_storage_integration_only "${SNOWFLAKE_ROOT}" "${SNOWFLAKE_OVERLAY}"
 terraform_output_json "${SNOWFLAKE_ROOT}" "${SNOWFLAKE_OUTPUTS_FILE}"
 
 SUBSCRIBER_ARN="$(json_value "${SNOWFLAKE_OUTPUTS_FILE}" "snowflake_manifest_subscriber_arn")"
-[[ -n "${SUBSCRIBER_ARN}" ]] || die "Snowflake apply did not produce snowflake_manifest_subscriber_arn"
+[[ -n "${SUBSCRIBER_ARN}" ]] || die "Snowflake storage-integration apply did not produce snowflake_manifest_subscriber_arn"
 
 echo "Reconciling AWS trust to the exact Snowflake principal"
 write_aws_overlay "${AWS_RECONCILE_OVERLAY}" "false" "${SUBSCRIBER_ARN}" "${EXTERNAL_ID}"
 terraform_apply "${AWS_ROOT}" "${AWS_RECONCILE_OVERLAY}"
 terraform_output_json "${AWS_ROOT}" "${AWS_OUTPUTS_FILE}"
 
-echo "Re-applying Snowflake after AWS trust reconciliation"
+echo "Applying full Snowflake stack with reconciled trust"
 terraform_apply "${SNOWFLAKE_ROOT}" "${SNOWFLAKE_OVERLAY}"
 terraform_output_json "${SNOWFLAKE_ROOT}" "${SNOWFLAKE_OUTPUTS_FILE}"
 

@@ -188,7 +188,7 @@ locals {
       replace(
         replace(
           replace(
-            replace(file("${path.module}/sql/source_load_procedure.sql"), "__SOURCE_LOAD_PROCEDURE_NAME__", var.source_load_procedure_name),
+            replace(file("${path.module}/sql/source_load_procedure.sql"), "__SOURCE_LOAD_PROCEDURE_NAME__", "${local.source_schema_fqn}.${var.source_load_procedure_name}"),
             "__SOURCE_SCHEMA__",
             var.source_schema_name,
           ),
@@ -216,7 +216,7 @@ locals {
       var.status_table_name,
     ),
     "__REFRESH_PROCEDURE_NAME__",
-    var.refresh_procedure_name,
+    "${local.gold_schema_fqn}.${var.refresh_procedure_name}",
   )
 
   stream_processor_procedure_sql = replace(
@@ -238,7 +238,7 @@ locals {
       var.refresh_procedure_name,
     ),
     "__STREAM_PROCESSOR_PROCEDURE_NAME__",
-    var.stream_processor_procedure_name,
+    "${local.gold_schema_fqn}.${var.stream_processor_procedure_name}",
   )
 }
 
@@ -287,6 +287,11 @@ resource "snowflake_table" "tables" {
   schema   = var.source_schema_name
   name     = each.key
   comment  = each.value.comment
+  # CHANGE_TRACKING must be true on every source table: the manifest_inbox
+  # has a stream over it, and every gold dynamic table consumes the source
+  # tables incrementally — both paths fail with "Change tracking is not
+  # enabled or has been missing for the time range requested" otherwise.
+  change_tracking = true
 
   dynamic "column" {
     for_each = each.value.columns
