@@ -28,10 +28,15 @@ terraform.tfstate.*
 *.tfplan
 .terraform/
 .terraform.lock.hcl
+infra/terraform/**/backend.hcl
+!infra/terraform/**/backend.hcl.example
 
 # dbt profiles contain Snowflake credentials
 infra/snowflake/dbt/**/profiles.yml
 !infra/snowflake/dbt/**/profiles.yml.example
+infra/snowflake/dbt/**/.user.yml
+infra/snowflake/dbt/**/logs/
+infra/snowflake/dbt/**/target/
 
 # Environment files
 .env
