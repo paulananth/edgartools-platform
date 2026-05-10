@@ -160,14 +160,17 @@ bash infra/scripts/publish-warehouse-image.sh \
   --cache-tag buildcache \
   --also-tag dev
 
-# Docker image publish (macOS Colima fast feedback)
+# Docker image publish (macOS Colima — see "Manual AWS build and deploy" below for the full recipe)
 colima start
 export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
+aws ecr get-login-password --region us-east-1 \
+  | docker login --username AWS --password-stdin \
+    077127448006.dkr.ecr.us-east-1.amazonaws.com
 bash infra/scripts/publish-warehouse-image.sh \
-  --aws-region <region> \
+  --aws-region us-east-1 \
   --ecr-repository edgartools-dev-warehouse \
   --role warehouse \
-  --image-tag $(git rev-parse HEAD) \
+  --image-tag sha-$(git rev-parse --short=12 HEAD) \
   --mode docker \
   --cache-from-tag dev \
   --also-tag dev
@@ -199,10 +202,22 @@ platform architecture changes explicitly.
 | `:sha-<hash>` | Immutable rollback/audit image |
 | `:prod` | Manually promoted production image |
 
-**Manual AWS build and deploy**
+**Manual AWS build and deploy — complete recipe (macOS Colima)**
+
+CI (GitHub Actions `build-images.yml`) runs this automatically on every push
+to `main`. Use the steps below only for ad-hoc builds or when CI is unavailable.
 
 ```bash
-# Build/push warehouse with macOS Colima and AWS ECR.
+# 1. Start Colima and point Docker CLI at it (do once per terminal session).
+colima start
+export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
+
+# 2. Authenticate to ECR (token valid for 12 h).
+aws ecr get-login-password --region us-east-1 \
+  | docker login --username AWS --password-stdin \
+    077127448006.dkr.ecr.us-east-1.amazonaws.com
+
+# 3a. Build and push the warehouse image.
 bash infra/scripts/publish-warehouse-image.sh \
   --aws-region us-east-1 \
   --ecr-repository edgartools-dev-warehouse \
@@ -212,7 +227,7 @@ bash infra/scripts/publish-warehouse-image.sh \
   --cache-from-tag dev \
   --also-tag dev
 
-# Build/push MDM separately when MDM code/deps changed.
+# 3b. Build and push the MDM image (when edgar_warehouse/mdm/** changed).
 bash infra/scripts/publish-warehouse-image.sh \
   --aws-region us-east-1 \
   --ecr-repository edgartools-dev-mdm \
@@ -222,14 +237,37 @@ bash infra/scripts/publish-warehouse-image.sh \
   --cache-from-tag dev \
   --also-tag dev
 
-# Deploy AWS ECS/Step Functions with an existing image reference.
+# 4. Capture the digest refs that step 3 printed (used for deploy).
+WAREHOUSE_REF=$(aws ecr describe-images \
+  --region us-east-1 \
+  --repository-name edgartools-dev-warehouse \
+  --query "sort_by(imageDetails,&imagePushedAt)[-1].imageDigest" \
+  --output text | xargs -I{} echo "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@{}")
+MDM_REF=$(aws ecr describe-images \
+  --region us-east-1 \
+  --repository-name edgartools-dev-mdm \
+  --query "sort_by(imageDetails,&imagePushedAt)[-1].imageDigest" \
+  --output text | xargs -I{} echo "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@{}")
+
+# 5. Deploy ECS task definitions and Step Functions state machines.
 bash infra/scripts/deploy-aws-application.sh \
   --env dev \
   --skip-build \
-  --image-ref <warehouse-image-digest-ref> \
-  --mdm-image-ref <mdm-image-digest-ref> \
+  --image-ref "$WAREHOUSE_REF" \
+  --mdm-image-ref "$MDM_REF" \
   --enable-mdm
 ```
+
+**When to rebuild which image**
+
+| Changed paths | Rebuild |
+|---------------|---------|
+| `edgar_warehouse/**` (excluding `edgar_warehouse/mdm/`) | warehouse only |
+| `edgar_warehouse/mdm/**` | MDM only |
+| Both (e.g. `orchestrator.py` + `mdm/cli.py`) | both |
+| `Dockerfile` / `Dockerfile.warehouse-deps` | warehouse (+ deps if lock changed) |
+| `Dockerfile.mdm-neo4j` / `Dockerfile.mdm-deps` | MDM (+ deps if lock changed) |
+| `uv.lock` | deps images for both — run without `--skip-build` |
 
 **Rollback to a previous SHA**
 
