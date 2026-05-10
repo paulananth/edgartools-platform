@@ -19,6 +19,10 @@ resource "snowflake_stage_internal" "dashboard_src" {
   schema   = snowflake_schema.dashboard.name
   name     = var.stage_name
   comment  = "Internal stage holding the Streamlit source files for the EdgarTools ${var.environment} dashboard."
+
+  lifecycle {
+    ignore_changes = [directory, file_format]
+  }
 }
 
 resource "snowflake_streamlit" "dashboard" {

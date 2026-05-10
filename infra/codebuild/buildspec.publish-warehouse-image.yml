@@ -19,7 +19,7 @@ phases:
   build:
     commands:
       - docker buildx ls | tee buildx-ls.txt
-      - set -o pipefail; bash infra/scripts/publish-warehouse-image.sh --aws-region "${AWS_REGION}" --ecr-repository "${IMAGE_REPOSITORY_NAME}" --image-tag "${IMAGE_TAG}" --mode linux --output-file "${OUTPUT_FILE}" 2>&1 | tee "${PUBLISH_LOG}"
+      - set -o pipefail; bash infra/scripts/publish-warehouse-image.sh --aws-region "${AWS_REGION}" --ecr-repository "${IMAGE_REPOSITORY_NAME}" --role "${IMAGE_ROLE:-warehouse}" --image-tag "${IMAGE_TAG}" --mode buildx --cache-tag "${CACHE_TAG:-buildcache}" --also-tag "${ALSO_TAG:-dev}" --output-file "${OUTPUT_FILE}" 2>&1 | tee "${PUBLISH_LOG}"
   post_build:
     commands:
       - test -s "${OUTPUT_FILE}"

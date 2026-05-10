@@ -58,6 +58,36 @@ Streamlit dashboard  (infra/snowflake/streamlit/  OR  examples/dashboard/)
 
 The platform depends on the `edgartools` PyPI package (`edgartools>=5.29.0`). It is **not** a local path dependency — install from PyPI.
 
+## SEC data idempotency
+
+SEC filing artifacts are treated as additive and immutable after they have been
+captured. Warehouse loaders must skip already loaded SEC files by default and
+only re-fetch when an operator passes an explicit `--force` repair flag.
+
+## Long-load 5-whys
+
+1. Why did warehouse loads take too long? Batched Step Functions work repeated
+   downstream publish work instead of separating capture, transform, and serving
+   refresh phases.
+2. Why was downstream work repeated? `bootstrap-batch` was treated as a
+   gold-affecting command, so each batch could build gold tables and emit a
+   Snowflake run manifest.
+3. Why was that expensive? Gold export and Snowflake refresh operate on the
+   whole warehouse state; repeating them per batch multiplies I/O and refresh
+   waits.
+4. Why was monitoring weak? Bronze, silver, gold, Snowflake load, and dynamic
+   table refresh did not have one operator-facing timeline.
+5. Why did it become hard to reason about? Distributed ECS tasks use local
+   DuckDB state and then publish `silver/sec/silver.duckdb`; concurrent batch
+   tasks can race unless silver is centralized into a single all-at-once phase.
+
+Target pipeline shape:
+- Populate bronze individually and make each CIK or batch progress visible.
+- Run silver once for the completed bronze run.
+- Run gold once after silver completes.
+- Emit structured progress events and surface Snowflake load, task, copy, and
+  dynamic-table refresh state in the dashboard.
+
 Key import pattern (do not change without checking the edgartools changelog):
 
 ```python
@@ -76,17 +106,21 @@ When the `edgartools` version is bumped, run the batch scripts in `scripts/batch
 
 ## Development Commands
 
-> **Tooling:** always use `uv` for Python dependency management in this repo.
-> The lockfile is `uv.lock`; never invoke bare `pip` (it bypasses the lock and
-> can desync the env). Use `uv sync` for the project deps and `uv pip install`
-> for one-off installs.
+> **Tooling:** always use `uv` for Python dependency management and Python CLI
+> execution in this repo. The lockfile is `uv.lock`; never invoke bare `pip` or
+> bare `dbt` from repo workflows. Use `uv sync` for project deps, `uv pip
+> install` for deliberate one-off installs, and `uv run --with <package>` when a
+> deploy needs a transient tool such as `dbt-snowflake`.
+>
+> **Docker runtime:** on macOS use Colima as the local Docker daemon. On Windows
+> use Docker Desktop. The default macOS fast-feedback path is Colima plus plain
+> `docker build`/`docker push`; `docker buildx` is supported when it is
+> measurably faster or when using Linux/Windows CI registry cache. Do not
+> introduce another container build/runtime stack.
 
 ```bash
 # Install project deps (uses uv.lock)
 uv sync --extra s3 --extra snowflake
-
-# Install dbt (one-off, not in pyproject)
-uv pip install dbt-snowflake
 
 # Warehouse CLI
 edgar-warehouse --help
@@ -94,9 +128,9 @@ edgar-warehouse bootstrap --tracking-status-filter active
 
 # dbt (from dbt project root)
 cd infra/snowflake/dbt/edgartools_gold
-dbt compile          # validate models without executing
-dbt run              # create/refresh gold dynamic tables in Snowflake
-dbt test             # run data quality tests
+uv run --with dbt-snowflake dbt compile  # validate models without executing
+uv run --with dbt-snowflake dbt run      # create/refresh gold dynamic tables in Snowflake
+uv run --with dbt-snowflake dbt test     # run data quality tests
 
 # Terraform — AWS infra
 cd infra/terraform/accounts/prod
@@ -108,18 +142,35 @@ cd infra/terraform/snowflake/accounts/prod
 terraform plan
 terraform apply
 
-# Docker image publish (Linux / CI)
+# AWS-only Snowflake native-pull deploy (dev)
+# Requires SnowCLI connection edgartools-dev and keeps Snowflake secrets out of repo files.
+bash infra/scripts/deploy-snowflake-stack.sh \
+  --env dev \
+  --snow-connection edgartools-dev \
+  --run-validation \
+  --run-dbt
+
+# Docker image publish (Linux / CI with buildx registry cache)
 bash infra/scripts/publish-warehouse-image.sh \
   --aws-region <region> \
-  --ecr-repository <name> \
+  --ecr-repository edgartools-dev-warehouse \
+  --role warehouse \
   --image-tag $(git rev-parse HEAD) \
-  --mode linux
+  --mode buildx \
+  --cache-tag buildcache \
+  --also-tag dev
 
-# Docker image publish (Windows via WSL bridge)
-bash infra/scripts/publish-warehouse-image-via-wsl.sh \
+# Docker image publish (macOS Colima fast feedback)
+colima start
+export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
+bash infra/scripts/publish-warehouse-image.sh \
   --aws-region <region> \
-  --ecr-repository <name> \
-  --image-tag $(git rev-parse HEAD)
+  --ecr-repository edgartools-dev-warehouse \
+  --role warehouse \
+  --image-tag $(git rev-parse HEAD) \
+  --mode docker \
+  --cache-from-tag dev \
+  --also-tag dev
 
 # Standalone dashboard (local)
 cd examples/dashboard
@@ -129,45 +180,65 @@ streamlit run edgar_universe_dashboard.py
 
 ## Image management
 
-Two ACR images, one per concern. **Image names never change.**
+Use AWS ECR only for deployable images. Do not add Azure Container Registry,
+Azure SDK, ODBC, or Azure deployment steps back into this repo unless the
+platform architecture changes explicitly.
 
 | Image | Dockerfile | Installs | Runs |
 |-------|------------|----------|------|
-| `edgar-warehouse-pipelines` | `Dockerfile.pipelines` | `.[s3,azure]` | `bootstrap-recent-10`, `daily-incremental`, `full-reconcile` |
-| `edgar-warehouse-mdm-neo4j` | `Dockerfile.mdm-neo4j` | `.[mdm]` + ODBC | all `mdm *` commands, MDM API |
+| `edgartools-dev-warehouse-deps` | `Dockerfile.warehouse-deps` | locked `.[s3]` deps via `uv` | dependency base image |
+| `edgartools-dev-warehouse` | `Dockerfile` | source copy on warehouse deps | warehouse ECS tasks |
+| `edgartools-dev-mdm-deps` | `Dockerfile.mdm-deps` | locked `.[s3,mdm-runtime]` deps via `uv`; no API/admin packages | MDM Step Functions dependency base image |
+| `edgartools-dev-mdm` | `Dockerfile.mdm-neo4j` | source copy on MDM deps | MDM ECS tasks/API |
 
-**Tagging strategy** — `terraform.tfvars` always references `:dev` and never changes for a normal deploy:
+**Tagging strategy**
 
 | Tag | Meaning |
 |-----|---------|
-| `:dev` | Mutable — always latest from `main` |
-| `:sha-<hash>` | Immutable — auto-pushed alongside `:dev` for rollback/audit |
-| `:prod` | Promoted manually from `:dev` when ready for production |
+| `:dev` | Mutable latest dev image |
+| `:sha-<hash>` | Immutable rollback/audit image |
+| `:prod` | Manually promoted production image |
 
-**CI (automated):** both images rebuild on every merge to `main` via `.github/workflows/build-images.yml`.
+**Manual AWS build and deploy**
 
-**Manual build (ACR):**
 ```bash
-# Warehouse ETL image
-bash infra/scripts/publish-warehouse-image-acr.sh \
-  --acr-name edgdev7659acr --image-role pipelines
+# Build/push warehouse with macOS Colima and AWS ECR.
+bash infra/scripts/publish-warehouse-image.sh \
+  --aws-region us-east-1 \
+  --ecr-repository edgartools-dev-warehouse \
+  --role warehouse \
+  --image-tag sha-$(git rev-parse --short=12 HEAD) \
+  --mode docker \
+  --cache-from-tag dev \
+  --also-tag dev
 
-# MDM Neo4j image
-bash infra/scripts/publish-warehouse-image-acr.sh \
-  --acr-name edgdev7659acr --image-role mdm-neo4j
+# Build/push MDM separately when MDM code/deps changed.
+bash infra/scripts/publish-warehouse-image.sh \
+  --aws-region us-east-1 \
+  --ecr-repository edgartools-dev-mdm \
+  --role mdm \
+  --image-tag sha-$(git rev-parse --short=12 HEAD) \
+  --mode docker \
+  --cache-from-tag dev \
+  --also-tag dev
 
-# Push prod tag (promote from dev)
-bash infra/scripts/publish-warehouse-image-acr.sh \
-  --acr-name edgdev7659acr --image-role mdm-neo4j --image-tag prod
+# Deploy AWS ECS/Step Functions with an existing image reference.
+bash infra/scripts/deploy-aws-application.sh \
+  --env dev \
+  --skip-build \
+  --image-ref <warehouse-image-digest-ref> \
+  --mdm-image-ref <mdm-image-digest-ref> \
+  --enable-mdm
 ```
 
-**Rollback to a previous SHA:**
+**Rollback to a previous SHA**
+
 ```bash
-ACR=edgdev7659acr.azurecr.io
+ECR=<account>.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse
 SHA=sha-abc1234
-docker pull $ACR/edgar-warehouse-mdm-neo4j:$SHA
-docker tag  $ACR/edgar-warehouse-mdm-neo4j:$SHA $ACR/edgar-warehouse-mdm-neo4j:dev
-docker push $ACR/edgar-warehouse-mdm-neo4j:dev
+docker pull $ECR:$SHA
+docker tag  $ECR:$SHA $ECR:dev
+docker push $ECR:dev
 ```
 
 ## Key Large Files (Read in Chunks)

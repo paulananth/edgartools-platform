@@ -44,6 +44,21 @@ class CommandContextFactoryTests(unittest.TestCase):
             self.assertIsNotNone(context.snowflake_export_root)
             self.assertEqual(context.serving_export_root, context.snowflake_export_root)
 
+    def test_bootstrap_next_uses_serving_export_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {
+                "EDGAR_IDENTITY": "dev@example.com",
+                "WAREHOUSE_RUNTIME_MODE": "bronze_capture",
+                "WAREHOUSE_BRONZE_ROOT": os.path.join(tmp, "bronze"),
+                "WAREHOUSE_STORAGE_ROOT": os.path.join(tmp, "warehouse"),
+                "SERVING_EXPORT_ROOT": os.path.join(tmp, "serving"),
+            }
+            with patch.dict(os.environ, env, clear=False):
+                context = build_warehouse_context("bootstrap-next")
+
+            self.assertIsNotNone(context.snowflake_export_root)
+            self.assertTrue(context.snowflake_export_root.root.endswith("serving"))
+
     def test_build_warehouse_context_requires_distinct_roots(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             shared = os.path.join(tmp, "shared")

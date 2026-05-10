@@ -12,6 +12,7 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory
+from edgar_warehouse.infrastructure.object_storage import read_bytes
 
 
 def fetch_filing_artifacts(
@@ -29,48 +30,67 @@ def fetch_filing_artifacts(
 
     cik = int(filing["cik"])
     capture_specs = default_capture_spec_factory()
-    index_spec = capture_specs.filing_index(cik, accession_number)
-    index_bytes = download_bytes(index_spec.source_url or "", context.identity)
-    index_record = _write_raw_artifact(
-        context=context,
-        db=db,
-        payload=index_bytes,
-        relative_path=index_spec.relative_path,
-        source_type="filing_index",
-        source_url=index_spec.source_url or "",
-        cik=cik,
-        accession_number=accession_number,
-        form=filing.get("form"),
-    )
-
-    attachment_rows = _extract_attachment_rows(
-        index_html=index_bytes.decode("utf-8", errors="replace"),
-        base_url=index_url,
-        accession_number=accession_number,
-        primary_document=filing.get("primary_document"),
-    )
-    if not attachment_rows and filing.get("primary_document"):
-        attachment_rows = [
-            {
+    existing_rows = db.get_filing_attachments(accession_number)
+    if existing_rows and not force:
+        hydrated_rows, cached_records, missing_rows = _split_existing_attachment_rows(db, existing_rows)
+        if not missing_rows:
+            return {
                 "accession_number": accession_number,
-                "document_name": filing["primary_document"],
-                "document_type": filing.get("form"),
-                "document_url": capture_specs.filing_document(
-                    cik=cik,
-                    accession_number=accession_number,
-                    document_name=filing["primary_document"],
-                    is_primary=True,
-                ).source_url,
-                "is_primary": True,
+                "attachment_count": len(hydrated_rows),
+                "raw_writes": cached_records,
             }
-        ]
+        attachment_rows = hydrated_rows + missing_rows
+        index_record = None
+    else:
+        index_spec = capture_specs.filing_index(cik, accession_number)
+        cached_index = None if force else _read_cached_index(db, accession_number)
+        if cached_index is None:
+            index_bytes = download_bytes(index_spec.source_url or "", context.identity)
+            index_record = _write_raw_artifact(
+                context=context,
+                db=db,
+                payload=index_bytes,
+                relative_path=index_spec.relative_path,
+                source_type="filing_index",
+                source_url=index_spec.source_url or "",
+                cik=cik,
+                accession_number=accession_number,
+                form=filing.get("form"),
+            )
+        else:
+            index_bytes = cached_index["payload"]
+            index_record = cached_index["write_record"]
 
-    raw_writes = [index_record]
+        attachment_rows = _extract_attachment_rows(
+            index_html=index_bytes.decode("utf-8", errors="replace"),
+            base_url=index_spec.source_url or "",
+            accession_number=accession_number,
+            primary_document=filing.get("primary_document"),
+        )
+        if not attachment_rows and filing.get("primary_document"):
+            attachment_rows = [
+                {
+                    "accession_number": accession_number,
+                    "document_name": filing["primary_document"],
+                    "document_type": filing.get("form"),
+                    "document_url": capture_specs.filing_document(
+                        cik=cik,
+                        accession_number=accession_number,
+                        document_name=filing["primary_document"],
+                        is_primary=True,
+                    ).source_url,
+                    "is_primary": True,
+                }
+            ]
+
+    raw_writes = [index_record] if index_record is not None else []
     hydrated_rows: list[dict[str, Any]] = []
     for row in attachment_rows:
-        already_downloaded = (not force) and row.get("raw_object_id")
+        existing_raw = db.get_raw_object(str(row["raw_object_id"])) if row.get("raw_object_id") else None
+        already_downloaded = (not force) and existing_raw is not None
         if already_downloaded:
             hydrated_rows.append(row)
+            raw_writes.append(_cached_raw_record(existing_raw))
             continue
         document_url = row["document_url"]
         document_name = row["document_name"]
@@ -102,6 +122,47 @@ def fetch_filing_artifacts(
         "accession_number": accession_number,
         "attachment_count": len(hydrated_rows),
         "raw_writes": raw_writes,
+    }
+
+
+def _split_existing_attachment_rows(db: Any, rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    hydrated_rows: list[dict[str, Any]] = []
+    cached_records: list[dict[str, Any]] = []
+    missing_rows: list[dict[str, Any]] = []
+    for row in rows:
+        raw_object_id = row.get("raw_object_id")
+        raw_object = db.get_raw_object(str(raw_object_id)) if raw_object_id else None
+        if raw_object is None:
+            missing_rows.append(row)
+            continue
+        hydrated_rows.append(row)
+        cached_records.append(_cached_raw_record(raw_object))
+    return hydrated_rows, cached_records, missing_rows
+
+
+def _read_cached_index(db: Any, accession_number: str) -> dict[str, Any] | None:
+    for raw_object in db.get_raw_objects_for_accession(accession_number, "filing_index"):
+        storage_path = raw_object.get("storage_path")
+        if not storage_path:
+            continue
+        try:
+            payload = read_bytes(str(storage_path))
+        except Exception:
+            continue
+        return {
+            "payload": payload,
+            "write_record": _cached_raw_record(raw_object),
+        }
+    return None
+
+
+def _cached_raw_record(raw_object: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "raw_object_id": raw_object.get("raw_object_id"),
+        "path": raw_object.get("storage_path"),
+        "source_url": raw_object.get("source_url"),
+        "source_type": raw_object.get("source_type"),
+        "cached": True,
     }
 
 
@@ -189,4 +250,3 @@ def _extract_attachment_rows(
         )
 
     return rows
-

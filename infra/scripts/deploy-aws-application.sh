@@ -42,7 +42,11 @@ Options:
   --image-ref <ref>                 Existing image ref to deploy. Skips build unless --build-image is set.
   --build-image                     Build and push the warehouse image before deployment.
   --skip-build                      Do not build; requires --image-ref.
-  --publish-mode <auto|linux|crane> Image publish mode. Default: auto.
+  --publish-mode <auto|docker|buildx>
+                                    Image publish mode. Default: auto.
+  --image-cache-from-tag <tag>      Plain Docker cache source tag, usually dev.
+  --image-cache-tag <tag>           Buildx registry cache tag, usually buildcache.
+  --also-tag <tag>                  Additional tag to push for built images. Repeatable.
   --push-attempts <count>           Image push retry count. Default: 1.
   --platform <platform>             Docker target platform. Default: linux/amd64.
   --context <path>                  Docker build context. Default: repo root.
@@ -52,6 +56,9 @@ Options:
   --bootstrap-batch-concurrency <n> Distributed Map bootstrap concurrency. Default: 10.
   --enable-mdm                      Deploy MDM ECS task definitions and state machines; fail if MDM secret ARNs are missing.
   --skip-mdm                        Do not deploy MDM ECS task definitions or state machines.
+  --mdm-image-ref <ref>             Existing MDM image ref. Defaults to warehouse image ref when not building MDM separately.
+  --mdm-ecr-repository-url <url>    ECR repository URL for built MDM image. Default: <account>.dkr.ecr.<region>.amazonaws.com/<prefix>-mdm.
+  --build-mdm-image                 Build and push a separate MDM image when MDM is deployed.
   --mdm-postgres-dsn-secret-arn <arn>
                                     Secrets Manager ARN injected as MDM_DATABASE_URL.
   --mdm-neo4j-secret-arn <arn>      Secrets Manager ARN injected as NEO4J_SECRET_JSON.
@@ -118,8 +125,13 @@ STEP_FUNCTIONS_ROLE_ARN=""
 LOG_GROUP_NAME=""
 IMAGE_TAG=""
 IMAGE_REF=""
+MDM_IMAGE_REF=""
 BUILD_IMAGE=""
+BUILD_MDM_IMAGE=""
 PUBLISH_MODE="auto"
+IMAGE_CACHE_FROM_TAG=""
+IMAGE_CACHE_TAG=""
+IMAGE_ALSO_TAGS=()
 PUSH_ATTEMPTS=1
 PLATFORM="linux/amd64"
 BUILD_CONTEXT=""
@@ -128,6 +140,7 @@ WAREHOUSE_RUNTIME_MODE="bronze_capture"
 WAREHOUSE_BRONZE_CIK_LIMIT=""
 BOOTSTRAP_BATCH_CONCURRENCY=10
 MDM_DEPLOYMENT_MODE="auto"
+MDM_ECR_REPOSITORY_URL=""
 MDM_POSTGRES_DSN_SECRET_ARN=""
 MDM_NEO4J_SECRET_ARN=""
 MDM_API_KEYS_SECRET_ARN=""
@@ -162,9 +175,14 @@ while [[ $# -gt 0 ]]; do
     --log-group-name) LOG_GROUP_NAME="${2:?}"; shift 2 ;;
     --image-tag) IMAGE_TAG="${2:?}"; shift 2 ;;
     --image-ref) IMAGE_REF="${2:?}"; shift 2 ;;
+    --mdm-image-ref) MDM_IMAGE_REF="${2:?}"; shift 2 ;;
     --build-image) BUILD_IMAGE=true; shift ;;
+    --build-mdm-image) BUILD_MDM_IMAGE=true; shift ;;
     --skip-build) BUILD_IMAGE=false; shift ;;
     --publish-mode) PUBLISH_MODE="${2:?}"; shift 2 ;;
+    --image-cache-from-tag) IMAGE_CACHE_FROM_TAG="${2:?}"; shift 2 ;;
+    --image-cache-tag) IMAGE_CACHE_TAG="${2:?}"; shift 2 ;;
+    --also-tag) IMAGE_ALSO_TAGS+=("${2:?}"); shift 2 ;;
     --push-attempts) PUSH_ATTEMPTS="${2:?}"; shift 2 ;;
     --platform) PLATFORM="${2:?}"; shift 2 ;;
     --context) BUILD_CONTEXT="${2:?}"; shift 2 ;;
@@ -174,6 +192,7 @@ while [[ $# -gt 0 ]]; do
     --bootstrap-batch-concurrency) BOOTSTRAP_BATCH_CONCURRENCY="${2:?}"; shift 2 ;;
     --enable-mdm) MDM_DEPLOYMENT_MODE="enabled"; shift ;;
     --skip-mdm) MDM_DEPLOYMENT_MODE="disabled"; shift ;;
+    --mdm-ecr-repository-url) MDM_ECR_REPOSITORY_URL="${2:?}"; shift 2 ;;
     --mdm-postgres-dsn-secret-arn) MDM_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
     --mdm-neo4j-secret-arn) MDM_NEO4J_SECRET_ARN="${2:?}"; shift 2 ;;
     --mdm-api-keys-secret-arn) MDM_API_KEYS_SECRET_ARN="${2:?}"; shift 2 ;;
@@ -198,8 +217,12 @@ if ! is_empty "$WAREHOUSE_BRONZE_CIK_LIMIT"; then
 fi
 
 case "$PUBLISH_MODE" in
-  auto|linux|crane) ;;
-  *) fail "--publish-mode must be one of auto, linux, crane" ;;
+  auto|docker|macos-docker|buildx|linux|linux-buildx|windows-buildx|crane) ;;
+  *) fail "--publish-mode must be one of auto, docker, buildx, macos-docker, linux-buildx, windows-buildx, crane" ;;
+esac
+case "$BUILD_MDM_IMAGE" in
+  ""|auto|true|false) ;;
+  *) fail "--build-mdm-image is a flag and cannot take a value" ;;
 esac
 
 require_command aws
@@ -223,6 +246,10 @@ if is_empty "$BUILD_IMAGE"; then
   else
     BUILD_IMAGE=false
   fi
+fi
+
+if is_empty "$BUILD_MDM_IMAGE"; then
+  BUILD_MDM_IMAGE=auto
 fi
 
 aws_cli() {
@@ -345,6 +372,9 @@ fi
 if is_empty "$ECR_REPOSITORY_URL"; then
   ECR_REPOSITORY_URL="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION_NAME}.amazonaws.com/${NAME_PREFIX}-warehouse"
 fi
+if is_empty "$MDM_ECR_REPOSITORY_URL"; then
+  MDM_ECR_REPOSITORY_URL="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION_NAME}.amazonaws.com/${NAME_PREFIX}-mdm"
+fi
 if is_empty "$PUBLIC_SUBNET_IDS_JSON" || json_array_is_empty "$PUBLIC_SUBNET_IDS_JSON"; then
   PUBLIC_SUBNET_IDS_JSON="$(
     aws_cli ec2 describe-subnets \
@@ -415,6 +445,14 @@ case "$MDM_DEPLOYMENT_MODE" in
     ;;
 esac
 
+if [[ "$BUILD_MDM_IMAGE" == "auto" ]]; then
+  if [[ "$DEPLOY_MDM" == "true" && "$BUILD_IMAGE" == "true" ]] && is_empty "$MDM_IMAGE_REF"; then
+    BUILD_MDM_IMAGE=true
+  else
+    BUILD_MDM_IMAGE=false
+  fi
+fi
+
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/edgartools-aws-application-XXXXXX")"
 cleanup() {
   rm -rf "$TMP_DIR"
@@ -450,12 +488,14 @@ win_path() {
 }
 
 ECR_REPOSITORY_NAME="${ECR_REPOSITORY_URL##*/}"
+MDM_ECR_REPOSITORY_NAME="${MDM_ECR_REPOSITORY_URL##*/}"
 
 if [[ "$BUILD_IMAGE" == "true" ]]; then
   image_output_file="$(json_file image-ref)"
   publish_args=(
     --aws-region "$AWS_REGION_NAME"
     --ecr-repository "$ECR_REPOSITORY_NAME"
+    --role warehouse
     --image-tag "$IMAGE_TAG"
     --mode "$PUBLISH_MODE"
     --push-attempts "$PUSH_ATTEMPTS"
@@ -467,12 +507,58 @@ if [[ "$BUILD_IMAGE" == "true" ]]; then
   if [[ -n "$AWS_PROFILE_NAME" ]]; then
     publish_args+=(--aws-profile "$AWS_PROFILE_NAME")
   fi
+  if [[ -n "$IMAGE_CACHE_FROM_TAG" ]]; then
+    publish_args+=(--cache-from-tag "$IMAGE_CACHE_FROM_TAG")
+  fi
+  if [[ -n "$IMAGE_CACHE_TAG" ]]; then
+    publish_args+=(--cache-tag "$IMAGE_CACHE_TAG")
+  fi
+  for tag in ${IMAGE_ALSO_TAGS[@]+"${IMAGE_ALSO_TAGS[@]}"}; do
+    publish_args+=(--also-tag "$tag")
+  done
   log "Building and publishing warehouse image ${ECR_REPOSITORY_NAME}:${IMAGE_TAG}"
   bash "${SCRIPT_DIR}/publish-warehouse-image.sh" "${publish_args[@]}"
   IMAGE_REF="$(tr -d '\r\n' < "$image_output_file")"
 fi
 
-log "Deploying image reference ${IMAGE_REF}"
+if [[ "$BUILD_MDM_IMAGE" == "true" ]]; then
+  mdm_image_output_file="$(json_file mdm-image-ref)"
+  mdm_publish_args=(
+    --aws-region "$AWS_REGION_NAME"
+    --ecr-repository "$MDM_ECR_REPOSITORY_NAME"
+    --role mdm
+    --image-tag "$IMAGE_TAG"
+    --mode "$PUBLISH_MODE"
+    --push-attempts "$PUSH_ATTEMPTS"
+    --platform "$PLATFORM"
+    --context "$BUILD_CONTEXT"
+    --output-file "$mdm_image_output_file"
+  )
+  if [[ -n "$AWS_PROFILE_NAME" ]]; then
+    mdm_publish_args+=(--aws-profile "$AWS_PROFILE_NAME")
+  fi
+  if [[ -n "$IMAGE_CACHE_FROM_TAG" ]]; then
+    mdm_publish_args+=(--cache-from-tag "$IMAGE_CACHE_FROM_TAG")
+  fi
+  if [[ -n "$IMAGE_CACHE_TAG" ]]; then
+    mdm_publish_args+=(--cache-tag "$IMAGE_CACHE_TAG")
+  fi
+  for tag in ${IMAGE_ALSO_TAGS[@]+"${IMAGE_ALSO_TAGS[@]}"}; do
+    mdm_publish_args+=(--also-tag "$tag")
+  done
+  log "Building and publishing MDM image ${MDM_ECR_REPOSITORY_NAME}:${IMAGE_TAG}"
+  bash "${SCRIPT_DIR}/publish-warehouse-image.sh" "${mdm_publish_args[@]}"
+  MDM_IMAGE_REF="$(tr -d '\r\n' < "$mdm_image_output_file")"
+fi
+
+if [[ "$DEPLOY_MDM" == "true" ]] && is_empty "$MDM_IMAGE_REF"; then
+  MDM_IMAGE_REF="$IMAGE_REF"
+fi
+
+log "Deploying warehouse image reference ${IMAGE_REF}"
+if [[ "$DEPLOY_MDM" == "true" ]]; then
+  log "Deploying MDM image reference ${MDM_IMAGE_REF}"
+fi
 
 write_container_definitions() {
   local output_file="$1" profile="$2"
@@ -561,7 +647,7 @@ register_task_definition() {
 
 write_mdm_container_definitions() {
   local output_file="$1" profile="$2"
-  MSYS_NO_PATHCONV=1 python3 - "$(win_path "$output_file")" "$profile" "$IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
+  MSYS_NO_PATHCONV=1 python3 - "$(win_path "$output_file")" "$profile" "$MDM_IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
     "$WAREHOUSE_BUCKET_NAME" "$MDM_SILVER_DUCKDB" "$MDM_POSTGRES_DSN_SECRET_ARN" \
     "$MDM_NEO4J_SECRET_ARN" "$MDM_API_KEYS_SECRET_ARN" "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" <<'PY'
 import json
@@ -1147,7 +1233,7 @@ fi
 printf '\n}\n' >> "$WORKFLOW_ARNS_FILE"
 
 SUMMARY_FILE="$(json_file deployment-summary)"
-python3 - "$SUMMARY_FILE" "$ENVIRONMENT" "$AWS_REGION_NAME" "$NAME_PREFIX" "$IMAGE_REF" \
+python3 - "$SUMMARY_FILE" "$ENVIRONMENT" "$AWS_REGION_NAME" "$NAME_PREFIX" "$IMAGE_REF" "$MDM_IMAGE_REF" \
   "$CLUSTER_NAME" "$CLUSTER_ARN" "$ECR_REPOSITORY_URL" "$LOG_GROUP_NAME" \
   "$STEP_FUNCTIONS_ROLE_ARN" "$STEP_FUNCTIONS_LOG_GROUP_NAME" \
   "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
@@ -1164,6 +1250,7 @@ import sys
     region,
     name_prefix,
     image_ref,
+    mdm_image_ref,
     cluster_name,
     cluster_arn,
     ecr_repository_url,
@@ -1197,6 +1284,7 @@ summary = {
     "region": region,
     "name_prefix": name_prefix,
     "image_ref": image_ref,
+    "mdm_image_ref": mdm_image_ref if deploy_mdm == "true" else None,
     "cluster": {
         "name": cluster_name,
         "arn": cluster_arn,
@@ -1212,6 +1300,7 @@ summary = {
 }
 if deploy_mdm == "true":
     summary["mdm"] = {
+        "image_ref": mdm_image_ref,
         "silver_duckdb": mdm_silver_duckdb,
         "secrets": {
             "postgres_dsn": mdm_database_secret_arn,

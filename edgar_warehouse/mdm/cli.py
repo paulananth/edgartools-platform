@@ -10,8 +10,12 @@ import json
 import os
 from pathlib import Path
 import sys
+import time
+from typing import Callable
 
 from sqlalchemy.orm import Session
+
+from edgar_warehouse.mdm.observability import elapsed_ms, emit_mdm_event
 
 
 def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
@@ -20,29 +24,29 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
 
     migrate = mdm_sub.add_parser("migrate", help="Create/upgrade MDM schema and seed reference data")
     migrate.add_argument("--no-seed", dest="seed", action="store_false", default=True)
-    migrate.set_defaults(handler=_handle_migrate)
+    migrate.set_defaults(handler=_logged_handler("migrate", _handle_migrate))
 
     counts = mdm_sub.add_parser("counts", help="Print MDM relational table row counts")
-    counts.set_defaults(handler=_handle_counts)
+    counts.set_defaults(handler=_logged_handler("counts", _handle_counts))
 
     check = mdm_sub.add_parser("check-connectivity", help="Check MDM SQL and optional Neo4j connectivity")
     check.add_argument("--neo4j", action="store_true", help="Also check NEO4J_URI/NEO4J_USER/NEO4J_PASSWORD")
-    check.set_defaults(handler=_handle_check_connectivity)
+    check.set_defaults(handler=_logged_handler("check-connectivity", _handle_check_connectivity))
 
     # run
     run = mdm_sub.add_parser("run", help="Run MDM pipeline for one or all domains")
     run.add_argument("--entity-type", choices=["company", "adviser", "security", "person", "fund", "all"], default="all")
     run.add_argument("--limit", type=int, default=None)
-    run.set_defaults(handler=_handle_run)
+    run.set_defaults(handler=_logged_handler("run", _handle_run))
 
     sync = mdm_sub.add_parser("sync-graph", help="Sync pending MDM relationship rows to Neo4j")
     sync.add_argument("--limit", type=int, default=None)
-    sync.set_defaults(handler=_handle_sync_graph)
+    sync.set_defaults(handler=_logged_handler("sync-graph", _handle_sync_graph))
 
     api = mdm_sub.add_parser("api", help="Run the MDM FastAPI service with uvicorn")
     api.add_argument("--host", default="0.0.0.0")
     api.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
-    api.set_defaults(handler=_handle_api)
+    api.set_defaults(handler=_logged_handler("api", _handle_api))
 
     seed_u = mdm_sub.add_parser(
         "seed-universe",
@@ -55,7 +59,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         choices=["active", "bootstrap_pending", "paused"],
         help="tracking_status assigned to new companies (default: active)",
     )
-    seed_u.set_defaults(handler=_handle_seed_universe)
+    seed_u.set_defaults(handler=_logged_handler("seed-universe", _handle_seed_universe))
 
     # review
     rev = mdm_sub.add_parser("review", help="Curation queue operations")
@@ -64,40 +68,40 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     rl = rev_sub.add_parser("list")
     rl.add_argument("--status", default="pending")
     rl.add_argument("--entity-type", default=None)
-    rl.set_defaults(handler=_handle_review_list)
+    rl.set_defaults(handler=_logged_handler("review-list", _handle_review_list))
 
     ra = rev_sub.add_parser("accept")
     ra.add_argument("review_id")
     ra.add_argument("--reviewer", default=os.environ.get("USER", "cli"))
-    ra.set_defaults(handler=_handle_review_accept)
+    ra.set_defaults(handler=_logged_handler("review-accept", _handle_review_accept))
 
     rr = rev_sub.add_parser("reject")
     rr.add_argument("review_id")
     rr.add_argument("--reviewer", default=os.environ.get("USER", "cli"))
-    rr.set_defaults(handler=_handle_review_reject)
+    rr.set_defaults(handler=_logged_handler("review-reject", _handle_review_reject))
 
     # quarantine / unquarantine
     q = mdm_sub.add_parser("quarantine")
     q.add_argument("entity_id")
-    q.set_defaults(handler=_handle_quarantine)
+    q.set_defaults(handler=_logged_handler("quarantine", _handle_quarantine))
 
     uq = mdm_sub.add_parser("unquarantine")
     uq.add_argument("entity_id")
-    uq.set_defaults(handler=_handle_unquarantine)
+    uq.set_defaults(handler=_logged_handler("unquarantine", _handle_unquarantine))
 
     # merge
     mg = mdm_sub.add_parser("merge")
     mg.add_argument("entity_id_keep")
     mg.add_argument("entity_id_discard")
     mg.add_argument("--reason", default="")
-    mg.set_defaults(handler=_handle_merge)
+    mg.set_defaults(handler=_logged_handler("merge", _handle_merge))
 
     # verify-graph
     vg = mdm_sub.add_parser(
         "verify-graph",
         help="Query Neo4j for node and relationship counts and print JSON",
     )
-    vg.set_defaults(handler=_handle_verify_graph)
+    vg.set_defaults(handler=_logged_handler("verify-graph", _handle_verify_graph))
 
     # backfill-relationships
     br = mdm_sub.add_parser(
@@ -110,14 +114,14 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         default=100,
         help="Maximum number of relationship instances to backfill and sync (default: 100)",
     )
-    br.set_defaults(handler=_handle_backfill_relationships)
+    br.set_defaults(handler=_logged_handler("backfill-relationships", _handle_backfill_relationships))
 
     # export
     ex = mdm_sub.add_parser("export")
     ex.add_argument("--since", default=None, help="ISO timestamp for incremental export")
     ex.add_argument("--entity-type", default=None)
     ex.add_argument("--batch-size", type=int, default=500)
-    ex.set_defaults(handler=_handle_export)
+    ex.set_defaults(handler=_logged_handler("export", _handle_export))
 
 
 # -- shared helpers ---------------------------------------------------------
@@ -128,11 +132,54 @@ def _session() -> Session:
 
 
 def _download_sec_bytes(url: str) -> bytes:
-    import urllib.request
+    from edgar_warehouse.infrastructure.sec_client import download_sec_bytes
+
     edgar_identity = os.environ.get("EDGAR_IDENTITY", "edgartools-platform contact@example.com")
-    req = urllib.request.Request(url, headers={"User-Agent": edgar_identity})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return resp.read()
+    return download_sec_bytes(url, edgar_identity)
+
+
+def _logged_handler(command_name: str, handler: Callable[[argparse.Namespace], int]) -> Callable[[argparse.Namespace], int]:
+    def _wrapped(args: argparse.Namespace) -> int:
+        started_at = time.monotonic()
+        emit_mdm_event(
+            "mdm_command_started",
+            command=command_name,
+            arguments=_safe_arguments(args),
+        )
+        try:
+            exit_code = handler(args)
+        except Exception as exc:
+            emit_mdm_event(
+                "mdm_command_failed",
+                command=command_name,
+                duration_ms=elapsed_ms(started_at),
+                error=exc.__class__.__name__,
+            )
+            raise
+        emit_mdm_event(
+            "mdm_command_completed",
+            command=command_name,
+            duration_ms=elapsed_ms(started_at),
+            exit_code=exit_code,
+        )
+        return exit_code
+
+    return _wrapped
+
+
+def _safe_arguments(args: argparse.Namespace) -> dict[str, object]:
+    safe: dict[str, object] = {}
+    blocked_fragments = ("password", "secret", "token", "key")
+    for name, value in vars(args).items():
+        if name == "handler" or any(fragment in name.lower() for fragment in blocked_fragments):
+            continue
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            safe[name] = value
+        elif isinstance(value, (list, tuple)):
+            safe[name] = [str(item) for item in value]
+        else:
+            safe[name] = str(value)
+    return safe
 
 
 def _get_mdm_engine():
@@ -287,12 +334,14 @@ def _handle_sync_graph(args) -> int:
         return 1
     session = _session()
     try:
-        count = GraphSyncEngine.build(session, client).sync_pending(limit=args.limit)
+        sync = GraphSyncEngine.build(session, client)
+        node_count = sync.sync_entities(limit=args.limit)
+        edge_count = sync.sync_pending(limit=args.limit)
         session.commit()
     finally:
         client.close()
         session.close()
-    print(json.dumps({"graph_edges_synced": count}, indent=2, sort_keys=True))
+    print(json.dumps({"graph_edges_synced": edge_count, "graph_nodes_synced": node_count}, indent=2, sort_keys=True))
     return 0
 
 

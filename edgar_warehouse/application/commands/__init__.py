@@ -5,6 +5,7 @@ from __future__ import annotations
 from edgar_warehouse.application.commands import (
     bootstrap_batch,
     bootstrap_full,
+    bootstrap_next,
     bootstrap_recent_10,
     catch_up_daily_form_index,
     daily_incremental,
@@ -24,4 +25,5 @@ COMMAND_REGISTRY = {
     "full-reconcile": full_reconcile.execute,
     "seed-universe": seed_universe.execute,
     "bootstrap-batch": bootstrap_batch.execute,
+    "bootstrap-next": bootstrap_next.execute,
 }

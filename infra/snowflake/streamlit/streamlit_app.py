@@ -12,6 +12,7 @@ from snowflake.snowpark.context import get_active_session
 st.set_page_config(page_title="EdgarTools Warehouse", layout="wide")
 
 GOLD_SCHEMA = "EDGARTOOLS_GOLD"
+SOURCE_SCHEMA = "EDGARTOOLS_SOURCE"
 
 
 @st.cache_resource
@@ -24,6 +25,25 @@ def _df(sql: str, params: list | None = None):
     if params:
         return session.sql(sql, params=params).to_pandas()
     return session.sql(sql).to_pandas()
+
+
+def _safe_df(label: str, sql: str):
+    try:
+        return _df(sql)
+    except Exception as exc:
+        st.warning(f"{label} is not available: {exc}")
+        return None
+
+
+def _show_dataframe(df, columns: list[str] | None = None):
+    if df is None or df.empty:
+        st.info("No rows to display.")
+        return
+    if columns is not None:
+        visible = [column for column in columns if column in df.columns]
+        if visible:
+            df = df[visible]
+    st.dataframe(df, use_container_width=True, hide_index=True)
 
 
 def _kpi_row():
@@ -282,8 +302,182 @@ def render_details():
         st.dataframe(recent, use_container_width=True, hide_index=True)
 
 
-summary_tab, details_tab = st.tabs(["Summary", "Company Details"])
+def _pipeline_runs():
+    return _safe_df(
+        "Pipeline runs",
+        f"""
+        with latest_manifest as (
+          select
+            environment,
+            workflow_name,
+            run_id,
+            business_date,
+            received_at,
+            completed_at as manifest_completed_at
+          from {SOURCE_SCHEMA}.SNOWFLAKE_RUN_MANIFEST_INBOX
+          qualify row_number() over (
+            partition by environment, workflow_name, run_id
+            order by received_at desc
+          ) = 1
+        )
+        select
+          coalesce(s.environment, m.environment) as environment,
+          coalesce(s.source_workflow, m.workflow_name) as workflow_name,
+          coalesce(s.run_id, m.run_id) as run_id,
+          m.business_date,
+          m.received_at as manifest_received_at,
+          m.manifest_completed_at,
+          s.source_load_status,
+          s.refresh_status,
+          s.status,
+          s.source_row_count,
+          s.tables_loaded,
+          s.error_message,
+          s.updated_at,
+          datediff('second', m.manifest_completed_at, s.updated_at) as snowflake_seconds
+        from latest_manifest m
+        full outer join {SOURCE_SCHEMA}.SNOWFLAKE_REFRESH_STATUS s
+          on s.environment = m.environment
+         and s.source_workflow = m.workflow_name
+         and s.run_id = m.run_id
+        order by coalesce(s.updated_at, m.received_at) desc
+        limit 100
+        """,
+    )
+
+
+def _pipeline_task_history():
+    return _safe_df(
+        "Manifest task history",
+        """
+        select *
+        from table(information_schema.task_history(
+          task_name => 'SNOWFLAKE_RUN_MANIFEST_TASK',
+          result_limit => 50
+        ))
+        order by scheduled_time desc
+        """,
+    )
+
+
+def _dynamic_table_refresh_history():
+    return _safe_df(
+        "Dynamic table refresh history",
+        f"""
+        select *
+        from table(information_schema.dynamic_table_refresh_history(result_limit => 100))
+        where database_name = current_database()
+          and schema_name = '{GOLD_SCHEMA}'
+        order by coalesce(refresh_start_time, data_timestamp) desc
+        """,
+    )
+
+
+def _manifest_copy_history():
+    return _safe_df(
+        "Manifest copy history",
+        f"""
+        select *
+        from table(information_schema.copy_history(
+          table_name => '{SOURCE_SCHEMA}.SNOWFLAKE_RUN_MANIFEST_INBOX',
+          start_time => dateadd(day, -7, current_timestamp())
+        ))
+        order by last_load_time desc
+        """,
+    )
+
+
+def _render_pipeline_metrics(runs):
+    if runs is None or runs.empty:
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Runs", "0")
+        col2.metric("Succeeded", "0")
+        col3.metric("Running", "0")
+        col4.metric("Failed", "0")
+        return
+
+    status = runs["STATUS"].fillna("pending").str.lower()
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Runs", f"{len(runs):,}")
+    col2.metric("Succeeded", f"{int((status == 'succeeded').sum()):,}")
+    col3.metric("Running", f"{int((status == 'running').sum()):,}")
+    col4.metric("Failed", f"{int((status == 'failed').sum()):,}")
+
+
+def render_pipeline():
+    st.header("Pipeline")
+    runs = _pipeline_runs()
+    _render_pipeline_metrics(runs)
+
+    st.subheader("Recent runs")
+    _show_dataframe(
+        runs,
+        [
+            "ENVIRONMENT",
+            "WORKFLOW_NAME",
+            "RUN_ID",
+            "BUSINESS_DATE",
+            "MANIFEST_RECEIVED_AT",
+            "MANIFEST_COMPLETED_AT",
+            "SOURCE_LOAD_STATUS",
+            "REFRESH_STATUS",
+            "STATUS",
+            "SOURCE_ROW_COUNT",
+            "TABLES_LOADED",
+            "SNOWFLAKE_SECONDS",
+            "ERROR_MESSAGE",
+            "UPDATED_AT",
+        ],
+    )
+
+    col_left, col_right = st.columns(2)
+    with col_left:
+        st.subheader("Manifest task")
+        _show_dataframe(
+            _pipeline_task_history(),
+            [
+                "SCHEDULED_TIME",
+                "COMPLETED_TIME",
+                "STATE",
+                "QUERY_ID",
+                "ERROR_CODE",
+                "ERROR_MESSAGE",
+            ],
+        )
+    with col_right:
+        st.subheader("Manifest copy")
+        _show_dataframe(
+            _manifest_copy_history(),
+            [
+                "FILE_NAME",
+                "STATUS",
+                "ROW_COUNT",
+                "ERROR_COUNT",
+                "LAST_LOAD_TIME",
+                "FIRST_ERROR_MESSAGE",
+            ],
+        )
+
+    st.subheader("Gold dynamic table refresh")
+    _show_dataframe(
+        _dynamic_table_refresh_history(),
+        [
+            "NAME",
+            "STATE",
+            "REFRESH_TRIGGER",
+            "REFRESH_ACTION",
+            "REFRESH_START_TIME",
+            "REFRESH_END_TIME",
+            "DATA_TIMESTAMP",
+            "STATE_MESSAGE",
+        ],
+    )
+
+
+summary_tab, details_tab, pipeline_tab = st.tabs(["Summary", "Company Details", "Pipeline"])
 with summary_tab:
     render_summary()
 with details_tab:
     render_details()
+with pipeline_tab:
+    render_pipeline()

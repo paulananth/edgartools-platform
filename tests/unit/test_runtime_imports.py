@@ -61,18 +61,14 @@ class RuntimeImportTests(unittest.TestCase):
         self.assertTrue(callable(gold.write_gold_to_snowflake_export))
 
     def test_command_registry_contains_all_cli_commands(self) -> None:
+        cli = importlib.import_module("edgar_warehouse.cli")
         commands = importlib.import_module("edgar_warehouse.application.commands")
+        parser = cli.build_parser()
+        subparsers_action = next(
+            action for action in parser._actions if action.__class__.__name__ == "_SubParsersAction"
+        )
+        warehouse_cli_commands = set(subparsers_action.choices) - {"mdm"}
         self.assertEqual(
             set(commands.COMMAND_REGISTRY),
-            {
-                "bootstrap-full",
-                "bootstrap-recent-10",
-                "bootstrap-batch",
-                "daily-incremental",
-                "load-daily-form-index-for-date",
-                "catch-up-daily-form-index",
-                "targeted-resync",
-                "full-reconcile",
-                "seed-universe",
-            },
+            warehouse_cli_commands,
         )
