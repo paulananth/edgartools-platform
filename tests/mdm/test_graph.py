@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from contextlib import contextmanager
 from unittest.mock import patch
 
 import pytest
@@ -185,6 +186,40 @@ class TestGraphSyncEngine:
         assert rows[0].target_entity_id == fund_id
         assert rows[0].graph_synced_at is None
 
+    def test_record_relationship_logs_each_creation(self, db_session, capsys):
+        adviser_id = _make_entity(db_session, "adviser")
+        fund_id = _make_entity(db_session, "fund")
+        db_session.commit()
+
+        engine = GraphSyncEngine.build(db_session)
+        engine.record_relationship("MANAGES_FUND", adviser_id, fund_id, source_system="test")
+
+        captured = capsys.readouterr()
+        assert "mdm_relationship_created" in captured.err
+        assert "MANAGES_FUND" in captured.err
+        assert adviser_id in captured.err
+        assert fund_id in captured.err
+
+    def test_record_relationship_skips_duplicate_rows(self, db_session, capsys):
+        adviser_id = _make_entity(db_session, "adviser")
+        fund_id = _make_entity(db_session, "fund")
+        db_session.commit()
+
+        engine = GraphSyncEngine.build(db_session)
+        first = engine.record_relationship("MANAGES_FUND", adviser_id, fund_id)
+        db_session.commit()
+        capsys.readouterr()
+        second = engine.record_relationship("MANAGES_FUND", adviser_id, fund_id)
+        db_session.commit()
+
+        rows = list(db_session.scalars(
+            __import__("sqlalchemy", fromlist=["select"]).select(MdmRelationshipInstance)
+        ))
+        captured = capsys.readouterr()
+        assert first.instance_id == second.instance_id
+        assert len(rows) == 1
+        assert "mdm_relationship_created" not in captured.err
+
     def test_record_relationship_unknown_type_raises(self, db_session):
         engine = GraphSyncEngine.build(db_session)
         with pytest.raises(KeyError, match="NO_SUCH_REL"):
@@ -215,6 +250,34 @@ class TestGraphSyncEngine:
         assert engine.sync_entities(limit=100) == 2
         assert len(client.graph_session.calls) == 2
         assert all("MERGE (n:Company" in query for query, _kwargs in client.graph_session.calls)
+
+    def test_sync_pending_filters_relationship_types_with_per_type_limit(self, db_session):
+        from sqlalchemy import select
+
+        adviser_id = _make_entity(db_session, "adviser")
+        fund_ids = [_make_entity(db_session, "fund") for _ in range(3)]
+        company_id = _make_entity(db_session, "company")
+        security_id = _make_entity(db_session, "security")
+        db_session.commit()
+
+        engine = GraphSyncEngine.build(db_session)
+        for fund_id in fund_ids:
+            engine.record_relationship("MANAGES_FUND", adviser_id, fund_id)
+        engine.record_relationship("ISSUED_BY", security_id, company_id)
+        db_session.commit()
+
+        fake = _FakeGraphClient()
+        synced = GraphSyncEngine.build(db_session, neo4j=fake).sync_pending(
+            relationship_types=["MANAGES_FUND"],
+            limit_per_type=2,
+        )
+
+        assert synced == 2
+        pending = list(db_session.scalars(
+            select(MdmRelationshipInstance).where(MdmRelationshipInstance.graph_synced_at.is_(None))
+        ))
+        assert len(pending) == 2
+        assert all("MANAGES_FUND" in query or "MERGE (n:" in query for query, _ in fake.graph_session.calls)
 
     def test_sync_pending_calls_bolt_and_stamps_synced_at(self, db_session, neo4j_client):
         adviser_id = _make_entity(db_session, "adviser")
@@ -414,11 +477,43 @@ class TestCLICommands:
         args = build_parser().parse_args(["mdm", "sync-graph", "--limit", "25"])
         assert args.limit == 25
 
+    def test_parser_sync_graph_per_type_limit(self):
+        from edgar_warehouse.cli import build_parser
+        args = build_parser().parse_args([
+            "mdm", "sync-graph",
+            "--relationship-type", "HOLDS",
+            "--limit-per-type", "100",
+        ])
+        assert args.relationship_type == ["HOLDS"]
+        assert args.limit_per_type == 100
+
+    def test_parser_exposes_derive_relationships(self):
+        from edgar_warehouse.cli import build_parser
+        args = build_parser().parse_args([
+            "mdm", "derive-relationships",
+            "--target-per-type", "100",
+            "--relationship-type", "HOLDS",
+        ])
+        assert args.mdm_command == "derive-relationships"
+        assert args.target_per_type == 100
+        assert args.relationship_type == ["HOLDS"]
+
+    def test_parser_exposes_load_relationships(self):
+        from edgar_warehouse.cli import build_parser
+        args = build_parser().parse_args([
+            "mdm", "load-relationships",
+            "--target-per-type", "100",
+            "--skip-graph-sync",
+        ])
+        assert args.mdm_command == "load-relationships"
+        assert args.target_per_type == 100
+        assert args.skip_graph_sync is True
+
     def test_runtime_ops_exposes_new_commands(self):
         """Extend existing e2e-operations test to include graph commands."""
         from edgar_warehouse.cli import build_parser
         parser = build_parser()
-        for cmd in ("backfill-relationships", "verify-graph", "sync-graph"):
+        for cmd in ("backfill-relationships", "verify-graph", "sync-graph", "derive-relationships", "load-relationships"):
             args = parser.parse_args(["mdm", cmd])
             assert args.mdm_command == cmd
 
@@ -452,8 +547,8 @@ class TestCLICommands:
 
 class TestNeo4jClientURINormalisation:
     """The cli._neo4j_client() must rewrite neo4j:// -> bolt:// so that
-    single-instance Azure Container Apps Neo4j (no bolt_advertised_address)
-    doesn't fail routing discovery.
+    single-instance Neo4j deployments without bolt_advertised_address do not
+    fail routing discovery.
 
     Neo4jGraphClient is a @dataclass with uri: str as a public field and lazy
     connection (connect() is not called at construction time), so we can
@@ -479,6 +574,20 @@ class TestNeo4jClientURINormalisation:
         client = self._call_neo4j_client("bolt://host:7687")
         assert client is not None
         assert client.uri.startswith("bolt://")
+
+    def test_username_alias_and_database_are_supported(self):
+        from edgar_warehouse.mdm.cli import _neo4j_client
+
+        with patch.dict(os.environ, {
+            "NEO4J_URI": "neo4j+s://example.databases.neo4j.io",
+            "NEO4J_USERNAME": "neo4j-user",
+            "NEO4J_PASSWORD": "secret",
+            "NEO4J_DATABASE": "neo4j-db",
+        }, clear=True):
+            client = _neo4j_client()
+        assert client is not None
+        assert client.user == "neo4j-user"
+        assert client.database == "neo4j-db"
 
     def test_returns_none_when_env_vars_missing(self):
         from edgar_warehouse.mdm.cli import _neo4j_client

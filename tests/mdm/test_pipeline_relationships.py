@@ -36,6 +36,7 @@ from edgar_warehouse.mdm.database import (
     MdmPerson,
     MdmRelationshipInstance,
     MdmRelationshipType,
+    MdmSecurity,
     MdmSourceRef,
 )
 from edgar_warehouse.mdm.pipeline import MDMPipeline, _derive_role
@@ -123,50 +124,50 @@ def session() -> Session:
 @pytest.fixture
 def fixture_world(session: Session) -> dict:
     """Seed a small fixed world:
-      * 2 companies (CIK 320193 = Apple, CIK 789019 = Microsoft)
-      * 1 individual adviser linked to no company, CIK 111111
-      * 1 firm-style adviser linked to Microsoft (linked_company_entity_id)
-      * 1 person whose owner_cik == 111111 (matches the individual adviser)
-      * 1 person whose owner_cik == 222222 (insider only, no adviser link)
+      * 2 companies (synthetic CIKs 910001 = Issuer Corp, 910002 = Linked Corp)
+      * 1 individual adviser linked to no company, synthetic CIK 910101
+      * 1 firm-style adviser linked to Linked Corp (linked_company_entity_id)
+      * 1 person whose owner_cik == 910101 (matches the individual adviser)
+      * 1 person whose owner_cik == 910102 (insider only, no adviser link)
     """
-    apple_id = _add_entity(session, "company")
-    msft_id  = _add_entity(session, "company")
+    issuer_company_id = _add_entity(session, "company")
+    linked_company_id  = _add_entity(session, "company")
     session.add_all([
-        MdmCompany(entity_id=apple_id, cik=320193, canonical_name="Apple Inc"),
-        MdmCompany(entity_id=msft_id,  cik=789019, canonical_name="Microsoft Corp"),
+        MdmCompany(entity_id=issuer_company_id, cik=910001, canonical_name="Issuer Corp"),
+        MdmCompany(entity_id=linked_company_id,  cik=910002, canonical_name="Linked Corp"),
     ])
 
-    indiv_adv_id = _add_entity(session, "adviser")
-    firm_adv_id  = _add_entity(session, "adviser")
+    individual_adviser_id = _add_entity(session, "adviser")
+    firm_adviser_id  = _add_entity(session, "adviser")
     session.add_all([
-        MdmAdviser(entity_id=indiv_adv_id, cik=111111,
-                   canonical_name="Jane Doe (RIA)",
+        MdmAdviser(entity_id=individual_adviser_id, cik=910101,
+                   canonical_name="Individual Adviser (RIA)",
                    linked_company_entity_id=None),
-        MdmAdviser(entity_id=firm_adv_id, cik=789019,
-                   canonical_name="Microsoft Asset Mgmt",
-                   linked_company_entity_id=msft_id),
+        MdmAdviser(entity_id=firm_adviser_id, cik=910002,
+                   canonical_name="Linked Asset Mgmt",
+                   linked_company_entity_id=linked_company_id),
     ])
     # Source ref so _adviser_entity_id() can resolve from accession_number
     session.add(MdmSourceRef(
-        entity_id=firm_adv_id, source_system="adv_filing",
-        source_id="0001-msft-adv", source_priority=2,
+        entity_id=firm_adviser_id, source_system="adv_filing",
+        source_id="0001-linked-adv", source_priority=2,
     ))
 
-    insider_person_id = _add_entity(session, "person")
-    indiv_person_id   = _add_entity(session, "person")
+    reporting_person_id = _add_entity(session, "person")
+    individual_person_id   = _add_entity(session, "person")
     session.add_all([
-        MdmPerson(entity_id=insider_person_id, owner_cik=222222,
-                  canonical_name="Tim Cook"),
-        MdmPerson(entity_id=indiv_person_id, owner_cik=111111,
-                  canonical_name="Jane Doe"),
+        MdmPerson(entity_id=reporting_person_id, owner_cik=910102,
+                  canonical_name="Reporting Person"),
+        MdmPerson(entity_id=individual_person_id, owner_cik=910101,
+                  canonical_name="Individual Person"),
     ])
 
     session.commit()
     return {
-        "apple_id": apple_id, "msft_id": msft_id,
-        "indiv_adv_id": indiv_adv_id, "firm_adv_id": firm_adv_id,
-        "insider_person_id": insider_person_id,
-        "indiv_person_id": indiv_person_id,
+        "issuer_company_id": issuer_company_id, "linked_company_id": linked_company_id,
+        "individual_adviser_id": individual_adviser_id, "firm_adviser_id": firm_adviser_id,
+        "reporting_person_id": reporting_person_id,
+        "individual_person_id": individual_person_id,
     }
 
 
@@ -177,27 +178,27 @@ def fixture_world(session: Session) -> dict:
 class TestPipelineHelpers:
     def test_company_cik_set(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=StubSilver({}))
-        assert pipe._company_cik_set() == {320193, 789019}
+        assert pipe._company_cik_set() == {910001, 910002}
 
     def test_company_entity_id_resolves(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=StubSilver({}))
-        assert pipe._company_entity_id(320193) == fixture_world["apple_id"]
+        assert pipe._company_entity_id(910001) == fixture_world["issuer_company_id"]
         assert pipe._company_entity_id(999999) is None
         assert pipe._company_entity_id(None)   is None
 
     def test_person_entity_id_by_cik(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=StubSilver({}))
-        assert pipe._person_entity_id(222222, "Tim Cook") == fixture_world["insider_person_id"]
+        assert pipe._person_entity_id(910102, "Reporting Person") == fixture_world["reporting_person_id"]
 
     def test_person_entity_id_by_name_fallback(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=StubSilver({}))
         # No CIK match -> falls back to canonical_name
-        assert pipe._person_entity_id(None, "Jane Doe") == fixture_world["indiv_person_id"]
+        assert pipe._person_entity_id(None, "Individual Person") == fixture_world["individual_person_id"]
         assert pipe._person_entity_id(None, "No Such Person") is None
 
     def test_adviser_entity_id_via_source_ref(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=StubSilver({}))
-        assert pipe._adviser_entity_id("0001-msft-adv") == fixture_world["firm_adv_id"]
+        assert pipe._adviser_entity_id("0001-linked-adv") == fixture_world["firm_adviser_id"]
         assert pipe._adviser_entity_id("nonexistent-acc") is None
         assert pipe._adviser_entity_id(None) is None
 
@@ -206,8 +207,8 @@ class TestPipelineHelpers:
         pairs = list(pipe._adviser_company_pairs())
         assert len(pairs) == 1
         adv_id, co_id = pairs[0]
-        assert adv_id == fixture_world["firm_adv_id"]
-        assert co_id  == fixture_world["msft_id"]
+        assert adv_id == fixture_world["firm_adviser_id"]
+        assert co_id  == fixture_world["linked_company_id"]
 
     def test_adviser_person_pairs_only_unlinked(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=StubSilver({}))
@@ -215,8 +216,8 @@ class TestPipelineHelpers:
         # firm adviser is excluded (linked_company_entity_id is set)
         assert len(pairs) == 1
         adv_id, person_id = pairs[0]
-        assert adv_id    == fixture_world["indiv_adv_id"]
-        assert person_id == fixture_world["indiv_person_id"]
+        assert adv_id    == fixture_world["individual_adviser_id"]
+        assert person_id == fixture_world["individual_person_id"]
 
 
 # ---------------------------------------------------------------------------
@@ -245,46 +246,46 @@ class TestRunRelationships:
         #  - SELECT ... FROM sec_ownership_reporting_owner ... (for IS_INSIDER)
         # The MANAGES_FUND/ISSUED_BY backfill is a no-op without funds/securities.
         owner_rows = [
-            # Tim Cook -> Apple, director
+            # Reporting Person -> Issuer Corp, director
             {
-                "accession_number": "0000-apple-1",
+                "accession_number": "0000-issuer-1",
                 "owner_index": 0,
-                "owner_cik": 222222,
-                "owner_name": "Tim Cook",
+                "owner_cik": 910102,
+                "owner_name": "Reporting Person",
                 "is_director": True,
                 "is_officer": False,
                 "is_ten_percent_owner": False,
                 "is_other": False,
                 "officer_title": None,
-                "issuer_cik": 320193,
+                "issuer_cik": 910001,
                 "period_of_report": None,
             },
-            # Jane Doe -> Microsoft, officer
+            # Individual Person -> Linked Corp, officer
             {
-                "accession_number": "0000-msft-1",
+                "accession_number": "0000-linked-1",
                 "owner_index": 0,
-                "owner_cik": 111111,
-                "owner_name": "Jane Doe",
+                "owner_cik": 910101,
+                "owner_name": "Individual Person",
                 "is_director": False,
                 "is_officer": True,
                 "is_ten_percent_owner": False,
                 "is_other": False,
                 "officer_title": "CFO",
-                "issuer_cik": 789019,
+                "issuer_cik": 910002,
                 "period_of_report": None,
             },
             # Corporate beneficial owner — owner_cik IS a known company. Must skip.
             {
                 "accession_number": "0000-corp-1",
                 "owner_index": 1,
-                "owner_cik": 320193,        # Apple's CIK
-                "owner_name": "Apple Inc",
+                "owner_cik": 910001,        # Issuer Corp's synthetic CIK
+                "owner_name": "Issuer Corp",
                 "is_director": False,
                 "is_officer": False,
                 "is_ten_percent_owner": True,
                 "is_other": False,
                 "officer_title": None,
-                "issuer_cik": 789019,
+                "issuer_cik": 910002,
                 "period_of_report": None,
             },
         ]
@@ -306,8 +307,8 @@ class TestRunRelationships:
         assert written >= 2
 
         pairs = {(r.source_entity_id, r.target_entity_id) for r in rows}
-        assert (fixture_world["insider_person_id"], fixture_world["apple_id"]) in pairs
-        assert (fixture_world["indiv_person_id"],   fixture_world["msft_id"])  in pairs
+        assert (fixture_world["reporting_person_id"], fixture_world["issuer_company_id"]) in pairs
+        assert (fixture_world["individual_person_id"],   fixture_world["linked_company_id"])  in pairs
 
     def test_skips_corporate_beneficial_owner(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=self._stub())
@@ -318,10 +319,10 @@ class TestRunRelationships:
             .join(MdmRelationshipType)
             .where(MdmRelationshipType.rel_type_name == "IS_INSIDER")
         ))
-        # No row should target_entity = msft from owner_cik = Apple
+        # No row should target_entity = linked company from owner_cik = Issuer Corp
         assert all(
-            not (r.source_entity_id == fixture_world["apple_id"]
-                 and r.target_entity_id == fixture_world["msft_id"])
+            not (r.source_entity_id == fixture_world["issuer_company_id"]
+                 and r.target_entity_id == fixture_world["linked_company_id"])
             for r in rows
         )
 
@@ -335,8 +336,8 @@ class TestRunRelationships:
             .where(MdmRelationshipType.rel_type_name == "IS_ENTITY_OF")
         ))
         assert len(rows) == 1
-        assert rows[0].source_entity_id == fixture_world["firm_adv_id"]
-        assert rows[0].target_entity_id == fixture_world["msft_id"]
+        assert rows[0].source_entity_id == fixture_world["firm_adviser_id"]
+        assert rows[0].target_entity_id == fixture_world["linked_company_id"]
 
     def test_writes_is_person_of(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=self._stub())
@@ -348,8 +349,8 @@ class TestRunRelationships:
             .where(MdmRelationshipType.rel_type_name == "IS_PERSON_OF")
         ))
         assert len(rows) == 1
-        assert rows[0].source_entity_id == fixture_world["indiv_adv_id"]
-        assert rows[0].target_entity_id == fixture_world["indiv_person_id"]
+        assert rows[0].source_entity_id == fixture_world["individual_adviser_id"]
+        assert rows[0].target_entity_id == fixture_world["individual_person_id"]
 
     def test_returned_count_matches_inserts(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=self._stub())
@@ -367,11 +368,80 @@ class TestRunRelationships:
             .where(MdmRelationshipType.rel_type_name == "IS_INSIDER")
         ))
         by_source = {r.source_entity_id: r for r in rows}
-        cook_row = by_source[fixture_world["insider_person_id"]]
-        jane_row = by_source[fixture_world["indiv_person_id"]]
+        director_row = by_source[fixture_world["reporting_person_id"]]
+        officer_row = by_source[fixture_world["individual_person_id"]]
 
-        assert cook_row.properties.get("role") == "director"
-        assert jane_row.properties.get("role") == "officer"
-        assert jane_row.properties.get("title") == "CFO"
-        assert cook_row.source_system == "ownership_filing"
-        assert cook_row.source_accession == "0000-apple-1"
+        assert director_row.properties.get("role") == "director"
+        assert officer_row.properties.get("role") == "officer"
+        assert officer_row.properties.get("title") == "CFO"
+        assert director_row.source_system == "ownership_filing"
+        assert director_row.source_accession == "0000-issuer-1"
+
+    def test_writes_holds_from_non_derivative_transactions(self, session, fixture_world):
+        security_id = _add_entity(session, "security")
+        session.add(MdmSecurity(
+            entity_id=security_id,
+            issuer_entity_id=fixture_world["issuer_company_id"],
+            canonical_title="Common Stock",
+            security_type="common_stock",
+        ))
+        session.add(MdmSourceRef(
+            entity_id=security_id,
+            source_system="ownership_filing",
+            source_id="0000-issuer-1:0:0",
+            source_priority=3,
+        ))
+        session.commit()
+        pipe = MDMPipeline(session=session, silver=StubSilver({
+            "FROM sec_ownership_reporting_owner": [],
+            "FROM sec_ownership_non_derivative_txn": [
+                {
+                    "accession_number": "0000-issuer-1",
+                    "owner_index": 0,
+                    "txn_index": 0,
+                    "security_title": "Common Stock",
+                    "transaction_date": None,
+                    "shares_owned_after": 10,
+                    "ownership_direct_indirect": "D",
+                    "owner_cik": 910102,
+                    "owner_name": "Reporting Person",
+                    "issuer_cik": 910001,
+                }
+            ],
+        }))
+
+        summary = pipe.derive_relationships(target_per_type=1, relationship_types=["HOLDS"])
+
+        rows = list(session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "HOLDS")
+        ))
+        assert summary["HOLDS"]["inserted"] == 1
+        assert len(rows) == 1
+        assert rows[0].source_entity_id == fixture_world["reporting_person_id"]
+        assert rows[0].target_entity_id == security_id
+        assert rows[0].properties["shares_owned"] == 10
+        assert rows[0].properties["direct_indirect"] == "D"
+
+    def test_relationship_derivation_is_idempotent(self, session, fixture_world):
+        pipe = MDMPipeline(session=session, silver=self._stub())
+
+        first = pipe.run_relationships()
+        second = pipe.run_relationships()
+
+        assert first == 4
+        assert second == 0
+        rows = list(session.scalars(select(MdmRelationshipInstance)))
+        assert len(rows) == 4
+
+    def test_target_per_type_counts_existing_rows(self, session, fixture_world):
+        pipe = MDMPipeline(session=session, silver=self._stub())
+
+        first = pipe.derive_relationships(target_per_type=1, relationship_types=["IS_INSIDER"])
+        second = pipe.derive_relationships(target_per_type=1, relationship_types=["IS_INSIDER"])
+
+        assert first["IS_INSIDER"]["inserted"] == 1
+        assert first["IS_INSIDER"]["total"] == 1
+        assert second["IS_INSIDER"]["existing"] == 1
+        assert second["IS_INSIDER"]["inserted"] == 0

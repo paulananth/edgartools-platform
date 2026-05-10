@@ -41,7 +41,28 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
 
     sync = mdm_sub.add_parser("sync-graph", help="Sync pending MDM relationship rows to Neo4j")
     sync.add_argument("--limit", type=int, default=None)
+    sync.add_argument("--limit-per-type", type=int, default=None, help="Maximum pending edges to sync for each relationship type")
+    sync.add_argument("--relationship-type", action="append", default=None, help="Relationship type to sync; repeat for multiple types")
     sync.set_defaults(handler=_logged_handler("sync-graph", _handle_sync_graph))
+
+    derive = mdm_sub.add_parser(
+        "derive-relationships",
+        help="Derive MDM relationship instances from resolved entities and silver facts",
+    )
+    derive.add_argument("--target-per-type", type=int, default=100, help="Active relationships to target per type")
+    derive.add_argument("--relationship-type", action="append", default=None, help="Relationship type to derive; repeat for multiple types")
+    derive.set_defaults(handler=_logged_handler("derive-relationships", _handle_derive_relationships))
+
+    load_rels = mdm_sub.add_parser(
+        "load-relationships",
+        help="Resolve entities, derive relationships, and sync requested relationship targets to Neo4j",
+    )
+    load_rels.add_argument("--target-per-type", type=int, default=100, help="Active relationships to target per type")
+    load_rels.add_argument("--entity-limit", type=int, default=None, help="Optional cap for each entity resolver phase")
+    load_rels.add_argument("--relationship-type", action="append", default=None, help="Relationship type to load; repeat for multiple types")
+    load_rels.add_argument("--skip-entity-resolution", action="store_true", default=False, help="Only derive/sync from existing MDM entities")
+    load_rels.add_argument("--skip-graph-sync", action="store_true", default=False, help="Derive relationships but do not sync Neo4j")
+    load_rels.set_defaults(handler=_logged_handler("load-relationships", _handle_load_relationships))
 
     api = mdm_sub.add_parser("api", help="Run the MDM FastAPI service with uvicorn")
     api.add_argument("--host", default="0.0.0.0")
@@ -191,20 +212,22 @@ def _neo4j_client():
     from edgar_warehouse.mdm.graph import Neo4jGraphClient
 
     uri = os.environ.get("NEO4J_URI")
-    user = os.environ.get("NEO4J_USER")
+    user = os.environ.get("NEO4J_USER") or os.environ.get("NEO4J_USERNAME")
     password = os.environ.get("NEO4J_PASSWORD")
+    database = os.environ.get("NEO4J_DATABASE")
     if not (uri and user and password) and os.environ.get("NEO4J_SECRET_JSON"):
         payload = json.loads(os.environ["NEO4J_SECRET_JSON"])
         uri = uri or payload.get("uri")
-        user = user or payload.get("user")
+        user = user or payload.get("user") or payload.get("username")
         password = password or payload.get("password")
+        database = database or payload.get("database")
     if not (uri and user and password):
         return None
     # neo4j:// triggers bolt routing which fails on single-instance deployments
     # without NEO4J_server_bolt_advertised__address configured; use bolt:// directly.
     if uri and uri.startswith("neo4j://"):
         uri = "bolt://" + uri[len("neo4j://"):]
-    return Neo4jGraphClient(uri=uri, user=user, password=password)
+    return Neo4jGraphClient(uri=uri, user=user, password=password, database=database)
 
 
 def _silver_reader():
@@ -301,7 +324,11 @@ def _handle_counts(args) -> int:
     from edgar_warehouse.mdm.database import get_engine
     from edgar_warehouse.mdm.migrations.runtime import count_tables
 
-    print(json.dumps(count_tables(get_engine()), indent=2, sort_keys=True))
+    engine = get_engine()
+    payload = dict(count_tables(engine))
+    with Session(engine) as session:
+        payload["relationships_by_type"] = _relationship_counts_by_type(session)
+    print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
 
@@ -336,7 +363,11 @@ def _handle_sync_graph(args) -> int:
     try:
         sync = GraphSyncEngine.build(session, client)
         node_count = sync.sync_entities(limit=args.limit)
-        edge_count = sync.sync_pending(limit=args.limit)
+        edge_count = sync.sync_pending(
+            limit=args.limit,
+            relationship_types=args.relationship_type,
+            limit_per_type=args.limit_per_type,
+        )
         session.commit()
     finally:
         client.close()
@@ -345,29 +376,106 @@ def _handle_sync_graph(args) -> int:
     return 0
 
 
+def _handle_derive_relationships(args) -> int:
+    from edgar_warehouse.mdm.pipeline import MDMPipeline
+
+    session = _session()
+    silver = _silver_reader()
+    if silver is None:
+        print("MDM_SILVER_DUCKDB not set; nothing to do.", file=sys.stderr)
+        session.close()
+        return 1
+    try:
+        pipeline = MDMPipeline(session=session, silver=silver)
+        summary = pipeline.derive_relationships(
+            target_per_type=args.target_per_type,
+            relationship_types=args.relationship_type,
+        )
+        session.commit()
+    finally:
+        session.close()
+    print(json.dumps({"relationship_counts_by_type": summary}, indent=2, sort_keys=True))
+    return 0
+
+
+def _handle_load_relationships(args) -> int:
+    from edgar_warehouse.mdm.graph import GraphSyncEngine
+    from edgar_warehouse.mdm.pipeline import MDMPipeline
+
+    session = _session()
+    silver = _silver_reader()
+    if silver is None:
+        print("MDM_SILVER_DUCKDB not set; nothing to do.", file=sys.stderr)
+        session.close()
+        return 1
+
+    client = None if args.skip_graph_sync else _neo4j_client()
+    try:
+        pipeline = MDMPipeline(session=session, silver=silver, neo4j=client)
+        entity_counts: dict[str, int] = {}
+        if not args.skip_entity_resolution:
+            entity_counts = {
+                "companies_processed": pipeline.run_companies(limit=args.entity_limit),
+                "advisers_processed": pipeline.run_advisers(limit=args.entity_limit),
+                "securities_processed": pipeline.run_securities(limit=args.entity_limit),
+                "persons_processed": pipeline.run_persons(limit=args.entity_limit),
+                "funds_processed": pipeline.run_funds(limit=args.entity_limit),
+            }
+        relationship_summary = pipeline.derive_relationships(
+            target_per_type=args.target_per_type,
+            relationship_types=args.relationship_type,
+        )
+        graph_nodes_synced = 0
+        graph_edges_synced = 0
+        if client is not None:
+            sync = GraphSyncEngine.build(session, client)
+            graph_nodes_synced = sync.sync_entities()
+            graph_edges_synced = sync.sync_pending(
+                relationship_types=args.relationship_type,
+                limit_per_type=args.target_per_type,
+            )
+        session.commit()
+    finally:
+        if client is not None:
+            client.close()
+        session.close()
+
+    print(
+        json.dumps(
+            {
+                **entity_counts,
+                "graph_edges_synced": graph_edges_synced,
+                "graph_nodes_synced": graph_nodes_synced,
+                "relationship_counts_by_type": relationship_summary,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
 def _handle_verify_graph(args) -> int:
     client = _neo4j_client()
     if client is None:
         print(json.dumps({"error": "NEO4J_URI/NEO4J_USER/NEO4J_PASSWORD not configured"}), file=sys.stderr)
         return 1
+    session = _session()
     try:
+        from edgar_warehouse.mdm.graph import GraphRegistry
+
+        relationship_types = sorted(GraphRegistry.load(session).rel_type_by_name)
         with client.session() as s:
-            nodes     = s.run("MATCH (n)                     RETURN count(n) AS n").single()["n"]
-            manages   = s.run("MATCH ()-[r:MANAGES_FUND]->()  RETURN count(r) AS n").single()["n"]
-            issued    = s.run("MATCH ()-[r:ISSUED_BY]->()     RETURN count(r) AS n").single()["n"]
-            insider   = s.run("MATCH ()-[r:IS_INSIDER]->()    RETURN count(r) AS n").single()["n"]
-            entity_of = s.run("MATCH ()-[r:IS_ENTITY_OF]->()  RETURN count(r) AS n").single()["n"]
-            person_of = s.run("MATCH ()-[r:IS_PERSON_OF]->()  RETURN count(r) AS n").single()["n"]
+            payload = {"neo4j_nodes_total": s.run("MATCH (n) RETURN count(n) AS n").single()["n"]}
+            for rel_type in relationship_types:
+                _validate_cypher_relationship_type(rel_type)
+                payload[f"neo4j_{rel_type}_edges"] = s.run(
+                    f"MATCH ()-[r:{rel_type}]->() RETURN count(r) AS n"
+                ).single()["n"]
     finally:
+        session.close()
         client.close()
-    print(json.dumps({
-        "neo4j_nodes_total":          nodes,
-        "neo4j_MANAGES_FUND_edges":   manages,
-        "neo4j_ISSUED_BY_edges":      issued,
-        "neo4j_IS_INSIDER_edges":     insider,
-        "neo4j_IS_ENTITY_OF_edges":   entity_of,
-        "neo4j_IS_PERSON_OF_edges":   person_of,
-    }, indent=2, sort_keys=True))
+    print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
 
@@ -384,6 +492,44 @@ def _handle_backfill_relationships(args) -> int:
         session.close()
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
+
+
+def _relationship_counts_by_type(session: Session) -> dict[str, dict[str, int]]:
+    from sqlalchemy import case, func, select
+    from edgar_warehouse.mdm.database import MdmRelationshipInstance, MdmRelationshipType
+
+    pending_expr = case(
+        (
+            (MdmRelationshipInstance.instance_id.isnot(None))
+            & (MdmRelationshipInstance.graph_synced_at.is_(None)),
+            1,
+        ),
+        else_=0,
+    )
+    rows = session.execute(
+        select(
+            MdmRelationshipType.rel_type_name,
+            func.count(MdmRelationshipInstance.instance_id),
+            func.coalesce(func.sum(pending_expr), 0),
+        )
+        .outerjoin(
+            MdmRelationshipInstance,
+            (MdmRelationshipInstance.rel_type_id == MdmRelationshipType.rel_type_id)
+            & (MdmRelationshipInstance.is_active == True),
+        )
+        .where(MdmRelationshipType.is_active == True)
+        .group_by(MdmRelationshipType.rel_type_name)
+        .order_by(MdmRelationshipType.rel_type_name)
+    )
+    return {
+        name: {"active": int(active or 0), "pending_graph_sync": int(pending or 0)}
+        for name, active, pending in rows
+    }
+
+
+def _validate_cypher_relationship_type(rel_type: str) -> None:
+    if not rel_type.replace("_", "").isalnum() or not rel_type[0].isalpha():
+        raise ValueError(f"Unsafe Neo4j relationship type: {rel_type}")
 
 
 def _handle_api(args) -> int:
