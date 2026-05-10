@@ -14,6 +14,8 @@ Sync pattern:
 from __future__ import annotations
 
 import hashlib
+import json
+import sys
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -122,7 +124,8 @@ def relationship_merge_cypher(registry: GraphRegistry, rel_type_name: str) -> st
 class Neo4jGraphClient:
     uri: str
     user: str
-    password: str
+    password: str = field(repr=False)
+    database: str | None = None
     _driver: Any = field(default=None, init=False, repr=False)
 
     def connect(self) -> None:
@@ -171,7 +174,8 @@ class Neo4jGraphClient:
     def session(self):
         if self._driver is None:
             self.connect()
-        with self._driver.session() as s:
+        kwargs = {"database": self.database} if self.database else {}
+        with self._driver.session(**kwargs) as s:
             emit_mdm_event("neo4j_session_opened", host=_uri_host(self.uri), scheme=urlparse(self.uri).scheme)
             try:
                 yield _LoggedNeo4jSession(s, uri=self.uri)
@@ -289,37 +293,97 @@ class GraphSyncEngine:
         source_system: Optional[str] = None,
         source_accession: Optional[str] = None,
     ) -> MdmRelationshipInstance:
+        row, _created = self.ensure_relationship(
+            rel_type_name=rel_type_name,
+            source_entity_id=source_entity_id,
+            target_entity_id=target_entity_id,
+            properties=properties,
+            effective_from=effective_from,
+            effective_to=effective_to,
+            source_system=source_system,
+            source_accession=source_accession,
+        )
+        return row
+
+    def ensure_relationship(
+        self,
+        rel_type_name: str,
+        source_entity_id: str,
+        target_entity_id: str,
+        properties: Optional[dict] = None,
+        effective_from=None,
+        effective_to=None,
+        source_system: Optional[str] = None,
+        source_accession: Optional[str] = None,
+    ) -> tuple[MdmRelationshipInstance, bool]:
         """Write to mdm_relationship_instance first (PG mirror), leave
-        graph_synced_at NULL so sync_pending() picks it up."""
+        graph_synced_at NULL so sync_pending() picks it up.
+
+        Returns (row, created). Existing active rows with the same source,
+        target, relationship type, temporal bounds, source accession, and
+        properties are reused so reruns do not create duplicate MDM edges.
+        """
         rec = self.registry.rel_type_by_name.get(rel_type_name)
         if rec is None:
             raise KeyError(f"Unknown relationship type '{rel_type_name}'")
+        clean_properties = properties or {}
+        candidates = self.session.scalars(
+            select(MdmRelationshipInstance).where(
+                MdmRelationshipInstance.rel_type_id == rec["rel_type_id"],
+                MdmRelationshipInstance.source_entity_id == source_entity_id,
+                MdmRelationshipInstance.target_entity_id == target_entity_id,
+                MdmRelationshipInstance.is_active == True,
+            )
+        )
+        for existing in candidates:
+            if (
+                (existing.properties or {}) == clean_properties
+                and existing.effective_from == effective_from
+                and existing.effective_to == effective_to
+                and existing.source_accession == source_accession
+            ):
+                return existing, False
 
         row = MdmRelationshipInstance(
             rel_type_id=rec["rel_type_id"],
             source_entity_id=source_entity_id,
             target_entity_id=target_entity_id,
-            properties=properties or {},
+            properties=clean_properties,
             effective_from=effective_from,
             effective_to=effective_to,
             source_system=source_system,
             source_accession=source_accession,
         )
         self.session.add(row)
-        return row
+        _emit_graph_event(
+            "mdm_relationship_created",
+            rel_type_name=rel_type_name,
+            source_entity_id=source_entity_id,
+            target_entity_id=target_entity_id,
+            source_system=source_system,
+            source_accession=source_accession,
+            effective_from=effective_from.isoformat() if hasattr(effective_from, "isoformat") else effective_from,
+            effective_to=effective_to.isoformat() if hasattr(effective_to, "isoformat") else effective_to,
+            property_keys=sorted(clean_properties),
+        )
+        return row, True
 
-    def sync_pending(self, limit: Optional[int] = None) -> int:
+    def sync_pending(
+        self,
+        limit: Optional[int] = None,
+        *,
+        relationship_types: Optional[Iterable[str]] = None,
+        limit_per_type: Optional[int] = None,
+    ) -> int:
         """Push every mdm_relationship_instance with graph_synced_at IS NULL
         to Neo4j. Returns count of rows synced."""
         if self.neo4j is None:
             return 0
-        stmt = select(MdmRelationshipInstance).where(
-            MdmRelationshipInstance.graph_synced_at.is_(None),
-            MdmRelationshipInstance.is_active == True,
+        rows = self._pending_relationship_rows(
+            limit=limit,
+            relationship_types=relationship_types,
+            limit_per_type=limit_per_type,
         )
-        if limit:
-            stmt = stmt.limit(limit)
-        rows: list[MdmRelationshipInstance] = list(self.session.scalars(stmt))
         if not rows:
             return 0
 
@@ -371,6 +435,56 @@ class GraphSyncEngine:
             for row in rows:
                 self._ensure_node_exists(s, row.entity_id, row.entity_type)
         return len(rows)
+
+    def _pending_relationship_rows(
+        self,
+        *,
+        limit: Optional[int],
+        relationship_types: Optional[Iterable[str]],
+        limit_per_type: Optional[int],
+    ) -> list[MdmRelationshipInstance]:
+        rel_type_names = list(relationship_types or [])
+        rel_type_ids = [
+            self.registry.rel_type_by_name[name]["rel_type_id"]
+            for name in rel_type_names
+            if name in self.registry.rel_type_by_name
+        ]
+
+        def base_stmt():
+            stmt = select(MdmRelationshipInstance).where(
+                MdmRelationshipInstance.graph_synced_at.is_(None),
+                MdmRelationshipInstance.is_active == True,
+            )
+            if rel_type_ids:
+                stmt = stmt.where(MdmRelationshipInstance.rel_type_id.in_(rel_type_ids))
+            return stmt.order_by(MdmRelationshipInstance.created_at, MdmRelationshipInstance.instance_id)
+
+        if limit_per_type is None:
+            stmt = base_stmt()
+            if limit:
+                stmt = stmt.limit(limit)
+            return list(self.session.scalars(stmt))
+
+        selected: list[MdmRelationshipInstance] = []
+        source_type_ids = rel_type_ids or [
+            record["rel_type_id"] for record in self.registry.rel_type_by_name.values()
+        ]
+        for rel_type_id in source_type_ids:
+            stmt = (
+                select(MdmRelationshipInstance)
+                .where(
+                    MdmRelationshipInstance.graph_synced_at.is_(None),
+                    MdmRelationshipInstance.is_active == True,
+                    MdmRelationshipInstance.rel_type_id == rel_type_id,
+                )
+                .order_by(MdmRelationshipInstance.created_at, MdmRelationshipInstance.instance_id)
+                .limit(limit_per_type)
+            )
+            for row in self.session.scalars(stmt):
+                selected.append(row)
+                if limit is not None and len(selected) >= limit:
+                    return selected
+        return selected
 
     def _ensure_node_exists(self, neo4j_session, entity_id: str, entity_type: str) -> None:
         entity = self.session.get(MdmEntity, entity_id)
@@ -448,16 +562,15 @@ def backfill_relationship_instances(
             key = (manages_fund["rel_type_id"], fund.adviser_entity_id, fund.entity_id)
             if key in existing:
                 continue
-            session.add(
-                MdmRelationshipInstance(
-                    rel_type_id=manages_fund["rel_type_id"],
-                    source_entity_id=fund.adviser_entity_id,
-                    target_entity_id=fund.entity_id,
-                    source_system="mdm_backfill",
-                )
+            _row, created = GraphSyncEngine(session, registry).ensure_relationship(
+                "MANAGES_FUND",
+                fund.adviser_entity_id,
+                fund.entity_id,
+                source_system="mdm_backfill",
             )
-            existing.add(key)
-            backfilled += 1
+            if created:
+                existing.add(key)
+                backfilled += 1
 
     if issued_by and backfilled < limit:
         for sec in session.scalars(
@@ -468,16 +581,15 @@ def backfill_relationship_instances(
             key = (issued_by["rel_type_id"], sec.entity_id, sec.issuer_entity_id)
             if key in existing:
                 continue
-            session.add(
-                MdmRelationshipInstance(
-                    rel_type_id=issued_by["rel_type_id"],
-                    source_entity_id=sec.entity_id,
-                    target_entity_id=sec.issuer_entity_id,
-                    source_system="mdm_backfill",
-                )
+            _row, created = GraphSyncEngine(session, registry).ensure_relationship(
+                "ISSUED_BY",
+                sec.entity_id,
+                sec.issuer_entity_id,
+                source_system="mdm_backfill",
             )
-            existing.add(key)
-            backfilled += 1
+            if created:
+                existing.add(key)
+                backfilled += 1
 
     session.commit()
 
@@ -488,3 +600,12 @@ def backfill_relationship_instances(
         session.commit()
 
     return {"backfilled": backfilled, "synced": synced}
+
+
+def _emit_graph_event(event: str, **payload: object) -> None:
+    document = {
+        "event": event,
+        "emitted_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        **payload,
+    }
+    print(json.dumps(document, sort_keys=True, default=str), file=sys.stderr, flush=True)
