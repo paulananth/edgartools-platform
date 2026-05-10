@@ -81,6 +81,14 @@ class WarehouseSettings:
                     "(SNOWFLAKE_EXPORT_ROOT is accepted as a temporary migration fallback)"
                 )
             serving_export_root = value
+
+            if not os.environ.get("MDM_DATABASE_URL", "").strip():
+                raise WarehouseRuntimeError(
+                    "MDM_DATABASE_URL is required for gold-affecting warehouse commands. "
+                    "MDM is the system of record for company universe tracking. "
+                    "Run 'edgar-warehouse mdm seed-universe' to initialise the universe."
+                )
+
         return cls(
             identity=identity,
             runtime_mode=runtime_mode,

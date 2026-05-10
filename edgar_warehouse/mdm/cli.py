@@ -82,6 +82,23 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     )
     seed_u.set_defaults(handler=_logged_handler("seed-universe", _handle_seed_universe))
 
+    seed_s = mdm_sub.add_parser(
+        "seed-from-silver",
+        help="One-time migration: copy tracking universe from silver DuckDB into MDM Postgres",
+    )
+    seed_s.add_argument(
+        "--silver-path",
+        default=None,
+        help="Local path to silver.duckdb (default: download from WAREHOUSE_STORAGE_ROOT)",
+    )
+    seed_s.add_argument(
+        "--tracking-status",
+        default=None,
+        help="Only migrate rows with this tracking_status (default: all rows)",
+    )
+    seed_s.add_argument("--dry-run", action="store_true", default=False, help="Print rows without writing to MDM")
+    seed_s.set_defaults(handler=_logged_handler("seed-from-silver", _handle_seed_from_silver))
+
     # review
     rev = mdm_sub.add_parser("review", help="Curation queue operations")
     rev_sub = rev.add_subparsers(dest="review_command", required=True)
@@ -309,6 +326,83 @@ def _handle_seed_universe(args) -> int:
     count = bulk_upsert_universe(engine, rows, default_status=args.tracking_status)
     print(json.dumps({"rows_seeded": count, "status": "ok"}, indent=2))
     return 0
+
+
+def _handle_seed_from_silver(args) -> int:
+    """Migrate company tracking universe from silver DuckDB into MDM Postgres.
+
+    Reads sec_tracked_universe rows from a silver DuckDB file (local path or
+    downloaded from S3 via WAREHOUSE_STORAGE_ROOT) and upserts them into
+    mdm_company, preserving existing tracking_status values in MDM.
+    """
+    import os
+    import tempfile
+    try:
+        import duckdb
+    except ImportError as exc:
+        raise SystemExit("duckdb is required for seed-from-silver. Install with: uv pip install duckdb") from exc
+
+    from edgar_warehouse.mdm.universe import bulk_upsert_universe
+
+    silver_path = getattr(args, "silver_path", None)
+    if not silver_path:
+        storage_root = os.environ.get("WAREHOUSE_STORAGE_ROOT", "").strip()
+        if not storage_root:
+            raise SystemExit("--silver-path or WAREHOUSE_STORAGE_ROOT is required")
+        s3_uri = storage_root.rstrip("/") + "/silver/sec/silver.duckdb"
+        tmp = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
+        tmp.close()
+        silver_path = tmp.name
+        print(json.dumps({"status": "downloading", "source": s3_uri}))
+        import subprocess
+        subprocess.run(["aws", "s3", "cp", s3_uri, silver_path], check=True)
+
+    tracking_status_filter = getattr(args, "tracking_status", None)
+    dry_run = bool(getattr(args, "dry_run", False))
+
+    con = duckdb.connect(silver_path, read_only=True)
+    try:
+        query = "SELECT cik, current_ticker, NULL as exchange, tracking_status FROM sec_tracked_universe"
+        params: list = []
+        if tracking_status_filter:
+            query += " WHERE tracking_status = ?"
+            params.append(tracking_status_filter)
+        silver_rows = con.execute(query, params).fetchall()
+    finally:
+        con.close()
+
+    if not silver_rows:
+        print(json.dumps({"status": "ok", "rows_found": 0, "rows_migrated": 0}))
+        return 0
+
+    migrate_rows = [
+        {"cik": r[0], "ticker": r[1] or str(r[0]), "exchange": r[2]}
+        for r in silver_rows
+    ]
+    status_groups: dict[str, int] = {}
+    for r in silver_rows:
+        status_groups[r[3]] = status_groups.get(r[3], 0) + 1
+
+    if dry_run:
+        print(json.dumps({"status": "dry_run", "rows_found": len(migrate_rows), "by_status": status_groups}, indent=2))
+        return 0
+
+    engine = _get_mdm_engine()
+    total = 0
+    for status, rows_for_status in _group_by_status(silver_rows):
+        upsert_rows = [{"cik": r[0], "ticker": r[1] or str(r[0]), "exchange": r[2]} for r in rows_for_status]
+        total += bulk_upsert_universe(engine, upsert_rows, default_status=status)
+
+    print(json.dumps({"status": "ok", "rows_found": len(migrate_rows), "rows_migrated": total, "by_status": status_groups}, indent=2))
+    return 0
+
+
+def _group_by_status(rows: list) -> list[tuple[str, list]]:
+    groups: dict[str, list] = {}
+    for r in rows:
+        status = r[3] or "active"
+        groups.setdefault(status, []).append(r)
+    return list(groups.items())
 
 
 def _handle_migrate(args) -> int:

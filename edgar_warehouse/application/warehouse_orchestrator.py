@@ -128,12 +128,13 @@ def run_command(command_name: str, args: Any) -> int:
 
 
 def run_seed_universe_command(args: Any) -> int:
-    """Seed the tracked-universe table from a local SEC reference JSON file."""
+    """Seed the MDM tracked universe from a SEC reference JSON file."""
     try:
         from edgar_warehouse.silver_store import _parse_company_ticker_rows
+        from edgar_warehouse.mdm.database import get_engine
+        from edgar_warehouse.mdm.universe import bulk_upsert_universe
 
         limit = _resolve_seed_limit(getattr(args, "limit", None))
-        silver_root = _resolve_seed_silver_root(args)
         source_label, document = _resolve_seed_document(args)
         rows = _parse_company_ticker_rows(document)
         if not rows:
@@ -141,12 +142,9 @@ def run_seed_universe_command(args: Any) -> int:
         if limit is not None:
             rows = rows[:limit]
 
-        db = _open_silver_database(StorageLocation(silver_root))
-        try:
-            rows_seeded = db.seed_tracked_universe_rows(rows)
-            tracked_universe_count = db.get_tracked_universe_count()
-        finally:
-            db.close()
+        tracking_status = str(getattr(args, "tracking_status", None) or "active")
+        engine = get_engine()
+        rows_seeded = bulk_upsert_universe(engine, rows, default_status=tracking_status)
     except WarehouseRuntimeError as exc:
         print(
             json.dumps(
@@ -168,10 +166,9 @@ def run_seed_universe_command(args: Any) -> int:
                 "limit": limit,
                 "rows_seeded": rows_seeded,
                 "run_id": getattr(args, "run_id", None),
-                "silver_db_path": str(Path(silver_root) / "silver" / "sec" / "silver.duckdb"),
                 "source": source_label,
                 "status": "ok",
-                "tracked_universe_count": tracked_universe_count,
+                "tracking_status": tracking_status,
             },
             indent=2,
             sort_keys=True,
@@ -642,8 +639,8 @@ def _capture_bronze_raw(
                 metrics["sync_status"] = "partial"
                 break
         impacted_ciks = _dedupe_ints(impacted_ciks)
-        db.auto_enroll_tracked_universe(impacted_ciks, scope_reason="daily_index")
-        impacted_ciks = _filter_ciks_to_universe(impacted_ciks, db)
+        _mdm_auto_enroll(impacted_ciks, scope_reason="daily_index")
+        impacted_ciks = _filter_ciks_to_universe(impacted_ciks)
         selected_ciks = _apply_bronze_cik_limit(impacted_ciks)
         if selected_ciks:
             result = _run_submissions_bronze_then_silver(
@@ -678,19 +675,11 @@ def _capture_bronze_raw(
         return raw_writes, metrics
 
     if command_name == "bootstrap-recent-10":
-        ciks, reference_result = _resolve_bootstrap_target_ciks(
-            context=context,
-            db=db,
-            sync_run_id=sync_run_id,
+        ciks = _resolve_bootstrap_target_ciks(
             raw_ciks=scope.get("cik_list"),
             command_name=command_name,
             tracking_status_filter=str(scope.get("tracking_status_filter", "active")),
-            fetch_date=now.date(),
         )
-        if reference_result is not None:
-            raw_writes.extend(reference_result["raw_writes"])
-            metrics["rows_inserted"] += reference_result["rows_written"]
-            metrics["rows_skipped"] += reference_result["rows_skipped"]
         ciks = _apply_bronze_cik_limit(ciks)
         result = _run_submissions_bronze_then_silver(
             context=context,
@@ -709,19 +698,11 @@ def _capture_bronze_raw(
         return raw_writes, metrics
 
     if command_name == "bootstrap-full":
-        ciks, reference_result = _resolve_bootstrap_target_ciks(
-            context=context,
-            db=db,
-            sync_run_id=sync_run_id,
+        ciks = _resolve_bootstrap_target_ciks(
             raw_ciks=scope.get("cik_list"),
             command_name=command_name,
             tracking_status_filter=str(scope.get("tracking_status_filter", "active")),
-            fetch_date=now.date(),
         )
-        if reference_result is not None:
-            raw_writes.extend(reference_result["raw_writes"])
-            metrics["rows_inserted"] += reference_result["rows_written"]
-            metrics["rows_skipped"] += reference_result["rows_skipped"]
         ciks = _apply_bronze_cik_limit(ciks)
         result = _run_submissions_bronze_then_silver(
             context=context,
@@ -741,24 +722,11 @@ def _capture_bronze_raw(
     if command_name == "bootstrap-next":
         cik_limit = int(scope.get("cik_limit") or 100)
         tracking_status_filter = str(scope.get("tracking_status_filter", "bootstrap_pending"))
-        ciks, reference_result = _resolve_bootstrap_target_ciks(
-            context=context,
-            db=db,
-            sync_run_id=sync_run_id,
+        ciks = _resolve_bootstrap_target_ciks(
             raw_ciks=None,
             command_name=command_name,
             tracking_status_filter=tracking_status_filter,
-            fetch_date=now.date(),
-            seed_source_names=["company_tickers_exchange"],
-            seed_company_sync_state=False,
-            seed_tracked_universe_limit=cik_limit,
-            seed_tracked_universe_status=tracking_status_filter,
-            seed_tracked_universe_only_new=True,
         )
-        if reference_result is not None:
-            raw_writes.extend(reference_result["raw_writes"])
-            metrics["rows_inserted"] += reference_result["rows_written"]
-            metrics["rows_skipped"] += reference_result["rows_skipped"]
         ciks = _apply_bronze_cik_limit(ciks[:cik_limit])
         result = _run_submissions_bronze_then_silver(
             context=context,
@@ -944,6 +912,13 @@ def _capture_bronze_raw(
         if len(limited_ciks) < len(universe_rows):
             allowed = set(limited_ciks)
             universe_rows = [row for row in universe_rows if int(row["cik"]) in allowed]
+        # Seed MDM as the tracking source of truth before writing S3 batches.
+        from edgar_warehouse.mdm.database import get_engine
+        from edgar_warehouse.mdm.universe import bulk_upsert_universe
+        tracking_status = str(arguments.get("tracking_status") or "active")
+        mdm_seeded = bulk_upsert_universe(get_engine(), universe_rows, default_status=tracking_status)
+        metrics["mdm_rows_seeded"] = mdm_seeded
+
         metrics["_ticker_reference_rows"] = ticker_reference_rows
         cik_universe_path = _write_cik_universe_batches(
             context=context,
@@ -1324,9 +1299,6 @@ def _sync_reference_data(
     fetch_date: date,
     source_names: list[str] | None = None,
     seed_company_sync_state: bool = True,
-    tracked_universe_limit: int | None = None,
-    tracked_universe_status: str = "active",
-    tracked_universe_only_new: bool = False,
 ) -> dict[str, Any]:
     selected_sources = source_names or ["company_tickers", "company_tickers_exchange"]
     raw_writes: list[dict[str, Any]] = []
@@ -1393,22 +1365,6 @@ def _sync_reference_data(
                     }
                 )
 
-    if seed_document is not None:
-        seed_rows = _tracked_universe_seed_rows(
-            db=db,
-            seed_document=seed_document,
-            limit=tracked_universe_limit,
-            only_new=tracked_universe_only_new,
-        )
-        seeded_count = db.seed_tracked_universe_rows(seed_rows, tracking_status=tracked_universe_status)
-        metrics_payload = {
-            "limit": tracked_universe_limit,
-            "only_new": tracked_universe_only_new,
-            "rows_seeded": seeded_count,
-            "status": tracked_universe_status,
-            "sync_run_id": sync_run_id,
-        }
-        _emit_pipeline_event("tracked_universe_seeded", **metrics_payload)
     return {
         "raw_writes": raw_writes,
         "rows_written": rows_written,
@@ -2068,97 +2024,102 @@ def _parse_cik(value: Any) -> int:
 
 
 def _get_mdm_tracked_ciks(status_filter: str) -> list[int]:
-    """Query MDM for tracked CIKs when MDM_DATABASE_URL is configured.
+    """Query MDM for tracked CIKs. MDM is the sole source of truth for universe tracking.
 
-    Returns empty list — not an error — when MDM is unconfigured or unreachable,
-    so callers fall through to the DuckDB path.
+    Raises WarehouseRuntimeError if MDM_DATABASE_URL is not set or MDM is unreachable.
     """
     import os
     url = os.environ.get("MDM_DATABASE_URL")
     if not url:
-        return []
-    try:
-        from edgar_warehouse.mdm.database import get_engine
-        from edgar_warehouse.mdm.universe import get_tracked_ciks
-        return get_tracked_ciks(get_engine(url), status_filter=status_filter)
-    except Exception:
-        return []
+        raise WarehouseRuntimeError(
+            "MDM_DATABASE_URL is required. Seed the universe with "
+            "'edgar-warehouse mdm seed-universe' before running bootstrap commands."
+        )
+    from edgar_warehouse.mdm.database import get_engine
+    from edgar_warehouse.mdm.universe import get_tracked_ciks
+    return get_tracked_ciks(get_engine(url), status_filter=status_filter)
 
 
 def _sync_mdm_tracking_status(cik: int, status: str) -> None:
-    """Fire-and-forget: update mdm_company.tracking_status when MDM_DATABASE_URL is set."""
+    """Update mdm_company.tracking_status after a company sync completes.
+
+    Raises on failure — MDM is the tracking source of truth and write failures
+    must surface rather than silently produce stale state.
+    """
     import os
     url = os.environ.get("MDM_DATABASE_URL")
     if not url:
-        return
-    try:
-        from edgar_warehouse.mdm.database import get_engine
-        from edgar_warehouse.mdm.universe import update_tracking_status
-        update_tracking_status(get_engine(url), cik, status)
-    except Exception:
-        pass
+        raise WarehouseRuntimeError("MDM_DATABASE_URL is required for tracking status updates")
+    from edgar_warehouse.mdm.database import get_engine
+    from edgar_warehouse.mdm.universe import update_tracking_status
+    update_tracking_status(get_engine(url), cik, status)
 
 
 def _resolve_target_ciks(
     *,
-    db: SilverDatabase,
     raw_ciks: Any,
     command_name: str,
     tracking_status_filter: str,
 ) -> list[int]:
     if raw_ciks:
         return [_parse_cik(value) for value in raw_ciks]
-    ciks = _get_mdm_tracked_ciks(tracking_status_filter) or db.get_tracked_universe_ciks(status_filter=tracking_status_filter)
+    ciks = _get_mdm_tracked_ciks(tracking_status_filter)
     if ciks:
         return ciks
-    raise WarehouseRuntimeError(f"{command_name} requires --cik-list or a seeded tracked universe")
+    raise WarehouseRuntimeError(
+        f"{command_name} requires --cik-list or a seeded MDM universe "
+        f"(tracking_status='{tracking_status_filter}'). "
+        "Run 'edgar-warehouse mdm seed-universe' first."
+    )
+
+
+def _mdm_auto_enroll(ciks: list[int], *, scope_reason: str = "auto_discovered") -> None:
+    """Enroll newly discovered CIKs into MDM with tracking_status='active'.
+
+    Used by daily-incremental to register companies seen in the SEC daily index
+    that are not yet in the MDM universe. Non-fatal — logs on failure rather than
+    aborting the pipeline, since auto-enrollment is best-effort discovery.
+    """
+    if not ciks:
+        return
+    import os
+    url = os.environ.get("MDM_DATABASE_URL")
+    if not url:
+        return
+    try:
+        from edgar_warehouse.mdm.database import get_engine
+        from edgar_warehouse.mdm.universe import bulk_upsert_universe
+        rows = [{"cik": cik, "ticker": str(cik), "exchange": None} for cik in ciks]
+        bulk_upsert_universe(get_engine(url), rows, default_status="active")
+    except Exception as exc:
+        _emit_pipeline_event("mdm_auto_enroll_failed", scope_reason=scope_reason, error=str(exc), cik_count=len(ciks))
 
 
 def _resolve_bootstrap_target_ciks(
     *,
-    context: WarehouseCommandContext,
-    db: SilverDatabase,
-    sync_run_id: str,
     raw_ciks: Any,
     command_name: str,
     tracking_status_filter: str,
-    fetch_date: date,
-    seed_source_names: list[str] | None = None,
-    seed_company_sync_state: bool = True,
-    seed_tracked_universe_limit: int | None = None,
-    seed_tracked_universe_status: str = "active",
-    seed_tracked_universe_only_new: bool = False,
-) -> tuple[list[int], dict[str, Any] | None]:
+) -> list[int]:
+    """Resolve CIKs from MDM exclusively. SEC bronze is not consulted for scope."""
     if raw_ciks:
-        return [_parse_cik(value) for value in raw_ciks], None
-    ciks = _get_mdm_tracked_ciks(tracking_status_filter) or db.get_tracked_universe_ciks(status_filter=tracking_status_filter)
-    if ciks:
-        return ciks, None
-
-    reference_result = _sync_reference_data(
-        context=context,
-        db=db,
-        sync_run_id=sync_run_id,
-        fetch_date=fetch_date,
-        source_names=seed_source_names,
-        seed_company_sync_state=seed_company_sync_state,
-        tracked_universe_limit=seed_tracked_universe_limit,
-        tracked_universe_status=seed_tracked_universe_status,
-        tracked_universe_only_new=seed_tracked_universe_only_new,
-    )
-    ciks = _get_mdm_tracked_ciks(tracking_status_filter) or db.get_tracked_universe_ciks(status_filter=tracking_status_filter)
+        return [_parse_cik(value) for value in raw_ciks]
+    ciks = _get_mdm_tracked_ciks(tracking_status_filter)
     if not ciks:
-        raise WarehouseRuntimeError(f"{command_name} could not seed a tracked universe from SEC reference data")
-    return ciks, reference_result
+        raise WarehouseRuntimeError(
+            f"{command_name} found no companies with tracking_status='{tracking_status_filter}' in MDM. "
+            "Run 'edgar-warehouse mdm seed-universe --tracking-status "
+            f"{tracking_status_filter}' first."
+        )
+    return ciks
 
 
 def _resolve_reconcile_ciks(
     *,
-    db: SilverDatabase,
     raw_ciks: Any,
     sample_limit: int | None,
 ) -> list[int]:
-    ciks = [_parse_cik(value) for value in raw_ciks] if raw_ciks else db.get_tracked_universe_ciks(status_filter="active")
+    ciks = [_parse_cik(value) for value in raw_ciks] if raw_ciks else _get_mdm_tracked_ciks("active")
     if sample_limit is not None:
         return ciks[: int(sample_limit)]
     return ciks
@@ -2189,17 +2150,15 @@ def _pagination_file_names(submissions_document: dict[str, Any]) -> list[str]:
     return names
 
 
-def _filter_ciks_to_universe(impacted_ciks: list[int], db: "SilverDatabase | None") -> list[int]:
-    """Return only CIKs that are in the active tracked universe.
+def _filter_ciks_to_universe(impacted_ciks: list[int]) -> list[int]:
+    """Return only CIKs that are active in the MDM tracked universe.
 
-    Falls through to all impacted_ciks if the universe is empty (cold-start)
-    or if db is None (remote storage).
+    Falls through to all impacted_ciks if MDM returns an empty active universe
+    (cold-start guard so daily-incremental can run before the first seed).
     """
-    if db is None:
-        return impacted_ciks
-    tracked = _get_mdm_tracked_ciks("active") or db.get_tracked_universe_ciks(status_filter="active")
+    tracked = _get_mdm_tracked_ciks("active")
     if not tracked:
-        return impacted_ciks  # cold-start: empty universe, pass all through
+        return impacted_ciks
     tracked_set = set(tracked)
     return [c for c in impacted_ciks if c in tracked_set]
 

@@ -1,3 +1,8 @@
+output "github_actions_role_arn" {
+  description = "IAM role ARN assumed by GitHub Actions via OIDC for ECR push."
+  value       = module.github_actions_ecr.role_arn
+}
+
 output "runner_execution_role_arn" {
   description = "Dev sec_platform_runner_execution role ARN for ECS task image pulls, logging, and runtime secret reads."
   value       = module.runtime_access.runner_execution_role_arn
