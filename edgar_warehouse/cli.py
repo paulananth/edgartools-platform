@@ -189,7 +189,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     targeted_resync = subparsers.add_parser(
         "targeted-resync",
-        help="Force-refresh one reference, CIK, or accession scope.",
+        help="Refresh one reference, CIK, or accession scope.",
     )
     targeted_resync.add_argument(
         "--scope-type",
@@ -238,11 +238,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip parser execution",
     )
     targeted_resync.add_argument(
+        "--force",
+        dest="force",
+        action="store_true",
+        default=False,
+        help="Force re-fetch even if the selected SEC files are already loaded",
+    )
+    targeted_resync.add_argument(
         "--no-force",
         dest="force",
         action="store_false",
-        default=True,
-        help="Disable the default force-refresh behavior",
+        help="Deprecated no-op; targeted resync skips already loaded SEC files by default",
     )
     _add_run_id_arg(targeted_resync)
     targeted_resync.set_defaults(handler=_handle_targeted_resync)

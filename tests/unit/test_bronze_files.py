@@ -29,6 +29,23 @@ class BronzeFileContractTests(unittest.TestCase):
             ),
         )
 
+    def test_planned_writes_for_bootstrap_next_use_expected_manifest_paths(self) -> None:
+        self.assertEqual(
+            planned_writes(
+                command_name="bootstrap-next",
+                command_path="bootstrap-next",
+                run_id="run-123",
+                scope={"cik_limit": 100, "tracking_status_filter": "bootstrap_pending"},
+            ),
+            {
+                "bronze": "runs/bootstrap-next/run-123/manifest.json",
+                "staging": "staging/runs/bootstrap-next/run-123/manifest.json",
+                "silver": "silver/sec/runs/bootstrap-next/run-123/manifest.json",
+                "gold": "gold/runs/bootstrap-next/run-123/manifest.json",
+                "artifacts": "artifacts/runs/bootstrap-next/run-123/manifest.json",
+            },
+        )
+
     def test_special_daily_index_manifest_paths_remain_unchanged(self) -> None:
         resolver = default_path_resolver()
         self.assertEqual(

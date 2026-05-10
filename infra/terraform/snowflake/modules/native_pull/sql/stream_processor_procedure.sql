@@ -1,19 +1,59 @@
 CREATE OR REPLACE PROCEDURE __STREAM_PROCESSOR_PROCEDURE_NAME__()
 RETURNS VARIANT
-LANGUAGE SQL
+LANGUAGE JAVASCRIPT
 EXECUTE AS OWNER
 AS
 $$
-BEGIN
-  FOR manifest_record IN (
-    SELECT DISTINCT workflow_name, run_id
-    FROM __SOURCE_SCHEMA__.__MANIFEST_STREAM_NAME__
-    WHERE METADATA$ACTION = 'INSERT'
-  ) DO
-    CALL __SOURCE_SCHEMA__.__SOURCE_LOAD_PROCEDURE_NAME__(manifest_record.workflow_name, manifest_record.run_id);
-    CALL __GOLD_SCHEMA__.__REFRESH_PROCEDURE_NAME__(manifest_record.workflow_name, manifest_record.run_id);
-  END FOR;
+const currentDatabase = snowflake.createStatement({sqlText: "SELECT CURRENT_DATABASE()"}).execute();
+currentDatabase.next();
+const databaseName = currentDatabase.getColumnValue(1);
+const sourceSchema = "__SOURCE_SCHEMA__";
+const goldSchema = "__GOLD_SCHEMA__";
+const manifestStream = `${databaseName}.${sourceSchema}.__MANIFEST_STREAM_NAME__`;
+const sourceLoadProcedure = `${databaseName}.${sourceSchema}.__SOURCE_LOAD_PROCEDURE_NAME__`;
+const refreshProcedure = `${databaseName}.${goldSchema}.__REFRESH_PROCEDURE_NAME__`;
+const tempManifestTable = `TMP_RUN_MANIFEST_STREAM_${Date.now()}`;
 
-  RETURN OBJECT_CONSTRUCT('status', 'succeeded');
-END;
+snowflake.createStatement({
+  sqlText: `CREATE TEMP TABLE ${tempManifestTable} (workflow_name STRING, run_id STRING)`
+}).execute();
+
+// Reading a stream with SELECT does not advance its offset. Use INSERT ... SELECT
+// so Snowflake consumes the stream rows when the statement commits.
+snowflake.createStatement({
+  sqlText: `
+    INSERT INTO ${tempManifestTable} (workflow_name, run_id)
+    SELECT DISTINCT workflow_name, run_id
+    FROM ${manifestStream}
+    WHERE METADATA$ACTION = 'INSERT'
+  `
+}).execute();
+
+const manifests = snowflake.createStatement({
+  sqlText: `SELECT workflow_name, run_id FROM ${tempManifestTable} ORDER BY workflow_name, run_id`
+}).execute();
+
+const processed = [];
+while (manifests.next()) {
+  const workflowName = manifests.getColumnValue(1);
+  const runId = manifests.getColumnValue(2);
+
+  snowflake.createStatement({
+    sqlText: `CALL ${sourceLoadProcedure}(?, ?)`,
+    binds: [workflowName, runId]
+  }).execute();
+
+  snowflake.createStatement({
+    sqlText: `CALL ${refreshProcedure}(?, ?)`,
+    binds: [workflowName, runId]
+  }).execute();
+
+  processed.push({ workflow_name: workflowName, run_id: runId });
+}
+
+return {
+  status: "succeeded",
+  processed_count: processed.length,
+  processed_manifests: processed
+};
 $$;

@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
+import json
 from pathlib import Path
+
+from sqlalchemy import text
 
 from edgar_warehouse.cli import build_parser
 from edgar_warehouse.mdm.api.auth import _parse_key_payload
+from edgar_warehouse.mdm.database import get_engine
 from edgar_warehouse.mdm.migrations import runtime as migrations
 from edgar_warehouse.mdm.migrations.runtime import MDM_TABLES
 
@@ -56,7 +62,7 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
     result = migrations.migrate(_Engine(), seed=False)
 
     assert result["dialect"] == "postgresql"
-    assert applied_files == ["001_initial_schema.sql"]
+    assert applied_files == ["001_initial_schema.sql", "003_tracking_status_index.sql"]
 
 
 def test_mdm_cli_exposes_e2e_operations() -> None:
@@ -65,3 +71,57 @@ def test_mdm_cli_exposes_e2e_operations() -> None:
         args = parser.parse_args(["mdm", command])
         assert args.command == "mdm"
         assert args.mdm_command == command
+
+
+def test_mdm_sql_logging_emits_each_database_call() -> None:
+    stderr = io.StringIO()
+    with contextlib.redirect_stderr(stderr):
+        engine = get_engine("sqlite:///:memory:")
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1 AS ok")).scalar()
+
+    events = [json.loads(line) for line in stderr.getvalue().splitlines()]
+    assert "mdm_sql_started" in [event["event"] for event in events]
+    assert "mdm_sql_completed" in [event["event"] for event in events]
+    completed = next(event for event in events if event["event"] == "mdm_sql_completed")
+    assert completed["operation"] == "select"
+
+
+def test_neo4j_client_logs_each_query() -> None:
+    from edgar_warehouse.mdm.graph import Neo4jGraphClient
+
+    class _Result:
+        def single(self):
+            return {"ok": 1}
+
+    class _Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def run(self, query, **kwargs):
+            return _Result()
+
+    class _Driver:
+        def session(self):
+            return _Session()
+
+        def close(self):
+            return None
+
+    client = Neo4jGraphClient(uri="neo4j+s://example.databases.neo4j.io", user="user", password="password")
+    client._driver = _Driver()
+
+    stderr = io.StringIO()
+    with contextlib.redirect_stderr(stderr):
+        with client.session() as session:
+            assert session.run("RETURN 1 AS ok").single()["ok"] == 1
+        client.close()
+
+    events = [json.loads(line) for line in stderr.getvalue().splitlines()]
+    assert "neo4j_query_started" in [event["event"] for event in events]
+    assert "neo4j_query_completed" in [event["event"] for event in events]
+    completed = next(event for event in events if event["event"] == "neo4j_query_completed")
+    assert completed["operation"] == "return"

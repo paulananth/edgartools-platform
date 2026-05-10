@@ -141,6 +141,32 @@ def _make_entity(session, entity_type: str) -> str:
     return eid
 
 
+class _FakeGraphSession:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict]] = []
+
+    def run(self, query: str, **kwargs):
+        self.calls.append((query, kwargs))
+        return None
+
+
+class _FakeGraphClient:
+    def __init__(self) -> None:
+        self.graph_session = _FakeGraphSession()
+
+    def session(self):
+        client = self
+
+        class _Context:
+            def __enter__(self):
+                return client.graph_session
+
+            def __exit__(self, exc_type, exc, tb):
+                return None
+
+        return _Context()
+
+
 class TestGraphSyncEngine:
     def test_record_relationship_writes_instance_row(self, db_session):
         adviser_id = _make_entity(db_session, "adviser")
@@ -172,6 +198,23 @@ class TestGraphSyncEngine:
         engine.record_relationship("MANAGES_FUND", adviser_id, fund_id)
         db_session.commit()
         assert engine.sync_pending() == 0
+
+    def test_sync_entities_returns_zero_without_neo4j(self, db_session):
+        _make_entity(db_session, "company")
+        db_session.commit()
+        engine = GraphSyncEngine.build(db_session, neo4j=None)
+        assert engine.sync_entities() == 0
+
+    def test_sync_entities_upserts_nodes_without_relationships(self, db_session):
+        _make_entity(db_session, "company")
+        _make_entity(db_session, "company")
+        db_session.commit()
+        client = _FakeGraphClient()
+        engine = GraphSyncEngine.build(db_session, neo4j=client)
+
+        assert engine.sync_entities(limit=100) == 2
+        assert len(client.graph_session.calls) == 2
+        assert all("MERGE (n:Company" in query for query, _kwargs in client.graph_session.calls)
 
     def test_sync_pending_calls_bolt_and_stamps_synced_at(self, db_session, neo4j_client):
         adviser_id = _make_entity(db_session, "adviser")

@@ -13,10 +13,13 @@ Sync pattern:
 """
 from __future__ import annotations
 
+import hashlib
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Iterable, Optional
+from urllib.parse import urlparse
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -34,6 +37,7 @@ from edgar_warehouse.mdm.database import (
     MdmRelationshipType,
     MdmSecurity,
 )
+from edgar_warehouse.mdm.observability import elapsed_ms, emit_mdm_event
 
 
 @dataclass
@@ -122,23 +126,137 @@ class Neo4jGraphClient:
     _driver: Any = field(default=None, init=False, repr=False)
 
     def connect(self) -> None:
+        started_at = datetime.now(timezone.utc)
+        monotonic_started_at = time.monotonic()
+        emit_mdm_event("neo4j_connect_started", host=_uri_host(self.uri), scheme=urlparse(self.uri).scheme)
         if GraphDatabase is None:
+            emit_mdm_event(
+                "neo4j_connect_failed",
+                duration_ms=elapsed_ms(monotonic_started_at),
+                error="ImportError",
+                host=_uri_host(self.uri),
+                scheme=urlparse(self.uri).scheme,
+                started_at=started_at.isoformat(),
+            )
             raise RuntimeError(
                 "neo4j driver not installed. Install with: pip install edgartools-platform[mdm]"
             )
-        self._driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
+        try:
+            self._driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
+        except Exception as exc:
+            emit_mdm_event(
+                "neo4j_connect_failed",
+                duration_ms=elapsed_ms(monotonic_started_at),
+                error=exc.__class__.__name__,
+                host=_uri_host(self.uri),
+                scheme=urlparse(self.uri).scheme,
+                started_at=started_at.isoformat(),
+            )
+            raise
+        emit_mdm_event(
+            "neo4j_connect_completed",
+            duration_ms=elapsed_ms(monotonic_started_at),
+            host=_uri_host(self.uri),
+            scheme=urlparse(self.uri).scheme,
+            started_at=started_at.isoformat(),
+        )
 
     def close(self) -> None:
         if self._driver is not None:
             self._driver.close()
             self._driver = None
+            emit_mdm_event("neo4j_client_closed", host=_uri_host(self.uri), scheme=urlparse(self.uri).scheme)
 
     @contextmanager
     def session(self):
         if self._driver is None:
             self.connect()
         with self._driver.session() as s:
-            yield s
+            emit_mdm_event("neo4j_session_opened", host=_uri_host(self.uri), scheme=urlparse(self.uri).scheme)
+            try:
+                yield _LoggedNeo4jSession(s, uri=self.uri)
+            finally:
+                emit_mdm_event("neo4j_session_closed", host=_uri_host(self.uri), scheme=urlparse(self.uri).scheme)
+
+
+class _LoggedNeo4jSession:
+    def __init__(self, session: Any, *, uri: str) -> None:
+        self._session = session
+        self._uri = uri
+
+    def run(self, query: str, parameters: dict | None = None, **kwargs: Any):
+        started_at = time.monotonic()
+        query_hash = _query_hash(query)
+        emit_mdm_event(
+            "neo4j_query_started",
+            host=_uri_host(self._uri),
+            operation=_query_operation(query),
+            parameter_keys=_parameter_keys(parameters, kwargs),
+            query=_summarize_query(query),
+            query_hash=query_hash,
+            scheme=urlparse(self._uri).scheme,
+        )
+        try:
+            if parameters is None:
+                result = self._session.run(query, **kwargs)
+            else:
+                result = self._session.run(query, parameters, **kwargs)
+        except Exception as exc:
+            emit_mdm_event(
+                "neo4j_query_failed",
+                duration_ms=elapsed_ms(started_at),
+                error=exc.__class__.__name__,
+                host=_uri_host(self._uri),
+                operation=_query_operation(query),
+                query_hash=query_hash,
+                scheme=urlparse(self._uri).scheme,
+            )
+            raise
+        emit_mdm_event(
+            "neo4j_query_completed",
+            duration_ms=elapsed_ms(started_at),
+            host=_uri_host(self._uri),
+            operation=_query_operation(query),
+            query_hash=query_hash,
+            scheme=urlparse(self._uri).scheme,
+        )
+        return result
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._session, name)
+
+
+def _uri_host(uri: str) -> str:
+    return urlparse(uri).netloc
+
+
+def _query_hash(query: str) -> str:
+    return hashlib.sha256(_normalize_query(query).encode("utf-8")).hexdigest()[:16]
+
+
+def _summarize_query(query: str, limit: int = 1000) -> str:
+    normalized = _normalize_query(query)
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[: limit - 3] + "..."
+
+
+def _normalize_query(query: str) -> str:
+    return " ".join(str(query or "").split())
+
+
+def _query_operation(query: str) -> str:
+    normalized = _normalize_query(query)
+    if not normalized:
+        return "unknown"
+    return normalized.split(" ", 1)[0].lower()
+
+
+def _parameter_keys(parameters: dict | None, kwargs: dict[str, Any]) -> list[str]:
+    keys = set(kwargs)
+    if isinstance(parameters, dict):
+        keys.update(parameters)
+    return sorted(str(key) for key in keys)
 
 
 @dataclass
@@ -234,6 +352,24 @@ class GraphSyncEngine:
             .where(MdmRelationshipInstance.instance_id.in_([r.instance_id for r in rows]))
             .values(graph_synced_at=now)
         )
+        return len(rows)
+
+    def sync_entities(self, limit: Optional[int] = None, entity_types: Optional[Iterable[str]] = None) -> int:
+        """Upsert MDM entities as Neo4j nodes even when no relationships exist."""
+        if self.neo4j is None:
+            return 0
+        stmt = select(MdmEntity).where(MdmEntity.is_quarantined == False)
+        if entity_types:
+            stmt = stmt.where(MdmEntity.entity_type.in_(list(entity_types)))
+        stmt = stmt.order_by(MdmEntity.created_at, MdmEntity.entity_id)
+        if limit:
+            stmt = stmt.limit(limit)
+        rows: list[MdmEntity] = list(self.session.scalars(stmt))
+        if not rows:
+            return 0
+        with self.neo4j.session() as s:
+            for row in rows:
+                self._ensure_node_exists(s, row.entity_id, row.entity_type)
         return len(rows)
 
     def _ensure_node_exists(self, neo4j_session, entity_id: str, entity_type: str) -> None:

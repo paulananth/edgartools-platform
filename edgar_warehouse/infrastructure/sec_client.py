@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
+import sys
 import time
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from urllib.parse import urlparse
 
 from edgar_warehouse.application.errors import WarehouseRuntimeError
@@ -47,6 +49,8 @@ def download_sec_bytes(url: str, identity: str) -> bytes:
     max_response_bytes = int(os.environ.get("WAREHOUSE_SEC_MAX_RESPONSE_BYTES", DEFAULT_MAX_RESPONSE_BYTES))
 
     for attempt in range(1, 4):
+        started_at = time.monotonic()
+        _emit_sec_pull_event("sec_pull_started", url=url, attempt=attempt, max_attempts=3)
         try:
             with httpx.Client(follow_redirects=True, headers=headers, timeout=timeout) as client:
                 response = client.get(url)
@@ -56,22 +60,80 @@ def download_sec_bytes(url: str, identity: str) -> bytes:
                     raise WarehouseRuntimeError(
                         f"SEC response exceeded size limit for {url}: {len(response.content)} bytes"
                     )
+                _emit_sec_pull_event(
+                    "sec_pull_completed",
+                    url=url,
+                    final_url=str(response.url),
+                    attempt=attempt,
+                    max_attempts=3,
+                    status_code=response.status_code,
+                    bytes=len(response.content),
+                    duration_ms=_elapsed_ms(started_at),
+                )
                 return response.content
         except httpx.HTTPStatusError as exc:
             last_error = exc
             status_code = exc.response.status_code
             if status_code in {429, 500, 502, 503, 504} and attempt < 3:
+                _emit_sec_pull_event(
+                    "sec_pull_retry",
+                    url=url,
+                    attempt=attempt,
+                    max_attempts=3,
+                    status_code=status_code,
+                    duration_ms=_elapsed_ms(started_at),
+                )
                 time.sleep(attempt)
                 continue
+            _emit_sec_pull_event(
+                "sec_pull_failed",
+                url=url,
+                attempt=attempt,
+                max_attempts=3,
+                status_code=status_code,
+                duration_ms=_elapsed_ms(started_at),
+            )
             raise WarehouseRuntimeError(f"SEC request failed for {url}: HTTP {status_code}") from exc
         except httpx.HTTPError as exc:
             last_error = exc
             if attempt < 3:
+                _emit_sec_pull_event(
+                    "sec_pull_retry",
+                    url=url,
+                    attempt=attempt,
+                    max_attempts=3,
+                    error=exc.__class__.__name__,
+                    duration_ms=_elapsed_ms(started_at),
+                )
                 time.sleep(attempt)
                 continue
+            _emit_sec_pull_event(
+                "sec_pull_failed",
+                url=url,
+                attempt=attempt,
+                max_attempts=3,
+                error=exc.__class__.__name__,
+                duration_ms=_elapsed_ms(started_at),
+            )
             raise WarehouseRuntimeError(f"SEC request failed for {url}: {exc}") from exc
 
     raise WarehouseRuntimeError(f"SEC request failed for {url}: {last_error}")
+
+
+def _elapsed_ms(started_at: float) -> int:
+    return int((time.monotonic() - started_at) * 1000)
+
+
+def _emit_sec_pull_event(event: str, **payload: object) -> None:
+    parsed = urlparse(str(payload.get("url", "")))
+    document = {
+        "event": event,
+        "emitted_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "host": parsed.netloc,
+        "path": parsed.path,
+        **payload,
+    }
+    print(json.dumps(document, sort_keys=True), file=sys.stderr, flush=True)
 
 
 def build_company_tickers_url() -> str:

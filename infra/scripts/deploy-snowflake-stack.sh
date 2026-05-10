@@ -90,11 +90,22 @@ load_password_from_snow_config() {
   if [[ -n "${TF_VAR_snowflake_password:-}" || -n "${SNOWFLAKE_PASSWORD:-}" ]]; then
     return 0
   fi
-  local config_path="${SNOWFLAKE_HOME:-$HOME/.snowflake}/config.toml"
-  if [[ ! -f "${config_path}" ]]; then
+  local config_path=""
+  local candidates=(
+    "${SNOWFLAKE_HOME:-$HOME/.snowflake}/config.toml"
+    "$HOME/Library/Application Support/snowflake/config.toml"
+  )
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -f "${candidate}" ]]; then
+      config_path="${candidate}"
+      break
+    fi
+  done
+  if [[ -z "${config_path}" ]]; then
     # Windows path fallback when running under Git Bash (where $HOME may be /c/Users/<u>).
     local win_config_path
-    win_config_path="$(cygpath -w "${config_path}" 2>/dev/null || echo "${config_path}")"
+    win_config_path="$(cygpath -w "${candidates[0]}" 2>/dev/null || echo "${candidates[0]}")"
     [[ -f "${win_config_path}" ]] && config_path="${win_config_path}"
   fi
   [[ -f "${config_path}" ]] || return 0
@@ -150,12 +161,42 @@ trap cleanup EXIT
 require_command terraform
 require_command python3
 
+load_snowflake_provider_vars_from_tfvars() {
+  local tfvars_path="${SNOWFLAKE_ROOT}/terraform.tfvars"
+  [[ -f "${tfvars_path}" ]] || return 0
+
+  local exports
+  exports="$(TFVARS_PATH="${tfvars_path}" python3 - <<'PY'
+import os
+import pathlib
+import re
+import shlex
+
+text = pathlib.Path(os.environ["TFVARS_PATH"]).read_text(encoding="utf-8")
+keys = {
+    "snowflake_organization_name": "TF_VAR_snowflake_organization_name",
+    "snowflake_account_name": "TF_VAR_snowflake_account_name",
+    "snowflake_user": "TF_VAR_snowflake_user",
+}
+for tf_key, env_key in keys.items():
+    if os.environ.get(env_key):
+        continue
+    match = re.search(rf'^\s*{re.escape(tf_key)}\s*=\s*"([^"]*)"', text, flags=re.MULTILINE)
+    if match:
+        print(f"export {env_key}={shlex.quote(match.group(1))}")
+PY
+)"
+  [[ -z "${exports}" ]] || eval "${exports}"
+}
+
+load_snowflake_provider_vars_from_tfvars
+
 if [[ ${RUN_VALIDATION} -eq 1 || ${UPLOAD_DASHBOARD} -eq 1 ]]; then
   require_command snow
 fi
 
 if [[ ${RUN_DBT} -eq 1 ]]; then
-  require_command dbt
+  require_command uv
   # Auto-derive dbt connection inputs from the TF_VAR_snowflake_* values that
   # Terraform already requires. Lets the deploy run with one source of truth.
   if [[ -z "${DBT_SNOWFLAKE_ACCOUNT:-}" && -n "${TF_VAR_snowflake_organization_name:-}" && -n "${TF_VAR_snowflake_account_name:-}" ]]; then
@@ -167,6 +208,7 @@ if [[ ${RUN_DBT} -eq 1 ]]; then
   [[ -n "${DBT_SNOWFLAKE_ACCOUNT:-}" ]] || die "DBT_SNOWFLAKE_ACCOUNT (or TF_VAR_snowflake_organization_name + TF_VAR_snowflake_account_name) must be set when dbt is enabled"
   [[ -n "${DBT_SNOWFLAKE_USER:-}" ]] || die "DBT_SNOWFLAKE_USER (or TF_VAR_snowflake_user) must be set when dbt is enabled"
   [[ -n "${DBT_SNOWFLAKE_PASSWORD:-}" ]] || die "DBT_SNOWFLAKE_PASSWORD (or TF_VAR_snowflake_password) must be set when dbt is enabled"
+  export UV_CACHE_DIR="${UV_CACHE_DIR:-/private/tmp/uv-cache}"
 fi
 
 [[ -f "${AWS_ROOT}/backend.hcl" ]] || die "Missing backend.hcl in ${AWS_ROOT}"
@@ -349,9 +391,9 @@ if [[ ${RUN_DBT} -eq 1 ]]; then
 
   (
     cd "${DBT_ROOT}"
-    dbt deps
-    dbt run --target "${ENVIRONMENT}"
-    dbt test --target "${ENVIRONMENT}"
+    uv run --with dbt-snowflake dbt deps
+    uv run --with dbt-snowflake dbt run --target "${ENVIRONMENT}"
+    uv run --with dbt-snowflake dbt test --target "${ENVIRONMENT}"
   )
 fi
 

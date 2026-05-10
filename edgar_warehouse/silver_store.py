@@ -442,7 +442,12 @@ class SilverDatabase:
         rows = _parse_company_ticker_rows(company_tickers_exchange)
         return self.seed_tracked_universe_rows(rows)
 
-    def seed_tracked_universe_rows(self, rows: list[dict[str, Any]]) -> int:
+    def seed_tracked_universe_rows(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        tracking_status: str = "active",
+    ) -> int:
         """Upsert tracked-universe rows that were already parsed from SEC reference data."""
         now = datetime.now(UTC)
         count = 0
@@ -456,20 +461,24 @@ class SilverDatabase:
                 INSERT INTO sec_tracked_universe
                     (cik, input_ticker, current_ticker, universe_source,
                      tracking_status, history_mode, effective_from, added_at)
-                VALUES (?, ?, ?, 'seeded_from_sec_reference', 'active', 'recent_only', ?, ?)
+                VALUES (?, ?, ?, 'seeded_from_sec_reference', ?, 'recent_only', ?, ?)
                 ON CONFLICT (cik) DO UPDATE SET
                     input_ticker = excluded.input_ticker,
                     current_ticker = excluded.current_ticker,
                     universe_source = excluded.universe_source,
-                    tracking_status = excluded.tracking_status,
+                    tracking_status = COALESCE(sec_tracked_universe.tracking_status, excluded.tracking_status),
                     history_mode = excluded.history_mode,
                     effective_from = COALESCE(sec_tracked_universe.effective_from, excluded.effective_from),
                     added_at = COALESCE(sec_tracked_universe.added_at, excluded.added_at)
                 """,
-                [int(cik), str(ticker), str(ticker), now, now],
+                [int(cik), str(ticker), str(ticker), tracking_status, now, now],
             )
             count += 1
         return count
+
+    def get_all_tracked_universe_ciks(self) -> list[int]:
+        rows = self._conn.execute("SELECT cik FROM sec_tracked_universe").fetchall()
+        return [row[0] for row in rows]
 
     def auto_enroll_tracked_universe(
         self,
@@ -1371,6 +1380,29 @@ class SilverDatabase:
             return None
         cols = [d[0] for d in self._conn.description]
         return dict(zip(cols, result))
+
+    def get_raw_objects_for_accession(self, accession_number: str, source_type: str | None = None) -> list[dict[str, Any]]:
+        """Return raw objects for an accession, optionally filtered by source type."""
+        if source_type is None:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM sec_raw_object
+                WHERE accession_number = ?
+                ORDER BY fetched_at DESC
+                """,
+                [accession_number],
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM sec_raw_object
+                WHERE accession_number = ? AND source_type = ?
+                ORDER BY fetched_at DESC
+                """,
+                [accession_number, source_type],
+            ).fetchall()
+        cols = [d[0] for d in self._conn.description]
+        return [dict(zip(cols, row)) for row in rows]
 
     # ------------------------------------------------------------------
     # sec_filing_attachment

@@ -1,13 +1,35 @@
 """Tests that the warehouse orchestrator reads/writes tracked universe via MDM when configured."""
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
+from edgar_warehouse.infrastructure.object_storage import StorageLocation
 
 
 def _make_mock_db(ciks: list[int]) -> MagicMock:
     db = MagicMock()
     db.get_tracked_universe_ciks.return_value = ciks
     return db
+
+
+def test_hydrate_silver_database_from_remote_storage(tmp_path):
+    from edgar_warehouse.application import warehouse_orchestrator
+
+    context = WarehouseCommandContext(
+        bronze_root=StorageLocation(str(tmp_path / "bronze")),
+        storage_root=StorageLocation("s3://warehouse-root/warehouse"),
+        silver_root=StorageLocation(str(tmp_path / "silver")),
+        snowflake_export_root=None,
+        environment_name="test",
+        identity="dev@example.com",
+        runtime_mode="bronze_capture",
+    )
+    with patch.object(warehouse_orchestrator, "read_bytes", return_value=b"duckdb-bytes"):
+        warehouse_orchestrator._hydrate_silver_database_from_storage(context)
+
+    assert (Path(context.silver_root.join("silver", "sec", "silver.duckdb"))).read_bytes() == b"duckdb-bytes"
 
 
 # ---------------------------------------------------------------------------

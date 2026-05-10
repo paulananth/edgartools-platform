@@ -11,6 +11,7 @@ RUNTIME_MODES = frozenset({"bronze_capture", "infrastructure_validation"})
 SERVING_EXPORT_COMMANDS = frozenset(
     {
         "bootstrap-full",
+        "bootstrap-next",
         "bootstrap-recent-10",
         "bootstrap-batch",
         "daily-incremental",

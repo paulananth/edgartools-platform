@@ -101,6 +101,16 @@ _DAILY_INDEX_LINE_PATTERN = re.compile(
 )
 
 
+def _emit_pipeline_event(event: str, **payload: Any) -> None:
+    """Emit a structured progress event for ECS/CloudWatch pipeline monitoring."""
+    document = {
+        "event": event,
+        "emitted_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        **payload,
+    }
+    print(json.dumps(document, sort_keys=True), file=sys.stderr, flush=True)
+
+
 def run_command(command_name: str, args: Any) -> int:
     """Execute a warehouse command and emit a JSON result payload."""
     arguments = _namespace_to_payload(args)
@@ -270,6 +280,7 @@ def _execute_warehouse_bronze_capture(
     now = datetime.now(UTC)
     run_id = _resolve_run_id(arguments)
     command_path = command_name.replace("_", "-")
+    _hydrate_silver_database_from_storage(context)
     scope = _resolve_scope(command_name=command_name, arguments=arguments, now=now, silver_root=context.silver_root)
     db = _open_silver_database(context.silver_root)
     db_closed = False
@@ -308,6 +319,13 @@ def _execute_warehouse_bronze_capture(
             from edgar_warehouse.serving.gold_models import build_gold, write_gold_to_storage
             from edgar_warehouse.serving.targets.snowflake import write_gold_to_snowflake_export
 
+            gold_started_at = datetime.now(UTC)
+            _emit_pipeline_event(
+                "gold_publish_started",
+                command=command_name,
+                run_id=run_id,
+                silver_table_counts=silver_table_counts,
+            )
             gold_tables = build_gold(db)
             gold_row_counts = write_gold_to_storage(gold_tables, context.storage_root, run_id)
             export_business_date = _resolve_export_business_date(command_name=command_name, scope=scope, now=now)
@@ -317,6 +335,14 @@ def _execute_warehouse_bronze_capture(
                 run_id,
                 export_business_date,
             )
+            _emit_pipeline_event(
+                "gold_publish_completed",
+                command=command_name,
+                duration_seconds=(datetime.now(UTC) - gold_started_at).total_seconds(),
+                gold_row_counts=gold_row_counts,
+                run_id=run_id,
+                snowflake_export_counts=snowflake_export_counts,
+            )
         db.complete_sync_run(
             run_id,
             status=str(metrics.get("sync_status", "succeeded")),
@@ -325,10 +351,28 @@ def _execute_warehouse_bronze_capture(
         )
         db.close()
         db_closed = True
+        _emit_pipeline_event(
+            "silver_publish_started",
+            command=command_name,
+            run_id=run_id,
+            storage_root=context.storage_root.root,
+        )
         silver_database_write = _publish_silver_database_if_remote(context)
+        _emit_pipeline_event(
+            "silver_publish_completed",
+            command=command_name,
+            run_id=run_id,
+            silver_database=silver_database_write,
+        )
     except Exception as exc:
         if not db_closed:
             db.complete_sync_run(run_id, status="failed", error_message=str(exc))
+        _emit_pipeline_event(
+            "pipeline_failed",
+            command=command_name,
+            error_message=str(exc),
+            run_id=run_id,
+        )
         raise
     finally:
         if not db_closed:
@@ -467,6 +511,25 @@ def _execute_warehouse_bronze_capture(
 
 def _open_silver_database(silver_root: StorageLocation) -> SilverDatabase:
     return open_silver_database(silver_root)
+
+
+def _hydrate_silver_database_from_storage(context: WarehouseCommandContext) -> None:
+    if not context.storage_root.is_remote or context.silver_root.is_remote:
+        return
+    remote_path = context.storage_root.join("silver", "sec", "silver.duckdb")
+    local_path = Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
+    try:
+        payload = read_bytes(remote_path)
+    except (FileNotFoundError, OSError):
+        return
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    local_path.write_bytes(payload)
+    _emit_pipeline_event(
+        "silver_database_hydrated",
+        path=remote_path,
+        local_path=str(local_path),
+        size_bytes=len(payload),
+    )
 
 
 def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict[str, Any] | None:
@@ -676,20 +739,26 @@ def _capture_bronze_raw(
         return raw_writes, metrics
 
     if command_name == "bootstrap-next":
+        cik_limit = int(scope.get("cik_limit") or 100)
+        tracking_status_filter = str(scope.get("tracking_status_filter", "bootstrap_pending"))
         ciks, reference_result = _resolve_bootstrap_target_ciks(
             context=context,
             db=db,
             sync_run_id=sync_run_id,
             raw_ciks=None,
             command_name=command_name,
-            tracking_status_filter=str(scope.get("tracking_status_filter", "bootstrap_pending")),
+            tracking_status_filter=tracking_status_filter,
             fetch_date=now.date(),
+            seed_source_names=["company_tickers_exchange"],
+            seed_company_sync_state=False,
+            seed_tracked_universe_limit=cik_limit,
+            seed_tracked_universe_status=tracking_status_filter,
+            seed_tracked_universe_only_new=True,
         )
         if reference_result is not None:
             raw_writes.extend(reference_result["raw_writes"])
             metrics["rows_inserted"] += reference_result["rows_written"]
             metrics["rows_skipped"] += reference_result["rows_skipped"]
-        cik_limit = int(scope.get("cik_limit") or 100)
         ciks = _apply_bronze_cik_limit(ciks[:cik_limit])
         result = _run_submissions_bronze_then_silver(
             context=context,
@@ -956,55 +1025,58 @@ def _run_submissions_bronze_then_silver(
     """Capture every selected SEC submission into bronze before applying silver."""
     bronze_snapshots = []
     total_ciks = len(ciks)
-    print(
-        json.dumps(
-            {
-                "event": "bronze_capture_started",
-                "cik_count": total_ciks,
-                "include_pagination": include_pagination,
-                "load_mode": load_mode,
-            },
-            sort_keys=True,
-        ),
-        file=sys.stderr,
-        flush=True,
+    bronze_started_at = datetime.now(UTC)
+    _emit_pipeline_event(
+        "bronze_capture_started",
+        cik_count=total_ciks,
+        include_pagination=include_pagination,
+        load_mode=load_mode,
+        run_id=sync_run_id,
     )
     for index, cik in enumerate(ciks, start=1):
         bronze_snapshots.append(
             _capture_submission_bronze_snapshot(
-            context=context,
-            db=db,
-            cik=cik,
-            include_pagination=include_pagination,
-            fetch_date=fetch_date,
-            force=force,
-        )
+                context=context,
+                db=db,
+                cik=cik,
+                include_pagination=include_pagination,
+                fetch_date=fetch_date,
+                force=force,
+            )
         )
         if index == total_ciks or index % 10 == 0:
-            print(
-                json.dumps(
-                    {
-                        "event": "bronze_capture_progress",
-                        "captured": index,
-                        "cik_count": total_ciks,
-                    },
-                    sort_keys=True,
-                ),
-                file=sys.stderr,
-                flush=True,
+            _emit_pipeline_event(
+                "bronze_capture_progress",
+                captured=index,
+                cik_count=total_ciks,
+                run_id=sync_run_id,
             )
     raw_writes = [
         write_record
         for snapshot in bronze_snapshots
         for write_record in snapshot["raw_writes"]
     ]
+    _emit_pipeline_event(
+        "bronze_capture_completed",
+        cik_count=total_ciks,
+        duration_seconds=(datetime.now(UTC) - bronze_started_at).total_seconds(),
+        raw_object_count=len(raw_writes),
+        run_id=sync_run_id,
+    )
 
     rows_written = 0
     rows_skipped = 0
     recent_accessions: list[str] = []
     pagination_accessions: list[str] = []
     now = datetime.now(UTC)
-    for snapshot in bronze_snapshots:
+    silver_started_at = datetime.now(UTC)
+    _emit_pipeline_event(
+        "silver_apply_started",
+        cik_count=total_ciks,
+        raw_object_count=len(raw_writes),
+        run_id=sync_run_id,
+    )
+    for index, snapshot in enumerate(bronze_snapshots, start=1):
         result = _apply_submission_snapshot_to_silver(
             db=db,
             sync_run_id=sync_run_id,
@@ -1018,6 +1090,23 @@ def _run_submissions_bronze_then_silver(
         rows_skipped += int(result["rows_skipped"])
         recent_accessions.extend(result["recent_accessions"])
         pagination_accessions.extend(result["pagination_accessions"])
+        if index == total_ciks or index % 10 == 0:
+            _emit_pipeline_event(
+                "silver_apply_progress",
+                applied=index,
+                cik_count=total_ciks,
+                rows_skipped=rows_skipped,
+                rows_written=rows_written,
+                run_id=sync_run_id,
+            )
+    _emit_pipeline_event(
+        "silver_apply_completed",
+        cik_count=total_ciks,
+        duration_seconds=(datetime.now(UTC) - silver_started_at).total_seconds(),
+        rows_skipped=rows_skipped,
+        rows_written=rows_written,
+        run_id=sync_run_id,
+    )
 
     return {
         "raw_writes": raw_writes,
@@ -1234,6 +1323,10 @@ def _sync_reference_data(
     sync_run_id: str,
     fetch_date: date,
     source_names: list[str] | None = None,
+    seed_company_sync_state: bool = True,
+    tracked_universe_limit: int | None = None,
+    tracked_universe_status: str = "active",
+    tracked_universe_only_new: bool = False,
 ) -> dict[str, Any]:
     selected_sources = source_names or ["company_tickers", "company_tickers_exchange"]
     raw_writes: list[dict[str, Any]] = []
@@ -1289,24 +1382,63 @@ def _sync_reference_data(
         )
         if rows and (spec.source_name == "company_tickers_exchange" or seed_document is None):
             seed_document = document
-        for row in rows:
-            existing = db.get_company_sync_state(int(row["cik"]))
-            db.upsert_company_sync_state(
-                {
-                    "cik": int(row["cik"]),
-                    "tracking_status": existing.get("tracking_status", "bootstrap_pending") if existing else "bootstrap_pending",
-                    "last_error_message": None,
-                }
-            )
+        if seed_company_sync_state:
+            for row in rows:
+                existing = db.get_company_sync_state(int(row["cik"]))
+                db.upsert_company_sync_state(
+                    {
+                        "cik": int(row["cik"]),
+                        "tracking_status": existing.get("tracking_status", "bootstrap_pending") if existing else "bootstrap_pending",
+                        "last_error_message": None,
+                    }
+                )
 
     if seed_document is not None:
-        db.seed_tracked_universe(seed_document)
+        seed_rows = _tracked_universe_seed_rows(
+            db=db,
+            seed_document=seed_document,
+            limit=tracked_universe_limit,
+            only_new=tracked_universe_only_new,
+        )
+        seeded_count = db.seed_tracked_universe_rows(seed_rows, tracking_status=tracked_universe_status)
+        metrics_payload = {
+            "limit": tracked_universe_limit,
+            "only_new": tracked_universe_only_new,
+            "rows_seeded": seeded_count,
+            "status": tracked_universe_status,
+            "sync_run_id": sync_run_id,
+        }
+        _emit_pipeline_event("tracked_universe_seeded", **metrics_payload)
     return {
         "raw_writes": raw_writes,
         "rows_written": rows_written,
         "rows_skipped": rows_skipped,
         "seed_document": seed_document,
     }
+
+
+def _tracked_universe_seed_rows(
+    *,
+    db: SilverDatabase,
+    seed_document: dict[str, Any],
+    limit: int | None,
+    only_new: bool,
+) -> list[dict[str, Any]]:
+    from edgar_warehouse.silver_store import _parse_company_ticker_rows
+
+    rows = _parse_company_ticker_rows(seed_document)
+    existing_ciks = set(db.get_all_tracked_universe_ciks()) if only_new else set()
+    selected_rows: list[dict[str, Any]] = []
+    seen_ciks: set[int] = set()
+    for row in rows:
+        cik = int(row["cik"])
+        if cik in seen_ciks or cik in existing_ciks:
+            continue
+        seen_ciks.add(cik)
+        selected_rows.append(row)
+        if limit is not None and len(selected_rows) >= limit:
+            break
+    return selected_rows
 
 
 def _write_cik_universe_batches(
@@ -1991,6 +2123,11 @@ def _resolve_bootstrap_target_ciks(
     command_name: str,
     tracking_status_filter: str,
     fetch_date: date,
+    seed_source_names: list[str] | None = None,
+    seed_company_sync_state: bool = True,
+    seed_tracked_universe_limit: int | None = None,
+    seed_tracked_universe_status: str = "active",
+    seed_tracked_universe_only_new: bool = False,
 ) -> tuple[list[int], dict[str, Any] | None]:
     if raw_ciks:
         return [_parse_cik(value) for value in raw_ciks], None
@@ -2003,6 +2140,11 @@ def _resolve_bootstrap_target_ciks(
         db=db,
         sync_run_id=sync_run_id,
         fetch_date=fetch_date,
+        source_names=seed_source_names,
+        seed_company_sync_state=seed_company_sync_state,
+        tracked_universe_limit=seed_tracked_universe_limit,
+        tracked_universe_status=seed_tracked_universe_status,
+        tracked_universe_only_new=seed_tracked_universe_only_new,
     )
     ciks = _get_mdm_tracked_ciks(tracking_status_filter) or db.get_tracked_universe_ciks(status_filter=tracking_status_filter)
     if not ciks:

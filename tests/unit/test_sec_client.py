@@ -1,11 +1,37 @@
 from __future__ import annotations
 
+import contextlib
+import io
+import json
 import os
 import unittest
 from unittest.mock import patch
 
 from edgar_warehouse.application.errors import WarehouseRuntimeError
-from edgar_warehouse.infrastructure.sec_client import SecEndpointConfig, _validate_sec_url
+from edgar_warehouse.infrastructure.sec_client import SecEndpointConfig, _validate_sec_url, download_sec_bytes
+
+
+class _FakeResponse:
+    status_code = 200
+    url = "https://data.sec.gov/submissions/CIK0000000001.json"
+    content = b'{"ok":true}'
+
+    def raise_for_status(self) -> None:
+        return None
+
+
+class _FakeClient:
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def __enter__(self) -> "_FakeClient":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def get(self, url: str) -> _FakeResponse:
+        return _FakeResponse()
 
 
 class SecClientTests(unittest.TestCase):
@@ -22,3 +48,17 @@ class SecClientTests(unittest.TestCase):
     def test_validate_sec_url_rejects_non_allowlisted_host(self) -> None:
         with self.assertRaises(WarehouseRuntimeError):
             _validate_sec_url("https://example.com/path")
+
+    def test_download_sec_bytes_logs_each_sec_pull(self) -> None:
+        stderr = io.StringIO()
+        with patch("httpx.Client", _FakeClient), contextlib.redirect_stderr(stderr):
+            payload = download_sec_bytes(
+                "https://data.sec.gov/submissions/CIK0000000001.json",
+                "edgartools-platform test@example.com",
+            )
+
+        self.assertEqual(payload, b'{"ok":true}')
+        events = [json.loads(line) for line in stderr.getvalue().splitlines()]
+        self.assertEqual([event["event"] for event in events], ["sec_pull_started", "sec_pull_completed"])
+        self.assertEqual(events[1]["bytes"], 11)
+        self.assertEqual(events[1]["status_code"], 200)

@@ -36,6 +36,7 @@ class PipelineStats:
     persons_processed: int = 0
     securities_processed: int = 0
     funds_processed: int = 0
+    graph_nodes_synced: int = 0
     graph_edges_synced: int = 0
     quarantined: int = 0
     sent_to_review: int = 0
@@ -251,6 +252,7 @@ class MDMPipeline:
         stats.relationships_written = self.run_relationships(limit=limit)
         if self.neo4j is not None:
             sync = GraphSyncEngine.build(self.session, self.neo4j)
+            stats.graph_nodes_synced = sync.sync_entities(limit=limit)
             stats.graph_edges_synced = sync.sync_pending()
             self.session.commit()
         return stats

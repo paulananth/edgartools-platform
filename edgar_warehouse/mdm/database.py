@@ -75,7 +75,11 @@ def get_engine(url: str | None = None) -> Engine:
     kwargs: dict = {"pool_pre_ping": True}
     if url.startswith("mssql"):
         kwargs["fast_executemany"] = True
-    return create_engine(url, **kwargs)
+    engine = create_engine(url, **kwargs)
+    from edgar_warehouse.mdm.observability import install_mdm_sql_logging
+
+    install_mdm_sql_logging(engine)
+    return engine
 
 
 def get_session(engine: Engine) -> Session:
