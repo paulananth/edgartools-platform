@@ -449,6 +449,57 @@ case "$MDM_DEPLOYMENT_MODE" in
     ;;
 esac
 
+# Sync the MDM Postgres DSN secret from the AWS-managed RDS credential.
+# AWS rotates the RDS master password on its own schedule; this keeps the
+# operator-facing DSN secret always current so ECS tasks never hit stale-password failures.
+sync_mdm_postgres_dsn() {
+  local dsn_secret_arn="$1"
+  local rds_instance_id="$2"
+
+  log "Syncing MDM Postgres DSN from live RDS credential (instance: ${rds_instance_id})"
+
+  local rds_json master_secret_arn host port dbname cred_json username password dsn
+  rds_json="$(aws_cli rds describe-db-instances \
+    --db-instance-identifier "$rds_instance_id" \
+    --query 'DBInstances[0].{Host:Endpoint.Address,Port:Endpoint.Port,DB:DBName,SecretArn:MasterUserSecret.SecretArn}' \
+    --output json 2>/dev/null)" || { log "WARN: could not describe RDS instance ${rds_instance_id}; skipping DSN sync"; return 0; }
+
+  host="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['Host'])" <<< "$rds_json")"
+  port="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['Port'])" <<< "$rds_json")"
+  dbname="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['DB'])" <<< "$rds_json")"
+  master_secret_arn="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['SecretArn'])" <<< "$rds_json")"
+
+  if is_empty "$master_secret_arn"; then
+    log "WARN: RDS instance ${rds_instance_id} has no AWS-managed master secret; skipping DSN sync"
+    return 0
+  fi
+
+  cred_json="$(aws_cli secretsmanager get-secret-value \
+    --secret-id "$master_secret_arn" \
+    --query SecretString --output text 2>/dev/null)" || { log "WARN: could not read RDS master secret; skipping DSN sync"; return 0; }
+
+  dsn="$(python3 - "$host" "$port" "$dbname" <<'PY'
+import json, sys
+from urllib.parse import quote_plus
+cred = json.loads(sys.stdin.read())
+host, port, db = sys.argv[1], sys.argv[2], sys.argv[3]
+u = quote_plus(cred["username"])
+p = quote_plus(cred["password"])
+print(f"postgresql+psycopg2://{u}:{p}@{host}:{port}/{db}?sslmode=require")
+PY
+  <<< "$cred_json")"
+
+  aws_cli secretsmanager put-secret-value \
+    --secret-id "$dsn_secret_arn" \
+    --secret-string "$dsn" >/dev/null
+  log "MDM Postgres DSN secret updated (host=${host} db=${dbname} sslmode=require)"
+}
+
+if [[ "$DEPLOY_MDM" == "true" ]] && ! is_empty "$MDM_POSTGRES_DSN_SECRET_ARN"; then
+  MDM_RDS_INSTANCE_ID="${NAME_PREFIX}-mdm"
+  sync_mdm_postgres_dsn "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_RDS_INSTANCE_ID"
+fi
+
 if [[ "$BUILD_MDM_IMAGE" == "auto" ]]; then
   if [[ "$DEPLOY_MDM" == "true" && "$BUILD_IMAGE" == "true" ]] && is_empty "$MDM_IMAGE_REF"; then
     BUILD_MDM_IMAGE=true
