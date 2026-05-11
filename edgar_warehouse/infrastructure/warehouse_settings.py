@@ -13,11 +13,13 @@ SERVING_EXPORT_COMMANDS = frozenset(
         "bootstrap-full",
         "bootstrap-next",
         "bootstrap-recent-10",
-        "bootstrap-batch",
+        # bootstrap-batch excluded: parallel batch tasks do bronze+silver only, not gold.
+        # gold-refresh handles the single gold build after all batches complete.
         "daily-incremental",
         "targeted-resync",
         "full-reconcile",
         "seed-universe",
+        "gold-refresh",
     }
 )
 

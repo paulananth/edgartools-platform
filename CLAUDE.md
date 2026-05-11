@@ -64,29 +64,76 @@ SEC filing artifacts are treated as additive and immutable after they have been
 captured. Warehouse loaders must skip already loaded SEC files by default and
 only re-fetch when an operator passes an explicit `--force` repair flag.
 
-## Long-load 5-whys
+## Long-load 5-whys (resolved)
 
-1. Why did warehouse loads take too long? Batched Step Functions work repeated
-   downstream publish work instead of separating capture, transform, and serving
-   refresh phases.
-2. Why was downstream work repeated? `bootstrap-batch` was treated as a
-   gold-affecting command, so each batch could build gold tables and emit a
-   Snowflake run manifest.
-3. Why was that expensive? Gold export and Snowflake refresh operate on the
-   whole warehouse state; repeating them per batch multiplies I/O and refresh
-   waits.
-4. Why was monitoring weak? Bronze, silver, gold, Snowflake load, and dynamic
-   table refresh did not have one operator-facing timeline.
-5. Why did it become hard to reason about? Distributed ECS tasks use local
-   DuckDB state and then publish `silver/sec/silver.duckdb`; concurrent batch
-   tasks can race unless silver is centralized into a single all-at-once phase.
+**Problem:** Loading 100 companies sequentially took 30–90 minutes.
 
-Target pipeline shape:
-- Populate bronze individually and make each CIK or batch progress visible.
-- Run silver once for the completed bronze run.
-- Run gold once after silver completes.
-- Emit structured progress events and surface Snowflake load, task, copy, and
-  dynamic-table refresh state in the dashboard.
+1. `bootstrap-next` fetches all 100 CIKs sequentially — no parallelism at the CIK level.
+2. Each CIK requires N SEC API calls (submissions.json + all pagination files). A well-filed
+   company has 50+ pagination files × 200–500 ms = 10–25 s per company.
+3. `bootstrap-batch` (Step Functions Distributed Map) was in `GOLD_AFFECTING_COMMANDS`, so
+   every parallel batch task rebuilt gold tables and uploaded silver.duckdb — work that
+   operates on the whole warehouse state and multiplies I/O by batch count.
+4. The three phases (bronze, MDM, gold) were mixed into a single command, preventing the
+   MDM entity resolution + Neo4j sync from running against the complete silver dataset.
+5. There was no single Step Function that encoded the correct sequence: parallel bronze
+   → MDM in bulk → gold once.
+
+**Resolution:** `bootstrap-batch` removed from `GOLD_AFFECTING_COMMANDS`. New `gold-refresh`
+command builds gold once. New `bootstrap_phased` Step Function chains all four phases correctly.
+
+## Phased Pipeline (use this for all bootstraps ≥10 companies)
+
+`bootstrap_phased` is the canonical way to load companies at scale. It runs in four
+sequential stages, each optimised for its workload:
+
+```
+Stage 1 — Bronze + Silver (parallel, N×10 concurrent ECS tasks)
+  seed-universe  →  bootstrap-batch ×N  (MaxConcurrency=10)
+  • Each batch: fetch SEC submissions + pagination → S3 bronze, parse → silver DuckDB
+  • NO gold build per batch (bootstrap-batch is NOT in GOLD_AFFECTING_COMMANDS)
+
+Stage 2 — MDM entity resolution (sequential Step Functions)
+  mdm-run  →  mdm-backfill-relationships  →  mdm-sync-graph  →  mdm-verify-graph
+  • Runs after ALL batches complete so entity resolution sees the full silver dataset
+  • Derives IS_INSIDER, MANAGES_FUND etc. and syncs to Neo4j
+
+Stage 3 — Gold refresh (single ECS task)
+  gold-refresh
+  • Reads complete silver DuckDB, builds all 9 gold tables, writes Snowflake export manifests
+  • SNOWFLAKE_RUN_MANIFEST_TASK picks up the manifest and refreshes EDGARTOOLS_GOLD within 1 min
+```
+
+**When to use what:**
+
+| Scenario | Command / State Machine |
+|----------|------------------------|
+| Load 10+ companies (recommended) | `bootstrap_phased` Step Function |
+| Single company debug/resync | `targeted_resync` Step Function |
+| Rebuild gold from existing silver | `gold_refresh` Step Function |
+| Recent filings only (fast) | `bootstrap_recent_10` Step Function |
+| Daily incremental (ongoing) | `daily_incremental` Step Function |
+
+**Running `bootstrap_phased` via Step Functions:**
+
+```bash
+aws stepfunctions start-execution \
+  --region us-east-1 \
+  --state-machine-arn arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-bootstrap-phased \
+  --name "bootstrap-phased-$(date +%s)" \
+  --input '{}'
+# Runs ~15 min for 100 companies (vs 30-90 min sequential)
+# Monitor: aws stepfunctions describe-execution --execution-arn <arn> --query status
+```
+
+**Do NOT run `bootstrap-next` locally for large batches** — it is sequential and cannot reach
+MDM Postgres (private VPC). Reserve it for single-company ad-hoc loads with explicit `--cik-list`.
+
+**Key invariants (do not break):**
+- `bootstrap-batch` must NOT be in `GOLD_AFFECTING_COMMANDS` — enforced in `warehouse_orchestrator.py:79`
+- `gold-refresh` must be in `GOLD_AFFECTING_COMMANDS` — it is the sole gold builder in the phased pipeline
+- `SNOWFLAKE_RUN_MANIFEST_TASK` must be STARTED in `EDGARTOOLS_GOLD` — verify with
+  `snow sql --connection edgartools-dev -q "SHOW TASKS LIKE 'SNOWFLAKE_RUN_MANIFEST_TASK'"`
 
 Key import pattern (do not change without checking the edgartools changelog):
 

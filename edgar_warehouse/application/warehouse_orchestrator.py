@@ -80,10 +80,12 @@ GOLD_AFFECTING_COMMANDS = {
     "bootstrap-full",
     "bootstrap-next",
     "bootstrap-recent-10",
-    "bootstrap-batch",
+    # bootstrap-batch deliberately excluded: parallel batch tasks do bronze+silver only.
+    # Gold is built once by gold-refresh after all batches complete.
     "daily-incremental",
     "targeted-resync",
     "full-reconcile",
+    "gold-refresh",  # builds gold from current silver state, no bronze capture
 }
 
 SNOWFLAKE_EXPORT_COMMANDS = GOLD_AFFECTING_COMMANDS | {"seed-universe"}
@@ -947,6 +949,13 @@ def _capture_bronze_raw(
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
         metrics["rows_skipped"] += result["rows_skipped"]
+        return raw_writes, metrics
+
+    if command_name == "gold-refresh":
+        # Bronze and silver are already complete. _execute_warehouse (the caller)
+        # will build gold tables and write Snowflake export manifests because
+        # gold-refresh is in GOLD_AFFECTING_COMMANDS. Nothing to do here.
+        _emit_pipeline_event("gold_refresh_started", run_id=sync_run_id)
         return raw_writes, metrics
 
     raise WarehouseRuntimeError(f"bronze_capture mode does not support {command_name}")
