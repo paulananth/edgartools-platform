@@ -354,8 +354,12 @@ def _handle_seed_from_silver(args) -> int:
         tmp.close()
         silver_path = tmp.name
         print(json.dumps({"status": "downloading", "source": s3_uri}))
-        import subprocess
-        subprocess.run(["aws", "s3", "cp", s3_uri, silver_path], check=True)
+        import boto3
+        # Parse s3://bucket/key
+        s3_parts = s3_uri[len("s3://"):].split("/", 1)
+        s3_bucket, s3_key = s3_parts[0], s3_parts[1]
+        region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+        boto3.client("s3", region_name=region).download_file(s3_bucket, s3_key, silver_path)
 
     tracking_status_filter = getattr(args, "tracking_status", None)
     dry_run = bool(getattr(args, "dry_run", False))
