@@ -478,16 +478,16 @@ sync_mdm_postgres_dsn() {
     --secret-id "$master_secret_arn" \
     --query SecretString --output text 2>/dev/null)" || { log "WARN: could not read RDS master secret; skipping DSN sync"; return 0; }
 
-  dsn="$(python3 - "$host" "$port" "$dbname" <<'PY'
-import json, sys
+  dsn="$(CRED_JSON="$cred_json" python3 - "$host" "$port" "$dbname" <<'PY'
+import json, os, sys
 from urllib.parse import quote_plus
-cred = json.loads(sys.stdin.read())
+cred = json.loads(os.environ["CRED_JSON"])
 host, port, db = sys.argv[1], sys.argv[2], sys.argv[3]
 u = quote_plus(cred["username"])
 p = quote_plus(cred["password"])
 print(f"postgresql+psycopg2://{u}:{p}@{host}:{port}/{db}?sslmode=require")
 PY
-  <<< "$cred_json")"
+)"
 
   aws_cli secretsmanager put-secret-value \
     --secret-id "$dsn_secret_arn" \
