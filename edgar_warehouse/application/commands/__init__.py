@@ -10,6 +10,7 @@ from edgar_warehouse.application.commands import (
     catch_up_daily_form_index,
     daily_incremental,
     full_reconcile,
+    gold_refresh,
     load_daily_form_index_for_date,
     seed_universe,
     targeted_resync,
@@ -26,4 +27,5 @@ COMMAND_REGISTRY = {
     "seed-universe": seed_universe.execute,
     "bootstrap-batch": bootstrap_batch.execute,
     "bootstrap-next": bootstrap_next.execute,
+    "gold-refresh": gold_refresh.execute,
 }

@@ -620,10 +620,11 @@ write_container_definitions() {
   # MSYS_NO_PATHCONV=1 prevents Git Bash from translating /aws/ecs/... log group names
   # into Windows filesystem paths. win_path() converts output_file to native Windows
   # form so Python can locate it regardless of /tmp remapping differences.
+  # MDM_POSTGRES_DSN_SECRET_ARN is passed (may be empty when MDM is not deployed).
   MSYS_NO_PATHCONV=1 python3 - "$(win_path "$output_file")" "$profile" "$IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
     "$WAREHOUSE_RUNTIME_MODE" "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" \
     "$SNOWFLAKE_EXPORT_BUCKET_NAME" "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" \
-    "$WAREHOUSE_BRONZE_CIK_LIMIT" <<'PY'
+    "$WAREHOUSE_BRONZE_CIK_LIMIT" "${MDM_POSTGRES_DSN_SECRET_ARN:-}" <<'PY'
 import json
 import pathlib
 import sys
@@ -641,6 +642,7 @@ import sys
     edgar_secret_arn,
     log_group_name,
     bronze_cik_limit,
+    mdm_postgres_dsn_secret_arn,
 ) = sys.argv[1:]
 
 snowflake_export_root = f"s3://{snowflake_export_bucket}/warehouse/artifacts/snowflake_exports"
@@ -657,13 +659,19 @@ environment_values = [
 if bronze_cik_limit:
     environment_values.append({"name": "WAREHOUSE_BRONZE_CIK_LIMIT", "value": bronze_cik_limit})
 
+secrets = [{"name": "EDGAR_IDENTITY", "valueFrom": edgar_secret_arn}]
+# MDM_DATABASE_URL is required for gold-affecting commands (seed-universe, bootstrap-*, gold-refresh).
+# Inject it from Secrets Manager when MDM is deployed alongside the warehouse.
+if mdm_postgres_dsn_secret_arn:
+    secrets.append({"name": "MDM_DATABASE_URL", "valueFrom": mdm_postgres_dsn_secret_arn})
+
 container_definitions = [{
     "name": "edgar-warehouse",
     "image": image_ref,
     "essential": True,
     "command": ["--help"],
     "environment": environment_values,
-    "secrets": [{"name": "EDGAR_IDENTITY", "valueFrom": edgar_secret_arn}],
+    "secrets": secrets,
     "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
