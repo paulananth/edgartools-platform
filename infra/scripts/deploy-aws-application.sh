@@ -1199,34 +1199,30 @@ PY
 
 # Phased pipeline: seed → parallel bronze+silver batches → MDM chain → gold-refresh once.
 # Implements the target pipeline shape from CLAUDE.md long-load 5-whys.
+# Uses direct ECS task states throughout (no nested Step Function executions) so the
+# existing sec_platform_runner_step_functions role needs no extra EventBridge permissions.
 write_bootstrap_phased_definition() {
   local output_file="$1"
-  local seed_task_arn="$2"
-  local batch_task_arn="$3"
-  local gold_task_arn="$4"
-  local mdm_run_arn="$5"
-  local mdm_backfill_arn="$6"
-  local mdm_sync_arn="$7"
-  local mdm_verify_arn="$8"
+  local wh_task_small_arn="$2"   # warehouse small  (seed-universe, gold-refresh)
+  local wh_task_medium_arn="$3"  # warehouse medium (bootstrap-batch)
+  local mdm_task_small_arn="$4"  # mdm small        (mdm run/backfill/sync/verify)
 
   python3 - "$output_file" "$CLUSTER_ARN" \
-    "$seed_task_arn" "$batch_task_arn" "$gold_task_arn" \
-    "$mdm_run_arn" "$mdm_backfill_arn" "$mdm_sync_arn" "$mdm_verify_arn" \
+    "$wh_task_small_arn" "$wh_task_medium_arn" "$mdm_task_small_arn" \
     "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
     "$BOOTSTRAP_BATCH_CONCURRENCY" "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
- seed_task_arn, batch_task_arn, gold_task_arn,
- mdm_run_arn, mdm_backfill_arn, mdm_sync_arn, mdm_verify_arn,
+ wh_small_arn, wh_medium_arn, mdm_small_arn,
  container_name, bronze_bucket_name, subnet_json, security_group_json,
  batch_concurrency, mdm_run_limit, mdm_graph_limit) = sys.argv[1:]
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
 
-def ecs_task(task_def_arn, cmd_expr, retry_secs=120):
-    return {
+def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=120):
+    s = {
         "Type": "Task",
         "Resource": "arn:aws:states:::ecs:runTask.sync",
         "Parameters": {
@@ -1244,29 +1240,27 @@ def ecs_task(task_def_arn, cmd_expr, retry_secs=120):
         "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": retry_secs,
                    "BackoffRate": 2.0, "MaxAttempts": 2}],
     }
+    if is_end:
+        s["End"] = True
+    else:
+        s["Next"] = next_state
+    return s
 
-def sfn_child(state_machine_arn, input_expr="$.sfnInput"):
-    return {
-        "Type": "Task",
-        "Resource": "arn:aws:states:::states:startExecution.sync:2",
-        "Parameters": {
-            "StateMachineArn": state_machine_arn,
-            "Input.$": input_expr,
-        },
-        "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 30,
-                   "BackoffRate": 1.5, "MaxAttempts": 1}],
-    }
+mdm_limit = str(mdm_run_limit)
+graph_limit = str(mdm_graph_limit)
 
-seed = ecs_task(seed_task_arn, "States.Array('seed-universe', '--run-id', $$.Execution.Name)", 60)
-seed["Next"] = "BatchBootstrap"
+seed = ecs_state(wh_small_arn,
+    "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
+    next_state="BatchBootstrap", retry_secs=60)
 
-batch = ecs_task(batch_task_arn,
-    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--run-id', $$.Execution.Name)")
-batch["End"] = True
+batch = ecs_state(wh_medium_arn,
+    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--run-id', $$.Execution.Name)",
+    is_end=True)
 
 batch_map = {
     "Type": "Map",
     "MaxConcurrency": int(batch_concurrency),
+    "Comment": "Parallel bronze+silver only — no gold per batch.",
     "ItemReader": {
         "Resource": "arn:aws:states:::s3:getObject",
         "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
@@ -1280,29 +1274,30 @@ batch_map = {
         "StartAt": "RunBatch",
         "States": {"RunBatch": batch},
     },
-    "Comment": "Parallel bronze+silver only — no gold per batch.",
     "Next": "MdmRun",
 }
 
-mdm_run = sfn_child(mdm_run_arn, f"States.JsonMerge($$, States.StringToJson(States.Format('{{\"limit\":{mdm_run_limit}}}', '')), false)")
-mdm_run["Next"] = "MdmBackfill"
-
-mdm_backfill = sfn_child(mdm_backfill_arn, f"States.JsonMerge($$, States.StringToJson(States.Format('{{\"limit\":{mdm_graph_limit}}}', '')), false)")
-mdm_backfill["Next"] = "MdmSync"
-
-mdm_sync = sfn_child(mdm_sync_arn, f"States.JsonMerge($$, States.StringToJson(States.Format('{{\"limit\":{mdm_graph_limit}}}', '')), false)")
-mdm_sync["Next"] = "MdmVerify"
-
-mdm_verify = sfn_child(mdm_verify_arn, "States.JsonToString($$)")
-mdm_verify["Next"] = "GoldRefresh"
-
-gold = ecs_task(gold_task_arn, "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", 60)
-gold["End"] = True
+mdm_run = ecs_state(mdm_small_arn,
+    f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')",
+    next_state="MdmBackfill")
+mdm_backfill = ecs_state(mdm_small_arn,
+    f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')",
+    next_state="MdmSync")
+mdm_sync = ecs_state(mdm_small_arn,
+    f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')",
+    next_state="MdmVerify")
+mdm_verify = ecs_state(mdm_small_arn,
+    "States.Array('mdm', 'verify-graph')",
+    next_state="GoldRefresh")
+gold = ecs_state(wh_small_arn,
+    "States.Array('gold-refresh', '--run-id', $$.Execution.Name)",
+    is_end=True, retry_secs=60)
 
 definition = {
     "Comment": (
         "Phased bootstrap: (1) seed MDM universe, (2) parallel bronze+silver batches "
-        "(no gold per batch), (3) MDM entity resolution + Neo4j sync, (4) single gold build. "
+        "(no gold per batch), (3) MDM entity resolution + Neo4j sync in bulk, "
+        "(4) single gold build + Snowflake export manifest. "
         "Implements target pipeline shape from CLAUDE.md long-load 5-whys."
     ),
     "StartAt": "SeedUniverse",
@@ -1399,11 +1394,7 @@ if [[ "$DEPLOY_MDM" == "true" ]]; then
   # Chains seed → parallel bronze+silver batches → MDM → gold-refresh once.
   phased_definition_file="$(json_file sfn-bootstrap-phased)"
   write_bootstrap_phased_definition "$phased_definition_file" \
-    "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_SMALL_ARN" \
-    "arn:aws:states:${AWS_REGION_NAME}:${ACCOUNT_ID}:stateMachine:${NAME_PREFIX}-mdm-run" \
-    "arn:aws:states:${AWS_REGION_NAME}:${ACCOUNT_ID}:stateMachine:${NAME_PREFIX}-mdm-backfill-relationships" \
-    "arn:aws:states:${AWS_REGION_NAME}:${ACCOUNT_ID}:stateMachine:${NAME_PREFIX}-mdm-sync-graph" \
-    "arn:aws:states:${AWS_REGION_NAME}:${ACCOUNT_ID}:stateMachine:${NAME_PREFIX}-mdm-verify-graph"
+    "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN"
   phased_state_machine_arn="$(upsert_state_machine bootstrap_phased "$phased_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
   python3 - "bootstrap_phased" "$phased_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
