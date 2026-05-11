@@ -217,6 +217,13 @@ aws ecr get-login-password --region us-east-1 \
   | docker login --username AWS --password-stdin \
     077127448006.dkr.ecr.us-east-1.amazonaws.com
 
+# NOTE: ECR repositories must have MUTABLE tags for :dev to be overwritten.
+# If you see "tag is immutable" on push, run once per affected repo:
+#   aws ecr put-image-tag-mutability --region us-east-1 \
+#     --repository-name edgartools-dev-warehouse --image-tag-mutability MUTABLE
+#   aws ecr put-image-tag-mutability --region us-east-1 \
+#     --repository-name edgartools-dev-mdm --image-tag-mutability MUTABLE
+
 # 3a. Build and push the warehouse image.
 bash infra/scripts/publish-warehouse-image.sh \
   --aws-region us-east-1 \
@@ -257,6 +264,24 @@ bash infra/scripts/deploy-aws-application.sh \
   --mdm-image-ref "$MDM_REF" \
   --enable-mdm
 ```
+
+**If publish-warehouse-image.sh fails with a cache layer error (Colima cache corruption)**
+
+```bash
+# Build the MDM image directly, bypassing the publish script's cache handling.
+DEPS_REF="077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm-deps:deps-bc951d9c1b24a9bd"
+SHA_TAG="sha-$(git rev-parse --short=12 HEAD)"
+ECR_MDM="077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm"
+
+docker pull "$DEPS_REF"
+docker build --platform linux/amd64 --build-arg "DEPENDENCY_IMAGE=${DEPS_REF}" \
+  -f Dockerfile.mdm-neo4j -t "${ECR_MDM}:${SHA_TAG}" -t "${ECR_MDM}:dev" .
+docker push "${ECR_MDM}:${SHA_TAG}"
+docker push "${ECR_MDM}:dev"
+```
+
+The deps tag (`deps-bc951d9c1b24a9bd`) is derived from the `uv.lock` hash. Update it if deps change by
+running the publish script with `--role deps-mdm` first.
 
 **When to rebuild which image**
 
