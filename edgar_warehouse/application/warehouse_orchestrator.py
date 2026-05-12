@@ -133,8 +133,6 @@ def run_seed_universe_command(args: Any) -> int:
     """Seed the MDM tracked universe from a SEC reference JSON file."""
     try:
         from edgar_warehouse.silver_store import _parse_company_ticker_rows
-        from edgar_warehouse.mdm.database import get_engine
-        from edgar_warehouse.mdm.universe import bulk_upsert_universe
 
         limit = _resolve_seed_limit(getattr(args, "limit", None))
         source_label, document = _resolve_seed_document(args)
@@ -145,7 +143,7 @@ def run_seed_universe_command(args: Any) -> int:
             rows = rows[:limit]
 
         tracking_status = str(getattr(args, "tracking_status", None) or "active")
-        engine = get_engine()
+        engine, bulk_upsert_universe = _mdm_engine_and(["bulk_upsert_universe"])
         rows_seeded = bulk_upsert_universe(engine, rows, default_status=tracking_status)
     except WarehouseRuntimeError as exc:
         print(
@@ -914,13 +912,9 @@ def _capture_bronze_raw(
         if len(limited_ciks) < len(universe_rows):
             allowed = set(limited_ciks)
             universe_rows = [row for row in universe_rows if int(row["cik"]) in allowed]
-        # Seed MDM as the tracking source of truth before writing S3 batches.
-        from edgar_warehouse.mdm.database import get_engine
-        from edgar_warehouse.mdm.universe import bulk_upsert_universe
-        tracking_status = str(arguments.get("tracking_status") or "active")
-        mdm_seeded = bulk_upsert_universe(get_engine(), universe_rows, default_status=tracking_status)
-        metrics["mdm_rows_seeded"] = mdm_seeded
-
+        # MDM universe seeding is handled by the MDM image (mdm seed-universe or
+        # mdm seed-from-silver). The warehouse seed-universe step only writes
+        # CIK batches to S3 for the Distributed Map — no sqlalchemy required here.
         metrics["_ticker_reference_rows"] = ticker_reference_rows
         cik_universe_path = _write_cik_universe_batches(
             context=context,
@@ -2032,6 +2026,26 @@ def _parse_cik(value: Any) -> int:
     return parse_cik(value)
 
 
+def _mdm_engine_and(module_attrs: list[str]):
+    """Import MDM engine + named universe functions.
+
+    Raises WarehouseRuntimeError with a clear message when the MDM extras
+    (sqlalchemy, psycopg2) are not installed in the current image — e.g. the
+    warehouse-only image that does not include mdm-runtime dependencies.
+    """
+    try:
+        from edgar_warehouse.mdm import database as _db
+        from edgar_warehouse.mdm import universe as _u
+        engine = _db.get_engine()
+        return engine, *[getattr(_u, attr) for attr in module_attrs]
+    except ImportError as exc:
+        raise WarehouseRuntimeError(
+            f"MDM Python packages (sqlalchemy, psycopg2) are not available in this image. "
+            f"MDM operations must run in the MDM image (edgartools-dev-mdm). "
+            f"Missing: {exc.name}"
+        ) from exc
+
+
 def _get_mdm_tracked_ciks(status_filter: str) -> list[int]:
     """Query MDM for tracked CIKs. MDM is the sole source of truth for universe tracking.
 
@@ -2044,9 +2058,8 @@ def _get_mdm_tracked_ciks(status_filter: str) -> list[int]:
             "MDM_DATABASE_URL is required. Seed the universe with "
             "'edgar-warehouse mdm seed-universe' before running bootstrap commands."
         )
-    from edgar_warehouse.mdm.database import get_engine
-    from edgar_warehouse.mdm.universe import get_tracked_ciks
-    return get_tracked_ciks(get_engine(url), status_filter=status_filter)
+    engine, get_tracked_ciks = _mdm_engine_and(["get_tracked_ciks"])
+    return get_tracked_ciks(engine, status_filter=status_filter)
 
 
 def _sync_mdm_tracking_status(cik: int, status: str) -> None:
@@ -2056,12 +2069,10 @@ def _sync_mdm_tracking_status(cik: int, status: str) -> None:
     must surface rather than silently produce stale state.
     """
     import os
-    url = os.environ.get("MDM_DATABASE_URL")
-    if not url:
+    if not os.environ.get("MDM_DATABASE_URL"):
         raise WarehouseRuntimeError("MDM_DATABASE_URL is required for tracking status updates")
-    from edgar_warehouse.mdm.database import get_engine
-    from edgar_warehouse.mdm.universe import update_tracking_status
-    update_tracking_status(get_engine(url), cik, status)
+    engine, update_tracking_status = _mdm_engine_and(["update_tracking_status"])
+    update_tracking_status(engine, cik, status)
 
 
 def _resolve_target_ciks(
@@ -2096,10 +2107,9 @@ def _mdm_auto_enroll(ciks: list[int], *, scope_reason: str = "auto_discovered") 
     if not url:
         return
     try:
-        from edgar_warehouse.mdm.database import get_engine
-        from edgar_warehouse.mdm.universe import bulk_upsert_universe
+        engine, bulk_upsert_universe = _mdm_engine_and(["bulk_upsert_universe"])
         rows = [{"cik": cik, "ticker": str(cik), "exchange": None} for cik in ciks]
-        bulk_upsert_universe(get_engine(url), rows, default_status="active")
+        bulk_upsert_universe(engine, rows, default_status="active")
     except Exception as exc:
         _emit_pipeline_event("mdm_auto_enroll_failed", scope_reason=scope_reason, error=str(exc), cik_count=len(ciks))
 
