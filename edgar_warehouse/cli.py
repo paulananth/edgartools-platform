@@ -109,6 +109,10 @@ def _handle_bootstrap_next(args: argparse.Namespace) -> int:
     return run_command("bootstrap-next", args)
 
 
+def _handle_gold_refresh(args: argparse.Namespace) -> int:
+    return run_command("gold-refresh", args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="edgar-warehouse",
@@ -354,6 +358,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(bootstrap_next)
     bootstrap_next.set_defaults(handler=_handle_bootstrap_next)
+
+    gold_refresh = subparsers.add_parser(
+        "gold-refresh",
+        help="Build gold tables and write Snowflake export manifests from current silver state. "
+             "Run once after bootstrap-batch (phased pipeline) completes all batches.",
+    )
+    _add_run_id_arg(gold_refresh)
+    gold_refresh.set_defaults(handler=_handle_gold_refresh)
 
     try:
         from edgar_warehouse.mdm.cli import register_mdm_subparser

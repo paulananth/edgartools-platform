@@ -13,11 +13,13 @@ SERVING_EXPORT_COMMANDS = frozenset(
         "bootstrap-full",
         "bootstrap-next",
         "bootstrap-recent-10",
-        "bootstrap-batch",
+        # bootstrap-batch excluded: parallel batch tasks do bronze+silver only, not gold.
+        # gold-refresh handles the single gold build after all batches complete.
         "daily-incremental",
         "targeted-resync",
         "full-reconcile",
         "seed-universe",
+        "gold-refresh",
     }
 )
 
@@ -81,6 +83,14 @@ class WarehouseSettings:
                     "(SNOWFLAKE_EXPORT_ROOT is accepted as a temporary migration fallback)"
                 )
             serving_export_root = value
+
+            if not os.environ.get("MDM_DATABASE_URL", "").strip():
+                raise WarehouseRuntimeError(
+                    "MDM_DATABASE_URL is required for gold-affecting warehouse commands. "
+                    "MDM is the system of record for company universe tracking. "
+                    "Run 'edgar-warehouse mdm seed-universe' to initialise the universe."
+                )
+
         return cls(
             identity=identity,
             runtime_mode=runtime_mode,

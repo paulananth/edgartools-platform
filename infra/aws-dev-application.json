@@ -2,8 +2,8 @@
   "environment": "dev",
   "region": "us-east-1",
   "name_prefix": "edgartools-dev",
-  "image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@sha256:86ed0ce0a6dc3148b0e7ba934d880f1961b9f7f6edf123a7052d9d8e27eea4da",
-  "mdm_image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:e48f989cea30143a1d30ded30accf0864d3ebdaa9bb4feaaf346d5fc23b8d82d",
+  "image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@sha256:a8cd653fa321e4e50d14afed060514eb78c6b7b1874dab1ea98a3c09e588b397",
+  "mdm_image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:650fb597c997b5a7109ccc4b1dad19cb9849210b392f32f9ca735cac70d0b4fa",
   "cluster": {
     "name": "edgartools-dev-warehouse",
     "arn": "arn:aws:ecs:us-east-1:077127448006:cluster/edgartools-dev-warehouse"
@@ -15,11 +15,11 @@
   },
   "step_functions_role_arn": "arn:aws:iam::077127448006:role/sec_platform_runner_step_functions",
   "task_definitions": {
-    "small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-small:12",
-    "medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-medium:12",
-    "large": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-large:12",
-    "mdm_small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-small:12",
-    "mdm_medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-medium:12"
+    "small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-small:19",
+    "medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-medium:19",
+    "large": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-large:19",
+    "mdm_small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-small:19",
+    "mdm_medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-medium:19"
   },
   "state_machines": {
     "daily_incremental": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-daily-incremental",
@@ -29,7 +29,9 @@
     "full_reconcile": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-full-reconcile",
     "load_daily_form_index_for_date": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-load-daily-form-index-for-date",
     "catch_up_daily_form_index": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-catch-up-daily-form-index",
+    "gold_refresh": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-gold-refresh",
     "bootstrap_batched": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-bootstrap-batched",
+    "bootstrap_phased": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-bootstrap-phased",
     "mdm_migrate": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-mdm-migrate",
     "mdm_check_connectivity": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-mdm-check-connectivity",
     "mdm_run": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-mdm-run",
@@ -37,10 +39,11 @@
     "mdm_sync_graph": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-mdm-sync-graph",
     "mdm_verify_graph": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-mdm-verify-graph",
     "mdm_counts": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-mdm-counts",
-    "mdm_seed_universe": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-mdm-seed-universe"
+    "mdm_seed_universe": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-mdm-seed-universe",
+    "mdm_seed_from_silver": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-mdm-seed-from-silver"
   },
   "mdm": {
-    "image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:e48f989cea30143a1d30ded30accf0864d3ebdaa9bb4feaaf346d5fc23b8d82d",
+    "image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:650fb597c997b5a7109ccc4b1dad19cb9849210b392f32f9ca735cac70d0b4fa",
     "silver_duckdb": "s3://edgartools-dev-warehouse-077127448006/warehouse/silver/sec/silver.duckdb",
     "secrets": {
       "postgres_dsn": "arn:aws:secretsmanager:us-east-1:077127448006:secret:edgartools-dev/mdm/postgres_dsn-r6lhhS",

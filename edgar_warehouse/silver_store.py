@@ -16,20 +16,6 @@ except ImportError as exc:
 
 
 _DDL = """
-CREATE TABLE IF NOT EXISTS sec_tracked_universe (
-    cik                BIGINT PRIMARY KEY,
-    input_ticker       TEXT,
-    current_ticker     TEXT,
-    universe_source    TEXT    NOT NULL,
-    tracking_status    TEXT    NOT NULL DEFAULT 'active',
-    history_mode       TEXT    NOT NULL DEFAULT 'recent_only',
-    effective_from     TIMESTAMPTZ NOT NULL,
-    effective_to       TIMESTAMPTZ,
-    load_priority      INTEGER,
-    scope_reason       TEXT,
-    added_at           TIMESTAMPTZ NOT NULL,
-    removed_at         TIMESTAMPTZ
-);
 
 CREATE TABLE IF NOT EXISTS sec_company (
     cik                        BIGINT PRIMARY KEY,
@@ -410,17 +396,6 @@ class SilverDatabase:
 
     def _ensure_schema_evolution(self) -> None:
         migration_statements = [
-            "ALTER TABLE sec_tracked_universe ADD COLUMN IF NOT EXISTS input_ticker TEXT",
-            "ALTER TABLE sec_tracked_universe ADD COLUMN IF NOT EXISTS current_ticker TEXT",
-            "ALTER TABLE sec_tracked_universe ADD COLUMN IF NOT EXISTS universe_source TEXT",
-            "ALTER TABLE sec_tracked_universe ADD COLUMN IF NOT EXISTS tracking_status TEXT",
-            "ALTER TABLE sec_tracked_universe ADD COLUMN IF NOT EXISTS history_mode TEXT",
-            "ALTER TABLE sec_tracked_universe ADD COLUMN IF NOT EXISTS effective_from TIMESTAMPTZ",
-            "ALTER TABLE sec_tracked_universe ADD COLUMN IF NOT EXISTS effective_to TIMESTAMPTZ",
-            "ALTER TABLE sec_tracked_universe ADD COLUMN IF NOT EXISTS load_priority INTEGER",
-            "ALTER TABLE sec_tracked_universe ADD COLUMN IF NOT EXISTS scope_reason TEXT",
-            "ALTER TABLE sec_tracked_universe ADD COLUMN IF NOT EXISTS added_at TIMESTAMPTZ",
-            "ALTER TABLE sec_tracked_universe ADD COLUMN IF NOT EXISTS removed_at TIMESTAMPTZ",
             "ALTER TABLE sec_parse_run ADD COLUMN IF NOT EXISTS rows_written INTEGER",
             "ALTER TABLE sec_source_checkpoint ADD COLUMN IF NOT EXISTS bronze_path TEXT",
         ]
@@ -430,101 +405,6 @@ class SilverDatabase:
     def close(self) -> None:
         self._conn.close()
 
-    # ------------------------------------------------------------------
-    # sec_tracked_universe
-    # ------------------------------------------------------------------
-
-    def seed_tracked_universe(self, company_tickers_exchange: dict[str, Any]) -> int:
-        """Upsert rows from company_tickers_exchange.json into sec_tracked_universe.
-
-        Returns the number of rows inserted or updated.
-        """
-        rows = _parse_company_ticker_rows(company_tickers_exchange)
-        return self.seed_tracked_universe_rows(rows)
-
-    def seed_tracked_universe_rows(
-        self,
-        rows: list[dict[str, Any]],
-        *,
-        tracking_status: str = "active",
-    ) -> int:
-        """Upsert tracked-universe rows that were already parsed from SEC reference data."""
-        now = datetime.now(UTC)
-        count = 0
-        for row in rows:
-            cik = row.get("cik")
-            ticker = row.get("ticker")
-            if cik is None or not ticker:
-                continue
-            self._conn.execute(
-                """
-                INSERT INTO sec_tracked_universe
-                    (cik, input_ticker, current_ticker, universe_source,
-                     tracking_status, history_mode, effective_from, added_at)
-                VALUES (?, ?, ?, 'seeded_from_sec_reference', ?, 'recent_only', ?, ?)
-                ON CONFLICT (cik) DO UPDATE SET
-                    input_ticker = excluded.input_ticker,
-                    current_ticker = excluded.current_ticker,
-                    universe_source = excluded.universe_source,
-                    tracking_status = COALESCE(sec_tracked_universe.tracking_status, excluded.tracking_status),
-                    history_mode = excluded.history_mode,
-                    effective_from = COALESCE(sec_tracked_universe.effective_from, excluded.effective_from),
-                    added_at = COALESCE(sec_tracked_universe.added_at, excluded.added_at)
-                """,
-                [int(cik), str(ticker), str(ticker), tracking_status, now, now],
-            )
-            count += 1
-        return count
-
-    def get_all_tracked_universe_ciks(self) -> list[int]:
-        rows = self._conn.execute("SELECT cik FROM sec_tracked_universe").fetchall()
-        return [row[0] for row in rows]
-
-    def auto_enroll_tracked_universe(
-        self,
-        ciks: list[int],
-        *,
-        universe_source: str = "auto_discovered",
-        scope_reason: str = "daily_index",
-    ) -> int:
-        now = datetime.now(UTC)
-        count = 0
-        for cik in sorted(set(ciks)):
-            existed = self.get_tracked_universe_entry(cik) is not None
-            self._conn.execute(
-                """
-                INSERT INTO sec_tracked_universe
-                    (cik, universe_source, tracking_status, history_mode,
-                     effective_from, added_at, scope_reason)
-                VALUES (?, ?, 'active', 'recent_only', ?, ?, ?)
-                ON CONFLICT (cik) DO NOTHING
-                """,
-                [cik, universe_source, now, now, scope_reason],
-            )
-            if not existed:
-                count += 1
-        return count
-
-    def get_tracked_universe_entry(self, cik: int) -> dict[str, Any] | None:
-        result = self._conn.execute(
-            "SELECT * FROM sec_tracked_universe WHERE cik = ?", [cik]
-        ).fetchone()
-        if result is None:
-            return None
-        cols = [d[0] for d in self._conn.description]
-        return dict(zip(cols, result))
-
-    def get_tracked_universe_count(self) -> int:
-        return self._conn.execute(
-            "SELECT COUNT(*) FROM sec_tracked_universe"
-        ).fetchone()[0]
-
-    def get_tracked_universe_ciks(self, status_filter: str = "active") -> list[int]:
-        rows = self._conn.execute(
-            "SELECT cik FROM sec_tracked_universe WHERE tracking_status = ?",
-            [status_filter],
-        ).fetchall()
-        return [row[0] for row in rows]
 
     # ------------------------------------------------------------------
     # sec_company_ticker

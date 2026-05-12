@@ -36,6 +36,17 @@ locals {
   effective_tags = var.tags
 }
 
+module "github_actions_ecr" {
+  source = "../../modules/github_actions_ecr"
+
+  environment         = local.environment
+  name_prefix         = local.name_prefix
+  github_org          = "paulananth"
+  github_repo         = "edgartools-platform"
+  ecr_name_prefix     = local.name_prefix
+  tags                = local.effective_tags
+}
+
 module "runtime_access" {
   source = "../../modules/runtime_access"
 

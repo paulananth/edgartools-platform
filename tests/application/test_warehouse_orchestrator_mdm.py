@@ -1,17 +1,16 @@
-"""Tests that the warehouse orchestrator reads/writes tracked universe via MDM when configured."""
+"""Tests that MDM (mdm_company.tracking_status) is the sole system of record
+for company universe tracking. Silver DuckDB fallbacks have been removed.
+"""
 from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
-
-
-def _make_mock_db(ciks: list[int]) -> MagicMock:
-    db = MagicMock()
-    db.get_tracked_universe_ciks.return_value = ciks
-    return db
 
 
 def test_hydrate_silver_database_from_remote_storage(tmp_path):
@@ -33,27 +32,40 @@ def test_hydrate_silver_database_from_remote_storage(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# _get_mdm_tracked_ciks
+# _get_mdm_tracked_ciks — MDM is required, no fallback
 # ---------------------------------------------------------------------------
 
-def test_get_mdm_tracked_ciks_returns_empty_without_url(monkeypatch):
+def test_get_mdm_tracked_ciks_raises_without_url(monkeypatch):
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
     from edgar_warehouse.application.warehouse_orchestrator import _get_mdm_tracked_ciks
-    assert _get_mdm_tracked_ciks("active") == []
+    with pytest.raises(WarehouseRuntimeError, match="MDM_DATABASE_URL is required"):
+        _get_mdm_tracked_ciks("active")
 
 
-def test_get_mdm_tracked_ciks_returns_empty_on_exception(monkeypatch):
+def test_get_mdm_tracked_ciks_raises_on_connection_failure(monkeypatch):
     monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://localhost/test")
     with patch("edgar_warehouse.mdm.database.get_engine", side_effect=Exception("no DB")):
         from edgar_warehouse.application.warehouse_orchestrator import _get_mdm_tracked_ciks
-        assert _get_mdm_tracked_ciks("active") == []
+        with pytest.raises(Exception, match="no DB"):
+            _get_mdm_tracked_ciks("active")
+
+
+def test_get_mdm_tracked_ciks_returns_ciks_from_mdm(monkeypatch):
+    monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://localhost/test")
+    from edgar_warehouse.application.warehouse_orchestrator import _get_mdm_tracked_ciks
+
+    with patch("edgar_warehouse.mdm.database.get_engine", return_value=MagicMock()):
+        with patch("edgar_warehouse.mdm.universe.get_tracked_ciks", return_value=[100, 200]):
+            result = _get_mdm_tracked_ciks("active")
+
+    assert result == [100, 200]
 
 
 # ---------------------------------------------------------------------------
-# _resolve_target_ciks — MDM-first, DuckDB fallback
+# _resolve_target_ciks — MDM only, no DuckDB fallback
 # ---------------------------------------------------------------------------
 
-def test_resolve_target_ciks_uses_mdm_when_configured(monkeypatch):
+def test_resolve_target_ciks_uses_mdm(monkeypatch):
     monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://localhost/test")
     from edgar_warehouse.application.warehouse_orchestrator import _resolve_target_ciks
 
@@ -61,19 +73,16 @@ def test_resolve_target_ciks_uses_mdm_when_configured(monkeypatch):
         "edgar_warehouse.application.warehouse_orchestrator._get_mdm_tracked_ciks",
         return_value=[100, 200],
     ):
-        db = _make_mock_db([999])
         result = _resolve_target_ciks(
-            db=db,
             raw_ciks=None,
             command_name="bootstrap-full",
             tracking_status_filter="active",
         )
 
     assert result == [100, 200]
-    db.get_tracked_universe_ciks.assert_not_called()
 
 
-def test_resolve_target_ciks_falls_back_to_duckdb_when_mdm_empty(monkeypatch):
+def test_resolve_target_ciks_raises_when_mdm_empty(monkeypatch):
     monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://localhost/test")
     from edgar_warehouse.application.warehouse_orchestrator import _resolve_target_ciks
 
@@ -81,33 +90,24 @@ def test_resolve_target_ciks_falls_back_to_duckdb_when_mdm_empty(monkeypatch):
         "edgar_warehouse.application.warehouse_orchestrator._get_mdm_tracked_ciks",
         return_value=[],
     ):
-        db = _make_mock_db([100, 200])
-        result = _resolve_target_ciks(
-            db=db,
+        with pytest.raises(WarehouseRuntimeError, match="seeded MDM universe"):
+            _resolve_target_ciks(
+                raw_ciks=None,
+                command_name="bootstrap-full",
+                tracking_status_filter="active",
+            )
+
+
+def test_resolve_target_ciks_raises_without_mdm_url(monkeypatch):
+    monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
+    from edgar_warehouse.application.warehouse_orchestrator import _resolve_target_ciks
+
+    with pytest.raises(WarehouseRuntimeError, match="MDM_DATABASE_URL is required"):
+        _resolve_target_ciks(
             raw_ciks=None,
             command_name="bootstrap-full",
             tracking_status_filter="active",
         )
-
-    assert result == [100, 200]
-    db.get_tracked_universe_ciks.assert_called_once_with(status_filter="active")
-
-
-def test_resolve_target_ciks_uses_duckdb_when_no_mdm_url(monkeypatch):
-    """Without MDM_DATABASE_URL, _get_mdm_tracked_ciks returns [] and DuckDB is used."""
-    monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
-    from edgar_warehouse.application.warehouse_orchestrator import _resolve_target_ciks
-
-    db = _make_mock_db([100])
-    result = _resolve_target_ciks(
-        db=db,
-        raw_ciks=None,
-        command_name="bootstrap-full",
-        tracking_status_filter="active",
-    )
-
-    db.get_tracked_universe_ciks.assert_called_once_with(status_filter="active")
-    assert result == [100]
 
 
 def test_resolve_target_ciks_respects_raw_ciks(monkeypatch):
@@ -117,9 +117,7 @@ def test_resolve_target_ciks_respects_raw_ciks(monkeypatch):
     with patch(
         "edgar_warehouse.application.warehouse_orchestrator._get_mdm_tracked_ciks"
     ) as mock_mdm:
-        db = _make_mock_db([999])
         result = _resolve_target_ciks(
-            db=db,
             raw_ciks=["12345", "67890"],
             command_name="bootstrap-full",
             tracking_status_filter="active",
@@ -130,10 +128,10 @@ def test_resolve_target_ciks_respects_raw_ciks(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# _filter_ciks_to_universe — MDM-first, DuckDB fallback
+# _filter_ciks_to_universe — MDM only, no DuckDB fallback
 # ---------------------------------------------------------------------------
 
-def test_filter_ciks_to_universe_checks_mdm_first(monkeypatch):
+def test_filter_ciks_to_universe_filters_by_mdm(monkeypatch):
     monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://localhost/test")
     from edgar_warehouse.application.warehouse_orchestrator import _filter_ciks_to_universe
 
@@ -141,33 +139,42 @@ def test_filter_ciks_to_universe_checks_mdm_first(monkeypatch):
         "edgar_warehouse.application.warehouse_orchestrator._get_mdm_tracked_ciks",
         return_value=[100, 200],
     ):
-        db = _make_mock_db([999])
-        result = _filter_ciks_to_universe([100, 200, 300], db)
+        result = _filter_ciks_to_universe([100, 200, 300])
 
     assert result == [100, 200]
-    db.get_tracked_universe_ciks.assert_not_called()
 
 
-def test_filter_ciks_to_universe_falls_back_to_duckdb(monkeypatch):
-    """Without MDM_DATABASE_URL, _get_mdm_tracked_ciks returns [] and DuckDB filters."""
+def test_filter_ciks_to_universe_passes_through_when_mdm_empty(monkeypatch):
+    """Cold-start guard: if MDM returns no active CIKs, pass all impacted CIKs through."""
+    monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://localhost/test")
+    from edgar_warehouse.application.warehouse_orchestrator import _filter_ciks_to_universe
+
+    with patch(
+        "edgar_warehouse.application.warehouse_orchestrator._get_mdm_tracked_ciks",
+        return_value=[],
+    ):
+        result = _filter_ciks_to_universe([100, 200, 300])
+
+    assert result == [100, 200, 300]
+
+
+def test_filter_ciks_to_universe_raises_without_mdm_url(monkeypatch):
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
     from edgar_warehouse.application.warehouse_orchestrator import _filter_ciks_to_universe
 
-    db = _make_mock_db([100, 200])
-    result = _filter_ciks_to_universe([100, 200, 300], db)
-
-    db.get_tracked_universe_ciks.assert_called_once_with(status_filter="active")
-    assert result == [100, 200]
+    with pytest.raises(WarehouseRuntimeError, match="MDM_DATABASE_URL is required"):
+        _filter_ciks_to_universe([100, 200, 300])
 
 
 # ---------------------------------------------------------------------------
-# _sync_mdm_tracking_status
+# _sync_mdm_tracking_status — raises on failure, no silent swallow
 # ---------------------------------------------------------------------------
 
-def test_sync_mdm_tracking_status_no_op_without_url(monkeypatch):
+def test_sync_mdm_tracking_status_raises_without_url(monkeypatch):
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
     from edgar_warehouse.application.warehouse_orchestrator import _sync_mdm_tracking_status
-    _sync_mdm_tracking_status(1234, "active")
+    with pytest.raises(WarehouseRuntimeError, match="MDM_DATABASE_URL is required"):
+        _sync_mdm_tracking_status(1234, "active")
 
 
 def test_sync_mdm_tracking_status_calls_update_when_url_set(monkeypatch):
@@ -183,18 +190,41 @@ def test_sync_mdm_tracking_status_calls_update_when_url_set(monkeypatch):
     assert args[2] == "active"
 
 
-def test_sync_mdm_tracking_status_swallows_exceptions(monkeypatch):
+def test_sync_mdm_tracking_status_raises_on_db_failure(monkeypatch):
     monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://localhost/test")
     from edgar_warehouse.application.warehouse_orchestrator import _sync_mdm_tracking_status
 
     with patch("edgar_warehouse.mdm.database.get_engine", side_effect=Exception("DB down")):
-        _sync_mdm_tracking_status(1234, "active")
+        with pytest.raises(Exception, match="DB down"):
+            _sync_mdm_tracking_status(1234, "active")
 
 
-def test_filter_ciks_to_universe_passes_through_when_tracked_empty(monkeypatch):
+# ---------------------------------------------------------------------------
+# _mdm_auto_enroll — best-effort, non-fatal
+# ---------------------------------------------------------------------------
+
+def test_mdm_auto_enroll_calls_bulk_upsert(monkeypatch):
+    monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://localhost/test")
+    from edgar_warehouse.application.warehouse_orchestrator import _mdm_auto_enroll
+
+    with patch("edgar_warehouse.mdm.database.get_engine", return_value=MagicMock()):
+        with patch("edgar_warehouse.mdm.universe.bulk_upsert_universe", return_value=3) as mock_upsert:
+            _mdm_auto_enroll([100, 200, 300], scope_reason="daily_index")
+
+    mock_upsert.assert_called_once()
+    rows_arg = mock_upsert.call_args[0][1]
+    assert {r["cik"] for r in rows_arg} == {100, 200, 300}
+
+
+def test_mdm_auto_enroll_is_noop_without_url(monkeypatch):
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
-    from edgar_warehouse.application.warehouse_orchestrator import _filter_ciks_to_universe
+    from edgar_warehouse.application.warehouse_orchestrator import _mdm_auto_enroll
+    _mdm_auto_enroll([100, 200], scope_reason="daily_index")  # must not raise
 
-    db = _make_mock_db([])
-    result = _filter_ciks_to_universe([100, 200, 300], db)
-    assert result == [100, 200, 300]
+
+def test_mdm_auto_enroll_does_not_raise_on_db_failure(monkeypatch):
+    monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://localhost/test")
+    from edgar_warehouse.application.warehouse_orchestrator import _mdm_auto_enroll
+
+    with patch("edgar_warehouse.mdm.database.get_engine", side_effect=Exception("DB down")):
+        _mdm_auto_enroll([100], scope_reason="daily_index")  # must not raise

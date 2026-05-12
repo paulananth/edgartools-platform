@@ -68,6 +68,8 @@ Options:
   --mdm-graph-limit <n>             Default limit for mdm graph backfill/sync. Default: 100; 0 means no default limit.
   --mdm-seed-universe-tracking-status <status>
                                     tracking_status baked into mdm_seed_universe state machine. Default: bootstrap_pending.
+  --mdm-seed-from-silver-tracking-status <status>
+                                    tracking_status filter for mdm_seed_from_silver (migrate silver→MDM). Default: bootstrap_pending.
   --output-file <path>              Write deployment summary JSON.
   -h, --help                        Show this help.
 USAGE
@@ -148,6 +150,7 @@ MDM_SILVER_DUCKDB=""
 MDM_RUN_LIMIT=100
 MDM_GRAPH_LIMIT=100
 MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"
+MDM_SEED_FROM_SILVER_TRACKING_STATUS="bootstrap_pending"
 OUTPUT_FILE=""
 
 while [[ $# -gt 0 ]]; do
@@ -200,6 +203,7 @@ while [[ $# -gt 0 ]]; do
     --mdm-run-limit) MDM_RUN_LIMIT="${2:?}"; shift 2 ;;
     --mdm-graph-limit) MDM_GRAPH_LIMIT="${2:?}"; shift 2 ;;
     --mdm-seed-universe-tracking-status) MDM_SEED_UNIVERSE_TRACKING_STATUS="${2:?}"; shift 2 ;;
+    --mdm-seed-from-silver-tracking-status) MDM_SEED_FROM_SILVER_TRACKING_STATUS="${2:?}"; shift 2 ;;
     --output-file) OUTPUT_FILE="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -445,6 +449,57 @@ case "$MDM_DEPLOYMENT_MODE" in
     ;;
 esac
 
+# Sync the MDM Postgres DSN secret from the AWS-managed RDS credential.
+# AWS rotates the RDS master password on its own schedule; this keeps the
+# operator-facing DSN secret always current so ECS tasks never hit stale-password failures.
+sync_mdm_postgres_dsn() {
+  local dsn_secret_arn="$1"
+  local rds_instance_id="$2"
+
+  log "Syncing MDM Postgres DSN from live RDS credential (instance: ${rds_instance_id})"
+
+  local rds_json master_secret_arn host port dbname cred_json username password dsn
+  rds_json="$(aws_cli rds describe-db-instances \
+    --db-instance-identifier "$rds_instance_id" \
+    --query 'DBInstances[0].{Host:Endpoint.Address,Port:Endpoint.Port,DB:DBName,SecretArn:MasterUserSecret.SecretArn}' \
+    --output json 2>/dev/null)" || { log "WARN: could not describe RDS instance ${rds_instance_id}; skipping DSN sync"; return 0; }
+
+  host="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['Host'])" <<< "$rds_json")"
+  port="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['Port'])" <<< "$rds_json")"
+  dbname="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['DB'])" <<< "$rds_json")"
+  master_secret_arn="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['SecretArn'])" <<< "$rds_json")"
+
+  if is_empty "$master_secret_arn"; then
+    log "WARN: RDS instance ${rds_instance_id} has no AWS-managed master secret; skipping DSN sync"
+    return 0
+  fi
+
+  cred_json="$(aws_cli secretsmanager get-secret-value \
+    --secret-id "$master_secret_arn" \
+    --query SecretString --output text 2>/dev/null)" || { log "WARN: could not read RDS master secret; skipping DSN sync"; return 0; }
+
+  dsn="$(CRED_JSON="$cred_json" python3 - "$host" "$port" "$dbname" <<'PY'
+import json, os, sys
+from urllib.parse import quote_plus
+cred = json.loads(os.environ["CRED_JSON"])
+host, port, db = sys.argv[1], sys.argv[2], sys.argv[3]
+u = quote_plus(cred["username"])
+p = quote_plus(cred["password"])
+print(f"postgresql+psycopg2://{u}:{p}@{host}:{port}/{db}?sslmode=require")
+PY
+)"
+
+  aws_cli secretsmanager put-secret-value \
+    --secret-id "$dsn_secret_arn" \
+    --secret-string "$dsn" >/dev/null
+  log "MDM Postgres DSN secret updated (host=${host} db=${dbname} sslmode=require)"
+}
+
+if [[ "$DEPLOY_MDM" == "true" ]] && ! is_empty "$MDM_POSTGRES_DSN_SECRET_ARN"; then
+  MDM_RDS_INSTANCE_ID="${NAME_PREFIX}-mdm"
+  sync_mdm_postgres_dsn "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_RDS_INSTANCE_ID"
+fi
+
 if [[ "$BUILD_MDM_IMAGE" == "auto" ]]; then
   if [[ "$DEPLOY_MDM" == "true" && "$BUILD_IMAGE" == "true" ]] && is_empty "$MDM_IMAGE_REF"; then
     BUILD_MDM_IMAGE=true
@@ -565,10 +620,11 @@ write_container_definitions() {
   # MSYS_NO_PATHCONV=1 prevents Git Bash from translating /aws/ecs/... log group names
   # into Windows filesystem paths. win_path() converts output_file to native Windows
   # form so Python can locate it regardless of /tmp remapping differences.
+  # MDM_POSTGRES_DSN_SECRET_ARN is passed (may be empty when MDM is not deployed).
   MSYS_NO_PATHCONV=1 python3 - "$(win_path "$output_file")" "$profile" "$IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
     "$WAREHOUSE_RUNTIME_MODE" "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" \
     "$SNOWFLAKE_EXPORT_BUCKET_NAME" "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" \
-    "$WAREHOUSE_BRONZE_CIK_LIMIT" <<'PY'
+    "$WAREHOUSE_BRONZE_CIK_LIMIT" "${MDM_POSTGRES_DSN_SECRET_ARN:-}" <<'PY'
 import json
 import pathlib
 import sys
@@ -586,6 +642,7 @@ import sys
     edgar_secret_arn,
     log_group_name,
     bronze_cik_limit,
+    mdm_postgres_dsn_secret_arn,
 ) = sys.argv[1:]
 
 snowflake_export_root = f"s3://{snowflake_export_bucket}/warehouse/artifacts/snowflake_exports"
@@ -602,13 +659,19 @@ environment_values = [
 if bronze_cik_limit:
     environment_values.append({"name": "WAREHOUSE_BRONZE_CIK_LIMIT", "value": bronze_cik_limit})
 
+secrets = [{"name": "EDGAR_IDENTITY", "valueFrom": edgar_secret_arn}]
+# MDM_DATABASE_URL is required for gold-affecting commands (seed-universe, bootstrap-*, gold-refresh).
+# Inject it from Secrets Manager when MDM is deployed alongside the warehouse.
+if mdm_postgres_dsn_secret_arn:
+    secrets.append({"name": "MDM_DATABASE_URL", "valueFrom": mdm_postgres_dsn_secret_arn})
+
 container_definitions = [{
     "name": "edgar-warehouse",
     "image": image_ref,
     "essential": True,
     "command": ["--help"],
     "environment": environment_values,
-    "secrets": [{"name": "EDGAR_IDENTITY", "valueFrom": edgar_secret_arn}],
+    "secrets": secrets,
     "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
@@ -745,7 +808,7 @@ task_definition_for_profile() {
 
 task_definition_for_mdm_workflow() {
   case "$1" in
-    mdm_migrate|mdm_check_connectivity|mdm_verify_graph|mdm_counts|mdm_seed_universe) printf '%s\n' "$TASK_DEF_MDM_SMALL_ARN" ;;
+    mdm_migrate|mdm_check_connectivity|mdm_verify_graph|mdm_counts|mdm_seed_universe|mdm_seed_from_silver) printf '%s\n' "$TASK_DEF_MDM_SMALL_ARN" ;;
     mdm_run|mdm_backfill_relationships|mdm_sync_graph) printf '%s\n' "$TASK_DEF_MDM_MEDIUM_ARN" ;;
     *) fail "unknown MDM workflow: $1" ;;
   esac
@@ -760,6 +823,7 @@ workflow_profile() {
     full_reconcile) printf '%s\n' "medium" ;;
     load_daily_form_index_for_date) printf '%s\n' "small" ;;
     catch_up_daily_form_index) printf '%s\n' "small" ;;
+    gold_refresh) printf '%s\n' "small" ;;
     *) fail "unknown workflow: $1" ;;
   esac
 }
@@ -773,6 +837,7 @@ workflow_command_expression() {
     full_reconcile) printf '%s\n' "States.Array('full-reconcile', '--run-id', \$\$.Execution.Name)" ;;
     load_daily_form_index_for_date) printf '%s\n' "States.Array('load-daily-form-index-for-date', \$.target_date, '--run-id', \$\$.Execution.Name)" ;;
     catch_up_daily_form_index) printf '%s\n' "States.Array('catch-up-daily-form-index', '--run-id', \$\$.Execution.Name)" ;;
+    gold_refresh) printf '%s\n' "States.Array('gold-refresh', '--run-id', \$\$.Execution.Name)" ;;
     *) fail "unknown workflow: $1" ;;
   esac
 }
@@ -814,6 +879,7 @@ mdm_workflow_command_expression() {
     mdm_verify_graph) printf '%s\n' "States.Array('mdm', 'verify-graph')" ;;
     mdm_counts) printf '%s\n' "States.Array('mdm', 'counts')" ;;
     mdm_seed_universe) printf '%s\n' "States.Array('mdm', 'seed-universe', '--tracking-status', '${MDM_SEED_UNIVERSE_TRACKING_STATUS}')" ;;
+    mdm_seed_from_silver) printf '%s\n' "States.Array('mdm', 'seed-from-silver', '--tracking-status', '${MDM_SEED_FROM_SILVER_TRACKING_STATUS}')" ;;
     *) fail "unknown MDM workflow: $1" ;;
   esac
 }
@@ -1139,6 +1205,124 @@ pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", en
 PY
 }
 
+# Phased pipeline: seed → parallel bronze+silver batches → MDM chain → gold-refresh once.
+# Implements the target pipeline shape from CLAUDE.md long-load 5-whys.
+# Uses direct ECS task states throughout (no nested Step Function executions) so the
+# existing sec_platform_runner_step_functions role needs no extra EventBridge permissions.
+write_bootstrap_phased_definition() {
+  local output_file="$1"
+  local wh_task_small_arn="$2"   # warehouse small  (seed-universe, gold-refresh)
+  local wh_task_medium_arn="$3"  # warehouse medium (bootstrap-batch)
+  local mdm_task_small_arn="$4"  # mdm small        (mdm run/backfill/sync/verify)
+
+  python3 - "$output_file" "$CLUSTER_ARN" \
+    "$wh_task_small_arn" "$wh_task_medium_arn" "$mdm_task_small_arn" \
+    "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
+    "$BOOTSTRAP_BATCH_CONCURRENCY" "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" <<'PY'
+import json, pathlib, sys
+
+(output_file, cluster_arn,
+ wh_small_arn, wh_medium_arn, mdm_small_arn,
+ container_name, bronze_bucket_name, subnet_json, security_group_json,
+ batch_concurrency, mdm_run_limit, mdm_graph_limit) = sys.argv[1:]
+
+subnets = json.loads(subnet_json)
+security_groups = json.loads(security_group_json)
+
+def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=120):
+    s = {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::ecs:runTask.sync",
+        "Parameters": {
+            "LaunchType": "FARGATE",
+            "Cluster": cluster_arn,
+            "TaskDefinition": task_def_arn,
+            "PropagateTags": "TASK_DEFINITION",
+            "NetworkConfiguration": {"AwsvpcConfiguration": {
+                "AssignPublicIp": "ENABLED",
+                "SecurityGroups": security_groups,
+                "Subnets": subnets,
+            }},
+            "Overrides": {"ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}]},
+        },
+        "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": retry_secs,
+                   "BackoffRate": 2.0, "MaxAttempts": 2}],
+    }
+    if is_end:
+        s["End"] = True
+    else:
+        s["Next"] = next_state
+    return s
+
+mdm_limit = str(mdm_run_limit)
+graph_limit = str(mdm_graph_limit)
+
+seed = ecs_state(wh_small_arn,
+    "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
+    next_state="BatchBootstrap", retry_secs=60)
+
+batch = ecs_state(wh_medium_arn,
+    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--run-id', $$.Execution.Name)",
+    is_end=True)
+
+batch_map = {
+    "Type": "Map",
+    "MaxConcurrency": int(batch_concurrency),
+    "Comment": "Parallel bronze+silver only — no gold per batch.",
+    "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
+        "Parameters": {
+            "Bucket": bronze_bucket_name,
+            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_batches.jsonl', $$.Execution.Name)",
+        },
+    },
+    "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
+        "StartAt": "RunBatch",
+        "States": {"RunBatch": batch},
+    },
+    "Next": "MdmRun",
+}
+
+mdm_run = ecs_state(mdm_small_arn,
+    f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')",
+    next_state="MdmBackfill")
+mdm_backfill = ecs_state(mdm_small_arn,
+    f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')",
+    next_state="MdmSync")
+mdm_sync = ecs_state(mdm_small_arn,
+    f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')",
+    next_state="MdmVerify")
+mdm_verify = ecs_state(mdm_small_arn,
+    "States.Array('mdm', 'verify-graph')",
+    next_state="GoldRefresh")
+gold = ecs_state(wh_small_arn,
+    "States.Array('gold-refresh', '--run-id', $$.Execution.Name)",
+    is_end=True, retry_secs=60)
+
+definition = {
+    "Comment": (
+        "Phased bootstrap: (1) seed MDM universe, (2) parallel bronze+silver batches "
+        "(no gold per batch), (3) MDM entity resolution + Neo4j sync in bulk, "
+        "(4) single gold build + Snowflake export manifest. "
+        "Implements target pipeline shape from CLAUDE.md long-load 5-whys."
+    ),
+    "StartAt": "SeedUniverse",
+    "States": {
+        "SeedUniverse": seed,
+        "BatchBootstrap": batch_map,
+        "MdmRun": mdm_run,
+        "MdmBackfill": mdm_backfill,
+        "MdmSync": mdm_sync,
+        "MdmVerify": mdm_verify,
+        "GoldRefresh": gold,
+    },
+}
+pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
 upsert_state_machine() {
   local workflow="$1" definition_file="$2" role_arn="$3" logging_file="$4" name arn existing_arn
   name="${NAME_PREFIX}-${workflow//_/-}"
@@ -1179,7 +1363,7 @@ WORKFLOW_ARNS_FILE="$(json_file workflow-arns)"
 printf '{\n' > "$WORKFLOW_ARNS_FILE"
 first_workflow=true
 
-for workflow in daily_incremental bootstrap_recent_10 bootstrap_full targeted_resync full_reconcile load_daily_form_index_for_date catch_up_daily_form_index; do
+for workflow in daily_incremental bootstrap_recent_10 bootstrap_full targeted_resync full_reconcile load_daily_form_index_for_date catch_up_daily_form_index gold_refresh; do
   profile="$(workflow_profile "$workflow")"
   task_definition_arn="$(task_definition_for_profile "$profile")"
   command_expression="$(workflow_command_expression "$workflow")"
@@ -1214,7 +1398,19 @@ print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
 
 if [[ "$DEPLOY_MDM" == "true" ]]; then
-  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts mdm_seed_universe; do
+  # bootstrap_phased: the recommended way to load 100+ companies.
+  # Chains seed → parallel bronze+silver batches → MDM → gold-refresh once.
+  phased_definition_file="$(json_file sfn-bootstrap-phased)"
+  write_bootstrap_phased_definition "$phased_definition_file" \
+    "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN"
+  phased_state_machine_arn="$(upsert_state_machine bootstrap_phased "$phased_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
+  python3 - "bootstrap_phased" "$phased_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+import json, sys
+print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
+PY
+
+  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts mdm_seed_universe mdm_seed_from_silver; do
     task_definition_arn="$(task_definition_for_mdm_workflow "$workflow")"
     command_expression="$(mdm_workflow_command_expression "$workflow")"
     limit_command_expression="$(mdm_workflow_limit_command_expression "$workflow")"

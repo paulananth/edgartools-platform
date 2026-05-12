@@ -8,13 +8,25 @@ Usage: bash infra/scripts/deploy-snowflake-stack.sh [options]
 
 Options:
   --env <dev|prod>           Target environment. Default: dev
-  --snow-connection <name>   SnowCLI connection used for validation and dashboard upload.
+  --snow-connection <name>   SnowCLI connection used for all snow sql operations.
   --run-validation           Run SnowCLI-based native-pull validation artifact generation.
   --run-dbt                  Run dbt deps/run/test.
   --upload-dashboard         Upload dashboard artifacts.
 
-This is an explicit post-infra Snowflake/database-object operator script. dbt,
-dashboard upload, and validation are opt-in.
+This is an explicit post-infra Snowflake/database-object operator script. After
+Terraform completes, SNOWFLAKE_RUN_MANIFEST_TASK is always created or replaced
+and resumed (requires snow CLI). dbt, dashboard upload, and validation are opt-in.
+
+Required env vars for warehouse bootstrap commands (set before running edgar-warehouse):
+  EDGAR_IDENTITY               Operator email for SEC API user-agent.
+  WAREHOUSE_RUNTIME_MODE       Set to bronze_capture to execute (default: infrastructure_validation).
+  WAREHOUSE_BRONZE_ROOT        s3://edgartools-dev-bronze-<account>/warehouse/bronze
+  WAREHOUSE_STORAGE_ROOT       s3://edgartools-dev-warehouse-<account>/warehouse
+  SERVING_EXPORT_ROOT          s3://edgartools-dev-snowflake-export-<account>/warehouse/artifacts/snowflake_exports
+  MDM_DATABASE_URL             PostgreSQL DSN for MDM (system of record for universe tracking).
+                               Retrieve with: aws secretsmanager get-secret-value \
+                                 --secret-id edgartools-dev/mdm/postgres_dsn --query SecretString --output text
+  WAREHOUSE_BRONZE_CIK_LIMIT   Optional: cap number of CIKs processed (e.g. 100 for testing).
 EOF
 }
 
@@ -365,6 +377,29 @@ terraform_output_json "${SNOWFLAKE_ROOT}" "${SNOWFLAKE_OUTPUTS_FILE}"
 echo "Applying Snowflake access-control grants"
 terraform_apply_root "${SNOWFLAKE_ACCESS_ROOT}"
 terraform_output_json "${SNOWFLAKE_ACCESS_ROOT}" "${SNOWFLAKE_ACCESS_OUTPUTS_FILE}"
+
+# The stream processor task is not managed by Terraform — create or replace it
+# here so it is always present and running after every deploy. Without this task
+# the SNOWFLAKE_RUN_MANIFEST_STREAM is never consumed and gold tables are never
+# refreshed automatically after a warehouse bootstrap run.
+deploy_manifest_task() {
+  local db wh
+  db="$(json_value "${SNOWFLAKE_OUTPUTS_FILE}" "database_name")"
+  wh="$(json_map_value "${SNOWFLAKE_OUTPUTS_FILE}" "warehouse_names" "refresh")"
+  snow sql --connection "${SNOW_CONNECTION}" -q "
+CREATE OR REPLACE TASK ${db}.EDGARTOOLS_GOLD.SNOWFLAKE_RUN_MANIFEST_TASK
+  WAREHOUSE = ${wh}
+  SCHEDULE = '1 MINUTE'
+  WHEN SYSTEM\$STREAM_HAS_DATA('${db}.EDGARTOOLS_SOURCE.SNOWFLAKE_RUN_MANIFEST_STREAM')
+  AS
+  CALL ${db}.EDGARTOOLS_GOLD.PROCESS_RUN_MANIFEST_STREAM();
+ALTER TASK ${db}.EDGARTOOLS_GOLD.SNOWFLAKE_RUN_MANIFEST_TASK RESUME;
+"
+}
+
+echo "Deploying Snowflake stream processor task"
+require_command snow
+deploy_manifest_task
 
 if [[ ${RUN_VALIDATION} -eq 1 ]]; then
   echo "Validating Terraform-managed native-pull contract"
