@@ -65,7 +65,7 @@ Options:
   --mdm-api-keys-secret-arn <arn>   Secrets Manager ARN injected as MDM_API_KEYS.
   --mdm-silver-duckdb <uri>         MDM_SILVER_DUCKDB. Default: s3://<warehouse-bucket>/warehouse/silver/sec/silver.duckdb.
   --mdm-run-limit <n>               Default limit for mdm run state machine. Default: 100; 0 means no default limit.
-  --mdm-graph-limit <n>             Default limit for mdm graph backfill/sync. Default: 100; 0 means no default limit.
+  --mdm-graph-limit <n>             Default limit for mdm graph backfill/sync. Default: 200; 0 means no default limit.
   --mdm-seed-universe-tracking-status <status>
                                     tracking_status baked into mdm_seed_universe state machine. Default: bootstrap_pending.
   --mdm-seed-from-silver-tracking-status <status>
@@ -148,7 +148,7 @@ MDM_NEO4J_SECRET_ARN=""
 MDM_API_KEYS_SECRET_ARN=""
 MDM_SILVER_DUCKDB=""
 MDM_RUN_LIMIT=100
-MDM_GRAPH_LIMIT=100
+MDM_GRAPH_LIMIT=200
 MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"
 MDM_SEED_FROM_SILVER_TRACKING_STATUS="bootstrap_pending"
 OUTPUT_FILE=""
@@ -1282,6 +1282,7 @@ batch_map = {
         "StartAt": "RunBatch",
         "States": {"RunBatch": batch},
     },
+    "ResultPath": None,
     "Next": "MdmRun",
 }
 
