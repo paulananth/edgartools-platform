@@ -2,7 +2,7 @@
   "environment": "dev",
   "region": "us-east-1",
   "name_prefix": "edgartools-dev",
-  "image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@sha256:a8cd653fa321e4e50d14afed060514eb78c6b7b1874dab1ea98a3c09e588b397",
+  "image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@sha256:80cc43226134069083b2f102f614bcfd323ae578bea279ac8e380d29f9f2ba20",
   "mdm_image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:650fb597c997b5a7109ccc4b1dad19cb9849210b392f32f9ca735cac70d0b4fa",
   "cluster": {
     "name": "edgartools-dev-warehouse",
@@ -13,13 +13,19 @@
     "ecs": "/aws/ecs/edgartools-dev-warehouse",
     "step_functions": "/aws/states/edgartools-dev-warehouse"
   },
+  "bronze_bucket_name": "edgartools-dev-bronze-077127448006",
+  "warehouse_bucket_name": "edgartools-dev-warehouse-077127448006",
+  "snowflake_export_bucket_name": "edgartools-dev-snowflake-export-077127448006",
+  "execution_role_arn": "arn:aws:iam::077127448006:role/sec_platform_runner_execution",
+  "task_role_arn": "arn:aws:iam::077127448006:role/sec_platform_runner_task",
   "step_functions_role_arn": "arn:aws:iam::077127448006:role/sec_platform_runner_step_functions",
+  "edgar_identity_secret_arn": "arn:aws:secretsmanager:us-east-1:077127448006:secret:edgartools-dev-edgar-identity-UMvCTb",
   "task_definitions": {
-    "small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-small:19",
-    "medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-medium:19",
-    "large": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-large:19",
-    "mdm_small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-small:19",
-    "mdm_medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-medium:19"
+    "small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-small:20",
+    "medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-medium:20",
+    "large": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-large:20",
+    "mdm_small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-small:20",
+    "mdm_medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-medium:20"
   },
   "state_machines": {
     "daily_incremental": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-daily-incremental",

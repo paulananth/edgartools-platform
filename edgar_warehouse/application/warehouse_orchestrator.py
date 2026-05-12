@@ -2342,6 +2342,11 @@ def _resolve_scope(
             "include_pagination": arguments.get("include_pagination", True),
         }
 
+    if command_name == "gold-refresh":
+        # Scope is empty — bronze/silver are already complete.
+        # _execute_warehouse builds gold because gold-refresh is in GOLD_AFFECTING_COMMANDS.
+        return {}
+
     raise WarehouseRuntimeError(f"Unsupported warehouse command: {command_name}")
 
 
