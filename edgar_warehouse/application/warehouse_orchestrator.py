@@ -862,9 +862,21 @@ def _capture_bronze_raw(
         if len(limited_ciks) < len(universe_rows):
             allowed = set(limited_ciks)
             universe_rows = [row for row in universe_rows if int(row["cik"]) in allowed]
-        # MDM universe seeding is handled by the MDM image (mdm seed-universe or
-        # mdm seed-from-silver). The warehouse seed-universe step only writes
-        # CIK batches to S3 for the Distributed Map — no sqlalchemy required here.
+        # Exclude companies already fully bootstrapped (active in MDM) — they will be
+        # picked up by daily-incremental when new filings appear; re-bootstrapping
+        # them wastes batch capacity and duplicates bronze writes.
+        # Non-fatal: if MDM is unreachable _get_mdm_tracked_ciks returns [] and we
+        # include everything (safe cold-start behaviour).
+        active_ciks = set(_get_mdm_tracked_ciks("active"))
+        if active_ciks:
+            before = len(universe_rows)
+            universe_rows = [row for row in universe_rows if int(row["cik"]) not in active_ciks]
+            _emit_pipeline_event(
+                "seed_universe_filtered",
+                total_ciks=before,
+                new_ciks=len(universe_rows),
+                skipped_active=before - len(universe_rows),
+            )
         metrics["_ticker_reference_rows"] = ticker_reference_rows
         cik_universe_path = _write_cik_universe_batches(
             context=context,
@@ -1324,29 +1336,6 @@ def _sync_reference_data(
         "seed_document": seed_document,
     }
 
-
-def _tracked_universe_seed_rows(
-    *,
-    db: SilverDatabase,
-    seed_document: dict[str, Any],
-    limit: int | None,
-    only_new: bool,
-) -> list[dict[str, Any]]:
-    from edgar_warehouse.silver_store import _parse_company_ticker_rows
-
-    rows = _parse_company_ticker_rows(seed_document)
-    existing_ciks = set(db.get_all_tracked_universe_ciks()) if only_new else set()
-    selected_rows: list[dict[str, Any]] = []
-    seen_ciks: set[int] = set()
-    for row in rows:
-        cik = int(row["cik"])
-        if cik in seen_ciks or cik in existing_ciks:
-            continue
-        seen_ciks.add(cik)
-        selected_rows.append(row)
-        if limit is not None and len(selected_rows) >= limit:
-            break
-    return selected_rows
 
 
 def _write_cik_universe_batches(
