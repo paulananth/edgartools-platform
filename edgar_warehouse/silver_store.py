@@ -726,6 +726,69 @@ class SilverDatabase:
         return [dict(zip(cols, row)) for row in rows]
 
     # ------------------------------------------------------------------
+    # Submission staging (composite operation)
+    # ------------------------------------------------------------------
+
+    def stage_submission(
+        self,
+        *,
+        cik: int,
+        main_payload: dict[str, Any],
+        pagination_payloads: list[tuple[str, dict[str, Any]]],
+        sync_run_id: str,
+        raw_object_id: str,
+        load_mode: str,
+        recent_limit: int | None = None,
+    ) -> dict[str, Any]:
+        """Stage one company's full submission into silver: reset lists, run loaders, merge all tables."""
+        from edgar_warehouse.loaders.bronze_submission_extractors import (
+            stage_address_loader,
+            stage_company_loader,
+            stage_former_name_loader,
+            stage_manifest_loader,
+            stage_pagination_filing_loader,
+            stage_recent_filing_loader,
+        )
+
+        company_rows = stage_company_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
+        address_rows = stage_address_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
+        former_name_rows = stage_former_name_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
+        manifest_rows = stage_manifest_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
+        recent_rows = stage_recent_filing_loader(
+            main_payload, cik, sync_run_id, raw_object_id, load_mode, recent_limit=recent_limit
+        )
+
+        self._conn.execute("DELETE FROM sec_company_former_name WHERE cik = ?", [cik])
+        self._conn.execute("DELETE FROM sec_company_submission_file WHERE cik = ?", [cik])
+
+        rows_written = 0
+        rows_written += self.merge_company(company_rows, sync_run_id)
+        rows_written += self.merge_addresses(address_rows, sync_run_id)
+        rows_written += self.merge_former_names(former_name_rows, sync_run_id)
+        rows_written += self.merge_submission_files(manifest_rows, sync_run_id)
+        rows_written += self.merge_filings(recent_rows, sync_run_id)
+
+        pagination_accessions: list[str] = []
+        for _file_name, pagination_payload in pagination_payloads:
+            pagination_rows = stage_pagination_filing_loader(
+                pagination_payload, cik, sync_run_id, raw_object_id, load_mode
+            )
+            rows_written += self.merge_filings(pagination_rows, sync_run_id)
+            pagination_accessions.extend(
+                row["accession_number"] for row in pagination_rows if row.get("accession_number")
+            )
+
+        return {
+            "rows_written": rows_written,
+            "recent_rows": recent_rows,
+            "manifest_rows": manifest_rows,
+            "recent_accessions": [
+                row["accession_number"] for row in recent_rows if row.get("accession_number")
+            ],
+            "pagination_accessions": pagination_accessions,
+        }
+
+    # ------------------------------------------------------------------
     # sec_current_filing_feed
     # ------------------------------------------------------------------
 

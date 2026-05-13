@@ -354,6 +354,40 @@ docker push "${ECR}/edgartools-dev-mdm:dev"
 | `Dockerfile.mdm-neo4j` / `Dockerfile.mdm-deps` | MDM (+ deps if lock changed) |
 | `uv.lock` | deps images for both — run without `--skip-build` |
 
+**Clean up local images before a build (run this first every time)**
+
+Colima accumulates stale images fast — old SHA tags, debug tags, superseded deps layers. Clean before building to avoid cache confusion and reclaim disk.
+
+```bash
+export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
+
+# 1. Show what's on disk
+docker system df
+docker images --format "{{.Repository}}:{{.Tag}}\t{{.Size}}"
+
+# 2. Remove dangling (untagged) images and unused build cache
+docker image prune -f
+docker builder prune -f
+
+# 3. Remove old named images — keep only :dev and the latest :sha-* per repo.
+#    List old tags from the output above and delete explicitly:
+ECR="077127448006.dkr.ecr.us-east-1.amazonaws.com"
+docker rmi \
+  "${ECR}/edgartools-dev-warehouse:sha-<old>" \
+  "${ECR}/edgartools-dev-mdm:sha-<old>" \
+  "${ECR}/edgartools-dev-warehouse-deps:deps-<old>" \
+  # ... add any debug/ad-hoc tags (routerfix-*, hydratefix-*, etc.)
+
+# 4. Nuclear option — wipe everything (forces full re-pull of base + deps on next build)
+docker system prune -af   # WARNING: removes ALL local images, not just ours
+```
+
+**What to keep:**
+- `:dev` tag for each repo — used as build cache source (`--cache-from-tag dev`)
+- Latest `:sha-<hash>` per repo — rollback anchor
+- `:deps-<hash>` for warehouse-deps and mdm-deps — slow to rebuild; only remove if `uv.lock` changed
+- `public.ecr.aws/docker/library/python:3.12-slim-bookworm` — base layer cache
+
 **Rollback to a previous SHA**
 
 ```bash

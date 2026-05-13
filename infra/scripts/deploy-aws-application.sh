@@ -6,22 +6,21 @@ usage() {
 Usage:
   deploy-aws-application.sh --env <dev|prod> [options]
 
-Deploys active AWS application components outside Terraform:
+Deploys active AWS application components — no Terraform required:
   - optional warehouse Docker image build and ECR push
   - ECS Fargate task definitions for warehouse task profiles
   - Step Functions log group and state machines
 
-Terraform outputs are used only for passive infrastructure discovery. Pass
---no-terraform-discovery and explicit resource flags to avoid Terraform CLI use.
-Use the sec_platform_deployer AWS profile/principal for normal application rollout.
+Infrastructure parameters (bucket names, role ARNs, secret ARNs) are resolved in order:
+  1. CLI flag (explicit override)
+  2. Deployment manifest (infra/aws-<env>-application.json — written by every successful deploy)
+  3. AWS API discovery / deterministic naming convention
+Terraform is only needed for initial provisioning (infra/terraform/); never for normal operations.
 
 Options:
   --env <dev|prod>                  Environment name. Required.
-  --aws-profile <profile>           AWS CLI profile. Normal rollout profile: sec_platform_deployer.
+  --aws-profile <profile>           AWS CLI profile.
   --aws-region <region>             AWS region. Default: AWS_REGION, AWS_DEFAULT_REGION, or us-east-1.
-  --terraform-root <path>           AWS Terraform root. Default: infra/terraform/accounts/<env>.
-  --access-terraform-root <path>    AWS access Terraform root. Default: infra/terraform/access/aws/accounts/<env>.
-  --no-terraform-discovery          Require explicit flags; do not run terraform output.
   --name-prefix <prefix>            Resource prefix. Default: edgartools-<env>.
   --cluster-name <name>             ECS cluster name.
   --cluster-arn <arn>               ECS cluster ARN.
@@ -65,7 +64,7 @@ Options:
   --mdm-api-keys-secret-arn <arn>   Secrets Manager ARN injected as MDM_API_KEYS.
   --mdm-silver-duckdb <uri>         MDM_SILVER_DUCKDB. Default: s3://<warehouse-bucket>/warehouse/silver/sec/silver.duckdb.
   --mdm-run-limit <n>               Default limit for mdm run state machine. Default: 100; 0 means no default limit.
-  --mdm-graph-limit <n>             Default limit for mdm graph backfill/sync. Default: 100; 0 means no default limit.
+  --mdm-graph-limit <n>             Default limit for mdm graph backfill/sync. Default: 200; 0 means no default limit.
   --mdm-seed-universe-tracking-status <status>
                                     tracking_status baked into mdm_seed_universe state machine. Default: bootstrap_pending.
   --mdm-seed-from-silver-tracking-status <status>
@@ -106,9 +105,6 @@ first_nonempty() {
 ENVIRONMENT=""
 AWS_PROFILE_NAME=""
 AWS_REGION_NAME="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
-TF_ROOT=""
-ACCESS_TF_ROOT=""
-USE_TERRAFORM_DISCOVERY=true
 NAME_PREFIX=""
 CLUSTER_NAME=""
 CLUSTER_ARN=""
@@ -148,7 +144,7 @@ MDM_NEO4J_SECRET_ARN=""
 MDM_API_KEYS_SECRET_ARN=""
 MDM_SILVER_DUCKDB=""
 MDM_RUN_LIMIT=100
-MDM_GRAPH_LIMIT=100
+MDM_GRAPH_LIMIT=200
 MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"
 MDM_SEED_FROM_SILVER_TRACKING_STATUS="bootstrap_pending"
 OUTPUT_FILE=""
@@ -158,9 +154,6 @@ while [[ $# -gt 0 ]]; do
     --env) ENVIRONMENT="${2:?}"; shift 2 ;;
     --aws-profile) AWS_PROFILE_NAME="${2:?}"; shift 2 ;;
     --aws-region) AWS_REGION_NAME="${2:?}"; shift 2 ;;
-    --terraform-root) TF_ROOT="${2:?}"; shift 2 ;;
-    --access-terraform-root) ACCESS_TF_ROOT="${2:?}"; shift 2 ;;
-    --no-terraform-discovery) USE_TERRAFORM_DISCOVERY=false; shift ;;
     --name-prefix) NAME_PREFIX="${2:?}"; shift 2 ;;
     --cluster-name) CLUSTER_NAME="${2:?}"; shift 2 ;;
     --cluster-arn) CLUSTER_ARN="${2:?}"; shift 2 ;;
@@ -234,8 +227,7 @@ require_command python3
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT_DIR="${REPO_ROOT}/infra/scripts"
-TF_ROOT="${TF_ROOT:-${REPO_ROOT}/infra/terraform/accounts/${ENVIRONMENT}}"
-ACCESS_TF_ROOT="${ACCESS_TF_ROOT:-${REPO_ROOT}/infra/terraform/access/aws/accounts/${ENVIRONMENT}}"
+MANIFEST_FILE="${REPO_ROOT}/infra/aws-${ENVIRONMENT}-application.json"
 NAME_PREFIX="${NAME_PREFIX:-edgartools-${ENVIRONMENT}}"
 RUNNER_EXECUTION_ROLE_NAME="sec_platform_runner_execution"
 RUNNER_TASK_ROLE_NAME="sec_platform_runner_task"
@@ -266,25 +258,24 @@ aws_cli() {
   fi
 }
 
-tf_raw() {
-  if [[ "$USE_TERRAFORM_DISCOVERY" != "true" || ! -d "$TF_ROOT" ]]; then
-    return 0
-  fi
-  terraform -chdir="$TF_ROOT" output -raw "$1" 2>/dev/null || true
+# Read a top-level or dotted-path value from the deployment manifest.
+# Usage: manifest_value "key"  OR  manifest_value "mdm.secrets.postgres_dsn"
+manifest_value() {
+  [[ -f "$MANIFEST_FILE" ]] || return 0
+  python3 -c "
+import json, sys
+try:
+    d = json.load(open('${MANIFEST_FILE}'))
+    for k in '${1}'.split('.'): d = d[k]
+    print(d or '', end='')
+except Exception: pass
+" 2>/dev/null || true
 }
 
-tf_json() {
-  if [[ "$USE_TERRAFORM_DISCOVERY" != "true" || ! -d "$TF_ROOT" ]]; then
-    return 0
-  fi
-  terraform -chdir="$TF_ROOT" output -json "$1" 2>/dev/null || true
-}
-
-tf_access_raw() {
-  if [[ "$USE_TERRAFORM_DISCOVERY" != "true" || ! -d "$ACCESS_TF_ROOT" ]]; then
-    return 0
-  fi
-  terraform -chdir="$ACCESS_TF_ROOT" output -raw "$1" 2>/dev/null || true
+# Look up a Secrets Manager ARN by secret name (partial match on name prefix).
+secret_arn_by_name() {
+  aws_cli secretsmanager describe-secret --secret-id "$1" \
+    --query 'ARN' --output text 2>/dev/null || true
 }
 
 require_runner_role_name() {
@@ -318,64 +309,83 @@ raise SystemExit(0 if not value else 1)
 PY
 }
 
-if [[ "$USE_TERRAFORM_DISCOVERY" == "true" ]]; then
-  require_command terraform
-fi
+# Resolve account ID first — bucket naming convention depends on it.
+ACCOUNT_ID="$(aws_cli sts get-caller-identity --query Account --output text)"
 
-ECR_REPOSITORY_URL="$(first_nonempty "$ECR_REPOSITORY_URL" "$(tf_raw ecr_repository_url)")"
-CLUSTER_NAME="$(first_nonempty "$CLUSTER_NAME" "$(tf_raw cluster_name)")"
-CLUSTER_ARN="$(first_nonempty "$CLUSTER_ARN" "$(tf_raw cluster_arn)")"
-BRONZE_BUCKET_NAME="$(first_nonempty "$BRONZE_BUCKET_NAME" "$(tf_raw bronze_bucket_name)")"
-WAREHOUSE_BUCKET_NAME="$(first_nonempty "$WAREHOUSE_BUCKET_NAME" "$(tf_raw warehouse_bucket_name)")"
-SNOWFLAKE_EXPORT_BUCKET_NAME="$(first_nonempty "$SNOWFLAKE_EXPORT_BUCKET_NAME" "$(tf_raw snowflake_export_bucket_name)")"
-EDGAR_IDENTITY_SECRET_ARN="$(first_nonempty "$EDGAR_IDENTITY_SECRET_ARN" "$(tf_raw edgar_identity_secret_arn)")"
-EXECUTION_ROLE_ARN="$(first_nonempty "$EXECUTION_ROLE_ARN" "$(tf_access_raw runner_execution_role_arn)" "$(tf_access_raw ecs_task_execution_role_arn)" "$(tf_raw ecs_task_execution_role_arn)")"
-TASK_ROLE_ARN="$(first_nonempty "$TASK_ROLE_ARN" "$(tf_access_raw runner_task_role_arn)" "$(tf_access_raw ecs_task_role_arn)" "$(tf_raw ecs_task_role_arn)")"
-STEP_FUNCTIONS_ROLE_ARN="$(first_nonempty "$STEP_FUNCTIONS_ROLE_ARN" "$(tf_access_raw runner_step_functions_role_arn)" "$(tf_access_raw step_functions_role_arn)")"
-LOG_GROUP_NAME="$(first_nonempty "$LOG_GROUP_NAME" "$(tf_raw log_group_name)" "/aws/ecs/${NAME_PREFIX}-warehouse")"
-MDM_POSTGRES_DSN_SECRET_ARN="$(first_nonempty "$MDM_POSTGRES_DSN_SECRET_ARN" "$(tf_raw mdm_postgres_dsn_secret_arn)")"
-MDM_NEO4J_SECRET_ARN="$(first_nonempty "$MDM_NEO4J_SECRET_ARN" "$(tf_raw mdm_neo4j_secret_arn)")"
-MDM_API_KEYS_SECRET_ARN="$(first_nonempty "$MDM_API_KEYS_SECRET_ARN" "$(tf_raw mdm_api_keys_secret_arn)")"
+# Parameter resolution order (no Terraform):
+#   1. CLI flag (already set above)
+#   2. Deployment manifest (infra/aws-<env>-application.json — written by every successful deploy)
+#   3. AWS API discovery / deterministic naming convention
 
+# Cluster
+CLUSTER_ARN="$(first_nonempty "$CLUSTER_ARN" "$(manifest_value cluster.arn)")"
+CLUSTER_NAME="$(first_nonempty "$CLUSTER_NAME" "$(manifest_value cluster.name)")"
+
+# ECR — naming convention: <account>.dkr.ecr.<region>.amazonaws.com/<prefix>-warehouse
+ECR_REPOSITORY_URL="$(first_nonempty "$ECR_REPOSITORY_URL" "$(manifest_value ecr_repository_url)" \
+  "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION_NAME}.amazonaws.com/${NAME_PREFIX}-warehouse")"
+
+# S3 buckets — naming convention matches Terraform: <prefix>-<purpose>-<account_id>
+BRONZE_BUCKET_NAME="$(first_nonempty "$BRONZE_BUCKET_NAME" \
+  "$(manifest_value bronze_bucket_name)" \
+  "${NAME_PREFIX}-bronze-${ACCOUNT_ID}")"
+WAREHOUSE_BUCKET_NAME="$(first_nonempty "$WAREHOUSE_BUCKET_NAME" \
+  "$(manifest_value warehouse_bucket_name)" \
+  "${NAME_PREFIX}-warehouse-${ACCOUNT_ID}")"
+SNOWFLAKE_EXPORT_BUCKET_NAME="$(first_nonempty "$SNOWFLAKE_EXPORT_BUCKET_NAME" \
+  "$(manifest_value snowflake_export_bucket_name)" \
+  "${NAME_PREFIX}-snowflake-export-${ACCOUNT_ID}")"
+
+# IAM roles — fixed names provisioned by Terraform access layer; look up via IAM API
+EXECUTION_ROLE_ARN="$(first_nonempty "$EXECUTION_ROLE_ARN" \
+  "$(manifest_value execution_role_arn)" \
+  "$(aws_cli iam get-role --role-name "$RUNNER_EXECUTION_ROLE_NAME" --query 'Role.Arn' --output text 2>/dev/null || true)")"
+TASK_ROLE_ARN="$(first_nonempty "$TASK_ROLE_ARN" \
+  "$(manifest_value task_role_arn)" \
+  "$(aws_cli iam get-role --role-name "$RUNNER_TASK_ROLE_NAME" --query 'Role.Arn' --output text 2>/dev/null || true)")"
+STEP_FUNCTIONS_ROLE_ARN="$(first_nonempty "$STEP_FUNCTIONS_ROLE_ARN" \
+  "$(manifest_value step_functions_role_arn)" \
+  "$(aws_cli iam get-role --role-name "$RUNNER_STEP_FUNCTIONS_ROLE_NAME" --query 'Role.Arn' --output text 2>/dev/null || true)")"
+
+# CloudWatch log group
+LOG_GROUP_NAME="$(first_nonempty "$LOG_GROUP_NAME" \
+  "$(manifest_value log_groups.ecs)" \
+  "/aws/ecs/${NAME_PREFIX}-warehouse")"
+
+# Secrets Manager ARNs — look up by name; names are fixed conventions
+EDGAR_IDENTITY_SECRET_ARN="$(first_nonempty "$EDGAR_IDENTITY_SECRET_ARN" \
+  "$(manifest_value edgar_identity_secret_arn)" \
+  "$(secret_arn_by_name "${NAME_PREFIX}-edgar-identity")")"
+MDM_POSTGRES_DSN_SECRET_ARN="$(first_nonempty "$MDM_POSTGRES_DSN_SECRET_ARN" \
+  "$(manifest_value mdm.secrets.postgres_dsn)" \
+  "$(secret_arn_by_name "${NAME_PREFIX}/mdm/postgres_dsn")")"
+MDM_NEO4J_SECRET_ARN="$(first_nonempty "$MDM_NEO4J_SECRET_ARN" \
+  "$(manifest_value mdm.secrets.neo4j)" \
+  "$(secret_arn_by_name "${NAME_PREFIX}/mdm/neo4j")")"
+MDM_API_KEYS_SECRET_ARN="$(first_nonempty "$MDM_API_KEYS_SECRET_ARN" \
+  "$(manifest_value mdm.secrets.api_keys)" \
+  "$(secret_arn_by_name "${NAME_PREFIX}/mdm/api_keys")")"
+
+# Subnets and security groups — discovered via EC2 tags (no Terraform needed)
 if is_empty "$PUBLIC_SUBNET_IDS_JSON"; then
   if ! is_empty "$PUBLIC_SUBNET_IDS_CSV"; then
     PUBLIC_SUBNET_IDS_JSON="$(csv_to_json_array "$PUBLIC_SUBNET_IDS_CSV")"
-  else
-    PUBLIC_SUBNET_IDS_JSON="$(tf_json public_subnet_ids)"
   fi
 fi
 
-if is_empty "$SECURITY_GROUP_IDS_JSON"; then
-  if ! is_empty "$SECURITY_GROUP_IDS_CSV"; then
-    SECURITY_GROUP_IDS_JSON="$(csv_to_json_array "$SECURITY_GROUP_IDS_CSV")"
-  else
-    public_sg="$(tf_raw public_ecs_security_group_id)"
-    if ! is_empty "$public_sg"; then
-      SECURITY_GROUP_IDS_JSON="$(csv_to_json_array "$public_sg")"
-    fi
-  fi
+if is_empty "$SECURITY_GROUP_IDS_JSON" && ! is_empty "$SECURITY_GROUP_IDS_CSV"; then
+  SECURITY_GROUP_IDS_JSON="$(csv_to_json_array "$SECURITY_GROUP_IDS_CSV")"
 fi
 
-ACCOUNT_ID="$(aws_cli sts get-caller-identity --query Account --output text)"
-
+# Cluster name ↔ ARN cross-derivation
 if is_empty "$CLUSTER_ARN" && ! is_empty "$CLUSTER_NAME"; then
   CLUSTER_ARN="$(aws_cli ecs describe-clusters --clusters "$CLUSTER_NAME" --query 'clusters[0].clusterArn' --output text 2>/dev/null || true)"
 fi
 if is_empty "$CLUSTER_NAME" && ! is_empty "$CLUSTER_ARN"; then
   CLUSTER_NAME="${CLUSTER_ARN##*/}"
 fi
-if is_empty "$EXECUTION_ROLE_ARN"; then
-  EXECUTION_ROLE_ARN="$(aws_cli iam get-role --role-name "$RUNNER_EXECUTION_ROLE_NAME" --query 'Role.Arn' --output text 2>/dev/null || true)"
-fi
-if is_empty "$TASK_ROLE_ARN"; then
-  TASK_ROLE_ARN="$(aws_cli iam get-role --role-name "$RUNNER_TASK_ROLE_NAME" --query 'Role.Arn' --output text 2>/dev/null || true)"
-fi
-if is_empty "$STEP_FUNCTIONS_ROLE_ARN"; then
-  STEP_FUNCTIONS_ROLE_ARN="$(aws_cli iam get-role --role-name "$RUNNER_STEP_FUNCTIONS_ROLE_NAME" --query 'Role.Arn' --output text 2>/dev/null || true)"
-fi
-if is_empty "$ECR_REPOSITORY_URL"; then
-  ECR_REPOSITORY_URL="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION_NAME}.amazonaws.com/${NAME_PREFIX}-warehouse"
-fi
+
+# MDM ECR — naming convention
 if is_empty "$MDM_ECR_REPOSITORY_URL"; then
   MDM_ECR_REPOSITORY_URL="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION_NAME}.amazonaws.com/${NAME_PREFIX}-mdm"
 fi
@@ -396,7 +406,7 @@ if is_empty "$SECURITY_GROUP_IDS_JSON" || json_array_is_empty "$SECURITY_GROUP_I
   )"
 fi
 
-is_empty "$CLUSTER_ARN" && fail "could not resolve ECS cluster ARN; pass --cluster-arn or run Terraform apply with updated outputs"
+is_empty "$CLUSTER_ARN" && fail "could not resolve ECS cluster ARN; pass --cluster-arn or ensure the manifest file ${MANIFEST_FILE} exists"
 is_empty "$CLUSTER_NAME" && fail "could not resolve ECS cluster name; pass --cluster-name"
 is_empty "$ECR_REPOSITORY_URL" && fail "could not resolve ECR repository URL; pass --ecr-repository-url"
 is_empty "$BRONZE_BUCKET_NAME" && fail "could not resolve bronze bucket name; pass --bronze-bucket-name"
@@ -405,7 +415,7 @@ is_empty "$SNOWFLAKE_EXPORT_BUCKET_NAME" && fail "could not resolve Snowflake ex
 is_empty "$EDGAR_IDENTITY_SECRET_ARN" && fail "could not resolve EDGAR identity secret ARN; pass --edgar-identity-secret-arn"
 is_empty "$EXECUTION_ROLE_ARN" && fail "could not resolve ECS task execution role ARN; pass --execution-role-arn"
 is_empty "$TASK_ROLE_ARN" && fail "could not resolve ECS task role ARN; pass --task-role-arn"
-is_empty "$STEP_FUNCTIONS_ROLE_ARN" && fail "could not resolve Step Functions role ARN; apply the AWS access root or pass --step-functions-role-arn"
+is_empty "$STEP_FUNCTIONS_ROLE_ARN" && fail "could not resolve Step Functions role ARN; check IAM role ${RUNNER_STEP_FUNCTIONS_ROLE_NAME} exists or pass --step-functions-role-arn"
 require_runner_role_name "$EXECUTION_ROLE_ARN" "$RUNNER_EXECUTION_ROLE_NAME" "--execution-role-arn"
 require_runner_role_name "$TASK_ROLE_ARN" "$RUNNER_TASK_ROLE_NAME" "--task-role-arn"
 require_runner_role_name "$STEP_FUNCTIONS_ROLE_ARN" "$RUNNER_STEP_FUNCTIONS_ROLE_NAME" "--step-functions-role-arn"
@@ -441,7 +451,7 @@ case "$MDM_DEPLOYMENT_MODE" in
     if [[ ${#missing_mdm_values[@]} -eq 0 ]]; then
       DEPLOY_MDM=true
     else
-      log "Skipping MDM task definitions/state machines; missing Terraform outputs or flags: ${missing_mdm_values[*]}"
+      log "Skipping MDM task definitions/state machines; missing values: ${missing_mdm_values[*]}"
     fi
     ;;
   *)
@@ -1282,6 +1292,7 @@ batch_map = {
         "StartAt": "RunBatch",
         "States": {"RunBatch": batch},
     },
+    "ResultPath": None,
     "Next": "MdmRun",
 }
 
@@ -1435,7 +1446,9 @@ python3 - "$SUMMARY_FILE" "$ENVIRONMENT" "$AWS_REGION_NAME" "$NAME_PREFIX" "$IMA
   "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
   "$DEPLOY_MDM" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$MDM_SILVER_DUCKDB" \
   "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_NEO4J_SECRET_ARN" "$MDM_API_KEYS_SECRET_ARN" \
-  "$WORKFLOW_ARNS_FILE" <<'PY'
+  "$WORKFLOW_ARNS_FILE" \
+  "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" "$SNOWFLAKE_EXPORT_BUCKET_NAME" \
+  "$EXECUTION_ROLE_ARN" "$TASK_ROLE_ARN" "$EDGAR_IDENTITY_SECRET_ARN" <<'PY'
 import json
 import pathlib
 import sys
@@ -1464,6 +1477,12 @@ import sys
     neo4j_secret_arn,
     api_keys_secret_arn,
     workflow_arns_file,
+    bronze_bucket_name,
+    warehouse_bucket_name,
+    snowflake_export_bucket_name,
+    execution_role_arn,
+    task_role_arn,
+    edgar_identity_secret_arn,
 ) = sys.argv[1:]
 
 task_definitions = {
@@ -1490,7 +1509,13 @@ summary = {
         "ecs": ecs_log_group_name,
         "step_functions": step_functions_log_group_name,
     },
+    "bronze_bucket_name": bronze_bucket_name,
+    "warehouse_bucket_name": warehouse_bucket_name,
+    "snowflake_export_bucket_name": snowflake_export_bucket_name,
+    "execution_role_arn": execution_role_arn,
+    "task_role_arn": task_role_arn,
     "step_functions_role_arn": step_functions_role_arn,
+    "edgar_identity_secret_arn": edgar_identity_secret_arn,
     "task_definitions": task_definitions,
     "state_machines": json.loads(pathlib.Path(workflow_arns_file).read_text(encoding="utf-8")),
 }
@@ -1507,6 +1532,10 @@ if deploy_mdm == "true":
 
 pathlib.Path(output_file).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
 PY
+
+# Always update the deployment manifest so future deploys resolve params without Terraform.
+cp "$SUMMARY_FILE" "$MANIFEST_FILE"
+log "Manifest written to ${MANIFEST_FILE}"
 
 if ! is_empty "$OUTPUT_FILE"; then
   cp "$SUMMARY_FILE" "$OUTPUT_FILE"
