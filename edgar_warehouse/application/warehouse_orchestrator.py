@@ -43,10 +43,7 @@ from edgar_warehouse.domain.policy.command_scope import (
 )
 from edgar_warehouse.loaders import (
     seed_universe_loader,
-    stage_address_loader,
-    stage_company_loader,
     stage_daily_index_filing_loader,
-    stage_former_name_loader,
     stage_manifest_loader,
     stage_pagination_filing_loader,
     stage_recent_filing_loader,
@@ -71,7 +68,7 @@ from edgar_warehouse.infrastructure.sec_client import (
     download_sec_bytes,
 )
 from edgar_warehouse.infrastructure.object_storage import StorageLocation, read_bytes
-from edgar_warehouse.silver_support.session import open_silver_database, reset_submission_state
+from edgar_warehouse.silver_support.session import open_silver_database
 
 if TYPE_CHECKING:
     from edgar_warehouse.silver_store import SilverDatabase
@@ -544,54 +541,6 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
         "size_bytes": source_path.stat().st_size,
     }
 
-
-def _apply_silver_from_submissions(
-    db: SilverDatabase,
-    sync_run_id: str,
-    cik: int,
-    raw_object_id: str,
-    load_mode: str,
-    main_payload: dict[str, Any],
-    pagination_payloads: list[tuple[str, dict[str, Any]]],
-    recent_limit: int | None = None,
-) -> dict[str, Any]:
-    """Write silver rows for one company from its parsed submissions JSON payloads."""
-    company_rows = stage_company_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
-    address_rows = stage_address_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
-    former_name_rows = stage_former_name_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
-    manifest_rows = stage_manifest_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
-    recent_rows = stage_recent_filing_loader(
-        main_payload, cik, sync_run_id, raw_object_id, load_mode, recent_limit=recent_limit
-    )
-
-    reset_submission_state(db, cik)
-    rows_written = 0
-    rows_written += db.merge_company(company_rows, sync_run_id)
-    rows_written += db.merge_addresses(address_rows, sync_run_id)
-    rows_written += db.merge_former_names(former_name_rows, sync_run_id)
-    rows_written += db.merge_submission_files(manifest_rows, sync_run_id)
-    rows_written += db.merge_filings(recent_rows, sync_run_id)
-
-    pagination_accessions: list[str] = []
-    for _file_name, pagination_payload in pagination_payloads:
-        pagination_rows = stage_pagination_filing_loader(pagination_payload, cik, sync_run_id, raw_object_id, load_mode)
-        rows_written += db.merge_filings(pagination_rows, sync_run_id)
-        pagination_accessions.extend(
-            row["accession_number"]
-            for row in pagination_rows
-            if row.get("accession_number")
-        )
-    return {
-        "rows_written": rows_written,
-        "recent_rows": recent_rows,
-        "manifest_rows": manifest_rows,
-        "recent_accessions": [
-            row["accession_number"]
-            for row in recent_rows
-            if row.get("accession_number")
-        ],
-        "pagination_accessions": pagination_accessions,
-    }
 
 
 def _capture_bronze_raw(
@@ -1223,14 +1172,13 @@ def _apply_submission_snapshot_to_silver(
             "pagination_accessions": [],
         }
     else:
-        result = _apply_silver_from_submissions(
-            db=db,
-            sync_run_id=sync_run_id,
+        result = db.stage_submission(
             cik=cik,
-            raw_object_id=main_write_record["sha256"],
-            load_mode=load_mode,
             main_payload=main_payload,
             pagination_payloads=pagination_payloads,
+            sync_run_id=sync_run_id,
+            raw_object_id=main_write_record["sha256"],
+            load_mode=load_mode,
             recent_limit=recent_limit,
         )
         rows_written += int(result["rows_written"])
