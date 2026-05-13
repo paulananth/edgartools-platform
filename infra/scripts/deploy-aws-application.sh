@@ -833,7 +833,7 @@ workflow_profile() {
     full_reconcile) printf '%s\n' "medium" ;;
     load_daily_form_index_for_date) printf '%s\n' "small" ;;
     catch_up_daily_form_index) printf '%s\n' "small" ;;
-    gold_refresh) printf '%s\n' "small" ;;
+    gold_refresh) printf '%s\n' "medium" ;;
     *) fail "unknown workflow: $1" ;;
   esac
 }
@@ -1221,7 +1221,7 @@ PY
 # existing sec_platform_runner_step_functions role needs no extra EventBridge permissions.
 write_bootstrap_phased_definition() {
   local output_file="$1"
-  local wh_task_small_arn="$2"   # warehouse small  (seed-universe, gold-refresh)
+  local wh_task_small_arn="$2"   # warehouse small  (seed-universe)
   local wh_task_medium_arn="$3"  # warehouse medium (bootstrap-batch)
   local mdm_task_small_arn="$4"  # mdm small        (mdm run/backfill/sync/verify)
 
@@ -1308,7 +1308,7 @@ mdm_sync = ecs_state(mdm_small_arn,
 mdm_verify = ecs_state(mdm_small_arn,
     "States.Array('mdm', 'verify-graph')",
     next_state="GoldRefresh")
-gold = ecs_state(wh_small_arn,
+gold = ecs_state(wh_medium_arn,
     "States.Array('gold-refresh', '--run-id', $$.Execution.Name)",
     is_end=True, retry_secs=60)
 
