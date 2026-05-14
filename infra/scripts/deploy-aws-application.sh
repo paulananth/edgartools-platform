@@ -1223,18 +1223,19 @@ PY
 write_bootstrap_phased_definition() {
   local output_file="$1"
   local wh_task_small_arn="$2"    # warehouse small  (reserved; unused in phased pipeline after seed OOM fix)
-  local wh_task_medium_arn="$3"   # warehouse medium (seed-universe, bootstrap-batch, gold-refresh)
+  local wh_task_medium_arn="$3"   # warehouse medium (seed-universe, bootstrap-batch)
   local mdm_task_small_arn="$4"   # mdm small        (mdm verify-graph — lightweight check)
   local mdm_task_medium_arn="$5"  # mdm medium       (mdm run, backfill-relationships, sync-graph)
+  local wh_task_large_arn="$6"    # warehouse large  (gold-refresh — full-universe DuckDB is multi-GB)
 
   python3 - "$output_file" "$CLUSTER_ARN" \
-    "$wh_task_small_arn" "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" \
+    "$wh_task_small_arn" "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
     "$BOOTSTRAP_BATCH_CONCURRENCY" "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
- wh_small_arn, wh_medium_arn, mdm_small_arn, mdm_medium_arn,
+ wh_small_arn, wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
  container_name, bronze_bucket_name, subnet_json, security_group_json,
  batch_concurrency, mdm_run_limit, mdm_graph_limit) = sys.argv[1:]
 
@@ -1311,7 +1312,7 @@ mdm_sync = ecs_state(mdm_medium_arn,
 mdm_verify = ecs_state(mdm_small_arn,
     "States.Array('mdm', 'verify-graph')",
     next_state="GoldRefresh")
-gold = ecs_state(wh_medium_arn,
+gold = ecs_state(wh_large_arn,
     "States.Array('gold-refresh', '--run-id', $$.Execution.Name)",
     is_end=True, retry_secs=60)
 
@@ -1416,7 +1417,7 @@ if [[ "$DEPLOY_MDM" == "true" ]]; then
   # Chains seed → parallel bronze+silver batches → MDM → gold-refresh once.
   phased_definition_file="$(json_file sfn-bootstrap-phased)"
   write_bootstrap_phased_definition "$phased_definition_file" \
-    "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN"
+    "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN"
   phased_state_machine_arn="$(upsert_state_machine bootstrap_phased "$phased_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
   python3 - "bootstrap_phased" "$phased_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'

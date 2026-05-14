@@ -155,6 +155,24 @@ class StorageLocation:
     def write_text(self, relative_path: str, payload: str) -> str:
         return self.write_bytes(relative_path, payload.encode("utf-8"))
 
+    def upload_file(self, relative_path: str, local_path: "Path", chunk_size: int = 8 * 1024 * 1024) -> str:
+        """Stream a local file to storage without loading it fully into memory."""
+        import shutil
+        relative = sanitize_relative_path(relative_path)
+        destination = self.join(relative)
+        if self.is_remote:
+            protocol = _protocol_for_uri(self.root)
+            _assert_protocol_allowed(protocol)
+            import fsspec
+            fs = fsspec.filesystem(protocol, **_remote_storage_options(destination))
+            with local_path.open("rb") as src, fs.open(destination, "wb") as dst:
+                shutil.copyfileobj(src, dst, length=chunk_size)
+            return destination
+        destination_path = Path(destination)
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(local_path), str(destination_path))
+        return str(destination_path)
+
     def write_bytes(self, relative_path: str, payload: bytes) -> str:
         relative = sanitize_relative_path(relative_path)
         destination = self.join(relative)

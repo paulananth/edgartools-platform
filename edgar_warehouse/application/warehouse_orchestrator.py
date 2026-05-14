@@ -330,6 +330,7 @@ def _execute_warehouse_bronze_capture(
                 run_id,
                 export_business_date,
             )
+            del gold_tables
             _emit_pipeline_event(
                 "gold_publish_completed",
                 command=command_name,
@@ -534,11 +535,13 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
     if not source_path.exists():
         raise WarehouseRuntimeError(f"Silver DuckDB file was not found: {source_path}")
     relative_path = "silver/sec/silver.duckdb"
+    size_bytes = source_path.stat().st_size
+    destination = context.storage_root.upload_file(relative_path, source_path)
     return {
         "layer": "silver_database",
-        "path": context.storage_root.write_bytes(relative_path, source_path.read_bytes()),
+        "path": destination,
         "relative_path": relative_path,
-        "size_bytes": source_path.stat().st_size,
+        "size_bytes": size_bytes,
     }
 
 
