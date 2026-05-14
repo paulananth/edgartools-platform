@@ -1187,6 +1187,7 @@ definition = {
         "BatchBootstrap": {
             "Type": "Map",
             "MaxConcurrency": int(batch_concurrency),
+            "ToleratedFailurePercentage": 10,
             "ItemReader": {
                 "Resource": "arn:aws:states:::s3:getObject",
                 "ReaderConfig": {
@@ -1280,6 +1281,7 @@ batch_map = {
     "Type": "Map",
     "MaxConcurrency": int(batch_concurrency),
     "Comment": "Parallel bronze+silver only — no gold per batch.",
+    "ToleratedFailurePercentage": 10,
     "ItemReader": {
         "Resource": "arn:aws:states:::s3:getObject",
         "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
