@@ -1221,8 +1221,8 @@ PY
 # existing sec_platform_runner_step_functions role needs no extra EventBridge permissions.
 write_bootstrap_phased_definition() {
   local output_file="$1"
-  local wh_task_small_arn="$2"    # warehouse small  (seed-universe)
-  local wh_task_medium_arn="$3"   # warehouse medium (bootstrap-batch, gold-refresh)
+  local wh_task_small_arn="$2"    # warehouse small  (reserved; unused in phased pipeline after seed OOM fix)
+  local wh_task_medium_arn="$3"   # warehouse medium (seed-universe, bootstrap-batch, gold-refresh)
   local mdm_task_small_arn="$4"   # mdm small        (mdm verify-graph — lightweight check)
   local mdm_task_medium_arn="$5"  # mdm medium       (mdm run, backfill-relationships, sync-graph)
 
@@ -1268,7 +1268,7 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
 mdm_limit = str(mdm_run_limit)
 graph_limit = str(mdm_graph_limit)
 
-seed = ecs_state(wh_small_arn,
+seed = ecs_state(wh_medium_arn,
     "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
     next_state="BatchBootstrap", retry_secs=60)
 
@@ -1397,7 +1397,7 @@ PY
 done
 
 bootstrap_definition_file="$(json_file sfn-bootstrap-batched)"
-write_bootstrap_batched_definition "$bootstrap_definition_file" "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN"
+write_bootstrap_batched_definition "$bootstrap_definition_file" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MEDIUM_ARN"
 bootstrap_state_machine_arn="$(upsert_state_machine bootstrap_batched "$bootstrap_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
 if [[ "$first_workflow" != "true" ]]; then
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
