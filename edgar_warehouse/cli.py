@@ -322,6 +322,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="Skip pagination files (recent filings only)",
     )
+    bootstrap_batch.add_argument(
+        "--artifact-policy",
+        default="all_attachments",
+        help="Artifact fetch policy",
+    )
+    bootstrap_batch.add_argument(
+        "--parser-policy",
+        default="configured_forms",
+        help="Parser execution policy",
+    )
     _add_run_id_arg(bootstrap_batch)
     bootstrap_batch.set_defaults(handler=_handle_bootstrap_batch)
 

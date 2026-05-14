@@ -330,6 +330,7 @@ def _execute_warehouse_bronze_capture(
                 run_id,
                 export_business_date,
             )
+            del gold_tables
             _emit_pipeline_event(
                 "gold_publish_completed",
                 command=command_name,
@@ -534,11 +535,13 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
     if not source_path.exists():
         raise WarehouseRuntimeError(f"Silver DuckDB file was not found: {source_path}")
     relative_path = "silver/sec/silver.duckdb"
+    size_bytes = source_path.stat().st_size
+    destination = context.storage_root.upload_file(relative_path, source_path)
     return {
         "layer": "silver_database",
-        "path": context.storage_root.write_bytes(relative_path, source_path.read_bytes()),
+        "path": destination,
         "relative_path": relative_path,
-        "size_bytes": source_path.stat().st_size,
+        "size_bytes": size_bytes,
     }
 
 
@@ -602,6 +605,8 @@ def _capture_bronze_raw(
                 fetch_date=now.date(),
                 force=bool(arguments.get("force")),
                 load_mode="daily_incremental",
+                artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
+                parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
             )
             raw_writes.extend(result["raw_writes"])
             metrics["rows_inserted"] += result["rows_written"]
@@ -641,6 +646,8 @@ def _capture_bronze_raw(
             force=bool(arguments.get("force")),
             load_mode="bootstrap_recent_10",
             recent_limit=arguments.get("recent_limit"),
+            artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
+            parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
         )
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
@@ -663,6 +670,8 @@ def _capture_bronze_raw(
             fetch_date=now.date(),
             force=bool(arguments.get("force")),
             load_mode="bootstrap_full",
+            artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
+            parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
         )
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
@@ -687,6 +696,8 @@ def _capture_bronze_raw(
             fetch_date=now.date(),
             force=bool(arguments.get("force")),
             load_mode="bootstrap_full",
+            artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
+            parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
         )
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
@@ -862,12 +873,16 @@ def _capture_bronze_raw(
         if len(limited_ciks) < len(universe_rows):
             allowed = set(limited_ciks)
             universe_rows = [row for row in universe_rows if int(row["cik"]) in allowed]
-        # Exclude companies already fully bootstrapped (active in MDM) — they will be
-        # picked up by daily-incremental when new filings appear; re-bootstrapping
-        # them wastes batch capacity and duplicates bronze writes.
-        # Non-fatal: if MDM is unreachable _get_mdm_tracked_ciks returns [] and we
-        # include everything (safe cold-start behaviour).
+        # Exclude companies already fully bootstrapped. Check both silver DuckDB
+        # (sec_company_sync_state.tracking_status = 'active') and MDM Postgres,
+        # since MDM may have been reset while silver still holds accurate status.
+        # Non-fatal: MDM unreachability returns [] and silver is always available.
         active_ciks = set(_get_mdm_tracked_ciks("active"))
+        silver_active_ciks = set(
+            row["cik"]
+            for row in db.get_active_ciks()
+        )
+        active_ciks = active_ciks | silver_active_ciks
         if active_ciks:
             before = len(universe_rows)
             universe_rows = [row for row in universe_rows if int(row["cik"]) not in active_ciks]
@@ -876,6 +891,8 @@ def _capture_bronze_raw(
                 total_ciks=before,
                 new_ciks=len(universe_rows),
                 skipped_active=before - len(universe_rows),
+                skipped_mdm_active=len(silver_active_ciks & {int(r["cik"]) for r in universe_rows[:before]}),
+                skipped_silver_active=len(silver_active_ciks),
             )
         metrics["_ticker_reference_rows"] = ticker_reference_rows
         cik_universe_path = _write_cik_universe_batches(
@@ -901,6 +918,8 @@ def _capture_bronze_raw(
             fetch_date=now.date(),
             force=bool(arguments.get("force", False)),
             load_mode="bootstrap_batch",
+            artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
+            parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
         )
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
@@ -961,6 +980,8 @@ def _run_submissions_bronze_then_silver(
     force: bool,
     load_mode: str,
     recent_limit: int | None = None,
+    artifact_policy: str = "none",
+    parser_policy: str = "none",
 ) -> dict[str, Any]:
     """Capture every selected SEC submission into bronze before applying silver."""
     bronze_snapshots = []
@@ -1048,6 +1069,19 @@ def _run_submissions_bronze_then_silver(
         run_id=sync_run_id,
     )
 
+    artifact_result = _run_configured_form_artifact_pipeline(
+        context=context,
+        db=db,
+        sync_run_id=sync_run_id,
+        accession_numbers=_dedupe_strings([*recent_accessions, *pagination_accessions]),
+        artifact_policy=artifact_policy,
+        parser_policy=parser_policy,
+        force=force,
+    )
+    raw_writes.extend(artifact_result["raw_writes"])
+    rows_written += int(artifact_result["rows_written"])
+    rows_skipped += int(artifact_result["rows_skipped"])
+
     return {
         "raw_writes": raw_writes,
         "rows_written": rows_written,
@@ -1055,6 +1089,127 @@ def _run_submissions_bronze_then_silver(
         "recent_accessions": _dedupe_strings(recent_accessions),
         "pagination_accessions": _dedupe_strings(pagination_accessions),
     }
+
+
+def _run_configured_form_artifact_pipeline(
+    *,
+    context: WarehouseCommandContext,
+    db: SilverDatabase,
+    sync_run_id: str,
+    accession_numbers: list[str],
+    artifact_policy: str,
+    parser_policy: str,
+    force: bool,
+) -> dict[str, Any]:
+    fetch_artifacts = _artifact_policy_fetches(artifact_policy)
+    run_parsers = _parser_policy_runs(parser_policy)
+    if not fetch_artifacts and not run_parsers:
+        return {"raw_writes": [], "rows_written": 0, "rows_skipped": 0}
+
+    selected_accessions = _configured_parser_accessions(db, accession_numbers)
+    if not selected_accessions:
+        return {"raw_writes": [], "rows_written": 0, "rows_skipped": 0}
+
+    _emit_pipeline_event(
+        "filing_artifact_pipeline_started",
+        accession_count=len(selected_accessions),
+        artifact_policy=artifact_policy,
+        parser_policy=parser_policy,
+        run_id=sync_run_id,
+    )
+    import time as _time
+    _CONSECUTIVE_ERROR_LIMIT = int(os.environ.get("WAREHOUSE_ARTIFACT_CIRCUIT_BREAKER", "20"))
+    raw_writes: list[dict[str, Any]] = []
+    rows_written = 0
+    errors = 0
+    consecutive_errors = 0
+    for accession_number in selected_accessions:
+        if consecutive_errors >= _CONSECUTIVE_ERROR_LIMIT:
+            _emit_pipeline_event(
+                "filing_artifact_circuit_open",
+                consecutive_errors=consecutive_errors,
+                remaining_accessions=len(selected_accessions) - errors - rows_written,
+                run_id=sync_run_id,
+            )
+            break
+        try:
+            if fetch_artifacts:
+                from edgar_warehouse.infrastructure.filing_artifact_service import refresh_filing_artifacts
+
+                artifact_result = refresh_filing_artifacts(
+                    context=context,
+                    db=db,
+                    accession_number=accession_number,
+                    sync_run_id=sync_run_id,
+                    download_bytes=_download_sec_bytes,
+                    force=force,
+                )
+                raw_writes.extend(artifact_result["raw_writes"])
+                rows_written += int(artifact_result["attachment_count"])
+                _time.sleep(float(os.environ.get("WAREHOUSE_ARTIFACT_REQUEST_DELAY", "1.0")))
+            if run_parsers:
+                rows_written += _run_parse_pipeline(
+                    db=db,
+                    accession_number=accession_number,
+                    sync_run_id=sync_run_id,
+                )
+            consecutive_errors = 0
+        except Exception as exc:
+            errors += 1
+            consecutive_errors += 1
+            _emit_pipeline_event(
+                "filing_artifact_failed",
+                accession_number=accession_number,
+                error=str(exc),
+                run_id=sync_run_id,
+            )
+    _emit_pipeline_event(
+        "filing_artifact_pipeline_completed",
+        accession_count=len(selected_accessions),
+        raw_object_count=len(raw_writes),
+        rows_written=rows_written,
+        errors=errors,
+        run_id=sync_run_id,
+    )
+    return {"raw_writes": raw_writes, "rows_written": rows_written, "rows_skipped": errors}
+
+
+def _configured_parser_accessions(db: SilverDatabase, accession_numbers: list[str]) -> list[str]:
+    selected: list[str] = []
+    for accession_number in _dedupe_strings(accession_numbers):
+        filing = db.get_filing(accession_number)
+        if filing is None:
+            continue
+        if _is_configured_parser_form(filing.get("form")):
+            selected.append(accession_number)
+    return selected
+
+
+def _is_configured_parser_form(form_type: Any) -> bool:
+    normalized = str(form_type or "").strip().upper()
+    return normalized in OWNERSHIP_FORMS or normalized in ADV_FORMS
+
+
+def _artifact_policy_fetches(policy: str) -> bool:
+    normalized = _normalize_policy(policy)
+    if normalized in {"none", "skip", "disabled", "off"}:
+        return False
+    if normalized in {"all_attachments", "configured_forms"}:
+        return True
+    raise WarehouseRuntimeError(f"Unsupported artifact_policy: {policy}")
+
+
+def _parser_policy_runs(policy: str) -> bool:
+    normalized = _normalize_policy(policy)
+    if normalized in {"none", "skip", "disabled", "off"}:
+        return False
+    if normalized == "configured_forms":
+        return True
+    raise WarehouseRuntimeError(f"Unsupported parser_policy: {policy}")
+
+
+def _normalize_policy(policy: str) -> str:
+    return str(policy or "").strip().lower().replace("-", "_")
 
 
 def _capture_submission_bronze_snapshot(
@@ -1196,16 +1351,17 @@ def _apply_submission_snapshot_to_silver(
         rows_written += int(result["rows_written"])
 
     all_filing_rows = list(result["recent_rows"])
+    pagination_rows_for_accessions: list[dict[str, Any]] = []
     for _file_name, pagination_payload in pagination_payloads:
-        all_filing_rows.extend(
-            stage_pagination_filing_loader(
-                pagination_payload,
-                cik,
-                sync_run_id,
-                main_write_record["sha256"],
-                load_mode,
-            )
+        pagination_rows = stage_pagination_filing_loader(
+            pagination_payload,
+            cik,
+            sync_run_id,
+            main_write_record["sha256"],
+            load_mode,
         )
+        pagination_rows_for_accessions.extend(pagination_rows)
+        all_filing_rows.extend(pagination_rows)
 
     latest_filing_date = _latest_filing_date(all_filing_rows)
     latest_acceptance_datetime = _latest_acceptance_datetime(all_filing_rows)
@@ -1251,7 +1407,13 @@ def _apply_submission_snapshot_to_silver(
         "rows_written": rows_written,
         "rows_skipped": rows_skipped,
         "recent_accessions": _dedupe_strings(result["recent_accessions"]),
-        "pagination_accessions": _dedupe_strings(result["pagination_accessions"]),
+        "pagination_accessions": _dedupe_strings(
+            [
+                row["accession_number"]
+                for row in pagination_rows_for_accessions
+                if row.get("accession_number")
+            ]
+        ),
     }
 
 
