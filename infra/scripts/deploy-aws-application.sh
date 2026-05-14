@@ -1221,18 +1221,19 @@ PY
 # existing sec_platform_runner_step_functions role needs no extra EventBridge permissions.
 write_bootstrap_phased_definition() {
   local output_file="$1"
-  local wh_task_small_arn="$2"   # warehouse small  (seed-universe)
-  local wh_task_medium_arn="$3"  # warehouse medium (bootstrap-batch)
-  local mdm_task_small_arn="$4"  # mdm small        (mdm run/backfill/sync/verify)
+  local wh_task_small_arn="$2"    # warehouse small  (seed-universe)
+  local wh_task_medium_arn="$3"   # warehouse medium (bootstrap-batch, gold-refresh)
+  local mdm_task_small_arn="$4"   # mdm small        (mdm verify-graph — lightweight check)
+  local mdm_task_medium_arn="$5"  # mdm medium       (mdm run, backfill-relationships, sync-graph)
 
   python3 - "$output_file" "$CLUSTER_ARN" \
-    "$wh_task_small_arn" "$wh_task_medium_arn" "$mdm_task_small_arn" \
+    "$wh_task_small_arn" "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" \
     "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
     "$BOOTSTRAP_BATCH_CONCURRENCY" "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
- wh_small_arn, wh_medium_arn, mdm_small_arn,
+ wh_small_arn, wh_medium_arn, mdm_small_arn, mdm_medium_arn,
  container_name, bronze_bucket_name, subnet_json, security_group_json,
  batch_concurrency, mdm_run_limit, mdm_graph_limit) = sys.argv[1:]
 
@@ -1296,13 +1297,13 @@ batch_map = {
     "Next": "MdmRun",
 }
 
-mdm_run = ecs_state(mdm_small_arn,
+mdm_run = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')",
     next_state="MdmBackfill")
-mdm_backfill = ecs_state(mdm_small_arn,
+mdm_backfill = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')",
     next_state="MdmSync")
-mdm_sync = ecs_state(mdm_small_arn,
+mdm_sync = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')",
     next_state="MdmVerify")
 mdm_verify = ecs_state(mdm_small_arn,
@@ -1413,7 +1414,7 @@ if [[ "$DEPLOY_MDM" == "true" ]]; then
   # Chains seed → parallel bronze+silver batches → MDM → gold-refresh once.
   phased_definition_file="$(json_file sfn-bootstrap-phased)"
   write_bootstrap_phased_definition "$phased_definition_file" \
-    "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN"
+    "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN"
   phased_state_machine_arn="$(upsert_state_machine bootstrap_phased "$phased_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
   python3 - "bootstrap_phased" "$phased_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'

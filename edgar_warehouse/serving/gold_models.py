@@ -251,10 +251,7 @@ def _arrow(result: Any) -> pa.Table:
 
 
 def _fetch_rows(conn: Any, query: str) -> list[dict[str, Any]]:
-    try:
-        result = conn.execute(query).fetchall()
-    except Exception:
-        return []
+    result = conn.execute(query).fetchall()
     columns = [desc[0] for desc in conn.description]
     return [dict(zip(columns, row)) for row in result]
 
@@ -359,35 +356,29 @@ def _private_fund_natural_key(cik: Any, fund_name: Any, fund_type: Any, jurisdic
 
 
 def _build_dim_company(conn: Any) -> pa.Table:
-    try:
-        table = _arrow(
-            conn.execute(
-                """
-                SELECT
-                    cik AS company_key,
-                    cik,
-                    entity_name,
-                    entity_type,
-                    sic,
-                    sic_description,
-                    state_of_incorporation,
-                    fiscal_year_end,
-                    last_sync_run_id
-                FROM sec_company
-                ORDER BY cik
-                """
-            )
+    table = _arrow(
+        conn.execute(
+            """
+            SELECT
+                cik AS company_key,
+                cik,
+                entity_name,
+                entity_type,
+                sic,
+                sic_description,
+                state_of_incorporation,
+                fiscal_year_end,
+                last_sync_run_id
+            FROM sec_company
+            ORDER BY cik
+            """
         )
-    except Exception:
-        return _empty(_DIM_COMPANY_SCHEMA)
+    )
     return _empty(_DIM_COMPANY_SCHEMA) if table.num_rows == 0 else table.cast(_DIM_COMPANY_SCHEMA)
 
 
 def _build_dim_form(conn: Any) -> pa.Table:
-    try:
-        base = _arrow(conn.execute("SELECT DISTINCT form FROM sec_company_filing WHERE form IS NOT NULL ORDER BY form"))
-    except Exception:
-        return _empty(_DIM_FORM_SCHEMA)
+    base = _arrow(conn.execute("SELECT DISTINCT form FROM sec_company_filing WHERE form IS NOT NULL ORDER BY form"))
     forms = base.column("form").to_pylist() if base.num_rows else []
     return pa.table(
         {
@@ -400,10 +391,7 @@ def _build_dim_form(conn: Any) -> pa.Table:
 
 
 def _build_dim_date(conn: Any) -> pa.Table:
-    try:
-        row = conn.execute("SELECT MIN(filing_date), MAX(filing_date) FROM sec_company_filing").fetchone()
-    except Exception:
-        row = None
+    row = conn.execute("SELECT MIN(filing_date), MAX(filing_date) FROM sec_company_filing").fetchone()
     if row is None or row[0] is None:
         return _empty(_DIM_DATE_SCHEMA)
     start = row[0] if isinstance(row[0], date) else date.fromisoformat(str(row[0]))
@@ -429,18 +417,15 @@ def _build_dim_date(conn: Any) -> pa.Table:
 
 
 def _build_dim_filing(conn: Any) -> pa.Table:
-    try:
-        table = _arrow(
-            conn.execute(
-                """
-                SELECT accession_number, cik, form, filing_date, report_date, is_xbrl, size
-                FROM sec_company_filing
-                ORDER BY filing_date, accession_number
-                """
-            )
+    table = _arrow(
+        conn.execute(
+            """
+            SELECT accession_number, cik, form, filing_date, report_date, is_xbrl, size
+            FROM sec_company_filing
+            ORDER BY filing_date, accession_number
+            """
         )
-    except Exception:
-        return _empty(_DIM_FILING_SCHEMA)
+    )
     if table.num_rows == 0:
         return _empty(_DIM_FILING_SCHEMA)
     accessions = table.column("accession_number").to_pylist()
@@ -467,18 +452,15 @@ def _build_dim_filing(conn: Any) -> pa.Table:
 
 
 def _build_fact_filing_activity(conn: Any) -> pa.Table:
-    try:
-        table = _arrow(
-            conn.execute(
-                """
-                SELECT accession_number, cik, form, filing_date, report_date, is_xbrl
-                FROM sec_company_filing
-                ORDER BY filing_date, accession_number
-                """
-            )
+    table = _arrow(
+        conn.execute(
+            """
+            SELECT accession_number, cik, form, filing_date, report_date, is_xbrl
+            FROM sec_company_filing
+            ORDER BY filing_date, accession_number
+            """
         )
-    except Exception:
-        return _empty(_FACT_FILING_ACTIVITY_SCHEMA)
+    )
     if table.num_rows == 0:
         return _empty(_FACT_FILING_ACTIVITY_SCHEMA)
     accessions = table.column("accession_number").to_pylist()

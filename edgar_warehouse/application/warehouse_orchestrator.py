@@ -602,6 +602,8 @@ def _capture_bronze_raw(
                 fetch_date=now.date(),
                 force=bool(arguments.get("force")),
                 load_mode="daily_incremental",
+                artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
+                parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
             )
             raw_writes.extend(result["raw_writes"])
             metrics["rows_inserted"] += result["rows_written"]
@@ -641,6 +643,8 @@ def _capture_bronze_raw(
             force=bool(arguments.get("force")),
             load_mode="bootstrap_recent_10",
             recent_limit=arguments.get("recent_limit"),
+            artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
+            parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
         )
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
@@ -663,6 +667,8 @@ def _capture_bronze_raw(
             fetch_date=now.date(),
             force=bool(arguments.get("force")),
             load_mode="bootstrap_full",
+            artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
+            parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
         )
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
@@ -687,6 +693,8 @@ def _capture_bronze_raw(
             fetch_date=now.date(),
             force=bool(arguments.get("force")),
             load_mode="bootstrap_full",
+            artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
+            parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
         )
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
@@ -901,6 +909,8 @@ def _capture_bronze_raw(
             fetch_date=now.date(),
             force=bool(arguments.get("force", False)),
             load_mode="bootstrap_batch",
+            artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
+            parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
         )
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
@@ -961,6 +971,8 @@ def _run_submissions_bronze_then_silver(
     force: bool,
     load_mode: str,
     recent_limit: int | None = None,
+    artifact_policy: str = "none",
+    parser_policy: str = "none",
 ) -> dict[str, Any]:
     """Capture every selected SEC submission into bronze before applying silver."""
     bronze_snapshots = []
@@ -1048,6 +1060,19 @@ def _run_submissions_bronze_then_silver(
         run_id=sync_run_id,
     )
 
+    artifact_result = _run_configured_form_artifact_pipeline(
+        context=context,
+        db=db,
+        sync_run_id=sync_run_id,
+        accession_numbers=_dedupe_strings([*recent_accessions, *pagination_accessions]),
+        artifact_policy=artifact_policy,
+        parser_policy=parser_policy,
+        force=force,
+    )
+    raw_writes.extend(artifact_result["raw_writes"])
+    rows_written += int(artifact_result["rows_written"])
+    rows_skipped += int(artifact_result["rows_skipped"])
+
     return {
         "raw_writes": raw_writes,
         "rows_written": rows_written,
@@ -1055,6 +1080,102 @@ def _run_submissions_bronze_then_silver(
         "recent_accessions": _dedupe_strings(recent_accessions),
         "pagination_accessions": _dedupe_strings(pagination_accessions),
     }
+
+
+def _run_configured_form_artifact_pipeline(
+    *,
+    context: WarehouseCommandContext,
+    db: SilverDatabase,
+    sync_run_id: str,
+    accession_numbers: list[str],
+    artifact_policy: str,
+    parser_policy: str,
+    force: bool,
+) -> dict[str, Any]:
+    fetch_artifacts = _artifact_policy_fetches(artifact_policy)
+    run_parsers = _parser_policy_runs(parser_policy)
+    if not fetch_artifacts and not run_parsers:
+        return {"raw_writes": [], "rows_written": 0, "rows_skipped": 0}
+
+    selected_accessions = _configured_parser_accessions(db, accession_numbers)
+    if not selected_accessions:
+        return {"raw_writes": [], "rows_written": 0, "rows_skipped": 0}
+
+    _emit_pipeline_event(
+        "filing_artifact_pipeline_started",
+        accession_count=len(selected_accessions),
+        artifact_policy=artifact_policy,
+        parser_policy=parser_policy,
+        run_id=sync_run_id,
+    )
+    raw_writes: list[dict[str, Any]] = []
+    rows_written = 0
+    for accession_number in selected_accessions:
+        if fetch_artifacts:
+            from edgar_warehouse.infrastructure.filing_artifact_service import refresh_filing_artifacts
+
+            artifact_result = refresh_filing_artifacts(
+                context=context,
+                db=db,
+                accession_number=accession_number,
+                sync_run_id=sync_run_id,
+                download_bytes=_download_sec_bytes,
+                force=force,
+            )
+            raw_writes.extend(artifact_result["raw_writes"])
+            rows_written += int(artifact_result["attachment_count"])
+        if run_parsers:
+            rows_written += _run_parse_pipeline(
+                db=db,
+                accession_number=accession_number,
+                sync_run_id=sync_run_id,
+            )
+    _emit_pipeline_event(
+        "filing_artifact_pipeline_completed",
+        accession_count=len(selected_accessions),
+        raw_object_count=len(raw_writes),
+        rows_written=rows_written,
+        run_id=sync_run_id,
+    )
+    return {"raw_writes": raw_writes, "rows_written": rows_written, "rows_skipped": 0}
+
+
+def _configured_parser_accessions(db: SilverDatabase, accession_numbers: list[str]) -> list[str]:
+    selected: list[str] = []
+    for accession_number in _dedupe_strings(accession_numbers):
+        filing = db.get_filing(accession_number)
+        if filing is None:
+            continue
+        if _is_configured_parser_form(filing.get("form")):
+            selected.append(accession_number)
+    return selected
+
+
+def _is_configured_parser_form(form_type: Any) -> bool:
+    normalized = str(form_type or "").strip().upper()
+    return normalized in OWNERSHIP_FORMS or normalized in ADV_FORMS
+
+
+def _artifact_policy_fetches(policy: str) -> bool:
+    normalized = _normalize_policy(policy)
+    if normalized in {"none", "skip", "disabled", "off"}:
+        return False
+    if normalized in {"all_attachments", "configured_forms"}:
+        return True
+    raise WarehouseRuntimeError(f"Unsupported artifact_policy: {policy}")
+
+
+def _parser_policy_runs(policy: str) -> bool:
+    normalized = _normalize_policy(policy)
+    if normalized in {"none", "skip", "disabled", "off"}:
+        return False
+    if normalized == "configured_forms":
+        return True
+    raise WarehouseRuntimeError(f"Unsupported parser_policy: {policy}")
+
+
+def _normalize_policy(policy: str) -> str:
+    return str(policy or "").strip().lower().replace("-", "_")
 
 
 def _capture_submission_bronze_snapshot(
@@ -1196,16 +1317,17 @@ def _apply_submission_snapshot_to_silver(
         rows_written += int(result["rows_written"])
 
     all_filing_rows = list(result["recent_rows"])
+    pagination_rows_for_accessions: list[dict[str, Any]] = []
     for _file_name, pagination_payload in pagination_payloads:
-        all_filing_rows.extend(
-            stage_pagination_filing_loader(
-                pagination_payload,
-                cik,
-                sync_run_id,
-                main_write_record["sha256"],
-                load_mode,
-            )
+        pagination_rows = stage_pagination_filing_loader(
+            pagination_payload,
+            cik,
+            sync_run_id,
+            main_write_record["sha256"],
+            load_mode,
         )
+        pagination_rows_for_accessions.extend(pagination_rows)
+        all_filing_rows.extend(pagination_rows)
 
     latest_filing_date = _latest_filing_date(all_filing_rows)
     latest_acceptance_datetime = _latest_acceptance_datetime(all_filing_rows)
@@ -1251,7 +1373,13 @@ def _apply_submission_snapshot_to_silver(
         "rows_written": rows_written,
         "rows_skipped": rows_skipped,
         "recent_accessions": _dedupe_strings(result["recent_accessions"]),
-        "pagination_accessions": _dedupe_strings(result["pagination_accessions"]),
+        "pagination_accessions": _dedupe_strings(
+            [
+                row["accession_number"]
+                for row in pagination_rows_for_accessions
+                if row.get("accession_number")
+            ]
+        ),
     }
 
 
