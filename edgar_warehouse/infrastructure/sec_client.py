@@ -83,7 +83,7 @@ def download_sec_bytes(url: str, identity: str) -> bytes:
                     status_code=status_code,
                     duration_ms=_elapsed_ms(started_at),
                 )
-                time.sleep(attempt)
+                time.sleep(attempt * 10)
                 continue
             _emit_sec_pull_event(
                 "sec_pull_failed",

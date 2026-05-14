@@ -1108,36 +1108,49 @@ def _run_configured_form_artifact_pipeline(
         parser_policy=parser_policy,
         run_id=sync_run_id,
     )
+    import time as _time
     raw_writes: list[dict[str, Any]] = []
     rows_written = 0
+    errors = 0
     for accession_number in selected_accessions:
-        if fetch_artifacts:
-            from edgar_warehouse.infrastructure.filing_artifact_service import refresh_filing_artifacts
+        try:
+            if fetch_artifacts:
+                from edgar_warehouse.infrastructure.filing_artifact_service import refresh_filing_artifacts
 
-            artifact_result = refresh_filing_artifacts(
-                context=context,
-                db=db,
+                artifact_result = refresh_filing_artifacts(
+                    context=context,
+                    db=db,
+                    accession_number=accession_number,
+                    sync_run_id=sync_run_id,
+                    download_bytes=_download_sec_bytes,
+                    force=force,
+                )
+                raw_writes.extend(artifact_result["raw_writes"])
+                rows_written += int(artifact_result["attachment_count"])
+                _time.sleep(0.1)
+            if run_parsers:
+                rows_written += _run_parse_pipeline(
+                    db=db,
+                    accession_number=accession_number,
+                    sync_run_id=sync_run_id,
+                )
+        except Exception as exc:
+            errors += 1
+            _emit_pipeline_event(
+                "filing_artifact_failed",
                 accession_number=accession_number,
-                sync_run_id=sync_run_id,
-                download_bytes=_download_sec_bytes,
-                force=force,
-            )
-            raw_writes.extend(artifact_result["raw_writes"])
-            rows_written += int(artifact_result["attachment_count"])
-        if run_parsers:
-            rows_written += _run_parse_pipeline(
-                db=db,
-                accession_number=accession_number,
-                sync_run_id=sync_run_id,
+                error=str(exc),
+                run_id=sync_run_id,
             )
     _emit_pipeline_event(
         "filing_artifact_pipeline_completed",
         accession_count=len(selected_accessions),
         raw_object_count=len(raw_writes),
         rows_written=rows_written,
+        errors=errors,
         run_id=sync_run_id,
     )
-    return {"raw_writes": raw_writes, "rows_written": rows_written, "rows_skipped": 0}
+    return {"raw_writes": raw_writes, "rows_written": rows_written, "rows_skipped": errors}
 
 
 def _configured_parser_accessions(db: SilverDatabase, accession_numbers: list[str]) -> list[str]:
