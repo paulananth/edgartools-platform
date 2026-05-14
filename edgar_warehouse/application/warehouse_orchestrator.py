@@ -1112,10 +1112,20 @@ def _run_configured_form_artifact_pipeline(
         run_id=sync_run_id,
     )
     import time as _time
+    _CONSECUTIVE_ERROR_LIMIT = int(os.environ.get("WAREHOUSE_ARTIFACT_CIRCUIT_BREAKER", "20"))
     raw_writes: list[dict[str, Any]] = []
     rows_written = 0
     errors = 0
+    consecutive_errors = 0
     for accession_number in selected_accessions:
+        if consecutive_errors >= _CONSECUTIVE_ERROR_LIMIT:
+            _emit_pipeline_event(
+                "filing_artifact_circuit_open",
+                consecutive_errors=consecutive_errors,
+                remaining_accessions=len(selected_accessions) - errors - rows_written,
+                run_id=sync_run_id,
+            )
+            break
         try:
             if fetch_artifacts:
                 from edgar_warehouse.infrastructure.filing_artifact_service import refresh_filing_artifacts
@@ -1137,8 +1147,10 @@ def _run_configured_form_artifact_pipeline(
                     accession_number=accession_number,
                     sync_run_id=sync_run_id,
                 )
+            consecutive_errors = 0
         except Exception as exc:
             errors += 1
+            consecutive_errors += 1
             _emit_pipeline_event(
                 "filing_artifact_failed",
                 accession_number=accession_number,
