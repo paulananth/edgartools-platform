@@ -1140,7 +1140,7 @@ def _run_configured_form_artifact_pipeline(
                 )
                 raw_writes.extend(artifact_result["raw_writes"])
                 rows_written += int(artifact_result["attachment_count"])
-                _time.sleep(0.1)
+                _time.sleep(float(os.environ.get("WAREHOUSE_ARTIFACT_REQUEST_DELAY", "1.0")))
             if run_parsers:
                 rows_written += _run_parse_pipeline(
                     db=db,
