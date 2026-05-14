@@ -1696,6 +1696,13 @@ class SilverDatabase:
         cols = [d[0] for d in self._conn.description]
         return dict(zip(cols, result))
 
+    def get_active_ciks(self) -> list[dict[str, Any]]:
+        """Return CIKs already marked active in silver — used by seed-universe to skip re-bootstrapping."""
+        rows = self._conn.execute(
+            "SELECT cik FROM sec_company_sync_state WHERE tracking_status = 'active'"
+        ).fetchall()
+        return [{"cik": row[0]} for row in rows]
+
     # ------------------------------------------------------------------
     # sec_reconcile_finding
     # ------------------------------------------------------------------

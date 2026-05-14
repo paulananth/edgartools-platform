@@ -873,12 +873,16 @@ def _capture_bronze_raw(
         if len(limited_ciks) < len(universe_rows):
             allowed = set(limited_ciks)
             universe_rows = [row for row in universe_rows if int(row["cik"]) in allowed]
-        # Exclude companies already fully bootstrapped (active in MDM) — they will be
-        # picked up by daily-incremental when new filings appear; re-bootstrapping
-        # them wastes batch capacity and duplicates bronze writes.
-        # Non-fatal: if MDM is unreachable _get_mdm_tracked_ciks returns [] and we
-        # include everything (safe cold-start behaviour).
+        # Exclude companies already fully bootstrapped. Check both silver DuckDB
+        # (sec_company_sync_state.tracking_status = 'active') and MDM Postgres,
+        # since MDM may have been reset while silver still holds accurate status.
+        # Non-fatal: MDM unreachability returns [] and silver is always available.
         active_ciks = set(_get_mdm_tracked_ciks("active"))
+        silver_active_ciks = set(
+            row["cik"]
+            for row in db.get_active_ciks()
+        )
+        active_ciks = active_ciks | silver_active_ciks
         if active_ciks:
             before = len(universe_rows)
             universe_rows = [row for row in universe_rows if int(row["cik"]) not in active_ciks]
@@ -887,6 +891,8 @@ def _capture_bronze_raw(
                 total_ciks=before,
                 new_ciks=len(universe_rows),
                 skipped_active=before - len(universe_rows),
+                skipped_mdm_active=len(silver_active_ciks & {int(r["cik"]) for r in universe_rows[:before]}),
+                skipped_silver_active=len(silver_active_ciks),
             )
         metrics["_ticker_reference_rows"] = ticker_reference_rows
         cik_universe_path = _write_cik_universe_batches(
