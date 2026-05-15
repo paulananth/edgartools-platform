@@ -520,38 +520,44 @@ if aws_cli sns get-topic-attributes \
     --topic-arn "$SNOWFLAKE_MANIFEST_SNS_ARN" \
     --query 'Attributes.TopicArn' --output text 2>/dev/null | grep -q "arn:"; then
 
-  # Ensure the SNS topic policy allows S3 to publish
+  # Ensure the SNS topic policy allows S3 to publish.
+  # Use heredoc + sys.argv to avoid nested-double-quote quoting issues.
+  SNS_POLICY=$(python3 - "$SNOWFLAKE_MANIFEST_SNS_ARN" "$SNOWFLAKE_EXPORT_BUCKET_NAME" <<'PY'
+import json, sys
+sns_arn, bucket_name = sys.argv[1], sys.argv[2]
+print(json.dumps({
+    "Version": "2012-10-17",
+    "Statement": [{
+        "Sid": "AllowS3BucketNotification",
+        "Effect": "Allow",
+        "Principal": {"Service": "s3.amazonaws.com"},
+        "Action": "SNS:Publish",
+        "Resource": sns_arn,
+        "Condition": {"ArnLike": {"aws:SourceArn": f"arn:aws:s3:::{bucket_name}"}}
+    }]
+}))
+PY
+)
   aws_cli sns set-topic-attributes \
     --topic-arn "$SNOWFLAKE_MANIFEST_SNS_ARN" \
     --attribute-name Policy \
-    --attribute-value "$(python3 -c "
-import json
-print(json.dumps({
-  'Version': '2012-10-17',
-  'Statement': [{
-    'Sid': 'AllowS3BucketNotification',
-    'Effect': 'Allow',
-    'Principal': {'Service': 's3.amazonaws.com'},
-    'Action': 'SNS:Publish',
-    'Resource': '${SNOWFLAKE_MANIFEST_SNS_ARN}',
-    'Condition': {'ArnLike': {'aws:SourceArn': 'arn:aws:s3:::${SNOWFLAKE_EXPORT_BUCKET_NAME}'}}
-  }]
-}))
-")" 2>/dev/null || true
+    --attribute-value "$SNS_POLICY" 2>/dev/null || true
 
   # Set the bucket notification (idempotent — PUT replaces in full)
-  NOTIFICATION_JSON="$(python3 -c "
-import json
-print(json.dumps({'TopicConfigurations': [{
-  'Id': 'snowflake-manifest-events',
-  'TopicArn': '${SNOWFLAKE_MANIFEST_SNS_ARN}',
-  'Events': ['s3:ObjectCreated:*'],
-  'Filter': {'Key': {'FilterRules': [
-    {'Name': 'prefix', 'Value': '${MANIFEST_PREFIX}'},
-    {'Name': 'suffix', 'Value': 'run_manifest.json'}
-  ]}}
+  NOTIFICATION_JSON=$(python3 - "$SNOWFLAKE_MANIFEST_SNS_ARN" "$MANIFEST_PREFIX" <<'PY'
+import json, sys
+sns_arn, prefix = sys.argv[1], sys.argv[2]
+print(json.dumps({"TopicConfigurations": [{
+    "Id": "snowflake-manifest-events",
+    "TopicArn": sns_arn,
+    "Events": ["s3:ObjectCreated:*"],
+    "Filter": {"Key": {"FilterRules": [
+        {"Name": "prefix", "Value": prefix},
+        {"Name": "suffix", "Value": "run_manifest.json"}
+    ]}}
 }]}))
-")"
+PY
+)
   aws_cli s3api put-bucket-notification-configuration \
     --bucket "$SNOWFLAKE_EXPORT_BUCKET_NAME" \
     --notification-configuration "$NOTIFICATION_JSON" 2>/dev/null \
