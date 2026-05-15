@@ -236,11 +236,19 @@ build_arg_args() {
 
 cleanup_local_images() {
     # Prune dangling layers and stale SHA tags for this repo before building.
-    # Keeps :dev (cache source) and the most recent :sha-* tag; deletes the rest.
+    # Also removes the deps base image so it is always freshly pulled — this
+    # prevents Colima overlay-cache corruption on the FROM layer (the most
+    # common "failed to restore cached image" failure with the legacy builder).
     local repo="${REGISTRY}/${ECR_REPOSITORY}"
     log "Cleaning local images for ${ECR_REPOSITORY}"
     docker image prune -f >/dev/null 2>&1 || true
-    docker builder prune -f >/dev/null 2>&1 || true
+    docker builder prune -af >/dev/null 2>&1 || true
+
+    # Remove the deps base image so it gets freshly pulled (prevents stale layer corruption)
+    if [[ -n "${DEPENDENCY_IMAGE}" ]]; then
+        log "Removing cached deps image ${DEPENDENCY_IMAGE##*/} (will re-pull fresh)"
+        docker rmi "${DEPENDENCY_IMAGE}" >/dev/null 2>&1 || true
+    fi
 
     # Remove old sha-* tags for this repo (keep only the newest one)
     local sha_tags old_tags
