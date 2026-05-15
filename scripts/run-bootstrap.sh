@@ -25,7 +25,6 @@ set -euo pipefail
 
 REGION="us-east-1"
 NAME_PREFIX="edgartools-dev"
-STATE_MACHINE_ARN="arn:aws:states:${REGION}:077127448006:stateMachine:${NAME_PREFIX}-bootstrap-phased"
 
 EDGAR_IDENTITY_SECRET="${NAME_PREFIX}-edgar-identity"
 POSTGRES_DSN_SECRET="${NAME_PREFIX}/mdm/postgres_dsn"
@@ -60,6 +59,10 @@ aws_cli() {
     aws --region "$REGION" "$@"
   fi
 }
+
+# Resolve account ID — must come after aws_cli is defined so --profile is applied
+ACCOUNT=$(aws_cli sts get-caller-identity --query 'Account' --output text 2>/dev/null || true)
+STATE_MACHINE_ARN="arn:aws:states:${REGION}:${ACCOUNT}:stateMachine:${NAME_PREFIX}-bootstrap-phased"
 
 # ---------------------------------------------------------------------------
 # PREFLIGHT: resolve all credentials before touching the pipeline
@@ -172,7 +175,7 @@ echo ""
 # ---------------------------------------------------------------------------
 # Fire the Step Function
 # ---------------------------------------------------------------------------
-RUN_NAME="${NAME_PREFIX}-bootstrap-$(date +%s)"
+RUN_NAME="${NAME_PREFIX}-bootstrap-$(date -u +%Y%m%d-%H%M%S)"
 echo "Starting bootstrap-phased: $RUN_NAME"
 
 EXEC_ARN=$(aws_cli stepfunctions start-execution \

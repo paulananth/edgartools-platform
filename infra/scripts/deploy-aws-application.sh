@@ -1457,10 +1457,10 @@ mdm_limit   = str(mdm_run_limit)
 graph_limit = str(mdm_graph_limit)
 
 # seed-silver-batches reads CIKs from silver DuckDB (no SEC API calls) and writes the same
-# cik_batches.jsonl format that bootstrap-batch expects. Default filter "all" includes every
-# company with a bronze checkpoint regardless of tracking_status.
+# cik_batches.jsonl format that bootstrap-batch expects. tracking_status_filter is passed
+# from the SM execution input (default "all" when not provided in trigger input).
 seed = ecs_state(wh_medium_arn,
-    "States.Array('seed-silver-batches', '--run-id', $$.Execution.Name)",
+    "States.Array('seed-silver-batches', '--run-id', $$.Execution.Name, '--tracking-status-filter', $.tracking_status_filter)",
     next_state="BatchSilver", retry_secs=60)
 
 # INVARIANT: silver_mdm_gold must make ZERO SEC API calls.
@@ -1495,9 +1495,13 @@ batch_map = {
     "Next": "MdmRun",
 }
 
-mdm_run      = ecs_state(mdm_medium_arn, f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')", next_state="MdmBackfill")
-mdm_backfill = ecs_state(mdm_medium_arn, f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')", next_state="MdmSync")
-mdm_sync     = ecs_state(mdm_medium_arn, f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')", next_state="MdmVerify")
+# INVARIANT: No --limit on MDM commands here. silver_mdm_gold is always a full bulk
+# re-run (all companies in silver), not an incremental daily update. A hard limit would
+# silently leave the majority of companies unprocessed in MDM and Neo4j.
+# MDM_RUN_LIMIT (incremental default 100) is intentionally NOT used here.
+mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="MdmBackfill")
+mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmSync")
+mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="MdmVerify")
 mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh")
 gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
 
@@ -1657,6 +1661,72 @@ PY
   mdm_gold_arn="$(upsert_state_machine mdm_gold "$mdm_gold_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
   python3 - "mdm_gold" "$mdm_gold_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+import json, sys
+print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
+PY
+
+  # ownership_mdm_gold: parse Form 3/4/5 XMLs already in S3 bronze → persons + IS_INSIDER in MDM → Neo4j → gold.
+  # No SEC calls. Uses edgartools to parse XMLs directly from bronze.
+  ownership_mdm_gold_file="$(json_file sfn-ownership-mdm-gold)"
+  python3 - "$ownership_mdm_gold_file" "$CLUSTER_ARN" \
+    "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
+    "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" <<'PY'
+import json, pathlib, sys
+
+(output_file, cluster_arn,
+ wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
+ container_name, subnet_json, security_group_json) = sys.argv[1:]
+
+subnets = json.loads(subnet_json)
+security_groups = json.loads(security_group_json)
+
+def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=120):
+    s = {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::ecs:runTask.sync",
+        "Parameters": {
+            "LaunchType": "FARGATE",
+            "Cluster": cluster_arn,
+            "TaskDefinition": task_def_arn,
+            "PropagateTags": "TASK_DEFINITION",
+            "NetworkConfiguration": {"AwsvpcConfiguration": {
+                "AssignPublicIp": "ENABLED",
+                "SecurityGroups": security_groups,
+                "Subnets": subnets,
+            }},
+            "Overrides": {"ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}]},
+        },
+        "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": retry_secs,
+                   "BackoffRate": 2.0, "MaxAttempts": 2}],
+    }
+    if is_end:
+        s["End"] = True
+    else:
+        s["Next"] = next_state
+    return s
+
+definition = {
+    "Comment": (
+        "Parse Form 3/4/5 ownership XMLs already in S3 bronze (no SEC calls), "
+        "then run MDM to derive persons + IS_INSIDER relationships, sync to Neo4j, refresh gold."
+    ),
+    "StartAt": "ParseOwnershipBronze",
+    "States": {
+        "ParseOwnershipBronze": ecs_state(wh_medium_arn,
+            "States.Array('parse-ownership-bronze', '--run-id', $$.Execution.Name)",
+            next_state="MdmRun", retry_secs=60),
+        "MdmRun":      ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="MdmBackfill"),
+        "MdmBackfill": ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmSync"),
+        "MdmSync":     ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="MdmVerify"),
+        "MdmVerify":   ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh"),
+        "GoldRefresh": ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60),
+    },
+}
+pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
+PY
+  ownership_mdm_gold_arn="$(upsert_state_machine ownership_mdm_gold "$ownership_mdm_gold_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
+  python3 - "ownership_mdm_gold" "$ownership_mdm_gold_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
 import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY

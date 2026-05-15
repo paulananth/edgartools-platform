@@ -117,6 +117,10 @@ def _handle_seed_silver_batches(args: argparse.Namespace) -> int:
     return run_command("seed-silver-batches", args)
 
 
+def _handle_parse_ownership_bronze(args: argparse.Namespace) -> int:
+    return run_command("parse-ownership-bronze", args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="edgar-warehouse",
@@ -327,6 +331,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(seed_silver_batches)
     seed_silver_batches.set_defaults(handler=_handle_seed_silver_batches)
+
+    parse_ownership_bronze = subparsers.add_parser(
+        "parse-ownership-bronze",
+        help=(
+            "Parse Form 3/4/5 ownership XMLs already in S3 bronze into silver. "
+            "Uses edgartools (Ownership.from_xml). No SEC API calls. "
+            "Idempotent — skips accessions already in sec_ownership_reporting_owner."
+        ),
+    )
+    _add_run_id_arg(parse_ownership_bronze)
+    parse_ownership_bronze.set_defaults(handler=_handle_parse_ownership_bronze)
 
     bootstrap_batch = subparsers.add_parser(
         "bootstrap-batch",

@@ -50,7 +50,7 @@ case "$PIPELINE" in
     ;;
   silver)
     SM="${BASE}:${NAME_PREFIX}-silver-mdm-gold"
-    INPUT='{}'
+    INPUT='{"tracking_status_filter": "all"}'
     LABEL="silver_mdm_gold (all)"
     ;;
   silver-active)
@@ -78,6 +78,11 @@ case "$PIPELINE" in
     INPUT='{}'
     LABEL="mdm_gold (MDM chain → Neo4j sync → gold-refresh, no silver batch)"
     ;;
+  ownership)
+    SM="${BASE}:${NAME_PREFIX}-ownership-mdm-gold"
+    INPUT='{}'
+    LABEL="ownership_mdm_gold (parse bronze XMLs → MDM persons → Neo4j → gold)"
+    ;;
   mdm-verify)
     SM="${BASE}:${NAME_PREFIX}-mdm-verify-graph"
     INPUT='{}'
@@ -95,7 +100,7 @@ case "$PIPELINE" in
     ;;
 esac
 
-RUN_NAME="${PIPELINE//-/_}-$(date +%s)"
+RUN_NAME="${PIPELINE//-/_}-$(date -u +%Y%m%d-%H%M%S)"
 echo "Triggering: ${LABEL}"
 echo "  SM : ${SM##*:stateMachine:}"
 echo "  Run: ${RUN_NAME}"

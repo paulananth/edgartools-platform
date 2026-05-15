@@ -47,6 +47,7 @@ sm_suffix_for() {
     silver)     echo "silver-mdm-gold" ;;
     gold)       echo "gold-refresh" ;;
     mdm-gold)   echo "mdm-gold" ;;
+    ownership)  echo "ownership-mdm-gold" ;;
     *)          echo "$1" ;;
   esac
 }
@@ -197,10 +198,11 @@ if [[ -z "$LOG_STREAM" ]]; then
 else
   echo "  Stream: ${LOG_STREAM}"
   echo ""
-  aws_ logs filter-log-events \
+  raw_log=$(aws_ logs filter-log-events \
     --log-group-name "$LOG_GROUP" \
     --log-stream-names "$LOG_STREAM" \
-    --output json 2>/dev/null | python3 -c "
+    --output json 2>/dev/null || echo '{"events":[]}')
+  echo "$raw_log" | python3 -c "
 import json, sys
 evts = json.load(sys.stdin).get('events',[])
 print(f'  Total log events: {len(evts)}')

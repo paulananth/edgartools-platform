@@ -34,9 +34,10 @@ BASE="arn:aws:states:${AWS_REGION}:${ACCOUNT}:stateMachine"
 # Format: "short-name|display-label|sm-suffix|stages..."
 declare -a MACHINES=(
   "bootstrap|BOOTSTRAP-PHASED|bootstrap-phased|SeedUniverse BatchBootstrap MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
-  "silver|SILVER-MDM-GOLD|silver-mdm-gold|SeedSilverBatches SilverBatch MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
+  "silver|SILVER-MDM-GOLD|silver-mdm-gold|SeedSilverBatches BatchSilver MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
   "gold|GOLD-REFRESH|gold-refresh|GoldRefresh"
   "mdm-gold|MDM-GOLD|mdm-gold|MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
+  "ownership|OWNERSHIP-MDM-GOLD|ownership-mdm-gold|ParseOwnershipBronze MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
 )
 
 show_machine() {
@@ -48,11 +49,11 @@ show_machine() {
   printf "  %-36s· %s · %s\n" "${label}" "${ENVIRONMENT}" "${AWS_REGION}"
   hr
 
-  # Recent executions
+  # Recent executions — fetch 5 so we can filter; display only what matters
   local execs_json
   execs_json=$(aws_ stepfunctions list-executions \
     --state-machine-arn "$sm_arn" \
-    --max-results 3 \
+    --max-results 5 \
     --output json 2>/dev/null || echo '{"executions":[]}')
 
   echo ""
@@ -65,21 +66,31 @@ execs = json.load(sys.stdin).get('executions', [])
 if not execs:
     print('  (none)')
     sys.exit()
+
+def fmt(ts):
+    if not ts: return '…'
+    try:
+        dt = datetime.fromisoformat(ts.replace('Z','+00:00'))
+        ago = (datetime.now(timezone.utc) - dt).total_seconds()
+        if ago < 3600: return f'{ago/60:.0f}m ago'
+        return f'{ago/3600:.1f}h ago'
+    except: return ts[-14:-5]
+
+# When there is a RUNNING execution, suppress old FAILED/ABORTED noise.
+# Step Functions Standard workflows can't be deleted — only show what matters.
+has_running = any(e['status'] == 'RUNNING' for e in execs)
+shown = 0
 for e in execs:
-    name   = e['name'][-32:]
+    if has_running and e['status'] in ('FAILED','ABORTED','TIMED_OUT') and shown > 0:
+        continue  # hide old failures when something is actively running
+    if shown >= 2:
+        break
+    name   = e['name']
     status = e['status']
     start  = e.get('startDate','')
-    stop   = e.get('stopDate','')
-    def fmt(ts):
-        if not ts: return '…'
-        try:
-            dt = datetime.fromisoformat(ts.replace('Z','+00:00'))
-            ago = (datetime.now(timezone.utc) - dt).total_seconds()
-            if ago < 3600: return f'{ago/60:.0f}m ago'
-            return f'{ago/3600:.1f}h ago'
-        except: return ts[-14:-5]
     icon = {'RUNNING':'▶','SUCCEEDED':'✓','FAILED':'✗','ABORTED':'⊘','TIMED_OUT':'⏱'}.get(status,'?')
-    print(f'  {icon} {status:10s}  {name:32s}  started {fmt(start)}')
+    print(f'  {icon} {status:10s}  {name}  started {fmt(start)}')
+    shown += 1
 "
 
   # Latest execution detail
@@ -142,7 +153,7 @@ import json,sys
 d=json.load(sys.stdin)
 ic=d.get('itemCounts',{})
 total=ic.get('total',0); running=ic.get('running',0)
-pending=ic.get('pending',0); done=ic.get('resultsWritten',0); failed=ic.get('failed',0)
+pending=ic.get('pending',0); done=ic.get('succeeded',0); failed=ic.get('failed',0)
 pct=100*done/total if total else 0
 bar='█'*int(pct/4)+'░'*(25-int(pct/4))
 print(f'  [{bar}] {pct:.0f}%  done={done}/{total}  running={running}  pending={pending}  failed={failed}')
