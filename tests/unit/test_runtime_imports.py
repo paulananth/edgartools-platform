@@ -72,3 +72,41 @@ class RuntimeImportTests(unittest.TestCase):
             set(commands.COMMAND_REGISTRY),
             warehouse_cli_commands,
         )
+
+    def test_all_commands_have_planned_manifest_paths(self) -> None:
+        """Every CLI command must have a case in planned_manifest_paths.
+
+        5-why root cause: gold-refresh and seed-silver-batches were missing,
+        causing exit=2 after successfully completing all work because
+        _execute_warehouse_bronze_capture calls _planned_writes unconditionally.
+        """
+        cli = importlib.import_module("edgar_warehouse.cli")
+        catalog = importlib.import_module("edgar_warehouse.infrastructure.dataset_path_catalog")
+        errors_module = importlib.import_module("edgar_warehouse.application.errors")
+
+        parser = cli.build_parser()
+        subparsers_action = next(
+            action for action in parser._actions if action.__class__.__name__ == "_SubParsersAction"
+        )
+        all_commands = set(subparsers_action.choices) - {"mdm"}
+
+        resolver = catalog.default_path_resolver()
+        missing = []
+        for command in sorted(all_commands):
+            try:
+                resolver.planned_manifest_paths(
+                    command_name=command,
+                    command_path=command,
+                    run_id="test-run",
+                    scope={},
+                )
+            except errors_module.WarehouseRuntimeError:
+                missing.append(command)
+            except Exception:
+                pass  # other errors are fine — only WarehouseRuntimeError("Unsupported") matters
+
+        self.assertEqual(
+            missing,
+            [],
+            f"Commands missing from planned_manifest_paths (will exit=2 after completing work): {missing}",
+        )
