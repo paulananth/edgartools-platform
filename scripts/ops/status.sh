@@ -201,14 +201,26 @@ from datetime import datetime,timezone
 tasks=json.load(sys.stdin)['tasks']
 for t in tasks:
     td=t.get('taskDefinitionArn','').split('/')[-1]
-    cmd=' '.join((t.get('overrides',{}).get('containerOverrides') or [{}])[0].get('command',[]))
+    overrides = (t.get('overrides',{}).get('containerOverrides') or [{}])[0]
+    cmd_parts = overrides.get('command',[])
+    # Derive a human label: first token + key flags (--artifact-policy, --tracking-status-filter)
+    label = cmd_parts[0] if cmd_parts else '?'
+    for i, part in enumerate(cmd_parts):
+        if part == '--artifact-policy' and i+1 < len(cmd_parts):
+            label += f' [artifact={cmd_parts[i+1]}]'
+        if part == '--tracking-status-filter' and i+1 < len(cmd_parts):
+            label += f' [{cmd_parts[i+1]}]'
     started=t.get('startedAt','')
     elapsed=''
     if started:
         dt=datetime.fromisoformat(started.replace('Z','+00:00'))
         mins=(datetime.now(timezone.utc)-dt).total_seconds()/60
         elapsed=f'{mins:.0f}m'
-    print(f'  {td:<40}  {elapsed:>5}  {cmd[:50]}')
+    # Identify owning pipeline from started-by tag if present
+    tags = {tag['key']:tag['value'] for tag in t.get('tags',[])}
+    pipeline = tags.get('aws:states:stateMachineArn','').split(':stateMachine:')[-1] or ''
+    pipeline_hint = f'  via {pipeline}' if pipeline else ''
+    print(f'  {td:<38} {elapsed:>5}  {label}{pipeline_hint}')
 "
   fi
   echo ""
