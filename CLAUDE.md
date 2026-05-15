@@ -134,6 +134,11 @@ MDM Postgres (private VPC). Reserve it for single-company ad-hoc loads with expl
 - `gold-refresh` must be in `GOLD_AFFECTING_COMMANDS` — it is the sole gold builder in the phased pipeline
 - `SNOWFLAKE_RUN_MANIFEST_TASK` must be STARTED in `EDGARTOOLS_GOLD` — verify with
   `snow sql --connection edgartools-dev -q "SHOW TASKS LIKE 'SNOWFLAKE_RUN_MANIFEST_TASK'"`
+- `silver_mdm_gold` map MUST pass `--artifact-policy skip` to `bootstrap-batch` — without it
+  the pipeline makes thousands of SEC API calls (fetching ownership XMLs) even though the
+  purpose of this pipeline is to reprocess already-loaded bronze with zero SEC calls.
+  5-why root cause: the artifact pipeline is a separate SEC fetch pass; "no SEC calls" must
+  be encoded as a flag, not assumed from the pipeline name.
 
 Key import pattern (do not change without checking the edgartools changelog):
 

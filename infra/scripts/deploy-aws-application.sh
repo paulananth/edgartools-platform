@@ -1463,9 +1463,14 @@ seed = ecs_state(wh_medium_arn,
     "States.Array('seed-silver-batches', '--run-id', $$.Execution.Name)",
     next_state="BatchSilver", retry_secs=60)
 
-# bootstrap-batch: SHA256 checkpoint hit → silver staging skipped; artifact pipeline runs.
+# INVARIANT: silver_mdm_gold must make ZERO SEC API calls.
+# --artifact-policy skip is REQUIRED here — without it bootstrap-batch fetches
+# ownership XMLs for every Form 3/4/5 filing (sec_pull_started events, thousands
+# per batch). silver_mdm_gold is for reprocessing already-loaded bronze only.
+# If ownership artifacts are needed, run a separate targeted pipeline with
+# --artifact-policy=fetch after silver_mdm_gold completes.
 batch = ecs_state(wh_medium_arn,
-    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--run-id', $$.Execution.Name)",
+    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'skip', '--run-id', $$.Execution.Name)",
     is_end=True)
 
 batch_map = {
