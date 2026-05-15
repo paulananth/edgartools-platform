@@ -444,6 +444,17 @@ class TestBackfillRelationshipInstances:
         result = backfill_relationship_instances(db_session, neo4j=None, limit=100)
         assert result["backfilled"] == 0
 
+    def test_backfill_no_limit_processes_all(self, db_session):
+        """limit=None must process all rows without TypeError (regression: limit was int-only)."""
+        adviser_id = _make_full_entity(db_session, "adviser")
+        for i in range(5):
+            fid = _make_full_entity(db_session, "fund")
+            db_session.add(MdmFund(entity_id=fid, adviser_entity_id=adviser_id, canonical_name=f"F{i}"))
+        db_session.commit()
+
+        result = backfill_relationship_instances(db_session, neo4j=None, limit=None)
+        assert result["backfilled"] == 5
+
 
 # ===========================================================================
 # Layer 5 — CLI commands

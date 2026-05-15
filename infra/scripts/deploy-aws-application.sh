@@ -510,6 +510,63 @@ if [[ "$DEPLOY_MDM" == "true" ]] && ! is_empty "$MDM_POSTGRES_DSN_SECRET_ARN"; t
   sync_mdm_postgres_dsn "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_RDS_INSTANCE_ID"
 fi
 
+# Wire S3 → SNS bucket notification so Snowpipe receives ObjectCreated events for manifests.
+# 5-why root cause: Snowflake had stale data because this notification was never configured,
+# meaning Snowpipe never fired and SNOWFLAKE_RUN_MANIFEST_INBOX stayed empty.
+SNOWFLAKE_MANIFEST_SNS_ARN="arn:aws:sns:${AWS_REGION_NAME}:${ACCOUNT_ID}:${NAME_PREFIX}-snowflake-manifest-events"
+MANIFEST_PREFIX="warehouse/artifacts/snowflake_exports/manifests/"
+
+if aws_cli sns get-topic-attributes \
+    --topic-arn "$SNOWFLAKE_MANIFEST_SNS_ARN" \
+    --query 'Attributes.TopicArn' --output text 2>/dev/null | grep -q "arn:"; then
+
+  # Ensure the SNS topic policy allows S3 to publish.
+  # Use heredoc + sys.argv to avoid nested-double-quote quoting issues.
+  SNS_POLICY=$(python3 - "$SNOWFLAKE_MANIFEST_SNS_ARN" "$SNOWFLAKE_EXPORT_BUCKET_NAME" <<'PY'
+import json, sys
+sns_arn, bucket_name = sys.argv[1], sys.argv[2]
+print(json.dumps({
+    "Version": "2012-10-17",
+    "Statement": [{
+        "Sid": "AllowS3BucketNotification",
+        "Effect": "Allow",
+        "Principal": {"Service": "s3.amazonaws.com"},
+        "Action": "SNS:Publish",
+        "Resource": sns_arn,
+        "Condition": {"ArnLike": {"aws:SourceArn": f"arn:aws:s3:::{bucket_name}"}}
+    }]
+}))
+PY
+)
+  aws_cli sns set-topic-attributes \
+    --topic-arn "$SNOWFLAKE_MANIFEST_SNS_ARN" \
+    --attribute-name Policy \
+    --attribute-value "$SNS_POLICY" 2>/dev/null || true
+
+  # Set the bucket notification (idempotent — PUT replaces in full)
+  NOTIFICATION_JSON=$(python3 - "$SNOWFLAKE_MANIFEST_SNS_ARN" "$MANIFEST_PREFIX" <<'PY'
+import json, sys
+sns_arn, prefix = sys.argv[1], sys.argv[2]
+print(json.dumps({"TopicConfigurations": [{
+    "Id": "snowflake-manifest-events",
+    "TopicArn": sns_arn,
+    "Events": ["s3:ObjectCreated:*"],
+    "Filter": {"Key": {"FilterRules": [
+        {"Name": "prefix", "Value": prefix},
+        {"Name": "suffix", "Value": "run_manifest.json"}
+    ]}}
+}]}))
+PY
+)
+  aws_cli s3api put-bucket-notification-configuration \
+    --bucket "$SNOWFLAKE_EXPORT_BUCKET_NAME" \
+    --notification-configuration "$NOTIFICATION_JSON" 2>/dev/null \
+    && log "S3 → SNS notification configured on ${SNOWFLAKE_EXPORT_BUCKET_NAME} for manifest prefix" \
+    || log "WARN: could not set S3 bucket notification (may need s3:PutBucketNotification permission)"
+else
+  log "WARN: SNS topic ${SNOWFLAKE_MANIFEST_SNS_ARN} not found — skipping S3 notification wiring"
+fi
+
 if [[ "$BUILD_MDM_IMAGE" == "auto" ]]; then
   if [[ "$DEPLOY_MDM" == "true" && "$BUILD_IMAGE" == "true" ]] && is_empty "$MDM_IMAGE_REF"; then
     BUILD_MDM_IMAGE=true
@@ -554,6 +611,14 @@ win_path() {
 
 ECR_REPOSITORY_NAME="${ECR_REPOSITORY_URL##*/}"
 MDM_ECR_REPOSITORY_NAME="${MDM_ECR_REPOSITORY_URL##*/}"
+
+# ── Clean up stale ECR images before every deploy ────────────────────────────
+log "Cleaning up stale ECR images (keeps :dev + 2 newest :sha-* per repo)"
+bash "${SCRIPT_DIR}/cleanup-ecr-images.sh" \
+  --env "$ENVIRONMENT" \
+  --region "$AWS_REGION_NAME" \
+  ${AWS_PROFILE_NAME:+--profile "$AWS_PROFILE_NAME"} \
+  --apply || log "ECR cleanup encountered errors (non-fatal, continuing deploy)"
 
 if [[ "$BUILD_IMAGE" == "true" ]]; then
   image_output_file="$(json_file image-ref)"
@@ -1338,6 +1403,132 @@ pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", en
 PY
 }
 
+# Re-process pipeline for already-loaded bronze:
+#   seed-silver-batches → parallel bootstrap-batch (uses cached bronze) → MDM chain → gold-refresh.
+# Use when bronze is already in S3 but silver/MDM/Neo4j/Snowflake need refreshing.
+# Accepts optional input: {"tracking_status_filter": "all|active|bootstrap_pending"}
+write_silver_mdm_gold_definition() {
+  local output_file="$1"
+  local wh_task_medium_arn="$2"  # warehouse medium (seed-silver-batches, bootstrap-batch)
+  local mdm_task_small_arn="$3"  # mdm small   (mdm verify-graph)
+  local mdm_task_medium_arn="$4" # mdm medium  (mdm run, backfill, sync)
+  local wh_task_large_arn="$5"   # warehouse large (gold-refresh)
+
+  python3 - "$output_file" "$CLUSTER_ARN" \
+    "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
+    "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
+    "$BOOTSTRAP_BATCH_CONCURRENCY" "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" <<'PY'
+import json, pathlib, sys
+
+(output_file, cluster_arn,
+ wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
+ container_name, bronze_bucket_name, subnet_json, security_group_json,
+ batch_concurrency, mdm_run_limit, mdm_graph_limit) = sys.argv[1:]
+
+subnets = json.loads(subnet_json)
+security_groups = json.loads(security_group_json)
+
+def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=120):
+    s = {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::ecs:runTask.sync",
+        "Parameters": {
+            "LaunchType": "FARGATE",
+            "Cluster": cluster_arn,
+            "TaskDefinition": task_def_arn,
+            "PropagateTags": "TASK_DEFINITION",
+            "NetworkConfiguration": {"AwsvpcConfiguration": {
+                "AssignPublicIp": "ENABLED",
+                "SecurityGroups": security_groups,
+                "Subnets": subnets,
+            }},
+            "Overrides": {"ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}]},
+        },
+        "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": retry_secs,
+                   "BackoffRate": 2.0, "MaxAttempts": 2}],
+    }
+    if is_end:
+        s["End"] = True
+    else:
+        s["Next"] = next_state
+    return s
+
+mdm_limit   = str(mdm_run_limit)
+graph_limit = str(mdm_graph_limit)
+
+# seed-silver-batches reads CIKs from silver DuckDB (no SEC API calls) and writes the same
+# cik_batches.jsonl format that bootstrap-batch expects. tracking_status_filter is passed
+# from the SM execution input (default "all" when not provided in trigger input).
+seed = ecs_state(wh_medium_arn,
+    "States.Array('seed-silver-batches', '--run-id', $$.Execution.Name, '--tracking-status-filter', $.tracking_status_filter)",
+    next_state="BatchSilver", retry_secs=60)
+
+# INVARIANT: silver_mdm_gold must make ZERO SEC API calls.
+# --artifact-policy skip is REQUIRED here — without it bootstrap-batch fetches
+# ownership XMLs for every Form 3/4/5 filing (sec_pull_started events, thousands
+# per batch). silver_mdm_gold is for reprocessing already-loaded bronze only.
+# If ownership artifacts are needed, run a separate targeted pipeline with
+# --artifact-policy=fetch after silver_mdm_gold completes.
+batch = ecs_state(wh_medium_arn,
+    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'skip', '--run-id', $$.Execution.Name)",
+    is_end=True)
+
+batch_map = {
+    "Type": "Map",
+    "MaxConcurrency": int(batch_concurrency),
+    "Comment": "Re-process silver + artifacts from cached bronze. Submissions not re-downloaded.",
+    "ToleratedFailurePercentage": 10,
+    "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
+        "Parameters": {
+            "Bucket": bronze_bucket_name,
+            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_batches.jsonl', $$.Execution.Name)",
+        },
+    },
+    "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
+        "StartAt": "RunBatch",
+        "States": {"RunBatch": batch},
+    },
+    "ResultPath": None,
+    "Next": "MdmRun",
+}
+
+# INVARIANT: No --limit on MDM commands here. silver_mdm_gold is always a full bulk
+# re-run (all companies in silver), not an incremental daily update. A hard limit would
+# silently leave the majority of companies unprocessed in MDM and Neo4j.
+# MDM_RUN_LIMIT (incremental default 100) is intentionally NOT used here.
+mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="MdmBackfill")
+mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmSync")
+mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="MdmVerify")
+mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh")
+gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
+
+definition = {
+    "Comment": (
+        "Re-process pipeline for already-loaded bronze: "
+        "(1) seed batch file from silver DuckDB (no SEC downloads), "
+        "(2) parallel bootstrap-batch uses bronze SHA256 cache for submissions + runs artifact pipeline, "
+        "(3) MDM entity resolution + Neo4j sync, "
+        "(4) gold build + Snowflake export manifest. "
+        "Trigger with: {} or {\"tracking_status_filter\": \"active|bootstrap_pending\"}"
+    ),
+    "StartAt": "SeedSilverBatches",
+    "States": {
+        "SeedSilverBatches": seed,
+        "BatchSilver":  batch_map,
+        "MdmRun":       mdm_run,
+        "MdmBackfill":  mdm_backfill,
+        "MdmSync":      mdm_sync,
+        "MdmVerify":    mdm_verify,
+        "GoldRefresh":  gold,
+    },
+}
+pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
 upsert_state_machine() {
   local workflow="$1" definition_file="$2" role_arn="$3" logging_file="$4" name arn existing_arn
   name="${NAME_PREFIX}-${workflow//_/-}"
@@ -1421,6 +1612,132 @@ if [[ "$DEPLOY_MDM" == "true" ]]; then
   phased_state_machine_arn="$(upsert_state_machine bootstrap_phased "$phased_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
   python3 - "bootstrap_phased" "$phased_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+import json, sys
+print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
+PY
+
+  # mdm_gold: MDM entity resolution + Neo4j sync + gold-refresh, no silver batch step.
+  # Use after BatchBootstrap already completed — skips all submission downloading.
+  mdm_gold_file="$(json_file sfn-mdm-gold)"
+  python3 - "$mdm_gold_file" "$CLUSTER_ARN" \
+    "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_LARGE_ARN" \
+    "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
+    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" <<'PY'
+import json, pathlib, sys
+(output_file, cluster_arn,
+ mdm_medium_arn, mdm_small_arn, wh_large_arn,
+ container_name, subnet_json, security_group_json,
+ mdm_run_limit, mdm_graph_limit) = sys.argv[1:]
+subnets = json.loads(subnet_json)
+security_groups = json.loads(security_group_json)
+mdm_limit   = str(mdm_run_limit)
+graph_limit = str(mdm_graph_limit)
+
+def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=120):
+    s = {"Type": "Task", "Resource": "arn:aws:states:::ecs:runTask.sync",
+         "Parameters": {"LaunchType": "FARGATE", "Cluster": cluster_arn,
+                        "TaskDefinition": task_def_arn, "PropagateTags": "TASK_DEFINITION",
+                        "NetworkConfiguration": {"AwsvpcConfiguration": {
+                            "AssignPublicIp": "ENABLED", "SecurityGroups": security_groups, "Subnets": subnets}},
+                        "Overrides": {"ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}]}},
+         "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": retry_secs, "BackoffRate": 2.0, "MaxAttempts": 2}]}
+    if is_end: s["End"] = True
+    else: s["Next"] = next_state
+    return s
+
+definition = {
+    "Comment": "MDM entity resolution + Neo4j sync + gold-refresh. No silver batch step — run after bronze+silver are complete.",
+    "StartAt": "MdmRun",
+    "States": {
+        "MdmRun":      ecs_state(mdm_medium_arn, f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')", next_state="MdmBackfill"),
+        "MdmBackfill": ecs_state(mdm_medium_arn, f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')", next_state="MdmSync"),
+        "MdmSync":     ecs_state(mdm_medium_arn, f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')", next_state="MdmVerify"),
+        "MdmVerify":   ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh"),
+        "GoldRefresh": ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60),
+    },
+}
+pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
+PY
+  mdm_gold_arn="$(upsert_state_machine mdm_gold "$mdm_gold_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
+  python3 - "mdm_gold" "$mdm_gold_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+import json, sys
+print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
+PY
+
+  # ownership_mdm_gold: parse Form 3/4/5 XMLs already in S3 bronze → persons + IS_INSIDER in MDM → Neo4j → gold.
+  # No SEC calls. Uses edgartools to parse XMLs directly from bronze.
+  ownership_mdm_gold_file="$(json_file sfn-ownership-mdm-gold)"
+  python3 - "$ownership_mdm_gold_file" "$CLUSTER_ARN" \
+    "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
+    "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" <<'PY'
+import json, pathlib, sys
+
+(output_file, cluster_arn,
+ wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
+ container_name, subnet_json, security_group_json) = sys.argv[1:]
+
+subnets = json.loads(subnet_json)
+security_groups = json.loads(security_group_json)
+
+def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=120):
+    s = {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::ecs:runTask.sync",
+        "Parameters": {
+            "LaunchType": "FARGATE",
+            "Cluster": cluster_arn,
+            "TaskDefinition": task_def_arn,
+            "PropagateTags": "TASK_DEFINITION",
+            "NetworkConfiguration": {"AwsvpcConfiguration": {
+                "AssignPublicIp": "ENABLED",
+                "SecurityGroups": security_groups,
+                "Subnets": subnets,
+            }},
+            "Overrides": {"ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}]},
+        },
+        "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": retry_secs,
+                   "BackoffRate": 2.0, "MaxAttempts": 2}],
+    }
+    if is_end:
+        s["End"] = True
+    else:
+        s["Next"] = next_state
+    return s
+
+definition = {
+    "Comment": (
+        "Parse Form 3/4/5 ownership XMLs already in S3 bronze (no SEC calls), "
+        "then run MDM to derive persons + IS_INSIDER relationships, sync to Neo4j, refresh gold."
+    ),
+    "StartAt": "ParseOwnershipBronze",
+    "States": {
+        "ParseOwnershipBronze": ecs_state(wh_medium_arn,
+            "States.Array('parse-ownership-bronze', '--run-id', $$.Execution.Name)",
+            next_state="MdmRun", retry_secs=60),
+        "MdmRun":      ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="MdmBackfill"),
+        "MdmBackfill": ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmSync"),
+        "MdmSync":     ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="MdmVerify"),
+        "MdmVerify":   ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh"),
+        "GoldRefresh": ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60),
+    },
+}
+pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
+PY
+  ownership_mdm_gold_arn="$(upsert_state_machine ownership_mdm_gold "$ownership_mdm_gold_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
+  python3 - "ownership_mdm_gold" "$ownership_mdm_gold_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+import json, sys
+print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
+PY
+
+  # silver_mdm_gold: re-process already-loaded bronze through silver → MDM → Neo4j → Snowflake.
+  silver_mdm_gold_file="$(json_file sfn-silver-mdm-gold)"
+  write_silver_mdm_gold_definition "$silver_mdm_gold_file" \
+    "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN"
+  silver_mdm_gold_arn="$(upsert_state_machine silver_mdm_gold "$silver_mdm_gold_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
+  python3 - "silver_mdm_gold" "$silver_mdm_gold_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
 import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY

@@ -530,16 +530,17 @@ class GraphSyncEngine:
 def backfill_relationship_instances(
     session: Session,
     neo4j: Optional[Neo4jGraphClient] = None,
-    limit: int = 100,
+    limit: Optional[int] = None,
 ) -> dict:
     """Derive mdm_relationship_instance rows from existing mdm_fund and
-    mdm_security data, then sync up to *limit* rows to Neo4j.
+    mdm_security data, then sync all new rows to Neo4j.
 
     Sources:
       MANAGES_FUND : mdm_fund.adviser_entity_id  -> mdm_fund.entity_id
       ISSUED_BY    : mdm_security.entity_id       -> mdm_security.issuer_entity_id
 
     Rows already present in mdm_relationship_instance are skipped.
+    limit=None (default) means process all available rows.
     Returns a summary dict with keys backfilled, synced.
     """
     registry = GraphRegistry.load(session)
@@ -553,12 +554,16 @@ def backfill_relationship_instances(
 
     backfilled = 0
 
-    if manages_fund and backfilled < limit:
-        for fund in session.scalars(
-            select(MdmFund)
-            .where(MdmFund.adviser_entity_id.isnot(None))
-            .limit(limit - backfilled)
-        ):
+    def _under_limit() -> bool:
+        return limit is None or backfilled < limit
+
+    if manages_fund and _under_limit():
+        q = select(MdmFund).where(MdmFund.adviser_entity_id.isnot(None))
+        if limit is not None:
+            q = q.limit(limit - backfilled)
+        for fund in session.scalars(q):
+            if not _under_limit():
+                break
             key = (manages_fund["rel_type_id"], fund.adviser_entity_id, fund.entity_id)
             if key in existing:
                 continue
@@ -572,12 +577,13 @@ def backfill_relationship_instances(
                 existing.add(key)
                 backfilled += 1
 
-    if issued_by and backfilled < limit:
-        for sec in session.scalars(
-            select(MdmSecurity)
-            .where(MdmSecurity.issuer_entity_id.isnot(None))
-            .limit(limit - backfilled)
-        ):
+    if issued_by and _under_limit():
+        q = select(MdmSecurity).where(MdmSecurity.issuer_entity_id.isnot(None))
+        if limit is not None:
+            q = q.limit(limit - backfilled)
+        for sec in session.scalars(q):
+            if not _under_limit():
+                break
             key = (issued_by["rel_type_id"], sec.entity_id, sec.issuer_entity_id)
             if key in existing:
                 continue

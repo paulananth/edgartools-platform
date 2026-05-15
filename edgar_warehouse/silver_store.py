@@ -1703,6 +1703,39 @@ class SilverDatabase:
         ).fetchall()
         return [{"cik": row[0]} for row in rows]
 
+    def get_ciks_with_bronze(self, tracking_status_filter: str = "all") -> list[dict[str, Any]]:
+        """Return CIKs that have bronze submissions loaded (have a submissions_main checkpoint).
+
+        Used by seed-silver-batches to build a batch file for reprocessing already-loaded bronze
+        through silver, MDM, and gold without re-downloading from SEC.
+        """
+        if tracking_status_filter == "all":
+            sql = """
+                SELECT DISTINCT s.cik
+                FROM sec_company_sync_state s
+                WHERE EXISTS (
+                    SELECT 1 FROM sec_source_checkpoint c
+                    WHERE c.source_name = 'submissions_main'
+                      AND c.source_key = 'cik:' || CAST(s.cik AS VARCHAR)
+                )
+                ORDER BY s.cik
+            """
+            rows = self._conn.execute(sql).fetchall()
+        else:
+            sql = """
+                SELECT DISTINCT s.cik
+                FROM sec_company_sync_state s
+                WHERE s.tracking_status = ?
+                  AND EXISTS (
+                      SELECT 1 FROM sec_source_checkpoint c
+                      WHERE c.source_name = 'submissions_main'
+                        AND c.source_key = 'cik:' || CAST(s.cik AS VARCHAR)
+                  )
+                ORDER BY s.cik
+            """
+            rows = self._conn.execute(sql, [tracking_status_filter]).fetchall()
+        return [{"cik": row[0]} for row in rows]
+
     # ------------------------------------------------------------------
     # sec_reconcile_finding
     # ------------------------------------------------------------------

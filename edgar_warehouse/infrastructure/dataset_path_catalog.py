@@ -229,10 +229,16 @@ class WarehousePathResolver:
                 "gold": self._render("manifest.default.gold.path", **default_tokens),
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }
-        if command_name == "seed-universe":
+        if command_name in ("seed-universe", "seed-silver-batches", "parse-ownership-bronze"):
             return {
                 "bronze": self._render("manifest.default.bronze.path", **default_tokens),
                 "staging": self._render("manifest.default.staging.path", **default_tokens),
+                "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
+            }
+
+        if command_name == "gold-refresh":
+            return {
+                "gold": self._render("manifest.default.gold.path", **default_tokens),
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }
         if command_name == "load-daily-form-index-for-date":

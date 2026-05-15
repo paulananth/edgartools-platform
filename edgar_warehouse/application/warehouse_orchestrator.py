@@ -906,6 +906,50 @@ def _capture_bronze_raw(
         metrics["cik_count"] = len(universe_rows)
         return raw_writes, metrics
 
+    if command_name == "parse-ownership-bronze":
+        return _run_parse_ownership_bronze(
+            context=context, db=db, sync_run_id=sync_run_id, metrics=metrics
+        )
+
+    if command_name == "seed-silver-batches":
+        tracking_status_filter = str(arguments.get("tracking_status_filter") or "all").strip()
+        batch_size = int(arguments.get("batch_size") or 100)
+        rows = db.get_ciks_with_bronze(tracking_status_filter=tracking_status_filter)
+        _emit_pipeline_event(
+            "seed_silver_batches_started",
+            tracking_status_filter=tracking_status_filter,
+            cik_count=len(rows),
+            batch_size=batch_size,
+            run_id=sync_run_id,
+        )
+        if not rows:
+            _emit_pipeline_event(
+                "seed_silver_batches_completed",
+                cik_count=0,
+                batch_count=0,
+                run_id=sync_run_id,
+            )
+            metrics["cik_count"] = 0
+            return raw_writes, metrics
+        cik_universe_path = _write_cik_universe_batches(
+            context=context,
+            rows=rows,
+            fetch_date=now.date(),
+            sync_run_id=sync_run_id,
+            batch_size=batch_size,
+        )
+        batch_count = -(-len(rows) // batch_size)  # ceiling division
+        _emit_pipeline_event(
+            "seed_silver_batches_completed",
+            cik_count=len(rows),
+            batch_count=batch_count,
+            cik_universe_path=cik_universe_path,
+            run_id=sync_run_id,
+        )
+        metrics["cik_universe_path"] = cik_universe_path
+        metrics["cik_count"] = len(rows)
+        return raw_writes, metrics
+
     if command_name == "bootstrap-batch":
         cik_list = list(arguments.get("cik_list") or [])
         include_pagination = bool(arguments.get("include_pagination", True))
@@ -1188,6 +1232,115 @@ def _configured_parser_accessions(db: SilverDatabase, accession_numbers: list[st
 def _is_configured_parser_form(form_type: Any) -> bool:
     normalized = str(form_type or "").strip().upper()
     return normalized in OWNERSHIP_FORMS or normalized in ADV_FORMS
+
+
+def _run_parse_ownership_bronze(
+    *,
+    context: "WarehouseCommandContext",
+    db: "SilverDatabase",
+    sync_run_id: str,
+    metrics: dict[str, Any],
+) -> tuple[list[dict], dict[str, Any]]:
+    """Parse Form 3/4/5 ownership XMLs that already exist in S3 bronze into silver.
+
+    Uses edgartools (Ownership.from_xml) to parse files at:
+        {bronze_root}/filings/sec/cik={cik}/accession={accession}/primary/*.xml
+
+    No SEC API calls — reads only from bronze S3. Idempotent: skips accessions
+    already present in sec_ownership_reporting_owner.
+    """
+    from edgar_warehouse.infrastructure.object_storage import read_bytes
+    from edgar_warehouse.parsers.ownership import parse_ownership
+    import fsspec
+
+    filings = db.fetch(
+        """
+        SELECT f.accession_number, f.cik, f.form_type
+        FROM sec_company_filing f
+        WHERE f.form_type IN ('3','3/A','4','4/A','5','5/A')
+        ORDER BY f.cik, f.period_of_report
+        """
+    )
+    already_parsed: set[str] = {
+        row["accession_number"]
+        for row in db.fetch("SELECT DISTINCT accession_number FROM sec_ownership_reporting_owner")
+    }
+
+    total = len(filings)
+    parsed_count = skipped_count = error_count = 0
+    rows_written = 0
+
+    _emit_pipeline_event(
+        "parse_ownership_bronze_started",
+        total_filings=total,
+        already_parsed=len(already_parsed),
+        run_id=sync_run_id,
+    )
+
+    bronze_root = context.bronze_root.root  # e.g. s3://bucket/warehouse/bronze
+    fs = fsspec.filesystem("s3")
+
+    for filing in filings:
+        accession = filing["accession_number"]
+        cik = filing["cik"]
+        form_type = filing["form_type"]
+
+        if accession in already_parsed:
+            skipped_count += 1
+            continue
+
+        prefix = f"{bronze_root}/filings/sec/cik={cik}/accession={accession}/primary/"
+        try:
+            xml_files = [
+                p for p in fs.ls(prefix, detail=False)
+                if p.endswith(".xml") or p.endswith(".XML")
+            ]
+            if not xml_files:
+                error_count += 1
+                continue
+
+            # fsspec.ls returns full s3://... paths
+            xml_path = xml_files[0] if xml_files[0].startswith("s3://") else f"s3://{xml_files[0]}"
+            xml_bytes = read_bytes(xml_path)
+            xml_content = xml_bytes.decode("utf-8", errors="replace")
+
+            parsed = parse_ownership(accession, xml_content, form_type)
+
+            rows_written += db.merge_ownership_reporting_owners(
+                parsed.get("sec_ownership_reporting_owner", []), sync_run_id
+            )
+            rows_written += db.merge_ownership_non_derivative_txns(
+                parsed.get("sec_ownership_non_derivative_txn", []), sync_run_id
+            )
+            rows_written += db.merge_ownership_derivative_txns(
+                parsed.get("sec_ownership_derivative_txn", []), sync_run_id
+            )
+            already_parsed.add(accession)
+            parsed_count += 1
+
+        except Exception as exc:
+            error_count += 1
+            _emit_pipeline_event(
+                "parse_ownership_bronze_error",
+                accession_number=accession,
+                error=str(exc)[:200],
+                run_id=sync_run_id,
+            )
+
+    _emit_pipeline_event(
+        "parse_ownership_bronze_completed",
+        total=total,
+        parsed=parsed_count,
+        skipped=skipped_count,
+        errors=error_count,
+        rows_written=rows_written,
+        run_id=sync_run_id,
+    )
+    metrics["parsed"] = parsed_count
+    metrics["skipped"] = skipped_count
+    metrics["errors"] = error_count
+    metrics["rows_written"] = rows_written
+    return [], metrics
 
 
 def _artifact_policy_fetches(policy: str) -> bool:
@@ -2444,6 +2597,15 @@ def _resolve_scope(
     if command_name == "gold-refresh":
         # Scope is empty — bronze/silver are already complete.
         # _execute_warehouse builds gold because gold-refresh is in GOLD_AFFECTING_COMMANDS.
+        return {}
+
+    if command_name == "seed-silver-batches":
+        return {
+            "tracking_status_filter": arguments.get("tracking_status_filter") or "all",
+            "batch_size": arguments.get("batch_size") or 100,
+        }
+
+    if command_name == "parse-ownership-bronze":
         return {}
 
     raise WarehouseRuntimeError(f"Unsupported warehouse command: {command_name}")

@@ -134,6 +134,11 @@ MDM Postgres (private VPC). Reserve it for single-company ad-hoc loads with expl
 - `gold-refresh` must be in `GOLD_AFFECTING_COMMANDS` — it is the sole gold builder in the phased pipeline
 - `SNOWFLAKE_RUN_MANIFEST_TASK` must be STARTED in `EDGARTOOLS_GOLD` — verify with
   `snow sql --connection edgartools-dev -q "SHOW TASKS LIKE 'SNOWFLAKE_RUN_MANIFEST_TASK'"`
+- `silver_mdm_gold` map MUST pass `--artifact-policy skip` to `bootstrap-batch` — without it
+  the pipeline makes thousands of SEC API calls (fetching ownership XMLs) even though the
+  purpose of this pipeline is to reprocess already-loaded bronze with zero SEC calls.
+  5-why root cause: the artifact pipeline is a separate SEC fetch pass; "no SEC calls" must
+  be encoded as a flag, not assumed from the pipeline name.
 
 Key import pattern (do not change without checking the edgartools changelog):
 
@@ -164,6 +169,17 @@ When the `edgartools` version is bumped, run the batch scripts in `scripts/batch
 > `docker build`/`docker push`; `docker buildx` is supported when it is
 > measurably faster or when using Linux/Windows CI registry cache. Do not
 > introduce another container build/runtime stack.
+>
+> **One-time Colima setup (macOS):** Docker 29+ in Colima defaults to the
+> containerd image-store snapshotter, which the legacy `docker build` path
+> cannot use. Run this once per workstation (and after any Colima/Docker
+> upgrade) to disable the snapshotter and provision adequate CPU/RAM/disk:
+> ```bash
+> bash infra/scripts/setup-colima.sh           # apply + restart Colima
+> bash infra/scripts/setup-colima.sh --verify  # check current state
+> ```
+> `publish-warehouse-image.sh` fails fast with a pointer to this script if
+> the daemon is misconfigured.
 
 ```bash
 # Install project deps (uses uv.lock)

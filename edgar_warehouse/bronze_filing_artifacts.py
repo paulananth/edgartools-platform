@@ -42,46 +42,74 @@ def fetch_filing_artifacts(
         attachment_rows = hydrated_rows + missing_rows
         index_record = None
     else:
-        index_spec = capture_specs.filing_index(cik, accession_number)
-        cached_index = None if force else _read_cached_index(db, accession_number)
-        if cached_index is None:
-            index_bytes = download_bytes(index_spec.source_url or "", context.identity)
-            index_record = _write_raw_artifact(
-                context=context,
-                db=db,
-                payload=index_bytes,
-                relative_path=index_spec.relative_path,
-                source_type="filing_index",
-                source_url=index_spec.source_url or "",
+        # Fast path: if primary_document is known, skip the -index.html fetch.
+        # The index page (www.sec.gov/Archives/.../{acc}-index.html) is rate-limited
+        # and returns 503 under load, while direct document URLs return 200.
+        # For SEC ownership filings the primary_document is often stored as
+        # "xslXXX/filename.xml" — strip the XSLT subdirectory prefix to get the
+        # raw XML that contains <ownershipDocument>.
+        primary_doc = filing.get("primary_document") or ""
+        raw_doc_name = _resolve_raw_document_name(primary_doc)
+        index_record = None
+
+        if raw_doc_name and not force and not _read_cached_index(db, accession_number):
+            doc_spec = capture_specs.filing_document(
                 cik=cik,
                 accession_number=accession_number,
-                form=filing.get("form"),
+                document_name=raw_doc_name,
+                is_primary=True,
             )
-        else:
-            index_bytes = cached_index["payload"]
-            index_record = cached_index["write_record"]
-
-        attachment_rows = _extract_attachment_rows(
-            index_html=index_bytes.decode("utf-8", errors="replace"),
-            base_url=index_spec.source_url or "",
-            accession_number=accession_number,
-            primary_document=filing.get("primary_document"),
-        )
-        if not attachment_rows and filing.get("primary_document"):
             attachment_rows = [
                 {
                     "accession_number": accession_number,
-                    "document_name": filing["primary_document"],
+                    "document_name": raw_doc_name,
                     "document_type": filing.get("form"),
-                    "document_url": capture_specs.filing_document(
-                        cik=cik,
-                        accession_number=accession_number,
-                        document_name=filing["primary_document"],
-                        is_primary=True,
-                    ).source_url,
+                    "document_url": doc_spec.source_url,
                     "is_primary": True,
                 }
             ]
+        else:
+            # Fall back to index fetch when primary_document is unknown or cached index exists.
+            index_spec = capture_specs.filing_index(cik, accession_number)
+            cached_index = None if force else _read_cached_index(db, accession_number)
+            if cached_index is None:
+                index_bytes = download_bytes(index_spec.source_url or "", context.identity)
+                index_record = _write_raw_artifact(
+                    context=context,
+                    db=db,
+                    payload=index_bytes,
+                    relative_path=index_spec.relative_path,
+                    source_type="filing_index",
+                    source_url=index_spec.source_url or "",
+                    cik=cik,
+                    accession_number=accession_number,
+                    form=filing.get("form"),
+                )
+            else:
+                index_bytes = cached_index["payload"]
+                index_record = cached_index["write_record"]
+
+            attachment_rows = _extract_attachment_rows(
+                index_html=index_bytes.decode("utf-8", errors="replace"),
+                base_url=index_spec.source_url or "",
+                accession_number=accession_number,
+                primary_document=filing.get("primary_document"),
+            )
+            if not attachment_rows and filing.get("primary_document"):
+                attachment_rows = [
+                    {
+                        "accession_number": accession_number,
+                        "document_name": filing["primary_document"],
+                        "document_type": filing.get("form"),
+                        "document_url": capture_specs.filing_document(
+                            cik=cik,
+                            accession_number=accession_number,
+                            document_name=filing["primary_document"],
+                            is_primary=True,
+                        ).source_url,
+                        "is_primary": True,
+                    }
+                ]
 
     raw_writes = [index_record] if index_record is not None else []
     hydrated_rows: list[dict[str, Any]] = []
@@ -123,6 +151,26 @@ def fetch_filing_artifacts(
         "attachment_count": len(hydrated_rows),
         "raw_writes": raw_writes,
     }
+
+
+def _resolve_raw_document_name(primary_document: str) -> str:
+    """Strip XSLT renderer subdirectory to get the raw filing XML name.
+
+    SEC submissions list ownership docs as 'xslF345X06/primary_doc.xml'.
+    The XSLT prefix is a rendering stylesheet; the actual <ownershipDocument>
+    XML is the filename part at the root of the accession directory.
+    Stripping the prefix lets us skip the -index.html fetch (which 503s under
+    load) and go directly to the document URL.
+
+    Returns the raw filename, or empty string if the pattern doesn't apply.
+    """
+    if not primary_document:
+        return ""
+    parts = primary_document.replace("\\", "/").split("/")
+    if len(parts) >= 2 and parts[0].lower().startswith("xsl"):
+        return "/".join(parts[1:])
+    # No XSLT prefix — use as-is (already a raw document name)
+    return primary_document
 
 
 def _split_existing_attachment_rows(db: Any, rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:

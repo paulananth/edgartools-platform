@@ -113,6 +113,14 @@ def _handle_gold_refresh(args: argparse.Namespace) -> int:
     return run_command("gold-refresh", args)
 
 
+def _handle_seed_silver_batches(args: argparse.Namespace) -> int:
+    return run_command("seed-silver-batches", args)
+
+
+def _handle_parse_ownership_bronze(args: argparse.Namespace) -> int:
+    return run_command("parse-ownership-bronze", args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="edgar-warehouse",
@@ -298,6 +306,42 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(seed_universe)
     seed_universe.set_defaults(handler=_handle_seed_universe)
+
+    seed_silver_batches = subparsers.add_parser(
+        "seed-silver-batches",
+        help=(
+            "Write a CIK batch file from companies already in silver (bronze already loaded). "
+            "Used by silver_mdm_gold to reprocess silver → MDM → Neo4j → Snowflake "
+            "without re-downloading bronze from SEC."
+        ),
+    )
+    seed_silver_batches.add_argument(
+        "--tracking-status-filter",
+        default="all",
+        help=(
+            "Which companies to include: 'all' (any status with bronze checkpoint), "
+            "'active', or 'bootstrap_pending'. Default: all."
+        ),
+    )
+    seed_silver_batches.add_argument(
+        "--batch-size",
+        type=int,
+        default=100,
+        help="Companies per batch (default: 100).",
+    )
+    _add_run_id_arg(seed_silver_batches)
+    seed_silver_batches.set_defaults(handler=_handle_seed_silver_batches)
+
+    parse_ownership_bronze = subparsers.add_parser(
+        "parse-ownership-bronze",
+        help=(
+            "Parse Form 3/4/5 ownership XMLs already in S3 bronze into silver. "
+            "Uses edgartools (Ownership.from_xml). No SEC API calls. "
+            "Idempotent — skips accessions already in sec_ownership_reporting_owner."
+        ),
+    )
+    _add_run_id_arg(parse_ownership_bronze)
+    parse_ownership_bronze.set_defaults(handler=_handle_parse_ownership_bronze)
 
     bootstrap_batch = subparsers.add_parser(
         "bootstrap-batch",

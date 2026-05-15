@@ -234,10 +234,58 @@ build_arg_args() {
     fi
 }
 
+cleanup_local_images() {
+    # Prune dangling layers and stale SHA tags for this repo before building.
+    # Also removes the deps base image so it is always freshly pulled — this
+    # prevents Colima overlay-cache corruption on the FROM layer (the most
+    # common "failed to restore cached image" failure with the legacy builder).
+    local repo="${REGISTRY}/${ECR_REPOSITORY}"
+    log "Cleaning local images for ${ECR_REPOSITORY}"
+    docker image prune -f >/dev/null 2>&1 || true
+    docker builder prune -af >/dev/null 2>&1 || true
+
+    # Remove the deps base image so it gets freshly pulled (prevents stale layer corruption)
+    if [[ -n "${DEPENDENCY_IMAGE}" ]]; then
+        log "Removing cached deps image ${DEPENDENCY_IMAGE##*/} (will re-pull fresh)"
+        docker rmi "${DEPENDENCY_IMAGE}" >/dev/null 2>&1 || true
+    fi
+
+    # Remove old sha-* tags for this repo (keep only the newest one)
+    local sha_tags old_tags
+    sha_tags=$(docker images --format "{{.Tag}}" "${repo}" 2>/dev/null \
+        | grep '^sha-' | sort -r || true)
+    old_tags=$(echo "$sha_tags" | tail -n +2 || true)
+    while IFS= read -r tag; do
+        [[ -z "$tag" ]] && continue
+        log "Removing stale local image ${ECR_REPOSITORY}:${tag}"
+        docker rmi "${repo}:${tag}" >/dev/null 2>&1 || true
+    done <<< "$old_tags"
+}
+
+verify_legacy_builder_supported() {
+    # The legacy `docker build` path (per CLAUDE.md) cannot use the containerd
+    # image-store snapshotter that Docker 29+ enables by default in Colima.
+    # If we detect it, fail fast with a pointer to the one-time setup script.
+    local driver_status
+    driver_status="$(docker info --format '{{.DriverStatus}}' 2>/dev/null || true)"
+    if echo "$driver_status" | grep -q "containerd.snapshotter"; then
+        echo "" >&2
+        echo "ERROR: Docker daemon is using the containerd image-store snapshotter." >&2
+        echo "       Legacy 'docker build' (per CLAUDE.md) cannot use this." >&2
+        echo "" >&2
+        echo "  Fix once per workstation:" >&2
+        echo "    bash infra/scripts/setup-colima.sh" >&2
+        echo "" >&2
+        exit 1
+    fi
+}
+
 publish_docker() {
     local cache_ref tag
     require_command docker
     linux_docker_daemon || fail "docker mode requires a Linux Docker daemon such as macOS Colima"
+    verify_legacy_builder_supported
+    cleanup_local_images
     docker_login
 
     if [[ -n "${DEPENDENCY_IMAGE}" ]]; then
