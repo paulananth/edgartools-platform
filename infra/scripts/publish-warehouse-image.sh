@@ -262,15 +262,29 @@ cleanup_local_images() {
     done <<< "$old_tags"
 }
 
+verify_legacy_builder_supported() {
+    # The legacy `docker build` path (per CLAUDE.md) cannot use the containerd
+    # image-store snapshotter that Docker 29+ enables by default in Colima.
+    # If we detect it, fail fast with a pointer to the one-time setup script.
+    local driver_status
+    driver_status="$(docker info --format '{{.DriverStatus}}' 2>/dev/null || true)"
+    if echo "$driver_status" | grep -q "containerd.snapshotter"; then
+        echo "" >&2
+        echo "ERROR: Docker daemon is using the containerd image-store snapshotter." >&2
+        echo "       Legacy 'docker build' (per CLAUDE.md) cannot use this." >&2
+        echo "" >&2
+        echo "  Fix once per workstation:" >&2
+        echo "    bash infra/scripts/setup-colima.sh" >&2
+        echo "" >&2
+        exit 1
+    fi
+}
+
 publish_docker() {
     local cache_ref tag
     require_command docker
     linux_docker_daemon || fail "docker mode requires a Linux Docker daemon such as macOS Colima"
-    # Docker 29 + Colima uses the containerd image-store snapshotter by default.
-    # The legacy build path fails on it with "failed to restore cached image".
-    # DOCKER_BUILDKIT=1 routes plain `docker build` through BuildKit, which is
-    # compatible with the containerd snapshotter — same command, no new tools.
-    export DOCKER_BUILDKIT=1
+    verify_legacy_builder_supported
     cleanup_local_images
     docker_login
 

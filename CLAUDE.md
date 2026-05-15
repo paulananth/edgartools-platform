@@ -164,6 +164,17 @@ When the `edgartools` version is bumped, run the batch scripts in `scripts/batch
 > `docker build`/`docker push`; `docker buildx` is supported when it is
 > measurably faster or when using Linux/Windows CI registry cache. Do not
 > introduce another container build/runtime stack.
+>
+> **One-time Colima setup (macOS):** Docker 29+ in Colima defaults to the
+> containerd image-store snapshotter, which the legacy `docker build` path
+> cannot use. Run this once per workstation (and after any Colima/Docker
+> upgrade) to disable the snapshotter and provision adequate CPU/RAM/disk:
+> ```bash
+> bash infra/scripts/setup-colima.sh           # apply + restart Colima
+> bash infra/scripts/setup-colima.sh --verify  # check current state
+> ```
+> `publish-warehouse-image.sh` fails fast with a pointer to this script if
+> the daemon is misconfigured.
 
 ```bash
 # Install project deps (uses uv.lock)
