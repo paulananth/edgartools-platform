@@ -266,6 +266,11 @@ publish_docker() {
     local cache_ref tag
     require_command docker
     linux_docker_daemon || fail "docker mode requires a Linux Docker daemon such as macOS Colima"
+    # Docker 29 + Colima uses the containerd image-store snapshotter by default.
+    # The legacy build path fails on it with "failed to restore cached image".
+    # DOCKER_BUILDKIT=1 routes plain `docker build` through BuildKit, which is
+    # compatible with the containerd snapshotter — same command, no new tools.
+    export DOCKER_BUILDKIT=1
     cleanup_local_images
     docker_login
 
