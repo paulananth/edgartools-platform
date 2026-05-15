@@ -906,6 +906,45 @@ def _capture_bronze_raw(
         metrics["cik_count"] = len(universe_rows)
         return raw_writes, metrics
 
+    if command_name == "seed-silver-batches":
+        tracking_status_filter = str(arguments.get("tracking_status_filter") or "all").strip()
+        batch_size = int(arguments.get("batch_size") or 100)
+        rows = db.get_ciks_with_bronze(tracking_status_filter=tracking_status_filter)
+        _emit_pipeline_event(
+            "seed_silver_batches_started",
+            tracking_status_filter=tracking_status_filter,
+            cik_count=len(rows),
+            batch_size=batch_size,
+            run_id=sync_run_id,
+        )
+        if not rows:
+            _emit_pipeline_event(
+                "seed_silver_batches_completed",
+                cik_count=0,
+                batch_count=0,
+                run_id=sync_run_id,
+            )
+            metrics["cik_count"] = 0
+            return raw_writes, metrics
+        cik_universe_path = _write_cik_universe_batches(
+            context=context,
+            rows=rows,
+            fetch_date=now.date(),
+            sync_run_id=sync_run_id,
+            batch_size=batch_size,
+        )
+        batch_count = -(-len(rows) // batch_size)  # ceiling division
+        _emit_pipeline_event(
+            "seed_silver_batches_completed",
+            cik_count=len(rows),
+            batch_count=batch_count,
+            cik_universe_path=cik_universe_path,
+            run_id=sync_run_id,
+        )
+        metrics["cik_universe_path"] = cik_universe_path
+        metrics["cik_count"] = len(rows)
+        return raw_writes, metrics
+
     if command_name == "bootstrap-batch":
         cik_list = list(arguments.get("cik_list") or [])
         include_pagination = bool(arguments.get("include_pagination", True))
