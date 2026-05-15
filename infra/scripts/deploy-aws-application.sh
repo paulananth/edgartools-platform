@@ -510,6 +510,57 @@ if [[ "$DEPLOY_MDM" == "true" ]] && ! is_empty "$MDM_POSTGRES_DSN_SECRET_ARN"; t
   sync_mdm_postgres_dsn "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_RDS_INSTANCE_ID"
 fi
 
+# Wire S3 → SNS bucket notification so Snowpipe receives ObjectCreated events for manifests.
+# 5-why root cause: Snowflake had stale data because this notification was never configured,
+# meaning Snowpipe never fired and SNOWFLAKE_RUN_MANIFEST_INBOX stayed empty.
+SNOWFLAKE_MANIFEST_SNS_ARN="arn:aws:sns:${AWS_REGION_NAME}:${ACCOUNT_ID}:${NAME_PREFIX}-snowflake-manifest-events"
+MANIFEST_PREFIX="warehouse/artifacts/snowflake_exports/manifests/"
+
+if aws_cli sns get-topic-attributes \
+    --topic-arn "$SNOWFLAKE_MANIFEST_SNS_ARN" \
+    --query 'Attributes.TopicArn' --output text 2>/dev/null | grep -q "arn:"; then
+
+  # Ensure the SNS topic policy allows S3 to publish
+  aws_cli sns set-topic-attributes \
+    --topic-arn "$SNOWFLAKE_MANIFEST_SNS_ARN" \
+    --attribute-name Policy \
+    --attribute-value "$(python3 -c "
+import json
+print(json.dumps({
+  'Version': '2012-10-17',
+  'Statement': [{
+    'Sid': 'AllowS3BucketNotification',
+    'Effect': 'Allow',
+    'Principal': {'Service': 's3.amazonaws.com'},
+    'Action': 'SNS:Publish',
+    'Resource': '${SNOWFLAKE_MANIFEST_SNS_ARN}',
+    'Condition': {'ArnLike': {'aws:SourceArn': 'arn:aws:s3:::${SNOWFLAKE_EXPORT_BUCKET_NAME}'}}
+  }]
+}))
+")" 2>/dev/null || true
+
+  # Set the bucket notification (idempotent — PUT replaces in full)
+  NOTIFICATION_JSON="$(python3 -c "
+import json
+print(json.dumps({'TopicConfigurations': [{
+  'Id': 'snowflake-manifest-events',
+  'TopicArn': '${SNOWFLAKE_MANIFEST_SNS_ARN}',
+  'Events': ['s3:ObjectCreated:*'],
+  'Filter': {'Key': {'FilterRules': [
+    {'Name': 'prefix', 'Value': '${MANIFEST_PREFIX}'},
+    {'Name': 'suffix', 'Value': 'run_manifest.json'}
+  ]}}
+}]}))
+")"
+  aws_cli s3api put-bucket-notification-configuration \
+    --bucket "$SNOWFLAKE_EXPORT_BUCKET_NAME" \
+    --notification-configuration "$NOTIFICATION_JSON" 2>/dev/null \
+    && log "S3 → SNS notification configured on ${SNOWFLAKE_EXPORT_BUCKET_NAME} for manifest prefix" \
+    || log "WARN: could not set S3 bucket notification (may need s3:PutBucketNotification permission)"
+else
+  log "WARN: SNS topic ${SNOWFLAKE_MANIFEST_SNS_ARN} not found — skipping S3 notification wiring"
+fi
+
 if [[ "$BUILD_MDM_IMAGE" == "auto" ]]; then
   if [[ "$DEPLOY_MDM" == "true" && "$BUILD_IMAGE" == "true" ]] && is_empty "$MDM_IMAGE_REF"; then
     BUILD_MDM_IMAGE=true
