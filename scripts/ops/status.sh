@@ -228,14 +228,28 @@ for entry in "${MACHINES[@]}"; do
   IFS='|' read -r short label suffix stages <<< "$entry"
   if [[ -z "$FILTER" || "$FILTER" == "$short" ]]; then
     show_machine "$short" "$label" "$suffix" "$stages"
-    # Track failures for the hint at the bottom
+    # Track failures for the hint at the bottom — only if failure is recent (< 6h)
     sm_arn="${BASE}:${NAME_PREFIX}-${suffix}"
-    latest_status=$(aws_ stepfunctions list-executions \
+    latest_exec=$(aws_ stepfunctions list-executions \
       --state-machine-arn "$sm_arn" \
       --max-results 1 \
-      --query 'executions[0].status' \
-      --output text 2>/dev/null || echo "")
-    [[ "$latest_status" == "FAILED" ]] && FAILED_PIPELINES+=("$short")
+      --query 'executions[0].{status:status,stop:stopDate}' \
+      --output json 2>/dev/null || echo '{}')
+    latest_status=$(echo "$latest_exec" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || true)
+    if [[ "$latest_status" == "FAILED" ]]; then
+      stop_ts=$(echo "$latest_exec" | python3 -c "
+import json,sys
+from datetime import datetime,timezone
+s=json.load(sys.stdin).get('stop','')
+if not s: print(0); exit()
+try:
+    dt=datetime.fromisoformat(s.replace('Z','+00:00'))
+    print(int((datetime.now(timezone.utc)-dt).total_seconds()))
+except: print(99999)
+" 2>/dev/null || echo "99999")
+      # Only flag as active failure if stopped within last 6 hours
+      [[ "$stop_ts" -lt 21600 ]] && FAILED_PIPELINES+=("$short")
+    fi
   fi
 done
 
