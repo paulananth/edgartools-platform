@@ -234,10 +234,31 @@ build_arg_args() {
     fi
 }
 
+cleanup_local_images() {
+    # Prune dangling layers and stale SHA tags for this repo before building.
+    # Keeps :dev (cache source) and the most recent :sha-* tag; deletes the rest.
+    local repo="${REGISTRY}/${ECR_REPOSITORY}"
+    log "Cleaning local images for ${ECR_REPOSITORY}"
+    docker image prune -f >/dev/null 2>&1 || true
+    docker builder prune -f >/dev/null 2>&1 || true
+
+    # Remove old sha-* tags for this repo (keep only the newest one)
+    local sha_tags old_tags
+    sha_tags=$(docker images --format "{{.Tag}}" "${repo}" 2>/dev/null \
+        | grep '^sha-' | sort -r || true)
+    old_tags=$(echo "$sha_tags" | tail -n +2 || true)
+    while IFS= read -r tag; do
+        [[ -z "$tag" ]] && continue
+        log "Removing stale local image ${ECR_REPOSITORY}:${tag}"
+        docker rmi "${repo}:${tag}" >/dev/null 2>&1 || true
+    done <<< "$old_tags"
+}
+
 publish_docker() {
     local cache_ref tag
     require_command docker
     linux_docker_daemon || fail "docker mode requires a Linux Docker daemon such as macOS Colima"
+    cleanup_local_images
     docker_login
 
     if [[ -n "${DEPENDENCY_IMAGE}" ]]; then
