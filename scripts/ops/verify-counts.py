@@ -130,7 +130,7 @@ def verify_silver(env: str, region: str, local_path: str | None) -> None:
         print()
         print("  SYNC RUN HISTORY (last 5)")
         rows = conn.execute(
-            "SELECT command, status, count(*) FROM sec_sync_run GROUP BY 1,2 ORDER BY 3 DESC LIMIT 10"
+            "SELECT sync_mode, status, count(*) FROM sec_sync_run GROUP BY 1,2 ORDER BY 3 DESC LIMIT 10"
         ).fetchall()
         for cmd, status, n in rows:
             ok(f"  {cmd} [{status}]", n)
