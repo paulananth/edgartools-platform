@@ -110,3 +110,43 @@ class RuntimeImportTests(unittest.TestCase):
             [],
             f"Commands missing from planned_manifest_paths (will exit=2 after completing work): {missing}",
         )
+
+    def test_all_commands_have_resolve_scope(self) -> None:
+        """Every CLI command must have a case in _resolve_scope.
+
+        5-why root cause: seed-silver-batches was missing from _resolve_scope,
+        causing 'Unsupported warehouse command' at runtime despite being registered
+        in COMMAND_REGISTRY and having a planned_manifest_paths entry.
+        """
+        cli = importlib.import_module("edgar_warehouse.cli")
+        orchestrator = importlib.import_module("edgar_warehouse.application.warehouse_orchestrator")
+        errors_module = importlib.import_module("edgar_warehouse.application.errors")
+
+        parser = cli.build_parser()
+        subparsers_action = next(
+            action for action in parser._actions if action.__class__.__name__ == "_SubParsersAction"
+        )
+        # Commands that legitimately bypass _resolve_scope (mdm delegates elsewhere)
+        skip = {"mdm"}
+        all_commands = set(subparsers_action.choices) - skip
+
+        missing = []
+        for command in sorted(all_commands):
+            try:
+                orchestrator._resolve_scope(
+                    command_name=command,
+                    arguments={},
+                    db=None,
+                    now=__import__("datetime").datetime(2024, 1, 1),
+                )
+            except errors_module.WarehouseRuntimeError as e:
+                if "Unsupported warehouse command" in str(e):
+                    missing.append(command)
+            except Exception:
+                pass  # other errors are fine — db=None will raise for most commands
+
+        self.assertEqual(
+            missing,
+            [],
+            f"Commands missing from _resolve_scope (will fail at runtime with 'Unsupported'): {missing}",
+        )

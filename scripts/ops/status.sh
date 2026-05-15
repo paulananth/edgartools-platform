@@ -1,211 +1,253 @@
 #!/usr/bin/env bash
-# Pipeline status: latest bootstrap_phased execution + batch progress + running tasks.
+# Pipeline status: all state machines + running ECS tasks.
 #
 # Usage:
-#   ./scripts/ops/status.sh
-#   ./scripts/ops/status.sh --env prod
-#   ./scripts/ops/status.sh --env dev --region us-west-2
+#   ./scripts/ops/status.sh                  # all pipelines
+#   ./scripts/ops/status.sh bootstrap        # one pipeline only
+#   ./scripts/ops/status.sh --env dev        # environment override
 
 set -euo pipefail
 
 ENVIRONMENT="dev"
 AWS_REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
 AWS_PROFILE_ARG=""
+FILTER=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env)      ENVIRONMENT="${2:?}"; shift 2 ;;
-    --region)   AWS_REGION="${2:?}"; shift 2 ;;
-    --profile)  AWS_PROFILE_ARG="--profile ${2:?}"; shift 2 ;;
-    *) echo "Unknown arg: $1" >&2; exit 2 ;;
+    --env)     ENVIRONMENT="${2:?}"; shift 2 ;;
+    --region)  AWS_REGION="${2:?}"; shift 2 ;;
+    --profile) AWS_PROFILE_ARG="--profile ${2:?}"; shift 2 ;;
+    -*)        echo "Unknown flag: $1" >&2; exit 2 ;;
+    *)         FILTER="$1"; shift ;;
   esac
 done
 
 NAME_PREFIX="edgartools-${ENVIRONMENT}"
 CLUSTER="${NAME_PREFIX}-warehouse"
-SM_ARN="arn:aws:states:${AWS_REGION}:$(aws ${AWS_PROFILE_ARG} sts get-caller-identity \
-  --query Account --output text 2>/dev/null):stateMachine:${NAME_PREFIX}-bootstrap-phased"
-
 aws_() { aws ${AWS_PROFILE_ARG} --region "$AWS_REGION" "$@"; }
+hr()   { printf '%.0s─' $(seq 1 62); echo; }
+ACCOUNT=$(aws_ sts get-caller-identity --query Account --output text 2>/dev/null)
+BASE="arn:aws:states:${AWS_REGION}:${ACCOUNT}:stateMachine"
 
-hr() { printf '%.0s─' $(seq 1 60); echo; }
+# ── State machines to show ────────────────────────────────────────────────────
+# Format: "short-name|display-label|sm-suffix|stages..."
+declare -a MACHINES=(
+  "bootstrap|BOOTSTRAP-PHASED|bootstrap-phased|SeedUniverse BatchBootstrap MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
+  "silver|SILVER-MDM-GOLD|silver-mdm-gold|SeedSilverBatches SilverBatch MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
+  "gold|GOLD-REFRESH|gold-refresh|GoldRefresh"
+  "mdm-gold|MDM-GOLD|mdm-gold|MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
+)
 
-echo ""
-hr
-echo "  BOOTSTRAP-PHASED  ·  ${ENVIRONMENT}  ·  ${AWS_REGION}"
-hr
+show_machine() {
+  local short="$1" label="$2" suffix="$3" stages_str="$4"
+  local sm_arn="${BASE}:${NAME_PREFIX}-${suffix}"
 
-# ── Latest executions ─────────────────────────────────────────────────────────
-echo ""
-echo "RECENT EXECUTIONS"
-aws_ stepfunctions list-executions \
-  --state-machine-arn "$SM_ARN" \
-  --max-results 4 \
-  --output json 2>/dev/null | python3 -c "
+  echo ""
+  hr
+  printf "  %-36s· %s · %s\n" "${label}" "${ENVIRONMENT}" "${AWS_REGION}"
+  hr
+
+  # Recent executions
+  local execs_json
+  execs_json=$(aws_ stepfunctions list-executions \
+    --state-machine-arn "$sm_arn" \
+    --max-results 3 \
+    --output json 2>/dev/null || echo '{"executions":[]}')
+
+  echo ""
+  echo "RECENT EXECUTIONS"
+  echo "$execs_json" | python3 -c "
 import json, sys
 from datetime import datetime, timezone
 
 execs = json.load(sys.stdin).get('executions', [])
+if not execs:
+    print('  (none)')
+    sys.exit()
 for e in execs:
-    name  = e['name'][-28:]
+    name   = e['name'][-32:]
     status = e['status']
-    start  = e['startDate'][-14:-5]
-    stop   = e.get('stopDate', '')
-    stop_s = stop[-14:-5] if stop else '(running)'
-    icon = {'RUNNING':'▶','SUCCEEDED':'✓','FAILED':'✗','ABORTED':'⊘'}.get(status, '?')
-    print(f'  {icon} {status:10s}  {name}  {start} → {stop_s}')
+    start  = e.get('startDate','')
+    stop   = e.get('stopDate','')
+    def fmt(ts):
+        if not ts: return '…'
+        try:
+            dt = datetime.fromisoformat(ts.replace('Z','+00:00'))
+            ago = (datetime.now(timezone.utc) - dt).total_seconds()
+            if ago < 3600: return f'{ago/60:.0f}m ago'
+            return f'{ago/3600:.1f}h ago'
+        except: return ts[-14:-5]
+    icon = {'RUNNING':'▶','SUCCEEDED':'✓','FAILED':'✗','ABORTED':'⊘','TIMED_OUT':'⏱'}.get(status,'?')
+    print(f'  {icon} {status:10s}  {name:32s}  started {fmt(start)}')
 "
 
-# ── Latest running execution ─────────────────────────────────────────────────
-LATEST=$(aws_ stepfunctions list-executions \
-  --state-machine-arn "$SM_ARN" \
-  --max-results 1 \
-  --query 'executions[0]' \
-  --output json 2>/dev/null)
+  # Latest execution detail
+  local latest exec_arn exec_status
+  latest=$(echo "$execs_json" | python3 -c "
+import json,sys
+execs=json.load(sys.stdin).get('executions',[])
+if execs: print(json.dumps(execs[0]))
+else: print('{}')
+")
+  exec_arn=$(echo "$latest" | python3 -c "import json,sys; print(json.load(sys.stdin).get('executionArn',''))")
+  exec_status=$(echo "$latest" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))")
+  [[ -z "$exec_arn" ]] && return
 
-STATUS=$(echo "$LATEST" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))")
-EXEC_ARN=$(echo "$LATEST" | python3 -c "import json,sys; print(json.load(sys.stdin).get('executionArn',''))")
+  # Stage progress
+  local history
+  history=$(aws_ stepfunctions get-execution-history \
+    --execution-arn "$exec_arn" \
+    --output json 2>/dev/null || echo '{"events":[]}')
 
-if [[ -z "$EXEC_ARN" ]]; then
-  echo "  (no executions found)"
-  exit 0
-fi
-
-# ── Step-by-step stage progress ──────────────────────────────────────────────
-echo ""
-echo "STAGE PROGRESS  ($STATUS)"
-aws_ stepfunctions get-execution-history \
-  --execution-arn "$EXEC_ARN" \
-  --output json 2>/dev/null | python3 -c "
-import json, sys
-
+  echo ""
+  echo "STAGE PROGRESS  (${exec_status})"
+  echo "$history" | STAGES="$stages_str" python3 -c "
+import json, sys, os
 events = json.load(sys.stdin)['events']
-stages = ['SeedUniverse','BatchBootstrap','MdmRun','MdmBackfill','MdmSync','MdmVerify','GoldRefresh']
-entered  = set()
-exited   = set()
-failed   = set()
-
+stages = os.environ.get('STAGES','').split()
+entered, exited, failed = set(), set(), set()
 for e in events:
     s = (e.get('stateEnteredEventDetails') or {}).get('name','')
     x = (e.get('stateExitedEventDetails')  or {}).get('name','')
     if s: entered.add(s)
     if x: exited.add(x)
     if e['type'] in ('TaskFailed','MapStateFailed','ExecutionFailed'):
-        for s in entered - exited:
-            failed.add(s)
-
+        for n in list(entered - exited): failed.add(n)
 for stage in stages:
-    if stage in exited:
-        icon = '✓'
-    elif stage in failed:
-        icon = '✗'
-    elif stage in entered:
-        icon = '▶'
-    else:
-        icon = '·'
+    if stage in exited:    icon = chr(10003)
+    elif stage in failed:  icon = chr(10007)
+    elif stage in entered: icon = chr(9654)
+    else:                  icon = chr(183)
     print(f'  {icon}  {stage}')
 "
 
-# ── Batch map run progress ────────────────────────────────────────────────────
-MAP_ARN=$(aws_ stepfunctions get-execution-history \
-  --execution-arn "$EXEC_ARN" \
-  --output json 2>/dev/null | python3 -c "
-import json, sys
+  # Batch map progress (if any)
+  local map_arn
+  map_arn=$(echo "$history" | python3 -c "
+import json,sys
 for e in json.load(sys.stdin)['events']:
-    if e['type'] == 'MapRunStarted':
+    if e['type']=='MapRunStarted':
         print(e.get('mapRunStartedEventDetails',{}).get('mapRunArn',''))
         break
 " 2>/dev/null || true)
 
-if [[ -n "$MAP_ARN" ]]; then
-  echo ""
-  echo "BATCH MAP RUN"
-  aws_ stepfunctions describe-map-run \
-    --map-run-arn "$MAP_ARN" \
-    --output json 2>/dev/null | python3 -c "
-import json, sys
-d = json.loads(sys.stdin.read())
-ic = d.get('itemCounts', {})
-total     = ic.get('total', 0)
-running   = ic.get('running', 0)
-pending   = ic.get('pending', 0)
-succeeded = ic.get('resultsWritten', 0)
-failed    = ic.get('failed', 0)
-pct  = 100 * succeeded / total if total else 0
-bar  = '█' * int(pct / 4) + '░' * (25 - int(pct / 4))
-print(f'  [{bar}] {pct:.0f}%')
-print(f'  done={succeeded}/{total}  running={running}  pending={pending}  failed={failed}')
-print(f'  status={d[\"status\"]}  tolerance=10%')
+  if [[ -n "$map_arn" ]]; then
+    echo ""
+    echo "BATCH MAP RUN"
+    aws_ stepfunctions describe-map-run \
+      --map-run-arn "$map_arn" \
+      --output json 2>/dev/null | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+ic=d.get('itemCounts',{})
+total=ic.get('total',0); running=ic.get('running',0)
+pending=ic.get('pending',0); done=ic.get('resultsWritten',0); failed=ic.get('failed',0)
+pct=100*done/total if total else 0
+bar='█'*int(pct/4)+'░'*(25-int(pct/4))
+print(f'  [{bar}] {pct:.0f}%  done={done}/{total}  running={running}  pending={pending}  failed={failed}')
+print(f'  status={d[\"status\"]}')
 "
-fi
+  fi
 
-# ── Running ECS tasks ──────────────────────────────────────────────────────────
-echo ""
-echo "RUNNING ECS TASKS  (cluster: ${CLUSTER})"
-TASK_ARNS=$(aws_ ecs list-tasks \
-  --cluster "$CLUSTER" \
-  --desired-status RUNNING \
-  --query 'taskArns' \
-  --output json 2>/dev/null | python3 -c "
-import json, sys
-arns = json.load(sys.stdin)
-print(' '.join(arns) if arns else '')
-")
-
-if [[ -z "$TASK_ARNS" ]]; then
-  echo "  (none running)"
-else
-  aws_ ecs describe-tasks \
-    --cluster "$CLUSTER" \
-    --tasks $TASK_ARNS \
-    --output json 2>/dev/null | python3 -c "
-import json, sys
-from datetime import datetime, timezone
-
-tasks = json.load(sys.stdin)['tasks']
-for t in tasks:
-    td  = t.get('taskDefinitionArn','').split('/')[-1]
-    cmd = ' '.join((t.get('overrides',{}).get('containerOverrides') or [{}])[0].get('command',[]))
-    started = t.get('startedAt','')
-    elapsed = ''
-    if started:
-        dt = datetime.fromisoformat(started.replace('Z','+00:00'))
-        mins = (datetime.now(timezone.utc) - dt).total_seconds() / 60
-        elapsed = f'{mins:.0f}m'
-    cpu = t.get('cpu','?')
-    mem_mb = int(cpu) * 2 if cpu and str(cpu).isdigit() else '?'
-    print(f'  {td}  {elapsed:>6}  {cmd[:55]}')
-"
-fi
-
-# ── Last failure cause ────────────────────────────────────────────────────────
-EXEC_STATUS=$(echo "$LATEST" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))")
-if [[ "$EXEC_STATUS" == "FAILED" ]]; then
-  echo ""
-  echo "FAILURE CAUSE"
-  aws_ stepfunctions get-execution-history \
-    --execution-arn "$EXEC_ARN" \
-    --output json 2>/dev/null | python3 -c "
-import json, sys
-events = json.load(sys.stdin)['events']
+  # Failure cause
+  if [[ "$exec_status" == "FAILED" ]]; then
+    echo ""
+    echo "FAILURE CAUSE"
+    echo "$history" | python3 -c "
+import json,sys
+events=json.load(sys.stdin)['events']
 for e in reversed(events):
-    fd = e.get('taskFailedEventDetails') or e.get('executionFailedEventDetails') or e.get('mapRunFailedEventDetails') or {}
-    cause = fd.get('cause','')
-    err   = fd.get('error','')
+    fd=(e.get('taskFailedEventDetails') or e.get('executionFailedEventDetails')
+        or e.get('mapRunFailedEventDetails') or {})
+    err=fd.get('error',''); cause=fd.get('cause','')
     if err or cause:
-        print(f'  error: {err}')
+        if err: print(f'  error: {err}')
         try:
-            c = json.loads(cause)
+            c=json.loads(cause)
             for cont in c.get('Containers',[]):
-                ec = cont.get('ExitCode','?')
-                reason = cont.get('Reason','')
+                ec=cont.get('ExitCode','?'); reason=cont.get('Reason','')
                 print(f'  exit={ec}  {reason}')
         except:
-            if cause:
-                print(f'  {cause[:120]}')
+            if cause: print(f'  {cause[:140]}')
         break
 "
-fi
+  fi
+}
 
+# ── Running ECS tasks ─────────────────────────────────────────────────────────
+show_ecs_tasks() {
+  echo ""
+  hr
+  echo "  RUNNING ECS TASKS  ·  cluster: ${CLUSTER}"
+  hr
+  echo ""
+  local task_arns
+  task_arns=$(aws_ ecs list-tasks \
+    --cluster "$CLUSTER" \
+    --desired-status RUNNING \
+    --query 'taskArns' --output json 2>/dev/null \
+    | python3 -c "import json,sys; arns=json.load(sys.stdin); print(' '.join(arns) if arns else '')")
+
+  if [[ -z "$task_arns" ]]; then
+    echo "  (none running)"
+  else
+    aws_ ecs describe-tasks \
+      --cluster "$CLUSTER" \
+      --tasks $task_arns \
+      --output json 2>/dev/null | python3 -c "
+import json,sys
+from datetime import datetime,timezone
+tasks=json.load(sys.stdin)['tasks']
+for t in tasks:
+    td=t.get('taskDefinitionArn','').split('/')[-1]
+    cmd=' '.join((t.get('overrides',{}).get('containerOverrides') or [{}])[0].get('command',[]))
+    started=t.get('startedAt','')
+    elapsed=''
+    if started:
+        dt=datetime.fromisoformat(started.replace('Z','+00:00'))
+        mins=(datetime.now(timezone.utc)-dt).total_seconds()/60
+        elapsed=f'{mins:.0f}m'
+    print(f'  {td:<40}  {elapsed:>5}  {cmd[:50]}')
+"
+  fi
+  echo ""
+  hr
+  echo ""
+}
+
+# ── Main ──────────────────────────────────────────────────────────────────────
 echo ""
 hr
+printf "  PIPELINE STATUS  ·  %s  ·  %s\n" "${ENVIRONMENT}" "${AWS_REGION}"
+hr
+
+FAILED_PIPELINES=()
+
+for entry in "${MACHINES[@]}"; do
+  IFS='|' read -r short label suffix stages <<< "$entry"
+  if [[ -z "$FILTER" || "$FILTER" == "$short" ]]; then
+    show_machine "$short" "$label" "$suffix" "$stages"
+    # Track failures for the hint at the bottom
+    sm_arn="${BASE}:${NAME_PREFIX}-${suffix}"
+    latest_status=$(aws_ stepfunctions list-executions \
+      --state-machine-arn "$sm_arn" \
+      --max-results 1 \
+      --query 'executions[0].status' \
+      --output text 2>/dev/null || echo "")
+    [[ "$latest_status" == "FAILED" ]] && FAILED_PIPELINES+=("$short")
+  fi
+done
+
+show_ecs_tasks
+
+if [[ ${#FAILED_PIPELINES[@]} -gt 0 ]]; then
+  echo "  FAILURES DETECTED — to diagnose:"
+  for p in "${FAILED_PIPELINES[@]}"; do
+    echo "    ./scripts/ops/diagnose-execution.sh ${p}"
+  done
+  echo "    ./scripts/ops/diagnose-execution.sh        # auto-find latest"
+  echo ""
+  hr
+  echo ""
+fi

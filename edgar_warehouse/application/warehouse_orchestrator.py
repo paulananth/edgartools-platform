@@ -2485,6 +2485,12 @@ def _resolve_scope(
         # _execute_warehouse builds gold because gold-refresh is in GOLD_AFFECTING_COMMANDS.
         return {}
 
+    if command_name == "seed-silver-batches":
+        return {
+            "tracking_status_filter": arguments.get("tracking_status_filter") or "all",
+            "batch_size": arguments.get("batch_size") or 100,
+        }
+
     raise WarehouseRuntimeError(f"Unsupported warehouse command: {command_name}")
 
 
