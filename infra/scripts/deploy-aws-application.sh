@@ -612,6 +612,14 @@ win_path() {
 ECR_REPOSITORY_NAME="${ECR_REPOSITORY_URL##*/}"
 MDM_ECR_REPOSITORY_NAME="${MDM_ECR_REPOSITORY_URL##*/}"
 
+# ── Clean up stale ECR images before every deploy ────────────────────────────
+log "Cleaning up stale ECR images (keeps :dev + 2 newest :sha-* per repo)"
+bash "${SCRIPT_DIR}/cleanup-ecr-images.sh" \
+  --env "$ENVIRONMENT" \
+  --region "$AWS_REGION_NAME" \
+  ${AWS_PROFILE_NAME:+--profile "$AWS_PROFILE_NAME"} \
+  --apply || log "ECR cleanup encountered errors (non-fatal, continuing deploy)"
+
 if [[ "$BUILD_IMAGE" == "true" ]]; then
   image_output_file="$(json_file image-ref)"
   publish_args=(
