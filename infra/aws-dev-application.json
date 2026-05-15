@@ -21,11 +21,11 @@
   "step_functions_role_arn": "arn:aws:iam::077127448006:role/sec_platform_runner_step_functions",
   "edgar_identity_secret_arn": "arn:aws:secretsmanager:us-east-1:077127448006:secret:edgartools-dev-edgar-identity-UMvCTb",
   "task_definitions": {
-    "small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-small:29",
-    "medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-medium:29",
-    "large": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-large:29",
-    "mdm_small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-small:28",
-    "mdm_medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-medium:28"
+    "small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-small:30",
+    "medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-medium:30",
+    "large": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-large:30",
+    "mdm_small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-small:29",
+    "mdm_medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-medium:29"
   },
   "state_machines": {
     "daily_incremental": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-daily-incremental",
@@ -38,6 +38,7 @@
     "gold_refresh": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-gold-refresh",
     "bootstrap_batched": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-bootstrap-batched",
     "bootstrap_phased": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-bootstrap-phased",
+    "mdm_gold": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-mdm-gold",
     "silver_mdm_gold": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-silver-mdm-gold",
     "mdm_migrate": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-mdm-migrate",
     "mdm_check_connectivity": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-mdm-check-connectivity",

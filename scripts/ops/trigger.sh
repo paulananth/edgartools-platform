@@ -34,7 +34,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -z "$PIPELINE" ]] && { echo "Usage: $0 [--env dev] <pipeline>"; echo "Pipelines: bootstrap silver silver-active silver-pending gold mdm-run mdm-verify mdm-sync"; exit 2; }
+[[ -z "$PIPELINE" ]] && { echo "Usage: $0 [--env dev] <pipeline>"; echo "Pipelines: bootstrap silver silver-active silver-pending gold mdm-gold mdm-run mdm-verify mdm-sync"; exit 2; }
 
 NAME_PREFIX="edgartools-${ENVIRONMENT}"
 ACCOUNT=$(aws ${AWS_PROFILE_ARG} --region "$AWS_REGION" sts get-caller-identity --query Account --output text 2>/dev/null)
@@ -72,6 +72,11 @@ case "$PIPELINE" in
     SM="${BASE}:${NAME_PREFIX}-mdm-run"
     INPUT='{}'
     LABEL="mdm_run"
+    ;;
+  mdm-gold)
+    SM="${BASE}:${NAME_PREFIX}-mdm-gold"
+    INPUT='{}'
+    LABEL="mdm_gold (MDM chain → Neo4j sync → gold-refresh, no silver batch)"
     ;;
   mdm-verify)
     SM="${BASE}:${NAME_PREFIX}-mdm-verify-graph"
