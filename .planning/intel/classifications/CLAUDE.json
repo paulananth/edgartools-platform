@@ -1,0 +1,60 @@
+{
+  "filepath": "CLAUDE.md",
+  "type": "DOC",
+  "title": "EdgarTools Platform",
+  "scope_summary": "Developer guide and onboarding reference for the EdgarTools data platform, covering architecture, data layers, ETL pipeline phases, Docker image management, and development commands. Serves as the primary navigation and operational context document for contributors working in this repo.",
+  "cross_references": [
+    "edgar_warehouse/runtime.py",
+    "edgar_warehouse/silver.py",
+    "edgar_warehouse/gold.py",
+    "edgar_warehouse/parsers/ownership.py",
+    "edgar_warehouse/parsers/adv.py",
+    "edgar_warehouse/cli.py",
+    "scripts/batch/",
+    "infra/snowflake/dbt/edgartools_gold/models/gold/",
+    "infra/snowflake/sql/bootstrap/",
+    "infra/snowflake/streamlit/streamlit_app.py",
+    "examples/dashboard/edgar_universe_dashboard.py",
+    "infra/terraform/accounts/prod/",
+    "infra/terraform/snowflake/accounts/prod/",
+    "infra/scripts/",
+    "infra/scripts/setup-colima.sh",
+    "infra/scripts/publish-warehouse-image.sh",
+    "infra/scripts/deploy-snowflake-stack.sh",
+    "infra/scripts/deploy-aws-application.sh",
+    "Dockerfile",
+    "Dockerfile.warehouse-deps",
+    "Dockerfile.mdm-deps",
+    "Dockerfile.mdm-neo4j",
+    "uv.lock",
+    "docs/runbook.md",
+    "warehouse_orchestrator.py"
+  ],
+  "locked_decisions": [
+    "bootstrap-batch must NOT be in GOLD_AFFECTING_COMMANDS (enforced in warehouse_orchestrator.py:79)",
+    "gold-refresh must be in GOLD_AFFECTING_COMMANDS — sole gold builder in the phased pipeline",
+    "SNOWFLAKE_RUN_MANIFEST_TASK must be STARTED in EDGARTOOLS_GOLD",
+    "silver_mdm_gold map MUST pass --artifact-policy skip to bootstrap-batch",
+    "SEC filing artifacts are additive and immutable after capture — skip by default, re-fetch only with explicit --force flag",
+    "Use AWS ECR only for deployable images — do not add Azure Container Registry, Azure SDK, ODBC, or Azure deployment steps",
+    "Always use uv for Python dependency management — never bare pip or bare dbt",
+    "On macOS use Colima as the local Docker daemon; do not introduce another container build/runtime stack"
+  ],
+  "key_requirements": [
+    "edgartools PyPI package >= 5.29.0 required (not a local path dependency)",
+    "Warehouse loaders must skip already-loaded SEC files by default",
+    "bootstrap_phased Step Function is the canonical way to load >=10 companies",
+    "Do not run bootstrap-next locally for large batches",
+    "When edgartools version is bumped, run batch scripts in scripts/batch/ to smoke-test parsing"
+  ],
+  "key_constraints": [
+    "bootstrap-batch must NOT be in GOLD_AFFECTING_COMMANDS",
+    "silver_mdm_gold map MUST pass --artifact-policy skip to bootstrap-batch",
+    "Use uv (not pip) for all Python dependency management",
+    "Use Colima (not Docker Desktop or other runtimes) on macOS",
+    "ECR tags must be MUTABLE for :dev to be overwritten",
+    "edgartools >= 5.29.0 installed from PyPI",
+    "Ownership import pattern: from edgar.ownership import Ownership — do not change without checking changelog"
+  ],
+  "source": "repo-root"
+}

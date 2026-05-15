@@ -1,0 +1,26 @@
+{
+  "filepath": "infra/terraform/snowflake/README.md",
+  "type": "DOC",
+  "title": "Snowflake Terraform Layout",
+  "scope_summary": "Describes the directory structure, provisioning scope, and apply order for Terraform-managed Snowflake objects (databases, schemas, warehouses, native-pull runtime). Serves as an orientation guide for the Snowflake infrastructure layer within the edgartools platform.",
+  "cross_references": [
+    "infra/terraform/access/snowflake/",
+    "infra/snowflake/sql/",
+    "infra/snowflake/dbt/edgartools_gold/",
+    "infra/scripts/deploy-snowflake-stack.sh",
+    "infra/terraform/accounts/prod/",
+    "infra/terraform/snowflake/accounts/dev/",
+    "infra/terraform/snowflake/accounts/prod/"
+  ],
+  "locked_decisions": [],
+  "key_requirements": [],
+  "key_constraints": [
+    "Terraform CLI pinned to 1.14.8",
+    "Snowflake provider pinned to 2.14.1",
+    "Snowflake state must use a key separate from AWS account roots",
+    "Account roles and grants are NOT managed here — they live in infra/terraform/access/snowflake/",
+    "dbt models are NOT managed by this Terraform root",
+    "AWS Terraform is limited to passive cloud infrastructure (export bucket, SNS topic container, IAM role)"
+  ],
+  "source": "infra/terraform/snowflake"
+}
