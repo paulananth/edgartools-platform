@@ -2,7 +2,7 @@
 
 status: active
 milestone: MDM & graph completeness
-updated: 2026-05-15
+updated: 2026-05-16
 
 ---
 
@@ -98,6 +98,7 @@ Do not change without explicit user instruction.
 | DEC-016 | NEO4J_USERNAME (Aura display name) must be mapped to NEO4J_USER before running MDM commands | |
 | DEC-017 | Terraform S3 backend state locking uses `use_lockfile = true` — no DynamoDB lock table | |
 | DEC-018 | ECR tags must be MUTABLE for `:dev` to be overwritten on each image push | |
+| DEC-019 | Claude and Codex may work independently only through isolated git/workstream ownership; neither runtime may overwrite the other's in-progress work | AGENTS.md, .planning/COORDINATION.md |
 
 ---
 
@@ -106,6 +107,7 @@ Do not change without explicit user instruction.
 | Date | Phase | Decision | Rationale |
 |------|-------|----------|-----------|
 | 2026-05-15 | init | 10 decisions LOCKED (DEC-001 through DEC-010) | Derived from CLAUDE.md/AGENTS.md; DEC-005 and DEC-010 promoted to LOCKED on user confirmation |
+| 2026-05-16 | coordination | Claude/Codex work must be isolated by worktree/branch and GSD workstream ownership | User requested independent Claude and Codex work without conflicts |
 
 ---
 

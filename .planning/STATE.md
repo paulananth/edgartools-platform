@@ -51,6 +51,9 @@ None yet.
   independent of Phases 2-3. Can be advanced in parallel if needed.
 - `GOLD_AFFECTING_COMMANDS` invariant check script does not yet exist — create in Phase 4.
 - Documentation debt (CLAUDE.md "8 tables", README.md bare pip) deferred to backlog Phase 7.
+- Claude and Codex work must remain isolated by git/worktree and GSD workstream ownership.
+  See `.planning/COORDINATION.md`. Existing uncommitted work should be treated as protected
+  unless the user explicitly hands it off.
 
 ## Session Continuity
 

@@ -2,6 +2,18 @@
 
 This repo is the full data platform built on top of the `edgartools` PyPI package. It extracts SEC EDGAR filings data via an ETL runtime, stages Parquet files in S3, loads them into Snowflake, and transforms them into production-ready dynamic tables consumed by a Streamlit dashboard. The platform is designed to track a universe of public companies and investment advisers across all major SEC form types.
 
+## Parallel Agent Workstreams
+
+Claude and Codex may work on this repository independently, but they must not share an uncoordinated edit surface.
+
+- Treat current Codex work as protected unless the user explicitly hands it off.
+- Prefer separate git worktrees or branches for concurrent Claude and Codex work.
+- Use separate GSD workstream directories under `.planning/workstreams/<name>/`; do not edit another runtime's active workstream files.
+- Before editing, run `git status --short` and inspect `.planning/active-workstream` when present.
+- Avoid overlapping source files, Terraform roots, generated application JSON, and planning artifacts across runtimes unless the user assigns the same task to both.
+- If overlap is unavoidable, stop and ask for an ownership decision instead of merging assumptions.
+- Do not overwrite, revert, stage, or commit changes created by the other runtime unless explicitly instructed.
+
 ## Quick Navigation
 
 | Need | Location |
