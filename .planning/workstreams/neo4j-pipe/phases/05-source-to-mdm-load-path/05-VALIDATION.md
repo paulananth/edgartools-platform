@@ -39,16 +39,17 @@ created: 2026-05-16
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
 | 05-W0-01 | TBD | 0 | PIPE-01 | T-05-01 | Parse existing bronze XML without SEC re-fetch and write current silver ownership tables. | unit/integration | `uv run --extra s3 --with pytest pytest tests/application/test_parse_ownership_bronze.py -q` | no - W0 | pending |
-| 05-W0-02 | TBD | 0 | PIPE-02 | T-05-02 | Repeated MDM entity loading keeps domain entity counts stable. | integration | `uv run --extra mdm-runtime --with pytest pytest tests/mdm/test_source_to_mdm_load_path.py::test_entity_load_is_idempotent_for_domain_counts -q` | no - W0 | pending |
-| 05-W0-03 | TBD | 0 | PIPE-03 | T-05-03 | Missing silver source exits before MDM session creation or mutation. | unit/CLI | `uv run --extra mdm-runtime --with pytest pytest tests/mdm/test_source_to_mdm_load_path.py::test_missing_silver_source_fails_before_session -q` | no - W0 | pending |
-| 05-W0-04 | TBD | 0 | ISO-01, ISO-02 | - | Changed files stay inside the neo4j-pipe scope and avoid loader-fix/generated deployment surfaces. | static review | `git diff --name-only` | manual/static | pending |
+| 05-W0-02 | TBD | 0 | PIPE-01 | T-05-02 | S3-backed `MDM_SILVER_DUCKDB` succeeds through `object_storage.read_bytes()` using real DuckDB bytes and no SEC fetch. | integration | `uv run --extra mdm-runtime --extra s3 --with pytest pytest tests/mdm/test_source_to_mdm_load_path.py::test_s3_backed_silver_source_uses_object_storage_read_bytes -q` | no - W0 | pending |
+| 05-W0-03 | TBD | 0 | PIPE-02 | T-05-03 | Repeated MDM entity loading keeps domain entity counts stable. | integration | `uv run --extra mdm-runtime --with pytest pytest tests/mdm/test_source_to_mdm_load_path.py::test_entity_load_is_idempotent_for_domain_counts -q` | no - W0 | pending |
+| 05-W0-04 | TBD | 0 | PIPE-03 | T-05-04 | Missing silver source exits before MDM session creation or mutation. | unit/CLI | `uv run --extra mdm-runtime --with pytest pytest tests/mdm/test_source_to_mdm_load_path.py::test_missing_silver_source_fails_before_session -q` | no - W0 | pending |
+| 05-W0-05 | TBD | 0 | ISO-01, ISO-02 | - | Changed files stay inside the neo4j-pipe scope and avoid loader-fix/generated deployment surfaces, including untracked files. | static review | `git status --short --untracked-files=all` | manual/static | pending |
 
 ---
 
 ## Wave 0 Requirements
 
 - [ ] `tests/application/test_parse_ownership_bronze.py` - covers current silver schema, skip already parsed accessions, artifact-registry primary XML reads, missing artifact reporting.
-- [ ] `tests/mdm/test_source_to_mdm_load_path.py` - covers local/S3-like `MDM_SILVER_DUCKDB`, missing source before session, table/row preflight, and entity domain count idempotency.
+- [ ] `tests/mdm/test_source_to_mdm_load_path.py` - covers local `MDM_SILVER_DUCKDB`, positive `s3://` `MDM_SILVER_DUCKDB` via monkeypatched `object_storage.read_bytes()` returning real DuckDB bytes, missing source before session, table/row preflight, and entity domain count idempotency.
 - [ ] Fixture helper to create a tiny real DuckDB file using current silver DDL and synthetic rows for all five entity domains.
 - [ ] MDM test setup using existing SQLAlchemy metadata and default seeding patterns.
 
@@ -59,7 +60,7 @@ created: 2026-05-16
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
 | Live S3 bronze primary XML availability | PIPE-01 | Local research did not verify AWS bronze contents or credentials. | Run the bounded operator validation task produced by the plan against the target `WAREHOUSE_BRONZE_ROOT` and `WAREHOUSE_STORAGE_ROOT`; record ownership-form filing, primary artifact, and parsed ownership row counts. |
-| Worktree isolation | ISO-01, ISO-02 | Requires review of final changed file set. | Run `git status --short` and `git diff --name-only`; confirm no loader-fix artifacts, generated deployment JSON, gold/dbt, or Step Functions observability files changed. |
+| Worktree isolation | ISO-01, ISO-02 | Requires review of final changed file set. | Run `git status --short --untracked-files=all`; confirm no loader-fix artifacts, generated deployment JSON, gold/dbt, or Step Functions observability files changed. |
 
 ---
 

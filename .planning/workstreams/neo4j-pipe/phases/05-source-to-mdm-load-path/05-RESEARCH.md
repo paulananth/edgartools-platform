@@ -392,22 +392,22 @@ Use this before and after a repeated fixture run to prove PIPE-02. [VERIFIED: `.
 | A1 | Live S3 bronze primary XML availability was not verified during research; research relies on the milestone audit and code paths. [ASSUMED] | Open Questions / Summary | Planner may need an operator validation task before relying on real S3 bronze artifacts. |
 | A2 | The minimal fixture can use synthetic SEC-like rows rather than real filings as long as it exercises the current silver schema and MDM resolvers. [ASSUMED] | Validation Architecture | If parser-specific behavior is required, planner must add one real sanitized Form 4 XML fixture. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Are primary ownership XML artifacts present in the real target bronze root?**
    - What we know: Local silver candidates had nonzero Forms 3/4/5 filing metadata and zero parsed ownership rows. [VERIFIED: `.planning/workstreams/neo4j-pipe/v1.1-MILESTONE-AUDIT.md`]
    - What's unclear: This research did not query live S3 bronze. [ASSUMED]
-   - Recommendation: Add a bounded operator validation task that reports counts for `sec_filing_attachment` primary rows joined to `sec_raw_object`, and only then runs repaired `parse-ownership-bronze`. [VERIFIED: `scripts/ops/check-neo4j-e2e.py:96`]
+   - Resolution: Phase 5 execution must not assume live bronze availability. Automated work uses local fixtures and artifact-registry behavior; operator documentation must include a bounded AWS validation step that reports ownership-form filing counts, `sec_filing_attachment` primary rows joined to `sec_raw_object`, and parsed ownership row counts before a live backfill run. This remains a manual live-data verification, not an implementation blocker. [RESOLVED: covered by Plan 04 documentation/operator diagnostic scope]
 
 2. **Should `parse-ownership-bronze` get scope flags in Phase 5?**
    - What we know: Context gives the agent discretion to add `--limit`, `--cik-list`, `--accession-list`, or dry-run/report-only controls if needed. [VERIFIED: `05-CONTEXT.md`]
    - What's unclear: The roadmap success criteria do not require these flags. [VERIFIED: `.planning/workstreams/neo4j-pipe/ROADMAP.md`]
-   - Recommendation: Add only `--limit` or `--accession-list` if tests or safe local verification need bounded execution. [ASSUMED]
+   - Resolution: Add `--limit` and `--accession-list` to the existing `parse-ownership-bronze` command for bounded repair and testability. Do not add a new command and do not add SEC re-fetch behavior. [RESOLVED: covered by Plan 02]
 
 3. **Should missing optional ADV tables block `mdm run --entity-type all`?**
    - What we know: Phase success expects company, adviser, person, security, and fund counts to stay stable across repeated runs. [VERIFIED: `.planning/workstreams/neo4j-pipe/ROADMAP.md`]
    - What's unclear: The production silver candidates in the audit focused on ownership gaps, not ADV row availability. [VERIFIED: `.planning/workstreams/neo4j-pipe/v1.1-MILESTONE-AUDIT.md`]
-   - Recommendation: Make preflight table requirements entity-type aware; require ADV rows only when running adviser/fund loaders or `entity-type all`. [ASSUMED]
+   - Resolution: Make preflight table requirements entity-type aware. `entity-type all` requires all five domain source groups; adviser and fund source tables are required only for `adviser`, `fund`, or `all`. Ownership tables are required for `person`, `security`, relationship-readiness commands, and `all`. [RESOLVED: covered by Plan 03]
 
 ## Environment Availability
 
@@ -450,12 +450,12 @@ The workstream config does not set `workflow.nyquist_validation` to `false`, so 
 
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|--------------|
-| PIPE-01 | MDM reads local and URI-backed `MDM_SILVER_DUCKDB` without SEC fetch and loads all five entity domains. | integration | `uv run --extra mdm-runtime --extra s3 --with pytest pytest tests/mdm/test_source_to_mdm_load_path.py::test_mdm_run_all_from_silver_fixture -q` | no - Wave 0 [ASSUMED proposed file] |
+| PIPE-01 | MDM reads local and URI-backed `MDM_SILVER_DUCKDB` without SEC fetch and loads all five entity domains. | integration | `uv run --extra mdm-runtime --extra s3 --with pytest pytest tests/mdm/test_source_to_mdm_load_path.py::test_mdm_run_all_from_silver_fixture tests/mdm/test_source_to_mdm_load_path.py::test_s3_backed_silver_source_uses_object_storage_read_bytes -q` | no - Wave 0 [ASSUMED proposed file] |
 | PIPE-01 | `parse-ownership-bronze` selects `form`/`report_date` and reads primary XML from artifact registry. | unit/integration | `uv run --extra s3 --with pytest pytest tests/application/test_parse_ownership_bronze.py -q` | no - Wave 0 [ASSUMED proposed file] |
 | PIPE-02 | Re-running entity load against the same fixture keeps `mdm_company`, `mdm_adviser`, `mdm_person`, `mdm_security`, and `mdm_fund` counts stable. | integration | `uv run --extra mdm-runtime --with pytest pytest tests/mdm/test_source_to_mdm_load_path.py::test_entity_load_is_idempotent_for_domain_counts -q` | no - Wave 0 [ASSUMED proposed file] |
 | PIPE-03 | Missing `MDM_SILVER_DUCKDB` exits nonzero with an actionable message before opening MDM session. | unit/CLI | `uv run --extra mdm-runtime --with pytest pytest tests/mdm/test_source_to_mdm_load_path.py::test_missing_silver_source_fails_before_session -q` | no - Wave 0 [ASSUMED proposed file] |
-| ISO-01 | Phase files avoid loader-fix workstream and generated deployment JSON. | review/static | `git status --short` | manual/static [VERIFIED: AGENTS.md] |
-| ISO-02 | Phase avoids gold/dbt/Step Functions/refactor surfaces. | review/static | `git diff --name-only` | manual/static [VERIFIED: AGENTS.md] |
+| ISO-01 | Phase files avoid loader-fix workstream and generated deployment JSON, including untracked files. | review/static | `git status --short --untracked-files=all` | manual/static [VERIFIED: AGENTS.md] |
+| ISO-02 | Phase avoids gold/dbt/Step Functions/refactor surfaces, including untracked files. | review/static | `git status --short --untracked-files=all` | manual/static [VERIFIED: AGENTS.md] |
 
 ### Sampling Rate
 
@@ -466,7 +466,7 @@ The workstream config does not set `workflow.nyquist_validation` to `false`, so 
 ### Wave 0 Gaps
 
 - [ ] `tests/application/test_parse_ownership_bronze.py` - covers current silver schema, skip already parsed accessions, artifact-registry primary XML reads, missing artifact reporting. [ASSUMED proposed file]
-- [ ] `tests/mdm/test_source_to_mdm_load_path.py` - covers local/S3-like `MDM_SILVER_DUCKDB`, missing source before session, table/row preflight, and entity domain count idempotency. [ASSUMED proposed file]
+- [ ] `tests/mdm/test_source_to_mdm_load_path.py` - covers local `MDM_SILVER_DUCKDB`, positive `s3://` `MDM_SILVER_DUCKDB` via monkeypatched `object_storage.read_bytes()` returning real DuckDB bytes, missing source before session, table/row preflight, and entity domain count idempotency. [ASSUMED proposed file]
 - [ ] Fixture helper to create a tiny real DuckDB file using `SilverDatabase` DDL or direct DDL from `silver_store.py`, with synthetic rows for all five entity domains. [ASSUMED]
 - [ ] Optional helper to seed in-memory MDM with `Base.metadata.create_all()` plus `seed_defaults(session)` so entity resolvers have source priorities and relationship definitions. [VERIFIED: `tests/mdm/conftest.py:101`; `edgar_warehouse/mdm/migrations/runtime.py:380`]
 
