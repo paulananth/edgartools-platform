@@ -125,10 +125,12 @@ for e in events:
     if s: entered.add(s)
     if x: exited.add(x)
     # TaskFailed is intermediate — stage may show ✗ briefly before retry completes
-    if e['type'] in ('TaskFailed','MapStateFailed','ExecutionFailed'):
+    if e['type'] in ('TaskFailed','MapRunFailed','MapStateFailed','ExecutionFailed'):
         for n in list(entered - exited): failed.add(n)
 active = entered - exited - failed
-assert len(active) <= 1, f'one-▶ invariant violation: {active}'
+if len(active) > 1:
+    import sys as _sys
+    print(f'  ⚠  one-▶ invariant violation: {active}', file=_sys.stderr)
 for stage in stages:
     if stage in exited:   icon = chr(10003)
     elif stage in failed: icon = chr(10007)
