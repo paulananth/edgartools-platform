@@ -52,11 +52,11 @@ an SNS email notification when anything fails.
 
 ## Traceability
 
-| REQ-ID | Phase |
-|--------|-------|
-| OBS-01 | TBD (roadmapper) |
-| OBS-02 | TBD (roadmapper) |
-| OBS-03 | TBD (roadmapper) |
-| OBS-04 | TBD (roadmapper) |
-| OBS-05 | TBD (roadmapper) |
-| OBS-06 | TBD (roadmapper) |
+| REQ-ID | Phase | Status |
+|--------|-------|--------|
+| OBS-01 | Phase 1 | Pending |
+| OBS-02 | Phase 1 | Pending |
+| OBS-03 | Phase 2 | Pending |
+| OBS-04 | Phase 2 | Pending |
+| OBS-05 | Phase 3 | Pending |
+| OBS-06 | Phase 3 | Pending |
