@@ -62,8 +62,9 @@ Plans:
   2. The notification email body contains: pipeline name, execution ARN, failed stage name, and a direct CloudWatch Logs URL to the log stream of the failing ECS task
   3. The subscriber email address is configurable via a Terraform variable (not hardcoded) — changing the recipient requires only a `terraform apply`, not a code change
   4. The SNS topic, subscription, and failure-detection wiring (EventBridge rule on Step Functions state change) are all Terraform-managed infrastructure, consistent with DEC-011
-**Plans**: TBD
-**UI hint**: no
+**Plans**: 1 plan
+Plans:
+- [ ] 03-01-PLAN.md — Create pipeline_notifications Terraform module, wire into accounts/prod, deploy and verify
 
 ### Phase 4: SEC Rate Limiting
 **Goal**: All pipeline ECS tasks enforce a minimum of 2 and a maximum of 5 concurrent outbound connections to the SEC EDGAR website — preventing rate-limit blocks and ensuring predictable throughput
@@ -86,7 +87,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Failure Surfacing | 3/3 | Complete | 2026-05-16 |
 | 2. Status Completeness | 0/1 | Not started | - |
-| 3. Failure Notifications | 0/? | Not started | - |
+| 3. Failure Notifications | 0/1 | Not started | - |
 | 4. SEC Rate Limiting | 0/1 | Not started | - |
 
 ---
