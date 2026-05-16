@@ -20,6 +20,7 @@ an SNS email notification when anything fails.
 - [ ] **Phase 1: Failure Surfacing** - Every stage failure in all 5 state machines reaches FAILED state — executions never succeed silently when a stage errored
 - [ ] **Phase 2: Status Completeness** - `status.sh` shows a complete, accurate stage-level breakdown including the actively executing stage for all 5 registered state machines
 - [ ] **Phase 3: Failure Notifications** - Operators receive an SNS email with full context (pipeline name, execution ARN, failed stage, CloudWatch deep-link) when any pipeline fails
+- [ ] **Phase 4: SEC Rate Limiting** - Enforce minimum 2 and maximum 5 concurrent calls to the SEC website across all pipeline tasks
 
 ---
 
@@ -62,15 +63,26 @@ Plans:
 **Plans**: TBD
 **UI hint**: no
 
+### Phase 4: SEC Rate Limiting
+**Goal**: All pipeline ECS tasks enforce a minimum of 2 and a maximum of 5 concurrent outbound connections to the SEC EDGAR website — preventing rate-limit blocks and ensuring predictable throughput
+**Depends on**: Nothing (independent; can land alongside Phase 2 or 3)
+**Requirements**: TBD
+**Success Criteria** (what must be TRUE):
+  1. No ECS task makes fewer than 2 or more than 5 simultaneous HTTP connections to `data.sec.gov` or `www.sec.gov`
+  2. The concurrency bounds are enforced in code (not just documentation) and are configurable via environment variable or config without a code change
+  3. Existing pipeline load tests or integration tests pass with the new limits applied
+**Plans**: TBD
+
 ---
 
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Failure Surfacing | 0/3 | Not started | - |
+| 1. Failure Surfacing | 3/3 | Complete | 2026-05-16 |
 | 2. Status Completeness | 0/? | Not started | - |
 | 3. Failure Notifications | 0/? | Not started | - |
+| 4. SEC Rate Limiting | 0/? | Not started | - |
 
 ---
 

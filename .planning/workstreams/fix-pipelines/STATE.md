@@ -69,6 +69,10 @@ Requirements: OBS-01 through OBS-06 (see REQUIREMENTS.md)
 
 None
 
+### Roadmap Evolution
+
+- Phase 4 added: enforce minimum 2 and maximum 5 concurrent calls to SEC website
+
 ### Pending Todos
 
 - Fix race condition in `scripts/ops/test-failure-surfacing.sh`: the "overwrite-after-SeedUniverse"
