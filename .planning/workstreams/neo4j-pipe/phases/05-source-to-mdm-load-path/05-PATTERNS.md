@@ -9,10 +9,12 @@
 | New/Modified File | Role | Data Flow | Closest Analog | Match Quality |
 |-------------------|------|-----------|----------------|---------------|
 | `edgar_warehouse/application/warehouse_orchestrator.py` | controller/orchestrator | batch, file I/O, transform | `edgar_warehouse/application/warehouse_orchestrator.py` | exact |
+| `edgar_warehouse/cli.py` | CLI command registry | request/response, batch | `edgar_warehouse/cli.py` | exact |
 | `edgar_warehouse/mdm/cli.py` | CLI boundary | request/response, batch | `edgar_warehouse/mdm/cli.py` | exact |
 | `edgar_warehouse/mdm/pipeline.py` | service/orchestrator | batch, CRUD, transform | `edgar_warehouse/mdm/pipeline.py` | exact |
 | `tests/application/test_parse_ownership_bronze.py` | application test | batch, file I/O, transform | `tests/unit/test_loader_idempotency.py`, `tests/unit/test_submission_phase_order.py` | role match |
 | `tests/mdm/test_source_to_mdm_load_path.py` | MDM integration test | batch, CRUD, transform | `tests/mdm/test_pipeline_relationships.py` | exact |
+| `docs/aws-mdm-source-to-mdm.md` | operator documentation | operator runbook | `AGENTS.md` MDM guidance and `scripts/ops/check-neo4j-e2e.py` readiness-count vocabulary | role match |
 
 ## Pattern Assignments
 
@@ -54,6 +56,22 @@ Closest current references:
 - `_handle_derive_relationships(...)`
 - `_handle_load_relationships(...)`
 - `_handle_seed_from_silver(...)`
+
+### `edgar_warehouse/cli.py`
+
+Follow the existing top-level CLI command registry:
+
+- Add bounded arguments on the existing `parse-ownership-bronze` parser only.
+- Keep the command name and handler `_handle_parse_ownership_bronze` unchanged.
+- Use argparse options named `--limit` and `--accession-list`.
+- Do not add a second ownership parser command.
+- Do not add SEC-fetch flags to the command.
+
+Closest current references:
+
+- `parse_ownership_bronze = subparsers.add_parser("parse-ownership-bronze", ...)`
+- `_add_run_id_arg(parse_ownership_bronze)`
+- Bounded options on existing commands such as `seed-universe`, `bootstrap-next`, and MDM subcommands.
 
 ### `edgar_warehouse/mdm/pipeline.py`
 
@@ -100,6 +118,7 @@ Use existing MDM fixture patterns:
 - Use in-memory SQLite with `Base.metadata.create_all(...)` and registry seeding.
 - Use `StubSilver.fetch(...)` keyed by SQL substrings for pipeline tests where possible.
 - Use a real temporary DuckDB file for CLI source-preflight tests.
+- Include a positive URI-backed test that sets `MDM_SILVER_DUCKDB=s3://bucket/path/silver.duckdb`, monkeypatches `edgar_warehouse.infrastructure.object_storage.read_bytes` to return bytes from the temporary DuckDB fixture, and verifies preflight/load success.
 - Assert idempotency on domain tables only: `mdm_company`, `mdm_adviser`, `mdm_person`, `mdm_security`, `mdm_fund`.
 - Do not assert staging/change-log tables stay unchanged across repeated runs.
 - Test missing `MDM_SILVER_DUCKDB` before `_session()` by monkeypatching `_session` to raise if called.
@@ -110,6 +129,24 @@ Closest current references:
 - `tests/mdm/test_pipeline_relationships.py`
 - `tests/mdm/test_universe.py`
 - `tests/mdm/test_runtime_ops.py`
+
+### `docs/aws-mdm-source-to-mdm.md`
+
+Follow repository operator-doc style:
+
+- Keep guidance AWS/local focused.
+- Document local `MDM_SILVER_DUCKDB=/path/to/silver.duckdb`.
+- Document S3-backed `MDM_SILVER_DUCKDB=s3://.../silver.duckdb` and `MDM_LOCAL_SILVER_DUCKDB`.
+- Include exact commands for `edgar-warehouse parse-ownership-bronze`, `edgar-warehouse mdm run`, `edgar-warehouse mdm derive-relationships`, and `edgar-warehouse mdm load-relationships --skip-graph-sync`.
+- State that absent bronze primary XML is reported and not re-fetched.
+- Keep relationship coverage in Phase 6 and Neo4j sync in Phase 7.
+- Do not introduce non-AWS storage, new secret-management paths, Terraform rollout steps, or generated deployment JSON edits.
+
+Closest current references:
+
+- `AGENTS.md` AWS MDM and warehouse-command sections.
+- `scripts/ops/check-neo4j-e2e.py` readiness-count vocabulary.
+- `infra/scripts/run-aws-mdm-e2e.sh` operational command style.
 
 ## Shared Patterns
 
