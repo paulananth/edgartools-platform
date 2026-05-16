@@ -1,17 +1,11 @@
 ---
 gsd_state_version: 1.0
-workstream: neo4j-pipe
 milestone: v1.1
 milestone_name: Neo4j bronze-to-graph pipe
-status: planning
-last_updated: "2026-05-16"
-last_activity: 2026-05-16
-progress:
-  total_phases: 3
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+status: Ready to plan Phase 5
+last_updated: "2026-05-16T14:59:48Z"
+last_activity: 2026-05-16 — Phase 5 context gathered (assumptions mode)
+resume_file: .planning/workstreams/neo4j-pipe/phases/05-source-to-mdm-load-path/05-CONTEXT.md
 ---
 
 # Project State — neo4j-pipe
@@ -20,8 +14,9 @@ progress:
 
 Phase: 5 of 7 (Source To MDM Load Path)
 Plan: 0 of TBD in current phase
-Status: Ready to discuss Phase 5
-Last activity: 2026-05-16 — Workstream roadmap initialized
+Status: Ready to plan Phase 5
+Last activity: 2026-05-16 — Phase 5 context gathered (assumptions mode)
+Resume file: `.planning/workstreams/neo4j-pipe/phases/05-source-to-mdm-load-path/05-CONTEXT.md`
 
 ## Milestone Context
 
@@ -45,6 +40,7 @@ into Neo4j so graph sync is complete, idempotent, and independently verifiable.
 - Use the isolated git worktree at `/Users/aneenaananth/gsd-workspaces/neo4j-pipe/edgartools-platform`.
 - Do not edit loader-fix workstream artifacts or generated deployment JSON from this worktree.
 - Keep scope to bronze/silver → MDM → Neo4j. Gold refresh, generic Step Functions observability, and unrelated loader refactors are out of scope.
+- Phase 5 context confirms that missing ownership relationships should be repaired independently by parsing already-captured bronze Form 3/4/5 XML into silver ownership tables before MDM/Neo4j derivation.
 
 ### Blockers
 
