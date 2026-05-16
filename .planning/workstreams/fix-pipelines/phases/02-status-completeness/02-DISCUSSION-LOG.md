@@ -5,7 +5,7 @@
 
 **Date:** 2026-05-16
 **Phase:** 02-status-completeness
-**Areas discussed:** Stage list maintenance, Map state active-stage granularity
+**Areas discussed:** Stage list maintenance, Map state active-stage granularity, D-03 vs D-05 verification tension, Retry-state icon
 
 ---
 
@@ -68,12 +68,64 @@
 
 ---
 
+---
+
+## D-03 vs D-05 Verification Tension (update session — 2026-05-16)
+
+### Q1 — What does 'verification step' mean for the one-▶ invariant?
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Code comment only | Comment in Python block explaining sequential-model guarantee. No assert, no live run. | |
+| Python assert in code | `assert len(active) <= 1` after computing active set. Code-level enforcement, no live run. | ✓ |
+| Live pipeline observation | Manual step: spin up pipeline, observe exactly one ▶. Contradicts D-03. | |
+
+**User's choice:** Python assert in code
+**Notes:** Resolves D-03/D-05 tension — structural enforcement without a live run.
+
+### Q2 — Where should the assert live?
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| After computing active, before rendering | `active = entered - exited - failed; assert len(active) <= 1, f'...'` | ✓ |
+| Inside per-stage loop | Equivalent but harder to read. | |
+| You decide | Leave to planner/executor. | |
+
+**User's choice:** After computing active, before rendering
+
+---
+
+## Retry-State Icon (update session — 2026-05-16)
+
+### Q1 — What should retry-state icon behavior be?
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Keep ✗ on TaskFailed (current) | Stage shows ✗ on ECS task failure. Transient ✗ then ✓ if retry succeeds. | ✓ |
+| Show ▶ during retries | Remove TaskFailed from failure detection; only terminal events mark ✗. | |
+| Show ↻ with new icon | New icon for retry state. More informative but more complex. | |
+
+**User's choice:** Keep ✗ on TaskFailed (current behavior)
+**Notes:** Accepted as known limitation for v1, not a bug to fix.
+
+### Q2 — Document as known limitation?
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Yes, document as known limitation | Add note preventing future agents from "fixing" this. | ✓ |
+| No, leave as Claude's Discretion | Keep current "acceptable for v1" language. | |
+
+**User's choice:** Yes, document it as known limitation
+
+---
+
 ## Claude's Discretion
 
-- **Retry state visualization** — not selected for discussion. Current behavior (✗ icon for
-  failing-then-retrying stages) is acceptable for v1. Claude may improve this if trivial,
-  but it is not required for OBS-04.
+- **Retry state visualization** — resolved by D-06: keep current ✗ behavior; documented as
+  known limitation. Explicitly NOT a bug to fix in Phase 2.
 
 ## Deferred Ideas
 
-None — discussion stayed within phase scope.
+- **Retry-state icon upgrade (▶ or ↻):** Would require distinguishing `TaskFailed`
+  (intermediate) from `MapStateFailed`/`ExecutionFailed` (terminal). Deferred to a future
+  phase. D-06 marks this as a v1 known limitation.
