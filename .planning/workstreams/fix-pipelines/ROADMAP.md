@@ -34,7 +34,11 @@ an SNS email notification when anything fails.
   2. A failed child execution within a Distributed Map state (BatchBootstrap in `bootstrap_phased`, BatchSilver in `silver_mdm_gold`) propagates to the parent execution reaching FAILED — the `ToleratedFailurePercentage` does not absorb the failure silently
   3. All 5 named state machines — `bootstrap-phased`, `silver-mdm-gold`, `gold-refresh`, `mdm-gold`, `ownership-mdm-gold` — exhibit the same hard-fail behavior when any of their stages errors
   4. Running `./scripts/ops/status.sh` after a failed execution shows FAILED status (not SUCCEEDED) for the affected pipeline
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 01-01-PLAN.md — Edit deploy-aws-application.sh (4 value changes) and redeploy both state machines
+- [ ] 01-02-PLAN.md — Create test-failure-surfacing.sh and append runbook recovery section
+- [ ] 01-03-PLAN.md — Run live failure-injection test and record FAILED execution ARN
 
 ### Phase 2: Status Completeness
 **Goal**: `status.sh` displays a complete, accurate stage-level breakdown for all 5 registered state machines, with clear indication of which stage is actively executing during a running pipeline
@@ -64,7 +68,7 @@ an SNS email notification when anything fails.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Failure Surfacing | 0/? | Not started | - |
+| 1. Failure Surfacing | 0/3 | Not started | - |
 | 2. Status Completeness | 0/? | Not started | - |
 | 3. Failure Notifications | 0/? | Not started | - |
 
