@@ -23,16 +23,16 @@ machine definitions, or add live end-to-end tests of all 5 machines.
 ## Implementation Decisions
 
 ### Stage list maintenance
-- **D-01:** Keep the stage lists hardcoded in the `MACHINES` array in `status.sh`. Do NOT
+- **D-01:** [informational] Keep the stage lists hardcoded in the `MACHINES` array in `status.sh`. Do NOT
   generate them dynamically at runtime (no extra API call on every status.sh invocation).
 - **D-02:** Add a comment directly above the `MACHINES` array pointing reviewers to the
   source of truth:
   `# Stage order must match write_bootstrap_phased_definition(), write_silver_mdm_gold_definition(), etc. in infra/scripts/deploy-aws-application.sh`
-- **D-03:** No live verification pass is needed — code inspection confirms the lists match
+- **D-03:** [informational] No live verification pass is needed — code inspection confirms the lists match
   the state machine definitions. Running actual pipelines to spot-check is out of scope.
 
 ### Active-stage display
-- **D-04:** The two-section layout is correct and sufficient: `▶ BatchBootstrap` in
+- **D-04:** [informational] The two-section layout is correct and sufficient: `▶ BatchBootstrap` in
   STAGE PROGRESS + the separate BATCH MAP RUN section below. Do NOT merge the batch item
   count into the stage line.
 - **D-05:** Exactly one `▶` marker is the invariant for OBS-04. The plan resolves the
