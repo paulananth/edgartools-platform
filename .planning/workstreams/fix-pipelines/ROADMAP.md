@@ -51,7 +51,7 @@ Plans:
   3. For a running pipeline, exactly one stage shows the active-execution marker (`▶`) and it matches the stage currently executing in Step Functions — not just a top-level "RUNNING" with no stage detail
 **Plans**: 1 plan
 Plans:
-- [ ] 02-01-PLAN.md — Apply D-02/D-05/D-06 edits to status.sh and verify stage list correctness
+- [x] 02-01-PLAN.md — Apply D-02/D-05/D-06 edits to status.sh and verify stage list correctness
 
 ### Phase 3: Failure Notifications
 **Goal**: Operators are automatically notified by SNS email when any pipeline execution reaches FAILED state, with enough detail to immediately identify and locate the failure
