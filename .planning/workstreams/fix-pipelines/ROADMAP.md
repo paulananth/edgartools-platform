@@ -49,7 +49,9 @@ Plans:
   1. `./scripts/ops/status.sh` displays stage-level breakdown for all 5 state machines: `bootstrap-phased`, `silver-mdm-gold`, `gold-refresh`, `mdm-gold`, and `ownership-mdm-gold` — no registered state machine is silently omitted
   2. All stage names listed for each state machine appear in the output (no stages are missing from the hardcoded stage list relative to what the state machine actually executes)
   3. For a running pipeline, exactly one stage shows the active-execution marker (`▶`) and it matches the stage currently executing in Step Functions — not just a top-level "RUNNING" with no stage detail
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 02-01-PLAN.md — Apply D-02/D-05/D-06 edits to status.sh and verify stage list correctness
 
 ### Phase 3: Failure Notifications
 **Goal**: Operators are automatically notified by SNS email when any pipeline execution reaches FAILED state, with enough detail to immediately identify and locate the failure
@@ -80,7 +82,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Failure Surfacing | 3/3 | Complete | 2026-05-16 |
-| 2. Status Completeness | 0/? | Not started | - |
+| 2. Status Completeness | 0/1 | Not started | - |
 | 3. Failure Notifications | 0/? | Not started | - |
 | 4. SEC Rate Limiting | 0/? | Not started | - |
 
