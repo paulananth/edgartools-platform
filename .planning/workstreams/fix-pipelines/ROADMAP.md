@@ -36,9 +36,9 @@ an SNS email notification when anything fails.
   4. Running `./scripts/ops/status.sh` after a failed execution shows FAILED status (not SUCCEEDED) for the affected pipeline
 **Plans**: 3 plans
 Plans:
-- [ ] 01-01-PLAN.md — Edit deploy-aws-application.sh (4 value changes) and redeploy both state machines
-- [ ] 01-02-PLAN.md — Create test-failure-surfacing.sh and append runbook recovery section
-- [ ] 01-03-PLAN.md — Run live failure-injection test and record FAILED execution ARN
+- [x] 01-01-PLAN.md — Edit deploy-aws-application.sh (4 value changes) and redeploy both state machines
+- [x] 01-02-PLAN.md — Create test-failure-surfacing.sh and append runbook recovery section
+- [x] 01-03-PLAN.md — Run live failure-injection test and record FAILED execution ARN
 
 ### Phase 2: Status Completeness
 **Goal**: `status.sh` displays a complete, accurate stage-level breakdown for all 5 registered state machines, with clear indication of which stage is actively executing during a running pipeline
