@@ -68,12 +68,15 @@ Plans:
 ### Phase 4: SEC Rate Limiting
 **Goal**: All pipeline ECS tasks enforce a minimum of 2 and a maximum of 5 concurrent outbound connections to the SEC EDGAR website — preventing rate-limit blocks and ensuring predictable throughput
 **Depends on**: Nothing (independent; can land alongside Phase 2 or 3)
-**Requirements**: TBD
+**Requirements**: SEC-RL-01, SEC-RL-02
 **Success Criteria** (what must be TRUE):
-  1. No ECS task makes fewer than 2 or more than 5 simultaneous HTTP connections to `data.sec.gov` or `www.sec.gov`
-  2. The concurrency bounds are enforced in code (not just documentation) and are configurable via environment variable or config without a code change
-  3. Existing pipeline load tests or integration tests pass with the new limits applied
-**Plans**: TBD
+  1. Every call to `download_sec_bytes()` in `sec_client.py` is throttled by a 9 req/sec in-process rate limiter before the retry loop — the limiter is a module-level singleton initialized at import time
+  2. `CLAUDE.md` documents `BOOTSTRAP_BATCH_CONCURRENCY` recommended range as 2–5 concurrent ECS tasks, with the current default of 3 explicitly noted as compliant
+  3. All existing `tests/unit/test_sec_client.py` tests pass; a new unit test confirms `try_acquire` is called exactly once per logical `download_sec_bytes()` invocation regardless of retry count
+  4. `deploy-aws-application.sh` line 139 (`BOOTSTRAP_BATCH_CONCURRENCY=3`) is unchanged — value was already within compliant range per user decision
+**Plans**: 1 plan
+Plans:
+- [ ] 04-01-PLAN.md — Add pyrate-limiter rate limiting to sec_client.py and document safe concurrency range in CLAUDE.md
 
 ---
 
@@ -84,7 +87,7 @@ Plans:
 | 1. Failure Surfacing | 3/3 | Complete | 2026-05-16 |
 | 2. Status Completeness | 0/1 | Not started | - |
 | 3. Failure Notifications | 0/? | Not started | - |
-| 4. SEC Rate Limiting | 0/? | Not started | - |
+| 4. SEC Rate Limiting | 0/1 | Not started | - |
 
 ---
 
@@ -98,5 +101,7 @@ Plans:
 | OBS-04 | Phase 2 | Pending |
 | OBS-05 | Phase 3 | Pending |
 | OBS-06 | Phase 3 | Pending |
+| SEC-RL-01 | Phase 4 | Pending |
+| SEC-RL-02 | Phase 4 | Pending |
 
-All 6 v1 requirements mapped. No orphans.
+All 8 requirements mapped. No orphans.
