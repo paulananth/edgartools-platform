@@ -1,7 +1,7 @@
 # Project: EdgarTools Platform
 
 status: active
-milestone: MDM & graph completeness
+milestone: v1.1 Neo4j bronze-to-graph pipe
 updated: 2026-05-16
 
 ---
@@ -14,15 +14,21 @@ at scale on AWS ECS and publishes to Snowflake gold tables consumed by analytics
 
 ---
 
-## Current Milestone
+## Current Milestone: v1.1 Neo4j bronze-to-graph pipe
 
-**MDM & graph completeness** — complete entity resolution, Neo4j sync correctness, and full
-IS_INSIDER / MANAGES_FUND relationship coverage so downstream gold tables reflect accurate
-insider and adviser relationships.
+**Goal:** Fix the path from already-captured bronze/silver data through MDM relationship
+derivation into Neo4j so graph sync is complete, idempotent, and independently verifiable.
 
-Developer-facing success metric: All phased pipeline stages (bronze → MDM → gold) run
-reliably at scale. The MDM graph correctly classifies entity relationships and `mdm-verify-graph`
-reports zero relationship defects.
+**Target features:**
+- Load MDM entities from local or S3-backed silver data derived from bronze without re-fetching SEC artifacts.
+- Derive all Neo4j relationship rows required for ownership and adviser/fund graph coverage.
+- Sync Neo4j nodes and edges idempotently, including repeat-run behavior and pending-sync visibility.
+- Verify graph coverage with actionable counts and missing-edge diagnostics.
+
+Developer-facing success metric: Given an already-loaded bronze/silver dataset,
+`edgar-warehouse mdm load-relationships`, `edgar-warehouse mdm sync-graph`, and
+`edgar-warehouse mdm verify-graph` can prove the Neo4j graph matches MDM relationship state
+without touching gold-layer pipeline work or loader fixes.
 
 ---
 
