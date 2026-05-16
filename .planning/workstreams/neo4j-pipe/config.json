@@ -1,0 +1,11 @@
+{
+  "name": "neo4j-pipe",
+  "branch": "workspace/neo4j-pipe",
+  "workspace_path": "/Users/aneenaananth/gsd-workspaces/neo4j-pipe/edgartools-platform",
+  "scope": "Fix the bronze/silver to MDM to Neo4j graph pipe without overlapping loader-fix work.",
+  "protected_from": [
+    "loader fixes",
+    "fix-pipelines workstream",
+    "generated deployment JSON"
+  ]
+}

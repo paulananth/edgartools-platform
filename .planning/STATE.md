@@ -1,25 +1,39 @@
+---
+gsd_state_version: 1.0
+milestone: v1.1
+milestone_name: Neo4j bronze-to-graph pipe
+status: planning
+last_updated: "2026-05-16T14:18:23.476Z"
+last_activity: 2026-05-16
+progress:
+  total_phases: 3
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
+---
+
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-15)
+See: .planning/PROJECT.md (updated 2026-05-16)
 
 **Core value:** Structured, business-ready SEC EDGAR data through a reliable phased ETL pipeline
 publishing to Snowflake gold tables.
-**Current focus:** Phase 1 — MDM Entity Resolution (not yet started)
+**Current focus:** Phase 5 — Source To MDM Load Path (not yet started)
 
 ## Current Position
 
-Phase: 1 of 4 (MDM Entity Resolution)
-Plan: 0 of TBD in current phase
-Status: Ready to plan Phase 1
-Last activity: 2026-05-15 — Roadmap initialized from intel ingest (11 DOC sources)
-
-Progress: [░░░░░░░░░░] 0%
+Phase: Not started (defining requirements)
+Plan: —
+Status: Ready to plan Phase 5
+Last activity: 2026-05-16 — Milestone v1.1 roadmap initialized
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0
 - Average duration: -
 - Total execution time: -
@@ -37,6 +51,7 @@ Progress: [░░░░░░░░░░] 0%
 ### Decisions
 
 All locked decisions confirmed in PROJECT.md. Key ones for MDM work:
+
 - DEC-004: silver_mdm_gold map MUST pass `--artifact-policy skip` to bootstrap-batch
 - DEC-009: SEC artifacts are additive/immutable — loaders skip by default
 - DEC-002/DEC-003: bootstrap-batch NOT in GOLD_AFFECTING_COMMANDS; gold-refresh IS
@@ -49,11 +64,15 @@ None yet.
 
 - Phase 4 (Pipeline Hardening) depends on Phase 1 for MDM baseline but is otherwise
   independent of Phases 2-3. Can be advanced in parallel if needed.
+
 - `GOLD_AFFECTING_COMMANDS` invariant check script does not yet exist — create in Phase 4.
 - Documentation debt (CLAUDE.md "8 tables", README.md bare pip) deferred to backlog Phase 7.
 - Claude and Codex work must remain isolated by git/worktree and GSD workstream ownership.
   See `.planning/COORDINATION.md`. Existing uncommitted work should be treated as protected
   unless the user explicitly hands it off.
+- Active isolated worktree for this milestone:
+  `/Users/aneenaananth/gsd-workspaces/neo4j-pipe/edgartools-platform`
+  on branch `workspace/neo4j-pipe`. Do not edit loader-fix workstream artifacts from this branch.
 
 ## Session Continuity
 
