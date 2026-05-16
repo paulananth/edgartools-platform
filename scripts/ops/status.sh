@@ -32,6 +32,7 @@ BASE="arn:aws:states:${AWS_REGION}:${ACCOUNT}:stateMachine"
 
 # ── State machines to show ────────────────────────────────────────────────────
 # Format: "short-name|display-label|sm-suffix|stages..."
+# Stage order must match write_bootstrap_phased_definition(), write_silver_mdm_gold_definition(), etc. in infra/scripts/deploy-aws-application.sh
 declare -a MACHINES=(
   "bootstrap|BOOTSTRAP-PHASED|bootstrap-phased|SeedUniverse BatchBootstrap MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
   "silver|SILVER-MDM-GOLD|silver-mdm-gold|SeedSilverBatches BatchSilver MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
@@ -123,13 +124,16 @@ for e in events:
     x = (e.get('stateExitedEventDetails')  or {}).get('name','')
     if s: entered.add(s)
     if x: exited.add(x)
+    # TaskFailed is intermediate — stage may show ✗ briefly before retry completes
     if e['type'] in ('TaskFailed','MapStateFailed','ExecutionFailed'):
         for n in list(entered - exited): failed.add(n)
+active = entered - exited - failed
+assert len(active) <= 1, f'one-▶ invariant violation: {active}'
 for stage in stages:
-    if stage in exited:    icon = chr(10003)
-    elif stage in failed:  icon = chr(10007)
-    elif stage in entered: icon = chr(9654)
-    else:                  icon = chr(183)
+    if stage in exited:   icon = chr(10003)
+    elif stage in failed: icon = chr(10007)
+    elif stage in active: icon = chr(9654)
+    else:                 icon = chr(183)
     print(f'  {icon}  {stage}')
 "
 
