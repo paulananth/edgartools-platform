@@ -3,7 +3,7 @@
 workstream: neo4j-pipe
 status: active
 milestone: v1.1 Neo4j bronze-to-graph pipe
-updated: 2026-05-16
+updated: 2026-05-17
 
 ---
 
@@ -49,7 +49,9 @@ Plans:
   2. `HOLDS` and `ISSUED_BY` rows cover ownership security relationships where owner, security, and issuer resolve.
   3. `MANAGES_FUND`, `IS_ENTITY_OF`, and `IS_PERSON_OF` rows cover adviser/fund/company/person relationships.
   4. Re-running relationship derivation against unchanged data inserts zero new active duplicate rows.
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 06-01-PLAN.md — TDD: expand fixture_world, add broken-down skip counters, D-03 stderr events, and all-six-types idempotency test.
 
 ### Phase 7: Neo4j Sync And Verification
 **Goal**: Neo4j sync upserts all required nodes and pending edges idempotently, and verification reports both graph counts and missing MDM-to-Neo4j edges.
@@ -69,5 +71,5 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 5. Source To MDM Load Path | v1.1 Neo4j bronze-to-graph pipe | 1/4 | In progress | - |
-| 6. Relationship Derivation Coverage | v1.1 Neo4j bronze-to-graph pipe | 0/TBD | Not started | - |
+| 6. Relationship Derivation Coverage | v1.1 Neo4j bronze-to-graph pipe | 0/1 | Not started | - |
 | 7. Neo4j Sync And Verification | v1.1 Neo4j bronze-to-graph pipe | 0/TBD | Not started | - |
