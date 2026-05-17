@@ -12,7 +12,10 @@ Graph sync runs last.
 """
 from __future__ import annotations
 
+import json
+import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Iterable, Optional
 
 from sqlalchemy import func, select
@@ -213,15 +216,25 @@ class MDMPipeline:
             if target_per_type is not None:
                 remaining = max(int(target_per_type) - existing, 0)
             inserted = 0
-            skipped = 0
+            skipped_corporate = 0
+            skipped_unresolved_source = 0
+            skipped_unresolved_target = 0
+            skipped_existing = 0
             if remaining is None or remaining > 0:
-                inserted, skipped = self._derive_relationship_type(sync_engine, rel_type_name, remaining)
+                (inserted, skipped_corporate, skipped_unresolved_source,
+                 skipped_unresolved_target, skipped_existing) = \
+                    self._derive_relationship_type(sync_engine, rel_type_name, remaining)
             summary[rel_type_name] = {
-                "existing": existing,
-                "inserted": inserted,
-                "skipped": skipped,
-                "target": target_per_type,
-                "total": existing + inserted,
+                "existing":                  existing,
+                "inserted":                  inserted,
+                "skipped":                   (skipped_corporate + skipped_unresolved_source
+                                              + skipped_unresolved_target + skipped_existing),
+                "skipped_corporate":         skipped_corporate,
+                "skipped_unresolved_source": skipped_unresolved_source,
+                "skipped_unresolved_target": skipped_unresolved_target,
+                "skipped_existing":          skipped_existing,
+                "target":                    target_per_type,
+                "total":                     existing + inserted,
             }
         self.session.commit()
         return summary
@@ -231,7 +244,7 @@ class MDMPipeline:
         sync_engine: GraphSyncEngine,
         rel_type_name: str,
         remaining: Optional[int],
-    ) -> tuple[int, int]:
+    ) -> tuple[int, int, int, int, int]:
         if rel_type_name == "IS_INSIDER":
             return self._derive_is_insider(sync_engine, remaining)
         if rel_type_name == "HOLDS":
@@ -246,7 +259,7 @@ class MDMPipeline:
             return self._derive_is_person_of(sync_engine, remaining)
         raise KeyError(f"Unknown relationship type '{rel_type_name}'")
 
-    def _derive_is_insider(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int]:
+    def _derive_is_insider(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
         sql = """
             SELECT o.accession_number, o.owner_index, o.owner_cik, o.owner_name,
                    o.is_director, o.is_officer, o.is_ten_percent_owner, o.is_other,
@@ -257,16 +270,44 @@ class MDMPipeline:
         """
         company_ciks = self._company_cik_set()
         inserted = 0
-        skipped = 0
+        skipped_corporate = 0
+        skipped_unresolved_source = 0
+        skipped_unresolved_target = 0
+        skipped_existing = 0
         for row in self.silver.fetch(sql):
             owner_cik = row.get("owner_cik")
             if owner_cik in company_ciks:
-                skipped += 1
+                skipped_corporate += 1
+                print(json.dumps({
+                    "event": "mdm_relationship_skip",
+                    "rel_type": "IS_INSIDER",
+                    "reason": "corporate",
+                    "owner_cik": owner_cik,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }), file=sys.stderr, flush=True)
+                continue
+            person_id = self._person_entity_id(owner_cik, row.get("owner_name"))
+            if person_id is None:
+                skipped_unresolved_source += 1
+                print(json.dumps({
+                    "event": "mdm_relationship_skip",
+                    "rel_type": "IS_INSIDER",
+                    "reason": "unresolved_source",
+                    "owner_cik": owner_cik,
+                    "owner_name": row.get("owner_name"),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }), file=sys.stderr, flush=True)
                 continue
             issuer_id = self._company_entity_id(row.get("issuer_cik"))
-            person_id = self._person_entity_id(owner_cik, row.get("owner_name"))
-            if issuer_id is None or person_id is None:
-                skipped += 1
+            if issuer_id is None:
+                skipped_unresolved_target += 1
+                print(json.dumps({
+                    "event": "mdm_relationship_skip",
+                    "rel_type": "IS_INSIDER",
+                    "reason": "unresolved_target",
+                    "issuer_cik": row.get("issuer_cik"),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }), file=sys.stderr, flush=True)
                 continue
             _rel, created = sync_engine.ensure_relationship(
                 rel_type_name="IS_INSIDER",
@@ -277,13 +318,23 @@ class MDMPipeline:
                 source_system="ownership_filing",
                 source_accession=row.get("accession_number"),
             )
-            inserted += 1 if created else 0
-            skipped += 0 if created else 1
+            if created:
+                inserted += 1
+            else:
+                skipped_existing += 1
+                print(json.dumps({
+                    "event": "mdm_relationship_skip",
+                    "rel_type": "IS_INSIDER",
+                    "reason": "existing",
+                    "source_entity_id": person_id,
+                    "target_entity_id": issuer_id,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }), file=sys.stderr, flush=True)
             if remaining is not None and inserted >= remaining:
                 break
-        return inserted, skipped
+        return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
-    def _derive_holds(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int]:
+    def _derive_holds(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
         sql = """
             SELECT t.accession_number, t.owner_index, t.txn_index,
                    t.security_title, t.transaction_date, t.shares_owned_after,
@@ -299,16 +350,45 @@ class MDMPipeline:
         """
         company_ciks = self._company_cik_set()
         inserted = 0
-        skipped = 0
+        skipped_corporate = 0
+        skipped_unresolved_source = 0
+        skipped_unresolved_target = 0
+        skipped_existing = 0
         for row in self.silver.fetch(sql):
             owner_cik = row.get("owner_cik")
             if owner_cik in company_ciks:
-                skipped += 1
+                skipped_corporate += 1
+                print(json.dumps({
+                    "event": "mdm_relationship_skip",
+                    "rel_type": "HOLDS",
+                    "reason": "corporate",
+                    "owner_cik": owner_cik,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }), file=sys.stderr, flush=True)
                 continue
             person_id = self._person_entity_id(owner_cik, row.get("owner_name"))
+            if person_id is None:
+                skipped_unresolved_source += 1
+                print(json.dumps({
+                    "event": "mdm_relationship_skip",
+                    "rel_type": "HOLDS",
+                    "reason": "unresolved_source",
+                    "owner_cik": owner_cik,
+                    "owner_name": row.get("owner_name"),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }), file=sys.stderr, flush=True)
+                continue
             security_id = self._security_entity_id(row)
-            if person_id is None or security_id is None:
-                skipped += 1
+            if security_id is None:
+                skipped_unresolved_target += 1
+                print(json.dumps({
+                    "event": "mdm_relationship_skip",
+                    "rel_type": "HOLDS",
+                    "reason": "unresolved_target",
+                    "security_title": row.get("security_title"),
+                    "issuer_cik": row.get("issuer_cik"),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }), file=sys.stderr, flush=True)
                 continue
             properties = {
                 "shares_owned": self._json_property(row.get("shares_owned_after")),
@@ -324,15 +404,28 @@ class MDMPipeline:
                 source_system="ownership_filing",
                 source_accession=row.get("accession_number"),
             )
-            inserted += 1 if created else 0
-            skipped += 0 if created else 1
+            if created:
+                inserted += 1
+            else:
+                skipped_existing += 1
+                print(json.dumps({
+                    "event": "mdm_relationship_skip",
+                    "rel_type": "HOLDS",
+                    "reason": "existing",
+                    "source_entity_id": person_id,
+                    "target_entity_id": security_id,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }), file=sys.stderr, flush=True)
             if remaining is not None and inserted >= remaining:
                 break
-        return inserted, skipped
+        return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
-    def _derive_is_entity_of(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int]:
+    def _derive_is_entity_of(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
         inserted = 0
-        skipped = 0
+        skipped_corporate = 0
+        skipped_unresolved_source = 0
+        skipped_unresolved_target = 0
+        skipped_existing = 0
         for adviser_id, company_id in self._adviser_company_pairs():
             _rel, created = sync_engine.ensure_relationship(
                 rel_type_name="IS_ENTITY_OF",
@@ -341,14 +434,17 @@ class MDMPipeline:
                 source_system="adv_filing",
             )
             inserted += 1 if created else 0
-            skipped += 0 if created else 1
+            skipped_existing += 0 if created else 1
             if remaining is not None and inserted >= remaining:
                 break
-        return inserted, skipped
+        return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
-    def _derive_is_person_of(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int]:
+    def _derive_is_person_of(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
         inserted = 0
-        skipped = 0
+        skipped_corporate = 0
+        skipped_unresolved_source = 0
+        skipped_unresolved_target = 0
+        skipped_existing = 0
         for adviser_id, person_id in self._adviser_person_pairs():
             _rel, created = sync_engine.ensure_relationship(
                 rel_type_name="IS_PERSON_OF",
@@ -357,16 +453,19 @@ class MDMPipeline:
                 source_system="adv_filing",
             )
             inserted += 1 if created else 0
-            skipped += 0 if created else 1
+            skipped_existing += 0 if created else 1
             if remaining is not None and inserted >= remaining:
                 break
-        return inserted, skipped
+        return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
-    def _derive_manages_fund(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int]:
+    def _derive_manages_fund(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
         from edgar_warehouse.mdm.database import MdmFund
 
         inserted = 0
-        skipped = 0
+        skipped_corporate = 0
+        skipped_unresolved_source = 0
+        skipped_unresolved_target = 0
+        skipped_existing = 0
         for fund in self.session.scalars(
             select(MdmFund).where(MdmFund.adviser_entity_id.isnot(None))
         ):
@@ -377,16 +476,19 @@ class MDMPipeline:
                 source_system="mdm_backfill",
             )
             inserted += 1 if created else 0
-            skipped += 0 if created else 1
+            skipped_existing += 0 if created else 1
             if remaining is not None and inserted >= remaining:
                 break
-        return inserted, skipped
+        return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
-    def _derive_issued_by(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int]:
+    def _derive_issued_by(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
         from edgar_warehouse.mdm.database import MdmSecurity
 
         inserted = 0
-        skipped = 0
+        skipped_corporate = 0
+        skipped_unresolved_source = 0
+        skipped_unresolved_target = 0
+        skipped_existing = 0
         for security in self.session.scalars(
             select(MdmSecurity).where(MdmSecurity.issuer_entity_id.isnot(None))
         ):
@@ -397,10 +499,10 @@ class MDMPipeline:
                 source_system="mdm_backfill",
             )
             inserted += 1 if created else 0
-            skipped += 0 if created else 1
+            skipped_existing += 0 if created else 1
             if remaining is not None and inserted >= remaining:
                 break
-        return inserted, skipped
+        return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def run_all(self, limit: Optional[int] = None) -> PipelineStats:
         stats = PipelineStats()
