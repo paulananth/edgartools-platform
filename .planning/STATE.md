@@ -6,16 +6,23 @@ See: .planning/PROJECT.md (updated 2026-05-15)
 
 **Core value:** Structured, business-ready SEC EDGAR data through a reliable phased ETL pipeline
 publishing to Snowflake gold tables.
-**Current focus:** Phase 1 — MDM Entity Resolution (not yet started)
+**Current focus:** Phase 1 — MDM Entity Resolution (ready to start)
 
 ## Current Position
 
 Phase: 1 of 4 (MDM Entity Resolution)
 Plan: 0 of TBD in current phase
 Status: Ready to plan Phase 1
-Last activity: 2026-05-15 — Roadmap initialized from intel ingest (11 DOC sources)
+Last activity: 2026-05-16 — fix-pipelines workstream (v1.0 Pipeline Observability) complete
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [░░░░░░░░░░] 0% (MDM milestone)
+
+## Completed Workstreams
+
+- **fix-pipelines v1.0** (2026-05-16) — Pipeline Observability
+  4 phases · 6 plans · 12 files changed
+  Failure surfacing, status completeness, SNS failure notifications, SEC rate limiting
+  Archive: .planning/workstreams/fix-pipelines/milestones/v1.0-ROADMAP.md
 
 ## Performance Metrics
 
@@ -57,6 +64,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-15
-Stopped at: Roadmap and planning files initialized; no phases in flight
+Last session: 2026-05-16
+Stopped at: fix-pipelines milestone archived; ready to start MDM Phase 1
 Resume file: None
