@@ -35,7 +35,7 @@ Neo4j so graph sync is complete, idempotent, and independently verifiable.
   4. The worktree remains isolated on `workspace/neo4j-pipe` and does not edit loader-fix artifacts or generated deployment JSON.
 **Plans**: 4 plans
 Plans:
-- [ ] 05-01-PLAN.md — Wave 0 tests and fixtures for parser repair, source preflight, and MDM entity idempotency.
+- [x] 05-01-PLAN.md — Wave 0 tests and fixtures for parser repair, source preflight, and MDM entity idempotency. (ffc9ad8)
 - [ ] 05-02-PLAN.md — Repair parse-ownership-bronze against current silver schema and artifact-registry reads.
 - [ ] 05-03-PLAN.md — Add shared MDM silver preflight before mutating commands.
 - [ ] 05-04-PLAN.md — Prove all-domain entity-load idempotency and document AWS/local operator flow.
@@ -68,6 +68,6 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 5. Source To MDM Load Path | v1.1 Neo4j bronze-to-graph pipe | 0/4 | Not started | - |
+| 5. Source To MDM Load Path | v1.1 Neo4j bronze-to-graph pipe | 1/4 | In progress | - |
 | 6. Relationship Derivation Coverage | v1.1 Neo4j bronze-to-graph pipe | 0/TBD | Not started | - |
 | 7. Neo4j Sync And Verification | v1.1 Neo4j bronze-to-graph pipe | 0/TBD | Not started | - |
