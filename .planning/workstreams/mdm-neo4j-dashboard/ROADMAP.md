@@ -33,7 +33,10 @@ Build a read-only dashboard for reviewing MDM relational data and Neo4j graph da
   3. Neo4j connection uses read-only sessions/transactions for review queries.
   4. Missing configuration and connection errors are actionable and do not print secret values.
   5. Changed files stay inside the dashboard worktree scope and avoid generated deployment JSON.
-**Plans**: TBD
+**Plans**:
+  - 08-01: MDM read-only dashboard helpers (wave 1)
+  - 08-02: Neo4j review-only dashboard helpers (wave 1)
+  - 08-03: Streamlit dashboard shell, docs, and architecture guards (wave 2; depends on 08-01, 08-02)
 
 ### Phase 9: MDM And Neo4j Review Metrics
 **Goal**: Operators can inspect MDM and Neo4j coverage metrics side by side, including pending sync and missing-edge diagnostics.
@@ -65,6 +68,6 @@ Build a read-only dashboard for reviewing MDM relational data and Neo4j graph da
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 8. Dashboard Foundations And Read-Only Data Access | v1.2 MDM Neo4j Review Dashboard | 0/TBD | Not started | - |
+| 8. Dashboard Foundations And Read-Only Data Access | v1.2 MDM Neo4j Review Dashboard | 0/3 | Planned | - |
 | 9. MDM And Neo4j Review Metrics | v1.2 MDM Neo4j Review Dashboard | 0/TBD | Not started | - |
 | 10. Operator Review Experience | v1.2 MDM Neo4j Review Dashboard | 0/TBD | Not started | - |
