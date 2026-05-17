@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Optional
 from urllib.parse import urlparse
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 try:  # optional dependency from the [mdm] extra
@@ -435,6 +435,30 @@ class GraphSyncEngine:
             for row in rows:
                 self._ensure_node_exists(s, row.entity_id, row.entity_type)
         return len(rows)
+
+    def pending_counts(self) -> dict[str, int]:
+        """Return count of unsynced (graph_synced_at IS NULL, is_active) rows by rel_type_name.
+
+        Note: GROUP BY naturally omits types with zero pending rows. Callers must
+        use counts.get(rel_type, 0) to include zeroes for fully-synced types.
+        """
+        rows = self.session.execute(
+            select(
+                MdmRelationshipType.rel_type_name,
+                func.count(MdmRelationshipInstance.instance_id),
+            )
+            .select_from(MdmRelationshipInstance)
+            .join(
+                MdmRelationshipType,
+                MdmRelationshipInstance.rel_type_id == MdmRelationshipType.rel_type_id,
+            )
+            .where(
+                MdmRelationshipInstance.graph_synced_at.is_(None),
+                MdmRelationshipInstance.is_active == True,
+            )
+            .group_by(MdmRelationshipType.rel_type_name)
+        )
+        return {name: int(count) for name, count in rows}
 
     def _pending_relationship_rows(
         self,

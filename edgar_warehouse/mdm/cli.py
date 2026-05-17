@@ -560,9 +560,10 @@ def _handle_verify_graph(args) -> int:
         return 1
     session = _session()
     try:
-        from edgar_warehouse.mdm.graph import GraphRegistry
+        from edgar_warehouse.mdm.graph import GraphRegistry, GraphSyncEngine
 
-        relationship_types = sorted(GraphRegistry.load(session).rel_type_by_name)
+        registry = GraphRegistry.load(session)
+        relationship_types = sorted(registry.rel_type_by_name)
         with client.session() as s:
             payload = {"neo4j_nodes_total": s.run("MATCH (n) RETURN count(n) AS n").single()["n"]}
             for rel_type in relationship_types:
@@ -570,6 +571,11 @@ def _handle_verify_graph(args) -> int:
                 payload[f"neo4j_{rel_type}_edges"] = s.run(
                     f"MATCH ()-[r:{rel_type}]->() RETURN count(r) AS n"
                 ).single()["n"]
+        # Add pending MDM counts (SQL only — Neo4j connection already released)
+        engine = GraphSyncEngine(session=session, registry=registry)
+        pending = engine.pending_counts()
+        for rel_type in relationship_types:
+            payload[f"mdm_{rel_type}_pending"] = pending.get(rel_type, 0)
     finally:
         session.close()
         client.close()
