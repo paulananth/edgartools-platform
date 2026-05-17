@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Neo4j bronze-to-graph pipe
 status: executing
-last_updated: "2026-05-16T23:03:15.506Z"
-last_activity: 2026-05-16 -- Phase 05 planning complete
+last_updated: "2026-05-17T00:35:00.000Z"
+last_activity: 2026-05-17 -- Phase 05 Plan 01 complete (RED test contract)
 ---
 
 # Project State — neo4j-pipe
@@ -12,10 +12,10 @@ last_activity: 2026-05-16 -- Phase 05 planning complete
 ## Current Position
 
 Phase: 5 of 7 (Source To MDM Load Path)
-Plan: 0 of TBD in current phase
-Status: Ready to execute
-Last activity: 2026-05-16 -- Phase 05 planning complete
-Resume file: `.planning/workstreams/neo4j-pipe/phases/05-source-to-mdm-load-path/05-CONTEXT.md`
+Plan: 1 of 4 complete in current phase
+Status: Executing
+Last activity: 2026-05-17 -- Plan 05-01 complete (Wave 0 RED tests committed ffc9ad8)
+Resume file: `.planning/workstreams/neo4j-pipe/phases/05-source-to-mdm-load-path/05-02-PLAN.md`
 
 ## Milestone Context
 
@@ -40,6 +40,9 @@ into Neo4j so graph sync is complete, idempotent, and independently verifiable.
 - Do not edit loader-fix workstream artifacts or generated deployment JSON from this worktree.
 - Keep scope to bronze/silver → MDM → Neo4j. Gold refresh, generic Step Functions observability, and unrelated loader refactors are out of scope.
 - Phase 5 context confirms that missing ownership relationships should be repaired independently by parsing already-captured bronze Form 3/4/5 XML into silver ownership tables before MDM/Neo4j derivation.
+- Plan 05-01: RED tests anchor to known current defects — form_type/period_of_report schema mismatch, _session() called before _silver_reader(), sec_tracked_universe stale reference.
+- Plan 05-01: parse_ownership patched at edgar_warehouse.parsers.ownership (function-local import pattern); FakeSilverDB records raw SQL for schema assertion without DuckDB execution.
+- Plan 05-01: 3 of 15 MDM tests intentionally pass current code (ftp/http rejection, s3 read_bytes delegation) — these verify existing correct behaviors.
 
 ### Blockers
 
