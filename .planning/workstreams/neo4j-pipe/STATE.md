@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Neo4j bronze-to-graph pipe
 status: executing
-last_updated: "2026-05-17T10:15:44.316Z"
+last_updated: "2026-05-17T10:18:38Z"
 last_activity: 2026-05-17
 ---
 
@@ -12,7 +12,7 @@ last_activity: 2026-05-17
 ## Current Position
 
 Phase: 5 of 7 (Source To MDM Load Path)
-Plan: 2 of 4 complete in current phase
+Plan: 3 of 4 complete in current phase
 Status: Ready to execute
 Last activity: 2026-05-17
 Resume file: None
@@ -43,6 +43,9 @@ into Neo4j so graph sync is complete, idempotent, and independently verifiable.
 - Plan 05-01: RED tests anchor to known current defects — form_type/period_of_report schema mismatch, _session() called before _silver_reader(), sec_tracked_universe stale reference.
 - Plan 05-01: parse_ownership patched at edgar_warehouse.parsers.ownership (function-local import pattern); FakeSilverDB records raw SQL for schema assertion without DuckDB execution.
 - Plan 05-01: 3 of 15 MDM tests intentionally pass current code (ftp/http rejection, s3 read_bytes delegation) — these verify existing correct behaviors.
+- Plan 05-03: _require_silver_reader() runs before _session() in all three mutation handlers; _validate_silver_tables() uses fixed allowlist constants only (T-05-14/T-05-15 mitigated).
+- Plan 05-03: sec_tracked_universe stale reference fixed to sec_company_sync_state in pipeline.py run_companies() (D-12).
+- Plan 05-03: TestEntityLoadIdempotentForDomainCounts deferred to 05-04 (SQLite Date/FundResolver compatibility issue).
 
 ### Blockers
 
