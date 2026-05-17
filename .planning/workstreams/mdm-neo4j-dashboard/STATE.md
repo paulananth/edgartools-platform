@@ -19,8 +19,8 @@ progress:
 
 Phase: 8 of 10 (Dashboard Foundations And Read-Only Data Access)
 Plan: -
-Status: Context gathered; ready to plan Phase 8
-Last activity: 2026-05-17 - Phase 8 context gathered
+Status: UI design contract approved; ready to plan Phase 8
+Last activity: 2026-05-17 - Phase 8 UI-SPEC approved
 
 Progress: 0% (MDM Neo4j Review Dashboard milestone)
 
@@ -53,5 +53,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-05-17
-Stopped at: Phase 8 context gathered
-Resume file: .planning/workstreams/mdm-neo4j-dashboard/phases/08-dashboard-foundations-and-read-only-data-access/08-CONTEXT.md
+Stopped at: Phase 8 UI-SPEC approved
+Resume file: .planning/workstreams/mdm-neo4j-dashboard/phases/08-dashboard-foundations-and-read-only-data-access/08-UI-SPEC.md
