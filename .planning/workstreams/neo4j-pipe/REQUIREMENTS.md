@@ -11,7 +11,7 @@ updated: 2026-05-16
 
 ### Source To MDM
 
-- [ ] **PIPE-01**: Operator can run the MDM entity loaders against an existing local or S3-backed silver DuckDB produced from bronze without re-fetching SEC artifacts.
+- [x] **PIPE-01**: Operator can run the MDM entity loaders against an existing local or S3-backed silver DuckDB produced from bronze without re-fetching SEC artifacts.
 - [ ] **PIPE-02**: MDM company, adviser, person, security, and fund loaders are idempotent across repeated runs against the same silver data.
 - [ ] **PIPE-03**: Missing silver source configuration fails with a clear operator message that names the required setting and does not partially mutate MDM state.
 
@@ -31,8 +31,8 @@ updated: 2026-05-16
 
 ### Isolation
 
-- [ ] **ISO-01**: This milestone is developed in the `workspace/neo4j-pipe` worktree and does not modify the active loader-fix worktree, loader workstream artifacts, or generated deployment JSON.
-- [ ] **ISO-02**: Changes avoid gold refresh, Step Functions failure-observability, and unrelated loader refactors unless they are required to prove the bronze-to-Neo4j path.
+- [x] **ISO-01**: This milestone is developed in the `workspace/neo4j-pipe` worktree and does not modify the active loader-fix worktree, loader workstream artifacts, or generated deployment JSON.
+- [x] **ISO-02**: Changes avoid gold refresh, Step Functions failure-observability, and unrelated loader refactors unless they are required to prove the bronze-to-Neo4j path.
 
 ## Future Requirements
 
@@ -50,7 +50,7 @@ updated: 2026-05-16
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PIPE-01 | Phase 5 | Pending |
+| PIPE-01 | Phase 5 | Complete |
 | PIPE-02 | Phase 5 | Pending |
 | PIPE-03 | Phase 5 | Pending |
 | REL-01 | Phase 6 | Pending |
@@ -61,5 +61,5 @@ updated: 2026-05-16
 | GRAPH-02 | Phase 7 | Pending |
 | GRAPH-03 | Phase 7 | Pending |
 | GRAPH-04 | Phase 7 | Pending |
-| ISO-01 | Phase 5 | Pending |
-| ISO-02 | Phase 5 | Pending |
+| ISO-01 | Phase 5 | Complete |
+| ISO-02 | Phase 5 | Complete |
