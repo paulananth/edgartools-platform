@@ -340,6 +340,23 @@ def build_parser() -> argparse.ArgumentParser:
             "Idempotent — skips accessions already in sec_ownership_reporting_owner."
         ),
     )
+    parse_ownership_bronze.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Maximum number of accessions to process (default: all).",
+    )
+    parse_ownership_bronze.add_argument(
+        "--accession-list",
+        type=lambda s: [a.strip() for a in s.split(",") if a.strip()],
+        default=None,
+        metavar="ACCESSIONS",
+        help=(
+            "Comma-separated accession numbers to process. "
+            "When supplied, only these accessions are parsed (default: all Forms 3/4/5)."
+        ),
+    )
     _add_run_id_arg(parse_ownership_bronze)
     parse_ownership_bronze.set_defaults(handler=_handle_parse_ownership_bronze)
 

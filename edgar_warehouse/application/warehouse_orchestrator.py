@@ -908,7 +908,12 @@ def _capture_bronze_raw(
 
     if command_name == "parse-ownership-bronze":
         return _run_parse_ownership_bronze(
-            context=context, db=db, sync_run_id=sync_run_id, metrics=metrics
+            context=context,
+            db=db,
+            sync_run_id=sync_run_id,
+            metrics=metrics,
+            limit=int(arguments["limit"]) if arguments.get("limit") is not None else None,
+            accession_list=arguments.get("accession_list") or None,
         )
 
     if command_name == "seed-silver-batches":
@@ -1240,34 +1245,51 @@ def _run_parse_ownership_bronze(
     db: "SilverDatabase",
     sync_run_id: str,
     metrics: dict[str, Any],
+    limit: int | None = None,
+    accession_list: list[str] | None = None,
 ) -> tuple[list[dict], dict[str, Any]]:
-    """Parse Form 3/4/5 ownership XMLs that already exist in S3 bronze into silver.
+    """Parse Form 3/4/5 ownership XMLs that already exist in bronze into silver.
 
-    Uses edgartools (Ownership.from_xml) to parse files at:
-        {bronze_root}/filings/sec/cik={cik}/accession={accession}/primary/*.xml
+    Reads primary XML through the artifact registry (sec_filing_attachment +
+    sec_raw_object + read_bytes) — no S3 prefix listing, no SEC API calls.
+    Idempotent: skips accessions already present in sec_ownership_reporting_owner.
 
-    No SEC API calls — reads only from bronze S3. Idempotent: skips accessions
-    already present in sec_ownership_reporting_owner.
+    Args:
+        context: Warehouse command context (bronze_root, silver_root, etc.)
+        db: Silver database connection for queries and merges.
+        sync_run_id: Run ID for audit trail and event payloads.
+        metrics: Mutable dict; populated with parsed/skipped/errors/missing_artifacts/rows_written.
+        limit: Optional cap on the number of accessions to process.
+        accession_list: Optional explicit list of accession numbers to process
+            (filters the sec_company_filing query result to this set).
     """
-    from edgar_warehouse.infrastructure.object_storage import read_bytes
     from edgar_warehouse.parsers.ownership import parse_ownership
-    import fsspec
 
     filings = db.fetch(
         """
-        SELECT f.accession_number, f.cik, f.form_type
+        SELECT f.accession_number, f.cik, f.form
         FROM sec_company_filing f
-        WHERE f.form_type IN ('3','3/A','4','4/A','5','5/A')
-        ORDER BY f.cik, f.period_of_report
+        WHERE f.form IN ('3','3/A','4','4/A','5','5/A')
+        ORDER BY f.cik, f.report_date
         """
     )
+
+    # Apply optional accession filter
+    if accession_list is not None:
+        allowed = set(accession_list)
+        filings = [f for f in filings if f["accession_number"] in allowed]
+
     already_parsed: set[str] = {
         row["accession_number"]
         for row in db.fetch("SELECT DISTINCT accession_number FROM sec_ownership_reporting_owner")
     }
 
+    # Apply optional limit after skip-filter so the limit counts processable accessions
+    if limit is not None:
+        filings = filings[:limit]
+
     total = len(filings)
-    parsed_count = skipped_count = error_count = 0
+    parsed_count = skipped_count = error_count = missing_artifact_count = 0
     rows_written = 0
 
     _emit_pipeline_event(
@@ -1277,34 +1299,29 @@ def _run_parse_ownership_bronze(
         run_id=sync_run_id,
     )
 
-    bronze_root = context.bronze_root.root  # e.g. s3://bucket/warehouse/bronze
-    fs = fsspec.filesystem("s3")
-
     for filing in filings:
         accession = filing["accession_number"]
-        cik = filing["cik"]
-        form_type = filing["form_type"]
+        form = filing["form"]
 
         if accession in already_parsed:
             skipped_count += 1
             continue
 
-        prefix = f"{bronze_root}/filings/sec/cik={cik}/accession={accession}/primary/"
         try:
-            xml_files = [
-                p for p in fs.ls(prefix, detail=False)
-                if p.endswith(".xml") or p.endswith(".XML")
-            ]
-            if not xml_files:
-                error_count += 1
-                continue
+            xml_bytes = _read_primary_artifact_bytes(db, accession)
+        except WarehouseRuntimeError as exc:
+            missing_artifact_count += 1
+            _emit_pipeline_event(
+                "parse_ownership_bronze_missing_artifact",
+                accession_number=accession,
+                reason=str(exc)[:200],
+                run_id=sync_run_id,
+            )
+            continue
 
-            # fsspec.ls returns full s3://... paths
-            xml_path = xml_files[0] if xml_files[0].startswith("s3://") else f"s3://{xml_files[0]}"
-            xml_bytes = read_bytes(xml_path)
+        try:
             xml_content = xml_bytes.decode("utf-8", errors="replace")
-
-            parsed = parse_ownership(accession, xml_content, form_type)
+            parsed = parse_ownership(accession, xml_content, form)
 
             rows_written += db.merge_ownership_reporting_owners(
                 parsed.get("sec_ownership_reporting_owner", []), sync_run_id
@@ -1333,12 +1350,14 @@ def _run_parse_ownership_bronze(
         parsed=parsed_count,
         skipped=skipped_count,
         errors=error_count,
+        missing_artifacts=missing_artifact_count,
         rows_written=rows_written,
         run_id=sync_run_id,
     )
     metrics["parsed"] = parsed_count
     metrics["skipped"] = skipped_count
     metrics["errors"] = error_count
+    metrics["missing_artifacts"] = missing_artifact_count
     metrics["rows_written"] = rows_written
     return [], metrics
 
@@ -2606,7 +2625,10 @@ def _resolve_scope(
         }
 
     if command_name == "parse-ownership-bronze":
-        return {}
+        return {
+            "limit": arguments.get("limit"),
+            "accession_list": arguments.get("accession_list"),
+        }
 
     raise WarehouseRuntimeError(f"Unsupported warehouse command: {command_name}")
 
