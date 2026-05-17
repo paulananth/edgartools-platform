@@ -1,0 +1,12 @@
+{
+  "name": "mdm-neo4j-dashboard",
+  "branch": "workspace/mdm-neo4j-dashboard",
+  "workspace_path": "/Users/aneenaananth/gsd-workspaces/mdm-neo4j-dashboard/edgartools-platform",
+  "scope": "Build an unrelated dashboard for reviewing MDM relational data and Neo4j graph data without overlapping neo4j-pipe or fix-pipelines work.",
+  "protected_from": [
+    "neo4j-pipe implementation",
+    "fix-pipelines workstream",
+    "generated deployment JSON",
+    "gold/dbt refresh changes unless explicitly required"
+  ]
+}
