@@ -36,7 +36,7 @@ Neo4j so graph sync is complete, idempotent, and independently verifiable.
 **Plans**: 4 plans
 Plans:
 - [x] 05-01-PLAN.md — Wave 0 tests and fixtures for parser repair, source preflight, and MDM entity idempotency. (ffc9ad8)
-- [ ] 05-02-PLAN.md — Repair parse-ownership-bronze against current silver schema and artifact-registry reads.
+- [x] 05-02-PLAN.md — Repair parse-ownership-bronze against current silver schema and artifact-registry reads.
 - [ ] 05-03-PLAN.md — Add shared MDM silver preflight before mutating commands.
 - [ ] 05-04-PLAN.md — Prove all-domain entity-load idempotency and document AWS/local operator flow.
 
