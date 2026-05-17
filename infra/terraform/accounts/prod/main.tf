@@ -38,3 +38,26 @@ module "runtime" {
   ecr_force_delete             = false
   tags                         = var.tags
 }
+
+# ── Pipeline Failure Notifications ────────────────────────────────────────────
+#
+# Dev deployment target per CONTEXT.md D-03. Although this is the prod account
+# root (local.environment = "prod"), the notification infra targets the dev
+# Step Functions state machines. environment = "dev" is passed as a string
+# literal — do NOT use local.environment here, or the EventBridge prefix filter
+# would become edgartools-prod-* and match zero existing state machines.
+#
+# Enable with:  terraform apply -var="pipeline_notifications_enabled=true" \
+#                               -var="pipeline_failure_subscriber_email=you@example.com"
+#
+module "pipeline_notifications" {
+  count  = var.pipeline_notifications_enabled ? 1 : 0
+  source = "../../modules/pipeline_notifications"
+
+  environment      = "dev"
+  name_prefix      = "edgartools-dev"
+  aws_region       = var.aws_region
+  account_id       = "077127448006"
+  subscriber_email = var.pipeline_failure_subscriber_email
+  tags             = var.tags
+}

@@ -749,3 +749,102 @@ SELECT * FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
   created by the Snowflake Terraform root in Step 4.
 - **SnowCLI connection** (`SNOW_CONNECTION`) must be configured in
   `~/.snowflake/config.toml` and have `PUT` privileges on the stage.
+
+---
+
+## Recovering from a partial bootstrap_phased failure
+
+When `bootstrap_phased` reaches FAILED state, one or more batches in the `BatchBootstrap`
+Distributed Map failed after exhausting retries. Because `ToleratedFailurePercentage: 0`,
+a single batch failure drives the execution to FAILED — other batches may have succeeded.
+
+**Recovery is safe to run immediately.** DEC-009: already-loaded CIKs are skipped on
+re-run, so a full `bootstrap_phased` re-run processes only the CIKs that were not loaded.
+
+### Option A: Full re-run (recommended)
+
+The simplest recovery. Already-loaded CIKs are skipped automatically (DEC-009
+idempotency). Use this unless you need to load only specific CIKs.
+
+```bash
+./scripts/ops/trigger.sh bootstrap
+```
+
+### Option B: Targeted recovery for specific CIKs
+
+Use this if you want to re-run only the failed CIKs rather than re-seeding the full
+universe. Requires identifying the failed child executions from the Map Run.
+
+**Step 1: Find the failed execution ARN**
+
+```bash
+ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+aws stepfunctions list-executions \
+  --state-machine-arn "arn:aws:states:us-east-1:${ACCOUNT}:stateMachine:edgartools-dev-bootstrap-phased" \
+  --status-filter FAILED \
+  --max-results 1 \
+  --query 'executions[0].executionArn' \
+  --output text
+```
+
+**Step 2: Find the BatchBootstrap Map Run ARN**
+
+```bash
+EXEC_ARN=<execution-arn-from-step-1>
+aws stepfunctions get-execution-history \
+  --execution-arn "$EXEC_ARN" --output json \
+  | python3 -c "
+import json,sys
+for e in json.load(sys.stdin)['events']:
+    if e['type']=='MapRunStarted':
+        print(e['mapRunStartedEventDetails']['mapRunArn']); break
+"
+```
+
+**Step 3: List failed child executions**
+
+```bash
+MAP_RUN_ARN=<map-run-arn-from-step-2>
+aws stepfunctions list-executions \
+  --map-run-arn "$MAP_RUN_ARN" \
+  --status-filter FAILED \
+  --output json \
+  --query 'executions[].executionArn'
+```
+
+**Step 4: Extract CIK list from each failed child execution**
+
+```bash
+CHILD_EXEC_ARN=<child-execution-arn-from-step-3>
+aws stepfunctions describe-execution \
+  --execution-arn "$CHILD_EXEC_ARN" \
+  --query 'input' --output text \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['cik_list'])"
+```
+
+**Step 5b: Per-CIK targeted resync (for single-company recovery)**
+
+```bash
+# scope_type "cik" is a valid targeted_resync input (warehouse_orchestrator.py line 722)
+CIK=<cik-from-step-4>
+aws stepfunctions start-execution \
+  --state-machine-arn "arn:aws:states:us-east-1:${ACCOUNT}:stateMachine:edgartools-dev-targeted-resync" \
+  --name "targeted-resync-${CIK}-$(date +%s)" \
+  --input "{\"scope_type\": \"cik\", \"scope_key\": \"${CIK}\"}"
+```
+
+### Note on post-failure child executions
+
+AWS Step Functions may continue to run child workflows in a Map Run even after the
+tolerated failure threshold is exceeded, before the Map Run is marked failed. This is
+by-design behavior. The parent execution status (FAILED) is the authoritative signal —
+do not interpret some children completing as a partial success.
+
+### Failures during MDM stages
+
+If `bootstrap_phased` fails during `MdmRun`, `MdmBackfill`, `MdmSync`, or `MdmVerify`
+(after `BatchBootstrap` succeeded), skip re-batching and run only the MDM+gold stages:
+
+```bash
+./scripts/ops/trigger.sh mdm-gold
+```

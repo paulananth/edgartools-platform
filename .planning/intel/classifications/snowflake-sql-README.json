@@ -1,0 +1,24 @@
+{
+  "filepath": "infra/snowflake/sql/README.md",
+  "type": "DOC",
+  "title": "Snowflake Native-Pull Validation Assets",
+  "scope_summary": "Documents the scope and execution order of Snowflake native-pull validation assets, clarifying ownership boundaries between Terraform-managed platform objects, dbt-managed gold models, and legacy bootstrap SQL retained as reference. Serves as orientation for developers deploying or validating the Snowflake native-pull path.",
+  "cross_references": [
+    "infra/terraform/snowflake/",
+    "infra/terraform/accounts/dev",
+    "infra/terraform/snowflake/accounts/dev",
+    "infra/snowflake/dbt/edgartools_gold/",
+    "infra/snowflake/sql/bootstrap/",
+    "infra/snowflake/sql/bootstrap_native_pull.py",
+    "infra/snowflake/sql/dev_native_pull_handshake.json",
+    "infra/scripts/deploy-snowflake-stack.sh"
+  ],
+  "locked_decisions": [],
+  "key_requirements": [],
+  "key_constraints": [
+    "Terraform owns: storage integration, S3 import path, run-manifest auto-ingest objects, refresh-status table, manifest stream, source-side load wrapper, and public gold refresh wrapper",
+    "dbt project owns: curated gold models, dynamic tables, and the EDGARTOOLS_GOLD_STATUS view",
+    "SQL files under bootstrap/ are no longer the deployment mechanism — retained as reference only"
+  ],
+  "source": "infra/snowflake/sql"
+}

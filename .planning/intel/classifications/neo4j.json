@@ -1,0 +1,26 @@
+{
+  "filepath": "docs/neo4j.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Connecting MDM To Neo4j",
+  "scope_summary": "Runbook-style guide for configuring and verifying Neo4j connectivity for the MDM graph sync service. Covers runtime environment variables, AWS Secrets Manager, Azure Key Vault, local verification, and Fleet token handling.",
+  "scope": ["Neo4j", "MDM", "graph sync", "AWS Secrets Manager", "Azure Key Vault", "ECS", "Bolt driver"],
+  "cross_references": [
+    "infra/scripts/deploy-aws-application.sh",
+    "infra/scripts/bootstrap-azure-secrets.sh",
+    "infra/terraform/access/aws/accounts/<env>"
+  ],
+  "locked_decisions": [],
+  "key_requirements": [],
+  "key_constraints": [
+    "NEO4J_USERNAME (Aura) must be mapped to NEO4J_USER before running the repo",
+    "Secret values must be populated by an operator outside Terraform state",
+    "Fleet tokens must be treated as secrets and rotated if exposed in terminal logs or chat",
+    "The MDM graph client uses the driver's default database (NEO4J_DATABASE is not used at runtime)"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "",
+  "source": "docs"
+}

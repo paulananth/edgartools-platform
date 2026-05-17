@@ -1324,7 +1324,7 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
             "Overrides": {"ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}]},
         },
         "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": retry_secs,
-                   "BackoffRate": 2.0, "MaxAttempts": 2}],
+                   "BackoffRate": 2.0, "MaxAttempts": 3}],
     }
     if is_end:
         s["End"] = True
@@ -1347,7 +1347,7 @@ batch_map = {
     "Type": "Map",
     "MaxConcurrency": int(batch_concurrency),
     "Comment": "Parallel bronze+silver only — no gold per batch.",
-    "ToleratedFailurePercentage": 10,
+    "ToleratedFailurePercentage": 0,
     "ItemReader": {
         "Resource": "arn:aws:states:::s3:getObject",
         "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
@@ -1445,7 +1445,7 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
             "Overrides": {"ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}]},
         },
         "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": retry_secs,
-                   "BackoffRate": 2.0, "MaxAttempts": 2}],
+                   "BackoffRate": 2.0, "MaxAttempts": 3}],
     }
     if is_end:
         s["End"] = True
@@ -1477,7 +1477,7 @@ batch_map = {
     "Type": "Map",
     "MaxConcurrency": int(batch_concurrency),
     "Comment": "Re-process silver + artifacts from cached bronze. Submissions not re-downloaded.",
-    "ToleratedFailurePercentage": 10,
+    "ToleratedFailurePercentage": 0,
     "ItemReader": {
         "Resource": "arn:aws:states:::s3:getObject",
         "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},

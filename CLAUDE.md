@@ -2,6 +2,18 @@
 
 This repo is the full data platform built on top of the `edgartools` PyPI package. It extracts SEC EDGAR filings data via an ETL runtime, stages Parquet files in S3, loads them into Snowflake, and transforms them into production-ready dynamic tables consumed by a Streamlit dashboard. The platform is designed to track a universe of public companies and investment advisers across all major SEC form types.
 
+## Parallel Agent Workstreams
+
+Claude and Codex may work on this repository independently, but they must not share an uncoordinated edit surface.
+
+- Treat current Codex work as protected unless the user explicitly hands it off.
+- Prefer separate git worktrees or branches for concurrent Claude and Codex work.
+- Use separate GSD workstream directories under `.planning/workstreams/<name>/`; do not edit another runtime's active workstream files.
+- Before editing, run `git status --short` and inspect `.planning/active-workstream` when present.
+- Avoid overlapping source files, Terraform roots, generated application JSON, and planning artifacts across runtimes unless the user assigns the same task to both.
+- If overlap is unavoidable, stop and ask for an ownership decision instead of merging assumptions.
+- Do not overwrite, revert, stage, or commit changes created by the other runtime unless explicitly instructed.
+
 ## Quick Navigation
 
 | Need | Location |
@@ -139,6 +151,12 @@ MDM Postgres (private VPC). Reserve it for single-company ad-hoc loads with expl
   purpose of this pipeline is to reprocess already-loaded bronze with zero SEC calls.
   5-why root cause: the artifact pipeline is a separate SEC fetch pass; "no SEC calls" must
   be encoded as a flag, not assumed from the pipeline name.
+- `BOOTSTRAP_BATCH_CONCURRENCY` recommended range: **2–5** concurrent ECS tasks. Current
+  default is 3 (already within the recommended range). Values below 2 are not recommended
+  for production — throughput is too low. Values above 5 risk triggering SEC rate limiting:
+  at 5 tasks × ~9 req/sec theoretical max = ~45 req/sec, well above SEC's 10 req/sec per-IP
+  limit without stagger mitigation. The in-process rate limiter in `sec_client.py` (9 req/sec
+  per task) enforces per-task throttling but does not coordinate across ECS tasks.
 
 Key import pattern (do not change without checking the edgartools changelog):
 

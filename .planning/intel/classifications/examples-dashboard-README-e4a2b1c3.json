@@ -1,0 +1,30 @@
+{
+  "filepath": "examples/dashboard/README.md",
+  "type": "DOC",
+  "title": "EdgarTools Universe Dashboard",
+  "scope_summary": "Setup and usage guide for the standalone Streamlit dashboard that queries the Snowflake EDGARTOOLS_GOLD layer. Covers prerequisites, configuration, six dashboard sections, and known caveats.",
+  "cross_references": [
+    "infra/snowflake/dbt/edgartools_gold",
+    "infra/snowflake/streamlit/streamlit_app.py",
+    "infra/snowflake/dbt/edgartools_gold/models/gold/gold.yml",
+    "examples/dashboard/edgar_universe_dashboard.py",
+    "examples/dashboard/requirements.txt"
+  ],
+  "locked_decisions": [],
+  "key_requirements": [
+    "Python 3.11+",
+    "Snowflake role with SELECT on EDGARTOOLS_DEV.EDGARTOOLS_GOLD.* and USAGE on a warehouse",
+    "~/.snowflake/config.toml with a connection block pointing to EDGARTOOLS_DEV / EDGARTOOLS_GOLD"
+  ],
+  "key_constraints": [
+    "Maps aggregate at country/US-state granularity only — no lat/lon in the gold layer",
+    "ADVISER_OFFICES.geography_key is an unresolved surrogate; adviser office geography section not yet plottable",
+    "All Streamlit queries are cached for 1 hour"
+  ],
+  "source": "examples/dashboard",
+  "confidence": "high",
+  "manifest_override": false,
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

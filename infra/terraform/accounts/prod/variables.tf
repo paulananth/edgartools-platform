@@ -69,3 +69,15 @@ variable "mdm_db_instance_class" {
   type        = string
   default     = "db.t3.micro"
 }
+
+variable "pipeline_notifications_enabled" {
+  description = "Set to true to provision the pipeline_notifications SNS + EventBridge stack. Defaults to false so it is opt-in and does not affect existing terraform plan output."
+  type        = bool
+  default     = false
+}
+
+variable "pipeline_failure_subscriber_email" {
+  description = "Email address to receive pipeline failure notifications. Required when pipeline_notifications_enabled = true. No default — operator must supply explicitly."
+  type        = string
+  default     = null
+}
