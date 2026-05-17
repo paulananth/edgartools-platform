@@ -1,7 +1,7 @@
 ---
 plan: 03-01
 phase: 03-failure-notifications
-status: partial
+status: complete
 completed: 2026-05-16
 commit: 5b0254c
 ---
@@ -72,10 +72,10 @@ aws stepfunctions start-execution \
 | `terraform validate` exits 0 | PASS |
 | `pipeline_notifications_enabled` variable, default false | PASS |
 | `pipeline_failure_subscriber_email` variable, default null | PASS |
-| `terraform apply` deploys 6 resources | PENDING — backend not initialized |
-| EventBridge rule ENABLED in AWS | PENDING |
-| SNS email subscription confirmed | PENDING |
-| Live FAILED execution triggers email within 2 min | PENDING |
+| `terraform apply` deploys 5 resources (targeted) | PASS |
+| EventBridge rule ENABLED in AWS | PASS — arn:aws:events:us-east-1:077127448006:rule/edgartools-dev-pipeline-failures |
+| SNS email subscription confirmed | PASS — arn:aws:sns:us-east-1:077127448006:edgartools-dev-pipeline-failures:d85b1cc1-3f85-45c8-894d-b95594850b8f |
+| Live FAILED execution triggers email within 2 min | PASS — mdm-gold test execution, email received |
 
 ## Key Design Points
 

@@ -19,8 +19,8 @@ an SNS email notification when anything fails.
 
 - [ ] **Phase 1: Failure Surfacing** - Every stage failure in all 5 state machines reaches FAILED state — executions never succeed silently when a stage errored
 - [ ] **Phase 2: Status Completeness** - `status.sh` shows a complete, accurate stage-level breakdown including the actively executing stage for all 5 registered state machines
-- [ ] **Phase 3: Failure Notifications** - Operators receive an SNS email with full context (pipeline name, execution ARN, failed stage, CloudWatch deep-link) when any pipeline fails
-- [ ] **Phase 4: SEC Rate Limiting** - Enforce minimum 2 and maximum 5 concurrent calls to the SEC website across all pipeline tasks
+- [x] **Phase 3: Failure Notifications** - Operators receive an SNS email with full context (pipeline name, execution ARN, failed stage, CloudWatch deep-link) when any pipeline fails
+- [x] **Phase 4: SEC Rate Limiting** - Enforce minimum 2 and maximum 5 concurrent calls to the SEC website across all pipeline tasks
 
 ---
 
@@ -86,9 +86,9 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Failure Surfacing | 3/3 | Complete | 2026-05-16 |
-| 2. Status Completeness | 0/1 | Not started | - |
-| 3. Failure Notifications | 0/1 | Not started | - |
-| 4. SEC Rate Limiting | 0/1 | Not started | - |
+| 2. Status Completeness | 1/1 | Complete | 2026-05-16 |
+| 3. Failure Notifications | 1/1 | Complete | 2026-05-16 |
+| 4. SEC Rate Limiting | 1/1 | Complete | 2026-05-16 |
 
 ---
 
