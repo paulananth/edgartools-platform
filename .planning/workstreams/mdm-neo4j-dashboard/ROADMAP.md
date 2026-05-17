@@ -68,6 +68,6 @@ Build a read-only dashboard for reviewing MDM relational data and Neo4j graph da
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 8. Dashboard Foundations And Read-Only Data Access | v1.2 MDM Neo4j Review Dashboard | 2/3 | In Progress | - |
+| 8. Dashboard Foundations And Read-Only Data Access | v1.2 MDM Neo4j Review Dashboard | 3/3 | Verification pending | - |
 | 9. MDM And Neo4j Review Metrics | v1.2 MDM Neo4j Review Dashboard | 0/TBD | Not started | - |
 | 10. Operator Review Experience | v1.2 MDM Neo4j Review Dashboard | 0/TBD | Not started | - |
