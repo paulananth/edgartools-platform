@@ -19,11 +19,11 @@ created: 2026-05-17
 |----------|-------|
 | Tool | none |
 | Preset | not applicable |
-| Component library | Streamlit native primitives: `st.sidebar`, `st.columns`, `st.metric`, `st.tabs`, `st.dataframe`, `st.expander`, `st.status`, Plotly charts |
+| Component library | Streamlit native primitives for Phase 8: `st.sidebar`, `st.columns`, `st.button`, `st.status`, `st.info`, `st.warning`, `st.error`, `st.code`/`st.json`, and `st.dataframe` only for bounded smoke-test output |
 | Icon library | none; use text labels only for this foundation phase |
 | Font | Streamlit default sans-serif system stack |
 
-Source: codebase scan found no `components.json`, Tailwind config, React component tree, or shadcn setup. Existing dashboard pattern is Streamlit + Plotly from `examples/dashboard/edgar_universe_dashboard.py`; Snowflake Streamlit app is contrast-only and not the target shell.
+Source: codebase scan found no `components.json`, Tailwind config, React component tree, or shadcn setup. Existing dashboard pattern is Streamlit from `examples/dashboard/edgar_universe_dashboard.py`; Snowflake Streamlit app is contrast-only and not the target shell. Plotly charts and KPI metric surfaces are not required in Phase 8.
 
 ---
 
@@ -33,15 +33,15 @@ Declared values (must be multiples of 4):
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| xs | 4px | Chart label offsets, inline label-value gaps |
+| xs | 4px | Inline label-value gaps |
 | sm | 8px | Compact control spacing, dataframe caption spacing |
-| md | 16px | Default vertical rhythm between controls, metrics, and tables |
-| lg | 24px | Section grouping gaps after headers and before chart/table groups |
+| md | 16px | Default vertical rhythm between controls, status rows, and smoke-test output |
+| lg | 24px | Section grouping gaps after headers and before status/output groups |
 | xl | 32px | Major split between dashboard sections inside a page |
-| 2xl | 48px | Page-level separation after overview/KPI blocks |
+| 2xl | 48px | Page-level separation after the Phase 8 overview foundation blocks |
 | 3xl | 64px | Reserved for future large page breaks; do not use in dense operator views unless a section truly resets context |
 
-Exceptions: Streamlit's built-in sidebar width, dataframe row height, metric tile dimensions, and Plotly chart internals may use framework defaults. Touch/click targets for `Refresh data`, sidebar navigation, selects, and search inputs must be at least 44px high where Streamlit allows control sizing.
+Exceptions: Streamlit's built-in sidebar width, dataframe row height, status containers, and button dimensions may use framework defaults. Touch/click targets for `Refresh data` and sidebar navigation must be at least 44px high where Streamlit allows control sizing.
 
 ---
 
@@ -54,7 +54,7 @@ Exceptions: Streamlit's built-in sidebar width, dataframe row height, metric til
 | Heading | 20px | 600 | 1.2 |
 | Display | 28px | 600 | 1.2 |
 
-Use exactly these four text sizes in custom Markdown/CSS, if any custom styling is added. Prefer Streamlit header/subheader/metric defaults where they already map closely. Do not scale fonts with viewport width. Use title case for navigation labels and sentence case for helper, empty, and error text.
+Use exactly these four text sizes in custom Markdown/CSS, if any custom styling is added. Prefer Streamlit header/subheader defaults where they already map closely. Do not scale fonts with viewport width. Use title case for navigation labels and sentence case for helper, empty, and error text.
 
 ---
 
@@ -64,18 +64,18 @@ Use exactly these four text sizes in custom Markdown/CSS, if any custom styling 
 |------|-------|-------|
 | Dominant (60%) | #FFFFFF | Main dashboard background and primary content area |
 | Secondary (30%) | #F6F8FA | Sidebar, dataframe header bands, subtle section dividers, empty-state surfaces |
-| Accent (10%) | #1F77B4 | Selected navigation state, primary Plotly series, focused search/select controls, informational links |
+| Accent (10%) | #1F77B4 | Selected navigation state, `Refresh data` focus/active state, status links, Neo4j configured/connected status |
 | Destructive | #D92D20 | Error states only; no destructive actions exist in this phase |
 
-Accent reserved for: selected sidebar item, `Refresh data` focus/active state, primary chart series, inline links to SEC or diagnostic references, and Neo4j configured/connected status. Do not use accent for every metric, every table row, or decorative backgrounds.
+Accent reserved for: selected sidebar item, `Refresh data` focus/active state, inline links to diagnostic references, and Neo4j configured/connected status. Do not use accent for every status row, every table row, or decorative backgrounds.
 
 Status colors:
 
 | Status | Value | Usage |
 |--------|-------|-------|
-| Success | #12B76A | MDM connected, Neo4j connected, zero pending relationships |
-| Warning | #F79009 | Neo4j optional/unconfigured, partial data available, pending sync exists |
-| Error | #D92D20 | MDM missing/unreachable, query failure, invalid user input |
+| Success | #12B76A | MDM connected, Neo4j connected, smoke-test checks passed |
+| Warning | #F79009 | Neo4j optional/unconfigured, partial data available, smoke-test check unavailable |
+| Error | #D92D20 | MDM missing/unreachable, query failure, invalid configuration |
 
 All status indicators must include visible text; color must never be the only signal.
 
@@ -97,10 +97,8 @@ Additional required copy:
 |----------|------|
 | Neo4j optional unavailable | Neo4j is not configured. MDM relationship tables are still available. |
 | Neo4j connection failure | Neo4j query failed. Check `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, and network access. |
-| Search empty | Enter a CIK, name, ticker, CRD number, person name, fund name, or entity ID to search. |
-| Search no results | No matching MDM entities found. |
-| Relationship type empty | No active relationship types are registered. |
-| Neighborhood empty | No active relationships found for this entity and filter set. |
+| Placeholder view | This view is planned for a later phase. Phase 8 only verifies read-only dashboard connectivity. |
+| Smoke test empty | No smoke-test rows were returned. Connection checks still completed. |
 | Partial data warning | Showing partial data because an optional source is unavailable. |
 
 Tone: operator-facing, factual, short. Avoid marketing language and avoid implying that the dashboard can repair, sync, migrate, or mutate data.
@@ -127,7 +125,7 @@ Required shell:
 | Page config | `page_title="EdgarTools MDM Graph"`, `layout="wide"` |
 | Sidebar title | EdgarTools MDM |
 | Sidebar caption | Read-only MDM and Neo4j status |
-| Sidebar navigation | Overview, Entities, Relationships, Graph Coverage, Neighborhood |
+| Sidebar navigation | Overview, Entities, Relationships, Graph Coverage, Neighborhood. Phase 8 may show these as navigation placeholders; only Overview renders implemented content. |
 | Sidebar global action | `Refresh data` clears Streamlit query/resource caches and reruns |
 | Footer/sidebar diagnostics | Show MDM connection label and Neo4j status label; never show credentials or full connection strings |
 
@@ -135,13 +133,28 @@ Content density:
 
 | View | Required surface |
 |------|------------------|
-| Overview | KPI row for companies, advisers, persons, securities, funds, relationship instances, pending graph sync; below it, relationship counts by type and tracking-status counts |
-| Entities | Search input, entity-type filter, max-results selector, result table, selected entity details in an expander |
-| Relationships | Active relationship-type table with source type, target type, temporal flag, merge strategy, and description; relationship count by type chart/table |
-| Graph Coverage | Pending vs synced relationship counts, graph-sync status, Neo4j optional status, and per-type pending counts |
-| Neighborhood | Entity ID input, relationship-type multiselect, depth selector limited to 1-3, as-of date filter, tabular nodes/edges output; simple Plotly/network display is optional for this phase |
+| Overview | Implemented Phase 8 surface. Show a connection/status panel for required MDM and optional Neo4j, a `Refresh data` action, and bounded read-only helper smoke-test output proving safe SELECT/read queries can run. |
+| Entities | Non-implemented placeholder only. Show the placeholder copy above; do not add search, entity filters, result tables, or detail expanders in Phase 8. |
+| Relationships | Non-implemented placeholder only. Show the placeholder copy above; do not add relationship type tables, counts, charts, or filters in Phase 8. |
+| Graph Coverage | Non-implemented placeholder only. Show the placeholder copy above; do not add pending sync counts, graph coverage metrics, or per-type pending counts in Phase 8. |
+| Neighborhood | Non-implemented placeholder only. Show the placeholder copy above; do not add entity lookup, depth controls, relationship filters, node/edge output, or graph visualization in Phase 8. |
 
-Do not use nested cards. Streamlit metric blocks, tables, tabs, expanders, and columns are sufficient. Page sections should be separated with `st.divider()` only when the next area changes task context.
+Focal point and hierarchy:
+
+| Priority | Surface | Contract |
+|----------|---------|----------|
+| Primary | Connection/status panel | First visible content in Overview. It must clearly state MDM required status, Neo4j optional status, and whether the dashboard is operating in MDM-only mode. |
+| Secondary | Read-only helper smoke-test output | Immediately below the status panel. It should show minimal structured output from safe helper calls, such as connection metadata or a tiny bounded sample, without becoming a review metrics surface. |
+| Tertiary | Sidebar navigation | Persistent orientation only. Future phase destinations may be visible, but their content must remain placeholders in Phase 8. |
+
+Do not use nested cards. Streamlit status blocks, minimal tables, JSON/code output, and columns are sufficient. Page sections should be separated with `st.divider()` only when the next area changes task context.
+
+Deferred surfaces:
+
+| Later phase | Surface |
+|-------------|---------|
+| Phase 9 | Entity counts, relationship counts, Neo4j node/edge counts, pending graph sync counts, missing-edge comparison queries, and coverage tables/charts. |
+| Phase 10 | Review-first MDM/Neo4j/mismatch views, bounded filters, entity/relationship drill-ins, polished empty/error state design, and run documentation. |
 
 ---
 
@@ -154,19 +167,17 @@ Data access:
 | MDM startup | MDM is required at startup. If `MDM_DATABASE_URL` is missing or unreachable, render the blocking error state and do not show stale data. |
 | MDM queries | Use dedicated read-only helper functions under `edgar_warehouse` for dashboard queries. Query helpers must not call mutation functions, pipeline runners, migration code, graph sync, or stewardship actions. |
 | Neo4j access | Neo4j is optional. Use a review-only wrapper around existing Neo4j client conventions. If credentials are absent or a query fails, keep MDM-backed views usable and show the Neo4j copy defined above. |
-| Query safety | Use parameterized queries for search, entity selection, relationship type filters, and neighborhood lookup. Do not interpolate user input into SQL or Cypher. |
+| Query safety | Phase 8 smoke-test helpers must use parameterized SQL/Cypher where parameters are needed. Do not interpolate user input, environment values, labels, or relationship types into SQL or Cypher. |
 | Cache | Cache read-only result sets for 60 seconds. `Refresh data` must clear cache and rerun. |
 
 Controls:
 
 | Control | Contract |
 |---------|----------|
-| Search | Minimum useful query length is 2 characters unless the value parses as an exact CIK or entity ID. Limit default results to 25. |
-| Entity type filter | Options: All, company, adviser, person, security, fund. Default: All. |
-| Relationship type filter | Populate from active `mdm_relationship_type` rows. Default: all active types. |
-| Depth | Use a bounded numeric control or select with values 1, 2, 3. Default: 1. |
-| Max rows | Default: 100. Maximum: 500. Larger exports are out of scope. |
-| Tables | Use `st.dataframe(..., use_container_width=True, hide_index=True)` for all tabular outputs. |
+| Refresh data | The only implemented action. Clears dashboard caches and reruns connection/status and smoke-test helpers. |
+| Sidebar navigation | May use Streamlit radio/select navigation. Non-Overview destinations render placeholder copy only. |
+| Smoke-test row limit | If a smoke-test helper returns rows, hard-code a tiny bounded limit of 5-10 rows. Do not expose operator filters in Phase 8. |
+| Tables | Use `st.dataframe(..., use_container_width=True, hide_index=True)` only for smoke-test output. Full review tables are deferred. |
 
 Read-only prohibition:
 
@@ -181,7 +192,7 @@ Read-only prohibition:
 
 ## Data Contract For Display
 
-Use the current MDM model names in visible labels and table headers. Preferred labels:
+Phase 8 display labels are limited to connection/status and smoke-test output. Full metric and review labels are reserved for Phase 9/10 implementation planning, but any placeholder or smoke-test table that references MDM concepts must use the current model names. Preferred future labels:
 
 | Data | Visible label |
 |------|---------------|
@@ -201,11 +212,11 @@ Numeric formatting:
 
 | Value | Format |
 |-------|--------|
-| Counts | Thousands separators, no decimals |
+| Counts | Thousands separators, no decimals; Phase 8 may use this only for tiny smoke-test row counts, not full KPI/count surfaces |
 | Percentages | One decimal place |
 | Dates | ISO date `YYYY-MM-DD` |
 | Timestamps | ISO-like local display with timezone when available |
-| Missing values | `-` in tables and metrics |
+| Missing values | `-` in smoke-test tables and status details |
 
 ---
 
@@ -215,7 +226,7 @@ Numeric formatting:
 |------|----------|
 | Layout | Dashboard must remain usable at 1280px desktop width and 390px mobile width using Streamlit's native responsive stacking. |
 | Tables | Wide tables must scroll horizontally inside the dataframe widget rather than forcing page overflow. |
-| Charts | Plotly charts must use text titles, axis labels, and hover labels. Primary bar/line colors may use accent, but chart meaning must also be encoded in labels. |
+| Charts | Do not add charts in Phase 8. Plotly chart contracts are deferred to Phase 9/10. |
 | Forms | Every input must have a visible label; placeholders are examples only, not labels. |
 | Errors | Use `st.error` for MDM-blocking failures, `st.warning` for optional Neo4j/partial data, and `st.info` for empty states. |
 | Keyboard | All Streamlit-native controls must remain reachable by keyboard; do not add custom HTML controls in this phase. |
@@ -224,25 +235,19 @@ Numeric formatting:
 
 ## Source Notes
 
-Requested upstream artifacts under `.planning/workstreams/mdm-neo4j-dashboard/` were not present in this checkout on 2026-05-17. This contract therefore uses:
+Upstream artifacts under `.planning/workstreams/mdm-neo4j-dashboard/` were present in this checkout on 2026-05-17. This contract uses:
 
 | Source | Decisions Used |
 |--------|----------------|
-| User prompt important decisions | Streamlit shell; new operator dashboard path plus reusable helpers under `edgar_warehouse`; dedicated read-only MDM query helpers; review-only Neo4j wrapper; MDM required at startup; Neo4j optional; no mutation controls, graph sync, migrations, generated deployment JSON, or gold/dbt changes |
-| `examples/dashboard/README.md` | Streamlit + Plotly dashboard style, sidebar navigation, cached queries, read-only operator sections |
-| `examples/dashboard/edgar_universe_dashboard.py` | `st.set_page_config(layout="wide")`, sidebar radio navigation, refresh cache button, KPI rows, `st.dataframe(... use_container_width=True, hide_index=True)`, `st.info`/`st.warning`/`st.error` state handling |
-| `infra/snowflake/streamlit/streamlit_app.py` | Contrast pattern only: simple tabs, metrics, safe dataframe helpers |
+| `08-CONTEXT.md` | Phase 8 establishes shell, connection handling, helper boundaries, and safety tests; full metric views, filters, graph sync, MDM mutation, deployment rollout, and gold/dbt changes are deferred |
+| `ROADMAP.md` | Phase 8 requires local launch, read-only MDM access, read-only Neo4j access, configuration safety, and generated deployment JSON avoidance; Phase 9 owns counts/pending/missing-edge metrics; Phase 10 owns filters/polish |
+| `REQUIREMENTS.md` | DASH-01, DASH-02, DASH-03, ISO-01, and ISO-02 are Phase 8; MDM/GRAPH metrics are Phase 9; UX filters/review experience are Phase 10 |
+| `STATE.md` | Active worktree is `/Users/aneenaananth/gsd-workspaces/mdm-neo4j-dashboard/edgartools-platform`; branch is `workspace/mdm-neo4j-dashboard`; workstream is planning Phase 8 |
+| `examples/dashboard/README.md` | Streamlit local dashboard style, sidebar navigation, cached queries, read-only operator sections |
+| `examples/dashboard/edgar_universe_dashboard.py` | `st.set_page_config(layout="wide")`, sidebar radio navigation, refresh cache button, `st.dataframe(... use_container_width=True, hide_index=True)`, `st.info`/`st.warning`/`st.error` state handling |
+| `infra/snowflake/streamlit/streamlit_app.py` | Contrast pattern only: simple tabs and safe dataframe helpers |
 | Codebase MDM model/API scan | Entity and relationship labels, optional Neo4j status, graph sync pending concept |
 | Defaults | Spacing, typography, color split, and accessibility rules where upstream artifacts did not specify values |
-
-Missing requested files:
-
-| File | Status |
-|------|--------|
-| `.planning/workstreams/mdm-neo4j-dashboard/STATE.md` | not found |
-| `.planning/workstreams/mdm-neo4j-dashboard/ROADMAP.md` | not found |
-| `.planning/workstreams/mdm-neo4j-dashboard/REQUIREMENTS.md` | not found |
-| `.planning/workstreams/mdm-neo4j-dashboard/phases/08-dashboard-foundations-and-read-only-data-access/08-CONTEXT.md` | not found before this phase directory was created |
 
 ---
 
