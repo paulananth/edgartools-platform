@@ -163,12 +163,27 @@ def fixture_world(session: Session) -> dict:
                   canonical_name="Individual Person"),
     ])
 
+    fund_entity_id = _add_entity(session, "fund")
+    session.add(MdmFund(
+        entity_id=fund_entity_id,
+        adviser_entity_id=firm_adviser_id,
+        canonical_name="Linked Growth Fund",
+    ))
+    security_entity_id = _add_entity(session, "security")
+    session.add(MdmSecurity(
+        entity_id=security_entity_id,
+        issuer_entity_id=issuer_company_id,
+        canonical_title="Common Stock",
+    ))
+
     session.commit()
     return {
         "issuer_company_id": issuer_company_id, "linked_company_id": linked_company_id,
         "individual_adviser_id": individual_adviser_id, "firm_adviser_id": firm_adviser_id,
         "reporting_person_id": reporting_person_id,
         "individual_person_id": individual_person_id,
+        "fund_entity_id": fund_entity_id,
+        "security_entity_id": security_entity_id,
     }
 
 
@@ -356,8 +371,8 @@ class TestRunRelationships:
     def test_returned_count_matches_inserts(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=self._stub())
         written = pipe.run_relationships()
-        # 2 IS_INSIDER + 1 IS_ENTITY_OF + 1 IS_PERSON_OF = 4
-        assert written == 4
+        # 2 IS_INSIDER + 1 IS_ENTITY_OF + 1 IS_PERSON_OF + 1 MANAGES_FUND + 1 ISSUED_BY = 6
+        assert written == 6
 
     def test_properties_include_role_and_title(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=self._stub())
@@ -431,10 +446,10 @@ class TestRunRelationships:
         first = pipe.run_relationships()
         second = pipe.run_relationships()
 
-        assert first == 4
+        assert first == 6
         assert second == 0
         rows = list(session.scalars(select(MdmRelationshipInstance)))
-        assert len(rows) == 4
+        assert len(rows) == 6
 
     def test_target_per_type_counts_existing_rows(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=self._stub())
