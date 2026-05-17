@@ -3,7 +3,7 @@
 workstream: neo4j-pipe
 status: active
 milestone: v1.1 Neo4j bronze-to-graph pipe
-updated: 2026-05-16
+updated: 2026-05-17
 
 ---
 
@@ -17,10 +17,10 @@ updated: 2026-05-16
 
 ### Relationship Derivation
 
-- [ ] **REL-01**: MDM derives `IS_INSIDER` relationships for all non-corporate Forms 3/4/5 reporting owners with resolved issuer and person entities.
-- [ ] **REL-02**: MDM derives `HOLDS` and `ISSUED_BY` relationships for ownership securities with resolved owners, securities, and issuers.
-- [ ] **REL-03**: MDM derives `MANAGES_FUND`, `IS_ENTITY_OF`, and `IS_PERSON_OF` relationships for adviser, fund, company, and person links.
-- [ ] **REL-04**: Relationship derivation is idempotent: repeated runs against unchanged silver and MDM data do not create duplicate active relationship rows.
+- [x] **REL-01**: MDM derives `IS_INSIDER` relationships for all non-corporate Forms 3/4/5 reporting owners with resolved issuer and person entities.
+- [x] **REL-02**: MDM derives `HOLDS` and `ISSUED_BY` relationships for ownership securities with resolved owners, securities, and issuers.
+- [x] **REL-03**: MDM derives `MANAGES_FUND`, `IS_ENTITY_OF`, and `IS_PERSON_OF` relationships for adviser, fund, company, and person links.
+- [x] **REL-04**: Relationship derivation is idempotent: repeated runs against unchanged silver and MDM data do not create duplicate active relationship rows.
 
 ### Neo4j Sync And Verification
 
@@ -53,10 +53,10 @@ updated: 2026-05-16
 | PIPE-01 | Phase 5 | Complete |
 | PIPE-02 | Phase 5 | Pending |
 | PIPE-03 | Phase 5 | Pending |
-| REL-01 | Phase 6 | Pending |
-| REL-02 | Phase 6 | Pending |
-| REL-03 | Phase 6 | Pending |
-| REL-04 | Phase 6 | Pending |
+| REL-01 | Phase 6 | Complete |
+| REL-02 | Phase 6 | Complete |
+| REL-03 | Phase 6 | Complete |
+| REL-04 | Phase 6 | Complete |
 | GRAPH-01 | Phase 7 | Pending |
 | GRAPH-02 | Phase 7 | Pending |
 | GRAPH-03 | Phase 7 | Pending |
