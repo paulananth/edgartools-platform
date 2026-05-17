@@ -273,37 +273,195 @@ def _silver_reader():
     return _DuckReader(duckdb_path)
 
 
+# ---------------------------------------------------------------------------
+# Silver source preflight helpers (D-11, D-12, T-05-14, T-05-15)
+# ---------------------------------------------------------------------------
+
+# Fixed allowlist of required silver tables per entity type.
+# Values are sets of table names that MUST exist AND have nonzero rows.
+# Use only constants here — no user-provided identifiers are ever interpolated.
+_REQUIRED_TABLES_COMPANY: frozenset[str] = frozenset({"sec_company"})
+_REQUIRED_TABLES_ADVISER: frozenset[str] = frozenset({"sec_adv_filing"})
+_REQUIRED_TABLES_FUND: frozenset[str] = frozenset({"sec_adv_private_fund"})
+_REQUIRED_TABLES_PERSON: frozenset[str] = frozenset({
+    "sec_company_filing",
+    "sec_ownership_reporting_owner",
+})
+_REQUIRED_TABLES_SECURITY: frozenset[str] = frozenset({
+    "sec_company_filing",
+    "sec_ownership_non_derivative_txn",
+})
+# D-12: relationship commands need source readiness for company-person derivation
+_REQUIRED_TABLES_RELATIONSHIP_READINESS: frozenset[str] = frozenset({
+    "sec_company",
+    "sec_company_filing",
+    "sec_ownership_reporting_owner",
+})
+
+# entity-type -> required tables (used by _handle_run)
+_ENTITY_TYPE_REQUIRED_TABLES: dict[str, frozenset[str]] = {
+    "company": _REQUIRED_TABLES_COMPANY,
+    "adviser": _REQUIRED_TABLES_ADVISER,
+    "fund": _REQUIRED_TABLES_FUND,
+    "person": _REQUIRED_TABLES_PERSON,
+    "security": _REQUIRED_TABLES_SECURITY,
+    "all": (
+        _REQUIRED_TABLES_COMPANY
+        | _REQUIRED_TABLES_ADVISER
+        | _REQUIRED_TABLES_FUND
+        | _REQUIRED_TABLES_PERSON
+        | _REQUIRED_TABLES_SECURITY
+    ),
+}
+
+
+def _validate_silver_tables(reader, required_tables: frozenset[str]) -> list[str]:
+    """Check that each name in *required_tables* exists in the DuckDB and has ≥1 rows.
+
+    Returns a list of human-readable problem descriptions.  An empty list means
+    all required tables are present and non-empty.
+
+    Security: table names come only from the fixed allowlists above; no
+    user-provided identifiers are ever used inside a SQL string.
+    """
+    import duckdb as _duckdb
+
+    problems: list[str] = []
+
+    # Fetch the set of tables that actually exist in the DuckDB file.
+    try:
+        existing_tables: set[str] = {
+            row[0].lower()
+            for row in reader.fetch(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+            )
+        }
+    except Exception as exc:
+        problems.append(f"cannot query table list from silver DuckDB: {exc}")
+        return problems
+
+    for table_name in sorted(required_tables):
+        # Validate that table_name is in the fixed allowlist before using in SQL.
+        _all_known = (
+            _REQUIRED_TABLES_COMPANY
+            | _REQUIRED_TABLES_ADVISER
+            | _REQUIRED_TABLES_FUND
+            | _REQUIRED_TABLES_PERSON
+            | _REQUIRED_TABLES_SECURITY
+            | _REQUIRED_TABLES_RELATIONSHIP_READINESS
+        )
+        if table_name not in _all_known:
+            # Should never happen — caller must use constants, not external input.
+            problems.append(f"unknown required table '{table_name}' (internal error)")
+            continue
+
+        if table_name.lower() not in existing_tables:
+            problems.append(f"required table '{table_name}' is missing from silver DuckDB")
+            continue
+
+        # Count rows; use allowlisted name directly in SQL (never from user input).
+        try:
+            count_rows = reader.fetch(f"SELECT COUNT(*) AS n FROM {table_name}")
+            n = count_rows[0]["n"] if count_rows else 0
+            if n == 0:
+                problems.append(
+                    f"required table '{table_name}' exists but has 0 rows in silver DuckDB"
+                )
+        except Exception as exc:
+            problems.append(f"error counting rows in '{table_name}': {exc}")
+
+    return problems
+
+
+def _require_silver_reader(
+    required_tables: frozenset[str],
+    command_name: str,
+) -> tuple[object, int]:
+    """Open and validate the MDM silver source before any MDM session is created.
+
+    Returns (reader, 0) on success or (None, 1) when the source is invalid or
+    missing.  Prints actionable stderr messages naming MDM_SILVER_DUCKDB.
+
+    Security: preflight runs BEFORE _session() so an invalid source never
+    triggers MDM database mutation (T-05-15).
+    """
+    duckdb_path = os.environ.get("MDM_SILVER_DUCKDB")
+    if duckdb_path is None:
+        print(
+            f"MDM_SILVER_DUCKDB is not set. "
+            f"Set MDM_SILVER_DUCKDB to a local path or s3:// URI before running '{command_name}'.",
+            file=sys.stderr,
+        )
+        return None, 1
+
+    try:
+        reader = _silver_reader()
+    except Exception as exc:
+        print(
+            f"Cannot open MDM_SILVER_DUCKDB={duckdb_path!r}: {exc}",
+            file=sys.stderr,
+        )
+        return None, 1
+
+    if reader is None:
+        # Should not reach here since we checked MDM_SILVER_DUCKDB above, but be safe.
+        print(
+            f"MDM_SILVER_DUCKDB is not set. "
+            f"Set MDM_SILVER_DUCKDB to a local path or s3:// URI before running '{command_name}'.",
+            file=sys.stderr,
+        )
+        return None, 1
+
+    if required_tables:
+        problems = _validate_silver_tables(reader, required_tables)
+        if problems:
+            print(
+                f"Silver DuckDB source (MDM_SILVER_DUCKDB={duckdb_path!r}) is not ready "
+                f"for '{command_name}':\n"
+                + "\n".join(f"  - {p}" for p in problems),
+                file=sys.stderr,
+            )
+            return None, 1
+
+    return reader, 0
+
+
 # -- handlers ---------------------------------------------------------------
 
 def _handle_run(args) -> int:
     from edgar_warehouse.mdm.pipeline import MDMPipeline
 
-    session = _session()
-    silver = _silver_reader()
-    if silver is None:
-        print("MDM_SILVER_DUCKDB not set; nothing to do.", file=sys.stderr)
-        return 1
+    # D-11 / PIPE-03: validate silver source BEFORE opening MDM session.
+    entity_type = getattr(args, "entity_type", "all") or "all"
+    required_tables = _ENTITY_TYPE_REQUIRED_TABLES.get(entity_type, _REQUIRED_TABLES_COMPANY)
+    silver, rc = _require_silver_reader(required_tables, f"mdm run --entity-type {entity_type}")
+    if rc != 0:
+        return rc
 
-    pipeline = MDMPipeline(session=session, silver=silver, neo4j=_neo4j_client())
-    if args.entity_type == "all":
-        stats = pipeline.run_all(limit=args.limit)
-        print(json.dumps(stats.__dict__, indent=2, sort_keys=True))
-        return 0
-    if args.entity_type == "company":
-        n = pipeline.run_companies(limit=args.limit)
-        print(f"companies: {n}")
-    if args.entity_type == "adviser":
-        n = pipeline.run_advisers(limit=args.limit)
-        print(f"advisers: {n}")
-    if args.entity_type == "security":
-        n = pipeline.run_securities(limit=args.limit)
-        print(f"securities: {n}")
-    if args.entity_type == "person":
-        n = pipeline.run_persons(limit=args.limit)
-        print(f"persons: {n}")
-    if args.entity_type == "fund":
-        n = pipeline.run_funds(limit=args.limit)
-        print(f"funds: {n}")
+    session = _session()
+    try:
+        pipeline = MDMPipeline(session=session, silver=silver, neo4j=_neo4j_client())
+        if entity_type == "all":
+            stats = pipeline.run_all(limit=args.limit)
+            print(json.dumps(stats.__dict__, indent=2, sort_keys=True))
+            return 0
+        if entity_type == "company":
+            n = pipeline.run_companies(limit=args.limit)
+            print(f"companies: {n}")
+        if entity_type == "adviser":
+            n = pipeline.run_advisers(limit=args.limit)
+            print(f"advisers: {n}")
+        if entity_type == "security":
+            n = pipeline.run_securities(limit=args.limit)
+            print(f"securities: {n}")
+        if entity_type == "person":
+            n = pipeline.run_persons(limit=args.limit)
+            print(f"persons: {n}")
+        if entity_type == "fund":
+            n = pipeline.run_funds(limit=args.limit)
+            print(f"funds: {n}")
+    finally:
+        session.close()
     return 0
 
 
@@ -477,12 +635,14 @@ def _handle_sync_graph(args) -> int:
 def _handle_derive_relationships(args) -> int:
     from edgar_warehouse.mdm.pipeline import MDMPipeline
 
+    # D-11, D-12 / PIPE-03: validate silver source readiness BEFORE opening MDM session.
+    silver, rc = _require_silver_reader(
+        _REQUIRED_TABLES_RELATIONSHIP_READINESS, "mdm derive-relationships"
+    )
+    if rc != 0:
+        return rc
+
     session = _session()
-    silver = _silver_reader()
-    if silver is None:
-        print("MDM_SILVER_DUCKDB not set; nothing to do.", file=sys.stderr)
-        session.close()
-        return 1
     try:
         pipeline = MDMPipeline(session=session, silver=silver)
         summary = pipeline.derive_relationships(
@@ -500,13 +660,14 @@ def _handle_load_relationships(args) -> int:
     from edgar_warehouse.mdm.graph import GraphSyncEngine
     from edgar_warehouse.mdm.pipeline import MDMPipeline
 
-    session = _session()
-    silver = _silver_reader()
-    if silver is None:
-        print("MDM_SILVER_DUCKDB not set; nothing to do.", file=sys.stderr)
-        session.close()
-        return 1
+    # D-11, D-12 / PIPE-03: validate silver source readiness BEFORE opening MDM session.
+    silver, rc = _require_silver_reader(
+        _REQUIRED_TABLES_RELATIONSHIP_READINESS, "mdm load-relationships"
+    )
+    if rc != 0:
+        return rc
 
+    session = _session()
     client = None if args.skip_graph_sync else _neo4j_client()
     try:
         pipeline = MDMPipeline(session=session, silver=silver, neo4j=client)

@@ -297,6 +297,23 @@ def _seed_registry(session: Session) -> None:
             merge_strategy=strategy,
             is_active=True,
         ))
+
+    # Source priority rules required by MDMRuleEngine for resolver._stage_attrs.
+    # Uses the same priority assignments as seed_defaults() in migrations/runtime.py.
+    from edgar_warehouse.mdm.database import MdmSourcePriority
+    for et, source_system, priority, description in [
+        ("all", "edgar_cik", 1, "SEC CIK submission data"),
+        ("all", "adv_filing", 2, "Form ADV filing data"),
+        ("all", "ownership_filing", 3, "Form 3/4/5 derived data"),
+        ("all", "derived", 4, "Computed or inferred values"),
+    ]:
+        session.add(MdmSourcePriority(
+            entity_type=et,
+            source_system=source_system,
+            priority=priority,
+            description=description,
+        ))
+
     session.commit()
 
 
