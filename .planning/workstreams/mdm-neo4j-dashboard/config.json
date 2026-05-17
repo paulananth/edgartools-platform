@@ -8,5 +8,8 @@
     "fix-pipelines workstream",
     "generated deployment JSON",
     "gold/dbt refresh changes unless explicitly required"
-  ]
+  ],
+  "workflow": {
+    "_auto_chain_active": false
+  }
 }
