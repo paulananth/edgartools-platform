@@ -300,6 +300,11 @@ def _execute_warehouse_bronze_capture(
     silver_database_write: dict[str, Any] | None = None
     silver_table_counts: dict[str, int] | None = None
     try:
+        _emit_pipeline_event(
+            "bronze_silver_started",
+            command=command_name,
+            run_id=run_id,
+        )
         raw_writes, metrics = _capture_bronze_raw(
             context=context,
             db=db,
@@ -308,6 +313,13 @@ def _execute_warehouse_bronze_capture(
             scope=scope,
             now=now,
             sync_run_id=run_id,
+        )
+        _emit_pipeline_event(
+            "bronze_silver_completed",
+            command=command_name,
+            run_id=run_id,
+            rows_inserted=metrics.get("rows_inserted", 0),
+            rows_skipped=metrics.get("rows_skipped", 0),
         )
         silver_table_counts = db.get_table_counts()
         if context.snowflake_export_root is not None and command_name in GOLD_AFFECTING_COMMANDS:
