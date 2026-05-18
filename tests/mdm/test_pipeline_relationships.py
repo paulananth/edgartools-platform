@@ -33,6 +33,7 @@ from edgar_warehouse.mdm.database import (
     MdmCompany,
     MdmEntity,
     MdmEntityTypeDefinition,
+    MdmFund,
     MdmPerson,
     MdmRelationshipInstance,
     MdmRelationshipType,
@@ -162,12 +163,27 @@ def fixture_world(session: Session) -> dict:
                   canonical_name="Individual Person"),
     ])
 
+    fund_entity_id = _add_entity(session, "fund")
+    session.add(MdmFund(
+        entity_id=fund_entity_id,
+        adviser_entity_id=firm_adviser_id,
+        canonical_name="Linked Growth Fund",
+    ))
+    security_entity_id = _add_entity(session, "security")
+    session.add(MdmSecurity(
+        entity_id=security_entity_id,
+        issuer_entity_id=issuer_company_id,
+        canonical_title="Common Stock",
+    ))
+
     session.commit()
     return {
         "issuer_company_id": issuer_company_id, "linked_company_id": linked_company_id,
         "individual_adviser_id": individual_adviser_id, "firm_adviser_id": firm_adviser_id,
         "reporting_person_id": reporting_person_id,
         "individual_person_id": individual_person_id,
+        "fund_entity_id": fund_entity_id,
+        "security_entity_id": security_entity_id,
     }
 
 
@@ -355,8 +371,8 @@ class TestRunRelationships:
     def test_returned_count_matches_inserts(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=self._stub())
         written = pipe.run_relationships()
-        # 2 IS_INSIDER + 1 IS_ENTITY_OF + 1 IS_PERSON_OF = 4
-        assert written == 4
+        # 2 IS_INSIDER + 1 IS_ENTITY_OF + 1 IS_PERSON_OF + 1 MANAGES_FUND + 1 ISSUED_BY = 6
+        assert written == 6
 
     def test_properties_include_role_and_title(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=self._stub())
@@ -430,10 +446,10 @@ class TestRunRelationships:
         first = pipe.run_relationships()
         second = pipe.run_relationships()
 
-        assert first == 4
+        assert first == 6
         assert second == 0
         rows = list(session.scalars(select(MdmRelationshipInstance)))
-        assert len(rows) == 4
+        assert len(rows) == 6
 
     def test_target_per_type_counts_existing_rows(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=self._stub())
@@ -445,3 +461,85 @@ class TestRunRelationships:
         assert first["IS_INSIDER"]["total"] == 1
         assert second["IS_INSIDER"]["existing"] == 1
         assert second["IS_INSIDER"]["inserted"] == 0
+
+    def test_writes_manages_fund_relationship(self, session, fixture_world):
+        """MANAGES_FUND deriver inserts exactly 1 row when fixture_world has 1 MdmFund. (D-01, D-02, REL-03)"""
+        pipe = MDMPipeline(session=session, silver=StubSilver({}))
+        summary = pipe.derive_relationships(relationship_types=["MANAGES_FUND"])
+        assert summary["MANAGES_FUND"]["inserted"] == 1
+        assert summary["MANAGES_FUND"]["skipped_existing"] == 0
+        assert summary["MANAGES_FUND"]["skipped"] == (
+            summary["MANAGES_FUND"]["skipped_corporate"]
+            + summary["MANAGES_FUND"]["skipped_unresolved_source"]
+            + summary["MANAGES_FUND"]["skipped_unresolved_target"]
+            + summary["MANAGES_FUND"]["skipped_existing"]
+        )
+
+    def test_writes_issued_by_relationship(self, session, fixture_world):
+        """ISSUED_BY deriver inserts exactly 1 row when fixture_world has 1 qualifying MdmSecurity. (D-01, D-02, REL-02)"""
+        pipe = MDMPipeline(session=session, silver=StubSilver({}))
+        summary = pipe.derive_relationships(relationship_types=["ISSUED_BY"])
+        assert summary["ISSUED_BY"]["inserted"] == 1
+        assert summary["ISSUED_BY"]["skipped_existing"] == 0
+        assert summary["ISSUED_BY"]["skipped"] == (
+            summary["ISSUED_BY"]["skipped_corporate"]
+            + summary["ISSUED_BY"]["skipped_unresolved_source"]
+            + summary["ISSUED_BY"]["skipped_unresolved_target"]
+            + summary["ISSUED_BY"]["skipped_existing"]
+        )
+
+    def test_all_six_types_idempotent(self, session, fixture_world):
+        """Running derive_relationships() twice inserts 0 rows on second run for all 6 types. (D-04, REL-04)"""
+        session.add(MdmSourceRef(
+            entity_id=fixture_world["security_entity_id"],
+            source_system="ownership_filing",
+            source_id="0000-issuer-1:0:0",
+            source_priority=3,
+        ))
+        session.commit()
+
+        silver = StubSilver({
+            "FROM sec_ownership_reporting_owner": [
+                {
+                    "accession_number": "0000-issuer-1", "owner_index": 0,
+                    "owner_cik": 910102, "owner_name": "Reporting Person",
+                    "is_director": True, "is_officer": False,
+                    "is_ten_percent_owner": False, "is_other": False,
+                    "officer_title": None, "issuer_cik": 910001, "period_of_report": None,
+                },
+            ],
+            "FROM sec_ownership_non_derivative_txn": [
+                {
+                    "accession_number": "0000-issuer-1", "owner_index": 0, "txn_index": 0,
+                    "security_title": "Common Stock", "transaction_date": None,
+                    "shares_owned_after": 10, "ownership_direct_indirect": "D",
+                    "owner_cik": 910102, "owner_name": "Reporting Person",
+                    "issuer_cik": 910001,
+                },
+            ],
+        })
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        ALL_SIX = ["IS_INSIDER", "HOLDS", "ISSUED_BY", "MANAGES_FUND", "IS_ENTITY_OF", "IS_PERSON_OF"]
+        first = pipe.derive_relationships()
+        second = pipe.derive_relationships()
+
+        assert first["IS_INSIDER"]["inserted"] >= 1
+        assert first["HOLDS"]["inserted"] == 1
+        assert first["ISSUED_BY"]["inserted"] == 1
+        assert first["MANAGES_FUND"]["inserted"] == 1
+        assert first["IS_ENTITY_OF"]["inserted"] == 1
+        assert first["IS_PERSON_OF"]["inserted"] == 1
+
+        for rt in ALL_SIX:
+            assert second[rt]["inserted"] == 0, (
+                f"Expected 0 inserts on second run for {rt}, got {second[rt]['inserted']}"
+            )
+
+        for rt in ALL_SIX:
+            assert second[rt]["skipped"] == (
+                second[rt]["skipped_corporate"]
+                + second[rt]["skipped_unresolved_source"]
+                + second[rt]["skipped_unresolved_target"]
+                + second[rt]["skipped_existing"]
+            ), f"skipped backward-compat broken for {rt}"

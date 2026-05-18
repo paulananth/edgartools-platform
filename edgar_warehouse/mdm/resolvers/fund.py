@@ -8,6 +8,7 @@ mdm_entity_attribute_stage.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Optional
 
 from sqlalchemy import select
@@ -17,6 +18,11 @@ from edgar_warehouse.mdm.resolvers.base import BaseResolver, ResolveOutcome, Res
 from edgar_warehouse.mdm.survivorship import run_survivorship_for_entity
 
 FUND_FIELDS = ["canonical_name", "fund_type", "jurisdiction", "aum_amount", "aum_as_of_date"]
+
+# Date-typed columns in MdmFund that receive survivorship winning_value strings.
+# survivorship stores all field values as str(); SQLite Date columns require
+# Python date objects, so coerce ISO-format strings back before setattr.
+_DATE_FIELDS: frozenset[str] = frozenset({"aum_as_of_date"})
 
 
 @dataclass
@@ -81,7 +87,13 @@ class FundResolver(BaseResolver):
             for f in FUND_FIELDS:
                 w = merges.get(f)
                 if w is not None and w.winning_value is not None:
-                    setattr(row, f, w.winning_value)
+                    value = w.winning_value
+                    if f in _DATE_FIELDS and isinstance(value, str):
+                        try:
+                            value = date.fromisoformat(value)
+                        except ValueError:
+                            value = None
+                    setattr(row, f, value)
         self._log_change(ctx, entity_id, {k: v.winning_value for k, v in merges.items()})
 
         from edgar_warehouse.mdm.match import MatchAction

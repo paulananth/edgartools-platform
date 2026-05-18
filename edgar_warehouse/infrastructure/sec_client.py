@@ -10,10 +10,26 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from urllib.parse import urlparse
 
+from pyrate_limiter import Duration, InMemoryBucket, Limiter, Rate
+
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 
 DEFAULT_MAX_RESPONSE_BYTES = 50 * 1024 * 1024
 ALLOWED_HOSTS = frozenset({"www.sec.gov", "sec.gov", "data.sec.gov"})
+
+
+def _create_sec_rate_limiter() -> Limiter:
+    # 9 req/sec matches EDGAR_RATE_LIMIT_PER_SEC (edgartools default).
+    # In-process only — does not coordinate across ECS tasks.
+    rate = Rate(9, Duration.SECOND)
+    bucket = InMemoryBucket([rate])
+    try:
+        return Limiter(bucket, max_delay=Duration.DAY, raise_when_fail=False, retry_until_max_delay=True)
+    except TypeError:
+        return Limiter(bucket)
+
+
+_SEC_RATE_LIMITER: Limiter = _create_sec_rate_limiter()
 
 
 @dataclass(frozen=True)
@@ -43,6 +59,7 @@ def download_sec_bytes(url: str, identity: str) -> bytes:
     import httpx
 
     _validate_sec_url(url)
+    _SEC_RATE_LIMITER.try_acquire("sec_download")
     last_error: Exception | None = None
     headers = {"Accept": "*/*", "User-Agent": identity}
     timeout = httpx.Timeout(30.0, connect=10.0)

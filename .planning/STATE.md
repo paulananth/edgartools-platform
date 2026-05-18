@@ -28,7 +28,16 @@ publishing to Snowflake gold tables.
 Phase: Not started (defining requirements)
 Plan: —
 Status: Ready to plan Phase 5
-Last activity: 2026-05-16 — Milestone v1.1 roadmap initialized
+Last activity: 2026-05-16 — Milestone v1.1 roadmap initialized; fix-pipelines v1.0 complete
+
+Progress: [░░░░░░░░░░] 0% (Neo4j bronze-to-graph pipe milestone)
+
+## Completed Workstreams
+
+- **fix-pipelines v1.0** (2026-05-16) — Pipeline Observability
+  4 phases · 6 plans · 12 files changed
+  Failure surfacing, status completeness, SNS failure notifications, SEC rate limiting
+  Archive: .planning/workstreams/fix-pipelines/milestones/v1.0-ROADMAP.md
 
 ## Performance Metrics
 
@@ -64,7 +73,6 @@ None yet.
 
 - Phase 4 (Pipeline Hardening) depends on Phase 1 for MDM baseline but is otherwise
   independent of Phases 2-3. Can be advanced in parallel if needed.
-
 - `GOLD_AFFECTING_COMMANDS` invariant check script does not yet exist — create in Phase 4.
 - Documentation debt (CLAUDE.md "8 tables", README.md bare pip) deferred to backlog Phase 7.
 - Claude and Codex work must remain isolated by git/worktree and GSD workstream ownership.
@@ -76,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-15
-Stopped at: Roadmap and planning files initialized; no phases in flight
+Last session: 2026-05-16
+Stopped at: Milestone v1.1 roadmap initialized; neo4j-pipe planning in progress
 Resume file: None

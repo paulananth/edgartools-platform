@@ -151,6 +151,12 @@ MDM Postgres (private VPC). Reserve it for single-company ad-hoc loads with expl
   purpose of this pipeline is to reprocess already-loaded bronze with zero SEC calls.
   5-why root cause: the artifact pipeline is a separate SEC fetch pass; "no SEC calls" must
   be encoded as a flag, not assumed from the pipeline name.
+- `BOOTSTRAP_BATCH_CONCURRENCY` recommended range: **2–5** concurrent ECS tasks. Current
+  default is 3 (already within the recommended range). Values below 2 are not recommended
+  for production — throughput is too low. Values above 5 risk triggering SEC rate limiting:
+  at 5 tasks × ~9 req/sec theoretical max = ~45 req/sec, well above SEC's 10 req/sec per-IP
+  limit without stagger mitigation. The in-process rate limiter in `sec_client.py` (9 req/sec
+  per task) enforces per-task throttling but does not coordinate across ECS tasks.
 
 Key import pattern (do not change without checking the edgartools changelog):
 
