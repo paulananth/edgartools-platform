@@ -321,15 +321,50 @@ def _execute_warehouse_bronze_capture(
                 run_id=run_id,
                 silver_table_counts=silver_table_counts,
             )
+
+            _emit_pipeline_event("gold_build_started", command=command_name, run_id=run_id)
             gold_tables = build_gold(db)
+            _emit_pipeline_event(
+                "gold_build_completed",
+                command=command_name,
+                run_id=run_id,
+                duration_seconds=(datetime.now(UTC) - gold_started_at).total_seconds(),
+                table_count=len(gold_tables),
+            )
+
+            storage_started_at = datetime.now(UTC)
+            _emit_pipeline_event("gold_storage_write_started", command=command_name, run_id=run_id)
             gold_row_counts = write_gold_to_storage(gold_tables, context.storage_root, run_id)
+            _emit_pipeline_event(
+                "gold_storage_write_completed",
+                command=command_name,
+                run_id=run_id,
+                duration_seconds=(datetime.now(UTC) - storage_started_at).total_seconds(),
+                gold_row_counts=gold_row_counts,
+            )
+
             export_business_date = _resolve_export_business_date(command_name=command_name, scope=scope, now=now)
+            export_started_at = datetime.now(UTC)
+            _emit_pipeline_event(
+                "gold_snowflake_export_started",
+                command=command_name,
+                run_id=run_id,
+                export_business_date=str(export_business_date),
+            )
             snowflake_export_counts = write_gold_to_snowflake_export(
                 gold_tables,
                 context.snowflake_export_root,
                 run_id,
                 export_business_date,
             )
+            _emit_pipeline_event(
+                "gold_snowflake_export_completed",
+                command=command_name,
+                run_id=run_id,
+                duration_seconds=(datetime.now(UTC) - export_started_at).total_seconds(),
+                snowflake_export_counts=snowflake_export_counts,
+            )
+
             del gold_tables
             _emit_pipeline_event(
                 "gold_publish_completed",
