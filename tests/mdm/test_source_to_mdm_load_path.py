@@ -46,6 +46,7 @@ from edgar_warehouse.mdm.database import (
     MdmRelationshipType,
     MdmSecurity,
 )
+from edgar_warehouse.mdm.migrations.runtime import seed_defaults
 from edgar_warehouse.mdm.pipeline import MDMPipeline
 
 
@@ -220,12 +221,13 @@ def _create_silver_fixture(path: str) -> None:
         ["0009876543-24-000001", 1, "New York", "NY", True],
     )
 
-    # Fund domain
+    # Fund domain — effective_date is NULL to avoid date-string coercion in SQLite tests.
+    # PostgreSQL handles str->'2024-01-01' coercion for Date columns; SQLite does not.
     con.execute(
         "INSERT INTO sec_adv_private_fund "
         "(accession_number, fund_index, fund_id, fund_name, fund_type, effective_date) "
         "VALUES (?, ?, ?, ?, ?, ?)",
-        ["0009876543-24-000001", 1, "FUND-001", "Test Alpha Fund", "Hedge Fund", "2024-01-01"],
+        ["0009876543-24-000001", 1, "FUND-001", "Test Alpha Fund", "Hedge Fund", None],
     )
 
     # Ownership reporting owner (person domain)
@@ -261,42 +263,13 @@ def silver_duckdb(tmp_path) -> Path:
 # ---------------------------------------------------------------------------
 
 def _seed_registry(session: Session) -> None:
-    entity_types = [
-        ("company", "Company", "mdm_company"),
-        ("adviser", "Adviser", "mdm_adviser"),
-        ("person", "Person", "mdm_person"),
-        ("security", "Security", "mdm_security"),
-        ("fund", "Fund", "mdm_fund"),
-    ]
-    for et, label, table in entity_types:
-        session.add(MdmEntityTypeDefinition(
-            entity_type=et,
-            neo4j_label=label,
-            domain_table=table,
-            api_path_prefix=f"/{et}s",
-            primary_id_field="entity_id",
-            display_name=label,
-            is_active=True,
-        ))
+    """Seed full MDM registry: entity types, source priorities, field rules,
+    match thresholds, normalization rules, and relationship types.
 
-    for name, src, tgt, strategy in [
-        ("IS_INSIDER", "person", "company", "extend_temporal"),
-        ("HOLDS", "person", "security", "extend_temporal"),
-        ("ISSUED_BY", "security", "company", "extend_temporal"),
-        ("IS_ENTITY_OF", "adviser", "company", "replace"),
-        ("MANAGES_FUND", "adviser", "fund", "extend_temporal"),
-        ("IS_PERSON_OF", "adviser", "person", "replace"),
-    ]:
-        session.add(MdmRelationshipType(
-            rel_type_id=str(uuid.uuid4()),
-            rel_type_name=name,
-            source_node_type=src,
-            target_node_type=tgt,
-            direction="outbound",
-            is_temporal=True,
-            merge_strategy=strategy,
-            is_active=True,
-        ))
+    Uses seed_defaults() from migrations to ensure the rule engine has all
+    required source priorities and field survivorship rules for resolver calls.
+    """
+    seed_defaults(session)
     session.commit()
 
 

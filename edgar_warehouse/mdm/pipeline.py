@@ -98,7 +98,7 @@ class MDMPipeline:
                 [row["cik"]],
             ))
             tracking = self._first(self.silver.fetch(
-                "SELECT tracking_status FROM sec_tracked_universe WHERE cik = ?",
+                "SELECT tracking_status FROM sec_company_sync_state WHERE cik = ?",
                 [row["cik"]],
             ))
             resolver.resolve_one(ctx, "edgar_cik", row, ticker, tracking)
