@@ -894,24 +894,41 @@ def _build_fact_adv_private_fund(conn: Any) -> pa.Table:
 
 
 def build_gold(db: SilverDatabase) -> dict[str, pa.Table]:
+    import json
+    import sys
+    from datetime import datetime, timezone
+
+    def _timed(name: str, fn):
+        t0 = datetime.now(timezone.utc)
+        print(json.dumps({"event": "gold_table_started", "table": name,
+                          "emitted_at": t0.isoformat().replace("+00:00", "Z")}),
+              file=sys.stderr, flush=True)
+        result = fn()
+        duration = (datetime.now(timezone.utc) - t0).total_seconds()
+        print(json.dumps({"event": "gold_table_completed", "table": name,
+                          "rows": len(result), "duration_seconds": round(duration, 2),
+                          "emitted_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")}),
+              file=sys.stderr, flush=True)
+        return result
+
     conn = get_connection(db)
     return {
-        "dim_company": _build_dim_company(conn),
-        "dim_form": _build_dim_form(conn),
-        "dim_date": _build_dim_date(conn),
-        "dim_filing": _build_dim_filing(conn),
-        "fact_filing_activity": _build_fact_filing_activity(conn),
-        "dim_party": _build_dim_party(conn),
-        "dim_security": _build_dim_security(conn),
-        "dim_ownership_txn_type": _build_dim_ownership_txn_type(conn),
-        "dim_geography": _build_dim_geography(conn),
-        "dim_disclosure_category": _build_dim_disclosure_category(conn),
-        "dim_private_fund": _build_dim_private_fund(conn),
-        "fact_ownership_transaction": _build_fact_ownership_transaction(conn),
-        "fact_ownership_holding_snapshot": _build_fact_ownership_holding_snapshot(conn),
-        "fact_adv_office": _build_fact_adv_office(conn),
-        "fact_adv_disclosure": _build_fact_adv_disclosure(conn),
-        "fact_adv_private_fund": _build_fact_adv_private_fund(conn),
+        "dim_company":                    _timed("dim_company",                    lambda: _build_dim_company(conn)),
+        "dim_form":                       _timed("dim_form",                       lambda: _build_dim_form(conn)),
+        "dim_date":                       _timed("dim_date",                       lambda: _build_dim_date(conn)),
+        "dim_filing":                     _timed("dim_filing",                     lambda: _build_dim_filing(conn)),
+        "fact_filing_activity":           _timed("fact_filing_activity",           lambda: _build_fact_filing_activity(conn)),
+        "dim_party":                      _timed("dim_party",                      lambda: _build_dim_party(conn)),
+        "dim_security":                   _timed("dim_security",                   lambda: _build_dim_security(conn)),
+        "dim_ownership_txn_type":         _timed("dim_ownership_txn_type",         lambda: _build_dim_ownership_txn_type(conn)),
+        "dim_geography":                  _timed("dim_geography",                  lambda: _build_dim_geography(conn)),
+        "dim_disclosure_category":        _timed("dim_disclosure_category",        lambda: _build_dim_disclosure_category(conn)),
+        "dim_private_fund":               _timed("dim_private_fund",               lambda: _build_dim_private_fund(conn)),
+        "fact_ownership_transaction":     _timed("fact_ownership_transaction",     lambda: _build_fact_ownership_transaction(conn)),
+        "fact_ownership_holding_snapshot":_timed("fact_ownership_holding_snapshot",lambda: _build_fact_ownership_holding_snapshot(conn)),
+        "fact_adv_office":                _timed("fact_adv_office",                lambda: _build_fact_adv_office(conn)),
+        "fact_adv_disclosure":            _timed("fact_adv_disclosure",            lambda: _build_fact_adv_disclosure(conn)),
+        "fact_adv_private_fund":          _timed("fact_adv_private_fund",          lambda: _build_fact_adv_private_fund(conn)),
     }
 
 

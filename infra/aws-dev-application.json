@@ -2,7 +2,7 @@
   "environment": "dev",
   "region": "us-east-1",
   "name_prefix": "edgartools-dev",
-  "image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@sha256:06986569d3cfeb8549a88c2f422f53c77f2de3547cb7a1d9af55e0672fb578b5",
+  "image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@sha256:e80987bba3c9872f3aa0674601ef9af08f4e9b8428e26aba0f9193976fa12b89",
   "mdm_image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:be7f26bbaa729b8752f32fb4f374c071e75a5974e95ccd97569d7a0deb4045bb",
   "cluster": {
     "name": "edgartools-dev-warehouse",
@@ -21,11 +21,11 @@
   "step_functions_role_arn": "arn:aws:iam::077127448006:role/sec_platform_runner_step_functions",
   "edgar_identity_secret_arn": "arn:aws:secretsmanager:us-east-1:077127448006:secret:edgartools-dev-edgar-identity-UMvCTb",
   "task_definitions": {
-    "small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-small:47",
-    "medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-medium:47",
-    "large": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-large:47",
-    "mdm_small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-small:44",
-    "mdm_medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-medium:44"
+    "small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-small:48",
+    "medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-medium:48",
+    "large": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-large:48",
+    "mdm_small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-small:45",
+    "mdm_medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-medium:45"
   },
   "state_machines": {
     "bootstrap_full": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-bootstrap-full",
