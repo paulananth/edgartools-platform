@@ -2,7 +2,7 @@
   "environment": "dev",
   "region": "us-east-1",
   "name_prefix": "edgartools-dev",
-  "image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@sha256:655f28582126835af0919be49e50c26a0ac41338837691a4ef495d7464cca889",
+  "image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@sha256:408c265e95889961d3584fcf1ffc4d9442b096db1803c4094c969227868dd8bb",
   "mdm_image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:be7f26bbaa729b8752f32fb4f374c071e75a5974e95ccd97569d7a0deb4045bb",
   "cluster": {
     "name": "edgartools-dev-warehouse",
@@ -21,15 +21,13 @@
   "step_functions_role_arn": "arn:aws:iam::077127448006:role/sec_platform_runner_step_functions",
   "edgar_identity_secret_arn": "arn:aws:secretsmanager:us-east-1:077127448006:secret:edgartools-dev-edgar-identity-UMvCTb",
   "task_definitions": {
-    "small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-small:40",
-    "medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-medium:40",
-    "large": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-large:40",
-    "mdm_small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-small:37",
-    "mdm_medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-medium:37"
+    "small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-small:45",
+    "medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-medium:45",
+    "large": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-large:45",
+    "mdm_small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-small:42",
+    "mdm_medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-medium:42"
   },
   "state_machines": {
-    "daily_incremental": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-daily-incremental",
-    "bootstrap_recent_10": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-bootstrap-recent-10",
     "bootstrap_full": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-bootstrap-full",
     "targeted_resync": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-targeted-resync",
     "full_reconcile": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-full-reconcile",
@@ -38,6 +36,8 @@
     "gold_refresh": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-gold-refresh",
     "bootstrap_batched": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-bootstrap-batched",
     "bootstrap_phased": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-bootstrap-phased",
+    "bootstrap_recent_10": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-bootstrap-recent-10",
+    "daily_incremental": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-daily-incremental",
     "mdm_gold": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-mdm-gold",
     "ownership_mdm_gold": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-ownership-mdm-gold",
     "silver_mdm_gold": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-silver-mdm-gold",
