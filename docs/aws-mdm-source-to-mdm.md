@@ -1,265 +1,268 @@
-# MDM Source-to-Entity Load Path (Phase 5)
+# AWS MDM: Source to MDM Load Path (Phase 5)
 
-This document covers the operator path for loading MDM entity rows from silver
-DuckDB data without SEC re-fetching or Neo4j synchronisation. It is the
-reference for Phase 5 of the neo4j-pipe workstream.
+This document covers running the MDM entity loaders against a local or S3-backed silver DuckDB
+produced from already-captured SEC EDGAR bronze artifacts. It does not describe bronze artifact
+capture, Neo4j graph sync, or relationship derivation — those belong to later phases.
 
-Phase boundaries:
-- **Phase 5 (this document):** Silver source readiness and MDM entity loading
-- **Phase 6:** Relationship derivation coverage
-- **Phase 7:** Neo4j graph synchronisation
+**Scope:** This guide is AWS/local only. Do not introduce Azure, Databricks, non-AWS storage
+backends, new secret-management paths, or Terraform rollout steps for Phase 5 operations.
 
 ---
 
 ## Prerequisites
 
-### Silver data must already exist
+The silver DuckDB must already exist and contain the required source rows.
+See the [Silver Readiness Diagnostics](#silver-readiness-diagnostics) section before running
+MDM entity loads.
 
-The MDM load path consumes already-captured bronze and silver data. It never
-re-fetches SEC artifacts. If bronze primary XML is absent for a filing, the
-`parse-ownership-bronze` command reports the gap as a `missing_artifact` metric
-and continues (D-09, D-10). No silent SEC re-fetch occurs.
-
-Required source tables and nonzero-row checks before MDM entity loading:
-
-| Table | Required by |
-|-------|-------------|
-| `sec_company` | company entity loader |
-| `sec_adv_filing` | adviser entity loader |
-| `sec_adv_private_fund` | fund entity loader |
-| `sec_company_filing` | person and security loaders |
-| `sec_ownership_reporting_owner` | person entity loader (Form 3/4/5 parse) |
-| `sec_ownership_non_derivative_txn` | security entity loader |
-
-If ownership tables are empty, run `parse-ownership-bronze` first (see below).
-
-### Environment variables
+Runtime variables must be exported in your shell or injected as ECS task environment variables:
 
 ```bash
-# Required: local path or s3:// URI to the silver DuckDB file
-export MDM_SILVER_DUCKDB=/path/to/silver.duckdb
+# Required for all MDM commands
+export MDM_DATABASE_URL="postgresql+psycopg2://user:password@host:5432/mdm"
 
-# Required for MDM writes: MDM Postgres (or SQLite for local testing)
-export MDM_DATABASE_URL="postgresql://mdm:password@localhost:5432/mdm"
+# Required for MDM entity loads from silver (see path options below)
+export MDM_SILVER_DUCKDB="/path/to/silver.duckdb"    # local path
+# or
+export MDM_SILVER_DUCKDB="s3://edgartools-dev-warehouse/warehouse/silver.duckdb"  # S3-backed
 
-# Optional: local cache path when MDM_SILVER_DUCKDB is an s3:// URI
-export MDM_LOCAL_SILVER_DUCKDB=/tmp/mdm-silver.duckdb
-
-# Optional: AWS region for S3 reads
-export AWS_DEFAULT_REGION=us-east-1
+# Optional: local cache path for S3-backed silver (avoids re-download on each run)
+export MDM_LOCAL_SILVER_DUCKDB="/tmp/silver_local_cache.duckdb"
 ```
 
 ---
 
-## Local Silver Path
+## Silver Source Options
 
-Use a local `silver.duckdb` file when running on a developer machine or in a
-container with a pre-downloaded silver copy.
+### Local Path
+
+Set `MDM_SILVER_DUCKDB` to an absolute path on the local filesystem:
 
 ```bash
-export MDM_SILVER_DUCKDB=/data/silver/silver.duckdb
-export MDM_DATABASE_URL="postgresql://mdm:password@localhost:5432/mdm"
+export MDM_SILVER_DUCKDB="/data/silver/silver.duckdb"
 ```
 
-### 1. Populate ownership tables (if empty)
+The MDM CLI opens the DuckDB file read-only and loads entity rows without copying it.
 
-If `sec_ownership_reporting_owner` has 0 rows, parse the existing bronze XMLs:
+### S3-Backed Path
+
+Set `MDM_SILVER_DUCKDB` to an S3 URI. The CLI downloads the file through the existing
+`object_storage.read_bytes()` adapter (backed by `fsspec`/`s3fs`):
 
 ```bash
-# Parse all Form 3/4/5 bronze XMLs already captured in sec_raw_object
+export MDM_SILVER_DUCKDB="s3://edgartools-dev-warehouse/warehouse/silver.duckdb"
+```
+
+The AWS credential chain (`~/.aws/credentials`, EC2 instance profile, ECS task role) must grant
+`s3:GetObject` on the warehouse bucket path.
+
+Optionally cache the downloaded file locally to avoid re-downloading on repeated runs:
+
+```bash
+export MDM_LOCAL_SILVER_DUCKDB="/tmp/silver_local_cache.duckdb"
+```
+
+If `MDM_LOCAL_SILVER_DUCKDB` is set and the file already exists at that path, the CLI skips the
+S3 download and reads from the cached local file instead.
+
+**Note:** Unsupported URI protocols (e.g., `ftp://`, `http://`) are rejected by the
+object_storage allowlist before any download is attempted.
+
+---
+
+## Step 1: Parse Ownership Bronze
+
+Before running MDM entity loads, parse existing bronze Form 3/4/5 primary XML artifacts into
+silver ownership tables. This step reads already-captured bronze artifacts and writes to
+`sec_ownership_reporting_owner` and transaction tables in the silver DuckDB.
+
+```bash
+# Parse all unprocessed ownership XML from the bronze artifact registry
 edgar-warehouse parse-ownership-bronze
 
-# Bounded run: process only the most recent 500 accessions
-edgar-warehouse parse-ownership-bronze --limit 500
+# Bounded run: limit to N accessions (useful for validation)
+edgar-warehouse parse-ownership-bronze --limit 100
 
-# Targeted run: re-process specific accessions (comma-separated)
-edgar-warehouse parse-ownership-bronze \
-  --accession-list 0001234567-24-000001,0001234567-24-000002
+# Bounded run: specific accession numbers only
+edgar-warehouse parse-ownership-bronze --accession-list 0001234567-24-000001,0009876543-24-000002
 ```
 
-The command reads primary artifacts via `sec_filing_attachment` and
-`sec_raw_object` only. If a primary XML is not registered, the accession is
-counted in `missing_artifacts` and skipped without any SEC API call.
+**Important:** `parse-ownership-bronze` reads primary XML from the artifact registry
+(`sec_filing_attachment` joined to `sec_raw_object`) and does NOT make SEC API calls. If the
+primary XML artifact is absent from `sec_raw_object` for a given accession, the command reports
+the gap and skips that filing — it does not re-fetch from SEC. Absent bronze primary XML means
+the bronze capture phase was incomplete; re-running bronze capture is outside Phase 5 scope
+unless explicitly requested.
 
-### 2. Run MDM entity loaders
+The command is idempotent: accessions already present in `sec_ownership_reporting_owner` are
+skipped on repeat runs.
+
+---
+
+## Step 2: Run MDM Entity Loaders
+
+Load all five entity domains (company, adviser, person, security, fund) from silver into MDM:
 
 ```bash
-# Load all five entity domains (company, adviser, fund, person, security)
 edgar-warehouse mdm run --entity-type all
+```
 
-# Load a single domain
+Or load a single entity type:
+
+```bash
 edgar-warehouse mdm run --entity-type company
 edgar-warehouse mdm run --entity-type adviser
-edgar-warehouse mdm run --entity-type fund
 edgar-warehouse mdm run --entity-type person
 edgar-warehouse mdm run --entity-type security
+edgar-warehouse mdm run --entity-type fund
+```
 
-# Cap rows per domain (useful for smoke tests)
+Add `--limit N` to process at most N entities per type:
+
+```bash
 edgar-warehouse mdm run --entity-type all --limit 100
 ```
 
-The `mdm run` preflight checks `MDM_SILVER_DUCKDB` and required tables before
-opening the MDM database session. If a required table is missing or empty, the
-command exits nonzero and prints an actionable message naming `MDM_SILVER_DUCKDB`.
+The loaders are idempotent: running `mdm run` twice against the same silver data leaves
+`mdm_company`, `mdm_adviser`, `mdm_person`, `mdm_security`, and `mdm_fund` counts stable.
 
-### 3. Derive relationships (Phase 6 scope)
+**Note:** `MDM_SILVER_DUCKDB` must be set and readable before this command opens the MDM
+database session. If the variable is absent or the DuckDB cannot be opened, the command exits
+with a nonzero code and names `MDM_SILVER_DUCKDB` in the error message without opening an MDM
+session or mutating MDM state.
 
-Relationship derivation is covered in Phase 6. The commands below are
-documented here for operator awareness; they require populated entity tables
-from step 2 above.
+---
+
+## Step 3: Derive Relationships (Phase 6 — for reference)
+
+Relationship derivation is Phase 6 scope. When you are ready to move to relationship coverage:
 
 ```bash
-# Derive relationship instances from resolved entities and silver facts
 edgar-warehouse mdm derive-relationships --target-per-type 100
-
-# Derive specific relationship type
-edgar-warehouse mdm derive-relationships \
-  --target-per-type 100 \
-  --relationship-type IS_INSIDER
-```
-
-### 4. Load relationships without Neo4j sync (Phase 6 scope, Phase 7 opt-in)
-
-```bash
-# Derive relationships and skip Neo4j sync (Phase 5/6 validation only)
-edgar-warehouse mdm load-relationships \
-  --target-per-type 100 \
-  --skip-graph-sync
-
-# Full path including Neo4j sync (Phase 7 — requires NEO4J_* credentials)
-edgar-warehouse mdm load-relationships \
-  --target-per-type 100
 ```
 
 ---
 
-## S3-Backed Silver Path
+## Step 4: Load Relationships (Skip Graph Sync for Source Readiness)
 
-Use the S3-backed path when running inside an ECS task or when the silver
-DuckDB is stored in the platform S3 bucket.
+To validate source readiness without pushing to Neo4j, use `--skip-graph-sync`:
 
 ```bash
-# S3-backed silver: the file is downloaded to MDM_LOCAL_SILVER_DUCKDB before use
-export MDM_SILVER_DUCKDB=s3://my-bucket/warehouse/silver/silver.duckdb
-export MDM_LOCAL_SILVER_DUCKDB=/tmp/mdm-silver.duckdb
-export MDM_DATABASE_URL="postgresql://mdm:password@mdm.internal:5432/mdm"
-export AWS_DEFAULT_REGION=us-east-1
+edgar-warehouse mdm load-relationships --skip-graph-sync
 ```
 
-The `_silver_reader()` call in `edgar_warehouse/mdm/cli.py` detects the
-`s3://` prefix and calls `object_storage.read_bytes()` to download the file
-before opening a DuckDB connection. The download uses the AWS SDK credential
-chain (IAM role, environment variables, or `~/.aws/credentials`).
+This runs entity resolution and writes relationship instances to MDM SQL but skips the Neo4j
+graph sync step. Useful for verifying source coverage before Neo4j credentials are available
+(Neo4j sync is Phase 7 scope).
 
-After download, the same preflight table checks apply as for local paths.
+---
 
-### Downloading silver manually for ad-hoc inspection
+## Silver Readiness Diagnostics
+
+Run these checks before entity loads to confirm the silver DuckDB has the required source rows.
+
+### Required Tables and Minimum Counts
+
+| Table | Required For | Minimum Rows |
+|-------|-------------|-------------|
+| `sec_company` | Company, all entity types | 1 |
+| `sec_company_filing` | Person, security, all | Forms 3/4/5 present |
+| `sec_filing_attachment` | `parse-ownership-bronze` artifact read | 1 primary row per Form 3/4/5 |
+| `sec_raw_object` | `parse-ownership-bronze` artifact content | 1 row per Form 3/4/5 attachment |
+| `sec_ownership_reporting_owner` | Person, security, IS_INSIDER | 1 |
+| `sec_adv_filing` | Adviser, fund | 1 |
+| `sec_adv_private_fund` | Fund | 1 |
+
+### DuckDB Diagnostic Queries
+
+Connect to the silver DuckDB and run:
+
+```sql
+-- Company source counts
+SELECT COUNT(*) AS company_count FROM sec_company;
+
+-- Ownership filing counts (Forms 3/4/5)
+SELECT form, COUNT(*) AS filing_count
+FROM sec_company_filing
+WHERE form IN ('3','3/A','4','4/A','5','5/A')
+GROUP BY form
+ORDER BY form;
+
+-- Artifact registry availability
+SELECT COUNT(*) AS attachment_count
+FROM sec_filing_attachment
+WHERE is_primary = TRUE;
+
+SELECT COUNT(*) AS raw_object_count
+FROM sec_raw_object;
+
+-- Parsed ownership rows
+SELECT COUNT(*) AS owner_count FROM sec_ownership_reporting_owner;
+
+-- ADV source counts
+SELECT COUNT(*) AS adv_filing_count FROM sec_adv_filing;
+SELECT COUNT(*) AS private_fund_count FROM sec_adv_private_fund;
+```
+
+### Interpreting Results
+
+| Finding | Cause | Action |
+|---------|-------|--------|
+| Nonzero `sec_company_filing` Forms 3/4/5 + zero `sec_raw_object` | Bronze artifacts were not captured | Bronze capture is outside Phase 5 scope; contact operator who ran bronze pipeline |
+| Nonzero `sec_raw_object` + zero `sec_ownership_reporting_owner` | `parse-ownership-bronze` not yet run or failed | Run `edgar-warehouse parse-ownership-bronze --limit 100` and review output |
+| Zero `sec_adv_filing` | ADV data was not loaded | ADV forms must be in silver before adviser/fund entity loads |
+
+---
+
+## Scope Boundaries
+
+| Capability | Phase |
+|-----------|-------|
+| Bronze artifact capture (SEC fetch) | Pre-Phase 5 / outside this path |
+| Silver ownership backfill from bronze | Phase 5 (`parse-ownership-bronze`) |
+| MDM entity loads (all 5 domains) | Phase 5 (`mdm run`) |
+| Relationship derivation coverage | Phase 6 (`mdm derive-relationships`) |
+| Neo4j graph sync | Phase 7 (`mdm sync-graph`, `mdm verify-graph`) |
+
+**Protected artifacts:** Generated deployment JSON (e.g., `infra/aws-dev-application.json`) and
+loader-fix workstream artifacts must not be edited during Phase 5 MDM operations. These are
+governed by ISO-01 and ISO-02 workstream isolation rules.
+
+---
+
+## AWS ECS Execution
+
+For production runs via Step Functions:
 
 ```bash
-aws s3 cp s3://my-bucket/warehouse/silver/silver.duckdb /tmp/silver.duckdb
-export MDM_SILVER_DUCKDB=/tmp/silver.duckdb
+# Start the MDM entity load Step Function
+STATE_MACHINE_ARN="$(
+  python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["state_machines"]["mdm_run"])' \
+    infra/aws-dev-application.json
+)"
+
+aws stepfunctions start-execution \
+  --region us-east-1 \
+  --state-machine-arn "$STATE_MACHINE_ARN" \
+  --input '{"entity_type":"all"}'
+```
+
+Monitor execution:
+
+```bash
+aws stepfunctions describe-execution \
+  --execution-arn <execution-arn> \
+  --query 'status'
 ```
 
 ---
 
-## Source Readiness Diagnostics
+## Common Errors
 
-Before running entity loaders, verify that source tables are populated:
-
-```bash
-# Quick row counts for all required Phase 5 source tables
-uv run python3 - <<'EOF'
-import duckdb, os
-db = duckdb.connect(os.environ["MDM_SILVER_DUCKDB"], read_only=True)
-tables = [
-    "sec_company",
-    "sec_company_filing",
-    "sec_adv_filing",
-    "sec_adv_private_fund",
-    "sec_ownership_reporting_owner",
-    "sec_ownership_non_derivative_txn",
-]
-for t in tables:
-    try:
-        n = db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-        print(f"  {t}: {n}")
-    except Exception as e:
-        print(f"  {t}: MISSING ({e})")
-EOF
-```
-
-Expected nonzero tables before a valid entity load:
-- `sec_company` — at least 1 row per company in the universe
-- `sec_company_filing` — Form 3/4/5 filings for person/security derivation
-- `sec_adv_filing` — ADV submissions for adviser and fund domains
-- `sec_ownership_reporting_owner` — parsed from `parse-ownership-bronze`
-
-If `sec_ownership_reporting_owner` is zero, person and security entity loaders
-will produce 0 rows. This is not an error — run `parse-ownership-bronze` first
-(see "Populate ownership tables" above).
-
-### Check sec_company_sync_state (current tracking column)
-
-The company loader reads `sec_company_sync_state.tracking_status` to include
-tracking metadata. This table is present in silver after a `bootstrap-batch`
-or `bootstrap-next` run. If absent, the loader still succeeds and loads all
-companies from `sec_company` without tracking metadata.
-
-```bash
-# Verify current silver tracking table is populated
-uv run python3 - <<'EOF'
-import duckdb, os
-db = duckdb.connect(os.environ["MDM_SILVER_DUCKDB"], read_only=True)
-n = db.execute("SELECT COUNT(*) FROM sec_company_sync_state").fetchone()[0]
-active = db.execute("SELECT COUNT(*) FROM sec_company_sync_state WHERE tracking_status='active'").fetchone()[0]
-print(f"sec_company_sync_state: {n} rows ({active} active)")
-EOF
-```
-
----
-
-## Phase Boundaries
-
-| Phase | Scope | Commands |
-|-------|-------|----------|
-| Phase 5 | Silver source readiness + entity loading | `parse-ownership-bronze`, `mdm run` |
-| Phase 6 | Relationship derivation coverage | `mdm derive-relationships`, `mdm load-relationships --skip-graph-sync` |
-| Phase 7 | Neo4j graph synchronisation | `mdm load-relationships`, `mdm sync-graph` |
-
-### What Phase 5 does NOT do
-
-- SEC re-fetch: absent bronze XMLs are reported, not re-fetched (D-09, D-10)
-- Relationship derivation coverage: Phase 6 owns validation that IS_INSIDER,
-  HOLDS, ISSUED_BY, IS_ENTITY_OF, MANAGES_FUND, and IS_PERSON_OF relationships
-  are derived with expected coverage across all entity pairs
-- Neo4j sync: Phase 7 owns NEO4J_URI credentials and `mdm sync-graph`
-  execution; `--skip-graph-sync` is the Phase 5 boundary flag
-
----
-
-## Isolation Constraints
-
-The following files and directories are managed by the parallel loader-fix
-workstream (Codex) and must not be edited from this workstream:
-
-- `infra/aws-dev-application.json` — generated deployment JSON
-- `.planning/workstreams/fix-pipelines/` — loader-fix planning artifacts
-- `edgar_warehouse/application/warehouse_orchestrator.py` — loader-fix scope
-  (except D-07/D-08 changes committed in Phase 5 plan 02)
-
----
-
-## Idempotency
-
-MDM entity loading is idempotent: running `mdm run` twice against the same
-silver fixture leaves entity domain counts (`mdm_company`, `mdm_adviser`,
-`mdm_person`, `mdm_security`, `mdm_fund`) unchanged. This is proven by
-`TestEntityLoadIdempotentForDomainCounts` in
-`tests/mdm/test_source_to_mdm_load_path.py`.
-
-The identity keys per domain:
-- company: CIK (`sec_company.cik`)
-- adviser: CIK or CRD number (`sec_adv_filing.cik`, `sec_adv_filing.crd_number`)
-- person: owner CIK or canonical name (`sec_ownership_reporting_owner.owner_cik`)
-- security: source ref `accession_number:owner_index:txn_index` or title + issuer
-- fund: adviser entity ID + normalised fund name
+| Error | Meaning | Fix |
+|-------|---------|-----|
+| `MDM_SILVER_DUCKDB is required` | Variable not set | `export MDM_SILVER_DUCKDB=...` |
+| `Unsupported protocol` in silver path | Protocol not in allowlist | Use `/local/path`, `s3://`, or a supported scheme |
+| `Table not found: sec_ownership_reporting_owner` | Preflight failed; table missing | Run `parse-ownership-bronze` first |
+| `No source priority rule for ...` | MDM schema not seeded | Run `edgar-warehouse mdm migrate` |
+| `CatalogException: Table with name sec_tracked_universe` | Stale pipeline code | Upgrade to current `edgar_warehouse.mdm.pipeline` |

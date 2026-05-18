@@ -606,3 +606,114 @@ class TestNeo4jClientURINormalisation:
             os.environ.pop(k, None)
         with patch.dict(os.environ, {}, clear=True):
             assert _neo4j_client() is None
+
+
+# ===========================================================================
+# Layer 7 — GraphSyncEngine idempotency (GRAPH-04, D-07)
+# ===========================================================================
+
+class TestGraphSyncIdempotency:
+    def test_all_pending_zero_after_double_sync(self, db_session):
+        adviser_id  = _make_entity(db_session, "adviser")
+        fund_id     = _make_entity(db_session, "fund")
+        security_id = _make_entity(db_session, "security")
+        company_id  = _make_entity(db_session, "company")
+        db_session.commit()
+
+        engine = GraphSyncEngine.build(db_session, neo4j=_FakeGraphClient())
+        engine.record_relationship("MANAGES_FUND", adviser_id, fund_id)
+        engine.record_relationship("ISSUED_BY", security_id, company_id)
+        db_session.commit()
+
+        # First sync pass
+        engine.sync_entities()
+        engine.sync_pending()
+        db_session.commit()
+
+        # Second sync pass — must be idempotent
+        engine.sync_entities()
+        engine.sync_pending()
+        db_session.commit()
+
+        # All types must report zero pending (D-07)
+        counts = engine.pending_counts()
+        assert counts.get("MANAGES_FUND", 0) == 0
+        assert counts.get("ISSUED_BY", 0) == 0
+
+
+# ===========================================================================
+# Layer 8 — Live Neo4j smoke test (D-08, D-09)
+# ===========================================================================
+
+@pytest.mark.neo4j
+@pytest.mark.skipif(
+    not os.environ.get("NEO4J_URI"),
+    reason="NEO4J_URI not set — skipping live Neo4j smoke test",
+)
+class TestGraphSyncNeo4jSmoke:
+    def test_double_sync_stable_and_no_pending(self, db_session):
+        from edgar_warehouse.mdm.graph import Neo4jGraphClient
+
+        uri = os.environ["NEO4J_URI"]
+        if uri.startswith("neo4j://"):
+            uri = "bolt://" + uri[len("neo4j://"):]
+        client = Neo4jGraphClient(
+            uri=uri,
+            user=os.environ["NEO4J_USER"],
+            password=os.environ["NEO4J_PASSWORD"],
+        )
+        client.connect()
+        adviser_id = _make_entity(db_session, "adviser")
+        fund_id    = _make_entity(db_session, "fund")
+        try:
+            db_session.commit()
+
+            engine = GraphSyncEngine.build(db_session, neo4j=client)
+            engine.record_relationship("MANAGES_FUND", adviser_id, fund_id)
+            db_session.commit()
+
+            # First sync pass
+            engine.sync_entities()
+            engine.sync_pending()
+            db_session.commit()
+
+            # Capture first-pass Neo4j counts
+            with client.session() as s:
+                first_nodes = s.run(
+                    "MATCH (n) WHERE n.entity_id IN $ids RETURN count(n) AS n",
+                    ids=[adviser_id, fund_id],
+                ).single()["n"]
+                first_edges = s.run(
+                    "MATCH ()-[r:MANAGES_FUND]->() RETURN count(r) AS n"
+                ).single()["n"]
+
+            # Second sync pass — idempotent
+            engine.sync_entities()
+            engine.sync_pending()
+            db_session.commit()
+
+            # Pending must be zero
+            counts = engine.pending_counts()
+            assert counts.get("MANAGES_FUND", 0) == 0
+
+            # Neo4j counts must be stable (second run == first run)
+            with client.session() as s:
+                second_nodes = s.run(
+                    "MATCH (n) WHERE n.entity_id IN $ids RETURN count(n) AS n",
+                    ids=[adviser_id, fund_id],
+                ).single()["n"]
+                second_edges = s.run(
+                    "MATCH ()-[r:MANAGES_FUND]->() RETURN count(r) AS n"
+                ).single()["n"]
+
+            assert first_nodes > 0
+            assert first_edges > 0
+            assert second_nodes == first_nodes
+            assert second_edges == first_edges
+        finally:
+            with client.session() as s:
+                s.run(
+                    "MATCH (n) WHERE n.entity_id IN $ids DETACH DELETE n",
+                    ids=[adviser_id, fund_id],
+                )
+            client.close()

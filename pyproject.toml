@@ -78,3 +78,8 @@ include = [
   "edgar_warehouse/config/*.properties",
   "edgar_warehouse/mdm/migrations/*.sql",
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "neo4j: requires live Neo4j via NEO4J_URI env var",
+]
