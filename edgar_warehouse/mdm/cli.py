@@ -248,8 +248,8 @@ def _neo4j_client():
 
 
 def _silver_reader():
-    """Thin DuckDB reader. Returns None in local/dev mode so CLI shows intent only."""
-    duckdb_path = os.environ.get("MDM_SILVER_DUCKDB")
+    """Thin DuckDB reader. Returns None when MDM_SILVER_DUCKDB is absent or empty."""
+    duckdb_path = os.environ.get("MDM_SILVER_DUCKDB") or None
     if duckdb_path is None:
         return None
     if "://" in duckdb_path:
@@ -273,38 +273,158 @@ def _silver_reader():
     return _DuckReader(duckdb_path)
 
 
+# -- silver preflight helpers -----------------------------------------------
+
+# Fixed allowlist of required tables per entity type for 'mdm run'.
+# Values are True = table must be nonempty; False = table must exist (any count).
+# T-05-14: No operator-provided table name is ever used here.
+_REQUIRED_TABLES_RUN: dict[str, dict[str, bool]] = {
+    "company": {
+        "sec_company": False,  # must exist; ticker/sync-state are optional
+    },
+    "adviser": {
+        "sec_adv_filing": True,  # nonempty
+    },
+    "fund": {
+        "sec_adv_private_fund": True,  # nonempty
+    },
+    "person": {
+        "sec_company_filing": True,  # nonempty
+        "sec_ownership_reporting_owner": True,  # nonempty
+    },
+    "security": {
+        "sec_company_filing": True,  # nonempty
+        "sec_ownership_non_derivative_txn": True,  # nonempty
+    },
+}
+
+# Fixed required tables for 'derive-relationships' and 'load-relationships' (D-12).
+_REQUIRED_TABLES_RELATIONSHIPS: dict[str, bool] = {
+    "sec_company": True,
+    "sec_company_filing": True,
+    "sec_ownership_reporting_owner": True,
+}
+
+
+def _required_tables_for_run(entity_type: str) -> dict[str, bool]:
+    """Return the fixed required-table mapping for the given entity type."""
+    if entity_type == "all":
+        merged: dict[str, bool] = {}
+        for tables in _REQUIRED_TABLES_RUN.values():
+            for table, must_be_nonempty in tables.items():
+                # If the table already in merged, keep the stricter requirement.
+                existing = merged.get(table, False)
+                merged[table] = existing or must_be_nonempty
+        return merged
+    return _REQUIRED_TABLES_RUN.get(entity_type, {})
+
+
+def _validate_silver_tables(reader, required_tables: dict[str, bool]) -> list[str]:
+    """Check required tables exist and have the required row counts.
+
+    Uses only fixed table-name constants from the allowlist — no user-controlled
+    identifiers are interpolated into SQL (T-05-14).
+
+    Returns a list of human-readable failure descriptions (empty = all passed).
+    """
+    import duckdb  # type: ignore
+
+    failures: list[str] = []
+    for table_name, must_be_nonempty in required_tables.items():
+        # Security: table_name comes exclusively from the fixed _REQUIRED_TABLES_*
+        # constants above; never from args, env, or external input.
+        try:
+            rows = reader.fetch(
+                f"SELECT COUNT(*) AS n FROM {table_name}"  # noqa: S608
+            )
+            count = rows[0]["n"] if rows else 0
+            if must_be_nonempty and count == 0:
+                failures.append(f"required table '{table_name}' is empty (0 rows)")
+        except Exception as exc:
+            err_lower = str(exc).lower()
+            if "not found" in err_lower or "binder" in err_lower or "catalog" in err_lower or "does not exist" in err_lower:
+                failures.append(f"required table '{table_name}' is missing from silver DuckDB")
+            else:
+                failures.append(f"required table '{table_name}' could not be queried: {exc}")
+    return failures
+
+
+def _require_silver_reader(
+    required_tables: dict[str, bool],
+    command_name: str,
+) -> tuple:
+    """Open the silver DuckDB reader and validate required tables.
+
+    Runs source preflight BEFORE any MDM session is opened (D-11, T-05-15).
+    Returns (reader, 0) on success or (None, 1) on any failure.
+    Prints actionable stderr naming MDM_SILVER_DUCKDB on failure.
+    """
+    try:
+        reader = _silver_reader()
+    except Exception as exc:
+        print(
+            f"{command_name}: cannot open MDM_SILVER_DUCKDB — {exc}. "
+            "Check that MDM_SILVER_DUCKDB is set to a valid local path or s3:// URI.",
+            file=sys.stderr,
+        )
+        return None, 1
+
+    if reader is None:
+        print(
+            f"{command_name}: MDM_SILVER_DUCKDB is required but is not set. "
+            "Set MDM_SILVER_DUCKDB to a local DuckDB path or s3:// URI.",
+            file=sys.stderr,
+        )
+        return None, 1
+
+    if required_tables:
+        failures = _validate_silver_tables(reader, required_tables)
+        if failures:
+            print(
+                f"{command_name}: silver DuckDB source is not ready. "
+                + "; ".join(failures),
+                file=sys.stderr,
+            )
+            return None, 1
+
+    return reader, 0
+
+
 # -- handlers ---------------------------------------------------------------
 
 def _handle_run(args) -> int:
     from edgar_warehouse.mdm.pipeline import MDMPipeline
 
-    session = _session()
-    silver = _silver_reader()
-    if silver is None:
-        print("MDM_SILVER_DUCKDB not set; nothing to do.", file=sys.stderr)
-        return 1
+    required = _required_tables_for_run(args.entity_type)
+    silver, rc = _require_silver_reader(required, "mdm run")
+    if rc != 0:
+        return rc
 
-    pipeline = MDMPipeline(session=session, silver=silver, neo4j=_neo4j_client())
-    if args.entity_type == "all":
-        stats = pipeline.run_all(limit=args.limit)
-        print(json.dumps(stats.__dict__, indent=2, sort_keys=True))
+    session = _session()
+    try:
+        pipeline = MDMPipeline(session=session, silver=silver, neo4j=_neo4j_client())
+        if args.entity_type == "all":
+            stats = pipeline.run_all(limit=args.limit)
+            print(json.dumps(stats.__dict__, indent=2, sort_keys=True))
+            return 0
+        if args.entity_type == "company":
+            n = pipeline.run_companies(limit=args.limit)
+            print(f"companies: {n}")
+        if args.entity_type == "adviser":
+            n = pipeline.run_advisers(limit=args.limit)
+            print(f"advisers: {n}")
+        if args.entity_type == "security":
+            n = pipeline.run_securities(limit=args.limit)
+            print(f"securities: {n}")
+        if args.entity_type == "person":
+            n = pipeline.run_persons(limit=args.limit)
+            print(f"persons: {n}")
+        if args.entity_type == "fund":
+            n = pipeline.run_funds(limit=args.limit)
+            print(f"funds: {n}")
         return 0
-    if args.entity_type == "company":
-        n = pipeline.run_companies(limit=args.limit)
-        print(f"companies: {n}")
-    if args.entity_type == "adviser":
-        n = pipeline.run_advisers(limit=args.limit)
-        print(f"advisers: {n}")
-    if args.entity_type == "security":
-        n = pipeline.run_securities(limit=args.limit)
-        print(f"securities: {n}")
-    if args.entity_type == "person":
-        n = pipeline.run_persons(limit=args.limit)
-        print(f"persons: {n}")
-    if args.entity_type == "fund":
-        n = pipeline.run_funds(limit=args.limit)
-        print(f"funds: {n}")
-    return 0
+    finally:
+        session.close()
 
 
 def _handle_seed_universe(args) -> int:
@@ -477,12 +597,11 @@ def _handle_sync_graph(args) -> int:
 def _handle_derive_relationships(args) -> int:
     from edgar_warehouse.mdm.pipeline import MDMPipeline
 
+    silver, rc = _require_silver_reader(_REQUIRED_TABLES_RELATIONSHIPS, "mdm derive-relationships")
+    if rc != 0:
+        return rc
+
     session = _session()
-    silver = _silver_reader()
-    if silver is None:
-        print("MDM_SILVER_DUCKDB not set; nothing to do.", file=sys.stderr)
-        session.close()
-        return 1
     try:
         pipeline = MDMPipeline(session=session, silver=silver)
         summary = pipeline.derive_relationships(
@@ -500,14 +619,12 @@ def _handle_load_relationships(args) -> int:
     from edgar_warehouse.mdm.graph import GraphSyncEngine
     from edgar_warehouse.mdm.pipeline import MDMPipeline
 
-    session = _session()
-    silver = _silver_reader()
-    if silver is None:
-        print("MDM_SILVER_DUCKDB not set; nothing to do.", file=sys.stderr)
-        session.close()
-        return 1
+    silver, rc = _require_silver_reader(_REQUIRED_TABLES_RELATIONSHIPS, "mdm load-relationships")
+    if rc != 0:
+        return rc
 
     client = None if args.skip_graph_sync else _neo4j_client()
+    session = _session()
     try:
         pipeline = MDMPipeline(session=session, silver=silver, neo4j=client)
         entity_counts: dict[str, int] = {}
