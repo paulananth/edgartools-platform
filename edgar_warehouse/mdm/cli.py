@@ -702,11 +702,24 @@ def _handle_verify_graph(args) -> int:
 
 def _handle_backfill_relationships(args) -> int:
     from edgar_warehouse.mdm.graph import backfill_relationship_instances
+    from edgar_warehouse.mdm.pipeline import MDMPipeline
+    from edgar_warehouse.mdm.rules import MDMRuleEngine
 
     session = _session()
     client = _neo4j_client()
+    silver = _silver_reader()
     try:
+        # Phase 1: repair mdm_security.issuer_entity_id = NULL rows before deriving ISSUED_BY.
+        # Root cause: run_companies(limit=100) may not have processed a security's issuer on the
+        # run it was first created, leaving issuer_entity_id NULL permanently.
+        issuers_repaired = 0
+        if silver is not None:
+            pipeline = MDMPipeline(session=session, silver=silver)
+            issuers_repaired = pipeline.backfill_security_issuers()
+
+        # Phase 2: derive MANAGES_FUND and ISSUED_BY instances, sync to Neo4j.
         result = backfill_relationship_instances(session, neo4j=client, limit=args.limit)
+        result["issuers_repaired"] = issuers_repaired
     finally:
         if client is not None:
             client.close()
