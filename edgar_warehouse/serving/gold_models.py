@@ -378,11 +378,18 @@ def _build_dim_company(conn: Any) -> pa.Table:
 
 
 def _build_dim_form(conn: Any) -> pa.Table:
-    base = _arrow(conn.execute("SELECT DISTINCT form FROM sec_company_filing WHERE form IS NOT NULL ORDER BY form"))
-    forms = base.column("form").to_pylist() if base.num_rows else []
+    # form_family computed in Python (466 rows — negligible); form_key uses DuckDB hash
+    # to stay consistent with the hash used in _build_dim_filing / _build_fact_filing_activity.
+    base = _arrow(conn.execute(
+        "SELECT DISTINCT form, (hash(form) & 9223372036854775807)::BIGINT AS form_key"
+        " FROM sec_company_filing WHERE form IS NOT NULL ORDER BY form"
+    ))
+    if base.num_rows == 0:
+        return _empty(_DIM_FORM_SCHEMA)
+    forms = base.column("form").to_pylist()
     return pa.table(
         {
-            "form_key": pa.array([_det_key(form) for form in forms], type=pa.int64()),
+            "form_key": base.column("form_key").cast(pa.int64()),
             "form": pa.array(forms, type=pa.string()),
             "form_family": pa.array([_form_family(form) for form in forms], type=pa.string()),
         },
@@ -417,74 +424,54 @@ def _build_dim_date(conn: Any) -> pa.Table:
 
 
 def _build_dim_filing(conn: Any) -> pa.Table:
+    # All key columns computed in DuckDB — eliminates 3 × 2.7M Python-level calls.
     table = _arrow(
         conn.execute(
             """
-            SELECT accession_number, cik, form, filing_date, report_date, is_xbrl, size
+            SELECT
+                (hash(accession_number) & 9223372036854775807)::BIGINT AS filing_key,
+                accession_number,
+                cik::BIGINT                                              AS cik,
+                cik::BIGINT                                              AS company_key,
+                form,
+                COALESCE((hash(form) & 9223372036854775807)::BIGINT, 0) AS form_key,
+                filing_date,
+                (year(filing_date)*10000 + month(filing_date)*100
+                 + day(filing_date))::INTEGER                            AS date_key,
+                report_date,
+                is_xbrl::BOOLEAN                                        AS is_xbrl,
+                size::BIGINT                                             AS size
             FROM sec_company_filing
             ORDER BY filing_date, accession_number
             """
         )
     )
-    if table.num_rows == 0:
-        return _empty(_DIM_FILING_SCHEMA)
-    accessions = table.column("accession_number").to_pylist()
-    ciks = table.column("cik").to_pylist()
-    forms = table.column("form").to_pylist()
-    filing_dates = table.column("filing_date").to_pylist()
-    report_dates = table.column("report_date").to_pylist()
-    return pa.table(
-        {
-            "filing_key": pa.array([_det_key(accession) for accession in accessions], type=pa.int64()),
-            "accession_number": pa.array(accessions, type=pa.string()),
-            "cik": pa.array(ciks, type=pa.int64()),
-            "company_key": pa.array(ciks, type=pa.int64()),
-            "form": pa.array(forms, type=pa.string()),
-            "form_key": pa.array([_det_key(form) if form else 0 for form in forms], type=pa.int64()),
-            "filing_date": pa.array(filing_dates, type=pa.date32()),
-            "date_key": pa.array([_filing_date_to_int(item) for item in filing_dates], type=pa.int32()),
-            "report_date": pa.array(report_dates, type=pa.date32()),
-            "is_xbrl": table.column("is_xbrl").cast(pa.bool_()),
-            "size": table.column("size").cast(pa.int64()),
-        },
-        schema=_DIM_FILING_SCHEMA,
-    )
+    return _empty(_DIM_FILING_SCHEMA) if table.num_rows == 0 else table.cast(_DIM_FILING_SCHEMA)
 
 
 def _build_fact_filing_activity(conn: Any) -> pa.Table:
     table = _arrow(
         conn.execute(
             """
-            SELECT accession_number, cik, form, filing_date, report_date, is_xbrl
+            SELECT
+                (hash(accession_number) & 9223372036854775807)::BIGINT AS fact_key,
+                cik::BIGINT                                              AS company_key,
+                (hash(accession_number) & 9223372036854775807)::BIGINT AS filing_key,
+                (year(filing_date)*10000 + month(filing_date)*100
+                 + day(filing_date))::INTEGER                            AS date_key,
+                COALESCE((hash(form) & 9223372036854775807)::BIGINT, 0) AS form_key,
+                accession_number,
+                cik::BIGINT                                              AS cik,
+                form,
+                filing_date,
+                report_date,
+                is_xbrl::BOOLEAN                                        AS is_xbrl
             FROM sec_company_filing
             ORDER BY filing_date, accession_number
             """
         )
     )
-    if table.num_rows == 0:
-        return _empty(_FACT_FILING_ACTIVITY_SCHEMA)
-    accessions = table.column("accession_number").to_pylist()
-    ciks = table.column("cik").to_pylist()
-    forms = table.column("form").to_pylist()
-    filing_dates = table.column("filing_date").to_pylist()
-    report_dates = table.column("report_date").to_pylist()
-    filing_keys = [_det_key(accession) for accession in accessions]
-    return pa.table(
-        {
-            "fact_key": pa.array(filing_keys, type=pa.int64()),
-            "company_key": pa.array(ciks, type=pa.int64()),
-            "filing_key": pa.array(filing_keys, type=pa.int64()),
-            "date_key": pa.array([_filing_date_to_int(item) for item in filing_dates], type=pa.int32()),
-            "form_key": pa.array([_det_key(form) if form else 0 for form in forms], type=pa.int64()),
-            "accession_number": pa.array(accessions, type=pa.string()),
-            "cik": pa.array(ciks, type=pa.int64()),
-            "form": pa.array(forms, type=pa.string()),
-            "filing_date": pa.array(filing_dates, type=pa.date32()),
-            "report_date": pa.array(report_dates, type=pa.date32()),
-            "is_xbrl": table.column("is_xbrl").cast(pa.bool_()),
-        },
-        schema=_FACT_FILING_ACTIVITY_SCHEMA,
-    )
+    return _empty(_FACT_FILING_ACTIVITY_SCHEMA) if table.num_rows == 0 else table.cast(_FACT_FILING_ACTIVITY_SCHEMA)
 
 
 def _build_dim_party(conn: Any) -> pa.Table:
