@@ -92,11 +92,11 @@ only re-fetch when an operator passes an explicit `--force` repair flag.
    → MDM in bulk → gold once.
 
 **Resolution:** `bootstrap-batch` removed from `GOLD_AFFECTING_COMMANDS`. New `gold-refresh`
-command builds gold once. New `bootstrap_phased` Step Function chains all four phases correctly.
+command builds gold once. New `load_history` Step Function chains all four phases correctly.
 
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
-`bootstrap_phased` is the canonical way to load companies at scale. It runs in four
+`load_history` is the canonical way to load companies at scale. It runs in four
 sequential stages, each optimised for its workload:
 
 ```
@@ -120,19 +120,19 @@ Stage 3 — Gold refresh (single ECS task)
 
 | Scenario | Command / State Machine |
 |----------|------------------------|
-| Load 10+ companies (recommended) | `bootstrap_phased` Step Function |
+| Load 10+ companies (recommended) | `load_history` Step Function |
 | Single company debug/resync | `targeted_resync` Step Function |
 | Rebuild gold from existing silver | `gold_refresh` Step Function |
-| Recent filings only (fast) | `bootstrap_recent_10` Step Function |
+| Recent filings only (fast) | `bootstrap` Step Function |
 | Daily incremental (ongoing) | `daily_incremental` Step Function |
 
-**Running `bootstrap_phased` via Step Functions:**
+**Running `load_history` via Step Functions:**
 
 ```bash
 aws stepfunctions start-execution \
   --region us-east-1 \
-  --state-machine-arn arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-bootstrap-phased \
-  --name "bootstrap-phased-$(date +%s)" \
+  --state-machine-arn arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-load-history \
+  --name "load-history-$(date +%s)" \
   --input '{}'
 # Runs ~15 min for 100 companies (vs 30-90 min sequential)
 # Monitor: aws stepfunctions describe-execution --execution-arn <arn> --query status

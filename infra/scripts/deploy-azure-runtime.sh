@@ -626,7 +626,7 @@ if [[ "$SKIP_WAREHOUSE_JOBS" != "true" ]]; then
   deploy_job "${NAME_PREFIX}-seed-universe" "edgar-warehouse" "$PIPELINES_IMAGE" 1 "2Gi" 3600 0 "" "warehouse" \
     seed-universe
   deploy_job "${NAME_PREFIX}-boot-recent-10" "edgar-warehouse" "$PIPELINES_IMAGE" 2 "4Gi" 21600 0 "" "warehouse" \
-    bootstrap-recent-10 --no-include-reference-refresh
+    bootstrap --no-include-reference-refresh
   if [[ "$SKIP_DAILY_JOB" != "true" ]]; then
     deploy_job "${NAME_PREFIX}-daily-incr" "edgar-warehouse" "$PIPELINES_IMAGE" 1 "2Gi" 7200 1 "$DAILY_CRON" "warehouse" \
       daily-incremental

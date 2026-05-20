@@ -3,12 +3,12 @@
 #
 # Architecture:
 #   sec_tracked_universe in silver.duckdb controls which companies are bootstrapped.
-#   seed-universe populates it; bootstrap-recent-10 reads from it.
+#   seed-universe populates it; bootstrap reads from it.
 #   Never pass a CIK list at runtime — the seed table IS the scope control.
 #
 # Steps:
 #   1  seed-universe         Seed sec_tracked_universe in silver.duckdb (scope control)
-#   2  bootstrap-recent-10   Fetch 10 most recent submissions per tracked company → silver.duckdb
+#   2  bootstrap   Fetch 10 most recent submissions per tracked company → silver.duckdb
 #   3  mdm migrate           Apply schema + seed reference data in Azure SQL
 #   4  mdm run               Load entities from silver into Azure SQL
 #   5  mdm sync-graph        Push pending relationship instances to Neo4j
@@ -98,7 +98,7 @@ PY
 }
 
 SEED_JOB="$(json_output_value container_app_job_names seed_universe "${NAME_PREFIX}-seed-universe")"
-BOOT_JOB="$(json_output_value container_app_job_names bootstrap_recent_10 "${NAME_PREFIX}-boot-recent-10")"
+BOOT_JOB="$(json_output_value container_app_job_names bootstrap "${NAME_PREFIX}-boot-recent-10")"
 MIGRATE_JOB="$(json_output_value mdm_container_app_job_names migrate "${NAME_PREFIX}-mdm-migrate")"
 RUN_JOB="$(json_output_value mdm_container_app_job_names run "${NAME_PREFIX}-mdm-run")"
 SYNC_JOB="$(json_output_value mdm_container_app_job_names sync_graph "${NAME_PREFIX}-mdm-graph-sync")"
@@ -278,7 +278,7 @@ echo "================================================"
 
 # ---------------------------------------------------------------------------
 # STEP 1: Seed universe (populate sec_tracked_universe in silver.duckdb)
-# sec_tracked_universe is the scope control for bootstrap-recent-10.
+# sec_tracked_universe is the scope control for bootstrap.
 # --universe-limit scopes dev to N companies, avoiding OOM on the full universe.
 # ---------------------------------------------------------------------------
 echo ""

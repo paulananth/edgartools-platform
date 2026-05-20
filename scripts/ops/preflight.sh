@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pre-flight check: verify every critical dependency before triggering bootstrap.
 # Each check either passes ✓ or fails ✗ with a clear fix command.
-# Run this before any bootstrap_phased / silver_mdm_gold / gold-refresh trigger.
+# Run this before any load_history / silver_mdm_gold / gold-refresh trigger.
 #
 # Usage:
 #   ./scripts/ops/preflight.sh
@@ -88,7 +88,7 @@ check "ECS task definitions registered" \
   "bash infra/scripts/deploy-aws-application.sh --env ${ENVIRONMENT} ..."
 
 # ── 4. State machines exist ───────────────────────────────────────────────────
-for sm in "bootstrap-phased" "gold-refresh" "silver-mdm-gold" "mdm-gold"; do
+for sm in "load-history" "gold-refresh" "silver-mdm-gold" "mdm-gold"; do
   SM_ARN="arn:aws:states:${AWS_REGION}:${ACCOUNT_ID}:stateMachine:${NAME_PREFIX}-${sm}"
   SM_STATUS=$(aws_ stepfunctions describe-state-machine \
     --state-machine-arn "$SM_ARN" \

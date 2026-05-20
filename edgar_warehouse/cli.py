@@ -85,8 +85,8 @@ def _handle_bootstrap_full(args: argparse.Namespace) -> int:
     return run_command("bootstrap-full", args)
 
 
-def _handle_bootstrap_recent_10(args: argparse.Namespace) -> int:
-    return run_command("bootstrap-recent-10", args)
+def _handle_bootstrap(args: argparse.Namespace) -> int:
+    return run_command("bootstrap", args)
 
 
 def _handle_daily_incremental(args: argparse.Namespace) -> int:
@@ -164,13 +164,13 @@ def build_parser() -> argparse.ArgumentParser:
     _add_run_id_arg(bootstrap_full)
     bootstrap_full.set_defaults(handler=_handle_bootstrap_full)
 
-    bootstrap_recent_10 = subparsers.add_parser(
-        "bootstrap-recent-10",
+    bootstrap = subparsers.add_parser(
+        "bootstrap",
         help="Load only the most recent filings for tracked companies.",
     )
-    _add_common_bootstrap_args(bootstrap_recent_10, include_recent_limit=True)
-    _add_run_id_arg(bootstrap_recent_10)
-    bootstrap_recent_10.set_defaults(handler=_handle_bootstrap_recent_10)
+    _add_common_bootstrap_args(bootstrap, include_recent_limit=True)
+    _add_run_id_arg(bootstrap)
+    bootstrap.set_defaults(handler=_handle_bootstrap)
 
     daily_incremental = subparsers.add_parser(
         "daily-incremental",

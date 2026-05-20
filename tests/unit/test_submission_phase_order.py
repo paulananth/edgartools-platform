@@ -78,7 +78,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 include_pagination=False,
                 fetch_date=date(2026, 4, 25),
                 force=False,
-                load_mode="bootstrap_recent_10",
+                load_mode="bootstrap",
             )
 
         self.assertEqual(

@@ -253,7 +253,7 @@ bash infra/scripts/run-databricks-dbt.sh \
 
 Acceptance before cutover:
 
-- Run the same bounded scope on both paths, starting with `bootstrap-recent-10`.
+- Run the same bounded scope on both paths, starting with `bootstrap`.
 - Compare row counts for company, filing activity/detail, ownership, adviser, private funds, and ticker reference.
 - Compare key samples by CIK and accession number.
 - Run at least one daily incremental and one reconciliation-style run successfully before production cutover.
@@ -545,14 +545,14 @@ operator-managed state machine explicitly:
 
 ```bash
 STATE_MACHINE_ARN="$(
-  python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["state_machines"]["bootstrap_recent_10"])' \
+  python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["state_machines"]["bootstrap"])' \
     infra/aws-prod-application.json
 )"
 
 aws stepfunctions start-execution \
   --profile sec_platform_deployer \
   --state-machine-arn "$STATE_MACHINE_ARN" \
-  --input '{"trigger":"operator","workflow":"bootstrap_recent_10"}'
+  --input '{"trigger":"operator","workflow":"bootstrap"}'
 ```
 
 For a bounded replay, pass a `cik_list` string to workflows that support it:
@@ -561,14 +561,14 @@ For a bounded replay, pass a `cik_list` string to workflows that support it:
 aws stepfunctions start-execution \
   --profile sec_platform_deployer \
   --state-machine-arn "$STATE_MACHINE_ARN" \
-  --input '{"trigger":"operator","workflow":"bootstrap_recent_10","cik_list":"0000320193,0000789019"}'
+  --input '{"trigger":"operator","workflow":"bootstrap","cik_list":"0000320193,0000789019"}'
 ```
 
 ### Local Run (development / testing)
 
 ```bash
 export EDGAR_IDENTITY="Your Name your@email.com"
-edgar-warehouse bootstrap-recent-10 --tracking-status-filter active
+edgar-warehouse bootstrap --tracking-status-filter active
 ```
 
 ---
@@ -752,14 +752,14 @@ SELECT * FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
 
 ---
 
-## Recovering from a partial bootstrap_phased failure
+## Recovering from a partial load_history failure
 
-When `bootstrap_phased` reaches FAILED state, one or more batches in the `BatchBootstrap`
+When `load_history` reaches FAILED state, one or more batches in the `BatchBootstrap`
 Distributed Map failed after exhausting retries. Because `ToleratedFailurePercentage: 0`,
 a single batch failure drives the execution to FAILED — other batches may have succeeded.
 
 **Recovery is safe to run immediately.** DEC-009: already-loaded CIKs are skipped on
-re-run, so a full `bootstrap_phased` re-run processes only the CIKs that were not loaded.
+re-run, so a full `load_history` re-run processes only the CIKs that were not loaded.
 
 ### Option A: Full re-run (recommended)
 
@@ -780,7 +780,7 @@ universe. Requires identifying the failed child executions from the Map Run.
 ```bash
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 aws stepfunctions list-executions \
-  --state-machine-arn "arn:aws:states:us-east-1:${ACCOUNT}:stateMachine:edgartools-dev-bootstrap-phased" \
+  --state-machine-arn "arn:aws:states:us-east-1:${ACCOUNT}:stateMachine:edgartools-dev-load-history" \
   --status-filter FAILED \
   --max-results 1 \
   --query 'executions[0].executionArn' \
@@ -842,7 +842,7 @@ do not interpret some children completing as a partial success.
 
 ### Failures during MDM stages
 
-If `bootstrap_phased` fails during `MdmRun`, `MdmBackfill`, `MdmSync`, or `MdmVerify`
+If `load_history` fails during `MdmRun`, `MdmBackfill`, `MdmSync`, or `MdmVerify`
 (after `BatchBootstrap` succeeded), skip re-batching and run only the MDM+gold stages:
 
 ```bash

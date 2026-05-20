@@ -378,7 +378,7 @@ def diagnose(silver: dict, mdm: dict, neo4j: dict) -> None:
     FIXES = {
         "Silver has (security_title, issuer_cik) pairs": (
             "No ownership non-derivative transactions in silver. "
-            "Run: bootstrap-recent-10 (or parse-ownership-bronze) to load Form 3/4/5 data."
+            "Run: bootstrap (or parse-ownership-bronze) to load Form 3/4/5 data."
         ),
         "MDM securities with issuer_entity_id set": (
             "Securities exist in silver but mdm_security.issuer_entity_id is NULL.\n"
@@ -418,7 +418,7 @@ def diagnose(silver: dict, mdm: dict, neo4j: dict) -> None:
         print()
         print("  Fix: run 'mdm run --entity-type all' (ensures companies exist before securities),")
         print("       then 'mdm backfill-relationships', then 'mdm sync-graph'.")
-        print("       Via Step Functions: trigger bootstrap-recent-10 (runs all three in order).")
+        print("       Via Step Functions: trigger bootstrap (runs all three in order).")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
