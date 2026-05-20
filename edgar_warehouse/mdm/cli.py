@@ -307,12 +307,21 @@ _REQUIRED_TABLES_RELATIONSHIPS: dict[str, bool] = {
 
 
 def _required_tables_for_run(entity_type: str) -> dict[str, bool]:
-    """Return the fixed required-table mapping for the given entity type."""
+    """Return the fixed required-table mapping for the given entity type.
+
+    For 'all': adviser/fund tables are excluded from the non-empty requirement
+    because they are legitimately empty until the ADV pipeline runs. Blocking a
+    company-population run on ADV data that may never arrive is wrong.
+    """
     if entity_type == "all":
+        # Only enforce the core tables that are always populated after a company
+        # bootstrap; adviser and fund tables are optional for 'all' runs.
+        _ADV_ONLY_TYPES = {"adviser", "fund"}
         merged: dict[str, bool] = {}
-        for tables in _REQUIRED_TABLES_RUN.values():
+        for et, tables in _REQUIRED_TABLES_RUN.items():
+            if et in _ADV_ONLY_TYPES:
+                continue
             for table, must_be_nonempty in tables.items():
-                # If the table already in merged, keep the stricter requirement.
                 existing = merged.get(table, False)
                 merged[table] = existing or must_be_nonempty
         return merged
