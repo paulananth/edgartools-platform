@@ -229,19 +229,19 @@ def test_window_slice_correctness():
 
 
 def test_cli_flags_present():
-    """bootstrap-full, bootstrap-recent-10, daily-incremental, bootstrap-next each accept --cik-limit and --cik-offset."""
+    """bootstrap-full, bootstrap, daily-incremental, bootstrap-next each accept --cik-limit and --cik-offset."""
     from edgar_warehouse.cli import build_parser
 
     parser = build_parser()
 
-    for subcommand in ["bootstrap-full", "bootstrap-recent-10", "daily-incremental", "bootstrap-next"]:
+    for subcommand in ["bootstrap-full", "bootstrap", "daily-incremental", "bootstrap-next"]:
         # Parse with --cik-limit and --cik-offset
         args = parser.parse_args([subcommand, "--cik-limit", "5", "--cik-offset", "10"])
         assert args.cik_limit == 5, f"{subcommand} --cik-limit 5 should parse to int 5"
         assert args.cik_offset == 10, f"{subcommand} --cik-offset 10 should parse to int 10"
 
     # Defaults: cik_limit=None, cik_offset=0
-    for subcommand in ["bootstrap-full", "bootstrap-recent-10", "daily-incremental", "bootstrap-next"]:
+    for subcommand in ["bootstrap-full", "bootstrap", "daily-incremental", "bootstrap-next"]:
         args = parser.parse_args([subcommand])
         assert args.cik_limit is None, f"{subcommand} default cik_limit should be None"
         assert args.cik_offset == 0, f"{subcommand} default cik_offset should be 0"
