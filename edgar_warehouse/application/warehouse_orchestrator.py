@@ -941,6 +941,8 @@ def _capture_bronze_raw(
                 skipped_mdm_active=len(silver_active_ciks & {int(r["cik"]) for r in universe_rows[:before]}),
                 skipped_silver_active=len(silver_active_ciks),
             )
+        if arguments.get("limit") is not None:
+            universe_rows = universe_rows[: int(arguments["limit"])]
         metrics["_ticker_reference_rows"] = ticker_reference_rows
         cik_universe_path = _write_cik_universe_batches(
             context=context,
