@@ -262,7 +262,7 @@ Core CLI commands live in `edgar_warehouse/cli.py`:
 ```bash
 edgar-warehouse --help
 edgar-warehouse seed-universe --limit 100
-edgar-warehouse bootstrap-recent-10 --tracking-status-filter active
+edgar-warehouse bootstrap --tracking-status-filter active
 edgar-warehouse bootstrap-full --tracking-status-filter active
 edgar-warehouse bootstrap-next --limit 100
 edgar-warehouse bootstrap-batch --cik-list 0000320193,0000789019
@@ -277,14 +277,14 @@ Step Functions execution example:
 
 ```bash
 STATE_MACHINE_ARN="$(
-  python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["state_machines"]["bootstrap_recent_10"])' \
+  python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["state_machines"]["bootstrap"])' \
     infra/aws-prod-application.json
 )"
 
 aws stepfunctions start-execution \
   --profile sec_platform_deployer \
   --state-machine-arn "$STATE_MACHINE_ARN" \
-  --input '{"trigger":"operator","workflow":"bootstrap_recent_10"}'
+  --input '{"trigger":"operator","workflow":"bootstrap"}'
 ```
 
 For bounded replay:
@@ -293,7 +293,7 @@ For bounded replay:
 aws stepfunctions start-execution \
   --profile sec_platform_deployer \
   --state-machine-arn "$STATE_MACHINE_ARN" \
-  --input '{"trigger":"operator","workflow":"bootstrap_recent_10","cik_list":"0000320193,0000789019"}'
+  --input '{"trigger":"operator","workflow":"bootstrap","cik_list":"0000320193,0000789019"}'
 ```
 
 ## AWS MDM

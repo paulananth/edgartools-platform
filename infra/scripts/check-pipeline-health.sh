@@ -96,7 +96,7 @@ if not isinstance(data, dict):
 print(data.get(key) or default)
 PY
 }
-BOOT_JOB="$(json_output_value container_app_job_names bootstrap_recent_10 "${NAME_PREFIX}-boot-recent-10")"
+BOOT_JOB="$(json_output_value container_app_job_names bootstrap "${NAME_PREFIX}-boot-recent-10")"
 COUNTS_JOB="$(json_output_value mdm_container_app_job_names counts "${NAME_PREFIX}-mdm-counts")"
 VERIFY_JOB="$(json_output_value mdm_container_app_job_names verify_graph "${NAME_PREFIX}-mdm-graph-verify")"
 RUN_JOB="$(json_output_value mdm_container_app_job_names run "${NAME_PREFIX}-mdm-run")"
@@ -234,7 +234,7 @@ if [[ "$SKIP_SILVER" == "false" ]]; then
   else
     echo "  silver.duckdb : 0 bytes   last_modified=${MODIFIED}"
     echo "  Status        : EMPTY — MDM run will read no data"
-    echo "  Fix           : ensure WAREHOUSE_RUNTIME_MODE=bronze_capture, then run bootstrap-recent-10"
+    echo "  Fix           : ensure WAREHOUSE_RUNTIME_MODE=bronze_capture, then run bootstrap"
   fi
 
   echo ""

@@ -5,7 +5,7 @@
 # Usage:
 #   ./scripts/ops/diagnose-execution.sh               # latest failure, any pipeline
 #   ./scripts/ops/diagnose-execution.sh silver         # latest silver-mdm-gold run
-#   ./scripts/ops/diagnose-execution.sh bootstrap      # latest bootstrap-phased run
+#   ./scripts/ops/diagnose-execution.sh bootstrap      # latest load-history run
 #   ./scripts/ops/diagnose-execution.sh gold
 #   ./scripts/ops/diagnose-execution.sh mdm-gold
 #   ./scripts/ops/diagnose-execution.sh --exec <arn>  # specific execution
@@ -43,7 +43,7 @@ BASE="arn:aws:states:${AWS_REGION}:${ACCOUNT}:stateMachine"
 # Short name → SM suffix mapping (same as trigger.sh)
 sm_suffix_for() {
   case "$1" in
-    bootstrap)  echo "bootstrap-phased" ;;
+    bootstrap)  echo "load-history" ;;
     silver)     echo "silver-mdm-gold" ;;
     gold)       echo "gold-refresh" ;;
     mdm-gold)   echo "mdm-gold" ;;
@@ -69,7 +69,7 @@ if [[ -z "$EXEC_ARN" ]]; then
     # Auto-find: scan all pipelines, pick the most recently failed
     echo "Scanning all pipelines for the latest failure…"
     LATEST_FAIL_TIME=0
-    for suffix in bootstrap-phased silver-mdm-gold gold-refresh mdm-gold; do
+    for suffix in load-history silver-mdm-gold gold-refresh mdm-gold; do
       sm="${BASE}:${NAME_PREFIX}-${suffix}"
       row=$(aws_ stepfunctions list-executions \
         --state-machine-arn "$sm" \

@@ -347,7 +347,7 @@ def bug3_bootstrap_pending(conn: object) -> None:
         print("  Why 2: None have rows in sec_company_filing and none carry error messages.")
         print("  Why 3: bootstrap_completed_at is NULL for all of them — they were seeded into")
         print("         sec_company_sync_state (seed-universe step) but never fetched.")
-        print("  Why 4: The phased pipeline (bootstrap_phased) runs bootstrap-batch in parallel")
+        print("  Why 4: The phased pipeline (load_history) runs bootstrap-batch in parallel")
         print("         batches; if fewer batches ran than companies seeded, the remainder stay")
         print("         in 'bootstrap_pending' indefinitely.")
         print("  Why 5 (root cause): These {n} CIKs were added to the tracking universe but".format(n=pending_total))
@@ -355,7 +355,7 @@ def bug3_bootstrap_pending(conn: object) -> None:
         print("         universe that was seeded beyond the batch capacity of the last run.")
         print()
         print("  Result: NOT a bug.  bootstrap_pending = seeded-but-not-yet-fetched.")
-        print("  Action: run bootstrap_phased (or bootstrap_recent_10) to fetch remaining CIKs.")
+        print("  Action: run load_history (or bootstrap) to fetch remaining CIKs.")
         print("          Monitor progress with: ./scripts/ops/silver-counts.sh --local /tmp/silver.duckdb")
     elif pending_with_filings > 0:
         print("  Why 2: {n} pending CIKs DO have rows in sec_company_filing — state machine bug.".format(

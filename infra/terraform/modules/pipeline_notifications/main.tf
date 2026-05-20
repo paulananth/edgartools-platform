@@ -87,7 +87,7 @@ resource "aws_sns_topic_subscription" "pipeline_failures" {
 #
 # Single catch-all rule matching all edgartools-{env}-* state machines (D-02).
 # The prefix filter covers all 5 production state machines:
-#   edgartools-dev-bootstrap-phased, edgartools-dev-silver-mdm-gold,
+#   edgartools-dev-load-history, edgartools-dev-silver-mdm-gold,
 #   edgartools-dev-gold-refresh, edgartools-dev-mdm-gold,
 #   edgartools-dev-ownership-mdm-gold
 # It also matches other edgartools-dev-* machines (e.g. daily-incremental,

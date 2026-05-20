@@ -6,7 +6,7 @@ from edgar_warehouse.application.commands import (
     bootstrap_batch,
     bootstrap_full,
     bootstrap_next,
-    bootstrap_recent_10,
+    bootstrap,
     catch_up_daily_form_index,
     daily_incremental,
     full_reconcile,
@@ -20,7 +20,7 @@ from edgar_warehouse.application.commands import (
 
 COMMAND_REGISTRY = {
     "bootstrap-full": bootstrap_full.execute,
-    "bootstrap-recent-10": bootstrap_recent_10.execute,
+    "bootstrap": bootstrap.execute,
     "daily-incremental": daily_incremental.execute,
     "load-daily-form-index-for-date": load_daily_form_index_for_date.execute,
     "catch-up-daily-form-index": catch_up_daily_form_index.execute,

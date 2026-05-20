@@ -141,27 +141,27 @@ class WarehousePathResolverTests(unittest.TestCase):
         )
         self.assertEqual(
             self.resolver.snowflake_export_run_manifest_path(
-                workflow_name="bootstrap_recent_10",
+                workflow_name="bootstrap",
                 business_date="2026-04-22",
                 run_id="run-123",
             ),
-            "manifests/workflow_name=bootstrap_recent_10/business_date=2026-04-22/run_id=run-123/run_manifest.json",
+            "manifests/workflow_name=bootstrap/business_date=2026-04-22/run_id=run-123/run_manifest.json",
         )
 
     def test_resolver_plans_default_and_special_manifest_paths(self) -> None:
         self.assertEqual(
             self.resolver.planned_manifest_paths(
-                command_name="bootstrap-recent-10",
-                command_path="bootstrap-recent-10",
+                command_name="bootstrap",
+                command_path="bootstrap",
                 run_id="run-123",
                 scope={},
             ),
             {
-                "bronze": "runs/bootstrap-recent-10/run-123/manifest.json",
-                "staging": "staging/runs/bootstrap-recent-10/run-123/manifest.json",
-                "silver": "silver/sec/runs/bootstrap-recent-10/run-123/manifest.json",
-                "gold": "gold/runs/bootstrap-recent-10/run-123/manifest.json",
-                "artifacts": "artifacts/runs/bootstrap-recent-10/run-123/manifest.json",
+                "bronze": "runs/bootstrap/run-123/manifest.json",
+                "staging": "staging/runs/bootstrap/run-123/manifest.json",
+                "silver": "silver/sec/runs/bootstrap/run-123/manifest.json",
+                "gold": "gold/runs/bootstrap/run-123/manifest.json",
+                "artifacts": "artifacts/runs/bootstrap/run-123/manifest.json",
             },
         )
         self.assertEqual(
@@ -265,12 +265,12 @@ class CaptureSpecFactoryTests(unittest.TestCase):
         self.assertEqual(
             self.factory.manifest_output(
                 layer="bronze",
-                command_name="bootstrap-recent-10",
-                command_path="bootstrap-recent-10",
+                command_name="bootstrap",
+                command_path="bootstrap",
                 run_id="run-123",
                 scope={},
             ).relative_path,
-            "runs/bootstrap-recent-10/run-123/manifest.json",
+            "runs/bootstrap/run-123/manifest.json",
         )
         self.assertEqual(
             self.factory.gold_table_output("company", "run-123").relative_path,
@@ -282,11 +282,11 @@ class CaptureSpecFactoryTests(unittest.TestCase):
         )
         self.assertEqual(
             self.factory.snowflake_export_run_manifest(
-                workflow_name="bootstrap_recent_10",
+                workflow_name="bootstrap",
                 business_date="2026-04-22",
                 run_id="run-123",
             ).relative_path,
-            "manifests/workflow_name=bootstrap_recent_10/business_date=2026-04-22/run_id=run-123/run_manifest.json",
+            "manifests/workflow_name=bootstrap/business_date=2026-04-22/run_id=run-123/run_manifest.json",
         )
 
     def test_factory_rejects_unsupported_source(self) -> None:

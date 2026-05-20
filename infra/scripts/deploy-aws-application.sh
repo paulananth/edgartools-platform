@@ -892,7 +892,7 @@ task_definition_for_mdm_workflow() {
 workflow_profile() {
   case "$1" in
     daily_incremental) printf '%s\n' "medium" ;;
-    bootstrap_recent_10) printf '%s\n' "medium" ;;
+    bootstrap) printf '%s\n' "medium" ;;
     bootstrap_full) printf '%s\n' "large" ;;
     targeted_resync) printf '%s\n' "small" ;;
     full_reconcile) printf '%s\n' "medium" ;;
@@ -906,7 +906,7 @@ workflow_profile() {
 workflow_command_expression() {
   case "$1" in
     daily_incremental) printf '%s\n' "States.Array('daily-incremental', '--run-id', \$\$.Execution.Name)" ;;
-    bootstrap_recent_10) printf '%s\n' "States.Array('bootstrap-recent-10', '--run-id', \$\$.Execution.Name)" ;;
+    bootstrap) printf '%s\n' "States.Array('bootstrap', '--run-id', \$\$.Execution.Name)" ;;
     bootstrap_full) printf '%s\n' "States.Array('bootstrap-full', '--run-id', \$\$.Execution.Name)" ;;
     targeted_resync) printf '%s\n' "States.Array('targeted-resync', '--scope-type', \$.scope_type, '--scope-key', \$.scope_key, '--run-id', \$\$.Execution.Name)" ;;
     full_reconcile) printf '%s\n' "States.Array('full-reconcile', '--run-id', \$\$.Execution.Name)" ;;
@@ -920,7 +920,7 @@ workflow_command_expression() {
 workflow_cik_command_expression() {
   case "$1" in
     daily_incremental) printf '%s\n' "States.Array('daily-incremental', '--run-id', \$\$.Execution.Name, '--cik-list', \$.cik_list)" ;;
-    bootstrap_recent_10) printf '%s\n' "States.Array('bootstrap-recent-10', '--run-id', \$\$.Execution.Name, '--cik-list', \$.cik_list)" ;;
+    bootstrap) printf '%s\n' "States.Array('bootstrap', '--run-id', \$\$.Execution.Name, '--cik-list', \$.cik_list)" ;;
     bootstrap_full) printf '%s\n' "States.Array('bootstrap-full', '--run-id', \$\$.Execution.Name, '--cik-list', \$.cik_list)" ;;
     *) return 0 ;;
   esac
@@ -1285,7 +1285,7 @@ PY
 # Implements the target pipeline shape from CLAUDE.md long-load 5-whys.
 # Uses direct ECS task states throughout (no nested Step Function executions) so the
 # existing sec_platform_runner_step_functions role needs no extra EventBridge permissions.
-write_bootstrap_phased_definition() {
+write_load_history_definition() {
   local output_file="$1"
   local wh_task_small_arn="$2"    # warehouse small  (reserved; unused in phased pipeline after seed OOM fix)
   local wh_task_medium_arn="$3"   # warehouse medium (seed-universe, bootstrap-batch)
@@ -1405,14 +1405,14 @@ PY
 
 # Full pipeline for a single warehouse command followed by the MDM chain and gold refresh.
 # Shape: RunWarehouseTask → MdmRun → MdmBackfill → MdmSync → MdmVerify → GoldRefresh
-# Used by bootstrap_recent_10 and daily_incremental.
+# Used by bootstrap and daily_incremental.
 write_warehouse_mdm_gold_definition() {
   local output_file="$1"
   local wh_task_medium_arn="$2"   # warehouse medium (the bronze/silver command)
   local mdm_task_small_arn="$3"   # mdm small  (verify-graph)
   local mdm_task_medium_arn="$4"  # mdm medium (run, backfill, sync)
   local wh_task_large_arn="$5"    # warehouse large (gold-refresh)
-  local workflow_name="$6"        # e.g. bootstrap_recent_10 or daily_incremental
+  local workflow_name="$6"        # e.g. bootstrap or daily_incremental
 
   python3 - "$output_file" "$CLUSTER_ARN" \
     "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
@@ -1431,7 +1431,7 @@ mdm_limit   = str(mdm_run_limit)
 graph_limit = str(mdm_graph_limit)
 
 WAREHOUSE_COMMANDS = {
-    "bootstrap_recent_10": "bootstrap-recent-10",
+    "bootstrap": "bootstrap",
     "daily_incremental":   "daily-incremental",
 }
 wh_cmd = WAREHOUSE_COMMANDS[workflow_name]
@@ -1701,27 +1701,27 @@ print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
 
 if [[ "$DEPLOY_MDM" == "true" ]]; then
-  # bootstrap_phased: the recommended way to load 100+ companies.
+  # load_history: the recommended way to load 100+ companies.
   # Chains seed → parallel bronze+silver batches → MDM → gold-refresh once.
-  phased_definition_file="$(json_file sfn-bootstrap-phased)"
-  write_bootstrap_phased_definition "$phased_definition_file" \
+  phased_definition_file="$(json_file sfn-load-history)"
+  write_load_history_definition "$phased_definition_file" \
     "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN"
-  phased_state_machine_arn="$(upsert_state_machine bootstrap_phased "$phased_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+  phased_state_machine_arn="$(upsert_state_machine load_history "$phased_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  python3 - "bootstrap_phased" "$phased_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+  python3 - "load_history" "$phased_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
 import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
 
-  # bootstrap_recent_10: recent filings → MDM chain → gold. Same shape as bootstrap_phased
+  # bootstrap: recent filings → MDM chain → gold. Same shape as load_history
   # but scoped to the 10 most recent filings per active company instead of a full batch sweep.
-  recent10_definition_file="$(json_file sfn-bootstrap-recent-10)"
+  recent10_definition_file="$(json_file sfn-bootstrap)"
   write_warehouse_mdm_gold_definition "$recent10_definition_file" \
     "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
-    "bootstrap_recent_10"
-  recent10_state_machine_arn="$(upsert_state_machine bootstrap_recent_10 "$recent10_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+    "bootstrap"
+  recent10_state_machine_arn="$(upsert_state_machine bootstrap "$recent10_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  python3 - "bootstrap_recent_10" "$recent10_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+  python3 - "bootstrap" "$recent10_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
 import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY

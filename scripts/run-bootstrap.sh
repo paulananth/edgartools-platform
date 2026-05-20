@@ -62,7 +62,7 @@ aws_cli() {
 
 # Resolve account ID — must come after aws_cli is defined so --profile is applied
 ACCOUNT=$(aws_cli sts get-caller-identity --query 'Account' --output text 2>/dev/null || true)
-STATE_MACHINE_ARN="arn:aws:states:${REGION}:${ACCOUNT}:stateMachine:${NAME_PREFIX}-bootstrap-phased"
+STATE_MACHINE_ARN="arn:aws:states:${REGION}:${ACCOUNT}:stateMachine:${NAME_PREFIX}-load-history"
 
 # ---------------------------------------------------------------------------
 # PREFLIGHT: resolve all credentials before touching the pipeline
@@ -176,7 +176,7 @@ echo ""
 # Fire the Step Function
 # ---------------------------------------------------------------------------
 RUN_NAME="${NAME_PREFIX}-bootstrap-$(date -u +%Y%m%d-%H%M%S)"
-echo "Starting bootstrap-phased: $RUN_NAME"
+echo "Starting load-history: $RUN_NAME"
 
 EXEC_ARN=$(aws_cli stepfunctions start-execution \
   --state-machine-arn "$STATE_MACHINE_ARN" \

@@ -3,7 +3,7 @@
 #
 # Usage:
 #   ./scripts/ops/status.sh                  # all pipelines
-#   ./scripts/ops/status.sh bootstrap        # one pipeline only
+#   ./scripts/ops/status.sh bootstrap  # or load-history        # one pipeline only
 #   ./scripts/ops/status.sh --env dev        # environment override
 
 set -euo pipefail
@@ -32,10 +32,10 @@ BASE="arn:aws:states:${AWS_REGION}:${ACCOUNT}:stateMachine"
 
 # ── State machines to show ────────────────────────────────────────────────────
 # Format: "short-name|display-label|sm-suffix|stages..."
-# Stage order must match write_bootstrap_phased_definition(), write_silver_mdm_gold_definition(), etc. in infra/scripts/deploy-aws-application.sh
+# Stage order must match write_load_history_definition(), write_silver_mdm_gold_definition(), etc. in infra/scripts/deploy-aws-application.sh
 declare -a MACHINES=(
-  "bootstrap|BOOTSTRAP-PHASED|bootstrap-phased|SeedUniverse BatchBootstrap MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
-  "recent|BOOTSTRAP-RECENT-10|bootstrap-recent-10|RunWarehouseTask MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
+  "load-history|LOAD-HISTORY|load-history|SeedUniverse BatchBootstrap MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
+  "bootstrap|BOOTSTRAP|bootstrap|RunWarehouseTask MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
   "daily|DAILY-INCREMENTAL|daily-incremental|RunWarehouseTask MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
   "silver|SILVER-MDM-GOLD|silver-mdm-gold|SeedSilverBatches BatchSilver MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
   "gold|GOLD-REFRESH|gold-refresh|GoldRefresh"
