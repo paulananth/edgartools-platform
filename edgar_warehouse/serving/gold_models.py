@@ -378,11 +378,18 @@ def _build_dim_company(conn: Any) -> pa.Table:
 
 
 def _build_dim_form(conn: Any) -> pa.Table:
-    base = _arrow(conn.execute("SELECT DISTINCT form FROM sec_company_filing WHERE form IS NOT NULL ORDER BY form"))
-    forms = base.column("form").to_pylist() if base.num_rows else []
+    # form_family computed in Python (466 rows — negligible); form_key uses DuckDB hash
+    # to stay consistent with the hash used in _build_dim_filing / _build_fact_filing_activity.
+    base = _arrow(conn.execute(
+        "SELECT DISTINCT form, (hash(form) & 9223372036854775807)::BIGINT AS form_key"
+        " FROM sec_company_filing WHERE form IS NOT NULL ORDER BY form"
+    ))
+    if base.num_rows == 0:
+        return _empty(_DIM_FORM_SCHEMA)
+    forms = base.column("form").to_pylist()
     return pa.table(
         {
-            "form_key": pa.array([_det_key(form) for form in forms], type=pa.int64()),
+            "form_key": base.column("form_key").cast(pa.int64()),
             "form": pa.array(forms, type=pa.string()),
             "form_family": pa.array([_form_family(form) for form in forms], type=pa.string()),
         },
@@ -417,74 +424,54 @@ def _build_dim_date(conn: Any) -> pa.Table:
 
 
 def _build_dim_filing(conn: Any) -> pa.Table:
+    # All key columns computed in DuckDB — eliminates 3 × 2.7M Python-level calls.
     table = _arrow(
         conn.execute(
             """
-            SELECT accession_number, cik, form, filing_date, report_date, is_xbrl, size
+            SELECT
+                (hash(accession_number) & 9223372036854775807)::BIGINT AS filing_key,
+                accession_number,
+                cik::BIGINT                                              AS cik,
+                cik::BIGINT                                              AS company_key,
+                form,
+                COALESCE((hash(form) & 9223372036854775807)::BIGINT, 0) AS form_key,
+                filing_date,
+                (year(filing_date)*10000 + month(filing_date)*100
+                 + day(filing_date))::INTEGER                            AS date_key,
+                report_date,
+                is_xbrl::BOOLEAN                                        AS is_xbrl,
+                size::BIGINT                                             AS size
             FROM sec_company_filing
             ORDER BY filing_date, accession_number
             """
         )
     )
-    if table.num_rows == 0:
-        return _empty(_DIM_FILING_SCHEMA)
-    accessions = table.column("accession_number").to_pylist()
-    ciks = table.column("cik").to_pylist()
-    forms = table.column("form").to_pylist()
-    filing_dates = table.column("filing_date").to_pylist()
-    report_dates = table.column("report_date").to_pylist()
-    return pa.table(
-        {
-            "filing_key": pa.array([_det_key(accession) for accession in accessions], type=pa.int64()),
-            "accession_number": pa.array(accessions, type=pa.string()),
-            "cik": pa.array(ciks, type=pa.int64()),
-            "company_key": pa.array(ciks, type=pa.int64()),
-            "form": pa.array(forms, type=pa.string()),
-            "form_key": pa.array([_det_key(form) if form else 0 for form in forms], type=pa.int64()),
-            "filing_date": pa.array(filing_dates, type=pa.date32()),
-            "date_key": pa.array([_filing_date_to_int(item) for item in filing_dates], type=pa.int32()),
-            "report_date": pa.array(report_dates, type=pa.date32()),
-            "is_xbrl": table.column("is_xbrl").cast(pa.bool_()),
-            "size": table.column("size").cast(pa.int64()),
-        },
-        schema=_DIM_FILING_SCHEMA,
-    )
+    return _empty(_DIM_FILING_SCHEMA) if table.num_rows == 0 else table.cast(_DIM_FILING_SCHEMA)
 
 
 def _build_fact_filing_activity(conn: Any) -> pa.Table:
     table = _arrow(
         conn.execute(
             """
-            SELECT accession_number, cik, form, filing_date, report_date, is_xbrl
+            SELECT
+                (hash(accession_number) & 9223372036854775807)::BIGINT AS fact_key,
+                cik::BIGINT                                              AS company_key,
+                (hash(accession_number) & 9223372036854775807)::BIGINT AS filing_key,
+                (year(filing_date)*10000 + month(filing_date)*100
+                 + day(filing_date))::INTEGER                            AS date_key,
+                COALESCE((hash(form) & 9223372036854775807)::BIGINT, 0) AS form_key,
+                accession_number,
+                cik::BIGINT                                              AS cik,
+                form,
+                filing_date,
+                report_date,
+                is_xbrl::BOOLEAN                                        AS is_xbrl
             FROM sec_company_filing
             ORDER BY filing_date, accession_number
             """
         )
     )
-    if table.num_rows == 0:
-        return _empty(_FACT_FILING_ACTIVITY_SCHEMA)
-    accessions = table.column("accession_number").to_pylist()
-    ciks = table.column("cik").to_pylist()
-    forms = table.column("form").to_pylist()
-    filing_dates = table.column("filing_date").to_pylist()
-    report_dates = table.column("report_date").to_pylist()
-    filing_keys = [_det_key(accession) for accession in accessions]
-    return pa.table(
-        {
-            "fact_key": pa.array(filing_keys, type=pa.int64()),
-            "company_key": pa.array(ciks, type=pa.int64()),
-            "filing_key": pa.array(filing_keys, type=pa.int64()),
-            "date_key": pa.array([_filing_date_to_int(item) for item in filing_dates], type=pa.int32()),
-            "form_key": pa.array([_det_key(form) if form else 0 for form in forms], type=pa.int64()),
-            "accession_number": pa.array(accessions, type=pa.string()),
-            "cik": pa.array(ciks, type=pa.int64()),
-            "form": pa.array(forms, type=pa.string()),
-            "filing_date": pa.array(filing_dates, type=pa.date32()),
-            "report_date": pa.array(report_dates, type=pa.date32()),
-            "is_xbrl": table.column("is_xbrl").cast(pa.bool_()),
-        },
-        schema=_FACT_FILING_ACTIVITY_SCHEMA,
-    )
+    return _empty(_FACT_FILING_ACTIVITY_SCHEMA) if table.num_rows == 0 else table.cast(_FACT_FILING_ACTIVITY_SCHEMA)
 
 
 def _build_dim_party(conn: Any) -> pa.Table:
@@ -708,76 +695,152 @@ def _ownership_fact_source_rows(conn: Any) -> list[dict[str, Any]]:
 
 
 def _build_fact_ownership_transaction(conn: Any) -> pa.Table:
-    records: list[dict[str, Any]] = []
-    for row in _ownership_fact_source_rows(conn):
-        party_natural_key = _party_natural_key(row.get("owner_name"), row.get("owner_cik"))
-        security_natural_key = _security_natural_key(row.get("cik"), row.get("security_title"))
-        transaction_code = _clean_text(row.get("transaction_code"))
-        fact_key_value = _det_key(
-            f"{row['accession_number']}|{row['owner_index']}|{row['txn_index']}|{'D' if row.get('is_derivative') else 'N'}"
+    # All key and natural-key derivations pushed into DuckDB SQL.
+    # Eliminates Python loop + 5× _det_key() calls per row across 37K ownership rows.
+    table = _arrow(conn.execute("""
+        WITH src AS (
+            SELECT f.accession_number, f.cik::BIGINT AS cik, f.form, f.filing_date,
+                   o.owner_index, o.owner_cik, o.owner_name,
+                   t.txn_index, t.security_title, t.transaction_code,
+                   t.transaction_shares, t.transaction_price, t.shares_owned_after,
+                   t.ownership_direct_indirect, FALSE AS is_derivative
+            FROM sec_ownership_non_derivative_txn t
+            JOIN sec_company_filing f ON f.accession_number = t.accession_number
+            LEFT JOIN sec_ownership_reporting_owner o
+                ON o.accession_number = t.accession_number AND o.owner_index = t.owner_index
+            UNION ALL
+            SELECT f.accession_number, f.cik::BIGINT AS cik, f.form, f.filing_date,
+                   o.owner_index, o.owner_cik, o.owner_name,
+                   t.txn_index, t.security_title, t.transaction_code,
+                   t.transaction_shares, t.transaction_price, t.shares_owned_after,
+                   t.ownership_direct_indirect, TRUE AS is_derivative
+            FROM sec_ownership_derivative_txn t
+            JOIN sec_company_filing f ON f.accession_number = t.accession_number
+            LEFT JOIN sec_ownership_reporting_owner o
+                ON o.accession_number = t.accession_number AND o.owner_index = t.owner_index
+        ),
+        keyed AS (
+            SELECT *,
+                -- party_natural_key: prefer CIK, fall back to normalized name
+                CASE
+                    WHEN owner_cik IS NOT NULL
+                        THEN 'cik:' || CAST(CAST(owner_cik AS BIGINT) AS VARCHAR)
+                    WHEN NULLIF(trim(regexp_replace(COALESCE(owner_name,''),'\s+',' ','g')),'') IS NOT NULL
+                        THEN 'name:' || lower(trim(regexp_replace(owner_name,'\s+',' ','g')))
+                    ELSE NULL
+                END AS party_nk,
+                -- security_natural_key: cik|normalized_title (NULL if no title)
+                CASE
+                    WHEN NULLIF(trim(regexp_replace(COALESCE(security_title,''),'\s+',' ','g')),'') IS NULL THEN NULL
+                    ELSE CAST(COALESCE(cik,0) AS VARCHAR) || '|' ||
+                         lower(trim(regexp_replace(security_title,'\s+',' ','g')))
+                END AS security_nk,
+                -- clean transaction_code
+                NULLIF(trim(regexp_replace(COALESCE(transaction_code,''),'\s+',' ','g')),'') AS txn_code_clean
+            FROM src
         )
-        records.append(
-            {
-                "fact_key": fact_key_value,
-                "company_key": _coerce_int(row.get("cik")),
-                "date_key": _filing_date_to_int(row.get("filing_date")),
-                "form_key": _det_key(str(row["form"])) if row.get("form") else None,
-                "party_key": _det_key(party_natural_key) if party_natural_key else None,
-                "security_key": _det_key(security_natural_key) if security_natural_key else None,
-                "ownership_txn_type_key": _det_key(transaction_code) if transaction_code else None,
-                "accession_number": row.get("accession_number"),
-                "owner_index": _coerce_int(row.get("owner_index")),
-                "txn_index": _coerce_int(row.get("txn_index")),
-                "transaction_code": transaction_code,
-                "transaction_shares": _coerce_float(row.get("transaction_shares")),
-                "transaction_price": _coerce_float(row.get("transaction_price")),
-                "shares_owned_after": _coerce_float(row.get("shares_owned_after")),
-                "is_derivative": bool(row.get("is_derivative")) if row.get("is_derivative") is not None else None,
-            }
-        )
-    records.sort(key=lambda record: (record["accession_number"] or "", record["owner_index"] or 0, record["txn_index"] or 0))
-    return _table_from_records(_FACT_OWNERSHIP_TRANSACTION_SCHEMA, records)
+        SELECT
+            (hash(accession_number || '|' ||
+                  COALESCE(CAST(owner_index AS VARCHAR),'None') || '|' ||
+                  COALESCE(CAST(txn_index AS VARCHAR),'None') || '|' ||
+                  CASE WHEN is_derivative THEN 'D' ELSE 'N' END
+            ) & 9223372036854775807)::BIGINT                                        AS fact_key,
+            cik                                                                      AS company_key,
+            (year(filing_date)*10000 + month(filing_date)*100
+             + day(filing_date))::INTEGER                                            AS date_key,
+            CASE WHEN form IS NOT NULL
+                THEN (hash(form) & 9223372036854775807)::BIGINT END                 AS form_key,
+            CASE WHEN party_nk IS NOT NULL
+                THEN (hash(party_nk) & 9223372036854775807)::BIGINT END             AS party_key,
+            CASE WHEN security_nk IS NOT NULL
+                THEN (hash(security_nk) & 9223372036854775807)::BIGINT END          AS security_key,
+            CASE WHEN txn_code_clean IS NOT NULL
+                THEN (hash(txn_code_clean) & 9223372036854775807)::BIGINT END       AS ownership_txn_type_key,
+            accession_number,
+            owner_index::INTEGER                                                     AS owner_index,
+            txn_index::INTEGER                                                       AS txn_index,
+            txn_code_clean                                                           AS transaction_code,
+            TRY_CAST(transaction_shares AS DOUBLE)                                  AS transaction_shares,
+            TRY_CAST(transaction_price AS DOUBLE)                                   AS transaction_price,
+            TRY_CAST(shares_owned_after AS DOUBLE)                                  AS shares_owned_after,
+            is_derivative::BOOLEAN                                                   AS is_derivative
+        FROM keyed
+        ORDER BY accession_number, owner_index, txn_index
+    """))
+    return _empty(_FACT_OWNERSHIP_TRANSACTION_SCHEMA) if table.num_rows == 0 else table.cast(_FACT_OWNERSHIP_TRANSACTION_SCHEMA)
 
 
 def _build_fact_ownership_holding_snapshot(conn: Any) -> pa.Table:
-    grouped: dict[tuple[Any, ...], dict[str, Any]] = {}
-    for row in _ownership_fact_source_rows(conn):
-        party_natural_key = _party_natural_key(row.get("owner_name"), row.get("owner_cik"))
-        security_natural_key = _security_natural_key(row.get("cik"), row.get("security_title"))
-        if security_natural_key is None:
-            continue
-        if row.get("shares_owned_after") in (None, ""):
-            continue
-        group_key = (
-            row.get("accession_number"),
-            _coerce_int(row.get("owner_index")),
-            security_natural_key,
-            _clean_text(row.get("ownership_direct_indirect")),
+    # Same SQL rewrite pattern as _build_fact_ownership_transaction.
+    # "Last transaction per holding group" implemented with QUALIFY ROW_NUMBER()
+    # instead of a Python groupby loop.
+    table = _arrow(conn.execute("""
+        WITH src AS (
+            SELECT f.accession_number, f.cik::BIGINT AS cik, f.filing_date,
+                   o.owner_index, o.owner_cik, o.owner_name,
+                   t.txn_index, t.security_title,
+                   t.shares_owned_after, t.ownership_direct_indirect,
+                   FALSE AS is_derivative
+            FROM sec_ownership_non_derivative_txn t
+            JOIN sec_company_filing f ON f.accession_number = t.accession_number
+            LEFT JOIN sec_ownership_reporting_owner o
+                ON o.accession_number = t.accession_number AND o.owner_index = t.owner_index
+            UNION ALL
+            SELECT f.accession_number, f.cik::BIGINT AS cik, f.filing_date,
+                   o.owner_index, o.owner_cik, o.owner_name,
+                   t.txn_index, t.security_title,
+                   t.shares_owned_after, t.ownership_direct_indirect,
+                   TRUE AS is_derivative
+            FROM sec_ownership_derivative_txn t
+            JOIN sec_company_filing f ON f.accession_number = t.accession_number
+            LEFT JOIN sec_ownership_reporting_owner o
+                ON o.accession_number = t.accession_number AND o.owner_index = t.owner_index
+        ),
+        keyed AS (
+            SELECT *,
+                CASE
+                    WHEN owner_cik IS NOT NULL
+                        THEN 'cik:' || CAST(CAST(owner_cik AS BIGINT) AS VARCHAR)
+                    WHEN NULLIF(trim(regexp_replace(COALESCE(owner_name,''),'\s+',' ','g')),'') IS NOT NULL
+                        THEN 'name:' || lower(trim(regexp_replace(owner_name,'\s+',' ','g')))
+                    ELSE NULL
+                END AS party_nk,
+                CASE
+                    WHEN NULLIF(trim(regexp_replace(COALESCE(security_title,''),'\s+',' ','g')),'') IS NULL THEN NULL
+                    ELSE CAST(COALESCE(cik,0) AS VARCHAR) || '|' ||
+                         lower(trim(regexp_replace(security_title,'\s+',' ','g')))
+                END AS security_nk,
+                NULLIF(trim(regexp_replace(COALESCE(ownership_direct_indirect,''),'\s+',' ','g')),'')
+                    AS di_clean
+            FROM src
+            WHERE NULLIF(trim(regexp_replace(COALESCE(security_title,''),'\s+',' ','g')),'') IS NOT NULL
+              AND shares_owned_after IS NOT NULL
+              AND CAST(shares_owned_after AS VARCHAR) != ''
         )
-        current = grouped.get(group_key)
-        row_rank = (_coerce_int(row.get("txn_index")) or 0, 1 if row.get("is_derivative") else 0)
-        current_rank = ((current or {}).get("_txn_rank") or (-1, -1))
-        if current is not None and row_rank <= current_rank:
-            continue
-        grouped[group_key] = {
-            "_txn_rank": row_rank,
-            "fact_key": _det_key(
-                f"{row['accession_number']}|{row.get('owner_index')}|{security_natural_key}|{_clean_text(row.get('ownership_direct_indirect')) or ''}"
-            ),
-            "company_key": _coerce_int(row.get("cik")),
-            "date_key": _filing_date_to_int(row.get("filing_date")),
-            "party_key": _det_key(party_natural_key) if party_natural_key else None,
-            "security_key": _det_key(security_natural_key),
-            "accession_number": row.get("accession_number"),
-            "owner_index": _coerce_int(row.get("owner_index")),
-            "shares_owned_after": _coerce_float(row.get("shares_owned_after")),
-            "ownership_direct_indirect": _clean_text(row.get("ownership_direct_indirect")),
-        }
-    records = [
-        {key: value for key, value in record.items() if not key.startswith("_")}
-        for _, record in sorted(grouped.items(), key=lambda item: ((item[0][0] or ""), item[0][1] or 0, item[0][2], item[0][3] or ""))
-    ]
-    return _table_from_records(_FACT_OWNERSHIP_HOLDING_SNAPSHOT_SCHEMA, records)
+        SELECT
+            (hash(accession_number || '|' ||
+                  COALESCE(CAST(owner_index AS VARCHAR),'None') || '|' ||
+                  security_nk || '|' ||
+                  COALESCE(di_clean,'')
+            ) & 9223372036854775807)::BIGINT                                        AS fact_key,
+            cik                                                                      AS company_key,
+            (year(filing_date)*10000 + month(filing_date)*100
+             + day(filing_date))::INTEGER                                            AS date_key,
+            CASE WHEN party_nk IS NOT NULL
+                THEN (hash(party_nk) & 9223372036854775807)::BIGINT END             AS party_key,
+            (hash(security_nk) & 9223372036854775807)::BIGINT                       AS security_key,
+            accession_number,
+            owner_index::INTEGER                                                     AS owner_index,
+            TRY_CAST(shares_owned_after AS DOUBLE)                                  AS shares_owned_after,
+            di_clean                                                                 AS ownership_direct_indirect
+        FROM keyed
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY accession_number, owner_index, security_nk, di_clean
+            ORDER BY COALESCE(txn_index,0) DESC, CASE WHEN is_derivative THEN 1 ELSE 0 END DESC
+        ) = 1
+        ORDER BY accession_number, owner_index, security_nk, di_clean
+    """))
+    return _empty(_FACT_OWNERSHIP_HOLDING_SNAPSHOT_SCHEMA) if table.num_rows == 0 else table.cast(_FACT_OWNERSHIP_HOLDING_SNAPSHOT_SCHEMA)
 
 
 def _build_fact_adv_office(conn: Any) -> pa.Table:
@@ -894,24 +957,41 @@ def _build_fact_adv_private_fund(conn: Any) -> pa.Table:
 
 
 def build_gold(db: SilverDatabase) -> dict[str, pa.Table]:
+    import json
+    import sys
+    from datetime import datetime, timezone
+
+    def _timed(name: str, fn):
+        t0 = datetime.now(timezone.utc)
+        print(json.dumps({"event": "gold_table_started", "table": name,
+                          "emitted_at": t0.isoformat().replace("+00:00", "Z")}),
+              file=sys.stderr, flush=True)
+        result = fn()
+        duration = (datetime.now(timezone.utc) - t0).total_seconds()
+        print(json.dumps({"event": "gold_table_completed", "table": name,
+                          "rows": len(result), "duration_seconds": round(duration, 2),
+                          "emitted_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")}),
+              file=sys.stderr, flush=True)
+        return result
+
     conn = get_connection(db)
     return {
-        "dim_company": _build_dim_company(conn),
-        "dim_form": _build_dim_form(conn),
-        "dim_date": _build_dim_date(conn),
-        "dim_filing": _build_dim_filing(conn),
-        "fact_filing_activity": _build_fact_filing_activity(conn),
-        "dim_party": _build_dim_party(conn),
-        "dim_security": _build_dim_security(conn),
-        "dim_ownership_txn_type": _build_dim_ownership_txn_type(conn),
-        "dim_geography": _build_dim_geography(conn),
-        "dim_disclosure_category": _build_dim_disclosure_category(conn),
-        "dim_private_fund": _build_dim_private_fund(conn),
-        "fact_ownership_transaction": _build_fact_ownership_transaction(conn),
-        "fact_ownership_holding_snapshot": _build_fact_ownership_holding_snapshot(conn),
-        "fact_adv_office": _build_fact_adv_office(conn),
-        "fact_adv_disclosure": _build_fact_adv_disclosure(conn),
-        "fact_adv_private_fund": _build_fact_adv_private_fund(conn),
+        "dim_company":                    _timed("dim_company",                    lambda: _build_dim_company(conn)),
+        "dim_form":                       _timed("dim_form",                       lambda: _build_dim_form(conn)),
+        "dim_date":                       _timed("dim_date",                       lambda: _build_dim_date(conn)),
+        "dim_filing":                     _timed("dim_filing",                     lambda: _build_dim_filing(conn)),
+        "fact_filing_activity":           _timed("fact_filing_activity",           lambda: _build_fact_filing_activity(conn)),
+        "dim_party":                      _timed("dim_party",                      lambda: _build_dim_party(conn)),
+        "dim_security":                   _timed("dim_security",                   lambda: _build_dim_security(conn)),
+        "dim_ownership_txn_type":         _timed("dim_ownership_txn_type",         lambda: _build_dim_ownership_txn_type(conn)),
+        "dim_geography":                  _timed("dim_geography",                  lambda: _build_dim_geography(conn)),
+        "dim_disclosure_category":        _timed("dim_disclosure_category",        lambda: _build_dim_disclosure_category(conn)),
+        "dim_private_fund":               _timed("dim_private_fund",               lambda: _build_dim_private_fund(conn)),
+        "fact_ownership_transaction":     _timed("fact_ownership_transaction",     lambda: _build_fact_ownership_transaction(conn)),
+        "fact_ownership_holding_snapshot":_timed("fact_ownership_holding_snapshot",lambda: _build_fact_ownership_holding_snapshot(conn)),
+        "fact_adv_office":                _timed("fact_adv_office",                lambda: _build_fact_adv_office(conn)),
+        "fact_adv_disclosure":            _timed("fact_adv_disclosure",            lambda: _build_fact_adv_disclosure(conn)),
+        "fact_adv_private_fund":          _timed("fact_adv_private_fund",          lambda: _build_fact_adv_private_fund(conn)),
     }
 
 

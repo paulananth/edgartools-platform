@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from edgar_warehouse.mdm.database import MdmEntity, MdmSecurity
 from edgar_warehouse.mdm.resolvers.base import BaseResolver, ResolveOutcome, ResolverContext
@@ -63,6 +63,37 @@ class SecurityResolver(BaseResolver):
             entity_id = existing[0]["entity_id"]
             is_new = False
             score = 1.0
+            # Upgrade: issuer was unknown when this security was first created but is now resolved.
+            # Update in-place rather than creating a duplicate entity.
+            if issuer_entity_id:
+                sec_row = ctx.session.get(MdmSecurity, entity_id)
+                if sec_row is not None and sec_row.issuer_entity_id is None:
+                    sec_row.issuer_entity_id = issuer_entity_id
+        elif issuer_entity_id:
+            # Issuer is known but no exact (title, issuer) match exists.
+            # Check for a NULL-issuer security with the same title and upgrade it rather
+            # than creating a duplicate entity for the same real-world security.
+            null_match = self._existing_candidates(ctx, None, canonical)
+            if null_match:
+                entity_id = null_match[0]["entity_id"]
+                is_new = False
+                score = 1.0
+                sec_row = ctx.session.get(MdmSecurity, entity_id)
+                if sec_row is not None and sec_row.issuer_entity_id is None:
+                    sec_row.issuer_entity_id = issuer_entity_id
+            else:
+                ent = self._create_entity(
+                    ctx, resolution_method="issuer_title_dedup", confidence=1.0
+                )
+                entity_id = ent.entity_id
+                is_new = True
+                score = 1.0
+                ctx.session.add(MdmSecurity(
+                    entity_id=entity_id,
+                    issuer_entity_id=issuer_entity_id,
+                    canonical_title=canonical or "Unknown",
+                    security_type=sec_type,
+                ))
         else:
             ent = self._create_entity(
                 ctx, resolution_method="issuer_title_dedup", confidence=1.0
@@ -70,13 +101,12 @@ class SecurityResolver(BaseResolver):
             entity_id = ent.entity_id
             is_new = True
             score = 1.0
-            row = MdmSecurity(
+            ctx.session.add(MdmSecurity(
                 entity_id=entity_id,
                 issuer_entity_id=issuer_entity_id,
                 canonical_title=canonical or "Unknown",
                 security_type=sec_type,
-            )
-            ctx.session.add(row)
+            ))
 
         self._stage_attrs(
             ctx, entity_id, source_system, source_id,
@@ -110,6 +140,10 @@ class SecurityResolver(BaseResolver):
         )
         if issuer_entity_id:
             stmt = stmt.where(MdmSecurity.issuer_entity_id == issuer_entity_id)
+        else:
+            # When no issuer is known, only match securities that also have no issuer.
+            # Prevents a NULL-issuer lookup from shadowing an issuer-specific entity.
+            stmt = stmt.where(MdmSecurity.issuer_entity_id.is_(None))
         return [
             {"entity_id": s.entity_id, "canonical_title": s.canonical_title}
             for s, _ in ctx.session.execute(stmt).all()

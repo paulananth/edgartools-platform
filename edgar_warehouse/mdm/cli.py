@@ -307,12 +307,21 @@ _REQUIRED_TABLES_RELATIONSHIPS: dict[str, bool] = {
 
 
 def _required_tables_for_run(entity_type: str) -> dict[str, bool]:
-    """Return the fixed required-table mapping for the given entity type."""
+    """Return the fixed required-table mapping for the given entity type.
+
+    For 'all': adviser/fund tables are excluded from the non-empty requirement
+    because they are legitimately empty until the ADV pipeline runs. Blocking a
+    company-population run on ADV data that may never arrive is wrong.
+    """
     if entity_type == "all":
+        # Only enforce the core tables that are always populated after a company
+        # bootstrap; adviser and fund tables are optional for 'all' runs.
+        _ADV_ONLY_TYPES = {"adviser", "fund"}
         merged: dict[str, bool] = {}
-        for tables in _REQUIRED_TABLES_RUN.values():
+        for et, tables in _REQUIRED_TABLES_RUN.items():
+            if et in _ADV_ONLY_TYPES:
+                continue
             for table, must_be_nonempty in tables.items():
-                # If the table already in merged, keep the stricter requirement.
                 existing = merged.get(table, False)
                 merged[table] = existing or must_be_nonempty
         return merged
@@ -702,11 +711,24 @@ def _handle_verify_graph(args) -> int:
 
 def _handle_backfill_relationships(args) -> int:
     from edgar_warehouse.mdm.graph import backfill_relationship_instances
+    from edgar_warehouse.mdm.pipeline import MDMPipeline
+    from edgar_warehouse.mdm.rules import MDMRuleEngine
 
     session = _session()
     client = _neo4j_client()
+    silver = _silver_reader()
     try:
+        # Phase 1: repair mdm_security.issuer_entity_id = NULL rows before deriving ISSUED_BY.
+        # Root cause: run_companies(limit=100) may not have processed a security's issuer on the
+        # run it was first created, leaving issuer_entity_id NULL permanently.
+        issuers_repaired = 0
+        if silver is not None:
+            pipeline = MDMPipeline(session=session, silver=silver)
+            issuers_repaired = pipeline.backfill_security_issuers()
+
+        # Phase 2: derive MANAGES_FUND and ISSUED_BY instances, sync to Neo4j.
         result = backfill_relationship_instances(session, neo4j=client, limit=args.limit)
+        result["issuers_repaired"] = issuers_repaired
     finally:
         if client is not None:
             client.close()

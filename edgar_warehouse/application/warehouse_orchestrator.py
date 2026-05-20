@@ -300,6 +300,11 @@ def _execute_warehouse_bronze_capture(
     silver_database_write: dict[str, Any] | None = None
     silver_table_counts: dict[str, int] | None = None
     try:
+        _emit_pipeline_event(
+            "bronze_silver_started",
+            command=command_name,
+            run_id=run_id,
+        )
         raw_writes, metrics = _capture_bronze_raw(
             context=context,
             db=db,
@@ -308,6 +313,13 @@ def _execute_warehouse_bronze_capture(
             scope=scope,
             now=now,
             sync_run_id=run_id,
+        )
+        _emit_pipeline_event(
+            "bronze_silver_completed",
+            command=command_name,
+            run_id=run_id,
+            rows_inserted=metrics.get("rows_inserted", 0),
+            rows_skipped=metrics.get("rows_skipped", 0),
         )
         silver_table_counts = db.get_table_counts()
         if context.snowflake_export_root is not None and command_name in GOLD_AFFECTING_COMMANDS:
@@ -321,15 +333,50 @@ def _execute_warehouse_bronze_capture(
                 run_id=run_id,
                 silver_table_counts=silver_table_counts,
             )
+
+            _emit_pipeline_event("gold_build_started", command=command_name, run_id=run_id)
             gold_tables = build_gold(db)
+            _emit_pipeline_event(
+                "gold_build_completed",
+                command=command_name,
+                run_id=run_id,
+                duration_seconds=(datetime.now(UTC) - gold_started_at).total_seconds(),
+                table_count=len(gold_tables),
+            )
+
+            storage_started_at = datetime.now(UTC)
+            _emit_pipeline_event("gold_storage_write_started", command=command_name, run_id=run_id)
             gold_row_counts = write_gold_to_storage(gold_tables, context.storage_root, run_id)
+            _emit_pipeline_event(
+                "gold_storage_write_completed",
+                command=command_name,
+                run_id=run_id,
+                duration_seconds=(datetime.now(UTC) - storage_started_at).total_seconds(),
+                gold_row_counts=gold_row_counts,
+            )
+
             export_business_date = _resolve_export_business_date(command_name=command_name, scope=scope, now=now)
+            export_started_at = datetime.now(UTC)
+            _emit_pipeline_event(
+                "gold_snowflake_export_started",
+                command=command_name,
+                run_id=run_id,
+                export_business_date=str(export_business_date),
+            )
             snowflake_export_counts = write_gold_to_snowflake_export(
                 gold_tables,
                 context.snowflake_export_root,
                 run_id,
                 export_business_date,
             )
+            _emit_pipeline_event(
+                "gold_snowflake_export_completed",
+                command=command_name,
+                run_id=run_id,
+                duration_seconds=(datetime.now(UTC) - export_started_at).total_seconds(),
+                snowflake_export_counts=snowflake_export_counts,
+            )
+
             del gold_tables
             _emit_pipeline_event(
                 "gold_publish_completed",

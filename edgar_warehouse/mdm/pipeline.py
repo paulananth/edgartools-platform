@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Iterable, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from edgar_warehouse.mdm.graph import GraphSyncEngine, Neo4jGraphClient
@@ -503,6 +503,53 @@ class MDMPipeline:
             if remaining is not None and inserted >= remaining:
                 break
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
+
+    def backfill_security_issuers(self) -> int:
+        """Repair mdm_security rows where issuer_entity_id is NULL but the company is now in MDM.
+
+        5-why root cause: run_companies(limit=100) processes at most 100 of 5400 companies per
+        run, so when run_securities() creates a security its issuer may not yet exist in
+        mdm_company.  On subsequent runs the resolver finds the existing NULL-issuer row and
+        returns it unchanged.  This method does one full scan of silver to patch those rows.
+
+        Returns the number of rows updated.
+        """
+        from edgar_warehouse.mdm.database import MdmCompany, MdmSecurity
+
+        # canonical_title normalisation must match run_securities()
+        def _canonical(raw: str) -> str:
+            return " ".join(w.capitalize() for w in (raw or "").split())
+
+        sql = """
+            SELECT DISTINCT t.security_title, f.cik AS issuer_cik
+            FROM   sec_ownership_non_derivative_txn t
+            JOIN   sec_company_filing f ON f.accession_number = t.accession_number
+            WHERE  t.security_title IS NOT NULL
+        """
+        rows = self.silver.fetch(sql)
+
+        updated = 0
+        for row in rows:
+            canonical = _canonical(row.get("security_title") or "")
+            issuer_cik = row.get("issuer_cik")
+            if not canonical or issuer_cik is None:
+                continue
+
+            issuer_entity_id = self._company_entity_id(issuer_cik)
+            if not issuer_entity_id:
+                continue
+
+            result = self.session.execute(
+                update(MdmSecurity)
+                .where(MdmSecurity.canonical_title == canonical)
+                .where(MdmSecurity.issuer_entity_id.is_(None))
+                .values(issuer_entity_id=issuer_entity_id)
+            )
+            updated += result.rowcount
+
+        if updated:
+            self.session.commit()
+        return updated
 
     def run_all(self, limit: Optional[int] = None) -> PipelineStats:
         stats = PipelineStats()

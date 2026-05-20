@@ -1403,6 +1403,103 @@ pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", en
 PY
 }
 
+# Full pipeline for a single warehouse command followed by the MDM chain and gold refresh.
+# Shape: RunWarehouseTask → MdmRun → MdmBackfill → MdmSync → MdmVerify → GoldRefresh
+# Used by bootstrap_recent_10 and daily_incremental.
+write_warehouse_mdm_gold_definition() {
+  local output_file="$1"
+  local wh_task_medium_arn="$2"   # warehouse medium (the bronze/silver command)
+  local mdm_task_small_arn="$3"   # mdm small  (verify-graph)
+  local mdm_task_medium_arn="$4"  # mdm medium (run, backfill, sync)
+  local wh_task_large_arn="$5"    # warehouse large (gold-refresh)
+  local workflow_name="$6"        # e.g. bootstrap_recent_10 or daily_incremental
+
+  python3 - "$output_file" "$CLUSTER_ARN" \
+    "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
+    "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
+    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$workflow_name" <<'PY'
+import json, pathlib, sys
+
+(output_file, cluster_arn,
+ wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
+ container_name, subnet_json, security_group_json,
+ mdm_run_limit, mdm_graph_limit, workflow_name) = sys.argv[1:]
+
+subnets = json.loads(subnet_json)
+security_groups = json.loads(security_group_json)
+mdm_limit   = str(mdm_run_limit)
+graph_limit = str(mdm_graph_limit)
+
+WAREHOUSE_COMMANDS = {
+    "bootstrap_recent_10": "bootstrap-recent-10",
+    "daily_incremental":   "daily-incremental",
+}
+wh_cmd = WAREHOUSE_COMMANDS[workflow_name]
+
+def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=120):
+    s = {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::ecs:runTask.sync",
+        "Parameters": {
+            "LaunchType": "FARGATE",
+            "Cluster": cluster_arn,
+            "TaskDefinition": task_def_arn,
+            "PropagateTags": "TASK_DEFINITION",
+            "NetworkConfiguration": {"AwsvpcConfiguration": {
+                "AssignPublicIp": "ENABLED",
+                "SecurityGroups": security_groups,
+                "Subnets": subnets,
+            }},
+            "Overrides": {"ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}]},
+        },
+        "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": retry_secs,
+                   "BackoffRate": 2.0, "MaxAttempts": 3}],
+    }
+    if is_end:
+        s["End"] = True
+    else:
+        s["Next"] = next_state
+    return s
+
+run_wh = ecs_state(wh_medium_arn,
+    f"States.Array('{wh_cmd}', '--run-id', $$.Execution.Name)",
+    next_state="MdmRun")
+mdm_run = ecs_state(mdm_medium_arn,
+    f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')",
+    next_state="MdmBackfill")
+mdm_backfill = ecs_state(mdm_medium_arn,
+    f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')",
+    next_state="MdmSync")
+mdm_sync = ecs_state(mdm_medium_arn,
+    f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')",
+    next_state="MdmVerify")
+mdm_verify = ecs_state(mdm_small_arn,
+    "States.Array('mdm', 'verify-graph')",
+    next_state="GoldRefresh")
+gold = ecs_state(wh_large_arn,
+    "States.Array('gold-refresh', '--run-id', $$.Execution.Name)",
+    is_end=True, retry_secs=60)
+
+display = workflow_name.replace("_", " ").title()
+definition = {
+    "Comment": (
+        f"{display}: (1) bronze+silver capture, (2) MDM entity resolution + Neo4j sync, "
+        "(3) gold build + Snowflake export manifest."
+    ),
+    "StartAt": "RunWarehouseTask",
+    "States": {
+        "RunWarehouseTask": run_wh,
+        "MdmRun":           mdm_run,
+        "MdmBackfill":      mdm_backfill,
+        "MdmSync":          mdm_sync,
+        "MdmVerify":        mdm_verify,
+        "GoldRefresh":      gold,
+    },
+}
+pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
 # Re-process pipeline for already-loaded bronze:
 #   seed-silver-batches → parallel bootstrap-batch (uses cached bronze) → MDM chain → gold-refresh.
 # Use when bronze is already in S3 but silver/MDM/Neo4j/Snowflake need refreshing.
@@ -1569,7 +1666,7 @@ WORKFLOW_ARNS_FILE="$(json_file workflow-arns)"
 printf '{\n' > "$WORKFLOW_ARNS_FILE"
 first_workflow=true
 
-for workflow in daily_incremental bootstrap_recent_10 bootstrap_full targeted_resync full_reconcile load_daily_form_index_for_date catch_up_daily_form_index gold_refresh; do
+for workflow in bootstrap_full targeted_resync full_reconcile load_daily_form_index_for_date catch_up_daily_form_index gold_refresh; do
   profile="$(workflow_profile "$workflow")"
   task_definition_arn="$(task_definition_for_profile "$profile")"
   command_expression="$(workflow_command_expression "$workflow")"
@@ -1612,6 +1709,31 @@ if [[ "$DEPLOY_MDM" == "true" ]]; then
   phased_state_machine_arn="$(upsert_state_machine bootstrap_phased "$phased_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
   python3 - "bootstrap_phased" "$phased_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+import json, sys
+print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
+PY
+
+  # bootstrap_recent_10: recent filings → MDM chain → gold. Same shape as bootstrap_phased
+  # but scoped to the 10 most recent filings per active company instead of a full batch sweep.
+  recent10_definition_file="$(json_file sfn-bootstrap-recent-10)"
+  write_warehouse_mdm_gold_definition "$recent10_definition_file" \
+    "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
+    "bootstrap_recent_10"
+  recent10_state_machine_arn="$(upsert_state_machine bootstrap_recent_10 "$recent10_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
+  python3 - "bootstrap_recent_10" "$recent10_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+import json, sys
+print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
+PY
+
+  # daily_incremental: daily new filings → MDM chain → gold. Same pipeline shape.
+  daily_definition_file="$(json_file sfn-daily-incremental)"
+  write_warehouse_mdm_gold_definition "$daily_definition_file" \
+    "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
+    "daily_incremental"
+  daily_state_machine_arn="$(upsert_state_machine daily_incremental "$daily_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
+  python3 - "daily_incremental" "$daily_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
 import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
