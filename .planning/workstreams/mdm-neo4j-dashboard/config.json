@@ -10,6 +10,7 @@
     "gold/dbt refresh changes unless explicitly required"
   ],
   "workflow": {
-    "_auto_chain_active": false
+    "_auto_chain_active": false,
+    "nyquist_validation": true
   }
 }
