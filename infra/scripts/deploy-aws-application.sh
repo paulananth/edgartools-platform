@@ -1336,17 +1336,17 @@ mdm_limit = str(mdm_run_limit)
 graph_limit = str(mdm_graph_limit)
 
 seed = ecs_state(wh_medium_arn,
-    "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
+    "States.Array('seed-universe', '--limit', $$.Execution.Input.universe_limit, '--run-id', $$.Execution.Name)",
     next_state="BatchBootstrap", retry_secs=60)
 
 batch = ecs_state(wh_medium_arn,
-    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--run-id', $$.Execution.Name)",
+    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'skip', '--run-id', $$.Execution.Name)",
     is_end=True)
 
 batch_map = {
     "Type": "Map",
     "MaxConcurrency": int(batch_concurrency),
-    "Comment": "Parallel bronze+silver only — no gold per batch.",
+    "Comment": "Parallel bronze+silver only — no gold per batch. --artifact-policy skip prevents per-company ownership XML downloads.",
     "ToleratedFailurePercentage": 0,
     "ItemReader": {
         "Resource": "arn:aws:states:::s3:getObject",
