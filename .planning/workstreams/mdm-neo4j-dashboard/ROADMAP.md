@@ -48,7 +48,10 @@ Build a read-only dashboard for reviewing MDM relational data and Neo4j graph da
   3. Comparison view reports pending MDM relationship rows for the selected scope.
   4. Comparison view reports missing Neo4j edges by relationship type with bounded sample rows.
   5. Focused tests prove comparison queries are bounded and read-only.
-**Plans**: TBD
+**Plans**: 3 plans
+  - 09-01: MDM read-only review metrics and pending sync samples (wave 1)
+  - 09-02: Neo4j graph review metrics and bounded diagnostics (wave 1)
+  - 09-03: Streamlit metrics rendering, docs, and architecture guards (wave 2; depends on 09-01, 09-02)
 
 ### Phase 10: Operator Review Experience
 **Goal**: Operators have a usable review dashboard with MDM overview, Neo4j overview, mismatch diagnostics, filters, and runbook documentation.
