@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping
 
 import streamlit as st
 
@@ -15,107 +15,440 @@ SECTIONS = [
     "Neighborhood",
 ]
 PLACEHOLDER_COPY = (
-    "This view is planned for a later phase. Phase 8 only verifies read-only "
-    "dashboard connectivity."
+    "This view remains unchanged for this phase. Broader filters and graph "
+    "exploration are planned for a later dashboard phase."
 )
-MDM_EMPTY_HEADING = "No MDM data loaded"
-MDM_EMPTY_BODY = "Seed or load the MDM database, then refresh this dashboard."
-OPTIONAL_PARTIAL_COPY = "Showing partial data because an optional source is unavailable."
-SMOKE_EMPTY_COPY = "No smoke-test rows were returned. Connection checks still completed."
+BOUNDED_SAMPLE_COPY = "Samples are bounded diagnostics, not exhaustive diffs."
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def _read_mdm_status() -> dict[str, Any]:
-    return dashboard_readonly.check_mdm_status().as_dict()
+def _read_mdm_metrics() -> dict[str, Any]:
+    return dashboard_readonly.get_mdm_dashboard_metrics().as_dict()
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def _read_mdm_smoke() -> dict[str, Any]:
-    return dashboard_readonly.run_mdm_smoke_query().as_dict()
+def _read_mdm_diagnostic_inputs() -> dict[str, Any]:
+    return dashboard_readonly.get_active_relationship_diagnostic_inputs().as_dict()
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def _read_neo4j_status() -> dict[str, Any]:
-    return graph_readonly.check_neo4j_status().as_dict()
-
-
-@st.cache_data(ttl=60, show_spinner=False)
-def _read_neo4j_smoke() -> dict[str, Any]:
-    status, client = graph_readonly.load_neo4j_review_client()
-    if client is None:
-        return status.as_dict()
-    try:
-        return graph_readonly.run_neo4j_smoke_query(client=client).as_dict()
-    finally:
-        client.close()
+def _read_neo4j_metrics(mdm_diagnostic_inputs: Mapping[str, Any]) -> dict[str, Any]:
+    relationship_types = _relationship_types_from_diagnostics(mdm_diagnostic_inputs)
+    entity_labels = _entity_labels_from_diagnostics(mdm_diagnostic_inputs)
+    return graph_readonly.get_neo4j_graph_metrics(
+        entity_labels=entity_labels,
+        relationship_types=relationship_types,
+        mdm_diagnostic_inputs=mdm_diagnostic_inputs,
+    ).as_dict()
 
 
 def _clear_dashboard_cache() -> None:
     st.cache_data.clear()
 
 
-def _render_status(label: str, status: dict[str, Any], *, required: bool) -> None:
-    if status.get("connected"):
-        st.success(f"{label}: {status['message']}")
+def _relationship_types_from_diagnostics(payload: Mapping[str, Any]) -> list[str]:
+    edge_keys = payload.get("known_mdm_edge_keys")
+    if isinstance(edge_keys, Mapping):
+        return [str(key) for key in edge_keys]
+    return []
+
+
+def _entity_labels_from_diagnostics(payload: Mapping[str, Any]) -> list[str]:
+    rows = payload.get("candidate_rows")
+    if not isinstance(rows, list) or not rows:
+        return ["Company", "Adviser", "Person", "Security", "Fund"]
+    return ["Company", "Adviser", "Person", "Security", "Fund"]
+
+
+def _format_count(value: Any) -> str:
+    try:
+        return f"{int(value or 0):,}"
+    except (TypeError, ValueError):
+        return "0"
+
+
+def _format_percent(value: Any) -> str:
+    if value is None:
+        return "-"
+    try:
+        return f"{float(value):.1f}%"
+    except (TypeError, ValueError):
+        return "-"
+
+
+def _timestamp_caption(label: str, payload: Mapping[str, Any]) -> None:
+    last_refreshed = payload.get("last_refreshed")
+    if last_refreshed:
+        st.caption(f"{label} last refreshed: {last_refreshed}")
+
+
+def _render_mdm_unavailable(mdm_metrics: Mapping[str, Any]) -> bool:
+    if mdm_metrics.get("available"):
+        return False
+    st.error(mdm_metrics.get("message", "MDM database unavailable."))
+    _render_grouped_warnings(mdm_metrics=mdm_metrics, neo4j_metrics=None, coverage_rows=[])
+    return True
+
+
+def _render_snapshot(
+    *,
+    mdm_metrics: Mapping[str, Any],
+    neo4j_metrics: Mapping[str, Any] | None,
+    coverage_rows: list[dict[str, Any]],
+) -> None:
+    entity_total = sum(
+        int(row.get("count") or 0)
+        for row in _mapping_values(mdm_metrics.get("entity_counts"))
+    )
+    relationship_total = sum(
+        int(row.get("active_count") or 0)
+        for row in _mapping_values(mdm_metrics.get("relationship_counts"))
+    )
+    pending_total = sum(
+        int(row.get("pending_graph_sync_count") or 0)
+        for row in _mapping_values(mdm_metrics.get("relationship_counts"))
+    )
+    node_total = 0
+    edge_total = 0
+    if neo4j_metrics and neo4j_metrics.get("available"):
+        node_total = sum(
+            int(row.get("node_count") or 0)
+            for row in _mapping_values(neo4j_metrics.get("node_counts"))
+        )
+        edge_total = sum(
+            int(row.get("edge_count") or 0)
+            for row in _mapping_values(neo4j_metrics.get("relationship_counts"))
+        )
+
+    missing_total = sum(int(row.get("missing_estimate") or 0) for row in coverage_rows)
+    extra_total = sum(int(row.get("extra_graph_count") or 0) for row in coverage_rows)
+    neo_status = "OK" if neo4j_metrics and neo4j_metrics.get("available") else "Unavailable"
+    relationship_status = "OK"
+    if missing_total:
+        relationship_status = "Missing graph data"
+    elif extra_total:
+        relationship_status = "Extra graph data"
+    elif pending_total:
+        relationship_status = "Pending sync"
+
+    metric_cols = st.columns(5)
+    metric_cols[0].metric("MDM entities", _format_count(entity_total), "OK")
+    metric_cols[1].metric("MDM relationships", _format_count(relationship_total), relationship_status)
+    metric_cols[2].metric("Neo4j nodes", _format_count(node_total), neo_status)
+    metric_cols[3].metric("Neo4j edges", _format_count(edge_total), neo_status)
+    metric_cols[4].metric("Pending sync", _format_count(pending_total), "Review" if pending_total else "OK")
+
+
+def _render_grouped_warnings(
+    *,
+    mdm_metrics: Mapping[str, Any],
+    neo4j_metrics: Mapping[str, Any] | None,
+    coverage_rows: list[dict[str, Any]],
+) -> None:
+    blocking: list[dict[str, str]] = []
+    coverage: list[dict[str, str]] = []
+
+    for warning in _mapping_values(mdm_metrics.get("warnings")):
+        severity = str(warning.get("severity") or "warning")
+        row = {
+            "severity": severity,
+            "message": str(warning.get("message") or ""),
+            "action": str(warning.get("action") or ""),
+        }
+        if severity == "error":
+            blocking.append(row)
+        else:
+            coverage.append(row)
+
+    if neo4j_metrics and not neo4j_metrics.get("available"):
+        coverage.append(
+            {
+                "severity": "warning",
+                "message": str(neo4j_metrics.get("message") or "Neo4j graph metrics unavailable."),
+                "action": "Check graph configuration and network access outside the dashboard.",
+            }
+        )
+
+    for row in coverage_rows:
+        if int(row.get("missing_estimate") or 0) > 0:
+            coverage.append(
+                {
+                    "severity": "warning",
+                    "message": f"{row['relationship_type']} has missing graph data.",
+                    "action": "Review pending and missing-edge samples.",
+                }
+            )
+        if int(row.get("extra_graph_count") or 0) > 0:
+            coverage.append(
+                {
+                    "severity": "warning",
+                    "message": f"{row['relationship_type']} has extra graph data.",
+                    "action": "Review extra graph samples against the MDM registry.",
+                }
+            )
+
+    if not blocking and not coverage:
+        st.success("No blocking failures or coverage warnings.")
         return
-    if required:
-        st.error(status["message"])
+
+    st.subheader("Attention Needed")
+    if blocking:
+        st.markdown("**Blocking failures**")
+        for row in blocking:
+            st.error(f"{row['message']} {row['action']}".strip())
+    if coverage:
+        st.markdown("**Coverage warnings**")
+        for row in coverage:
+            if row["severity"] == "info":
+                st.info(f"{row['message']} {row['action']}".strip())
+            else:
+                st.warning(f"{row['message']} {row['action']}".strip())
+
+
+def _render_entity_table(mdm_metrics: Mapping[str, Any]) -> None:
+    rows = [
+        {
+            "Domain": row.get("label"),
+            "Count": int(row.get("count") or 0),
+            "Status": row.get("status"),
+        }
+        for row in _mapping_values(mdm_metrics.get("entity_counts"))
+    ]
+    if rows:
+        st.dataframe(rows, use_container_width=True, hide_index=True)
     else:
-        st.warning(status["message"])
+        st.info("No MDM entity metrics were returned.")
 
 
-def _render_mdm_smoke(smoke: dict[str, Any]) -> None:
-    if not smoke.get("available"):
-        st.error(smoke["message"])
-        return
-    rows = smoke.get("rows") or []
+def _render_relationship_table(
+    *,
+    mdm_metrics: Mapping[str, Any],
+    neo4j_metrics: Mapping[str, Any] | None,
+) -> None:
+    neo4j_relationships = (
+        neo4j_metrics.get("relationship_counts", {})
+        if neo4j_metrics and neo4j_metrics.get("available")
+        else {}
+    )
+    rows = []
+    for rel_type, row in sorted(_mapping_items(mdm_metrics.get("relationship_counts"))):
+        graph_row = neo4j_relationships.get(rel_type, {}) if isinstance(neo4j_relationships, Mapping) else {}
+        rows.append(
+            {
+                "Relationship Type": rel_type,
+                "MDM Active": int(row.get("active_count") or 0),
+                "Pending Sync": int(row.get("pending_graph_sync_count") or 0),
+                "Neo4j Edges": _format_count(graph_row.get("edge_count")) if graph_row else "-",
+                "Status": row.get("status"),
+            }
+        )
+    if rows:
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+    else:
+        st.info("No active MDM relationship types were returned.")
+
+
+def _render_entity_comparison(
+    *,
+    mdm_metrics: Mapping[str, Any],
+    neo4j_metrics: Mapping[str, Any] | None,
+) -> None:
+    node_counts = (
+        neo4j_metrics.get("node_counts", {})
+        if neo4j_metrics and neo4j_metrics.get("available")
+        else {}
+    )
+    detail_rows: list[dict[str, Any]] = []
+    chart_rows: list[dict[str, Any]] = []
+    for domain, row in _mapping_items(mdm_metrics.get("entity_counts")):
+        label = str(row.get("label") or domain)
+        graph_key = label.rstrip("s")
+        graph_count = 0
+        if isinstance(node_counts, Mapping):
+            graph_count = int((node_counts.get(graph_key) or {}).get("node_count") or 0)
+        mdm_count = int(row.get("count") or 0)
+        detail_rows.append(
+            {
+                "Domain": label,
+                "MDM Count": mdm_count,
+                "Neo4j Count": graph_count if neo4j_metrics and neo4j_metrics.get("available") else "-",
+                "Status": "Unavailable" if not (neo4j_metrics and neo4j_metrics.get("available")) else "OK",
+            }
+        )
+        chart_rows.append({"Domain": label, "Source": "MDM", "Count": mdm_count})
+        if neo4j_metrics and neo4j_metrics.get("available"):
+            chart_rows.append({"Domain": label, "Source": "Neo4j", "Count": graph_count})
+
+    st.subheader("Entity Domain Coverage")
+    if chart_rows:
+        st.bar_chart(chart_rows, x="Domain", y="Count", color="Source")
+    if detail_rows:
+        st.dataframe(detail_rows, use_container_width=True, hide_index=True)
+
+
+def _relationship_coverage_rows(
+    *,
+    mdm_metrics: Mapping[str, Any],
+    neo4j_metrics: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
+    neo4j_relationships = (
+        neo4j_metrics.get("relationship_counts", {})
+        if neo4j_metrics and neo4j_metrics.get("available")
+        else {}
+    )
+    return [
+        row.as_dict()
+        for row in dashboard_readonly.build_relationship_coverage_rows(
+            mdm_metrics.get("relationship_counts", {}),
+            neo4j_relationships if isinstance(neo4j_relationships, Mapping) else {},
+        )
+    ]
+
+
+def _render_relationship_coverage(rows: list[dict[str, Any]]) -> None:
+    table_rows = [
+        {
+            "Relationship Type": row.get("relationship_type"),
+            "MDM Active": int(row.get("mdm_active_count") or 0),
+            "Neo4j Edges": int(row.get("neo4j_edge_count") or 0),
+            "Pending Sync": int(row.get("pending_graph_sync_count") or 0),
+            "Missing Estimate": int(row.get("missing_estimate") or 0),
+            "Coverage": _format_percent(row.get("coverage_percent")),
+            "Status": row.get("status"),
+        }
+        for row in rows
+    ]
+    st.subheader("Relationship Coverage")
+    if table_rows:
+        st.dataframe(table_rows, use_container_width=True, hide_index=True)
+    else:
+        st.info("No relationship coverage rows were returned.")
+
+
+def _render_samples(title: str, rows: list[dict[str, Any]]) -> None:
+    st.subheader(title)
+    st.caption(BOUNDED_SAMPLE_COPY)
     if not rows:
-        st.info(MDM_EMPTY_HEADING)
-        st.caption(MDM_EMPTY_BODY)
-        st.info(SMOKE_EMPTY_COPY)
+        st.info("No bounded sample rows were returned.")
         return
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    display_rows = [
+        {
+            "Relationship Type": row.get("relationship_type"),
+            "Source": row.get("source_entity_name") or row.get("source_entity_id"),
+            "Target": row.get("target_entity_name") or row.get("target_entity_id"),
+            "Created": row.get("created_at", "-"),
+        }
+        for row in rows
+    ]
+    st.dataframe(display_rows, use_container_width=True, hide_index=True)
 
 
-def _render_neo4j_smoke(smoke: dict[str, Any]) -> None:
-    if smoke.get("connected"):
-        st.json({"ok": smoke.get("details", {}).get("ok", False)})
-    else:
-        st.info(smoke["message"])
+def _flatten_sample_map(payload: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    if isinstance(payload, Mapping):
+        for samples in payload.values():
+            if isinstance(samples, list):
+                rows.extend(row for row in samples if isinstance(row, Mapping))
+    return rows
 
 
-def render_overview() -> None:
+def _mapping_values(value: Any) -> list[Mapping[str, Any]]:
+    if isinstance(value, Mapping):
+        return [row for row in value.values() if isinstance(row, Mapping)]
+    if isinstance(value, list):
+        return [row for row in value if isinstance(row, Mapping)]
+    return []
+
+
+def _mapping_items(value: Any) -> list[tuple[str, Mapping[str, Any]]]:
+    if not isinstance(value, Mapping):
+        return []
+    return [
+        (str(key), row)
+        for key, row in value.items()
+        if isinstance(row, Mapping)
+    ]
+
+
+def render_overview(
+    *,
+    mdm_metrics: Mapping[str, Any],
+    neo4j_metrics: Mapping[str, Any] | None,
+    coverage_rows: list[dict[str, Any]],
+) -> None:
     st.title("EdgarTools MDM Graph")
-    st.caption("Read-only connectivity checks for local MDM and optional Neo4j review.")
-
-    mdm_status = _read_mdm_status()
-    neo4j_status = _read_neo4j_status()
-
-    status_left, status_right = st.columns(2)
-    with status_left:
-        st.subheader("MDM status")
-        _render_status("MDM", mdm_status, required=True)
-    with status_right:
-        st.subheader("Neo4j status")
-        _render_status("Neo4j", neo4j_status, required=False)
-
-    if not mdm_status.get("connected"):
+    st.caption("Read-only MDM and Neo4j coverage metrics.")
+    if _render_mdm_unavailable(mdm_metrics):
         return
+    _render_snapshot(
+        mdm_metrics=mdm_metrics,
+        neo4j_metrics=neo4j_metrics,
+        coverage_rows=coverage_rows,
+    )
+    _timestamp_caption("MDM metrics", mdm_metrics)
+    if neo4j_metrics:
+        _timestamp_caption("Neo4j metrics", neo4j_metrics)
+    _render_grouped_warnings(
+        mdm_metrics=mdm_metrics,
+        neo4j_metrics=neo4j_metrics,
+        coverage_rows=coverage_rows,
+    )
 
-    if not neo4j_status.get("connected"):
-        st.warning(OPTIONAL_PARTIAL_COPY)
 
-    smoke_left, smoke_right = st.columns(2)
-    with smoke_left:
-        st.subheader("MDM smoke output")
-        _render_mdm_smoke(_read_mdm_smoke())
-    with smoke_right:
-        st.subheader("Neo4j smoke output")
-        _render_neo4j_smoke(_read_neo4j_smoke())
+def render_entities(*, mdm_metrics: Mapping[str, Any]) -> None:
+    st.title("MDM Overview")
+    if _render_mdm_unavailable(mdm_metrics):
+        return
+    _timestamp_caption("MDM metrics", mdm_metrics)
+    _render_entity_table(mdm_metrics)
 
 
-def render_placeholder(section_name: str) -> None:
-    st.title(section_name)
+def render_relationships(
+    *,
+    mdm_metrics: Mapping[str, Any],
+    neo4j_metrics: Mapping[str, Any] | None,
+) -> None:
+    st.title("Relationships")
+    if _render_mdm_unavailable(mdm_metrics):
+        return
+    _timestamp_caption("MDM metrics", mdm_metrics)
+    if neo4j_metrics and not neo4j_metrics.get("available"):
+        st.info(neo4j_metrics.get("message", "Neo4j graph metrics unavailable."))
+    _render_relationship_table(mdm_metrics=mdm_metrics, neo4j_metrics=neo4j_metrics)
+
+
+def render_graph_coverage(
+    *,
+    mdm_metrics: Mapping[str, Any],
+    neo4j_metrics: Mapping[str, Any] | None,
+    coverage_rows: list[dict[str, Any]],
+) -> None:
+    st.title("Graph Coverage")
+    if _render_mdm_unavailable(mdm_metrics):
+        return
+    if not neo4j_metrics or not neo4j_metrics.get("available"):
+        st.warning(
+            (neo4j_metrics or {}).get(
+                "message",
+                "Neo4j graph metrics unavailable. MDM metrics are still available.",
+            )
+        )
+    _render_entity_comparison(mdm_metrics=mdm_metrics, neo4j_metrics=neo4j_metrics)
+    _render_relationship_coverage(coverage_rows)
+    _render_samples("Pending Sync Samples", list(mdm_metrics.get("pending_sync_samples") or []))
+    if neo4j_metrics and neo4j_metrics.get("available"):
+        _render_samples(
+            "Missing Edge Samples",
+            _flatten_sample_map(neo4j_metrics.get("missing_edge_samples")),
+        )
+        _render_samples(
+            "Extra Graph Data Samples",
+            _flatten_sample_map(neo4j_metrics.get("extra_graph_samples")),
+        )
+
+
+def render_neighborhood() -> None:
+    st.title("Neighborhood")
     st.info(PLACEHOLDER_COPY)
 
 
@@ -125,14 +458,42 @@ def main() -> None:
     st.sidebar.caption("Read-only MDM and Neo4j status")
     section_name = st.sidebar.radio("Section", SECTIONS)
     st.sidebar.divider()
-    if st.sidebar.button("Refresh data", use_container_width=True):
+    if st.sidebar.button("Refresh metrics", use_container_width=True):
         _clear_dashboard_cache()
         st.rerun()
 
+    mdm_metrics = _read_mdm_metrics()
+    mdm_diagnostic_inputs = (
+        _read_mdm_diagnostic_inputs() if mdm_metrics.get("available") else {}
+    )
+    neo4j_metrics = (
+        _read_neo4j_metrics(mdm_diagnostic_inputs)
+        if mdm_metrics.get("available")
+        else None
+    )
+    coverage_rows = _relationship_coverage_rows(
+        mdm_metrics=mdm_metrics,
+        neo4j_metrics=neo4j_metrics,
+    )
+
     if section_name == "Overview":
-        render_overview()
+        render_overview(
+            mdm_metrics=mdm_metrics,
+            neo4j_metrics=neo4j_metrics,
+            coverage_rows=coverage_rows,
+        )
+    elif section_name == "Entities":
+        render_entities(mdm_metrics=mdm_metrics)
+    elif section_name == "Relationships":
+        render_relationships(mdm_metrics=mdm_metrics, neo4j_metrics=neo4j_metrics)
+    elif section_name == "Graph Coverage":
+        render_graph_coverage(
+            mdm_metrics=mdm_metrics,
+            neo4j_metrics=neo4j_metrics,
+            coverage_rows=coverage_rows,
+        )
     else:
-        render_placeholder(section_name)
+        render_neighborhood()
 
 
 if __name__ == "__main__":
