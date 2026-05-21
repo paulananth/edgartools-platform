@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PHASE8_TARGETS = [
+PHASE9_TARGETS = [
     REPO_ROOT / "examples" / "mdm_graph_dashboard" / "streamlit_app.py",
     REPO_ROOT / "examples" / "mdm_graph_dashboard" / "README.md",
     REPO_ROOT / "edgar_warehouse" / "mdm" / "dashboard_readonly.py",
@@ -27,7 +27,17 @@ def _read(path: Path) -> str:
 
 
 class DashboardFoundationBoundaryTests(unittest.TestCase):
-    def test_phase8_targets_do_not_import_mutation_surfaces(self) -> None:
+    def test_phase9_targets_include_dashboard_and_readonly_helpers(self) -> None:
+        expected = {
+            "examples/mdm_graph_dashboard/streamlit_app.py",
+            "examples/mdm_graph_dashboard/README.md",
+            "edgar_warehouse/mdm/dashboard_readonly.py",
+            "edgar_warehouse/mdm/graph_readonly.py",
+        }
+        actual = {path.relative_to(REPO_ROOT).as_posix() for path in PHASE9_TARGETS}
+        self.assertEqual(actual, expected)
+
+    def test_phase9_targets_do_not_import_mutation_surfaces(self) -> None:
         forbidden = [
             "MDMPipeline",
             "GraphSyncEngine",
@@ -45,7 +55,7 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         ]
         offenders = {
             path.relative_to(REPO_ROOT): token
-            for path in _existing(PHASE8_TARGETS)
+            for path in _existing(PHASE9_TARGETS)
             for token in forbidden
             if token in _read(path)
         }
@@ -63,25 +73,53 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         ]
         self.assertEqual(offenders, [])
 
+    def test_streamlit_contains_no_raw_sql_or_cypher(self) -> None:
+        target = REPO_ROOT / "examples" / "mdm_graph_dashboard" / "streamlit_app.py"
+        if not target.exists():
+            self.skipTest("streamlit_app.py not created yet")
+        text = _read(target)
+        self.assertNotRegex(text.upper(), r"\bSELECT\s")
+        self.assertNotRegex(text.upper(), r"\bMATCH\s")
+        self.assertNotIn("RETURN 1 AS ok", text)
+
     def test_dashboard_text_contains_no_mutation_controls(self) -> None:
-        forbidden_labels = [
-            "sync graph",
-            "derive relationships",
-            "load relationships",
+        forbidden_labels = {
+            "sync",
+            "derive",
+            "load",
             "migrate",
-            "seed universe",
+            "seed",
             "merge",
+            "repair",
             "quarantine",
             "accept",
             "reject",
-        ]
-        offenders = {
-            path.relative_to(REPO_ROOT): label
-            for path in _existing(DASHBOARD_TEXT_TARGETS)
-            for label in forbidden_labels
-            if label in _read(path).lower()
+            "edit",
+            "delete",
+            "credential",
         }
-        self.assertEqual(offenders, {})
+        control_patterns = (
+            r"st\.(?:button|link_button|download_button|checkbox|toggle|radio|"
+            r"selectbox|multiselect|text_input|text_area)"
+            r"\([^)]*['\"]([^'\"]+)['\"]"
+        )
+        command_patterns = (
+            r"(?:uv run|edgar-warehouse|aws |terraform |dbt |bash )[^`\n]*"
+            r"(sync|derive|load|migrate|seed|merge|repair|quarantine|accept|"
+            r"reject|edit|delete)"
+        )
+        offenders = {
+            path.relative_to(REPO_ROOT): match.group(0)
+            for path in _existing(DASHBOARD_TEXT_TARGETS)
+            for match in re.finditer(control_patterns, _read(path), flags=re.IGNORECASE)
+            if any(label in match.group(1).lower() for label in forbidden_labels)
+        }
+        command_offenders = {
+            path.relative_to(REPO_ROOT): match.group(0)
+            for path in _existing(DASHBOARD_TEXT_TARGETS)
+            for match in re.finditer(command_patterns, _read(path).lower())
+        }
+        self.assertEqual(offenders | command_offenders, {})
 
     def test_dashboard_text_avoids_out_of_scope_paths(self) -> None:
         forbidden_paths = [
@@ -92,6 +130,10 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
             "deploy-aws-application.sh",
             "publish-warehouse-image.sh",
             "infra/snowflake/dbt",
+            "snowflake",
+            "dbt",
+            "terraform",
+            "generated application json",
             "edgar_universe_dashboard.py",
         ]
         offenders = {
@@ -109,5 +151,6 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         text = _read(target)
         self.assertIn("dashboard_readonly", text)
         self.assertIn("graph_readonly", text)
-        self.assertNotIn("SELECT ", text.upper())
-        self.assertNotIn("RETURN 1 AS ok", text)
+        self.assertIn("dashboard_readonly.get_mdm_dashboard_metrics", text)
+        self.assertIn("dashboard_readonly.get_active_relationship_diagnostic_inputs", text)
+        self.assertIn("graph_readonly.get_neo4j_graph_metrics", text)
