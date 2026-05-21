@@ -500,3 +500,91 @@ def test_find_extra_graph_samples_filters_known_mdm_keys_and_hides_properties():
         and not (set(query.upper().split()) & WRITE_TOKENS)
         for query, _kwargs in client.graph_session.calls
     )
+
+
+def test_graph_metrics_do_not_infer_extra_edges_from_bounded_known_keys():
+    from edgar_warehouse.mdm.graph_readonly import get_neo4j_graph_metrics
+
+    client = _FakeGraphClient(
+        counts={"relationship:MANAGES_FUND": 3},
+        extra_edges={
+            "MANAGES_FUND": [
+                {
+                    "source_entity_id": "adviser-extra",
+                    "target_entity_id": "fund-extra",
+                }
+            ]
+        },
+    )
+
+    result = get_neo4j_graph_metrics(
+        entity_labels=[],
+        relationship_types=["MANAGES_FUND"],
+        mdm_diagnostic_inputs={
+            "known_mdm_edge_keys": {
+                "MANAGES_FUND": [("MANAGES_FUND", "adviser-1", "fund-1")]
+            },
+            "active_relationship_counts": {"MANAGES_FUND": 3},
+        },
+        client=client,
+    )
+    payload = result.as_dict()
+
+    assert payload["relationship_counts"]["MANAGES_FUND"]["edge_count"] == 3
+    assert payload["extra_graph_samples"]["MANAGES_FUND"] == []
+    assert payload["warnings"] == []
+    assert all(
+        "RETURN s.entity_id AS source_entity_id" not in query
+        for query, _kwargs in client.graph_session.calls
+    )
+
+
+def test_graph_metrics_samples_extra_edges_only_when_full_counts_exceed_mdm_active():
+    from edgar_warehouse.mdm.graph_readonly import get_neo4j_graph_metrics
+
+    client = _FakeGraphClient(
+        counts={"relationship:MANAGES_FUND": 3},
+        extra_edges={
+            "MANAGES_FUND": [
+                {
+                    "source_entity_id": "adviser-1",
+                    "source_entity_name": "Alpha Adviser",
+                    "target_entity_id": "fund-1",
+                    "target_entity_name": "Alpha Fund",
+                },
+                {
+                    "source_entity_id": "adviser-extra",
+                    "source_entity_name": "Extra Adviser",
+                    "target_entity_id": "fund-extra",
+                    "target_entity_name": "Extra Fund",
+                },
+            ]
+        },
+    )
+
+    result = get_neo4j_graph_metrics(
+        entity_labels=[],
+        relationship_types=["MANAGES_FUND"],
+        mdm_diagnostic_inputs={
+            "known_mdm_edge_keys": {
+                "MANAGES_FUND": [("MANAGES_FUND", "adviser-1", "fund-1")]
+            },
+            "active_relationship_counts": {"MANAGES_FUND": 2},
+        },
+        client=client,
+    )
+    payload = result.as_dict()
+
+    assert payload["extra_graph_samples"]["MANAGES_FUND"] == [
+        {
+            "relationship_type": "MANAGES_FUND",
+            "source_entity_id": "adviser-extra",
+            "source_entity_name": "Extra Adviser",
+            "target_entity_id": "fund-extra",
+            "target_entity_name": "Extra Fund",
+        }
+    ]
+    assert any(
+        "RETURN s.entity_id AS source_entity_id" in query
+        for query, _kwargs in client.graph_session.calls
+    )

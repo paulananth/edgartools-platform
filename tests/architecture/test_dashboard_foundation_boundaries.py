@@ -154,3 +154,15 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         self.assertIn("dashboard_readonly.get_mdm_dashboard_metrics", text)
         self.assertIn("dashboard_readonly.get_active_relationship_diagnostic_inputs", text)
         self.assertIn("graph_readonly.get_neo4j_graph_metrics", text)
+
+    def test_streamlit_graph_queries_use_full_registry_not_bounded_samples(self) -> None:
+        target = REPO_ROOT / "examples" / "mdm_graph_dashboard" / "streamlit_app.py"
+        if not target.exists():
+            self.skipTest("streamlit_app.py not created yet")
+        text = _read(target)
+        self.assertIn("_relationship_types_from_mdm_metrics", text)
+        self.assertIn("_entity_labels_from_mdm_metrics", text)
+        self.assertIn("neo4j_labels", text)
+        self.assertNotIn("_relationship_types_from_diagnostics", text)
+        self.assertNotIn("_entity_labels_from_diagnostics", text)
+        self.assertNotIn("known_mdm_edge_keys", text)

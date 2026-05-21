@@ -162,6 +162,7 @@ class MdmRelationshipDiagnosticInputs:
     message: str
     candidate_rows: list[MdmDiagnosticSample] = field(default_factory=list)
     known_mdm_edge_keys: dict[str, list[tuple[str, str, str]]] = field(default_factory=dict)
+    active_relationship_counts: dict[str, int] = field(default_factory=dict)
     last_refreshed: str | None = None
     error_env_var: str | None = None
     warnings: list[MdmMetricWarning] = field(default_factory=list)
@@ -174,6 +175,7 @@ class MdmRelationshipDiagnosticInputs:
             "known_mdm_edge_keys": {
                 key: list(value) for key, value in self.known_mdm_edge_keys.items()
             },
+            "active_relationship_counts": dict(self.active_relationship_counts),
             "last_refreshed": self.last_refreshed,
             "error_env_var": self.error_env_var,
             "warnings": [warning.as_dict() for warning in self.warnings],
@@ -334,11 +336,16 @@ def get_active_relationship_diagnostic_inputs(
             known_mdm_edge_keys.setdefault(row.relationship_type, []).append(
                 row.mdm_edge_key
             )
+        relationship_counts = _get_relationship_counts(active_session)
         return MdmRelationshipDiagnosticInputs(
             available=True,
             message="MDM relationship diagnostic inputs loaded.",
             candidate_rows=candidate_rows,
             known_mdm_edge_keys=known_mdm_edge_keys,
+            active_relationship_counts={
+                relationship_type: metric.active_count
+                for relationship_type, metric in relationship_counts.items()
+            },
             last_refreshed=_utc_now_iso(),
         )
     except Exception:
@@ -347,6 +354,7 @@ def get_active_relationship_diagnostic_inputs(
             message=MDM_UNAVAILABLE_MESSAGE,
             candidate_rows=[],
             known_mdm_edge_keys={},
+            active_relationship_counts={},
             error_env_var=MDM_DATABASE_ENV_VAR,
             warnings=[_unavailable_warning()],
         )
@@ -610,13 +618,24 @@ def _get_entity_names(session: Session, entity_ids: list[Any]) -> dict[str, str]
 
 
 def _get_registry_details(session: Session) -> dict[str, Any]:
-    entity_types = [
-        row[0]
-        for row in session.execute(
-            select(MdmEntityTypeDefinition.entity_type)
+    entity_type_rows = [
+        {"entity_type": str(entity_type), "neo4j_label": str(neo4j_label)}
+        for entity_type, neo4j_label in session.execute(
+            select(
+                MdmEntityTypeDefinition.entity_type,
+                MdmEntityTypeDefinition.neo4j_label,
+            )
             .where(MdmEntityTypeDefinition.is_active.is_(True))
             .order_by(MdmEntityTypeDefinition.entity_type)
         )
+    ]
+    entity_types = [
+        row["entity_type"]
+        for row in entity_type_rows
+    ]
+    neo4j_labels = [
+        row["neo4j_label"]
+        for row in entity_type_rows
     ]
     relationship_types = [
         row[0]
@@ -628,6 +647,8 @@ def _get_registry_details(session: Session) -> dict[str, Any]:
     ]
     return {
         "entity_types": entity_types,
+        "entity_type_details": entity_type_rows,
+        "neo4j_labels": neo4j_labels,
         "relationship_types": relationship_types,
     }
 

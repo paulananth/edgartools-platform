@@ -32,9 +32,12 @@ def _read_mdm_diagnostic_inputs() -> dict[str, Any]:
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def _read_neo4j_metrics(mdm_diagnostic_inputs: Mapping[str, Any]) -> dict[str, Any]:
-    relationship_types = _relationship_types_from_diagnostics(mdm_diagnostic_inputs)
-    entity_labels = _entity_labels_from_diagnostics(mdm_diagnostic_inputs)
+def _read_neo4j_metrics(
+    mdm_metrics: Mapping[str, Any],
+    mdm_diagnostic_inputs: Mapping[str, Any],
+) -> dict[str, Any]:
+    relationship_types = _relationship_types_from_mdm_metrics(mdm_metrics)
+    entity_labels = _entity_labels_from_mdm_metrics(mdm_metrics)
     return graph_readonly.get_neo4j_graph_metrics(
         entity_labels=entity_labels,
         relationship_types=relationship_types,
@@ -46,18 +49,28 @@ def _clear_dashboard_cache() -> None:
     st.cache_data.clear()
 
 
-def _relationship_types_from_diagnostics(payload: Mapping[str, Any]) -> list[str]:
-    edge_keys = payload.get("known_mdm_edge_keys")
-    if isinstance(edge_keys, Mapping):
-        return [str(key) for key in edge_keys]
+def _relationship_types_from_mdm_metrics(payload: Mapping[str, Any]) -> list[str]:
+    relationship_counts = payload.get("relationship_counts")
+    if isinstance(relationship_counts, Mapping):
+        return [str(key) for key in relationship_counts]
     return []
 
 
-def _entity_labels_from_diagnostics(payload: Mapping[str, Any]) -> list[str]:
-    rows = payload.get("candidate_rows")
-    if not isinstance(rows, list) or not rows:
-        return ["Company", "Adviser", "Person", "Security", "Fund"]
-    return ["Company", "Adviser", "Person", "Security", "Fund"]
+def _entity_labels_from_mdm_metrics(payload: Mapping[str, Any]) -> list[str]:
+    registry = payload.get("registry")
+    if not isinstance(registry, Mapping):
+        return []
+    labels = registry.get("neo4j_labels")
+    if isinstance(labels, list):
+        return [str(label) for label in labels if label]
+    details = registry.get("entity_type_details")
+    if isinstance(details, list):
+        return [
+            str(row.get("neo4j_label"))
+            for row in details
+            if isinstance(row, Mapping) and row.get("neo4j_label")
+        ]
+    return []
 
 
 def _format_count(value: Any) -> str:
@@ -467,7 +480,7 @@ def main() -> None:
         _read_mdm_diagnostic_inputs() if mdm_metrics.get("available") else {}
     )
     neo4j_metrics = (
-        _read_neo4j_metrics(mdm_diagnostic_inputs)
+        _read_neo4j_metrics(mdm_metrics, mdm_diagnostic_inputs)
         if mdm_metrics.get("available")
         else None
     )
