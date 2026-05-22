@@ -11,21 +11,21 @@ updated: 2026-05-17
 
 ### Data Access
 
-- [ ] **DASH-01**: Operator can launch the dashboard locally with existing MDM and Neo4j environment variables, without adding new secret-management steps.
-- [ ] **DASH-02**: Dashboard reads MDM relational state in read-only mode and never mutates MDM tables.
-- [ ] **DASH-03**: Dashboard reads Neo4j graph state in read-only mode and never writes nodes, edges, labels, or properties.
+- [x] **DASH-01**: Operator can launch the dashboard locally with existing MDM and Neo4j environment variables, without adding new secret-management steps.
+- [x] **DASH-02**: Dashboard reads MDM relational state in read-only mode and never mutates MDM tables.
+- [x] **DASH-03**: Dashboard reads Neo4j graph state in read-only mode and never writes nodes, edges, labels, or properties.
 
 ### MDM Review
 
-- [ ] **MDM-01**: Operator can see MDM entity counts by domain: company, adviser, person, security, and fund.
-- [ ] **MDM-02**: Operator can see MDM relationship counts by relationship type and active/pending sync status.
-- [ ] **MDM-03**: Operator can inspect source freshness and data-readiness warnings relevant to MDM and graph review.
+- [x] **MDM-01**: Operator can see MDM entity counts by domain: company, adviser, person, security, and fund.
+- [x] **MDM-02**: Operator can see MDM relationship counts by relationship type and active/pending sync status.
+- [x] **MDM-03**: Operator can inspect source freshness and data-readiness warnings relevant to MDM and graph review.
 
 ### Neo4j Review
 
 - [ ] **GRAPH-01**: Operator can see Neo4j node counts by label and relationship counts by type.
-- [ ] **GRAPH-02**: Operator can see pending MDM relationship rows that have not reached Neo4j for the selected scope.
-- [ ] **GRAPH-03**: Operator can see missing-edge diagnostics comparing active MDM relationship rows to Neo4j edges.
+- [x] **GRAPH-02**: Operator can see pending MDM relationship rows that have not reached Neo4j for the selected scope.
+- [x] **GRAPH-03**: Operator can see missing-edge diagnostics comparing active MDM relationship rows to Neo4j edges.
 
 ### Dashboard Experience
 
@@ -35,8 +35,8 @@ updated: 2026-05-17
 
 ### Isolation
 
-- [ ] **ISO-01**: Work is developed only in the `workspace/mdm-neo4j-dashboard` worktree and does not modify `neo4j-pipe`, `fix-pipelines`, or generated deployment JSON.
-- [ ] **ISO-02**: Dashboard work avoids pipeline mutation, gold/dbt changes, Step Functions changes, and runtime rollout changes unless explicitly requested.
+- [x] **ISO-01**: Work is developed only in the `workspace/mdm-neo4j-dashboard` worktree and does not modify `neo4j-pipe`, `fix-pipelines`, or generated deployment JSON.
+- [x] **ISO-02**: Dashboard work avoids pipeline mutation, gold/dbt changes, Step Functions changes, and runtime rollout changes unless explicitly requested.
 
 ## Future Requirements
 
@@ -56,17 +56,17 @@ updated: 2026-05-17
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DASH-01 | Phase 8 | Pending |
-| DASH-02 | Phase 8 | Pending |
-| DASH-03 | Phase 8 | Pending |
-| MDM-01 | Phase 9 | Pending |
-| MDM-02 | Phase 9 | Pending |
-| MDM-03 | Phase 9 | Pending |
-| GRAPH-01 | Phase 9 | Pending |
-| GRAPH-02 | Phase 9 | Pending |
-| GRAPH-03 | Phase 9 | Pending |
-| UX-01 | Phase 10 | Pending |
-| UX-02 | Phase 10 | Pending |
-| UX-03 | Phase 10 | Pending |
-| ISO-01 | Phase 8 | Pending |
-| ISO-02 | Phase 8 | Pending |
+| DASH-01 | Phase 8 | Satisfied |
+| DASH-02 | Phase 8 | Satisfied |
+| DASH-03 | Phase 8 | Satisfied |
+| MDM-01 | Phase 9 | Satisfied |
+| MDM-02 | Phase 9 | Satisfied |
+| MDM-03 | Phase 9 | Satisfied |
+| GRAPH-01 | Phase 9 | Unsatisfied - integration display gap |
+| GRAPH-02 | Phase 9 | Satisfied |
+| GRAPH-03 | Phase 9 | Satisfied |
+| UX-01 | Phase 10 | Unsatisfied - phase not started |
+| UX-02 | Phase 10 | Unsatisfied - phase not started |
+| UX-03 | Phase 10 | Unsatisfied - phase not started |
+| ISO-01 | Phase 8 | Satisfied |
+| ISO-02 | Phase 8 | Satisfied |
