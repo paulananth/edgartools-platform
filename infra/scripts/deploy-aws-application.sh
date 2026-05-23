@@ -1281,14 +1281,17 @@ pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", en
 PY
 }
 
-# Phased pipeline: seed → parallel bronze+silver batches → MDM chain → gold-refresh once.
-# Implements the target pipeline shape from CLAUDE.md long-load 5-whys.
+# Phased pipeline: seed → compute windows → sequential windowed bootstrap → MDM chain → gold → run summary.
+# Replaces the original DISTRIBUTED Map over cik_batches.jsonl with an INLINE Map (MaxConcurrency=1)
+# over cik_windows.jsonl written by compute-windows.  Sequential windows ensure silver.duckdb is
+# consistent at each step; MDM + gold run once after all windows complete.
+# Implements CHUNK-02 (sequential windowed SM) and CHUNK-04 SM-side (per-window bootstrap-next command).
 # Uses direct ECS task states throughout (no nested Step Function executions) so the
 # existing sec_platform_runner_step_functions role needs no extra EventBridge permissions.
 write_bootstrap_phased_definition() {
   local output_file="$1"
-  local wh_task_small_arn="$2"    # warehouse small  (reserved; unused in phased pipeline after seed OOM fix)
-  local wh_task_medium_arn="$3"   # warehouse medium (seed-universe, bootstrap-batch)
+  local wh_task_small_arn="$2"    # warehouse small  (compute-windows, write-run-summary)
+  local wh_task_medium_arn="$3"   # warehouse medium (seed-universe, per-window bootstrap-next)
   local mdm_task_small_arn="$4"   # mdm small        (mdm verify-graph — lightweight check)
   local mdm_task_medium_arn="$5"  # mdm medium       (mdm run, backfill-relationships, sync-graph)
   local wh_task_large_arn="$6"    # warehouse large  (gold-refresh — full-universe DuckDB is multi-GB)
@@ -1296,13 +1299,13 @@ write_bootstrap_phased_definition() {
   python3 - "$output_file" "$CLUSTER_ARN" \
     "$wh_task_small_arn" "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
-    "$BOOTSTRAP_BATCH_CONCURRENCY" "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" <<'PY'
+    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  wh_small_arn, wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
  container_name, bronze_bucket_name, subnet_json, security_group_json,
- batch_concurrency, mdm_run_limit, mdm_graph_limit) = sys.argv[1:]
+ mdm_run_limit, mdm_graph_limit) = sys.argv[1:]
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
@@ -1335,36 +1338,86 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
 mdm_limit = str(mdm_run_limit)
 graph_limit = str(mdm_graph_limit)
 
+# (1) SeedUniverse: enrol bootstrap_pending CIKs into MDM — unchanged from prior shape.
 seed = ecs_state(wh_medium_arn,
-    "States.Array('seed-universe', '--limit', $$.Execution.Input.universe_limit, '--run-id', $$.Execution.Name)",
-    next_state="BatchBootstrap", retry_secs=60)
+    "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
+    next_state="WindowSizeCheck", retry_secs=60)
+# ResultPath: null passes the original SM input (e.g. {"window_size": 25}) unchanged to the
+# next state.  Without this, the ECS runTask.sync result object would replace the entire input,
+# destroying $.window_size before WindowSizeCheck can read it (D-15 bug).
+seed["ResultPath"] = None
 
-batch = ecs_state(wh_medium_arn,
-    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'skip', '--run-id', $$.Execution.Name)",
+# (2) WindowSizeCheck → WindowSizeDefault → ComputeWindows
+# D-15 backward-compat: SM input {} is valid because WindowSizeDefault injects window_size=500
+# when the caller omits it.  The Choice state routes:
+#   - $.window_size IS_PRESENT (caller supplied a value) → skip default, go straight to ComputeWindows
+#   - $.window_size absent (e.g. input was {}) → WindowSizeDefault injects the integer 500
+#     at $.window_size via ResultPath, then falls through to ComputeWindows
+window_size_check = {
+    "Type": "Choice",
+    "Comment": "Route to ComputeWindows directly when caller supplied window_size; otherwise inject the default.",
+    "Choices": [
+        {
+            "Variable": "$.window_size",
+            "IsPresent": True,
+            "Next": "ComputeWindows",
+        }
+    ],
+    "Default": "WindowSizeDefault",
+}
+
+# Pass state: writes integer 500 directly to $.window_size (Result is a scalar, not a dict,
+# so ResultPath merges it in-place — downstream sees $.window_size = 500, not $.window_size = {}).
+window_size_default = {
+    "Type": "Pass",
+    "Comment": "Inject default window_size=500 when caller passed {} or omitted the key. "
+               "Result is a bare integer; ResultPath $.window_size writes it directly so "
+               "$.window_size = 500 (not {\"window_size\": 500}) for ComputeWindows.",
+    "Result": 500,
+    "ResultPath": "$.window_size",
+    "Next": "ComputeWindows",
+}
+
+# (3) ComputeWindows: queries MDM for active CIKs, writes cik_windows.jsonl + cik_snapshot.jsonl.
+# --window-size uses States.Format to coerce the integer $.window_size to a string for argv.
+compute_windows = ecs_state(wh_small_arn,
+    "States.Array('compute-windows', '--window-size', States.Format('{}', $.window_size), '--run-id', $$.Execution.Name)",
+    next_state="WindowedBootstrap")
+
+# (4) WindowedBootstrap: INLINE Map (MaxConcurrency=1) — reads cik_windows.jsonl from S3.
+# Each item is {"window_offset": N, "window_limit": M}.
+# Per-window command: bootstrap-next --cik-limit M --cik-offset N --run-id <execution-name>
+# MaxConcurrency=1 enforces sequential execution so silver.duckdb sees complete prior windows.
+per_window = ecs_state(wh_medium_arn,
+    "States.Array('bootstrap-next', '--cik-limit', States.Format('{}', $.window_limit), '--cik-offset', States.Format('{}', $.window_offset), '--run-id', $$.Execution.Name)",
     is_end=True)
 
-batch_map = {
+windowed_bootstrap = {
     "Type": "Map",
-    "MaxConcurrency": int(batch_concurrency),
-    "Comment": "Parallel bronze+silver only — no gold per batch. --artifact-policy skip prevents per-company ownership XML downloads.",
+    "Comment": "Sequential windowed bootstrap (MaxConcurrency=1): one window at a time so silver.duckdb is consistent.",
+    "MaxConcurrency": 1,
     "ToleratedFailurePercentage": 0,
     "ItemReader": {
         "Resource": "arn:aws:states:::s3:getObject",
         "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
         "Parameters": {
             "Bucket": bronze_bucket_name,
-            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_batches.jsonl', $$.Execution.Name)",
+            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)",
         },
     },
     "ItemProcessor": {
-        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
-        "StartAt": "RunBatch",
-        "States": {"RunBatch": batch},
+        "ProcessorConfig": {
+            "Mode": "INLINE",
+        },
+        "StartAt": "RunWindow",
+        "States": {"RunWindow": per_window},
     },
     "ResultPath": None,
     "Next": "MdmRun",
 }
 
+# (5)–(8) MDM chain + GoldRefresh — verbatim from prior write_bootstrap_phased_definition tail.
+# Run once after ALL windows complete (same invariant as before).
 mdm_run = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')",
     next_state="MdmBackfill")
@@ -1379,24 +1432,39 @@ mdm_verify = ecs_state(mdm_small_arn,
     next_state="GoldRefresh")
 gold = ecs_state(wh_large_arn,
     "States.Array('gold-refresh', '--run-id', $$.Execution.Name)",
-    is_end=True, retry_secs=60)
+    next_state="WriteRunSummary", retry_secs=60)
+
+# (9) WriteRunSummary: terminal task that reads cik_windows.jsonl + cik_snapshot.jsonl from S3
+# to derive window_count and cik_count, then writes run-summary.json.
+# Uses --from-windows-key so the command resolves counts from S3 manifests; the SM does NOT
+# carry $.WindowCount / $.CikCount through state (those values live only in the S3 manifests).
+write_run_summary = ecs_state(wh_small_arn,
+    "States.Array('write-run-summary', '--run-id', $$.Execution.Name, '--from-windows-key', States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name))",
+    is_end=True)
 
 definition = {
     "Comment": (
-        "Phased bootstrap: (1) seed MDM universe, (2) parallel bronze+silver batches "
-        "(no gold per batch), (3) MDM entity resolution + Neo4j sync in bulk, "
-        "(4) single gold build + Snowflake export manifest. "
-        "Implements target pipeline shape from CLAUDE.md long-load 5-whys."
+        "Phased bootstrap: (1) seed MDM universe, (2) inject window_size default if absent, "
+        "(3) compute CIK windows + write manifests to S3, "
+        "(4) sequential INLINE Map bootstrap-next per window (MaxConcurrency=1), "
+        "(5) MDM entity resolution + Neo4j sync in bulk, "
+        "(6) single gold build + Snowflake export manifest, "
+        "(7) write run-summary.json with window_count and cik_count from S3 manifests. "
+        "Implements CHUNK-02 (sequential windowed SM) and CHUNK-04 SM-side."
     ),
     "StartAt": "SeedUniverse",
     "States": {
-        "SeedUniverse": seed,
-        "BatchBootstrap": batch_map,
-        "MdmRun": mdm_run,
-        "MdmBackfill": mdm_backfill,
-        "MdmSync": mdm_sync,
-        "MdmVerify": mdm_verify,
-        "GoldRefresh": gold,
+        "SeedUniverse":      seed,
+        "WindowSizeCheck":   window_size_check,
+        "WindowSizeDefault": window_size_default,
+        "ComputeWindows":    compute_windows,
+        "WindowedBootstrap": windowed_bootstrap,
+        "MdmRun":            mdm_run,
+        "MdmBackfill":       mdm_backfill,
+        "MdmSync":           mdm_sync,
+        "MdmVerify":         mdm_verify,
+        "GoldRefresh":       gold,
+        "WriteRunSummary":   write_run_summary,
     },
 }
 pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")

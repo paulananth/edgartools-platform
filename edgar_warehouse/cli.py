@@ -60,6 +60,18 @@ def _add_common_bootstrap_args(parser: argparse.ArgumentParser, include_recent_l
         default=False,
         help="Force re-fetch and rebuild of the selected scope",
     )
+    parser.add_argument(
+        "--cik-limit",
+        type=int,
+        default=None,
+        help="Window size for CIK chunking (number of CIKs to process); None = no limit",
+    )
+    parser.add_argument(
+        "--cik-offset",
+        type=int,
+        default=0,
+        help="0-based offset into the ordered CIK list for windowed chunking",
+    )
 
 
 def _add_run_id_arg(parser: argparse.ArgumentParser) -> None:
@@ -113,12 +125,28 @@ def _handle_gold_refresh(args: argparse.Namespace) -> int:
     return run_command("gold-refresh", args)
 
 
+def _handle_compute_windows(args: argparse.Namespace) -> int:
+    if getattr(args, "window_size", None) is not None and args.window_size <= 0:
+        import sys
+        print(f"error: --window-size must be a positive integer, got {args.window_size}", file=sys.stderr)
+        return 2
+    return run_command("compute-windows", args)
+
+
+def _handle_write_run_summary(args: argparse.Namespace) -> int:
+    return run_command("write-run-summary", args)
+
+
 def _handle_seed_silver_batches(args: argparse.Namespace) -> int:
     return run_command("seed-silver-batches", args)
 
 
 def _handle_parse_ownership_bronze(args: argparse.Namespace) -> int:
     return run_command("parse-ownership-bronze", args)
+
+
+def _handle_migrate_silver_shards(args: argparse.Namespace) -> int:
+    return run_command("migrate-silver-shards", args)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -167,6 +195,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="Force re-fetch and rebuild of the selected date range",
+    )
+    daily_incremental.add_argument(
+        "--cik-limit",
+        type=int,
+        default=None,
+        help="Window size for CIK chunking (number of CIKs to process); None = no limit",
+    )
+    daily_incremental.add_argument(
+        "--cik-offset",
+        type=int,
+        default=0,
+        help="0-based offset into the ordered CIK list for windowed chunking",
     )
     _add_run_id_arg(daily_incremental)
     daily_incremental.set_defaults(handler=_handle_daily_incremental)
@@ -427,6 +467,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Force re-fetch even if already loaded",
     )
+    bootstrap_next.add_argument(
+        "--cik-limit",
+        type=int,
+        default=None,
+        help="Window size for CIK chunking (number of CIKs to process); None = no limit",
+    )
+    bootstrap_next.add_argument(
+        "--cik-offset",
+        type=int,
+        default=0,
+        help="0-based offset into the ordered CIK list for windowed chunking",
+    )
     _add_run_id_arg(bootstrap_next)
     bootstrap_next.set_defaults(handler=_handle_bootstrap_next)
 
@@ -437,6 +489,72 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(gold_refresh)
     gold_refresh.set_defaults(handler=_handle_gold_refresh)
+
+    compute_windows = subparsers.add_parser(
+        "compute-windows",
+        help=(
+            "Query MDM for ordered active CIKs and write cik_windows.jsonl + cik_snapshot.jsonl "
+            "to S3 under the run prefix. Pre-Map step consumed by the windowed bootstrap SM ItemReader."
+        ),
+    )
+    compute_windows.add_argument(
+        "--window-size",
+        type=int,
+        default=500,
+        help="Number of CIKs per window (default: 500). Must be > 0.",
+    )
+    _add_run_id_arg(compute_windows)
+    compute_windows.set_defaults(handler=_handle_compute_windows)
+
+    write_run_summary = subparsers.add_parser(
+        "write-run-summary",
+        help=(
+            "Write run-summary.json to S3 at the end of a windowed bootstrap run. "
+            "Derives window_count and cik_count from the S3 cik_windows.jsonl and "
+            "cik_snapshot.jsonl manifests written by compute-windows."
+        ),
+    )
+    write_run_summary.add_argument(
+        "--from-windows-key",
+        type=str,
+        required=True,
+        help=(
+            "S3 key of the cik_windows.jsonl manifest for this run "
+            "(e.g. reference/cik_universe/runs/{run_id}/cik_windows.jsonl)."
+        ),
+    )
+    _add_run_id_arg(write_run_summary)
+    write_run_summary.set_defaults(handler=_handle_write_run_summary)
+
+    migrate_silver_shards = subparsers.add_parser(
+        "migrate-silver-shards",
+        help=(
+            "One-time migration: convert a monolithic silver.duckdb into 4 CIK-range shard files "
+            "with a verified shard-manifest.json. Run the production CIK percentile query first "
+            "(see docs/runbook.md) to verify band boundaries before executing on prod data."
+        ),
+    )
+    migrate_silver_shards.add_argument(
+        "--source",
+        required=True,
+        help="Path to the monolithic silver.duckdb file (local path).",
+    )
+    migrate_silver_shards.add_argument(
+        "--output-dir",
+        required=True,
+        help="Directory to write shard-{0..3}.duckdb and shard-manifest.json.",
+    )
+    migrate_silver_shards.add_argument(
+        "--band-boundaries",
+        default=None,
+        help=(
+            "JSON array of custom band boundaries, e.g. "
+            "'[{\"shard_index\":0,\"cik_min\":0,\"cik_max\":1053917}, ...]'. "
+            "Defaults to dev DB quartiles (p25=1053917, p50=1523562, p75=1819990). "
+            "Run the prod CIK percentile query first to compute production quartiles."
+        ),
+    )
+    migrate_silver_shards.set_defaults(handler=_handle_migrate_silver_shards)
 
     try:
         from edgar_warehouse.mdm.cli import register_mdm_subparser

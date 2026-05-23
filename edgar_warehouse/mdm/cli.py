@@ -248,29 +248,67 @@ def _neo4j_client():
 
 
 def _silver_reader():
-    """Thin DuckDB reader. Returns None when MDM_SILVER_DUCKDB is absent or empty."""
+    """Multi-shard silver reader. Returns None when MDM_SILVER_DUCKDB is absent or empty.
+
+    Shard-aware (Phase 9): downloads all shards via the shard manifest when
+    storage_root is remote (S3), or lists shard-*.duckdb files when
+    MDM_SILVER_DUCKDB is a local directory path.
+
+    MDM_SILVER_DUCKDB semantics after sharding:
+      - Absent/empty → return None (no silver source configured)
+      - S3 URI (contains "://") → ignored; use WAREHOUSE_STORAGE_ROOT to locate
+        shards via shard-manifest.json, download all shards, return ShardedSilverReader
+      - Local directory path → list shard-*.duckdb files in that directory,
+        return ShardedSilverReader over those files
+      - Local .duckdb file path (legacy dev path) → wrap as single-shard
+        ShardedSilverReader for API compatibility
+
+    The env var MDM_SILVER_DUCKDB is KEPT for backwards compatibility; its
+    presence signals that a silver source is configured.
+    """
+    from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
+
     duckdb_path = os.environ.get("MDM_SILVER_DUCKDB") or None
+    storage_root_env = os.environ.get("WAREHOUSE_STORAGE_ROOT", "").strip()
+
+    # Remote mode: WAREHOUSE_STORAGE_ROOT is an S3 URI (or similar remote)
+    if storage_root_env and "://" in storage_root_env:
+        from edgar_warehouse.application.warehouse_orchestrator import _hydrate_all_shards
+        from edgar_warehouse.application.command_context_factory import build_warehouse_context
+
+        context = build_warehouse_context("mdm-run")
+        local_paths = _hydrate_all_shards(context)
+        shard_paths = [p for p in local_paths if p is not None]
+        if not shard_paths:
+            return None
+        return ShardedSilverReader(shard_paths)
+
+    # Legacy S3 URI in MDM_SILVER_DUCKDB itself (older ECS task definition style)
+    if duckdb_path is not None and "://" in duckdb_path:
+        from edgar_warehouse.application.warehouse_orchestrator import _hydrate_all_shards
+        from edgar_warehouse.application.command_context_factory import build_warehouse_context
+
+        context = build_warehouse_context("mdm-run")
+        local_paths = _hydrate_all_shards(context)
+        shard_paths = [p for p in local_paths if p is not None]
+        if not shard_paths:
+            return None
+        return ShardedSilverReader(shard_paths)
+
     if duckdb_path is None:
         return None
-    if "://" in duckdb_path:
-        from edgar_warehouse.infrastructure.object_storage import read_bytes
 
-        local_path = Path(os.environ.get("MDM_LOCAL_SILVER_DUCKDB", "/tmp/mdm-silver.duckdb"))
-        local_path.parent.mkdir(parents=True, exist_ok=True)
-        local_path.write_bytes(read_bytes(duckdb_path))
-        duckdb_path = str(local_path)
-    import duckdb  # type: ignore
+    # Local directory containing shard-*.duckdb files
+    local_p = Path(duckdb_path)
+    if local_p.is_dir():
+        import glob
+        shard_files = sorted(glob.glob(str(local_p / "shard-*.duckdb")))
+        if not shard_files:
+            return None
+        return ShardedSilverReader(shard_files)
 
-    class _DuckReader:
-        def __init__(self, path: str) -> None:
-            self._con = duckdb.connect(path, read_only=True)
-
-        def fetch(self, sql: str, params: list | None = None) -> list[dict]:
-            rows = self._con.execute(sql, params or []).fetchall()
-            cols = [d[0] for d in self._con.description]
-            return [dict(zip(cols, r)) for r in rows]
-
-    return _DuckReader(duckdb_path)
+    # Legacy single-file path (dev/testing): wrap as single-shard reader
+    return ShardedSilverReader([duckdb_path])
 
 
 # -- silver preflight helpers -----------------------------------------------
@@ -465,11 +503,6 @@ def _handle_seed_from_silver(args) -> int:
     mdm_company, preserving existing tracking_status values in MDM.
     """
     import os
-    import tempfile
-    try:
-        import duckdb
-    except ImportError as exc:
-        raise SystemExit("duckdb is required for seed-from-silver. Install with: uv pip install duckdb") from exc
 
     from edgar_warehouse.mdm.universe import bulk_upsert_universe
 
@@ -478,31 +511,50 @@ def _handle_seed_from_silver(args) -> int:
         storage_root = os.environ.get("WAREHOUSE_STORAGE_ROOT", "").strip()
         if not storage_root:
             raise SystemExit("--silver-path or WAREHOUSE_STORAGE_ROOT is required")
-        s3_uri = storage_root.rstrip("/") + "/silver/sec/silver.duckdb"
-        tmp = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
-        tmp.close()
-        silver_path = tmp.name
-        print(json.dumps({"status": "downloading", "source": s3_uri}))
-        import boto3
-        # Parse s3://bucket/key
-        s3_parts = s3_uri[len("s3://"):].split("/", 1)
-        s3_bucket, s3_key = s3_parts[0], s3_parts[1]
-        region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
-        boto3.client("s3", region_name=region).download_file(s3_bucket, s3_key, silver_path)
 
     tracking_status_filter = getattr(args, "tracking_status", None)
     dry_run = bool(getattr(args, "dry_run", False))
 
-    con = duckdb.connect(silver_path, read_only=True)
-    try:
-        query = "SELECT cik, current_ticker, NULL as exchange, tracking_status FROM sec_tracked_universe"
-        params: list = []
-        if tracking_status_filter:
-            query += " WHERE tracking_status = ?"
-            params.append(tracking_status_filter)
-        silver_rows = con.execute(query, params).fetchall()
-    finally:
-        con.close()
+    # Shard-aware read: sec_tracked_universe is a global table replicated to all shards.
+    # Use shard-0 (or the explicit --silver-path) for this point-in-time query.
+    # This avoids the hardcoded silver.duckdb monolith path.
+    if silver_path:
+        # Explicit local path provided: may be a single shard file or legacy monolith.
+        from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
+        reader = ShardedSilverReader([silver_path])
+        try:
+            query = "SELECT cik, current_ticker, NULL as exchange, tracking_status FROM sec_tracked_universe"
+            params: list = []
+            if tracking_status_filter:
+                query += " WHERE tracking_status = ?"
+                params.append(tracking_status_filter)
+            silver_rows = reader._conn.execute(query, params).fetchall()
+        finally:
+            reader.close()
+    else:
+        # Remote: download shard-0 via the orchestrator and open it.
+        # sec_tracked_universe is replicated to all shards; shard-0 is sufficient.
+        from edgar_warehouse.application.command_context_factory import build_warehouse_context
+        from edgar_warehouse.application.warehouse_orchestrator import _hydrate_shard_for_window
+
+        context = build_warehouse_context("seed-from-silver")
+        print(json.dumps({"status": "downloading_shard", "shard_index": 0}))
+        local_shard_path = _hydrate_shard_for_window(context, shard_index=0)
+        if not local_shard_path:
+            print(json.dumps({"status": "ok", "rows_found": 0, "rows_migrated": 0,
+                              "note": "shard-0 not found in remote storage"}))
+            return 0
+        from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
+        reader = ShardedSilverReader([local_shard_path])
+        try:
+            query = "SELECT cik, current_ticker, NULL as exchange, tracking_status FROM sec_tracked_universe"
+            params = []
+            if tracking_status_filter:
+                query += " WHERE tracking_status = ?"
+                params.append(tracking_status_filter)
+            silver_rows = reader._conn.execute(query, params).fetchall()
+        finally:
+            reader.close()
 
     if not silver_rows:
         print(json.dumps({"status": "ok", "rows_found": 0, "rows_migrated": 0}))

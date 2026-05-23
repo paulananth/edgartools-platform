@@ -228,3 +228,42 @@ def test_mdm_auto_enroll_does_not_raise_on_db_failure(monkeypatch):
 
     with patch("edgar_warehouse.mdm.database.get_engine", side_effect=Exception("DB down")):
         _mdm_auto_enroll([100], scope_reason="daily_index")  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# _resolve_bootstrap_target_ciks — cik_limit/cik_offset (Wave 0 stubs)
+# ---------------------------------------------------------------------------
+
+def test_resolve_bootstrap_target_ciks_applies_cik_offset_then_cik_limit(monkeypatch):
+    """_resolve_bootstrap_target_ciks honors cik_limit/cik_offset when both are provided.
+
+    Verifies that offset is applied before limit:
+    input [100, 200, 300, 400, 500], offset=1, limit=2 -> [200, 300]
+    """
+    monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://localhost/test")
+    from edgar_warehouse.application.warehouse_orchestrator import _resolve_bootstrap_target_ciks
+
+    with patch(
+        "edgar_warehouse.application.warehouse_orchestrator._get_mdm_tracked_ciks",
+        return_value=[100, 200, 300, 400, 500],
+    ):
+        result = _resolve_bootstrap_target_ciks(
+            raw_ciks=None,
+            command_name="bootstrap-full",
+            tracking_status_filter="active",
+            cik_limit=2,
+            cik_offset=1,
+        )
+
+    assert result == [200, 300]
+
+
+def test_apply_bronze_cik_limit_emits_deprecation_warning(monkeypatch):
+    """WAREHOUSE_BRONZE_CIK_LIMIT env var emits DeprecationWarning when set."""
+    monkeypatch.setenv("WAREHOUSE_BRONZE_CIK_LIMIT", "3")
+    from edgar_warehouse.application.warehouse_orchestrator import _apply_bronze_cik_limit
+
+    with pytest.warns(DeprecationWarning, match="WAREHOUSE_BRONZE_CIK_LIMIT"):
+        result = _apply_bronze_cik_limit([100, 200, 300, 400, 500])
+
+    assert result == [100, 200, 300]

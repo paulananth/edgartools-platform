@@ -19,6 +19,7 @@ class CommandContextFactoryTests(unittest.TestCase):
                 "WAREHOUSE_STORAGE_ROOT": os.path.join(tmp, "warehouse"),
                 "WAREHOUSE_SILVER_ROOT": os.path.join(tmp, "silver"),
                 "SERVING_EXPORT_ROOT": os.path.join(tmp, "serving"),
+                "MDM_DATABASE_URL": "postgresql://test:test@localhost:5432/test",
             }
             with patch.dict(os.environ, env, clear=False):
                 context = build_warehouse_context("bootstrap-full")
@@ -37,6 +38,7 @@ class CommandContextFactoryTests(unittest.TestCase):
                 "WAREHOUSE_BRONZE_ROOT": os.path.join(tmp, "bronze"),
                 "WAREHOUSE_STORAGE_ROOT": os.path.join(tmp, "warehouse"),
                 "SNOWFLAKE_EXPORT_ROOT": os.path.join(tmp, "snowflake"),
+                "MDM_DATABASE_URL": "postgresql://test:test@localhost:5432/test",
             }
             with patch.dict(os.environ, env, clear=False):
                 context = build_warehouse_context("bootstrap-full")
@@ -52,6 +54,7 @@ class CommandContextFactoryTests(unittest.TestCase):
                 "WAREHOUSE_BRONZE_ROOT": os.path.join(tmp, "bronze"),
                 "WAREHOUSE_STORAGE_ROOT": os.path.join(tmp, "warehouse"),
                 "SERVING_EXPORT_ROOT": os.path.join(tmp, "serving"),
+                "MDM_DATABASE_URL": "postgresql://test:test@localhost:5432/test",
             }
             with patch.dict(os.environ, env, clear=False):
                 context = build_warehouse_context("bootstrap-next")

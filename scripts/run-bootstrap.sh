@@ -2,11 +2,13 @@
 # Run the full phased bootstrap pipeline for the next batch of companies.
 #
 # Usage:
-#   bash scripts/run-bootstrap.sh [--aws-profile <profile>] [--watch] [--no-wait]
+#   bash scripts/run-bootstrap.sh [--aws-profile <profile>] [--window-size N] [--watch] [--no-wait]
 #
 #   --aws-profile <profile>   AWS CLI named profile (SSO or key-based).
 #                             If credentials have expired, sso login is attempted
 #                             automatically for SSO profiles.
+#   --window-size N           Number of CIKs per bootstrap-next window (default: 500).
+#                             Passed as {"window_size": N} in the SM input JSON.
 #   --watch                   Stream a spinner + elapsed time until completion.
 #   --no-wait                 Fire the execution and exit immediately.
 #
@@ -31,6 +33,7 @@ POSTGRES_DSN_SECRET="${NAME_PREFIX}/mdm/postgres_dsn"
 NEO4J_SECRET="${NAME_PREFIX}/mdm/neo4j"
 
 AWS_PROFILE_NAME=""
+WINDOW_SIZE=500
 WATCH=false
 NO_WAIT=false
 
@@ -39,11 +42,18 @@ NO_WAIT=false
 # ---------------------------------------------------------------------------
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --aws-profile) AWS_PROFILE_NAME="${2:?'--aws-profile requires a value'}"; shift 2 ;;
-    --watch)       WATCH=true;  shift ;;
-    --no-wait)     NO_WAIT=true; shift ;;
+    --aws-profile)  AWS_PROFILE_NAME="${2:?'--aws-profile requires a value'}"; shift 2 ;;
+    --window-size)
+      WINDOW_SIZE="${2:?'--window-size requires a value'}"
+      if ! [[ "$WINDOW_SIZE" =~ ^[0-9]+$ ]] || [[ "$WINDOW_SIZE" -le 0 ]]; then
+        echo "ERROR: --window-size must be a positive integer (got: $WINDOW_SIZE)" >&2
+        exit 1
+      fi
+      shift 2 ;;
+    --watch)        WATCH=true;  shift ;;
+    --no-wait)      NO_WAIT=true; shift ;;
     -h|--help)
-      sed -n '2,21p' "$0" | sed 's/^# \?//'
+      sed -n '2,23p' "$0" | sed 's/^# \?//'
       exit 0 ;;
     *) shift ;;
   esac
@@ -176,12 +186,13 @@ echo ""
 # Fire the Step Function
 # ---------------------------------------------------------------------------
 RUN_NAME="${NAME_PREFIX}-bootstrap-$(date -u +%Y%m%d-%H%M%S)"
-echo "Starting bootstrap-phased: $RUN_NAME"
+echo "Starting bootstrap-phased: $RUN_NAME  (window_size=$WINDOW_SIZE)"
 
+SM_INPUT="$(printf '{"window_size": %d}' "$WINDOW_SIZE")"
 EXEC_ARN=$(aws_cli stepfunctions start-execution \
   --state-machine-arn "$STATE_MACHINE_ARN" \
   --name "$RUN_NAME" \
-  --input '{}' \
+  --input "$SM_INPUT" \
   --query 'executionArn' --output text)
 
 echo "Execution ARN: $EXEC_ARN"
