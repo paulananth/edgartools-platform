@@ -33,6 +33,7 @@ _ALLOWED_TEMPLATE_TOKENS = frozenset(
         "end_date",
         "run_id",
         "section",
+        "shard_index",
         "table_name",
         "table_path",
         "text_version",
@@ -56,6 +57,9 @@ _REQUIRED_TEMPLATE_KEYS = frozenset(
         "reference.company_tickers.path",
         "reference.company_tickers_exchange.path",
         "reference.cik_universe_batches.path",
+        "reference.cik_windows.path",
+        "reference.cik_snapshot.path",
+        "reference.run_summary.path",
         "submissions.main.filename",
         "submissions.main.path",
         "submissions.pagination.path",
@@ -80,6 +84,8 @@ _REQUIRED_TEMPLATE_KEYS = frozenset(
         "snowflake_export.table.filename",
         "snowflake_export.table.path",
         "snowflake_export.run_manifest.path",
+        "silver.shard_manifest.path",
+        "silver.shard.path",
     }
 )
 
@@ -143,6 +149,26 @@ class WarehousePathResolver:
 
     def cik_universe_batches_path(self, run_id: str) -> str:
         return self._render("reference.cik_universe_batches.path", run_id=run_id)
+
+    def cik_windows_path(self, run_id: str) -> str:
+        """Return the S3-relative path for cik_windows.jsonl for the given run."""
+        return self._render("reference.cik_windows.path", run_id=run_id)
+
+    def cik_snapshot_path(self, run_id: str) -> str:
+        """Return the S3-relative path for cik_snapshot.jsonl for the given run."""
+        return self._render("reference.cik_snapshot.path", run_id=run_id)
+
+    def run_summary_path(self, run_id: str) -> str:
+        """Return the S3-relative path for run-summary.json for the given run."""
+        return self._render("reference.run_summary.path", run_id=run_id)
+
+    def shard_manifest_path(self) -> str:
+        """Return the S3-relative path for the shard manifest JSON."""
+        return self._render("silver.shard_manifest.path")
+
+    def shard_path(self, shard_index: int) -> str:
+        """Return the S3-relative path for a given shard DuckDB file."""
+        return self._render("silver.shard.path", shard_index=shard_index)
 
     def submissions_main_filename(self, cik: int) -> str:
         return self._render("submissions.main.filename", cik=cik)
@@ -239,6 +265,17 @@ class WarehousePathResolver:
         if command_name == "gold-refresh":
             return {
                 "gold": self._render("manifest.default.gold.path", **default_tokens),
+                "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
+            }
+        if command_name in ("compute-windows", "write-run-summary"):
+            # These commands write JSONL/JSON manifests to bronze; no gold or silver manifests.
+            return {
+                "bronze": self._render("manifest.default.bronze.path", **default_tokens),
+                "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
+            }
+        if command_name == "migrate-silver-shards":
+            # Local-only migration; no S3 bronze/silver/gold manifests are written.
+            return {
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }
         if command_name == "load-daily-form-index-for-date":
@@ -359,6 +396,41 @@ class CaptureSpecFactory:
         return CaptureSpec(
             source_name="cik_universe_batches",
             relative_path=self._resolver.cik_universe_batches_path(run_id),
+        )
+
+    def cik_windows(self, run_id: str) -> CaptureSpec:
+        """Return a CaptureSpec for the cik_windows.jsonl output of a compute-windows run."""
+        return CaptureSpec(
+            source_name="cik_windows",
+            relative_path=self._resolver.cik_windows_path(run_id),
+        )
+
+    def cik_snapshot(self, run_id: str) -> CaptureSpec:
+        """Return a CaptureSpec for the cik_snapshot.jsonl output of a windowed run."""
+        return CaptureSpec(
+            source_name="cik_snapshot",
+            relative_path=self._resolver.cik_snapshot_path(run_id),
+        )
+
+    def run_summary(self, run_id: str) -> CaptureSpec:
+        """Return a CaptureSpec for the run-summary.json metadata output of a run."""
+        return CaptureSpec(
+            source_name="run_summary",
+            relative_path=self._resolver.run_summary_path(run_id),
+        )
+
+    def shard_manifest(self) -> CaptureSpec:
+        """Return a CaptureSpec for the shard manifest JSON output."""
+        return CaptureSpec(
+            source_name="shard_manifest",
+            relative_path=self._resolver.shard_manifest_path(),
+        )
+
+    def shard(self, shard_index: int) -> CaptureSpec:
+        """Return a CaptureSpec for a given shard DuckDB file output."""
+        return CaptureSpec(
+            source_name=f"silver_shard_{shard_index}",
+            relative_path=self._resolver.shard_path(shard_index),
         )
 
     def submissions_main(self, cik: int, fetch_date: date) -> CaptureSpec:

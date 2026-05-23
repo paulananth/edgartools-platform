@@ -83,3 +83,8 @@ include = [
 markers = [
     "neo4j: requires live Neo4j via NEO4J_URI env var",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]

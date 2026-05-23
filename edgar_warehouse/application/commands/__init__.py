@@ -8,19 +8,23 @@ from edgar_warehouse.application.commands import (
     bootstrap_next,
     bootstrap_recent_10,
     catch_up_daily_form_index,
+    compute_windows,
     daily_incremental,
     full_reconcile,
     gold_refresh,
     load_daily_form_index_for_date,
+    migrate_silver_shards,
     parse_ownership_bronze,
     seed_silver_batches,
     seed_universe,
     targeted_resync,
+    write_run_summary,
 )
 
 COMMAND_REGISTRY = {
     "bootstrap-full": bootstrap_full.execute,
     "bootstrap-recent-10": bootstrap_recent_10.execute,
+    "compute-windows": compute_windows.execute,
     "daily-incremental": daily_incremental.execute,
     "load-daily-form-index-for-date": load_daily_form_index_for_date.execute,
     "catch-up-daily-form-index": catch_up_daily_form_index.execute,
@@ -32,4 +36,6 @@ COMMAND_REGISTRY = {
     "bootstrap-batch": bootstrap_batch.execute,
     "bootstrap-next": bootstrap_next.execute,
     "gold-refresh": gold_refresh.execute,
+    "migrate-silver-shards": migrate_silver_shards.execute,
+    "write-run-summary": write_run_summary.execute,
 }

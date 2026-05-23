@@ -192,6 +192,25 @@ class WarehousePathResolverTests(unittest.TestCase):
         )
 
 
+    def test_resolver_builds_cik_windows_path(self) -> None:
+        self.assertEqual(
+            self.resolver.cik_windows_path("run-123"),
+            "reference/cik_universe/runs/run-123/cik_windows.jsonl",
+        )
+
+    def test_resolver_builds_cik_snapshot_path(self) -> None:
+        self.assertEqual(
+            self.resolver.cik_snapshot_path("run-123"),
+            "reference/cik_universe/runs/run-123/cik_snapshot.jsonl",
+        )
+
+    def test_resolver_builds_run_summary_path(self) -> None:
+        self.assertEqual(
+            self.resolver.run_summary_path("run-123"),
+            "reference/cik_universe/runs/run-123/run-summary.json",
+        )
+
+
 class CaptureSpecFactoryTests(unittest.TestCase):
     def setUp(self) -> None:
         self.factory = CaptureSpecFactory(WarehousePathResolver(load_path_template_catalog()))
@@ -292,6 +311,67 @@ class CaptureSpecFactoryTests(unittest.TestCase):
     def test_factory_rejects_unsupported_source(self) -> None:
         with self.assertRaises(WarehouseRuntimeError):
             self.factory.reference("unsupported_source", date(2026, 4, 22))
+
+
+class CaptureSpecFactoryCikWindowsTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.factory = CaptureSpecFactory(WarehousePathResolver(load_path_template_catalog()))
+
+    def test_factory_builds_cik_windows_spec(self) -> None:
+        spec = self.factory.cik_windows("run-123")
+        self.assertEqual(spec.source_name, "cik_windows")
+        self.assertEqual(
+            spec.relative_path,
+            "reference/cik_universe/runs/run-123/cik_windows.jsonl",
+        )
+
+    def test_factory_builds_cik_snapshot_spec(self) -> None:
+        spec = self.factory.cik_snapshot("run-123")
+        self.assertEqual(spec.source_name, "cik_snapshot")
+        self.assertEqual(
+            spec.relative_path,
+            "reference/cik_universe/runs/run-123/cik_snapshot.jsonl",
+        )
+
+    def test_factory_builds_run_summary_spec(self) -> None:
+        spec = self.factory.run_summary("run-123")
+        self.assertEqual(spec.source_name, "run_summary")
+        self.assertEqual(
+            spec.relative_path,
+            "reference/cik_universe/runs/run-123/run-summary.json",
+        )
+
+
+class WarehousePathResolverShardTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.resolver = WarehousePathResolver(load_path_template_catalog())
+
+    def test_resolver_builds_shard_manifest_path(self) -> None:
+        self.assertEqual(
+            self.resolver.shard_manifest_path(),
+            "silver/sec/shard-manifest.json",
+        )
+
+    def test_resolver_builds_shard_path(self) -> None:
+        self.assertEqual(
+            self.resolver.shard_path(2),
+            "silver/sec/shards/shard-2.duckdb",
+        )
+
+
+class CaptureSpecFactoryShardTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.factory = CaptureSpecFactory(WarehousePathResolver(load_path_template_catalog()))
+
+    def test_factory_builds_shard_manifest_spec(self) -> None:
+        spec = self.factory.shard_manifest()
+        self.assertEqual(spec.source_name, "shard_manifest")
+        self.assertEqual(spec.relative_path, "silver/sec/shard-manifest.json")
+
+    def test_factory_builds_shard_spec(self) -> None:
+        spec = self.factory.shard(2)
+        self.assertEqual(spec.source_name, "silver_shard_2")
+        self.assertEqual(spec.relative_path, "silver/sec/shards/shard-2.duckdb")
 
 
 if __name__ == "__main__":

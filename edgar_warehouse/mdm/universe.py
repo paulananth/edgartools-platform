@@ -16,10 +16,12 @@ from edgar_warehouse.mdm.database import MdmCompany, MdmEntity
 
 
 def get_tracked_ciks(engine: Engine, status_filter: str = "active") -> list[int]:
-    """Return CIKs from mdm_company where tracking_status == status_filter."""
+    """Return CIKs from mdm_company where tracking_status == status_filter, ordered ASC."""
     with Session(engine) as session:
         rows = session.execute(
-            select(MdmCompany.cik).where(MdmCompany.tracking_status == status_filter)
+            select(MdmCompany.cik)
+            .where(MdmCompany.tracking_status == status_filter)
+            .order_by(MdmCompany.cik)
         ).all()
         return [row[0] for row in rows]
 

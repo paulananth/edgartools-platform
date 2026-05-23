@@ -956,7 +956,8 @@ def _build_fact_adv_private_fund(conn: Any) -> pa.Table:
     return _table_from_records(_FACT_ADV_PRIVATE_FUND_SCHEMA, records)
 
 
-def build_gold(db: SilverDatabase) -> dict[str, pa.Table]:
+def build_gold(db: Any) -> dict[str, pa.Table]:
+    # Accepts SilverDatabase or ShardedSilverReader via duck typing (._conn attribute).
     import json
     import sys
     from datetime import datetime, timezone

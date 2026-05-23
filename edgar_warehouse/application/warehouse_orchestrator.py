@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import uuid
+import warnings
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -63,12 +64,12 @@ from edgar_warehouse.infrastructure.run_manifest_builder import (
     snowflake_export_run_manifest_table,
     warehouse_success_message,
 )
-from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory
+from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory, default_path_resolver
 from edgar_warehouse.infrastructure.sec_client import (
     download_sec_bytes,
 )
 from edgar_warehouse.infrastructure.object_storage import StorageLocation, read_bytes
-from edgar_warehouse.silver_support.session import open_silver_database
+from edgar_warehouse.silver_support.session import open_silver_database, open_silver_shard
 
 if TYPE_CHECKING:
     from edgar_warehouse.silver_store import SilverDatabase
@@ -275,9 +276,65 @@ def _execute_warehouse_bronze_capture(
     now = datetime.now(UTC)
     run_id = _resolve_run_id(arguments)
     command_path = command_name.replace("_", "-")
-    _hydrate_silver_database_from_storage(context)
-    scope = _resolve_scope(command_name=command_name, arguments=arguments, now=now, silver_root=context.silver_root)
-    db = _open_silver_database(context.silver_root)
+
+    # --- Shard-aware hydrate/open (Phase 9, STORE-02) ---
+    # bootstrap-batch is the ECS chunk task that receives a pre-resolved CIK list
+    # (from seed-silver-batches / Step Functions Distributed Map).  For remote
+    # storage we download only the overlapping shard rather than the full monolith.
+    #
+    # NOTE: --cik-offset is a positional index into the MDM CIK list, NOT a CIK
+    # value.  Here we already have the final resolved CIK integers in cik_list,
+    # so cik_min/cik_max are extracted directly from those values.
+    _active_shard_index: int | None = None
+    _using_shard_path: bool = (
+        command_name == "bootstrap-batch"
+        and context.storage_root.is_remote
+        and bool(arguments.get("cik_list"))
+    )
+
+    if _using_shard_path:
+        chunk_ciks = [int(c) for c in arguments["cik_list"]]
+        cik_min = min(chunk_ciks)
+        cik_max = max(chunk_ciks)
+        from edgar_warehouse.application.sharding.shard_manifest import shards_for_window
+        manifest = _read_shard_manifest(context)
+        overlapping = shards_for_window(manifest, cik_min, cik_max)
+        if not overlapping:
+            # No shard covers this window — fall back to monolith path.
+            _using_shard_path = False
+        else:
+            if len(overlapping) > 1:
+                # A 500-CIK window spanning two shard bands is unusual but possible near
+                # band boundaries.  Only the first overlapping shard is the write target
+                # (operational invariant: configure cik_limit so windows don't straddle
+                # boundaries).  Log a warning but do not error out.
+                _emit_pipeline_event(
+                    "shard_window_crosses_band_boundary",
+                    command=command_name,
+                    run_id=run_id,
+                    cik_min=cik_min,
+                    cik_max=cik_max,
+                    overlapping_shards=overlapping,
+                    write_shard=overlapping[0],
+                )
+            _active_shard_index = overlapping[0]
+            local_shard_path = _hydrate_shard_for_window(context, _active_shard_index)
+            if local_shard_path is None:
+                # Shard doesn't exist in remote storage yet — fall back to monolith.
+                _using_shard_path = False
+            else:
+                scope = _resolve_scope(
+                    command_name=command_name,
+                    arguments=arguments,
+                    now=now,
+                    silver_root=None,
+                )
+                db = open_silver_shard(local_shard_path)
+
+    if not _using_shard_path:
+        _hydrate_silver_database_from_storage(context)
+        scope = _resolve_scope(command_name=command_name, arguments=arguments, now=now, silver_root=context.silver_root)
+        db = _open_silver_database(context.silver_root)
     db_closed = False
     sync_mode = _sync_mode_for_command(command_name)
     sync_scope_type = _sync_scope_type_for_command(command_name, scope)
@@ -400,7 +457,10 @@ def _execute_warehouse_bronze_capture(
             run_id=run_id,
             storage_root=context.storage_root.root,
         )
-        silver_database_write = _publish_silver_database_if_remote(context)
+        if _using_shard_path and _active_shard_index is not None:
+            silver_database_write = _publish_shard_if_remote(context, _active_shard_index)
+        else:
+            silver_database_write = _publish_silver_database_if_remote(context)
         _emit_pipeline_event(
             "silver_publish_completed",
             command=command_name,
@@ -592,6 +652,146 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
     }
 
 
+# ---------------------------------------------------------------------------
+# Shard-aware hydrate / publish (Phase 9 — STORE-02 / STORE-03)
+#
+# PITFALL: --cik-offset is a POSITIONAL INDEX into the sorted MDM CIK list, not
+# a CIK value.  Callers must resolve positions to actual CIK values before
+# passing cik_min/cik_max to shards_for_window.  The functions below accept an
+# already-resolved shard_index.
+# ---------------------------------------------------------------------------
+
+
+def _read_shard_manifest(context: WarehouseCommandContext) -> dict:
+    """Fetch and parse shard-manifest.json from remote storage.
+
+    Raises
+    ------
+    WarehouseRuntimeError
+        If the storage root is not remote, or if the manifest is malformed.
+    """
+    if not context.storage_root.is_remote:
+        raise WarehouseRuntimeError(
+            "shard manifest requires remote storage; storage_root is local"
+        )
+    from edgar_warehouse.application.sharding.shard_manifest import load_manifest
+
+    manifest_path = context.storage_root.join("silver", "sec", "shard-manifest.json")
+    payload = read_bytes(manifest_path)
+    return load_manifest(payload)
+
+
+def _hydrate_shard_for_window(
+    context: WarehouseCommandContext,
+    shard_index: int,
+) -> str | None:
+    """Download shard-{shard_index}.duckdb from remote storage to the local silver directory.
+
+    Parameters
+    ----------
+    context:
+        The warehouse command context carrying storage root paths.
+    shard_index:
+        The zero-based shard index to download.
+
+    Returns
+    -------
+    str | None
+        The local filesystem path to the downloaded shard, or ``None`` if the
+        shard does not yet exist in remote storage (new shard, no pre-existing
+        data).  Returns the local shard path directly for non-remote storage
+        contexts (no download needed).
+    """
+    local_path = Path(
+        context.silver_root.join("silver", "sec", "shards", f"shard-{shard_index}.duckdb")
+    )
+
+    if not context.storage_root.is_remote or context.silver_root.is_remote:
+        # Local storage — no download needed; return existing path.
+        return str(local_path)
+
+    relative_path = default_path_resolver().shard_path(shard_index)
+    remote_path = context.storage_root.join(relative_path)
+
+    try:
+        payload = read_bytes(remote_path)
+    except (FileNotFoundError, OSError):
+        return None
+
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    local_path.write_bytes(payload)
+    _emit_pipeline_event(
+        "silver_shard_hydrated",
+        shard_index=shard_index,
+        path=remote_path,
+        local_path=str(local_path),
+        size_bytes=len(payload),
+    )
+    return str(local_path)
+
+
+def _hydrate_all_shards(context: WarehouseCommandContext) -> list[str | None]:
+    """Download all shards listed in the shard manifest.
+
+    Used by gold-refresh and MDM commands that require the full silver dataset.
+
+    Returns
+    -------
+    list[str | None]
+        Local paths for each shard (in shard_index order).  An entry is
+        ``None`` if that shard does not yet exist in remote storage.
+    """
+    manifest = _read_shard_manifest(context)
+    return [
+        _hydrate_shard_for_window(context, shard_index)
+        for shard_index in range(manifest["shard_count"])
+    ]
+
+
+def _publish_shard_if_remote(
+    context: WarehouseCommandContext,
+    shard_index: int,
+) -> dict[str, Any] | None:
+    """Upload the modified shard-{shard_index}.duckdb to remote storage.
+
+    Parameters
+    ----------
+    context:
+        The warehouse command context.
+    shard_index:
+        The zero-based shard index to upload.
+
+    Returns
+    -------
+    dict | None
+        A write-record dict (``layer``, ``shard_index``, ``path``,
+        ``size_bytes``) if uploaded, or ``None`` if storage is local.
+
+    Raises
+    ------
+    WarehouseRuntimeError
+        If the local shard file does not exist.
+    """
+    if not context.storage_root.is_remote:
+        return None
+
+    local_path = Path(
+        context.silver_root.join("silver", "sec", "shards", f"shard-{shard_index}.duckdb")
+    )
+    if not local_path.exists():
+        raise WarehouseRuntimeError(
+            f"Shard {shard_index} not found at {local_path}"
+        )
+
+    relative_path = default_path_resolver().shard_path(shard_index)
+    destination = context.storage_root.upload_file(relative_path, local_path)
+    return {
+        "layer": "silver_shard",
+        "shard_index": shard_index,
+        "path": destination,
+        "size_bytes": local_path.stat().st_size,
+    }
+
 
 def _capture_bronze_raw(
     context: WarehouseCommandContext,
@@ -641,7 +841,12 @@ def _capture_bronze_raw(
         impacted_ciks = _dedupe_ints(impacted_ciks)
         _mdm_auto_enroll(impacted_ciks, scope_reason="daily_index")
         impacted_ciks = _filter_ciks_to_universe(impacted_ciks)
-        selected_ciks = _apply_bronze_cik_limit(impacted_ciks)
+        cik_limit = arguments.get("cik_limit")
+        cik_offset = int(arguments.get("cik_offset") or 0)
+        _validate_window_args(cik_limit, cik_offset)
+        selected_ciks = impacted_ciks[cik_offset:]
+        if cik_limit is not None:
+            selected_ciks = selected_ciks[:cik_limit]
         if selected_ciks:
             result = _run_submissions_bronze_then_silver(
                 context=context,
@@ -681,8 +886,9 @@ def _capture_bronze_raw(
             raw_ciks=scope.get("cik_list"),
             command_name=command_name,
             tracking_status_filter=str(scope.get("tracking_status_filter", "active")),
+            cik_limit=arguments.get("cik_limit"),
+            cik_offset=int(arguments.get("cik_offset") or 0),
         )
-        ciks = _apply_bronze_cik_limit(ciks)
         result = _run_submissions_bronze_then_silver(
             context=context,
             db=db,
@@ -706,8 +912,9 @@ def _capture_bronze_raw(
             raw_ciks=scope.get("cik_list"),
             command_name=command_name,
             tracking_status_filter=str(scope.get("tracking_status_filter", "active")),
+            cik_limit=arguments.get("cik_limit"),
+            cik_offset=int(arguments.get("cik_offset") or 0),
         )
-        ciks = _apply_bronze_cik_limit(ciks)
         result = _run_submissions_bronze_then_silver(
             context=context,
             db=db,
@@ -726,14 +933,16 @@ def _capture_bronze_raw(
         return raw_writes, metrics
 
     if command_name == "bootstrap-next":
-        cik_limit = int(scope.get("cik_limit") or 100)
+        pending_pool_limit = int(scope.get("cik_limit") or 100)
         tracking_status_filter = str(scope.get("tracking_status_filter", "bootstrap_pending"))
         ciks = _resolve_bootstrap_target_ciks(
             raw_ciks=None,
             command_name=command_name,
             tracking_status_filter=tracking_status_filter,
+            cik_limit=arguments.get("cik_limit"),
+            cik_offset=int(arguments.get("cik_offset") or 0),
         )
-        ciks = _apply_bronze_cik_limit(ciks[:cik_limit])
+        ciks = ciks[:pending_pool_limit]
         result = _run_submissions_bronze_then_silver(
             context=context,
             db=db,
@@ -1029,6 +1238,95 @@ def _capture_bronze_raw(
         # will build gold tables and write Snowflake export manifests because
         # gold-refresh is in GOLD_AFFECTING_COMMANDS. Nothing to do here.
         _emit_pipeline_event("gold_refresh_started", run_id=sync_run_id)
+        return raw_writes, metrics
+
+    if command_name == "compute-windows":
+        window_size = int(arguments.get("window_size") or 500)
+        if window_size <= 0:
+            raise WarehouseRuntimeError(
+                f"--window-size must be a positive integer, got {window_size}"
+            )
+        ciks = _get_mdm_tracked_ciks("active")
+        # Build window descriptors: {window_offset, window_limit} for each slice
+        window_descs = [
+            {"window_offset": i, "window_limit": min(window_size, len(ciks) - i)}
+            for i in range(0, max(len(ciks), 1), window_size)
+            if i < len(ciks)
+        ]
+        # Write cik_windows.jsonl
+        windows_content = "\n".join(json.dumps(w) for w in window_descs) + "\n"
+        windows_rel = default_path_resolver().cik_windows_path(sync_run_id)
+        context.bronze_root.write_text(windows_rel, windows_content)
+        # Write cik_snapshot.jsonl
+        snapshot_content = "\n".join(json.dumps({"cik": cik}) for cik in ciks) + "\n"
+        snapshot_rel = default_path_resolver().cik_snapshot_path(sync_run_id)
+        context.bronze_root.write_text(snapshot_rel, snapshot_content)
+        _emit_pipeline_event(
+            "compute_windows_completed",
+            run_id=sync_run_id,
+            cik_count=len(ciks),
+            window_count=len(window_descs),
+            window_size=window_size,
+        )
+        metrics["cik_count"] = len(ciks)
+        metrics["window_count"] = len(window_descs)
+        return raw_writes, metrics
+
+    if command_name == "write-run-summary":
+        from_windows_key = str(arguments.get("from_windows_key") or "").strip()
+        if not from_windows_key:
+            raise WarehouseRuntimeError(
+                "--from-windows-key is required for write-run-summary"
+            )
+        # Read cik_windows.jsonl via the supplied --from-windows-key
+        windows_full_path = context.bronze_root.join(from_windows_key)
+        try:
+            windows_bytes = read_bytes(windows_full_path)
+        except (FileNotFoundError, OSError) as exc:
+            raise WarehouseRuntimeError(
+                f"write-run-summary: cik_windows.jsonl not found at S3 key '{from_windows_key}'"
+            ) from exc
+        windows_text = windows_bytes.decode("utf-8")
+        window_lines = [line for line in windows_text.splitlines() if line.strip()]
+        if not window_lines:
+            raise WarehouseRuntimeError(
+                f"write-run-summary: cik_windows.jsonl at '{from_windows_key}' is empty"
+            )
+        window_count = len(window_lines)
+        # Derive cik_snapshot.jsonl path from the same run prefix
+        snapshot_rel = default_path_resolver().cik_snapshot_path(sync_run_id)
+        snapshot_full_path = context.bronze_root.join(snapshot_rel)
+        try:
+            snapshot_bytes = read_bytes(snapshot_full_path)
+        except (FileNotFoundError, OSError) as exc:
+            raise WarehouseRuntimeError(
+                f"write-run-summary: cik_snapshot.jsonl not found at '{snapshot_rel}'"
+            ) from exc
+        snapshot_text = snapshot_bytes.decode("utf-8")
+        cik_lines = [line for line in snapshot_text.splitlines() if line.strip()]
+        if not cik_lines:
+            raise WarehouseRuntimeError(
+                f"write-run-summary: cik_snapshot.jsonl at '{snapshot_rel}' is empty"
+            )
+        cik_count = len(cik_lines)
+        # Build run-summary.json
+        completed_at = datetime.now(UTC).isoformat()
+        payload = {
+            "run_id": sync_run_id,
+            "window_count": window_count,
+            "cik_count": cik_count,
+            "completed_at": completed_at,
+        }
+        summary_rel = default_path_resolver().run_summary_path(sync_run_id)
+        context.bronze_root.write_text(summary_rel, json.dumps(payload) + "\n")
+        _emit_pipeline_event(
+            "write_run_summary_completed",
+            run_id=sync_run_id,
+            window_count=window_count,
+            cik_count=cik_count,
+        )
+        metrics["window_count"] = window_count
+        metrics["cik_count"] = cik_count
         return raw_writes, metrics
 
     raise WarehouseRuntimeError(f"bronze_capture mode does not support {command_name}")
@@ -2419,22 +2717,45 @@ def _mdm_auto_enroll(ciks: list[int], *, scope_reason: str = "auto_discovered") 
         _emit_pipeline_event("mdm_auto_enroll_failed", scope_reason=scope_reason, error=str(exc), cik_count=len(ciks))
 
 
+def _validate_window_args(cik_limit: int | None, cik_offset: int) -> None:
+    """Validate --cik-limit and --cik-offset values. Raises WarehouseRuntimeError on invalid input."""
+    if cik_limit is not None and cik_limit <= 0:
+        raise WarehouseRuntimeError(
+            f"--cik-limit must be a positive integer, got {cik_limit}"
+        )
+    if cik_offset < 0:
+        raise WarehouseRuntimeError(
+            f"--cik-offset must be a non-negative integer, got {cik_offset}"
+        )
+
+
 def _resolve_bootstrap_target_ciks(
     *,
     raw_ciks: Any,
     command_name: str,
     tracking_status_filter: str,
+    cik_limit: int | None = None,
+    cik_offset: int = 0,
 ) -> list[int]:
-    """Resolve CIKs from MDM exclusively. SEC bronze is not consulted for scope."""
+    """Resolve CIKs from MDM exclusively. SEC bronze is not consulted for scope.
+
+    Applies deterministic windowing (cik_offset then cik_limit) after MDM lookup.
+    """
+    _validate_window_args(cik_limit, cik_offset)
     if raw_ciks:
-        return [_parse_cik(value) for value in raw_ciks]
-    ciks = _get_mdm_tracked_ciks(tracking_status_filter)
-    if not ciks:
-        raise WarehouseRuntimeError(
-            f"{command_name} found no companies with tracking_status='{tracking_status_filter}' in MDM. "
-            "Run 'edgar-warehouse mdm seed-universe --tracking-status "
-            f"{tracking_status_filter}' first."
-        )
+        ciks = [_parse_cik(value) for value in raw_ciks]
+    else:
+        ciks = _get_mdm_tracked_ciks(tracking_status_filter)
+        if not ciks:
+            raise WarehouseRuntimeError(
+                f"{command_name} found no companies with tracking_status='{tracking_status_filter}' in MDM. "
+                "Run 'edgar-warehouse mdm seed-universe --tracking-status "
+                f"{tracking_status_filter}' first."
+            )
+    # Apply windowing: offset first, then limit
+    ciks = ciks[cik_offset:]
+    if cik_limit is not None:
+        ciks = ciks[:cik_limit]
     return ciks
 
 
@@ -2508,6 +2829,7 @@ def _apply_bronze_cik_limit(ciks: list[int]) -> list[int]:
     raw_limit = os.environ.get("WAREHOUSE_BRONZE_CIK_LIMIT", "").strip()
     if not raw_limit:
         return ciks
+    warnings.warn("WAREHOUSE_BRONZE_CIK_LIMIT is deprecated; use --cik-limit/--cik-offset instead", DeprecationWarning, stacklevel=2)
     try:
         limit = int(raw_limit)
     except ValueError as exc:
@@ -2677,6 +2999,16 @@ def _resolve_scope(
         return {
             "limit": arguments.get("limit"),
             "accession_list": arguments.get("accession_list"),
+        }
+
+    if command_name == "compute-windows":
+        return {
+            "window_size": arguments.get("window_size", 500),
+        }
+
+    if command_name == "write-run-summary":
+        return {
+            "from_windows_key": arguments.get("from_windows_key"),
         }
 
     raise WarehouseRuntimeError(f"Unsupported warehouse command: {command_name}")
