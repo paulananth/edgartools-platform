@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# Run the full phased bootstrap pipeline for the next batch of companies.
+# Run the bootstrap (recent-filings) pipeline for the active universe.
+# DEFAULT for all load-100 / load-1000 operations.
+#
+# To run load_history (full historical bootstrap for new companies), use
+#   ./scripts/ops/trigger.sh load-history  (explicit only — not this script)
 #
 # Usage:
 #   bash scripts/run-bootstrap.sh [--aws-profile <profile>] [--watch] [--no-wait]
@@ -10,11 +14,10 @@
 #   --watch                   Stream a spinner + elapsed time until completion.
 #   --no-wait                 Fire the execution and exit immediately.
 #
-# What it does (4 stages, ~15 min for 100 companies):
-#   1. seed-universe          — enrols bootstrap_pending CIKs into MDM
-#   2. bootstrap-batch x10 concurrent — fetch SEC filings → bronze + silver
-#   3. mdm run → backfill-relationships → sync-graph (Neo4j) → verify-graph
-#   4. gold-refresh           — builds all gold tables + Snowflake export manifest
+# What it does:
+#   1. bootstrap              — fetch recent SEC filings for active universe → bronze + silver
+#   2. mdm run → backfill-relationships → sync-graph (Neo4j) → verify-graph
+#   3. gold-refresh           — builds all gold tables + Snowflake export manifest
 #
 # Secrets required in AWS Secrets Manager before running:
 #   edgartools-dev-edgar-identity   SEC API User-Agent email (plain string)
@@ -62,7 +65,7 @@ aws_cli() {
 
 # Resolve account ID — must come after aws_cli is defined so --profile is applied
 ACCOUNT=$(aws_cli sts get-caller-identity --query 'Account' --output text 2>/dev/null || true)
-STATE_MACHINE_ARN="arn:aws:states:${REGION}:${ACCOUNT}:stateMachine:${NAME_PREFIX}-load-history"
+STATE_MACHINE_ARN="arn:aws:states:${REGION}:${ACCOUNT}:stateMachine:${NAME_PREFIX}-bootstrap"
 
 # ---------------------------------------------------------------------------
 # PREFLIGHT: resolve all credentials before touching the pipeline
@@ -176,7 +179,7 @@ echo ""
 # Fire the Step Function
 # ---------------------------------------------------------------------------
 RUN_NAME="${NAME_PREFIX}-bootstrap-$(date -u +%Y%m%d-%H%M%S)"
-echo "Starting load-history: $RUN_NAME"
+echo "Starting bootstrap (recent): $RUN_NAME"
 
 EXEC_ARN=$(aws_cli stepfunctions start-execution \
   --state-machine-arn "$STATE_MACHINE_ARN" \
