@@ -2,25 +2,22 @@
 
 ShardedSilverReader opens N shard DuckDB files in a single in-memory connection
 via ATTACH (READ_ONLY) and creates a UNION ALL view for every table in _TABLES.
-Callers can query unioned data through the ._conn attribute or via the .fetch()
-helper method.
+Callers can query unioned data through the .fetch() helper method.
 
 Duck-typing compatibility
 --------------------------
-``edgar_warehouse.silver_support.access.get_connection(db)`` does ``db._conn``.
-ShardedSilverReader exposes ``._conn`` as a plain instance attribute so this
-accessor works without any modification to ``access.py``.
+``edgar_warehouse.silver_support.access.get_connection(...)`` can use this
+reader through the same connection-bearing interface as ``SilverDatabase``.
 
 gold.py compatibility
 ----------------------
-``build_gold(db)`` calls ``get_connection(db)`` which returns ``db._conn``.
-ShardedSilverReader satisfies this via duck typing — no signature change needed.
+``build_gold(...)`` calls ``get_connection(...)``.
+ShardedSilverReader satisfies this via duck typing; no signature change needed.
 
 MDM pipeline compatibility
 ---------------------------
 ``MDMPipeline`` and ``_require_silver_reader`` call ``silver.fetch(sql, params)``.
-ShardedSilverReader provides a ``.fetch()`` method wrapping ``self._conn.execute()``
-so that MDM callers work unchanged.
+ShardedSilverReader provides that method so MDM callers work unchanged.
 
 Pitfalls
 --------
