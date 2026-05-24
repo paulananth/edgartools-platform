@@ -1380,7 +1380,7 @@ window_size_default = {
 
 # (3) ComputeWindows: queries MDM for active CIKs, writes cik_windows.jsonl + cik_snapshot.jsonl.
 # --window-size uses States.Format to coerce the integer $.window_size to a string for argv.
-compute_windows = ecs_state(wh_small_arn,
+compute_windows = ecs_state(wh_medium_arn,
     "States.Array('compute-windows', '--window-size', States.Format('{}', $.window_size), '--run-id', $$.Execution.Name)",
     next_state="WindowedBootstrap")
 
@@ -1438,7 +1438,7 @@ gold = ecs_state(wh_large_arn,
 # to derive window_count and cik_count, then writes run-summary.json.
 # Uses --from-windows-key so the command resolves counts from S3 manifests; the SM does NOT
 # carry $.WindowCount / $.CikCount through state (those values live only in the S3 manifests).
-write_run_summary = ecs_state(wh_small_arn,
+write_run_summary = ecs_state(wh_medium_arn,
     "States.Array('write-run-summary', '--run-id', $$.Execution.Name, '--from-windows-key', States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name))",
     is_end=True)
 

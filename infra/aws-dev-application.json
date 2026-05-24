@@ -21,11 +21,11 @@
   "step_functions_role_arn": "arn:aws:iam::077127448006:role/sec_platform_runner_step_functions",
   "edgar_identity_secret_arn": "arn:aws:secretsmanager:us-east-1:077127448006:secret:edgartools-dev-edgar-identity-UMvCTb",
   "task_definitions": {
-    "small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-small:58",
-    "medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-medium:58",
-    "large": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-large:58",
-    "mdm_small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-small:55",
-    "mdm_medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-medium:55"
+    "small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-small:60",
+    "medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-medium:60",
+    "large": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-large:60",
+    "mdm_small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-small:57",
+    "mdm_medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-medium:57"
   },
   "state_machines": {
     "bootstrap_full": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-bootstrap-full",
