@@ -65,7 +65,7 @@ def parse_acceptance_datetime(value: Any) -> datetime | None:
 
 
 def sync_mode_for_command(command_name: str) -> str:
-    if command_name in {"bootstrap-full", "bootstrap-recent-10", "bootstrap-batch"}:
+    if command_name in {"bootstrap-full", "bootstrap", "bootstrap-batch"}:
         return "bootstrap"
     if command_name in {"daily-incremental", "load-daily-form-index-for-date", "catch-up-daily-form-index"}:
         return "incremental"
@@ -79,7 +79,7 @@ def sync_mode_for_command(command_name: str) -> str:
 def sync_scope_type_for_command(command_name: str, scope: dict[str, Any]) -> str:
     if command_name in {"daily-incremental", "load-daily-form-index-for-date", "catch-up-daily-form-index"}:
         return "daily_index"
-    if command_name in {"bootstrap-full", "bootstrap-recent-10", "bootstrap-batch"}:
+    if command_name in {"bootstrap-full", "bootstrap", "bootstrap-batch"}:
         return "submissions"
     if command_name == "seed-universe":
         return "reference"

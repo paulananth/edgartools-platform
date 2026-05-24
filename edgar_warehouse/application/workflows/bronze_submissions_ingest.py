@@ -11,8 +11,8 @@ def run_bootstrap_full(args: Any) -> int:
     return execute_standard_command("bootstrap-full", args)
 
 
-def run_bootstrap_recent_10(args: Any) -> int:
-    return execute_standard_command("bootstrap-recent-10", args)
+def run_bootstrap(args: Any) -> int:
+    return execute_standard_command("bootstrap", args)
 
 
 def run_bootstrap_batch(args: Any) -> int:

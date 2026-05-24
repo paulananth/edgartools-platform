@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Failure-injection regression test for bootstrap_phased.
+# Failure-injection regression test for load_history.
 # Confirms that ToleratedFailurePercentage: 0 causes the execution to reach
 # FAILED state when a batch fails, never SUCCEEDED.
 #
-# Strategy: start bootstrap_phased, wait for SeedUniverse to complete, then
+# Strategy: start load_history, wait for SeedUniverse to complete, then
 # overwrite the cik_batches.jsonl S3 file with a single invalid CIK (9999999).
 # The ECS bootstrap-batch task will fetch SEC EDGAR for CIK 9999999, get a 404,
 # raise WarehouseRuntimeError, and exit non-zero. After 3 SFN-level retries the
@@ -37,13 +37,13 @@ done
 
 NAME_PREFIX="edgartools-${ENVIRONMENT}"
 ACCOUNT=$(aws ${AWS_PROFILE_ARG} --region "$AWS_REGION" sts get-caller-identity --query Account --output text)
-SM_ARN="arn:aws:states:${AWS_REGION}:${ACCOUNT}:stateMachine:${NAME_PREFIX}-bootstrap-phased"
+SM_ARN="arn:aws:states:${AWS_REGION}:${ACCOUNT}:stateMachine:${NAME_PREFIX}-load-history"
 aws_() { aws ${AWS_PROFILE_ARG} --region "$AWS_REGION" "$@"; }
 
 RUN_NAME="test-failure-surfacing-$(date -u +%Y%m%d-%H%M%S)"
 
 # ── Step 1: Start execution ────────────────────────────────────────────────────
-echo "[1/5] Starting bootstrap_phased execution: ${RUN_NAME}"
+echo "[1/5] Starting load_history execution: ${RUN_NAME}"
 RESULT=$(aws_ stepfunctions start-execution \
   --state-machine-arn "$SM_ARN" \
   --name "$RUN_NAME" \

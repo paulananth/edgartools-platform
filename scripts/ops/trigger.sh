@@ -2,7 +2,7 @@
 # Trigger a state machine by short name. Replaces looking up ARNs every time.
 #
 # Available pipelines:
-#   bootstrap          bootstrap_phased  (full: seed → batches → MDM → gold)
+#   bootstrap          load_history  (full: seed → batches → MDM → gold)
 #   silver             silver_mdm_gold   (re-process already-loaded bronze)
 #   silver-active      silver_mdm_gold with tracking_status_filter=active
 #   silver-pending     silver_mdm_gold with tracking_status_filter=bootstrap_pending
@@ -44,9 +44,9 @@ aws_() { aws ${AWS_PROFILE_ARG} --region "$AWS_REGION" "$@"; }
 
 case "$PIPELINE" in
   bootstrap)
-    SM="${BASE}:${NAME_PREFIX}-bootstrap-phased"
+    SM="${BASE}:${NAME_PREFIX}-load-history"
     INPUT='{}'
-    LABEL="bootstrap_phased"
+    LABEL="load_history"
     ;;
   silver)
     SM="${BASE}:${NAME_PREFIX}-silver-mdm-gold"

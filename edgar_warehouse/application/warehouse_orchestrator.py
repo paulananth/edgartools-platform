@@ -77,7 +77,7 @@ if TYPE_CHECKING:
 GOLD_AFFECTING_COMMANDS = {
     "bootstrap-full",
     "bootstrap-next",
-    "bootstrap-recent-10",
+    "bootstrap",
     # bootstrap-batch deliberately excluded: parallel batch tasks do bronze+silver only.
     # Gold is built once by gold-refresh after all batches complete.
     "daily-incremental",
@@ -881,7 +881,7 @@ def _capture_bronze_raw(
             metrics["sync_status"] = "partial"
         return raw_writes, metrics
 
-    if command_name == "bootstrap-recent-10":
+    if command_name == "bootstrap":
         ciks = _resolve_bootstrap_target_ciks(
             raw_ciks=scope.get("cik_list"),
             command_name=command_name,
@@ -897,7 +897,7 @@ def _capture_bronze_raw(
             include_pagination=False,
             fetch_date=now.date(),
             force=bool(arguments.get("force")),
-            load_mode="bootstrap_recent_10",
+            load_mode="bootstrap",
             recent_limit=arguments.get("recent_limit"),
             artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
             parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
@@ -2910,7 +2910,7 @@ def _resolve_scope(
     silver_root: StorageLocation | None = None,
 ) -> dict[str, Any]:
     db = _open_silver_database(silver_root) if silver_root is not None else None
-    if command_name == "bootstrap-recent-10":
+    if command_name == "bootstrap":
         return {
             "cik_list": arguments.get("cik_list"),
             "recent_limit": arguments.get("recent_limit"),
