@@ -2,7 +2,8 @@
 # Trigger a state machine by short name. Replaces looking up ARNs every time.
 #
 # Available pipelines:
-#   bootstrap          load_history  (full: seed → batches → MDM → gold)
+#   recent             edgartools-dev-bootstrap  (DEFAULT: recent filings for active universe)
+#   load-history       load_history  (EXPLICIT ONLY: seed new companies → batches → MDM → gold)
 #   silver             silver_mdm_gold   (re-process already-loaded bronze)
 #   silver-active      silver_mdm_gold with tracking_status_filter=active
 #   silver-pending     silver_mdm_gold with tracking_status_filter=bootstrap_pending
@@ -12,10 +13,11 @@
 #   mdm-sync           standalone mdm_sync_graph
 #
 # Usage:
-#   ./scripts/ops/trigger.sh bootstrap
+#   ./scripts/ops/trigger.sh recent
+#   ./scripts/ops/trigger.sh load-history   # explicit only
 #   ./scripts/ops/trigger.sh silver-active
 #   ./scripts/ops/trigger.sh gold
-#   ./scripts/ops/trigger.sh --env dev bootstrap
+#   ./scripts/ops/trigger.sh --env dev recent
 
 set -euo pipefail
 
@@ -34,7 +36,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -z "$PIPELINE" ]] && { echo "Usage: $0 [--env dev] <pipeline>"; echo "Pipelines: bootstrap silver silver-active silver-pending gold mdm-gold mdm-run mdm-verify mdm-sync"; exit 2; }
+[[ -z "$PIPELINE" ]] && { echo "Usage: $0 [--env dev] <pipeline>"; echo "Pipelines: recent load-history silver silver-active silver-pending gold mdm-gold mdm-run mdm-verify mdm-sync"; exit 2; }
 
 NAME_PREFIX="edgartools-${ENVIRONMENT}"
 ACCOUNT=$(aws ${AWS_PROFILE_ARG} --region "$AWS_REGION" sts get-caller-identity --query Account --output text 2>/dev/null)
@@ -43,10 +45,15 @@ BASE="arn:aws:states:${AWS_REGION}:${ACCOUNT}:stateMachine"
 aws_() { aws ${AWS_PROFILE_ARG} --region "$AWS_REGION" "$@"; }
 
 case "$PIPELINE" in
-  bootstrap)
-    SM="${BASE}:${NAME_PREFIX}-load-history"
+  recent)
+    SM="${BASE}:${NAME_PREFIX}-bootstrap"
     INPUT='{}'
-    LABEL="load_history"
+    LABEL="bootstrap (recent filings, active universe)"
+    ;;
+  load-history)
+    SM="${BASE}:${NAME_PREFIX}-load-history"
+    INPUT='{"universe_limit": "100"}'
+    LABEL="load_history (seed new companies → batches → MDM → gold)"
     ;;
   silver)
     SM="${BASE}:${NAME_PREFIX}-silver-mdm-gold"
@@ -95,7 +102,7 @@ case "$PIPELINE" in
     ;;
   *)
     echo "Unknown pipeline: $PIPELINE" >&2
-    echo "Valid: bootstrap silver silver-active silver-pending gold mdm-run mdm-verify mdm-sync" >&2
+    echo "Valid: recent load-history silver silver-active silver-pending gold mdm-run mdm-verify mdm-sync" >&2
     exit 2
     ;;
 esac

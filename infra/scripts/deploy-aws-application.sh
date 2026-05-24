@@ -1549,21 +1549,45 @@ gold = ecs_state(wh_large_arn,
     is_end=True, retry_secs=60)
 
 display = workflow_name.replace("_", " ").title()
-definition = {
-    "Comment": (
-        f"{display}: (1) bronze+silver capture, (2) MDM entity resolution + Neo4j sync, "
-        "(3) gold build + Snowflake export manifest."
-    ),
-    "StartAt": "RunWarehouseTask",
-    "States": {
-        "RunWarehouseTask": run_wh,
-        "MdmRun":           mdm_run,
-        "MdmBackfill":      mdm_backfill,
-        "MdmSync":          mdm_sync,
-        "MdmVerify":        mdm_verify,
-        "GoldRefresh":      gold,
-    },
-}
+
+# All workflows except daily_incremental seed the universe first so any
+# bootstrap_pending CIKs are enrolled before the main pipeline step runs.
+if workflow_name != "daily_incremental":
+    seed_universe = ecs_state(wh_medium_arn,
+        "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
+        next_state="RunWarehouseTask", retry_secs=60)
+    definition = {
+        "Comment": (
+            f"{display}: (0) seed universe, (1) bronze+silver capture, "
+            "(2) MDM entity resolution + Neo4j sync, (3) gold build + Snowflake export manifest."
+        ),
+        "StartAt": "SeedUniverse",
+        "States": {
+            "SeedUniverse":     seed_universe,
+            "RunWarehouseTask": run_wh,
+            "MdmRun":           mdm_run,
+            "MdmBackfill":      mdm_backfill,
+            "MdmSync":          mdm_sync,
+            "MdmVerify":        mdm_verify,
+            "GoldRefresh":      gold,
+        },
+    }
+else:
+    definition = {
+        "Comment": (
+            f"{display}: (1) bronze+silver capture, (2) MDM entity resolution + Neo4j sync, "
+            "(3) gold build + Snowflake export manifest."
+        ),
+        "StartAt": "RunWarehouseTask",
+        "States": {
+            "RunWarehouseTask": run_wh,
+            "MdmRun":           mdm_run,
+            "MdmBackfill":      mdm_backfill,
+            "MdmSync":          mdm_sync,
+            "MdmVerify":        mdm_verify,
+            "GoldRefresh":      gold,
+        },
+    }
 pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
 PY
 }
@@ -1670,17 +1694,23 @@ mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", ne
 mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh")
 gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
 
+seed_universe = ecs_state(wh_medium_arn,
+    "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
+    next_state="SeedSilverBatches", retry_secs=60)
+
 definition = {
     "Comment": (
         "Re-process pipeline for already-loaded bronze: "
+        "(0) seed universe (enrol any bootstrap_pending CIKs), "
         "(1) seed batch file from silver DuckDB (no SEC downloads), "
         "(2) parallel bootstrap-batch uses bronze SHA256 cache for submissions + runs artifact pipeline, "
         "(3) MDM entity resolution + Neo4j sync, "
         "(4) gold build + Snowflake export manifest. "
         "Trigger with: {} or {\"tracking_status_filter\": \"active|bootstrap_pending\"}"
     ),
-    "StartAt": "SeedSilverBatches",
+    "StartAt": "SeedUniverse",
     "States": {
+        "SeedUniverse":     seed_universe,
         "SeedSilverBatches": seed,
         "BatchSilver":  batch_map,
         "MdmRun":       mdm_run,
