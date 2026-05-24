@@ -256,8 +256,9 @@ def _silver_reader():
 
     MDM_SILVER_DUCKDB semantics after sharding:
       - Absent/empty → return None (no silver source configured)
-      - S3 URI (contains "://") → ignored; use WAREHOUSE_STORAGE_ROOT to locate
-        shards via shard-manifest.json, download all shards, return ShardedSilverReader
+      - S3 URI (contains "://") → localize through object_storage.read_bytes as
+        a legacy single-file silver source unless WAREHOUSE_STORAGE_ROOT selects
+        remote shard hydration
       - Local directory path → list shard-*.duckdb files in that directory,
         return ShardedSilverReader over those files
       - Local .duckdb file path (legacy dev path) → wrap as single-shard
@@ -283,17 +284,16 @@ def _silver_reader():
             return None
         return ShardedSilverReader(shard_paths)
 
-    # Legacy S3 URI in MDM_SILVER_DUCKDB itself (older ECS task definition style)
+    # Legacy remote URI in MDM_SILVER_DUCKDB itself (older ECS task definition
+    # style). Keep this path independent of WarehouseSettings so local tests and
+    # repair commands can use an explicit silver source without full runtime env.
     if duckdb_path is not None and "://" in duckdb_path:
-        from edgar_warehouse.application.warehouse_orchestrator import _hydrate_all_shards
-        from edgar_warehouse.application.command_context_factory import build_warehouse_context
+        from edgar_warehouse.infrastructure.object_storage import read_bytes
 
-        context = build_warehouse_context("mdm-run")
-        local_paths = _hydrate_all_shards(context)
-        shard_paths = [p for p in local_paths if p is not None]
-        if not shard_paths:
-            return None
-        return ShardedSilverReader(shard_paths)
+        local_path = Path(os.environ.get("MDM_LOCAL_SILVER_DUCKDB", "/tmp/mdm-silver.duckdb"))
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(read_bytes(duckdb_path))
+        duckdb_path = str(local_path)
 
     if duckdb_path is None:
         return None
