@@ -277,6 +277,10 @@ def get_neo4j_graph_metrics(
                     rel_type,
                 )
                 known_edge_keys = _diagnostic_edge_keys(diagnostic_inputs, rel_type)
+                mdm_active_count = _diagnostic_active_count(
+                    diagnostic_inputs,
+                    rel_type,
+                )
                 type_limit = min(sample_limit, remaining_sample_slots)
                 missing_for_type: list[Neo4jDiagnosticSample] = []
                 extra_for_type: list[Neo4jDiagnosticSample] = []
@@ -292,7 +296,7 @@ def get_neo4j_graph_metrics(
 
                 if type_limit > 0 and _needs_extra_samples(
                     edge_count,
-                    known_edge_keys,
+                    mdm_active_count,
                 ):
                     extra_limit = min(sample_limit, remaining_sample_slots)
                     if extra_limit > 0:
@@ -631,8 +635,21 @@ def _diagnostic_edge_keys(
     return normalized
 
 
-def _needs_extra_samples(edge_count: int, known_edge_keys: list[tuple[str, str, str]]) -> bool:
-    return edge_count > len(known_edge_keys)
+def _diagnostic_active_count(
+    diagnostic_inputs: Mapping[str, Any],
+    relationship_type: str,
+) -> int | None:
+    active_counts = diagnostic_inputs.get("active_relationship_counts", {})
+    if not isinstance(active_counts, Mapping) or relationship_type not in active_counts:
+        return None
+    try:
+        return int(active_counts[relationship_type] or 0)
+    except (TypeError, ValueError):
+        return None
+
+
+def _needs_extra_samples(edge_count: int, mdm_active_count: int | None) -> bool:
+    return mdm_active_count is not None and edge_count > mdm_active_count
 
 
 def _utc_now_iso() -> str:

@@ -60,7 +60,11 @@ Build a read-only dashboard for reviewing MDM relational data and Neo4j graph da
   3. Empty, partial, disconnected, and permission-error states are clear and safe.
   4. Documentation explains local launch, environment variables, read-only guarantees, and expected operator workflow.
   5. Focused dashboard tests pass without live credentials by using fixtures/mocks.
-**Plans**: TBD
+**Plans**: 4 plans
+  - 10-01: Correct registry-label graph counts and final review navigation (wave 1)
+  - 10-02: Add bounded row-limit and page filters (wave 2; depends on 10-01)
+  - 10-03: Harden empty, partial, disconnected, and permission-error states (wave 3; depends on 10-02)
+  - 10-04: Update operator runbook and run full focused validation (wave 4; depends on 10-03)
 
 ---
 
@@ -70,4 +74,4 @@ Build a read-only dashboard for reviewing MDM relational data and Neo4j graph da
 |-------|-----------|----------------|--------|-----------|
 | 8. Dashboard Foundations And Read-Only Data Access | v1.2 MDM Neo4j Review Dashboard | 3/3 | Verification pending | - |
 | 9. MDM And Neo4j Review Metrics | v1.2 MDM Neo4j Review Dashboard | 0/TBD | Not started | - |
-| 10. Operator Review Experience | v1.2 MDM Neo4j Review Dashboard | 0/TBD | Not started | - |
+| 10. Operator Review Experience | v1.2 MDM Neo4j Review Dashboard | 0/4 | Not started | - |

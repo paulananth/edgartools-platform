@@ -136,8 +136,8 @@ View ownership:
 |---------------------|---------------------------|
 | Overview | Coverage snapshot first, then grouped warning area, then section last-refreshed timestamps. Demote Phase 08 smoke output to a collapsed or low-priority diagnostic surface, or remove it from the primary view. |
 | Entities | MDM Overview detail: entity counts by domain for company, adviser, person, security, and fund. Include raw counts and source-readiness status. |
-| Relationships | MDM Overview detail: relationship counts by registered relationship type, active count, pending sync count, and readiness status. Show every registered active relationship type, including zero-count types. |
-| Graph Coverage | Graph Coverage detail: chart-first entity-domain comparison, relationship coverage table, pending sync samples, missing-edge samples, and extra graph data samples. |
+| Relationships | MDM Overview detail plus Neo4j Overview edge-count detail: relationship counts by registered relationship type, MDM active count, pending sync count, Neo4j edge count when available, and readiness status. Show every registered active relationship type, including zero-count types. |
+| Graph Coverage | Neo4j Overview node-count detail plus Graph Coverage diagnostics: chart-first entity-domain comparison, Neo4j node counts by label, relationship coverage table, pending sync samples, missing-edge samples, and extra graph data samples. |
 | Neighborhood | Keep the Phase 08 placeholder. Entity neighborhood lookup and graph visualization remain out of scope for Phase 09. |
 
 Overview snapshot:

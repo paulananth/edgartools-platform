@@ -171,6 +171,7 @@ def test_run_mdm_smoke_query_returns_bounded_structured_rows(db_session):
 def test_mdm_dashboard_metrics_include_all_required_domain_counts(db_session):
     from edgar_warehouse.mdm.dashboard_readonly import get_mdm_dashboard_metrics
 
+    _ensure_person_registry(db_session)
     _seed_domain_entity(db_session, "company", "Apple Inc.", cik=320193)
     _seed_domain_entity(db_session, "adviser", "Example Adviser LLC", cik=100001)
     _seed_domain_entity(db_session, "person", "Jane Officer")
@@ -194,6 +195,23 @@ def test_mdm_dashboard_metrics_include_all_required_domain_counts(db_session):
     assert payload["entity_counts"]["person"]["count"] == 1
     assert payload["entity_counts"]["security"]["count"] == 1
     assert payload["entity_counts"]["fund"]["count"] == 1
+    assert payload["registry"]["neo4j_labels"] == [
+        "Adviser",
+        "Company",
+        "Fund",
+        "Person",
+        "Security",
+    ]
+    assert {
+        row["entity_type"]: row["neo4j_label"]
+        for row in payload["registry"]["entity_type_details"]
+    } == {
+        "adviser": "Adviser",
+        "company": "Company",
+        "fund": "Fund",
+        "person": "Person",
+        "security": "Security",
+    }
     assert payload["last_refreshed"]
 
 
@@ -410,6 +428,9 @@ def test_active_relationship_diagnostic_inputs_are_ordered_bounded_and_keyed(db_
     assert payload["known_mdm_edge_keys"]["OWNS_COMPANY"] == [
         ("OWNS_COMPANY", person_id, company_id)
     ]
+    assert payload["active_relationship_counts"]["MANAGES_FUND"] == 2
+    assert payload["active_relationship_counts"]["OWNS_COMPANY"] == 1
+    assert payload["active_relationship_counts"]["ISSUED_BY"] == 0
     assert all("properties" not in row for row in payload["candidate_rows"])
 
 
