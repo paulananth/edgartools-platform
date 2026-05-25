@@ -42,7 +42,13 @@ MDM relationship parity, dashboard inspection, and end-to-end AWS verification.
 4. Node/edge table or view contract is defined for MDM entities, relationship types, labels, ids, properties, and projection inputs.
 5. Implementation risks and plan-review questions are captured so `$gsd-plan-review-convergence 1 --codex` can review the plan before coding.
 
-**Plans**: TBD
+**Plans**:
+
+| Plan | Wave | Objective | Requirements |
+|------|------|-----------|--------------|
+| 01-01 | 1 | Create the Native App install, privilege, compute-pool, warehouse, and live-account validation runbook. | DISC-01, SNOW-01, ISO-01, ISO-02 |
+| 01-02 | 1 | Record the architecture decision for direct migration to the Snowflake Native App target and Snowflake-managed graph access. | DISC-02, DISC-03, ISO-01, ISO-02 |
+| 01-03 | 2 | Define the graph projection contract and plan-review checklist for implementation phases. | DISC-04, SNOW-01, ISO-01, ISO-02 |
 
 ### Phase 2: Snowflake Graph Sync Contract
 
@@ -104,7 +110,7 @@ MDM relationship parity, dashboard inspection, and end-to-end AWS verification.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Snowflake Native App Feasibility And Architecture Decision | v1.3 Neo4j Snowflake Native App Migration | 0/TBD | Not started | - |
+| 1. Snowflake Native App Feasibility And Architecture Decision | v1.3 Neo4j Snowflake Native App Migration | 3/3 planned | Ready to execute | - |
 | 2. Snowflake Graph Sync Contract | v1.3 Neo4j Snowflake Native App Migration | 0/TBD | Not started | - |
 | 3. Hosted Graph Verification And E2E Cutover | v1.3 Neo4j Snowflake Native App Migration | 0/TBD | Not started | - |
 | 4. Dashboard Hosted Graph Migration | v1.3 Neo4j Snowflake Native App Migration | 0/TBD | Not started | - |
