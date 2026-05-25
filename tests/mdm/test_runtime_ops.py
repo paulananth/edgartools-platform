@@ -62,7 +62,11 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
     result = migrations.migrate(_Engine(), seed=False)
 
     assert result["dialect"] == "postgresql"
-    assert applied_files == ["001_initial_schema.sql", "003_tracking_status_index.sql"]
+    assert applied_files == [
+        "001_initial_schema.sql",
+        "003_tracking_status_index.sql",
+        "004_company_ticker_parent.sql",
+    ]
 
 
 def test_mdm_cli_exposes_e2e_operations() -> None:

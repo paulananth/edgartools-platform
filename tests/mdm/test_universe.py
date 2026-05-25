@@ -37,6 +37,17 @@ def test_bulk_upsert_creates_new_companies(engine):
     assert sorted(ciks) == [1234, 5678]
 
 
+def test_bulk_upsert_populates_ticker_attribute(engine):
+    rows = [{"cik": 1234, "ticker": "AAPL", "exchange": "NASDAQ"}]
+    bulk_upsert_universe(engine, rows)
+    with engine.connect() as conn:
+        ticker, primary_ticker = conn.execute(
+            text("SELECT ticker, primary_ticker FROM mdm_company WHERE cik = 1234")
+        ).one()
+    assert ticker == "AAPL"
+    assert primary_ticker == "AAPL"
+
+
 def test_bulk_upsert_is_idempotent(engine):
     rows = [{"cik": 1234, "ticker": "AAPL", "exchange": "NASDAQ"}]
     count1 = bulk_upsert_universe(engine, rows)

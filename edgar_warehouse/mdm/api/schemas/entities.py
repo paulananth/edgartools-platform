@@ -38,9 +38,11 @@ class CompanyOut(_Base):
     sic_description: Optional[str] = None
     state_of_incorporation: Optional[str] = None
     fiscal_year_end: Optional[str] = None
+    ticker: Optional[str] = None
     primary_ticker: Optional[str] = None
     primary_exchange: Optional[str] = None
     tracking_status: Optional[str] = None
+    parent_company_entity_id: Optional[str] = None
 
 
 class AdviserOut(_Base):

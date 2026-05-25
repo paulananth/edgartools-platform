@@ -23,9 +23,11 @@ COMPANY_FIELDS = [
     "sic_description",
     "state_of_incorporation",
     "fiscal_year_end",
+    "ticker",
     "primary_ticker",
     "primary_exchange",
     "tracking_status",
+    "parent_company_entity_id",
 ]
 
 
@@ -69,6 +71,7 @@ class CompanyResolver(BaseResolver):
         primary_ticker = (ticker_row or {}).get("ticker")
         primary_exchange = (ticker_row or {}).get("exchange")
         tracking_status = (tracking_row or {}).get("tracking_status")
+        parent_company_entity_id = self._parent_company_entity_id(ctx, company_row)
 
         staged = {
             "canonical_name": name,
@@ -77,9 +80,11 @@ class CompanyResolver(BaseResolver):
             "sic_description": company_row.get("sic_description"),
             "state_of_incorporation": company_row.get("state_of_incorporation"),
             "fiscal_year_end": company_row.get("fiscal_year_end"),
+            "ticker": primary_ticker,
             "primary_ticker": primary_ticker,
             "primary_exchange": primary_exchange,
             "tracking_status": tracking_status,
+            "parent_company_entity_id": parent_company_entity_id,
         }
         self._stage_attrs(ctx, outcome.entity_id, source_system, str(cik), staged)
         self._register_source(
@@ -135,9 +140,11 @@ class CompanyResolver(BaseResolver):
             "sic_description": row.sic_description,
             "state_of_incorporation": row.state_of_incorporation,
             "fiscal_year_end": row.fiscal_year_end,
+            "ticker": row.ticker,
             "primary_ticker": row.primary_ticker,
             "primary_exchange": row.primary_exchange,
             "tracking_status": row.tracking_status,
+            "parent_company_entity_id": row.parent_company_entity_id,
         }
 
     @staticmethod
@@ -159,3 +166,20 @@ class CompanyResolver(BaseResolver):
             winner = merges.get(field_name)
             if winner is not None and winner.winning_value is not None:
                 setattr(row, field_name, winner.winning_value)
+
+    @staticmethod
+    def _parent_company_entity_id(ctx: ResolverContext, company_row: dict) -> Optional[str]:
+        parent_cik = (
+            company_row.get("parent_company_cik")
+            or company_row.get("parent_cik")
+            or company_row.get("ultimate_parent_cik")
+        )
+        if parent_cik in (None, ""):
+            return None
+        try:
+            parent_cik_int = int(parent_cik)
+        except (TypeError, ValueError):
+            return None
+        return ctx.session.scalar(
+            select(MdmCompany.entity_id).where(MdmCompany.cik == parent_cik_int)
+        )

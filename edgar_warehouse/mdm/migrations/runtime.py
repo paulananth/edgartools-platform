@@ -75,13 +75,18 @@ _MSSQL_SCHEMA_STATEMENTS = [
         sic_description NVARCHAR(512) NULL,
         state_of_incorporation NVARCHAR(64) NULL,
         fiscal_year_end NVARCHAR(16) NULL,
+        ticker NVARCHAR(64) NULL,
         primary_ticker NVARCHAR(64) NULL,
         primary_exchange NVARCHAR(128) NULL,
         tracking_status NVARCHAR(64) NULL,
+        parent_company_entity_id NVARCHAR(36) NULL REFERENCES mdm_entity(entity_id),
         valid_from DATETIMEOFFSET NOT NULL DEFAULT SYSUTCDATETIME(),
         valid_to DATETIMEOFFSET NULL
     )
     """,
+    "IF COL_LENGTH('mdm_company', 'ticker') IS NULL ALTER TABLE mdm_company ADD ticker NVARCHAR(64) NULL",
+    "IF COL_LENGTH('mdm_company', 'parent_company_entity_id') IS NULL ALTER TABLE mdm_company ADD parent_company_entity_id NVARCHAR(36) NULL REFERENCES mdm_entity(entity_id)",
+    "UPDATE mdm_company SET ticker = primary_ticker WHERE ticker IS NULL AND primary_ticker IS NOT NULL",
     """
     IF OBJECT_ID('mdm_adviser', 'U') IS NULL
     CREATE TABLE mdm_adviser (
@@ -344,6 +349,7 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
     else:
         _apply_sql_file(engine, "001_initial_schema.sql")
         _apply_sql_file(engine, "003_tracking_status_index.sql")
+        _apply_sql_file(engine, "004_company_ticker_parent.sql")
 
     if seed:
         with Session(engine) as session:
@@ -493,7 +499,9 @@ def _seed_field_rules(session: Session) -> None:
         ("company", "ein", "immutable", "edgar_cik", None),
         ("company", "sic_code", "immutable", "edgar_cik", None),
         ("company", "sic_description", "immutable", "edgar_cik", None),
+        ("company", "ticker", "highest_source_rank", None, None),
         ("company", "primary_ticker", "highest_source_rank", None, None),
+        ("company", "parent_company_entity_id", "source_priority", None, ["edgar_cik", "derived"]),
         ("adviser", "canonical_name", "source_priority", None, ["adv_filing", "edgar_cik"]),
         ("adviser", "aum_total", "most_recent", "adv_filing", None),
         ("person", "canonical_name", "source_priority", None, None),
@@ -576,8 +584,10 @@ def _seed_relationship_types(session: Session) -> None:
     rows = [
         ("IS_INSIDER", "person", "company", "outbound", ["source_entity_id", "target_entity_id", "title"], "extend_temporal", "Person is officer/director/10pct owner of company"),
         ("HOLDS", "person", "security", "outbound", ["source_entity_id", "target_entity_id"], "extend_temporal", "Person holds a security position"),
+        ("COMPANY_HOLDS", "company", "security", "outbound", ["source_entity_id", "target_entity_id"], "extend_temporal", "Company holds a security position as a Form 3/4/5 reporting owner"),
         ("ISSUED_BY", "security", "company", "outbound", ["source_entity_id", "target_entity_id"], "extend_temporal", "Security is issued by company"),
         ("IS_ENTITY_OF", "adviser", "company", "outbound", ["source_entity_id", "target_entity_id"], "replace", "Adviser is the same legal entity as a registered company"),
+        ("HAS_PARENT_COMPANY", "company", "company", "outbound", ["source_entity_id", "target_entity_id"], "replace", "Company has a parent company"),
         ("MANAGES_FUND", "adviser", "fund", "outbound", ["source_entity_id", "target_entity_id"], "extend_temporal", "Adviser manages a private fund"),
         ("IS_PERSON_OF", "adviser", "person", "outbound", ["source_entity_id", "target_entity_id"], "replace", "Individual investment adviser is the same natural person as an ownership reporting owner"),
     ]
@@ -605,7 +615,23 @@ def _seed_relationship_properties(session: Session) -> None:
         ("HOLDS", "shares_owned", "float", False, "Number of shares held"),
         ("HOLDS", "direct_indirect", "text", False, "D = direct ownership, I = indirect"),
         ("HOLDS", "as_of_date", "date", False, "Date of the reported position"),
+        ("HOLDS", "is_derivative", "boolean", False, "Whether the holding came from the derivative ownership table"),
+        ("HOLDS", "conversion_or_exercise_price", "float", False, "Derivative conversion or exercise price"),
+        ("HOLDS", "exercise_date", "date", False, "Derivative exercise date"),
+        ("HOLDS", "expiration_date", "date", False, "Derivative expiration date"),
+        ("HOLDS", "underlying_security_title", "text", False, "Underlying derivative security title"),
+        ("HOLDS", "underlying_security_shares", "float", False, "Underlying derivative security share count"),
         ("HOLDS", "source_accession", "text", False, "Source filing accession number"),
+        ("COMPANY_HOLDS", "shares_owned", "float", False, "Number of shares held"),
+        ("COMPANY_HOLDS", "direct_indirect", "text", False, "D = direct ownership, I = indirect"),
+        ("COMPANY_HOLDS", "as_of_date", "date", False, "Date of the reported position"),
+        ("COMPANY_HOLDS", "is_derivative", "boolean", False, "Whether the holding came from the derivative ownership table"),
+        ("COMPANY_HOLDS", "conversion_or_exercise_price", "float", False, "Derivative conversion or exercise price"),
+        ("COMPANY_HOLDS", "exercise_date", "date", False, "Derivative exercise date"),
+        ("COMPANY_HOLDS", "expiration_date", "date", False, "Derivative expiration date"),
+        ("COMPANY_HOLDS", "underlying_security_title", "text", False, "Underlying derivative security title"),
+        ("COMPANY_HOLDS", "underlying_security_shares", "float", False, "Underlying derivative security share count"),
+        ("COMPANY_HOLDS", "source_accession", "text", False, "Source filing accession number"),
         ("MANAGES_FUND", "since_date", "date", False, "Date adviser began managing the fund"),
         ("MANAGES_FUND", "source_accession", "text", False, "Source ADV filing accession number"),
     ]
@@ -639,6 +665,50 @@ def _seed_relationship_mappings(session: Session) -> None:
             "IS_INSIDER from Form 3/4/5 reporting owner rows.",
         ),
         (
+            "COMPANY_HOLDS",
+            "ownership_filing",
+            "sec_ownership_non_derivative_txn",
+            "owner_cik",
+            "security_title",
+            "company",
+            "security",
+            {"shares_owned": "shares_owned_after", "source_accession": "accession_number"},
+            "COMPANY_HOLDS from corporate Form 3/4/5 reporting owner transaction rows.",
+        ),
+        (
+            "COMPANY_HOLDS",
+            "ownership_filing",
+            "sec_ownership_derivative_txn",
+            "owner_cik",
+            "security_title",
+            "company",
+            "security",
+            {"shares_owned": "shares_owned_after", "source_accession": "accession_number", "is_derivative": True},
+            "COMPANY_HOLDS from corporate Form 3/4/5 derivative transaction rows.",
+        ),
+        (
+            "HOLDS",
+            "ownership_filing",
+            "sec_ownership_derivative_txn",
+            "owner_cik",
+            "security_title",
+            "person",
+            "security",
+            {"shares_owned": "shares_owned_after", "source_accession": "accession_number", "is_derivative": True},
+            "HOLDS from natural-person Form 3/4/5 derivative transaction rows.",
+        ),
+        (
+            "HOLDS",
+            "ownership_filing",
+            "sec_ownership_non_derivative_txn",
+            "owner_cik",
+            "security_title",
+            "person",
+            "security",
+            {"shares_owned": "shares_owned_after", "source_accession": "accession_number"},
+            "HOLDS from natural-person Form 3/4/5 non-derivative transaction rows.",
+        ),
+        (
             "MANAGES_FUND",
             "adv_filing",
             "sec_adv_private_fund",
@@ -659,6 +729,17 @@ def _seed_relationship_mappings(session: Session) -> None:
             "company",
             {},
             "IS_ENTITY_OF derived by matching adviser CIK to company CIK.",
+        ),
+        (
+            "HAS_PARENT_COMPANY",
+            "derived",
+            "mdm_company",
+            "entity_id",
+            "parent_company_entity_id",
+            "company",
+            "company",
+            {},
+            "HAS_PARENT_COMPANY derived from mdm_company.parent_company_entity_id.",
         ),
     ]
     for rel_type_name, source_system, source_table, source_field, target_field, source_type, target_type, mapping, description in rows:

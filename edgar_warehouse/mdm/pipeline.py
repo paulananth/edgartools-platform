@@ -35,8 +35,10 @@ from edgar_warehouse.mdm.rules import MDMRuleEngine
 RELATIONSHIP_TYPES = (
     "IS_INSIDER",
     "HOLDS",
+    "COMPANY_HOLDS",
     "ISSUED_BY",
     "IS_ENTITY_OF",
+    "HAS_PARENT_COMPANY",
     "MANAGES_FUND",
     "IS_PERSON_OF",
 )
@@ -134,8 +136,14 @@ class MDMPipeline:
         resolver = SecurityResolver()
         sql = """
             SELECT DISTINCT t.accession_number, t.owner_index, t.txn_index,
-                   t.security_title, f.cik AS issuer_cik
+                   t.security_title, f.cik AS issuer_cik, FALSE AS is_derivative
             FROM sec_ownership_non_derivative_txn t
+            JOIN sec_company_filing f ON t.accession_number = f.accession_number
+            WHERE t.security_title IS NOT NULL
+            UNION ALL
+            SELECT DISTINCT t.accession_number, t.owner_index, t.txn_index,
+                   t.security_title, f.cik AS issuer_cik, TRUE AS is_derivative
+            FROM sec_ownership_derivative_txn t
             JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
         """
@@ -249,10 +257,14 @@ class MDMPipeline:
             return self._derive_is_insider(sync_engine, remaining)
         if rel_type_name == "HOLDS":
             return self._derive_holds(sync_engine, remaining)
+        if rel_type_name == "COMPANY_HOLDS":
+            return self._derive_company_holds(sync_engine, remaining)
         if rel_type_name == "ISSUED_BY":
             return self._derive_issued_by(sync_engine, remaining)
         if rel_type_name == "IS_ENTITY_OF":
             return self._derive_is_entity_of(sync_engine, remaining)
+        if rel_type_name == "HAS_PARENT_COMPANY":
+            return self._derive_has_parent_company(sync_engine, remaining)
         if rel_type_name == "MANAGES_FUND":
             return self._derive_manages_fund(sync_engine, remaining)
         if rel_type_name == "IS_PERSON_OF":
@@ -339,9 +351,33 @@ class MDMPipeline:
             SELECT t.accession_number, t.owner_index, t.txn_index,
                    t.security_title, t.transaction_date, t.shares_owned_after,
                    t.ownership_direct_indirect,
+                   FALSE AS is_derivative,
+                   NULL AS conversion_or_exercise_price,
+                   NULL AS exercise_date,
+                   NULL AS expiration_date,
+                   NULL AS underlying_security_title,
+                   NULL AS underlying_security_shares,
                    o.owner_cik, o.owner_name,
                    f.cik AS issuer_cik
             FROM sec_ownership_non_derivative_txn t
+            JOIN sec_ownership_reporting_owner o
+              ON t.accession_number = o.accession_number
+             AND t.owner_index = o.owner_index
+            JOIN sec_company_filing f ON t.accession_number = f.accession_number
+            WHERE t.security_title IS NOT NULL
+            UNION ALL
+            SELECT t.accession_number, t.owner_index, t.txn_index,
+                   t.security_title, t.transaction_date, t.shares_owned_after,
+                   t.ownership_direct_indirect,
+                   TRUE AS is_derivative,
+                   t.conversion_or_exercise_price,
+                   t.exercise_date,
+                   t.expiration_date,
+                   t.underlying_security_title,
+                   t.underlying_security_shares,
+                   o.owner_cik, o.owner_name,
+                   f.cik AS issuer_cik
+            FROM sec_ownership_derivative_txn t
             JOIN sec_ownership_reporting_owner o
               ON t.accession_number = o.accession_number
              AND t.owner_index = o.owner_index
@@ -394,6 +430,12 @@ class MDMPipeline:
                 "shares_owned": self._json_property(row.get("shares_owned_after")),
                 "direct_indirect": row.get("ownership_direct_indirect"),
                 "as_of_date": self._json_property(row.get("transaction_date")),
+                "is_derivative": bool(row.get("is_derivative")),
+                "conversion_or_exercise_price": self._json_property(row.get("conversion_or_exercise_price")),
+                "exercise_date": self._json_property(row.get("exercise_date")),
+                "expiration_date": self._json_property(row.get("expiration_date")),
+                "underlying_security_title": row.get("underlying_security_title"),
+                "underlying_security_shares": self._json_property(row.get("underlying_security_shares")),
             }
             _rel, created = sync_engine.ensure_relationship(
                 rel_type_name="HOLDS",
@@ -420,6 +462,99 @@ class MDMPipeline:
                 break
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
+    def _derive_company_holds(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
+        sql = """
+            SELECT t.accession_number, t.owner_index, t.txn_index,
+                   t.security_title, t.transaction_date, t.shares_owned_after,
+                   t.ownership_direct_indirect,
+                   FALSE AS is_derivative,
+                   NULL AS conversion_or_exercise_price,
+                   NULL AS exercise_date,
+                   NULL AS expiration_date,
+                   NULL AS underlying_security_title,
+                   NULL AS underlying_security_shares,
+                   o.owner_cik, o.owner_name,
+                   f.cik AS issuer_cik
+            FROM sec_ownership_non_derivative_txn t
+            JOIN sec_ownership_reporting_owner o
+              ON t.accession_number = o.accession_number
+             AND t.owner_index = o.owner_index
+            JOIN sec_company_filing f ON t.accession_number = f.accession_number
+            WHERE t.security_title IS NOT NULL
+            UNION ALL
+            SELECT t.accession_number, t.owner_index, t.txn_index,
+                   t.security_title, t.transaction_date, t.shares_owned_after,
+                   t.ownership_direct_indirect,
+                   TRUE AS is_derivative,
+                   t.conversion_or_exercise_price,
+                   t.exercise_date,
+                   t.expiration_date,
+                   t.underlying_security_title,
+                   t.underlying_security_shares,
+                   o.owner_cik, o.owner_name,
+                   f.cik AS issuer_cik
+            FROM sec_ownership_derivative_txn t
+            JOIN sec_ownership_reporting_owner o
+              ON t.accession_number = o.accession_number
+             AND t.owner_index = o.owner_index
+            JOIN sec_company_filing f ON t.accession_number = f.accession_number
+            WHERE t.security_title IS NOT NULL
+        """
+        company_ciks = self._company_cik_set()
+        inserted = 0
+        skipped_corporate = 0
+        skipped_unresolved_source = 0
+        skipped_unresolved_target = 0
+        skipped_existing = 0
+        for row in self.silver.fetch(sql):
+            owner_cik = row.get("owner_cik")
+            if owner_cik not in company_ciks:
+                skipped_corporate += 1
+                continue
+            company_id = self._company_entity_id(owner_cik)
+            if company_id is None:
+                skipped_unresolved_source += 1
+                continue
+            security_id = self._security_entity_id(row)
+            if security_id is None:
+                skipped_unresolved_target += 1
+                print(json.dumps({
+                    "event": "mdm_relationship_skip",
+                    "rel_type": "COMPANY_HOLDS",
+                    "reason": "unresolved_target",
+                    "security_title": row.get("security_title"),
+                    "issuer_cik": row.get("issuer_cik"),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }), file=sys.stderr, flush=True)
+                continue
+            properties = {
+                "shares_owned": self._json_property(row.get("shares_owned_after")),
+                "direct_indirect": row.get("ownership_direct_indirect"),
+                "as_of_date": self._json_property(row.get("transaction_date")),
+                "is_derivative": bool(row.get("is_derivative")),
+                "conversion_or_exercise_price": self._json_property(row.get("conversion_or_exercise_price")),
+                "exercise_date": self._json_property(row.get("exercise_date")),
+                "expiration_date": self._json_property(row.get("expiration_date")),
+                "underlying_security_title": row.get("underlying_security_title"),
+                "underlying_security_shares": self._json_property(row.get("underlying_security_shares")),
+            }
+            _rel, created = sync_engine.ensure_relationship(
+                rel_type_name="COMPANY_HOLDS",
+                source_entity_id=company_id,
+                target_entity_id=security_id,
+                properties={k: v for k, v in properties.items() if v is not None},
+                effective_from=row.get("transaction_date"),
+                source_system="ownership_filing",
+                source_accession=row.get("accession_number"),
+            )
+            if created:
+                inserted += 1
+            else:
+                skipped_existing += 1
+            if remaining is not None and inserted >= remaining:
+                break
+        return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
+
     def _derive_is_entity_of(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
         inserted = 0
         skipped_corporate = 0
@@ -432,6 +567,34 @@ class MDMPipeline:
                 source_entity_id=adviser_id,
                 target_entity_id=company_id,
                 source_system="adv_filing",
+            )
+            inserted += 1 if created else 0
+            skipped_existing += 0 if created else 1
+            if remaining is not None and inserted >= remaining:
+                break
+        return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
+
+    def _derive_has_parent_company(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
+        from edgar_warehouse.mdm.database import MdmCompany
+
+        inserted = 0
+        skipped_corporate = 0
+        skipped_unresolved_source = 0
+        skipped_unresolved_target = 0
+        skipped_existing = 0
+        for company in self.session.scalars(
+            select(MdmCompany)
+            .where(MdmCompany.parent_company_entity_id.isnot(None))
+            .order_by(MdmCompany.cik)
+        ):
+            if company.entity_id == company.parent_company_entity_id:
+                skipped_unresolved_target += 1
+                continue
+            _rel, created = sync_engine.ensure_relationship(
+                rel_type_name="HAS_PARENT_COMPANY",
+                source_entity_id=company.entity_id,
+                target_entity_id=company.parent_company_entity_id,
+                source_system="derived",
             )
             inserted += 1 if created else 0
             skipped_existing += 0 if created else 1
@@ -523,6 +686,11 @@ class MDMPipeline:
         sql = """
             SELECT DISTINCT t.security_title, f.cik AS issuer_cik
             FROM   sec_ownership_non_derivative_txn t
+            JOIN   sec_company_filing f ON f.accession_number = t.accession_number
+            WHERE  t.security_title IS NOT NULL
+            UNION
+            SELECT DISTINCT t.security_title, f.cik AS issuer_cik
+            FROM   sec_ownership_derivative_txn t
             JOIN   sec_company_filing f ON f.accession_number = t.accession_number
             WHERE  t.security_title IS NOT NULL
         """
@@ -627,11 +795,7 @@ class MDMPipeline:
     def _security_entity_id(self, txn_row: dict) -> Optional[str]:
         from edgar_warehouse.mdm.database import MdmEntity, MdmSecurity, MdmSourceRef
 
-        source_id = (
-            f"{txn_row.get('accession_number')}:"
-            f"{txn_row.get('owner_index')}:"
-            f"{txn_row.get('txn_index')}"
-        )
+        source_id = _ownership_security_source_id(txn_row)
         source_match = self.session.scalar(
             select(MdmSourceRef.entity_id)
             .join(MdmEntity, MdmEntity.entity_id == MdmSourceRef.entity_id)
@@ -693,3 +857,12 @@ class MDMPipeline:
         if hasattr(value, "__float__") and value.__class__.__module__ == "decimal":
             return float(value)
         return value
+
+
+def _ownership_security_source_id(txn_row: dict) -> str:
+    accession = txn_row.get("accession_number")
+    owner_index = txn_row.get("owner_index")
+    txn_index = txn_row.get("txn_index")
+    if txn_row.get("is_derivative"):
+        return f"{accession}:derivative:{owner_index}:{txn_index}"
+    return f"{accession}:{owner_index}:{txn_index}"

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import os
+import uuid
 from typing import Any, Optional
 
 from sqlalchemy import select, update
@@ -30,6 +32,107 @@ class SnowflakeWriter:
 
     def upsert(self, table: str, rows: list[dict], key: str = "entity_id") -> int:
         raise NotImplementedError
+
+
+class SnowflakeConnectorWriter(SnowflakeWriter):
+    """Snowflake upsert writer backed by snowflake-connector-python.
+
+    Target MDM tables are expected to already exist. The writer creates a
+    temporary table shaped from the current batch, inserts batch rows, then
+    MERGEs by the configured key.
+    """
+
+    def __init__(self, connection: Any, *, database: str | None = None, schema: str | None = None) -> None:
+        self.connection = connection
+        self.database = database
+        self.schema = schema
+
+    @classmethod
+    def from_env(cls) -> "SnowflakeConnectorWriter":
+        try:
+            import snowflake.connector  # type: ignore
+        except ImportError as exc:  # pragma: no cover - depends on optional extra
+            raise RuntimeError(
+                "snowflake-connector-python is not installed. Run with the snowflake extra, "
+                "for example: uv run --extra snowflake edgar-warehouse mdm export ..."
+            ) from exc
+
+        account = os.environ.get("MDM_SNOWFLAKE_ACCOUNT") or os.environ.get("DBT_SNOWFLAKE_ACCOUNT")
+        user = os.environ.get("MDM_SNOWFLAKE_USER") or os.environ.get("DBT_SNOWFLAKE_USER")
+        password = os.environ.get("MDM_SNOWFLAKE_PASSWORD") or os.environ.get("DBT_SNOWFLAKE_PASSWORD")
+        database = os.environ.get("MDM_SNOWFLAKE_DATABASE") or os.environ.get("DBT_SNOWFLAKE_DATABASE")
+        schema = os.environ.get("MDM_SNOWFLAKE_SCHEMA") or os.environ.get("DBT_SNOWFLAKE_SCHEMA") or "EDGARTOOLS_GOLD"
+        warehouse = os.environ.get("MDM_SNOWFLAKE_WAREHOUSE") or os.environ.get("DBT_SNOWFLAKE_WAREHOUSE")
+        role = os.environ.get("MDM_SNOWFLAKE_ROLE") or os.environ.get("DBT_SNOWFLAKE_ROLE")
+        missing = [
+            name
+            for name, value in {
+                "MDM_SNOWFLAKE_ACCOUNT or DBT_SNOWFLAKE_ACCOUNT": account,
+                "MDM_SNOWFLAKE_USER or DBT_SNOWFLAKE_USER": user,
+                "MDM_SNOWFLAKE_PASSWORD or DBT_SNOWFLAKE_PASSWORD": password,
+                "MDM_SNOWFLAKE_DATABASE or DBT_SNOWFLAKE_DATABASE": database,
+                "MDM_SNOWFLAKE_WAREHOUSE or DBT_SNOWFLAKE_WAREHOUSE": warehouse,
+            }.items()
+            if not value
+        ]
+        if missing:
+            raise RuntimeError("Missing Snowflake export setting(s): " + ", ".join(missing))
+
+        kwargs = {
+            "account": account,
+            "user": user,
+            "password": password,
+            "database": database,
+            "schema": schema,
+            "warehouse": warehouse,
+        }
+        if role:
+            kwargs["role"] = role
+        return cls(snowflake.connector.connect(**kwargs), database=database, schema=schema)
+
+    def upsert(self, table: str, rows: list[dict], key: str = "entity_id") -> int:
+        if not rows:
+            return 0
+        columns = sorted({str(column) for row in rows for column in row})
+        if key not in columns:
+            raise ValueError(f"Upsert key {key!r} is not present in rows for {table}")
+        target = self._table_name(table)
+        temp_table = f"TEMP_{_safe_identifier(table)}_{uuid.uuid4().hex[:12]}"
+        column_defs = ", ".join(f"{_quote_identifier(column)} VARIANT" for column in columns)
+        insert_columns = ", ".join(_quote_identifier(column) for column in columns)
+        placeholders = ", ".join(["PARSE_JSON(%s)"] * len(columns))
+        updates = ", ".join(
+            f"target.{_quote_identifier(column)} = source.{_quote_identifier(column)}"
+            for column in columns
+            if column != key
+        )
+        values = [
+            tuple(_json_text(row.get(column)) for column in columns)
+            for row in rows
+        ]
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(f"CREATE TEMPORARY TABLE {_quote_identifier(temp_table)} ({column_defs})")
+            cursor.executemany(
+                f"INSERT INTO {_quote_identifier(temp_table)} ({insert_columns}) VALUES ({placeholders})",
+                values,
+            )
+            merge_sql = (
+                f"MERGE INTO {target} AS target "
+                f"USING {_quote_identifier(temp_table)} AS source "
+                f"ON target.{_quote_identifier(key)} = source.{_quote_identifier(key)} "
+                f"WHEN MATCHED THEN UPDATE SET {updates} "
+                f"WHEN NOT MATCHED THEN INSERT ({insert_columns}) VALUES "
+                f"({', '.join(f'source.{_quote_identifier(column)}' for column in columns)})"
+            )
+            cursor.execute(merge_sql)
+        finally:
+            cursor.close()
+        return len(rows)
+
+    def _table_name(self, table: str) -> str:
+        parts = [part for part in (self.database, self.schema, table) if part]
+        return ".".join(_quote_identifier(part) for part in parts)
 
 
 @dataclass
@@ -86,3 +189,20 @@ class MDMExporter:
             else:
                 out[col.name] = val
         return out
+
+
+def _safe_identifier(value: str) -> str:
+    cleaned = str(value).upper()
+    if not cleaned.replace("_", "").isalnum() or not cleaned[0].isalpha():
+        raise ValueError(f"Unsafe Snowflake identifier: {value!r}")
+    return cleaned
+
+
+def _quote_identifier(value: str) -> str:
+    return f'"{_safe_identifier(value)}"'
+
+
+def _json_text(value: Any) -> str:
+    import json
+
+    return json.dumps(value)

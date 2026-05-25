@@ -28,14 +28,16 @@ INSERT INTO mdm_source_priority (entity_type, source_system, priority, descripti
 ON CONFLICT (entity_type, source_system) DO NOTHING;
 
 -- ---------------------------------------------------------------------------
--- mdm_field_survivorship (9 rows)
+-- mdm_field_survivorship (11 rows)
 -- ---------------------------------------------------------------------------
 INSERT INTO mdm_field_survivorship (entity_type, field_name, rule_type, source_system, preferred_source_order, notes) VALUES
     ('company', 'canonical_name',  'source_priority',     NULL,         NULL,                           'Highest active priority source wins'),
     ('company', 'ein',             'immutable',           'edgar_cik',  NULL,                           'EIN set once from EDGAR, never overridden'),
     ('company', 'sic_code',        'immutable',           'edgar_cik',  NULL,                           'SIC authoritative from EDGAR only'),
     ('company', 'sic_description', 'immutable',           'edgar_cik',  NULL,                           'SIC description from EDGAR only'),
+    ('company', 'ticker',          'highest_source_rank', NULL,         NULL,                           'Ticker with source_rank=1 wins'),
     ('company', 'primary_ticker',  'highest_source_rank', NULL,         NULL,                           'Ticker with source_rank=1 wins'),
+    ('company', 'parent_company_entity_id', 'source_priority', NULL,    '["edgar_cik","derived"]',      'Parent company entity reference from source or derived data'),
     ('adviser', 'canonical_name',  'source_priority',     NULL,         '["adv_filing","edgar_cik"]',   'ADV has legal adviser name; preferred despite priority 2'),
     ('adviser', 'aum_total',       'most_recent',         'adv_filing', NULL,                           'Most recent ADV filing by effective_date'),
     ('person',  'canonical_name',  'source_priority',     NULL,         NULL,                           'Highest active priority source wins'),
@@ -226,6 +228,11 @@ INSERT INTO mdm_relationship_type (rel_type_name, source_node_type, target_node_
      '["source_entity_id","target_entity_id"]',
      'extend_temporal',
      'Person holds a security position'),
+    ('COMPANY_HOLDS',
+     'company',  'security', 'outbound', TRUE,
+     '["source_entity_id","target_entity_id"]',
+     'extend_temporal',
+     'Company holds a security position as a Form 3/4/5 reporting owner'),
     ('ISSUED_BY',
      'security', 'company',  'outbound', TRUE,
      '["source_entity_id","target_entity_id"]',
@@ -236,6 +243,11 @@ INSERT INTO mdm_relationship_type (rel_type_name, source_node_type, target_node_
      '["source_entity_id","target_entity_id"]',
      'replace',
      'Adviser is the same legal entity as a registered company'),
+    ('HAS_PARENT_COMPANY',
+     'company',  'company',  'outbound', TRUE,
+     '["source_entity_id","target_entity_id"]',
+     'replace',
+     'Company has a parent company'),
     ('MANAGES_FUND',
      'adviser',  'fund',     'outbound', TRUE,
      '["source_entity_id","target_entity_id"]',
@@ -290,6 +302,56 @@ SELECT rel_type_id, 'source_accession', 'text',  FALSE, 'Source filing accession
 FROM   mdm_relationship_type WHERE rel_type_name = 'HOLDS'
 ON CONFLICT (rel_type_id, property_name) DO NOTHING;
 
+INSERT INTO mdm_relationship_property_def (rel_type_id, property_name, data_type, is_required, description)
+SELECT rel_type_id, 'is_derivative', 'boolean', FALSE, 'Whether the holding came from the derivative ownership table'
+FROM   mdm_relationship_type WHERE rel_type_name = 'HOLDS'
+ON CONFLICT (rel_type_id, property_name) DO NOTHING;
+
+INSERT INTO mdm_relationship_property_def (rel_type_id, property_name, data_type, is_required, description)
+SELECT rel_type_id, 'conversion_or_exercise_price', 'float', FALSE, 'Derivative conversion or exercise price'
+FROM   mdm_relationship_type WHERE rel_type_name = 'HOLDS'
+ON CONFLICT (rel_type_id, property_name) DO NOTHING;
+
+INSERT INTO mdm_relationship_property_def (rel_type_id, property_name, data_type, is_required, description)
+SELECT rel_type_id, 'exercise_date', 'date', FALSE, 'Derivative exercise date'
+FROM   mdm_relationship_type WHERE rel_type_name = 'HOLDS'
+ON CONFLICT (rel_type_id, property_name) DO NOTHING;
+
+INSERT INTO mdm_relationship_property_def (rel_type_id, property_name, data_type, is_required, description)
+SELECT rel_type_id, 'expiration_date', 'date', FALSE, 'Derivative expiration date'
+FROM   mdm_relationship_type WHERE rel_type_name = 'HOLDS'
+ON CONFLICT (rel_type_id, property_name) DO NOTHING;
+
+INSERT INTO mdm_relationship_property_def (rel_type_id, property_name, data_type, is_required, description)
+SELECT rel_type_id, 'underlying_security_title', 'text', FALSE, 'Underlying derivative security title'
+FROM   mdm_relationship_type WHERE rel_type_name = 'HOLDS'
+ON CONFLICT (rel_type_id, property_name) DO NOTHING;
+
+INSERT INTO mdm_relationship_property_def (rel_type_id, property_name, data_type, is_required, description)
+SELECT rel_type_id, 'underlying_security_shares', 'float', FALSE, 'Underlying derivative security share count'
+FROM   mdm_relationship_type WHERE rel_type_name = 'HOLDS'
+ON CONFLICT (rel_type_id, property_name) DO NOTHING;
+
+-- COMPANY_HOLDS mirrors HOLDS properties for corporate reporting owners.
+INSERT INTO mdm_relationship_property_def (rel_type_id, property_name, data_type, is_required, description)
+SELECT rt.rel_type_id, p.property_name, p.data_type, p.is_required, p.description
+FROM mdm_relationship_type rt
+CROSS JOIN (
+    VALUES
+        ('shares_owned', 'float', FALSE, 'Number of shares held'),
+        ('direct_indirect', 'text', FALSE, 'D = direct ownership, I = indirect'),
+        ('as_of_date', 'date', FALSE, 'Date of the reported position'),
+        ('source_accession', 'text', FALSE, 'Source filing accession number'),
+        ('is_derivative', 'boolean', FALSE, 'Whether the holding came from the derivative ownership table'),
+        ('conversion_or_exercise_price', 'float', FALSE, 'Derivative conversion or exercise price'),
+        ('exercise_date', 'date', FALSE, 'Derivative exercise date'),
+        ('expiration_date', 'date', FALSE, 'Derivative expiration date'),
+        ('underlying_security_title', 'text', FALSE, 'Underlying derivative security title'),
+        ('underlying_security_shares', 'float', FALSE, 'Underlying derivative security share count')
+) AS p(property_name, data_type, is_required, description)
+WHERE rt.rel_type_name = 'COMPANY_HOLDS'
+ON CONFLICT (rel_type_id, property_name) DO NOTHING;
+
 -- MANAGES_FUND properties
 INSERT INTO mdm_relationship_property_def (rel_type_id, property_name, data_type, is_required, description)
 SELECT rel_type_id, 'since_date',       'date',  FALSE, 'Date adviser began managing the fund'
@@ -336,6 +398,104 @@ SELECT
     'IS_INSIDER from Form 3/4/5 reporting owner rows. Pipeline derives issuer_cik via sec_filing join on accession_number and role via boolean flags.'
 FROM mdm_relationship_type rt
 WHERE rt.rel_type_name = 'IS_INSIDER'
+ON CONFLICT (rel_type_id, source_system, source_table) DO NOTHING;
+
+-- HOLDS from natural-person ownership transaction rows, including derivatives.
+INSERT INTO mdm_relationship_source_mapping (
+    rel_type_id, source_system, source_table,
+    source_entity_field, target_entity_field,
+    source_entity_type, target_entity_type,
+    property_mapping,
+    effective_from_field, effective_to_field,
+    description
+)
+SELECT
+    rt.rel_type_id,
+    'ownership_filing',
+    'sec_ownership_non_derivative_txn',
+    'owner_cik',
+    'security_title',
+    'person',
+    'security',
+    '{"shares_owned":"shares_owned_after","source_accession":"accession_number"}'::jsonb,
+    'transaction_date',
+    NULL,
+    'HOLDS from natural-person Form 3/4/5 non-derivative transaction rows.'
+FROM mdm_relationship_type rt
+WHERE rt.rel_type_name = 'HOLDS'
+ON CONFLICT (rel_type_id, source_system, source_table) DO NOTHING;
+
+INSERT INTO mdm_relationship_source_mapping (
+    rel_type_id, source_system, source_table,
+    source_entity_field, target_entity_field,
+    source_entity_type, target_entity_type,
+    property_mapping,
+    effective_from_field, effective_to_field,
+    description
+)
+SELECT
+    rt.rel_type_id,
+    'ownership_filing',
+    'sec_ownership_derivative_txn',
+    'owner_cik',
+    'security_title',
+    'person',
+    'security',
+    '{"shares_owned":"shares_owned_after","source_accession":"accession_number","is_derivative":true}'::jsonb,
+    'transaction_date',
+    NULL,
+    'HOLDS from natural-person Form 3/4/5 derivative transaction rows.'
+FROM mdm_relationship_type rt
+WHERE rt.rel_type_name = 'HOLDS'
+ON CONFLICT (rel_type_id, source_system, source_table) DO NOTHING;
+
+-- COMPANY_HOLDS covers corporate reporting owners previously skipped by HOLDS.
+INSERT INTO mdm_relationship_source_mapping (
+    rel_type_id, source_system, source_table,
+    source_entity_field, target_entity_field,
+    source_entity_type, target_entity_type,
+    property_mapping,
+    effective_from_field, effective_to_field,
+    description
+)
+SELECT
+    rt.rel_type_id,
+    'ownership_filing',
+    'sec_ownership_non_derivative_txn',
+    'owner_cik',
+    'security_title',
+    'company',
+    'security',
+    '{"shares_owned":"shares_owned_after","source_accession":"accession_number"}'::jsonb,
+    'transaction_date',
+    NULL,
+    'COMPANY_HOLDS from corporate Form 3/4/5 non-derivative transaction rows.'
+FROM mdm_relationship_type rt
+WHERE rt.rel_type_name = 'COMPANY_HOLDS'
+ON CONFLICT (rel_type_id, source_system, source_table) DO NOTHING;
+
+INSERT INTO mdm_relationship_source_mapping (
+    rel_type_id, source_system, source_table,
+    source_entity_field, target_entity_field,
+    source_entity_type, target_entity_type,
+    property_mapping,
+    effective_from_field, effective_to_field,
+    description
+)
+SELECT
+    rt.rel_type_id,
+    'ownership_filing',
+    'sec_ownership_derivative_txn',
+    'owner_cik',
+    'security_title',
+    'company',
+    'security',
+    '{"shares_owned":"shares_owned_after","source_accession":"accession_number","is_derivative":true}'::jsonb,
+    'transaction_date',
+    NULL,
+    'COMPANY_HOLDS from corporate Form 3/4/5 derivative transaction rows.'
+FROM mdm_relationship_type rt
+WHERE rt.rel_type_name = 'COMPANY_HOLDS'
 ON CONFLICT (rel_type_id, source_system, source_table) DO NOTHING;
 
 -- MANAGES_FUND from adv_filing / sec_adv_private_fund
@@ -392,4 +552,31 @@ SELECT
     'IS_ENTITY_OF derived by matching adviser CIK to company CIK in mdm_company'
 FROM mdm_relationship_type rt
 WHERE rt.rel_type_name = 'IS_ENTITY_OF'
+ON CONFLICT (rel_type_id, source_system, source_table) DO NOTHING;
+
+-- HAS_PARENT_COMPANY derived from mdm_company.parent_company_entity_id
+INSERT INTO mdm_relationship_source_mapping (
+    rel_type_id, source_system, source_table,
+    source_entity_field, target_entity_field,
+    source_entity_type, target_entity_type,
+    property_mapping,
+    effective_from_field, effective_to_field,
+    filter_condition,
+    description
+)
+SELECT
+    rt.rel_type_id,
+    'derived',
+    'mdm_company',
+    'entity_id',
+    'parent_company_entity_id',
+    'company',
+    'company',
+    '{}'::JSONB,
+    NULL,
+    NULL,
+    '{"parent_company_entity_id_not_null": {"field": "parent_company_entity_id", "op": "IS NOT NULL"}}'::JSONB,
+    'HAS_PARENT_COMPANY derived from mdm_company.parent_company_entity_id'
+FROM mdm_relationship_type rt
+WHERE rt.rel_type_name = 'HAS_PARENT_COMPANY'
 ON CONFLICT (rel_type_id, source_system, source_table) DO NOTHING;

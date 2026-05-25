@@ -113,6 +113,8 @@ def db_session() -> Generator[Session, None, None]:
         _seed_entity_type(session, "security", "Security", "mdm_security")
         _seed_rel_type(session, "MANAGES_FUND", "adviser",  "fund")
         _seed_rel_type(session, "ISSUED_BY",    "security", "company")
+        _seed_rel_type(session, "COMPANY_HOLDS", "company", "security")
+        _seed_rel_type(session, "HAS_PARENT_COMPANY", "company", "company", strategy="replace")
         session.commit()
         yield session
 

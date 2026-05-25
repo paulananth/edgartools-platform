@@ -256,7 +256,7 @@ def verify_neo4j(env: str, region: str) -> None:
 
             print()
             print("  EDGES BY RELATIONSHIP TYPE (expect IS_INSIDER > 0)")
-            for rel in ["IS_INSIDER", "HOLDS", "MANAGES_FUND", "ISSUED_BY", "IS_ENTITY_OF", "IS_PERSON_OF"]:
+            for rel in ["IS_INSIDER", "HOLDS", "COMPANY_HOLDS", "MANAGES_FUND", "ISSUED_BY", "IS_ENTITY_OF", "IS_PERSON_OF"]:
                 n = s.run(f"MATCH ()-[r:{rel}]->() RETURN count(r) AS n").single()["n"]
                 ok(f"  {rel}", n)
 
