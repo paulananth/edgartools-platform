@@ -1,0 +1,8 @@
+{
+  "workflow": {
+    "research": false,
+    "text_mode": true,
+    "plan_review_convergence": false
+  },
+  "workstream": "neo4j-snowflake"
+}
