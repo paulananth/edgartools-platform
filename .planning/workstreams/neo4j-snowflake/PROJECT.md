@@ -3,7 +3,7 @@
 workstream: neo4j-snowflake
 status: active
 milestone: v1.3 Neo4j Snowflake Native App Migration
-updated: 2026-05-25
+updated: 2026-05-26
 
 ---
 
@@ -37,6 +37,15 @@ Developer-facing success metric: Given an already-loaded AWS MDM dataset, operat
 the existing graph sync and verification workflow against the Snowflake-hosted Neo4j Native
 App path, prove parity with MDM relationship state, inspect the result in the dashboard, and
 avoid any dependency on an external Neo4j Aura/Bolt target.
+
+---
+
+## Current State
+
+Phase 1 is complete. The workstream now has a verified Snowflake Marketplace Native App
+operator runbook, an accepted architecture decision replacing external Neo4j for this
+milestone, a Snowflake-managed graph access model, and a Native App-facing MDM node/edge
+projection contract for Phase 2 planning.
 
 ---
 
