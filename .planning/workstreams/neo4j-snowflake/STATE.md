@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Neo4j Snowflake Native App Migration
 status: ready_to_execute
-stopped_at: Phase 2 planning complete
-last_updated: "2026-05-26T13:31:59.680Z"
-last_activity: 2026-05-26 -- Phase 2 planning complete
+stopped_at: Phase 2 replanned after review feedback
+last_updated: "2026-05-26T23:50:27Z"
+last_activity: 2026-05-26 -- Phase 2 replanned after review feedback
 progress:
   total_phases: 4
   completed_phases: 1
@@ -21,7 +21,7 @@ progress:
 Phase: 2 (Snowflake Graph Sync Contract) - PLANNED
 Plan: 3 plans ready
 Status: Ready to execute
-Last activity: 2026-05-26 -- Phase 2 planning complete
+Last activity: 2026-05-26 -- Phase 2 replanned after review feedback
 
 Progress: [##--------] 25% (Phase 1 complete; Phase 2 planned; milestone v1.3 remains in progress)
 
@@ -82,6 +82,11 @@ projection surfaces should change.
   `02-02` for the Snowflake graph sync executor, and `02-03` for `edgar-warehouse mdm
   sync-graph` CLI wiring.
 
+- Phase 2 replanning addressed review feedback: `02-02` now requires fail-closed validation
+  for unknown relationship/entity filters before materialization, and `02-03` now keeps
+  `load-relationships` derivation-only by default unless an explicit graph sync opt-in is
+  provided.
+
 ## Blockers
 
 - Live Marketplace app availability, Snowflake account privileges, and app role grant details must
@@ -93,6 +98,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-05-26T13:31:59.680Z
-Stopped at: Phase 2 planning complete
+Last session: 2026-05-26T23:50:27Z
+Stopped at: Phase 2 replanned after review feedback
 Resume file: .planning/workstreams/neo4j-snowflake/phases/02-snowflake-graph-sync-contract/02-01-PLAN.md

@@ -71,8 +71,8 @@ MDM relationship parity, dashboard inspection, and end-to-end AWS verification.
 | Plan | Wave | Objective | Requirements |
 |------|------|-----------|--------------|
 | 02-01 | 1 | Define the Snowflake graph projection SQL contract for canonical MDM graph inputs and Native App-compatible table projections. | SYNC-01, SYNC-02, SNOW-02, SNOW-04 |
-| 02-02 | 2 | Add the reusable Snowflake graph sync executor and credential-free writer/idempotency tests. | SYNC-01, SYNC-02, SYNC-03, SNOW-02, SNOW-04 |
-| 02-03 | 3 | Wire `edgar-warehouse mdm sync-graph` to Snowflake graph materialization while preserving bounded repair filters. | SYNC-01, SYNC-02, SYNC-03, SNOW-02, SNOW-04 |
+| 02-02 | 2 | Add the reusable Snowflake graph sync executor with fail-closed relationship/entity filter validation and credential-free writer/idempotency tests. | SYNC-01, SYNC-02, SYNC-03, SNOW-02, SNOW-04 |
+| 02-03 | 3 | Wire `edgar-warehouse mdm sync-graph` to Snowflake graph materialization while keeping `load-relationships` graph writes explicit opt-in. | SYNC-01, SYNC-02, SYNC-03, SNOW-02, SNOW-04 |
 
 ### Phase 3: Hosted Graph Verification And E2E Cutover
 
