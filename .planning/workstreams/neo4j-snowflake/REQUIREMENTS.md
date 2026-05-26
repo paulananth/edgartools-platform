@@ -3,7 +3,7 @@
 workstream: neo4j-snowflake
 status: active
 milestone: v1.3 Neo4j Snowflake Native App Migration
-updated: 2026-05-25
+updated: 2026-05-26
 
 ---
 
@@ -11,7 +11,7 @@ updated: 2026-05-25
 
 ### Feasibility And Architecture
 
-- [ ] **DISC-01**: Operator can install or validate access to the Neo4j Graph Analytics Native App through the Snowflake Marketplace flow.
+- [x] **DISC-01**: Operator can install or validate access to the Neo4j Graph Analytics Native App through the Snowflake Marketplace flow.
 - [ ] **DISC-02**: Operator has an architecture decision that makes Snowflake-hosted Neo4j the graph target and removes external Neo4j from milestone validation.
 - [ ] **DISC-03**: Operator has a documented credential/configuration model where graph access comes from Snowflake-managed app roles, grants, and connection context rather than external `NEO4J_*` secrets.
 - [ ] **DISC-04**: Operator has a confirmed table/view contract for nodes, edges, labels, relationship types, and graph projection inputs expected by the Native App.
@@ -25,7 +25,7 @@ updated: 2026-05-25
 
 ### Snowflake Native App Integration
 
-- [ ] **SNOW-01**: Snowflake roles, grants, warehouses, and application permissions required by the Neo4j Native App are documented and can be applied without broadening unrelated platform privileges.
+- [x] **SNOW-01**: Snowflake roles, grants, warehouses, and application permissions required by the Neo4j Native App are documented and can be applied without broadening unrelated platform privileges.
 - [ ] **SNOW-02**: Neo4j graph projections can be created from existing Snowflake source/gold data plus MDM graph-ready tables/views without redesigning the gold layer.
 - [ ] **SNOW-03**: Query-level graph checks can run through the Native App path, including at least one traversal/connectivity-style check relevant to SEC entity relationships.
 - [ ] **SNOW-04**: Native App output tables, if used, land in a governed Snowflake schema with clear ownership and cleanup behavior.
@@ -46,8 +46,8 @@ updated: 2026-05-25
 
 ### Isolation
 
-- [ ] **ISO-01**: Work stays isolated from unfinished `mdm-neo4j-dashboard` and older `neo4j-pipe` workstream artifacts unless explicitly merged.
-- [ ] **ISO-02**: Changes remain AWS/Snowflake-focused and do not introduce non-AWS deployment paths, registries, storage targets, workflow engines, or secret-management paths.
+- [x] **ISO-01**: Work stays isolated from unfinished `mdm-neo4j-dashboard` and older `neo4j-pipe` workstream artifacts unless explicitly merged.
+- [x] **ISO-02**: Changes remain AWS/Snowflake-focused and do not introduce non-AWS deployment paths, registries, storage targets, workflow engines, or secret-management paths.
 
 ## Future Requirements
 
@@ -67,7 +67,7 @@ updated: 2026-05-25
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DISC-01 | Phase 1 | Pending |
+| DISC-01 | Phase 1 | Complete |
 | DISC-02 | Phase 1 | Pending |
 | DISC-03 | Phase 1 | Pending |
 | DISC-04 | Phase 1 | Pending |
@@ -75,7 +75,7 @@ updated: 2026-05-25
 | SYNC-02 | Phase 2 | Pending |
 | SYNC-03 | Phase 2 | Pending |
 | SYNC-04 | Phase 3 | Pending |
-| SNOW-01 | Phase 1 | Pending |
+| SNOW-01 | Phase 1 | Complete |
 | SNOW-02 | Phase 2 | Pending |
 | SNOW-03 | Phase 3 | Pending |
 | SNOW-04 | Phase 2 | Pending |
@@ -87,5 +87,5 @@ updated: 2026-05-25
 | DASH-01 | Phase 4 | Pending |
 | DASH-02 | Phase 4 | Pending |
 | DASH-03 | Phase 4 | Pending |
-| ISO-01 | Phase 1 | Pending |
-| ISO-02 | Phase 1 | Pending |
+| ISO-01 | Phase 1 | Complete |
+| ISO-02 | Phase 1 | Complete |

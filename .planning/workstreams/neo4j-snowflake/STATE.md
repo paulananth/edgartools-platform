@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Neo4j Snowflake Native App Migration
 status: executing
-stopped_at: Phase 1 execution started
-last_updated: "2026-05-26T01:18:21.873Z"
-last_activity: 2026-05-26 -- Phase 1 execution started
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-05-26T02:46:57Z"
+last_activity: 2026-05-26 -- Completed Plan 01-01 Native App operator runbook
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 33
 ---
 
 # Project State - neo4j-snowflake
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 1 (Snowflake Native App Feasibility And Architecture Decision) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 1
-Last activity: 2026-05-26 -- Phase 1 execution started
+Plan: 2 of 3
+Status: Ready for Plan 01-02
+Last activity: 2026-05-26 -- Completed Plan 01-01 Native App operator runbook
 
-Progress: [----------] 0% (Neo4j Snowflake Native App Migration milestone)
+Progress: [███-------] 33% (Neo4j Snowflake Native App Migration milestone)
 
 ## Milestone Context
 
@@ -46,6 +46,14 @@ projection surfaces should change.
 
 - The existing MDM Neo4j review dashboard must be updated to inspect the hosted graph target.
 
+- Plan 01-01 documents the Native App runbook with the default application name
+  `Neo4j_Graph_Analytics`, application roles `app_user` and `app_admin`, required
+  privileges `CREATE COMPUTE POOL` and `CREATE WAREHOUSE`, event sharing, compute selector
+  `CPU_X64_XS`, and app warehouse `Neo4j_Graph_Analytics_app_warehouse`.
+
+- Broad upstream example grants such as `ALL PRIVILEGES` require narrowing or explicit
+  operator review before use in this platform.
+
 ## Blockers
 
 - Live Marketplace app availability, Snowflake account privileges, and app role grant details must
@@ -57,6 +65,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-05-25
-Stopped at: Milestone initialized
-Resume file: .planning/workstreams/neo4j-snowflake/ROADMAP.md
+Last session: 2026-05-26
+Stopped at: Completed 01-01-PLAN.md
+Resume file: .planning/workstreams/neo4j-snowflake/phases/01-snowflake-native-app-feasibility-and-architecture-decision/01-02-PLAN.md
