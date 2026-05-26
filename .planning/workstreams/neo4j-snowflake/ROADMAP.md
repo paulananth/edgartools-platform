@@ -110,7 +110,7 @@ MDM relationship parity, dashboard inspection, and end-to-end AWS verification.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Snowflake Native App Feasibility And Architecture Decision | v1.3 Neo4j Snowflake Native App Migration | 1/3 complete | In Progress | - |
+| 1. Snowflake Native App Feasibility And Architecture Decision | v1.3 Neo4j Snowflake Native App Migration | 2/3 complete | In Progress | - |
 | 2. Snowflake Graph Sync Contract | v1.3 Neo4j Snowflake Native App Migration | 0/TBD | Not started | - |
 | 3. Hosted Graph Verification And E2E Cutover | v1.3 Neo4j Snowflake Native App Migration | 0/TBD | Not started | - |
 | 4. Dashboard Hosted Graph Migration | v1.3 Neo4j Snowflake Native App Migration | 0/TBD | Not started | - |

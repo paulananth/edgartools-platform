@@ -12,8 +12,8 @@ updated: 2026-05-26
 ### Feasibility And Architecture
 
 - [x] **DISC-01**: Operator can install or validate access to the Neo4j Graph Analytics Native App through the Snowflake Marketplace flow.
-- [ ] **DISC-02**: Operator has an architecture decision that makes Snowflake-hosted Neo4j the graph target and removes external Neo4j from milestone validation.
-- [ ] **DISC-03**: Operator has a documented credential/configuration model where graph access comes from Snowflake-managed app roles, grants, and connection context rather than external `NEO4J_*` secrets.
+- [x] **DISC-02**: Operator has an architecture decision that makes Snowflake-hosted Neo4j the graph target and removes external Neo4j from milestone validation.
+- [x] **DISC-03**: Operator has a documented credential/configuration model where graph access comes from Snowflake-managed app roles, grants, and connection context rather than external `NEO4J_*` secrets.
 - [ ] **DISC-04**: Operator has a confirmed table/view contract for nodes, edges, labels, relationship types, and graph projection inputs expected by the Native App.
 
 ### Sync Contract
@@ -68,8 +68,8 @@ updated: 2026-05-26
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | DISC-01 | Phase 1 | Complete |
-| DISC-02 | Phase 1 | Pending |
-| DISC-03 | Phase 1 | Pending |
+| DISC-02 | Phase 1 | Complete |
+| DISC-03 | Phase 1 | Complete |
 | DISC-04 | Phase 1 | Pending |
 | SYNC-01 | Phase 2 | Pending |
 | SYNC-02 | Phase 2 | Pending |
