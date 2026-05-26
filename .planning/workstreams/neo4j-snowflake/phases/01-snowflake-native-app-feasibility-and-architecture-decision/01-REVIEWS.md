@@ -1,7 +1,10 @@
 ---
 phase: 1
 reviewers: [codex]
-reviewed_at: 2026-05-26T00:36:40Z
+reviewed_at: 2026-05-26T00:44:39Z
+review_cycle: 2
+prior_review_commit: d7e28d5
+replan_commit: 257aacb
 plans_reviewed:
   - 01-01-PLAN.md
   - 01-02-PLAN.md
@@ -10,44 +13,53 @@ plans_reviewed:
 
 # Cross-AI Plan Review - Phase 1
 
-## Codex Review
+## Cycle 1 Summary
+
+Cycle 1 found two HIGH concerns:
+
+- `01-03-PLAN.md` could define the graph projection contract without reading the current MDM relationship schema, graph sync implementation, or existing Snowflake graph migration tests.
+- `01-02-PLAN.md` could define the credential/configuration ADR without mapping the current `NEO4J_*` CLI path to existing Snowflake runtime and auth surfaces.
+
+The follow-up replan in commit `257aacb` updated `01-02-PLAN.md` and `01-03-PLAN.md`.
+
+## Codex Review - Cycle 2
 
 ### Summary
 
-The Phase 1 plans are well scoped as documentation and architecture decision work. They preserve the workstream boundary, avoid source edits, and translate the milestone decision into useful runbook, ADR, projection contract, and review-question artifacts. The plan set is not ready to converge yet because two core feasibility outputs can be produced from planning assumptions alone: the graph projection contract does not require reading the current MDM graph schema/code, and the credential/configuration decision does not require mapping the existing `NEO4J_*` command path onto the repository's Snowflake runtime configuration. That leaves Phase 2 with room to guess about exactly the surfaces Phase 1 is supposed to settle.
+The two cycle-1 HIGH concerns are fully resolved by the replanned Phase 1 plans. `01-02-PLAN.md` now requires the architecture decision record to inspect the concrete current Neo4j command path in `edgar_warehouse/mdm/cli.py`, including `_neo4j_client()`, `NEO4J_URI`, `NEO4J_USER`/`NEO4J_USERNAME`, `NEO4J_PASSWORD`, `NEO4J_DATABASE`, and `NEO4J_SECRET_JSON`, and to map that path to existing Snowflake runtime surfaces such as `MDM_SNOWFLAKE_*`, `DBT_SNOWFLAKE_*`, `SERVING_EXPORT_ROOT`, `SNOWFLAKE_EXPORT_ROOT`, Snowflake export code, Snowflake access grants, and AWS MDM deployment/e2e scripts. `01-03-PLAN.md` now requires the graph projection contract to read the actual MDM schema, seeded relationship registry, graph sync engine, hosted Snowflake graph migration generator, and tests before defining the Native App-facing node/edge contract. That is enough source grounding for Phase 1 planning convergence.
 
 ### Strengths
 
-- The phase boundary is clear: Phase 1 creates workstream-local planning documents only and does not edit source, Terraform, dashboard files, generated JSON, or sibling workstreams.
-- Plan waves are sensible. The runbook and ADR can proceed in parallel, and the graph projection contract correctly depends on those outputs.
-- The plans preserve the user's cutover decision: Snowflake Marketplace Neo4j Graph Analytics Native App is the target, external Neo4j parallel validation is out of scope, and `edgar-warehouse mdm sync-graph` remains the operator command surface.
-- Required Native App projection identifiers are called out explicitly: `nodeId`, `sourceNodeId`, `targetNodeId`, `defaultTablePrefix`, `nodeTables`, and `relationshipTables`.
-- Threat models are present and relevant for planning artifacts: privilege broadening, stale external credentials, graph input tampering, and verification repudiation are called out.
+- `01-02-PLAN.md` now names the current external Neo4j environment variables and consuming handlers instead of using an abstract credential model.
+- `01-02-PLAN.md` explicitly requires the ADR to identify Phase 2 source-change targets: `_neo4j_client()`, `sync-graph`, `verify-graph`, graph connectivity checks, and graph sync call sites that expect `Neo4jGraphClient`.
+- `01-02-PLAN.md` preserves the correct boundary: Phase 1 records the decision, while source code and Terraform changes remain out of scope.
+- `01-03-PLAN.md` now reads `edgar_warehouse/mdm/migrations/runtime.py`, `002_seed_data.sql`, `graph.py`, `snowflake_graph.py`, `tests/mdm/test_graph.py`, and `tests/mdm/test_snowflake_graph_migration.py` before writing the projection contract.
+- `01-03-PLAN.md` now requires reconciliation between proposed `MDM_GRAPH_NODES`/`MDM_GRAPH_EDGES` and the existing `GRAPH_NODES`/`GRAPH_EDGES` generator and tests, including column casing differences between current Snowflake SQL and Native App documentation.
+- `01-03-PLAN.md` adds fail-fast dependencies on `01-NATIVE-APP-RUNBOOK.md`, `01-ARCHITECTURE-DECISION.md`, `01-01-SUMMARY.md`, and `01-02-SUMMARY.md` before Wave 2 writes the graph contract.
+
+### Prior HIGH Resolution
+
+| Prior Concern | Cycle 2 Status | Evidence |
+| --- | --- | --- |
+| `01-03-PLAN.md` could define the projection contract without source-grounding in MDM schema/code/tests. | Fully resolved | The plan now requires read-only inspection of the MDM migration runtime, seed data, graph sync engine, Snowflake graph generator, graph tests, and Snowflake graph migration tests. It also requires the contract to map `mdm_relationship_type`, `mdm_relationship_instance`, seeded relationship types, `source_entity_id`, `target_entity_id`, `properties`, `graph_synced_at`, `is_active`, and `idx_rel_instance_dedup`. |
+| `01-02-PLAN.md` could define the credential/configuration ADR without mapping the current external Neo4j path to existing Snowflake runtime/auth surfaces. | Fully resolved | The plan now requires read-only inspection of `edgar_warehouse/mdm/cli.py`, `edgar_warehouse/mdm/export.py`, `warehouse_settings.py`, `serving/targets/snowflake.py`, Snowflake access Terraform, and AWS MDM scripts. It explicitly names current `NEO4J_*`/`NEO4J_SECRET_JSON` inputs and future Snowflake-managed app roles, database roles, grants, warehouse/app warehouse context, and connection context. |
 
 ### Concerns
 
-- HIGH: `01-03-PLAN.md` can define the graph projection contract without reading the actual MDM relationship schema, graph sync implementation, or existing Snowflake graph migration tests. DISC-04 asks for a confirmed contract for nodes, edges, labels, relationship types, and projection inputs, but the plan only reads planning docs and the ADR. It should require read-only inspection of current source-of-truth files such as `edgar_warehouse/mdm/migrations/runtime.py`, `edgar_warehouse/mdm/migrations/002_seed_data.sql`, `edgar_warehouse/mdm/graph.py`, `edgar_warehouse/mdm/snowflake_graph.py`, `tests/mdm/test_graph.py`, and `tests/mdm/test_snowflake_graph_migration.py`. Otherwise the executor can produce plausible `MDM_GRAPH_NODES` and `MDM_GRAPH_EDGES` docs that do not match current entity IDs, relationship type names, dedupe keys, active-state semantics, or existing Snowflake graph fixtures.
-
-- HIGH: `01-02-PLAN.md` can write the credential/configuration ADR without mapping the current external Neo4j runtime path to the existing Snowflake runtime path. The repository currently has command behavior around `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, `NEO4J_DATABASE`, and `NEO4J_SECRET_JSON` in `edgar_warehouse/mdm/cli.py`, while the milestone requires graph access to come from Snowflake-managed app roles, grants, database roles, and Snowflake connection context. The ADR plan should require read-only inspection of `edgar_warehouse/mdm/cli.py`, `edgar_warehouse/infrastructure/warehouse_settings.py`, `edgar_warehouse/serving/targets/snowflake.py`, Snowflake Terraform access roots, and AWS MDM deploy scripts so it can name the concrete future config handoff. Without that, Phase 2 may inherit an abstract "Snowflake context" decision but still lack a testable replacement for the current Neo4j secret path.
-
-- MEDIUM: `01-01-PLAN.md` does not require the executor to capture fresh documentation evidence and live-account status separately. The runbook asks for current source URLs and a live-account validation section, but the acceptance criteria also say the document can be reviewed without live Snowflake credentials. That is fine if the runbook explicitly records `not run`, `requires operator`, or `validated in account`, but the plan does not require such status labels. Add an evidence table with source URL, access date, account/region applicability, required privilege, and validation status. This matters because Snowflake Native Apps with Snowpark Container Services may require additional privileges depending on service behavior, such as endpoint or external-access related grants beyond `CREATE COMPUTE POOL` and `CREATE WAREHOUSE`.
-
-- MEDIUM: `01-03-PLAN.md` depends on Wave 1 outputs and lists `01-NATIVE-APP-RUNBOOK.md` and `01-ARCHITECTURE-DECISION.md` in context, but the task does not explicitly fail fast if those files are missing or incomplete. Because the plan is autonomous, add a blocking precondition that `01-01` and `01-02` summaries plus their output documents must exist before writing the projection contract and review checklist.
-
-- LOW: The verification commands in `01-01-PLAN.md` and `01-02-PLAN.md` use `rg` for terms that are intentionally expected in rejected-alternative sections, such as `NEO4J_URI` or `external Neo4j`. The prose says to confirm matches are out-of-scope, but the automated command alone cannot distinguish safe from unsafe mentions. Consider adding source assertions for rejected-alternative section headers or exact phrases like `Rejected Alternatives` and `not milestone validation dependencies`.
+- MEDIUM: `01-01-PLAN.md` still allows the Native App runbook to be reviewed without live Snowflake credentials, which is acceptable for Phase 1 planning, but the eventual runbook must label each account-dependent check as documented, validated live, blocked, or operator-required. This is not a convergence blocker because Phase 3 carries live validation and the plan already has a `Live Account Validation` section.
+- LOW: The `rg` verification in `01-02-PLAN.md` intentionally matches rejected alternatives like `external Neo4j`. Executors should continue to inspect the matched sections, not treat the command alone as proof of correctness.
 
 ### Suggestions
 
-- Update `01-03-PLAN.md` so Task 1 has a mandatory `<read_first>` list covering the current MDM schema, graph registry, graph sync engine, Snowflake graph adapter/tests, and MDM graph tests. The acceptance criteria should require the contract to map current `mdm_relationship_type`, `mdm_relationship_instance`, source/target entity IDs, relationship active state, dedupe index, and property payload semantics to the proposed Snowflake node/edge views.
-- Update `01-02-PLAN.md` so the ADR names the exact current Neo4j config inputs and the future Snowflake config/auth surfaces that will replace them. It should explicitly state which current code paths Phase 2 must change and which AWS/Snowflake secrets or env vars remain in use.
-- Update `01-01-PLAN.md` to require a source and account-evidence matrix. Each Native App assumption should have a status: documented, validated live, blocked, or operator-required.
-- Add a Phase 2 entry gate that blocks implementation until the projection contract has been reconciled with actual MDM schema/code and the credential ADR has been reconciled with current CLI/runtime settings.
+- Keep the cycle-2 source-grounding requirements intact during execution. Do not shorten the `read_first` lists in `01-02-PLAN.md` or `01-03-PLAN.md`.
+- In execution, make the ADR and projection contract cite exact source file observations so Phase 2 can distinguish settled decisions from open live-account questions.
+- Consider carrying the `documented`, `validated live`, `blocked`, and `operator-required` status vocabulary into `01-NATIVE-APP-RUNBOOK.md` during execution.
 
 ### Risk Assessment
 
-Overall risk: HIGH.
+Overall risk: MEDIUM.
 
-The plan set is directionally correct and does not overreach into implementation, but Phase 1 is the architecture de-risking phase. If it produces a projection contract and credential decision without inspecting the current MDM graph schema and current runtime config surfaces, the later implementation phases can still make the wrong cutover assumptions while appearing to satisfy the documentation tasks.
+The remaining risk is mostly the expected Phase 1 feasibility risk around live Snowflake Marketplace and Native App account behavior. The earlier HIGH planning risks are resolved because the replanned tasks now force source-level grounding before the ADR and graph projection contract can be written.
 
 ## Consensus Summary
 
@@ -55,17 +67,14 @@ Only the Codex reviewer was invoked for this review cycle, so there is no multi-
 
 ### Agreed Strengths
 
-- Workstream isolation and documentation-only scope are strong.
-- Native App projection terminology is present and aligned with current Neo4j/Snowflake documentation.
-- The direct migration decision is clearly represented in the plans.
+- The replanned credential/configuration ADR is grounded in current repository code and runtime settings.
+- The replanned graph projection contract is grounded in current MDM schema, graph sync behavior, hosted Snowflake graph SQL, and tests.
+- The plans preserve workstream isolation and keep Phase 1 documentation-only.
 
 ### Agreed Concerns
 
-- The projection contract needs source-level grounding in current MDM schema and graph sync behavior.
-- The credential/configuration ADR needs source-level grounding in current `edgar-warehouse` Neo4j and Snowflake runtime configuration.
-- Live-account and documentation validation evidence needs explicit status labels.
+- Live Snowflake account validation remains a later proof point and must be labeled clearly in Phase 1 outputs.
 
 ### Divergent Views
 
 - None. This was a single-reviewer Codex run.
-
