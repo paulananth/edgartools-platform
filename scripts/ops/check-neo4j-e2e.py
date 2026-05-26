@@ -209,7 +209,7 @@ def check_neo4j(env: str, region: str) -> dict:
         with driver.session(database=secret.get("database","neo4j")) as s:
             nodes = s.run("MATCH (n) RETURN count(n) AS n").single()["n"]
             ok("nodes total",  nodes, required=True)
-            for rel in ["IS_INSIDER","HOLDS","MANAGES_FUND","ISSUED_BY","IS_ENTITY_OF","IS_PERSON_OF"]:
+            for rel in ["IS_INSIDER","HOLDS","COMPANY_HOLDS","MANAGES_FUND","ISSUED_BY","IS_ENTITY_OF","IS_PERSON_OF"]:
                 n = s.run(f"MATCH ()-[r:{rel}]->() RETURN count(r) AS n").single()["n"]
                 ok(f"  {rel}", n, required=(rel == "IS_INSIDER"))
                 if rel == "IS_INSIDER": results["neo4j_is_insider"] = n

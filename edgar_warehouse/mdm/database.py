@@ -179,9 +179,15 @@ class MdmCompany(Base):
     sic_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     state_of_incorporation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     fiscal_year_end: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ticker: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     primary_ticker: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     primary_exchange: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     tracking_status: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    parent_company_entity_id: Mapped[Optional[str]] = mapped_column(
+        GUID(),
+        ForeignKey("mdm_entity.entity_id"),
+        nullable=True,
+    )
     valid_from: Mapped[Optional[object]] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
     )

@@ -57,7 +57,7 @@ class SecurityResolver(BaseResolver):
         sec_type = _infer_type(canonical)
 
         existing = self._existing_candidates(ctx, issuer_entity_id, canonical)
-        source_id = f"{txn_row['accession_number']}:{txn_row.get('owner_index')}:{txn_row.get('txn_index')}"
+        source_id = txn_row.get("source_id") or _ownership_security_source_id(txn_row)
 
         if existing:
             entity_id = existing[0]["entity_id"]
@@ -148,3 +148,12 @@ class SecurityResolver(BaseResolver):
             {"entity_id": s.entity_id, "canonical_title": s.canonical_title}
             for s, _ in ctx.session.execute(stmt).all()
         ]
+
+
+def _ownership_security_source_id(txn_row: dict) -> str:
+    accession = txn_row.get("accession_number")
+    owner_index = txn_row.get("owner_index")
+    txn_index = txn_row.get("txn_index")
+    if txn_row.get("is_derivative"):
+        return f"{accession}:derivative:{owner_index}:{txn_index}"
+    return f"{accession}:{owner_index}:{txn_index}"

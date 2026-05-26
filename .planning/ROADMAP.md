@@ -18,6 +18,7 @@ Neo4j so graph sync is complete, idempotent, and independently verifiable.
 - [ ] **Phase 5: Source To MDM Load Path** - MDM loaders consume existing silver data produced from bronze with clear configuration, idempotency, and no loader-workstream overlap
 - [ ] **Phase 6: Relationship Derivation Coverage** - Ownership, adviser, fund, company, person, and security relationships are fully derived into MDM relationship rows
 - [ ] **Phase 7: Neo4j Sync And Verification** - Neo4j node/edge sync is idempotent and `verify-graph` reports coverage defects clearly
+- [ ] **Phase 8: Neo4j E2E Snowflake Graph Analytics Migration** - keep AWS MDM/Postgres plus Neo4j as the operational graph path while adding Snowflake graph-ready analytics migration and validation
 
 ---
 
@@ -56,6 +57,18 @@ Neo4j so graph sync is complete, idempotent, and independently verifiable.
   4. Focused local tests pass; live Neo4j smoke test is documented and runnable when `NEO4J_*` credentials are available.
 **Plans**: TBD
 
+### Phase 8: Neo4j E2E Snowflake Graph Analytics Migration
+**Goal**: Operators can validate the full AWS graph analytics path from bronze to silver to MDM entities/relationships to Snowflake graph-ready node and edge tables for Neo4j Graph Analytics hosted in Snowflake.
+**Depends on**: Phase 7
+**Requirements**: GRAPH-01, GRAPH-02, GRAPH-03, GRAPH-04, REL-01, REL-02, REL-03, REL-04
+**Success Criteria** (what must be TRUE):
+  1. Neo4j Graph Analytics is Snowflake-hosted; the supported analytics path does not depend on external Aura/Bolt runtime credentials.
+  2. `mdm export` has a real Snowflake writer and Snowflake MDM mirror tables can be transformed into graph node/edge tables plus validation SQL using a `snow` connection.
+  3. Relationship derivation covers corporate Form 3/4/5 reporting owners through company-to-security holdings and derivative transaction holdings.
+  4. Existing `mdm migrate`, `mdm run --entity-type all`, `mdm derive-relationships`, `mdm sync-graph`, and `mdm verify-graph` compatibility is preserved.
+  5. Focused local tests cover new registry seed data, idempotent relationship derivation, and Snowflake graph migration SQL generation.
+**Plans**: TBD
+
 ---
 
 ## Progress
@@ -65,3 +78,4 @@ Neo4j so graph sync is complete, idempotent, and independently verifiable.
 | 5. Source To MDM Load Path | v1.1 Neo4j bronze-to-graph pipe | 0/TBD | Not started | - |
 | 6. Relationship Derivation Coverage | v1.1 Neo4j bronze-to-graph pipe | 0/TBD | Not started | - |
 | 7. Neo4j Sync And Verification | v1.1 Neo4j bronze-to-graph pipe | 0/TBD | Not started | - |
+| 8. Neo4j E2E Snowflake Graph Analytics Migration | v1.1 Neo4j bronze-to-graph pipe | 0/TBD | Not started | - |

@@ -894,13 +894,6 @@ def _handle_export(args) -> int:
 
 
 def _build_snowflake_writer():
-    """Deferred — real writer uses snowflake-connector-python; stub here raises."""
+    from edgar_warehouse.mdm.export import SnowflakeConnectorWriter
 
-    class _StubWriter:
-        def upsert(self, table, rows, key="entity_id"):
-            raise RuntimeError(
-                "Snowflake writer not configured. Wire one via "
-                "edgar_warehouse.mdm.export.SnowflakeWriter in infra."
-            )
-
-    return _StubWriter()
+    return SnowflakeConnectorWriter.from_env()

@@ -8,7 +8,7 @@ existing resolver-based pipeline:
   * IS_PERSON_OF     (adviser -> person,   adviser CIK matches person owner_cik)
 
 The test seeds an in-memory SQLite store with all five MDM entity-type
-definitions, all five relationship types (matching the production seed
+definitions and graph relationship types (matching the production seed
 in edgar_warehouse/mdm/migrations/runtime.py), and a small amount of
 domain data. A stub SilverReader returns canned rows for the two queries
 issued by run_relationships.
@@ -54,14 +54,21 @@ class StubSilver:
         self._fixtures = fixtures
 
     def fetch(self, sql: str, params: Optional[list[Any]] = None) -> list[dict]:
+        matched: list[dict] = []
+        transaction_query = (
+            "sec_ownership_non_derivative_txn" in sql
+            or "sec_ownership_derivative_txn" in sql
+        )
         for needle, rows in self._fixtures.items():
+            if transaction_query and needle == "FROM sec_ownership_reporting_owner":
+                continue
             if needle in sql:
-                return list(rows)
-        return []
+                matched.extend(rows)
+        return matched
 
 
 def _seed_registry(session: Session) -> dict[str, str]:
-    """Seed all 5 entity-type definitions + all 5 rel types."""
+    """Seed all 5 entity-type definitions + graph relationship types."""
     entity_types = [
         ("company",  "Company",  "mdm_company"),
         ("adviser",  "Adviser",  "mdm_adviser"),
@@ -80,8 +87,10 @@ def _seed_registry(session: Session) -> dict[str, str]:
     for name, src, tgt, strategy in [
         ("IS_INSIDER",   "person",   "company", "extend_temporal"),
         ("HOLDS",        "person",   "security", "extend_temporal"),
+        ("COMPANY_HOLDS", "company",  "security", "extend_temporal"),
         ("ISSUED_BY",    "security", "company", "extend_temporal"),
         ("IS_ENTITY_OF", "adviser",  "company", "replace"),
+        ("HAS_PARENT_COMPANY", "company", "company", "replace"),
         ("MANAGES_FUND", "adviser",  "fund",    "extend_temporal"),
         ("IS_PERSON_OF", "adviser",  "person",  "replace"),
     ]:
@@ -368,6 +377,30 @@ class TestRunRelationships:
         assert rows[0].source_entity_id == fixture_world["individual_adviser_id"]
         assert rows[0].target_entity_id == fixture_world["individual_person_id"]
 
+    def test_writes_has_parent_company_relationship(self, session, fixture_world):
+        child_id = _add_entity(session, "company")
+        session.add(MdmCompany(
+            entity_id=child_id,
+            cik=910003,
+            canonical_name="Child Corp",
+            ticker="CHLD",
+            parent_company_entity_id=fixture_world["linked_company_id"],
+        ))
+        session.commit()
+        pipe = MDMPipeline(session=session, silver=StubSilver({}))
+
+        summary = pipe.derive_relationships(relationship_types=["HAS_PARENT_COMPANY"])
+
+        rows = list(session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "HAS_PARENT_COMPANY")
+        ))
+        assert summary["HAS_PARENT_COMPANY"]["inserted"] == 1
+        assert len(rows) == 1
+        assert rows[0].source_entity_id == child_id
+        assert rows[0].target_entity_id == fixture_world["linked_company_id"]
+
     def test_returned_count_matches_inserts(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=self._stub())
         written = pipe.run_relationships()
@@ -439,6 +472,100 @@ class TestRunRelationships:
         assert rows[0].target_entity_id == security_id
         assert rows[0].properties["shares_owned"] == 10
         assert rows[0].properties["direct_indirect"] == "D"
+        assert rows[0].properties["is_derivative"] is False
+
+    def test_writes_company_holds_for_corporate_reporting_owner(self, session, fixture_world):
+        session.add(MdmSourceRef(
+            entity_id=fixture_world["security_entity_id"],
+            source_system="ownership_filing",
+            source_id="0000-corp-1:1:0",
+            source_priority=3,
+        ))
+        session.commit()
+        pipe = MDMPipeline(session=session, silver=StubSilver({
+            "FROM sec_ownership_non_derivative_txn": [
+                {
+                    "accession_number": "0000-corp-1",
+                    "owner_index": 1,
+                    "txn_index": 0,
+                    "security_title": "Common Stock",
+                    "transaction_date": None,
+                    "shares_owned_after": 25,
+                    "ownership_direct_indirect": "I",
+                    "owner_cik": 910002,
+                    "owner_name": "Linked Corp",
+                    "issuer_cik": 910001,
+                }
+            ],
+        }))
+
+        summary = pipe.derive_relationships(target_per_type=1, relationship_types=["COMPANY_HOLDS"])
+
+        rows = list(session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "COMPANY_HOLDS")
+        ))
+        assert summary["COMPANY_HOLDS"]["inserted"] == 1
+        assert len(rows) == 1
+        assert rows[0].source_entity_id == fixture_world["linked_company_id"]
+        assert rows[0].target_entity_id == fixture_world["security_entity_id"]
+        assert rows[0].properties["shares_owned"] == 25
+        assert rows[0].properties["is_derivative"] is False
+
+    def test_writes_holds_from_derivative_transactions(self, session, fixture_world):
+        derivative_security_id = _add_entity(session, "security")
+        session.add(MdmSecurity(
+            entity_id=derivative_security_id,
+            issuer_entity_id=fixture_world["issuer_company_id"],
+            canonical_title="Option",
+            security_type="option",
+        ))
+        session.add(MdmSourceRef(
+            entity_id=derivative_security_id,
+            source_system="ownership_filing",
+            source_id="0000-issuer-derivative:derivative:0:0",
+            source_priority=3,
+        ))
+        session.commit()
+        pipe = MDMPipeline(session=session, silver=StubSilver({
+            "FROM sec_ownership_non_derivative_txn": [],
+            "FROM sec_ownership_derivative_txn": [
+                {
+                    "accession_number": "0000-issuer-derivative",
+                    "owner_index": 0,
+                    "txn_index": 0,
+                    "security_title": "Option",
+                    "transaction_date": None,
+                    "shares_owned_after": 5,
+                    "ownership_direct_indirect": "D",
+                    "is_derivative": True,
+                    "conversion_or_exercise_price": 12.5,
+                    "exercise_date": None,
+                    "expiration_date": None,
+                    "underlying_security_title": "Common Stock",
+                    "underlying_security_shares": 5,
+                    "owner_cik": 910102,
+                    "owner_name": "Reporting Person",
+                    "issuer_cik": 910001,
+                }
+            ],
+        }))
+
+        summary = pipe.derive_relationships(target_per_type=1, relationship_types=["HOLDS"])
+
+        rows = list(session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "HOLDS")
+        ))
+        assert summary["HOLDS"]["inserted"] == 1
+        assert len(rows) == 1
+        assert rows[0].source_entity_id == fixture_world["reporting_person_id"]
+        assert rows[0].target_entity_id == derivative_security_id
+        assert rows[0].properties["is_derivative"] is True
+        assert rows[0].properties["conversion_or_exercise_price"] == 12.5
+        assert rows[0].properties["underlying_security_title"] == "Common Stock"
 
     def test_relationship_derivation_is_idempotent(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=self._stub())
@@ -488,7 +615,7 @@ class TestRunRelationships:
             + summary["ISSUED_BY"]["skipped_existing"]
         )
 
-    def test_all_six_types_idempotent(self, session, fixture_world):
+    def test_all_relationship_types_idempotent(self, session, fixture_world):
         """Running derive_relationships() twice inserts 0 rows on second run for all 6 types. (D-04, REL-04)"""
         session.add(MdmSourceRef(
             entity_id=fixture_world["security_entity_id"],
@@ -520,23 +647,34 @@ class TestRunRelationships:
         })
         pipe = MDMPipeline(session=session, silver=silver)
 
-        ALL_SIX = ["IS_INSIDER", "HOLDS", "ISSUED_BY", "MANAGES_FUND", "IS_ENTITY_OF", "IS_PERSON_OF"]
+        ALL_TYPES = [
+            "IS_INSIDER",
+            "HOLDS",
+            "COMPANY_HOLDS",
+            "ISSUED_BY",
+            "MANAGES_FUND",
+            "IS_ENTITY_OF",
+            "HAS_PARENT_COMPANY",
+            "IS_PERSON_OF",
+        ]
         first = pipe.derive_relationships()
         second = pipe.derive_relationships()
 
         assert first["IS_INSIDER"]["inserted"] >= 1
         assert first["HOLDS"]["inserted"] == 1
+        assert first["COMPANY_HOLDS"]["inserted"] == 0
         assert first["ISSUED_BY"]["inserted"] == 1
         assert first["MANAGES_FUND"]["inserted"] == 1
         assert first["IS_ENTITY_OF"]["inserted"] == 1
+        assert first["HAS_PARENT_COMPANY"]["inserted"] == 0
         assert first["IS_PERSON_OF"]["inserted"] == 1
 
-        for rt in ALL_SIX:
+        for rt in ALL_TYPES:
             assert second[rt]["inserted"] == 0, (
                 f"Expected 0 inserts on second run for {rt}, got {second[rt]['inserted']}"
             )
 
-        for rt in ALL_SIX:
+        for rt in ALL_TYPES:
             assert second[rt]["skipped"] == (
                 second[rt]["skipped_corporate"]
                 + second[rt]["skipped_unresolved_source"]

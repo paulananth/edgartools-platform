@@ -75,6 +75,7 @@ def bulk_upsert_universe(
                     entity_id=entity.entity_id,
                     cik=cik,
                     canonical_name=ticker or str(cik),
+                    ticker=ticker or None,
                     primary_ticker=ticker or None,
                     primary_exchange=exchange,
                     tracking_status=default_status,
@@ -83,6 +84,8 @@ def bulk_upsert_universe(
             else:
                 if company.tracking_status is None:
                     company.tracking_status = default_status
+                if ticker and company.ticker is None:
+                    company.ticker = ticker
                 if ticker and company.primary_ticker is None:
                     company.primary_ticker = ticker
                 if exchange and company.primary_exchange is None:

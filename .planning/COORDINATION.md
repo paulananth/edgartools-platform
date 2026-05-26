@@ -1,7 +1,7 @@
 # Coordination: Claude and Codex
 
 status: active
-updated: 2026-05-16
+updated: 2026-05-25
 
 ---
 
@@ -21,4 +21,6 @@ Claude and Codex can work independently on this project, but each runtime must o
 
 ## Current Note
 
-The repository currently has an active GSD workstream named `fix-pipelines`. Treat it as protected Codex work unless the user explicitly reassigns or hands it off.
+The repository currently has an active GSD workstream named `neo4j-snowflake`.
+Treat unfinished `mdm-neo4j-dashboard`, `neo4j-pipe`, and `fix-pipelines` artifacts as
+protected unless the user explicitly reassigns or hands them off.

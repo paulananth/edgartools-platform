@@ -58,9 +58,11 @@ CREATE TABLE IF NOT EXISTS mdm_company (
     sic_description        TEXT,
     state_of_incorporation TEXT,
     fiscal_year_end        TEXT,
+    ticker                 TEXT,
     primary_ticker         TEXT,
     primary_exchange       TEXT,
     tracking_status        TEXT,
+    parent_company_entity_id UUID REFERENCES mdm_entity(entity_id),
     valid_from             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     valid_to               TIMESTAMPTZ
 );

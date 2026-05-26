@@ -180,6 +180,29 @@ CREATE TABLE IF NOT EXISTS sec_ownership_non_derivative_txn (
     last_sync_run_id TEXT,
     PRIMARY KEY (accession_number, owner_index, txn_index)
 );
+
+CREATE TABLE IF NOT EXISTS sec_ownership_derivative_txn (
+    accession_number TEXT,
+    owner_index SMALLINT,
+    txn_index SMALLINT,
+    security_title TEXT,
+    transaction_date DATE,
+    transaction_code TEXT,
+    transaction_shares DECIMAL(28,8),
+    transaction_price DECIMAL(28,8),
+    acquired_disposed_code TEXT,
+    shares_owned_after DECIMAL(28,8),
+    ownership_nature TEXT,
+    ownership_direct_indirect TEXT,
+    conversion_or_exercise_price DECIMAL(28,8),
+    exercise_date DATE,
+    expiration_date DATE,
+    underlying_security_title TEXT,
+    underlying_security_shares DECIMAL(28,8),
+    parser_version TEXT,
+    last_sync_run_id TEXT,
+    PRIMARY KEY (accession_number, owner_index, txn_index)
+);
 """
 
 
