@@ -66,7 +66,13 @@ MDM relationship parity, dashboard inspection, and end-to-end AWS verification.
 4. Bounded relationship/entity filters still work for repair and validation workflows.
 5. Focused tests cover SQL generation or Snowflake writer behavior without live credentials.
 
-**Plans**: TBD
+**Plans**:
+
+| Plan | Wave | Objective | Requirements |
+|------|------|-----------|--------------|
+| 02-01 | 1 | Define the Snowflake graph projection SQL contract for canonical MDM graph inputs and Native App-compatible table projections. | SYNC-01, SYNC-02, SNOW-02, SNOW-04 |
+| 02-02 | 2 | Add the reusable Snowflake graph sync executor and credential-free writer/idempotency tests. | SYNC-01, SYNC-02, SYNC-03, SNOW-02, SNOW-04 |
+| 02-03 | 3 | Wire `edgar-warehouse mdm sync-graph` to Snowflake graph materialization while preserving bounded repair filters. | SYNC-01, SYNC-02, SYNC-03, SNOW-02, SNOW-04 |
 
 ### Phase 3: Hosted Graph Verification And E2E Cutover
 
@@ -111,6 +117,6 @@ MDM relationship parity, dashboard inspection, and end-to-end AWS verification.
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Snowflake Native App Feasibility And Architecture Decision | v1.3 Neo4j Snowflake Native App Migration | 3/3 | Complete    | 2026-05-26 |
-| 2. Snowflake Graph Sync Contract | v1.3 Neo4j Snowflake Native App Migration | 0/TBD | Not started | - |
+| 2. Snowflake Graph Sync Contract | v1.3 Neo4j Snowflake Native App Migration | 0/3 | Planned | - |
 | 3. Hosted Graph Verification And E2E Cutover | v1.3 Neo4j Snowflake Native App Migration | 0/TBD | Not started | - |
 | 4. Dashboard Hosted Graph Migration | v1.3 Neo4j Snowflake Native App Migration | 0/TBD | Not started | - |
