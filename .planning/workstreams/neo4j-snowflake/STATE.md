@@ -73,6 +73,11 @@ projection surfaces should change.
 - Phase 1 verification passed with 21/21 must-haves verified and no human verification
   required; `DISC-04` is now marked complete in requirements traceability.
 
+- Operator-supplied Snowflake Graph Analytics agent instructions are captured in
+  `SNOWFLAKE-GRAPH-ANALYTICS-AGENT-INSTRUCTIONS.md`; Phase 2 should reconcile
+  `EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION`, `GRAPH_NODE_*`, `GRAPH_EDGE_*`, available
+  compute pools, and algorithm result tables with the Phase 1 graph projection contract.
+
 ## Blockers
 
 - Live Marketplace app availability, Snowflake account privileges, and app role grant details must

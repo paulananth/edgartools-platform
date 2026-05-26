@@ -47,6 +47,12 @@ operator runbook, an accepted architecture decision replacing external Neo4j for
 milestone, a Snowflake-managed graph access model, and a Native App-facing MDM node/edge
 projection contract for Phase 2 planning.
 
+Operator-supplied live-account graph analytics context is captured in
+`SNOWFLAKE-GRAPH-ANALYTICS-AGENT-INSTRUCTIONS.md`. Phase 2 should use it to reconcile the
+planned `MDM_GRAPH_NODES`/`MDM_GRAPH_EDGES` contract with the live
+`EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION` tables using `GRAPH_NODE_*` and `GRAPH_EDGE_*`
+prefixes.
+
 ---
 
 ## Scope Boundaries
