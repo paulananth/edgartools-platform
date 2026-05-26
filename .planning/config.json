@@ -1,6 +1,7 @@
 {
   "workflow": {
     "plan_review_convergence": true,
-    "use_worktrees": false
+    "use_worktrees": false,
+    "_auto_chain_active": false
   }
 }
