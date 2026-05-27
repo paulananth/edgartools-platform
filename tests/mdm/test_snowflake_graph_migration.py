@@ -36,6 +36,79 @@ def test_generates_snowflake_graph_migration_sql(tmp_path):
     assert "Snowflake-Hosted" in (output_dir / "README.md").read_text(encoding="utf-8")
 
 
+def test_generated_sql_exposes_phase_2_graph_projection_contract(tmp_path):
+    output_dir = tmp_path / "sql"
+
+    generate_snowflake_graph_migration(
+        SnowflakeGraphMigrationConfig(env="dev", output_dir=output_dir)
+    )
+
+    graph_sql = (output_dir / "00_graph_tables.sql").read_text(encoding="utf-8")
+    validation_sql = (output_dir / "01_validation.sql").read_text(encoding="utf-8")
+    readme = (output_dir / "README.md").read_text(encoding="utf-8")
+    combined = "\n".join([graph_sql, validation_sql, readme])
+
+    assert "EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION" in graph_sql
+
+    for table_name in [
+        "MDM_GRAPH_NODES",
+        "MDM_GRAPH_EDGES",
+        "GRAPH_NODE_COMPANY",
+        "GRAPH_NODE_PERSON",
+        "GRAPH_NODE_SECURITY",
+        "GRAPH_NODE_ADVISER",
+        "GRAPH_NODE_FUND",
+        "GRAPH_EDGE_IS_INSIDER",
+        "GRAPH_EDGE_HOLDS",
+        "GRAPH_EDGE_COMPANY_HOLDS",
+        "GRAPH_EDGE_ISSUED_BY",
+        "GRAPH_EDGE_IS_ENTITY_OF",
+        "GRAPH_EDGE_HAS_PARENT_COMPANY",
+        "GRAPH_EDGE_MANAGES_FUND",
+        "GRAPH_EDGE_IS_PERSON_OF",
+    ]:
+        assert table_name in graph_sql
+
+    for column_name in [
+        "NODEID",
+        "SOURCENODEID",
+        "TARGETNODEID",
+        "SOURCE_SYSTEM",
+        "SOURCE_ACCESSION",
+        "SOURCE_UPDATED_AT",
+        "CREATED_AT",
+        "UPDATED_AT",
+        "GRAPH_SYNC_STATUS",
+        "GRAPH_SYNCED_AT",
+    ]:
+        assert column_name in graph_sql
+
+    assert "MDM_ENTITY_TYPE_DEFINITION" in graph_sql
+    assert "NEO4J_LABEL" in graph_sql
+    assert "IS_QUARANTINED = FALSE" in graph_sql
+    assert "RI.IS_ACTIVE = TRUE" in graph_sql
+    assert "RT.IS_ACTIVE = TRUE" in graph_sql
+    assert "OBJECT_CONSTRUCT_KEEP_NULL" in graph_sql
+
+    assert "active_mdm_relationship_parity" in validation_sql
+    assert "missing_graph_edge_endpoints" in validation_sql
+    assert "MDM_GRAPH_NODES" in validation_sql
+    assert "MDM_GRAPH_EDGES" in validation_sql
+
+    assert "NEO4J_GRAPH_ANALYTICS.GRAPH." in readme
+    assert "operator cleanup" in readme.lower()
+
+    for forbidden in [
+        "NEO4J_URI",
+        "NEO4J_USER",
+        "NEO4J_USERNAME",
+        "NEO4J_PASSWORD",
+        "NEO4J_DATABASE",
+        "NEO4J_SECRET_JSON",
+    ]:
+        assert forbidden not in combined
+
+
 def test_run_snowflake_graph_sql_uses_snow_connection(tmp_path, monkeypatch):
     first = tmp_path / "00_graph_tables.sql"
     second = tmp_path / "01_validation.sql"
