@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Neo4j Snowflake Native App Migration
 status: executing
-stopped_at: Phase 2 Plan 02-01 complete
-last_updated: "2026-05-27T00:07:25Z"
-last_activity: 2026-05-27 -- Phase 2 Plan 02-01 completed
+stopped_at: Phase 2 Plan 02-02 complete
+last_updated: "2026-05-27T00:16:25Z"
+last_activity: 2026-05-27 -- Phase 2 Plan 02-02 completed
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
-  percent: 33
+  completed_plans: 5
+  percent: 42
 ---
 
 # Project State - neo4j-snowflake
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 2 (Snowflake Graph Sync Contract) — EXECUTING
-Plan: 2 of 3
-Status: Phase 2 Plan 02-01 complete; ready for Plan 02-02
-Last activity: 2026-05-27 -- Phase 2 Plan 02-01 completed
+Plan: 3 of 3
+Status: Phase 2 Plan 02-02 complete; ready for Plan 02-03
+Last activity: 2026-05-27 -- Phase 2 Plan 02-02 completed
 
-Progress: [###-------] 33% (Phase 1 complete; Phase 2 plan 1 of 3 complete; milestone v1.3 remains in progress)
+Progress: [####------] 42% (Phase 1 complete; Phase 2 plan 2 of 3 complete; milestone v1.3 remains in progress)
 
 ## Milestone Context
 
@@ -100,6 +100,15 @@ projection surfaces should change.
   SQL and README do not require external Neo4j connection secrets, and no live
   Snowflake credentials were used.
 
+- Plan 02-02 added a reusable Snowflake graph sync executor that shares the
+  existing `MDM_SNOWFLAKE_*` / `DBT_SNOWFLAKE_*` connection model, materializes
+  graph tables with deterministic `CREATE OR REPLACE` SQL, and returns target
+  schema, applied filters, table names, and node/edge counts.
+
+- Plan 02-02 enforces fail-closed validation for unknown entity and relationship
+  filters before Snowflake cursor execution, preventing misleading successful
+  empty syncs for values such as `companies` or `HODLS`.
+
 ## Blockers
 
 - Live Marketplace app availability, Snowflake account privileges, and app role grant details must
@@ -111,6 +120,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-05-27T00:07:25Z
-Stopped at: Phase 2 Plan 02-01 complete
-Resume file: .planning/workstreams/neo4j-snowflake/phases/02-snowflake-graph-sync-contract/02-02-PLAN.md
+Last session: 2026-05-27T00:16:25Z
+Stopped at: Phase 2 Plan 02-02 complete
+Resume file: .planning/workstreams/neo4j-snowflake/phases/02-snowflake-graph-sync-contract/02-03-PLAN.md
