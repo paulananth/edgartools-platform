@@ -1,9 +1,39 @@
 from edgar_warehouse.mdm.snowflake_graph import (
+    SnowflakeGraphSyncConfig,
+    SnowflakeGraphSyncExecutor,
+    SnowflakeGraphValidationError,
     SnowflakeGraphMigrationConfig,
     generate_snowflake_graph_migration,
     run_hosted_neo4j_e2e,
     run_snowflake_graph_sql,
 )
+
+
+class FakeGraphCursor:
+    def __init__(self) -> None:
+        self.executed: list[str] = []
+        self.results: list[tuple[int]] = [(7,), (11,)]
+        self.closed = False
+
+    def execute(self, sql: str):
+        self.executed.append(sql)
+        return self
+
+    def fetchone(self):
+        if self.results:
+            return self.results.pop(0)
+        return (0,)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakeGraphConnection:
+    def __init__(self) -> None:
+        self.fake_cursor = FakeGraphCursor()
+
+    def cursor(self) -> FakeGraphCursor:
+        return self.fake_cursor
 
 
 def test_generates_snowflake_graph_migration_sql(tmp_path):
@@ -152,3 +182,101 @@ def test_run_hosted_neo4j_e2e_uses_hosted_validation_only(tmp_path, monkeypatch)
 
     assert executed == ["02_hosted_neo4j_e2e.sql"]
     assert calls == [(["snow", "sql", "-c", "edgartools-dev", "-f", str(hosted)], True)]
+
+
+def test_graph_sync_executor_materializes_filtered_graph_contract_without_credentials():
+    connection = FakeGraphConnection()
+    executor = SnowflakeGraphSyncExecutor(connection)
+
+    result = executor.sync(
+        SnowflakeGraphSyncConfig(
+            target_database="EDGARTOOLS_DEV",
+            target_schema="NEO4J_GRAPH_MIGRATION",
+            mdm_schema="MDM_TEST",
+            entity_types=("company", "person"),
+            relationship_types=("IS_INSIDER", "HOLDS"),
+            limit=100,
+            limit_per_type=10,
+        )
+    )
+
+    cursor = connection.fake_cursor
+    combined_sql = "\n".join(cursor.executed)
+    assert cursor.closed is True
+    assert cursor.executed[0].startswith("-- Build graph-ready node and edge tables")
+    assert "CREATE OR REPLACE TABLE EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION.MDM_GRAPH_NODES" in combined_sql
+    assert "CREATE OR REPLACE TABLE EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION.MDM_GRAPH_EDGES" in combined_sql
+    assert "EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION" in combined_sql
+    assert "GRAPH_NODE_COMPANY" in combined_sql
+    assert "GRAPH_EDGE_IS_INSIDER" in combined_sql
+    assert "NODEID" in combined_sql
+    assert "SOURCENODEID" in combined_sql
+    assert "TARGETNODEID" in combined_sql
+    assert "E.ENTITY_TYPE IN ('company', 'person')" in combined_sql
+    assert "RT.REL_TYPE_NAME IN ('HOLDS', 'IS_INSIDER')" in combined_sql
+    assert "ROW_NUMBER() OVER (PARTITION BY E.ENTITY_TYPE ORDER BY E.ENTITY_ID) <= 10" in combined_sql
+    assert "ROW_NUMBER() OVER (PARTITION BY RT.REL_TYPE_NAME ORDER BY RI.INSTANCE_ID) <= 10" in combined_sql
+    assert "LIMIT 100" in combined_sql
+    assert result.node_count == 7
+    assert result.edge_count == 11
+    assert result.target_database == "EDGARTOOLS_DEV"
+    assert result.target_schema == "NEO4J_GRAPH_MIGRATION"
+    assert result.node_tables == (
+        "MDM_GRAPH_NODES",
+        "GRAPH_NODE_ADVISER",
+        "GRAPH_NODE_COMPANY",
+        "GRAPH_NODE_FUND",
+        "GRAPH_NODE_PERSON",
+        "GRAPH_NODE_SECURITY",
+    )
+    assert "GRAPH_EDGE_HOLDS" in result.edge_tables
+    assert result.applied_filters == {
+        "entity_types": ("company", "person"),
+        "relationship_types": ("HOLDS", "IS_INSIDER"),
+        "limit": 100,
+        "limit_per_type": 10,
+    }
+
+
+def test_graph_sync_executor_rejects_unknown_relationship_before_execute():
+    connection = FakeGraphConnection()
+    executor = SnowflakeGraphSyncExecutor(connection)
+
+    try:
+        executor.sync(
+            SnowflakeGraphSyncConfig(
+                target_database="EDGARTOOLS_DEV",
+                relationship_types=("HODLS",),
+            )
+        )
+    except SnowflakeGraphValidationError as exc:
+        message = str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("expected invalid relationship filter to raise")
+
+    assert "HODLS" in message
+    assert "IS_INSIDER" in message
+    assert "MANAGES_FUND" in message
+    assert connection.fake_cursor.executed == []
+
+
+def test_graph_sync_executor_rejects_unknown_entity_before_execute():
+    connection = FakeGraphConnection()
+    executor = SnowflakeGraphSyncExecutor(connection)
+
+    try:
+        executor.sync(
+            SnowflakeGraphSyncConfig(
+                target_database="EDGARTOOLS_DEV",
+                entity_types=("companies",),
+            )
+        )
+    except SnowflakeGraphValidationError as exc:
+        message = str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("expected invalid entity filter to raise")
+
+    assert "companies" in message
+    assert "company" in message
+    assert "security" in message
+    assert connection.fake_cursor.executed == []
