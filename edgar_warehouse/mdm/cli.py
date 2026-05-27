@@ -39,10 +39,24 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     run.add_argument("--limit", type=int, default=None)
     run.set_defaults(handler=_logged_handler("run", _handle_run))
 
-    sync = mdm_sub.add_parser("sync-graph", help="Sync pending MDM relationship rows to Neo4j")
+    sync = mdm_sub.add_parser(
+        "sync-graph",
+        help="Materialize Snowflake graph-ready node and edge state from MDM",
+    )
     sync.add_argument("--limit", type=int, default=None)
     sync.add_argument("--limit-per-type", type=int, default=None, help="Maximum pending edges to sync for each relationship type")
     sync.add_argument("--relationship-type", action="append", default=None, help="Relationship type to sync; repeat for multiple types")
+    sync.add_argument(
+        "--entity-type",
+        action="append",
+        choices=["company", "adviser", "person", "security", "fund"],
+        default=None,
+        help="Entity type to materialize; repeat for multiple types",
+    )
+    sync.add_argument("--target-database", default=None, help="Snowflake target database for graph-ready tables")
+    sync.add_argument("--target-schema", default=None, help="Snowflake target schema for graph-ready tables")
+    sync.add_argument("--mdm-database", default=None, help="Snowflake database containing MDM source tables")
+    sync.add_argument("--mdm-schema", default=None, help="Snowflake schema containing MDM source tables")
     sync.set_defaults(handler=_logged_handler("sync-graph", _handle_sync_graph))
 
     derive = mdm_sub.add_parser(
@@ -61,7 +75,8 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     load_rels.add_argument("--entity-limit", type=int, default=None, help="Optional cap for each entity resolver phase")
     load_rels.add_argument("--relationship-type", action="append", default=None, help="Relationship type to load; repeat for multiple types")
     load_rels.add_argument("--skip-entity-resolution", action="store_true", default=False, help="Only derive/sync from existing MDM entities")
-    load_rels.add_argument("--skip-graph-sync", action="store_true", default=False, help="Derive relationships but do not sync Neo4j")
+    load_rels.add_argument("--graph-sync", action="store_true", default=False, help="After derivation, materialize Snowflake graph-ready tables")
+    load_rels.add_argument("--skip-graph-sync", action="store_true", default=False, help="Derive relationships but do not materialize graph tables")
     load_rels.set_defaults(handler=_logged_handler("load-relationships", _handle_load_relationships))
 
     api = mdm_sub.add_parser("api", help="Run the MDM FastAPI service with uvicorn")
@@ -632,27 +647,77 @@ def _handle_check_connectivity(args) -> int:
 
 
 def _handle_sync_graph(args) -> int:
-    from edgar_warehouse.mdm.graph import GraphSyncEngine
+    from edgar_warehouse.mdm.snowflake_graph import SnowflakeGraphSyncExecutor
 
-    client = _neo4j_client()
-    if client is None:
-        print("NEO4J_URI/NEO4J_USER/NEO4J_PASSWORD not configured", file=sys.stderr)
-        return 1
-    session = _session()
     try:
-        sync = GraphSyncEngine.build(session, client)
-        node_count = sync.sync_entities(limit=args.limit)
-        edge_count = sync.sync_pending(
-            limit=args.limit,
-            relationship_types=args.relationship_type,
-            limit_per_type=args.limit_per_type,
+        result = SnowflakeGraphSyncExecutor.from_env().sync(
+            _snowflake_graph_sync_config(
+                entity_types=args.entity_type,
+                relationship_types=args.relationship_type,
+                limit=args.limit,
+                limit_per_type=args.limit_per_type,
+                target_database=args.target_database,
+                target_schema=args.target_schema,
+                mdm_database=args.mdm_database,
+                mdm_schema=args.mdm_schema,
+            )
         )
-        session.commit()
-    finally:
-        client.close()
-        session.close()
-    print(json.dumps({"graph_edges_synced": edge_count, "graph_nodes_synced": node_count}, indent=2, sort_keys=True))
+    except (RuntimeError, ValueError) as exc:
+        print(f"sync-graph: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(_snowflake_graph_sync_payload(result), indent=2, sort_keys=True))
     return 0
+
+
+def _snowflake_graph_sync_config(
+    *,
+    entity_types,
+    relationship_types,
+    limit: int | None,
+    limit_per_type: int | None,
+    target_database: str | None = None,
+    target_schema: str | None = None,
+    mdm_database: str | None = None,
+    mdm_schema: str | None = None,
+):
+    from edgar_warehouse.mdm.snowflake_graph import (
+        DEFAULT_MDM_SCHEMA,
+        DEFAULT_TARGET_SCHEMA,
+        SnowflakeGraphSyncConfig,
+    )
+
+    return SnowflakeGraphSyncConfig(
+        target_database=target_database,
+        target_schema=target_schema or DEFAULT_TARGET_SCHEMA,
+        mdm_database=mdm_database,
+        mdm_schema=mdm_schema or DEFAULT_MDM_SCHEMA,
+        entity_types=tuple(entity_types or ()),
+        relationship_types=tuple(relationship_types or ()),
+        limit=limit,
+        limit_per_type=limit_per_type,
+    )
+
+
+def _snowflake_graph_sync_payload(result) -> dict[str, object]:
+    return {
+        "status": "ok",
+        "graph_nodes_materialized": result.node_count,
+        "graph_edges_materialized": result.edge_count,
+        "graph_nodes_synced": result.node_count,
+        "graph_edges_synced": result.edge_count,
+        "target": {
+            "database": result.target_database,
+            "schema": result.target_schema,
+        },
+        "node_tables": list(result.node_tables),
+        "edge_tables": list(result.edge_tables),
+        "applied_filters": {
+            "entity_types": list(result.applied_filters.get("entity_types") or ()),
+            "relationship_types": list(result.applied_filters.get("relationship_types") or ()),
+            "limit": result.applied_filters.get("limit"),
+            "limit_per_type": result.applied_filters.get("limit_per_type"),
+        },
+    }
 
 
 def _handle_derive_relationships(args) -> int:
@@ -677,17 +742,17 @@ def _handle_derive_relationships(args) -> int:
 
 
 def _handle_load_relationships(args) -> int:
-    from edgar_warehouse.mdm.graph import GraphSyncEngine
     from edgar_warehouse.mdm.pipeline import MDMPipeline
+    from edgar_warehouse.mdm.snowflake_graph import SnowflakeGraphSyncExecutor
 
     silver, rc = _require_silver_reader(_REQUIRED_TABLES_RELATIONSHIPS, "mdm load-relationships")
     if rc != 0:
         return rc
 
-    client = None if args.skip_graph_sync else _neo4j_client()
+    graph_sync_enabled = bool(getattr(args, "graph_sync", False)) and not args.skip_graph_sync
     session = _session()
     try:
-        pipeline = MDMPipeline(session=session, silver=silver, neo4j=client)
+        pipeline = MDMPipeline(session=session, silver=silver)
         entity_counts: dict[str, int] = {}
         if not args.skip_entity_resolution:
             entity_counts = {
@@ -701,19 +766,24 @@ def _handle_load_relationships(args) -> int:
             target_per_type=args.target_per_type,
             relationship_types=args.relationship_type,
         )
-        graph_nodes_synced = 0
-        graph_edges_synced = 0
-        if client is not None:
-            sync = GraphSyncEngine.build(session, client)
-            graph_nodes_synced = sync.sync_entities()
-            graph_edges_synced = sync.sync_pending(
-                relationship_types=args.relationship_type,
-                limit_per_type=args.target_per_type,
+        graph_sync_payload: dict[str, object] = {"enabled": False}
+        if graph_sync_enabled:
+            result = SnowflakeGraphSyncExecutor.from_env().sync(
+                _snowflake_graph_sync_config(
+                    entity_types=None,
+                    relationship_types=args.relationship_type,
+                    limit=None,
+                    limit_per_type=args.target_per_type,
+                )
             )
+            graph_sync_payload = {
+                "enabled": True,
+                **_snowflake_graph_sync_payload(result),
+            }
+        graph_nodes_synced = int(graph_sync_payload.get("graph_nodes_synced") or 0)
+        graph_edges_synced = int(graph_sync_payload.get("graph_edges_synced") or 0)
         session.commit()
     finally:
-        if client is not None:
-            client.close()
         session.close()
 
     print(
@@ -722,6 +792,7 @@ def _handle_load_relationships(args) -> int:
                 **entity_counts,
                 "graph_edges_synced": graph_edges_synced,
                 "graph_nodes_synced": graph_nodes_synced,
+                "graph_sync": graph_sync_payload,
                 "relationship_counts_by_type": relationship_summary,
             },
             indent=2,
