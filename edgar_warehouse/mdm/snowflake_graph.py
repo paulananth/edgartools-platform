@@ -6,9 +6,41 @@ from pathlib import Path
 import subprocess
 from typing import Any
 
+from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
+
 
 DEFAULT_TARGET_SCHEMA = "NEO4J_GRAPH_MIGRATION"
 DEFAULT_MDM_SCHEMA = "MDM"
+ALLOWED_ENTITY_TYPES = ("adviser", "company", "fund", "person", "security")
+ALLOWED_RELATIONSHIP_TYPES = (
+    "COMPANY_HOLDS",
+    "HAS_PARENT_COMPANY",
+    "HOLDS",
+    "IS_ENTITY_OF",
+    "IS_INSIDER",
+    "IS_PERSON_OF",
+    "ISSUED_BY",
+    "MANAGES_FUND",
+)
+NODE_TABLES = (
+    "MDM_GRAPH_NODES",
+    "GRAPH_NODE_ADVISER",
+    "GRAPH_NODE_COMPANY",
+    "GRAPH_NODE_FUND",
+    "GRAPH_NODE_PERSON",
+    "GRAPH_NODE_SECURITY",
+)
+EDGE_TABLES = (
+    "MDM_GRAPH_EDGES",
+    "GRAPH_EDGE_COMPANY_HOLDS",
+    "GRAPH_EDGE_HAS_PARENT_COMPANY",
+    "GRAPH_EDGE_HOLDS",
+    "GRAPH_EDGE_IS_ENTITY_OF",
+    "GRAPH_EDGE_IS_INSIDER",
+    "GRAPH_EDGE_IS_PERSON_OF",
+    "GRAPH_EDGE_ISSUED_BY",
+    "GRAPH_EDGE_MANAGES_FUND",
+)
 
 
 @dataclass(frozen=True)
@@ -28,6 +60,103 @@ class SnowflakeGraphMigrationConfig:
         return self.mdm_database or self.resolved_target_database()
 
 
+class SnowflakeGraphValidationError(ValueError):
+    """Raised when graph sync filters fail closed before Snowflake execution."""
+
+
+@dataclass(frozen=True)
+class SnowflakeGraphSyncConfig:
+    target_database: str | None = None
+    target_schema: str = DEFAULT_TARGET_SCHEMA
+    mdm_database: str | None = None
+    mdm_schema: str = DEFAULT_MDM_SCHEMA
+    entity_types: tuple[str, ...] = ()
+    relationship_types: tuple[str, ...] = ()
+    limit: int | None = None
+    limit_per_type: int | None = None
+
+    def resolved_target_database(self, default_database: str | None = None) -> str:
+        database = self.target_database or default_database
+        if not database:
+            raise SnowflakeGraphValidationError(
+                "target_database is required when Snowflake connection settings do not provide a database"
+            )
+        return database
+
+    def resolved_mdm_database(self, default_database: str | None = None) -> str:
+        return self.mdm_database or self.resolved_target_database(default_database)
+
+
+@dataclass(frozen=True)
+class SnowflakeGraphSyncResult:
+    node_count: int
+    edge_count: int
+    target_database: str
+    target_schema: str
+    node_tables: tuple[str, ...]
+    edge_tables: tuple[str, ...]
+    applied_filters: dict[str, Any]
+
+
+class SnowflakeGraphSyncExecutor:
+    """Materialize Snowflake graph tables through a connector-style connection."""
+
+    def __init__(self, connection: Any, *, default_database: str | None = None) -> None:
+        self.connection = connection
+        self.default_database = default_database
+
+    @classmethod
+    def from_env(cls) -> "SnowflakeGraphSyncExecutor":
+        settings = SnowflakeConnectionSettings.from_env()
+        return cls(settings.connect(), default_database=settings.database)
+
+    def sync(self, config: SnowflakeGraphSyncConfig) -> SnowflakeGraphSyncResult:
+        target_database = config.resolved_target_database(self.default_database)
+        mdm_database = config.resolved_mdm_database(self.default_database)
+        entity_types = _normalize_entity_types(config.entity_types)
+        relationship_types = _normalize_relationship_types(config.relationship_types)
+        limit = _validate_limit(config.limit, "limit")
+        limit_per_type = _validate_limit(config.limit_per_type, "limit_per_type")
+        context = _graph_context(
+            target_database=target_database,
+            target_schema=config.target_schema,
+            mdm_database=mdm_database,
+            mdm_schema=config.mdm_schema,
+            entity_types=entity_types,
+            relationship_types=relationship_types,
+            limit=limit,
+            limit_per_type=limit_per_type,
+        )
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(render_graph_tables(context))
+            node_count = _fetch_scalar(
+                cursor,
+                f"SELECT COUNT(*) FROM {_fq(context, 'MDM_GRAPH_NODES')}",
+            )
+            edge_count = _fetch_scalar(
+                cursor,
+                f"SELECT COUNT(*) FROM {_fq(context, 'MDM_GRAPH_EDGES')}",
+            )
+        finally:
+            cursor.close()
+
+        return SnowflakeGraphSyncResult(
+            node_count=node_count,
+            edge_count=edge_count,
+            target_database=target_database,
+            target_schema=config.target_schema,
+            node_tables=NODE_TABLES,
+            edge_tables=EDGE_TABLES,
+            applied_filters={
+                "entity_types": entity_types,
+                "relationship_types": relationship_types,
+                "limit": limit,
+                "limit_per_type": limit_per_type,
+            },
+        )
+
+
 def generate_snowflake_graph_migration(config: SnowflakeGraphMigrationConfig) -> dict[str, Path]:
     """Write SQL files that build graph-ready tables inside Snowflake.
 
@@ -35,13 +164,13 @@ def generate_snowflake_graph_migration(config: SnowflakeGraphMigrationConfig) ->
     reads Snowflake MDM mirror tables directly; it does not require Aura,
     Bolt, `NEO4J_*` credentials, or JSONL exports from an external graph.
     """
-    context = {
-        "target_database": _ident(config.resolved_target_database()),
-        "target_schema": _ident(config.target_schema),
-        "mdm_database": _ident(config.resolved_mdm_database()),
-        "mdm_schema": _ident(config.mdm_schema),
-        "silver_path": config.silver_path,
-    }
+    context = _graph_context(
+        target_database=config.resolved_target_database(),
+        target_schema=config.target_schema,
+        mdm_database=config.resolved_mdm_database(),
+        mdm_schema=config.mdm_schema,
+        silver_path=config.silver_path,
+    )
 
     files = {
         "00_graph_tables.sql": render_graph_tables(context),
@@ -89,94 +218,186 @@ def render_graph_tables(context: dict[str, Any]) -> str:
 
 CREATE SCHEMA IF NOT EXISTS {context["target_database"]}.{context["target_schema"]};
 
-CREATE OR REPLACE TABLE {_fq(context, "GRAPH_NODES")} AS
+CREATE OR REPLACE TABLE {_fq(context, "MDM_GRAPH_NODES")} AS
 SELECT
-  ENTITY_ID::STRING AS NODEID,
-  'Company' AS LABEL,
+  E.ENTITY_ID::STRING AS NODEID,
+  ETD.NEO4J_LABEL::STRING AS LABEL,
+  E.ENTITY_TYPE::STRING AS ENTITY_TYPE,
+  'mdm' AS SOURCE_SYSTEM,
+  COALESCE(
+    C.VALID_FROM,
+    A.VALID_FROM,
+    P.VALID_FROM,
+    S.VALID_FROM,
+    F.VALID_FROM,
+    E.UPDATED_AT
+  ) AS SOURCE_UPDATED_AT,
+  E.CREATED_AT AS CREATED_AT,
+  E.UPDATED_AT AS UPDATED_AT,
   OBJECT_CONSTRUCT_KEEP_NULL(
-    'entity_id', ENTITY_ID,
-    'cik', CIK,
-    'canonical_name', CANONICAL_NAME,
-    'ticker', COALESCE(TICKER, PRIMARY_TICKER),
-    'primary_ticker', PRIMARY_TICKER,
-    'primary_exchange', PRIMARY_EXCHANGE,
-    'parent_company_entity_id', PARENT_COMPANY_ENTITY_ID
+    'entity_id', E.ENTITY_ID,
+    'entity_type', E.ENTITY_TYPE,
+    'label', ETD.NEO4J_LABEL,
+    'cik', COALESCE(C.CIK, A.CIK),
+    'owner_cik', P.OWNER_CIK,
+    'crd_number', A.CRD_NUMBER,
+    'canonical_name', COALESCE(C.CANONICAL_NAME, A.CANONICAL_NAME, P.CANONICAL_NAME, F.CANONICAL_NAME),
+    'canonical_title', S.CANONICAL_TITLE,
+    'ticker', COALESCE(C.TICKER, C.PRIMARY_TICKER),
+    'primary_ticker', C.PRIMARY_TICKER,
+    'primary_exchange', C.PRIMARY_EXCHANGE,
+    'issuer_entity_id', S.ISSUER_ENTITY_ID,
+    'adviser_entity_id', F.ADVISER_ENTITY_ID,
+    'parent_company_entity_id', C.PARENT_COMPANY_ENTITY_ID,
+    'security_type', S.SECURITY_TYPE,
+    'fund_type', F.FUND_TYPE,
+    'primary_role', P.PRIMARY_ROLE
   ) AS PROPERTIES
-FROM {_mdm_fq(context, "MDM_COMPANY")}
-UNION ALL
-SELECT
-  ENTITY_ID::STRING AS NODEID,
-  'Adviser' AS LABEL,
-  OBJECT_CONSTRUCT_KEEP_NULL(
-    'entity_id', ENTITY_ID,
-    'cik', CIK,
-    'crd_number', CRD_NUMBER,
-    'canonical_name', CANONICAL_NAME,
-    'linked_company_entity_id', LINKED_COMPANY_ENTITY_ID
-  ) AS PROPERTIES
-FROM {_mdm_fq(context, "MDM_ADVISER")}
-UNION ALL
-SELECT
-  ENTITY_ID::STRING AS NODEID,
-  'Person' AS LABEL,
-  OBJECT_CONSTRUCT_KEEP_NULL(
-    'entity_id', ENTITY_ID,
-    'owner_cik', OWNER_CIK,
-    'canonical_name', CANONICAL_NAME,
-    'primary_role', PRIMARY_ROLE
-  ) AS PROPERTIES
-FROM {_mdm_fq(context, "MDM_PERSON")}
-UNION ALL
-SELECT
-  ENTITY_ID::STRING AS NODEID,
-  'Security' AS LABEL,
-  OBJECT_CONSTRUCT_KEEP_NULL(
-    'entity_id', ENTITY_ID,
-    'issuer_entity_id', ISSUER_ENTITY_ID,
-    'canonical_title', CANONICAL_TITLE,
-    'security_type', SECURITY_TYPE
-  ) AS PROPERTIES
-FROM {_mdm_fq(context, "MDM_SECURITY")}
-UNION ALL
-SELECT
-  ENTITY_ID::STRING AS NODEID,
-  'Fund' AS LABEL,
-  OBJECT_CONSTRUCT_KEEP_NULL(
-    'entity_id', ENTITY_ID,
-    'adviser_entity_id', ADVISER_ENTITY_ID,
-    'canonical_name', CANONICAL_NAME,
-    'fund_type', FUND_TYPE
-  ) AS PROPERTIES
-FROM {_mdm_fq(context, "MDM_FUND")};
+FROM {_mdm_fq(context, "MDM_ENTITY")} E
+JOIN {_mdm_fq(context, "MDM_ENTITY_TYPE_DEFINITION")} ETD
+  ON ETD.ENTITY_TYPE = E.ENTITY_TYPE
+ AND ETD.IS_ACTIVE = TRUE
+LEFT JOIN {_mdm_fq(context, "MDM_COMPANY")} C
+  ON C.ENTITY_ID = E.ENTITY_ID
+ AND E.ENTITY_TYPE = 'company'
+LEFT JOIN {_mdm_fq(context, "MDM_ADVISER")} A
+  ON A.ENTITY_ID = E.ENTITY_ID
+ AND E.ENTITY_TYPE = 'adviser'
+LEFT JOIN {_mdm_fq(context, "MDM_PERSON")} P
+  ON P.ENTITY_ID = E.ENTITY_ID
+ AND E.ENTITY_TYPE = 'person'
+LEFT JOIN {_mdm_fq(context, "MDM_SECURITY")} S
+  ON S.ENTITY_ID = E.ENTITY_ID
+ AND E.ENTITY_TYPE = 'security'
+LEFT JOIN {_mdm_fq(context, "MDM_FUND")} F
+  ON F.ENTITY_ID = E.ENTITY_ID
+ AND E.ENTITY_TYPE = 'fund'
+WHERE E.IS_QUARANTINED = FALSE{context["entity_type_filter"]}
+{context["entity_per_type_limit"]}{context["entity_limit"]};
 
-CREATE OR REPLACE TABLE {_fq(context, "GRAPH_EDGES")} AS
+CREATE OR REPLACE TABLE {_fq(context, "MDM_GRAPH_EDGES")} AS
 SELECT
   RI.INSTANCE_ID::STRING AS EDGEID,
   RT.REL_TYPE_NAME::STRING AS RELATIONSHIP_TYPE,
   RI.SOURCE_ENTITY_ID::STRING AS SOURCENODEID,
   RI.TARGET_ENTITY_ID::STRING AS TARGETNODEID,
+  RT.SOURCE_NODE_TYPE::STRING AS SOURCE_ENTITY_TYPE,
+  RT.TARGET_NODE_TYPE::STRING AS TARGET_ENTITY_TYPE,
+  RI.SOURCE_SYSTEM::STRING AS SOURCE_SYSTEM,
+  RI.SOURCE_ACCESSION::STRING AS SOURCE_ACCESSION,
+  RI.EFFECTIVE_FROM AS EFFECTIVE_FROM,
+  RI.EFFECTIVE_TO AS EFFECTIVE_TO,
+  RT.MERGE_STRATEGY::STRING AS MERGE_STRATEGY,
+  CASE
+    WHEN RI.GRAPH_SYNCED_AT IS NULL THEN 'PENDING'
+    ELSE 'SYNCED'
+  END AS GRAPH_SYNC_STATUS,
+  RI.GRAPH_SYNCED_AT AS GRAPH_SYNCED_AT,
+  RI.CREATED_AT AS CREATED_AT,
+  RI.UPDATED_AT AS UPDATED_AT,
   OBJECT_CONSTRUCT_KEEP_NULL(
     'instance_id', RI.INSTANCE_ID,
     'source_system', RI.SOURCE_SYSTEM,
     'source_accession', RI.SOURCE_ACCESSION,
     'effective_from', RI.EFFECTIVE_FROM,
     'effective_to', RI.EFFECTIVE_TO,
-    'properties', RI.PROPERTIES
+    'properties', TRY_PARSE_JSON(RI.PROPERTIES),
+    'merge_strategy', RT.MERGE_STRATEGY,
+    'source_node_type', RT.SOURCE_NODE_TYPE,
+    'target_node_type', RT.TARGET_NODE_TYPE,
+    'graph_sync_status', CASE
+      WHEN RI.GRAPH_SYNCED_AT IS NULL THEN 'PENDING'
+      ELSE 'SYNCED'
+    END
   ) AS PROPERTIES
 FROM {_mdm_fq(context, "MDM_RELATIONSHIP_INSTANCE")} RI
 JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_TYPE")} RT
   ON RT.REL_TYPE_ID = RI.REL_TYPE_ID
 WHERE RI.IS_ACTIVE = TRUE
-  AND RT.IS_ACTIVE = TRUE;
+  AND RT.IS_ACTIVE = TRUE{context["relationship_type_filter"]}
+{context["relationship_per_type_limit"]}{context["relationship_limit"]};
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODES")} AS
+SELECT NODEID, LABEL, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_NODES")};
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGES")} AS
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_EDGES")};
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODE_COMPANY")} AS
+SELECT NODEID, LABEL, ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_UPDATED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_NODES")}
+WHERE ENTITY_TYPE = 'company';
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODE_PERSON")} AS
+SELECT NODEID, LABEL, ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_UPDATED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_NODES")}
+WHERE ENTITY_TYPE = 'person';
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODE_SECURITY")} AS
+SELECT NODEID, LABEL, ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_UPDATED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_NODES")}
+WHERE ENTITY_TYPE = 'security';
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODE_ADVISER")} AS
+SELECT NODEID, LABEL, ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_UPDATED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_NODES")}
+WHERE ENTITY_TYPE = 'adviser';
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODE_FUND")} AS
+SELECT NODEID, LABEL, ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_UPDATED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_NODES")}
+WHERE ENTITY_TYPE = 'fund';
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_IS_INSIDER")} AS
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_EDGES")}
+WHERE RELATIONSHIP_TYPE = 'IS_INSIDER';
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_HOLDS")} AS
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_EDGES")}
+WHERE RELATIONSHIP_TYPE = 'HOLDS';
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_COMPANY_HOLDS")} AS
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_EDGES")}
+WHERE RELATIONSHIP_TYPE = 'COMPANY_HOLDS';
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_ISSUED_BY")} AS
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_EDGES")}
+WHERE RELATIONSHIP_TYPE = 'ISSUED_BY';
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_IS_ENTITY_OF")} AS
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_EDGES")}
+WHERE RELATIONSHIP_TYPE = 'IS_ENTITY_OF';
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_HAS_PARENT_COMPANY")} AS
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_EDGES")}
+WHERE RELATIONSHIP_TYPE = 'HAS_PARENT_COMPANY';
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_MANAGES_FUND")} AS
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_EDGES")}
+WHERE RELATIONSHIP_TYPE = 'MANAGES_FUND';
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_IS_PERSON_OF")} AS
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_EDGES")}
+WHERE RELATIONSHIP_TYPE = 'IS_PERSON_OF';
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODE_COUNTS")} AS
 SELECT LABEL, COUNT(*) AS NODE_COUNT
-FROM {_fq(context, "GRAPH_NODES")}
+FROM {_fq(context, "MDM_GRAPH_NODES")}
 GROUP BY LABEL;
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_COUNTS")} AS
 SELECT RELATIONSHIP_TYPE, COUNT(*) AS EDGE_COUNT
-FROM {_fq(context, "GRAPH_EDGES")}
+FROM {_fq(context, "MDM_GRAPH_EDGES")}
 GROUP BY RELATIONSHIP_TYPE;
 """
 
@@ -185,20 +406,32 @@ def render_validation(context: dict[str, Any]) -> str:
     return f"""-- Validation for Snowflake-hosted Neo4j Graph Analytics tables.
 
 SELECT 'snowflake_graph_nodes' AS METRIC, COUNT(*) AS VALUE
-FROM {_fq(context, "GRAPH_NODES")}
+FROM {_fq(context, "MDM_GRAPH_NODES")}
 UNION ALL
 SELECT 'snowflake_graph_edges' AS METRIC, COUNT(*) AS VALUE
-FROM {_fq(context, "GRAPH_EDGES")}
+FROM {_fq(context, "MDM_GRAPH_EDGES")}
+UNION ALL
+SELECT 'active_mdm_entities' AS METRIC, COUNT(*) AS VALUE
+FROM {_mdm_fq(context, "MDM_ENTITY")} E
+JOIN {_mdm_fq(context, "MDM_ENTITY_TYPE_DEFINITION")} ETD
+  ON ETD.ENTITY_TYPE = E.ENTITY_TYPE
+ AND ETD.IS_ACTIVE = TRUE
+WHERE E.IS_QUARANTINED = FALSE
 UNION ALL
 SELECT 'mdm_relationship_instances_active' AS METRIC, COUNT(*) AS VALUE
 FROM {_mdm_fq(context, "MDM_RELATIONSHIP_INSTANCE")}
 WHERE IS_ACTIVE = TRUE;
+
+SELECT LABEL, NODE_COUNT
+FROM {_fq(context, "GRAPH_NODE_COUNTS")}
+ORDER BY LABEL;
 
 SELECT RELATIONSHIP_TYPE, EDGE_COUNT
 FROM {_fq(context, "GRAPH_EDGE_COUNTS")}
 ORDER BY RELATIONSHIP_TYPE;
 
 SELECT
+  'active_mdm_relationship_parity' AS CHECK_NAME,
   RT.REL_TYPE_NAME AS RELATIONSHIP_TYPE,
   COUNT(RI.INSTANCE_ID) AS MDM_ACTIVE_COUNT,
   COALESCE(G.EDGE_COUNT, 0) AS SNOWFLAKE_GRAPH_EDGE_COUNT,
@@ -213,11 +446,18 @@ WHERE RT.IS_ACTIVE = TRUE
 GROUP BY RT.REL_TYPE_NAME, G.EDGE_COUNT
 ORDER BY RT.REL_TYPE_NAME;
 
-SELECT E.RELATIONSHIP_TYPE, E.SOURCENODEID, E.TARGETNODEID, E.EDGEID
-FROM {_fq(context, "GRAPH_EDGES")} E
-LEFT JOIN {_fq(context, "GRAPH_NODES")} S
+SELECT
+  'missing_graph_edge_endpoints' AS CHECK_NAME,
+  E.RELATIONSHIP_TYPE,
+  E.SOURCENODEID,
+  E.TARGETNODEID,
+  E.EDGEID,
+  IFF(S.NODEID IS NULL, TRUE, FALSE) AS MISSING_SOURCE_NODE,
+  IFF(T.NODEID IS NULL, TRUE, FALSE) AS MISSING_TARGET_NODE
+FROM {_fq(context, "MDM_GRAPH_EDGES")} E
+LEFT JOIN {_fq(context, "MDM_GRAPH_NODES")} S
   ON S.NODEID = E.SOURCENODEID
-LEFT JOIN {_fq(context, "GRAPH_NODES")} T
+LEFT JOIN {_fq(context, "MDM_GRAPH_NODES")} T
   ON T.NODEID = E.TARGETNODEID
 WHERE S.NODEID IS NULL OR T.NODEID IS NULL
 LIMIT 100;
@@ -276,13 +516,119 @@ Silver source: `{context["silver_path"] or "environment-backed"}`
 
 The generated tables use Neo4j Graph Analytics friendly columns:
 
-- `GRAPH_NODES(NODEID, LABEL, PROPERTIES)`
-- `GRAPH_EDGES(EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, PROPERTIES)`
+- `MDM_GRAPH_NODES(NODEID, LABEL, ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_UPDATED_AT, CREATED_AT, UPDATED_AT, PROPERTIES)`
+- `MDM_GRAPH_EDGES(EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_SYSTEM, SOURCE_ACCESSION, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, PROPERTIES)`
+- `GRAPH_NODE_*` views expose one Native App-compatible node table per label.
+- `GRAPH_EDGE_*` views expose one Native App-compatible relationship table per type.
+
+`MDM_GRAPH_NODES` and `MDM_GRAPH_EDGES` are the canonical contract tables.
+`GRAPH_NODES` and `GRAPH_EDGES` remain compatibility views over the canonical
+tables for older validation queries.
+
+Neo4j Graph Analytics procedures such as `NEO4J_GRAPH_ANALYTICS.GRAPH.PAGE_RANK`,
+`NEO4J_GRAPH_ANALYTICS.GRAPH.LOUVAIN`, and
+`NEO4J_GRAPH_ANALYTICS.GRAPH.GRAPH_INFO` consume these generated graph tables.
+This SQL generation step does not invoke those procedures. Algorithm output
+tables should land in governed `{context["target_database"]}.{context["target_schema"]}`
+tables with operator cleanup ownership.
 
 For an already materialized Snowflake-hosted graph, run only
 `02_hosted_neo4j_e2e.sql`. It validates existing graph node/edge tables and
 Neo4j Graph Analytics result tables without mutating Snowflake.
 """
+
+
+def _graph_context(
+    *,
+    target_database: str,
+    target_schema: str,
+    mdm_database: str,
+    mdm_schema: str,
+    silver_path: Path | None = None,
+    entity_types: tuple[str, ...] = (),
+    relationship_types: tuple[str, ...] = (),
+    limit: int | None = None,
+    limit_per_type: int | None = None,
+) -> dict[str, Any]:
+    return {
+        "target_database": _ident(target_database),
+        "target_schema": _ident(target_schema),
+        "mdm_database": _ident(mdm_database),
+        "mdm_schema": _ident(mdm_schema),
+        "silver_path": silver_path,
+        "entity_type_filter": _in_filter("E.ENTITY_TYPE", entity_types),
+        "relationship_type_filter": _in_filter("RT.REL_TYPE_NAME", relationship_types),
+        "entity_per_type_limit": _qualify_limit("E.ENTITY_TYPE", "E.ENTITY_ID", limit_per_type),
+        "relationship_per_type_limit": _qualify_limit(
+            "RT.REL_TYPE_NAME",
+            "RI.INSTANCE_ID",
+            limit_per_type,
+        ),
+        "entity_limit": _limit_clause(limit),
+        "relationship_limit": _limit_clause(limit),
+    }
+
+
+def _normalize_entity_types(values: tuple[str, ...]) -> tuple[str, ...]:
+    normalized = tuple(sorted({str(value).lower() for value in values}))
+    invalid = [value for value in normalized if value not in ALLOWED_ENTITY_TYPES]
+    if invalid:
+        raise SnowflakeGraphValidationError(
+            "Invalid entity type filter(s): "
+            + ", ".join(invalid)
+            + ". Allowed values: "
+            + ", ".join(ALLOWED_ENTITY_TYPES)
+        )
+    return normalized
+
+
+def _normalize_relationship_types(values: tuple[str, ...]) -> tuple[str, ...]:
+    normalized = tuple(sorted({str(value).upper() for value in values}))
+    invalid = [value for value in normalized if value not in ALLOWED_RELATIONSHIP_TYPES]
+    if invalid:
+        raise SnowflakeGraphValidationError(
+            "Invalid relationship type filter(s): "
+            + ", ".join(invalid)
+            + ". Allowed values: "
+            + ", ".join(ALLOWED_RELATIONSHIP_TYPES)
+        )
+    return normalized
+
+
+def _validate_limit(value: int | None, name: str) -> int | None:
+    if value is None:
+        return None
+    if value < 1:
+        raise SnowflakeGraphValidationError(f"{name} must be a positive integer")
+    return int(value)
+
+
+def _in_filter(column: str, values: tuple[str, ...]) -> str:
+    if not values:
+        return ""
+    quoted = ", ".join(_sql_literal(value) for value in values)
+    return f"\n  AND {column} IN ({quoted})"
+
+
+def _qualify_limit(partition_column: str, order_column: str, limit: int | None) -> str:
+    if limit is None:
+        return ""
+    return (
+        "QUALIFY ROW_NUMBER() OVER "
+        f"(PARTITION BY {partition_column} ORDER BY {order_column}) <= {limit}\n"
+    )
+
+
+def _limit_clause(limit: int | None) -> str:
+    if limit is None:
+        return ""
+    return f"LIMIT {limit}"
+
+
+def _fetch_scalar(cursor: Any, sql: str) -> int:
+    cursor.execute(sql)
+    row = cursor.fetchone()
+    return int(row[0] if row else 0)
 
 
 def _fq(context: dict[str, Any], name: str) -> str:
@@ -298,3 +644,7 @@ def _ident(value: str) -> str:
     if not cleaned.replace("_", "").isalnum() or not cleaned[0].isalpha():
         raise ValueError(f"Unsafe Snowflake identifier: {value!r}")
     return cleaned
+
+
+def _sql_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"

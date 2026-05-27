@@ -2,28 +2,28 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Neo4j Snowflake Native App Migration
-status: ready_for_planning
-stopped_at: Phase 1 verified and complete
-last_updated: "2026-05-26T10:16:38.222Z"
-last_activity: 2026-05-26 -- Phase 1 verified and complete
+status: executing
+stopped_at: Phase 2 complete
+last_updated: "2026-05-27T00:24:12Z"
+last_activity: 2026-05-27 -- Phase 2 Plan 02-03 completed
 progress:
   total_phases: 4
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 25
+  completed_phases: 2
+  total_plans: 6
+  completed_plans: 6
+  percent: 50
 ---
 
 # Project State - neo4j-snowflake
 
 ## Current Position
 
-Phase: 2 (Snowflake Graph Sync Contract) - NOT STARTED
-Plan: Not planned
-Status: Ready for Phase 2 planning
-Last activity: 2026-05-26 -- Phase 1 verified and complete
+Phase: 3 (Hosted Graph Verification And E2E Cutover) — READY TO PLAN
+Plan: TBD
+Status: Phase 2 complete; ready to plan hosted graph verification and E2E cutover
+Last activity: 2026-05-27 -- Phase 2 Plan 02-03 completed
 
-Progress: [##--------] 25% (Phase 1 complete; milestone v1.3 remains in progress)
+Progress: [#####-----] 50% (Phases 1 and 2 complete; milestone v1.3 remains in progress)
 
 ## Milestone Context
 
@@ -78,6 +78,46 @@ projection surfaces should change.
   `EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION`, `GRAPH_NODE_*`, `GRAPH_EDGE_*`, available
   compute pools, and algorithm result tables with the Phase 1 graph projection contract.
 
+- Phase 2 planning produced three executable plans: `02-01` for graph projection SQL,
+  `02-02` for the Snowflake graph sync executor, and `02-03` for `edgar-warehouse mdm
+  sync-graph` CLI wiring.
+
+- Phase 2 replanning addressed review feedback: `02-02` now requires fail-closed validation
+  for unknown relationship/entity filters before materialization, and `02-03` now keeps
+  `load-relationships` derivation-only by default unless an explicit graph sync opt-in is
+  provided.
+
+- Phase 2 plan review convergence completed in 2 cycles. Cycle 1 found 2 HIGH concerns;
+  replanning resolved both, and Cycle 2 reported `current_high=0`.
+
+- Plan 02-01 implemented the generated Snowflake graph projection SQL contract:
+  canonical `MDM_GRAPH_NODES` and `MDM_GRAPH_EDGES`, compatibility
+  `GRAPH_NODES`/`GRAPH_EDGES` views, per-label `GRAPH_NODE_*` views, per-type
+  `GRAPH_EDGE_*` views, validation diagnostics, and governed Native App output
+  guidance.
+
+- Plan 02-01 keeps generated graph artifacts credential-free: tests assert the
+  SQL and README do not require external Neo4j connection secrets, and no live
+  Snowflake credentials were used.
+
+- Plan 02-02 added a reusable Snowflake graph sync executor that shares the
+  existing `MDM_SNOWFLAKE_*` / `DBT_SNOWFLAKE_*` connection model, materializes
+  graph tables with deterministic `CREATE OR REPLACE` SQL, and returns target
+  schema, applied filters, table names, and node/edge counts.
+
+- Plan 02-02 enforces fail-closed validation for unknown entity and relationship
+  filters before Snowflake cursor execution, preventing misleading successful
+  empty syncs for values such as `companies` or `HODLS`.
+
+- Plan 02-03 wired `edgar-warehouse mdm sync-graph` to
+  `SnowflakeGraphSyncExecutor`, preserving bounded relationship/entity filters,
+  target schema overrides, and secret-safe JSON materialization counts without
+  requiring external `NEO4J_*` credentials.
+
+- Plan 02-03 changed `load-relationships` to remain derivation-only by default;
+  post-derivation graph materialization now requires explicit `--graph-sync`,
+  while `--skip-graph-sync` remains an accepted no-write path.
+
 ## Blockers
 
 - Live Marketplace app availability, Snowflake account privileges, and app role grant details must
@@ -89,6 +129,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-05-26T10:08:05.677Z
-Stopped at: Phase 1 verified and complete
-Resume file: None
+Last session: 2026-05-27T00:24:12Z
+Stopped at: Phase 2 complete
+Resume file: Phase 3 planning

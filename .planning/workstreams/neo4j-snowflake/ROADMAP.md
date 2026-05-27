@@ -3,7 +3,7 @@
 workstream: neo4j-snowflake
 status: active
 milestone: v1.3 Neo4j Snowflake Native App Migration
-updated: 2026-05-26
+updated: 2026-05-27
 
 ---
 
@@ -18,7 +18,7 @@ MDM relationship parity, dashboard inspection, and end-to-end AWS verification.
 ## Phases
 
 - [x] **Phase 1: Snowflake Native App Feasibility And Architecture Decision** - validate marketplace installation, permissions, graph projection contract, and the decision to cut over from external Neo4j (completed 2026-05-26)
-- [ ] **Phase 2: Snowflake Graph Sync Contract** - adapt `edgar-warehouse mdm sync-graph` to materialize MDM graph state into Snowflake graph-ready node and edge tables/views
+- [x] **Phase 2: Snowflake Graph Sync Contract** - adapt `edgar-warehouse mdm sync-graph` to materialize MDM graph state into Snowflake graph-ready node and edge tables/views (completed 2026-05-27)
 - [ ] **Phase 3: Hosted Graph Verification And E2E Cutover** - move `verify-graph` and AWS pipeline validation onto the Snowflake-hosted Native App path
 - [ ] **Phase 4: Dashboard Hosted Graph Migration** - update the MDM Neo4j review dashboard to compare MDM state with the Snowflake-hosted graph target
 
@@ -66,7 +66,13 @@ MDM relationship parity, dashboard inspection, and end-to-end AWS verification.
 4. Bounded relationship/entity filters still work for repair and validation workflows.
 5. Focused tests cover SQL generation or Snowflake writer behavior without live credentials.
 
-**Plans**: TBD
+**Plans**:
+
+| Plan | Wave | Objective | Requirements |
+|------|------|-----------|--------------|
+| 02-01 | 1 | Define the Snowflake graph projection SQL contract for canonical MDM graph inputs and Native App-compatible table projections. | SYNC-01, SYNC-02, SNOW-02, SNOW-04 |
+| 02-02 | 2 | Add the reusable Snowflake graph sync executor with fail-closed relationship/entity filter validation and credential-free writer/idempotency tests. | SYNC-01, SYNC-02, SYNC-03, SNOW-02, SNOW-04 |
+| 02-03 | 3 | Wire `edgar-warehouse mdm sync-graph` to Snowflake graph materialization while keeping `load-relationships` graph writes explicit opt-in. | SYNC-01, SYNC-02, SYNC-03, SNOW-02, SNOW-04 |
 
 ### Phase 3: Hosted Graph Verification And E2E Cutover
 
@@ -111,6 +117,6 @@ MDM relationship parity, dashboard inspection, and end-to-end AWS verification.
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Snowflake Native App Feasibility And Architecture Decision | v1.3 Neo4j Snowflake Native App Migration | 3/3 | Complete    | 2026-05-26 |
-| 2. Snowflake Graph Sync Contract | v1.3 Neo4j Snowflake Native App Migration | 0/TBD | Not started | - |
+| 2. Snowflake Graph Sync Contract | v1.3 Neo4j Snowflake Native App Migration | 3/3 | Complete    | 2026-05-27 |
 | 3. Hosted Graph Verification And E2E Cutover | v1.3 Neo4j Snowflake Native App Migration | 0/TBD | Not started | - |
 | 4. Dashboard Hosted Graph Migration | v1.3 Neo4j Snowflake Native App Migration | 0/TBD | Not started | - |

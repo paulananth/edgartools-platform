@@ -3,7 +3,7 @@
 workstream: neo4j-snowflake
 status: active
 milestone: v1.3 Neo4j Snowflake Native App Migration
-updated: 2026-05-26
+updated: 2026-05-27
 
 ---
 
@@ -18,17 +18,17 @@ updated: 2026-05-26
 
 ### Sync Contract
 
-- [ ] **SYNC-01**: Operator can run `edgar-warehouse mdm sync-graph` so active MDM entities and relationships are materialized into Snowflake graph-ready node and edge tables/views.
-- [ ] **SYNC-02**: Running graph sync twice against unchanged MDM state produces stable Snowflake node/edge counts and does not duplicate graph rows.
-- [ ] **SYNC-03**: Graph sync still supports bounded execution by relationship type, entity type, and row limit for operator repair workflows.
+- [x] **SYNC-01**: Operator can run `edgar-warehouse mdm sync-graph` so active MDM entities and relationships are materialized into Snowflake graph-ready node and edge tables/views.
+- [x] **SYNC-02**: Running graph sync twice against unchanged MDM state produces stable Snowflake node/edge counts and does not duplicate graph rows.
+- [x] **SYNC-03**: Graph sync still supports bounded execution by relationship type, entity type, and row limit for operator repair workflows.
 - [ ] **SYNC-04**: `edgar-warehouse mdm verify-graph` targets the Snowflake-hosted graph path and no longer requires an external Neo4j Bolt connection for milestone verification.
 
 ### Snowflake Native App Integration
 
 - [x] **SNOW-01**: Snowflake roles, grants, warehouses, and application permissions required by the Neo4j Native App are documented and can be applied without broadening unrelated platform privileges.
-- [ ] **SNOW-02**: Neo4j graph projections can be created from existing Snowflake source/gold data plus MDM graph-ready tables/views without redesigning the gold layer.
+- [x] **SNOW-02**: Neo4j graph projections can be created from existing Snowflake source/gold data plus MDM graph-ready tables/views without redesigning the gold layer.
 - [ ] **SNOW-03**: Query-level graph checks can run through the Native App path, including at least one traversal/connectivity-style check relevant to SEC entity relationships.
-- [ ] **SNOW-04**: Native App output tables, if used, land in a governed Snowflake schema with clear ownership and cleanup behavior.
+- [x] **SNOW-04**: Native App output tables, if used, land in a governed Snowflake schema with clear ownership and cleanup behavior.
 
 ### Verification
 
@@ -71,14 +71,14 @@ updated: 2026-05-26
 | DISC-02 | Phase 1 | Complete |
 | DISC-03 | Phase 1 | Complete |
 | DISC-04 | Phase 1 | Complete |
-| SYNC-01 | Phase 2 | Pending |
-| SYNC-02 | Phase 2 | Pending |
-| SYNC-03 | Phase 2 | Pending |
+| SYNC-01 | Phase 2 | Complete |
+| SYNC-02 | Phase 2 | Complete |
+| SYNC-03 | Phase 2 | Complete |
 | SYNC-04 | Phase 3 | Pending |
 | SNOW-01 | Phase 1 | Complete |
-| SNOW-02 | Phase 2 | Pending |
+| SNOW-02 | Phase 2 | Complete |
 | SNOW-03 | Phase 3 | Pending |
-| SNOW-04 | Phase 2 | Pending |
+| SNOW-04 | Phase 2 | Complete |
 | VERIFY-01 | Phase 3 | Pending |
 | VERIFY-02 | Phase 3 | Pending |
 | VERIFY-03 | Phase 3 | Pending |
