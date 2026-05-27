@@ -34,29 +34,20 @@ class SnowflakeWriter:
         raise NotImplementedError
 
 
-class SnowflakeConnectorWriter(SnowflakeWriter):
-    """Snowflake upsert writer backed by snowflake-connector-python.
+@dataclass(frozen=True)
+class SnowflakeConnectionSettings:
+    """Reusable Snowflake connector settings for MDM export and graph sync."""
 
-    Target MDM tables are expected to already exist. The writer creates a
-    temporary table shaped from the current batch, inserts batch rows, then
-    MERGEs by the configured key.
-    """
-
-    def __init__(self, connection: Any, *, database: str | None = None, schema: str | None = None) -> None:
-        self.connection = connection
-        self.database = database
-        self.schema = schema
+    account: str
+    user: str
+    password: str
+    database: str
+    schema: str
+    warehouse: str
+    role: str | None = None
 
     @classmethod
-    def from_env(cls) -> "SnowflakeConnectorWriter":
-        try:
-            import snowflake.connector  # type: ignore
-        except ImportError as exc:  # pragma: no cover - depends on optional extra
-            raise RuntimeError(
-                "snowflake-connector-python is not installed. Run with the snowflake extra, "
-                "for example: uv run --extra snowflake edgar-warehouse mdm export ..."
-            ) from exc
-
+    def from_env(cls) -> "SnowflakeConnectionSettings":
         account = os.environ.get("MDM_SNOWFLAKE_ACCOUNT") or os.environ.get("DBT_SNOWFLAKE_ACCOUNT")
         user = os.environ.get("MDM_SNOWFLAKE_USER") or os.environ.get("DBT_SNOWFLAKE_USER")
         password = os.environ.get("MDM_SNOWFLAKE_PASSWORD") or os.environ.get("DBT_SNOWFLAKE_PASSWORD")
@@ -78,17 +69,58 @@ class SnowflakeConnectorWriter(SnowflakeWriter):
         if missing:
             raise RuntimeError("Missing Snowflake export setting(s): " + ", ".join(missing))
 
+        return cls(
+            account=str(account),
+            user=str(user),
+            password=str(password),
+            database=str(database),
+            schema=str(schema),
+            warehouse=str(warehouse),
+            role=str(role) if role else None,
+        )
+
+    def connection_kwargs(self) -> dict[str, str]:
         kwargs = {
-            "account": account,
-            "user": user,
-            "password": password,
-            "database": database,
-            "schema": schema,
-            "warehouse": warehouse,
+            "account": self.account,
+            "user": self.user,
+            "password": self.password,
+            "database": self.database,
+            "schema": self.schema,
+            "warehouse": self.warehouse,
         }
-        if role:
-            kwargs["role"] = role
-        return cls(snowflake.connector.connect(**kwargs), database=database, schema=schema)
+        if self.role:
+            kwargs["role"] = self.role
+        return kwargs
+
+    def connect(self) -> Any:
+        try:
+            import snowflake.connector  # type: ignore
+        except ImportError as exc:  # pragma: no cover - depends on optional extra
+            raise RuntimeError(
+                "snowflake-connector-python is not installed. Run with the snowflake extra, "
+                "for example: uv run --extra snowflake edgar-warehouse mdm export ..."
+            ) from exc
+
+        return snowflake.connector.connect(**self.connection_kwargs())
+
+
+class SnowflakeConnectorWriter(SnowflakeWriter):
+    """Snowflake upsert writer backed by snowflake-connector-python.
+
+    Target MDM tables are expected to already exist. The writer creates a
+    temporary table shaped from the current batch, inserts batch rows, then
+    MERGEs by the configured key.
+    """
+
+    def __init__(self, connection: Any, *, database: str | None = None, schema: str | None = None) -> None:
+        self.connection = connection
+        self.database = database
+        self.schema = schema
+
+    @classmethod
+    def from_env(cls) -> "SnowflakeConnectorWriter":
+        settings = SnowflakeConnectionSettings.from_env()
+        return cls(settings.connect(), database=settings.database, schema=settings.schema)
 
     def upsert(self, table: str, rows: list[dict], key: str = "entity_id") -> int:
         if not rows:
