@@ -3,27 +3,27 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Neo4j Snowflake Native App Migration
 status: executing
-stopped_at: Phase 2 Plan 02-02 complete
-last_updated: "2026-05-27T00:16:25Z"
-last_activity: 2026-05-27 -- Phase 2 Plan 02-02 completed
+stopped_at: Phase 2 complete
+last_updated: "2026-05-27T00:24:12Z"
+last_activity: 2026-05-27 -- Phase 2 Plan 02-03 completed
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
-  percent: 42
+  completed_plans: 6
+  percent: 50
 ---
 
 # Project State - neo4j-snowflake
 
 ## Current Position
 
-Phase: 2 (Snowflake Graph Sync Contract) — EXECUTING
-Plan: 3 of 3
-Status: Phase 2 Plan 02-02 complete; ready for Plan 02-03
-Last activity: 2026-05-27 -- Phase 2 Plan 02-02 completed
+Phase: 3 (Hosted Graph Verification And E2E Cutover) — READY TO PLAN
+Plan: TBD
+Status: Phase 2 complete; ready to plan hosted graph verification and E2E cutover
+Last activity: 2026-05-27 -- Phase 2 Plan 02-03 completed
 
-Progress: [####------] 42% (Phase 1 complete; Phase 2 plan 2 of 3 complete; milestone v1.3 remains in progress)
+Progress: [#####-----] 50% (Phases 1 and 2 complete; milestone v1.3 remains in progress)
 
 ## Milestone Context
 
@@ -109,6 +109,15 @@ projection surfaces should change.
   filters before Snowflake cursor execution, preventing misleading successful
   empty syncs for values such as `companies` or `HODLS`.
 
+- Plan 02-03 wired `edgar-warehouse mdm sync-graph` to
+  `SnowflakeGraphSyncExecutor`, preserving bounded relationship/entity filters,
+  target schema overrides, and secret-safe JSON materialization counts without
+  requiring external `NEO4J_*` credentials.
+
+- Plan 02-03 changed `load-relationships` to remain derivation-only by default;
+  post-derivation graph materialization now requires explicit `--graph-sync`,
+  while `--skip-graph-sync` remains an accepted no-write path.
+
 ## Blockers
 
 - Live Marketplace app availability, Snowflake account privileges, and app role grant details must
@@ -120,6 +129,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-05-27T00:16:25Z
-Stopped at: Phase 2 Plan 02-02 complete
-Resume file: .planning/workstreams/neo4j-snowflake/phases/02-snowflake-graph-sync-contract/02-03-PLAN.md
+Last session: 2026-05-27T00:24:12Z
+Stopped at: Phase 2 complete
+Resume file: Phase 3 planning
