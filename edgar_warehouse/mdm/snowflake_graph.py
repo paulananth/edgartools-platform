@@ -6,9 +6,41 @@ from pathlib import Path
 import subprocess
 from typing import Any
 
+from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
+
 
 DEFAULT_TARGET_SCHEMA = "NEO4J_GRAPH_MIGRATION"
 DEFAULT_MDM_SCHEMA = "MDM"
+ALLOWED_ENTITY_TYPES = ("adviser", "company", "fund", "person", "security")
+ALLOWED_RELATIONSHIP_TYPES = (
+    "COMPANY_HOLDS",
+    "HAS_PARENT_COMPANY",
+    "HOLDS",
+    "IS_ENTITY_OF",
+    "IS_INSIDER",
+    "IS_PERSON_OF",
+    "ISSUED_BY",
+    "MANAGES_FUND",
+)
+NODE_TABLES = (
+    "MDM_GRAPH_NODES",
+    "GRAPH_NODE_ADVISER",
+    "GRAPH_NODE_COMPANY",
+    "GRAPH_NODE_FUND",
+    "GRAPH_NODE_PERSON",
+    "GRAPH_NODE_SECURITY",
+)
+EDGE_TABLES = (
+    "MDM_GRAPH_EDGES",
+    "GRAPH_EDGE_COMPANY_HOLDS",
+    "GRAPH_EDGE_HAS_PARENT_COMPANY",
+    "GRAPH_EDGE_HOLDS",
+    "GRAPH_EDGE_IS_ENTITY_OF",
+    "GRAPH_EDGE_IS_INSIDER",
+    "GRAPH_EDGE_IS_PERSON_OF",
+    "GRAPH_EDGE_ISSUED_BY",
+    "GRAPH_EDGE_MANAGES_FUND",
+)
 
 
 @dataclass(frozen=True)
@@ -28,6 +60,103 @@ class SnowflakeGraphMigrationConfig:
         return self.mdm_database or self.resolved_target_database()
 
 
+class SnowflakeGraphValidationError(ValueError):
+    """Raised when graph sync filters fail closed before Snowflake execution."""
+
+
+@dataclass(frozen=True)
+class SnowflakeGraphSyncConfig:
+    target_database: str | None = None
+    target_schema: str = DEFAULT_TARGET_SCHEMA
+    mdm_database: str | None = None
+    mdm_schema: str = DEFAULT_MDM_SCHEMA
+    entity_types: tuple[str, ...] = ()
+    relationship_types: tuple[str, ...] = ()
+    limit: int | None = None
+    limit_per_type: int | None = None
+
+    def resolved_target_database(self, default_database: str | None = None) -> str:
+        database = self.target_database or default_database
+        if not database:
+            raise SnowflakeGraphValidationError(
+                "target_database is required when Snowflake connection settings do not provide a database"
+            )
+        return database
+
+    def resolved_mdm_database(self, default_database: str | None = None) -> str:
+        return self.mdm_database or self.resolved_target_database(default_database)
+
+
+@dataclass(frozen=True)
+class SnowflakeGraphSyncResult:
+    node_count: int
+    edge_count: int
+    target_database: str
+    target_schema: str
+    node_tables: tuple[str, ...]
+    edge_tables: tuple[str, ...]
+    applied_filters: dict[str, Any]
+
+
+class SnowflakeGraphSyncExecutor:
+    """Materialize Snowflake graph tables through a connector-style connection."""
+
+    def __init__(self, connection: Any, *, default_database: str | None = None) -> None:
+        self.connection = connection
+        self.default_database = default_database
+
+    @classmethod
+    def from_env(cls) -> "SnowflakeGraphSyncExecutor":
+        settings = SnowflakeConnectionSettings.from_env()
+        return cls(settings.connect(), default_database=settings.database)
+
+    def sync(self, config: SnowflakeGraphSyncConfig) -> SnowflakeGraphSyncResult:
+        target_database = config.resolved_target_database(self.default_database)
+        mdm_database = config.resolved_mdm_database(self.default_database)
+        entity_types = _normalize_entity_types(config.entity_types)
+        relationship_types = _normalize_relationship_types(config.relationship_types)
+        limit = _validate_limit(config.limit, "limit")
+        limit_per_type = _validate_limit(config.limit_per_type, "limit_per_type")
+        context = _graph_context(
+            target_database=target_database,
+            target_schema=config.target_schema,
+            mdm_database=mdm_database,
+            mdm_schema=config.mdm_schema,
+            entity_types=entity_types,
+            relationship_types=relationship_types,
+            limit=limit,
+            limit_per_type=limit_per_type,
+        )
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(render_graph_tables(context))
+            node_count = _fetch_scalar(
+                cursor,
+                f"SELECT COUNT(*) FROM {_fq(context, 'MDM_GRAPH_NODES')}",
+            )
+            edge_count = _fetch_scalar(
+                cursor,
+                f"SELECT COUNT(*) FROM {_fq(context, 'MDM_GRAPH_EDGES')}",
+            )
+        finally:
+            cursor.close()
+
+        return SnowflakeGraphSyncResult(
+            node_count=node_count,
+            edge_count=edge_count,
+            target_database=target_database,
+            target_schema=config.target_schema,
+            node_tables=NODE_TABLES,
+            edge_tables=EDGE_TABLES,
+            applied_filters={
+                "entity_types": entity_types,
+                "relationship_types": relationship_types,
+                "limit": limit,
+                "limit_per_type": limit_per_type,
+            },
+        )
+
+
 def generate_snowflake_graph_migration(config: SnowflakeGraphMigrationConfig) -> dict[str, Path]:
     """Write SQL files that build graph-ready tables inside Snowflake.
 
@@ -35,13 +164,13 @@ def generate_snowflake_graph_migration(config: SnowflakeGraphMigrationConfig) ->
     reads Snowflake MDM mirror tables directly; it does not require Aura,
     Bolt, `NEO4J_*` credentials, or JSONL exports from an external graph.
     """
-    context = {
-        "target_database": _ident(config.resolved_target_database()),
-        "target_schema": _ident(config.target_schema),
-        "mdm_database": _ident(config.resolved_mdm_database()),
-        "mdm_schema": _ident(config.mdm_schema),
-        "silver_path": config.silver_path,
-    }
+    context = _graph_context(
+        target_database=config.resolved_target_database(),
+        target_schema=config.target_schema,
+        mdm_database=config.resolved_mdm_database(),
+        mdm_schema=config.mdm_schema,
+        silver_path=config.silver_path,
+    )
 
     files = {
         "00_graph_tables.sql": render_graph_tables(context),
@@ -143,7 +272,8 @@ LEFT JOIN {_mdm_fq(context, "MDM_SECURITY")} S
 LEFT JOIN {_mdm_fq(context, "MDM_FUND")} F
   ON F.ENTITY_ID = E.ENTITY_ID
  AND E.ENTITY_TYPE = 'fund'
-WHERE E.IS_QUARANTINED = FALSE;
+WHERE E.IS_QUARANTINED = FALSE{context["entity_type_filter"]}
+{context["entity_per_type_limit"]}{context["entity_limit"]};
 
 CREATE OR REPLACE TABLE {_fq(context, "MDM_GRAPH_EDGES")} AS
 SELECT
@@ -184,7 +314,8 @@ FROM {_mdm_fq(context, "MDM_RELATIONSHIP_INSTANCE")} RI
 JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_TYPE")} RT
   ON RT.REL_TYPE_ID = RI.REL_TYPE_ID
 WHERE RI.IS_ACTIVE = TRUE
-  AND RT.IS_ACTIVE = TRUE;
+  AND RT.IS_ACTIVE = TRUE{context["relationship_type_filter"]}
+{context["relationship_per_type_limit"]}{context["relationship_limit"]};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODES")} AS
 SELECT NODEID, LABEL, PROPERTIES
@@ -407,6 +538,99 @@ Neo4j Graph Analytics result tables without mutating Snowflake.
 """
 
 
+def _graph_context(
+    *,
+    target_database: str,
+    target_schema: str,
+    mdm_database: str,
+    mdm_schema: str,
+    silver_path: Path | None = None,
+    entity_types: tuple[str, ...] = (),
+    relationship_types: tuple[str, ...] = (),
+    limit: int | None = None,
+    limit_per_type: int | None = None,
+) -> dict[str, Any]:
+    return {
+        "target_database": _ident(target_database),
+        "target_schema": _ident(target_schema),
+        "mdm_database": _ident(mdm_database),
+        "mdm_schema": _ident(mdm_schema),
+        "silver_path": silver_path,
+        "entity_type_filter": _in_filter("E.ENTITY_TYPE", entity_types),
+        "relationship_type_filter": _in_filter("RT.REL_TYPE_NAME", relationship_types),
+        "entity_per_type_limit": _qualify_limit("E.ENTITY_TYPE", "E.ENTITY_ID", limit_per_type),
+        "relationship_per_type_limit": _qualify_limit(
+            "RT.REL_TYPE_NAME",
+            "RI.INSTANCE_ID",
+            limit_per_type,
+        ),
+        "entity_limit": _limit_clause(limit),
+        "relationship_limit": _limit_clause(limit),
+    }
+
+
+def _normalize_entity_types(values: tuple[str, ...]) -> tuple[str, ...]:
+    normalized = tuple(sorted({str(value).lower() for value in values}))
+    invalid = [value for value in normalized if value not in ALLOWED_ENTITY_TYPES]
+    if invalid:
+        raise SnowflakeGraphValidationError(
+            "Invalid entity type filter(s): "
+            + ", ".join(invalid)
+            + ". Allowed values: "
+            + ", ".join(ALLOWED_ENTITY_TYPES)
+        )
+    return normalized
+
+
+def _normalize_relationship_types(values: tuple[str, ...]) -> tuple[str, ...]:
+    normalized = tuple(sorted({str(value).upper() for value in values}))
+    invalid = [value for value in normalized if value not in ALLOWED_RELATIONSHIP_TYPES]
+    if invalid:
+        raise SnowflakeGraphValidationError(
+            "Invalid relationship type filter(s): "
+            + ", ".join(invalid)
+            + ". Allowed values: "
+            + ", ".join(ALLOWED_RELATIONSHIP_TYPES)
+        )
+    return normalized
+
+
+def _validate_limit(value: int | None, name: str) -> int | None:
+    if value is None:
+        return None
+    if value < 1:
+        raise SnowflakeGraphValidationError(f"{name} must be a positive integer")
+    return int(value)
+
+
+def _in_filter(column: str, values: tuple[str, ...]) -> str:
+    if not values:
+        return ""
+    quoted = ", ".join(_sql_literal(value) for value in values)
+    return f"\n  AND {column} IN ({quoted})"
+
+
+def _qualify_limit(partition_column: str, order_column: str, limit: int | None) -> str:
+    if limit is None:
+        return ""
+    return (
+        "QUALIFY ROW_NUMBER() OVER "
+        f"(PARTITION BY {partition_column} ORDER BY {order_column}) <= {limit}\n"
+    )
+
+
+def _limit_clause(limit: int | None) -> str:
+    if limit is None:
+        return ""
+    return f"LIMIT {limit}"
+
+
+def _fetch_scalar(cursor: Any, sql: str) -> int:
+    cursor.execute(sql)
+    row = cursor.fetchone()
+    return int(row[0] if row else 0)
+
+
 def _fq(context: dict[str, Any], name: str) -> str:
     return f"{context['target_database']}.{context['target_schema']}.{_ident(name)}"
 
@@ -420,3 +644,7 @@ def _ident(value: str) -> str:
     if not cleaned.replace("_", "").isalnum() or not cleaned[0].isalpha():
         raise ValueError(f"Unsafe Snowflake identifier: {value!r}")
     return cleaned
+
+
+def _sql_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
