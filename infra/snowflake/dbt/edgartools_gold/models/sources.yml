@@ -26,3 +26,18 @@ sources:
       - name: SERVING_REFRESH_STATUS
         identifier: "{{ env_var('DBT_REFRESH_STATUS_IDENTIFIER', 'SNOWFLAKE_REFRESH_STATUS') }}"
         description: Per-run serving load and refresh status table for the active warehouse target.
+      # ── Fundamentals silver exports (Branch B, isolated DAG branch) ──────────
+      # These sources are populated by bootstrap-fundamentals → gold-refresh.
+      # A missing/empty source must NOT block the existing 9-table gold chain refresh.
+      - name: SEC_FINANCIAL_FACT
+        description: XBRL financial facts per (cik, accession, concept, fiscal_period).
+      - name: SEC_FINANCIAL_DERIVED
+        description: Derived metrics per (cik, accession, fiscal_period) — EBITDA, FCF, margins, returns, forensic scores.
+      - name: SEC_EARNINGS_RELEASE
+        description: 8-K earnings releases — GAAP/non-GAAP results, guidance, beat/miss flags.
+      - name: SEC_ACCOUNTING_FLAG
+        description: Annual auditor identity + forensic scores (Beneish, Altman, Piotroski) per 10-K.
+      - name: SEC_EXECUTIVE_RECORD
+        description: DEF 14A proxy compensation table — exec name, role, total comp per fiscal year.
+      - name: SEC_THIRTEENF_HOLDING
+        description: 13F-HR institutional holdings — CUSIP, shares held, market value per quarter.

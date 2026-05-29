@@ -224,6 +224,7 @@ def test_graph_sync_executor_materializes_filtered_graph_contract_without_creden
     assert result.node_tables == (
         "MDM_GRAPH_NODES",
         "GRAPH_NODE_ADVISER",
+        "GRAPH_NODE_AUDITFIRM",
         "GRAPH_NODE_COMPANY",
         "GRAPH_NODE_FUND",
         "GRAPH_NODE_PERSON",

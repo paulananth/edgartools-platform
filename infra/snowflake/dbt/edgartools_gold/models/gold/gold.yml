@@ -82,6 +82,78 @@ models:
       - name: ticker
         tests:
           - not_null
+  # ── Fundamentals models (isolated DAG branch, Branch B silver) ────────────
+  # These models use separate source() blocks and zero ref() into the existing
+  # 9-table chain.  A failed fundamentals model must not block existing refresh.
+  - name: financial_facts
+    description: XBRL financial facts per (cik, accession_number, concept, fiscal_period, segment). Dynamic table from SEC_FINANCIAL_FACT silver export.
+    columns:
+      - name: cik
+        tests:
+          - not_null
+      - name: accession_number
+        tests:
+          - not_null
+      - name: concept
+        tests:
+          - not_null
+
+  - name: financial_derived
+    description: Derived financial metrics with YoY growth per (cik, accession_number, fiscal_period). Computed from SEC_FINANCIAL_DERIVED silver export.
+    columns:
+      - name: cik
+        tests:
+          - not_null
+      - name: accession_number
+        tests:
+          - not_null
+
+  - name: earnings_releases
+    description: 8-K earnings releases with beat/miss flags and cumulative beat streaks per (cik, accession_number).
+    columns:
+      - name: cik
+        tests:
+          - not_null
+      - name: accession_number
+        tests:
+          - not_null
+
+  - name: accounting_flags
+    description: Annual auditor identity and forensic score tier classifications (Beneish, Altman, Piotroski) per 10-K filing.
+    columns:
+      - name: cik
+        tests:
+          - not_null
+      - name: accession_number
+        tests:
+          - not_null
+
+  - name: executive_records
+    description: DEF 14A executive compensation with YoY change and tenure metrics per (cik, accession_number, exec_name).
+    columns:
+      - name: cik
+        tests:
+          - not_null
+      - name: accession_number
+        tests:
+          - not_null
+      - name: exec_name
+        tests:
+          - not_null
+
+  - name: institutional_holdings
+    description: 13F institutional holdings with QoQ share change and ownership rank per (cik, accession_number, holding_index).
+    columns:
+      - name: cik
+        tests:
+          - not_null
+      - name: accession_number
+        tests:
+          - not_null
+      - name: holding_index
+        tests:
+          - not_null
+
   - name: edgartools_gold_status
     description: Business-facing freshness view for the Snowflake gold mirror.
     columns:

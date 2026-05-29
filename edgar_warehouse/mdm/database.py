@@ -123,7 +123,7 @@ class MdmEntity(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "entity_type IN ('company','adviser','person','security','fund')",
+            "entity_type IN ('company','adviser','person','security','fund','audit_firm')",
             name="ck_mdm_entity_type",
         ),
     )
@@ -265,6 +265,9 @@ class MdmSecurity(Base):
     )
     canonical_title: Mapped[str] = mapped_column(Text, nullable=False)
     security_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # security_class: hybrid enum — equity/etf_fund/fixed_income/warrant/unknown_security
+    # Populated by SecurityResolver (Form 4 path) and _ensure_security_by_cusip (13F path).
+    security_class: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cusip: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     isin: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     valid_from: Mapped[Optional[object]] = mapped_column(
@@ -298,6 +301,31 @@ class MdmFund(Base):
     )
     valid_to: Mapped[Optional[object]] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
+    )
+
+
+class MdmAuditFirm(Base):
+    """Golden record for an independent audit firm (PCAOB-registered).
+
+    Seeded once from migration 005_fundamentals_relationships.sql (Big 4 + Next 6).
+    Additional firms can be added via seed_pcaob_registry.py (optional full registry).
+    Entity type 'audit_firm' must be registered in mdm_entity_type_definition.
+    """
+
+    __tablename__ = "mdm_audit_firm"
+
+    entity_id: Mapped[str] = mapped_column(
+        GUID(),
+        ForeignKey("mdm_entity.entity_id"),
+        primary_key=True,
+    )
+    firm_name: Mapped[str] = mapped_column(Text, nullable=False)
+    # PCAOB registration number — authoritative identifier (AD-08)
+    pcaob_firm_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    big4: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    canonical_name: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
     )
 
 
