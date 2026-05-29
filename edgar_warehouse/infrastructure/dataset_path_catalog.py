@@ -45,6 +45,7 @@ _DEFAULT_MANIFEST_COMMANDS = frozenset(
         "bootstrap",
         "bootstrap-full",
         "bootstrap-batch",
+        "bootstrap-fundamentals",
         "bootstrap-next",
         "daily-incremental",
         "targeted-resync",

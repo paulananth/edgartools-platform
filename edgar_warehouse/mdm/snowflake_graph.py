@@ -11,11 +11,14 @@ from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
 
 DEFAULT_TARGET_SCHEMA = "NEO4J_GRAPH_MIGRATION"
 DEFAULT_MDM_SCHEMA = "MDM"
-ALLOWED_ENTITY_TYPES = ("adviser", "company", "fund", "person", "security")
+ALLOWED_ENTITY_TYPES = ("adviser", "audit_firm", "company", "fund", "person", "security")
 ALLOWED_RELATIONSHIP_TYPES = (
+    "AUDITED_BY",           # Company → AuditFirm  (10-K XBRL dei_AuditorFirmId)
     "COMPANY_HOLDS",
+    "EMPLOYED_BY",          # Person → Company     (DEF 14A proxy)
     "HAS_PARENT_COMPANY",
     "HOLDS",
+    "INSTITUTIONAL_HOLDS",  # Adviser → Security   (13F holdings)
     "IS_ENTITY_OF",
     "IS_INSIDER",
     "IS_PERSON_OF",
@@ -25,6 +28,7 @@ ALLOWED_RELATIONSHIP_TYPES = (
 NODE_TABLES = (
     "MDM_GRAPH_NODES",
     "GRAPH_NODE_ADVISER",
+    "GRAPH_NODE_AUDITFIRM",
     "GRAPH_NODE_COMPANY",
     "GRAPH_NODE_FUND",
     "GRAPH_NODE_PERSON",
@@ -32,9 +36,12 @@ NODE_TABLES = (
 )
 EDGE_TABLES = (
     "MDM_GRAPH_EDGES",
+    "GRAPH_EDGE_AUDITED_BY",
     "GRAPH_EDGE_COMPANY_HOLDS",
+    "GRAPH_EDGE_EMPLOYED_BY",
     "GRAPH_EDGE_HAS_PARENT_COMPANY",
     "GRAPH_EDGE_HOLDS",
+    "GRAPH_EDGE_INSTITUTIONAL_HOLDS",
     "GRAPH_EDGE_IS_ENTITY_OF",
     "GRAPH_EDGE_IS_INSIDER",
     "GRAPH_EDGE_IS_PERSON_OF",

@@ -2984,6 +2984,13 @@ def _resolve_scope(
             "include_pagination": arguments.get("include_pagination", True),
         }
 
+    if command_name == "bootstrap-fundamentals":
+        # Branch B counterpart of bootstrap-batch. CIK list + mode dispatch.
+        return {
+            "cik_list": arguments.get("cik_list") or [],
+            "mode": arguments.get("mode") or "per-filing",
+        }
+
     if command_name == "gold-refresh":
         # Scope is empty — bronze/silver are already complete.
         # _execute_warehouse builds gold because gold-refresh is in GOLD_AFFECTING_COMMANDS.

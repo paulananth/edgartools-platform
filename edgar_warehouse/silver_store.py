@@ -381,6 +381,173 @@ CREATE TABLE IF NOT EXISTS sec_reconcile_finding (
     resync_run_id         TEXT,
     PRIMARY KEY (reconcile_run_id, cik, scope_type, object_type, object_key, drift_type)
 );
+
+-- ==========================================================================
+-- FUNDAMENTALS NAMESPACE TABLES  (silver/fundamentals/shard-{0..3}.duckdb)
+-- Branch B bootstrap forms: 8-K earnings, DEF 14A, 10-K/10-Q XBRL, 13F-HR
+-- ==========================================================================
+
+CREATE TABLE IF NOT EXISTS sec_financial_fact (
+    cik                 BIGINT NOT NULL,
+    accession_number    TEXT NOT NULL,
+    fiscal_year         INTEGER NOT NULL,
+    fiscal_period       TEXT NOT NULL,   -- FY | Q1 | Q2 | Q3 | Q4
+    period_end          DATE NOT NULL,
+    form_type           TEXT NOT NULL,   -- 10-K | 10-Q
+    concept             TEXT NOT NULL,   -- XBRL concept name (e.g. us-gaap/Revenues)
+    value               DOUBLE,
+    unit                TEXT,            -- USD | shares | pure
+    decimals            INTEGER,
+    segment             TEXT NOT NULL DEFAULT 'consolidated',  -- 'consolidated' or JSON-encoded dimension key
+    parser_version      TEXT,
+    ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (cik, accession_number, concept, fiscal_period, segment)
+);
+
+CREATE TABLE IF NOT EXISTS sec_financial_derived (
+    cik                 BIGINT NOT NULL,
+    accession_number    TEXT NOT NULL,
+    fiscal_year         INTEGER NOT NULL,
+    fiscal_period       TEXT NOT NULL,   -- FY | Q1 | Q2 | Q3 | Q4
+    period_end          DATE NOT NULL,
+    form_type           TEXT NOT NULL,
+    -- Income metrics
+    revenue             DOUBLE,
+    gross_profit        DOUBLE,
+    ebitda              DOUBLE,
+    ebit                DOUBLE,
+    net_income          DOUBLE,
+    eps_diluted         DOUBLE,
+    -- Balance sheet
+    total_assets        DOUBLE,
+    total_liabilities   DOUBLE,
+    total_equity        DOUBLE,
+    cash_and_equivalents DOUBLE,
+    total_debt          DOUBLE,
+    -- Cash flow
+    operating_cash_flow DOUBLE,
+    capex               DOUBLE,
+    free_cash_flow      DOUBLE,
+    -- Margins (0.0–1.0)
+    gross_margin        DOUBLE,
+    ebitda_margin       DOUBLE,
+    net_margin          DOUBLE,
+    -- Returns
+    roic                DOUBLE,
+    roe                 DOUBLE,
+    roa                 DOUBLE,
+    -- NOTE: Forensic scores (Beneish M / Altman Z / Piotroski F) live exclusively on
+    -- sec_accounting_flag. They are annual constructs computed cross-period and would
+    -- be misleading to denormalise to per-quarter rows here.
+    parser_version      TEXT,
+    ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (cik, accession_number, fiscal_period)
+);
+
+CREATE TABLE IF NOT EXISTS sec_earnings_release (
+    cik                     BIGINT NOT NULL,
+    accession_number        TEXT NOT NULL,
+    filing_date             DATE NOT NULL,
+    fiscal_year             INTEGER,
+    fiscal_quarter          INTEGER,     -- 1–4; NULL for annual releases
+    period_end              DATE,
+    -- GAAP results (validated via edgartools EarningsRelease.get_key_metrics())
+    revenue_gaap            DOUBLE,
+    net_income_gaap         DOUBLE,
+    eps_gaap_diluted        DOUBLE,
+    -- Presence flags (high-confidence: edgartools detects table presence reliably)
+    has_non_gaap            BOOLEAN NOT NULL DEFAULT FALSE,
+    has_guidance            BOOLEAN NOT NULL DEFAULT FALSE,
+    -- NOTE: Specific guidance ranges (revenue/EPS low/high), non-GAAP EPS value,
+    -- and beat/miss flags are NOT stored here. They require either validated
+    -- per-company extraction logic (guidance ranges) or cross-period comparison
+    -- (beat/miss). When those extractors land, columns will be added via forward
+    -- migration with population in the same change.
+    parser_version          TEXT,
+    ingested_at             TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (cik, accession_number)
+);
+
+CREATE TABLE IF NOT EXISTS sec_accounting_flag (
+    cik                 BIGINT NOT NULL,
+    accession_number    TEXT NOT NULL,
+    fiscal_year         INTEGER NOT NULL,
+    period_end          DATE,
+    form_type           TEXT NOT NULL,  -- always 10-K
+    -- Auditor identity (from XBRL DEI facts)
+    auditor_name        TEXT,           -- dei_AuditorName
+    auditor_pcaob_id    TEXT,           -- dei_AuditorFirmId (PCAOB numeric ID)
+    auditor_location    TEXT,           -- dei_AuditorLocation
+    icfr_attestation    BOOLEAN,        -- dei_IcfrAuditorAttestationFlag
+    auditor_changed     BOOLEAN,        -- TRUE if auditor_pcaob_id differs from prior fiscal year
+    -- Forensic scores (computed cross-period by accounting_flags.backfill_accounting_flags;
+    -- this table is the single source of truth — they are NOT denormalised to
+    -- sec_financial_derived because they are annual constructs).
+    beneish_m_score     DOUBLE,
+    altman_z_score      DOUBLE,
+    piotroski_f_score   INTEGER,
+    -- NOTE: audit_opinion (unqualified/qualified/adverse/disclaimer) is NOT stored here.
+    -- It requires parsing the auditor's report section of the 10-K, for which
+    -- no validated extractor exists yet. A forward migration will add the column
+    -- in the same change that lands the extractor.
+    parser_version      TEXT,
+    ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (cik, accession_number)
+);
+
+CREATE TABLE IF NOT EXISTS sec_executive_record (
+    cik                 BIGINT NOT NULL,
+    accession_number    TEXT NOT NULL,
+    fiscal_year         INTEGER NOT NULL,
+    exec_name           TEXT NOT NULL,
+    exec_role           TEXT,           -- CEO | CFO | COO | President | etc.
+    -- Compensation table columns (from edgartools extract_summary_compensation)
+    total_comp          DOUBLE,
+    base_salary         DOUBLE,
+    bonus               DOUBLE,
+    stock_awards        DOUBLE,
+    option_awards       DOUBLE,
+    non_equity_incentive DOUBLE,
+    -- NOTE: deferred_comp, other_comp, exec_person_entity_id, tenure_start_year are
+    -- NOT stored here:
+    --   deferred_comp / other_comp — edgartools extract_summary_compensation does not
+    --     return these SCT columns. When that capability lands upstream, columns will
+    --     be added via forward migration with population in the same change.
+    --   exec_person_entity_id — entity resolution is MDM's responsibility; the
+    --     resolved entity_id lives on mdm_relationship_instance (source_entity_id),
+    --     not denormalised to silver.
+    --   tenure_start_year — computed cross-filing by MDM's _derive_employed_by from
+    --     the EMPLOYED_BY relationship history; stored on the relationship's
+    --     properties JSON, not on silver.
+    parser_version      TEXT,
+    ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (cik, accession_number, exec_name)
+);
+
+CREATE TABLE IF NOT EXISTS sec_thirteenf_holding (
+    cik                 BIGINT NOT NULL,     -- 13F filing manager CIK
+    accession_number    TEXT NOT NULL,
+    holding_index       BIGINT NOT NULL,     -- 1-based row position within the filing (parser-assigned)
+    period_of_report    DATE NOT NULL,       -- quarter-end date from 13F header
+    cusip               TEXT,               -- may be absent in some filings
+    issuer_name         TEXT,
+    security_title      TEXT,
+    -- Quantity (shares / principal amount for bonds)
+    shares_held         DOUBLE,
+    -- Market value: 13F reports in $000s pre-Q4 2022, $1 units after — parser normalises to USD
+    market_value        DOUBLE,
+    -- Classification
+    security_class      TEXT,               -- equity | etf_fund | fixed_income | warrant | unknown_security
+    put_call            TEXT,               -- Put | Call | NULL (options only)
+    discretion_type     TEXT,               -- Sole | Shared | None
+    -- Voting authority columns (reported separately in 13F XML)
+    voting_auth_sole    DOUBLE,
+    voting_auth_shared  DOUBLE,
+    voting_auth_none    DOUBLE,
+    parser_version      TEXT,
+    ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (cik, accession_number, holding_index)
+);
 """
 
 
@@ -1827,6 +1994,222 @@ class SilverDatabase:
             row = self._conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
             counts[table] = row[0] if row else 0
         return counts
+
+    # ------------------------------------------------------------------
+    # Fundamentals namespace — Branch B silver tables
+    # ------------------------------------------------------------------
+
+    def merge_financial_facts(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        return self._merge_rows(
+            """
+            INSERT INTO sec_financial_fact
+                (cik, accession_number, fiscal_year, fiscal_period, period_end,
+                 form_type, concept, value, unit, decimals, segment, parser_version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (cik, accession_number, concept, fiscal_period, segment) DO UPDATE SET
+                value = excluded.value,
+                decimals = excluded.decimals,
+                parser_version = excluded.parser_version
+            """,
+            rows,
+            lambda r: [
+                r["cik"], r["accession_number"], r.get("fiscal_year"),
+                r["fiscal_period"], r.get("period_end"), r.get("form_type", ""),
+                r["concept"], r.get("value"), r.get("unit"),
+                r.get("decimals"), r.get("segment", "consolidated"),
+                r.get("parser_version"),
+            ],
+        )
+
+    def merge_financial_derived(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        return self._merge_rows(
+            """
+            INSERT INTO sec_financial_derived
+                (cik, accession_number, fiscal_year, fiscal_period, period_end, form_type,
+                 revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
+                 total_assets, total_liabilities, total_equity, cash_and_equivalents,
+                 total_debt, operating_cash_flow, capex, free_cash_flow,
+                 gross_margin, ebitda_margin, net_margin, roic, roe, roa,
+                 parser_version)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT (cik, accession_number, fiscal_period) DO UPDATE SET
+                revenue = excluded.revenue,
+                gross_profit = excluded.gross_profit,
+                ebitda = excluded.ebitda,
+                ebit = excluded.ebit,
+                net_income = excluded.net_income,
+                eps_diluted = excluded.eps_diluted,
+                total_assets = excluded.total_assets,
+                total_liabilities = excluded.total_liabilities,
+                total_equity = excluded.total_equity,
+                cash_and_equivalents = excluded.cash_and_equivalents,
+                total_debt = excluded.total_debt,
+                operating_cash_flow = excluded.operating_cash_flow,
+                capex = excluded.capex,
+                free_cash_flow = excluded.free_cash_flow,
+                gross_margin = excluded.gross_margin,
+                ebitda_margin = excluded.ebitda_margin,
+                net_margin = excluded.net_margin,
+                roic = excluded.roic,
+                roe = excluded.roe,
+                roa = excluded.roa,
+                parser_version = excluded.parser_version
+            """,
+            rows,
+            lambda r: [
+                r["cik"], r["accession_number"], r.get("fiscal_year"),
+                r["fiscal_period"], r.get("period_end"), r.get("form_type", ""),
+                r.get("revenue"), r.get("gross_profit"), r.get("ebitda"),
+                r.get("ebit"), r.get("net_income"), r.get("eps_diluted"),
+                r.get("total_assets"), r.get("total_liabilities"), r.get("total_equity"),
+                r.get("cash_and_equivalents"), r.get("total_debt"),
+                r.get("operating_cash_flow"), r.get("capex"), r.get("free_cash_flow"),
+                r.get("gross_margin"), r.get("ebitda_margin"), r.get("net_margin"),
+                r.get("roic"), r.get("roe"), r.get("roa"),
+                r.get("parser_version"),
+            ],
+        )
+
+    def merge_earnings_releases(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        return self._merge_rows(
+            """
+            INSERT INTO sec_earnings_release
+                (cik, accession_number, filing_date, fiscal_year, fiscal_quarter,
+                 period_end, revenue_gaap, net_income_gaap, eps_gaap_diluted,
+                 has_non_gaap, has_guidance, parser_version)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT (cik, accession_number) DO UPDATE SET
+                fiscal_year = excluded.fiscal_year,
+                fiscal_quarter = excluded.fiscal_quarter,
+                period_end = excluded.period_end,
+                revenue_gaap = excluded.revenue_gaap,
+                net_income_gaap = excluded.net_income_gaap,
+                eps_gaap_diluted = excluded.eps_gaap_diluted,
+                has_non_gaap = excluded.has_non_gaap,
+                has_guidance = excluded.has_guidance,
+                parser_version = excluded.parser_version
+            """,
+            rows,
+            lambda r: [
+                r["cik"], r["accession_number"], r.get("filing_date"),
+                r.get("fiscal_year"), r.get("fiscal_quarter"),
+                r.get("period_end"), r.get("revenue_gaap"), r.get("net_income_gaap"),
+                r.get("eps_gaap_diluted"),
+                bool(r.get("has_non_gaap", False)),
+                bool(r.get("has_guidance", False)),
+                r.get("parser_version"),
+            ],
+        )
+
+    def merge_accounting_flags(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        return self._merge_rows(
+            """
+            INSERT INTO sec_accounting_flag
+                (cik, accession_number, fiscal_year, period_end, form_type,
+                 auditor_name, auditor_pcaob_id, auditor_location, icfr_attestation,
+                 auditor_changed, beneish_m_score, altman_z_score, piotroski_f_score,
+                 parser_version)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT (cik, accession_number) DO UPDATE SET
+                auditor_name = excluded.auditor_name,
+                auditor_pcaob_id = excluded.auditor_pcaob_id,
+                auditor_location = excluded.auditor_location,
+                icfr_attestation = excluded.icfr_attestation,
+                auditor_changed = excluded.auditor_changed,
+                beneish_m_score = COALESCE(excluded.beneish_m_score, sec_accounting_flag.beneish_m_score),
+                altman_z_score = COALESCE(excluded.altman_z_score, sec_accounting_flag.altman_z_score),
+                piotroski_f_score = COALESCE(excluded.piotroski_f_score, sec_accounting_flag.piotroski_f_score),
+                parser_version = excluded.parser_version
+            """,
+            rows,
+            lambda r: [
+                r["cik"], r["accession_number"], r["fiscal_year"],
+                r.get("period_end"), r.get("form_type", "10-K"),
+                r.get("auditor_name"), r.get("auditor_pcaob_id"),
+                r.get("auditor_location"), r.get("icfr_attestation"),
+                r.get("auditor_changed"),
+                r.get("beneish_m_score"), r.get("altman_z_score"),
+                r.get("piotroski_f_score"),
+                r.get("parser_version"),
+            ],
+        )
+
+    def update_accounting_flag_scores(
+        self,
+        cik: int,
+        accession_number: str,
+        beneish_m_score: float | None,
+        altman_z_score: float | None,
+        piotroski_f_score: int | None,
+    ) -> None:
+        """Back-fill forensic scores into an existing sec_accounting_flag row."""
+        self._conn.execute(
+            """
+            UPDATE sec_accounting_flag
+            SET beneish_m_score   = COALESCE(?, beneish_m_score),
+                altman_z_score    = COALESCE(?, altman_z_score),
+                piotroski_f_score = COALESCE(?, piotroski_f_score)
+            WHERE cik = ? AND accession_number = ?
+            """,
+            [beneish_m_score, altman_z_score, piotroski_f_score,
+             int(cik), accession_number],
+        )
+
+    def merge_executive_records(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        return self._merge_rows(
+            """
+            INSERT INTO sec_executive_record
+                (cik, accession_number, fiscal_year, exec_name, exec_role,
+                 total_comp, base_salary, bonus, stock_awards, option_awards,
+                 non_equity_incentive, parser_version)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT (cik, accession_number, exec_name) DO UPDATE SET
+                exec_role = excluded.exec_role,
+                total_comp = excluded.total_comp,
+                base_salary = excluded.base_salary,
+                bonus = excluded.bonus,
+                stock_awards = excluded.stock_awards,
+                option_awards = excluded.option_awards,
+                non_equity_incentive = excluded.non_equity_incentive,
+                parser_version = excluded.parser_version
+            """,
+            rows,
+            lambda r: [
+                r["cik"], r["accession_number"], r.get("fiscal_year"),
+                r["exec_name"], r.get("exec_role"),
+                r.get("total_comp"), r.get("base_salary"), r.get("bonus"),
+                r.get("stock_awards"), r.get("option_awards"),
+                r.get("non_equity_incentive"),
+                r.get("parser_version"),
+            ],
+        )
+
+    def merge_thirteenf_holdings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        return self._merge_rows(
+            """
+            INSERT INTO sec_thirteenf_holding
+                (cik, accession_number, holding_index, period_of_report,
+                 cusip, issuer_name, security_title, shares_held, market_value,
+                 security_class, put_call, discretion_type,
+                 voting_auth_sole, voting_auth_shared, voting_auth_none,
+                 parser_version)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT (cik, accession_number, holding_index) DO UPDATE SET
+                shares_held = excluded.shares_held,
+                market_value = excluded.market_value,
+                security_class = excluded.security_class,
+                parser_version = excluded.parser_version
+            """,
+            rows,
+            lambda r: [
+                r["cik"], r["accession_number"], r["holding_index"],
+                r.get("period_of_report"), r.get("cusip"), r.get("issuer_name"),
+                r.get("security_title"), r.get("shares_held"), r.get("market_value"),
+                r.get("security_class"), r.get("put_call"), r.get("discretion_type"),
+                r.get("voting_auth_sole"), r.get("voting_auth_shared"),
+                r.get("voting_auth_none"), r.get("parser_version"),
+            ],
+        )
 
     def _merge_rows(
         self,

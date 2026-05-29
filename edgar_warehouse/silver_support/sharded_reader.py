@@ -80,6 +80,14 @@ class ShardedSilverReader:
         "sec_company_sync_state",
         "sec_reconcile_finding",
         "sec_tracked_universe",  # legacy table; best-effort
+        # Fundamentals namespace (Branch B) — absent in older ownership-only shards;
+        # CREATE VIEW failures are silently ignored by the try/except in __init__.
+        "sec_financial_fact",
+        "sec_financial_derived",
+        "sec_earnings_release",
+        "sec_accounting_flag",
+        "sec_executive_record",
+        "sec_thirteenf_holding",
     ]
 
     def __init__(self, shard_paths: list[str]) -> None:

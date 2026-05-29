@@ -149,6 +149,10 @@ def _handle_migrate_silver_shards(args: argparse.Namespace) -> int:
     return run_command("migrate-silver-shards", args)
 
 
+def _handle_bootstrap_fundamentals(args: argparse.Namespace) -> int:
+    return run_command("bootstrap-fundamentals", args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="edgar-warehouse",
@@ -555,6 +559,45 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     migrate_silver_shards.set_defaults(handler=_handle_migrate_silver_shards)
+
+    bootstrap_fundamentals = subparsers.add_parser(
+        "bootstrap-fundamentals",
+        help=(
+            "Branch B bootstrap: ingest fundamentals silver from bronze. "
+            "Runs in parallel with bootstrap-batch (Branch A) via Step Functions. "
+            "Modes: per-filing (8-K/DEF 14A), entity-facts (XBRL companyfacts), "
+            "thirteenf (13F INFORMATION TABLE). Writes to silver/fundamentals/ namespace."
+        ),
+    )
+    bootstrap_fundamentals.add_argument(
+        "--cik-list",
+        type=_parse_cik_list,
+        required=True,
+        help="Comma-separated CIK integers for this batch",
+    )
+    bootstrap_fundamentals.add_argument(
+        "--mode",
+        choices=["per-filing", "entity-facts", "thirteenf"],
+        default="per-filing",
+        help=(
+            "Processing mode: "
+            "per-filing = 8-K earnings + DEF 14A proxy (per-accession dispatch); "
+            "entity-facts = SEC companyfacts API (CIK-level, writes sec_financial_fact); "
+            "thirteenf = 13F INFORMATION TABLE XML (writes sec_thirteenf_holding). "
+            "Default: per-filing"
+        ),
+    )
+    bootstrap_fundamentals.add_argument(
+        "--fundamentals-silver-path",
+        default=None,
+        help=(
+            "Local path to the fundamentals silver DuckDB shard file. "
+            "Defaults to $FUNDAMENTALS_SILVER_PATH env var or "
+            "/tmp/silver/fundamentals/shard-0.duckdb."
+        ),
+    )
+    _add_run_id_arg(bootstrap_fundamentals)
+    bootstrap_fundamentals.set_defaults(handler=_handle_bootstrap_fundamentals)
 
     try:
         from edgar_warehouse.mdm.cli import register_mdm_subparser

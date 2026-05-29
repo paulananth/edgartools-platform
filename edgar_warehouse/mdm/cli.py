@@ -114,6 +114,12 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     seed_s.add_argument("--dry-run", action="store_true", default=False, help="Print rows without writing to MDM")
     seed_s.set_defaults(handler=_logged_handler("seed-from-silver", _handle_seed_from_silver))
 
+    seed_af = mdm_sub.add_parser(
+        "seed-audit-firms",
+        help="Seed Big 4 + Next 6 PCAOB audit firms into MDM (idempotent)",
+    )
+    seed_af.set_defaults(handler=_logged_handler("seed-audit-firms", _handle_seed_audit_firms))
+
     # review
     rev = mdm_sub.add_parser("review", help="Curation queue operations")
     rev_sub = rev.add_subparsers(dest="review_command", required=True)
@@ -507,6 +513,24 @@ def _handle_seed_universe(args) -> int:
     engine = _get_mdm_engine()
     count = bulk_upsert_universe(engine, rows, default_status=args.tracking_status)
     print(json.dumps({"rows_seeded": count, "status": "ok"}, indent=2))
+    return 0
+
+
+def _handle_seed_audit_firms(args) -> int:
+    """Seed Big 4 + Next 6 PCAOB audit firms into MDM.
+
+    Idempotent — firms already present (matched by pcaob_firm_id or
+    canonical_name) are skipped.  Prints a JSON summary of inserted/skipped.
+    """
+    from edgar_warehouse.mdm.database import get_engine, get_session
+    from edgar_warehouse.mdm.seed.audit_firms import seed_audit_firms
+
+    engine = get_engine()
+    with get_session(engine) as session:
+        result = seed_audit_firms(session)
+
+    result["status"] = "ok"
+    print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
 
