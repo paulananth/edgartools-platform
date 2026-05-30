@@ -106,3 +106,34 @@ require_env() {
         fatal "required env var not set: $var_name"
     fi
 }
+
+# ────────────────────────────────────────────────────────────────────
+# Snowflake CLI helpers (modern `snow` CLI, not legacy `snowsql`)
+#
+# The repo uses Snowflake CLI v3+ (snowflake-cli-labs / `snow`) — the same
+# CLI invoked by infra/scripts/deploy-snowflake-stack.sh and
+# scripts/test/smoke-test-single-cik.sh.
+#
+# Required env: SNOW_CONNECTION (e.g. "edgartools-dev").
+# Install: pip install snowflake-cli-labs
+# Configure: `snow connection add` to write ~/.snowflake/connections.toml
+# ────────────────────────────────────────────────────────────────────
+
+# snow_sql_exec <query> — run a query for side effect (suppress stdout).
+# Returns the snow CLI exit code so callers can branch on success/failure.
+snow_sql_exec() {
+    snow sql --connection "$SNOW_CONNECTION" --query "$1" >/dev/null 2>&1
+}
+
+# snow_sql_file <path> — apply a SQL file with no captured output.
+# Used to deploy 01_*.sql, 03_*.sql, 06_*.sql.
+snow_sql_file() {
+    snow sql --connection "$SNOW_CONNECTION" --filename "$1" >/dev/null 2>&1
+}
+
+# snow_scalar <query> — return the first column of the first row.
+# Matches the helper pattern in scripts/test/smoke-test-single-cik.sh.
+snow_scalar() {
+    snow sql --connection "$SNOW_CONNECTION" --format json --query "$1" 2>/dev/null \
+        | python3 -c "import json,sys; rows=json.load(sys.stdin); print(list(rows[0].values())[0] if rows else '')" 2>/dev/null
+}
