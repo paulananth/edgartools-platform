@@ -98,14 +98,31 @@ class ShardedSilverReader:
             alias = f"s{i}"
             self._conn.execute(f"ATTACH '{path}' AS {alias} (READ_ONLY)")
             aliases.append(alias)
+
+        # Per-shard table membership: a UNION ALL across aliases that DO contain
+        # the table.  Required for mixed-namespace mounts (e.g. gold-refresh
+        # attaches legacy ownership monolith + fundamentals shard — each has a
+        # disjoint table set).  Without per-shard detection, the UNION ALL would
+        # reference a non-existent table in one of the aliases and DuckDB would
+        # fail the entire CREATE VIEW.
         for table in self._TABLES:
+            aliases_with_table = []
+            for alias in aliases:
+                try:
+                    self._conn.execute(f"SELECT 1 FROM {alias}.{table} LIMIT 0")
+                    aliases_with_table.append(alias)
+                except Exception:
+                    pass  # table doesn't exist in this shard
+            if not aliases_with_table:
+                continue  # table doesn't exist in any mounted shard
+
             parts = " UNION ALL ".join(
-                f"SELECT * FROM {alias}.{table}" for alias in aliases
+                f"SELECT * FROM {alias}.{table}" for alias in aliases_with_table
             )
             try:
                 self._conn.execute(f"CREATE VIEW {table} AS {parts}")
             except Exception:
-                pass  # table may not exist in older shards
+                pass  # schema mismatch (column drift) — skip with best effort
 
     def fetch(self, sql: str, params: list | None = None) -> list[dict]:
         """Execute a SQL query and return results as a list of dicts.
