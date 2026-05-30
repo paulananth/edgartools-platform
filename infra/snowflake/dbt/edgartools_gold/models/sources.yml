@@ -27,17 +27,18 @@ sources:
         identifier: "{{ env_var('DBT_REFRESH_STATUS_IDENTIFIER', 'SNOWFLAKE_REFRESH_STATUS') }}"
         description: Per-run serving load and refresh status table for the active warehouse target.
       # ── Fundamentals silver exports (Branch B, isolated DAG branch) ──────────
-      # These sources are populated by bootstrap-fundamentals → gold-refresh.
-      # A missing/empty source must NOT block the existing 9-table gold chain refresh.
+      # PR-1 split (Q1-C hybrid):
+      #   PASSTHROUGH (>1M rows, composite natural keys, retain SEC_ prefix):
       - name: SEC_FINANCIAL_FACT
-        description: XBRL financial facts per (cik, accession, concept, fiscal_period).
+        description: XBRL us-gaap fact per (cik, accession, concept, fiscal_period, segment). Composite-key passthrough from silver.
       - name: SEC_FINANCIAL_DERIVED
-        description: Derived metrics per (cik, accession, fiscal_period) — EBITDA, FCF, margins, returns, forensic scores.
-      - name: SEC_EARNINGS_RELEASE
-        description: 8-K earnings releases — GAAP/non-GAAP results, guidance, beat/miss flags.
-      - name: SEC_ACCOUNTING_FLAG
-        description: Annual auditor identity + forensic scores (Beneish, Altman, Piotroski) per 10-K.
-      - name: SEC_EXECUTIVE_RECORD
-        description: DEF 14A proxy compensation table — exec name, role, total comp per fiscal year.
+        description: Derived per-period metrics (EBITDA, FCF, margins, returns) per (cik, accession, fiscal_period). Passthrough from silver. Forensic scores live on ACCOUNTING_FLAG.
       - name: SEC_THIRTEENF_HOLDING
-        description: 13F-HR institutional holdings — CUSIP, shares held, market value per quarter.
+        description: 13F INFORMATION TABLE holding per (cik, accession, holding_index). Passthrough from silver.
+      #   DIMENSIONAL (<1M rows, surrogate fact_key, joined to COMPANY+DATE+FORM in the build step):
+      - name: EARNINGS_RELEASE
+        description: 8-K earnings release fact per (cik, accession). Dimensional — COMPANY+DATE×2+FORM joins.
+      - name: EXECUTIVE_RECORD
+        description: DEF 14A executive compensation fact per (cik, accession, exec_name). Dimensional — COMPANY+DATE joins.
+      - name: ACCOUNTING_FLAG
+        description: 10-K accounting-flag fact per (cik, accession). Dimensional — COMPANY+DATE+FORM joins; auditor identity retained as natural-key columns (AUDIT_FIRM dim deferred).

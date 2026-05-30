@@ -20,7 +20,10 @@ class RuntimeImportTests(unittest.TestCase):
         fake_pyarrow.Table = type("Table", (), {})
         fake_pyarrow.BufferOutputStream = type("BufferOutputStream", (), {})
         fake_pyarrow.schema = lambda fields: ("schema", fields)
-        fake_pyarrow.field = lambda name, value: (name, value)
+        # `nullable` kwarg added with Branch B fundamentals PR-1 (Q5-C: PK
+        # columns marked nullable=False).  Pre-existing 9 fact/dim schemas
+        # call pa.field with 2 args; the new fundamentals schemas pass nullable.
+        fake_pyarrow.field = lambda name, value, nullable=True: (name, value, nullable)
         fake_pyarrow.int64 = lambda: "int64"
         fake_pyarrow.int32 = lambda: "int32"
         fake_pyarrow.int16 = lambda: "int16"
@@ -28,6 +31,8 @@ class RuntimeImportTests(unittest.TestCase):
         fake_pyarrow.date32 = lambda: "date32"
         fake_pyarrow.bool_ = lambda: "bool"
         fake_pyarrow.float64 = lambda: "float64"
+        # Branch B fundamentals timestamp column uses pa.timestamp("us", tz="UTC").
+        fake_pyarrow.timestamp = lambda unit, tz=None: f"timestamp[{unit}{',' + tz if tz else ''}]"
 
         fake_parquet = types.ModuleType("pyarrow.parquet")
         fake_parquet.write_table = lambda table, buffer: None

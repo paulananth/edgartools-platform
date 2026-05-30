@@ -1,16 +1,30 @@
--- Create the source-side load wrapper for EdgarTools export runs.
+-- Composite-key load wrapper for Branch B passthrough fundamentals tables.
 --
--- Required session variables:
+-- Required session variables (same as 03_source_load_wrapper.sql):
 --   set database_name = 'EDGARTOOLS_DEV';
 --   set source_schema_name = 'EDGARTOOLS_SOURCE';
 --   set deployer_role_name = 'EDGARTOOLS_DEV_DEPLOYER';
---   set source_load_procedure_name = 'LOAD_EXPORTS_FOR_RUN';
+--   set fundamentals_load_procedure_name = 'LOAD_FUNDAMENTALS_EXPORTS_FOR_RUN';
+--
+-- Why a separate proc (Q7-7b decision):
+-- ------------------------------------
+-- The existing LOAD_EXPORTS_FOR_RUN proc (file 03) assumes a single scalar
+-- merge key per table (e.g. FACT_KEY).  The 3 fundamentals passthrough tables
+-- have composite natural keys:
+--   SEC_FINANCIAL_FACT      → (CIK, ACCESSION_NUMBER, CONCEPT, FISCAL_PERIOD, SEGMENT)
+--   SEC_THIRTEENF_HOLDING   → (CIK, ACCESSION_NUMBER, HOLDING_INDEX)
+--   SEC_FINANCIAL_DERIVED   → (CIK, ACCESSION_NUMBER, FISCAL_PERIOD)
+--
+-- Keeping a separate proc preserves the working Branch A code path untouched
+-- (zero regression risk) and isolates Branch B failure modes per AD-13.
+-- Both procs share the same status table, manifest inbox, parquet stage, and
+-- file format — only the MERGE generator differs.
 
 USE ROLE IDENTIFIER($deployer_role_name);
 USE DATABASE IDENTIFIER($database_name);
 USE SCHEMA IDENTIFIER($source_schema_name);
 
-CREATE OR REPLACE PROCEDURE IDENTIFIER($source_load_procedure_name)(workflow_name STRING, run_id STRING)
+CREATE OR REPLACE PROCEDURE IDENTIFIER($fundamentals_load_procedure_name)(workflow_name STRING, run_id STRING)
 RETURNS VARIANT
 LANGUAGE JAVASCRIPT
 EXECUTE AS OWNER
@@ -26,37 +40,17 @@ const parquetStage = `${databaseName}.${sourceSchema}.EDGARTOOLS_SOURCE_EXPORT_S
 const parquetFileFormat = `${databaseName}.${sourceSchema}.EDGARTOOLS_SOURCE_EXPORT_FILE_FORMAT`;
 
 const targetTables = {
-  COMPANY: `${databaseName}.${sourceSchema}.COMPANY`,
-  FILING_ACTIVITY: `${databaseName}.${sourceSchema}.FILING_ACTIVITY`,
-  OWNERSHIP_ACTIVITY: `${databaseName}.${sourceSchema}.OWNERSHIP_ACTIVITY`,
-  OWNERSHIP_HOLDINGS: `${databaseName}.${sourceSchema}.OWNERSHIP_HOLDINGS`,
-  ADVISER_OFFICES: `${databaseName}.${sourceSchema}.ADVISER_OFFICES`,
-  ADVISER_DISCLOSURES: `${databaseName}.${sourceSchema}.ADVISER_DISCLOSURES`,
-  PRIVATE_FUNDS: `${databaseName}.${sourceSchema}.PRIVATE_FUNDS`,
-  FILING_DETAIL: `${databaseName}.${sourceSchema}.FILING_DETAIL`,
-  TICKER_REFERENCE: `${databaseName}.${sourceSchema}.TICKER_REFERENCE`,
-  // Branch B dimensional tables (surrogate FACT_KEY MERGE — same shape as the
-  // existing 9 fact tables, so they share this proc).  The 3 passthrough
-  // fundamentals tables use composite natural keys and are handled by
-  // LOAD_FUNDAMENTALS_EXPORTS_FOR_RUN instead (see 06_fundamentals_load_wrapper.sql).
-  EARNINGS_RELEASE: `${databaseName}.${sourceSchema}.EARNINGS_RELEASE`,
-  EXECUTIVE_RECORD: `${databaseName}.${sourceSchema}.EXECUTIVE_RECORD`,
-  ACCOUNTING_FLAG: `${databaseName}.${sourceSchema}.ACCOUNTING_FLAG`
+  SEC_FINANCIAL_FACT:     `${databaseName}.${sourceSchema}.SEC_FINANCIAL_FACT`,
+  SEC_THIRTEENF_HOLDING:  `${databaseName}.${sourceSchema}.SEC_THIRTEENF_HOLDING`,
+  SEC_FINANCIAL_DERIVED:  `${databaseName}.${sourceSchema}.SEC_FINANCIAL_DERIVED`
 };
 
+// Q4-A: hardcoded composite merge keys.  Each array lists the column names
+// that together identify a row.  MERGE ON joins them with AND.
 const mergeKeys = {
-  COMPANY: "COMPANY_KEY",
-  FILING_ACTIVITY: "FACT_KEY",
-  OWNERSHIP_ACTIVITY: "FACT_KEY",
-  OWNERSHIP_HOLDINGS: "FACT_KEY",
-  ADVISER_OFFICES: "FACT_KEY",
-  ADVISER_DISCLOSURES: "FACT_KEY",
-  PRIVATE_FUNDS: "FACT_KEY",
-  FILING_DETAIL: "FILING_KEY",
-  TICKER_REFERENCE: "CIK",
-  EARNINGS_RELEASE: "FACT_KEY",
-  EXECUTIVE_RECORD: "FACT_KEY",
-  ACCOUNTING_FLAG: "FACT_KEY"
+  SEC_FINANCIAL_FACT:     ["CIK", "ACCESSION_NUMBER", "CONCEPT", "FISCAL_PERIOD", "SEGMENT"],
+  SEC_THIRTEENF_HOLDING:  ["CIK", "ACCESSION_NUMBER", "HOLDING_INDEX"],
+  SEC_FINANCIAL_DERIVED:  ["CIK", "ACCESSION_NUMBER", "FISCAL_PERIOD"]
 };
 
 function q(value) {
@@ -93,15 +87,12 @@ function upsertStatus(environmentName, businessDate, manifestCompletedAt, source
         ${sourceRowCount === null || sourceRowCount === undefined ? "NULL" : Number(sourceRowCount)} AS source_row_count,
         ${tablesLoaded === null || tablesLoaded === undefined ? "NULL" : Number(tablesLoaded)} AS tables_loaded,
         ${errorValue} AS error_message,
-        CASE
-          WHEN '${q(refreshStatus)}' = 'succeeded' THEN CURRENT_TIMESTAMP()
-          ELSE NULL
-        END AS last_successful_refresh_at,
+        CURRENT_TIMESTAMP() AS last_successful_refresh_at,
         CURRENT_TIMESTAMP() AS updated_at
     ) AS source
-    ON target.environment = source.environment
-      AND target.source_workflow = source.source_workflow
-      AND target.run_id = source.run_id
+      ON target.environment = source.environment
+     AND target.source_workflow = source.source_workflow
+     AND target.run_id = source.run_id
     WHEN MATCHED THEN UPDATE SET
       business_date = source.business_date,
       manifest_completed_at = source.manifest_completed_at,
@@ -111,36 +102,22 @@ function upsertStatus(environmentName, businessDate, manifestCompletedAt, source
       source_row_count = source.source_row_count,
       tables_loaded = source.tables_loaded,
       error_message = source.error_message,
-      last_successful_refresh_at = COALESCE(source.last_successful_refresh_at, target.last_successful_refresh_at),
+      last_successful_refresh_at = CASE
+        WHEN source.source_load_status = 'succeeded' THEN source.last_successful_refresh_at
+        ELSE target.last_successful_refresh_at
+      END,
       updated_at = source.updated_at
     WHEN NOT MATCHED THEN INSERT (
-      environment,
-      source_workflow,
-      run_id,
-      business_date,
-      manifest_completed_at,
-      source_load_status,
-      refresh_status,
-      status,
-      source_row_count,
-      tables_loaded,
-      error_message,
-      last_successful_refresh_at,
-      updated_at
+      environment, source_workflow, run_id, business_date, manifest_completed_at,
+      source_load_status, refresh_status, status,
+      source_row_count, tables_loaded, error_message,
+      last_successful_refresh_at, updated_at
     ) VALUES (
-      source.environment,
-      source.source_workflow,
-      source.run_id,
-      source.business_date,
-      source.manifest_completed_at,
-      source.source_load_status,
-      source.refresh_status,
-      source.status,
-      source.source_row_count,
-      source.tables_loaded,
-      source.error_message,
-      source.last_successful_refresh_at,
-      source.updated_at
+      source.environment, source.source_workflow, source.run_id,
+      source.business_date, source.manifest_completed_at,
+      source.source_load_status, source.refresh_status, source.status,
+      source.source_row_count, source.tables_loaded, source.error_message,
+      source.last_successful_refresh_at, source.updated_at
     )
   `);
 }
@@ -171,6 +148,19 @@ if (tables.length === 0) {
   throw new Error(`Run manifest for workflow ${WORKFLOW_NAME} and run ${RUN_ID} contains no tables.`);
 }
 
+// Filter to only the fundamentals passthrough tables — this proc ignores
+// dimensional / Branch A tables (those are handled by LOAD_EXPORTS_FOR_RUN).
+const fundamentalsTables = tables.filter(t => targetTables.hasOwnProperty(String(t.table_name || "").toUpperCase()));
+
+if (fundamentalsTables.length === 0) {
+  return {
+    status: "no_fundamentals_tables",
+    workflow_name: WORKFLOW_NAME,
+    run_id: RUN_ID,
+    available_tables: tables.map(t => t.table_name)
+  };
+}
+
 const priorSuccess = scalar(`
   SELECT COUNT(*)
   FROM ${statusTable}
@@ -194,13 +184,13 @@ const stagedTables = [];
 let totalRows = 0;
 
 try {
-  for (const tableSpec of tables) {
+  for (const tableSpec of fundamentalsTables) {
     const tableName = String(tableSpec.table_name || "").toUpperCase();
     const targetTable = targetTables[tableName];
     if (!targetTable) {
       throw new Error(`Unsupported source table ${tableName} in run manifest.`);
     }
-    const tempTableName = `TMP_${tableName}`;
+    const tempTableName = `TMP_FUND_${tableName}`;
     const relativePath = String(tableSpec.relative_path || "");
     const expectedRowCount = Number(tableSpec.row_count || 0);
 
@@ -237,22 +227,28 @@ try {
 
   exec("BEGIN");
   for (const staged of stagedTables) {
-    const key = mergeKeys[staged.tableName];
-    if (!key) {
-      throw new Error(`No merge key defined for table ${staged.tableName}`);
+    const keyCols = mergeKeys[staged.tableName];
+    if (!keyCols || keyCols.length === 0) {
+      throw new Error(`No composite merge keys defined for table ${staged.tableName}`);
     }
     const columns = getColumns(staged.tableName);
     if (columns.length === 0) {
       throw new Error(`No columns found for table ${staged.tableName}`);
     }
-    const updateSet = columns.filter(c => c !== key).map(c => `${c} = source.${c}`).join(", ");
+
+    // Build MERGE ON clause: target.K1 = source.K1 AND target.K2 = source.K2 ...
+    const onClause = keyCols.map(c => `target.${c} = source.${c}`).join(" AND ");
+
+    // Update non-key columns on match
+    const nonKeyColumns = columns.filter(c => !keyCols.includes(c));
+    const updateSet = nonKeyColumns.map(c => `${c} = source.${c}`).join(", ");
     const insertCols = columns.join(", ");
     const insertVals = columns.map(c => `source.${c}`).join(", ");
 
     exec(`
       MERGE INTO ${staged.targetTable} AS target
       USING ${staged.tempTableName} AS source
-      ON target.${key} = source.${key}
+      ON ${onClause}
       WHEN MATCHED THEN UPDATE SET ${updateSet}
       WHEN NOT MATCHED THEN INSERT (${insertCols}) VALUES (${insertVals})
     `);
@@ -278,7 +274,8 @@ try {
     environment: environmentName,
     business_date: businessDate,
     tables_loaded: stagedTables.length,
-    source_row_count: totalRows
+    source_row_count: totalRows,
+    proc: "LOAD_FUNDAMENTALS_EXPORTS_FOR_RUN"
   };
 } catch (error) {
   try {

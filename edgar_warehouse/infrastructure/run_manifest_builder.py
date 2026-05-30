@@ -17,6 +17,17 @@ SNOWFLAKE_EXPORT_TABLES = {
     "ADVISER_DISCLOSURES": "adviser_disclosures",
     "PRIVATE_FUNDS": "private_funds",
     "FILING_DETAIL": "filing_detail",
+    # Branch B fundamentals (PR-1 / Q1-C hybrid passthrough+dimensional split).
+    # Passthrough tables (Q2-A: >1M-row cardinality, composite natural keys,
+    # loaded by LOAD_FUNDAMENTALS_EXPORTS_FOR_RUN):
+    "SEC_FINANCIAL_FACT": "sec_financial_fact",
+    "SEC_THIRTEENF_HOLDING": "sec_thirteenf_holding",
+    "SEC_FINANCIAL_DERIVED": "sec_financial_derived",
+    # Dimensional tables (Q3-D: surrogate fact_key, COMPANY+DATE+FORM joins,
+    # loaded by the existing LOAD_EXPORTS_FOR_RUN proc):
+    "EARNINGS_RELEASE": "earnings_release",
+    "EXECUTIVE_RECORD": "executive_record",
+    "ACCOUNTING_FLAG": "accounting_flag",
 }
 
 

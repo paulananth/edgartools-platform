@@ -4,11 +4,15 @@
 -- Adds comp_rank_within_company (1 = highest paid exec for that filing) and
 -- comp_pct_change_yoy using window functions over the (cik, exec_name) time series.
 --
+-- Source shape (PR-1 / Q3-D):
+--   DIMENSIONAL — EXECUTIVE_RECORD source carries surrogate fact_key
+--   (hash of accession+exec_name) plus COMPANY+DATE FKs.
+--
 -- Grain: one row per (cik, accession_number, exec_name).
 {{ gold_model_config('EXECUTIVE_RECORDS') }}
 
 with base as (
-    select * from {{ source("edgartools_source", "SEC_EXECUTIVE_RECORD") }}
+    select * from {{ source("edgartools_source", "EXECUTIVE_RECORD") }}
 ),
 
 with_rank as (
@@ -32,8 +36,12 @@ with_rank as (
 )
 
 select
-    cik,
+    fact_key,
+    company_key,
+    fiscal_year_date_key,
+    -- Natural keys
     accession_number,
+    cik,
     fiscal_year,
     exec_name,
     exec_role,
