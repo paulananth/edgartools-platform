@@ -238,6 +238,154 @@ _FACT_ADV_PRIVATE_FUND_SCHEMA = pa.schema(
     ]
 )
 
+# ── Branch B Fundamentals — PR-1 ─────────────────────────────────────────
+# Passthrough schemas (Q1-C / Q2-A): 1:1 with silver, composite natural keys.
+# PK columns marked nullable=False per Q5-C (prevents NULL MERGE-key surprises
+# that would lead to duplicate INSERTs).
+
+_SEC_FINANCIAL_FACT_SCHEMA = pa.schema(
+    [
+        pa.field("cik", pa.int64(), nullable=False),
+        pa.field("accession_number", pa.string(), nullable=False),
+        pa.field("concept", pa.string(), nullable=False),
+        pa.field("fiscal_period", pa.string(), nullable=False),
+        pa.field("segment", pa.string(), nullable=False),
+        pa.field("fiscal_year", pa.int32()),
+        pa.field("period_end", pa.date32()),
+        pa.field("form_type", pa.string()),
+        pa.field("value", pa.float64()),
+        pa.field("unit", pa.string()),
+        pa.field("decimals", pa.int32()),
+        pa.field("parser_version", pa.string()),
+        pa.field("ingested_at", pa.timestamp("us", tz="UTC")),
+    ]
+)
+
+_SEC_THIRTEENF_HOLDING_SCHEMA = pa.schema(
+    [
+        pa.field("cik", pa.int64(), nullable=False),
+        pa.field("accession_number", pa.string(), nullable=False),
+        pa.field("holding_index", pa.int64(), nullable=False),
+        pa.field("period_of_report", pa.date32()),
+        pa.field("cusip", pa.string()),
+        pa.field("issuer_name", pa.string()),
+        pa.field("security_title", pa.string()),
+        pa.field("shares_held", pa.float64()),
+        pa.field("market_value", pa.float64()),
+        pa.field("security_class", pa.string()),
+        pa.field("put_call", pa.string()),
+        pa.field("discretion_type", pa.string()),
+        pa.field("voting_auth_sole", pa.float64()),
+        pa.field("voting_auth_shared", pa.float64()),
+        pa.field("voting_auth_none", pa.float64()),
+        pa.field("parser_version", pa.string()),
+        pa.field("ingested_at", pa.timestamp("us", tz="UTC")),
+    ]
+)
+
+_SEC_FINANCIAL_DERIVED_SCHEMA = pa.schema(
+    [
+        pa.field("cik", pa.int64(), nullable=False),
+        pa.field("accession_number", pa.string(), nullable=False),
+        pa.field("fiscal_period", pa.string(), nullable=False),
+        pa.field("fiscal_year", pa.int32()),
+        pa.field("period_end", pa.date32()),
+        pa.field("form_type", pa.string()),
+        pa.field("revenue", pa.float64()),
+        pa.field("gross_profit", pa.float64()),
+        pa.field("ebitda", pa.float64()),
+        pa.field("ebit", pa.float64()),
+        pa.field("net_income", pa.float64()),
+        pa.field("eps_diluted", pa.float64()),
+        pa.field("total_assets", pa.float64()),
+        pa.field("total_liabilities", pa.float64()),
+        pa.field("total_equity", pa.float64()),
+        pa.field("cash_and_equivalents", pa.float64()),
+        pa.field("total_debt", pa.float64()),
+        pa.field("operating_cash_flow", pa.float64()),
+        pa.field("capex", pa.float64()),
+        pa.field("free_cash_flow", pa.float64()),
+        pa.field("gross_margin", pa.float64()),
+        pa.field("ebitda_margin", pa.float64()),
+        pa.field("net_margin", pa.float64()),
+        pa.field("roic", pa.float64()),
+        pa.field("roe", pa.float64()),
+        pa.field("roa", pa.float64()),
+        pa.field("parser_version", pa.string()),
+        pa.field("ingested_at", pa.timestamp("us", tz="UTC")),
+    ]
+)
+
+# Dimensional schemas (Q3-D): surrogate fact_key (NOT NULL per Q5-C) + dim FKs.
+
+_FACT_EARNINGS_RELEASE_SCHEMA = pa.schema(
+    [
+        pa.field("fact_key", pa.int64(), nullable=False),
+        pa.field("company_key", pa.int64()),
+        pa.field("filing_date_key", pa.int32()),
+        pa.field("period_end_date_key", pa.int32()),
+        pa.field("form_key", pa.int64()),
+        pa.field("accession_number", pa.string()),
+        pa.field("cik", pa.int64()),
+        pa.field("filing_date", pa.date32()),
+        pa.field("fiscal_year", pa.int32()),
+        pa.field("fiscal_quarter", pa.int32()),
+        pa.field("period_end", pa.date32()),
+        pa.field("revenue_gaap", pa.float64()),
+        pa.field("net_income_gaap", pa.float64()),
+        pa.field("eps_gaap_diluted", pa.float64()),
+        pa.field("has_non_gaap", pa.bool_()),
+        pa.field("has_guidance", pa.bool_()),
+        pa.field("parser_version", pa.string()),
+        pa.field("ingested_at", pa.timestamp("us", tz="UTC")),
+    ]
+)
+
+_FACT_EXECUTIVE_RECORD_SCHEMA = pa.schema(
+    [
+        pa.field("fact_key", pa.int64(), nullable=False),
+        pa.field("company_key", pa.int64()),
+        pa.field("fiscal_year_date_key", pa.int32()),
+        pa.field("accession_number", pa.string()),
+        pa.field("cik", pa.int64()),
+        pa.field("fiscal_year", pa.int32()),
+        pa.field("exec_name", pa.string()),
+        pa.field("exec_role", pa.string()),
+        pa.field("total_comp", pa.float64()),
+        pa.field("base_salary", pa.float64()),
+        pa.field("bonus", pa.float64()),
+        pa.field("stock_awards", pa.float64()),
+        pa.field("option_awards", pa.float64()),
+        pa.field("non_equity_incentive", pa.float64()),
+        pa.field("parser_version", pa.string()),
+        pa.field("ingested_at", pa.timestamp("us", tz="UTC")),
+    ]
+)
+
+_FACT_ACCOUNTING_FLAG_SCHEMA = pa.schema(
+    [
+        pa.field("fact_key", pa.int64(), nullable=False),
+        pa.field("company_key", pa.int64()),
+        pa.field("fiscal_year_date_key", pa.int32()),
+        pa.field("form_key", pa.int64()),
+        pa.field("accession_number", pa.string()),
+        pa.field("cik", pa.int64()),
+        pa.field("fiscal_year", pa.int32()),
+        pa.field("period_end", pa.date32()),
+        pa.field("form_type", pa.string()),
+        pa.field("auditor_name", pa.string()),
+        pa.field("auditor_pcaob_id", pa.string()),
+        pa.field("auditor_location", pa.string()),
+        pa.field("icfr_attestation", pa.bool_()),
+        pa.field("auditor_changed", pa.bool_()),
+        pa.field("beneish_m_score", pa.float64()),
+        pa.field("altman_z_score", pa.float64()),
+        pa.field("piotroski_f_score", pa.int32()),
+        pa.field("parser_version", pa.string()),
+        pa.field("ingested_at", pa.timestamp("us", tz="UTC")),
+    ]
+)
+
 
 def _empty(schema: pa.Schema) -> pa.Table:
     return pa.table({field.name: pa.array([], type=field.type) for field in schema}, schema=schema)
@@ -956,6 +1104,212 @@ def _build_fact_adv_private_fund(conn: Any) -> pa.Table:
     return _table_from_records(_FACT_ADV_PRIVATE_FUND_SCHEMA, records)
 
 
+# ── Branch B Fundamentals builders — PR-1 ────────────────────────────────
+# Passthrough builders SELECT columns in PyArrow schema order (Q1-C, Q2-A).
+# Column order matters for PyArrow's table.cast() — silver-table column order
+# differs from our PK-first ordering, so an explicit SELECT list is required.
+
+def _build_sec_financial_fact(conn: Any) -> pa.Table:
+    table = _arrow(
+        conn.execute(
+            """
+            SELECT
+                cik::BIGINT          AS cik,
+                accession_number,
+                concept,
+                fiscal_period,
+                segment,
+                fiscal_year::INTEGER AS fiscal_year,
+                period_end,
+                form_type,
+                value,
+                unit,
+                decimals::INTEGER    AS decimals,
+                parser_version,
+                ingested_at
+            FROM sec_financial_fact
+            ORDER BY cik, accession_number, concept, fiscal_period, segment
+            """
+        )
+    )
+    return _empty(_SEC_FINANCIAL_FACT_SCHEMA) if table.num_rows == 0 else table.cast(_SEC_FINANCIAL_FACT_SCHEMA)
+
+
+def _build_sec_thirteenf_holding(conn: Any) -> pa.Table:
+    table = _arrow(
+        conn.execute(
+            """
+            SELECT
+                cik::BIGINT          AS cik,
+                accession_number,
+                holding_index::BIGINT AS holding_index,
+                period_of_report,
+                cusip,
+                issuer_name,
+                security_title,
+                shares_held,
+                market_value,
+                security_class,
+                put_call,
+                discretion_type,
+                voting_auth_sole,
+                voting_auth_shared,
+                voting_auth_none,
+                parser_version,
+                ingested_at
+            FROM sec_thirteenf_holding
+            ORDER BY cik, accession_number, holding_index
+            """
+        )
+    )
+    return _empty(_SEC_THIRTEENF_HOLDING_SCHEMA) if table.num_rows == 0 else table.cast(_SEC_THIRTEENF_HOLDING_SCHEMA)
+
+
+def _build_sec_financial_derived(conn: Any) -> pa.Table:
+    table = _arrow(
+        conn.execute(
+            """
+            SELECT
+                cik::BIGINT          AS cik,
+                accession_number,
+                fiscal_period,
+                fiscal_year::INTEGER AS fiscal_year,
+                period_end,
+                form_type,
+                revenue,
+                gross_profit,
+                ebitda,
+                ebit,
+                net_income,
+                eps_diluted,
+                total_assets,
+                total_liabilities,
+                total_equity,
+                cash_and_equivalents,
+                total_debt,
+                operating_cash_flow,
+                capex,
+                free_cash_flow,
+                gross_margin,
+                ebitda_margin,
+                net_margin,
+                roic,
+                roe,
+                roa,
+                parser_version,
+                ingested_at
+            FROM sec_financial_derived
+            ORDER BY cik, accession_number, fiscal_period
+            """
+        )
+    )
+    return _empty(_SEC_FINANCIAL_DERIVED_SCHEMA) if table.num_rows == 0 else table.cast(_SEC_FINANCIAL_DERIVED_SCHEMA)
+
+
+# Dimensional builders (Q3-D): generate fact_key + dim FKs.  The hash + mask
+# pattern matches _build_fact_filing_activity (line 452-474) — DuckDB hash()
+# is deterministic, so MERGE is idempotent across re-runs.
+
+def _build_fact_earnings_release(conn: Any) -> pa.Table:
+    table = _arrow(
+        conn.execute(
+            """
+            SELECT
+                (hash(accession_number) & 9223372036854775807)::BIGINT AS fact_key,
+                cik::BIGINT                                            AS company_key,
+                (year(filing_date)*10000 + month(filing_date)*100
+                 + day(filing_date))::INTEGER                          AS filing_date_key,
+                CASE
+                    WHEN period_end IS NULL THEN NULL
+                    ELSE (year(period_end)*10000 + month(period_end)*100
+                          + day(period_end))::INTEGER
+                END                                                    AS period_end_date_key,
+                (hash('8-K') & 9223372036854775807)::BIGINT            AS form_key,
+                accession_number,
+                cik::BIGINT                                            AS cik,
+                filing_date,
+                fiscal_year::INTEGER                                   AS fiscal_year,
+                fiscal_quarter::INTEGER                                AS fiscal_quarter,
+                period_end,
+                revenue_gaap,
+                net_income_gaap,
+                eps_gaap_diluted,
+                has_non_gaap,
+                has_guidance,
+                parser_version,
+                ingested_at
+            FROM sec_earnings_release
+            ORDER BY cik, accession_number
+            """
+        )
+    )
+    return _empty(_FACT_EARNINGS_RELEASE_SCHEMA) if table.num_rows == 0 else table.cast(_FACT_EARNINGS_RELEASE_SCHEMA)
+
+
+def _build_fact_executive_record(conn: Any) -> pa.Table:
+    table = _arrow(
+        conn.execute(
+            """
+            SELECT
+                (hash(accession_number, exec_name) & 9223372036854775807)::BIGINT AS fact_key,
+                cik::BIGINT                                                       AS company_key,
+                (fiscal_year*10000 + 1231)::INTEGER                               AS fiscal_year_date_key,
+                accession_number,
+                cik::BIGINT                                                       AS cik,
+                fiscal_year::INTEGER                                              AS fiscal_year,
+                exec_name,
+                exec_role,
+                total_comp,
+                base_salary,
+                bonus,
+                stock_awards,
+                option_awards,
+                non_equity_incentive,
+                parser_version,
+                ingested_at
+            FROM sec_executive_record
+            ORDER BY cik, accession_number, exec_name
+            """
+        )
+    )
+    return _empty(_FACT_EXECUTIVE_RECORD_SCHEMA) if table.num_rows == 0 else table.cast(_FACT_EXECUTIVE_RECORD_SCHEMA)
+
+
+def _build_fact_accounting_flag(conn: Any) -> pa.Table:
+    table = _arrow(
+        conn.execute(
+            """
+            SELECT
+                (hash(accession_number) & 9223372036854775807)::BIGINT AS fact_key,
+                cik::BIGINT                                            AS company_key,
+                (fiscal_year*10000 + 1231)::INTEGER                    AS fiscal_year_date_key,
+                COALESCE(
+                    (hash(form_type) & 9223372036854775807)::BIGINT,
+                    (hash('10-K') & 9223372036854775807)::BIGINT
+                )                                                      AS form_key,
+                accession_number,
+                cik::BIGINT                                            AS cik,
+                fiscal_year::INTEGER                                   AS fiscal_year,
+                period_end,
+                form_type,
+                auditor_name,
+                auditor_pcaob_id,
+                auditor_location,
+                icfr_attestation,
+                auditor_changed,
+                beneish_m_score,
+                altman_z_score,
+                piotroski_f_score::INTEGER                             AS piotroski_f_score,
+                parser_version,
+                ingested_at
+            FROM sec_accounting_flag
+            ORDER BY cik, accession_number
+            """
+        )
+    )
+    return _empty(_FACT_ACCOUNTING_FLAG_SCHEMA) if table.num_rows == 0 else table.cast(_FACT_ACCOUNTING_FLAG_SCHEMA)
+
+
 def build_gold(db: Any) -> dict[str, pa.Table]:
     # Accepts SilverDatabase or ShardedSilverReader via duck typing (._conn attribute).
     import json
@@ -993,6 +1347,16 @@ def build_gold(db: Any) -> dict[str, pa.Table]:
         "fact_adv_office":                _timed("fact_adv_office",                lambda: _build_fact_adv_office(conn)),
         "fact_adv_disclosure":            _timed("fact_adv_disclosure",            lambda: _build_fact_adv_disclosure(conn)),
         "fact_adv_private_fund":          _timed("fact_adv_private_fund",          lambda: _build_fact_adv_private_fund(conn)),
+        # Branch B fundamentals — PR-1 (Q1-C hybrid passthrough+dimensional).
+        # The dict KEY here is informational; the actual Snowflake target table
+        # name comes from SNOWFLAKE_EXPORT_TABLES (run_manifest_builder.py),
+        # which is keyed UPPER-snake by Snowflake table name.
+        "sec_financial_fact":             _timed("sec_financial_fact",             lambda: _build_sec_financial_fact(conn)),
+        "sec_thirteenf_holding":          _timed("sec_thirteenf_holding",          lambda: _build_sec_thirteenf_holding(conn)),
+        "sec_financial_derived":          _timed("sec_financial_derived",          lambda: _build_sec_financial_derived(conn)),
+        "fact_earnings_release":          _timed("fact_earnings_release",          lambda: _build_fact_earnings_release(conn)),
+        "fact_executive_record":          _timed("fact_executive_record",          lambda: _build_fact_executive_record(conn)),
+        "fact_accounting_flag":           _timed("fact_accounting_flag",           lambda: _build_fact_accounting_flag(conn)),
     }
 
 
