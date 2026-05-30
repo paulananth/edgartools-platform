@@ -194,6 +194,156 @@ CREATE TABLE IF NOT EXISTS TICKER_REFERENCE (
 )
 COMMENT = 'Current ticker-reference dimension mirrored from the canonical warehouse gold export.';
 
+-- =====================================================================
+-- Branch B — Fundamentals research extension (PR-1)
+--
+-- 3 PASSTHROUGH tables (high-cardinality, CIK-keyed natural-key MERGE).
+-- Loaded by LOAD_FUNDAMENTALS_EXPORTS_FOR_RUN (composite-key proc).
+-- NOT NULL applied to MERGE-key columns ONLY (Q5-C decision).
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS SEC_FINANCIAL_FACT (
+  cik              NUMBER(38, 0) NOT NULL,
+  accession_number STRING        NOT NULL,
+  concept          STRING        NOT NULL,
+  fiscal_period    STRING        NOT NULL,
+  segment          STRING        NOT NULL,
+  fiscal_year      NUMBER(38, 0),
+  period_end       DATE,
+  form_type        STRING,
+  value            FLOAT,
+  unit             STRING,
+  decimals         NUMBER(38, 0),
+  parser_version   STRING,
+  ingested_at      TIMESTAMP_TZ
+)
+COMMENT = 'XBRL us-gaap fact per (cik, accession, concept, fiscal_period, segment). Passthrough from silver sec_financial_fact.';
+
+CREATE TABLE IF NOT EXISTS SEC_THIRTEENF_HOLDING (
+  cik                 NUMBER(38, 0) NOT NULL,
+  accession_number    STRING        NOT NULL,
+  holding_index       NUMBER(38, 0) NOT NULL,
+  period_of_report    DATE,
+  cusip               STRING,
+  issuer_name         STRING,
+  security_title      STRING,
+  shares_held         FLOAT,
+  market_value        FLOAT,
+  security_class      STRING,
+  put_call            STRING,
+  discretion_type     STRING,
+  voting_auth_sole    FLOAT,
+  voting_auth_shared  FLOAT,
+  voting_auth_none    FLOAT,
+  parser_version      STRING,
+  ingested_at         TIMESTAMP_TZ
+)
+COMMENT = '13F INFORMATION TABLE holding per (cik, accession, holding_index). Passthrough from silver sec_thirteenf_holding.';
+
+CREATE TABLE IF NOT EXISTS SEC_FINANCIAL_DERIVED (
+  cik                  NUMBER(38, 0) NOT NULL,
+  accession_number     STRING        NOT NULL,
+  fiscal_period        STRING        NOT NULL,
+  fiscal_year          NUMBER(38, 0),
+  period_end           DATE,
+  form_type            STRING,
+  revenue              FLOAT,
+  gross_profit         FLOAT,
+  ebitda               FLOAT,
+  ebit                 FLOAT,
+  net_income           FLOAT,
+  eps_diluted          FLOAT,
+  total_assets         FLOAT,
+  total_liabilities    FLOAT,
+  total_equity         FLOAT,
+  cash_and_equivalents FLOAT,
+  total_debt           FLOAT,
+  operating_cash_flow  FLOAT,
+  capex                FLOAT,
+  free_cash_flow       FLOAT,
+  gross_margin         FLOAT,
+  ebitda_margin        FLOAT,
+  net_margin           FLOAT,
+  roic                 FLOAT,
+  roe                  FLOAT,
+  roa                  FLOAT,
+  parser_version       STRING,
+  ingested_at          TIMESTAMP_TZ
+)
+COMMENT = 'Derived per-period financial metrics. Passthrough from silver sec_financial_derived. Forensic scores live on ACCOUNTING_FLAG (annual constructs).';
+
+-- =====================================================================
+-- 3 DIMENSIONAL tables (low-cardinality, surrogate fact_key MERGE).
+-- Loaded by the EXISTING LOAD_EXPORTS_FOR_RUN proc.
+-- COMPANY/DATE/FORM keys generated in the warehouse build step.
+-- AUDIT_FIRM dim deferred to a future PR per Q3-D.
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS EARNINGS_RELEASE (
+  fact_key            NUMBER(38, 0) NOT NULL,
+  company_key         NUMBER(38, 0),
+  filing_date_key     NUMBER(38, 0),
+  period_end_date_key NUMBER(38, 0),
+  form_key            NUMBER(38, 0),
+  accession_number    STRING,
+  cik                 NUMBER(38, 0),
+  filing_date         DATE,
+  fiscal_year         NUMBER(38, 0),
+  fiscal_quarter      NUMBER(38, 0),
+  period_end          DATE,
+  revenue_gaap        FLOAT,
+  net_income_gaap     FLOAT,
+  eps_gaap_diluted    FLOAT,
+  has_non_gaap        BOOLEAN,
+  has_guidance        BOOLEAN,
+  parser_version      STRING,
+  ingested_at         TIMESTAMP_TZ
+)
+COMMENT = '8-K earnings release fact per (cik, accession). Dimensional — joins COMPANY + DATE×2 + FORM.';
+
+CREATE TABLE IF NOT EXISTS EXECUTIVE_RECORD (
+  fact_key             NUMBER(38, 0) NOT NULL,
+  company_key          NUMBER(38, 0),
+  fiscal_year_date_key NUMBER(38, 0),
+  accession_number     STRING,
+  cik                  NUMBER(38, 0),
+  fiscal_year          NUMBER(38, 0),
+  exec_name            STRING,
+  exec_role            STRING,
+  total_comp           FLOAT,
+  base_salary          FLOAT,
+  bonus                FLOAT,
+  stock_awards         FLOAT,
+  option_awards        FLOAT,
+  non_equity_incentive FLOAT,
+  parser_version       STRING,
+  ingested_at          TIMESTAMP_TZ
+)
+COMMENT = 'DEF 14A executive compensation fact per (cik, accession, exec_name). Dimensional — joins COMPANY + DATE. Person dim (PARTY) not yet wired.';
+
+CREATE TABLE IF NOT EXISTS ACCOUNTING_FLAG (
+  fact_key             NUMBER(38, 0) NOT NULL,
+  company_key          NUMBER(38, 0),
+  fiscal_year_date_key NUMBER(38, 0),
+  form_key             NUMBER(38, 0),
+  accession_number     STRING,
+  cik                  NUMBER(38, 0),
+  fiscal_year          NUMBER(38, 0),
+  period_end           DATE,
+  form_type            STRING,
+  auditor_name         STRING,
+  auditor_pcaob_id     STRING,
+  auditor_location     STRING,
+  icfr_attestation     BOOLEAN,
+  auditor_changed      BOOLEAN,
+  beneish_m_score      FLOAT,
+  altman_z_score       FLOAT,
+  piotroski_f_score    NUMBER(38, 0),
+  parser_version       STRING,
+  ingested_at          TIMESTAMP_TZ
+)
+COMMENT = '10-K accounting flag fact per (cik, accession). Dimensional — joins COMPANY + DATE + FORM. AUDIT_FIRM dim deferred; auditor_name/auditor_pcaob_id retained as natural keys.';
+
 BEGIN
   EXECUTE IMMEDIATE
     $$CREATE OR REPLACE PIPE $$ || $manifest_pipe_name || $$

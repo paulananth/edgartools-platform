@@ -412,6 +412,86 @@ class SnowflakeGraphRegistryTests(unittest.TestCase):
 # 9. MDM pipeline derivation registry
 # ---------------------------------------------------------------------------
 
+class FundamentalsGoldBuilderTests(unittest.TestCase):
+    """PR-1 Q5-C invariant — PK columns marked nullable=False in PyArrow schemas.
+
+    Snowflake MERGE on a NULL key silently inserts duplicate rows; the only way
+    to prevent that at load time is for the Parquet metadata to declare PK
+    columns as non-nullable so Snowflake COPY INTO rejects nulls.
+    """
+
+    PASSTHROUGH_PK_COLUMNS = {
+        "_SEC_FINANCIAL_FACT_SCHEMA":     {"cik", "accession_number", "concept", "fiscal_period", "segment"},
+        "_SEC_THIRTEENF_HOLDING_SCHEMA":  {"cik", "accession_number", "holding_index"},
+        "_SEC_FINANCIAL_DERIVED_SCHEMA":  {"cik", "accession_number", "fiscal_period"},
+    }
+
+    DIMENSIONAL_PK_COLUMNS = {
+        "_FACT_EARNINGS_RELEASE_SCHEMA":   {"fact_key"},
+        "_FACT_EXECUTIVE_RECORD_SCHEMA":   {"fact_key"},
+        "_FACT_ACCOUNTING_FLAG_SCHEMA":    {"fact_key"},
+    }
+
+    def test_passthrough_schemas_mark_pk_columns_not_nullable(self) -> None:
+        from edgar_warehouse.serving import gold_models
+        for schema_name, pk_cols in self.PASSTHROUGH_PK_COLUMNS.items():
+            schema = getattr(gold_models, schema_name)
+            with self.subTest(schema=schema_name):
+                for field in schema:
+                    if field.name in pk_cols:
+                        self.assertFalse(
+                            field.nullable,
+                            f"{schema_name}.{field.name} is a PK column and must be nullable=False (Q5-C)",
+                        )
+
+    def test_dimensional_schemas_mark_fact_key_not_nullable(self) -> None:
+        from edgar_warehouse.serving import gold_models
+        for schema_name, pk_cols in self.DIMENSIONAL_PK_COLUMNS.items():
+            schema = getattr(gold_models, schema_name)
+            with self.subTest(schema=schema_name):
+                for field in schema:
+                    if field.name in pk_cols:
+                        self.assertFalse(
+                            field.nullable,
+                            f"{schema_name}.{field.name} is the surrogate PK and must be nullable=False (Q5-C)",
+                        )
+
+    def test_fundamentals_export_tables_registered(self) -> None:
+        """All 6 Branch B tables must be in SNOWFLAKE_EXPORT_TABLES so they
+        are written to the snowflake-export bucket during gold-refresh."""
+        from edgar_warehouse.infrastructure.run_manifest_builder import SNOWFLAKE_EXPORT_TABLES
+        for snow_table in (
+            "SEC_FINANCIAL_FACT",
+            "SEC_THIRTEENF_HOLDING",
+            "SEC_FINANCIAL_DERIVED",
+            "EARNINGS_RELEASE",
+            "EXECUTIVE_RECORD",
+            "ACCOUNTING_FLAG",
+        ):
+            with self.subTest(table=snow_table):
+                self.assertIn(snow_table, SNOWFLAKE_EXPORT_TABLES)
+
+    def test_build_gold_registers_fundamentals_builders(self) -> None:
+        """build_gold() return dict must include the 6 new builders so the
+        gold-refresh loop emits PyArrow tables for them."""
+        from edgar_warehouse.serving import gold_models
+        # We need the source code, not a runtime call (gold-refresh requires
+        # a live silver connection). Check the function body for the registrations.
+        import inspect
+        source = inspect.getsource(gold_models.build_gold)
+        for builder_key in (
+            "sec_financial_fact",
+            "sec_thirteenf_holding",
+            "sec_financial_derived",
+            "fact_earnings_release",
+            "fact_executive_record",
+            "fact_accounting_flag",
+        ):
+            with self.subTest(builder=builder_key):
+                self.assertIn(f'"{builder_key}"', source,
+                              f"build_gold() must register {builder_key}")
+
+
 class MdmPipelineRegistrationTests(unittest.TestCase):
     def test_new_relationship_types_in_registry(self) -> None:
         from edgar_warehouse.mdm.pipeline import RELATIONSHIP_TYPES

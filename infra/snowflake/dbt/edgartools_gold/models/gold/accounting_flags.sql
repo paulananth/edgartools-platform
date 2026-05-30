@@ -4,11 +4,17 @@
 -- Adds risk_tier classification derived from forensic score thresholds and
 -- consecutive_auditor_years (number of years same auditor has been retained).
 --
+-- Source shape (PR-1 / Q3-D):
+--   DIMENSIONAL — ACCOUNTING_FLAG source carries surrogate fact_key plus
+--   COMPANY+DATE+FORM FKs.  auditor_name / auditor_pcaob_id retained as
+--   natural-key columns; AUDIT_FIRM dim deferred until cross-firm analytics
+--   demand emerges.
+--
 -- Grain: one row per (cik, accession_number).
 {{ gold_model_config('ACCOUNTING_FLAGS') }}
 
 with base as (
-    select * from {{ source("edgartools_source", "SEC_ACCOUNTING_FLAG") }}
+    select * from {{ source("edgartools_source", "ACCOUNTING_FLAG") }}
 ),
 
 with_tenure as (
@@ -55,8 +61,13 @@ with_risk as (
 )
 
 select
-    cik,
+    fact_key,
+    company_key,
+    fiscal_year_date_key,
+    form_key,
+    -- Natural keys
     accession_number,
+    cik,
     fiscal_year,
     period_end,
     form_type,
