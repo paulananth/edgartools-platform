@@ -492,6 +492,133 @@ class FundamentalsGoldBuilderTests(unittest.TestCase):
                               f"build_gold() must register {builder_key}")
 
 
+class FundamentalsSnowflakeExportTests(unittest.TestCase):
+    """PR-2 invariants — Snowflake export wiring for the 6 fundamentals tables."""
+
+    EXPECTED_EXPORTS = {
+        # passthrough: snake_case retains SEC_ prefix path (matches Snowflake source naming)
+        "sec_financial_fact":      "sec_financial_fact",
+        "sec_thirteenf_holding":   "sec_thirteenf_holding",
+        "sec_financial_derived":   "sec_financial_derived",
+        # dimensional: drops SEC_ prefix (matches Snowflake source naming)
+        "earnings_release":        "fact_earnings_release",
+        "executive_record":        "fact_executive_record",
+        "accounting_flag":         "fact_accounting_flag",
+    }
+
+    def test_export_map_has_six_new_entries(self) -> None:
+        """write_gold_to_snowflake_export() must export all 6 Branch B tables."""
+        from edgar_warehouse.serving.targets import snowflake as snow_target
+        import inspect
+        source = inspect.getsource(snow_target.write_gold_to_snowflake_export)
+        for export_name, builder_key in self.EXPECTED_EXPORTS.items():
+            with self.subTest(export=export_name):
+                self.assertIn(f'"{export_name}":', source,
+                              f"export_map missing '{export_name}'")
+                self.assertIn(f'"{builder_key}"', source,
+                              f"export_map missing build_gold() key '{builder_key}'")
+
+    def test_export_runs_against_empty_tables(self) -> None:
+        """The export step must handle empty PyArrow tables gracefully (e.g.
+        when bootstrap-fundamentals has not run yet — the builders return
+        _empty(_SCHEMA) and write_gold_to_snowflake_export still records them).
+        """
+        from edgar_warehouse.serving.targets.snowflake import write_gold_to_snowflake_export
+        from edgar_warehouse.serving.gold_models import (
+            _empty,
+            _SEC_FINANCIAL_FACT_SCHEMA,
+            _SEC_THIRTEENF_HOLDING_SCHEMA,
+            _SEC_FINANCIAL_DERIVED_SCHEMA,
+            _FACT_EARNINGS_RELEASE_SCHEMA,
+            _FACT_EXECUTIVE_RECORD_SCHEMA,
+            _FACT_ACCOUNTING_FLAG_SCHEMA,
+        )
+        empty_tables = {
+            "sec_financial_fact":      _empty(_SEC_FINANCIAL_FACT_SCHEMA),
+            "sec_thirteenf_holding":   _empty(_SEC_THIRTEENF_HOLDING_SCHEMA),
+            "sec_financial_derived":   _empty(_SEC_FINANCIAL_DERIVED_SCHEMA),
+            "fact_earnings_release":   _empty(_FACT_EARNINGS_RELEASE_SCHEMA),
+            "fact_executive_record":   _empty(_FACT_EXECUTIVE_RECORD_SCHEMA),
+            "fact_accounting_flag":    _empty(_FACT_ACCOUNTING_FLAG_SCHEMA),
+        }
+        # Fake storage root: anything with write_bytes(rel_path, payload) suffices
+        class _FakeStorage:
+            def __init__(self) -> None:
+                self.writes: dict[str, int] = {}
+            def write_bytes(self, relative_path: str, payload: bytes) -> str:
+                self.writes[relative_path] = len(payload)
+                return relative_path
+
+        fake = _FakeStorage()
+        counts = write_gold_to_snowflake_export(empty_tables, fake, "test-run", "2024-01-01")
+        # All 6 should be in counts with 0 rows
+        for export_name in self.EXPECTED_EXPORTS:
+            with self.subTest(export=export_name):
+                self.assertIn(export_name, counts)
+                self.assertEqual(counts[export_name], 0)
+
+
+class FundamentalsShardedReaderTests(unittest.TestCase):
+    """PR-2 invariant — ShardedSilverReader supports mixed-namespace mounts.
+
+    Verifies the per-shard table-membership detection added to
+    ShardedSilverReader.__init__ so gold-refresh can ATTACH BOTH the legacy
+    ownership monolith and a fundamentals shard (disjoint table sets) without
+    the CREATE VIEW UNION ALL failing.
+    """
+
+    def test_mixed_namespace_mount(self) -> None:
+        import tempfile
+        import os
+        import duckdb
+        from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
+
+        # Build two minimal DuckDB shards with DISJOINT table sets
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ownership_path = os.path.join(tmpdir, "ownership.duckdb")
+            fundamentals_path = os.path.join(tmpdir, "fundamentals.duckdb")
+
+            # Ownership shard: only has sec_company (1 of the 9 ownership tables)
+            c1 = duckdb.connect(ownership_path)
+            c1.execute("CREATE TABLE sec_company (cik BIGINT, name TEXT)")
+            c1.execute("INSERT INTO sec_company VALUES (320193, 'Apple Inc.')")
+            c1.close()
+
+            # Fundamentals shard: only has sec_financial_fact (1 of the 6 fundamentals tables)
+            c2 = duckdb.connect(fundamentals_path)
+            c2.execute("""
+                CREATE TABLE sec_financial_fact (
+                    cik BIGINT, accession_number TEXT, fiscal_year INTEGER,
+                    fiscal_period TEXT, period_end DATE, form_type TEXT,
+                    concept TEXT, value DOUBLE, unit TEXT, decimals INTEGER,
+                    segment TEXT, parser_version TEXT, ingested_at TIMESTAMPTZ
+                )
+            """)
+            c2.execute("""
+                INSERT INTO sec_financial_fact
+                    (cik, accession_number, fiscal_year, fiscal_period, period_end,
+                     form_type, concept, value, unit, decimals, segment, parser_version)
+                VALUES (320193, '0001-test', 2023, 'FY', '2023-12-31', '10-K',
+                        'Revenues', 383285000000.0, 'USD', -6, 'consolidated', 'v1')
+            """)
+            c2.close()
+
+            # Mount both: per-shard membership detection routes each query to the
+            # right alias without CREATE VIEW failing on the missing table.
+            reader = ShardedSilverReader([ownership_path, fundamentals_path])
+            try:
+                ownership_rows = reader.fetch("SELECT cik, name FROM sec_company")
+                fundamentals_rows = reader.fetch(
+                    "SELECT cik, value FROM sec_financial_fact WHERE concept='Revenues'"
+                )
+                self.assertEqual(len(ownership_rows), 1)
+                self.assertEqual(ownership_rows[0]["cik"], 320193)
+                self.assertEqual(len(fundamentals_rows), 1)
+                self.assertEqual(fundamentals_rows[0]["value"], 383285000000.0)
+            finally:
+                reader.close()
+
+
 class MdmPipelineRegistrationTests(unittest.TestCase):
     def test_new_relationship_types_in_registry(self) -> None:
         from edgar_warehouse.mdm.pipeline import RELATIONSHIP_TYPES
