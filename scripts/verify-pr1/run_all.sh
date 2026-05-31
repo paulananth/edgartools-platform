@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Run all PR-1 verification stages in order, stopping on the first failure.
 #
 # Stages:
@@ -11,9 +12,8 @@
 # because PR-2 (warehouse export wiring) needs to land first.
 
 # shellcheck disable=SC1091
-source "$(dirname "${BASH_SOURCE[0]}")/00_lib.sh"
-
-SCRIPTS_DIR="$(dirname "${BASH_SOURCE[0]}")"
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPTS_DIR}/00_lib.sh"
 
 # Allow operator to skip stages 3/4 (the cloud ones) via --offline flag
 OFFLINE=false
@@ -37,6 +37,11 @@ STAGES=(
 )
 
 if ! $OFFLINE; then
+    if [[ -z "${SNOWFLAKE_DEFAULT_CONNECTION_NAME:-}" && -z "${SNOWFLAKE_ACCOUNT:-}" ]]; then
+        log "ERROR: Snowflake credentials not configured. Set SNOWFLAKE_DEFAULT_CONNECTION_NAME or SNOWFLAKE_ACCOUNT/SNOWFLAKE_USER."
+        log "       Use --offline to skip cloud stages."
+        exit 1
+    fi
     STAGES+=(
         "03_check_snowflake_ddl.sh:Stage 3 — Snowflake DDL deployment"
         "04_smoke_merge_proc.sh:Stage 4 — Composite-key MERGE semantics"
@@ -53,7 +58,7 @@ for spec in "${STAGES[@]}"; do
     label="${spec#*:}"
     printf '\n' >&2
     log "▶ ${label}"
-    if bash "${SCRIPTS_DIR}/${script}"; then
+    if "${SCRIPTS_DIR}/${script}"; then
         log "✓ ${label} — OK"
     else
         log "✗ ${label} — FAILED (subsequent stages skipped)"
@@ -62,11 +67,11 @@ for spec in "${STAGES[@]}"; do
     fi
 done
 
-printf '\n%s' "${C_BOLD}" >&2
+printf '\n%s' "${C_BOLD:-}" >&2
 if [[ $OVERALL_FAIL -eq 0 ]]; then
-    printf '%s[VERIFY-PR1 ALL OK]%s\n' "${C_GREEN}" "${C_RESET}" >&2
+    printf '%s[VERIFY-PR1 ALL OK]%s\n' "${C_GREEN:-}" "${C_RESET:-}" >&2
     exit 0
 else
-    printf '%s[VERIFY-PR1 STOPPED]%s see stage logs above\n' "${C_RED}" "${C_RESET}" >&2
+    printf '%s[VERIFY-PR1 STOPPED]%s see stage logs above\n' "${C_RED:-}" "${C_RESET:-}" >&2
     exit 1
 fi

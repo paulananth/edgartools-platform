@@ -20,7 +20,8 @@
 #   SNOWFLAKE_MANIFEST_SNS_TOPIC_ARN   — arn:aws:sns:{region}:{acct}:edgartools-{env}-snowflake-manifest-events
 
 # shellcheck disable=SC1091
-source "$(dirname "${BASH_SOURCE[0]}")/00_lib.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/00_lib.sh"
 
 step "Stage 3 — Snowflake DDL deployment"
 
@@ -58,7 +59,7 @@ build_sql_with_vars() {
             if [[ "$v" == "NULL" ]]; then
                 printf 'SET %s = NULL;\n' "$k"
             else
-                printf "SET %s = '%s';\n" "$k" "$v"
+                printf "SET %s = '%s';\n" "$k" "${v//\'/\'\'}"
             fi
         done
         cat "$source_file"
@@ -132,7 +133,7 @@ log "Verifying source tables exist in ${SNOWFLAKE_DATABASE}.${SOURCE_SCHEMA}"
 
 count_table() {
     local table_name="$1"
-    snow_scalar "SELECT COUNT(*) FROM ${SNOWFLAKE_DATABASE}.INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='${SOURCE_SCHEMA}' AND TABLE_NAME='${table_name}';"
+    snow_scalar "SELECT COUNT(*) FROM ${SNOWFLAKE_DATABASE}.INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '${SOURCE_SCHEMA}' AND TABLE_NAME = '${table_name}' AND TABLE_TYPE = 'BASE TABLE';"
 }
 
 for table in SEC_FINANCIAL_FACT SEC_THIRTEENF_HOLDING SEC_FINANCIAL_DERIVED \
@@ -150,7 +151,7 @@ log "Verifying NOT NULL constraints on PK columns"
 check_not_null() {
     local table="$1" col="$2"
     local result
-    result="$(snow_scalar "SELECT IS_NULLABLE FROM ${SNOWFLAKE_DATABASE}.INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='${SOURCE_SCHEMA}' AND TABLE_NAME='${table}' AND COLUMN_NAME='${col}';")"
+    result="$(snow_scalar "SELECT IS_NULLABLE FROM ${SNOWFLAKE_DATABASE}.INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '${SOURCE_SCHEMA}' AND TABLE_NAME = '${table}' AND COLUMN_NAME = '${col}';")"
     [[ "$result" == "NO" ]]
 }
 
@@ -176,11 +177,17 @@ for i in "${!pk_tables[@]}"; do
     table="${pk_tables[$i]}"
     cols="${pk_columns_list[$i]}"
     bad=""
+    # 00_lib.sh sets IFS=$'\n\t' to harden against filename-with-space bugs;
+    # restore the default IFS just for the column-splitting loop so that
+    # `for col in $cols` actually word-splits on spaces.
+    OLDIFS="$IFS"
+    IFS=$' \t\n'
     for col in $cols; do
         if ! check_not_null "$table" "$col"; then
             bad+="${col} "
         fi
     done
+    IFS="$OLDIFS"
     if [[ -z "$bad" ]]; then
         ok "${table} PK columns are NOT NULL in Snowflake metadata"
     else
@@ -193,12 +200,12 @@ log "Verifying load procedures"
 
 check_procedure() {
     local proc="$1"
-    snow_scalar "SELECT COUNT(*) FROM ${SNOWFLAKE_DATABASE}.INFORMATION_SCHEMA.PROCEDURES WHERE PROCEDURE_SCHEMA='${SOURCE_SCHEMA}' AND PROCEDURE_NAME='${proc}';"
+    snow_scalar "SELECT COUNT(*) FROM ${SNOWFLAKE_DATABASE}.INFORMATION_SCHEMA.PROCEDURES WHERE PROCEDURE_SCHEMA = '${SOURCE_SCHEMA}' AND PROCEDURE_NAME = '${proc}';"
 }
 
 for proc in "$SOURCE_LOAD_PROC" "$FUNDAMENTALS_LOAD_PROC"; do
     count="$(check_procedure "$proc")"
-    if [[ -n "$count" ]] && [[ "$count" -ge "1" ]] 2>/dev/null; then
+    if [[ -n "$count" ]] && [[ "$count" -ge 1 ]]; then
         ok "procedure ${proc} exists"
     else
         fail_check "procedure ${proc} NOT FOUND (count=${count:-?})"

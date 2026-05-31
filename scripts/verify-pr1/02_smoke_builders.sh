@@ -12,7 +12,8 @@
 # of PR-1 will produce Parquet conforming to the Snowflake CREATE TABLE shape.
 
 # shellcheck disable=SC1091
-source "$(dirname "${BASH_SOURCE[0]}")/00_lib.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/00_lib.sh"
 
 step "Stage 2 — PyArrow builder smoke test"
 
@@ -26,11 +27,10 @@ fi
 # Each assertion failure prints a line, and we count results from exit code.
 log "Running in-memory DuckDB → PyArrow build round-trip"
 
-cd "$REPO_ROOT"
 # shellcheck disable=SC1091
-source .venv/bin/activate
+source "${REPO_ROOT}/.venv/bin/activate"
 
-SMOKE_OUTPUT="$(python3 - <<'PY' 2>&1
+SMOKE_OUTPUT="$(cd "${REPO_ROOT}" && python3 - <<'PY' 2>&1
 import sys
 import duckdb
 from edgar_warehouse.silver_store import _DDL
@@ -117,7 +117,10 @@ if failures:
 PY
 )"
 
-# Echo individual pass lines to verifier output and tally
+if [[ $? -ne 0 ]]; then
+    fail_check "Python smoke test exited non-zero"
+fi
+
 while IFS= read -r line; do
     if [[ "$line" == PASS::* ]]; then
         ok "${line#PASS::}"

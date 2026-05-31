@@ -12,7 +12,8 @@
 #   - PR-1 unit tests pass
 
 # shellcheck disable=SC1091
-source "$(dirname "${BASH_SOURCE[0]}")/00_lib.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/00_lib.sh"
 
 step "Stage 1 — Local schema integrity"
 
@@ -23,7 +24,7 @@ require_file "$DDL_FILE"
 
 for table in SEC_FINANCIAL_FACT SEC_THIRTEENF_HOLDING SEC_FINANCIAL_DERIVED \
              EARNINGS_RELEASE EXECUTIVE_RECORD ACCOUNTING_FLAG; do
-    if grep -q "CREATE TABLE IF NOT EXISTS ${table} " "$DDL_FILE"; then
+    if grep -qi "CREATE TABLE IF NOT EXISTS ${table}[[:space:]]" "$DDL_FILE"; then
         ok "01_source_stage.sql declares ${table}"
     else
         fail_check "01_source_stage.sql is MISSING ${table}"
@@ -42,7 +43,7 @@ for spec in "${expected_not_null_blocks[@]}"; do
     table="${spec%%:*}"
     pk_cols="${spec##*:}"
     # Extract the CREATE TABLE block (between 'CREATE TABLE IF NOT EXISTS table' and the closing ');')
-    block=$(awk "/CREATE TABLE IF NOT EXISTS ${table} /,/^\);/" "$DDL_FILE")
+    block=$(awk "/CREATE TABLE IF NOT EXISTS ${table}[[:space:]]/,/^[)];/" "$DDL_FILE")
     if [[ -z "$block" ]]; then
         fail_check "could not extract ${table} block from DDL"
         continue
@@ -66,7 +67,7 @@ done
 
 # Dimensional tables must mark fact_key NOT NULL
 for table in EARNINGS_RELEASE EXECUTIVE_RECORD ACCOUNTING_FLAG; do
-    if awk "/CREATE TABLE IF NOT EXISTS ${table} /,/^\);/" "$DDL_FILE" \
+    if awk "/CREATE TABLE IF NOT EXISTS ${table}[[:space:]]/,/^[)];/" "$DDL_FILE" \
         | grep -E "^[[:space:]]*fact_key[[:space:]]" \
         | grep -q "NOT NULL"; then
         ok "${table}.fact_key is NOT NULL"
@@ -80,7 +81,7 @@ log "Checking infra/snowflake/sql/bootstrap/06_fundamentals_load_wrapper.sql"
 LOAD_PROC_FILE="${REPO_ROOT}/infra/snowflake/sql/bootstrap/06_fundamentals_load_wrapper.sql"
 require_file "$LOAD_PROC_FILE"
 
-if grep -q "CREATE OR REPLACE PROCEDURE IDENTIFIER(\$fundamentals_load_procedure_name)" "$LOAD_PROC_FILE"; then
+if grep -qF 'CREATE OR REPLACE PROCEDURE IDENTIFIER($fundamentals_load_procedure_name)' "$LOAD_PROC_FILE"; then
     ok "LOAD_FUNDAMENTALS_EXPORTS_FOR_RUN procedure declared"
 else
     fail_check "LOAD_FUNDAMENTALS_EXPORTS_FOR_RUN procedure NOT declared"
@@ -146,7 +147,7 @@ done
 
 # Dimensional sources DROP SEC_ prefix
 for table in EARNINGS_RELEASE EXECUTIVE_RECORD ACCOUNTING_FLAG; do
-    if grep -q "name: ${table}$" "$SOURCES_YML" || grep -q "name: ${table} *$" "$SOURCES_YML"; then
+    if grep -qE "name: ${table}[[:space:]]*$" "$SOURCES_YML"; then
         ok "sources.yml declares ${table} (dimensional, no SEC_ prefix)"
     else
         fail_check "sources.yml MISSING ${table} (dimensional)"
@@ -197,7 +198,8 @@ done
 # ── 7. PR-1 unit tests ──────────────────────────────────────────────
 log "Running PR-1 regression tests"
 if [[ -d "${REPO_ROOT}/.venv" ]]; then
-    if (cd "$REPO_ROOT" && source .venv/bin/activate && python3 -m pytest tests/unit/test_fundamentals_modules.py::FundamentalsGoldBuilderTests --tb=line -q 2>&1 | tail -5 | grep -q "passed"); then
+    test_output=""
+    if test_output=$(cd "$REPO_ROOT" && source .venv/bin/activate && python3 -m pytest tests/unit/test_fundamentals_modules.py::FundamentalsGoldBuilderTests --tb=line -q 2>&1) && printf '%s' "$test_output" | grep -q "passed"; then
         ok "FundamentalsGoldBuilderTests pass"
     else
         fail_check "FundamentalsGoldBuilderTests FAILED — run \`pytest tests/unit/test_fundamentals_modules.py::FundamentalsGoldBuilderTests -v\` for details"
