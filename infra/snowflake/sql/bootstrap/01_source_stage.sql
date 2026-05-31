@@ -37,7 +37,11 @@ BEGIN
 END;
 
 BEGIN
-  IF COALESCE($storage_external_id, '') <> '' THEN
+  -- Parentheses around the IF condition are required for the modern
+  -- snowflake-connector-python parser (legacy snowsql tolerated bare
+  -- predicates; the new client requires parens — see
+  -- docs/snowflake-cli-migration.md).
+  IF (COALESCE($storage_external_id, '') <> '') THEN
     EXECUTE IMMEDIATE
       'ALTER STORAGE INTEGRATION ' || $storage_integration_name || '
          SET STORAGE_AWS_EXTERNAL_ID = ''' || $storage_external_id || '''';

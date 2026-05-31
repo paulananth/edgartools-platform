@@ -23,7 +23,7 @@ bash scripts/verify-pr1/run_all.sh --offline
 
 ### Full verification (requires Snowflake creds)
 
-**One-time install** (the repo uses the modern `snow` CLI, not legacy `snowsql`):
+**One-time install** (the repo uses the modern `snow` CLI, not legacy `snowsql` — see [`docs/snowflake-cli-migration.md`](../../docs/snowflake-cli-migration.md) for the migration rationale and best practices):
 
 ```bash
 pip install snowflake-cli-labs       # or: uv pip install snowflake-cli-labs
