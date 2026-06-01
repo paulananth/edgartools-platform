@@ -7,7 +7,7 @@ name = "edgartools-platform"
 version = "0.1.0"
 description = "Data platform for SEC EDGAR: warehouse ETL, Snowflake dbt gold layer, dashboards"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 authors = [
   { name = "Paul Ananth", email = "thepaulananth@gmail.com" },

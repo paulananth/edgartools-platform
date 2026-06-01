@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12"]
+        python-version: ["3.11", "3.12"]
 
     steps:
       - uses: actions/checkout@v4
@@ -58,7 +58,8 @@ jobs:
       - name: Run MDM tests
         run: |
           uv run pytest tests/mdm/ -v --tb=short \
-            -k "not neo4j and not snowflake and not readonly"
+            -m "not neo4j" \
+            -k "not snowflake and not readonly"
 
   # ── Application-level tests ────────────────────────────────────────────────
   application:
