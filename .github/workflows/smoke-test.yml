@@ -1,14 +1,14 @@
-name: Single-CIK smoke test
+name: Smoke test
 
 on:
   workflow_run:
-    workflows: ["Build, test, and push container images"]
+    workflows: ["Deploy"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
     inputs:
       cik:
-        description: "CIK to test (default: 320193 — Apple)"
+        description: "CIK to test (default: 320193 - Apple)"
         default: "320193"
       env:
         description: "Environment"
@@ -25,29 +25,12 @@ env:
   AWS_ACCOUNT: "077127448006"
 
 jobs:
-  # Only run the smoke test when the build workflow succeeded (not on failure/cancel).
-  check-trigger:
-    name: Check trigger condition
+  smoke:
+    name: CIK ${{ github.event.inputs.cik || '320193' }} (${{ github.event.inputs.env || 'dev' }})
     runs-on: ubuntu-latest
-    outputs:
-      should_run: ${{ steps.check.outputs.should_run }}
-    steps:
-      - id: check
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-            echo "Upstream workflow did not succeed — skipping smoke test."
-          fi
-
-  smoke-test:
-    name: Smoke test CIK ${{ github.event.inputs.cik || '320193' }}
-    runs-on: ubuntu-latest
-    needs: check-trigger
-    if: needs.check-trigger.outputs.should_run == 'true'
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     timeout-minutes: 30
 
     steps:
@@ -93,16 +76,14 @@ jobs:
             --snow-connection "$SNOW_CONNECTION" \
             --timeout 1200
 
-      - name: Upload smoke test logs on failure
+      - name: Collect logs on failure
         if: failure()
         run: |
           aws logs tail /aws/states/edgartools-dev-warehouse \
-            --since 35m \
-            --region "$AWS_REGION" \
+            --since 35m --region "$AWS_REGION" \
             > /tmp/warehouse-logs.txt 2>&1 || true
           aws logs tail /aws/states/edgartools-dev-mdm \
-            --since 35m \
-            --region "$AWS_REGION" \
+            --since 35m --region "$AWS_REGION" \
             >> /tmp/warehouse-logs.txt 2>&1 || true
 
       - uses: actions/upload-artifact@v4

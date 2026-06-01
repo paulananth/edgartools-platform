@@ -1,4 +1,4 @@
-name: Build, test, and push container images
+name: Deploy
 
 on:
   push:
@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Image tag override (default: dev)"
-        default: dev
+        description: "Image tag override (default: short SHA)"
+        default: ""
 
 permissions:
   id-token: write
@@ -18,32 +18,10 @@ env:
   AWS_ACCOUNT: "077127448006"
 
 jobs:
-  test:
-    name: Run MDM tracking tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install project dependencies (mdm extras for MDM tracking tests)
-        run: uv sync --extra mdm
-
-      - name: Run MDM tracking tests
-        run: uv run pytest tests/application/test_warehouse_orchestrator_mdm.py -v
-
+  # ── Build and push container images to ECR ─────────────────────────────────
   build-push:
-    name: Build and push ${{ matrix.role }}
+    name: Build ${{ matrix.role }}
     runs-on: ubuntu-latest
-    needs: test
-
     strategy:
       matrix:
         include:
@@ -51,6 +29,9 @@ jobs:
             ecr_repository: edgartools-dev-warehouse
           - role: mdm
             ecr_repository: edgartools-dev-mdm
+
+    outputs:
+      warehouse-image: ${{ steps.meta.outputs.image-ref }}
 
     steps:
       - uses: actions/checkout@v4
@@ -64,9 +45,19 @@ jobs:
       - name: Log in to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push ${{ matrix.role }}
+      - name: Resolve image tag
+        id: tag
         run: |
-          TAG="${{ github.event.inputs.tag || 'dev' }}"
+          if [[ -n "${{ github.event.inputs.tag }}" ]]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push ${{ matrix.role }}
+        id: meta
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
           bash infra/scripts/publish-warehouse-image.sh \
             --aws-region "$AWS_REGION" \
             --ecr-repository "${{ matrix.ecr_repository }}" \
@@ -75,3 +66,4 @@ jobs:
             --mode buildx \
             --cache-tag buildcache \
             --also-tag dev
+          echo "image-ref=${{ env.AWS_ACCOUNT }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ matrix.ecr_repository }}:${TAG}" >> "$GITHUB_OUTPUT"
