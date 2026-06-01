@@ -35,7 +35,7 @@ Set the required env vars:
 
 ```bash
 # Required for stages 3 + 4
-export SNOW_CONNECTION=edgartools-dev                     # name from `snow connection list`
+export SNOW_CONNECTION=snowconn                           # ACCOUNTADMIN — required for CREATE STORAGE INTEGRATION
 export SNOWFLAKE_DATABASE=EDGARTOOLS_DEV
 export SNOWFLAKE_DEPLOYER_ROLE=EDGARTOOLS_DEV_DEPLOYER
 export SNOWFLAKE_STORAGE_ROLE_ARN=arn:aws:iam::077127448006:role/edgartools-dev-snowflake-s3
@@ -73,7 +73,7 @@ PR-1 is **complete** when:
 
 2. **Stages 3 + 4 pass** against dev Snowflake (proves the DDL actually deploys, NOT NULL constraints land in Snowflake metadata, composite-key MERGE behaves correctly). This is the **deploy-time gate**.
 
-3. **Optional pre-PR-2 sanity**: manually insert a row into `SEC_FINANCIAL_FACT` via `snow sql --connection $SNOW_CONNECTION --query "..."` and observe it in `EDGARTOOLS_DEV.EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT`. Stage 4 already does this.
+3. **Optional pre-PR-2 sanity**: manually insert a row into `SEC_FINANCIAL_FACT` via `snow sql --connection snowconn --query "..."` and observe it in `EDGARTOOLS_DEV.EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT`. Stage 4 already does this.
 
 Stage 5 (full Parquet roundtrip) is **NOT** required for PR-1 to be considered complete — it's the gate for **PR-2**, which is the warehouse export wiring.
 
@@ -91,10 +91,10 @@ Each script logs the specific check that failed. Common fixes:
 - **Stage 1 `sources.yml MISSING <table>`** → check that `sources.yml` was committed; my edits used the dimensional names without `SEC_` prefix
 - **Stage 1 `NOT NULL`** → check `01_source_stage.sql` — PK columns need `NOT NULL` after the type
 - **Stage 2 `schema mismatch`** → silver column order differs from PyArrow schema order; use explicit SELECT list in the builder
-- **Stage 3 `<table> NOT FOUND`** → snow connection or role issue; verify `SNOWFLAKE_DEPLOYER_ROLE` has CREATE TABLE in the source schema, and that `snow connection test --connection $SNOW_CONNECTION` succeeds
+- **Stage 3 `<table> NOT FOUND`** → snow connection or role issue; always use `SNOW_CONNECTION=snowconn` (ACCOUNTADMIN required for storage integration + DDL); run `snow connection test --connection snowconn` to confirm
 - **Stage 4 `NULL <col> INSERT was ACCEPTED`** → DDL did not apply NOT NULL constraint; re-run stage 3 and capture the deploy output by running `snow sql --connection $SNOW_CONNECTION --filename <the-tmp-file-path-from-the-failed-stage>` to see errors
 - **`required command not found: snow`** → install via `pip install snowflake-cli-labs`
-- **`required env var not set: SNOW_CONNECTION`** → set `export SNOW_CONNECTION=<your-connection-name>` (list with `snow connection list`)
+- **`required env var not set: SNOW_CONNECTION`** → set `export SNOW_CONNECTION=snowconn` (list available connections with `snow connection list`)
 
 ## Adding a new stage 5 (PR-2 dependency)
 

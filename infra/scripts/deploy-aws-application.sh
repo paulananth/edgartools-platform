@@ -1382,19 +1382,25 @@ window_size_default = {
 # --window-size uses States.Format to coerce the integer $.window_size to a string for argv.
 compute_windows = ecs_state(wh_medium_arn,
     "States.Array('compute-windows', '--window-size', States.Format('{}', $.window_size), '--run-id', $$.Execution.Name)",
-    next_state="WindowedBootstrap")
+    next_state="Stage1Parallel")
 
-# (4) WindowedBootstrap: INLINE Map (MaxConcurrency=1) — reads cik_windows.jsonl from S3.
-# Each item is {"window_offset": N, "window_limit": M}.
+# (4) Stage1Parallel: Parallel state running Branch A (ownership) and Branch B (fundamentals)
+# concurrently.  Both branches read the SAME cik_windows.jsonl produced by ComputeWindows; each
+# item is {"window_offset": N, "window_limit": M}.  Branch A writes silver/ownership/, Branch B
+# writes silver/fundamentals/ — separate S3 prefixes + separate local DuckDB shards, so the two
+# branches never contend for the same writer (AD-05).  Each branch's Map is MaxConcurrency=1 so
+# windows within a branch run sequentially (consistent shard state).
+#
+# (4a) Branch A — WindowedBootstrap INLINE Map.
 # Per-window command: bootstrap-next --cik-limit M --cik-offset N --run-id <execution-name>
-# MaxConcurrency=1 enforces sequential execution so silver.duckdb sees complete prior windows.
+# Terminal within Branch A's sub-state-machine (End=True), strict failure policy (ToleratedFailurePercentage=0).
 per_window = ecs_state(wh_medium_arn,
     "States.Array('bootstrap-next', '--cik-limit', States.Format('{}', $.window_limit), '--cik-offset', States.Format('{}', $.window_offset), '--run-id', $$.Execution.Name)",
     is_end=True)
 
 windowed_bootstrap = {
     "Type": "Map",
-    "Comment": "Sequential windowed bootstrap (MaxConcurrency=1): one window at a time so silver.duckdb is consistent.",
+    "Comment": "Branch A ownership bootstrap (MaxConcurrency=1): one window at a time so silver/ownership/ is consistent.",
     "MaxConcurrency": 1,
     "ToleratedFailurePercentage": 0,
     "ItemReader": {
@@ -1412,6 +1418,110 @@ windowed_bootstrap = {
         "StartAt": "RunWindow",
         "States": {"RunWindow": per_window},
     },
+    "ResultPath": None,
+    "End": True,
+}
+
+# (4b) Branch B — fundamentals bootstrap: two sequential INLINE Maps that share the cik_windows.jsonl
+# offset/limit windows.  bootstrap-fundamentals resolves the actual CIK slice from the MDM active
+# universe (same ordered source as Branch A's bootstrap-next), so Branch A and Branch B process
+# identical CIK windows for the same {window_offset, window_limit} item.  NO --cik-list is passed:
+# the Map item carries only offset/limit, and MDM is the authoritative CIK source.
+#
+# AD-13: partial Branch B failure is accepted.  A failure in either fundamentals Map is caught and
+# routed to BranchBComplete (a Pass terminal), so the Parallel state still completes and the
+# pipeline proceeds to MDM.  Gaps self-heal via the idempotent backfill workflow; a hard abort
+# would defeat that.  Branch A remains strict (critical path).
+fundamentals_branch_b_catch = [{
+    "ErrorEquals": ["States.ALL"],
+    "ResultPath": None,
+    "Next": "BranchBComplete",
+}]
+
+per_window_fundamentals_per_filing = ecs_state(wh_medium_arn,
+    "States.Array('bootstrap-fundamentals', '--mode', 'per-filing', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
+    is_end=True)
+
+fundamentals_per_filing = {
+    "Type": "Map",
+    "Comment": "Branch B per-filing: 8-K earnings + DEF 14A proxy -> sec_earnings_release, sec_executive_record (silver/fundamentals/).",
+    "MaxConcurrency": 1,
+    "ToleratedFailurePercentage": 0,
+    "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
+        "Parameters": {
+            "Bucket": bronze_bucket_name,
+            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)",
+        },
+    },
+    "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "INLINE"},
+        "StartAt": "RunFundamentalsPerFiling",
+        "States": {"RunFundamentalsPerFiling": per_window_fundamentals_per_filing},
+    },
+    "ResultPath": None,
+    "Catch": fundamentals_branch_b_catch,
+    "Next": "FundamentalsEntityFacts",
+}
+
+per_window_fundamentals_entity_facts = ecs_state(wh_medium_arn,
+    "States.Array('bootstrap-fundamentals', '--mode', 'entity-facts', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
+    is_end=True)
+
+fundamentals_entity_facts = {
+    "Type": "Map",
+    "Comment": "Branch B entity-facts: SEC companyfacts XBRL -> sec_financial_fact, sec_financial_derived, sec_accounting_flag (silver/fundamentals/).",
+    "MaxConcurrency": 1,
+    "ToleratedFailurePercentage": 0,
+    "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
+        "Parameters": {
+            "Bucket": bronze_bucket_name,
+            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)",
+        },
+    },
+    "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "INLINE"},
+        "StartAt": "RunFundamentalsEntityFacts",
+        "States": {"RunFundamentalsEntityFacts": per_window_fundamentals_entity_facts},
+    },
+    "ResultPath": None,
+    "Catch": fundamentals_branch_b_catch,
+    "End": True,
+}
+
+# BranchBComplete: graceful terminal for Branch B (reached on success fall-through from
+# FundamentalsEntityFacts, or via Catch from either fundamentals Map).  Pass state ends the branch.
+branch_b_complete = {
+    "Type": "Pass",
+    "Comment": "Branch B terminal — reached on success or after a caught fundamentals failure (AD-13).",
+    "End": True,
+}
+
+stage1_parallel = {
+    "Type": "Parallel",
+    "Comment": (
+        "Stage 1 parallel bootstrap. Branch A: ownership (bootstrap-next -> silver/ownership/). "
+        "Branch B: fundamentals (per-filing then entity-facts -> silver/fundamentals/). Both read the "
+        "same cik_windows.jsonl; each branch's Maps are MaxConcurrency=1. Branch B failures are caught "
+        "so the pipeline still advances to MDM (AD-13); Branch A is strict."
+    ),
+    "Branches": [
+        {
+            "StartAt": "WindowedBootstrap",
+            "States": {"WindowedBootstrap": windowed_bootstrap},
+        },
+        {
+            "StartAt": "FundamentalsPerFiling",
+            "States": {
+                "FundamentalsPerFiling": fundamentals_per_filing,
+                "FundamentalsEntityFacts": fundamentals_entity_facts,
+                "BranchBComplete": branch_b_complete,
+            },
+        },
+    ],
     "ResultPath": None,
     "Next": "MdmRun",
 }
@@ -1446,7 +1556,10 @@ definition = {
     "Comment": (
         "Phased bootstrap: (1) seed MDM universe, (2) inject window_size default if absent, "
         "(3) compute CIK windows + write manifests to S3, "
-        "(4) sequential INLINE Map bootstrap-next per window (MaxConcurrency=1), "
+        "(4) Stage1Parallel — Branch A ownership (bootstrap-next, silver/ownership/) and "
+        "Branch B fundamentals (per-filing + entity-facts, silver/fundamentals/) run concurrently, "
+        "each branch's Maps MaxConcurrency=1; Branch B failures are caught so the pipeline still "
+        "advances (AD-13), "
         "(5) MDM entity resolution + Neo4j sync in bulk, "
         "(6) single gold build + Snowflake export manifest, "
         "(7) write run-summary.json with window_count and cik_count from S3 manifests. "
@@ -1458,7 +1571,7 @@ definition = {
         "WindowSizeCheck":   window_size_check,
         "WindowSizeDefault": window_size_default,
         "ComputeWindows":    compute_windows,
-        "WindowedBootstrap": windowed_bootstrap,
+        "Stage1Parallel":    stage1_parallel,
         "MdmRun":            mdm_run,
         "MdmBackfill":       mdm_backfill,
         "MdmSync":           mdm_sync,

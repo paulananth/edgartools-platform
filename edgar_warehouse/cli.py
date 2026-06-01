@@ -572,8 +572,25 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap_fundamentals.add_argument(
         "--cik-list",
         type=_parse_cik_list,
-        required=True,
-        help="Comma-separated CIK integers for this batch",
+        default=None,
+        help=(
+            "Comma-separated CIK integers for this batch. "
+            "Optional: when omitted, the batch is resolved from the MDM tracked "
+            "active universe (same ordered source as Branch A bootstrap-next) and "
+            "windowed by --cik-offset/--cik-limit."
+        ),
+    )
+    bootstrap_fundamentals.add_argument(
+        "--cik-limit",
+        type=int,
+        default=None,
+        help="Window size for CIK chunking (number of CIKs to process); None = no limit",
+    )
+    bootstrap_fundamentals.add_argument(
+        "--cik-offset",
+        type=int,
+        default=0,
+        help="0-based offset into the ordered CIK list for windowed chunking",
     )
     bootstrap_fundamentals.add_argument(
         "--mode",

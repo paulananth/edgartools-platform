@@ -572,6 +572,24 @@ class SilverDatabase:
     def close(self) -> None:
         self._conn.close()
 
+    def fetch(self, sql: str, params: list | None = None) -> list[dict[str, Any]]:
+        """Execute a SQL query and return results as a list of dicts.
+
+        API-compatible with ``ShardedSilverReader.fetch`` so CIK-level
+        post-processors (e.g. ``accounting_flags.backfill_accounting_flags``)
+        can read from either a single writable shard or a multi-shard reader.
+
+        Parameters
+        ----------
+        sql:
+            SQL query string.
+        params:
+            Optional list of positional query parameters.
+        """
+        rows = self._conn.execute(sql, params or []).fetchall()
+        cols = [d[0] for d in self._conn.description]
+        return [dict(zip(cols, r)) for r in rows]
+
 
     # ------------------------------------------------------------------
     # sec_company_ticker

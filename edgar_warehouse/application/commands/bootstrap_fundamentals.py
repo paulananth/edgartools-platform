@@ -42,13 +42,33 @@ from typing import Any
 
 def execute(args: Any) -> int:
     """Entry point for the bootstrap-fundamentals CLI command."""
-    cik_list: list[int] = getattr(args, "cik_list", None) or []
+    raw_cik_list: list[int] = getattr(args, "cik_list", None) or []
     mode: str = str(getattr(args, "mode", "per-filing") or "per-filing")
     run_id: str = str(getattr(args, "run_id", None) or str(uuid.uuid4()))
     fundamentals_silver_path: str = getattr(args, "fundamentals_silver_path", None) or ""
 
+    cik_offset = int(getattr(args, "cik_offset", 0) or 0)
+    _cik_limit_raw = getattr(args, "cik_limit", None)
+    cik_limit = int(_cik_limit_raw) if _cik_limit_raw is not None else None
+
+    # Resolve the CIK batch.  When no explicit --cik-list is given (the Step
+    # Functions Map case), pull the ordered MDM active universe — the SAME source
+    # and ordering Branch A's bootstrap-next uses — and apply offset-then-limit
+    # windowing.  This guarantees Branch A and Branch B process identical CIK
+    # windows for the same {window_offset, window_limit} Map item.
+    try:
+        cik_list = _resolve_fundamentals_ciks(
+            raw_cik_list=raw_cik_list, cik_offset=cik_offset, cik_limit=cik_limit
+        )
+    except Exception as exc:
+        _err(f"bootstrap-fundamentals could not resolve CIKs: {exc}")
+        return 2
+
     if not cik_list:
-        _err("bootstrap-fundamentals requires --cik-list")
+        _err(
+            "bootstrap-fundamentals requires --cik-list, or an MDM-tracked active "
+            "universe resolvable via --cik-offset/--cik-limit"
+        )
         return 2
 
     if not fundamentals_silver_path:
@@ -61,7 +81,10 @@ def execute(args: Any) -> int:
     started_at = datetime.now(UTC)
 
     _log("bootstrap_fundamentals_started", run_id=run_id, mode=mode,
-         cik_count=len(cik_list), fundamentals_silver_path=fundamentals_silver_path)
+         cik_count=len(cik_list), cik_offset=cik_offset,
+         cik_limit=(cik_limit if cik_limit is not None else -1),
+         resolved_from=("cik_list" if raw_cik_list else "mdm_active_universe"),
+         fundamentals_silver_path=fundamentals_silver_path)
 
     # Open fundamentals silver shard (creates tables if first run)
     from edgar_warehouse.silver_support.session import open_silver_shard
@@ -152,6 +175,40 @@ def execute(args: Any) -> int:
              k: v for k, v in metrics.items() if isinstance(v, int)
          })
     return 0
+
+
+def _resolve_fundamentals_ciks(
+    *,
+    raw_cik_list: list[int],
+    cik_offset: int,
+    cik_limit: int | None,
+) -> list[int]:
+    """Resolve the CIK batch for this Branch B run.
+
+    Mirrors Branch A's ``_resolve_bootstrap_target_ciks`` semantics so the two
+    parallel branches process identical windows for the same ``{window_offset,
+    window_limit}`` Map item:
+
+    - With an explicit ``--cik-list``: use it as-is, then window.
+    - Without one: pull the MDM tracked active universe (ordered ASC by CIK,
+      the same source/order ``bootstrap-next`` uses), then window.
+
+    Windowing is offset-first, limit-second.
+    """
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _get_mdm_tracked_ciks,
+        _validate_window_args,
+    )
+
+    _validate_window_args(cik_limit, cik_offset)
+    if raw_cik_list:
+        ciks = list(raw_cik_list)
+    else:
+        ciks = _get_mdm_tracked_ciks("active")
+    ciks = ciks[cik_offset:]
+    if cik_limit is not None:
+        ciks = ciks[:cik_limit]
+    return ciks
 
 
 def _log(event: str, **kwargs: Any) -> None:

@@ -386,6 +386,16 @@ Native-pull gotchas:
 - The SnowCLI connection must exist before running the wrapper.
 - Snowflake Enterprise or higher is required for dynamic tables.
 
+### Dev Snowflake Connection
+
+For all local verification, DDL deployment, and `snow sql` commands targeting the dev Snowflake account, always use:
+
+```bash
+export SNOW_CONNECTION=snowconn
+```
+
+The `snowconn` connection uses ACCOUNTADMIN role, which is required for `CREATE STORAGE INTEGRATION` (needed by `01_source_stage.sql`) and all other DDL operations in the dev account. Do not use `YG91578` or `edgartools-dev` for verification scripts — those connections lack the required privileges.
+
 ## dbt And Dashboard
 
 dbt project root:
