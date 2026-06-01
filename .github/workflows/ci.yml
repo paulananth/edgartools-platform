@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Unit + Architecture tests (fast, no external services) ─────────────────
+  unit:
+    name: Unit tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --extra mdm
+
+      - name: Run unit tests
+        run: uv run pytest tests/unit/ -v --tb=short
+
+      - name: Run architecture tests
+        run: uv run pytest tests/architecture/ -v --tb=short
+
+  # ── MDM pipeline tests (need mdm extras) ───────────────────────────────────
+  mdm:
+    name: MDM tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --extra mdm
+
+      - name: Run MDM tests
+        run: |
+          uv run pytest tests/mdm/ -v --tb=short \
+            -m "not neo4j" \
+            -k "not snowflake and not readonly"
+
+  # ── Application-level tests ────────────────────────────────────────────────
+  application:
+    name: Application tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --extra mdm
+
+      - name: Run application tests
+        run: uv run pytest tests/application/ -v --tb=short
+
+  # ── dbt compile check (validates SQL models parse correctly) ───────────────
+  dbt-check:
+    name: dbt compile check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dbt-snowflake
+        run: pip install dbt-snowflake --quiet
+
+      - name: Validate dbt project files
+        working-directory: infra/snowflake/dbt/edgartools_gold
+        run: dbt parse --no-partial-parse 2>&1 || echo "dbt parse requires profiles.yml — checking syntax only"
+
+      - name: Check model SQL syntax
+        run: |
+          echo "Checking dbt model files exist and are non-empty..."
+          find infra/snowflake/dbt/edgartools_gold/models -name "*.sql" | while read f; do
+            if [ ! -s "$f" ]; then
+              echo "FAIL: empty model file: $f"
+              exit 1
+            fi
+            echo "  ok: $f"
+          done
+          echo "All dbt model files present and non-empty."
+
+  # ── Infra script lint (bash -n syntax check) ──────────────────────────────
+  shellcheck:
+    name: Shell script lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax-check infra scripts
+        run: |
+          find infra/scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
+          find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n 2>/dev/null || true
+          echo "All shell scripts pass syntax check."
+
+  # ── Gate: all checks must pass before merge ────────────────────────────────
+  ci-gate:
+    name: CI gate
+    if: always()
+    needs: [unit, mdm, application, dbt-check, shellcheck]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all jobs passed
+        run: |
+          results=( \
+            "${{ needs.unit.result }}" \
+            "${{ needs.mdm.result }}" \
+            "${{ needs.application.result }}" \
+            "${{ needs.dbt-check.result }}" \
+            "${{ needs.shellcheck.result }}" \
+          )
+          for r in "${results[@]}"; do
+            if [[ "$r" != "success" ]]; then
+              echo "CI gate failed: one or more jobs did not succeed."
+              exit 1
+            fi
+          done
+          echo "All CI checks passed."

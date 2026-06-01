@@ -279,6 +279,7 @@ class TestGraphSyncEngine:
         assert len(pending) == 2
         assert all("MANAGES_FUND" in query or "MERGE (n:" in query for query, _ in fake.graph_session.calls)
 
+    @pytest.mark.neo4j
     def test_sync_pending_calls_bolt_and_stamps_synced_at(self, db_session, neo4j_client):
         adviser_id = _make_entity(db_session, "adviser")
         fund_id    = _make_entity(db_session, "fund")
@@ -300,6 +301,7 @@ class TestGraphSyncEngine:
             s.run("MATCH (n) WHERE n.entity_id IN $ids DETACH DELETE n",
                   ids=[adviser_id, fund_id])
 
+    @pytest.mark.neo4j
     def test_sync_pending_respects_limit(self, db_session, neo4j_client):
         from sqlalchemy import select
         adviser_id = _make_entity(db_session, "adviser")
@@ -329,6 +331,7 @@ class TestGraphSyncEngine:
             s.run("MATCH (n) WHERE n.entity_id IN $ids DETACH DELETE n",
                   ids=[adviser_id] + fund_ids)
 
+    @pytest.mark.neo4j
     def test_sync_pending_skips_already_synced(self, db_session, neo4j_client):
         from sqlalchemy import select
         adviser_id = _make_entity(db_session, "adviser")
@@ -422,6 +425,7 @@ class TestBackfillRelationshipInstances:
         result = backfill_relationship_instances(db_session, neo4j=None, limit=3)
         assert result["backfilled"] == 3
 
+    @pytest.mark.neo4j
     def test_backfill_triggers_sync_when_neo4j_provided(self, db_session, neo4j_client):
         adviser_id = _make_full_entity(db_session, "adviser")
         fund_id    = _make_full_entity(db_session, "fund")
