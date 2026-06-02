@@ -44,6 +44,8 @@ flowchart LR
 ## Quick Start
 
 See [docs/runbook.md](docs/runbook.md) for complete end-to-end setup.
+For local macOS Docker setup with Colima, see
+[docs/colima-docker-macos.md](docs/colima-docker-macos.md).
 For MDM graph configuration, see [docs/neo4j.md](docs/neo4j.md).
 
 ## Structure
