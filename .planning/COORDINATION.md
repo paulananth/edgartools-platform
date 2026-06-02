@@ -1,13 +1,21 @@
 # Coordination: Claude and Codex
 
 status: active
-updated: 2026-05-25
+updated: 2026-06-01
 
 ---
 
 ## Rule
 
 Claude and Codex can work independently on this project, but each runtime must operate in an isolated workstream and avoid touching the other runtime's active files.
+
+## Repository Policy (LOCKED)
+
+**`edgartools` is a read-only reference repository.**
+- Never commit to `edgartools` — not checkpoints, docs, planning files, or code.
+- All development work, planning docs, session files, and checkpoints go in `edgartools-platform`.
+- `edgartools` is used only to read library source, understand APIs, and reference examples.
+- Agents may clone/read `edgartools` but must never stage or push changes to it.
 
 ## Operating Protocol
 
