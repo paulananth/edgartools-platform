@@ -1,8 +1,8 @@
 # Project: EdgarTools Platform
 
 status: active
-milestone: v1.1 Neo4j bronze-to-graph pipe
-updated: 2026-05-16
+milestone: multi-milestone (v1.1 / v1.2 / v1.3 / model-builder-contract-gaps)
+updated: 2026-06-01
 
 ---
 
@@ -50,18 +50,24 @@ Snowflake EDGARTOOLS_SOURCE  <-- native S3 pull via Snowflake storage integratio
 dbt (infra/snowflake/dbt/edgartools_gold/)
       |
       v
-EDGARTOOLS_GOLD  (9 dynamic tables + 1 status view)
+EDGARTOOLS_GOLD  (15 dynamic tables + 1 status view)
       |
       v
 Streamlit dashboard  (infra/snowflake/streamlit/  OR  examples/dashboard/)
 ```
 
-MDM runs as Stage 2 in the phased pipeline (between bronze/silver batches and gold refresh):
+MDM runs as Stage 2 in the phased pipeline (between silver batches and gold refresh):
 ```
-Stage 1: bronze + silver (parallel ECS tasks via bootstrap-batch, MaxConcurrency=10)
-Stage 2: MDM entity resolution (sequential: mdm-run → mdm-backfill-relationships →
-          mdm-sync-graph → mdm-verify-graph)
-Stage 3: gold refresh (single ECS task: gold-refresh)
+Stage 1: Stage1Parallel (Type=Parallel Step Function state)
+  Branch A: bootstrap-next   (ownership + ADV, MaxConcurrency=1) → silver/ownership/
+  Branch B: bootstrap-fundamentals per-filing → entity-facts      → silver/fundamentals/
+            (sequential within branch, States.ALL Catch → BranchBComplete)
+
+Stage 2: MDM entity resolution (sequential)
+  mdm-run → mdm-backfill-relationships → mdm-sync-graph → mdm-verify-graph
+
+Stage 3: gold refresh (single ECS task)
+  gold-refresh → dbt (15 dynamic tables + status view)
 ```
 
 ---
