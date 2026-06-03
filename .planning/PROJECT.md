@@ -1,8 +1,8 @@
 # Project: EdgarTools Platform
 
 status: active
-milestone: multi-milestone (v1.1 / v1.2 / v1.3 / model-builder-contract-gaps)
-updated: 2026-06-01
+milestone: multi-milestone (v1.2 / v1.3 / v1.4 / model-builder-contract-gaps)
+updated: 2026-06-03
 
 ---
 
@@ -14,21 +14,25 @@ at scale on AWS ECS and publishes to Snowflake gold tables consumed by analytics
 
 ---
 
-## Current Milestone: v1.1 Neo4j bronze-to-graph pipe
+## Current Milestone: v1.4 ADV Bronze-To-Silver Backfill
 
-**Goal:** Fix the path from already-captured bronze/silver data through MDM relationship
-derivation into Neo4j so graph sync is complete, idempotent, and independently verifiable.
+**Goal:** Add a safe operator path that parses already-downloaded ADV bronze artifacts into
+silver ADV tables without SEC re-fetch, unblocking the MDM adviser/fund load path.
+
+**Current progress:** Phase 8 complete. ADV bronze discovery/read contracts are in place; Phase 9 is ready to plan the `parse-adv-bronze` command and silver merge path.
 
 **Target features:**
-- Load MDM entities from local or S3-backed silver data derived from bronze without re-fetching SEC artifacts.
-- Derive all Neo4j relationship rows required for ownership and adviser/fund graph coverage.
-- Sync Neo4j nodes and edges idempotently, including repeat-run behavior and pending-sync visibility.
-- Verify graph coverage with actionable counts and missing-edge diagnostics.
+- Discover and select ADV filings already present in bronze or the artifact registry.
+- Parse ADV bronze through the existing ADV parser into `sec_adv_filing`, `sec_adv_office`,
+  `sec_adv_disclosure_event`, and `sec_adv_private_fund`.
+- Provide a bounded idempotent operator command with `--accession-list` and `--limit`.
+- Report missing artifacts clearly and prove the command performs no SEC API re-fetch.
+- Document live validation steps so the paused `neo4j-pipe` Phase 5 checkpoint can resume.
 
-Developer-facing success metric: Given an already-loaded bronze/silver dataset,
-`edgar-warehouse mdm load-relationships`, `edgar-warehouse mdm sync-graph`, and
-`edgar-warehouse mdm verify-graph` can prove the Neo4j graph matches MDM relationship state
-without touching gold-layer pipeline work or loader fixes.
+Developer-facing success metric: Given existing ADV bronze artifacts in S3,
+`edgar-warehouse parse-adv-bronze` can populate nonzero ADV silver rows and make
+`edgar-warehouse mdm run --entity-type adviser` / `fund` eligible to run without touching SEC
+network fetches, gold-layer pipeline work, or generated deployment JSON.
 
 ---
 
