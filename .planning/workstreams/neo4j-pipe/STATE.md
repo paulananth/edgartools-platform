@@ -2,25 +2,25 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: ADV Bronze-To-Silver Backfill
-status: planned
-last_updated: "2026-06-03T00:00:00-04:00"
-last_activity: 2026-06-03 -- Phase 8 planned
+status: executing
+last_updated: "2026-06-03T06:30:10-04:00"
+last_activity: 2026-06-03 -- Phase 8 plan executed; verification pending
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 1
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 33
 ---
 
 # Project State — neo4j-pipe
 
 ## Current Position
 
-Phase: 8 (ADV Bronze Discovery Contract) - PLANNED
+Phase: 8 (ADV Bronze Discovery Contract) - EXECUTING
 Plan: 1 of 1
-Status: Ready to execute Phase 8
-Last activity: 2026-06-03 -- Phase 8 planned
+Status: Plan 08-01 complete; review and verification pending
+Last activity: 2026-06-03 -- Phase 8 plan executed; verification pending
 Resume file: None
 
 ## Milestone Context
@@ -34,7 +34,7 @@ ADV tables without SEC re-fetch, unblocking the MDM adviser/fund load path.
 
 | Phase | Goal | Requirements | Status |
 |-------|------|--------------|--------|
-| 8 — ADV Bronze Discovery Contract | Existing ADV bronze artifacts can be discovered and selected without SEC calls | ADV-01, ADV-02, ADV-03, ISO-01, ISO-02, ISO-03 | Ready to execute |
+| 8 — ADV Bronze Discovery Contract | Existing ADV bronze artifacts can be discovered and selected without SEC calls | ADV-01, ADV-02, ADV-03, ISO-01, ISO-02, ISO-03 | Verification pending |
 | 9 — Parse ADV Bronze Command | A bounded idempotent command parses ADV bronze into silver ADV tables | ADV-04, ADV-05, ADV-06, ADV-07 | Not started |
 | 10 — Live ADV Backfill Validation | Dev S3 validation proves ADV silver rows and MDM adviser/fund readiness | MDM-ADV-01, MDM-ADV-02, MDM-ADV-03 | Not started |
 
@@ -50,6 +50,7 @@ ADV tables without SEC re-fetch, unblocking the MDM adviser/fund load path.
 - Reuse `edgar_warehouse.parsers.adv` and `SilverDatabase.merge_adv_*` rather than adding a new ADV parser.
 - Keep the workstream isolated from loader-fix artifacts, generated deployment JSON, gold/dbt, Snowflake graph sync, and generic Step Functions work.
 - Phase 8 plans discovery/read helper code only; `parse-adv-bronze` CLI registration and ADV silver merges are Phase 9.
+- Phase 8 Plan 08-01 created `adv_bronze_discovery.py` and focused contract tests; verification is pending before marking the phase complete.
 
 ### Blockers
 

@@ -55,7 +55,7 @@ that gap without broadening the architecture or fetching missing artifacts from 
 
 **Plans**: 1 plan
 Plans:
-- [ ] 08-01-PLAN.md - Add ADV bronze discovery/read helper and focused contract tests.
+- [x] 08-01-PLAN.md - Add ADV bronze discovery/read helper and focused contract tests.
 
 ### Phase 9: Parse ADV Bronze Command
 
@@ -95,6 +95,6 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 8. ADV Bronze Discovery Contract | v1.4 ADV Bronze-To-Silver Backfill | 0/1 | Ready to execute | - |
+| 8. ADV Bronze Discovery Contract | v1.4 ADV Bronze-To-Silver Backfill | 1/1 | Verification pending | - |
 | 9. Parse ADV Bronze Command | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Not started | - |
 | 10. Live ADV Backfill Validation | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Not started | - |
