@@ -3,7 +3,7 @@
 workstream: neo4j-pipe
 status: active
 milestone: v1.4 ADV Bronze-To-Silver Backfill
-updated: 2026-06-02
+updated: 2026-06-03
 
 ---
 
