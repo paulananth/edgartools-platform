@@ -98,3 +98,29 @@ Plans:
 | 8. ADV Bronze Discovery Contract | v1.4 ADV Bronze-To-Silver Backfill | 1/1 | Complete | 2026-06-03 |
 | 9. Parse ADV Bronze Command | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Ready to plan | - |
 | 10. Live ADV Backfill Validation | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Not started | - |
+
+## Backlog
+
+### Phase 999.1: SEC Alternate URL Load Validation (BACKLOG)
+
+**Future milestone candidate:** v1.5 SEC Alternate URL Load Test
+
+**Goal:** Validate the SEC bronze load/capture path for ADV artifacts that are available from a
+different SEC URL/source than the current registry-backed primary artifact path, before relying on
+that source for silver backfill.
+
+**Requirements:** TBD
+
+**Plans:** 0 plans
+
+**Notes:**
+- This is a separate fetch/capture validation milestone, not part of Phase 9 `parse-adv-bronze`.
+- The milestone may call SEC only through the existing bronze capture/load path with bounded test
+  inputs, EDGAR identity, rate-limit handling, and additive artifact semantics.
+- The Phase 9 silver backfill command must still treat missing alternate-url artifacts as missing
+  bronze and must not fetch from SEC.
+- Exact alternate SEC URL/source family is intentionally left open until this backlog item is
+  promoted for discussion.
+
+Plans:
+- [ ] TBD (promote to an active milestone when the current ADV backfill milestone is complete)
