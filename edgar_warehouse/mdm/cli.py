@@ -39,9 +39,6 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     run.add_argument("--limit", type=int, default=None)
     run.set_defaults(handler=_logged_handler("run", _handle_run))
 
-    cov = mdm_sub.add_parser("coverage-report", help="Report silver vs MDM entity counts per domain")
-    cov.set_defaults(handler=_logged_handler("coverage-report", _handle_coverage_report))
-
     sync = mdm_sub.add_parser(
         "sync-graph",
         help="Materialize Snowflake graph-ready node and edge state from MDM",
@@ -496,43 +493,6 @@ def _handle_run(args) -> int:
         return 0
     finally:
         session.close()
-
-
-def _handle_coverage_report(args) -> int:
-    from edgar_warehouse.mdm.coverage import compute_coverage
-
-    reader = _silver_reader()
-    if reader is None:
-        print(
-            "coverage-report: MDM_SILVER_DUCKDB is required but is not set. "
-            "Set MDM_SILVER_DUCKDB to a local DuckDB path or s3:// URI.",
-            file=sys.stderr,
-        )
-        return 1
-
-    session = _session()
-    try:
-        rows = compute_coverage(reader, session)
-    finally:
-        session.close()
-
-    col_w = {"domain": 12, "silver_count": 12, "mdm_count": 9, "gap": 5}
-    header = (
-        f"{'domain':<{col_w['domain']}} "
-        f"{'silver_count':>{col_w['silver_count']}} "
-        f"{'mdm_count':>{col_w['mdm_count']}} "
-        f"{'gap':>{col_w['gap']}}  reason"
-    )
-    print(header)
-    print("-" * (len(header) + 20))
-    for row in rows:
-        print(
-            f"{row['domain']:<{col_w['domain']}} "
-            f"{row['silver_count']:>{col_w['silver_count']}} "
-            f"{row['mdm_count']:>{col_w['mdm_count']}} "
-            f"{row['gap']:>{col_w['gap']}}  {row['reason']}"
-        )
-    return 0  # D-19: reporting tool, always exits 0
 
 
 def _handle_seed_universe(args) -> int:
