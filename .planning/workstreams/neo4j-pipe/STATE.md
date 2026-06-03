@@ -1,58 +1,58 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: milestone
-status: executing
-last_updated: "2026-06-03T00:44:45.457Z"
-last_activity: 2026-06-03 -- Phase 05 execution started
+milestone: v1.4
+milestone_name: ADV Bronze-To-Silver Backfill
+status: planning
+last_updated: "2026-06-02T21:55:00-04:00"
+last_activity: 2026-06-02 -- Milestone v1.4 started
 progress:
   total_phases: 3
-  completed_phases: 1
-  total_plans: 6
-  completed_plans: 5
-  percent: 33
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State — neo4j-pipe
 
 ## Current Position
 
-Phase: 05 (source-to-mdm-load-path) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 05
-Last activity: 2026-06-03 -- Phase 05 execution started
+Phase: Not started (defining phase plans)
+Plan: —
+Status: Milestone v1.4 roadmap initialized
+Last activity: 2026-06-02 -- Milestone v1.4 started
 Resume file: None
 
 ## Milestone Context
 
-**v1.1 Neo4j bronze-to-graph pipe**
+**v1.4 ADV Bronze-To-Silver Backfill**
 
-Goal: Fix the path from already-captured bronze/silver data through MDM relationship derivation
-into Neo4j so graph sync is complete, idempotent, and independently verifiable.
+Goal: Add a safe operator path that parses already-downloaded ADV bronze artifacts into silver
+ADV tables without SEC re-fetch, unblocking the MDM adviser/fund load path.
 
 ## Phase Summary
 
 | Phase | Goal | Requirements | Status |
 |-------|------|--------------|--------|
-| 5 — Source To MDM Load Path | Existing silver data can populate MDM entities without loader overlap | PIPE-01, PIPE-02, PIPE-03, ISO-01, ISO-02 | Not started |
-| 6 — Relationship Derivation Coverage | Graph relationships are fully derived into MDM rows | REL-01, REL-02, REL-03, REL-04 | Not started |
-| 7 — Neo4j Sync And Verification | Neo4j sync and verification are idempotent and diagnostic | GRAPH-01, GRAPH-02, GRAPH-03, GRAPH-04 | Not started |
+| 8 — ADV Bronze Discovery Contract | Existing ADV bronze artifacts can be discovered and selected without SEC calls | ADV-01, ADV-02, ADV-03, ISO-01, ISO-02, ISO-03 | Not started |
+| 9 — Parse ADV Bronze Command | A bounded idempotent command parses ADV bronze into silver ADV tables | ADV-04, ADV-05, ADV-06, ADV-07 | Not started |
+| 10 — Live ADV Backfill Validation | Dev S3 validation proves ADV silver rows and MDM adviser/fund readiness | MDM-ADV-01, MDM-ADV-02, MDM-ADV-03 | Not started |
 
 ## Accumulated Context
 
 ### Decisions
 
 - Use the isolated git worktree at `/Users/aneenaananth/gsd-workspaces/neo4j-pipe/edgartools-platform`.
-- Do not edit loader-fix workstream artifacts or generated deployment JSON from this worktree.
-- Keep scope to bronze/silver → MDM → Neo4j. Gold refresh, generic Step Functions observability, and unrelated loader refactors are out of scope.
-- Phase 5 context confirms that missing ownership relationships should be repaired independently by parsing already-captured bronze Form 3/4/5 XML into silver ownership tables before MDM/Neo4j derivation.
-- Plan 05-01: RED tests anchor to known current defects — form_type/period_of_report schema mismatch, _session() called before _silver_reader(), sec_tracked_universe stale reference.
-- Plan 05-01: parse_ownership patched at edgar_warehouse.parsers.ownership (function-local import pattern); FakeSilverDB records raw SQL for schema assertion without DuckDB execution.
-- Plan 05-01: 3 of 15 MDM tests intentionally pass current code (ftp/http rejection, s3 read_bytes delegation) — these verify existing correct behaviors.
+- Preserve v1.1 `neo4j-pipe` phase directories and reports as historical context; v1.4 continues phase numbering at Phase 8.
+- Keep the backfill AWS/local only: existing S3/local bronze artifacts in, silver ADV tables out.
+- Do not fetch missing ADV artifacts from SEC during this milestone.
+- Prefer registry-backed reads (`sec_filing_attachment` + `sec_raw_object`) when available, but include an explicit bounded fallback for existing bronze object paths because the live blocker is "bronze exists, no silver path."
+- Reuse `edgar_warehouse.parsers.adv` and `SilverDatabase.merge_adv_*` rather than adding a new ADV parser.
+- Keep the workstream isolated from loader-fix artifacts, generated deployment JSON, gold/dbt, Snowflake graph sync, and generic Step Functions work.
 
 ### Blockers
 
-None known.
+- v1.1 Phase 5 live checkpoint remains paused until ADV bronze can be backfilled into `sec_adv_filing` and `sec_adv_private_fund`.
 
 ### Pending Todos
 
