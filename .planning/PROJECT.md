@@ -2,7 +2,7 @@
 
 status: active
 milestone: multi-milestone (v1.2 / v1.3 / v1.4 / model-builder-contract-gaps)
-updated: 2026-06-02
+updated: 2026-06-03
 
 ---
 
@@ -18,6 +18,8 @@ at scale on AWS ECS and publishes to Snowflake gold tables consumed by analytics
 
 **Goal:** Add a safe operator path that parses already-downloaded ADV bronze artifacts into
 silver ADV tables without SEC re-fetch, unblocking the MDM adviser/fund load path.
+
+**Current progress:** Phase 8 complete. ADV bronze discovery/read contracts are in place; Phase 9 is ready to plan the `parse-adv-bronze` command and silver merge path.
 
 **Target features:**
 - Discover and select ADV filings already present in bronze or the artifact registry.

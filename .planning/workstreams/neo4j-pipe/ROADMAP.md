@@ -31,7 +31,7 @@ that gap without broadening the architecture or fetching missing artifacts from 
 
 ## Phases
 
-- [ ] **Phase 8: ADV Bronze Discovery Contract** - define and test how existing ADV bronze artifacts are discovered, selected, and read without SEC fetches.
+- [x] **Phase 8: ADV Bronze Discovery Contract** - define and test how existing ADV bronze artifacts are discovered, selected, and read without SEC fetches. Completed 2026-06-03.
 - [ ] **Phase 9: Parse ADV Bronze Command** - implement the bounded idempotent `parse-adv-bronze` operator command and silver merge behavior.
 - [ ] **Phase 10: Live ADV Backfill Validation** - validate against dev S3 bronze/silver, update docs, and hand off exact resume evidence for the blocked Phase 5 checkpoint.
 
@@ -95,6 +95,6 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 8. ADV Bronze Discovery Contract | v1.4 ADV Bronze-To-Silver Backfill | 1/1 | Verification pending | - |
-| 9. Parse ADV Bronze Command | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Not started | - |
+| 8. ADV Bronze Discovery Contract | v1.4 ADV Bronze-To-Silver Backfill | 1/1 | Complete | 2026-06-03 |
+| 9. Parse ADV Bronze Command | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Ready to plan | - |
 | 10. Live ADV Backfill Validation | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Not started | - |

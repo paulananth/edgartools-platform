@@ -22,7 +22,7 @@ publishing to Snowflake gold tables.
 
 | Milestone | Workstream | Progress | Status | Resumption Point |
 |-----------|-----------|----------|--------|-----------------|
-| v1.4 ADV Bronze-To-Silver Backfill | neo4j-pipe | 33% | Phase 8 verification pending | Phase 8: ADV Bronze Discovery Contract verification |
+| v1.4 ADV Bronze-To-Silver Backfill | neo4j-pipe | 33% | Phase 9 ready to plan | Phase 9: Parse ADV Bronze Command |
 | v1.2 MDM Neo4j Review Dashboard | mdm-neo4j-dashboard | 60% | Phase 10 ready to execute | Phase 10 UI-SPEC approved |
 | v1.3 Neo4j Snowflake Native App | neo4j-snowflake | 50% | Phase 3 ready to plan | Phase 3: Hosted Graph Verification + E2E |
 | Model Builder Contract Gaps | model-builder-contract-gaps | 0% | Phase 1 ready to start | Phase 1: Contract Governance |

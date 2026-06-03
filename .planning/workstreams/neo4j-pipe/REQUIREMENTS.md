@@ -3,7 +3,7 @@
 workstream: neo4j-pipe
 status: active
 milestone: v1.4 ADV Bronze-To-Silver Backfill
-updated: 2026-06-02
+updated: 2026-06-03
 
 ---
 
@@ -11,9 +11,9 @@ updated: 2026-06-02
 
 ### Bronze Discovery
 
-- [ ] **ADV-01**: Operator can select ADV filings that already exist in bronze or the silver artifact registry without calling the SEC API.
-- [ ] **ADV-02**: Backfill discovery prefers `sec_filing_attachment` + `sec_raw_object` registry rows when present and has an explicit bounded fallback for existing bronze object paths when registry rows are missing.
-- [ ] **ADV-03**: Missing or unreadable bronze artifacts are reported with accession/path counts and do not abort the whole backfill batch.
+- [x] **ADV-01**: Operator can select ADV filings that already exist in bronze or the silver artifact registry without calling the SEC API.
+- [x] **ADV-02**: Backfill discovery prefers `sec_filing_attachment` + `sec_raw_object` registry rows when present and has an explicit bounded fallback for existing bronze object paths when registry rows are missing.
+- [x] **ADV-03**: Missing or unreadable bronze artifacts are reported with accession/path counts and do not abort the whole backfill batch.
 
 ### Silver Backfill
 
@@ -30,9 +30,9 @@ updated: 2026-06-02
 
 ### Isolation
 
-- [ ] **ISO-01**: Work stays in the `workspace/neo4j-pipe` worktree and does not edit loader-fix artifacts or generated deployment JSON.
-- [ ] **ISO-02**: Changes remain AWS/local focused and do not introduce non-AWS storage, registry, workflow, or secret-management paths.
-- [ ] **ISO-03**: Gold refresh, dbt models, Snowflake graph sync, and unrelated Step Functions behavior remain out of scope unless a test exposes a direct regression from ADV backfill.
+- [x] **ISO-01**: Work stays in the `workspace/neo4j-pipe` worktree and does not edit loader-fix artifacts or generated deployment JSON.
+- [x] **ISO-02**: Changes remain AWS/local focused and do not introduce non-AWS storage, registry, workflow, or secret-management paths.
+- [x] **ISO-03**: Gold refresh, dbt models, Snowflake graph sync, and unrelated Step Functions behavior remain out of scope unless a test exposes a direct regression from ADV backfill.
 
 ## Future Requirements
 
@@ -51,9 +51,9 @@ updated: 2026-06-02
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ADV-01 | Phase 8 | Pending |
-| ADV-02 | Phase 8 | Pending |
-| ADV-03 | Phase 8 | Pending |
+| ADV-01 | Phase 8 | Complete |
+| ADV-02 | Phase 8 | Complete |
+| ADV-03 | Phase 8 | Complete |
 | ADV-04 | Phase 9 | Pending |
 | ADV-05 | Phase 9 | Pending |
 | ADV-06 | Phase 9 | Pending |
@@ -61,6 +61,6 @@ updated: 2026-06-02
 | MDM-ADV-01 | Phase 10 | Pending |
 | MDM-ADV-02 | Phase 10 | Pending |
 | MDM-ADV-03 | Phase 10 | Pending |
-| ISO-01 | Phase 8 | Pending |
-| ISO-02 | Phase 8 | Pending |
-| ISO-03 | Phase 8 | Pending |
+| ISO-01 | Phase 8 | Complete |
+| ISO-02 | Phase 8 | Complete |
+| ISO-03 | Phase 8 | Complete |
