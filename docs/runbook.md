@@ -567,7 +567,7 @@ aws stepfunctions start-execution \
 ### Local Run (development / testing)
 
 ```bash
-export EDGAR_IDENTITY="Your Name your@email.com"
+export EDGAR_IDENTITY="EdgarTools Platform thepaulananth@gmail.com"
 edgar-warehouse bootstrap --tracking-status-filter active
 ```
 

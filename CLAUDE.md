@@ -200,6 +200,15 @@ When the `edgartools` version is bumped, run the batch scripts in `scripts/batch
 > the daemon is misconfigured.
 
 ```bash
+# Required env vars before any warehouse command
+export EDGAR_IDENTITY="EdgarTools Platform thepaulananth@gmail.com"   # SEC User-Agent; must contain email
+export WAREHOUSE_RUNTIME_MODE="bronze_capture"
+export WAREHOUSE_BRONZE_ROOT="s3://edgartools-dev-bronze-077127448006/warehouse/bronze"
+export WAREHOUSE_STORAGE_ROOT="s3://edgartools-dev-warehouse-077127448006/warehouse"
+export SERVING_EXPORT_ROOT="s3://edgartools-dev-snowflake-export-077127448006/warehouse/artifacts/snowflake_exports/"
+export MDM_DATABASE_URL="postgresql://postgres:test@localhost:5432/mdm"  # local Colima postgres
+export AWS_DEFAULT_REGION=us-east-1  # infra is us-east-1, not the default us-east-2
+
 # Install project deps (uses uv.lock)
 uv sync --extra s3 --extra snowflake
 
