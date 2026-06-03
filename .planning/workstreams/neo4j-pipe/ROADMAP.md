@@ -53,7 +53,9 @@ that gap without broadening the architecture or fetching missing artifacts from 
   3. Missing artifact cases are counted and reported without aborting remaining accessions.
   4. Work stays isolated to `neo4j-pipe` source, tests, docs, and planning files.
 
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 08-01-PLAN.md - Add ADV bronze discovery/read helper and focused contract tests.
 
 ### Phase 9: Parse ADV Bronze Command
 
@@ -93,6 +95,6 @@ that gap without broadening the architecture or fetching missing artifacts from 
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 8. ADV Bronze Discovery Contract | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Not started | - |
+| 8. ADV Bronze Discovery Contract | v1.4 ADV Bronze-To-Silver Backfill | 0/1 | Ready to execute | - |
 | 9. Parse ADV Bronze Command | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Not started | - |
 | 10. Live ADV Backfill Validation | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Not started | - |
