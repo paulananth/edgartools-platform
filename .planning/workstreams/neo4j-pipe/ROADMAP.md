@@ -27,18 +27,19 @@ Neo4j so graph sync is complete, idempotent, and independently verifiable.
 ### Phase 5: Source To MDM Load Path
 **Goal**: Operators can populate MDM entities from an existing local or S3-backed silver DuckDB produced from bronze, without re-fetching SEC artifacts or touching the loader-fix workstream.
 **Depends on**: Nothing in this worktree
-**Requirements**: PIPE-01, PIPE-02, PIPE-03, ISO-01, ISO-02
+**Requirements**: PIPE-01, PIPE-02, PIPE-03, PIPE-04, PIPE-05, ISO-01, ISO-02
 **Success Criteria** (what must be TRUE):
   1. MDM commands document and validate the silver input source (`MDM_SILVER_DUCKDB` or S3-backed equivalent) before mutation.
   2. Running entity resolution twice against the same silver fixture keeps company, adviser, person, security, and fund counts stable.
   3. Missing silver configuration exits non-zero with an actionable message and does not mutate MDM tables.
   4. The worktree remains isolated on `workspace/neo4j-pipe` and does not edit loader-fix artifacts or generated deployment JSON.
-**Plans**: 4 plans
+**Plans**: 5 plans
 Plans:
 - [x] 05-01-PLAN.md — Wave 0 tests and fixtures for parser repair, source preflight, and MDM entity idempotency. (ffc9ad8)
 - [x] 05-02-PLAN.md — Repair parse-ownership-bronze against current silver schema and artifact-registry reads.
-- [ ] 05-03-PLAN.md — Add shared MDM silver preflight before mutating commands.
-- [ ] 05-04-PLAN.md — Prove all-domain entity-load idempotency and document AWS/local operator flow.
+- [x] 05-03-PLAN.md — Add shared MDM silver preflight before mutating commands.
+- [x] 05-04-PLAN.md — Prove all-domain entity-load idempotency and document AWS/local operator flow.
+- [ ] 05-05-PLAN.md — Live E2E validation: select CIK, run full pipe, implement mdm coverage-report, audit and fix gaps, verify all 11 GRAPH_EDGE_* tables.
 
 ### Phase 6: Relationship Derivation Coverage
 **Goal**: All graph-relevant relationships derivable from silver and resolved MDM entities are created as active MDM relationship rows without duplicates.
@@ -68,6 +69,6 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 5. Source To MDM Load Path | v1.1 Neo4j bronze-to-graph pipe | 1/4 | In progress | - |
+| 5. Source To MDM Load Path | v1.1 Neo4j bronze-to-graph pipe | 4/5 | In progress | - |
 | 6. Relationship Derivation Coverage | v1.1 Neo4j bronze-to-graph pipe | 0/TBD | Not started | - |
 | 7. Neo4j Sync And Verification | v1.1 Neo4j bronze-to-graph pipe | 0/TBD | Not started | - |

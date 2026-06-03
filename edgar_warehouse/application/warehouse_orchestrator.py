@@ -1064,7 +1064,23 @@ def _capture_bronze_raw(
             metrics["rows_inserted"] += result["rows_written"]
             metrics["rows_skipped"] += result["rows_skipped"]
             if arguments.get("include_artifacts") or arguments.get("include_text") or arguments.get("include_parsers"):
-                for accession_number in result["recent_accessions"]:
+                accessions = result["recent_accessions"]
+                total_accessions = len(accessions)
+                _emit_pipeline_event(
+                    "accession_resync_started",
+                    cik=_parse_cik(scope_key),
+                    accession_count=total_accessions,
+                    run_id=sync_run_id,
+                )
+                accession_started_at = datetime.now(UTC)
+                for acc_index, accession_number in enumerate(accessions, start=1):
+                    _emit_pipeline_event(
+                        "accession_resync_progress",
+                        accession_number=accession_number,
+                        index=acc_index,
+                        total=total_accessions,
+                        run_id=sync_run_id,
+                    )
                     pipeline_result = _run_accession_resync(
                         context=context,
                         db=db,
@@ -1077,6 +1093,14 @@ def _capture_bronze_raw(
                     )
                     raw_writes.extend(pipeline_result["raw_writes"])
                     metrics["rows_inserted"] += pipeline_result["rows_written"]
+                _emit_pipeline_event(
+                    "accession_resync_completed",
+                    cik=_parse_cik(scope_key),
+                    accession_count=total_accessions,
+                    rows_written=metrics["rows_inserted"],
+                    duration_seconds=(datetime.now(UTC) - accession_started_at).total_seconds(),
+                    run_id=sync_run_id,
+                )
             return raw_writes, metrics
         if scope_type == "accession":
             pipeline_result = _run_accession_resync(

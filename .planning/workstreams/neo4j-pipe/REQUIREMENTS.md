@@ -14,6 +14,8 @@ updated: 2026-05-16
 - [x] **PIPE-01**: Operator can run the MDM entity loaders against an existing local or S3-backed silver DuckDB produced from bronze without re-fetching SEC artifacts.
 - [ ] **PIPE-02**: MDM company, adviser, person, security, and fund loaders are idempotent across repeated runs against the same silver data.
 - [ ] **PIPE-03**: Missing silver source configuration fails with a clear operator message that names the required setting and does not partially mutate MDM state.
+- [ ] **PIPE-04**: `edgar-warehouse mdm coverage-report` subcommand reads silver DuckDB + MDM and reports silver_count vs mdm_count per domain with gap and exclusion reason. Exits 0 even when gaps exist.
+- [ ] **PIPE-05**: A live single-CIK end-to-end run succeeds from S3 bronze through parse-ownership-bronze → mdm run → mdm derive-relationships → mdm sync-graph, with all 11 GRAPH_EDGE_* tables in Snowflake NEO4J_GRAPH_MIGRATION populated with at least 1 row.
 
 ### Relationship Derivation
 
@@ -53,6 +55,8 @@ updated: 2026-05-16
 | PIPE-01 | Phase 5 | Complete |
 | PIPE-02 | Phase 5 | Pending |
 | PIPE-03 | Phase 5 | Pending |
+| PIPE-04 | Phase 5 | Pending |
+| PIPE-05 | Phase 5 | Pending |
 | REL-01 | Phase 6 | Pending |
 | REL-02 | Phase 6 | Pending |
 | REL-03 | Phase 6 | Pending |
