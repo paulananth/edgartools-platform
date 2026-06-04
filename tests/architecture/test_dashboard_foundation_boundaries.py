@@ -33,6 +33,10 @@ def _dashboard_source() -> str:
     return _read(REPO_ROOT / "examples" / "mdm_graph_dashboard" / "streamlit_app.py")
 
 
+def _dashboard_readme() -> str:
+    return _read(REPO_ROOT / "examples" / "mdm_graph_dashboard" / "README.md")
+
+
 class _FakeCacheData:
     def __call__(self, *args, **kwargs):
         def decorator(func):
@@ -375,3 +379,74 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
             "RuntimeError(",
         ):
             self.assertNotIn(unsafe_token, text)
+
+    def test_d13_d14_d15_d16_readme_contract_matches_operator_runbook(self) -> None:
+        text = _dashboard_readme()
+        headings = re.findall(r"^## (.+)$", text, flags=re.MULTILINE)
+
+        self.assertEqual(
+            headings,
+            [
+                "Purpose",
+                "Read-only guarantee",
+                "Prerequisites",
+                "Launch",
+                "Review workflow",
+                "Filters",
+                "Failure states",
+                "Existing checks",
+                "Validation",
+            ],
+        )
+        self.assertIn(
+            "This dashboard does not run sync, repair, migrate, load, or write actions.",
+            text,
+        )
+        for env_var in (
+            "MDM_DATABASE_URL",
+            "NEO4J_URI",
+            "NEO4J_USER",
+            "NEO4J_PASSWORD",
+            "NEO4J_DATABASE",
+            "NEO4J_SECRET_JSON",
+        ):
+            self.assertIn(env_var, text)
+
+        self.assertIn("Overview", text)
+        self.assertIn("MDM Overview", text)
+        self.assertIn("Neo4j Overview", text)
+        self.assertIn("Mismatch Diagnostics", text)
+        self.assertIn("Row limit", text)
+        self.assertIn("25", text)
+        self.assertIn("50", text)
+        self.assertIn("100", text)
+        self.assertIn("250", text)
+        self.assertIn("All", text)
+
+        allowed_commands = {
+            "edgar-warehouse mdm check-connectivity --neo4j",
+            "edgar-warehouse mdm counts",
+            "edgar-warehouse mdm verify-graph",
+        }
+        mdm_commands = set(
+            re.findall(r"^edgar-warehouse mdm [^\n`]+$", text, flags=re.MULTILINE)
+        )
+        self.assertEqual(mdm_commands, allowed_commands)
+        self.assertIn(
+            "uv run pytest tests/mdm/test_dashboard_readonly.py tests/mdm/test_graph_readonly.py tests/architecture/test_dashboard_foundation_boundaries.py -q",
+            text,
+        )
+
+        lowered = text.lower()
+        for forbidden in (
+            "visible sections",
+            "manual browser checklist",
+            "remediation button",
+            "dashboard button",
+            "dashboard control",
+            "sync button",
+            "repair button",
+            "migrate button",
+            "load button",
+        ):
+            self.assertNotIn(forbidden, lowered)
