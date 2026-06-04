@@ -29,9 +29,9 @@ updated: 2026-05-17
 
 ### Dashboard Experience
 
-- [ ] **UX-01**: Dashboard presents review-first views for MDM overview, Neo4j overview, and mismatch diagnostics.
-- [ ] **UX-02**: Dashboard supports bounded filters such as relationship type, entity type, and row limit so large stores remain inspectable.
-- [ ] **UX-03**: Dashboard surfaces connection/configuration errors with actionable messages and without printing secret values.
+- [x] **UX-01**: Dashboard presents review-first views for MDM overview, Neo4j overview, and mismatch diagnostics.
+- [x] **UX-02**: Dashboard supports bounded filters such as relationship type, entity type, and row limit so large stores remain inspectable.
+- [x] **UX-03**: Dashboard surfaces connection/configuration errors with actionable messages and without printing secret values.
 
 ### Isolation
 
