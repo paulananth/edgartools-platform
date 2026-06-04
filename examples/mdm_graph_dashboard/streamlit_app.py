@@ -9,15 +9,10 @@ from edgar_warehouse.mdm import dashboard_readonly, graph_readonly
 
 SECTIONS = [
     "Overview",
-    "Entities",
-    "Relationships",
-    "Graph Coverage",
-    "Neighborhood",
+    "MDM Overview",
+    "Neo4j Overview",
+    "Mismatch Diagnostics",
 ]
-PLACEHOLDER_COPY = (
-    "This view remains unchanged for this phase. Broader filters and graph "
-    "exploration are planned for a later dashboard phase."
-)
 BOUNDED_SAMPLE_COPY = "Samples are bounded diagnostics, not exhaustive diffs."
 
 
@@ -71,6 +66,31 @@ def _entity_labels_from_mdm_metrics(payload: Mapping[str, Any]) -> list[str]:
             if isinstance(row, Mapping) and row.get("neo4j_label")
         ]
     return []
+
+
+def _entity_registry_details(payload: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    registry = payload.get("registry")
+    if not isinstance(registry, Mapping):
+        return []
+    details = registry.get("entity_type_details")
+    if not isinstance(details, list):
+        return []
+    return [row for row in details if isinstance(row, Mapping)]
+
+
+def _neo4j_label_for_entity(
+    *,
+    mdm_metrics: Mapping[str, Any],
+    domain: str,
+    entity_row: Mapping[str, Any],
+) -> str:
+    explicit_label = entity_row.get("neo4j_label")
+    if explicit_label:
+        return str(explicit_label)
+    for detail in _entity_registry_details(mdm_metrics):
+        if str(detail.get("entity_type") or "") == domain and detail.get("neo4j_label"):
+            return str(detail["neo4j_label"])
+    return domain
 
 
 def _format_count(value: Any) -> str:
@@ -275,7 +295,11 @@ def _render_entity_comparison(
     chart_rows: list[dict[str, Any]] = []
     for domain, row in _mapping_items(mdm_metrics.get("entity_counts")):
         label = str(row.get("label") or domain)
-        graph_key = label.rstrip("s")
+        graph_key = _neo4j_label_for_entity(
+            mdm_metrics=mdm_metrics,
+            domain=domain,
+            entity_row=row,
+        )
         graph_count = 0
         if isinstance(node_counts, Mapping):
             graph_count = int((node_counts.get(graph_key) or {}).get("node_count") or 0)
@@ -284,6 +308,7 @@ def _render_entity_comparison(
             {
                 "Domain": label,
                 "MDM Count": mdm_count,
+                "Neo4j Label": graph_key,
                 "Neo4j Count": graph_count if neo4j_metrics and neo4j_metrics.get("available") else "-",
                 "Status": "Unavailable" if not (neo4j_metrics and neo4j_metrics.get("available")) else "OK",
             }
@@ -390,9 +415,14 @@ def render_overview(
     coverage_rows: list[dict[str, Any]],
 ) -> None:
     st.title("EdgarTools MDM Graph")
-    st.caption("Read-only MDM and Neo4j coverage metrics.")
+    st.caption("Read-only MDM and Neo4j coverage review.")
     if _render_mdm_unavailable(mdm_metrics):
         return
+    _render_grouped_warnings(
+        mdm_metrics=mdm_metrics,
+        neo4j_metrics=neo4j_metrics,
+        coverage_rows=coverage_rows,
+    )
     _render_snapshot(
         mdm_metrics=mdm_metrics,
         neo4j_metrics=neo4j_metrics,
@@ -401,42 +431,40 @@ def render_overview(
     _timestamp_caption("MDM metrics", mdm_metrics)
     if neo4j_metrics:
         _timestamp_caption("Neo4j metrics", neo4j_metrics)
-    _render_grouped_warnings(
-        mdm_metrics=mdm_metrics,
-        neo4j_metrics=neo4j_metrics,
-        coverage_rows=coverage_rows,
-    )
 
 
-def render_entities(*, mdm_metrics: Mapping[str, Any]) -> None:
+def render_mdm_overview(*, mdm_metrics: Mapping[str, Any]) -> None:
     st.title("MDM Overview")
     if _render_mdm_unavailable(mdm_metrics):
         return
     _timestamp_caption("MDM metrics", mdm_metrics)
     _render_entity_table(mdm_metrics)
+    _render_relationship_table(mdm_metrics=mdm_metrics, neo4j_metrics=None)
 
 
-def render_relationships(
+def render_neo4j_overview(
     *,
     mdm_metrics: Mapping[str, Any],
     neo4j_metrics: Mapping[str, Any] | None,
 ) -> None:
-    st.title("Relationships")
+    st.title("Neo4j Overview")
     if _render_mdm_unavailable(mdm_metrics):
         return
-    _timestamp_caption("MDM metrics", mdm_metrics)
     if neo4j_metrics and not neo4j_metrics.get("available"):
         st.info(neo4j_metrics.get("message", "Neo4j graph metrics unavailable."))
+        return
+    _timestamp_caption("Neo4j metrics", neo4j_metrics or {})
+    _render_entity_comparison(mdm_metrics=mdm_metrics, neo4j_metrics=neo4j_metrics)
     _render_relationship_table(mdm_metrics=mdm_metrics, neo4j_metrics=neo4j_metrics)
 
 
-def render_graph_coverage(
+def render_mismatch_diagnostics(
     *,
     mdm_metrics: Mapping[str, Any],
     neo4j_metrics: Mapping[str, Any] | None,
     coverage_rows: list[dict[str, Any]],
 ) -> None:
-    st.title("Graph Coverage")
+    st.title("Mismatch Diagnostics")
     if _render_mdm_unavailable(mdm_metrics):
         return
     if not neo4j_metrics or not neo4j_metrics.get("available"):
@@ -458,11 +486,6 @@ def render_graph_coverage(
             "Extra Graph Data Samples",
             _flatten_sample_map(neo4j_metrics.get("extra_graph_samples")),
         )
-
-
-def render_neighborhood() -> None:
-    st.title("Neighborhood")
-    st.info(PLACEHOLDER_COPY)
 
 
 def main() -> None:
@@ -495,18 +518,16 @@ def main() -> None:
             neo4j_metrics=neo4j_metrics,
             coverage_rows=coverage_rows,
         )
-    elif section_name == "Entities":
-        render_entities(mdm_metrics=mdm_metrics)
-    elif section_name == "Relationships":
-        render_relationships(mdm_metrics=mdm_metrics, neo4j_metrics=neo4j_metrics)
-    elif section_name == "Graph Coverage":
-        render_graph_coverage(
+    elif section_name == "MDM Overview":
+        render_mdm_overview(mdm_metrics=mdm_metrics)
+    elif section_name == "Neo4j Overview":
+        render_neo4j_overview(mdm_metrics=mdm_metrics, neo4j_metrics=neo4j_metrics)
+    elif section_name == "Mismatch Diagnostics":
+        render_mismatch_diagnostics(
             mdm_metrics=mdm_metrics,
             neo4j_metrics=neo4j_metrics,
             coverage_rows=coverage_rows,
         )
-    else:
-        render_neighborhood()
 
 
 if __name__ == "__main__":
