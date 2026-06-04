@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any, Mapping
 
 import streamlit as st
@@ -18,6 +19,15 @@ FILTER_ALL = "All"
 BOUNDED_SAMPLE_COPY = "Samples are bounded diagnostics, not exhaustive diffs."
 FILTERED_EMPTY_HEADING = "No rows match the current filters."
 FILTERED_EMPTY_BODY = "Adjust the selected type or row limit, then review the table again."
+MDM_CONFIG_REQUIRED_COPY = (
+    "MDM configuration is required. Set `MDM_DATABASE_URL`, then restart the dashboard."
+)
+MDM_UNAVAILABLE_COPY = "MDM database unavailable. Check `MDM_DATABASE_URL`, confirm the database is reachable, and restart the dashboard."
+MDM_PERMISSION_DENIED_COPY = "MDM database permission denied. Confirm the configured database user can run read-only SELECT queries."
+NEO4J_UNAVAILABLE_COPY = "Neo4j graph metrics unavailable. MDM overview remains available."
+NEO4J_PERMISSION_DENIED_COPY = (
+    "Neo4j permission denied. Confirm the configured graph user can run read-only MATCH queries."
+)
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -156,11 +166,32 @@ def _render_table_or_empty(
     st.info(empty_copy)
 
 
+def _mdm_state_copy(mdm_metrics: Mapping[str, Any]) -> str:
+    state = str(mdm_metrics.get("state") or "").lower()
+    message = str(mdm_metrics.get("message") or "").lower()
+    if state in {"missing_config", "not_configured"} or (
+        mdm_metrics.get("error_env_var") == "MDM_DATABASE_URL"
+        and not os.environ.get("MDM_DATABASE_URL")
+    ):
+        return MDM_CONFIG_REQUIRED_COPY
+    if "permission" in state or "permission" in message:
+        return MDM_PERMISSION_DENIED_COPY
+    return MDM_UNAVAILABLE_COPY
+
+
+def _neo4j_state_copy(neo4j_metrics: Mapping[str, Any] | None) -> str:
+    payload = neo4j_metrics or {}
+    state = str(payload.get("state") or "").lower()
+    message = str(payload.get("message") or "").lower()
+    if "permission" in state or "permission" in message:
+        return NEO4J_PERMISSION_DENIED_COPY
+    return NEO4J_UNAVAILABLE_COPY
+
+
 def _render_mdm_unavailable(mdm_metrics: Mapping[str, Any]) -> bool:
     if mdm_metrics.get("available"):
         return False
-    st.error(mdm_metrics.get("message", "MDM database unavailable."))
-    _render_grouped_warnings(mdm_metrics=mdm_metrics, neo4j_metrics=None, coverage_rows=[])
+    st.error(_mdm_state_copy(mdm_metrics))
     return True
 
 
@@ -238,7 +269,7 @@ def _render_grouped_warnings(
         coverage.append(
             {
                 "severity": "warning",
-                "message": str(neo4j_metrics.get("message") or "Neo4j graph metrics unavailable."),
+                "message": _neo4j_state_copy(neo4j_metrics),
                 "action": "Check graph configuration and network access outside the dashboard.",
             }
         )
@@ -548,7 +579,7 @@ def render_neo4j_overview(
     if _render_mdm_unavailable(mdm_metrics):
         return
     if neo4j_metrics and not neo4j_metrics.get("available"):
-        st.info(neo4j_metrics.get("message", "Neo4j graph metrics unavailable."))
+        st.info(_neo4j_state_copy(neo4j_metrics))
         return
     entity_filter = st.selectbox("Entity type", _entity_filter_options(mdm_metrics), index=0)
     relationship_filter = st.selectbox("Relationship type", _relationship_filter_options(mdm_metrics), index=0)
@@ -578,12 +609,7 @@ def render_mismatch_diagnostics(
     if _render_mdm_unavailable(mdm_metrics):
         return
     if not neo4j_metrics or not neo4j_metrics.get("available"):
-        st.warning(
-            (neo4j_metrics or {}).get(
-                "message",
-                "Neo4j graph metrics unavailable. MDM metrics are still available.",
-            )
-        )
+        st.warning(_neo4j_state_copy(neo4j_metrics))
     entity_filter = st.selectbox("Entity type", _entity_filter_options(mdm_metrics), index=0)
     relationship_filter = st.selectbox("Relationship type", _relationship_filter_options(mdm_metrics), index=0)
     _render_entity_comparison(
@@ -641,7 +667,7 @@ def main() -> None:
     coverage_rows = _relationship_coverage_rows(
         mdm_metrics=mdm_metrics,
         neo4j_metrics=neo4j_metrics,
-    )
+    ) if mdm_metrics.get("available") else []
 
     if section_name == "Overview":
         render_overview(

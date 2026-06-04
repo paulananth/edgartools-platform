@@ -154,6 +154,10 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         query_scan_text = (
             text.replace("No rows match the current filters.", "")
             .replace(
+                "MDM database permission denied. Confirm the configured database user can run read-only SELECT queries.",
+                "",
+            )
+            .replace(
                 "Neo4j permission denied. Confirm the configured graph user can run read-only MATCH queries.",
                 "",
             )
