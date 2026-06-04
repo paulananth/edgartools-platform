@@ -454,3 +454,47 @@ These files exceed 30 KB. When modifying them, read section by section rather th
 ## Setup
 
 See `docs/runbook.md` for end-to-end environment setup including AWS credentials, Snowflake keypair auth, S3 bucket provisioning, dbt profiles configuration, and first-run bootstrap.
+
+## gstack
+
+Use the `/browse` skill from gstack for all web browsing. Never use `mcp__claude-in-chrome__*` tools directly.
+
+Available gstack skills:
+
+| Skill | Purpose |
+|-------|---------|
+| `/office-hours` | Async Q&A and coaching sessions |
+| `/plan-ceo-review` | CEO-lens plan review |
+| `/plan-eng-review` | Engineering-lens plan review |
+| `/plan-design-review` | Design-lens plan review |
+| `/design-consultation` | Design consultation session |
+| `/design-shotgun` | Rapid parallel design exploration |
+| `/design-html` | Generate HTML design artifacts |
+| `/review` | Code review |
+| `/ship` | Ship a change end-to-end |
+| `/land-and-deploy` | Land PR and deploy |
+| `/canary` | Canary deploy workflow |
+| `/benchmark` | Run benchmarks |
+| `/browse` | Web browsing (use this for all browsing) |
+| `/connect-chrome` | Connect to Chrome for browser automation |
+| `/qa` | Full QA pass |
+| `/qa-only` | QA without implementation |
+| `/design-review` | Design review pass |
+| `/setup-browser-cookies` | Configure browser cookies |
+| `/setup-deploy` | Configure deploy settings |
+| `/setup-gbrain` | Configure gbrain |
+| `/retro` | Retrospective |
+| `/investigate` | Investigate an issue |
+| `/document-release` | Document a release |
+| `/document-generate` | Generate documentation |
+| `/codex` | Codex integration |
+| `/cso` | CSO workflow |
+| `/autoplan` | Automated planning |
+| `/plan-devex-review` | Developer experience plan review |
+| `/devex-review` | Developer experience review |
+| `/careful` | Extra-careful execution mode |
+| `/freeze` | Freeze a dependency or config |
+| `/guard` | Guard a file or section |
+| `/unfreeze` | Unfreeze a dependency or config |
+| `/gstack-upgrade` | Upgrade gstack |
+| `/learn` | Learn about a topic or codebase |
