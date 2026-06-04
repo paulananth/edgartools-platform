@@ -151,9 +151,10 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         if not target.exists():
             self.skipTest("streamlit_app.py not created yet")
         text = _read(target)
-        self.assertNotRegex(text.upper(), r"\bSELECT\s")
-        self.assertNotRegex(text.upper(), r"\bMATCH\s")
-        self.assertNotIn("RETURN 1 AS ok", text)
+        query_scan_text = text.replace("No rows match the current filters.", "")
+        self.assertNotRegex(query_scan_text.upper(), r"\bSELECT\s")
+        self.assertNotRegex(query_scan_text.upper(), r"\bMATCH\s")
+        self.assertNotIn("RETURN 1 AS ok", query_scan_text)
 
     def test_dashboard_text_contains_no_mutation_controls(self) -> None:
         forbidden_labels = {

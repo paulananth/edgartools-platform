@@ -13,7 +13,11 @@ SECTIONS = [
     "Neo4j Overview",
     "Mismatch Diagnostics",
 ]
+ROW_LIMIT_OPTIONS = [25, 50, 100, 250]
+FILTER_ALL = "All"
 BOUNDED_SAMPLE_COPY = "Samples are bounded diagnostics, not exhaustive diffs."
+FILTERED_EMPTY_HEADING = "No rows match the current filters."
+FILTERED_EMPTY_BODY = "Adjust the selected type or row limit, then review the table again."
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -51,6 +55,10 @@ def _relationship_types_from_mdm_metrics(payload: Mapping[str, Any]) -> list[str
     return []
 
 
+def _relationship_filter_options(payload: Mapping[str, Any]) -> list[str]:
+    return [FILTER_ALL, *_relationship_types_from_mdm_metrics(payload)]
+
+
 def _entity_labels_from_mdm_metrics(payload: Mapping[str, Any]) -> list[str]:
     registry = payload.get("registry")
     if not isinstance(registry, Mapping):
@@ -76,6 +84,17 @@ def _entity_registry_details(payload: Mapping[str, Any]) -> list[Mapping[str, An
     if not isinstance(details, list):
         return []
     return [row for row in details if isinstance(row, Mapping)]
+
+
+def _entity_filter_options(payload: Mapping[str, Any]) -> list[str]:
+    options = [
+        str(row["entity_type"])
+        for row in _entity_registry_details(payload)
+        if row.get("entity_type")
+    ]
+    if not options:
+        options = [domain for domain, _row in _mapping_items(payload.get("entity_counts"))]
+    return [FILTER_ALL, *options]
 
 
 def _neo4j_label_for_entity(
@@ -113,6 +132,28 @@ def _timestamp_caption(label: str, payload: Mapping[str, Any]) -> None:
     last_refreshed = payload.get("last_refreshed")
     if last_refreshed:
         st.caption(f"{label} last refreshed: {last_refreshed}")
+
+
+def _limit_rows(rows: list[dict[str, Any]], row_limit: int | None) -> list[dict[str, Any]]:
+    if row_limit is None:
+        return rows
+    return rows[:row_limit]
+
+
+def _render_table_or_empty(
+    rows: list[dict[str, Any]],
+    *,
+    filtered: bool,
+    empty_copy: str,
+) -> None:
+    if rows:
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+        return
+    if filtered:
+        st.info(FILTERED_EMPTY_HEADING)
+        st.caption(FILTERED_EMPTY_BODY)
+        return
+    st.info(empty_copy)
 
 
 def _render_mdm_unavailable(mdm_metrics: Mapping[str, Any]) -> bool:
@@ -238,25 +279,37 @@ def _render_grouped_warnings(
                 st.warning(f"{row['message']} {row['action']}".strip())
 
 
-def _render_entity_table(mdm_metrics: Mapping[str, Any]) -> None:
+def _render_entity_table(
+    mdm_metrics: Mapping[str, Any],
+    *,
+    entity_filter: str = FILTER_ALL,
+    row_limit: int | None = None,
+) -> None:
     rows = [
         {
             "Domain": row.get("label"),
             "Count": int(row.get("count") or 0),
             "Status": row.get("status"),
         }
-        for row in _mapping_values(mdm_metrics.get("entity_counts"))
+        for domain, row in _mapping_items(mdm_metrics.get("entity_counts"))
+        if entity_filter == FILTER_ALL
+        or entity_filter == domain
+        or entity_filter == str(row.get("label") or "")
     ]
-    if rows:
-        st.dataframe(rows, use_container_width=True, hide_index=True)
-    else:
-        st.info("No MDM entity metrics were returned.")
+    _render_table_or_empty(
+        _limit_rows(rows, row_limit),
+        filtered=entity_filter != FILTER_ALL,
+        empty_copy="No MDM entity metrics were returned.",
+    )
 
 
 def _render_relationship_table(
     *,
     mdm_metrics: Mapping[str, Any],
     neo4j_metrics: Mapping[str, Any] | None,
+    relationship_filter: str = FILTER_ALL,
+    row_limit: int | None = None,
+    include_neo4j_edges: bool = True,
 ) -> None:
     neo4j_relationships = (
         neo4j_metrics.get("relationship_counts", {})
@@ -265,26 +318,31 @@ def _render_relationship_table(
     )
     rows = []
     for rel_type, row in sorted(_mapping_items(mdm_metrics.get("relationship_counts"))):
+        if relationship_filter != FILTER_ALL and relationship_filter != rel_type:
+            continue
         graph_row = neo4j_relationships.get(rel_type, {}) if isinstance(neo4j_relationships, Mapping) else {}
-        rows.append(
-            {
-                "Relationship Type": rel_type,
-                "MDM Active": int(row.get("active_count") or 0),
-                "Pending Sync": int(row.get("pending_graph_sync_count") or 0),
-                "Neo4j Edges": _format_count(graph_row.get("edge_count")) if graph_row else "-",
-                "Status": row.get("status"),
-            }
-        )
-    if rows:
-        st.dataframe(rows, use_container_width=True, hide_index=True)
-    else:
-        st.info("No active MDM relationship types were returned.")
+        display_row: dict[str, Any] = {
+            "Relationship Type": rel_type,
+            "MDM Active": int(row.get("active_count") or 0),
+            "Pending Sync": int(row.get("pending_graph_sync_count") or 0),
+            "Status": row.get("status"),
+        }
+        if include_neo4j_edges:
+            display_row["Neo4j Edges"] = _format_count(graph_row.get("edge_count")) if graph_row else "-"
+        rows.append(display_row)
+    _render_table_or_empty(
+        _limit_rows(rows, row_limit),
+        filtered=relationship_filter != FILTER_ALL,
+        empty_copy="No active MDM relationship types were returned.",
+    )
 
 
 def _render_entity_comparison(
     *,
     mdm_metrics: Mapping[str, Any],
     neo4j_metrics: Mapping[str, Any] | None,
+    entity_filter: str = FILTER_ALL,
+    row_limit: int | None = None,
 ) -> None:
     node_counts = (
         neo4j_metrics.get("node_counts", {})
@@ -294,6 +352,12 @@ def _render_entity_comparison(
     detail_rows: list[dict[str, Any]] = []
     chart_rows: list[dict[str, Any]] = []
     for domain, row in _mapping_items(mdm_metrics.get("entity_counts")):
+        if (
+            entity_filter != FILTER_ALL
+            and entity_filter != domain
+            and entity_filter != str(row.get("label") or "")
+        ):
+            continue
         label = str(row.get("label") or domain)
         graph_key = _neo4j_label_for_entity(
             mdm_metrics=mdm_metrics,
@@ -320,8 +384,11 @@ def _render_entity_comparison(
     st.subheader("Entity Domain Coverage")
     if chart_rows:
         st.bar_chart(chart_rows, x="Domain", y="Count", color="Source")
-    if detail_rows:
-        st.dataframe(detail_rows, use_container_width=True, hide_index=True)
+    _render_table_or_empty(
+        _limit_rows(detail_rows, row_limit),
+        filtered=entity_filter != FILTER_ALL,
+        empty_copy="No MDM rows were returned for this review surface.",
+    )
 
 
 def _relationship_coverage_rows(
@@ -343,7 +410,12 @@ def _relationship_coverage_rows(
     ]
 
 
-def _render_relationship_coverage(rows: list[dict[str, Any]]) -> None:
+def _render_relationship_coverage(
+    rows: list[dict[str, Any]],
+    *,
+    relationship_filter: str = FILTER_ALL,
+    row_limit: int | None = None,
+) -> None:
     table_rows = [
         {
             "Relationship Type": row.get("relationship_type"),
@@ -355,20 +427,32 @@ def _render_relationship_coverage(rows: list[dict[str, Any]]) -> None:
             "Status": row.get("status"),
         }
         for row in rows
+        if relationship_filter == FILTER_ALL
+        or relationship_filter == str(row.get("relationship_type") or "")
     ]
     st.subheader("Relationship Coverage")
-    if table_rows:
-        st.dataframe(table_rows, use_container_width=True, hide_index=True)
-    else:
-        st.info("No relationship coverage rows were returned.")
+    _render_table_or_empty(
+        _limit_rows(table_rows, row_limit),
+        filtered=relationship_filter != FILTER_ALL,
+        empty_copy="No relationship coverage rows were returned.",
+    )
 
 
-def _render_samples(title: str, rows: list[dict[str, Any]]) -> None:
+def _render_samples(
+    title: str,
+    rows: list[dict[str, Any]],
+    *,
+    relationship_filter: str = FILTER_ALL,
+    row_limit: int | None = None,
+) -> None:
     st.subheader(title)
     st.caption(BOUNDED_SAMPLE_COPY)
-    if not rows:
-        st.info("No bounded sample rows were returned.")
-        return
+    filtered_rows = [
+        row
+        for row in rows
+        if relationship_filter == FILTER_ALL
+        or relationship_filter == str(row.get("relationship_type") or "")
+    ]
     display_rows = [
         {
             "Relationship Type": row.get("relationship_type"),
@@ -376,9 +460,13 @@ def _render_samples(title: str, rows: list[dict[str, Any]]) -> None:
             "Target": row.get("target_entity_name") or row.get("target_entity_id"),
             "Created": row.get("created_at", "-"),
         }
-        for row in rows
+        for row in filtered_rows
     ]
-    st.dataframe(display_rows, use_container_width=True, hide_index=True)
+    _render_table_or_empty(
+        _limit_rows(display_rows, row_limit),
+        filtered=relationship_filter != FILTER_ALL,
+        empty_copy="No bounded sample rows were returned.",
+    )
 
 
 def _flatten_sample_map(payload: Any) -> list[dict[str, Any]]:
@@ -433,19 +521,28 @@ def render_overview(
         _timestamp_caption("Neo4j metrics", neo4j_metrics)
 
 
-def render_mdm_overview(*, mdm_metrics: Mapping[str, Any]) -> None:
+def render_mdm_overview(*, mdm_metrics: Mapping[str, Any], row_limit: int) -> None:
     st.title("MDM Overview")
     if _render_mdm_unavailable(mdm_metrics):
         return
+    entity_filter = st.selectbox("Entity type", _entity_filter_options(mdm_metrics), index=0)
+    relationship_filter = st.selectbox("Relationship type", _relationship_filter_options(mdm_metrics), index=0)
     _timestamp_caption("MDM metrics", mdm_metrics)
-    _render_entity_table(mdm_metrics)
-    _render_relationship_table(mdm_metrics=mdm_metrics, neo4j_metrics=None)
+    _render_entity_table(mdm_metrics, entity_filter=entity_filter, row_limit=row_limit)
+    _render_relationship_table(
+        mdm_metrics=mdm_metrics,
+        neo4j_metrics=None,
+        relationship_filter=relationship_filter,
+        row_limit=row_limit,
+        include_neo4j_edges=False,
+    )
 
 
 def render_neo4j_overview(
     *,
     mdm_metrics: Mapping[str, Any],
     neo4j_metrics: Mapping[str, Any] | None,
+    row_limit: int,
 ) -> None:
     st.title("Neo4j Overview")
     if _render_mdm_unavailable(mdm_metrics):
@@ -453,9 +550,21 @@ def render_neo4j_overview(
     if neo4j_metrics and not neo4j_metrics.get("available"):
         st.info(neo4j_metrics.get("message", "Neo4j graph metrics unavailable."))
         return
+    entity_filter = st.selectbox("Entity type", _entity_filter_options(mdm_metrics), index=0)
+    relationship_filter = st.selectbox("Relationship type", _relationship_filter_options(mdm_metrics), index=0)
     _timestamp_caption("Neo4j metrics", neo4j_metrics or {})
-    _render_entity_comparison(mdm_metrics=mdm_metrics, neo4j_metrics=neo4j_metrics)
-    _render_relationship_table(mdm_metrics=mdm_metrics, neo4j_metrics=neo4j_metrics)
+    _render_entity_comparison(
+        mdm_metrics=mdm_metrics,
+        neo4j_metrics=neo4j_metrics,
+        entity_filter=entity_filter,
+        row_limit=row_limit,
+    )
+    _render_relationship_table(
+        mdm_metrics=mdm_metrics,
+        neo4j_metrics=neo4j_metrics,
+        relationship_filter=relationship_filter,
+        row_limit=row_limit,
+    )
 
 
 def render_mismatch_diagnostics(
@@ -463,6 +572,7 @@ def render_mismatch_diagnostics(
     mdm_metrics: Mapping[str, Any],
     neo4j_metrics: Mapping[str, Any] | None,
     coverage_rows: list[dict[str, Any]],
+    row_limit: int,
 ) -> None:
     st.title("Mismatch Diagnostics")
     if _render_mdm_unavailable(mdm_metrics):
@@ -474,17 +584,37 @@ def render_mismatch_diagnostics(
                 "Neo4j graph metrics unavailable. MDM metrics are still available.",
             )
         )
-    _render_entity_comparison(mdm_metrics=mdm_metrics, neo4j_metrics=neo4j_metrics)
-    _render_relationship_coverage(coverage_rows)
-    _render_samples("Pending Sync Samples", list(mdm_metrics.get("pending_sync_samples") or []))
+    entity_filter = st.selectbox("Entity type", _entity_filter_options(mdm_metrics), index=0)
+    relationship_filter = st.selectbox("Relationship type", _relationship_filter_options(mdm_metrics), index=0)
+    _render_entity_comparison(
+        mdm_metrics=mdm_metrics,
+        neo4j_metrics=neo4j_metrics,
+        entity_filter=entity_filter,
+        row_limit=row_limit,
+    )
+    _render_relationship_coverage(
+        coverage_rows,
+        relationship_filter=relationship_filter,
+        row_limit=row_limit,
+    )
+    _render_samples(
+        "Pending Sync Samples",
+        list(mdm_metrics.get("pending_sync_samples") or []),
+        relationship_filter=relationship_filter,
+        row_limit=row_limit,
+    )
     if neo4j_metrics and neo4j_metrics.get("available"):
         _render_samples(
             "Missing Edge Samples",
             _flatten_sample_map(neo4j_metrics.get("missing_edge_samples")),
+            relationship_filter=relationship_filter,
+            row_limit=row_limit,
         )
         _render_samples(
             "Extra Graph Data Samples",
             _flatten_sample_map(neo4j_metrics.get("extra_graph_samples")),
+            relationship_filter=relationship_filter,
+            row_limit=row_limit,
         )
 
 
@@ -493,6 +623,7 @@ def main() -> None:
     st.sidebar.title("EdgarTools MDM")
     st.sidebar.caption("Read-only MDM and Neo4j status")
     section_name = st.sidebar.radio("Section", SECTIONS)
+    row_limit = st.sidebar.selectbox("Row limit", ROW_LIMIT_OPTIONS, index=1)
     st.sidebar.divider()
     if st.sidebar.button("Refresh metrics", use_container_width=True):
         _clear_dashboard_cache()
@@ -519,14 +650,19 @@ def main() -> None:
             coverage_rows=coverage_rows,
         )
     elif section_name == "MDM Overview":
-        render_mdm_overview(mdm_metrics=mdm_metrics)
+        render_mdm_overview(mdm_metrics=mdm_metrics, row_limit=row_limit)
     elif section_name == "Neo4j Overview":
-        render_neo4j_overview(mdm_metrics=mdm_metrics, neo4j_metrics=neo4j_metrics)
+        render_neo4j_overview(
+            mdm_metrics=mdm_metrics,
+            neo4j_metrics=neo4j_metrics,
+            row_limit=row_limit,
+        )
     elif section_name == "Mismatch Diagnostics":
         render_mismatch_diagnostics(
             mdm_metrics=mdm_metrics,
             neo4j_metrics=neo4j_metrics,
             coverage_rows=coverage_rows,
+            row_limit=row_limit,
         )
 
 
