@@ -71,7 +71,10 @@ Plans:
   3. Re-running the command against the same artifacts skips or upserts without duplicate `sec_adv_*` rows.
   4. Focused tests cover registry reads, explicit bronze path reads, missing artifacts, parser errors, and idempotency.
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 09-01-PLAN.md - Add parse-adv-bronze CLI, orchestrator, and focused tests.
 
 ### Phase 10: Live ADV Backfill Validation
 
@@ -96,7 +99,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 8. ADV Bronze Discovery Contract | v1.4 ADV Bronze-To-Silver Backfill | 1/1 | Complete | 2026-06-03 |
-| 9. Parse ADV Bronze Command | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Ready to plan | - |
+| 9. Parse ADV Bronze Command | v1.4 ADV Bronze-To-Silver Backfill | 0/1 | Ready to execute | - |
 | 10. Live ADV Backfill Validation | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Not started | - |
 
 ## Backlog

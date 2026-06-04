@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: ADV Bronze-To-Silver Backfill
 status: active
-last_updated: "2026-06-03T06:34:38-04:00"
-last_activity: 2026-06-03 -- Phase 8 complete; Phase 9 ready to plan
+last_updated: "2026-06-03T07:19:42-04:00"
+last_activity: 2026-06-03 -- Phase 9 planned; ready to execute
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 1
+  total_plans: 2
   completed_plans: 1
   percent: 33
 ---
@@ -17,10 +17,10 @@ progress:
 
 ## Current Position
 
-Phase: 9 (Parse ADV Bronze Command) - READY TO PLAN
-Plan: TBD
-Status: Phase 8 complete; Phase 9 ready to plan
-Last activity: 2026-06-03 -- Phase 8 complete; Phase 9 ready to plan
+Phase: 9 (Parse ADV Bronze Command) - READY TO EXECUTE
+Plan: 09-01
+Status: Phase 9 planned; ready to execute
+Last activity: 2026-06-03 -- Phase 9 planned; ready to execute
 Resume file: None
 
 ## Milestone Context
@@ -35,7 +35,7 @@ ADV tables without SEC re-fetch, unblocking the MDM adviser/fund load path.
 | Phase | Goal | Requirements | Status |
 |-------|------|--------------|--------|
 | 8 — ADV Bronze Discovery Contract | Existing ADV bronze artifacts can be discovered and selected without SEC calls | ADV-01, ADV-02, ADV-03, ISO-01, ISO-02, ISO-03 | Complete |
-| 9 — Parse ADV Bronze Command | A bounded idempotent command parses ADV bronze into silver ADV tables | ADV-04, ADV-05, ADV-06, ADV-07 | Ready to plan |
+| 9 — Parse ADV Bronze Command | A bounded idempotent command parses ADV bronze into silver ADV tables | ADV-04, ADV-05, ADV-06, ADV-07 | Ready to execute |
 | 10 — Live ADV Backfill Validation | Dev S3 validation proves ADV silver rows and MDM adviser/fund readiness | MDM-ADV-01, MDM-ADV-02, MDM-ADV-03 | Not started |
 
 ## Accumulated Context
@@ -51,6 +51,9 @@ ADV tables without SEC re-fetch, unblocking the MDM adviser/fund load path.
 - Keep the workstream isolated from loader-fix artifacts, generated deployment JSON, gold/dbt, Snowflake graph sync, and generic Step Functions work.
 - Phase 8 plans discovery/read helper code only; `parse-adv-bronze` CLI registration and ADV silver merges are Phase 9.
 - Phase 8 Plan 08-01 created `adv_bronze_discovery.py` and focused contract tests; verification passed on 2026-06-03.
+- Phase 9 planning proceeded from `DISCOVERY.md` without a separate `CONTEXT.md` because the user asked to plan immediately after discovery.
+- Phase 9 Plan 09-01 is scoped to bronze-to-silver parsing only: no SEC fetch, no alternate SEC URL load, no gold/dbt/Snowflake export behavior.
+- SEC alternate URL load validation is captured separately as backlog Phase 999.1.
 
 ### Blockers
 
