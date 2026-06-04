@@ -17,6 +17,32 @@ def _parse_cik_list(value: str) -> list[int]:
         raise argparse.ArgumentTypeError("CIKs must be comma-separated integers") from exc
 
 
+def _parse_adv_artifact(value: str) -> dict[str, object]:
+    parts = [part.strip() for part in value.split(",", 3)]
+    if len(parts) not in (3, 4):
+        raise argparse.ArgumentTypeError("expected ACCESSION,FORM,STORAGE_PATH[,CIK]")
+
+    accession_number, form, storage_path = parts[:3]
+    if not accession_number:
+        raise argparse.ArgumentTypeError("artifact accession number is required")
+    if not form:
+        raise argparse.ArgumentTypeError("artifact form is required")
+    if not storage_path:
+        raise argparse.ArgumentTypeError("artifact storage path is required")
+
+    artifact: dict[str, object] = {
+        "accession_number": accession_number,
+        "form": form,
+        "storage_path": storage_path,
+    }
+    if len(parts) == 4 and parts[3]:
+        try:
+            artifact["cik"] = int(parts[3])
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError("artifact CIK must be an integer") from exc
+    return artifact
+
+
 def _add_common_bootstrap_args(parser: argparse.ArgumentParser, include_recent_limit: bool) -> None:
     parser.add_argument("--cik-list", type=_parse_cik_list, help="Comma-separated CIK list")
     parser.add_argument(
@@ -143,6 +169,10 @@ def _handle_seed_silver_batches(args: argparse.Namespace) -> int:
 
 def _handle_parse_ownership_bronze(args: argparse.Namespace) -> int:
     return run_command("parse-ownership-bronze", args)
+
+
+def _handle_parse_adv_bronze(args: argparse.Namespace) -> int:
+    return run_command("parse-adv-bronze", args)
 
 
 def _handle_migrate_silver_shards(args: argparse.Namespace) -> int:
@@ -403,6 +433,46 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(parse_ownership_bronze)
     parse_ownership_bronze.set_defaults(handler=_handle_parse_ownership_bronze)
+
+    parse_adv_bronze = subparsers.add_parser(
+        "parse-adv-bronze",
+        help=(
+            "Parse ADV-family filings already in S3 bronze into silver ADV tables. "
+            "Uses the local ADV parser. No SEC API calls. "
+            "Idempotent — skips accessions already in sec_adv_filing."
+        ),
+    )
+    parse_adv_bronze.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Maximum number of not-yet-parsed ADV accessions to process (default: all).",
+    )
+    parse_adv_bronze.add_argument(
+        "--accession-list",
+        type=lambda s: [a.strip() for a in s.split(",") if a.strip()],
+        default=None,
+        metavar="ACCESSIONS",
+        help=(
+            "Comma-separated accession numbers to process. "
+            "When supplied, only these accessions are parsed (default: all ADV-family forms)."
+        ),
+    )
+    parse_adv_bronze.add_argument(
+        "--artifact",
+        action="append",
+        default=[],
+        dest="artifacts",
+        metavar="ACCESSION,FORM,STORAGE_PATH[,CIK]",
+        type=_parse_adv_artifact,
+        help=(
+            "Explicit already-captured ADV artifact to parse. "
+            "Repeatable. Format: ACCESSION,FORM,STORAGE_PATH[,CIK]."
+        ),
+    )
+    _add_run_id_arg(parse_adv_bronze)
+    parse_adv_bronze.set_defaults(handler=_handle_parse_adv_bronze)
 
     bootstrap_batch = subparsers.add_parser(
         "bootstrap-batch",
