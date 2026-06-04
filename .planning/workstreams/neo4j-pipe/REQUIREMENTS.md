@@ -17,10 +17,10 @@ updated: 2026-06-03
 
 ### Silver Backfill
 
-- [ ] **ADV-04**: `edgar-warehouse parse-adv-bronze` parses selected ADV artifacts with the existing `edgar_warehouse.parsers.adv` parser and writes `sec_adv_filing`, `sec_adv_office`, `sec_adv_disclosure_event`, and `sec_adv_private_fund`.
-- [ ] **ADV-05**: `parse-adv-bronze` supports `--accession-list` and `--limit`, and repeated runs skip already parsed ADV accessions by default.
-- [ ] **ADV-06**: The backfill path is idempotent: rerunning against unchanged bronze does not duplicate ADV silver rows or corrupt existing ownership silver rows.
-- [ ] **ADV-07**: The implementation proves no SEC network fetch occurs during backfill by injecting/stubbing the artifact read path in tests.
+- [x] **ADV-04**: `edgar-warehouse parse-adv-bronze` parses selected ADV artifacts with the existing `edgar_warehouse.parsers.adv` parser and writes `sec_adv_filing`, `sec_adv_office`, `sec_adv_disclosure_event`, and `sec_adv_private_fund`.
+- [x] **ADV-05**: `parse-adv-bronze` supports `--accession-list` and `--limit`, and repeated runs skip already parsed ADV accessions by default.
+- [x] **ADV-06**: The backfill path is idempotent: rerunning against unchanged bronze does not duplicate ADV silver rows or corrupt existing ownership silver rows.
+- [x] **ADV-07**: The implementation proves no SEC network fetch occurs during backfill by injecting/stubbing the artifact read path in tests.
 
 ### MDM Readiness
 
@@ -54,10 +54,10 @@ updated: 2026-06-03
 | ADV-01 | Phase 8 | Complete |
 | ADV-02 | Phase 8 | Complete |
 | ADV-03 | Phase 8 | Complete |
-| ADV-04 | Phase 9 | Pending |
-| ADV-05 | Phase 9 | Pending |
-| ADV-06 | Phase 9 | Pending |
-| ADV-07 | Phase 9 | Pending |
+| ADV-04 | Phase 9 | Complete |
+| ADV-05 | Phase 9 | Complete |
+| ADV-06 | Phase 9 | Complete |
+| ADV-07 | Phase 9 | Complete |
 | MDM-ADV-01 | Phase 10 | Pending |
 | MDM-ADV-02 | Phase 10 | Pending |
 | MDM-ADV-03 | Phase 10 | Pending |

@@ -32,7 +32,7 @@ that gap without broadening the architecture or fetching missing artifacts from 
 ## Phases
 
 - [x] **Phase 8: ADV Bronze Discovery Contract** - define and test how existing ADV bronze artifacts are discovered, selected, and read without SEC fetches. Completed 2026-06-03.
-- [ ] **Phase 9: Parse ADV Bronze Command** - implement the bounded idempotent `parse-adv-bronze` operator command and silver merge behavior.
+- [x] **Phase 9: Parse ADV Bronze Command** - implement the bounded idempotent `parse-adv-bronze` operator command and silver merge behavior. Completed 2026-06-03.
 - [ ] **Phase 10: Live ADV Backfill Validation** - validate against dev S3 bronze/silver, update docs, and hand off exact resume evidence for the blocked Phase 5 checkpoint.
 
 ---
@@ -74,7 +74,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 09-01-PLAN.md - Add parse-adv-bronze CLI, orchestrator, and focused tests.
+- [x] 09-01-PLAN.md - Add parse-adv-bronze CLI, orchestrator, and focused tests.
 
 ### Phase 10: Live ADV Backfill Validation
 
@@ -99,8 +99,8 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 8. ADV Bronze Discovery Contract | v1.4 ADV Bronze-To-Silver Backfill | 1/1 | Complete | 2026-06-03 |
-| 9. Parse ADV Bronze Command | v1.4 ADV Bronze-To-Silver Backfill | 0/1 | Ready to execute | - |
-| 10. Live ADV Backfill Validation | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Not started | - |
+| 9. Parse ADV Bronze Command | v1.4 ADV Bronze-To-Silver Backfill | 1/1 | Complete | 2026-06-03 |
+| 10. Live ADV Backfill Validation | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Ready to plan | - |
 
 ## Backlog
 
