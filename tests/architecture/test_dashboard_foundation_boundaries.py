@@ -151,7 +151,13 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         if not target.exists():
             self.skipTest("streamlit_app.py not created yet")
         text = _read(target)
-        query_scan_text = text.replace("No rows match the current filters.", "")
+        query_scan_text = (
+            text.replace("No rows match the current filters.", "")
+            .replace(
+                "Neo4j permission denied. Confirm the configured graph user can run read-only MATCH queries.",
+                "",
+            )
+        )
         self.assertNotRegex(query_scan_text.upper(), r"\bSELECT\s")
         self.assertNotRegex(query_scan_text.upper(), r"\bMATCH\s")
         self.assertNotIn("RETURN 1 AS ok", query_scan_text)
@@ -340,3 +346,28 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         text = _dashboard_source()
 
         self.assertIn("No rows match the current filters.", text)
+
+    def test_d09_d10_d11_d12_state_copy_is_exact_and_secret_safe(self) -> None:
+        text = _dashboard_source()
+        expected_copy = [
+            "MDM configuration is required. Set `MDM_DATABASE_URL`, then restart the dashboard.",
+            "MDM database unavailable. Check `MDM_DATABASE_URL`, confirm the database is reachable, and restart the dashboard.",
+            "Neo4j graph metrics unavailable. MDM overview remains available.",
+            "Neo4j permission denied. Confirm the configured graph user can run read-only MATCH queries.",
+            "No rows match the current filters.",
+            "Adjust the selected type or row limit, then review the table again.",
+        ]
+
+        for copy in expected_copy:
+            self.assertIn(copy, text)
+
+        for unsafe_token in (
+            "password=",
+            "postgresql://",
+            "neo4j://",
+            "bolt://",
+            "example.internal",
+            "traceback",
+            "RuntimeError(",
+        ):
+            self.assertNotIn(unsafe_token, text)
