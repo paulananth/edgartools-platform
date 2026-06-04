@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import re
 import sys
+import types
 import unittest
 from pathlib import Path
 
@@ -26,6 +27,10 @@ def _existing(paths: list[Path]) -> list[Path]:
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def _dashboard_source() -> str:
+    return _read(REPO_ROOT / "examples" / "mdm_graph_dashboard" / "streamlit_app.py")
 
 
 class _FakeCacheData:
@@ -57,6 +62,12 @@ class _FakeStreamlit:
 def _load_streamlit_app_with_fake_streamlit() -> tuple[object, _FakeStreamlit]:
     target = REPO_ROOT / "examples" / "mdm_graph_dashboard" / "streamlit_app.py"
     fake_streamlit = _FakeStreamlit()
+    fake_dashboard_readonly = types.ModuleType("edgar_warehouse.mdm.dashboard_readonly")
+    fake_graph_readonly = types.ModuleType("edgar_warehouse.mdm.graph_readonly")
+    fake_dashboard_readonly.get_mdm_dashboard_metrics = lambda: None
+    fake_dashboard_readonly.get_active_relationship_diagnostic_inputs = lambda: None
+    fake_dashboard_readonly.build_relationship_coverage_rows = lambda *_args, **_kwargs: []
+    fake_graph_readonly.get_neo4j_graph_metrics = lambda *_args, **_kwargs: None
     spec = importlib.util.spec_from_file_location(
         "_phase9_streamlit_app_under_test",
         target,
@@ -65,7 +76,11 @@ def _load_streamlit_app_with_fake_streamlit() -> tuple[object, _FakeStreamlit]:
         raise AssertionError("could not load streamlit_app.py")
     module = importlib.util.module_from_spec(spec)
     original_streamlit = sys.modules.get("streamlit")
+    original_dashboard_readonly = sys.modules.get("edgar_warehouse.mdm.dashboard_readonly")
+    original_graph_readonly = sys.modules.get("edgar_warehouse.mdm.graph_readonly")
     sys.modules["streamlit"] = fake_streamlit
+    sys.modules["edgar_warehouse.mdm.dashboard_readonly"] = fake_dashboard_readonly
+    sys.modules["edgar_warehouse.mdm.graph_readonly"] = fake_graph_readonly
     try:
         spec.loader.exec_module(module)
     finally:
@@ -73,6 +88,14 @@ def _load_streamlit_app_with_fake_streamlit() -> tuple[object, _FakeStreamlit]:
             sys.modules.pop("streamlit", None)
         else:
             sys.modules["streamlit"] = original_streamlit
+        if original_dashboard_readonly is None:
+            sys.modules.pop("edgar_warehouse.mdm.dashboard_readonly", None)
+        else:
+            sys.modules["edgar_warehouse.mdm.dashboard_readonly"] = original_dashboard_readonly
+        if original_graph_readonly is None:
+            sys.modules.pop("edgar_warehouse.mdm.graph_readonly", None)
+        else:
+            sys.modules["edgar_warehouse.mdm.graph_readonly"] = original_graph_readonly
     return module, fake_streamlit
 
 
@@ -217,9 +240,8 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         self.assertNotIn("_entity_labels_from_diagnostics", text)
         self.assertNotIn("known_mdm_edge_keys", text)
 
-    @unittest.expectedFailure
     def test_entity_comparison_uses_registry_labels_for_neo4j_node_counts(self) -> None:
-        """Escalated GRAPH-01 regression: current UI uses plural label stripping."""
+        """GRAPH-01 regression: entity coverage uses registry Neo4j labels."""
         module, fake_streamlit = _load_streamlit_app_with_fake_streamlit()
 
         module._render_entity_comparison(
@@ -260,4 +282,30 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
                 "Securities": 40,
                 "People": 50,
             },
+        )
+
+    def test_phase10_navigation_labels_are_final_operator_views(self) -> None:
+        module, _fake_streamlit = _load_streamlit_app_with_fake_streamlit()
+
+        self.assertEqual(
+            module.SECTIONS,
+            [
+                "Overview",
+                "MDM Overview",
+                "Neo4j Overview",
+                "Mismatch Diagnostics",
+            ],
+        )
+        self.assertNotIn("Entities", module.SECTIONS)
+        self.assertNotIn("Relationships", module.SECTIONS)
+        self.assertNotIn("Graph Coverage", module.SECTIONS)
+        self.assertNotIn("Neighborhood", module.SECTIONS)
+
+    def test_overview_renders_attention_before_snapshot_metrics(self) -> None:
+        text = _dashboard_source()
+        render_overview = text.split("def render_overview(", 1)[1].split("\ndef ", 1)[0]
+
+        self.assertLess(
+            render_overview.index("_render_grouped_warnings"),
+            render_overview.index("_render_snapshot"),
         )
