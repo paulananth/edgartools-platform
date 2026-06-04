@@ -1272,6 +1272,17 @@ def _capture_bronze_raw(
             accession_list=arguments.get("accession_list") or None,
         )
 
+    if command_name == "parse-adv-bronze":
+        return _run_parse_adv_bronze(
+            context=context,
+            db=db,
+            sync_run_id=sync_run_id,
+            metrics=metrics,
+            limit=int(arguments["limit"]) if arguments.get("limit") is not None else None,
+            accession_list=arguments.get("accession_list") or None,
+            explicit_artifacts=arguments.get("artifacts") or [],
+        )
+
     if command_name == "seed-silver-batches":
         tracking_status_filter = str(arguments.get("tracking_status_filter") or "all").strip()
         batch_size = int(arguments.get("batch_size") or 100)
@@ -1804,6 +1815,150 @@ def _run_parse_ownership_bronze(
     metrics["errors"] = error_count
     metrics["missing_artifacts"] = missing_artifact_count
     metrics["rows_written"] = rows_written
+    return [], metrics
+
+
+def _run_parse_adv_bronze(
+    *,
+    context: "WarehouseCommandContext",
+    db: "SilverDatabase",
+    sync_run_id: str,
+    metrics: dict[str, Any],
+    limit: int | None = None,
+    accession_list: list[str] | None = None,
+    explicit_artifacts: list[Any] | tuple[Any, ...] | None = None,
+) -> tuple[list[dict], dict[str, Any]]:
+    """Parse ADV-family filings already captured in bronze into silver ADV tables."""
+    from edgar_warehouse.application.adv_bronze_discovery import (
+        discover_adv_bronze_artifacts,
+        read_adv_bronze_artifacts,
+    )
+    from edgar_warehouse.parsers.adv import parse_adv
+
+    already_parsed: set[str] = {
+        row["accession_number"]
+        for row in db.fetch("SELECT DISTINCT accession_number FROM sec_adv_filing")
+        if row["accession_number"]
+    }
+    initial_already_parsed_count = len(already_parsed)
+    discovery = discover_adv_bronze_artifacts(
+        db,
+        accession_list=accession_list,
+        explicit_artifacts=explicit_artifacts,
+        limit=None,
+    )
+
+    selected_candidates = []
+    skipped_count = 0
+    for candidate in discovery.candidates:
+        if candidate.accession_number in already_parsed:
+            skipped_count += 1
+            _emit_pipeline_event(
+                "parse_adv_bronze_skipped_already_parsed",
+                accession_number=candidate.accession_number,
+                source_kind=candidate.source_kind,
+                run_id=sync_run_id,
+            )
+            continue
+        selected_candidates.append(candidate)
+
+    if limit is not None:
+        selected_candidates = selected_candidates[:limit]
+
+    explicit_count = len(explicit_artifacts or [])
+    missing_artifact_count = len(discovery.issues)
+    unreadable_artifact_count = 0
+    parsed_count = 0
+    error_count = 0
+    rows_written = 0
+
+    _emit_pipeline_event(
+        "parse_adv_bronze_started",
+        discovered=len(discovery.candidates),
+        selected=len(selected_candidates),
+        already_parsed=initial_already_parsed_count,
+        skipped=skipped_count,
+        missing_artifacts=missing_artifact_count,
+        explicit_artifacts=explicit_count,
+        run_id=sync_run_id,
+    )
+
+    for issue in discovery.issues:
+        _emit_pipeline_event(
+            "parse_adv_bronze_missing_artifact",
+            accession_number=issue.accession_number,
+            storage_path=issue.storage_path,
+            source_kind=issue.source_kind,
+            reason=issue.reason,
+            detail=(issue.detail or "")[:200] or None,
+            run_id=sync_run_id,
+        )
+
+    read_result = read_adv_bronze_artifacts(selected_candidates, read_bytes_fn=read_bytes)
+    unreadable_artifact_count = len(read_result.issues)
+    for issue in read_result.issues:
+        _emit_pipeline_event(
+            "parse_adv_bronze_unreadable_artifact",
+            accession_number=issue.accession_number,
+            storage_path=issue.storage_path,
+            source_kind=issue.source_kind,
+            reason=issue.reason,
+            detail=(issue.detail or "")[:200] or None,
+            run_id=sync_run_id,
+        )
+
+    for bronze_payload in read_result.payloads:
+        candidate = bronze_payload.candidate
+        try:
+            parsed = parse_adv(
+                candidate.accession_number,
+                bronze_payload.payload.decode("utf-8", errors="replace"),
+                candidate.form,
+                candidate.cik,
+            )
+
+            rows_written += db.merge_adv_filings(parsed.get("sec_adv_filing", []), sync_run_id)
+            rows_written += db.merge_adv_offices(parsed.get("sec_adv_office", []), sync_run_id)
+            rows_written += db.merge_adv_disclosure_events(
+                parsed.get("sec_adv_disclosure_event", []),
+                sync_run_id,
+            )
+            rows_written += db.merge_adv_private_funds(parsed.get("sec_adv_private_fund", []), sync_run_id)
+            already_parsed.add(candidate.accession_number)
+            parsed_count += 1
+        except Exception as exc:
+            error_count += 1
+            _emit_pipeline_event(
+                "parse_adv_bronze_error",
+                accession_number=candidate.accession_number,
+                source_kind=candidate.source_kind,
+                error=str(exc)[:200],
+                run_id=sync_run_id,
+            )
+
+    _emit_pipeline_event(
+        "parse_adv_bronze_completed",
+        discovered=len(discovery.candidates),
+        selected=len(selected_candidates),
+        parsed=parsed_count,
+        skipped=skipped_count,
+        missing_artifacts=missing_artifact_count,
+        unreadable_artifacts=unreadable_artifact_count,
+        errors=error_count,
+        rows_written=rows_written,
+        explicit_artifacts=explicit_count,
+        run_id=sync_run_id,
+    )
+    metrics["discovered"] = len(discovery.candidates)
+    metrics["selected"] = len(selected_candidates)
+    metrics["parsed"] = parsed_count
+    metrics["skipped"] = skipped_count
+    metrics["missing_artifacts"] = missing_artifact_count
+    metrics["unreadable_artifacts"] = unreadable_artifact_count
+    metrics["errors"] = error_count
+    metrics["rows_written"] = rows_written
+    metrics["explicit_artifacts"] = explicit_count
+    metrics["already_parsed"] = initial_already_parsed_count
     return [], metrics
 
 
@@ -3104,6 +3259,13 @@ def _resolve_scope(
         return {
             "limit": arguments.get("limit"),
             "accession_list": arguments.get("accession_list"),
+        }
+
+    if command_name == "parse-adv-bronze":
+        return {
+            "limit": arguments.get("limit"),
+            "accession_list": arguments.get("accession_list"),
+            "explicit_artifact_count": len(arguments.get("artifacts") or []),
         }
 
     if command_name == "compute-windows":

@@ -32,7 +32,7 @@ that gap without broadening the architecture or fetching missing artifacts from 
 ## Phases
 
 - [x] **Phase 8: ADV Bronze Discovery Contract** - define and test how existing ADV bronze artifacts are discovered, selected, and read without SEC fetches. Completed 2026-06-03.
-- [ ] **Phase 9: Parse ADV Bronze Command** - implement the bounded idempotent `parse-adv-bronze` operator command and silver merge behavior.
+- [x] **Phase 9: Parse ADV Bronze Command** - implement the bounded idempotent `parse-adv-bronze` operator command and silver merge behavior. Completed 2026-06-03.
 - [ ] **Phase 10: Live ADV Backfill Validation** - validate against dev S3 bronze/silver, update docs, and hand off exact resume evidence for the blocked Phase 5 checkpoint.
 
 ---
@@ -71,7 +71,10 @@ Plans:
   3. Re-running the command against the same artifacts skips or upserts without duplicate `sec_adv_*` rows.
   4. Focused tests cover registry reads, explicit bronze path reads, missing artifacts, parser errors, and idempotency.
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [x] 09-01-PLAN.md - Add parse-adv-bronze CLI, orchestrator, and focused tests.
 
 ### Phase 10: Live ADV Backfill Validation
 
@@ -96,5 +99,31 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 8. ADV Bronze Discovery Contract | v1.4 ADV Bronze-To-Silver Backfill | 1/1 | Complete | 2026-06-03 |
-| 9. Parse ADV Bronze Command | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Ready to plan | - |
-| 10. Live ADV Backfill Validation | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Not started | - |
+| 9. Parse ADV Bronze Command | v1.4 ADV Bronze-To-Silver Backfill | 1/1 | Complete | 2026-06-03 |
+| 10. Live ADV Backfill Validation | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Ready to plan | - |
+
+## Backlog
+
+### Phase 999.1: SEC Alternate URL Load Validation (BACKLOG)
+
+**Future milestone candidate:** v1.5 SEC Alternate URL Load Test
+
+**Goal:** Validate the SEC bronze load/capture path for ADV artifacts that are available from a
+different SEC URL/source than the current registry-backed primary artifact path, before relying on
+that source for silver backfill.
+
+**Requirements:** TBD
+
+**Plans:** 0 plans
+
+**Notes:**
+- This is a separate fetch/capture validation milestone, not part of Phase 9 `parse-adv-bronze`.
+- The milestone may call SEC only through the existing bronze capture/load path with bounded test
+  inputs, EDGAR identity, rate-limit handling, and additive artifact semantics.
+- The Phase 9 silver backfill command must still treat missing alternate-url artifacts as missing
+  bronze and must not fetch from SEC.
+- Exact alternate SEC URL/source family is intentionally left open until this backlog item is
+  promoted for discussion.
+
+Plans:
+- [ ] TBD (promote to an active milestone when the current ADV backfill milestone is complete)
