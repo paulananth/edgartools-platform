@@ -309,3 +309,33 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
             render_overview.index("_render_grouped_warnings"),
             render_overview.index("_render_snapshot"),
         )
+
+    def test_row_limit_choices_and_default_are_bounded(self) -> None:
+        text = _dashboard_source()
+
+        self.assertIn("ROW_LIMIT_OPTIONS = [25, 50, 100, 250]", text)
+        self.assertRegex(
+            text,
+            r"st\.sidebar\.selectbox\(\s*['\"]Row limit['\"],\s*ROW_LIMIT_OPTIONS,\s*index=1",
+        )
+
+    def test_page_filters_are_single_select_with_all_default(self) -> None:
+        text = _dashboard_source()
+
+        self.assertIn('FILTER_ALL = "All"', text)
+        self.assertRegex(text, r"st\.selectbox\(\s*['\"]Entity type['\"].*index=0")
+        self.assertRegex(text, r"st\.selectbox\(\s*['\"]Relationship type['\"].*index=0")
+        for forbidden in (
+            "st.text_input",
+            "st.text_area",
+            "st.number_input",
+            "st.multiselect",
+            "st.checkbox",
+            "st.toggle",
+        ):
+            self.assertNotIn(forbidden, text)
+
+    def test_filtered_empty_copy_is_exact(self) -> None:
+        text = _dashboard_source()
+
+        self.assertIn("No rows match the current filters.", text)
