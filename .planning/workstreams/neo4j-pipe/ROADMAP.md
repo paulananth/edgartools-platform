@@ -90,7 +90,12 @@ Plans:
   3. `mdm run --entity-type adviser` and `mdm run --entity-type fund` preflight against the populated silver source no longer fail on empty ADV tables.
   4. `docs/aws-mdm-source-to-mdm.md` documents the ADV backfill step and the Phase 5 resume counts.
 
-**Plans**: TBD
+**Plans**: 3 plans (3 waves)
+
+Plans:
+- [ ] 10-01-PLAN.md - Acquire one Vanguard ADV XML from IAPD into S3 bronze (Fork A precondition).
+- [ ] 10-02-PLAN.md - Parse ADV bronze into silver, prove counts, fixture preflight test, live MDM adviser/fund load.
+- [ ] 10-03-PLAN.md - Document Step 1b ADV bronze + Phase 5 resume path; finalize evidence and STATE.
 
 ---
 
@@ -100,7 +105,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 8. ADV Bronze Discovery Contract | v1.4 ADV Bronze-To-Silver Backfill | 1/1 | Complete | 2026-06-03 |
 | 9. Parse ADV Bronze Command | v1.4 ADV Bronze-To-Silver Backfill | 1/1 | Complete | 2026-06-03 |
-| 10. Live ADV Backfill Validation | v1.4 ADV Bronze-To-Silver Backfill | 0/TBD | Ready to plan | - |
+| 10. Live ADV Backfill Validation | v1.4 ADV Bronze-To-Silver Backfill | 0/3 | Planned | - |
 
 ## Backlog
 
