@@ -136,12 +136,14 @@ Passive AWS Terraform creates infrastructure shells only:
 
 AWS Terraform must not create runnable ECS task definitions, Step Functions state machines, schedules, workload commands, image rollouts, or runtime secret values. Those are explicit operator actions.
 
-Default resource names:
+Default S3 bucket names:
+
+S3 bucket names are globally unique, so data buckets include the 12-digit AWS account ID suffix. The non-S3 resource prefix remains `edgartools-<env>` unless a Terraform variable overrides it.
 
 | Env | Bronze bucket | Warehouse bucket | Snowflake export bucket | Prefix |
 | --- | --- | --- | --- | --- |
-| dev | `edgartools-dev-bronze` | `edgartools-dev-warehouse` | `edgartools-dev-snowflake-export` | `edgartools-dev` |
-| prod | `edgartools-prod-bronze` | `edgartools-prod-warehouse` | `edgartools-prod-snowflake-export` | `edgartools-prod` |
+| dev | `edgartools-dev-bronze-<aws_account_id>` | `edgartools-dev-warehouse-<aws_account_id>` | `edgartools-dev-snowflake-export-<aws_account_id>` | `edgartools-dev` |
+| prod | `edgartools-prod-bronze-<aws_account_id>` | `edgartools-prod-warehouse-<aws_account_id>` | `edgartools-prod-snowflake-export-<aws_account_id>` | `edgartools-prod` |
 
 Important differences:
 
