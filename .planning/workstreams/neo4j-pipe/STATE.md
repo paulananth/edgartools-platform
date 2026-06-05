@@ -2,26 +2,26 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
-status: planning
-last_updated: "2026-06-05T16:54:42.223Z"
-last_activity: 2026-06-03 -- Phase 9 complete; Phase 10 ready to plan
+status: complete
+last_updated: "2026-06-05T18:15:00.000Z"
+last_activity: 2026-06-05 -- Phase 10 complete; all MDM-ADV requirements satisfied
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
-  percent: 50
+  completed_phases: 3
+  total_plans: 5
+  completed_plans: 5
+  percent: 75
 ---
 
 # Project State — neo4j-pipe
 
 ## Current Position
 
-Phase: 10 (Live ADV Backfill Validation) - READY TO PLAN
-Plan: TBD
-Status: Phase 9 complete; Phase 10 ready to plan
-Last activity: 2026-06-03 -- Phase 9 complete; Phase 10 ready to plan
-Resume file: .planning/workstreams/neo4j-pipe/phases/10-live-adv-backfill-validation/10-CONTEXT.md
+Phase: 10 (Live ADV Backfill Validation) - COMPLETE
+Plan: 10-03 (complete)
+Status: All MDM-ADV-01/02/03 requirements satisfied. Phase 5 resume path documented.
+Last activity: 2026-06-05 -- Phase 10 complete; sec_adv_filing=1, sec_adv_private_fund=1, mdm_adviser=1, mdm_fund=1
+Resume file: docs/aws-mdm-source-to-mdm.md (Phase 5 Resume Path section)
 
 ## Milestone Context
 
@@ -36,7 +36,7 @@ ADV tables without SEC re-fetch, unblocking the MDM adviser/fund load path.
 |-------|------|--------------|--------|
 | 8 — ADV Bronze Discovery Contract | Existing ADV bronze artifacts can be discovered and selected without SEC calls | ADV-01, ADV-02, ADV-03, ISO-01, ISO-02, ISO-03 | Complete |
 | 9 — Parse ADV Bronze Command | A bounded idempotent command parses ADV bronze into silver ADV tables | ADV-04, ADV-05, ADV-06, ADV-07 | Complete |
-| 10 — Live ADV Backfill Validation | Dev S3 validation proves ADV silver rows and MDM adviser/fund readiness | MDM-ADV-01, MDM-ADV-02, MDM-ADV-03 | Ready to plan |
+| 10 — Live ADV Backfill Validation | Dev S3 validation proves ADV silver rows and MDM adviser/fund readiness | MDM-ADV-01, MDM-ADV-02, MDM-ADV-03 | **Complete** (sec_adv_filing=1, sec_adv_private_fund=1, mdm_adviser=1, mdm_fund=1; Phase 5 resume path documented) |
 
 ## Accumulated Context
 
@@ -59,7 +59,7 @@ ADV tables without SEC re-fetch, unblocking the MDM adviser/fund load path.
 
 ### Blockers
 
-- v1.1 Phase 5 live checkpoint remains paused until ADV bronze can be backfilled into `sec_adv_filing` and `sec_adv_private_fund`.
+- v1.1 Phase 5 live checkpoint: ADV backfill path and resume evidence now exist (Phase 10 complete). Checkpoint is **unblocked** pending the full-scale Phase 5 run (graph pipeline: backfill-relationships → sync-graph → verify-graph). See `docs/aws-mdm-source-to-mdm.md` Phase 5 Resume Path section.
 
 ### Pending Todos
 

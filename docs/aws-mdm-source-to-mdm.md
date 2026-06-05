@@ -99,6 +99,61 @@ skipped on repeat runs.
 
 ---
 
+## Step 1b: Parse ADV Bronze (Required for Adviser and Fund Entity Types)
+
+> **Important:** ADV (Form ADV) filings are **not** in EDGAR. They are filed through
+> IARD/IAPD (operated by FINRA). Standard `edgar-warehouse bootstrap` does **not** capture ADV
+> bronze. ADV bronze must be obtained from IAPD and placed in S3 bronze before this step can run.
+> See [Phase 10 Fork-A acquisition](../gsd-workspaces/neo4j-pipe/phases/10-live-adv-backfill-validation/)
+> as the precedent for obtaining ADV XML from the SEC FOIA Form ADV bulk dataset and uploading it
+> to the canonical bronze path.
+
+Before running `mdm run --entity-type adviser` or `mdm run --entity-type fund`, parse existing
+ADV bronze XML artifacts into the silver ADV tables (`sec_adv_filing`, `sec_adv_office`,
+`sec_adv_disclosure_event`, `sec_adv_private_fund`).
+
+```bash
+# Parse all unprocessed ADV XML from the bronze artifact registry
+edgar-warehouse parse-adv-bronze
+
+# Bounded run: limit to N accessions
+edgar-warehouse parse-adv-bronze --limit 100
+
+# Bounded run: specific accession numbers only
+edgar-warehouse parse-adv-bronze --accession-list ADV-105958-20241218,ADV-987654-20241218
+
+# Explicit artifact path (when no registry rows exist — the Phase 10 validated path):
+edgar-warehouse parse-adv-bronze \
+  --artifact "ADV-105958-20241218,ADV,s3://edgartools-dev-bronze-077127448006/warehouse/bronze/filings/sec/cik=105958/accession=ADV-105958-20241218/primary_doc.xml,105958"
+```
+
+**Required silver counts before MDM load:**
+
+| MDM command | Required table | Minimum rows |
+|-------------|---------------|-------------|
+| `mdm run --entity-type adviser` | `sec_adv_filing` | **> 0** |
+| `mdm run --entity-type fund` | `sec_adv_private_fund` | **> 0** |
+| `mdm run --entity-type all` | *(does not enforce ADV tables)* | — |
+
+**Note:** `mdm run --entity-type all` does **not** enforce `sec_adv_filing` or
+`sec_adv_private_fund` counts. If you use `--entity-type all` with empty ADV tables the adviser
+and fund loaders will silently no-op. Always run the targeted `--entity-type adviser` and
+`--entity-type fund` commands with the diagnostics check first.
+
+The command is idempotent: accessions already present in `sec_adv_filing` are skipped on repeat
+runs. Unreadable bronze artifacts emit a non-fatal `parse_adv_bronze_unreadable_artifact` event
+and the batch continues.
+
+**Also unset `WAREHOUSE_STORAGE_ROOT` when running locally** to prevent the silver reader from
+switching to S3 shard hydration instead of reading the local `MDM_SILVER_DUCKDB`:
+
+```bash
+unset WAREHOUSE_STORAGE_ROOT
+export MDM_SILVER_DUCKDB="/tmp/edgar-warehouse-silver/silver/sec/silver.duckdb"
+```
+
+---
+
 ## Step 2: Run MDM Entity Loaders
 
 Load all five entity domains (company, adviser, person, security, fund) from silver into MDM:
@@ -210,7 +265,7 @@ SELECT COUNT(*) AS private_fund_count FROM sec_adv_private_fund;
 |---------|-------|--------|
 | Nonzero `sec_company_filing` Forms 3/4/5 + zero `sec_raw_object` | Bronze artifacts were not captured | Bronze capture is outside Phase 5 scope; contact operator who ran bronze pipeline |
 | Nonzero `sec_raw_object` + zero `sec_ownership_reporting_owner` | `parse-ownership-bronze` not yet run or failed | Run `edgar-warehouse parse-ownership-bronze --limit 100` and review output |
-| Zero `sec_adv_filing` | ADV data was not loaded | ADV forms must be in silver before adviser/fund entity loads |
+| Zero `sec_adv_filing` | ADV data was not loaded — ADV bronze must come from IAPD (not EDGAR bootstrap) | See [Step 1b: Parse ADV Bronze](#step-1b-parse-adv-bronze-required-for-adviser-and-fund-entity-types) |
 
 ---
 
@@ -227,6 +282,47 @@ SELECT COUNT(*) AS private_fund_count FROM sec_adv_private_fund;
 **Protected artifacts:** Generated deployment JSON (e.g., `infra/aws-dev-application.json`) and
 loader-fix workstream artifacts must not be edited during Phase 5 MDM operations. These are
 governed by ISO-01 and ISO-02 workstream isolation rules.
+
+---
+
+## Phase 5 Resume Path
+
+The v1.1 Phase 5 live checkpoint was blocked because ADV bronze had never been parsed into silver.
+Phase 10 (Fork A) proved the full path end-to-end using a single Vanguard ADV filing. The resume
+sequence for the full-scale Phase 5 run is:
+
+1. **Obtain ADV bronze in S3.** ADV XML artifacts must come from IAPD (FINRA) — not EDGAR
+   bootstrap. Use the SEC FOIA Form ADV bulk dataset
+   (`https://www.sec.gov/foia-services/frequently-requested-documents/form-adv-data`) and
+   upload the XML to the canonical bronze path:
+   `s3://<bucket>/warehouse/bronze/filings/sec/cik=<CIK>/accession=<ACCESSION>/primary_doc.xml`
+
+2. **Parse ADV bronze.** Run `edgar-warehouse parse-adv-bronze` (or with `--artifact` for
+   explicit paths; see [Step 1b](#step-1b-parse-adv-bronze-required-for-adviser-and-fund-entity-types)).
+
+3. **Confirm silver counts.**
+   ```bash
+   duckdb /tmp/edgar-warehouse-silver/silver/sec/silver.duckdb \
+     "SELECT COUNT(*) FROM sec_adv_filing; SELECT COUNT(*) FROM sec_adv_private_fund;"
+   ```
+   `sec_adv_filing > 0` is required for adviser; `sec_adv_private_fund > 0` for fund.
+
+4. **Run MDM entity loaders** (with `WAREHOUSE_STORAGE_ROOT` unset for local runs):
+   ```bash
+   unset WAREHOUSE_STORAGE_ROOT
+   edgar-warehouse mdm run --entity-type adviser
+   edgar-warehouse mdm run --entity-type fund
+   ```
+
+5. **Run the graph pipeline** (Phase 5 full-scale graph sync — Phase 10 deferred this step):
+   ```bash
+   edgar-warehouse mdm backfill-relationships
+   edgar-warehouse mdm sync-graph
+   edgar-warehouse mdm verify-graph
+   ```
+
+Phase 10 validated steps 1–4 on a single sample (1 adviser, 1 fund). Step 5 is the remaining
+Phase 5 scope and requires Neo4j to be running.
 
 ---
 
