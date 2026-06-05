@@ -535,3 +535,86 @@ structure; form values are filtered by ADV allowlist in `adv_bronze_discovery.py
 
 **Research date:** 2026-06-04
 **Valid until:** 2026-07-04 (30-day window; stable codebase, S3 state changes only if bootstrap runs)
+
+---
+
+## Appendix: IAPD Findings (Fork A — Extended)
+
+**User decision:** Fork A (extended) — build minimal IAPD ingestion to obtain one ADV filing, store as S3 bronze, run full live validation. User explicitly approved relaxing the "no SEC fetch" constraint for this one-time bootstrap.
+
+### Confirmed: ADV Forms Are NOT in EDGAR
+
+Verified definitively during research:
+- `edgar EFTS search (forms=ADV, all of 2024)` → `0 hits`
+- Goldman Sachs CIK 886982 `submissions.json` → 0 ADV form types (only 10-K, 10-Q, 13F-HR, 3, 4, etc.)
+- ADV forms are processed through IARD (Investment Adviser Registration Depository), a separate FINRA-operated system
+
+**Consequence:** `edgar-warehouse bootstrap --cik-list <adviser_cik>` will NOT capture ADV bronze. Standard EDGAR bootstrap is the wrong tool for ADV data.
+
+### IAPD Data Source
+
+ADV form data for the current period is available via:
+1. **IAPD website**: `https://adviserinfo.sec.gov/adv` — individual firm ADV filings, browser-based
+2. **IAPD Search API**: `https://api.adviserinfo.sec.gov/search/firm?query=...&nrows=N&start=0&wt=json` — publicly accessible, no auth required
+3. **SEC bulk CSV data**: Historical pre-2025 ADV Part 1 structured CSV files — available at `https://www.sec.gov/open/datasets/form-adv.json` (URL format not confirmed due to rate limiting)
+
+**IAPD Firm-specific API** (e.g., `/firm/{crd}/iapd/AdvFiling`) returns `403 Forbidden` — requires browser session or auth.
+
+**edgartools** has NO IAPD module. No built-in ADV fetch capability.
+
+### Target Investment Adviser
+
+| Field | Value |
+|-------|-------|
+| Name | VANGUARD GROUP INC |
+| CRD (firm_source_id) | 105958 |
+| SEC File Number | 801-11953 |
+| Scope | ACTIVE |
+| Source | IAPD Search API — confirmed active |
+
+### Ingestion Path for Fork A
+
+The `--artifact` explicit path in `parse-adv-bronze` allows bypassing the `sec_company_filing` registry entirely:
+
+```bash
+edgar-warehouse parse-adv-bronze \
+  --artifact "ACCESSION,ADV,s3://edgartools-dev-bronze-077127448006/warehouse/bronze/filings/sec/cik={CIK}/accession={ACCESSION}/primary_doc.xml,{CIK}"
+```
+
+Where `storage_path` is an S3 URI pointing to an ADV XML file that was uploaded manually or via a one-time script.
+
+**Proposed execution sequence for Fork A:**
+1. Obtain one ADV XML filing for a known investment adviser (Vanguard CRD 105958 or similar)
+   - Option A: Use IAPD browser download (requires Chrome automation or manual step)
+   - Option B: Use SEC bulk CSV → convert to minimal XML the parser can process
+   - Option C: Find a direct IAPD download URL at execution time via network inspection
+2. Upload to S3 at `s3://edgartools-dev-bronze-077127448006/warehouse/bronze/filings/sec/cik={CIK}/accession={ACCESSION}/primary_doc.xml`
+3. Run: `edgar-warehouse parse-adv-bronze --artifact "..."`
+4. Verify `sec_adv_filing` > 0 rows (MDM-ADV-01)
+5. Run: `edgar-warehouse mdm run --entity-type adviser` (MDM-ADV-02)
+6. Update `docs/aws-mdm-source-to-mdm.md` (MDM-ADV-03)
+
+### ADV XML Format Accepted by Parser
+
+From `edgar_warehouse/parsers/adv.py` (verified): the parser accepts:
+- XML with `<edgarsubmission>`, `<advfiling>`, or generic `<xml>` root tags
+- HTML with `<body>` / `<table>` / `<html>` tags
+- Plain text
+- PDF
+
+For a one-time test fixture, a minimal XML in the format:
+```xml
+<advFiling>
+  <advisorName>Vanguard Group Inc</advisorName>
+  <secFileNumber>801-11953</secFileNumber>
+  <crdNumber>105958</crdNumber>
+  <effectiveDate>2024-01-15</effectiveDate>
+  <offices><office><city>Malvern</city><state>PA</state></office></offices>
+</advFiling>
+```
+would satisfy the parser (the `<advfiling>` tag triggers XML parsing mode). However, using real IAPD XML is strongly preferred to ensure the full pipeline (S3 read → parse → silver write) handles real-world data.
+
+### Pitfall 6: IAPD API Requires Auth for Firm-Specific Endpoints
+**What goes wrong:** Calling `/firm/{CRD}/iapd/AdvFiling` returns `403 Forbidden`. The IAPD individual firm API is not publicly accessible via simple HTTP GET.
+**How to avoid:** Use the IAPD website via browser (Chrome automation), or use SEC bulk CSV data, or use a minimal test XML.
+**Warning signs:** `{"message":"Forbidden"}` response from `api.adviserinfo.sec.gov/firm/...`
