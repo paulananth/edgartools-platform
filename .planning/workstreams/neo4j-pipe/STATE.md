@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.4
-milestone_name: ADV Bronze-To-Silver Backfill
-status: active
-last_updated: "2026-06-03T20:30:04-04:00"
+milestone_name: milestone
+status: planning
+last_updated: "2026-06-05T01:25:13.213Z"
 last_activity: 2026-06-03 -- Phase 9 complete; Phase 10 ready to plan
 progress:
-  total_phases: 3
+  total_phases: 4
   completed_phases: 2
   total_plans: 2
   completed_plans: 2
-  percent: 67
+  percent: 50
 ---
 
 # Project State — neo4j-pipe
@@ -21,7 +21,7 @@ Phase: 10 (Live ADV Backfill Validation) - READY TO PLAN
 Plan: TBD
 Status: Phase 9 complete; Phase 10 ready to plan
 Last activity: 2026-06-03 -- Phase 9 complete; Phase 10 ready to plan
-Resume file: None
+Resume file: .planning/workstreams/neo4j-pipe/phases/10-live-adv-backfill-validation/10-CONTEXT.md
 
 ## Milestone Context
 
