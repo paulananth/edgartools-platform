@@ -48,6 +48,7 @@ that gap without broadening the architecture or fetching missing artifacts from 
 **Requirements**: ADV-01, ADV-02, ADV-03, ISO-01, ISO-02, ISO-03
 
 **Success Criteria** (what must be TRUE):
+
   1. Discovery logic distinguishes registry-backed ADV accessions from explicit existing bronze object path inputs.
   2. Tests prove discovery does not call SEC download functions.
   3. Missing artifact cases are counted and reported without aborting remaining accessions.
@@ -55,6 +56,7 @@ that gap without broadening the architecture or fetching missing artifacts from 
 
 **Plans**: 1 plan
 Plans:
+
 - [x] 08-01-PLAN.md - Add ADV bronze discovery/read helper and focused contract tests.
 
 ### Phase 9: Parse ADV Bronze Command
@@ -66,6 +68,7 @@ Plans:
 **Requirements**: ADV-04, ADV-05, ADV-06, ADV-07
 
 **Success Criteria** (what must be TRUE):
+
   1. CLI exposes `parse-adv-bronze --accession-list ...` and `parse-adv-bronze --limit N`.
   2. The command uses `edgar_warehouse.parsers.adv` and existing `SilverDatabase.merge_adv_*` methods.
   3. Re-running the command against the same artifacts skips or upserts without duplicate `sec_adv_*` rows.
@@ -74,6 +77,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
+
 - [x] 09-01-PLAN.md - Add parse-adv-bronze CLI, orchestrator, and focused tests.
 
 ### Phase 10: Live ADV Backfill Validation
@@ -85,6 +89,7 @@ Plans:
 **Requirements**: MDM-ADV-01, MDM-ADV-02, MDM-ADV-03
 
 **Success Criteria** (what must be TRUE):
+
   1. Live validation records selected ADV accession/path evidence from dev S3 bronze.
   2. After backfill, `sec_adv_filing` and, where source data contains private funds, `sec_adv_private_fund` counts are nonzero.
   3. `mdm run --entity-type adviser` and `mdm run --entity-type fund` preflight against the populated silver source no longer fail on empty ADV tables.
@@ -93,7 +98,8 @@ Plans:
 **Plans**: 3 plans (3 waves)
 
 Plans:
-- [ ] 10-01-PLAN.md - Acquire one Vanguard ADV XML from IAPD into S3 bronze (Fork A precondition).
+
+- [x] 10-01-PLAN.md - Acquire one Vanguard ADV XML from IAPD into S3 bronze (Fork A precondition).
 - [ ] 10-02-PLAN.md - Parse ADV bronze into silver, prove counts, fixture preflight test, live MDM adviser/fund load.
 - [ ] 10-03-PLAN.md - Document Step 1b ADV bronze + Phase 5 resume path; finalize evidence and STATE.
 
@@ -105,7 +111,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 8. ADV Bronze Discovery Contract | v1.4 ADV Bronze-To-Silver Backfill | 1/1 | Complete | 2026-06-03 |
 | 9. Parse ADV Bronze Command | v1.4 ADV Bronze-To-Silver Backfill | 1/1 | Complete | 2026-06-03 |
-| 10. Live ADV Backfill Validation | v1.4 ADV Bronze-To-Silver Backfill | 0/3 | Planned | - |
+| 10. Live ADV Backfill Validation | v1.4 ADV Bronze-To-Silver Backfill | 1/3 | In Progress|  |
 
 ## Backlog
 
@@ -119,16 +125,20 @@ that source for silver backfill.
 
 **Requirements:** TBD
 
-**Plans:** 0 plans
+**Plans:** 1/3 plans executed
 
 **Notes:**
+
 - This is a separate fetch/capture validation milestone, not part of Phase 9 `parse-adv-bronze`.
 - The milestone may call SEC only through the existing bronze capture/load path with bounded test
   inputs, EDGAR identity, rate-limit handling, and additive artifact semantics.
+
 - The Phase 9 silver backfill command must still treat missing alternate-url artifacts as missing
   bronze and must not fetch from SEC.
+
 - Exact alternate SEC URL/source family is intentionally left open until this backlog item is
   promoted for discussion.
 
 Plans:
+
 - [ ] TBD (promote to an active milestone when the current ADV backfill milestone is complete)
