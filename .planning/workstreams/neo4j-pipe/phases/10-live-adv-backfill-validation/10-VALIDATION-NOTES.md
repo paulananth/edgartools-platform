@@ -69,9 +69,70 @@ MDM-ADV-01 satisfied: sec_adv_filing > 0 ✓ and sec_adv_private_fund > 0 ✓
 
 ## MDM Load
 
-[Pending — Task 3 checkpoint: Colima Postgres required]
+**Commands run (in workspace worktree; WAREHOUSE_STORAGE_ROOT unset):**
+```bash
+export MDM_DATABASE_URL="postgresql://postgres:test@localhost:5432/mdm"
+export MDM_SILVER_DUCKDB="/tmp/edgar-warehouse-silver/silver/sec/silver.duckdb"
+unset WAREHOUSE_STORAGE_ROOT
+uv run --extra s3 edgar-warehouse mdm run --entity-type adviser
+uv run --extra s3 edgar-warehouse mdm run --entity-type fund
+```
+
+**Results:**
+
+| Command | Exit Code | Event |
+|---------|-----------|-------|
+| mdm run --entity-type adviser | 0 | mdm_command_completed |
+| mdm run --entity-type fund | 0 | mdm_command_completed (3122 ms) |
+
+**Postgres counts (Colima local MDM):**
+
+| Table | Count |
+|-------|-------|
+| mdm_adviser | 1 |
+| mdm_fund | 1 |
+
+MDM-ADV-01 fully satisfied: sec_adv_filing > 0 ✓, sec_adv_private_fund > 0 ✓, mdm_adviser > 0 ✓, mdm_fund > 0 ✓
+
+**Blockers encountered during Task 3 (recorded per user request):**
+
+| # | Blocker | Root Cause | Fix |
+|---|---------|------------|-----|
+| 1 | psql: command not found | psql not installed on macOS | docker exec mdm-postgres psql … |
+| 2 | MDM_SILVER_DUCKDB ignored | WAREHOUSE_STORAGE_ROOT=s3:// causes S3 shard hydration path | unset WAREHOUSE_STORAGE_ROOT |
+| 3 | relation "mdm_source_priority" does not exist | MDM schema not initialized | edgar-warehouse mdm migrate |
+| 4 | migrate silently skipped seeding | 005_fundamentals_relationships.sql ALTER TABLE fails on re-run, blocking seed_defaults() | Direct SQL INSERT via docker exec psql ON CONFLICT DO NOTHING |
+| 5 | KeyError: No source priority rule for adviser/adv_filing (×2) | mdm_source_priority table empty; seeding never completed | Manually INSERT ('all','adv_filing',2) + 3 other rows |
+| 6 | Executor socket timeouts (×2, ~20 min each) | Executor agents read large files before acting | Research pre-solved inline; pre-digested data passed to executor |
 
 **Graph pipeline (backfill-relationships, sync-graph, verify-graph) and Neo4j startup deferred to Phase 5 resume per orchestrator re-scope.**
+
+## Phase 10 COMPLETE
+
+All three requirements are satisfied:
+
+| Gate | Status | Evidence |
+|------|--------|----------|
+| MDM-ADV-01: sec_adv_filing > 0 | PASS | Silver: 1 row (Vanguard ADV-105958-20241218) |
+| MDM-ADV-01: sec_adv_private_fund > 0 | PASS | Silver: 1 row (CSF PRIVATE FUND, Hedge Fund, AUM $276M) |
+| MDM-ADV-01: mdm_adviser > 0 | PASS | Postgres: 1 row |
+| MDM-ADV-01: mdm_fund > 0 | PASS | Postgres: 1 row |
+| MDM-ADV-02: fixture preflight fail→pass | PASS | 5/5 tests green (test_adv_preflight.py, commit 93efbe5) |
+| MDM-ADV-03: runbook documents ADV backfill + Phase 5 resume | PASS | docs/aws-mdm-source-to-mdm.md: Step 1b + Phase 5 Resume Path section added |
+
+**Deferred (out of scope for Phase 10):**
+- Graph pipeline (backfill-relationships, sync-graph, verify-graph) — deferred to Phase 5 resume
+- Neo4j startup — deferred to Phase 5 resume
+
+## Next Steps (Phase 5 Resume)
+
+Phase 10 validated the single-sample slice (1 adviser, 1 fund). Full-scale Phase 5 resume sequence:
+
+1. Obtain ADV bronze for all target investment advisers from IAPD (FINRA) — see `docs/aws-mdm-source-to-mdm.md` Step 1b
+2. Run `edgar-warehouse parse-adv-bronze` to populate `sec_adv_filing` and `sec_adv_private_fund`
+3. Confirm `sec_adv_filing > 0` (adviser) and `sec_adv_private_fund > 0` (fund)
+4. Run `edgar-warehouse mdm run --entity-type adviser` then `--entity-type fund`
+5. Run `edgar-warehouse mdm backfill-relationships → sync-graph → verify-graph` (full graph sync)
 
 ## Rollback
 
