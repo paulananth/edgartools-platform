@@ -350,6 +350,11 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
         _apply_sql_file(engine, "001_initial_schema.sql")
         _apply_sql_file(engine, "003_tracking_status_index.sql")
         _apply_sql_file(engine, "004_company_ticker_parent.sql")
+        # Seed entity types before 005: the relationship-type INSERTs in 005 FK to
+        # mdm_entity_type_definition, which is only populated by Python seeding.
+        with Session(engine) as pre_session:
+            _seed_entity_types(pre_session)
+            pre_session.commit()
         _apply_sql_file(engine, "005_fundamentals_relationships.sql")
 
     if seed:
@@ -409,11 +414,12 @@ def _apply_sql_file(engine: Engine, filename: str) -> None:
 
 
 def _split_sql(sql: str) -> list[str]:
-    """Split SQL on statement-terminating semicolons, ignoring ; inside strings or -- comments."""
+    """Split SQL on statement-terminating semicolons, ignoring ; inside strings, comments, or $$...$$ blocks."""
     statements: list[str] = []
     current: list[str] = []
     in_single = False
     in_line_comment = False
+    in_dollar = False
     index = 0
     while index < len(sql):
         char = sql[index]
@@ -423,14 +429,32 @@ def _split_sql(sql: str) -> list[str]:
             current.append(char)
             index += 1
             continue
+        if in_dollar:
+            # Scan for closing $$
+            if char == "$" and index + 1 < len(sql) and sql[index + 1] == "$":
+                current.append(char)
+                current.append("$")
+                index += 2
+                in_dollar = False
+            else:
+                current.append(char)
+                index += 1
+            continue
         if char == "-" and index + 1 < len(sql) and sql[index + 1] == "-" and not in_single:
             in_line_comment = True
             current.append(char)
             index += 1
             continue
+        # Dollar-quote: $$ opens a dollar-quoted block (simplified — no tag quoting)
+        if char == "$" and index + 1 < len(sql) and sql[index + 1] == "$" and not in_single:
+            current.append(char)
+            current.append("$")
+            index += 2
+            in_dollar = True
+            continue
         if char == "'" and (index + 1 >= len(sql) or sql[index + 1] != "'"):
             in_single = not in_single
-        if char == ";" and not in_single:
+        if char == ";" and not in_single and not in_dollar:
             statements.append("".join(current))
             current = []
         else:
