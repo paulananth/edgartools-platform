@@ -17,3 +17,19 @@
 One private fund (CSF PRIVATE FUND) was present in IA_Schedule_D_7B1 for this filing.
 The sec-bulk-csv method uses real Form ADV Part 1 data from all registered investment advisers,
 filtered for CRD 105958. Private-fund detail (Schedule D 7B1) IS available for this filing.
+
+## S3 Bronze Upload
+
+**S3 URI:** s3://edgartools-dev-bronze-077127448006/warehouse/bronze/filings/sec/cik=105958/accession=ADV-105958-20241218/primary_doc.xml
+**CIK:** 105958
+**FORM:** ADV
+**Size:** 681 bytes
+**Verified:** aws s3 ls confirms one primary_doc.xml with nonzero size
+
+## Storage Adapter Readability
+
+read_bytes returned 681 bytes for the S3 URI above. Exit 0. ✓
+
+## Wave 2 --artifact String
+
+ADV-105958-20241218,ADV,s3://edgartools-dev-bronze-077127448006/warehouse/bronze/filings/sec/cik=105958/accession=ADV-105958-20241218/primary_doc.xml,105958
