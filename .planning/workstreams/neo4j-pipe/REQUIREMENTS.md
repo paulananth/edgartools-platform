@@ -3,7 +3,7 @@
 workstream: neo4j-pipe
 status: active
 milestone: v1.4 ADV Bronze-To-Silver Backfill
-updated: 2026-06-03
+updated: 2026-06-06
 
 ---
 
@@ -24,9 +24,9 @@ updated: 2026-06-03
 
 ### MDM Readiness
 
-- [ ] **MDM-ADV-01**: After ADV backfill, `sec_adv_filing` and `sec_adv_private_fund` readiness diagnostics report nonzero rows for at least one selected live S3 ADV sample when source data contains private funds.
-- [ ] **MDM-ADV-02**: `mdm run --entity-type adviser` and `mdm run --entity-type fund` preflights can succeed against a silver source populated by `parse-adv-bronze`.
-- [ ] **MDM-ADV-03**: The docs identify the exact resume path for the blocked Phase 5 live checkpoint, including the silver counts needed before running MDM adviser/fund loaders.
+- [x] **MDM-ADV-01**: After ADV backfill, `sec_adv_filing` and `sec_adv_private_fund` readiness diagnostics report nonzero rows for at least one selected live S3 ADV sample when source data contains private funds.
+- [x] **MDM-ADV-02**: `mdm run --entity-type adviser` and `mdm run --entity-type fund` preflights can succeed against a silver source populated by `parse-adv-bronze`.
+- [x] **MDM-ADV-03**: The docs identify the exact resume path for the blocked Phase 5 live checkpoint, including the silver counts needed before running MDM adviser/fund loaders.
 
 ### Isolation
 
@@ -58,9 +58,9 @@ updated: 2026-06-03
 | ADV-05 | Phase 9 | Complete |
 | ADV-06 | Phase 9 | Complete |
 | ADV-07 | Phase 9 | Complete |
-| MDM-ADV-01 | Phase 10 | Pending |
-| MDM-ADV-02 | Phase 10 | Pending |
-| MDM-ADV-03 | Phase 10 | Pending |
+| MDM-ADV-01 | Phase 10 | Complete |
+| MDM-ADV-02 | Phase 10 | Complete |
+| MDM-ADV-03 | Phase 10 | Complete |
 | ISO-01 | Phase 8 | Complete |
 | ISO-02 | Phase 8 | Complete |
 | ISO-03 | Phase 8 | Complete |

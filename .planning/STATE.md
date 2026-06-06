@@ -4,7 +4,7 @@ milestone: multi-milestone
 milestone_name: Multiple active workstreams
 status: executing
 last_updated: "2026-06-03"
-last_activity: 2026-06-03 -- neo4j-pipe Phase 8 plan executed; verification pending
+last_activity: 2026-06-06 -- neo4j-pipe v1.1 Phase 5 complete; Snowflake graph parity passed
 ---
 
 # Project State
@@ -23,6 +23,7 @@ publishing to Snowflake gold tables.
 | Milestone | Workstream | Progress | Status | Resumption Point |
 |-----------|-----------|----------|--------|-----------------|
 | v1.4 ADV Bronze-To-Silver Backfill | neo4j-pipe | 33% | Phase 9 ready to plan | Phase 9: Parse ADV Bronze Command |
+| v1.1 Neo4j Bronze-To-Graph Pipe | neo4j-pipe | Phase 5 complete | Phase 6 ready to plan | Phase 6: Full Graph Coverage And Verification |
 | v1.2 MDM Neo4j Review Dashboard | mdm-neo4j-dashboard | 60% | Phase 10 ready to execute | Phase 10 UI-SPEC approved |
 | v1.3 Neo4j Snowflake Native App | neo4j-snowflake | 50% | Phase 3 ready to plan | Phase 3: Hosted Graph Verification + E2E |
 | Model Builder Contract Gaps | model-builder-contract-gaps | 0% | Phase 1 ready to start | Phase 1: Contract Governance |
