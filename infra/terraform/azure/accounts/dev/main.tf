@@ -83,7 +83,6 @@ module "mdm" {
   sql_database_sku_name        = var.mdm_sql_database_sku_name
   sql_database_max_size_gb     = var.mdm_sql_database_max_size_gb
   sql_firewall_rules           = var.mdm_sql_firewall_rules
-  neo4j_storage_account_name   = var.mdm_neo4j_storage_account_name
   tags                         = local.tags
 
   depends_on = [module.key_vault, module.container_jobs]

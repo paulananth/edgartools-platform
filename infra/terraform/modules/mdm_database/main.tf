@@ -101,12 +101,6 @@ resource "aws_secretsmanager_secret" "postgres_dsn" {
   tags        = var.tags
 }
 
-resource "aws_secretsmanager_secret" "neo4j" {
-  name        = "${var.name_prefix}/mdm/neo4j"
-  description = "Empty Neo4j connection details container for MDM. Populate the value out-of-band."
-  tags        = var.tags
-}
-
 resource "aws_secretsmanager_secret" "api_keys" {
   name        = "${var.name_prefix}/mdm/api_keys"
   description = "Empty MDM API key container. Populate the value out-of-band."

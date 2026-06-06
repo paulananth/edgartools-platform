@@ -42,20 +42,3 @@ resource "azurerm_mssql_firewall_rule" "operator" {
   end_ip_address   = each.value.end_ip_address
 }
 
-resource "azurerm_storage_account" "neo4j" {
-  name                            = var.neo4j_storage_account_name
-  resource_group_name             = var.resource_group_name
-  location                        = var.location
-  account_tier                    = "Premium"
-  account_kind                    = "FileStorage"
-  account_replication_type        = "LRS"
-  min_tls_version                 = "TLS1_2"
-  allow_nested_items_to_be_public = false
-  tags                            = var.tags
-}
-
-resource "azurerm_storage_share" "neo4j" {
-  name                 = "neo4j-data"
-  storage_account_name = azurerm_storage_account.neo4j.name
-  quota                = 100
-}

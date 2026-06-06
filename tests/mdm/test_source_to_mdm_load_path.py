@@ -408,8 +408,8 @@ class TestMissingSilverSourceFailsBeforeSession:
             f"Expected 'MDM_SILVER_DUCKDB' in stderr error message. Got:\n{stderr_text!r}"
         )
 
-    def test_handle_run_all_does_not_create_neo4j_client(self, monkeypatch):
-        """_handle_run runs the relational MDM pipeline without implicit graph sync."""
+    def test_handle_run_all_succeeds(self, monkeypatch):
+        """_handle_run runs the relational MDM pipeline and returns 0."""
         from types import SimpleNamespace
 
         import edgar_warehouse.mdm.cli as mdm_cli
@@ -422,16 +422,10 @@ class TestMissingSilverSourceFailsBeforeSession:
             MagicMock(return_value=(object(), 0)),
         )
         monkeypatch.setattr(mdm_cli, "_session", MagicMock(return_value=fake_session))
-        monkeypatch.setattr(
-            mdm_cli,
-            "_neo4j_client",
-            MagicMock(side_effect=AssertionError("mdm run must not create a Neo4j client")),
-        )
 
         class FakePipeline:
-            def __init__(self, *, session, silver, neo4j=None):
+            def __init__(self, *, session, silver):
                 assert session is fake_session
-                assert neo4j is None
 
             def run_all(self, limit=None):
                 assert limit == 10
@@ -453,7 +447,6 @@ class TestMissingSilverSourceFailsBeforeSession:
         args = argparse.Namespace(entity_type="all", limit=10)
 
         assert mdm_cli._handle_run(args) == 0
-        assert mdm_cli._neo4j_client.call_count == 0
         fake_session.close.assert_called_once()
 
     def test_missing_silver_source_fails_before_session_in_handle_derive_relationships(
@@ -750,7 +743,7 @@ class TestMDMPipelineUsesCurrentSilverSchema:
     ):
         """run_companies() must not reference sec_tracked_universe; use sec_company_sync_state."""
         reader = _DuckReader(str(silver_duckdb))
-        pipeline = MDMPipeline(session=mdm_session, silver=reader, neo4j=None)
+        pipeline = MDMPipeline(session=mdm_session, silver=reader)
 
         # Will raise DuckDB BinderException if sec_tracked_universe is queried
         try:
@@ -773,7 +766,7 @@ class TestMDMPipelineUsesCurrentSilverSchema:
         Fails because the current code queries sec_tracked_universe.
         """
         reader = _DuckReader(str(silver_duckdb))
-        pipeline = MDMPipeline(session=mdm_session, silver=reader, neo4j=None)
+        pipeline = MDMPipeline(session=mdm_session, silver=reader)
 
         n = pipeline.run_companies()
         assert n >= 1, (
@@ -784,7 +777,7 @@ class TestMDMPipelineUsesCurrentSilverSchema:
     def test_run_persons_uses_sec_ownership_reporting_owner(self, silver_duckdb, mdm_session):
         """run_persons() must query sec_ownership_reporting_owner for person rows."""
         reader = _DuckReader(str(silver_duckdb))
-        pipeline = MDMPipeline(session=mdm_session, silver=reader, neo4j=None)
+        pipeline = MDMPipeline(session=mdm_session, silver=reader)
 
         # This will fail if run_companies has schema errors — run it first to seed companies
         try:
@@ -831,7 +824,7 @@ class TestEntityLoadIdempotentForDomainCounts:
         reader = _DuckReader(str(silver_duckdb))
 
         # First run
-        pipeline1 = MDMPipeline(session=mdm_session, silver=reader, neo4j=None)
+        pipeline1 = MDMPipeline(session=mdm_session, silver=reader)
         pipeline1.run_companies()
         pipeline1.run_advisers()
         pipeline1.run_persons()
@@ -841,7 +834,7 @@ class TestEntityLoadIdempotentForDomainCounts:
         counts_after_first = self._domain_counts(mdm_session)
 
         # Second run against the same data
-        pipeline2 = MDMPipeline(session=mdm_session, silver=reader, neo4j=None)
+        pipeline2 = MDMPipeline(session=mdm_session, silver=reader)
         pipeline2.run_companies()
         pipeline2.run_advisers()
         pipeline2.run_persons()
@@ -865,7 +858,7 @@ class TestEntityLoadIdempotentForDomainCounts:
         are ever loaded.
         """
         reader = _DuckReader(str(silver_duckdb))
-        pipeline = MDMPipeline(session=mdm_session, silver=reader, neo4j=None)
+        pipeline = MDMPipeline(session=mdm_session, silver=reader)
         pipeline.run_companies()
         pipeline.run_advisers()
         pipeline.run_persons()
@@ -897,7 +890,7 @@ class TestCoverageReport:
     def _load_all(self, silver_duckdb, mdm_session):
         """Run all five entity loaders and return the loaded session."""
         reader = _DuckReader(str(silver_duckdb))
-        pipeline = MDMPipeline(session=mdm_session, silver=reader, neo4j=None)
+        pipeline = MDMPipeline(session=mdm_session, silver=reader)
         pipeline.run_companies()
         pipeline.run_advisers()
         pipeline.run_persons()

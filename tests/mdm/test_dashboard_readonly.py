@@ -195,13 +195,6 @@ def test_mdm_dashboard_metrics_include_all_required_domain_counts(db_session):
     assert payload["entity_counts"]["person"]["count"] == 1
     assert payload["entity_counts"]["security"]["count"] == 1
     assert payload["entity_counts"]["fund"]["count"] == 1
-    assert payload["registry"]["neo4j_labels"] == [
-        "Adviser",
-        "Company",
-        "Fund",
-        "Person",
-        "Security",
-    ]
     assert {
         row["entity_type"]: row["neo4j_label"]
         for row in payload["registry"]["entity_type_details"]
@@ -442,44 +435,34 @@ def test_build_relationship_coverage_rows_clamps_missing_and_coverage_percent():
         "ISSUED_BY": {"active_count": 0, "pending_graph_sync_count": 0},
         "OWNS_COMPANY": {"active_count": 2, "pending_graph_sync_count": 0},
     }
-    neo4j_relationships = {
-        "MANAGES_FUND": {"edge_count": 3},
-        "OWNS_COMPANY": {"edge_count": 5},
-    }
 
-    rows = build_relationship_coverage_rows(mdm_relationships, neo4j_relationships)
+    rows = build_relationship_coverage_rows(mdm_relationships)
     payload = [row.as_dict() for row in rows]
 
     assert payload == [
         {
             "relationship_type": "ISSUED_BY",
             "mdm_active_count": 0,
-            "neo4j_edge_count": 0,
             "pending_graph_sync_count": 0,
-            "missing_estimate": 0,
+            "synced_count": 0,
             "coverage_percent": None,
-            "extra_graph_count": 0,
             "status": "No active MDM rows",
         },
         {
             "relationship_type": "MANAGES_FUND",
             "mdm_active_count": 4,
-            "neo4j_edge_count": 3,
             "pending_graph_sync_count": 1,
-            "missing_estimate": 1,
+            "synced_count": 3,
             "coverage_percent": 75.0,
-            "extra_graph_count": 0,
-            "status": "Missing graph data",
+            "status": "Pending sync",
         },
         {
             "relationship_type": "OWNS_COMPANY",
             "mdm_active_count": 2,
-            "neo4j_edge_count": 5,
             "pending_graph_sync_count": 0,
-            "missing_estimate": 0,
+            "synced_count": 2,
             "coverage_percent": 100.0,
-            "extra_graph_count": 3,
-            "status": "Extra graph data",
+            "status": "OK",
         },
     ]
 

@@ -94,11 +94,6 @@ variable "mdm_sql_firewall_rules" {
   default = {}
 }
 
-variable "mdm_neo4j_storage_account_name" {
-  description = "Globally unique storage account name for Neo4j Azure Files persistence."
-  type        = string
-  default     = null
-}
 
 variable "tags" {
   description = "Tags applied to Azure resources."

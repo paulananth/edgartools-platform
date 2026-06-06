@@ -50,7 +50,6 @@ mdm = [
     "sqlalchemy>=2.0.0",
     "psycopg2-binary>=2.9.9",
     "sqladmin>=0.16.0",
-    "neo4j>=5.20.0",
     "jellyfish>=1.0.0",
     "splink>=3.9.0",
     "pydantic>=2.7.0",
@@ -60,7 +59,6 @@ mdm-runtime = [
     "sqlalchemy>=2.0.0",
     "psycopg2-binary>=2.9.9",
     "snowflake-connector-python>=3.7",
-    "neo4j>=5.20.0",
     "jellyfish>=1.0.0",
     "pydantic>=2.7.0",
     "boto3>=1.34.0",
@@ -86,9 +84,7 @@ include = [
 ]
 
 [tool.pytest.ini_options]
-markers = [
-    "neo4j: requires live Neo4j via NEO4J_URI env var",
-]
+markers = []
 
 [dependency-groups]
 dev = [

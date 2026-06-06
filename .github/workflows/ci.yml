@@ -58,7 +58,6 @@ jobs:
       - name: Run MDM tests
         run: |
           uv run pytest tests/mdm/ -v --tb=short \
-            -m "not neo4j" \
             -k "not snowflake and not readonly"
 
   # ── Application-level tests ────────────────────────────────────────────────

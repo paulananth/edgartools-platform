@@ -26,76 +26,13 @@ from edgar_warehouse.mdm.database import (
 from edgar_warehouse.mdm.graph import (
     GraphRegistry,
     GraphSyncEngine,
-    Neo4jGraphClient,
     backfill_relationship_instances,
-    node_merge_cypher,
-    relationship_merge_cypher,
 )
 
 
 # ===========================================================================
 # Layer 1 — Cypher template builders (no fixtures needed)
 # ===========================================================================
-
-class TestCypherBuilders:
-    def _registry(self) -> GraphRegistry:
-        reg = GraphRegistry()
-        reg.labels_by_entity_type = {
-            "company":  "Company",
-            "adviser":  "Adviser",
-            "fund":     "Fund",
-            "security": "Security",
-        }
-        reg.rel_type_by_name = {
-            "MANAGES_FUND": {
-                "rel_type_id":      "rt-mf",
-                "rel_type_name":    "MANAGES_FUND",
-                "source_node_type": "adviser",
-                "target_node_type": "fund",
-                "direction":        "outbound",
-                "is_temporal":      True,
-                "merge_strategy":   "extend_temporal",
-            },
-            "ISSUED_BY": {
-                "rel_type_id":      "rt-ib",
-                "rel_type_name":    "ISSUED_BY",
-                "source_node_type": "security",
-                "target_node_type": "company",
-                "direction":        "outbound",
-                "is_temporal":      True,
-                "merge_strategy":   "extend_temporal",
-            },
-        }
-        return reg
-
-    def test_node_merge_uses_entity_label(self):
-        cypher = node_merge_cypher(self._registry(), "company")
-        assert "Company" in cypher
-        assert "entity_id: $entity_id" in cypher
-        assert "MERGE" in cypher
-        assert "SET" in cypher
-
-    def test_node_merge_unknown_type_raises(self):
-        with pytest.raises(KeyError, match="unknown_type"):
-            node_merge_cypher(self._registry(), "unknown_type")
-
-    def test_relationship_merge_manages_fund(self):
-        cypher = relationship_merge_cypher(self._registry(), "MANAGES_FUND")
-        assert "Adviser" in cypher
-        assert "Fund" in cypher
-        assert "MANAGES_FUND" in cypher
-        assert "$source_entity_id" in cypher
-        assert "$target_entity_id" in cypher
-
-    def test_relationship_merge_issued_by(self):
-        cypher = relationship_merge_cypher(self._registry(), "ISSUED_BY")
-        assert "Security" in cypher
-        assert "Company" in cypher
-        assert "ISSUED_BY" in cypher
-
-    def test_relationship_merge_unknown_type_raises(self):
-        with pytest.raises(KeyError, match="NO_SUCH_REL"):
-            relationship_merge_cypher(self._registry(), "NO_SUCH_REL")
 
 
 # ===========================================================================
@@ -225,139 +162,7 @@ class TestGraphSyncEngine:
         with pytest.raises(KeyError, match="NO_SUCH_REL"):
             engine.record_relationship("NO_SUCH_REL", "src", "tgt")
 
-    def test_sync_pending_returns_zero_without_neo4j(self, db_session):
-        adviser_id = _make_entity(db_session, "adviser")
-        fund_id    = _make_entity(db_session, "fund")
-        db_session.commit()
-        engine = GraphSyncEngine.build(db_session, neo4j=None)
-        engine.record_relationship("MANAGES_FUND", adviser_id, fund_id)
-        db_session.commit()
-        assert engine.sync_pending() == 0
-
-    def test_sync_entities_returns_zero_without_neo4j(self, db_session):
-        _make_entity(db_session, "company")
-        db_session.commit()
-        engine = GraphSyncEngine.build(db_session, neo4j=None)
-        assert engine.sync_entities() == 0
-
-    def test_sync_entities_upserts_nodes_without_relationships(self, db_session):
-        _make_entity(db_session, "company")
-        _make_entity(db_session, "company")
-        db_session.commit()
-        client = _FakeGraphClient()
-        engine = GraphSyncEngine.build(db_session, neo4j=client)
-
-        assert engine.sync_entities(limit=100) == 2
-        assert len(client.graph_session.calls) == 2
-        assert all("MERGE (n:Company" in query for query, _kwargs in client.graph_session.calls)
-
-    def test_sync_pending_filters_relationship_types_with_per_type_limit(self, db_session):
-        from sqlalchemy import select
-
-        adviser_id = _make_entity(db_session, "adviser")
-        fund_ids = [_make_entity(db_session, "fund") for _ in range(3)]
-        company_id = _make_entity(db_session, "company")
-        security_id = _make_entity(db_session, "security")
-        db_session.commit()
-
-        engine = GraphSyncEngine.build(db_session)
-        for fund_id in fund_ids:
-            engine.record_relationship("MANAGES_FUND", adviser_id, fund_id)
-        engine.record_relationship("ISSUED_BY", security_id, company_id)
-        db_session.commit()
-
-        fake = _FakeGraphClient()
-        synced = GraphSyncEngine.build(db_session, neo4j=fake).sync_pending(
-            relationship_types=["MANAGES_FUND"],
-            limit_per_type=2,
-        )
-
-        assert synced == 2
-        pending = list(db_session.scalars(
-            select(MdmRelationshipInstance).where(MdmRelationshipInstance.graph_synced_at.is_(None))
-        ))
-        assert len(pending) == 2
-        assert all("MANAGES_FUND" in query or "MERGE (n:" in query for query, _ in fake.graph_session.calls)
-
-    @pytest.mark.neo4j
-    def test_sync_pending_calls_bolt_and_stamps_synced_at(self, db_session, neo4j_client):
-        adviser_id = _make_entity(db_session, "adviser")
-        fund_id    = _make_entity(db_session, "fund")
-        db_session.commit()
-
-        engine = GraphSyncEngine.build(db_session, neo4j=neo4j_client)
-        engine.record_relationship("MANAGES_FUND", adviser_id, fund_id)
-        db_session.commit()
-
-        synced = engine.sync_pending()
-        assert synced == 1
-
-        row = db_session.scalars(
-            __import__("sqlalchemy", fromlist=["select"]).select(MdmRelationshipInstance)
-        ).first()
-        assert row.graph_synced_at is not None
-
-        with neo4j_client.session() as s:
-            s.run("MATCH (n) WHERE n.entity_id IN $ids DETACH DELETE n",
-                  ids=[adviser_id, fund_id])
-
-    @pytest.mark.neo4j
-    def test_sync_pending_respects_limit(self, db_session, neo4j_client):
-        from sqlalchemy import select
-        adviser_id = _make_entity(db_session, "adviser")
-        fund_ids = []
-        for _ in range(5):
-            fund_id = _make_entity(db_session, "fund")
-            fund_ids.append(fund_id)
-            db_session.flush()
-            db_session.add(MdmRelationshipInstance(
-                rel_type_id=list(GraphRegistry.load(db_session).rel_type_by_name.values())[0]["rel_type_id"],
-                source_entity_id=adviser_id,
-                target_entity_id=fund_id,
-                source_system="test",
-            ))
-        db_session.commit()
-
-        engine = GraphSyncEngine.build(db_session, neo4j=neo4j_client)
-        synced = engine.sync_pending(limit=3)
-        assert synced == 3
-
-        pending = list(db_session.scalars(
-            select(MdmRelationshipInstance).where(MdmRelationshipInstance.graph_synced_at.is_(None))
-        ))
-        assert len(pending) == 2
-
-        with neo4j_client.session() as s:
-            s.run("MATCH (n) WHERE n.entity_id IN $ids DETACH DELETE n",
-                  ids=[adviser_id] + fund_ids)
-
-    @pytest.mark.neo4j
-    def test_sync_pending_skips_already_synced(self, db_session, neo4j_client):
-        from sqlalchemy import select
-        adviser_id = _make_entity(db_session, "adviser")
-        fund_id    = _make_entity(db_session, "fund")
-        db_session.commit()
-
-        engine = GraphSyncEngine.build(db_session, neo4j=neo4j_client)
-        engine.record_relationship("MANAGES_FUND", adviser_id, fund_id)
-        db_session.commit()
-
-        first  = engine.sync_pending()
-        second = engine.sync_pending()
-        assert first  == 1
-        assert second == 0
-
-        with neo4j_client.session() as s:
-            s.run("MATCH (n) WHERE n.entity_id IN $ids DETACH DELETE n",
-                  ids=[adviser_id, fund_id])
-
-
-# ===========================================================================
-# Layer 4 — backfill_relationship_instances
-# ===========================================================================
-
 def _make_full_entity(session, entity_type: str) -> str:
-    """Create MdmEntity + domain row so _ensure_node_exists can look it up."""
     eid = str(uuid.uuid4())
     session.add(MdmEntity(entity_id=eid, entity_type=entity_type))
     session.flush()
@@ -376,7 +181,7 @@ class TestBackfillRelationshipInstances:
         ))
         db_session.commit()
 
-        result = backfill_relationship_instances(db_session, neo4j=None, limit=100)
+        result = backfill_relationship_instances(db_session, limit=100)
         assert result["backfilled"] == 1
         assert result["synced"] == 0
 
@@ -398,7 +203,7 @@ class TestBackfillRelationshipInstances:
         ))
         db_session.commit()
 
-        result = backfill_relationship_instances(db_session, neo4j=None, limit=100)
+        result = backfill_relationship_instances(db_session, limit=100)
         assert result["backfilled"] == 1
         rows = list(db_session.scalars(select(MdmRelationshipInstance)))
         assert rows[0].source_entity_id == security_id
@@ -410,8 +215,8 @@ class TestBackfillRelationshipInstances:
         db_session.add(MdmFund(entity_id=fund_id, adviser_entity_id=adviser_id, canonical_name="F"))
         db_session.commit()
 
-        r1 = backfill_relationship_instances(db_session, neo4j=None, limit=100)
-        r2 = backfill_relationship_instances(db_session, neo4j=None, limit=100)
+        r1 = backfill_relationship_instances(db_session, limit=100)
+        r2 = backfill_relationship_instances(db_session, limit=100)
         assert r1["backfilled"] == 1
         assert r2["backfilled"] == 0
 
@@ -422,30 +227,15 @@ class TestBackfillRelationshipInstances:
             db_session.add(MdmFund(entity_id=fid, adviser_entity_id=adviser_id, canonical_name=f"F{i}"))
         db_session.commit()
 
-        result = backfill_relationship_instances(db_session, neo4j=None, limit=3)
+        result = backfill_relationship_instances(db_session, limit=3)
         assert result["backfilled"] == 3
-
-    @pytest.mark.neo4j
-    def test_backfill_triggers_sync_when_neo4j_provided(self, db_session, neo4j_client):
-        adviser_id = _make_full_entity(db_session, "adviser")
-        fund_id    = _make_full_entity(db_session, "fund")
-        db_session.add(MdmFund(entity_id=fund_id, adviser_entity_id=adviser_id, canonical_name="F"))
-        db_session.commit()
-
-        result = backfill_relationship_instances(db_session, neo4j=neo4j_client, limit=100)
-        assert result["backfilled"] == 1
-        assert result["synced"] == 1
-
-        with neo4j_client.session() as s:
-            s.run("MATCH (n) WHERE n.entity_id IN $ids DETACH DELETE n",
-                  ids=[adviser_id, fund_id])
 
     def test_backfill_skips_funds_without_adviser(self, db_session):
         fund_id = _make_full_entity(db_session, "fund")
         db_session.add(MdmFund(entity_id=fund_id, adviser_entity_id=None, canonical_name="Orphan"))
         db_session.commit()
 
-        result = backfill_relationship_instances(db_session, neo4j=None, limit=100)
+        result = backfill_relationship_instances(db_session, limit=100)
         assert result["backfilled"] == 0
 
     def test_backfill_no_limit_processes_all(self, db_session):
@@ -456,7 +246,7 @@ class TestBackfillRelationshipInstances:
             db_session.add(MdmFund(entity_id=fid, adviser_entity_id=adviser_id, canonical_name=f"F{i}"))
         db_session.commit()
 
-        result = backfill_relationship_instances(db_session, neo4j=None, limit=None)
+        result = backfill_relationship_instances(db_session, limit=None)
         assert result["backfilled"] == 5
 
 
@@ -560,164 +350,4 @@ class TestCLICommands:
 # Layer 6 — bolt:// URI normalisation in _neo4j_client
 # ===========================================================================
 
-class TestNeo4jClientURINormalisation:
-    """The cli._neo4j_client() must rewrite neo4j:// -> bolt:// so that
-    single-instance Neo4j deployments without bolt_advertised_address do not
-    fail routing discovery.
 
-    Neo4jGraphClient is a @dataclass with uri: str as a public field and lazy
-    connection (connect() is not called at construction time), so we can
-    inspect client.uri directly without mocking the class or connecting.
-    """
-
-    def _call_neo4j_client(self, uri: str):
-        from edgar_warehouse.mdm.cli import _neo4j_client
-
-        with patch.dict(os.environ, {
-            "NEO4J_URI":      uri,
-            "NEO4J_USER":     "neo4j",
-            "NEO4J_PASSWORD": "secret",
-        }):
-            return _neo4j_client()
-
-    def test_neo4j_scheme_rewritten_to_bolt(self):
-        client = self._call_neo4j_client("neo4j://host:7687")
-        assert client is not None
-        assert client.uri.startswith("bolt://"), f"Expected bolt://, got: {client.uri}"
-
-    def test_bolt_scheme_unchanged(self):
-        client = self._call_neo4j_client("bolt://host:7687")
-        assert client is not None
-        assert client.uri.startswith("bolt://")
-
-    def test_username_alias_and_database_are_supported(self):
-        from edgar_warehouse.mdm.cli import _neo4j_client
-
-        with patch.dict(os.environ, {
-            "NEO4J_URI": "neo4j+s://example.databases.neo4j.io",
-            "NEO4J_USERNAME": "neo4j-user",
-            "NEO4J_PASSWORD": "secret",
-            "NEO4J_DATABASE": "neo4j-db",
-        }, clear=True):
-            client = _neo4j_client()
-        assert client is not None
-        assert client.user == "neo4j-user"
-        assert client.database == "neo4j-db"
-
-    def test_returns_none_when_env_vars_missing(self):
-        from edgar_warehouse.mdm.cli import _neo4j_client
-        for k in ("NEO4J_URI", "NEO4J_USER", "NEO4J_PASSWORD", "NEO4J_SECRET_JSON"):
-            os.environ.pop(k, None)
-        with patch.dict(os.environ, {}, clear=True):
-            assert _neo4j_client() is None
-
-
-# ===========================================================================
-# Layer 7 — GraphSyncEngine idempotency (GRAPH-04, D-07)
-# ===========================================================================
-
-class TestGraphSyncIdempotency:
-    def test_all_pending_zero_after_double_sync(self, db_session):
-        adviser_id  = _make_entity(db_session, "adviser")
-        fund_id     = _make_entity(db_session, "fund")
-        security_id = _make_entity(db_session, "security")
-        company_id  = _make_entity(db_session, "company")
-        db_session.commit()
-
-        engine = GraphSyncEngine.build(db_session, neo4j=_FakeGraphClient())
-        engine.record_relationship("MANAGES_FUND", adviser_id, fund_id)
-        engine.record_relationship("ISSUED_BY", security_id, company_id)
-        db_session.commit()
-
-        # First sync pass
-        engine.sync_entities()
-        engine.sync_pending()
-        db_session.commit()
-
-        # Second sync pass — must be idempotent
-        engine.sync_entities()
-        engine.sync_pending()
-        db_session.commit()
-
-        # All types must report zero pending (D-07)
-        counts = engine.pending_counts()
-        assert counts.get("MANAGES_FUND", 0) == 0
-        assert counts.get("ISSUED_BY", 0) == 0
-
-
-# ===========================================================================
-# Layer 8 — Live Neo4j smoke test (D-08, D-09)
-# ===========================================================================
-
-@pytest.mark.neo4j
-@pytest.mark.skipif(
-    not os.environ.get("NEO4J_URI"),
-    reason="NEO4J_URI not set — skipping live Neo4j smoke test",
-)
-class TestGraphSyncNeo4jSmoke:
-    def test_double_sync_stable_and_no_pending(self, db_session):
-        from edgar_warehouse.mdm.graph import Neo4jGraphClient
-
-        uri = os.environ["NEO4J_URI"]
-        if uri.startswith("neo4j://"):
-            uri = "bolt://" + uri[len("neo4j://"):]
-        client = Neo4jGraphClient(
-            uri=uri,
-            user=os.environ["NEO4J_USER"],
-            password=os.environ["NEO4J_PASSWORD"],
-        )
-        client.connect()
-        adviser_id = _make_entity(db_session, "adviser")
-        fund_id    = _make_entity(db_session, "fund")
-        try:
-            db_session.commit()
-
-            engine = GraphSyncEngine.build(db_session, neo4j=client)
-            engine.record_relationship("MANAGES_FUND", adviser_id, fund_id)
-            db_session.commit()
-
-            # First sync pass
-            engine.sync_entities()
-            engine.sync_pending()
-            db_session.commit()
-
-            # Capture first-pass Neo4j counts
-            with client.session() as s:
-                first_nodes = s.run(
-                    "MATCH (n) WHERE n.entity_id IN $ids RETURN count(n) AS n",
-                    ids=[adviser_id, fund_id],
-                ).single()["n"]
-                first_edges = s.run(
-                    "MATCH ()-[r:MANAGES_FUND]->() RETURN count(r) AS n"
-                ).single()["n"]
-
-            # Second sync pass — idempotent
-            engine.sync_entities()
-            engine.sync_pending()
-            db_session.commit()
-
-            # Pending must be zero
-            counts = engine.pending_counts()
-            assert counts.get("MANAGES_FUND", 0) == 0
-
-            # Neo4j counts must be stable (second run == first run)
-            with client.session() as s:
-                second_nodes = s.run(
-                    "MATCH (n) WHERE n.entity_id IN $ids RETURN count(n) AS n",
-                    ids=[adviser_id, fund_id],
-                ).single()["n"]
-                second_edges = s.run(
-                    "MATCH ()-[r:MANAGES_FUND]->() RETURN count(r) AS n"
-                ).single()["n"]
-
-            assert first_nodes > 0
-            assert first_edges > 0
-            assert second_nodes == first_nodes
-            assert second_edges == first_edges
-        finally:
-            with client.session() as s:
-                s.run(
-                    "MATCH (n) WHERE n.entity_id IN $ids DETACH DELETE n",
-                    ids=[adviser_id, fund_id],
-                )
-            client.close()

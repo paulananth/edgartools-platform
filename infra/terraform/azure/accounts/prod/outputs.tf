@@ -76,22 +76,8 @@ output "mdm_sql_database_name" {
 output "mdm_runtime_secret_uris" {
   description = "Versionless Key Vault URIs expected by out-of-band MDM runtime setup. Terraform does not create these secret values."
   value = var.enable_mdm ? {
-    database_url   = "${module.key_vault.vault_uri}secrets/mdm-database-url"
-    neo4j          = "${module.key_vault.vault_uri}secrets/mdm-neo4j"
-    neo4j_uri      = "${module.key_vault.vault_uri}secrets/mdm-neo4j-uri"
-    neo4j_user     = "${module.key_vault.vault_uri}secrets/mdm-neo4j-user"
-    neo4j_password = "${module.key_vault.vault_uri}secrets/mdm-neo4j-password"
-    api_keys       = "${module.key_vault.vault_uri}secrets/mdm-api-keys"
-    api_keys_csv   = "${module.key_vault.vault_uri}secrets/mdm-api-keys-csv"
+    database_url = "${module.key_vault.vault_uri}secrets/mdm-database-url"
+    api_keys     = "${module.key_vault.vault_uri}secrets/mdm-api-keys"
+    api_keys_csv = "${module.key_vault.vault_uri}secrets/mdm-api-keys-csv"
   } : {}
-}
-
-output "mdm_neo4j_storage_account_name" {
-  description = "Neo4j data storage account shell name."
-  value       = try(module.mdm[0].neo4j_storage_account_name, null)
-}
-
-output "mdm_neo4j_storage_share_name" {
-  description = "Neo4j data storage share shell name."
-  value       = try(module.mdm[0].neo4j_storage_share_name, null)
 }

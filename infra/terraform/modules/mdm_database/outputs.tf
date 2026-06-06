@@ -33,10 +33,6 @@ output "postgres_dsn_secret_arn" {
   value       = aws_secretsmanager_secret.postgres_dsn.arn
 }
 
-output "neo4j_secret_arn" {
-  description = "Secrets Manager ARN for the empty operator-populated Neo4j connection container."
-  value       = aws_secretsmanager_secret.neo4j.arn
-}
 
 output "api_keys_secret_arn" {
   description = "Secrets Manager ARN for the empty operator-populated MDM API key container."

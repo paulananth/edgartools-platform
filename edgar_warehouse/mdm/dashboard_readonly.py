@@ -186,22 +186,18 @@ class MdmRelationshipDiagnosticInputs:
 class RelationshipCoverageMetric:
     relationship_type: str
     mdm_active_count: int
-    neo4j_edge_count: int
     pending_graph_sync_count: int
-    missing_estimate: int
+    synced_count: int
     coverage_percent: float | None
-    extra_graph_count: int
     status: str
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "relationship_type": self.relationship_type,
             "mdm_active_count": self.mdm_active_count,
-            "neo4j_edge_count": self.neo4j_edge_count,
             "pending_graph_sync_count": self.pending_graph_sync_count,
-            "missing_estimate": self.missing_estimate,
+            "synced_count": self.synced_count,
             "coverage_percent": self.coverage_percent,
-            "extra_graph_count": self.extra_graph_count,
             "status": self.status,
         }
 
@@ -364,31 +360,20 @@ def get_active_relationship_diagnostic_inputs(
 
 def build_relationship_coverage_rows(
     mdm_relationships: Mapping[str, Mapping[str, Any]],
-    neo4j_relationships: Mapping[str, Mapping[str, Any]],
 ) -> list[RelationshipCoverageMetric]:
     rows: list[RelationshipCoverageMetric] = []
-    for relationship_type in sorted(set(mdm_relationships) | set(neo4j_relationships)):
+    for relationship_type in sorted(mdm_relationships):
         mdm_payload = mdm_relationships.get(relationship_type, {})
-        neo4j_payload = neo4j_relationships.get(relationship_type, {})
         mdm_active_count = _int_value(mdm_payload.get("active_count"))
         pending_graph_sync_count = _int_value(
             mdm_payload.get("pending_graph_sync_count")
         )
-        neo4j_edge_count = _int_value(
-            neo4j_payload.get("edge_count", neo4j_payload.get("count"))
-        )
-        missing_estimate = max(mdm_active_count - neo4j_edge_count, 0)
-        extra_graph_count = max(neo4j_edge_count - mdm_active_count, 0)
+        synced_count = max(mdm_active_count - pending_graph_sync_count, 0)
         if mdm_active_count > 0:
-            coverage_percent = min(neo4j_edge_count / mdm_active_count, 1.0) * 100
-            coverage_percent = round(coverage_percent, 2)
+            coverage_percent = round(synced_count / mdm_active_count * 100, 2)
         else:
             coverage_percent = None
-        if extra_graph_count > 0:
-            status = "Extra graph data"
-        elif missing_estimate > 0:
-            status = "Missing graph data"
-        elif mdm_active_count == 0:
+        if mdm_active_count == 0:
             status = "No active MDM rows"
         elif pending_graph_sync_count > 0:
             status = "Pending sync"
@@ -398,11 +383,9 @@ def build_relationship_coverage_rows(
             RelationshipCoverageMetric(
                 relationship_type=relationship_type,
                 mdm_active_count=mdm_active_count,
-                neo4j_edge_count=neo4j_edge_count,
                 pending_graph_sync_count=pending_graph_sync_count,
-                missing_estimate=missing_estimate,
+                synced_count=synced_count,
                 coverage_percent=coverage_percent,
-                extra_graph_count=extra_graph_count,
                 status=status,
             )
         )
@@ -630,7 +613,6 @@ def _get_registry_details(session: Session) -> dict[str, Any]:
         )
     ]
     entity_types = [row["entity_type"] for row in entity_type_rows]
-    neo4j_labels = [row["neo4j_label"] for row in entity_type_rows]
     relationship_types = [
         row[0]
         for row in session.execute(
@@ -642,7 +624,6 @@ def _get_registry_details(session: Session) -> dict[str, Any]:
     return {
         "entity_types": entity_types,
         "entity_type_details": entity_type_rows,
-        "neo4j_labels": neo4j_labels,
         "relationship_types": relationship_types,
     }
 

@@ -21,7 +21,7 @@ from typing import Iterable, Optional
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from edgar_warehouse.mdm.graph import GraphSyncEngine, Neo4jGraphClient
+from edgar_warehouse.mdm.graph import GraphSyncEngine
 from edgar_warehouse.mdm.resolvers.base import ResolverContext, SilverReader
 from edgar_warehouse.mdm.resolvers import (
     AdviserResolver,
@@ -81,7 +81,6 @@ def _derive_role(row: dict) -> str:
 class MDMPipeline:
     session: Session
     silver: SilverReader
-    neo4j: Optional[Neo4jGraphClient] = None
     engine: MDMRuleEngine = field(init=False)
     run_id: str = ""
 
@@ -262,7 +261,7 @@ class MDMPipeline:
         are per type so operators can see source shortfalls without inspecting
         MDM tables directly.
         """
-        sync_engine = GraphSyncEngine.build(self.session, neo4j=None)
+        sync_engine = GraphSyncEngine.build(self.session)
         requested_types = self._relationship_type_names(relationship_types)
         summary: dict[str, dict[str, int | None]] = {}
         for rel_type_name in requested_types:
@@ -783,11 +782,6 @@ class MDMPipeline:
         stats.relationships_written = sum(
             int(item["inserted"] or 0) for item in stats.relationship_counts_by_type.values()
         )
-        if self.neo4j is not None:
-            sync = GraphSyncEngine.build(self.session, self.neo4j)
-            stats.graph_nodes_synced = sync.sync_entities(limit=limit)
-            stats.graph_edges_synced = sync.sync_pending(limit_per_type=limit)
-            self.session.commit()
         return stats
 
     def _relationship_type_names(self, relationship_types: Optional[Iterable[str]]) -> list[str]:

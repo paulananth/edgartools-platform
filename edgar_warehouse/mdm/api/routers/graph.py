@@ -1,8 +1,7 @@
 """Graph endpoints — neighborhood, traversal, sync status.
 
-The relationship-types listing reads the registry directly. The neighborhood
-and traversal endpoints try Neo4j first; if Neo4j is unconfigured they
-fall back to the PostgreSQL mirror (`mdm_relationship_instance`).
+All graph data is read from the PostgreSQL mirror (mdm_relationship_instance).
+Graph analytics run via the Snowflake-hosted Neo4j Graph Analytics native app.
 """
 from __future__ import annotations
 
@@ -14,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from edgar_warehouse.mdm import database as db
-from edgar_warehouse.mdm.api.deps import get_db, get_neo4j
+from edgar_warehouse.mdm.api.deps import get_db
 from edgar_warehouse.mdm.api.schemas.graph import (
     GraphEdge,
     GraphNode,

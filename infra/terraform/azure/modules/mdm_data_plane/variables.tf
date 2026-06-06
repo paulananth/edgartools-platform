@@ -73,10 +73,6 @@ variable "sql_firewall_rules" {
   default = {}
 }
 
-variable "neo4j_storage_account_name" {
-  description = "Globally unique storage account name for the Neo4j data share shell."
-  type        = string
-}
 
 variable "tags" {
   description = "Tags applied to Azure resources."

@@ -13,12 +13,3 @@ output "sql_database_name" {
   value       = azurerm_mssql_database.mdm.name
 }
 
-output "neo4j_storage_account_name" {
-  description = "Neo4j data storage account shell name."
-  value       = azurerm_storage_account.neo4j.name
-}
-
-output "neo4j_storage_share_name" {
-  description = "Neo4j data storage share shell name."
-  value       = azurerm_storage_share.neo4j.name
-}

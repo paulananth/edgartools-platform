@@ -8,7 +8,7 @@ Also provides a FastAPI TestClient that wires the in-memory session through
 the app's dependency-injection system and uses real auth with MDM_API_KEYS
 set in the environment (no require_api_key dependency override).
 
-The neo4j_client fixture creates a real Neo4jGraphClient from NEO4J_*
+MDM test fixtures.
 environment variables. If these are not set the fixture raises KeyError —
 tests that need Neo4j must be run with credentials exported (e.g. hydrated
 from Azure Key Vault via test-mdm-e2e.sh). Silent skips are intentional
@@ -117,34 +117,6 @@ def db_session() -> Generator[Session, None, None]:
         _seed_rel_type(session, "HAS_PARENT_COMPANY", "company", "company", strategy="replace")
         session.commit()
         yield session
-
-
-@pytest.fixture
-def neo4j_client():
-    """Real Neo4jGraphClient connected to the Neo4j instance specified by env vars.
-
-    Reads NEO4J_URI / NEO4J_USER / NEO4J_PASSWORD from the environment.
-    Raises KeyError if any variable is absent — this is intentional so that
-    misconfigured environments fail loudly rather than skipping silently.
-
-    Normalises neo4j:// -> bolt:// to avoid routing-discovery failures on
-    single-instance Azure Container Apps deployments.
-
-    Tests that write nodes/edges to Neo4j must clean up within the test body:
-        with neo4j_client.session() as s:
-            s.run("MATCH (n) WHERE n.entity_id IN $ids DETACH DELETE n", ids=[...])
-    """
-    from edgar_warehouse.mdm.graph import Neo4jGraphClient
-
-    uri  = os.environ["NEO4J_URI"]
-    user = os.environ["NEO4J_USER"]
-    pw   = os.environ["NEO4J_PASSWORD"]
-    if uri.startswith("neo4j://"):
-        uri = "bolt://" + uri[len("neo4j://"):]
-    client = Neo4jGraphClient(uri=uri, user=user, password=pw)
-    client.connect()
-    yield client
-    client.close()
 
 
 @pytest.fixture

@@ -29,8 +29,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     counts = mdm_sub.add_parser("counts", help="Print MDM relational table row counts")
     counts.set_defaults(handler=_logged_handler("counts", _handle_counts))
 
-    check = mdm_sub.add_parser("check-connectivity", help="Check MDM SQL and optional Neo4j connectivity")
-    check.add_argument("--neo4j", action="store_true", help="Also check NEO4J_URI/NEO4J_USER/NEO4J_PASSWORD")
+    check = mdm_sub.add_parser("check-connectivity", help="Check MDM SQL connectivity")
     check.set_defaults(handler=_logged_handler("check-connectivity", _handle_check_connectivity))
 
     # run
@@ -247,28 +246,6 @@ def _safe_arguments(args: argparse.Namespace) -> dict[str, object]:
 def _get_mdm_engine():
     from edgar_warehouse.mdm.database import get_engine
     return get_engine()
-
-
-def _neo4j_client():
-    from edgar_warehouse.mdm.graph import Neo4jGraphClient
-
-    uri = os.environ.get("NEO4J_URI")
-    user = os.environ.get("NEO4J_USER") or os.environ.get("NEO4J_USERNAME")
-    password = os.environ.get("NEO4J_PASSWORD")
-    database = os.environ.get("NEO4J_DATABASE")
-    if not (uri and user and password) and os.environ.get("NEO4J_SECRET_JSON"):
-        payload = json.loads(os.environ["NEO4J_SECRET_JSON"])
-        uri = uri or payload.get("uri")
-        user = user or payload.get("user") or payload.get("username")
-        password = password or payload.get("password")
-        database = database or payload.get("database")
-    if not (uri and user and password):
-        return None
-    # neo4j:// triggers bolt routing which fails on single-instance deployments
-    # without NEO4J_server_bolt_advertised__address configured; use bolt:// directly.
-    if uri and uri.startswith("neo4j://"):
-        uri = "bolt://" + uri[len("neo4j://"):]
-    return Neo4jGraphClient(uri=uri, user=user, password=password, database=database)
 
 
 def _silver_reader():
@@ -695,17 +672,6 @@ def _handle_check_connectivity(args) -> int:
     from edgar_warehouse.mdm.migrations.runtime import check_connectivity
 
     payload = {"sql": check_connectivity(get_engine())}
-    if args.neo4j:
-        client = _neo4j_client()
-        if client is None:
-            payload["neo4j"] = {"connected": False, "error": "NEO4J_URI/NEO4J_USER/NEO4J_PASSWORD not configured"}
-        else:
-            try:
-                with client.session() as session:
-                    record = session.run("RETURN 1 AS ok").single()
-                payload["neo4j"] = {"connected": bool(record and record["ok"] == 1)}
-            finally:
-                client.close()
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
@@ -937,7 +903,6 @@ def _handle_backfill_relationships(args) -> int:
     from edgar_warehouse.mdm.rules import MDMRuleEngine
 
     session = _session()
-    client = _neo4j_client()
     silver = _silver_reader()
     try:
         # Phase 1: repair mdm_security.issuer_entity_id = NULL rows before deriving ISSUED_BY.
@@ -948,12 +913,10 @@ def _handle_backfill_relationships(args) -> int:
             pipeline = MDMPipeline(session=session, silver=silver)
             issuers_repaired = pipeline.backfill_security_issuers()
 
-        # Phase 2: derive MANAGES_FUND and ISSUED_BY instances, sync to Neo4j.
-        result = backfill_relationship_instances(session, neo4j=client, limit=args.limit)
+        # Phase 2: derive MANAGES_FUND and ISSUED_BY instances.
+        result = backfill_relationship_instances(session, limit=args.limit)
         result["issuers_repaired"] = issuers_repaired
     finally:
-        if client is not None:
-            client.close()
         session.close()
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
