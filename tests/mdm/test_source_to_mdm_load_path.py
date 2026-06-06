@@ -408,6 +408,54 @@ class TestMissingSilverSourceFailsBeforeSession:
             f"Expected 'MDM_SILVER_DUCKDB' in stderr error message. Got:\n{stderr_text!r}"
         )
 
+    def test_handle_run_all_does_not_create_neo4j_client(self, monkeypatch):
+        """_handle_run runs the relational MDM pipeline without implicit graph sync."""
+        from types import SimpleNamespace
+
+        import edgar_warehouse.mdm.cli as mdm_cli
+        import edgar_warehouse.mdm.pipeline as mdm_pipeline
+
+        fake_session = MagicMock()
+        monkeypatch.setattr(
+            mdm_cli,
+            "_require_silver_reader",
+            MagicMock(return_value=(object(), 0)),
+        )
+        monkeypatch.setattr(mdm_cli, "_session", MagicMock(return_value=fake_session))
+        monkeypatch.setattr(
+            mdm_cli,
+            "_neo4j_client",
+            MagicMock(side_effect=AssertionError("mdm run must not create a Neo4j client")),
+        )
+
+        class FakePipeline:
+            def __init__(self, *, session, silver, neo4j=None):
+                assert session is fake_session
+                assert neo4j is None
+
+            def run_all(self, limit=None):
+                assert limit == 10
+                return SimpleNamespace(
+                    companies_processed=0,
+                    advisers_processed=0,
+                    securities_processed=0,
+                    persons_processed=0,
+                    funds_processed=0,
+                    relationships_written=0,
+                    relationship_counts_by_type={},
+                    graph_nodes_synced=0,
+                    graph_edges_synced=0,
+                )
+
+        monkeypatch.setattr(mdm_pipeline, "MDMPipeline", FakePipeline)
+
+        import argparse
+        args = argparse.Namespace(entity_type="all", limit=10)
+
+        assert mdm_cli._handle_run(args) == 0
+        assert mdm_cli._neo4j_client.call_count == 0
+        fake_session.close.assert_called_once()
+
     def test_missing_silver_source_fails_before_session_in_handle_derive_relationships(
         self, monkeypatch
     ):
