@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 
 from edgar_warehouse.mdm.export import SnowflakeConnectorWriter
@@ -89,6 +90,61 @@ def test_snowflake_connection_settings_preserve_dbt_fallbacks(monkeypatch):
     assert settings.database == "EDGARTOOLS_DEV"
     assert settings.schema == "EDGARTOOLS_GOLD"
     assert settings.connection_kwargs()["warehouse"] == "LOAD_WH"
+
+
+def test_snowflake_connection_settings_read_json_secret(monkeypatch):
+    for name in list(os.environ):
+        if name.startswith("MDM_SNOWFLAKE_") or name.startswith("DBT_SNOWFLAKE_"):
+            monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(
+        "MDM_SNOWFLAKE_SECRET_JSON",
+        json.dumps(
+            {
+                "account": "acct",
+                "user": "user",
+                "password": "secret",
+                "database": "EDGARTOOLS_DEV",
+                "schema": "MDM",
+                "warehouse": "LOAD_WH",
+                "role": "MDM_LOADER",
+            }
+        ),
+    )
+
+    settings = SnowflakeConnectionSettings.from_env()
+
+    assert settings.connection_kwargs() == {
+        "account": "acct",
+        "user": "user",
+        "password": "secret",
+        "database": "EDGARTOOLS_DEV",
+        "schema": "MDM",
+        "warehouse": "LOAD_WH",
+        "role": "MDM_LOADER",
+    }
+
+
+def test_snowflake_connection_settings_env_overrides_json_secret(monkeypatch):
+    for name in list(os.environ):
+        if name.startswith("MDM_SNOWFLAKE_") or name.startswith("DBT_SNOWFLAKE_"):
+            monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(
+        "MDM_SNOWFLAKE_SECRET_JSON",
+        json.dumps(
+            {
+                "account": "secret-acct",
+                "user": "user",
+                "password": "secret",
+                "database": "EDGARTOOLS_DEV",
+                "warehouse": "LOAD_WH",
+            }
+        ),
+    )
+    monkeypatch.setenv("MDM_SNOWFLAKE_ACCOUNT", "env-acct")
+
+    settings = SnowflakeConnectionSettings.from_env()
+
+    assert settings.account == "env-acct"
 
 
 def test_snowflake_connection_settings_missing_values_preserve_error_names(monkeypatch):

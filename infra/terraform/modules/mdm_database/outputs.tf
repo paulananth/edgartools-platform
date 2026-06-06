@@ -42,3 +42,8 @@ output "api_keys_secret_arn" {
   description = "Secrets Manager ARN for the empty operator-populated MDM API key container."
   value       = aws_secretsmanager_secret.api_keys.arn
 }
+
+output "snowflake_secret_arn" {
+  description = "Secrets Manager ARN for the empty operator-populated MDM Snowflake connection container."
+  value       = aws_secretsmanager_secret.snowflake.arn
+}

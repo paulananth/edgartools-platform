@@ -112,3 +112,9 @@ resource "aws_secretsmanager_secret" "api_keys" {
   description = "Empty MDM API key container. Populate the value out-of-band."
   tags        = var.tags
 }
+
+resource "aws_secretsmanager_secret" "snowflake" {
+  name        = "${var.name_prefix}/mdm/snowflake"
+  description = "Empty Snowflake connection details container for MDM graph/export tasks. Populate the value out-of-band."
+  tags        = var.tags
+}
