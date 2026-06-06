@@ -48,6 +48,9 @@ RELATIONSHIP_TYPES = (
     "INSTITUTIONAL_HOLDS",  # Adviser → Security   (13F holdings)
 )
 
+_RELATIONSHIP_SOURCE_LIMIT_MULTIPLIER = 50
+_RELATIONSHIP_SOURCE_LIMIT_MINIMUM = 100
+
 
 @dataclass
 class PipelineStats:
@@ -92,6 +95,16 @@ class MDMPipeline:
             silver=self.silver,
             run_id=self.run_id,
         )
+
+    @staticmethod
+    def _bounded_relationship_sql(sql: str, remaining: Optional[int]) -> str:
+        if remaining is None:
+            return sql
+        source_limit = max(
+            int(remaining) * _RELATIONSHIP_SOURCE_LIMIT_MULTIPLIER,
+            _RELATIONSHIP_SOURCE_LIMIT_MINIMUM,
+        )
+        return f"{sql.rstrip()} LIMIT {source_limit}"
 
     def run_companies(self, limit: Optional[int] = None) -> int:
         ctx = self._ctx()
@@ -297,7 +310,7 @@ class MDMPipeline:
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
-        for row in self.silver.fetch(sql):
+        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining)):
             owner_cik = row.get("owner_cik")
             if owner_cik in company_ciks:
                 skipped_corporate += 1
@@ -401,7 +414,7 @@ class MDMPipeline:
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
-        for row in self.silver.fetch(sql):
+        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining)):
             owner_cik = row.get("owner_cik")
             if owner_cik in company_ciks:
                 skipped_corporate += 1
@@ -517,7 +530,7 @@ class MDMPipeline:
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
-        for row in self.silver.fetch(sql):
+        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining)):
             owner_cik = row.get("owner_cik")
             if owner_cik not in company_ciks:
                 skipped_corporate += 1
@@ -1048,7 +1061,7 @@ class MDMPipeline:
         skipped_unresolved_target = 0
         skipped_existing = 0
 
-        for row in self.silver.fetch(sql):
+        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining)):
             cik = row.get("cik")
             exec_name = row.get("exec_name") or ""
             accession_number = row.get("accession_number") or ""
@@ -1150,7 +1163,7 @@ class MDMPipeline:
         prev_cik: Optional[int] = None
         prev_auditor_name: Optional[str] = None
 
-        for row in self.silver.fetch(sql):
+        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining)):
             cik = row.get("cik")
             pcaob_id = row.get("auditor_pcaob_id")
             auditor_name = row.get("auditor_name")
@@ -1255,7 +1268,7 @@ class MDMPipeline:
         skipped_unresolved_target = 0
         skipped_existing = 0
 
-        for row in self.silver.fetch(sql):
+        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining)):
             cik = row.get("cik")
             cusip = row.get("cusip") or ""
             accession_number = row.get("accession_number") or ""
