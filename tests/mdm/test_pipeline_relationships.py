@@ -30,6 +30,7 @@ from sqlalchemy.pool import StaticPool
 from edgar_warehouse.mdm.database import (
     Base,
     MdmAdviser,
+    MdmAuditFirm,
     MdmCompany,
     MdmEntity,
     MdmEntityTypeDefinition,
@@ -84,11 +85,12 @@ class MissingTableSilver(StubSilver):
 def _seed_registry(session: Session) -> dict[str, str]:
     """Seed all 5 entity-type definitions + graph relationship types."""
     entity_types = [
-        ("company",  "Company",  "mdm_company"),
-        ("adviser",  "Adviser",  "mdm_adviser"),
-        ("person",   "Person",   "mdm_person"),
-        ("security", "Security", "mdm_security"),
-        ("fund",     "Fund",     "mdm_fund"),
+        ("company",    "Company",    "mdm_company"),
+        ("adviser",    "Adviser",    "mdm_adviser"),
+        ("person",     "Person",     "mdm_person"),
+        ("security",   "Security",   "mdm_security"),
+        ("fund",       "Fund",       "mdm_fund"),
+        ("audit_firm", "AuditFirm",  "mdm_audit_firm"),
     ]
     for et, label, table in entity_types:
         session.add(MdmEntityTypeDefinition(
@@ -99,14 +101,18 @@ def _seed_registry(session: Session) -> dict[str, str]:
 
     rel_types = {}
     for name, src, tgt, strategy in [
-        ("IS_INSIDER",   "person",   "company", "extend_temporal"),
-        ("HOLDS",        "person",   "security", "extend_temporal"),
-        ("COMPANY_HOLDS", "company",  "security", "extend_temporal"),
-        ("ISSUED_BY",    "security", "company", "extend_temporal"),
-        ("IS_ENTITY_OF", "adviser",  "company", "replace"),
-        ("HAS_PARENT_COMPANY", "company", "company", "replace"),
-        ("MANAGES_FUND", "adviser",  "fund",    "extend_temporal"),
-        ("IS_PERSON_OF", "adviser",  "person",  "replace"),
+        ("IS_INSIDER",          "person",   "company",     "extend_temporal"),
+        ("HOLDS",               "person",   "security",    "extend_temporal"),
+        ("COMPANY_HOLDS",       "company",  "security",    "extend_temporal"),
+        ("ISSUED_BY",           "security", "company",     "extend_temporal"),
+        ("IS_ENTITY_OF",        "adviser",  "company",     "replace"),
+        ("HAS_PARENT_COMPANY",  "company",  "company",     "replace"),
+        ("MANAGES_FUND",        "adviser",  "fund",        "extend_temporal"),
+        ("IS_PERSON_OF",        "adviser",  "person",      "replace"),
+        # Fundamentals-sourced types (sec_executive_record, sec_accounting_flag, sec_thirteenf_holding)
+        ("EMPLOYED_BY",         "person",   "company",     "extend_temporal"),
+        ("AUDITED_BY",          "company",  "audit_firm",  "extend_temporal"),
+        ("INSTITUTIONAL_HOLDS", "adviser",  "security",    "extend_temporal"),
     ]:
         rt_id = str(uuid.uuid4())
         session.add(MdmRelationshipType(
@@ -199,6 +205,16 @@ def fixture_world(session: Session) -> dict:
         canonical_title="Common Stock",
     ))
 
+    # Seed one audit firm so _audit_firm_entity_id(pcaob_id="E1") resolves in AUDITED_BY tests
+    audit_firm_entity_id = _add_entity(session, "audit_firm")
+    session.add(MdmAuditFirm(
+        entity_id=audit_firm_entity_id,
+        firm_name="Deloitte LLP",
+        canonical_name="Deloitte LLP",
+        pcaob_firm_id="E1",
+        big4=True,
+    ))
+
     session.commit()
     return {
         "issuer_company_id": issuer_company_id, "linked_company_id": linked_company_id,
@@ -207,6 +223,7 @@ def fixture_world(session: Session) -> dict:
         "individual_person_id": individual_person_id,
         "fund_entity_id": fund_entity_id,
         "security_entity_id": security_entity_id,
+        "audit_firm_entity_id": audit_firm_entity_id,
     }
 
 
@@ -626,6 +643,155 @@ class TestRunRelationships:
         assert summary["EMPLOYED_BY"]["skipped"] == 0
         assert any("sec_executive_record" in query for query in silver.queries)
 
+    # ------------------------------------------------------------------
+    # EMPLOYED_BY tests (T2 — 06-02)
+    # ------------------------------------------------------------------
+
+    def test_writes_employed_by_relationship(self, session, fixture_world):
+        """EMPLOYED_BY inserts 1 row from sec_executive_record for a resolved company. (06-02)"""
+        silver = StubSilver({
+            "sec_executive_record": [
+                {
+                    "cik": 910001, "accession_number": "0000-issuer-1",
+                    "fiscal_year": 2023, "exec_name": "Jane CEO", "exec_role": "CEO",
+                    "total_comp": 5000000, "base_salary": 1000000, "bonus": 500000,
+                    "stock_awards": 3000000, "option_awards": None,
+                    "non_equity_incentive": 500000, "tenure_start_year": 2020,
+                },
+            ],
+        })
+        pipe = MDMPipeline(session=session, silver=silver)
+        summary = pipe.derive_relationships(relationship_types=["EMPLOYED_BY"])
+        assert summary["EMPLOYED_BY"]["inserted"] == 1
+        assert summary["EMPLOYED_BY"]["skipped_unresolved_target"] == 0
+        assert summary["EMPLOYED_BY"]["skipped"] == (
+            summary["EMPLOYED_BY"]["skipped_corporate"]
+            + summary["EMPLOYED_BY"]["skipped_unresolved_source"]
+            + summary["EMPLOYED_BY"]["skipped_unresolved_target"]
+            + summary["EMPLOYED_BY"]["skipped_existing"]
+        )
+
+    # ------------------------------------------------------------------
+    # AUDITED_BY tests (T3 — 06-02)
+    # ------------------------------------------------------------------
+
+    def test_writes_audited_by_relationship(self, session, fixture_world):
+        """AUDITED_BY inserts 1 row when MdmAuditFirm resolves via PCAOB ID. (06-02)"""
+        silver = StubSilver({
+            "sec_accounting_flag": [
+                {
+                    "cik": 910001, "accession_number": "0000-issuer-1",
+                    "fiscal_year": 2023, "period_end": None,
+                    "auditor_pcaob_id": "E1", "auditor_name": "Deloitte LLP",
+                    "icfr_attestation": True,
+                },
+            ],
+        })
+        pipe = MDMPipeline(session=session, silver=silver)
+        summary = pipe.derive_relationships(relationship_types=["AUDITED_BY"])
+        assert summary["AUDITED_BY"]["inserted"] == 1
+        assert summary["AUDITED_BY"]["skipped_unresolved_target"] == 0
+        assert summary["AUDITED_BY"]["skipped"] == (
+            summary["AUDITED_BY"]["skipped_corporate"]
+            + summary["AUDITED_BY"]["skipped_unresolved_source"]
+            + summary["AUDITED_BY"]["skipped_unresolved_target"]
+            + summary["AUDITED_BY"]["skipped_existing"]
+        )
+
+    def test_audited_by_change_detection(self, session, fixture_world):
+        """AUDITED_BY: auditor_changed=True when fiscal_year N+1 has a different auditor. (06-02)"""
+        # Seed a second audit firm for the change-detection rows
+        pwc_entity_id = _add_entity(session, "audit_firm")
+        session.add(MdmAuditFirm(
+            entity_id=pwc_entity_id,
+            firm_name="PricewaterhouseCoopers LLP",
+            canonical_name="PricewaterhouseCoopers LLP",
+            pcaob_firm_id="E2",
+            big4=True,
+        ))
+        session.commit()
+
+        silver = StubSilver({
+            "sec_accounting_flag": [
+                # FY2022: first row for CIK 910001 — no prev, auditor_changed must be False
+                {
+                    "cik": 910001, "accession_number": "acc-2022",
+                    "fiscal_year": 2022, "period_end": None,
+                    "auditor_pcaob_id": "E1", "auditor_name": "Deloitte LLP",
+                    "icfr_attestation": True,
+                },
+                # FY2023: same CIK, different auditor — auditor_changed must be True
+                {
+                    "cik": 910001, "accession_number": "acc-2023",
+                    "fiscal_year": 2023, "period_end": None,
+                    "auditor_pcaob_id": "E2", "auditor_name": "PricewaterhouseCoopers LLP",
+                    "icfr_attestation": True,
+                },
+            ],
+        })
+        pipe = MDMPipeline(session=session, silver=silver)
+        summary = pipe.derive_relationships(relationship_types=["AUDITED_BY"])
+        assert summary["AUDITED_BY"]["inserted"] == 2
+
+        from sqlalchemy import select
+        instances = session.scalars(
+            select(MdmRelationshipInstance).order_by(MdmRelationshipInstance.effective_from)
+        ).all()
+        fy2022 = next(i for i in instances if i.properties.get("fiscal_year") == 2022)
+        fy2023 = next(i for i in instances if i.properties.get("fiscal_year") == 2023)
+        assert fy2022.properties["auditor_changed"] is False
+        assert fy2023.properties["auditor_changed"] is True
+
+    def test_optional_fundamentals_source_table_missing_audited_by(self, session):
+        """AUDITED_BY: missing sec_accounting_flag → 0 rows, no exception. (06-02)"""
+        silver = MissingTableSilver("sec_accounting_flag")
+        pipe = MDMPipeline(session=session, silver=silver)
+        summary = pipe.derive_relationships(
+            target_per_type=1, relationship_types=["AUDITED_BY"]
+        )
+        assert summary["AUDITED_BY"]["inserted"] == 0
+        assert summary["AUDITED_BY"]["skipped"] == 0
+        assert any("sec_accounting_flag" in query for query in silver.queries)
+
+    # ------------------------------------------------------------------
+    # INSTITUTIONAL_HOLDS tests (T4 + T5 — 06-02)
+    # ------------------------------------------------------------------
+
+    def test_writes_institutional_holds_relationship(self, session, fixture_world):
+        """INSTITUTIONAL_HOLDS inserts 1 row; security is auto-created via CUSIP. (06-02)"""
+        silver = StubSilver({
+            "sec_thirteenf_holding": [
+                {
+                    "cik": 910002, "accession_number": "0000-linked-adv",
+                    "period_of_report": "2023-12-31", "cusip": "037833100",
+                    "issuer_name": "Apple Inc", "security_title": "Common Stock",
+                    "shares_held": 1000, "market_value": 15000000,
+                    "put_call": None, "discretion_type": "SOLE", "security_class": None,
+                },
+            ],
+        })
+        pipe = MDMPipeline(session=session, silver=silver)
+        summary = pipe.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 1
+        assert summary["INSTITUTIONAL_HOLDS"]["skipped_unresolved_source"] == 0
+        assert summary["INSTITUTIONAL_HOLDS"]["skipped"] == (
+            summary["INSTITUTIONAL_HOLDS"]["skipped_corporate"]
+            + summary["INSTITUTIONAL_HOLDS"]["skipped_unresolved_source"]
+            + summary["INSTITUTIONAL_HOLDS"]["skipped_unresolved_target"]
+            + summary["INSTITUTIONAL_HOLDS"]["skipped_existing"]
+        )
+
+    def test_optional_fundamentals_source_table_missing_institutional_holds(self, session):
+        """INSTITUTIONAL_HOLDS: missing sec_thirteenf_holding → 0 rows, no exception. (06-02)"""
+        silver = MissingTableSilver("sec_thirteenf_holding")
+        pipe = MDMPipeline(session=session, silver=silver)
+        summary = pipe.derive_relationships(
+            target_per_type=1, relationship_types=["INSTITUTIONAL_HOLDS"]
+        )
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 0
+        assert summary["INSTITUTIONAL_HOLDS"]["skipped"] == 0
+        assert any("sec_thirteenf_holding" in query for query in silver.queries)
+
     def test_writes_manages_fund_relationship(self, session, fixture_world):
         """MANAGES_FUND deriver inserts exactly 1 row when fixture_world has 1 MdmFund. (D-01, D-02, REL-03)"""
         pipe = MDMPipeline(session=session, silver=StubSilver({}))
@@ -653,7 +819,7 @@ class TestRunRelationships:
         )
 
     def test_all_relationship_types_idempotent(self, session, fixture_world):
-        """Running derive_relationships() twice inserts 0 rows on second run for all 6 types. (D-04, REL-04)"""
+        """Running derive_relationships() twice inserts 0 rows on second run for all 11 types. (D-04, REL-04, 06-02)"""
         session.add(MdmSourceRef(
             entity_id=fixture_world["security_entity_id"],
             source_system="ownership_filing",
@@ -663,6 +829,7 @@ class TestRunRelationships:
         session.commit()
 
         silver = StubSilver({
+            # IS_INSIDER + HOLDS (ownership forms)
             "FROM sec_ownership_reporting_owner": [
                 {
                     "accession_number": "0000-issuer-1", "owner_index": 0,
@@ -681,6 +848,35 @@ class TestRunRelationships:
                     "issuer_cik": 910001,
                 },
             ],
+            # EMPLOYED_BY (DEF 14A proxy)
+            "sec_executive_record": [
+                {
+                    "cik": 910001, "accession_number": "0000-issuer-1",
+                    "fiscal_year": 2023, "exec_name": "Jane CEO", "exec_role": "CEO",
+                    "total_comp": 5000000, "base_salary": 1000000, "bonus": None,
+                    "stock_awards": None, "option_awards": None,
+                    "non_equity_incentive": None, "tenure_start_year": 2020,
+                },
+            ],
+            # AUDITED_BY (10-K XBRL DEI — resolves to fixture_world audit_firm pcaob_firm_id=E1)
+            "sec_accounting_flag": [
+                {
+                    "cik": 910001, "accession_number": "0000-issuer-1",
+                    "fiscal_year": 2023, "period_end": None,
+                    "auditor_pcaob_id": "E1", "auditor_name": "Deloitte LLP",
+                    "icfr_attestation": True,
+                },
+            ],
+            # INSTITUTIONAL_HOLDS (13F-HR — adviser CIK 910002, auto-creates security by CUSIP)
+            "sec_thirteenf_holding": [
+                {
+                    "cik": 910002, "accession_number": "0000-linked-adv",
+                    "period_of_report": "2023-12-31", "cusip": "037833100",
+                    "issuer_name": "Apple Inc", "security_title": "Common Stock",
+                    "shares_held": 1000, "market_value": 15000000,
+                    "put_call": None, "discretion_type": "SOLE", "security_class": None,
+                },
+            ],
         })
         pipe = MDMPipeline(session=session, silver=silver)
 
@@ -693,10 +889,14 @@ class TestRunRelationships:
             "IS_ENTITY_OF",
             "HAS_PARENT_COMPANY",
             "IS_PERSON_OF",
+            "EMPLOYED_BY",
+            "AUDITED_BY",
+            "INSTITUTIONAL_HOLDS",
         ]
         first = pipe.derive_relationships()
         second = pipe.derive_relationships()
 
+        # First-run insert assertions (existing 8 types)
         assert first["IS_INSIDER"]["inserted"] >= 1
         assert first["HOLDS"]["inserted"] == 1
         assert first["COMPANY_HOLDS"]["inserted"] == 0
@@ -705,12 +905,18 @@ class TestRunRelationships:
         assert first["IS_ENTITY_OF"]["inserted"] == 1
         assert first["HAS_PARENT_COMPANY"]["inserted"] == 0
         assert first["IS_PERSON_OF"]["inserted"] == 1
+        # First-run insert assertions (3 new fundamentals types — 06-02)
+        assert first["EMPLOYED_BY"]["inserted"] >= 1
+        assert first["AUDITED_BY"]["inserted"] >= 1
+        assert first["INSTITUTIONAL_HOLDS"]["inserted"] >= 1
 
+        # Second run must insert 0 for all 11 types (idempotency gate)
         for rt in ALL_TYPES:
             assert second[rt]["inserted"] == 0, (
                 f"Expected 0 inserts on second run for {rt}, got {second[rt]['inserted']}"
             )
 
+        # skipped backward-compat: skipped == sum of four sub-counters for all 11 types
         for rt in ALL_TYPES:
             assert second[rt]["skipped"] == (
                 second[rt]["skipped_corporate"]

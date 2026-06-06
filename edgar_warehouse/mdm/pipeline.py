@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Iterable, Optional
 
 from sqlalchemy import func, select, update
@@ -1120,7 +1120,7 @@ class MDMPipeline:
                 }), file=sys.stderr, flush=True)
                 continue
 
-            effective_from = f"{fiscal_year}-01-01" if fiscal_year else None
+            effective_from = date(int(fiscal_year), 1, 1) if fiscal_year else None
             _rel, created = sync_engine.ensure_relationship(
                 rel_type_name="EMPLOYED_BY",
                 source_entity_id=person_id,
@@ -1238,7 +1238,7 @@ class MDMPipeline:
                 }), file=sys.stderr, flush=True)
                 continue
 
-            effective_from = f"{fiscal_year}-01-01" if fiscal_year else None
+            effective_from = date(int(fiscal_year), 1, 1) if fiscal_year else None
             _rel, created = sync_engine.ensure_relationship(
                 rel_type_name="AUDITED_BY",
                 source_entity_id=company_id,
@@ -1355,7 +1355,7 @@ class MDMPipeline:
                     "discretion_type":  row.get("discretion_type"),
                     "source_accession": accession_number,
                 },
-                effective_from=str(period_of_report) if period_of_report else None,
+                effective_from=date.fromisoformat(str(period_of_report)) if period_of_report else None,
                 source_system="thirteenf_filing",
                 source_accession=accession_number,
             )
