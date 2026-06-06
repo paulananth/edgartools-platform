@@ -1037,6 +1037,7 @@ mdm-runtime = [
     { name = "neo4j" },
     { name = "psycopg2-binary" },
     { name = "pydantic" },
+    { name = "snowflake-connector-python" },
     { name = "sqlalchemy" },
 ]
 s3 = [
@@ -1082,6 +1083,7 @@ requires-dist = [
     { name = "pytz", specifier = ">=2024.1" },
     { name = "s3fs", marker = "extra == 's3'", specifier = ">=2023.1.0" },
     { name = "snowflake-connector-python", marker = "extra == 'dashboard'", specifier = ">=3.7" },
+    { name = "snowflake-connector-python", marker = "extra == 'mdm-runtime'", specifier = ">=3.7" },
     { name = "snowflake-connector-python", marker = "extra == 'snowflake'", specifier = ">=3.7" },
     { name = "splink", marker = "extra == 'mdm'", specifier = ">=3.9.0" },
     { name = "sqladmin", marker = "extra == 'mdm'", specifier = ">=0.16.0" },
