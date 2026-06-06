@@ -58,6 +58,9 @@ Options:
   --mdm-image-ref <ref>             Existing MDM image ref. Defaults to warehouse image ref when not building MDM separately.
   --mdm-ecr-repository-url <url>    ECR repository URL for built MDM image. Default: <account>.dkr.ecr.<region>.amazonaws.com/<prefix>-mdm.
   --build-mdm-image                 Build and push a separate MDM image when MDM is deployed.
+  --mdm-database-source <rds|snowflake-postgres>
+                                    Source of the MDM_DATABASE_URL secret. Default: rds.
+                                    Use snowflake-postgres after the secret contains the Snowflake Postgres application DSN.
   --mdm-postgres-dsn-secret-arn <arn>
                                     Secrets Manager ARN injected as MDM_DATABASE_URL.
   --mdm-neo4j-secret-arn <arn>      Secrets Manager ARN injected as NEO4J_SECRET_JSON.
@@ -139,6 +142,7 @@ WAREHOUSE_RUNTIME_MODE="bronze_capture"
 WAREHOUSE_BRONZE_CIK_LIMIT=""
 BOOTSTRAP_BATCH_CONCURRENCY=3
 MDM_DEPLOYMENT_MODE="auto"
+MDM_DATABASE_SOURCE=""
 MDM_ECR_REPOSITORY_URL=""
 MDM_POSTGRES_DSN_SECRET_ARN=""
 MDM_NEO4J_SECRET_ARN=""
@@ -190,6 +194,7 @@ while [[ $# -gt 0 ]]; do
     --bootstrap-batch-concurrency) BOOTSTRAP_BATCH_CONCURRENCY="${2:?}"; shift 2 ;;
     --enable-mdm) MDM_DEPLOYMENT_MODE="enabled"; shift ;;
     --skip-mdm) MDM_DEPLOYMENT_MODE="disabled"; shift ;;
+    --mdm-database-source) MDM_DATABASE_SOURCE="${2:?}"; shift 2 ;;
     --mdm-ecr-repository-url) MDM_ECR_REPOSITORY_URL="${2:?}"; shift 2 ;;
     --mdm-postgres-dsn-secret-arn) MDM_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
     --mdm-neo4j-secret-arn) MDM_NEO4J_SECRET_ARN="${2:?}"; shift 2 ;;
@@ -212,6 +217,12 @@ done
 [[ "$BOOTSTRAP_BATCH_CONCURRENCY" =~ ^[1-9][0-9]*$ ]] || fail "--bootstrap-batch-concurrency must be a positive integer"
 [[ "$MDM_RUN_LIMIT" =~ ^[0-9]+$ ]] || fail "--mdm-run-limit must be a non-negative integer"
 [[ "$MDM_GRAPH_LIMIT" =~ ^[0-9]+$ ]] || fail "--mdm-graph-limit must be a non-negative integer"
+if ! is_empty "$MDM_DATABASE_SOURCE"; then
+  case "$MDM_DATABASE_SOURCE" in
+    rds|snowflake-postgres) ;;
+    *) fail "--mdm-database-source must be rds or snowflake-postgres" ;;
+  esac
+fi
 if ! is_empty "$WAREHOUSE_BRONZE_CIK_LIMIT"; then
   [[ "$WAREHOUSE_BRONZE_CIK_LIMIT" =~ ^[0-9]+$ ]] || fail "--warehouse-bronze-cik-limit must be a non-negative integer"
 fi
@@ -280,6 +291,12 @@ secret_arn_by_name() {
   aws_cli secretsmanager describe-secret --secret-id "$1" \
     --query 'ARN' --output text 2>/dev/null || true
 }
+
+MDM_DATABASE_SOURCE="$(first_nonempty "$MDM_DATABASE_SOURCE" "$(manifest_value mdm.database_source)" "rds")"
+case "$MDM_DATABASE_SOURCE" in
+  rds|snowflake-postgres) ;;
+  *) fail "--mdm-database-source must be rds or snowflake-postgres" ;;
+esac
 
 require_runner_role_name() {
   local arn="$1" expected_name="$2" option_name="$3" actual_name
@@ -466,9 +483,10 @@ case "$MDM_DEPLOYMENT_MODE" in
     ;;
 esac
 
-# Sync the MDM Postgres DSN secret from the AWS-managed RDS credential.
-# AWS rotates the RDS master password on its own schedule; this keeps the
-# operator-facing DSN secret always current so ECS tasks never hit stale-password failures.
+# Pre-cutover compatibility: sync the MDM Postgres DSN secret from the
+# AWS-managed RDS credential when --mdm-database-source rds is selected.
+# Snowflake Postgres deployments must pass --mdm-database-source
+# snowflake-postgres so this block does not overwrite the application DSN.
 sync_mdm_postgres_dsn() {
   local dsn_secret_arn="$1"
   local rds_instance_id="$2"
@@ -514,7 +532,11 @@ PY
 
 if [[ "$DEPLOY_MDM" == "true" ]] && ! is_empty "$MDM_POSTGRES_DSN_SECRET_ARN"; then
   MDM_RDS_INSTANCE_ID="${NAME_PREFIX}-mdm"
-  sync_mdm_postgres_dsn "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_RDS_INSTANCE_ID"
+  if [[ "$MDM_DATABASE_SOURCE" == "rds" ]]; then
+    sync_mdm_postgres_dsn "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_RDS_INSTANCE_ID"
+  else
+    log "Skipping RDS DSN sync; using operator-managed Snowflake Postgres DSN secret (${MDM_POSTGRES_DSN_SECRET_ARN})"
+  fi
 fi
 
 # Wire S3 → SNS bucket notification so Snowpipe receives ObjectCreated events for manifests.
@@ -2112,7 +2134,7 @@ python3 - "$SUMMARY_FILE" "$ENVIRONMENT" "$AWS_REGION_NAME" "$NAME_PREFIX" "$IMA
   "$CLUSTER_NAME" "$CLUSTER_ARN" "$ECR_REPOSITORY_URL" "$LOG_GROUP_NAME" \
   "$STEP_FUNCTIONS_ROLE_ARN" "$STEP_FUNCTIONS_LOG_GROUP_NAME" \
   "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
-  "$DEPLOY_MDM" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$MDM_SILVER_DUCKDB" \
+  "$DEPLOY_MDM" "$MDM_DATABASE_SOURCE" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$MDM_SILVER_DUCKDB" \
   "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_NEO4J_SECRET_ARN" "$MDM_API_KEYS_SECRET_ARN" "$MDM_SNOWFLAKE_SECRET_ARN" \
   "$WORKFLOW_ARNS_FILE" \
   "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" "$SNOWFLAKE_EXPORT_BUCKET_NAME" \
@@ -2138,6 +2160,7 @@ import sys
     medium_task_definition,
     large_task_definition,
     deploy_mdm,
+    mdm_database_source,
     mdm_small_task_definition,
     mdm_medium_task_definition,
     mdm_silver_duckdb,
@@ -2191,6 +2214,7 @@ summary = {
 if deploy_mdm == "true":
     summary["mdm"] = {
         "image_ref": mdm_image_ref,
+        "database_source": mdm_database_source,
         "silver_duckdb": mdm_silver_duckdb,
         "secrets": {
             "postgres_dsn": mdm_database_secret_arn,

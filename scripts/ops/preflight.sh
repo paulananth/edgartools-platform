@@ -95,7 +95,7 @@ for sm in "load-history" "gold-refresh" "silver-mdm-gold" "mdm-gold"; do
     --query 'status' --output text 2>/dev/null || echo "NOT_FOUND")
   check "State machine ${sm}" \
     "$([[ "$SM_STATUS" == "ACTIVE" ]] && echo PASS || echo FAIL)" \
-    "bash infra/scripts/deploy-aws-application.sh --env ${ENVIRONMENT} --enable-mdm ..."
+    "bash infra/scripts/deploy-aws-application.sh --env ${ENVIRONMENT} --enable-mdm --mdm-database-source snowflake-postgres ..."
 done
 
 # ── 5. S3 buckets exist ───────────────────────────────────────────────────────
@@ -132,7 +132,7 @@ if [[ "$NOTIF_OK" == "FAIL" && "$AUTO_FIX" == "true" ]]; then
   NOTIF_OK="$([[ "$NOTIF_SNS" == "$SNS_ARN" ]] && echo PASS || echo FAIL)"
 fi
 check "S3 → SNS bucket notification configured" "$NOTIF_OK" \
-  "bash infra/scripts/deploy-aws-application.sh --env ${ENVIRONMENT} --skip-build --image-ref ... --enable-mdm"
+  "bash infra/scripts/deploy-aws-application.sh --env ${ENVIRONMENT} --skip-build --image-ref ... --enable-mdm --mdm-database-source snowflake-postgres"
 
 # ── 7. SNS topic + Snowpipe SQS subscription ─────────────────────────────────
 SNS_EXISTS=$(aws_ sns get-topic-attributes \

@@ -49,7 +49,7 @@ Claude and Codex may work on this repository independently, but they must not sh
 | Snowflake access Terraform | `infra/terraform/access/snowflake/accounts/{dev,prod}/` |
 | dbt gold models | `infra/snowflake/dbt/edgartools_gold/` |
 | AWS deploy/publish scripts | `infra/scripts/deploy-aws-application.sh`, `infra/scripts/publish-warehouse-image.sh` |
-| AWS MDM scripts | `infra/scripts/bootstrap-aws-mdm-secrets.sh`, `infra/scripts/run-aws-mdm-e2e.sh` |
+| AWS MDM scripts | `infra/scripts/bootstrap-aws-mdm-secrets.sh`, `infra/scripts/audit-mdm-snowflake-postgres-cutover.py`, `infra/scripts/remove-aws-mdm-rds-after-cutover.sh`, `infra/scripts/run-aws-mdm-e2e.sh` |
 | Docker images | `Dockerfile`, `Dockerfile.warehouse-deps`, `Dockerfile.mdm-deps`, `Dockerfile.mdm-neo4j` |
 
 Large files should be read in chunks before editing: `edgar_warehouse/runtime.py`, `edgar_warehouse/silver.py`, and `edgar_warehouse/gold.py`.
@@ -132,7 +132,7 @@ Passive AWS Terraform creates infrastructure shells only:
 - ECS cluster and CloudWatch log group.
 - SNS topic for Snowflake manifest events.
 - Empty Secrets Manager containers.
-- Optional MDM RDS PostgreSQL data plane when `mdm_enabled = true`.
+- Empty MDM Secrets Manager containers for Snowflake Postgres, Neo4j, API keys, and Snowflake graph/export settings.
 
 AWS Terraform must not create runnable ECS task definitions, Step Functions state machines, schedules, workload commands, image rollouts, or runtime secret values. Those are explicit operator actions.
 
@@ -302,24 +302,22 @@ aws stepfunctions start-execution \
 
 ## AWS MDM
 
-Enable the AWS MDM data plane with `mdm_enabled = true` in the AWS account root. It creates:
+MDM runtime writes use Snowflake Postgres through `MDM_DATABASE_URL`. AWS Terraform manages only empty Secrets Manager containers:
 
-- Private subnets.
-- RDS PostgreSQL with encrypted gp3 storage.
-- RDS security group allowing PostgreSQL only from the ECS task security group.
-- AWS-managed RDS master user secret.
-- Empty Secrets Manager containers for:
-  - `edgartools-<env>/mdm/postgres_dsn`
-  - `edgartools-<env>/mdm/neo4j`
-  - `edgartools-<env>/mdm/api_keys`
+- `edgartools-<env>/mdm/postgres_dsn`
+- `edgartools-<env>/mdm/neo4j`
+- `edgartools-<env>/mdm/api_keys`
+- `edgartools-<env>/mdm/snowflake`
 
-Populate the MDM PostgreSQL DSN after Terraform apply:
+Populate the MDM PostgreSQL DSN with the Snowflake Postgres `application` role DSN:
 
 ```bash
-bash infra/scripts/bootstrap-aws-mdm-secrets.sh \
-  --env dev \
-  --aws-profile aws-admin-dev \
-  --aws-region us-east-1
+printf '%s' "$SNOWFLAKE_APPLICATION_MDM_DSN" | \
+  bash infra/scripts/bootstrap-aws-mdm-secrets.sh \
+    --env dev \
+    --aws-profile aws-admin-dev \
+    --aws-region us-east-1 \
+    --dsn-stdin
 ```
 
 Then deploy app components with MDM enabled:
@@ -333,7 +331,14 @@ bash infra/scripts/deploy-aws-application.sh \
   --image-ref <warehouse-image-digest-ref> \
   --mdm-image-ref <mdm-image-digest-ref> \
   --enable-mdm \
+  --mdm-database-source snowflake-postgres \
   --output-file infra/aws-dev-application.json
+```
+
+Snowflake Postgres cutover and RDS removal runbook:
+
+```bash
+docs/aws-mdm-snowflake-postgres-cutover.md
 ```
 
 MDM CLI commands:

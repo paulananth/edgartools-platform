@@ -52,24 +52,6 @@ variable "tags" {
   default     = {}
 }
 
-variable "mdm_enabled" {
-  description = "Whether to provision the MDM RDS + Secrets Manager stack."
-  type        = bool
-  default     = false
-}
-
-variable "mdm_private_subnet_cidrs" {
-  description = "CIDR blocks for the MDM private subnets (one per AZ)."
-  type        = list(string)
-  default     = []
-}
-
-variable "mdm_db_instance_class" {
-  description = "RDS instance class for the MDM database."
-  type        = string
-  default     = "db.t3.micro"
-}
-
 variable "pipeline_notifications_enabled" {
   description = "Set to true to provision the pipeline_notifications SNS + EventBridge stack. Defaults to false so it is opt-in and does not affect existing terraform plan output."
   type        = bool

@@ -8,6 +8,3 @@
 # edgar_identity_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:edgartools-prod-edgar-identity"
 
 # Optional MDM database shell:
-# mdm_enabled              = true
-# mdm_private_subnet_cidrs = ["10.30.10.0/24", "10.30.11.0/24"]
-# mdm_db_instance_class    = "db.t3.micro"

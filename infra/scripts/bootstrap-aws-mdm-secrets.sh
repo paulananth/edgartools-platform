@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # bootstrap-aws-mdm-secrets.sh
 #
-# Reads the AWS-managed RDS master user secret created by Terraform and writes a
-# complete PostgreSQL DSN to the operator-facing postgres_dsn Secrets Manager secret.
-#
-# Run once after `terraform apply` with mdm_enabled = true. Idempotent — safe to re-run.
+# Writes the Snowflake Postgres application DSN to the operator-facing
+# MDM postgres_dsn Secrets Manager secret. Terraform manages only the empty
+# secret container; the credential value stays out of Terraform state.
 set -euo pipefail
 
 usage() {
@@ -12,17 +11,29 @@ usage() {
 Usage:
   bootstrap-aws-mdm-secrets.sh --env <dev|prod> [options]
 
-Populates the MDM postgres_dsn Secrets Manager secret from the RDS master user secret
-produced by Terraform. Run after `terraform apply` with mdm_enabled = true.
+Writes the MDM_DATABASE_URL secret for the Snowflake Postgres cutover.
+
+Provide the DSN with one of:
+  --dsn <postgresql://...>
+  --dsn-stdin
+  --host <host> --username <user> --password-stdin
 
 Options:
-  --env <dev|prod>          Environment. Required.
-  --aws-profile <profile>   AWS CLI profile. Default: AWS_PROFILE env var or instance role.
-  --aws-region <region>     AWS region. Default: us-east-1.
-  --terraform-root <path>   Terraform accounts root. Default: infra/terraform/accounts/<env>.
-  --db-name <name>          PostgreSQL database name to include in the DSN. Default: mdm.
-  --dry-run                 Print the masked DSN without writing to Secrets Manager.
-  -h, --help                Show this help.
+  --env <dev|prod>              Environment. Required.
+  --aws-profile <profile>       AWS CLI profile. Default: AWS_PROFILE env var or instance role.
+  --aws-region <region>         AWS region. Default: us-east-1.
+  --name-prefix <prefix>        Resource prefix. Default: edgartools-<env>.
+  --secret-id <id-or-arn>       Secret to write. Default: <name-prefix>/mdm/postgres_dsn.
+  --dsn <dsn>                   Full PostgreSQL DSN. Prefer --dsn-stdin for credentials.
+  --dsn-stdin                   Read the full PostgreSQL DSN from stdin.
+  --host <host>                 Snowflake Postgres host when constructing a DSN.
+  --port <port>                 PostgreSQL port. Default: 5432.
+  --database <name>             PostgreSQL database. Default: mdm.
+  --username <user>             Snowflake Postgres application role/user.
+  --password-stdin              Read the application password from stdin when constructing a DSN.
+  --expected-host-suffix <suf>  Required host suffix. Default: .snowflake.app.
+  --dry-run                     Validate and print the masked DSN without writing.
+  -h, --help                    Show this help.
 USAGE
 }
 
@@ -38,8 +49,16 @@ log() {
 ENVIRONMENT=""
 AWS_PROFILE_NAME="${AWS_PROFILE:-}"
 AWS_REGION_NAME="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
-TF_ROOT=""
-DB_NAME="mdm"
+NAME_PREFIX=""
+SECRET_ID=""
+DSN=""
+DSN_STDIN=false
+HOST=""
+PORT="5432"
+DATABASE="mdm"
+USERNAME=""
+PASSWORD_STDIN=false
+EXPECTED_HOST_SUFFIX=".snowflake.app"
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
@@ -47,8 +66,16 @@ while [[ $# -gt 0 ]]; do
     --env) ENVIRONMENT="${2:?}"; shift 2 ;;
     --aws-profile) AWS_PROFILE_NAME="${2:?}"; shift 2 ;;
     --aws-region) AWS_REGION_NAME="${2:?}"; shift 2 ;;
-    --terraform-root) TF_ROOT="${2:?}"; shift 2 ;;
-    --db-name) DB_NAME="${2:?}"; shift 2 ;;
+    --name-prefix) NAME_PREFIX="${2:?}"; shift 2 ;;
+    --secret-id) SECRET_ID="${2:?}"; shift 2 ;;
+    --dsn) DSN="${2:?}"; shift 2 ;;
+    --dsn-stdin) DSN_STDIN=true; shift ;;
+    --host) HOST="${2:?}"; shift 2 ;;
+    --port) PORT="${2:?}"; shift 2 ;;
+    --database) DATABASE="${2:?}"; shift 2 ;;
+    --username) USERNAME="${2:?}"; shift 2 ;;
+    --password-stdin) PASSWORD_STDIN=true; shift ;;
+    --expected-host-suffix) EXPECTED_HOST_SUFFIX="${2:?}"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -56,9 +83,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ "$ENVIRONMENT" == "dev" || "$ENVIRONMENT" == "prod" ]] || { usage >&2; exit 2; }
-
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-TF_ROOT="${TF_ROOT:-${REPO_ROOT}/infra/terraform/accounts/${ENVIRONMENT}}"
+NAME_PREFIX="${NAME_PREFIX:-edgartools-${ENVIRONMENT}}"
+SECRET_ID="${SECRET_ID:-${NAME_PREFIX}/mdm/postgres_dsn}"
 
 aws_cli() {
   local args=()
@@ -66,46 +92,71 @@ aws_cli() {
   aws "${args[@]}" --region "$AWS_REGION_NAME" "$@"
 }
 
-tf_raw() {
-  terraform -chdir="$TF_ROOT" output -raw "$1" 2>/dev/null || true
-}
+if [[ "$DSN_STDIN" == "true" ]]; then
+  [[ -z "$DSN" ]] || fail "use only one of --dsn or --dsn-stdin"
+  DSN="$(cat)"
+fi
 
-is_empty() {
-  [[ -z "${1:-}" || "${1:-}" == "null" || "${1:-}" == "None" ]]
-}
+if [[ -z "$DSN" ]]; then
+  [[ -n "$HOST" ]] || fail "provide --dsn/--dsn-stdin or --host"
+  [[ -n "$USERNAME" ]] || fail "--username is required when constructing a DSN"
+  [[ "$PASSWORD_STDIN" == "true" ]] || fail "--password-stdin is required when constructing a DSN"
+  PASSWORD="$(cat)"
+  DSN="$(python3 - "$HOST" "$PORT" "$DATABASE" "$USERNAME" "$PASSWORD" <<'PY'
+import sys
+from urllib.parse import quote_plus
 
-log "Reading Terraform outputs from ${TF_ROOT}"
-MASTER_SECRET_ARN="$(tf_raw mdm_db_master_user_secret_arn)"
-DSN_SECRET_ARN="$(tf_raw mdm_postgres_dsn_secret_arn)"
-DB_ENDPOINT="$(tf_raw mdm_db_endpoint)"
+host, port, database, username, password = sys.argv[1:]
+print(f"postgresql://{quote_plus(username)}:{quote_plus(password)}@{host}:{port}/{database}?sslmode=require")
+PY
+)"
+fi
 
-is_empty "$MASTER_SECRET_ARN" && fail "mdm_db_master_user_secret_arn not found in Terraform output. Is mdm_enabled = true and terraform apply complete?"
-is_empty "$DSN_SECRET_ARN"    && fail "mdm_postgres_dsn_secret_arn not found in Terraform output."
-is_empty "$DB_ENDPOINT"       && fail "mdm_db_endpoint not found in Terraform output."
+VALIDATED_JSON="$(python3 - "$DSN" "$DATABASE" "$EXPECTED_HOST_SUFFIX" <<'PY'
+import json
+import sys
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 
-log "Reading RDS master user credentials from Secrets Manager"
-MASTER_SECRET_JSON="$(aws_cli secretsmanager get-secret-value \
-  --secret-id "$MASTER_SECRET_ARN" \
-  --query SecretString \
-  --output text)"
+dsn, expected_database, expected_suffix = sys.argv[1:]
+parts = urlsplit(dsn.strip())
+if parts.scheme not in {"postgresql", "postgres", "postgresql+psycopg2"}:
+    raise SystemExit("DSN scheme must be postgresql, postgres, or postgresql+psycopg2")
+if not parts.hostname:
+    raise SystemExit("DSN must include a host")
+if not parts.hostname.endswith(expected_suffix):
+    raise SystemExit(f"DSN host must end with {expected_suffix}")
+database = parts.path.lstrip("/")
+if database != expected_database:
+    raise SystemExit(f"DSN database must be {expected_database}")
+query = parse_qs(parts.query)
+if query.get("sslmode", [""])[0] != "require":
+    separator = "&" if parts.query else ""
+    dsn = urlunsplit((parts.scheme, parts.netloc, parts.path, parts.query + f"{separator}sslmode=require", parts.fragment))
+    parts = urlsplit(dsn)
+redacted_netloc = parts.hostname
+if parts.port:
+    redacted_netloc = f"{redacted_netloc}:{parts.port}"
+if parts.username:
+    redacted_netloc = f"{parts.username}:***@{redacted_netloc}"
+masked = urlunsplit((parts.scheme, redacted_netloc, parts.path, parts.query, parts.fragment))
+print(json.dumps({"dsn": dsn, "masked": masked, "host": parts.hostname, "database": database}))
+PY
+)" || fail "invalid Snowflake Postgres DSN"
 
-DB_USER="$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['username'])" "$MASTER_SECRET_JSON")"
-DB_PASS="$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['password'])" "$MASTER_SECRET_JSON")"
-DB_PASS_ENC="$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$DB_PASS")"
-
-DSN="postgresql://${DB_USER}:${DB_PASS_ENC}@${DB_ENDPOINT}:5432/${DB_NAME}"
+NORMALIZED_DSN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["dsn"])' <<< "$VALIDATED_JSON")"
+MASKED_DSN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["masked"])' <<< "$VALIDATED_JSON")"
 
 if [[ "$DRY_RUN" == "true" ]]; then
-  log "DRY RUN — DSN (password masked):"
-  echo "postgresql://${DB_USER}:***@${DB_ENDPOINT}:5432/${DB_NAME}"
+  log "DRY RUN - validated DSN:"
+  echo "$MASKED_DSN"
   exit 0
 fi
 
-log "Writing DSN to ${DSN_SECRET_ARN}"
+log "Writing Snowflake Postgres MDM DSN to ${SECRET_ID}"
 aws_cli secretsmanager put-secret-value \
-  --secret-id "$DSN_SECRET_ARN" \
-  --secret-string "$DSN" \
+  --secret-id "$SECRET_ID" \
+  --secret-string "$NORMALIZED_DSN" \
   --output text >/dev/null
 
-log "Done. MDM_DATABASE_URL is now set in Secrets Manager (${DSN_SECRET_ARN})."
-log "Next: run deploy-aws-application.sh --enable-mdm, then start the mdm-migrate state machine."
+log "Done. MDM_DATABASE_URL secret now points at ${MASKED_DSN}"
+log "Next: deploy with deploy-aws-application.sh --enable-mdm --mdm-database-source snowflake-postgres"
