@@ -22,6 +22,7 @@ SNOWFLAKE_ENV_VARS = (
     "MDM_SNOWFLAKE_SCHEMA",
     "MDM_SNOWFLAKE_WAREHOUSE",
     "MDM_SNOWFLAKE_ROLE",
+    "MDM_SNOWFLAKE_SECRET_JSON",
     "DBT_SNOWFLAKE_ACCOUNT",
     "DBT_SNOWFLAKE_USER",
     "DBT_SNOWFLAKE_PASSWORD",
@@ -29,6 +30,7 @@ SNOWFLAKE_ENV_VARS = (
     "DBT_SNOWFLAKE_SCHEMA",
     "DBT_SNOWFLAKE_WAREHOUSE",
     "DBT_SNOWFLAKE_ROLE",
+    "DBT_SNOWFLAKE_SECRET_JSON",
 )
 
 
@@ -120,6 +122,40 @@ class RecordingSnowflakeExecutor:
         )
 
 
+class FakeSnowflakeCursor:
+    def __init__(self, *, node_count: int, edge_count: int) -> None:
+        self.node_count = node_count
+        self.edge_count = edge_count
+        self.current_sql = ""
+        self.closed = False
+
+    def execute(self, sql: str):
+        self.current_sql = sql
+        return self
+
+    def fetchone(self):
+        if "MDM_GRAPH_NODES" in self.current_sql:
+            return (self.node_count,)
+        if "MDM_GRAPH_EDGES" in self.current_sql:
+            return (self.edge_count,)
+        return (0,)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakeSnowflakeConnection:
+    def __init__(self, *, node_count: int, edge_count: int) -> None:
+        self.cursor_instance = FakeSnowflakeCursor(node_count=node_count, edge_count=edge_count)
+        self.closed = False
+
+    def cursor(self) -> FakeSnowflakeCursor:
+        return self.cursor_instance
+
+    def close(self) -> None:
+        self.closed = True
+
+
 @pytest.fixture(autouse=True)
 def reset_fakes():
     FakePipeline.instances.clear()
@@ -136,6 +172,23 @@ def _patch_executor(monkeypatch) -> None:
     monkeypatch.setattr(
         "edgar_warehouse.mdm.snowflake_graph.SnowflakeGraphSyncExecutor",
         RecordingSnowflakeExecutor,
+    )
+
+
+def _patch_verify_settings(monkeypatch, connection: FakeSnowflakeConnection) -> None:
+    class FakeSnowflakeConnectionSettings:
+        database = "EDGARTOOLS_DEV"
+
+        @classmethod
+        def from_env(cls):
+            return cls()
+
+        def connect(self):
+            return connection
+
+    monkeypatch.setattr(
+        "edgar_warehouse.mdm.export.SnowflakeConnectionSettings",
+        FakeSnowflakeConnectionSettings,
     )
 
 
@@ -205,6 +258,41 @@ def test_sync_graph_uses_snowflake_executor_without_neo4j_credentials(monkeypatc
         "limit": 100,
         "limit_per_type": 10,
     }
+
+
+def test_verify_graph_checks_snowflake_graph_tables(monkeypatch, capsys):
+    _clear_graph_env(monkeypatch)
+    connection = FakeSnowflakeConnection(node_count=7, edge_count=11)
+    _patch_verify_settings(monkeypatch, connection)
+
+    args = build_parser().parse_args(["mdm", "verify-graph"])
+
+    assert args.handler(args) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "ok"
+    assert payload["snowflake_graph_nodes"] == 7
+    assert payload["snowflake_graph_edges"] == 11
+    assert payload["target"] == {
+        "database": "EDGARTOOLS_DEV",
+        "schema": "NEO4J_GRAPH_MIGRATION",
+    }
+    assert connection.cursor_instance.closed is True
+    assert connection.closed is True
+
+
+def test_verify_graph_fails_when_snowflake_graph_is_empty(monkeypatch, capsys):
+    _clear_graph_env(monkeypatch)
+    _patch_verify_settings(monkeypatch, FakeSnowflakeConnection(node_count=7, edge_count=0))
+
+    args = build_parser().parse_args(["mdm", "verify-graph"])
+
+    assert args.handler(args) == 1
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "failed"
+    assert payload["snowflake_graph_nodes"] == 7
+    assert payload["snowflake_graph_edges"] == 0
 
 
 def test_load_relationships_default_derives_without_snowflake_credentials(monkeypatch, capsys):
