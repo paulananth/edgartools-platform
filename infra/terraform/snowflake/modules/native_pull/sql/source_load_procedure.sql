@@ -13,29 +13,41 @@ const manifestInboxTable = `${databaseName}.${sourceSchema}.__MANIFEST_INBOX_TAB
 const parquetStage = `${databaseName}.${sourceSchema}.__STAGE_NAME__`;
 const parquetFileFormat = `${databaseName}.${sourceSchema}.__PARQUET_FILE_FORMAT_NAME__`;
 
-const targetTables = {
-  COMPANY: `${databaseName}.${sourceSchema}.COMPANY`,
-  FILING_ACTIVITY: `${databaseName}.${sourceSchema}.FILING_ACTIVITY`,
-  OWNERSHIP_ACTIVITY: `${databaseName}.${sourceSchema}.OWNERSHIP_ACTIVITY`,
-  OWNERSHIP_HOLDINGS: `${databaseName}.${sourceSchema}.OWNERSHIP_HOLDINGS`,
-  ADVISER_OFFICES: `${databaseName}.${sourceSchema}.ADVISER_OFFICES`,
-  ADVISER_DISCLOSURES: `${databaseName}.${sourceSchema}.ADVISER_DISCLOSURES`,
-  PRIVATE_FUNDS: `${databaseName}.${sourceSchema}.PRIVATE_FUNDS`,
-  FILING_DETAIL: `${databaseName}.${sourceSchema}.FILING_DETAIL`,
-  TICKER_REFERENCE: `${databaseName}.${sourceSchema}.TICKER_REFERENCE`
-};
+const targetTables = new Map([
+  ["COMPANY", `${databaseName}.${sourceSchema}.COMPANY`],
+  ["FILING_ACTIVITY", `${databaseName}.${sourceSchema}.FILING_ACTIVITY`],
+  ["OWNERSHIP_ACTIVITY", `${databaseName}.${sourceSchema}.OWNERSHIP_ACTIVITY`],
+  ["OWNERSHIP_HOLDINGS", `${databaseName}.${sourceSchema}.OWNERSHIP_HOLDINGS`],
+  ["ADVISER_OFFICES", `${databaseName}.${sourceSchema}.ADVISER_OFFICES`],
+  ["ADVISER_DISCLOSURES", `${databaseName}.${sourceSchema}.ADVISER_DISCLOSURES`],
+  ["PRIVATE_FUNDS", `${databaseName}.${sourceSchema}.PRIVATE_FUNDS`],
+  ["FILING_DETAIL", `${databaseName}.${sourceSchema}.FILING_DETAIL`],
+  ["TICKER_REFERENCE", `${databaseName}.${sourceSchema}.TICKER_REFERENCE`],
+  ["SEC_FINANCIAL_FACT", `${databaseName}.${sourceSchema}.SEC_FINANCIAL_FACT`],
+  ["SEC_THIRTEENF_HOLDING", `${databaseName}.${sourceSchema}.SEC_THIRTEENF_HOLDING`],
+  ["SEC_FINANCIAL_DERIVED", `${databaseName}.${sourceSchema}.SEC_FINANCIAL_DERIVED`],
+  ["EARNINGS_RELEASE", `${databaseName}.${sourceSchema}.EARNINGS_RELEASE`],
+  ["EXECUTIVE_RECORD", `${databaseName}.${sourceSchema}.EXECUTIVE_RECORD`],
+  ["ACCOUNTING_FLAG", `${databaseName}.${sourceSchema}.ACCOUNTING_FLAG`]
+]);
 
-const mergeKeys = {
-  COMPANY: "COMPANY_KEY",
-  FILING_ACTIVITY: "FACT_KEY",
-  OWNERSHIP_ACTIVITY: "FACT_KEY",
-  OWNERSHIP_HOLDINGS: "FACT_KEY",
-  ADVISER_OFFICES: "FACT_KEY",
-  ADVISER_DISCLOSURES: "FACT_KEY",
-  PRIVATE_FUNDS: "FACT_KEY",
-  FILING_DETAIL: "FILING_KEY",
-  TICKER_REFERENCE: "CIK"
-};
+const mergeKeys = new Map([
+  ["COMPANY", ["COMPANY_KEY"]],
+  ["FILING_ACTIVITY", ["FACT_KEY"]],
+  ["OWNERSHIP_ACTIVITY", ["FACT_KEY"]],
+  ["OWNERSHIP_HOLDINGS", ["FACT_KEY"]],
+  ["ADVISER_OFFICES", ["FACT_KEY"]],
+  ["ADVISER_DISCLOSURES", ["FACT_KEY"]],
+  ["PRIVATE_FUNDS", ["FACT_KEY"]],
+  ["FILING_DETAIL", ["FILING_KEY"]],
+  ["TICKER_REFERENCE", ["CIK"]],
+  ["SEC_FINANCIAL_FACT", ["CIK", "ACCESSION_NUMBER", "CONCEPT", "FISCAL_PERIOD", "SEGMENT"]],
+  ["SEC_THIRTEENF_HOLDING", ["CIK", "ACCESSION_NUMBER", "HOLDING_INDEX"]],
+  ["SEC_FINANCIAL_DERIVED", ["CIK", "ACCESSION_NUMBER", "FISCAL_PERIOD"]],
+  ["EARNINGS_RELEASE", ["FACT_KEY"]],
+  ["EXECUTIVE_RECORD", ["FACT_KEY"]],
+  ["ACCOUNTING_FLAG", ["FACT_KEY"]]
+]);
 
 function q(value) {
   if (value === null || value === undefined) {
@@ -174,7 +186,7 @@ let totalRows = 0;
 try {
   for (const tableSpec of tables) {
     const tableName = String(tableSpec.table_name || "").toUpperCase();
-    const targetTable = targetTables[tableName];
+    const targetTable = targetTables.get(tableName);
     if (!targetTable) {
       throw new Error(`Unsupported source table ${tableName} in run manifest.`);
     }
@@ -215,25 +227,31 @@ try {
 
   exec("BEGIN");
   for (const staged of stagedTables) {
-    const key = mergeKeys[staged.tableName];
-    if (!key) {
-      throw new Error(`No merge key defined for table ${staged.tableName}`);
+    const keyColumns = mergeKeys.get(staged.tableName);
+    if (!keyColumns || keyColumns.length === 0) {
+      throw new Error(`No merge keys defined for table ${staged.tableName}`);
     }
     const columns = getColumns(staged.tableName);
     if (columns.length === 0) {
       throw new Error(`No columns found for table ${staged.tableName}`);
     }
-    const updateSet = columns.filter(c => c !== key).map(c => `${c} = source.${c}`).join(", ");
+    const onClause = keyColumns.map(c => `target.${c} = source.${c}`).join(" AND ");
+    const updateSet = columns.filter(c => !keyColumns.includes(c)).map(c => `${c} = source.${c}`).join(", ");
     const insertCols = columns.join(", ");
     const insertVals = columns.map(c => `source.${c}`).join(", ");
 
-    exec(`
+    let mergeSql = `
       MERGE INTO ${staged.targetTable} AS target
       USING ${staged.tempTableName} AS source
-      ON target.${key} = source.${key}
-      WHEN MATCHED THEN UPDATE SET ${updateSet}
+      ON ${onClause}
+    `;
+    if (updateSet.length > 0) {
+      mergeSql += `WHEN MATCHED THEN UPDATE SET ${updateSet} `;
+    }
+    mergeSql += `
       WHEN NOT MATCHED THEN INSERT (${insertCols}) VALUES (${insertVals})
-    `);
+    `;
+    exec(mergeSql);
   }
   exec("COMMIT");
 
