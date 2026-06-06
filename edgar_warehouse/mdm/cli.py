@@ -867,33 +867,68 @@ def _handle_load_relationships(args) -> int:
 
 
 def _handle_verify_graph(args) -> int:
-    client = _neo4j_client()
-    if client is None:
-        print(json.dumps({"error": "NEO4J_URI/NEO4J_USER/NEO4J_PASSWORD not configured"}), file=sys.stderr)
-        return 1
-    session = _session()
-    try:
-        from edgar_warehouse.mdm.graph import GraphRegistry, GraphSyncEngine
+    from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
+    from edgar_warehouse.mdm.snowflake_graph import DEFAULT_TARGET_SCHEMA
 
-        registry = GraphRegistry.load(session)
-        relationship_types = sorted(registry.rel_type_by_name)
-        with client.session() as s:
-            payload = {"neo4j_nodes_total": s.run("MATCH (n) RETURN count(n) AS n").single()["n"]}
-            for rel_type in relationship_types:
-                _validate_cypher_relationship_type(rel_type)
-                payload[f"neo4j_{rel_type}_edges"] = s.run(
-                    f"MATCH ()-[r:{rel_type}]->() RETURN count(r) AS n"
-                ).single()["n"]
-        # Add pending MDM counts (SQL only — Neo4j connection already released)
-        engine = GraphSyncEngine(session=session, registry=registry)
-        pending = engine.pending_counts()
-        for rel_type in relationship_types:
-            payload[f"mdm_{rel_type}_pending"] = pending.get(rel_type, 0)
-    finally:
-        session.close()
-        client.close()
+    try:
+        settings = SnowflakeConnectionSettings.from_env()
+        target_database = settings.database
+        target_schema = DEFAULT_TARGET_SCHEMA
+        nodes_table = _snowflake_graph_table(target_database, target_schema, "MDM_GRAPH_NODES")
+        edges_table = _snowflake_graph_table(target_database, target_schema, "MDM_GRAPH_EDGES")
+
+        connection = settings.connect()
+        cursor = connection.cursor()
+        try:
+            node_count = _snowflake_scalar(cursor, f"SELECT COUNT(*) FROM {nodes_table}")
+            edge_count = _snowflake_scalar(cursor, f"SELECT COUNT(*) FROM {edges_table}")
+        finally:
+            cursor.close()
+            connection.close()
+    except (RuntimeError, ValueError) as exc:
+        print(f"verify-graph: {exc}", file=sys.stderr)
+        return 1
+
+    payload = {
+        "status": "ok" if node_count > 0 and edge_count > 0 else "failed",
+        "snowflake_graph_nodes": node_count,
+        "snowflake_graph_edges": edge_count,
+        "target": {
+            "database": target_database,
+            "schema": target_schema,
+        },
+    }
     print(json.dumps(payload, indent=2, sort_keys=True))
+    if node_count <= 0 or edge_count <= 0:
+        print(
+            "verify-graph: Snowflake graph node and edge counts must both be greater than 0",
+            file=sys.stderr,
+        )
+        return 1
     return 0
+
+
+def _snowflake_graph_table(database: str, schema: str, table: str) -> str:
+    return ".".join(_snowflake_identifier(part) for part in (database, schema, table))
+
+
+def _snowflake_identifier(value: str) -> str:
+    cleaned = str(value).upper()
+    if not cleaned.replace("_", "").isalnum() or not cleaned[0].isalpha():
+        raise ValueError(f"Unsafe Snowflake identifier: {value!r}")
+    return cleaned
+
+
+def _snowflake_scalar(cursor, sql: str) -> int:
+    result = cursor.execute(sql)
+    row = result.fetchone() if hasattr(result, "fetchone") else cursor.fetchone()
+    if not row:
+        return 0
+    if isinstance(row, dict):
+        value = next(iter(row.values()), 0)
+    else:
+        value = row[0]
+    return int(value or 0)
 
 
 def _handle_backfill_relationships(args) -> int:
