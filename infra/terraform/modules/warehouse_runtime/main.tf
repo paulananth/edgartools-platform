@@ -72,3 +72,31 @@ resource "aws_secretsmanager_secret" "runner_credentials" {
 
   tags = merge(local.tags, { Name = "${local.name_prefix}-runner-credentials", Legacy = "runner-credentials" })
 }
+
+resource "aws_secretsmanager_secret" "mdm_postgres_dsn" {
+  name        = "${local.name_prefix}/mdm/postgres_dsn"
+  description = "Empty PostgreSQL connection string container for MDM. Populate the Snowflake Postgres application DSN out-of-band."
+
+  tags = merge(local.tags, { Name = "${local.name_prefix}/mdm/postgres_dsn", RuntimeSecret = "mdm-postgres-dsn" })
+}
+
+resource "aws_secretsmanager_secret" "mdm_neo4j" {
+  name        = "${local.name_prefix}/mdm/neo4j"
+  description = "Empty Neo4j connection details container for MDM graph sync. Populate the value out-of-band."
+
+  tags = merge(local.tags, { Name = "${local.name_prefix}/mdm/neo4j", RuntimeSecret = "mdm-neo4j" })
+}
+
+resource "aws_secretsmanager_secret" "mdm_api_keys" {
+  name        = "${local.name_prefix}/mdm/api_keys"
+  description = "Empty MDM API key container. Populate the value out-of-band."
+
+  tags = merge(local.tags, { Name = "${local.name_prefix}/mdm/api_keys", RuntimeSecret = "mdm-api-keys" })
+}
+
+resource "aws_secretsmanager_secret" "mdm_snowflake" {
+  name        = "${local.name_prefix}/mdm/snowflake"
+  description = "Empty Snowflake connection details container for MDM graph/export tasks. Populate the value out-of-band."
+
+  tags = merge(local.tags, { Name = "${local.name_prefix}/mdm/snowflake", RuntimeSecret = "mdm-snowflake" })
+}

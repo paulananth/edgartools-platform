@@ -88,37 +88,22 @@ output "runner_credentials_secret_arn" {
   value       = module.runtime.runner_credentials_secret_arn
 }
 
-output "mdm_db_endpoint" {
-  description = "Prod MDM PostgreSQL endpoint hostname (only set when var.mdm_enabled = true)."
-  value       = try(module.mdm[0].db_endpoint, null)
-}
-
-output "mdm_db_master_user_secret_arn" {
-  description = "Prod AWS-managed RDS master user secret ARN."
-  value       = try(module.mdm[0].db_master_user_secret_arn, null)
-}
-
 output "mdm_postgres_dsn_secret_arn" {
-  description = "Prod empty Secrets Manager container ARN for an operator-populated MDM PostgreSQL DSN."
-  value       = try(module.mdm[0].postgres_dsn_secret_arn, null)
+  description = "Prod empty Secrets Manager container ARN for the operator-populated Snowflake Postgres MDM DSN."
+  value       = module.runtime.mdm_postgres_dsn_secret_arn
 }
 
 output "mdm_neo4j_secret_arn" {
   description = "Prod empty Secrets Manager container ARN for operator-populated Neo4j connection details."
-  value       = try(module.mdm[0].neo4j_secret_arn, null)
+  value       = module.runtime.mdm_neo4j_secret_arn
 }
 
 output "mdm_api_keys_secret_arn" {
   description = "Prod empty Secrets Manager container ARN for operator-populated MDM API keys."
-  value       = try(module.mdm[0].api_keys_secret_arn, null)
+  value       = module.runtime.mdm_api_keys_secret_arn
 }
 
 output "mdm_snowflake_secret_arn" {
   description = "Prod empty Secrets Manager container ARN for operator-populated MDM Snowflake connection details."
-  value       = try(module.mdm[0].snowflake_secret_arn, null)
-}
-
-output "mdm_db_security_group_id" {
-  description = "Prod MDM RDS security group ID."
-  value       = try(module.mdm[0].db_security_group_id, null)
+  value       = module.runtime.mdm_snowflake_secret_arn
 }

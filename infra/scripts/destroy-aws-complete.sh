@@ -423,8 +423,13 @@ apply_destroy_overrides() {
     log "Temporarily relaxed prod Terraform destroy guards"
   fi
 
-  patch_file_with_python "${REPO_ROOT}/infra/terraform/modules/mdm_database/main.tf" mdm-destructive-delete
-  log "Temporarily configured MDM RDS resources for destructive deletion"
+  local mdm_database_module="${REPO_ROOT}/infra/terraform/modules/mdm_database/main.tf"
+  if [[ -f "$mdm_database_module" ]]; then
+    patch_file_with_python "$mdm_database_module" mdm-destructive-delete
+    log "Temporarily configured MDM RDS resources for destructive deletion"
+  else
+    log "No MDM RDS Terraform module present; RDS cleanup will use AWS API skip-final-snapshot deletion"
+  fi
 }
 
 bucket_exists() {

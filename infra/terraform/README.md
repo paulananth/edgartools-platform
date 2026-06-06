@@ -42,7 +42,6 @@ snowflake/
     dashboard/
     native_pull/
 modules/
-  mdm_database/          # RDS + empty secret containers only
   network_runtime/
   storage_buckets/
   storage_buckets_destroyable/
@@ -76,7 +75,7 @@ modules/
    - `edgartools-<env>-edgar-identity`
    - `edgartools-<env>-runner-credentials` only as a legacy compatibility
      container for non-runtime operator credentials
-   - `edgartools-<env>/mdm/*` when the AWS MDM database shell is enabled
+   - `edgartools-<env>/mdm/*` for MDM runtime DSNs and graph/export settings
 7. Deploy active AWS application components from the operator script:
    `bash infra/scripts/deploy-aws-application.sh --env dev --aws-profile sec_platform_deployer --build-image`.
 
