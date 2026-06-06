@@ -473,7 +473,7 @@ def _handle_run(args) -> int:
 
     session = _session()
     try:
-        pipeline = MDMPipeline(session=session, silver=silver, neo4j=_neo4j_client())
+        pipeline = MDMPipeline(session=session, silver=silver)
         if args.entity_type == "all":
             stats = pipeline.run_all(limit=args.limit)
             print(json.dumps(stats.__dict__, indent=2, sort_keys=True))
