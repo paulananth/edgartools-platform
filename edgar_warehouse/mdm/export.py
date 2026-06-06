@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import json
 import os
 import uuid
 from typing import Any, Optional
@@ -48,13 +49,14 @@ class SnowflakeConnectionSettings:
 
     @classmethod
     def from_env(cls) -> "SnowflakeConnectionSettings":
-        account = os.environ.get("MDM_SNOWFLAKE_ACCOUNT") or os.environ.get("DBT_SNOWFLAKE_ACCOUNT")
-        user = os.environ.get("MDM_SNOWFLAKE_USER") or os.environ.get("DBT_SNOWFLAKE_USER")
-        password = os.environ.get("MDM_SNOWFLAKE_PASSWORD") or os.environ.get("DBT_SNOWFLAKE_PASSWORD")
-        database = os.environ.get("MDM_SNOWFLAKE_DATABASE") or os.environ.get("DBT_SNOWFLAKE_DATABASE")
-        schema = os.environ.get("MDM_SNOWFLAKE_SCHEMA") or os.environ.get("DBT_SNOWFLAKE_SCHEMA") or "EDGARTOOLS_GOLD"
-        warehouse = os.environ.get("MDM_SNOWFLAKE_WAREHOUSE") or os.environ.get("DBT_SNOWFLAKE_WAREHOUSE")
-        role = os.environ.get("MDM_SNOWFLAKE_ROLE") or os.environ.get("DBT_SNOWFLAKE_ROLE")
+        secret = _snowflake_secret_payload()
+        account = _snowflake_setting(secret, "ACCOUNT")
+        user = _snowflake_setting(secret, "USER")
+        password = _snowflake_setting(secret, "PASSWORD")
+        database = _snowflake_setting(secret, "DATABASE")
+        schema = _snowflake_setting(secret, "SCHEMA") or "EDGARTOOLS_GOLD"
+        warehouse = _snowflake_setting(secret, "WAREHOUSE")
+        role = _snowflake_setting(secret, "ROLE")
         missing = [
             name
             for name, value in {
@@ -102,6 +104,35 @@ class SnowflakeConnectionSettings:
             ) from exc
 
         return snowflake.connector.connect(**self.connection_kwargs())
+
+
+def _snowflake_secret_payload() -> dict[str, Any]:
+    source_name = "MDM_SNOWFLAKE_SECRET_JSON"
+    raw = os.environ.get(source_name)
+    if not raw:
+        source_name = "DBT_SNOWFLAKE_SECRET_JSON"
+        raw = os.environ.get(source_name)
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid Snowflake secret JSON in {source_name}") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Invalid Snowflake secret JSON in {source_name}")
+    return payload
+
+
+def _snowflake_setting(secret: dict[str, Any], key: str) -> Any:
+    lower = key.lower()
+    return (
+        os.environ.get(f"MDM_SNOWFLAKE_{key}")
+        or os.environ.get(f"DBT_SNOWFLAKE_{key}")
+        or secret.get(f"MDM_SNOWFLAKE_{key}")
+        or secret.get(f"DBT_SNOWFLAKE_{key}")
+        or secret.get(f"snowflake_{lower}")
+        or secret.get(lower)
+    )
 
 
 class SnowflakeConnectorWriter(SnowflakeWriter):

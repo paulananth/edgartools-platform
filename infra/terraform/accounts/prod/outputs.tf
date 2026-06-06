@@ -113,6 +113,11 @@ output "mdm_api_keys_secret_arn" {
   value       = try(module.mdm[0].api_keys_secret_arn, null)
 }
 
+output "mdm_snowflake_secret_arn" {
+  description = "Prod empty Secrets Manager container ARN for operator-populated MDM Snowflake connection details."
+  value       = try(module.mdm[0].snowflake_secret_arn, null)
+}
+
 output "mdm_db_security_group_id" {
   description = "Prod MDM RDS security group ID."
   value       = try(module.mdm[0].db_security_group_id, null)
