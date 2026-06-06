@@ -2,7 +2,7 @@
 
 status: active
 milestone: v1.1 Neo4j bronze-to-graph pipe
-updated: 2026-05-16
+updated: 2026-06-06
 
 ---
 
@@ -10,9 +10,11 @@ updated: 2026-05-16
 
 ### Source To MDM
 
-- [ ] **PIPE-01**: Operator can run the MDM entity loaders against an existing local or S3-backed silver DuckDB produced from bronze without re-fetching SEC artifacts.
-- [ ] **PIPE-02**: MDM company, adviser, person, security, and fund loaders are idempotent across repeated runs against the same silver data.
-- [ ] **PIPE-03**: Missing silver source configuration fails with a clear operator message that names the required setting and does not partially mutate MDM state.
+- [x] **PIPE-01**: Operator can run the MDM entity loaders against an existing local or S3-backed silver DuckDB produced from bronze without re-fetching SEC artifacts.
+- [x] **PIPE-02**: MDM company, adviser, person, security, and fund loaders are idempotent across repeated runs against the same silver data.
+- [x] **PIPE-03**: Missing silver source configuration fails with a clear operator message that names the required setting and does not partially mutate MDM state.
+- [x] **PIPE-04**: `mdm coverage-report` reports silver vs MDM counts for companies, persons, securities, advisers, and funds, exits 0 as a reporting tool, and documents intended exclusions.
+- [x] **PIPE-05**: `mdm sync-graph` materializes the Snowflake `NEO4J_GRAPH_MIGRATION` graph tables from Snowflake MDM mirror rows and passes the MDM-to-graph parity gate for the bounded real-data sample. Phase 6 owns full 11-edge coverage across the active target.
 
 ### Relationship Derivation
 
@@ -23,15 +25,15 @@ updated: 2026-05-16
 
 ### Neo4j Sync And Verification
 
-- [ ] **GRAPH-01**: `edgar-warehouse mdm sync-graph` upserts all active MDM entities as Neo4j nodes before syncing pending relationships.
+- [ ] **GRAPH-01**: `edgar-warehouse mdm sync-graph` materializes all active MDM entities as graph nodes before syncing relationships.
 - [ ] **GRAPH-02**: `edgar-warehouse mdm sync-graph` supports bounded relationship sync by relationship type and per-type limit without starving other relationship types.
-- [ ] **GRAPH-03**: `edgar-warehouse mdm verify-graph` reports Neo4j node counts, relationship counts by type, pending MDM relationship counts, and missing-edge diagnostics.
-- [ ] **GRAPH-04**: Running graph sync twice against unchanged data produces stable Neo4j node and edge counts and leaves zero pending relationship rows for the selected scope.
+- [ ] **GRAPH-03**: Graph verification reports node counts, relationship counts by type, pending MDM relationship counts, parity gaps, and missing-edge endpoint diagnostics.
+- [ ] **GRAPH-04**: Running graph sync twice against unchanged data produces stable graph node and edge counts and leaves zero MDM-to-graph parity gaps for the selected scope.
 
 ### Isolation
 
-- [ ] **ISO-01**: This milestone is developed in the `workspace/neo4j-pipe` worktree and does not modify the active loader-fix worktree, loader workstream artifacts, or generated deployment JSON.
-- [ ] **ISO-02**: Changes avoid gold refresh, Step Functions failure-observability, and unrelated loader refactors unless they are required to prove the bronze-to-Neo4j path.
+- [x] **ISO-01**: This milestone is developed in the `workspace/neo4j-pipe` worktree and does not modify the active loader-fix worktree, loader workstream artifacts, or generated deployment JSON.
+- [x] **ISO-02**: Changes avoid gold refresh, Step Functions failure-observability, and unrelated loader refactors unless they are required to prove the bronze-to-Neo4j path.
 
 ## Future Requirements
 
@@ -49,16 +51,18 @@ updated: 2026-05-16
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PIPE-01 | Phase 5 | Pending |
-| PIPE-02 | Phase 5 | Pending |
-| PIPE-03 | Phase 5 | Pending |
+| PIPE-01 | Phase 5 | Complete |
+| PIPE-02 | Phase 5 | Complete |
+| PIPE-03 | Phase 5 | Complete |
+| PIPE-04 | Phase 5 | Complete |
+| PIPE-05 | Phase 5 | Complete |
 | REL-01 | Phase 6 | Pending |
 | REL-02 | Phase 6 | Pending |
 | REL-03 | Phase 6 | Pending |
 | REL-04 | Phase 6 | Pending |
-| GRAPH-01 | Phase 7 | Pending |
-| GRAPH-02 | Phase 7 | Pending |
-| GRAPH-03 | Phase 7 | Pending |
-| GRAPH-04 | Phase 7 | Pending |
-| ISO-01 | Phase 5 | Pending |
-| ISO-02 | Phase 5 | Pending |
+| GRAPH-01 | Phase 6 | Pending |
+| GRAPH-02 | Phase 6 | Pending |
+| GRAPH-03 | Phase 6 | Pending |
+| GRAPH-04 | Phase 6 | Pending |
+| ISO-01 | Phase 5 | Complete |
+| ISO-02 | Phase 5 | Complete |

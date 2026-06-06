@@ -3,6 +3,7 @@ from edgar_warehouse.mdm.snowflake_graph import (
     SnowflakeGraphSyncExecutor,
     SnowflakeGraphValidationError,
     SnowflakeGraphMigrationConfig,
+    _split_sql_statements,
     generate_snowflake_graph_migration,
     run_hosted_neo4j_e2e,
     run_snowflake_graph_sql,
@@ -96,6 +97,9 @@ def test_generated_sql_exposes_phase_2_graph_projection_contract(tmp_path):
         "GRAPH_EDGE_HAS_PARENT_COMPANY",
         "GRAPH_EDGE_MANAGES_FUND",
         "GRAPH_EDGE_IS_PERSON_OF",
+        "GRAPH_EDGE_EMPLOYED_BY",
+        "GRAPH_EDGE_AUDITED_BY",
+        "GRAPH_EDGE_INSTITUTIONAL_HOLDS",
     ]:
         assert table_name in graph_sql
 
@@ -204,6 +208,7 @@ def test_graph_sync_executor_materializes_filtered_graph_contract_without_creden
     combined_sql = "\n".join(cursor.executed)
     assert cursor.closed is True
     assert cursor.executed[0].startswith("-- Build graph-ready node and edge tables")
+    assert len(cursor.executed) > 3
     assert "CREATE OR REPLACE TABLE EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION.MDM_GRAPH_NODES" in combined_sql
     assert "CREATE OR REPLACE TABLE EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION.MDM_GRAPH_EDGES" in combined_sql
     assert "EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION" in combined_sql
@@ -237,6 +242,12 @@ def test_graph_sync_executor_materializes_filtered_graph_contract_without_creden
         "limit": 100,
         "limit_per_type": 10,
     }
+
+
+def test_split_sql_statements_preserves_semicolon_inside_string_literal():
+    statements = _split_sql_statements("SELECT 'a;b' AS value; SELECT 'c'';d' AS value;")
+
+    assert statements == ["SELECT 'a;b' AS value;", "SELECT 'c'';d' AS value;"]
 
 
 def test_graph_sync_executor_rejects_unknown_relationship_before_execute():

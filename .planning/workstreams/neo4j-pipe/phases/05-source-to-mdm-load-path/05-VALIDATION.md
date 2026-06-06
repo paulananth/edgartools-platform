@@ -1,10 +1,11 @@
 ---
 phase: 05
 slug: source-to-mdm-load-path
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: complete
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-05-16
+validated: 2026-06-06
 ---
 
 # Phase 05 - Validation Strategy
@@ -66,11 +67,88 @@ created: 2026-05-16
 
 ## Validation Sign-Off
 
-- [ ] All tasks have automated verification or Wave 0 dependencies.
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verification.
-- [ ] Wave 0 covers all missing references.
-- [ ] No watch-mode flags.
-- [ ] Feedback latency under 90 seconds for focused tests.
-- [ ] `nyquist_compliant: true` set in frontmatter after Wave 0 tests exist and pass.
+- [x] All tasks have automated verification or Wave 0 dependencies.
+- [x] Sampling continuity: no 3 consecutive tasks without automated verification.
+- [x] Wave 0 covers all missing references.
+- [x] No watch-mode flags.
+- [x] Feedback latency under 90 seconds for focused tests.
+- [x] `nyquist_compliant: true` set in frontmatter after Wave 0 tests exist and pass.
 
-**Approval:** pending
+**Approval:** complete
+
+---
+
+## Live E2E Sign-Off
+
+**Validated:** 2026-06-06
+
+**Scope:** bounded real-data Phase 5 closeout sample. No single available live silver CIK had both
+ownership and ADV rows, so the validation used the real ownership sample plus the Phase 10 real ADV
+sample that unblocked adviser/fund loading.
+
+| Source | Identifier | Evidence |
+|--------|------------|----------|
+| Ownership issuer | CIK 712515, accession 0000712515-26-000049 | Form 4 ownership rows loaded from live silver into MDM company/person/security domains |
+| ADV adviser/fund | CRD/CIK 105958, accession ADV-105958-20241218 | Vanguard ADV XML from S3 bronze parsed into silver; adviser and private fund loaded |
+| Snowflake target | EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION | `mdm sync-graph` materialized Snowflake graph tables via SnowflakeGraphSyncExecutor |
+
+### Automated Verification
+
+| Check | Result |
+|-------|--------|
+| `pytest tests/mdm/test_source_to_mdm_load_path.py -k coverage_report -q` | 1 passed, 18 deselected |
+| `MDM_DATABASE_URL=sqlite:// uv run edgar-warehouse mdm coverage-report --help` | exit 0 |
+| `pytest tests/mdm/test_source_to_mdm_load_path.py tests/application/test_parse_ownership_bronze.py -q` | 32 passed, 3 warnings |
+| `pytest tests/mdm/test_snowflake_graph_migration.py tests/mdm/test_cli_snowflake_graph.py -q` | 12 passed |
+
+### MDM Counts
+
+| Table | Count |
+|-------|-------|
+| mdm_company | 1 |
+| mdm_person | 1 |
+| mdm_security | 1 |
+| mdm_adviser | 1 |
+| mdm_fund | 1 |
+| mdm_entity | 15 |
+| mdm_relationship_instance | 4 |
+
+### Coverage Report
+
+| Domain | Silver Count | MDM Count | Gap | Reason |
+|--------|--------------|-----------|-----|--------|
+| companies | 1 | 1 | 0 | Inactive and dropped companies excluded (`tracking_status != 'active'`) |
+| persons | 1 | 1 | 0 | Corporate owners excluded |
+| securities | 1 | 1 | 0 | Ownership-sourced only; XBRL-sourced securities deferred to Phase 6 |
+| advisers | 1 | 1 | 0 | All ADV filers included |
+| funds | 1 | 1 | 0 | All private funds included |
+
+### Snowflake Graph Sync
+
+`edgar-warehouse mdm sync-graph --target-database EDGARTOOLS_DEV --target-schema NEO4J_GRAPH_MIGRATION --mdm-database EDGARTOOLS_DEV --mdm-schema MDM` exited 0.
+
+| Metric | Count |
+|--------|-------|
+| graph_nodes_synced | 15 |
+| graph_edges_synced | 4 |
+| missing endpoint rows | 0 |
+
+All 11 relationship-specific `GRAPH_EDGE_*` views exist in
+`EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION`.
+
+| Relationship Type | MDM Active | Graph Count | MDM Minus Graph | Notes |
+|-------------------|------------|-------------|-----------------|-------|
+| AUDITED_BY | 0 | 0 | 0 | Requires fundamentals audit-firm source rows |
+| COMPANY_HOLDS | 0 | 0 | 0 | Requires corporate reporting owner |
+| EMPLOYED_BY | 0 | 0 | 0 | Requires DEF 14A executive records |
+| HAS_PARENT_COMPANY | 0 | 0 | 0 | Unreachable until parent company links are populated |
+| HOLDS | 1 | 1 | 0 | Ownership core edge |
+| INSTITUTIONAL_HOLDS | 0 | 0 | 0 | Requires 13F holdings |
+| ISSUED_BY | 1 | 1 | 0 | Ownership core edge |
+| IS_ENTITY_OF | 0 | 0 | 0 | Requires adviser-to-company resolution in source sample |
+| IS_INSIDER | 1 | 1 | 0 | Ownership core edge |
+| IS_PERSON_OF | 0 | 0 | 0 | Requires adviser-person links in source sample |
+| MANAGES_FUND | 1 | 1 | 0 | ADV/private fund edge |
+
+**Phase 5 parity gate:** PASS. `MDM_MINUS_GRAPH = 0` for every active relationship type, and
+`IS_INSIDER`, `HOLDS`, and `ISSUED_BY` are nonzero.

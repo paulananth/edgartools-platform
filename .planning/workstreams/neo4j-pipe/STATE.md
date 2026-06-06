@@ -4,7 +4,7 @@ milestone: v1.4
 milestone_name: milestone
 status: complete
 last_updated: "2026-06-05T18:15:00.000Z"
-last_activity: 2026-06-05 -- Phase 10 complete; all MDM-ADV requirements satisfied
+last_activity: 2026-06-06 -- v1.1 Phase 5 Snowflake graph parity passed; Phase 5 blocker resolved
 progress:
   total_phases: 4
   completed_phases: 3
@@ -19,9 +19,9 @@ progress:
 
 Phase: 10 (Live ADV Backfill Validation) - COMPLETE
 Plan: 10-03 (complete)
-Status: All MDM-ADV-01/02/03 requirements satisfied. Phase 5 resume path documented.
-Last activity: 2026-06-05 -- Phase 10 complete; sec_adv_filing=1, sec_adv_private_fund=1, mdm_adviser=1, mdm_fund=1
-Resume file: docs/aws-mdm-source-to-mdm.md (Phase 5 Resume Path section)
+Status: All MDM-ADV-01/02/03 requirements satisfied. v1.1 Phase 5 resume completed with Snowflake graph parity passing.
+Last activity: 2026-06-06 -- Phase 5 bounded real-data sample synced to EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION; MDM_MINUS_GRAPH=0 for every active relationship type
+Resume file: .planning/workstreams/neo4j-pipe/phases/05-source-to-mdm-load-path/05-VALIDATION.md
 
 ## Milestone Context
 
@@ -59,7 +59,7 @@ ADV tables without SEC re-fetch, unblocking the MDM adviser/fund load path.
 
 ### Blockers
 
-- v1.1 Phase 5 live checkpoint: ADV backfill path and resume evidence now exist (Phase 10 complete). Checkpoint is **unblocked** pending the full-scale Phase 5 run (graph pipeline: backfill-relationships → sync-graph → verify-graph). See `docs/aws-mdm-source-to-mdm.md` Phase 5 Resume Path section.
+- v1.1 Phase 5 live checkpoint: **resolved** on 2026-06-06. The bounded real-data sample loaded all five MDM domains, `mdm coverage-report` showed 0 gap, `sync-graph` materialized `EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION`, all 11 relationship-specific `GRAPH_EDGE_*` views exist, and `MDM_MINUS_GRAPH=0` for every active relationship type. Full active-universe 11-edge coverage remains Phase 6 scope.
 
 ### Pending Todos
 

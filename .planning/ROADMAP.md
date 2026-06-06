@@ -2,7 +2,7 @@
 
 status: active
 milestone: v1.1 Neo4j bronze-to-graph pipe
-updated: 2026-05-16
+updated: 2026-06-06
 
 ---
 
@@ -15,9 +15,8 @@ Neo4j so graph sync is complete, idempotent, and independently verifiable.
 
 ## Phases
 
-- [ ] **Phase 5: Source To MDM Load Path** - MDM loaders consume existing silver data produced from bronze with clear configuration, idempotency, and no loader-workstream overlap
-- [ ] **Phase 6: Relationship Derivation Coverage** - Ownership, adviser, fund, company, person, and security relationships are fully derived into MDM relationship rows
-- [ ] **Phase 7: Neo4j Sync And Verification** - Neo4j node/edge sync is idempotent and `verify-graph` reports coverage defects clearly
+- [x] **Phase 5: Source To MDM Load Path** - MDM loaders consume existing silver data produced from bronze with clear configuration, idempotency, coverage reporting, and Snowflake graph parity for the bounded real-data sample. Completed 2026-06-06.
+- [ ] **Phase 6: Full Graph Coverage And Verification** - all graph-relevant relationships are derived and graph sync/parity is verified across the full active coverage target
 - [ ] **Phase 8: Neo4j E2E Snowflake Graph Analytics Migration** - keep AWS MDM/Postgres plus Neo4j as the operational graph path while adding Snowflake graph-ready analytics migration and validation
 
 ---
@@ -33,33 +32,27 @@ Neo4j so graph sync is complete, idempotent, and independently verifiable.
   2. Running entity resolution twice against the same silver fixture keeps company, adviser, person, security, and fund counts stable.
   3. Missing silver configuration exits non-zero with an actionable message and does not mutate MDM tables.
   4. The worktree remains isolated on `workspace/neo4j-pipe` and does not edit loader-fix artifacts or generated deployment JSON.
-**Plans**: TBD
+  5. `mdm coverage-report` reports silver vs MDM counts for all five domains and exits 0 as a reporting tool.
+  6. Snowflake graph sync materializes `NEO4J_GRAPH_MIGRATION`, all 11 relationship-specific `GRAPH_EDGE_*` views exist, and MDM-to-graph parity holds for the bounded real-data sample.
+**Plans**: 5 plans (complete)
 
-### Phase 6: Relationship Derivation Coverage
-**Goal**: All graph-relevant relationships derivable from silver and resolved MDM entities are created as active MDM relationship rows without duplicates.
+### Phase 6: Full Graph Coverage And Verification
+**Goal**: All graph-relevant relationships derivable from silver and resolved MDM entities are created as active MDM relationship rows without duplicates, synced into graph-ready Snowflake tables, and verified across the full active coverage target.
 **Depends on**: Phase 5
-**Requirements**: REL-01, REL-02, REL-03, REL-04
+**Requirements**: REL-01, REL-02, REL-03, REL-04, GRAPH-01, GRAPH-02, GRAPH-03, GRAPH-04
 **Success Criteria** (what must be TRUE):
   1. `IS_INSIDER` rows cover non-corporate Forms 3/4/5 reporting-owner to issuer pairs.
   2. `HOLDS` and `ISSUED_BY` rows cover ownership security relationships where owner, security, and issuer resolve.
   3. `MANAGES_FUND`, `IS_ENTITY_OF`, and `IS_PERSON_OF` rows cover adviser/fund/company/person relationships.
   4. Re-running relationship derivation against unchanged data inserts zero new active duplicate rows.
-**Plans**: TBD
-
-### Phase 7: Neo4j Sync And Verification
-**Goal**: Neo4j sync upserts all required nodes and pending edges idempotently, and verification reports both graph counts and missing MDM-to-Neo4j edges.
-**Depends on**: Phase 6
-**Requirements**: GRAPH-01, GRAPH-02, GRAPH-03, GRAPH-04
-**Success Criteria** (what must be TRUE):
-  1. `sync-graph` upserts MDM nodes before relationships and can sync by relationship type with per-type limits.
-  2. A second `sync-graph` run against unchanged selected scope leaves node and edge counts stable.
-  3. `verify-graph` reports node counts, edge counts by type, pending MDM rows, and missing-edge diagnostics.
-  4. Focused local tests pass; live Neo4j smoke test is documented and runnable when `NEO4J_*` credentials are available.
+  5. All 11 active relationship types have either graph rows or documented source-coverage exclusions.
+  6. `sync-graph` can sync by relationship type with per-type limits, preserves node/edge count stability on repeat runs, and leaves zero MDM-to-graph parity gaps.
+  7. Verification reports node counts, edge counts by type, pending MDM relationship counts, and missing-edge diagnostics.
 **Plans**: TBD
 
 ### Phase 8: Neo4j E2E Snowflake Graph Analytics Migration
 **Goal**: Operators can validate the full AWS graph analytics path from bronze to silver to MDM entities/relationships to Snowflake graph-ready node and edge tables for Neo4j Graph Analytics hosted in Snowflake.
-**Depends on**: Phase 7
+**Depends on**: Phase 6
 **Requirements**: GRAPH-01, GRAPH-02, GRAPH-03, GRAPH-04, REL-01, REL-02, REL-03, REL-04
 **Success Criteria** (what must be TRUE):
   1. Neo4j Graph Analytics is Snowflake-hosted; the supported analytics path does not depend on external Aura/Bolt runtime credentials.
@@ -75,7 +68,6 @@ Neo4j so graph sync is complete, idempotent, and independently verifiable.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 5. Source To MDM Load Path | v1.1 Neo4j bronze-to-graph pipe | 0/TBD | Not started | - |
-| 6. Relationship Derivation Coverage | v1.1 Neo4j bronze-to-graph pipe | 0/TBD | Not started | - |
-| 7. Neo4j Sync And Verification | v1.1 Neo4j bronze-to-graph pipe | 0/TBD | Not started | - |
+| 5. Source To MDM Load Path | v1.1 Neo4j bronze-to-graph pipe | 5/5 | Complete | 2026-06-06 |
+| 6. Full Graph Coverage And Verification | v1.1 Neo4j bronze-to-graph pipe | 1/TBD | In progress | - |
 | 8. Neo4j E2E Snowflake Graph Analytics Migration | v1.1 Neo4j bronze-to-graph pipe | 0/TBD | Not started | - |

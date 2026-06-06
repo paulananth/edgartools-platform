@@ -136,7 +136,7 @@ class SnowflakeGraphSyncExecutor:
         )
         cursor = self.connection.cursor()
         try:
-            cursor.execute(render_graph_tables(context))
+            _execute_sql_script(cursor, render_graph_tables(context))
             node_count = _fetch_scalar(
                 cursor,
                 f"SELECT COUNT(*) FROM {_fq(context, 'MDM_GRAPH_NODES')}",
@@ -162,6 +162,39 @@ class SnowflakeGraphSyncExecutor:
                 "limit_per_type": limit_per_type,
             },
         )
+
+
+def _execute_sql_script(cursor: Any, sql: str) -> None:
+    for statement in _split_sql_statements(sql):
+        cursor.execute(statement)
+
+
+def _split_sql_statements(sql: str) -> list[str]:
+    statements: list[str] = []
+    current: list[str] = []
+    in_single_quote = False
+    index = 0
+
+    while index < len(sql):
+        char = sql[index]
+        current.append(char)
+        if char == "'":
+            if in_single_quote and index + 1 < len(sql) and sql[index + 1] == "'":
+                current.append(sql[index + 1])
+                index += 2
+                continue
+            in_single_quote = not in_single_quote
+        elif char == ";" and not in_single_quote:
+            statement = "".join(current).strip()
+            if statement:
+                statements.append(statement)
+            current = []
+        index += 1
+
+    trailing = "".join(current).strip()
+    if trailing:
+        statements.append(trailing)
+    return statements
 
 
 def generate_snowflake_graph_migration(config: SnowflakeGraphMigrationConfig) -> dict[str, Path]:
@@ -396,6 +429,21 @@ CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_IS_PERSON_OF")} AS
 SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_EDGES")}
 WHERE RELATIONSHIP_TYPE = 'IS_PERSON_OF';
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_EMPLOYED_BY")} AS
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_EDGES")}
+WHERE RELATIONSHIP_TYPE = 'EMPLOYED_BY';
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_AUDITED_BY")} AS
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_EDGES")}
+WHERE RELATIONSHIP_TYPE = 'AUDITED_BY';
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_INSTITUTIONAL_HOLDS")} AS
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_EDGES")}
+WHERE RELATIONSHIP_TYPE = 'INSTITUTIONAL_HOLDS';
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODE_COUNTS")} AS
 SELECT LABEL, COUNT(*) AS NODE_COUNT

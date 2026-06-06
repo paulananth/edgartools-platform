@@ -324,6 +324,121 @@ sequence for the full-scale Phase 5 run is:
 Phase 10 validated steps 1–4 on a single sample (1 adviser, 1 fund). Step 5 is the remaining
 Phase 5 scope and requires Neo4j to be running.
 
+## Live E2E Run - Phase 5 Closeout
+
+**Date:** 2026-06-06
+
+**Scope:** bounded real-data validation. The available live silver source did not contain a
+single CIK with both ownership and ADV rows, so the closeout used:
+
+- ownership issuer CIK `712515`, accession `0000712515-26-000049`
+- ADV adviser/fund sample CRD/CIK `105958`, accession `ADV-105958-20241218`
+- local filtered silver DuckDB: `/tmp/gsd_phase5_filtered_silver.duckdb`
+- local Postgres MDM DB: `mdm_phase5_filtered_20260605205244`
+- Snowflake MDM mirror: `EDGARTOOLS_DEV.MDM`
+- Snowflake graph target: `EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION`
+
+Local environment:
+
+```bash
+export MDM_DATABASE_URL="postgresql://postgres:test@localhost:5432/mdm_phase5_filtered_20260605205244"
+export MDM_SILVER_DUCKDB="/tmp/gsd_phase5_filtered_silver.duckdb"
+export MDM_SQL_CALL_LOGGING=false
+unset WAREHOUSE_STORAGE_ROOT
+```
+
+Local verification:
+
+```bash
+uv run --extra mdm-runtime --extra s3 edgar-warehouse mdm counts
+uv run --extra mdm-runtime --extra s3 edgar-warehouse mdm coverage-report
+```
+
+Coverage result:
+
+| Domain | Silver Count | MDM Count | Gap |
+|--------|--------------|-----------|-----|
+| companies | 1 | 1 | 0 |
+| persons | 1 | 1 | 0 |
+| securities | 1 | 1 | 0 |
+| advisers | 1 | 1 | 0 |
+| funds | 1 | 1 | 0 |
+
+Snowflake mirror and graph sync:
+
+```bash
+# Read-only Snowflake CLI verification must use snowconn in dev.
+SNOW_CONNECTION=snowconn snow sql --connection snowconn \
+  -q "SELECT CURRENT_ACCOUNT(), CURRENT_ROLE(), CURRENT_WAREHOUSE()"
+
+# Connector env vars were sourced from the local snowconn definition without printing secrets.
+export MDM_SNOWFLAKE_DATABASE="EDGARTOOLS_DEV"
+export MDM_SNOWFLAKE_SCHEMA="MDM"
+
+uv run --extra mdm-runtime --extra snowflake edgar-warehouse mdm sync-graph \
+  --target-database EDGARTOOLS_DEV \
+  --target-schema NEO4J_GRAPH_MIGRATION \
+  --mdm-database EDGARTOOLS_DEV \
+  --mdm-schema MDM
+```
+
+`sync-graph` result:
+
+| Metric | Count |
+|--------|-------|
+| graph_nodes_synced | 15 |
+| graph_edges_synced | 4 |
+
+Per-edge graph counts:
+
+| Relationship Type | Edge Count |
+|-------------------|------------|
+| AUDITED_BY | 0 |
+| COMPANY_HOLDS | 0 |
+| EMPLOYED_BY | 0 |
+| HAS_PARENT_COMPANY | 0 |
+| HOLDS | 1 |
+| INSTITUTIONAL_HOLDS | 0 |
+| ISSUED_BY | 1 |
+| IS_ENTITY_OF | 0 |
+| IS_INSIDER | 1 |
+| IS_PERSON_OF | 0 |
+| MANAGES_FUND | 1 |
+
+Parity query:
+
+```sql
+SELECT
+  RT.REL_TYPE_NAME AS RELATIONSHIP_TYPE,
+  COUNT(RI.INSTANCE_ID) AS MDM_ACTIVE,
+  COALESCE(G.EDGE_COUNT,0) AS GRAPH_COUNT,
+  COUNT(RI.INSTANCE_ID)-COALESCE(G.EDGE_COUNT,0) AS MDM_MINUS_GRAPH
+FROM EDGARTOOLS_DEV.MDM.MDM_RELATIONSHIP_TYPE RT
+LEFT JOIN EDGARTOOLS_DEV.MDM.MDM_RELATIONSHIP_INSTANCE RI
+  ON RI.REL_TYPE_ID=RT.REL_TYPE_ID
+ AND RI.IS_ACTIVE=TRUE
+LEFT JOIN EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION.GRAPH_EDGE_COUNTS G
+  ON G.RELATIONSHIP_TYPE=RT.REL_TYPE_NAME
+WHERE RT.IS_ACTIVE=TRUE
+GROUP BY RT.REL_TYPE_NAME, G.EDGE_COUNT
+ORDER BY RT.REL_TYPE_NAME;
+```
+
+Result: `MDM_MINUS_GRAPH = 0` for all 11 active relationship types. Missing graph edge endpoint
+rows: `0`.
+
+Zero-count edge notes:
+
+| Relationship Type | Reason |
+|-------------------|--------|
+| AUDITED_BY | Requires fundamentals audit-firm source rows |
+| COMPANY_HOLDS | Requires corporate reporting owner |
+| EMPLOYED_BY | Requires DEF 14A executive records |
+| HAS_PARENT_COMPANY | Parent links are not populated by the Phase 5 source path |
+| INSTITUTIONAL_HOLDS | Requires 13F holdings |
+| IS_ENTITY_OF | Requires adviser-to-company resolution in the sample |
+| IS_PERSON_OF | Requires adviser-person links in the sample |
+
 ---
 
 ## AWS ECS Execution
