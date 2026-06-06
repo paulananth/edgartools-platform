@@ -162,6 +162,147 @@ locals {
         { name = "LAST_SYNC_RUN_ID", type = "STRING" },
       ]
     }
+    SEC_FINANCIAL_FACT = {
+      comment = "XBRL us-gaap fact per (cik, accession, concept, fiscal_period, segment). Passthrough from silver sec_financial_fact."
+      columns = [
+        { name = "CIK", type = "NUMBER(38,0)", nullable = false },
+        { name = "ACCESSION_NUMBER", type = "STRING", nullable = false },
+        { name = "CONCEPT", type = "STRING", nullable = false },
+        { name = "FISCAL_PERIOD", type = "STRING", nullable = false },
+        { name = "SEGMENT", type = "STRING", nullable = false },
+        { name = "FISCAL_YEAR", type = "NUMBER(38,0)" },
+        { name = "PERIOD_END", type = "DATE" },
+        { name = "FORM_TYPE", type = "STRING" },
+        { name = "VALUE", type = "FLOAT" },
+        { name = "UNIT", type = "STRING" },
+        { name = "DECIMALS", type = "NUMBER(38,0)" },
+        { name = "PARSER_VERSION", type = "STRING" },
+        { name = "INGESTED_AT", type = "TIMESTAMP_TZ" },
+      ]
+    }
+    SEC_THIRTEENF_HOLDING = {
+      comment = "13F INFORMATION TABLE holding per (cik, accession, holding_index). Passthrough from silver sec_thirteenf_holding."
+      columns = [
+        { name = "CIK", type = "NUMBER(38,0)", nullable = false },
+        { name = "ACCESSION_NUMBER", type = "STRING", nullable = false },
+        { name = "HOLDING_INDEX", type = "NUMBER(38,0)", nullable = false },
+        { name = "PERIOD_OF_REPORT", type = "DATE" },
+        { name = "CUSIP", type = "STRING" },
+        { name = "ISSUER_NAME", type = "STRING" },
+        { name = "SECURITY_TITLE", type = "STRING" },
+        { name = "SHARES_HELD", type = "FLOAT" },
+        { name = "MARKET_VALUE", type = "FLOAT" },
+        { name = "SECURITY_CLASS", type = "STRING" },
+        { name = "PUT_CALL", type = "STRING" },
+        { name = "DISCRETION_TYPE", type = "STRING" },
+        { name = "VOTING_AUTH_SOLE", type = "FLOAT" },
+        { name = "VOTING_AUTH_SHARED", type = "FLOAT" },
+        { name = "VOTING_AUTH_NONE", type = "FLOAT" },
+        { name = "PARSER_VERSION", type = "STRING" },
+        { name = "INGESTED_AT", type = "TIMESTAMP_TZ" },
+      ]
+    }
+    SEC_FINANCIAL_DERIVED = {
+      comment = "Derived per-period financial metrics. Passthrough from silver sec_financial_derived."
+      columns = [
+        { name = "CIK", type = "NUMBER(38,0)", nullable = false },
+        { name = "ACCESSION_NUMBER", type = "STRING", nullable = false },
+        { name = "FISCAL_PERIOD", type = "STRING", nullable = false },
+        { name = "FISCAL_YEAR", type = "NUMBER(38,0)" },
+        { name = "PERIOD_END", type = "DATE" },
+        { name = "FORM_TYPE", type = "STRING" },
+        { name = "REVENUE", type = "FLOAT" },
+        { name = "GROSS_PROFIT", type = "FLOAT" },
+        { name = "EBITDA", type = "FLOAT" },
+        { name = "EBIT", type = "FLOAT" },
+        { name = "NET_INCOME", type = "FLOAT" },
+        { name = "EPS_DILUTED", type = "FLOAT" },
+        { name = "TOTAL_ASSETS", type = "FLOAT" },
+        { name = "TOTAL_LIABILITIES", type = "FLOAT" },
+        { name = "TOTAL_EQUITY", type = "FLOAT" },
+        { name = "CASH_AND_EQUIVALENTS", type = "FLOAT" },
+        { name = "TOTAL_DEBT", type = "FLOAT" },
+        { name = "OPERATING_CASH_FLOW", type = "FLOAT" },
+        { name = "CAPEX", type = "FLOAT" },
+        { name = "FREE_CASH_FLOW", type = "FLOAT" },
+        { name = "GROSS_MARGIN", type = "FLOAT" },
+        { name = "EBITDA_MARGIN", type = "FLOAT" },
+        { name = "NET_MARGIN", type = "FLOAT" },
+        { name = "ROIC", type = "FLOAT" },
+        { name = "ROE", type = "FLOAT" },
+        { name = "ROA", type = "FLOAT" },
+        { name = "PARSER_VERSION", type = "STRING" },
+        { name = "INGESTED_AT", type = "TIMESTAMP_TZ" },
+      ]
+    }
+    EARNINGS_RELEASE = {
+      comment = "8-K earnings release fact per (cik, accession)."
+      columns = [
+        { name = "FACT_KEY", type = "NUMBER(38,0)", nullable = false },
+        { name = "COMPANY_KEY", type = "NUMBER(38,0)" },
+        { name = "FILING_DATE_KEY", type = "NUMBER(38,0)" },
+        { name = "PERIOD_END_DATE_KEY", type = "NUMBER(38,0)" },
+        { name = "FORM_KEY", type = "NUMBER(38,0)" },
+        { name = "ACCESSION_NUMBER", type = "STRING" },
+        { name = "CIK", type = "NUMBER(38,0)" },
+        { name = "FILING_DATE", type = "DATE" },
+        { name = "FISCAL_YEAR", type = "NUMBER(38,0)" },
+        { name = "FISCAL_QUARTER", type = "NUMBER(38,0)" },
+        { name = "PERIOD_END", type = "DATE" },
+        { name = "REVENUE_GAAP", type = "FLOAT" },
+        { name = "NET_INCOME_GAAP", type = "FLOAT" },
+        { name = "EPS_GAAP_DILUTED", type = "FLOAT" },
+        { name = "HAS_NON_GAAP", type = "BOOLEAN" },
+        { name = "HAS_GUIDANCE", type = "BOOLEAN" },
+        { name = "PARSER_VERSION", type = "STRING" },
+        { name = "INGESTED_AT", type = "TIMESTAMP_TZ" },
+      ]
+    }
+    EXECUTIVE_RECORD = {
+      comment = "DEF 14A executive compensation fact per (cik, accession, exec_name)."
+      columns = [
+        { name = "FACT_KEY", type = "NUMBER(38,0)", nullable = false },
+        { name = "COMPANY_KEY", type = "NUMBER(38,0)" },
+        { name = "FISCAL_YEAR_DATE_KEY", type = "NUMBER(38,0)" },
+        { name = "ACCESSION_NUMBER", type = "STRING" },
+        { name = "CIK", type = "NUMBER(38,0)" },
+        { name = "FISCAL_YEAR", type = "NUMBER(38,0)" },
+        { name = "EXEC_NAME", type = "STRING" },
+        { name = "EXEC_ROLE", type = "STRING" },
+        { name = "TOTAL_COMP", type = "FLOAT" },
+        { name = "BASE_SALARY", type = "FLOAT" },
+        { name = "BONUS", type = "FLOAT" },
+        { name = "STOCK_AWARDS", type = "FLOAT" },
+        { name = "OPTION_AWARDS", type = "FLOAT" },
+        { name = "NON_EQUITY_INCENTIVE", type = "FLOAT" },
+        { name = "PARSER_VERSION", type = "STRING" },
+        { name = "INGESTED_AT", type = "TIMESTAMP_TZ" },
+      ]
+    }
+    ACCOUNTING_FLAG = {
+      comment = "10-K accounting flag fact per (cik, accession)."
+      columns = [
+        { name = "FACT_KEY", type = "NUMBER(38,0)", nullable = false },
+        { name = "COMPANY_KEY", type = "NUMBER(38,0)" },
+        { name = "FISCAL_YEAR_DATE_KEY", type = "NUMBER(38,0)" },
+        { name = "FORM_KEY", type = "NUMBER(38,0)" },
+        { name = "ACCESSION_NUMBER", type = "STRING" },
+        { name = "CIK", type = "NUMBER(38,0)" },
+        { name = "FISCAL_YEAR", type = "NUMBER(38,0)" },
+        { name = "PERIOD_END", type = "DATE" },
+        { name = "FORM_TYPE", type = "STRING" },
+        { name = "AUDITOR_NAME", type = "STRING" },
+        { name = "AUDITOR_PCAOB_ID", type = "STRING" },
+        { name = "AUDITOR_LOCATION", type = "STRING" },
+        { name = "ICFR_ATTESTATION", type = "BOOLEAN" },
+        { name = "AUDITOR_CHANGED", type = "BOOLEAN" },
+        { name = "BENEISH_M_SCORE", type = "FLOAT" },
+        { name = "ALTMAN_Z_SCORE", type = "FLOAT" },
+        { name = "PIOTROSKI_F_SCORE", type = "NUMBER(38,0)" },
+        { name = "PARSER_VERSION", type = "STRING" },
+        { name = "INGESTED_AT", type = "TIMESTAMP_TZ" },
+      ]
+    }
   }
 
   manifest_copy_statement = trimspace(<<-SQL

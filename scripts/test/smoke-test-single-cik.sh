@@ -228,7 +228,13 @@ CIK_PADDED="$(printf '%010d' "$CIK")"
 FILING_ROWS="$(snow_scalar "SELECT COUNT(*) FROM ${DB}.EDGARTOOLS_GOLD.FILING_DETAIL WHERE company_key LIKE '%${CIK}%' OR cik = ${CIK}")"
 assert_gt "FILING_DETAIL rows for CIK ${CIK}" "$FILING_ROWS" 0
 
-OWNERSHIP_ROWS="$(snow_scalar "SELECT COUNT(*) FROM ${DB}.EDGARTOOLS_GOLD.OWNERSHIP_HOLDINGS WHERE issuer_cik = ${CIK}")"
+OWNERSHIP_ROWS="$(snow_scalar "
+  SELECT COUNT(*)
+  FROM ${DB}.EDGARTOOLS_GOLD.OWNERSHIP_HOLDINGS AS holdings
+  JOIN ${DB}.EDGARTOOLS_GOLD.COMPANY AS company
+    ON holdings.company_key = company.company_key
+  WHERE company.cik = ${CIK}
+")"
 # Ownership holdings may be 0 for issuers with no Form 3/4/5 — check filings instead
 COMPANY_ROWS="$(snow_scalar "SELECT COUNT(*) FROM ${DB}.EDGARTOOLS_GOLD.COMPANY WHERE cik = ${CIK}")"
 assert_gt "COMPANY rows for CIK ${CIK}" "$COMPANY_ROWS" 0

@@ -40,12 +40,12 @@ while (manifests.next()) {
 
   snowflake.createStatement({
     sqlText: `CALL ${sourceLoadProcedure}(?, ?)`,
-    binds: [workflowName, runId]
+    binds: Array.of(workflowName, runId)
   }).execute();
 
   snowflake.createStatement({
     sqlText: `CALL ${refreshProcedure}(?, ?)`,
-    binds: [workflowName, runId]
+    binds: Array.of(workflowName, runId)
   }).execute();
 
   processed.push({ workflow_name: workflowName, run_id: runId });
