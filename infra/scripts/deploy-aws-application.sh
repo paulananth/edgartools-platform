@@ -894,7 +894,7 @@ workflow_profile() {
     daily_incremental) printf '%s\n' "medium" ;;
     bootstrap) printf '%s\n' "medium" ;;
     bootstrap_full) printf '%s\n' "large" ;;
-    targeted_resync) printf '%s\n' "small" ;;
+    targeted_resync) printf '%s\n' "large" ;;
     full_reconcile) printf '%s\n' "medium" ;;
     load_daily_form_index_for_date) printf '%s\n' "small" ;;
     catch_up_daily_form_index) printf '%s\n' "small" ;;

@@ -51,17 +51,33 @@ jobs:
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: |
+          : "${SNOWFLAKE_ACCOUNT:?SNOWFLAKE_ACCOUNT secret is required}"
+          : "${SNOWFLAKE_USER:?SNOWFLAKE_USER secret is required}"
+          : "${SNOWFLAKE_PASSWORD:?SNOWFLAKE_PASSWORD secret is required}"
           mkdir -p ~/.snowflake
           cat > ~/.snowflake/config.toml <<EOF
           default_connection_name = "edgartools-dev"
+          EOF
 
-          [connections.edgartools-dev]
+          cat > ~/.snowflake/connections.toml <<EOF
+          [edgartools-dev]
           account = "${SNOWFLAKE_ACCOUNT}"
           user = "${SNOWFLAKE_USER}"
           password = "${SNOWFLAKE_PASSWORD}"
           warehouse = "compute_wh"
           role = "accountadmin"
           EOF
+          chmod 0600 ~/.snowflake/config.toml ~/.snowflake/connections.toml
+
+      - name: Validate snow connection
+        run: |
+          snow sql --connection edgartools-dev --format json --query "SELECT 1 AS ok" > /tmp/snow-connection-check.json
+          python3 - <<'PY'
+          import json
+          rows = json.load(open("/tmp/snow-connection-check.json", encoding="utf-8"))
+          if not rows:
+              raise SystemExit("snow connection check returned no rows")
+          PY
 
       - name: Run single-CIK smoke test
         env:

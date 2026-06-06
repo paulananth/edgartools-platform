@@ -105,12 +105,35 @@ run_phase() {
 }
 
 snow_sql() {
-  snow sql --connection "$SNOW_CONNECTION" --query "$1" 2>/dev/null
+  snow sql --connection "$SNOW_CONNECTION" --query "$1"
 }
 
 snow_scalar() {
-  snow sql --connection "$SNOW_CONNECTION" --format json --query "$1" 2>/dev/null \
-    | python3 -c "import json,sys; rows=json.load(sys.stdin); print(rows[0][0] if rows else 0)"
+  local output result
+  if ! output="$(snow sql --connection "$SNOW_CONNECTION" --format json --query "$1")"; then
+    fail "snow sql failed"
+  fi
+  if ! result="$(printf '%s\n' "$output" | python3 -c "
+import json
+import sys
+
+rows = json.load(sys.stdin)
+if not rows:
+    print(0)
+    raise SystemExit(0)
+
+row = rows[0]
+if isinstance(row, dict):
+    print(next(iter(row.values()), 0))
+elif isinstance(row, (list, tuple)):
+    print(row[0] if row else 0)
+else:
+    print(row)
+")"; then
+    printf 'Snowflake scalar query returned invalid JSON:\n%s\n' "$output" >&2
+    fail "snow sql returned invalid JSON"
+  fi
+  printf '%s\n' "$result"
 }
 
 assert_gt() {
