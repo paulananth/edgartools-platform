@@ -106,6 +106,35 @@ class MDMPipeline:
         )
         return f"{sql.rstrip()} LIMIT {source_limit}"
 
+    def _fetch_optional_relationship_rows(
+        self,
+        sql: str,
+        remaining: Optional[int],
+        *,
+        rel_type_name: str,
+        source_table: str,
+    ) -> list[dict]:
+        try:
+            return self.silver.fetch(self._bounded_relationship_sql(sql, remaining))
+        except Exception as exc:
+            if not self._is_missing_source_table(exc, source_table):
+                raise
+            print(json.dumps({
+                "event": "mdm_relationship_skip",
+                "rel_type": rel_type_name,
+                "reason": "missing_source_table",
+                "source_table": source_table,
+                "ts": datetime.now(timezone.utc).isoformat(),
+            }), file=sys.stderr, flush=True)
+            return []
+
+    @staticmethod
+    def _is_missing_source_table(exc: Exception, table_name: str) -> bool:
+        message = str(exc).lower()
+        table = table_name.lower()
+        missing_markers = ("does not exist", "not found", "catalog error", "binder error")
+        return table in message and any(marker in message for marker in missing_markers)
+
     def run_companies(self, limit: Optional[int] = None) -> int:
         ctx = self._ctx()
         resolver = CompanyResolver()
@@ -1061,7 +1090,12 @@ class MDMPipeline:
         skipped_unresolved_target = 0
         skipped_existing = 0
 
-        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining)):
+        for row in self._fetch_optional_relationship_rows(
+            sql,
+            remaining,
+            rel_type_name="EMPLOYED_BY",
+            source_table="sec_executive_record",
+        ):
             cik = row.get("cik")
             exec_name = row.get("exec_name") or ""
             accession_number = row.get("accession_number") or ""
@@ -1163,7 +1197,12 @@ class MDMPipeline:
         prev_cik: Optional[int] = None
         prev_auditor_name: Optional[str] = None
 
-        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining)):
+        for row in self._fetch_optional_relationship_rows(
+            sql,
+            remaining,
+            rel_type_name="AUDITED_BY",
+            source_table="sec_accounting_flag",
+        ):
             cik = row.get("cik")
             pcaob_id = row.get("auditor_pcaob_id")
             auditor_name = row.get("auditor_name")
@@ -1268,7 +1307,12 @@ class MDMPipeline:
         skipped_unresolved_target = 0
         skipped_existing = 0
 
-        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining)):
+        for row in self._fetch_optional_relationship_rows(
+            sql,
+            remaining,
+            rel_type_name="INSTITUTIONAL_HOLDS",
+            source_table="sec_thirteenf_holding",
+        ):
             cik = row.get("cik")
             cusip = row.get("cusip") or ""
             accession_number = row.get("accession_number") or ""

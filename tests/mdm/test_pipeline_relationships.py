@@ -69,6 +69,18 @@ class StubSilver:
         return matched
 
 
+class MissingTableSilver(StubSilver):
+    def __init__(self, table_name: str):
+        super().__init__({})
+        self._table_name = table_name
+
+    def fetch(self, sql: str, params: Optional[list[Any]] = None) -> list[dict]:
+        if self._table_name in sql:
+            self.queries.append(sql)
+            raise RuntimeError(f"Catalog Error: Table with name {self._table_name} does not exist!")
+        return super().fetch(sql, params)
+
+
 def _seed_registry(session: Session) -> dict[str, str]:
     """Seed all 5 entity-type definitions + graph relationship types."""
     entity_types = [
@@ -603,6 +615,16 @@ class TestRunRelationships:
         ]
         assert source_queries
         assert " LIMIT " in source_queries[0].upper()
+
+    def test_optional_fundamentals_source_table_missing_is_empty(self, session):
+        silver = MissingTableSilver("sec_executive_record")
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        summary = pipe.derive_relationships(target_per_type=1, relationship_types=["EMPLOYED_BY"])
+
+        assert summary["EMPLOYED_BY"]["inserted"] == 0
+        assert summary["EMPLOYED_BY"]["skipped"] == 0
+        assert any("sec_executive_record" in query for query in silver.queries)
 
     def test_writes_manages_fund_relationship(self, session, fixture_world):
         """MANAGES_FUND deriver inserts exactly 1 row when fixture_world has 1 MdmFund. (D-01, D-02, REL-03)"""
