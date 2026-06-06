@@ -786,7 +786,7 @@ register_task_definition() {
 write_mdm_container_definitions() {
   local output_file="$1" profile="$2"
   MSYS_NO_PATHCONV=1 python3 - "$(win_path "$output_file")" "$profile" "$MDM_IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
-    "$WAREHOUSE_BUCKET_NAME" "$MDM_SILVER_DUCKDB" "$MDM_POSTGRES_DSN_SECRET_ARN" \
+    "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" "$MDM_SILVER_DUCKDB" "$MDM_POSTGRES_DSN_SECRET_ARN" \
     "$MDM_NEO4J_SECRET_ARN" "$MDM_API_KEYS_SECRET_ARN" "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" <<'PY'
 import json
 import pathlib
@@ -798,6 +798,7 @@ import sys
     image_ref,
     aws_region,
     environment,
+    bronze_bucket,
     warehouse_bucket,
     mdm_silver_duckdb,
     mdm_database_secret_arn,
@@ -810,7 +811,10 @@ import sys
 environment_values = [
     {"name": "AWS_REGION", "value": aws_region},
     {"name": "WAREHOUSE_ENVIRONMENT", "value": environment},
+    {"name": "WAREHOUSE_RUNTIME_MODE", "value": "bronze_capture"},
+    {"name": "WAREHOUSE_BRONZE_ROOT", "value": f"s3://{bronze_bucket}/warehouse/bronze"},
     {"name": "WAREHOUSE_STORAGE_ROOT", "value": f"s3://{warehouse_bucket}/warehouse"},
+    {"name": "WAREHOUSE_SILVER_ROOT", "value": "/tmp/edgar-warehouse-silver"},
     {"name": "MDM_SILVER_DUCKDB", "value": mdm_silver_duckdb},
 ]
 

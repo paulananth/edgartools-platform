@@ -52,8 +52,10 @@ class StubSilver:
 
     def __init__(self, fixtures: dict[str, list[dict]]):
         self._fixtures = fixtures
+        self.queries: list[str] = []
 
     def fetch(self, sql: str, params: Optional[list[Any]] = None) -> list[dict]:
+        self.queries.append(sql)
         matched: list[dict] = []
         transaction_query = (
             "sec_ownership_non_derivative_txn" in sql
@@ -588,6 +590,19 @@ class TestRunRelationships:
         assert first["IS_INSIDER"]["total"] == 1
         assert second["IS_INSIDER"]["existing"] == 1
         assert second["IS_INSIDER"]["inserted"] == 0
+
+    def test_target_per_type_bounds_relationship_source_query(self, session, fixture_world):
+        silver = self._stub()
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        pipe.derive_relationships(target_per_type=1, relationship_types=["IS_INSIDER"])
+
+        source_queries = [
+            query for query in silver.queries
+            if "FROM sec_ownership_reporting_owner" in query
+        ]
+        assert source_queries
+        assert " LIMIT " in source_queries[0].upper()
 
     def test_writes_manages_fund_relationship(self, session, fixture_world):
         """MANAGES_FUND deriver inserts exactly 1 row when fixture_world has 1 MdmFund. (D-01, D-02, REL-03)"""
