@@ -59,6 +59,7 @@ mdm = [
 mdm-runtime = [
     "sqlalchemy>=2.0.0",
     "psycopg2-binary>=2.9.9",
+    "snowflake-connector-python>=3.7",
     "neo4j>=5.20.0",
     "jellyfish>=1.0.0",
     "pydantic>=2.7.0",
