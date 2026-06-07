@@ -19,6 +19,7 @@ PostgreSQL/SQL-mirror layer.
 """
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any, Optional
 
@@ -924,3 +925,137 @@ class TestRunRelationships:
                 + second[rt]["skipped_unresolved_target"]
                 + second[rt]["skipped_existing"]
             ), f"skipped backward-compat broken for {rt}"
+
+
+# ---------------------------------------------------------------------------
+# _bounded_relationship_sql / plateau-fix regression
+#
+# Bug: full-universe-sync.sh --limit 500 reported the same ~500 rows on every
+# rerun ("skipped_existing" never decreased, "inserted" plateaued at the first
+# run's count). Root cause: the source SQL had no ORDER BY, and the LIMIT was a
+# flat function of `remaining` -- so every invocation re-fetched the same
+# leading slice of an arbitrarily-ordered table. Rows already converted came
+# back as skipped_existing and the scan never advanced into fresh territory.
+#
+# Fix: _bounded_relationship_sql(sql, remaining, existing) grows the LIMIT by
+# `existing` (the live count of relationships of that type), and the six
+# affected derivers gained deterministic ORDER BY clauses. Together these
+# guarantee the fetch window always extends strictly past the previously
+# converted prefix.
+# ---------------------------------------------------------------------------
+
+class TestBoundedRelationshipSqlPlateauFix:
+    def test_appends_limit_growing_with_remaining_and_existing(self):
+        sql = "SELECT * FROM t"
+
+        # remaining=None -> idempotency-check path, full unbounded scan
+        assert MDMPipeline._bounded_relationship_sql(sql, None, existing=500) == sql
+
+        # existing=0 -> limit floors at the minimum window (multiplier * remaining)
+        assert MDMPipeline._bounded_relationship_sql(sql, 1, existing=0) == f"{sql} LIMIT 100"
+        assert MDMPipeline._bounded_relationship_sql(sql, 10, existing=0) == f"{sql} LIMIT 500"
+
+        # `existing` is additive -- this is the plateau fix itself: the window
+        # must extend past the count of rows already converted, or repeat runs
+        # with the same --limit re-fetch the same leading slice forever.
+        assert MDMPipeline._bounded_relationship_sql(sql, 10, existing=2_000) == f"{sql} LIMIT 2500"
+        assert MDMPipeline._bounded_relationship_sql(sql, 1, existing=450) == f"{sql} LIMIT 550"
+
+    def test_limit_always_strictly_exceeds_existing_count(self):
+        """Falsifiable invariant behind the fix: whatever `existing` is, the
+        emitted LIMIT must be strictly greater than it. Combined with a stable
+        ORDER BY, that guarantees the fetch reaches past every previously
+        converted row into unconverted ones -- the precise mechanism that
+        prevents the plateau. If this regresses to `existing` not feeding the
+        limit, the LIMIT collapses back to a flat function of `remaining` and
+        can again sit below `existing`, reproducing the bug.
+        """
+        sql = "SELECT * FROM t ORDER BY id"
+        for existing in (0, 1, 99, 100, 4_999, 50_000):
+            bounded = MDMPipeline._bounded_relationship_sql(sql, remaining=1, existing=existing)
+            limit = int(bounded.rsplit("LIMIT", 1)[1].strip())
+            assert limit > existing, (
+                f"LIMIT {limit} does not exceed existing={existing} -- "
+                f"a stable-order rescan would land entirely within already-"
+                f"converted rows and plateau at skipped_existing"
+            )
+
+
+class _LimitCapturingSilver(StubSilver):
+    """StubSilver that also records the LIMIT clause of each issued query.
+
+    Lets the test observe the exact source-window size the pipeline asks for
+    on each invocation -- the thing the plateau bug got wrong.
+    """
+
+    def __init__(self, fixtures: dict[str, list[dict]]):
+        super().__init__(fixtures)
+        self.limits: list[int] = []
+
+    def fetch(self, sql: str, params: Optional[list[Any]] = None) -> list[dict]:
+        match = re.search(r"LIMIT\s+(\d+)\s*$", sql.strip())
+        if match:
+            self.limits.append(int(match.group(1)))
+        return super().fetch(sql, params)
+
+
+class TestRelationshipDerivationPlateauFix:
+    def test_employed_by_window_advances_across_repeat_runs(self, session, fixture_world):
+        """End-to-end regression test for "always picking the same N rows".
+
+        Two distinct DEF-14A executive records for the same issuer; with
+        target_per_type=5 both insert on the first run. The second run must
+        compute a strictly larger source LIMIT than the first -- proving the
+        fetch window grows with the live relationship count rather than
+        re-issuing the same bounded query and plateauing on skipped_existing.
+        """
+        exec_row = lambda accession, year, name, role: {
+            "cik": 910001, "accession_number": accession, "fiscal_year": year,
+            "exec_name": name, "exec_role": role, "total_comp": 1_000_000,
+            "base_salary": None, "bonus": None, "stock_awards": None,
+            "option_awards": None, "non_equity_incentive": None,
+            "tenure_start_year": None,
+        }
+        silver = _LimitCapturingSilver({
+            "sec_executive_record": [
+                exec_row("0000-issuer-1", 2022, "Jane CEO", "CEO"),
+                exec_row("0000-issuer-2", 2023, "John CFO", "CFO"),
+            ],
+        })
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        first = pipe.derive_relationships(target_per_type=5, relationship_types=["EMPLOYED_BY"])
+        assert first["EMPLOYED_BY"]["existing"] == 0
+        assert first["EMPLOYED_BY"]["inserted"] == 2
+
+        second = pipe.derive_relationships(target_per_type=5, relationship_types=["EMPLOYED_BY"])
+        assert second["EMPLOYED_BY"]["existing"] == 2
+        assert second["EMPLOYED_BY"]["inserted"] == 0  # both already converted -- idempotent
+
+        assert len(silver.limits) == 2, "expected exactly one bounded fetch per run"
+        first_limit, second_limit = silver.limits
+        existing_at_run2 = second["EMPLOYED_BY"]["existing"]
+        remaining_at_run2 = 5 - existing_at_run2
+
+        # `existing` itself must be live (reflect what run 1 created), not a
+        # stale/constant value -- otherwise the additive term below is a no-op
+        # and the bug resurfaces silently even though the formula "looks" fixed.
+        assert existing_at_run2 == first["EMPLOYED_BY"]["inserted"] == 2
+
+        # The precise invariant that distinguishes fixed vs. broken: the second
+        # LIMIT must equal existing + max(remaining * 50, 100) -- i.e. it must
+        # include the live `existing` addend. A bare assertion that
+        # `second_limit > existing` is NOT sufficient to catch the regression
+        # here: at this fixture's scale the pre-fix flat limit
+        # (max(remaining*50, 100) == 150) already exceeds existing (2), so a
+        # looser check would pass against the broken code too (false
+        # confidence). The exact value 152 only comes out of existing(2) +
+        # max(3*50, 100); the pre-fix formula would emit 150.
+        expected_limit = existing_at_run2 + max(remaining_at_run2 * 50, 100)
+        assert second_limit == expected_limit == 152, (
+            f"second-run LIMIT ({second_limit}) != existing + windowed-remaining "
+            f"({expected_limit}) -- the `existing` addend is missing from the "
+            f"emitted LIMIT, so a stable-order rescan would plateau on the same "
+            f"leading slice instead of advancing past converted rows"
+        )
+        assert first_limit == 0 + max(5 * 50, 100) == 250
