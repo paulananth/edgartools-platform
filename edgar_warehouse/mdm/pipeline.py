@@ -1074,7 +1074,7 @@ class MDMPipeline:
         sql = """
             SELECT cik, accession_number, fiscal_year, exec_name, exec_role,
                    total_comp, base_salary, bonus, stock_awards,
-                   option_awards, non_equity_incentive, tenure_start_year
+                   option_awards, non_equity_incentive
             FROM sec_executive_record
             WHERE exec_name IS NOT NULL
         """
@@ -1133,7 +1133,6 @@ class MDMPipeline:
                     "stock_awards":       row.get("stock_awards"),
                     "option_awards":      row.get("option_awards"),
                     "non_equity_incentive": row.get("non_equity_incentive"),
-                    "tenure_start_year":  row.get("tenure_start_year"),
                     "source_accession":   accession_number,
                 },
                 effective_from=effective_from,
