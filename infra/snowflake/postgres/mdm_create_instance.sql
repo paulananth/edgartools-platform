@@ -8,12 +8,12 @@
 -- credentials out of band; Snowflake does not show them again after creation.
 
 CREATE POSTGRES INSTANCE EDGARTOOLS_DEV_MDM
-  COMPUTE_FAMILY = 'STANDARD_S'
+  COMPUTE_FAMILY = 'BURST_S'
   STORAGE_SIZE_GB = 50
   AUTHENTICATION_AUTHORITY = POSTGRES
   POSTGRES_VERSION = 16
   HIGH_AVAILABILITY = FALSE
-  NETWORK_POLICY = '<network_policy_name>'
+  NETWORK_POLICY = 'edgartools_dev_mdm_postgres_policy'
   COMMENT = 'EdgarTools MDM Snowflake Postgres runtime database';
 
 DESCRIBE POSTGRES INSTANCE EDGARTOOLS_DEV_MDM;
