@@ -57,12 +57,76 @@ run() {
     ok "$label"
 }
 
+# ── snowflake preflight ───────────────────────────────────────────────────────
+# Supports two credential sources (checked in order):
+#   1. MDM_SNOWFLAKE_* / DBT_SNOWFLAKE_* env vars
+#   2. ~/.snowflake/connections.toml  [snowconn]  (or SNOWFLAKE_CONNECTION)
+#
+# When using connections.toml, MDM_SNOWFLAKE_DATABASE must still be set because
+# the connection entry does not include the database name.  Example:
+#   export MDM_SNOWFLAKE_DATABASE=EDGARTOOLS_DEV
+_sf_env() { local a="MDM_SNOWFLAKE_$1" b="DBT_SNOWFLAKE_$1"; echo "${!a:-${!b:-}}"; }
+
+check_snowflake_env() {
+    local has_env=false has_cli=false conn_name="${SNOWFLAKE_CONNECTION:-}"
+
+    [[ -n "$(_sf_env ACCOUNT)" ]] && has_env=true
+
+    local connections_toml="$HOME/.snowflake/connections.toml"
+    if [[ "$has_env" == "false" && -f "$connections_toml" ]]; then
+        if [[ -z "$conn_name" ]]; then
+            local cfg="$HOME/.snowflake/config.toml"
+            [[ -f "$cfg" ]] && conn_name=$(grep -E '^default_connection_name' "$cfg" \
+                | sed 's/.*= *"\?\([^"]*\)"\?.*/\1/' | tr -d '[:space:]')
+            conn_name="${conn_name:-snowconn}"
+        fi
+        if grep -q "^\[${conn_name}\]" "$connections_toml" 2>/dev/null; then
+            has_cli=true
+            export SNOWFLAKE_CONNECTION="$conn_name"
+        fi
+    fi
+
+    if [[ "$has_env" == "false" && "$has_cli" == "false" ]]; then
+        printf '\n\e[31m✗  Snowflake credentials not found.\e[0m\n' >&2
+        printf '   Option A — env vars:\n' >&2
+        printf '     export MDM_SNOWFLAKE_ACCOUNT=...\n' >&2
+        printf '     export MDM_SNOWFLAKE_USER=...\n' >&2
+        printf '     export MDM_SNOWFLAKE_PASSWORD=...\n' >&2
+        printf '     export MDM_SNOWFLAKE_DATABASE=EDGARTOOLS_DEV\n' >&2
+        printf '     export MDM_SNOWFLAKE_WAREHOUSE=...\n' >&2
+        printf '   Option B — Snowflake CLI (connections.toml already present):\n' >&2
+        printf '     export MDM_SNOWFLAKE_DATABASE=EDGARTOOLS_DEV  # only missing piece\n' >&2
+        printf '   Or re-run with --skip-graph-sync to skip Snowflake steps.\n\n' >&2
+        exit 1
+    fi
+
+    if [[ "$has_cli" == "true" && -z "$(_sf_env DATABASE)" ]]; then
+        printf '\n\e[31m✗  MDM_SNOWFLAKE_DATABASE is not set.\e[0m\n' >&2
+        printf '   Using ~/.snowflake/connections.toml [%s] for other creds,\n' "$conn_name" >&2
+        printf '   but the database is not in the connection entry.\n' >&2
+        printf '     export MDM_SNOWFLAKE_DATABASE=EDGARTOOLS_DEV\n' >&2
+        printf '   Or re-run with --skip-graph-sync.\n\n' >&2
+        exit 1
+    fi
+
+    if [[ "$has_env" == "true" ]]; then
+        info "Snowflake creds   = env vars"
+    else
+        info "Snowflake creds   = ~/.snowflake/connections.toml [$conn_name]"
+    fi
+    info "Snowflake DB      = $(_sf_env DATABASE)"
+}
+
 # ── preflight ─────────────────────────────────────────────────────────────────
 hr "Preflight"
 
 [[ -n "${MDM_DATABASE_URL:-}" ]]  || err "MDM_DATABASE_URL is not set"
 [[ -n "${MDM_SILVER_DUCKDB:-}${WAREHOUSE_STORAGE_ROOT:-}" ]] \
     || err "Set MDM_SILVER_DUCKDB (local path or s3://) or WAREHOUSE_STORAGE_ROOT"
+
+# Validate Snowflake creds now — before any long-running steps — unless the
+# user is intentionally skipping graph sync.
+[[ "$SKIP_GRAPH_SYNC" == "true" ]] || check_snowflake_env
 
 info "MDM_DATABASE_URL  = ${MDM_DATABASE_URL%%@*}@***"
 info "MDM_SILVER_DUCKDB = ${MDM_SILVER_DUCKDB:-<via WAREHOUSE_STORAGE_ROOT>}"

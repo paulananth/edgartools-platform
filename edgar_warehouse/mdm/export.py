@@ -112,15 +112,70 @@ def _snowflake_secret_payload() -> dict[str, Any]:
     if not raw:
         source_name = "DBT_SNOWFLAKE_SECRET_JSON"
         raw = os.environ.get(source_name)
-    if not raw:
+    if raw:
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Invalid Snowflake secret JSON in {source_name}") from exc
+        if not isinstance(payload, dict):
+            raise RuntimeError(f"Invalid Snowflake secret JSON in {source_name}")
+        return payload
+
+    return _snowflake_cli_config_payload()
+
+
+def _snowflake_cli_config_payload() -> dict[str, Any]:
+    """Read credentials from ~/.snowflake/connections.toml (Snowflake CLI config).
+
+    The connection name is resolved in order:
+      1. SNOWFLAKE_CONNECTION env var
+      2. default_connection_name in ~/.snowflake/config.toml
+      3. "snowconn"
+
+    The returned dict uses lowercase keys (account, user, password, warehouse,
+    role, database) which _snowflake_setting() already handles via secret.get(lower).
+    Returns {} silently when the config file is absent.
+    """
+    import pathlib
+
+    connections_path = pathlib.Path.home() / ".snowflake" / "connections.toml"
+    if not connections_path.exists():
         return {}
+
     try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Invalid Snowflake secret JSON in {source_name}") from exc
-    if not isinstance(payload, dict):
-        raise RuntimeError(f"Invalid Snowflake secret JSON in {source_name}")
-    return payload
+        import tomllib  # Python 3.11+
+    except ImportError:
+        try:
+            import tomli as tomllib  # type: ignore[no-redef]
+        except ImportError:
+            return {}
+
+    try:
+        with connections_path.open("rb") as f:
+            all_connections: dict[str, Any] = tomllib.load(f)
+    except Exception:
+        return {}
+
+    # Resolve connection name
+    connection_name = os.environ.get("SNOWFLAKE_CONNECTION", "")
+    if not connection_name:
+        config_path = pathlib.Path.home() / ".snowflake" / "config.toml"
+        if config_path.exists():
+            try:
+                with config_path.open("rb") as f:
+                    cfg = tomllib.load(f)
+                connection_name = cfg.get("default_connection_name", "")
+            except Exception:
+                pass
+    if not connection_name:
+        connection_name = "snowconn"
+
+    conn = all_connections.get(connection_name, {})
+    if not conn:
+        return {}
+
+    # Normalise to lowercase keys so _snowflake_setting()'s secret.get(lower) picks them up
+    return {k.lower(): v for k, v in conn.items()}
 
 
 def _snowflake_setting(secret: dict[str, Any], key: str) -> Any:
