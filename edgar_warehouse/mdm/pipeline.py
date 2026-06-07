@@ -96,10 +96,21 @@ class MDMPipeline:
         )
 
     @staticmethod
-    def _bounded_relationship_sql(sql: str, remaining: Optional[int]) -> str:
+    def _bounded_relationship_sql(sql: str, remaining: Optional[int], existing: int = 0) -> str:
+        """Append a LIMIT that grows with `existing` so the source window keeps
+        advancing past already-converted rows on repeat runs.
+
+        Without `existing` in the limit, every run re-reads the same leading
+        slice of the (unordered-by-default) source query: rows already turned
+        into relationships come back as `skipped_existing` and the run never
+        reaches fresh rows further down the table — repeat invocations with the
+        same `--limit` plateau at whatever the first run produced. Growing the
+        window by `existing` guarantees it always extends past the previously
+        converted prefix into unconverted territory, given a stable ORDER BY.
+        """
         if remaining is None:
             return sql
-        source_limit = max(
+        source_limit = int(existing) + max(
             int(remaining) * _RELATIONSHIP_SOURCE_LIMIT_MULTIPLIER,
             _RELATIONSHIP_SOURCE_LIMIT_MINIMUM,
         )
@@ -112,9 +123,10 @@ class MDMPipeline:
         *,
         rel_type_name: str,
         source_table: str,
+        existing: int = 0,
     ) -> list[dict]:
         try:
-            return self.silver.fetch(self._bounded_relationship_sql(sql, remaining))
+            return self.silver.fetch(self._bounded_relationship_sql(sql, remaining, existing))
         except Exception as exc:
             if not self._is_missing_source_table(exc, source_table):
                 raise
@@ -331,14 +343,16 @@ class MDMPipeline:
                    f.cik AS issuer_cik, f.report_date AS period_of_report
             FROM sec_ownership_reporting_owner o
             JOIN sec_company_filing f ON o.accession_number = f.accession_number
+            ORDER BY o.accession_number, o.owner_index
         """
         company_ciks = self._company_cik_set()
+        existing = self._relationship_count("IS_INSIDER")
         inserted = 0
         skipped_corporate = 0
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
-        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining)):
+        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining, existing)):
             owner_cik = row.get("owner_cik")
             if owner_cik in company_ciks:
                 skipped_corporate += 1
@@ -435,14 +449,16 @@ class MDMPipeline:
              AND t.owner_index = o.owner_index
             JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
+            ORDER BY accession_number, owner_index, txn_index
         """
         company_ciks = self._company_cik_set()
+        existing = self._relationship_count("HOLDS")
         inserted = 0
         skipped_corporate = 0
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
-        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining)):
+        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining, existing)):
             owner_cik = row.get("owner_cik")
             if owner_cik in company_ciks:
                 skipped_corporate += 1
@@ -551,16 +567,20 @@ class MDMPipeline:
              AND t.owner_index = o.owner_index
             JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
+            ORDER BY accession_number, owner_index, txn_index
         """
         company_ciks = self._company_cik_set()
+        existing = self._relationship_count("COMPANY_HOLDS")
         inserted = 0
         skipped_corporate = 0
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
-        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining)):
+        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining, existing)):
             owner_cik = row.get("owner_cik")
             if owner_cik not in company_ciks:
+                # skipped_corporate here means non-corporate owner (inverse of
+                # IS_INSIDER/HOLDS — COMPANY_HOLDS wants corporate owners only)
                 skipped_corporate += 1
                 continue
             company_id = self._company_entity_id(owner_cik)
@@ -1077,7 +1097,9 @@ class MDMPipeline:
                    option_awards, non_equity_incentive
             FROM sec_executive_record
             WHERE exec_name IS NOT NULL
+            ORDER BY cik, fiscal_year, accession_number, exec_name
         """
+        existing = self._relationship_count("EMPLOYED_BY")
         inserted = 0
         skipped_corporate = 0
         skipped_unresolved_source = 0
@@ -1089,6 +1111,7 @@ class MDMPipeline:
             remaining,
             rel_type_name="EMPLOYED_BY",
             source_table="sec_executive_record",
+            existing=existing,
         ):
             cik = row.get("cik")
             exec_name = row.get("exec_name") or ""
@@ -1181,6 +1204,7 @@ class MDMPipeline:
             WHERE auditor_name IS NOT NULL OR auditor_pcaob_id IS NOT NULL
             ORDER BY cik, fiscal_year
         """
+        existing = self._relationship_count("AUDITED_BY")
         inserted = 0
         skipped_corporate = 0
         skipped_unresolved_source = 0
@@ -1195,6 +1219,7 @@ class MDMPipeline:
             remaining,
             rel_type_name="AUDITED_BY",
             source_table="sec_accounting_flag",
+            existing=existing,
         ):
             cik = row.get("cik")
             pcaob_id = row.get("auditor_pcaob_id")
@@ -1293,7 +1318,9 @@ class MDMPipeline:
                    put_call, discretion_type, security_class
             FROM sec_thirteenf_holding
             WHERE cusip IS NOT NULL
+            ORDER BY cik, accession_number, cusip
         """
+        existing = self._relationship_count("INSTITUTIONAL_HOLDS")
         inserted = 0
         skipped_corporate = 0
         skipped_unresolved_source = 0
@@ -1305,6 +1332,7 @@ class MDMPipeline:
             remaining,
             rel_type_name="INSTITUTIONAL_HOLDS",
             source_table="sec_thirteenf_holding",
+            existing=existing,
         ):
             cik = row.get("cik")
             cusip = row.get("cusip") or ""
