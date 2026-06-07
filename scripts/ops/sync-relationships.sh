@@ -62,25 +62,52 @@ run() {
 # ── snowflake preflight ───────────────────────────────────────────────────────
 _sf_env() { local a="MDM_SNOWFLAKE_$1" b="DBT_SNOWFLAKE_$1"; echo "${!a:-${!b:-}}"; }
 
+# Resolve the Snowflake CLI connection name via Python's tomllib (regex-based
+# bash grep on TOML section headers is fragile across grep implementations —
+# BSD grep on macOS handles \[ \] in BRE differently than GNU grep).
+# Prints the connection name if found in ~/.snowflake/connections.toml, else "".
+_snowflake_cli_connection() {
+    SNOWFLAKE_CONNECTION="${SNOWFLAKE_CONNECTION:-}" python3 - <<'PYEOF' 2>/dev/null
+import os, pathlib
+
+home = pathlib.Path.home()
+conn_name = os.environ.get("SNOWFLAKE_CONNECTION", "")
+
+if not conn_name:
+    cfg = home / ".snowflake" / "config.toml"
+    if cfg.exists():
+        try:
+            import tomllib
+            conn_name = tomllib.load(cfg.open("rb")).get("default_connection_name", "")
+        except Exception:
+            pass
+conn_name = conn_name or "snowconn"
+
+p = home / ".snowflake" / "connections.toml"
+if not p.exists():
+    print("", end="")
+else:
+    try:
+        import tomllib
+        found = conn_name in tomllib.load(p.open("rb"))
+    except Exception:
+        import re
+        found = bool(re.search(r"^\[" + re.escape(conn_name) + r"\]", p.read_text(), re.MULTILINE))
+    print(conn_name if found else "", end="")
+PYEOF
+}
+
 check_snowflake_env() {
-    local has_env=false has_cli=false conn_name="${SNOWFLAKE_CONNECTION:-}"
+    local has_env=false conn_name=""
+
     [[ -n "$(_sf_env ACCOUNT)" ]] && has_env=true
 
-    local connections_toml="$HOME/.snowflake/connections.toml"
-    if [[ "$has_env" == "false" && -f "$connections_toml" ]]; then
-        if [[ -z "$conn_name" ]]; then
-            local cfg="$HOME/.snowflake/config.toml"
-            [[ -f "$cfg" ]] && conn_name=$(grep -E '^default_connection_name' "$cfg" \
-                | sed 's/.*= *"\?\([^"]*\)"\?.*/\1/' | tr -d '[:space:]')
-            conn_name="${conn_name:-snowconn}"
-        fi
-        if grep -q "^\[${conn_name}\]" "$connections_toml" 2>/dev/null; then
-            has_cli=true
-            export SNOWFLAKE_CONNECTION="$conn_name"
-        fi
+    if [[ "$has_env" == "false" ]]; then
+        conn_name="$(_snowflake_cli_connection)"
+        [[ -n "$conn_name" ]] && export SNOWFLAKE_CONNECTION="$conn_name"
     fi
 
-    if [[ "$has_env" == "false" && "$has_cli" == "false" ]]; then
+    if [[ "$has_env" == "false" && -z "$conn_name" ]]; then
         printf '\n\e[31m✗  Snowflake credentials not found.\e[0m\n' >&2
         printf '   Option A — env vars:\n' >&2
         printf '     export MDM_SNOWFLAKE_ACCOUNT=...\n' >&2
@@ -88,13 +115,13 @@ check_snowflake_env() {
         printf '     export MDM_SNOWFLAKE_PASSWORD=...\n' >&2
         printf '     export MDM_SNOWFLAKE_DATABASE=EDGARTOOLS_DEV\n' >&2
         printf '     export MDM_SNOWFLAKE_WAREHOUSE=...\n' >&2
-        printf '   Option B — Snowflake CLI (connections.toml already present):\n' >&2
+        printf '   Option B — Snowflake CLI config (~/.snowflake/connections.toml):\n' >&2
         printf '     export MDM_SNOWFLAKE_DATABASE=EDGARTOOLS_DEV  # only missing piece\n' >&2
         printf '   Or re-run with --skip-graph-sync to skip Snowflake steps.\n\n' >&2
         exit 1
     fi
 
-    if [[ "$has_cli" == "true" && -z "$(_sf_env DATABASE)" ]]; then
+    if [[ -n "$conn_name" && -z "$(_sf_env DATABASE)" ]]; then
         printf '\n\e[31m✗  MDM_SNOWFLAKE_DATABASE is not set.\e[0m\n' >&2
         printf '   Using ~/.snowflake/connections.toml [%s] for other creds,\n' "$conn_name" >&2
         printf '   but the database is not in the connection entry.\n' >&2
