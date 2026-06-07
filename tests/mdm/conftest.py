@@ -7,12 +7,6 @@ and relationship types). SQLite doesn't have NOW() so we register it here.
 Also provides a FastAPI TestClient that wires the in-memory session through
 the app's dependency-injection system and uses real auth with MDM_API_KEYS
 set in the environment (no require_api_key dependency override).
-
-MDM test fixtures.
-environment variables. If these are not set the fixture raises KeyError —
-tests that need Neo4j must be run with credentials exported (e.g. hydrated
-from Azure Key Vault via test-mdm-e2e.sh). Silent skips are intentional
-omissions; we want loud failures instead.
 """
 from __future__ import annotations
 

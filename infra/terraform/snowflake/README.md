@@ -2,7 +2,7 @@
 
 This directory contains the Terraform-managed Snowflake deployment for the
 warehouse gold mirror. It is analytics/database-object provisioning, not part of
-the AWS/Azure passive cloud-infrastructure roots. Snowflake roles and grants now
+the AWS passive cloud-infrastructure roots. Snowflake roles and grants now
 live in `infra/terraform/access/snowflake/`.
 
 Follow-on implementation assets live alongside it:
@@ -59,7 +59,7 @@ The preferred Snowflake E2E path is an explicit post-infra operation:
 6. dbt deployment of business-facing gold models and dynamic tables
 7. Streamlit artifact upload
 
-This keeps AWS/Azure `terraform apply` limited to passive cloud infrastructure.
+This keeps AWS `terraform apply` limited to passive cloud infrastructure.
 
 ## Apply order
 

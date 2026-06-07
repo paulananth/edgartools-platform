@@ -43,8 +43,8 @@ class Base(DeclarativeBase):
 class GUID(TypeDecorator):
     """Portable UUID/GUID type.
 
-    PostgreSQL keeps native UUID columns; Azure SQL uses text GUIDs so it can
-    interoperate with the explicit T-SQL migration schema.
+    PostgreSQL keeps native UUID columns; other dialects (e.g. SQLite in tests)
+    fall back to fixed-length text GUIDs.
     """
 
     impl = CHAR(36)

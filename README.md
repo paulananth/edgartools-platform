@@ -2,7 +2,7 @@
 
 Data platform for SEC EDGAR built on [edgartools](https://github.com/dgunning/edgartools).
 
-Extracts SEC EDGAR filing data from source through bronze object storage to a gold analytics layer. Terraform now separates passive AWS/Azure/Snowflake provisioning from access-control roots; workload jobs, image rollout, secret values, schema migrations, and analytics refreshes run through explicit operator actions.
+Extracts SEC EDGAR filing data from source through bronze object storage to a gold analytics layer. Terraform now separates passive AWS/Snowflake provisioning from access-control roots; workload jobs, image rollout, secret values, schema migrations, and analytics refreshes run through explicit operator actions.
 
 AWS application rollout is handled by `infra/scripts/deploy-aws-application.sh`
 after the AWS provisioning and access Terraform roots have been applied. That
@@ -19,7 +19,7 @@ access key is part of the normal path.
 ## Architecture
 
 ```
-SEC EDGAR API → edgar-warehouse (Python) → S3 or ADLS Gen2 (Parquet) → Snowflake or Databricks source tables → dbt → Gold tables → dashboard
+SEC EDGAR API → edgar-warehouse (Python) → S3 (Parquet) → Snowflake source tables → dbt → Gold tables → dashboard
 ```
 
 ### Where `edgartools` fits
@@ -53,7 +53,7 @@ For MDM graph configuration, see [docs/neo4j.md](docs/neo4j.md).
 | Directory | Purpose |
 |---|---|
 | `edgar_warehouse/` | Python ETL runtime — exports SEC data to object storage |
-| `infra/terraform/` | Passive AWS/Azure/Snowflake provisioning roots plus separate access-control roots |
+| `infra/terraform/` | Passive AWS/Snowflake provisioning roots plus separate access-control roots |
 | `infra/snowflake/dbt/` | dbt project for Snowflake and Databricks gold tables |
 | `infra/databricks/sql/` | Unity Catalog external table registration templates |
 | `infra/snowflake/sql/bootstrap/` | Bootstrap SQL for Snowflake native S3 pull |
@@ -113,11 +113,8 @@ This section describes the code paths used by the warehouse runtime in developme
 git clone https://github.com/paulananth/edgartools-platform
 cd edgartools-platform
 pip install -e ".[s3,snowflake]"
-# Azure/Databricks parallel-run install:
-# pip install -e ".[azure,databricks]"
 ```
 
-Azure runtime credentials use managed identity for ACR/ADLS and Azure Key Vault for
-the mandatory SEC EDGAR User-Agent identity plus optional Databricks/dbt settings.
-Use `infra/scripts/bootstrap-azure-secrets.sh` to populate those values outside
-Terraform state.
+Runtime credentials (the mandatory SEC EDGAR User-Agent identity plus AWS/Snowflake
+settings) come from AWS Secrets Manager. Use `infra/scripts/bootstrap-aws-mdm-secrets.sh`
+to populate those values outside Terraform state.

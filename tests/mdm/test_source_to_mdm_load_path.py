@@ -537,8 +537,8 @@ class TestUnsupportedProtocolRejected:
             f"Expected 'unsupported' protocol error, got: {exc_info.value}"
         )
 
-    def test_http_to_non_azure_domain_rejected_by_object_storage(self):
-        """http:// (non-Azure) must be rejected by the protocol allowlist."""
+    def test_http_url_rejected_by_object_storage(self):
+        """http:// must be rejected by the protocol allowlist (only s3:// is supported)."""
         from edgar_warehouse.application.errors import WarehouseRuntimeError
         from edgar_warehouse.infrastructure import object_storage
 
