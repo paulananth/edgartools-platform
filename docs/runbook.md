@@ -1,8 +1,6 @@
 # EdgarTools Platform — End-to-End Setup Runbook
 
-This guide walks from zero to the legacy AWS/Snowflake gold layer and documents the
-Azure/Databricks parallel-run path used for migration. Keep AWS/Snowflake running until
-Azure/Databricks output validation has passed.
+This guide walks from zero to the AWS/Snowflake gold layer.
 
 ## Architecture Overview
 
@@ -13,21 +11,11 @@ SEC EDGAR API → edgar-warehouse Python CLI → AWS S3 (Parquet, bronze)
   → Streamlit dashboard
 ```
 
-Migration target:
-
-```
-SEC EDGAR API → edgar-warehouse Python CLI → ADLS Gen2 (Parquet)
-  → Unity Catalog external tables / Databricks SQL
-  → dbt-databricks → EDGARTOOLS_GOLD tables/views
-```
-
 Layers:
 - **Source**: SEC EDGAR API (live pull by the warehouse CLI)
 - **Bronze**: AWS S3 Parquet exports written by `edgar-warehouse`
-- **Azure Bronze**: ADLS Gen2 Parquet exports written by the same runtime during parallel runs
 - **Silver** (internal): DuckDB intermediate processing inside the warehouse container
 - **Gold**: Snowflake `EDGARTOOLS_GOLD` dynamic tables managed by dbt
-- **Databricks Gold**: Databricks tables/views managed by `dbt-databricks`
 
 ---
 
@@ -51,12 +39,10 @@ Layers:
 | GitHub CLI (`gh`) | >= 2.0 | `winget install GitHub.cli` |
 | Docker Desktop | >= 24 | docker.com |
 | AWS CLI | v2 | aws.amazon.com/cli |
-| Azure CLI | latest | learn.microsoft.com/cli/azure |
 | Terraform | **1.14.8 or later in the 1.14.x line** | terraform.io |
 | SnowCLI (`snow`) | latest | `pip install snowflake-cli-labs` |
 | Bash | any | native on Linux/Mac; WSL on Windows |
 | dbt-snowflake | >= 1.7 | `pip install dbt-snowflake` |
-| dbt-databricks | >= 1.8 | `pip install dbt-databricks` |
 
 ### Clone the Repository
 
@@ -65,10 +51,6 @@ git clone https://github.com/paulananth/edgartools-platform
 cd edgartools-platform
 pip install -e ".[s3,snowflake]"
 pip install dbt-snowflake
-
-# Azure/Databricks parallel run
-pip install -e ".[azure,databricks]"
-pip install dbt-databricks
 ```
 
 ### Environment Variables
@@ -85,19 +67,7 @@ Set these before running any steps. The exact names are used by scripts and dbt.
 | `TF_VAR_snowflake_account_name` | Snowflake Terraform provider | From Snowflake creds |
 | `TF_VAR_snowflake_user` | Snowflake Terraform provider | From Snowflake creds |
 | `EDGAR_IDENTITY` | Warehouse runtime | `"Your Name your@email.com"` |
-
-Azure/Databricks migration variables:
-
-| Variable | Used By | Notes |
-|----------|---------|-------|
-| `SERVING_EXPORT_ROOT` | Warehouse runtime | Preferred export root for Databricks/Snowflake serving Parquet |
-| `SNOWFLAKE_EXPORT_ROOT` | Warehouse runtime | Temporary fallback during migration |
-| `DBT_DATABRICKS_HOST` | dbt | Databricks workspace host |
-| `DBT_DATABRICKS_HTTP_PATH` | dbt | SQL warehouse HTTP path |
-| `DBT_DATABRICKS_TOKEN` | dbt | Personal access token or service-principal token |
-| `DBT_DATABRICKS_CATALOG` | dbt | Unity Catalog catalog for source and gold models |
-| `DBT_SOURCE_SCHEMA` | dbt | Source schema, default `EDGARTOOLS_SOURCE` |
-| `DBT_GOLD_SCHEMA` | dbt | Gold schema, default `EDGARTOOLS_GOLD` |
+| `SERVING_EXPORT_ROOT` | Warehouse runtime | Export root for Snowflake serving Parquet |
 
 ---
 
@@ -119,144 +89,13 @@ AWS uses a split-principal model:
   task permissions, and `sec_platform_runner_step_functions` for Step Functions
   service execution. These roles have no long-lived access keys.
 
-Azure/Databricks uses managed identity for cloud resources and Key Vault for unavoidable
-secret values.
-
-- **EDGAR identity**: Store the SEC User-Agent contact string in Key Vault secret
-  `edgar-identity`. The runtime receives it as `EDGAR_IDENTITY`. Use an app/operator
-  name and monitored email, for example `EdgarTools Platform data-ops@example.com`.
-- **Azure storage**: Container Apps Jobs use managed identity with `Storage Blob Data
-  Contributor` on the ADLS Gen2 account. Do not use account keys, SAS tokens, or
-  connection strings.
-- **Databricks dbt**: Store local/dev dbt fallback values in Key Vault secrets
-  `databricks-host`, `databricks-http-path`, `databricks-token`, and optionally
-  `databricks-catalog`, `dbt-source-schema`, and `dbt-gold-schema`. Production should
-  use a service principal or workload identity from CI/Databricks Jobs rather than a
-  personal token.
-- **Databricks storage**: Use Unity Catalog storage credentials and external locations
-  backed by managed identity/access connector. Do not grant Databricks ADLS account keys.
-- **MDM Azure SQL**: When the Azure MDM data plane is enabled, Terraform creates
-  the Azure SQL shell only. Operators store `mdm-database-url` for
-  `MDM_DATABASE_URL` with `infra/scripts/bootstrap-azure-secrets.sh`.
-- **MDM Neo4j**: Terraform creates the Azure Files persistence shell only.
-  Operators deploy the Neo4j Container App with `deploy-azure-runtime.sh` and
-  store `mdm-neo4j`, `mdm-neo4j-uri`, `mdm-neo4j-user`,
-  `mdm-neo4j-password`, and `mdm-neo4j-auth` in Key Vault. For external Neo4j
-  and Aura connection details, see `docs/neo4j.md`.
-- **MDM API keys**: Operators store API keys in Key Vault with
-  `infra/scripts/bootstrap-azure-secrets.sh`. Container Apps use
-  `mdm-api-keys-csv` as `MDM_API_KEYS`.
-
-The Azure CLI and Databricks CLI are operator tools for bootstrapping and validation;
-production runtime auth should not depend on a local CLI login session.
-
----
-
-## Azure/Databricks Parallel Run
-
-Use this path to stand up the replacement platform without removing AWS/Snowflake.
-
-```bash
-# Build and push the Azure runtime images to ACR
-bash infra/scripts/build-azure-images.sh \
-  --env dev \
-  --acr-name edgartoolsdevacr01 \
-  --image-tag dev
-
-# Apply Azure passive infrastructure
-cd infra/terraform/azure/accounts/dev
-cp backend.hcl.example backend.hcl
-cp terraform.tfvars.example terraform.tfvars
-# Edit backend.hcl and terraform.tfvars.
-# To provision MDM, set enable_mdm=true plus globally unique
-# mdm_sql_server_name and mdm_neo4j_storage_account_name.
-cd ../../../../..
-
-# Apply the full passive Azure stack.
-bash infra/scripts/deploy-azure-stack.sh --env dev
-
-# Apply managed identity, RBAC, and Key Vault access policies.
-cd infra/terraform/access/azure/accounts/dev
-cp backend.hcl.example backend.hcl
-cp terraform.tfvars.example terraform.tfvars
-# Edit backend.hcl and terraform.tfvars to point at the Azure provisioning state.
-terraform init -backend-config=backend.hcl
-terraform apply
-cd ../../../../../..
-
-# Store runtime secrets outside Terraform state after access is applied.
-bash infra/scripts/bootstrap-azure-secrets.sh \
-  --key-vault-name edgartools-dev-kv-01 \
-  --edgar-identity "EdgarTools Platform data-ops@example.com" \
-  --mdm-database-url "mssql+pyodbc://..." \
-  --mdm-neo4j-uri "bolt://edgartools-dev-neo4j:7687" \
-  --mdm-neo4j-user neo4j \
-  --mdm-neo4j-password "<neo4j-password>" \
-  --mdm-api-key "<api-key>" \
-  --databricks-host "https://adb-..." \
-  --databricks-http-path "/sql/1.0/warehouses/..." \
-  --databricks-token "..."
-
-# Deploy apps/jobs outside Terraform and apply the MDM schema.
-bash infra/scripts/deploy-azure-runtime.sh --env dev --run-schema
-```
-
-Terraform outputs the runtime roots:
-
-```bash
-terraform -chdir=infra/terraform/azure/accounts/dev output warehouse_bronze_root
-terraform -chdir=infra/terraform/azure/accounts/dev output warehouse_storage_root
-terraform -chdir=infra/terraform/azure/accounts/dev output serving_export_root
-terraform -chdir=infra/terraform/azure/accounts/dev output mdm_sql_server_fqdn
-terraform -chdir=infra/terraform/azure/accounts/dev output mdm_runtime_secret_uris
-```
-
-Run the MDM e2e checks after Azure SQL and Neo4j are provisioned:
-
-```bash
-EDGAR_WAREHOUSE_CMD="uv run --extra mdm edgar-warehouse" \
-  bash infra/scripts/test-mdm-e2e.sh --env dev
-```
-
-The script hydrates `MDM_DATABASE_URL`, `NEO4J_URI`, `NEO4J_USER`,
-`NEO4J_PASSWORD`, and `MDM_API_KEYS` from Key Vault, then runs:
-
-- `edgar-warehouse mdm check-connectivity --neo4j`
-- `edgar-warehouse mdm migrate`
-- `edgar-warehouse mdm counts`
-
-To validate from inside Container Apps instead of the operator machine, add
-`--start-container-jobs`. That starts the operator-managed MDM migrate, run, and
-counts jobs. The MDM run job receives `MDM_SILVER_DUCKDB`; by default
-`deploy-azure-runtime.sh` points it to
-`<WAREHOUSE_STORAGE_ROOT>/silver/sec/silver.duckdb`, and can be overridden with
-`--mdm-silver-duckdb`.
-
-Register Databricks external tables with
-`infra/databricks/sql/register_external_tables.sql`, then run dbt:
-
-```bash
-export DBT_DATABRICKS_HOST="https://adb-..."
-export DBT_DATABRICKS_HTTP_PATH="/sql/1.0/warehouses/..."
-export DBT_DATABRICKS_TOKEN="..."
-export DBT_DATABRICKS_CATALOG="edgartools_dev"
-export DBT_SOURCE_SCHEMA="EDGARTOOLS_SOURCE"
-export DBT_GOLD_SCHEMA="EDGARTOOLS_GOLD"
-
-bash infra/scripts/run-databricks-dbt.sh --target databricks_dev
-
-# Or hydrate DBT_* values from Azure Key Vault:
-bash infra/scripts/run-databricks-dbt.sh \
-  --target databricks_dev \
-  --key-vault-name edgartools-dev-kv-01
-```
-
-Acceptance before cutover:
-
-- Run the same bounded scope on both paths, starting with `bootstrap`.
-- Compare row counts for company, filing activity/detail, ownership, adviser, private funds, and ticker reference.
-- Compare key samples by CIK and accession number.
-- Run at least one daily incremental and one reconciliation-style run successfully before production cutover.
+- **EDGAR identity**: Store the SEC User-Agent contact string in AWS Secrets Manager
+  secret `edgartools-<env>-edgar-identity`. The runtime receives it as `EDGAR_IDENTITY`.
+  Use an app/operator name and monitored email, for example
+  `EdgarTools Platform data-ops@example.com`.
+- **MDM secrets**: Operators store `MDM_DATABASE_URL`, `MDM_API_KEYS`, and Snowflake
+  graph-sync settings under `edgartools-<env>/mdm/*` with
+  `infra/scripts/bootstrap-aws-mdm-secrets.sh`.
 
 ---
 

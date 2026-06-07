@@ -1,10 +1,10 @@
 # Terraform Layout
 
-This directory contains passive cloud-infrastructure Terraform roots for AWS and
-Azure, plus separate Snowflake Terraform trees for analytics/database-object
+This directory contains passive cloud-infrastructure Terraform roots for AWS,
+plus separate Snowflake Terraform trees for analytics/database-object
 provisioning and access control.
 
-AWS and Azure account roots are infra-only. They may create networks, storage,
+AWS account roots are infra-only. They may create networks, storage,
 registries, databases, logs, and empty secret containers. They
 must not create runnable application jobs/services, schedules, workflow engines,
 SQL procedures/tasks, dashboard apps, access-control bindings, or runtime secret
@@ -16,20 +16,7 @@ values.
 bootstrap-state/
 access/
   aws/accounts/{dev,prod}/        # IAM, SNS trust policies, ECS task roles
-  azure/accounts/{dev,prod}/      # managed identities, RBAC, Key Vault policies
   snowflake/accounts/{dev,prod}/  # roles and grants
-azure/
-  accounts/
-    dev/
-    prod/
-  modules/
-    container_apps_jobs/  # legacy name; now Log Analytics only
-    container_registry/
-    databricks_workspace/
-    key_vault/
-    mdm_data_plane/      # Azure SQL + storage shell only
-    resource_group/
-    storage_account/
 accounts/
   dev/
   prod/
@@ -82,32 +69,6 @@ modules/
 AWS Terraform no longer accepts warehouse image, workflow schedule, app command,
 Snowflake trust principal, IAM role, or EDGAR identity value inputs.
 
-## Azure Infra Apply
-
-1. Create an Azure Storage backend for Terraform state, then copy
-   `infra/terraform/azure/accounts/<env>/backend.hcl.example` to `backend.hcl`.
-2. Set `storage_account_name`, `container_registry_name`, and `key_vault_name`
-   in `terraform.tfvars`.
-3. Apply the infra root:
-   `bash infra/scripts/deploy-azure-stack.sh --env dev`.
-4. Apply the Azure access root:
-   `cd infra/terraform/access/azure/accounts/<env>`, copy `backend.hcl.example`
-   and `terraform.tfvars.example`, then run `terraform init`, `terraform plan`,
-   and `terraform apply`.
-5. Populate runtime secrets outside Terraform state:
-   `bash infra/scripts/bootstrap-azure-secrets.sh --key-vault-name <kv> --edgar-identity "EdgarTools Platform data-ops@example.com"`.
-6. Build images, deploy runtime apps/jobs, and run MDM schema migrations from
-   explicit operator scripts, for example:
-   `bash infra/scripts/deploy-azure-runtime.sh --env dev --build-images --run-schema`.
-
-Azure Terraform no longer accepts container image, schedule, app command, MDM API
-key, Neo4j password, or DSN value inputs. It creates no Container Apps jobs,
-Container Apps services, MDM API app, or Neo4j app container.
-
-Optional Azure MDM provisions only Azure SQL and a Neo4j data storage share shell.
-If enabled, Terraform emits versionless Key Vault URIs for expected runtime
-secret names, but it does not create `azurerm_key_vault_secret` values.
-
 ## Snowflake Apply
 
 1. Apply Snowflake provisioning from `infra/terraform/snowflake/accounts/<env>`
@@ -128,9 +89,6 @@ old provisioning states, migrate state before applying the new access roots:
   `infra/terraform/accounts/<env>` to `infra/terraform/access/aws/accounts/<env>`.
   Retire any old `edgartools-<env>-runner` IAM user after its access keys have
   been deleted; the new runner model is service-role based.
-- Move Azure managed identity, role assignments, and Key Vault access policies
-  from `infra/terraform/azure/accounts/<env>` to
-  `infra/terraform/access/azure/accounts/<env>`.
 - Move Snowflake account role and grant resources from
   `infra/terraform/snowflake/accounts/<env>` to
   `infra/terraform/access/snowflake/accounts/<env>`.
@@ -144,21 +102,6 @@ buckets, storage accounts, databases, Key Vaults, or Snowflake database objects.
 
 Run workload actions explicitly after infra has been applied:
 
-- Publish Azure images with `infra/scripts/build-azure-images.sh`, or publish one
-  image with `infra/scripts/publish-warehouse-image-acr.sh`.
-- Populate Azure Key Vault values with `infra/scripts/bootstrap-azure-secrets.sh`.
-  MDM runtime values use these secret names:
-  `mdm-database-url`, `mdm-neo4j-uri`, `mdm-neo4j-user`,
-  `mdm-neo4j-password`, `mdm-neo4j-auth`, `mdm-api-keys-csv`, and
-  `mdm-api-keys`.
-- Deploy Azure Container Apps runtime jobs/apps with
-  `infra/scripts/deploy-azure-runtime.sh`. This script creates or updates
-  Container Apps resources using Azure CLI/ARM REST, not Terraform. Pass
-  `--daily-cron` or `--full-reconcile-cron` only when schedules should be active.
-- Apply MDM SQL schema with `infra/scripts/run-azure-mdm-schema.sh`, or pass
-  `--run-schema` to `deploy-azure-runtime.sh`.
-- Run MDM ingestion with `infra/scripts/run-mdm-pipeline.sh`; it starts the
-  operator-managed Container Apps Jobs.
 - Deploy AWS application components with
   `infra/scripts/deploy-aws-application.sh --aws-profile sec_platform_deployer`.
   This script can build/push the
@@ -169,20 +112,18 @@ Run workload actions explicitly after infra has been applied:
   Runner role ARNs are read from the AWS access root when available.
 - Publish a standalone AWS image with `infra/scripts/publish-warehouse-image.sh`
   when you need to separate image build from application rollout.
-- Run Databricks dbt with `infra/scripts/run-databricks-dbt.sh`.
 - Run MDM migrations/pipelines only from operator-owned jobs or local operator
   commands, not from Terraform.
 - Provision Snowflake database objects from `infra/terraform/snowflake/` and
   Snowflake access from `infra/terraform/access/snowflake/`.
 - Upload Snowflake Streamlit dashboard artifacts with the Snowflake operator
-  scripts, not as part of AWS or Azure infra apply.
+  scripts, not as part of AWS infra apply.
 
 ## Notes
 
 - Terraform CLI is pinned to `1.14.7` for AWS roots.
 - AWS provider is pinned to `6.39.0`.
-- Azure provider is pinned to `~> 3.110`.
 - S3 backend state locking uses `use_lockfile = true`.
 - Bronze and warehouse data use separate buckets.
-- Snowflake Terraform uses separate state keys and is not part of the AWS/Azure
+- Snowflake Terraform uses separate state keys and is not part of the AWS
   infra-only guarantee.

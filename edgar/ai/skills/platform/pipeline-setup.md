@@ -48,13 +48,11 @@ The `edgar-warehouse` CLI runs in AWS ECS Fargate (containerized), reads from SE
 
 ## MDM Setup
 
-The MDM system (Master Data Management) owns the canonical company/adviser/person/fund registry and the **tracked universe** — the list of CIKs the warehouse processes. It uses PostgreSQL (prod) or Azure SQL (Azure path) as its relational store and Neo4j AuraDB for the graph layer.
+The MDM system (Master Data Management) owns the canonical company/adviser/person/fund registry and the **tracked universe** — the list of CIKs the warehouse processes. It uses PostgreSQL as its relational store and Neo4j AuraDB for the graph layer.
 
 **Required env vars:**
 ```bash
-export MDM_DATABASE_URL="postgresql://user:pass@host:5432/mdm"  # PostgreSQL
-# OR for Azure SQL:
-export MDM_DATABASE_URL="mssql+pyodbc://user:pass@server.database.windows.net/mdm?driver=ODBC+Driver+18+for+SQL+Server"
+export MDM_DATABASE_URL="postgresql://user:pass@host:5432/mdm"
 
 export NEO4J_URI="neo4j+s://<id>.databases.neo4j.io"
 export NEO4J_USER="neo4j"
