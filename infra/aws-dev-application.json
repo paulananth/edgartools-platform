@@ -2,8 +2,8 @@
   "environment": "dev",
   "region": "us-east-1",
   "name_prefix": "edgartools-dev",
-  "image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@sha256:d57192b4b3138e525be1f57f2704728f2f26ac2c716ab0e749538752a047d57e",
-  "mdm_image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@sha256:d57192b4b3138e525be1f57f2704728f2f26ac2c716ab0e749538752a047d57e",
+  "image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@sha256:65607bffc8d0572f64be31789404dd084d068d3b6f09241dd3eea13b9f0d1a95",
+  "mdm_image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:f330c2a6e9da353e9473d13f4c1b3fc04a397ab071e08a903a235644c478aa0a",
   "cluster": {
     "name": "edgartools-dev-warehouse",
     "arn": "arn:aws:ecs:us-east-1:077127448006:cluster/edgartools-dev-warehouse"
@@ -19,13 +19,13 @@
   "execution_role_arn": "arn:aws:iam::077127448006:role/sec_platform_runner_execution",
   "task_role_arn": "arn:aws:iam::077127448006:role/sec_platform_runner_task",
   "step_functions_role_arn": "arn:aws:iam::077127448006:role/sec_platform_runner_step_functions",
-  "edgar_identity_secret_arn": "arn:aws:secretsmanager:us-east-1:077127448006:secret:edgartools-dev-edgar-identity-UMvCTb",
+  "edgar_identity_secret_arn": "arn:aws:secretsmanager:us-east-1:077127448006:secret:edgartools-dev-edgar-identity-ptNAkm",
   "task_definitions": {
-    "small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-small:60",
-    "medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-medium:60",
-    "large": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-large:60",
-    "mdm_small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-small:57",
-    "mdm_medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-medium:57"
+    "small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-small:72",
+    "medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-medium:72",
+    "large": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-large:72",
+    "mdm_small": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-small:69",
+    "mdm_medium": "arn:aws:ecs:us-east-1:077127448006:task-definition/edgartools-dev-mdm-medium:69"
   },
   "state_machines": {
     "bootstrap_full": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-bootstrap-full",
@@ -52,12 +52,14 @@
     "mdm_seed_from_silver": "arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-mdm-seed-from-silver"
   },
   "mdm": {
-    "image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@sha256:d57192b4b3138e525be1f57f2704728f2f26ac2c716ab0e749538752a047d57e",
+    "image_ref": "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:f330c2a6e9da353e9473d13f4c1b3fc04a397ab071e08a903a235644c478aa0a",
+    "database_source": "snowflake-postgres",
     "silver_duckdb": "s3://edgartools-dev-warehouse-077127448006/warehouse/silver/sec/silver.duckdb",
     "secrets": {
       "postgres_dsn": "arn:aws:secretsmanager:us-east-1:077127448006:secret:edgartools-dev/mdm/postgres_dsn-r6lhhS",
       "neo4j": "arn:aws:secretsmanager:us-east-1:077127448006:secret:edgartools-dev/mdm/neo4j-v0FNhP",
-      "api_keys": "arn:aws:secretsmanager:us-east-1:077127448006:secret:edgartools-dev/mdm/api_keys-YQOt9d"
+      "api_keys": "arn:aws:secretsmanager:us-east-1:077127448006:secret:edgartools-dev/mdm/api_keys-YQOt9d",
+      "snowflake": "arn:aws:secretsmanager:us-east-1:077127448006:secret:edgartools-dev/mdm/snowflake-euKuPM"
     }
   }
 }
