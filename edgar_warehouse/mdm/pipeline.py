@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Iterable, Optional
@@ -22,6 +23,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from edgar_warehouse.mdm.graph import GraphSyncEngine
+from edgar_warehouse.mdm.observability import elapsed_ms, emit_mdm_event
 from edgar_warehouse.mdm.resolvers.base import ResolverContext, SilverReader
 from edgar_warehouse.mdm.resolvers import (
     AdviserResolver,
@@ -154,6 +156,7 @@ class MDMPipeline:
             sql += f" LIMIT {int(limit)}"
         rows = self.silver.fetch(sql)
         processed = 0
+        started_at = time.monotonic()
         for row in rows:
             ticker = self._first(self.silver.fetch(
                 "SELECT ticker, exchange FROM sec_company_ticker "
@@ -166,6 +169,8 @@ class MDMPipeline:
             ))
             resolver.resolve_one(ctx, "edgar_cik", row, ticker, tracking)
             processed += 1
+            if processed % 500 == 0:
+                emit_mdm_event("mdm_progress", domain="company", processed=processed, elapsed_ms=elapsed_ms(started_at))
         self.session.commit()
         return processed
 
@@ -177,6 +182,7 @@ class MDMPipeline:
             sql += f" LIMIT {int(limit)}"
         rows = self.silver.fetch(sql)
         processed = 0
+        started_at = time.monotonic()
         for row in rows:
             office = self._first(self.silver.fetch(
                 "SELECT city, state_or_country FROM sec_adv_office "
@@ -186,6 +192,8 @@ class MDMPipeline:
             resolver.resolve_one(ctx, "adv_filing", row, office,
                                  effective_date=row.get("effective_date"))
             processed += 1
+            if processed % 500 == 0:
+                emit_mdm_event("mdm_progress", domain="adviser", processed=processed, elapsed_ms=elapsed_ms(started_at))
         self.session.commit()
         return processed
 
@@ -209,10 +217,13 @@ class MDMPipeline:
             sql += f" LIMIT {int(limit)}"
         rows = self.silver.fetch(sql)
         processed = 0
+        started_at = time.monotonic()
         for row in rows:
             issuer_entity_id = self._company_entity_id(row.get("issuer_cik"))
             resolver.resolve_one(ctx, "ownership_filing", row, issuer_entity_id)
             processed += 1
+            if processed % 500 == 0:
+                emit_mdm_event("mdm_progress", domain="security", processed=processed, elapsed_ms=elapsed_ms(started_at))
         self.session.commit()
         return processed
 
@@ -232,12 +243,15 @@ class MDMPipeline:
         rows = self.silver.fetch(sql)
         company_ciks = self._company_cik_set()
         processed = 0
+        started_at = time.monotonic()
         for row in rows:
             if row.get("owner_cik") in company_ciks:
                 continue
             resolver.resolve_one(ctx, "ownership_filing", row,
                                  issuer_cik=row.get("issuer_cik"))
             processed += 1
+            if processed % 500 == 0:
+                emit_mdm_event("mdm_progress", domain="person", processed=processed, elapsed_ms=elapsed_ms(started_at))
         self.session.commit()
         return processed
 
@@ -249,11 +263,14 @@ class MDMPipeline:
             sql += f" LIMIT {int(limit)}"
         rows = self.silver.fetch(sql)
         processed = 0
+        started_at = time.monotonic()
         for row in rows:
             adviser_entity_id = self._adviser_entity_id(row.get("accession_number"))
             resolver.resolve_one(ctx, "adv_filing", row, adviser_entity_id,
                                  effective_date=row.get("effective_date"))
             processed += 1
+            if processed % 500 == 0:
+                emit_mdm_event("mdm_progress", domain="fund", processed=processed, elapsed_ms=elapsed_ms(started_at))
         self.session.commit()
         return processed
 
@@ -276,7 +293,9 @@ class MDMPipeline:
         sync_engine = GraphSyncEngine.build(self.session)
         requested_types = self._relationship_type_names(relationship_types)
         summary: dict[str, dict[str, int | None]] = {}
-        for rel_type_name in requested_types:
+        started_at = time.monotonic()
+        total_inserted = 0
+        for idx, rel_type_name in enumerate(requested_types):
             existing = self._relationship_count(rel_type_name)
             remaining = None
             if target_per_type is not None:
@@ -290,7 +309,8 @@ class MDMPipeline:
                 (inserted, skipped_corporate, skipped_unresolved_source,
                  skipped_unresolved_target, skipped_existing) = \
                     self._derive_relationship_type(sync_engine, rel_type_name, remaining)
-            summary[rel_type_name] = {
+            total_inserted += inserted
+            type_summary = {
                 "existing":                  existing,
                 "inserted":                  inserted,
                 "skipped":                   (skipped_corporate + skipped_unresolved_source
@@ -302,6 +322,18 @@ class MDMPipeline:
                 "target":                    target_per_type,
                 "total":                     existing + inserted,
             }
+            summary[rel_type_name] = type_summary
+            emit_mdm_event(
+                "mdm_progress",
+                domain="relationships",
+                rel_type=rel_type_name,
+                types_done=idx + 1,
+                types_total=len(requested_types),
+                inserted=inserted,
+                total_inserted=total_inserted,
+                elapsed_ms=elapsed_ms(started_at),
+                **{k: v for k, v in type_summary.items() if k not in ("inserted",)},
+            )
         self.session.commit()
         return summary
 
