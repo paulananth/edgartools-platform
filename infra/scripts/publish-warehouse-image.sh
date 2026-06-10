@@ -216,6 +216,24 @@ ensure_container_builder() {
 }
 
 docker_login() {
+    # If a docker credential helper (e.g. docker-credential-ecr-login) is
+    # configured for this registry, push/pull already authenticate per-request
+    # via that helper. `docker login` then has nothing useful to persist and
+    # fails with "error storing credentials ... not implemented" — harmless,
+    # but fatal under `set -e`. Skip the redundant login in that case.
+    if python3 -c "
+import json, os, sys
+path = os.path.expanduser('~/.docker/config.json')
+try:
+    with open(path) as f:
+        cfg = json.load(f)
+except (OSError, ValueError):
+    sys.exit(1)
+sys.exit(0 if '${REGISTRY}' in cfg.get('credHelpers', {}) else 1)
+"; then
+        log "Docker credential helper configured for ${REGISTRY}; skipping docker login"
+        return 0
+    fi
     aws_cli ecr get-login-password | docker login --username AWS --password-stdin "${REGISTRY}"
 }
 
