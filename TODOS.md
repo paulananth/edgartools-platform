@@ -53,3 +53,74 @@ could misread the counter and think COMPANY_HOLDS is misbehaving.
 (inverse of IS_INSIDER — COMPANY_HOLDS wants corporate owners only)`
 
 **Surfaced:** plan-eng-review 2026-06-06
+
+---
+
+## backfill_accounting_flags selects nonexistent forensic-score columns from sec_financial_derived
+
+**What:** `backfill_accounting_flags` (`edgar_warehouse/parsers/accounting_flags.py:51-64`)
+runs a `SELECT` against `sec_financial_derived` that includes
+`beneish_m_score, altman_z_score, piotroski_f_score`. These columns do not
+exist on `sec_financial_derived` — the table DDL
+(`edgar_warehouse/silver_store.py` around line 437) explicitly notes forensic
+scores live exclusively on `sec_accounting_flag` and are intentionally not
+denormalised onto `sec_financial_derived`.
+
+**Why:** DuckDB raises a `BinderException` (referenced column not found) the
+moment this query runs, so `backfill_accounting_flags` fails for every CIK
+that reaches the post-processing step in `bootstrap_fundamentals`
+(`edgar_warehouse/application/commands/bootstrap_fundamentals.py:126-130`).
+Forensic scores (Beneish M, Altman Z, Piotroski F) are never backfilled.
+
+**Where:**
+- `edgar_warehouse/parsers/accounting_flags.py:51-64` — the offending SELECT.
+- `edgar_warehouse/silver_store.py:~437-441` — DDL comment confirming the
+  columns are intentionally absent from `sec_financial_derived`.
+
+**Fix approach:** Drop `beneish_m_score, altman_z_score, piotroski_f_score`
+from the `sec_financial_derived` SELECT in `accounting_flags.py`. The `prev`
+row's prior-period values for these scores (used as fallbacks via
+`row.get("beneish_m_score")` etc. at lines 77/80/85) should instead be sourced
+from `sec_accounting_flag` (the table that actually carries them), via a
+second query or a join — needs design before implementing.
+
+**Surfaced:** merge-perf differential testing, 2026-06-10 (observation #1156, #1160)
+
+---
+
+## sec_financial_fact PK omits period_end — same-period restatements collide and silently drop ~58% of facts
+
+**What:** `sec_financial_fact`'s primary key is
+`(cik, accession_number, concept, fiscal_period, segment)`
+(`edgar_warehouse/silver_store.py:404`) — it does not include `period_end`.
+When a single accession's XBRL data contains multiple facts for the same
+`(concept, fiscal_period, segment)` but with *different* `period_end` dates
+(common for comparative-period restatements in 10-Q/10-K filings — e.g. a
+Q3 filing reporting both the current-quarter and a restated prior-year
+quarter under the same `fiscal_period` label), those rows collide on the PK
+and only one survives.
+
+**Why:** Confirmed empirically via the merge-perf differential test on real
+Apple (CIK 320193) `companyfacts` data: 24,195 raw fact rows reduce to
+10,227 stored rows after merge — a ~58% reduction. Spot-checked rows show
+the *value* is preserved correctly (last-write-wins, by design) but the
+*period_end* recorded against that value can belong to a different filing's
+period than the value itself — e.g.
+`(320193, '0000320193-17-000009', 'Q3', 'AccountsPayableCurrent', value=31915000000.0)`
+is stored with `period_end=2016-09-24` even when other rows in the same
+batch carry `period_end=2017-07-01` for the same PK. Downstream consumers
+joining on `period_end` for this PK get a mismatched value/period pairing.
+
+**Where:** `edgar_warehouse/silver_store.py:404` (PK definition) and the
+`merge_financial_facts` UPSERT logic that depends on it
+(`edgar_warehouse/silver_store.py:2020-2078`).
+
+**Fix approach:** Needs design discussion — likely either (a) add
+`period_end` to the PK (changes UPSERT/dedup semantics significantly, may
+need a migration for existing data), or (b) determine whether the ~58%
+"duplicates" are actually the *same* economic fact reported under multiple
+accessions/periods (in which case current behavior may be correct and the
+58% figure is expected dedup, not data loss) — confirm with a sample audit
+before deciding the PK needs to change.
+
+**Surfaced:** merge-perf differential testing, 2026-06-10 (observation #1198)
