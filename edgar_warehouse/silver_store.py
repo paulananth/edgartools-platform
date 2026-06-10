@@ -2018,19 +2018,56 @@ class SilverDatabase:
     # ------------------------------------------------------------------
 
     def merge_financial_facts(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_financial_fact
-                (cik, accession_number, fiscal_year, fiscal_period, period_end,
-                 form_type, concept, value, unit, decimals, segment, parser_version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (cik, accession_number, concept, fiscal_period, segment) DO UPDATE SET
-                value = excluded.value,
-                decimals = excluded.decimals,
-                parser_version = excluded.parser_version
+        return self._merge_rows_bulk(
+            staging_table="stg_sec_financial_fact",
+            staging_ddl="""
+                CREATE TEMP TABLE IF NOT EXISTS stg_sec_financial_fact (
+                    seq                 BIGINT,
+                    cik                 BIGINT,
+                    accession_number    TEXT,
+                    fiscal_year         INTEGER,
+                    fiscal_period       TEXT,
+                    period_end          DATE,
+                    form_type           TEXT,
+                    concept             TEXT,
+                    value               DOUBLE,
+                    unit                TEXT,
+                    decimals            INTEGER,
+                    segment             TEXT,
+                    parser_version      TEXT
+                )
             """,
-            rows,
-            lambda r: [
+            insert_first_sql="""
+                INSERT INTO sec_financial_fact
+                    (cik, accession_number, fiscal_year, fiscal_period, period_end,
+                     form_type, concept, value, unit, decimals, segment, parser_version)
+                SELECT cik, accession_number, fiscal_year, fiscal_period, period_end,
+                       form_type, concept, value, unit, decimals, segment, parser_version
+                FROM stg_sec_financial_fact
+                QUALIFY ROW_NUMBER() OVER (
+                    PARTITION BY cik, accession_number, concept, fiscal_period, segment
+                    ORDER BY seq ASC
+                ) = 1
+                ON CONFLICT (cik, accession_number, concept, fiscal_period, segment) DO NOTHING
+            """,
+            insert_last_sql="""
+                INSERT INTO sec_financial_fact
+                    (cik, accession_number, fiscal_year, fiscal_period, period_end,
+                     form_type, concept, value, unit, decimals, segment, parser_version)
+                SELECT cik, accession_number, fiscal_year, fiscal_period, period_end,
+                       form_type, concept, value, unit, decimals, segment, parser_version
+                FROM stg_sec_financial_fact
+                QUALIFY ROW_NUMBER() OVER (
+                    PARTITION BY cik, accession_number, concept, fiscal_period, segment
+                    ORDER BY seq DESC
+                ) = 1
+                ON CONFLICT (cik, accession_number, concept, fiscal_period, segment) DO UPDATE SET
+                    value = excluded.value,
+                    decimals = excluded.decimals,
+                    parser_version = excluded.parser_version
+            """,
+            rows=rows,
+            values_fn=lambda r: [
                 r["cik"], r["accession_number"], r.get("fiscal_year"),
                 r["fiscal_period"], r.get("period_end"), r.get("form_type", ""),
                 r["concept"], r.get("value"), r.get("unit"),
@@ -2040,41 +2077,105 @@ class SilverDatabase:
         )
 
     def merge_financial_derived(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_financial_derived
-                (cik, accession_number, fiscal_year, fiscal_period, period_end, form_type,
-                 revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
-                 total_assets, total_liabilities, total_equity, cash_and_equivalents,
-                 total_debt, operating_cash_flow, capex, free_cash_flow,
-                 gross_margin, ebitda_margin, net_margin, roic, roe, roa,
-                 parser_version)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            ON CONFLICT (cik, accession_number, fiscal_period) DO UPDATE SET
-                revenue = excluded.revenue,
-                gross_profit = excluded.gross_profit,
-                ebitda = excluded.ebitda,
-                ebit = excluded.ebit,
-                net_income = excluded.net_income,
-                eps_diluted = excluded.eps_diluted,
-                total_assets = excluded.total_assets,
-                total_liabilities = excluded.total_liabilities,
-                total_equity = excluded.total_equity,
-                cash_and_equivalents = excluded.cash_and_equivalents,
-                total_debt = excluded.total_debt,
-                operating_cash_flow = excluded.operating_cash_flow,
-                capex = excluded.capex,
-                free_cash_flow = excluded.free_cash_flow,
-                gross_margin = excluded.gross_margin,
-                ebitda_margin = excluded.ebitda_margin,
-                net_margin = excluded.net_margin,
-                roic = excluded.roic,
-                roe = excluded.roe,
-                roa = excluded.roa,
-                parser_version = excluded.parser_version
+        return self._merge_rows_bulk(
+            staging_table="stg_sec_financial_derived",
+            staging_ddl="""
+                CREATE TEMP TABLE IF NOT EXISTS stg_sec_financial_derived (
+                    seq                  BIGINT,
+                    cik                  BIGINT,
+                    accession_number     TEXT,
+                    fiscal_year          INTEGER,
+                    fiscal_period        TEXT,
+                    period_end           DATE,
+                    form_type            TEXT,
+                    revenue              DOUBLE,
+                    gross_profit         DOUBLE,
+                    ebitda               DOUBLE,
+                    ebit                 DOUBLE,
+                    net_income           DOUBLE,
+                    eps_diluted          DOUBLE,
+                    total_assets         DOUBLE,
+                    total_liabilities    DOUBLE,
+                    total_equity         DOUBLE,
+                    cash_and_equivalents DOUBLE,
+                    total_debt           DOUBLE,
+                    operating_cash_flow  DOUBLE,
+                    capex                DOUBLE,
+                    free_cash_flow       DOUBLE,
+                    gross_margin         DOUBLE,
+                    ebitda_margin        DOUBLE,
+                    net_margin           DOUBLE,
+                    roic                 DOUBLE,
+                    roe                  DOUBLE,
+                    roa                  DOUBLE,
+                    parser_version       TEXT
+                )
             """,
-            rows,
-            lambda r: [
+            insert_first_sql="""
+                INSERT INTO sec_financial_derived
+                    (cik, accession_number, fiscal_year, fiscal_period, period_end, form_type,
+                     revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
+                     total_assets, total_liabilities, total_equity, cash_and_equivalents,
+                     total_debt, operating_cash_flow, capex, free_cash_flow,
+                     gross_margin, ebitda_margin, net_margin, roic, roe, roa,
+                     parser_version)
+                SELECT cik, accession_number, fiscal_year, fiscal_period, period_end, form_type,
+                       revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
+                       total_assets, total_liabilities, total_equity, cash_and_equivalents,
+                       total_debt, operating_cash_flow, capex, free_cash_flow,
+                       gross_margin, ebitda_margin, net_margin, roic, roe, roa,
+                       parser_version
+                FROM stg_sec_financial_derived
+                QUALIFY ROW_NUMBER() OVER (
+                    PARTITION BY cik, accession_number, fiscal_period
+                    ORDER BY seq ASC
+                ) = 1
+                ON CONFLICT (cik, accession_number, fiscal_period) DO NOTHING
+            """,
+            insert_last_sql="""
+                INSERT INTO sec_financial_derived
+                    (cik, accession_number, fiscal_year, fiscal_period, period_end, form_type,
+                     revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
+                     total_assets, total_liabilities, total_equity, cash_and_equivalents,
+                     total_debt, operating_cash_flow, capex, free_cash_flow,
+                     gross_margin, ebitda_margin, net_margin, roic, roe, roa,
+                     parser_version)
+                SELECT cik, accession_number, fiscal_year, fiscal_period, period_end, form_type,
+                       revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
+                       total_assets, total_liabilities, total_equity, cash_and_equivalents,
+                       total_debt, operating_cash_flow, capex, free_cash_flow,
+                       gross_margin, ebitda_margin, net_margin, roic, roe, roa,
+                       parser_version
+                FROM stg_sec_financial_derived
+                QUALIFY ROW_NUMBER() OVER (
+                    PARTITION BY cik, accession_number, fiscal_period
+                    ORDER BY seq DESC
+                ) = 1
+                ON CONFLICT (cik, accession_number, fiscal_period) DO UPDATE SET
+                    revenue = excluded.revenue,
+                    gross_profit = excluded.gross_profit,
+                    ebitda = excluded.ebitda,
+                    ebit = excluded.ebit,
+                    net_income = excluded.net_income,
+                    eps_diluted = excluded.eps_diluted,
+                    total_assets = excluded.total_assets,
+                    total_liabilities = excluded.total_liabilities,
+                    total_equity = excluded.total_equity,
+                    cash_and_equivalents = excluded.cash_and_equivalents,
+                    total_debt = excluded.total_debt,
+                    operating_cash_flow = excluded.operating_cash_flow,
+                    capex = excluded.capex,
+                    free_cash_flow = excluded.free_cash_flow,
+                    gross_margin = excluded.gross_margin,
+                    ebitda_margin = excluded.ebitda_margin,
+                    net_margin = excluded.net_margin,
+                    roic = excluded.roic,
+                    roe = excluded.roe,
+                    roa = excluded.roa,
+                    parser_version = excluded.parser_version
+            """,
+            rows=rows,
+            values_fn=lambda r: [
                 r["cik"], r["accession_number"], r.get("fiscal_year"),
                 r["fiscal_period"], r.get("period_end"), r.get("form_type", ""),
                 r.get("revenue"), r.get("gross_profit"), r.get("ebitda"),
@@ -2240,6 +2341,52 @@ class SilverDatabase:
             self._conn.execute(sql, values_fn(row))
             count += 1
         return count
+
+    def _merge_rows_bulk(
+        self,
+        staging_table: str,
+        staging_ddl: str,
+        insert_first_sql: str,
+        insert_last_sql: str,
+        rows: list[dict[str, Any]],
+        values_fn,
+    ) -> int:
+        """Bulk UPSERT via a no-PK staging table, replicating row-by-row last-write-wins.
+
+        `values_fn` must return values in the same column order as `staging_ddl`
+        (excluding the leading `seq` column, which this method supplies via
+        `enumerate`).
+
+        The row-by-row loop in `_merge_rows` has per-column semantics on
+        conflict: columns in the `ON CONFLICT DO UPDATE SET` clause take the
+        *last* occurrence's value for a given primary key, while columns NOT
+        in that clause (e.g. `period_end`, `fiscal_year`) are set only on the
+        row's *first-ever* insert and never overwritten afterwards. A single
+        QUALIFY-deduped INSERT cannot reproduce this per-column mix, so two
+        passes are used:
+
+        1. `insert_first_sql` — INSERT the *first* (lowest-seq) occurrence per
+           PK, `ON CONFLICT DO NOTHING`. Establishes "first-insert-wins"
+           columns for brand-new PKs; no-ops for PKs that already existed.
+        2. `insert_last_sql` — INSERT the *last* (highest-seq) occurrence per
+           PK, `ON CONFLICT DO UPDATE SET <mutable columns>`. Applies
+           "last-write-wins" to the mutable columns for both new and
+           pre-existing PKs.
+        """
+        if not rows:
+            return 0
+        self._conn.execute(staging_ddl)
+        try:
+            staged = [[i, *values_fn(row)] for i, row in enumerate(rows)]
+            placeholders = ", ".join(["?"] * len(staged[0]))
+            self._conn.executemany(
+                f"INSERT INTO {staging_table} VALUES ({placeholders})", staged
+            )
+            self._conn.execute(insert_first_sql)
+            self._conn.execute(insert_last_sql)
+        finally:
+            self._conn.execute(f"DELETE FROM {staging_table}")
+        return len(rows)
 
 
 # ------------------------------------------------------------------
