@@ -92,6 +92,58 @@ second query or a join — needs design before implementing.
 
 ## sec_financial_fact PK omits period_end — same-period restatements collide and silently drop ~58% of facts
 
+**Status:** AUDITED 2026-06-10 — confirmed GENUINE DATA CORRUPTION, not expected
+dedup. Fix needs design + migration; not yet implemented.
+
+**Audit results** (real Apple/CIK 320193 companyfacts data, 24,195 raw fact rows,
+script `/tmp/audit_period_end_collision.py`, since deleted):
+
+- 10,227 distinct PK groups `(cik, accession_number, concept, fiscal_period,
+  segment)`; 8,784 (85.9%) have >1 raw row.
+- Of those collisions, 8,733 (99.4%) have IDENTICAL `fiscal_year` but
+  DIFFERENT `period_end` — these are the "current period" vs "comparative
+  prior-period" instant-fact pairs that XBRL balance sheets report side by
+  side (e.g. `AccountsPayableCurrent` reported for both the current
+  quarter-end AND the prior fiscal year-end, same `accn`/`fy`/`fp`).
+- 8,500 of 8,784 colliding groups (96.8%) produce a stored row whose
+  `(period_end, value)` pair matches **NEITHER** raw observation — the
+  bulk merge takes `period_end` from the first-seen row (chronologically the
+  prior-period comparative) and `value` from the last-seen row (the current
+  period's value), via `_merge_rows_bulk`'s split first/last UPSERT
+  (`silver_store.py:2040-2068`, `period_end` is set by `insert_first_sql` and
+  never updated by `insert_last_sql`'s `DO UPDATE SET`). Example:
+  `accn=0001193125-09-153165 concept=AccountsPayable fp=Q3` has raw rows
+  `(fy=2009, end=2008-09-27, val=5.52B)` and `(fy=2009, end=2009-06-27,
+  val=4.854B)` — the stored row is `(end=2008-09-27, val=4.854B)`, a pairing
+  that was never reported by Apple.
+- **Adding `period_end` to the PK** resolves 89% of the corruption: 24,195
+  raw rows -> 21,755 PK groups, collisions drop from 8,784 to 2,440.
+- The remaining 2,440 residual collisions: 2,423 have differing `value` for
+  the same `(accn, concept, fp, segment, period_end)` — these are
+  duration-concept QTD-vs-YTD pairs (e.g.
+  `AntidilutiveSecuritiesExcludedFromComputationOfEarningsPerShareAmount`
+  reported for both a 3-month and 6-month window ending on the same date).
+  Disambiguating these needs `period_start` (currently NOT captured by
+  `_extract_financial_fact_row` in `parsers/financials.py:139-170` — `fact.get("start")`
+  is dropped). Only 17 residual collisions are exact duplicates (harmless).
+
+**Recommended fix (two-stage, needs design sign-off before implementing):**
+1. Capture `period_start` in `_extract_financial_fact_row` (new nullable
+   column on `sec_financial_fact`).
+2. Extend PK to `(cik, accession_number, concept, fiscal_period, segment,
+   period_end, period_start)` (or `period_start` nullable + `COALESCE` to a
+   sentinel for instant facts where `start` is absent).
+3. `sec_financial_derived` has the analogous issue — its PK
+   `(cik, accession_number, fiscal_period)` collapses the same
+   `(fy, period_end)` groups that `compute_derived_for_accession`'s caller
+   already groups by (`fundamentals_ingest.py:200-208`); the derived PK needs
+   `period_end` (and likely `fiscal_year`) added too.
+4. **Migration**: existing `sec_financial_fact`/`sec_financial_derived` rows
+   already contain Frankenstein pairings — a schema PK change alone won't fix
+   stored data. Re-bootstrapping (`bootstrap-fundamentals --mode entity-facts
+   --force`) per CIK is the simplest correct fix since SEC data is
+   re-fetchable and idempotent per CLAUDE.md.
+
 **What:** `sec_financial_fact`'s primary key is
 `(cik, accession_number, concept, fiscal_period, segment)`
 (`edgar_warehouse/silver_store.py:404`) — it does not include `period_end`.
