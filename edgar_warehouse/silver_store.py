@@ -2053,10 +2053,10 @@ class SilverDatabase:
                        form_type, concept, value, unit, decimals, segment, parser_version
                 FROM stg_sec_financial_fact
                 QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY cik, accession_number, concept, fiscal_period, segment
+                    PARTITION BY cik, accession_number, concept, fiscal_period, segment, period_end
                     ORDER BY seq ASC
                 ) = 1
-                ON CONFLICT (cik, accession_number, concept, fiscal_period, segment) DO NOTHING
+                ON CONFLICT (cik, accession_number, concept, fiscal_period, segment, period_end) DO NOTHING
             """,
             insert_last_sql="""
                 INSERT INTO sec_financial_fact
@@ -2066,10 +2066,10 @@ class SilverDatabase:
                        form_type, concept, value, unit, decimals, segment, parser_version
                 FROM stg_sec_financial_fact
                 QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY cik, accession_number, concept, fiscal_period, segment
+                    PARTITION BY cik, accession_number, concept, fiscal_period, segment, period_end
                     ORDER BY seq DESC
                 ) = 1
-                ON CONFLICT (cik, accession_number, concept, fiscal_period, segment) DO UPDATE SET
+                ON CONFLICT (cik, accession_number, concept, fiscal_period, segment, period_end) DO UPDATE SET
                     value = excluded.value,
                     decimals = excluded.decimals,
                     parser_version = excluded.parser_version
@@ -2135,10 +2135,10 @@ class SilverDatabase:
                        parser_version
                 FROM stg_sec_financial_derived
                 QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY cik, accession_number, fiscal_period
+                    PARTITION BY cik, accession_number, fiscal_period, period_end
                     ORDER BY seq ASC
                 ) = 1
-                ON CONFLICT (cik, accession_number, fiscal_period) DO NOTHING
+                ON CONFLICT (cik, accession_number, fiscal_period, period_end) DO NOTHING
             """,
             insert_last_sql="""
                 INSERT INTO sec_financial_derived
@@ -2156,10 +2156,10 @@ class SilverDatabase:
                        parser_version
                 FROM stg_sec_financial_derived
                 QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY cik, accession_number, fiscal_period
+                    PARTITION BY cik, accession_number, fiscal_period, period_end
                     ORDER BY seq DESC
                 ) = 1
-                ON CONFLICT (cik, accession_number, fiscal_period) DO UPDATE SET
+                ON CONFLICT (cik, accession_number, fiscal_period, period_end) DO UPDATE SET
                     revenue = excluded.revenue,
                     gross_profit = excluded.gross_profit,
                     ebitda = excluded.ebitda,
