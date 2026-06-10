@@ -54,8 +54,7 @@ def backfill_accounting_flags(cik: int, silver: "SilverDatabase") -> int:
                revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
                total_assets, total_liabilities, total_equity, cash_and_equivalents,
                total_debt, operating_cash_flow, capex, free_cash_flow,
-               gross_margin, ebitda_margin, net_margin, roic, roe, roa,
-               beneish_m_score, altman_z_score, piotroski_f_score
+               gross_margin, ebitda_margin, net_margin, roic, roe, roa
         FROM sec_financial_derived
         WHERE cik = ? AND fiscal_period = 'FY'
         ORDER BY fiscal_year
@@ -74,20 +73,22 @@ def backfill_accounting_flags(cik: int, silver: "SilverDatabase") -> int:
         fiscal_year = row["fiscal_year"]
 
         # ── Cross-period Beneish (uses current + prior year) ─────────────────
-        beneish = _beneish_cross_period(row, prev) or row.get("beneish_m_score")
+        beneish = _beneish_cross_period(row, prev)
 
         # ── Enhanced Altman with prior-year delta signals ─────────────────────
-        altman = _altman_enhanced(row, prev) or row.get("altman_z_score")
+        altman = _altman_enhanced(row, prev)
 
         # ── Full Piotroski (9 signals with prior-year deltas) ─────────────────
         piotroski = _piotroski_full(row, prev)
-        if piotroski is None:
-            piotroski = row.get("piotroski_f_score")
 
         # ── Auditor change detection ──────────────────────────────────────────
         # (auditor_changed is already set by the financials.py parser via DEI facts;
         # we don't overwrite it here — only set forensic scores)
 
+        # update_accounting_flag_scores COALESCEs None against the existing
+        # sec_accounting_flag value, so a None here (e.g. no prior year for
+        # Beneish on the earliest fiscal year) leaves any previously-computed
+        # score untouched rather than clobbering it.
         try:
             silver.update_accounting_flag_scores(
                 cik=int(cik),
