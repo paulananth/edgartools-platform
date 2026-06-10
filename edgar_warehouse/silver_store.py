@@ -401,7 +401,11 @@ CREATE TABLE IF NOT EXISTS sec_financial_fact (
     segment             TEXT NOT NULL DEFAULT 'consolidated',  -- 'consolidated' or JSON-encoded dimension key
     parser_version      TEXT,
     ingested_at         TIMESTAMPTZ DEFAULT NOW(),
-    PRIMARY KEY (cik, accession_number, concept, fiscal_period, segment)
+    -- period_end is part of the PK because the SEC companyfacts API reports
+    -- both the current-period and comparative prior-period value for the
+    -- same (accn, concept, fiscal_period, segment) -- omitting period_end
+    -- collapses these into one row with a Frankenstein period_end/value pair.
+    PRIMARY KEY (cik, accession_number, concept, fiscal_period, segment, period_end)
 );
 
 CREATE TABLE IF NOT EXISTS sec_financial_derived (
@@ -441,7 +445,11 @@ CREATE TABLE IF NOT EXISTS sec_financial_derived (
     -- be misleading to denormalise to per-quarter rows here.
     parser_version      TEXT,
     ingested_at         TIMESTAMPTZ DEFAULT NOW(),
-    PRIMARY KEY (cik, accession_number, fiscal_period)
+    -- period_end is part of the PK for the same reason as sec_financial_fact:
+    -- a single accession can yield multiple derived rows for the same
+    -- fiscal_period (current vs. comparative prior period), each with a
+    -- distinct period_end.
+    PRIMARY KEY (cik, accession_number, fiscal_period, period_end)
 );
 
 CREATE TABLE IF NOT EXISTS sec_earnings_release (
