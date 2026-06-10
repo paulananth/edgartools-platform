@@ -58,6 +58,8 @@ could misread the counter and think COMPANY_HOLDS is misbehaving.
 
 ## backfill_accounting_flags selects nonexistent forensic-score columns from sec_financial_derived
 
+**Status:** RESOLVED in PR #56 (merged to main as `57d10ba`, 2026-06-10).
+
 **What:** `backfill_accounting_flags` (`edgar_warehouse/parsers/accounting_flags.py:51-64`)
 runs a `SELECT` against `sec_financial_derived` that includes
 `beneish_m_score, altman_z_score, piotroski_f_score`. These columns do not
