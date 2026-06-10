@@ -92,8 +92,29 @@ second query or a join — needs design before implementing.
 
 ## sec_financial_fact PK omits period_end — same-period restatements collide and silently drop ~58% of facts
 
-**Status:** AUDITED 2026-06-10 — confirmed GENUINE DATA CORRUPTION, not expected
-dedup. Fix needs design + migration; not yet implemented.
+**Status:** Stage 1 RESOLVED 2026-06-10 (commits `f1d9eea`, `7226630`, PR pending).
+Stage 2 (period_start, residual 2,440 collisions) remains OPEN — see "Recommended
+fix" step 1-3 below for the Stage 2 plan.
+
+**Stage 1 resolution summary:**
+- Added `period_end` to the PK of `sec_financial_fact`
+  (`cik, accession_number, concept, fiscal_period, segment, period_end`) and
+  `sec_financial_derived` (`cik, accession_number, fiscal_period, period_end`)
+  (`edgar_warehouse/silver_store.py`, commit `f1d9eea`).
+- Updated `merge_financial_facts`/`merge_financial_derived`'s bulk-staging
+  `QUALIFY ROW_NUMBER() OVER (PARTITION BY ...)` and `ON CONFLICT (...)` clauses
+  to include `period_end` (commit `7226630`).
+- Differential test against real Apple (CIK 320193) companyfacts: row count
+  went from 10,227 -> 21,755 (matches audit prediction exactly). The
+  `AccountsPayable accn=0001193125-09-153165 fp=Q3` example now correctly
+  splits into two rows: `(period_end=2008-09-27, value=5.52e9)` and
+  `(period_end=2009-06-27, value=4.854e9)`.
+- Migration: checked the dev S3 `silver.duckdb` (monolith) and the 4 CIK-range
+  shard files. `sec_financial_fact`/`sec_financial_derived` had 0 rows
+  everywhere (the halted 100-CIK benchmark never persisted entity-facts data),
+  so no re-bootstrap was needed. Dropped + recreated the two empty tables in
+  the monolith with the new PK and re-uploaded to S3. Shards don't have these
+  tables yet — they'll be created fresh with the new PK on first write.
 
 **Audit results** (real Apple/CIK 320193 companyfacts data, 24,195 raw fact rows,
 script `/tmp/audit_period_end_collision.py`, since deleted):
