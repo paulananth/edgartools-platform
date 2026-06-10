@@ -365,6 +365,54 @@ def run_warehouse_read_smoke(
                 )
 
 
+def run_mdm_check_connectivity_smoke(
+    aws: AwsCli,
+    *,
+    manifest: dict[str, Any],
+    task_definitions: dict[str, str],
+    definitions: dict[str, dict[str, Any]],
+    timeout_seconds: int,
+) -> None:
+    # The edgartools-dev-mdm-check-connectivity SFN hardcodes a removed --neo4j flag
+    # (decommissioned in commit 8784fd5). Run direct ECS instead.
+    network = None
+    for definition in definitions.values():
+        network = first_network_config(definition)
+        if network:
+            break
+    if not network:
+        raise AuditFailure("could not derive ECS network configuration from deployed state machine definitions")
+
+    awsvpc = {
+        "subnets": network.get("Subnets", []),
+        "securityGroups": network.get("SecurityGroups", []),
+        "assignPublicIp": network.get("AssignPublicIp", "ENABLED"),
+    }
+    response = aws.json(
+        "ecs", "run-task",
+        "--cluster", manifest["cluster"]["arn"],
+        "--launch-type", "FARGATE",
+        "--task-definition", task_definitions["mdm_medium"],
+        "--network-configuration", json.dumps({"awsvpcConfiguration": awsvpc}),
+        "--overrides", json.dumps({"containerOverrides": [{"name": "edgar-warehouse", "command": ["mdm", "check-connectivity"]}]}),
+    )
+    failures = response.get("failures") or []
+    if failures:
+        raise AuditFailure(f"mdm_check_connectivity smoke failed to start: {failures}")
+    task_arns = [task["taskArn"] for task in response.get("tasks", [])]
+    if not task_arns:
+        raise AuditFailure("mdm_check_connectivity smoke returned no ECS tasks")
+    aws.text("ecs", "wait", "tasks-stopped", "--cluster", manifest["cluster"]["arn"], "--tasks", *task_arns)
+    described = aws.json("ecs", "describe-tasks", "--cluster", manifest["cluster"]["arn"], "--tasks", *task_arns)
+    for task in described.get("tasks", []):
+        for container in task.get("containers", []):
+            if container.get("name") == "edgar-warehouse" and container.get("exitCode") != 0:
+                raise AuditFailure(
+                    f"mdm_check_connectivity smoke exited with "
+                    f"{container.get('exitCode')} ({container.get('reason', 'no reason')})"
+                )
+
+
 def run_runtime_smokes(
     aws: AwsCli,
     *,
@@ -374,11 +422,11 @@ def run_runtime_smokes(
     definitions: dict[str, dict[str, Any]],
     timeout_seconds: int,
 ) -> None:
-    start_execution_and_wait(
+    run_mdm_check_connectivity_smoke(
         aws,
-        workflow="mdm_check_connectivity",
-        arn=state_machines["mdm_check_connectivity"],
-        payload={"trigger": "cutover-audit", "workflow": "mdm_check_connectivity"},
+        manifest=manifest,
+        task_definitions=task_definitions,
+        definitions=definitions,
         timeout_seconds=timeout_seconds,
     )
     start_execution_and_wait(

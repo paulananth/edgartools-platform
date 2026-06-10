@@ -207,6 +207,109 @@ fresh immediately before each `deploy-aws-application.sh` invocation** —
 never reuse a digest ref captured before a prior run of this script, since
 that prior run's cleanup may have already deleted it.
 
+## 4b. Regenerate MDM Data From Silver (ECS)
+
+Because the Snowflake Postgres instance is network-isolated (no bastion, no
+local VPC access), `pg_dump`/`pg_restore` from the RDS source is unreachable
+from a developer laptop. Instead, regenerate every entity domain by re-running
+MDM's silver-reader pipeline from ECS — same network path the runtime uses.
+Run domains in parallel where possible; relationships must come last.
+
+```bash
+# Template — replace <DOMAIN> with: company, adviser, security, person, fund
+SG=$(cat /tmp/mdm-cutover-secrets/sg.txt)
+aws ecs run-task \
+  --region us-east-1 \
+  --cluster edgartools-dev-warehouse \
+  --task-definition edgartools-dev-mdm-medium:69 \
+  --launch-type FARGATE \
+  --network-configuration "{\"awsvpcConfiguration\":{\"subnets\":[\"subnet-070406420a32a17c5\"],\"securityGroups\":[\"$SG\"],\"assignPublicIp\":\"ENABLED\"}}" \
+  --overrides '{"containerOverrides":[{"name":"edgar-warehouse","command":["mdm","run","--entity-type","<DOMAIN>"],"environment":[{"name":"WAREHOUSE_RUNTIME_MODE","value":"bronze_capture"},{"name":"WAREHOUSE_BRONZE_ROOT","value":"s3://edgartools-dev-bronze-077127448006/warehouse/bronze"},{"name":"WAREHOUSE_STORAGE_ROOT","value":"s3://edgartools-dev-warehouse-077127448006/warehouse"},{"name":"SERVING_EXPORT_ROOT","value":"s3://edgartools-dev-snowflake-export-077127448006/warehouse/artifacts/snowflake_exports/"},{"name":"EDGAR_IDENTITY","value":"EdgarTools Platform thepaulananth@gmail.com"}]}]}'
+```
+
+After all entity domains complete, run relationship derivation with the **separate
+`derive-relationships` subcommand** (not `run --entity-type`):
+
+```bash
+aws ecs run-task \
+  --region us-east-1 \
+  --cluster edgartools-dev-warehouse \
+  --task-definition edgartools-dev-mdm-medium:69 \
+  --launch-type FARGATE \
+  --network-configuration "{\"awsvpcConfiguration\":{\"subnets\":[\"subnet-070406420a32a17c5\"],\"securityGroups\":[\"$SG\"],\"assignPublicIp\":\"ENABLED\"}}" \
+  --overrides '{"containerOverrides":[{"name":"edgar-warehouse","command":["mdm","derive-relationships"],"environment":[{"name":"WAREHOUSE_RUNTIME_MODE","value":"bronze_capture"},{"name":"WAREHOUSE_BRONZE_ROOT","value":"s3://edgartools-dev-bronze-077127448006/warehouse/bronze"},{"name":"WAREHOUSE_STORAGE_ROOT","value":"s3://edgartools-dev-warehouse-077127448006/warehouse"},{"name":"SERVING_EXPORT_ROOT","value":"s3://edgartools-dev-snowflake-export-077127448006/warehouse/artifacts/snowflake_exports/"},{"name":"EDGAR_IDENTITY","value":"EdgarTools Platform thepaulananth@gmail.com"}]}]}'
+```
+
+Check completion (ECS task history expires quickly — use CloudWatch):
+
+```bash
+aws logs filter-log-events \
+  --region us-east-1 \
+  --log-group-name /aws/ecs/edgartools-dev-warehouse \
+  --log-stream-names "mdm-mdm-medium/edgar-warehouse/<TASK_ID>" \
+  --filter-pattern "mdm_command_completed" \
+  --query 'events[*].message' --output text
+```
+
+Observed throughput (2026-06-08, mdm-medium, Snowflake Postgres):
+
+| Domain | Rows | Duration |
+|--------|------|----------|
+| companies | 5,500 | ~49 min |
+| persons | 25,647 | ~94 min |
+| securities | 37,102 | ~155 min |
+| relationships | TBD | TBD |
+
+### ⚠️ Known issue: `mdm run --entity-type relationships` is not a valid command
+
+**Symptom:** ECS task exits with code 2 immediately:
+
+```
+edgar-warehouse mdm run: error: argument --entity-type: invalid choice: 'relationships'
+(choose from company, adviser, security, person, fund, all)
+```
+
+**Root cause:** `relationships` is not a valid `--entity-type` value for `mdm run`.
+Relationship derivation is a separate pipeline stage exposed via its own subcommand
+`mdm derive-relationships`, not via `mdm run`. The MDM CLI has three distinct
+relationship commands:
+- `mdm derive-relationships` — derives relationship instances from resolved entities + silver facts (no graph sync)
+- `mdm load-relationships` — derives relationships AND optionally syncs to Snowflake graph tables
+- `mdm backfill-relationships` — legacy backfill from `mdm_fund`/`mdm_security` tables
+
+**Fix:** use `mdm derive-relationships` (not `mdm run --entity-type relationships`)
+when running relationship derivation from ECS. This command runs after all entity
+domains (`company`, `person`, `security`, etc.) have completed.
+
+### ⚠️ Known issue: `mdm-check-connectivity` Step Functions state machine is broken
+
+**Symptom:** `mdm-check-connectivity` Step Functions execution fails immediately.
+
+**Root cause:** The `edgartools-dev-mdm-check-connectivity` state machine hardcodes
+`--neo4j` in its ECS command override. The `--neo4j` flag was removed from the MDM
+CLI in commit `8784fd5` when Neo4j was decommissioned. The state machine was never
+updated, so every invocation fails at argument parsing before the container does any
+useful work.
+
+**Fix:** Do NOT use the `mdm-check-connectivity` Step Functions state machine. Run
+connectivity checks directly via `ecs run-task` with command `["mdm","check-connectivity"]`
+(no flags):
+
+```bash
+SG=$(cat /tmp/mdm-cutover-secrets/sg.txt)
+aws ecs run-task \
+  --region us-east-1 \
+  --cluster edgartools-dev-warehouse \
+  --task-definition edgartools-dev-mdm-medium:69 \
+  --launch-type FARGATE \
+  --network-configuration "{\"awsvpcConfiguration\":{\"subnets\":[\"subnet-070406420a32a17c5\"],\"securityGroups\":[\"$SG\"],\"assignPublicIp\":\"ENABLED\"}}" \
+  --overrides '{"containerOverrides":[{"name":"edgar-warehouse","command":["mdm","check-connectivity"]}]}'
+```
+
+**Recommended permanent fix (not yet applied):** update the state machine definition
+to remove `--neo4j` from the command override, or delete the state machine entirely
+if connectivity checks are always run ad-hoc.
+
 ## 5. Audit Gate
 
 Before RDS removal, run:
