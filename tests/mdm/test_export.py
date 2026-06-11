@@ -147,10 +147,11 @@ def test_snowflake_connection_settings_env_overrides_json_secret(monkeypatch):
     assert settings.account == "env-acct"
 
 
-def test_snowflake_connection_settings_missing_values_preserve_error_names(monkeypatch):
+def test_snowflake_connection_settings_missing_values_preserve_error_names(monkeypatch, tmp_path):
     for name in list(os.environ):
         if name.startswith("MDM_SNOWFLAKE_") or name.startswith("DBT_SNOWFLAKE_"):
             monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
 
     try:
         SnowflakeConnectionSettings.from_env()

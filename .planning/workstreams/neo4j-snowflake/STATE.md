@@ -3,27 +3,27 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Neo4j Snowflake Native App Migration
 status: executing
-stopped_at: Phase 3 planned; Plan 03-01 ready to execute
-last_updated: "2026-06-11T11:28:00Z"
-last_activity: 2026-06-11 -- Phase 3 planned
+stopped_at: Phase 3 Plan 03-01 complete
+last_updated: "2026-06-11T11:43:00Z"
+last_activity: 2026-06-11 -- Phase 3 Plan 03-01 completed
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 9
-  completed_plans: 6
-  percent: 50
+  completed_plans: 7
+  percent: 58
 ---
 
 # Project State - neo4j-snowflake
 
 ## Current Position
 
-Phase: 3 (Hosted Graph Verification And E2E Cutover) — READY TO PLAN
-Plan: 03-01 (strict Snowflake SQL parity gate)
-Status: Phase 3 planned; ready to execute hosted graph verification plan 03-01
-Last activity: 2026-06-11 -- Phase 3 planned
+Phase: 3 (Hosted Graph Verification And E2E Cutover) — IN PROGRESS
+Plan: 03-02 (Native App grants and smoke proof) — READY
+Status: Plan 03-01 complete; ready to add Native App proof and grant validation
+Last activity: 2026-06-11 -- Phase 3 Plan 03-01 completed
 
-Progress: [#####-----] 50% (Phases 1 and 2 complete; milestone v1.3 remains in progress)
+Progress: [######----] 58% (Phases 1 and 2 complete; Phase 3 plan 03-01 complete)
 
 ## Milestone Context
 
@@ -129,6 +129,12 @@ projection surfaces should change.
   grant automation, grant validation, and `GRAPH_INFO`/`BFS`/`WCC` smoke proof;
   and `03-03` for AWS MDM E2E cutover plus live dev validation evidence.
 
+- Plan 03-01 replaced the minimal `verify-graph` table-count check with a
+  strict Snowflake SQL parity gate. Verification now compares active MDM
+  entities by entity type, active MDM relationships by relationship type,
+  missing/extra graph node IDs, missing/extra graph edge IDs, and missing graph
+  edge endpoints before returning success.
+
 ## Blockers
 
 - Live Marketplace app availability, Snowflake account privileges, and app role grant details must
@@ -140,6 +146,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-11T11:28:00Z
-Stopped at: Phase 3 planned; Plan 03-01 ready to execute
-Resume file: .planning/workstreams/neo4j-snowflake/phases/03-hosted-graph-verification-and-e2e-cutover/03-01-PLAN.md
+Last session: 2026-06-11T11:43:00Z
+Stopped at: Phase 3 Plan 03-01 complete
+Resume file: .planning/workstreams/neo4j-snowflake/phases/03-hosted-graph-verification-and-e2e-cutover/03-02-PLAN.md

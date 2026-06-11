@@ -105,6 +105,32 @@ class SnowflakeGraphSyncResult:
     applied_filters: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class SnowflakeGraphVerificationConfig:
+    target_database: str | None = None
+    target_schema: str = DEFAULT_TARGET_SCHEMA
+    mdm_database: str | None = None
+    mdm_schema: str = DEFAULT_MDM_SCHEMA
+    sample_limit: int = 20
+
+    def resolved_target_database(self, default_database: str | None = None) -> str:
+        database = self.target_database or default_database
+        if not database:
+            raise SnowflakeGraphValidationError(
+                "target_database is required when Snowflake connection settings do not provide a database"
+            )
+        return database
+
+    def resolved_mdm_database(self, default_database: str | None = None) -> str:
+        return self.mdm_database or self.resolved_target_database(default_database)
+
+
+@dataclass(frozen=True)
+class SnowflakeGraphVerificationResult:
+    passed: bool
+    payload: dict[str, Any]
+
+
 class SnowflakeGraphSyncExecutor:
     """Materialize Snowflake graph tables through a connector-style connection."""
 
@@ -162,6 +188,117 @@ class SnowflakeGraphSyncExecutor:
                 "limit_per_type": limit_per_type,
             },
         )
+
+
+class SnowflakeGraphVerifier:
+    """Verify Snowflake graph tables against active MDM source rows."""
+
+    def __init__(self, connection: Any, *, default_database: str | None = None) -> None:
+        self.connection = connection
+        self.default_database = default_database
+
+    @classmethod
+    def from_env(cls) -> "SnowflakeGraphVerifier":
+        settings = SnowflakeConnectionSettings.from_env()
+        return cls(settings.connect(), default_database=settings.database)
+
+    def verify(self, config: SnowflakeGraphVerificationConfig) -> SnowflakeGraphVerificationResult:
+        sample_limit = _validate_limit(config.sample_limit, "sample_limit") or 20
+        context = {
+            "target_database": _ident(config.resolved_target_database(self.default_database)),
+            "target_schema": _ident(config.target_schema),
+            "mdm_database": _ident(config.resolved_mdm_database(self.default_database)),
+            "mdm_schema": _ident(config.mdm_schema),
+            "sample_limit": sample_limit,
+        }
+        cursor = self.connection.cursor()
+        try:
+            node_rows = _fetch_rows(
+                cursor,
+                _render_verify_node_counts(context),
+                (
+                    "ENTITY_TYPE",
+                    "MDM_ACTIVE_COUNT",
+                    "SNOWFLAKE_GRAPH_NODE_COUNT",
+                    "MDM_MINUS_GRAPH",
+                    "GRAPH_MINUS_MDM",
+                ),
+            )
+            relationship_rows = _fetch_rows(
+                cursor,
+                _render_verify_relationship_counts(context),
+                (
+                    "RELATIONSHIP_TYPE",
+                    "MDM_ACTIVE_COUNT",
+                    "SNOWFLAKE_GRAPH_EDGE_COUNT",
+                    "MDM_MINUS_GRAPH",
+                    "GRAPH_MINUS_MDM",
+                ),
+            )
+            diagnostics = {
+                "missing_graph_nodes": _format_sample_rows(
+                    _fetch_rows(cursor, _render_missing_nodes(context), ("ENTITY_TYPE", "NODEID")),
+                    ("ENTITY_TYPE", "NODEID"),
+                ),
+                "extra_graph_nodes": _format_sample_rows(
+                    _fetch_rows(cursor, _render_extra_nodes(context), ("ENTITY_TYPE", "NODEID")),
+                    ("ENTITY_TYPE", "NODEID"),
+                ),
+                "missing_graph_edges": _format_sample_rows(
+                    _fetch_rows(cursor, _render_missing_edges(context), ("RELATIONSHIP_TYPE", "EDGEID")),
+                    ("RELATIONSHIP_TYPE", "EDGEID"),
+                ),
+                "extra_graph_edges": _format_sample_rows(
+                    _fetch_rows(cursor, _render_extra_edges(context), ("RELATIONSHIP_TYPE", "EDGEID")),
+                    ("RELATIONSHIP_TYPE", "EDGEID"),
+                ),
+                "missing_graph_edge_endpoints": _format_sample_rows(
+                    _fetch_rows(
+                        cursor,
+                        _render_missing_edge_endpoints(context),
+                        (
+                            "RELATIONSHIP_TYPE",
+                            "EDGEID",
+                            "SOURCENODEID",
+                            "TARGETNODEID",
+                            "MISSING_SOURCE_NODE",
+                            "MISSING_TARGET_NODE",
+                        ),
+                    ),
+                    (
+                        "RELATIONSHIP_TYPE",
+                        "EDGEID",
+                        "SOURCENODEID",
+                        "TARGETNODEID",
+                        "MISSING_SOURCE_NODE",
+                        "MISSING_TARGET_NODE",
+                    ),
+                ),
+            }
+        finally:
+            cursor.close()
+
+        node_parity = _node_parity_payload(node_rows)
+        relationship_parity = _relationship_parity_payload(relationship_rows)
+        diagnostics_clean = all(not rows for rows in diagnostics.values())
+        passed = (
+            node_parity["status"] == "ok"
+            and relationship_parity["status"] == "ok"
+            and diagnostics_clean
+        )
+        payload = {
+            "status": "ok" if passed else "failed",
+            "snowflake_graph_nodes": node_parity["total_snowflake_graph"],
+            "snowflake_graph_edges": relationship_parity["total_snowflake_graph"],
+            "target": {
+                "database": context["target_database"],
+                "schema": context["target_schema"],
+            },
+            "node_parity": node_parity,
+            "relationship_parity": relationship_parity,
+            "diagnostics": diagnostics,
+        }
+        return SnowflakeGraphVerificationResult(passed=passed, payload=payload)
 
 
 def _execute_sql_script(cursor: Any, sql: str) -> None:
@@ -678,6 +815,229 @@ def _limit_clause(limit: int | None) -> str:
     if limit is None:
         return ""
     return f"LIMIT {limit}"
+
+
+def _fetch_rows(cursor: Any, sql: str, columns: tuple[str, ...]) -> list[dict[str, Any]]:
+    result = cursor.execute(sql)
+    fetch_source = result if hasattr(result, "fetchall") else cursor
+    rows = fetch_source.fetchall()
+    return [_normalize_result_row(row, columns) for row in rows]
+
+
+def _normalize_result_row(row: Any, columns: tuple[str, ...]) -> dict[str, Any]:
+    if isinstance(row, dict):
+        return {column: _dict_value(row, column) for column in columns}
+    return {column: row[index] if index < len(row) else None for index, column in enumerate(columns)}
+
+
+def _dict_value(row: dict[str, Any], column: str) -> Any:
+    if column in row:
+        return row[column]
+    lowered = column.lower()
+    if lowered in row:
+        return row[lowered]
+    return None
+
+
+def _node_parity_payload(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    by_type = [
+        {
+            "entity_type": str(row["ENTITY_TYPE"]),
+            "mdm_active_count": _as_int(row["MDM_ACTIVE_COUNT"]),
+            "snowflake_graph_node_count": _as_int(row["SNOWFLAKE_GRAPH_NODE_COUNT"]),
+            "mdm_minus_graph": _as_int(row["MDM_MINUS_GRAPH"]),
+            "graph_minus_mdm": _as_int(row["GRAPH_MINUS_MDM"]),
+        }
+        for row in rows
+    ]
+    failed = any(
+        row["mdm_minus_graph"] != 0 or row["graph_minus_mdm"] != 0
+        for row in by_type
+    )
+    return {
+        "status": "failed" if failed else "ok",
+        "total_mdm_active": sum(row["mdm_active_count"] for row in by_type),
+        "total_snowflake_graph": sum(row["snowflake_graph_node_count"] for row in by_type),
+        "by_entity_type": by_type,
+    }
+
+
+def _relationship_parity_payload(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    by_type = [
+        {
+            "relationship_type": str(row["RELATIONSHIP_TYPE"]),
+            "mdm_active_count": _as_int(row["MDM_ACTIVE_COUNT"]),
+            "snowflake_graph_edge_count": _as_int(row["SNOWFLAKE_GRAPH_EDGE_COUNT"]),
+            "mdm_minus_graph": _as_int(row["MDM_MINUS_GRAPH"]),
+            "graph_minus_mdm": _as_int(row["GRAPH_MINUS_MDM"]),
+        }
+        for row in rows
+    ]
+    failed = any(
+        row["mdm_minus_graph"] != 0 or row["graph_minus_mdm"] != 0
+        for row in by_type
+    )
+    return {
+        "status": "failed" if failed else "ok",
+        "total_mdm_active": sum(row["mdm_active_count"] for row in by_type),
+        "total_snowflake_graph": sum(row["snowflake_graph_edge_count"] for row in by_type),
+        "by_relationship_type": by_type,
+    }
+
+
+def _format_sample_rows(rows: list[dict[str, Any]], columns: tuple[str, ...]) -> list[dict[str, Any]]:
+    return [
+        {column.lower(): row[column] for column in columns}
+        for row in rows
+    ]
+
+
+def _as_int(value: Any) -> int:
+    return int(value or 0)
+
+
+def _render_verify_node_counts(context: dict[str, Any]) -> str:
+    return f"""-- verify_graph:node_counts
+WITH expected AS (
+  SELECT E.ENTITY_TYPE, COUNT(*) AS MDM_ACTIVE_COUNT
+  FROM {_mdm_fq(context, "MDM_ENTITY")} E
+  JOIN {_mdm_fq(context, "MDM_ENTITY_TYPE_DEFINITION")} ETD
+    ON ETD.ENTITY_TYPE = E.ENTITY_TYPE
+   AND ETD.IS_ACTIVE = TRUE
+  WHERE E.IS_QUARANTINED = FALSE
+  GROUP BY E.ENTITY_TYPE
+),
+actual AS (
+  SELECT ENTITY_TYPE, COUNT(*) AS SNOWFLAKE_GRAPH_NODE_COUNT
+  FROM {_fq(context, "MDM_GRAPH_NODES")}
+  GROUP BY ENTITY_TYPE
+)
+SELECT
+  COALESCE(expected.ENTITY_TYPE, actual.ENTITY_TYPE) AS ENTITY_TYPE,
+  COALESCE(expected.MDM_ACTIVE_COUNT, 0) AS MDM_ACTIVE_COUNT,
+  COALESCE(actual.SNOWFLAKE_GRAPH_NODE_COUNT, 0) AS SNOWFLAKE_GRAPH_NODE_COUNT,
+  COALESCE(expected.MDM_ACTIVE_COUNT, 0) - COALESCE(actual.SNOWFLAKE_GRAPH_NODE_COUNT, 0) AS MDM_MINUS_GRAPH,
+  COALESCE(actual.SNOWFLAKE_GRAPH_NODE_COUNT, 0) - COALESCE(expected.MDM_ACTIVE_COUNT, 0) AS GRAPH_MINUS_MDM
+FROM expected
+FULL OUTER JOIN actual
+  ON actual.ENTITY_TYPE = expected.ENTITY_TYPE
+ORDER BY ENTITY_TYPE
+"""
+
+
+def _render_verify_relationship_counts(context: dict[str, Any]) -> str:
+    return f"""-- verify_graph:relationship_counts
+WITH expected AS (
+  SELECT RT.REL_TYPE_NAME AS RELATIONSHIP_TYPE, COUNT(RI.INSTANCE_ID) AS MDM_ACTIVE_COUNT
+  FROM {_mdm_fq(context, "MDM_RELATIONSHIP_TYPE")} RT
+  LEFT JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_INSTANCE")} RI
+    ON RI.REL_TYPE_ID = RT.REL_TYPE_ID
+   AND RI.IS_ACTIVE = TRUE
+  WHERE RT.IS_ACTIVE = TRUE
+  GROUP BY RT.REL_TYPE_NAME
+),
+actual AS (
+  SELECT RELATIONSHIP_TYPE, COUNT(*) AS SNOWFLAKE_GRAPH_EDGE_COUNT
+  FROM {_fq(context, "MDM_GRAPH_EDGES")}
+  GROUP BY RELATIONSHIP_TYPE
+)
+SELECT
+  COALESCE(expected.RELATIONSHIP_TYPE, actual.RELATIONSHIP_TYPE) AS RELATIONSHIP_TYPE,
+  COALESCE(expected.MDM_ACTIVE_COUNT, 0) AS MDM_ACTIVE_COUNT,
+  COALESCE(actual.SNOWFLAKE_GRAPH_EDGE_COUNT, 0) AS SNOWFLAKE_GRAPH_EDGE_COUNT,
+  COALESCE(expected.MDM_ACTIVE_COUNT, 0) - COALESCE(actual.SNOWFLAKE_GRAPH_EDGE_COUNT, 0) AS MDM_MINUS_GRAPH,
+  COALESCE(actual.SNOWFLAKE_GRAPH_EDGE_COUNT, 0) - COALESCE(expected.MDM_ACTIVE_COUNT, 0) AS GRAPH_MINUS_MDM
+FROM expected
+FULL OUTER JOIN actual
+  ON actual.RELATIONSHIP_TYPE = expected.RELATIONSHIP_TYPE
+ORDER BY RELATIONSHIP_TYPE
+"""
+
+
+def _render_missing_nodes(context: dict[str, Any]) -> str:
+    return f"""-- verify_graph:missing_nodes
+SELECT E.ENTITY_TYPE, E.ENTITY_ID::STRING AS NODEID
+FROM {_mdm_fq(context, "MDM_ENTITY")} E
+JOIN {_mdm_fq(context, "MDM_ENTITY_TYPE_DEFINITION")} ETD
+  ON ETD.ENTITY_TYPE = E.ENTITY_TYPE
+ AND ETD.IS_ACTIVE = TRUE
+LEFT JOIN {_fq(context, "MDM_GRAPH_NODES")} G
+  ON G.NODEID = E.ENTITY_ID::STRING
+WHERE E.IS_QUARANTINED = FALSE
+  AND G.NODEID IS NULL
+ORDER BY E.ENTITY_TYPE, E.ENTITY_ID
+LIMIT {context["sample_limit"]}
+"""
+
+
+def _render_extra_nodes(context: dict[str, Any]) -> str:
+    return f"""-- verify_graph:extra_nodes
+SELECT G.ENTITY_TYPE, G.NODEID
+FROM {_fq(context, "MDM_GRAPH_NODES")} G
+LEFT JOIN {_mdm_fq(context, "MDM_ENTITY")} E
+  ON E.ENTITY_ID::STRING = G.NODEID
+LEFT JOIN {_mdm_fq(context, "MDM_ENTITY_TYPE_DEFINITION")} ETD
+  ON ETD.ENTITY_TYPE = E.ENTITY_TYPE
+ AND ETD.IS_ACTIVE = TRUE
+WHERE E.ENTITY_ID IS NULL
+   OR E.IS_QUARANTINED = TRUE
+   OR ETD.ENTITY_TYPE IS NULL
+ORDER BY G.ENTITY_TYPE, G.NODEID
+LIMIT {context["sample_limit"]}
+"""
+
+
+def _render_missing_edges(context: dict[str, Any]) -> str:
+    return f"""-- verify_graph:missing_edges
+SELECT RT.REL_TYPE_NAME AS RELATIONSHIP_TYPE, RI.INSTANCE_ID::STRING AS EDGEID
+FROM {_mdm_fq(context, "MDM_RELATIONSHIP_INSTANCE")} RI
+JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_TYPE")} RT
+  ON RT.REL_TYPE_ID = RI.REL_TYPE_ID
+ AND RT.IS_ACTIVE = TRUE
+LEFT JOIN {_fq(context, "MDM_GRAPH_EDGES")} G
+  ON G.EDGEID = RI.INSTANCE_ID::STRING
+WHERE RI.IS_ACTIVE = TRUE
+  AND G.EDGEID IS NULL
+ORDER BY RT.REL_TYPE_NAME, RI.INSTANCE_ID
+LIMIT {context["sample_limit"]}
+"""
+
+
+def _render_extra_edges(context: dict[str, Any]) -> str:
+    return f"""-- verify_graph:extra_edges
+SELECT G.RELATIONSHIP_TYPE, G.EDGEID
+FROM {_fq(context, "MDM_GRAPH_EDGES")} G
+LEFT JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_INSTANCE")} RI
+  ON RI.INSTANCE_ID::STRING = G.EDGEID
+LEFT JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_TYPE")} RT
+  ON RT.REL_TYPE_ID = RI.REL_TYPE_ID
+ AND RT.IS_ACTIVE = TRUE
+WHERE RI.INSTANCE_ID IS NULL
+   OR RI.IS_ACTIVE = FALSE
+   OR RT.REL_TYPE_ID IS NULL
+ORDER BY G.RELATIONSHIP_TYPE, G.EDGEID
+LIMIT {context["sample_limit"]}
+"""
+
+
+def _render_missing_edge_endpoints(context: dict[str, Any]) -> str:
+    return f"""-- verify_graph:missing_edge_endpoints
+SELECT
+  E.RELATIONSHIP_TYPE,
+  E.EDGEID,
+  E.SOURCENODEID,
+  E.TARGETNODEID,
+  IFF(S.NODEID IS NULL, TRUE, FALSE) AS MISSING_SOURCE_NODE,
+  IFF(T.NODEID IS NULL, TRUE, FALSE) AS MISSING_TARGET_NODE
+FROM {_fq(context, "MDM_GRAPH_EDGES")} E
+LEFT JOIN {_fq(context, "MDM_GRAPH_NODES")} S
+  ON S.NODEID = E.SOURCENODEID
+LEFT JOIN {_fq(context, "MDM_GRAPH_NODES")} T
+  ON T.NODEID = E.TARGETNODEID
+WHERE S.NODEID IS NULL OR T.NODEID IS NULL
+ORDER BY E.RELATIONSHIP_TYPE, E.EDGEID
+LIMIT {context["sample_limit"]}
+"""
 
 
 def _fetch_scalar(cursor: Any, sql: str) -> int:
