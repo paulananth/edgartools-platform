@@ -160,8 +160,17 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     # verify-graph
     vg = mdm_sub.add_parser(
         "verify-graph",
-        help="Query Neo4j for node and relationship counts and print JSON",
+        help="Verify Snowflake graph parity and Native App graph execution",
     )
+    vg.add_argument(
+        "--skip-native-app",
+        action="store_true",
+        default=False,
+        help="Skip Native App smoke checks for local/offline tests; not valid for live Phase 3 acceptance",
+    )
+    vg.add_argument("--native-app-name", default=None, help="Snowflake Native App name")
+    vg.add_argument("--native-app-database-role", default=None, help="Database role granted to the Native App")
+    vg.add_argument("--native-app-compute-pool", default=None, help="Native App compute pool selector")
     vg.set_defaults(handler=_logged_handler("verify-graph", _handle_verify_graph))
 
     # backfill-relationships
@@ -836,6 +845,9 @@ def _handle_verify_graph(args) -> int:
     from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
     from edgar_warehouse.mdm.snowflake_graph import (
         DEFAULT_MDM_SCHEMA,
+        DEFAULT_NATIVE_APP_COMPUTE_POOL,
+        DEFAULT_NATIVE_APP_DATABASE_ROLE,
+        DEFAULT_NATIVE_APP_NAME,
         DEFAULT_TARGET_SCHEMA,
         SnowflakeGraphVerificationConfig,
         SnowflakeGraphVerifier,
@@ -854,6 +866,14 @@ def _handle_verify_graph(args) -> int:
                     target_schema=DEFAULT_TARGET_SCHEMA,
                     mdm_database=settings.database,
                     mdm_schema=DEFAULT_MDM_SCHEMA,
+                    verify_native_app=not args.skip_native_app,
+                    native_app_name=args.native_app_name or DEFAULT_NATIVE_APP_NAME,
+                    native_app_database_role=(
+                        args.native_app_database_role or DEFAULT_NATIVE_APP_DATABASE_ROLE
+                    ),
+                    native_app_compute_pool=(
+                        args.native_app_compute_pool or DEFAULT_NATIVE_APP_COMPUTE_POOL
+                    ),
                 )
             )
         finally:
@@ -864,7 +884,7 @@ def _handle_verify_graph(args) -> int:
 
     print(json.dumps(result.payload, indent=2, sort_keys=True))
     if not result.passed:
-        print("verify-graph: Snowflake graph parity checks failed", file=sys.stderr)
+        print("verify-graph: Snowflake graph verification checks failed", file=sys.stderr)
         return 1
     return 0
 

@@ -4,13 +4,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import subprocess
-from typing import Any
+from typing import Any, Callable
 
 from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
 
 
 DEFAULT_TARGET_SCHEMA = "NEO4J_GRAPH_MIGRATION"
 DEFAULT_MDM_SCHEMA = "MDM"
+DEFAULT_NATIVE_APP_NAME = "Neo4j_Graph_Analytics"
+DEFAULT_NATIVE_APP_DATABASE_ROLE = "NEO4J_GRAPH_ANALYTICS_MIGRATION_ROLE"
+DEFAULT_NATIVE_APP_COMPUTE_POOL = "CPU_X64_XS"
+DEFAULT_NATIVE_APP_USER_ROLE = "EDGARTOOLS_GRAPH_APP_USER"
+DEFAULT_NATIVE_APP_ADMIN_ROLE = "EDGARTOOLS_GRAPH_APP_ADMIN"
 ALLOWED_ENTITY_TYPES = ("adviser", "audit_firm", "company", "fund", "person", "security")
 ALLOWED_RELATIONSHIP_TYPES = (
     "AUDITED_BY",           # Company → AuditFirm  (10-K XBRL dei_AuditorFirmId)
@@ -112,6 +117,12 @@ class SnowflakeGraphVerificationConfig:
     mdm_database: str | None = None
     mdm_schema: str = DEFAULT_MDM_SCHEMA
     sample_limit: int = 20
+    verify_native_app: bool = True
+    native_app_name: str = DEFAULT_NATIVE_APP_NAME
+    native_app_database_role: str = DEFAULT_NATIVE_APP_DATABASE_ROLE
+    native_app_compute_pool: str = DEFAULT_NATIVE_APP_COMPUTE_POOL
+    native_app_user_role: str = DEFAULT_NATIVE_APP_USER_ROLE
+    native_app_admin_role: str = DEFAULT_NATIVE_APP_ADMIN_ROLE
 
     def resolved_target_database(self, default_database: str | None = None) -> str:
         database = self.target_database or default_database
@@ -275,16 +286,22 @@ class SnowflakeGraphVerifier:
                     ),
                 ),
             }
+            native_app = _verify_native_app(cursor, context, config)
         finally:
             cursor.close()
 
         node_parity = _node_parity_payload(node_rows)
         relationship_parity = _relationship_parity_payload(relationship_rows)
         diagnostics_clean = all(not rows for rows in diagnostics.values())
+        native_app_ok = (
+            not native_app["required"]
+            or native_app["status"] == "ok"
+        )
         passed = (
             node_parity["status"] == "ok"
             and relationship_parity["status"] == "ok"
             and diagnostics_clean
+            and native_app_ok
         )
         payload = {
             "status": "ok" if passed else "failed",
@@ -297,8 +314,262 @@ class SnowflakeGraphVerifier:
             "node_parity": node_parity,
             "relationship_parity": relationship_parity,
             "diagnostics": diagnostics,
+            "native_app": native_app,
         }
         return SnowflakeGraphVerificationResult(passed=passed, payload=payload)
+
+
+def _verify_native_app(
+    cursor: Any,
+    context: dict[str, Any],
+    config: SnowflakeGraphVerificationConfig,
+) -> dict[str, Any]:
+    if not config.verify_native_app:
+        return {
+            "status": "skipped",
+            "required": False,
+            "phase3_acceptance": False,
+            "remediation": "Run without --skip-native-app for live Phase 3 acceptance.",
+            "checks": [],
+        }
+
+    app_name = _ident(config.native_app_name)
+    database_role = _ident(config.native_app_database_role)
+    compute_pool = _ident(config.native_app_compute_pool)
+    user_role = _ident(config.native_app_user_role)
+    admin_role = _ident(config.native_app_admin_role)
+    grant_script = "infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql"
+    checks: list[dict[str, Any]] = []
+
+    checks.append(
+        _native_rows_check(
+            cursor,
+            name="app_installation",
+            sql=_render_native_app_installation(config.native_app_name),
+            ok=lambda rows: bool(rows),
+            remediation=(
+                f"Install and activate the Snowflake Native App as {config.native_app_name}."
+            ),
+        )
+    )
+    checks.append(
+        _native_rows_check(
+            cursor,
+            name="app_user_role_grant",
+            sql=_render_native_app_role_grant(app_name, "app_user"),
+            ok=lambda rows: _rows_contain_all(rows, (user_role,)),
+            remediation=(
+                f"Run {grant_script} or grant APPLICATION ROLE {app_name}.app_user "
+                f"TO ROLE {user_role}."
+            ),
+        )
+    )
+    checks.append(
+        _native_rows_check(
+            cursor,
+            name="app_admin_role_grant",
+            sql=_render_native_app_role_grant(app_name, "app_admin"),
+            ok=lambda rows: _rows_contain_all(rows, (admin_role,)),
+            remediation=(
+                f"Run {grant_script} or grant APPLICATION ROLE {app_name}.app_admin "
+                f"TO ROLE {admin_role}."
+            ),
+        )
+    )
+    checks.append(
+        _native_rows_check(
+            cursor,
+            name="database_role_to_application",
+            sql=_render_native_app_database_role_to_application(app_name),
+            ok=lambda rows: _rows_contain_all(rows, (database_role,)),
+            remediation=(
+                f"Run {grant_script} to grant DATABASE ROLE {database_role} "
+                f"TO APPLICATION {app_name}."
+            ),
+        )
+    )
+    checks.append(
+        _native_rows_check(
+            cursor,
+            name="database_role_privileges",
+            sql=_render_native_app_database_role_privileges(context, database_role),
+            ok=lambda rows: _database_role_privileges_ok(rows, context),
+            remediation=(
+                f"Run {grant_script} to grant USAGE, SELECT, and scoped CREATE TABLE "
+                f"on {context['target_database']}.{context['target_schema']}."
+            ),
+        )
+    )
+    checks.append(
+        _native_rows_check(
+            cursor,
+            name="compute_pool",
+            sql=_render_native_app_compute_pools(app_name),
+            ok=lambda rows: _rows_contain_all(rows, (compute_pool,)),
+            remediation=(
+                f"Activate {app_name} and confirm compute pool selector {compute_pool} "
+                "is available from GRAPH.SHOW_AVAILABLE_COMPUTE_POOLS()."
+            ),
+        )
+    )
+
+    sample_check, sample_node_id = _native_sample_node_check(cursor, context)
+    checks.append(sample_check)
+    if all(check["status"] == "ok" for check in checks):
+        checks.extend(
+            [
+                _native_execute_check(
+                    cursor,
+                    name="graph_info",
+                    sql=_render_native_app_graph_info(context, app_name, compute_pool),
+                    remediation=(
+                        f"Run {grant_script} and confirm {app_name}.GRAPH.GRAPH_INFO "
+                        "can read the graph schema."
+                    ),
+                ),
+                _native_execute_check(
+                    cursor,
+                    name="bfs",
+                    sql=_render_native_app_bfs(context, app_name, compute_pool, sample_node_id),
+                    remediation=(
+                        f"Run {grant_script}; then retry BFS with compute pool {compute_pool} "
+                        "against the hosted MDM graph."
+                    ),
+                ),
+                _native_execute_check(
+                    cursor,
+                    name="wcc",
+                    sql=_render_native_app_wcc(context, app_name, compute_pool),
+                    remediation=(
+                        f"Run {grant_script}; then retry WCC with compute pool {compute_pool} "
+                        "against the hosted MDM graph."
+                    ),
+                ),
+            ]
+        )
+
+    status = "ok" if all(check["status"] == "ok" for check in checks) else "failed"
+    return {
+        "status": status,
+        "required": True,
+        "phase3_acceptance": status == "ok",
+        "app_name": app_name,
+        "database_role": database_role,
+        "compute_pool": compute_pool,
+        "checks": checks,
+    }
+
+
+def _native_rows_check(
+    cursor: Any,
+    *,
+    name: str,
+    sql: str,
+    ok: Callable[[list[Any]], bool],
+    remediation: str,
+) -> dict[str, Any]:
+    try:
+        rows = _fetch_raw_rows(cursor, sql)
+    except Exception as exc:  # pragma: no cover - exercised by live connector failures
+        return _native_failed_check(name, remediation, exc)
+    if ok(rows):
+        return {"name": name, "status": "ok", "row_count": len(rows)}
+    return {
+        "name": name,
+        "status": "failed",
+        "row_count": len(rows),
+        "remediation": remediation,
+    }
+
+
+def _native_execute_check(
+    cursor: Any,
+    *,
+    name: str,
+    sql: str,
+    remediation: str,
+) -> dict[str, Any]:
+    try:
+        rows = _fetch_raw_rows(cursor, sql)
+    except Exception as exc:  # pragma: no cover - exercised by live connector failures
+        return _native_failed_check(name, remediation, exc)
+    return {"name": name, "status": "ok", "row_count": len(rows)}
+
+
+def _native_sample_node_check(
+    cursor: Any,
+    context: dict[str, Any],
+) -> tuple[dict[str, Any], str]:
+    remediation = (
+        f"Materialize graph rows in {context['target_database']}.{context['target_schema']} "
+        "with `edgar-warehouse mdm sync-graph` before running Native App smoke checks."
+    )
+    try:
+        rows = _fetch_rows(
+            cursor,
+            _render_native_app_sample_node(context),
+            ("NODEID",),
+        )
+    except Exception as exc:  # pragma: no cover - exercised by live connector failures
+        return _native_failed_check("graph_schema_sample", remediation, exc), ""
+    sample_node_id = str(rows[0]["NODEID"]) if rows and rows[0]["NODEID"] else ""
+    if sample_node_id:
+        return {
+            "name": "graph_schema_sample",
+            "status": "ok",
+            "row_count": len(rows),
+            "sample_nodeid": sample_node_id,
+        }, sample_node_id
+    return {
+        "name": "graph_schema_sample",
+        "status": "failed",
+        "row_count": len(rows),
+        "remediation": remediation,
+    }, ""
+
+
+def _native_failed_check(name: str, remediation: str, exc: Exception) -> dict[str, Any]:
+    return {
+        "name": name,
+        "status": "failed",
+        "remediation": remediation,
+        "error": f"{exc.__class__.__name__}: {exc}",
+    }
+
+
+def _fetch_raw_rows(cursor: Any, sql: str) -> list[Any]:
+    result = cursor.execute(sql)
+    fetch_source = result if hasattr(result, "fetchall") else cursor
+    return list(fetch_source.fetchall())
+
+
+def _rows_contain_all(rows: list[Any], values: tuple[str, ...]) -> bool:
+    required = tuple(str(value).upper() for value in values)
+    return any(all(value in _row_text(row) for value in required) for row in rows)
+
+
+def _database_role_privileges_ok(rows: list[Any], context: dict[str, Any]) -> bool:
+    required_grants = (
+        ("USAGE", "DATABASE", context["target_database"]),
+        ("USAGE", "SCHEMA", context["target_schema"]),
+        ("SELECT", "TABLE"),
+        ("SELECT", "VIEW"),
+        ("CREATE TABLE", "SCHEMA", context["target_schema"]),
+    )
+    return all(
+        any(all(value in _row_text(row) for value in grant) for row in rows)
+        for grant in required_grants
+    )
+
+
+def _row_text(row: Any) -> str:
+    if isinstance(row, dict):
+        values = row.values()
+    elif isinstance(row, (list, tuple)):
+        values = row
+    else:
+        values = (row,)
+    return " ".join(str(value).upper() for value in values if value is not None)
 
 
 def _execute_sql_script(cursor: Any, sql: str) -> None:
@@ -1037,6 +1308,120 @@ LEFT JOIN {_fq(context, "MDM_GRAPH_NODES")} T
 WHERE S.NODEID IS NULL OR T.NODEID IS NULL
 ORDER BY E.RELATIONSHIP_TYPE, E.EDGEID
 LIMIT {context["sample_limit"]}
+"""
+
+
+def _render_native_app_installation(app_name: str) -> str:
+    return f"""-- verify_graph:native_app_installation
+SHOW APPLICATIONS LIKE {_sql_literal(app_name)}
+"""
+
+
+def _render_native_app_role_grant(app_name: str, app_role: str) -> str:
+    return f"""-- verify_graph:native_app_{app_role}_role
+SHOW GRANTS OF APPLICATION ROLE {app_name}.{app_role}
+"""
+
+
+def _render_native_app_database_role_to_application(app_name: str) -> str:
+    return f"""-- verify_graph:native_app_application_database_role
+SHOW GRANTS TO APPLICATION {app_name}
+"""
+
+
+def _render_native_app_database_role_privileges(
+    context: dict[str, Any],
+    database_role: str,
+) -> str:
+    return f"""-- verify_graph:native_app_database_role_privileges
+SHOW GRANTS TO DATABASE ROLE {context["target_database"]}.{database_role}
+"""
+
+
+def _render_native_app_compute_pools(app_name: str) -> str:
+    return f"""-- verify_graph:native_app_compute_pools
+CALL {app_name}.GRAPH.SHOW_AVAILABLE_COMPUTE_POOLS()
+"""
+
+
+def _render_native_app_sample_node(context: dict[str, Any]) -> str:
+    return f"""-- verify_graph:native_app_sample_node
+SELECT NODEID
+FROM {_fq(context, "MDM_GRAPH_NODES")}
+WHERE NODEID IS NOT NULL
+ORDER BY NODEID
+LIMIT 1
+"""
+
+
+def _render_native_app_graph_info(
+    context: dict[str, Any],
+    app_name: str,
+    compute_pool: str,
+) -> str:
+    graph_name = f"{context['target_database']}.{context['target_schema']}"
+    return f"""-- verify_graph:native_app_graph_info
+SELECT *
+FROM TABLE(
+  {app_name}.GRAPH.GRAPH_INFO(
+    {_sql_literal(graph_name)},
+    {{
+      'project_name': 'edgartools_mdm_verify_graph_info',
+      'compute_pool': {_sql_literal(compute_pool)},
+      'node_tables': ['MDM_GRAPH_NODES'],
+      'relationship_tables': ['MDM_GRAPH_EDGES']
+    }}
+  )
+)
+"""
+
+
+def _render_native_app_bfs(
+    context: dict[str, Any],
+    app_name: str,
+    compute_pool: str,
+    sample_node_id: str,
+) -> str:
+    graph_name = f"{context['target_database']}.{context['target_schema']}"
+    return f"""-- verify_graph:native_app_bfs
+SELECT *
+FROM TABLE(
+  {app_name}.GRAPH.BFS(
+    {_sql_literal(graph_name)},
+    {{
+      'project_name': 'edgartools_mdm_verify_bfs',
+      'compute_pool': {_sql_literal(compute_pool)},
+      'node_tables': ['MDM_GRAPH_NODES'],
+      'relationship_tables': ['MDM_GRAPH_EDGES'],
+      'source_node_id': {_sql_literal(sample_node_id)},
+      'max_depth': 2,
+      'write_options': {{'output_prefix': 'MDM_GRAPH_VERIFY_BFS_SMOKE'}}
+    }}
+  )
+)
+"""
+
+
+def _render_native_app_wcc(
+    context: dict[str, Any],
+    app_name: str,
+    compute_pool: str,
+) -> str:
+    graph_name = f"{context['target_database']}.{context['target_schema']}"
+    return f"""-- verify_graph:native_app_wcc
+SELECT *
+FROM TABLE(
+  {app_name}.GRAPH.WCC(
+    {_sql_literal(graph_name)},
+    {{
+      'project_name': 'edgartools_mdm_verify_wcc',
+      'compute_pool': {_sql_literal(compute_pool)},
+      'node_tables': ['MDM_GRAPH_NODES'],
+      'relationship_tables': ['MDM_GRAPH_EDGES'],
+      'write_options': {{'output_prefix': 'MDM_GRAPH_VERIFY_WCC_SMOKE'}}
+    }}
+  )
+)
 """
 
 

@@ -236,8 +236,10 @@ def _strict_parity_results(
     missing_edges: list[dict[str, object]] | None = None,
     extra_edges: list[dict[str, object]] | None = None,
     endpoint_rows: list[dict[str, object]] | None = None,
+    include_native_app: bool = True,
+    native_app_rows: dict[str, list[dict[str, object]]] | None = None,
 ) -> dict[str, list[dict[str, object]]]:
-    return {
+    results = {
         "verify_graph:node_counts": node_rows
         or [
             {
@@ -277,6 +279,92 @@ def _strict_parity_results(
         "verify_graph:missing_edges": missing_edges or [],
         "verify_graph:extra_edges": extra_edges or [],
         "verify_graph:missing_edge_endpoints": endpoint_rows or [],
+    }
+    if include_native_app:
+        results.update(_native_app_success_results())
+    if native_app_rows:
+        results.update(native_app_rows)
+    return results
+
+
+def _native_app_success_results() -> dict[str, list[dict[str, object]]]:
+    return {
+        "verify_graph:native_app_installation": [
+            {
+                "NAME": "NEO4J_GRAPH_ANALYTICS",
+                "STATE": "READY",
+            }
+        ],
+        "verify_graph:native_app_app_user_role": [
+            {
+                "GRANTED_TO": "ROLE",
+                "GRANTEE_NAME": "EDGARTOOLS_GRAPH_APP_USER",
+            }
+        ],
+        "verify_graph:native_app_app_admin_role": [
+            {
+                "GRANTED_TO": "ROLE",
+                "GRANTEE_NAME": "EDGARTOOLS_GRAPH_APP_ADMIN",
+            }
+        ],
+        "verify_graph:native_app_application_database_role": [
+            {
+                "GRANTED_ON": "DATABASE ROLE",
+                "NAME": "NEO4J_GRAPH_ANALYTICS_MIGRATION_ROLE",
+            }
+        ],
+        "verify_graph:native_app_database_role_privileges": [
+            {
+                "PRIVILEGE": "USAGE",
+                "GRANTED_ON": "DATABASE",
+                "NAME": "EDGARTOOLS_DEV",
+            },
+            {
+                "PRIVILEGE": "USAGE",
+                "GRANTED_ON": "SCHEMA",
+                "NAME": "EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION",
+            },
+            {
+                "PRIVILEGE": "SELECT",
+                "GRANTED_ON": "TABLE",
+                "NAME": "MDM_GRAPH_NODES",
+            },
+            {
+                "PRIVILEGE": "SELECT",
+                "GRANTED_ON": "VIEW",
+                "NAME": "GRAPH_NODES",
+            },
+            {
+                "PRIVILEGE": "CREATE TABLE",
+                "GRANTED_ON": "SCHEMA",
+                "NAME": "EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION",
+            },
+        ],
+        "verify_graph:native_app_compute_pools": [
+            {
+                "AVAILABLE_COMPUTE_POOLS": '["CPU_X64_XS"]',
+            }
+        ],
+        "verify_graph:native_app_sample_node": [
+            {
+                "NODEID": "company:1",
+            }
+        ],
+        "verify_graph:native_app_graph_info": [
+            {
+                "STATUS": "ok",
+            }
+        ],
+        "verify_graph:native_app_bfs": [
+            {
+                "STATUS": "ok",
+            }
+        ],
+        "verify_graph:native_app_wcc": [
+            {
+                "STATUS": "ok",
+            }
+        ],
     }
 
 
@@ -353,6 +441,21 @@ def test_verify_graph_reports_strict_snowflake_parity(monkeypatch, capsys):
     assert payload["snowflake_graph_edges"] == 3
     assert payload["node_parity"]["status"] == "ok"
     assert payload["relationship_parity"]["status"] == "ok"
+    assert payload["native_app"]["status"] == "ok"
+    assert payload["native_app"]["required"] is True
+    assert payload["native_app"]["phase3_acceptance"] is True
+    assert [check["name"] for check in payload["native_app"]["checks"]] == [
+        "app_installation",
+        "app_user_role_grant",
+        "app_admin_role_grant",
+        "database_role_to_application",
+        "database_role_privileges",
+        "compute_pool",
+        "graph_schema_sample",
+        "graph_info",
+        "bfs",
+        "wcc",
+    ]
     assert payload["node_parity"]["by_entity_type"] == [
         {
             "entity_type": "company",
@@ -382,6 +485,60 @@ def test_verify_graph_reports_strict_snowflake_parity(monkeypatch, capsys):
     }
     assert connection.cursor_instance.closed is True
     assert connection.closed is True
+
+
+def test_verify_graph_fails_hard_when_native_app_grant_missing(monkeypatch, capsys):
+    _clear_graph_env(monkeypatch)
+    _patch_verify_settings(
+        monkeypatch,
+        FakeSnowflakeConnection(
+            result_sets=_strict_parity_results(
+                native_app_rows={
+                    "verify_graph:native_app_application_database_role": [],
+                }
+            )
+        ),
+    )
+
+    args = build_parser().parse_args(["mdm", "verify-graph"])
+
+    assert args.handler(args) == 1
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "failed"
+    assert payload["node_parity"]["status"] == "ok"
+    assert payload["relationship_parity"]["status"] == "ok"
+    assert payload["native_app"]["status"] == "failed"
+    assert payload["native_app"]["phase3_acceptance"] is False
+    grant_check = [
+        check for check in payload["native_app"]["checks"]
+        if check["name"] == "database_role_to_application"
+    ][0]
+    assert grant_check["status"] == "failed"
+    assert "infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql" in grant_check["remediation"]
+
+
+def test_verify_graph_skip_native_app_is_explicit_offline_only(monkeypatch, capsys):
+    _clear_graph_env(monkeypatch)
+    connection = FakeSnowflakeConnection(
+        result_sets=_strict_parity_results(include_native_app=False)
+    )
+    _patch_verify_settings(monkeypatch, connection)
+
+    args = build_parser().parse_args(["mdm", "verify-graph", "--skip-native-app"])
+
+    assert args.handler(args) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "ok"
+    assert payload["native_app"] == {
+        "status": "skipped",
+        "required": False,
+        "phase3_acceptance": False,
+        "remediation": "Run without --skip-native-app for live Phase 3 acceptance.",
+        "checks": [],
+    }
+    assert "native_app_" not in "\n".join(connection.cursor_instance.executed)
 
 
 def test_verify_graph_fails_with_node_mismatch_diagnostics(monkeypatch, capsys):

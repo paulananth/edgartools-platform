@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from edgar_warehouse.mdm.snowflake_graph import (
     SnowflakeGraphSyncConfig,
     SnowflakeGraphSyncExecutor,
@@ -8,6 +10,10 @@ from edgar_warehouse.mdm.snowflake_graph import (
     run_hosted_neo4j_e2e,
     run_snowflake_graph_sql,
 )
+
+
+def _repo_root():
+    return Path(__file__).resolve().parents[2]
 
 
 class FakeGraphCursor:
@@ -141,6 +147,56 @@ def test_generated_sql_exposes_phase_2_graph_projection_contract(tmp_path):
         "NEO4J_SECRET_JSON",
     ]:
         assert forbidden not in combined
+
+
+def test_neo4j_graph_analytics_app_grants_are_least_privilege():
+    sql_path = _repo_root() / "infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql"
+    sql = sql_path.read_text(encoding="utf-8")
+    normalized = " ".join(sql.upper().split())
+
+    assert "CREATE DATABASE ROLE IF NOT EXISTS NEO4J_GRAPH_ANALYTICS_MIGRATION_ROLE" in normalized
+    assert "GRANT USAGE ON DATABASE EDGARTOOLS_DEV TO DATABASE ROLE NEO4J_GRAPH_ANALYTICS_MIGRATION_ROLE" in normalized
+    assert (
+        "GRANT USAGE ON SCHEMA EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION "
+        "TO DATABASE ROLE NEO4J_GRAPH_ANALYTICS_MIGRATION_ROLE"
+    ) in normalized
+    assert (
+        "GRANT SELECT ON ALL TABLES IN SCHEMA EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION "
+        "TO DATABASE ROLE NEO4J_GRAPH_ANALYTICS_MIGRATION_ROLE"
+    ) in normalized
+    assert (
+        "GRANT SELECT ON ALL VIEWS IN SCHEMA EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION "
+        "TO DATABASE ROLE NEO4J_GRAPH_ANALYTICS_MIGRATION_ROLE"
+    ) in normalized
+    assert (
+        "GRANT SELECT ON FUTURE TABLES IN SCHEMA EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION "
+        "TO DATABASE ROLE NEO4J_GRAPH_ANALYTICS_MIGRATION_ROLE"
+    ) in normalized
+    assert (
+        "GRANT SELECT ON FUTURE VIEWS IN SCHEMA EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION "
+        "TO DATABASE ROLE NEO4J_GRAPH_ANALYTICS_MIGRATION_ROLE"
+    ) in normalized
+    assert (
+        "GRANT CREATE TABLE ON SCHEMA EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION "
+        "TO DATABASE ROLE NEO4J_GRAPH_ANALYTICS_MIGRATION_ROLE"
+    ) in normalized
+    assert (
+        "GRANT DATABASE ROLE NEO4J_GRAPH_ANALYTICS_MIGRATION_ROLE "
+        "TO APPLICATION NEO4J_GRAPH_ANALYTICS"
+    ) in normalized
+    assert "GRANT APPLICATION ROLE NEO4J_GRAPH_ANALYTICS.APP_USER TO ROLE EDGARTOOLS_GRAPH_APP_USER" in normalized
+    assert "GRANT APPLICATION ROLE NEO4J_GRAPH_ANALYTICS.APP_ADMIN TO ROLE EDGARTOOLS_GRAPH_APP_ADMIN" in normalized
+
+    for forbidden in [
+        "ALL PRIVILEGES",
+        "GRANT OWNERSHIP",
+        "NEO4J_URI",
+        "NEO4J_USER",
+        "NEO4J_USERNAME",
+        "NEO4J_PASSWORD",
+        "NEO4J_SECRET_JSON",
+    ]:
+        assert forbidden not in normalized
 
 
 def test_run_snowflake_graph_sql_uses_snow_connection(tmp_path, monkeypatch):

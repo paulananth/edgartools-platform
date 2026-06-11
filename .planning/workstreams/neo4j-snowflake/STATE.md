@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Neo4j Snowflake Native App Migration
 status: executing
-stopped_at: Phase 3 Plan 03-01 complete
-last_updated: "2026-06-11T11:43:00Z"
-last_activity: 2026-06-11 -- Phase 3 Plan 03-01 completed
+stopped_at: Phase 3 Plan 03-02 complete
+last_updated: "2026-06-11T22:48:22Z"
+last_activity: 2026-06-11 -- Phase 3 Plan 03-02 completed
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 9
-  completed_plans: 7
-  percent: 58
+  completed_plans: 8
+  percent: 67
 ---
 
 # Project State - neo4j-snowflake
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 3 (Hosted Graph Verification And E2E Cutover) — IN PROGRESS
-Plan: 03-02 (Native App grants and smoke proof) — READY
-Status: Plan 03-01 complete; ready to add Native App proof and grant validation
-Last activity: 2026-06-11 -- Phase 3 Plan 03-01 completed
+Plan: 03-03 (AWS MDM E2E cutover and live dev proof) — READY
+Status: Plan 03-02 complete; ready to cut AWS E2E over to strict hosted verification
+Last activity: 2026-06-11 -- Phase 3 Plan 03-02 completed
 
-Progress: [######----] 58% (Phases 1 and 2 complete; Phase 3 plan 03-01 complete)
+Progress: [#######---] 67% (Phases 1 and 2 complete; Phase 3 plans 03-01 and 03-02 complete)
 
 ## Milestone Context
 
@@ -135,17 +135,29 @@ projection surfaces should change.
   missing/extra graph node IDs, missing/extra graph edge IDs, and missing graph
   edge endpoints before returning success.
 
+- Plan 03-02 added repo-managed Native App grants in
+  `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql` and extended
+  `verify-graph` with required Native App checks for installation, app role
+  grants, database-role grants, schema privileges, compute pool availability,
+  graph schema sample access, and default `GRAPH_INFO`/`BFS`/`WCC` smoke SQL.
+  Missing Native App prerequisites now fail the command with structured
+  remediation; `--skip-native-app` is marked offline-only with
+  `phase3_acceptance: false`.
+
 ## Blockers
 
 - Live Marketplace app availability, Snowflake account privileges, and app role grant details must
   be confirmed in a real Snowflake account before implementation can be treated as production-ready.
+- Plan 03-03 must apply or confirm the dev Native App grants and capture non-secret live dev
+  `verify-graph` and AWS Step Functions evidence.
 
 ## Pending Todos
 
-None.
+- Plan 03-03: apply/confirm dev Native App grants, run strict hosted `verify-graph`, and cut AWS
+  MDM E2E validation over to Snowflake `sync-graph` plus hosted verification.
 
 ## Session Continuity
 
-Last session: 2026-06-11T11:43:00Z
-Stopped at: Phase 3 Plan 03-01 complete
-Resume file: .planning/workstreams/neo4j-snowflake/phases/03-hosted-graph-verification-and-e2e-cutover/03-02-PLAN.md
+Last session: 2026-06-11T22:48:22Z
+Stopped at: Phase 3 Plan 03-02 complete
+Resume file: .planning/workstreams/neo4j-snowflake/phases/03-hosted-graph-verification-and-e2e-cutover/03-03-PLAN.md
