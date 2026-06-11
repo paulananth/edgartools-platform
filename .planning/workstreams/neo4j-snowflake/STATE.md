@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Neo4j Snowflake Native App Migration
 status: executing
-stopped_at: Phase 2 complete
-last_updated: "2026-05-27T00:24:12Z"
-last_activity: 2026-05-27 -- Phase 2 Plan 02-03 completed
+stopped_at: Phase 3 context gathered
+last_updated: "2026-06-11T10:47:00Z"
+last_activity: 2026-06-11 -- Phase 3 context gathered
 progress:
   total_phases: 4
   completed_phases: 2
@@ -20,8 +20,8 @@ progress:
 
 Phase: 3 (Hosted Graph Verification And E2E Cutover) — READY TO PLAN
 Plan: TBD
-Status: Phase 2 complete; ready to plan hosted graph verification and E2E cutover
-Last activity: 2026-05-27 -- Phase 2 Plan 02-03 completed
+Status: Phase 3 context gathered; ready to plan hosted graph verification and E2E cutover
+Last activity: 2026-06-11 -- Phase 3 context gathered
 
 Progress: [#####-----] 50% (Phases 1 and 2 complete; milestone v1.3 remains in progress)
 
@@ -118,6 +118,12 @@ projection surfaces should change.
   post-derivation graph materialization now requires explicit `--graph-sync`,
   while `--skip-graph-sync` remains an accepted no-write path.
 
+- Phase 3 discussion captured the hosted graph verification direction: `verify-graph`
+  must become a strict Snowflake-hosted parity gate with Native App `GRAPH_INFO`,
+  `BFS`, and `WCC` proof; least-privilege Native App grants should be automated and
+  validated; AWS MDM E2E success should use Snowflake `sync-graph` plus strict
+  `verify-graph` and include Step Functions validation.
+
 ## Blockers
 
 - Live Marketplace app availability, Snowflake account privileges, and app role grant details must
@@ -129,6 +135,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-05-27T00:24:12Z
-Stopped at: Phase 2 complete
-Resume file: Phase 3 planning
+Last session: 2026-06-11T10:47:00Z
+Stopped at: Phase 3 context gathered
+Resume file: .planning/workstreams/neo4j-snowflake/phases/03-hosted-graph-verification-and-e2e-cutover/03-CONTEXT.md

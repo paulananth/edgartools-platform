@@ -199,3 +199,51 @@ accessions/periods (in which case current behavior may be correct and the
 before deciding the PK needs to change.
 
 **Surfaced:** merge-perf differential testing, 2026-06-10 (observation #1198)
+
+---
+
+## Dev Terraform MDM-cutover state reconciliation — RESOLVED
+
+**Status:** RESOLVED 2026-06-11. `infra/terraform/accounts/dev/` now matches AWS
+exactly (`terraform plan` → "No changes. Your infrastructure matches the
+configuration.").
+
+**What:** After the MDM RDS→Snowflake-Postgres cutover removed `module "mdm"`
+from `main.tf` (PRs #51-54), 10 `module.mdm[0].*` resources remained in dev
+state. `infra/terraform/accounts/dev/mdm_secret_moves.tf` had `moved` blocks
+for `postgres_dsn` and `api_keys` only — `aws_secretsmanager_secret.neo4j` had
+no `moved` block, and the new `mdm_snowflake`/`edgar_identity[0]` resources
+were never reconciled with pre-existing out-of-band secrets.
+
+**Why (5-whys):**
+1. `terraform apply` of the cutover-cleanup plan (4 add/4 change/6 destroy)
+   partially failed with 3 `ResourceExistsException` on `CreateSecret`.
+2. `mdm_neo4j` failed because, lacking a `moved` block, its predecessor
+   (`module.mdm[0].aws_secretsmanager_secret.neo4j`) was destroyed and a
+   same-named secret immediately recreated in the *same* apply.
+3. AWS Secrets Manager blocks name reuse for 30 days (default
+   `recovery_window_in_days`) after a delete — the create-after-destroy in one
+   apply hit that window.
+4. `mdm_snowflake` and `edgar_identity[0]` failed because active secrets with
+   those exact names already existed in AWS but were never imported into
+   Terraform state (created out-of-band during earlier MDM work).
+5. Root cause: secret renames during the cutover were only partially captured
+   as `moved` blocks, and out-of-band secret creation was never reconciled
+   with state.
+
+**Resolution:**
+- `aws secretsmanager restore-secret --secret-id edgartools-dev/mdm/neo4j`
+  (cancelled the pending deletion from step 2/3).
+- `terraform import` for all 3 secrets into their `module.runtime.*` addresses
+  (`mdm_neo4j`, `mdm_snowflake`, `edgar_identity[0]`).
+- Re-ran `terraform apply` — remaining diff was tag/description metadata only
+  (0 add, 3 change, 0 destroy). Final `terraform plan` is clean.
+- Confirmed `module.mdm[0].aws_db_instance.mdm` is fully gone from both state
+  and AWS (no leftover anomaly).
+- Real AWS resources destroyed as part of this cleanup (intentional, part of
+  the cutover): `edgartools-dev-mdm-subnets` DB subnet group, 2 private
+  subnets, MDM RDS security group + rules, old `edgartools-dev/mdm/neo4j`
+  secret (immediately restored under the same name).
+
+**Surfaced:** carried over from `.continue-here.md` (Stage-1 PK-collision
+handoff), resolved 2026-06-11.

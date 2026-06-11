@@ -76,6 +76,22 @@ SEC filing artifacts are treated as additive and immutable after they have been
 captured. Warehouse loaders must skip already loaded SEC files by default and
 only re-fetch when an operator passes an explicit `--force` repair flag.
 
+## Debugging discipline: 5-whys
+
+When fixing **any** error (CLI failures, ECS task crashes, CI failures, data
+bugs, infra errors), do a 5-whys root-cause pass before applying a fix:
+
+1. State the observed symptom (error message, exit code, wrong output).
+2. Ask "why" repeatedly (3-5 times) until you reach a root cause, not just
+   the proximate trigger.
+3. Apply the fix at the root cause, not just the symptom.
+4. If the issue is non-trivial or likely to recur, document the chain
+   (problem → whys → resolution) in this file or `TODOS.md` so future
+   sessions don't re-debug it from scratch.
+
+The "Long-load 5-whys (resolved)" section below is the template for this —
+follow that format for new entries.
+
 ## Long-load 5-whys (resolved)
 
 **Problem:** Loading 100 companies sequentially took 30–90 minutes.
