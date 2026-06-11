@@ -401,7 +401,11 @@ CREATE TABLE IF NOT EXISTS sec_financial_fact (
     segment             TEXT NOT NULL DEFAULT 'consolidated',  -- 'consolidated' or JSON-encoded dimension key
     parser_version      TEXT,
     ingested_at         TIMESTAMPTZ DEFAULT NOW(),
-    PRIMARY KEY (cik, accession_number, concept, fiscal_period, segment)
+    -- period_end is part of the PK because the SEC companyfacts API reports
+    -- both the current-period and comparative prior-period value for the
+    -- same (accn, concept, fiscal_period, segment) -- omitting period_end
+    -- collapses these into one row with a Frankenstein period_end/value pair.
+    PRIMARY KEY (cik, accession_number, concept, fiscal_period, segment, period_end)
 );
 
 CREATE TABLE IF NOT EXISTS sec_financial_derived (
@@ -441,7 +445,11 @@ CREATE TABLE IF NOT EXISTS sec_financial_derived (
     -- be misleading to denormalise to per-quarter rows here.
     parser_version      TEXT,
     ingested_at         TIMESTAMPTZ DEFAULT NOW(),
-    PRIMARY KEY (cik, accession_number, fiscal_period)
+    -- period_end is part of the PK for the same reason as sec_financial_fact:
+    -- a single accession can yield multiple derived rows for the same
+    -- fiscal_period (current vs. comparative prior period), each with a
+    -- distinct period_end.
+    PRIMARY KEY (cik, accession_number, fiscal_period, period_end)
 );
 
 CREATE TABLE IF NOT EXISTS sec_earnings_release (
@@ -2045,10 +2053,10 @@ class SilverDatabase:
                        form_type, concept, value, unit, decimals, segment, parser_version
                 FROM stg_sec_financial_fact
                 QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY cik, accession_number, concept, fiscal_period, segment
+                    PARTITION BY cik, accession_number, concept, fiscal_period, segment, period_end
                     ORDER BY seq ASC
                 ) = 1
-                ON CONFLICT (cik, accession_number, concept, fiscal_period, segment) DO NOTHING
+                ON CONFLICT (cik, accession_number, concept, fiscal_period, segment, period_end) DO NOTHING
             """,
             insert_last_sql="""
                 INSERT INTO sec_financial_fact
@@ -2058,10 +2066,10 @@ class SilverDatabase:
                        form_type, concept, value, unit, decimals, segment, parser_version
                 FROM stg_sec_financial_fact
                 QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY cik, accession_number, concept, fiscal_period, segment
+                    PARTITION BY cik, accession_number, concept, fiscal_period, segment, period_end
                     ORDER BY seq DESC
                 ) = 1
-                ON CONFLICT (cik, accession_number, concept, fiscal_period, segment) DO UPDATE SET
+                ON CONFLICT (cik, accession_number, concept, fiscal_period, segment, period_end) DO UPDATE SET
                     value = excluded.value,
                     decimals = excluded.decimals,
                     parser_version = excluded.parser_version
@@ -2127,10 +2135,10 @@ class SilverDatabase:
                        parser_version
                 FROM stg_sec_financial_derived
                 QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY cik, accession_number, fiscal_period
+                    PARTITION BY cik, accession_number, fiscal_period, period_end
                     ORDER BY seq ASC
                 ) = 1
-                ON CONFLICT (cik, accession_number, fiscal_period) DO NOTHING
+                ON CONFLICT (cik, accession_number, fiscal_period, period_end) DO NOTHING
             """,
             insert_last_sql="""
                 INSERT INTO sec_financial_derived
@@ -2148,10 +2156,10 @@ class SilverDatabase:
                        parser_version
                 FROM stg_sec_financial_derived
                 QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY cik, accession_number, fiscal_period
+                    PARTITION BY cik, accession_number, fiscal_period, period_end
                     ORDER BY seq DESC
                 ) = 1
-                ON CONFLICT (cik, accession_number, fiscal_period) DO UPDATE SET
+                ON CONFLICT (cik, accession_number, fiscal_period, period_end) DO UPDATE SET
                     revenue = excluded.revenue,
                     gross_profit = excluded.gross_profit,
                     ebitda = excluded.ebitda,
