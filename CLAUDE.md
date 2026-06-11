@@ -6,10 +6,22 @@ This repo is the full data platform built on top of the `edgartools` PyPI packag
 
 Claude and Codex may work on this repository independently, but they must not share an uncoordinated edit surface.
 
+- **HARD RULE: Claude and Codex must NEVER commit to the same branch.** Each
+  runtime works on its own dedicated branch (or worktree). If you find
+  yourself about to commit and `git log -1` shows a commit authored by the
+  other runtime's current work that you did not expect, STOP — do not
+  commit — and ask the user how to proceed (e.g. branch off, rebase onto a
+  new branch, or hand off).
+- Branch naming convention: prefix branches with the owning runtime, e.g.
+  `claude/<topic>` or `codex/<topic>`. Before starting work or committing,
+  run `git branch --show-current` — if the current branch is prefixed for
+  the *other* runtime (or is a shared branch like `main`/`codex/main-sync`
+  that the other runtime is actively using), create/check out your own
+  branch (or worktree) before making any commits.
 - Treat current Codex work as protected unless the user explicitly hands it off.
-- Prefer separate git worktrees or branches for concurrent Claude and Codex work.
 - Use separate GSD workstream directories under `.planning/workstreams/<name>/`; do not edit another runtime's active workstream files.
-- Before editing, run `git status --short` and inspect `.planning/active-workstream` when present.
+- Before editing, run `git status --short` and `git log -1` and inspect
+  `.planning/active-workstream` when present.
 - Avoid overlapping source files, Terraform roots, generated application JSON, and planning artifacts across runtimes unless the user assigns the same task to both.
 - If overlap is unavoidable, stop and ask for an ownership decision instead of merging assumptions.
 - Do not overwrite, revert, stage, or commit changes created by the other runtime unless explicitly instructed.
