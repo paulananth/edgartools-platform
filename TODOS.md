@@ -92,7 +92,9 @@ second query or a join — needs design before implementing.
 
 ## sec_financial_fact PK omits period_end — same-period restatements collide and silently drop ~58% of facts
 
-**Status:** Stage 1 RESOLVED 2026-06-10 (commits `f1d9eea`, `7226630`, PR pending).
+**Status:** Stage 1 MERGED to main 2026-06-11 (commits `f1d9eea`, `7226630`, PR #57
+/ `8481e6e`). A schema-migration gap in the merged code was flagged by code
+review post-merge — see "Stage 1 follow-up: schema migration gap (OPEN)" below.
 Stage 2 (period_start, residual 2,440 collisions) remains OPEN — see "Recommended
 fix" step 1-3 below for the Stage 2 plan.
 
@@ -115,6 +117,52 @@ fix" step 1-3 below for the Stage 2 plan.
   so no re-bootstrap was needed. Dropped + recreated the two empty tables in
   the monolith with the new PK and re-uploaded to S3. Shards don't have these
   tables yet — they'll be created fresh with the new PK on first write.
+
+**Stage 1 follow-up: schema migration gap (OPEN)**
+
+**What:** `edgar_warehouse/silver_store.py:408`'s `CREATE TABLE IF NOT EXISTS`
+DDL for `sec_financial_fact`/`sec_financial_derived` does not migrate
+pre-existing tables created with the OLD PK (pre-PR-#57:
+`(cik, accession_number, concept, fiscal_period, segment)` /
+`(cik, accession_number, fiscal_period)`, no `period_end`). `IF NOT EXISTS`
+is a no-op against an existing table, so its constraint stays the old PK,
+while `merge_financial_facts`/`merge_financial_derived`'s
+`ON CONFLICT (..., period_end)` clauses (added in `7226630`) assume the new
+PK exists.
+
+**Why:** Flagged as `[P1]` by `codex review` against the merged diff
+(`codex/main-sync` PR #59 review pass, 2026-06-11): "For any existing
+`silver.duckdb` where these tables were already created with the old primary
+key, ... the new `ON CONFLICT (..., period_end)` targets ... are then not
+backed by a unique/primary-key constraint and DuckDB raises a binder error on
+the first financial merge." This session's dev S3 monolith was manually
+drop-recreated (see resolution summary above) and is fine, but any OTHER
+environment (other dev shards once they get these tables, prod, a fresh
+clone of an older `silver.duckdb`) will hit a `BinderException` on the first
+`merge_financial_facts`/`merge_financial_derived` call after pulling PR #57.
+
+**Where:**
+- `edgar_warehouse/silver_store.py:408` (and the analogous
+  `sec_financial_derived` DDL) — `CREATE TABLE IF NOT EXISTS` with the new PK.
+- `edgar_warehouse/silver_store.py:2020-2078` — `merge_financial_facts`/
+  `merge_financial_derived` `ON CONFLICT (..., period_end)` clauses that
+  require the new PK to exist as a real constraint.
+
+**Fix approach:** Add a schema-evolution check on `SilverDatabase` init (or a
+dedicated migration step) that detects `sec_financial_fact`/
+`sec_financial_derived` tables with the OLD PK (e.g. via
+`PRAGMA table_info`/`duckdb_constraints()`) and drop+recreates them with the
+new PK — same drop+recreate already done manually for the dev monolith this
+session, but automated so it runs wherever `SilverDatabase` opens an
+older-PK store. Drop+recreate is safe per CLAUDE.md SEC-data-idempotency
+(re-bootstrappable), but the migration must run BEFORE the first
+`merge_financial_facts`/`merge_financial_derived` call, not be left as a
+manual per-environment step.
+
+**Surfaced:** `codex review` of PR #59 diff (`codex/main-sync` vs `main`),
+2026-06-11.
+
+---
 
 **Audit results** (real Apple/CIK 320193 companyfacts data, 24,195 raw fact rows,
 script `/tmp/audit_period_end_collision.py`, since deleted):
