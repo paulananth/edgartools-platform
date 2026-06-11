@@ -93,10 +93,10 @@ second query or a join — needs design before implementing.
 ## sec_financial_fact PK omits period_end — same-period restatements collide and silently drop ~58% of facts
 
 **Status:** Stage 1 MERGED to main 2026-06-11 (commits `f1d9eea`, `7226630`, PR #57
-/ `8481e6e`). A schema-migration gap in the merged code was flagged by code
-review post-merge — see "Stage 1 follow-up: schema migration gap (OPEN)" below.
-Stage 2 (period_start, residual 2,440 collisions) remains OPEN — see "Recommended
-fix" step 1-3 below for the Stage 2 plan.
+/ `8481e6e`). A schema-migration gap in the merged code, flagged by code review
+post-merge, is now RESOLVED — see "Stage 1 follow-up: schema migration gap
+(RESOLVED)" below. Stage 2 (period_start, residual 2,440 collisions) remains
+OPEN — see "Recommended fix" step 1-3 below for the Stage 2 plan.
 
 **Stage 1 resolution summary:**
 - Added `period_end` to the PK of `sec_financial_fact`
@@ -118,7 +118,7 @@ fix" step 1-3 below for the Stage 2 plan.
   the monolith with the new PK and re-uploaded to S3. Shards don't have these
   tables yet — they'll be created fresh with the new PK on first write.
 
-**Stage 1 follow-up: schema migration gap (OPEN)**
+**Stage 1 follow-up: schema migration gap (RESOLVED)**
 
 **What:** `edgar_warehouse/silver_store.py:408`'s `CREATE TABLE IF NOT EXISTS`
 DDL for `sec_financial_fact`/`sec_financial_derived` does not migrate
@@ -158,6 +158,20 @@ older-PK store. Drop+recreate is safe per CLAUDE.md SEC-data-idempotency
 (re-bootstrappable), but the migration must run BEFORE the first
 `merge_financial_facts`/`merge_financial_derived` call, not be left as a
 manual per-environment step.
+
+**Resolution:** Implemented in `edgar_warehouse/silver_store.py`:
+`_ensure_schema_evolution()` now calls a new
+`_migrate_financial_period_end_pk()`, which queries
+`duckdb_constraints()` for each of `sec_financial_fact`/
+`sec_financial_derived`. If a table exists and its `PRIMARY KEY` does not
+include `period_end`, it logs a `WARNING` and `DROP TABLE`s it; `_DDL`
+(already `CREATE TABLE IF NOT EXISTS`) then recreates it with the
+period_end-inclusive PK. Runs automatically on every `SilverDatabase.__init__`,
+before any merge call, and is a no-op once a store has the new PK. Covered by
+`tests/unit/test_silver_store_schema_migration.py` (3 tests: migration drops
+old-PK rows + adds `period_end` to PK, `merge_financial_facts` succeeds
+post-migration on the exact collision shape from the codex finding, and a
+fresh/already-migrated store is a silent no-op).
 
 **Surfaced:** `codex review` of PR #59 diff (`codex/main-sync` vs `main`),
 2026-06-11.

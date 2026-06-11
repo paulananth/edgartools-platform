@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,9 @@ except ImportError as exc:
         "DuckDB is required for the silver layer. "
         "Install with: pip install 'edgartools[warehouse]'"
     ) from exc
+
+
+logger = logging.getLogger(__name__)
 
 
 _DDL = """
@@ -559,6 +563,13 @@ CREATE TABLE IF NOT EXISTS sec_thirteenf_holding (
 """
 
 
+# Tables whose primary key gained `period_end` in PR #57 (the period_end PK
+# fix for sec_financial_fact / sec_financial_derived). Stores created before
+# that change retain the old PK; _ensure_schema_evolution detects and repairs
+# them via _migrate_financial_period_end_pk.
+_FINANCIAL_TABLES_REQUIRING_PERIOD_END_PK = ("sec_financial_fact", "sec_financial_derived")
+
+
 class SilverDatabase:
     """Manages the silver-layer DuckDB instance for a warehouse root."""
 
@@ -570,12 +581,49 @@ class SilverDatabase:
         self._ensure_schema_evolution()
 
     def _ensure_schema_evolution(self) -> None:
+        self._migrate_financial_period_end_pk()
+
         migration_statements = [
             "ALTER TABLE sec_parse_run ADD COLUMN IF NOT EXISTS rows_written INTEGER",
             "ALTER TABLE sec_source_checkpoint ADD COLUMN IF NOT EXISTS bronze_path TEXT",
         ]
         for statement in migration_statements:
             self._conn.execute(statement)
+
+    def _migrate_financial_period_end_pk(self) -> None:
+        """Drop and recreate financial tables whose PK predates PR #57.
+
+        ``CREATE TABLE IF NOT EXISTS`` does not alter an existing table's
+        constraints, so a store created before the period_end PK fix
+        retains the old PK and the ``ON CONFLICT (..., period_end)``
+        targets in ``merge_financial_facts``/``merge_financial_derived``
+        raise a binder error. These tables are re-bootstrappable from SEC
+        bronze data, so old rows are discarded; ``_DDL`` recreates the
+        dropped tables below with the current (period_end-inclusive) PK.
+        """
+        tables_to_recreate = []
+        for table in _FINANCIAL_TABLES_REQUIRING_PERIOD_END_PK:
+            row = self._conn.execute(
+                """
+                SELECT constraint_column_names
+                FROM duckdb_constraints()
+                WHERE table_name = ? AND constraint_type = 'PRIMARY KEY'
+                """,
+                [table],
+            ).fetchone()
+            if row is not None and "period_end" not in row[0]:
+                tables_to_recreate.append(table)
+
+        for table in tables_to_recreate:
+            logger.warning(
+                "Migrating %s to the period_end primary key (PR #57): "
+                "dropping and recreating with no rows. Re-bootstrap to repopulate.",
+                table,
+            )
+            self._conn.execute(f"DROP TABLE {table}")
+
+        if tables_to_recreate:
+            self._conn.execute(_DDL)
 
     def close(self) -> None:
         self._conn.close()
