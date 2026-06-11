@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Neo4j Snowflake Native App Migration
 status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-06-11T10:47:00Z"
-last_activity: 2026-06-11 -- Phase 3 context gathered
+stopped_at: Phase 3 planned; Plan 03-01 ready to execute
+last_updated: "2026-06-11T11:28:00Z"
+last_activity: 2026-06-11 -- Phase 3 planned
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 6
+  total_plans: 9
   completed_plans: 6
   percent: 50
 ---
@@ -19,9 +19,9 @@ progress:
 ## Current Position
 
 Phase: 3 (Hosted Graph Verification And E2E Cutover) — READY TO PLAN
-Plan: TBD
-Status: Phase 3 context gathered; ready to plan hosted graph verification and E2E cutover
-Last activity: 2026-06-11 -- Phase 3 context gathered
+Plan: 03-01 (strict Snowflake SQL parity gate)
+Status: Phase 3 planned; ready to execute hosted graph verification plan 03-01
+Last activity: 2026-06-11 -- Phase 3 planned
 
 Progress: [#####-----] 50% (Phases 1 and 2 complete; milestone v1.3 remains in progress)
 
@@ -124,6 +124,11 @@ projection surfaces should change.
   validated; AWS MDM E2E success should use Snowflake `sync-graph` plus strict
   `verify-graph` and include Step Functions validation.
 
+- Phase 3 planning produced three executable plans: `03-01` for strict SQL
+  parity and structured diagnostics in `verify-graph`; `03-02` for Native App
+  grant automation, grant validation, and `GRAPH_INFO`/`BFS`/`WCC` smoke proof;
+  and `03-03` for AWS MDM E2E cutover plus live dev validation evidence.
+
 ## Blockers
 
 - Live Marketplace app availability, Snowflake account privileges, and app role grant details must
@@ -135,6 +140,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-11T10:47:00Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/workstreams/neo4j-snowflake/phases/03-hosted-graph-verification-and-e2e-cutover/03-CONTEXT.md
+Last session: 2026-06-11T11:28:00Z
+Stopped at: Phase 3 planned; Plan 03-01 ready to execute
+Resume file: .planning/workstreams/neo4j-snowflake/phases/03-hosted-graph-verification-and-e2e-cutover/03-01-PLAN.md

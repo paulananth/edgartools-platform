@@ -90,7 +90,13 @@ MDM relationship parity, dashboard inspection, and end-to-end AWS verification.
 4. End-to-end AWS validation reaches graph sync and Snowflake-hosted verification without external Neo4j credentials.
 5. Operator runbook documents how to distinguish app permission failures, missing graph projection data, and real MDM parity defects.
 
-**Plans**: TBD
+**Plans**:
+
+| Plan | Wave | Objective | Requirements |
+|------|------|-----------|--------------|
+| 03-01 | 1 | Replace minimal `verify-graph` counts with a strict Snowflake SQL parity gate and structured diagnostics. | SYNC-04, VERIFY-01, VERIFY-02 |
+| 03-02 | 2 | Add least-privilege Native App grants, grant validation, and default `GRAPH_INFO`/`BFS`/`WCC` smoke proof. | SYNC-04, SNOW-03, VERIFY-01, VERIFY-03 |
+| 03-03 | 3 | Cut AWS MDM E2E validation over to Snowflake `sync-graph` plus strict `verify-graph` and capture live dev proof. | SYNC-04, VERIFY-05 |
 
 ### Phase 4: Dashboard Hosted Graph Migration
 
@@ -118,5 +124,5 @@ MDM relationship parity, dashboard inspection, and end-to-end AWS verification.
 |-------|-----------|----------------|--------|-----------|
 | 1. Snowflake Native App Feasibility And Architecture Decision | v1.3 Neo4j Snowflake Native App Migration | 3/3 | Complete    | 2026-05-26 |
 | 2. Snowflake Graph Sync Contract | v1.3 Neo4j Snowflake Native App Migration | 3/3 | Complete    | 2026-05-27 |
-| 3. Hosted Graph Verification And E2E Cutover | v1.3 Neo4j Snowflake Native App Migration | 0/TBD | Not started | - |
+| 3. Hosted Graph Verification And E2E Cutover | v1.3 Neo4j Snowflake Native App Migration | 0/3 | Planned | - |
 | 4. Dashboard Hosted Graph Migration | v1.3 Neo4j Snowflake Native App Migration | 0/TBD | Not started | - |
