@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AWS-only MDM/Neo4j e2e and Step Functions status check.
+# AWS-only MDM hosted graph e2e and Step Functions status check.
 #
 # Usage:
 #   bash infra/scripts/run-aws-mdm-e2e.sh --env dev
@@ -13,7 +13,7 @@ Usage:
   run-aws-mdm-e2e.sh --env <dev|prod> [options]
 
 Checks every state machine listed in infra/aws-<env>-application.json, then
-runs the AWS-only MDM/Neo4j e2e chain unless --status-only is provided.
+runs the AWS-only MDM hosted graph e2e chain unless --status-only is provided.
 
 Options:
   --env <dev|prod>            Environment. Required.
@@ -95,6 +95,24 @@ print_state_machine_status() {
   done
 }
 
+warn_lingering_neo4j_references() {
+  local warned=false
+
+  if grep -Eiq 'NEO4J_|"neo4j"|--neo4j' "$APPLICATION_FILE"; then
+    echo "WARNING: deployment summary still contains lingering NEO4J_* or Neo4j references." >&2
+    warned=true
+  fi
+
+  if grep -Eiq 'NEO4J_|--neo4j|mdm_check_connectivity' "${REPO_ROOT}/infra/scripts/deploy-aws-application.sh"; then
+    echo "WARNING: deploy script still contains legacy Neo4j task-definition/script references." >&2
+    warned=true
+  fi
+
+  if [[ "$warned" == "true" ]]; then
+    echo "WARNING: Snowflake-hosted graph validation treats those references as warning-only unless they block mdm_sync_graph or mdm_verify_graph." >&2
+  fi
+}
+
 wait_for_execution() {
   local execution_arn="$1" label="$2" status
   while true; do
@@ -131,6 +149,7 @@ start_and_wait() {
 }
 
 print_state_machine_status
+warn_lingering_neo4j_references
 
 if [[ "$RUN_E2E" != "true" ]]; then
   exit 0
@@ -139,8 +158,8 @@ fi
 RUN_PREFIX="aws-mdm-e2e-$(date +%s)"
 
 echo ""
-echo "==> Running AWS-only MDM/Neo4j e2e"
-start_and_wait "mdm_check_connectivity" "{}" "check"
+echo "==> Running AWS-only MDM hosted graph e2e"
+echo "  Snowflake-hosted graph validation uses mdm_sync_graph plus strict mdm_verify_graph."
 start_and_wait "mdm_migrate" "{}" "migrate"
 start_and_wait "mdm_run" "{\"limit\":${MDM_RUN_LIMIT}}" "run"
 start_and_wait "mdm_backfill_relationships" "{\"limit\":${GRAPH_LIMIT}}" "backfill"
@@ -149,4 +168,4 @@ start_and_wait "mdm_verify_graph" "{}" "verify"
 start_and_wait "mdm_counts" "{}" "counts"
 
 echo ""
-echo "AWS MDM/Neo4j e2e succeeded."
+echo "AWS MDM hosted graph e2e succeeded."

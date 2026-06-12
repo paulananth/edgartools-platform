@@ -450,3 +450,15 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
             "load button",
         ):
             self.assertNotIn(forbidden, lowered)
+
+    def test_aws_mdm_e2e_uses_hosted_graph_validation_gate(self) -> None:
+        text = _read(REPO_ROOT / "infra" / "scripts" / "run-aws-mdm-e2e.sh")
+
+        self.assertIn("AWS-only MDM hosted graph e2e", text)
+        self.assertIn("Snowflake-hosted graph validation", text)
+        self.assertNotIn('start_and_wait "mdm_check_connectivity"', text)
+        self.assertIn('start_and_wait "mdm_sync_graph"', text)
+        self.assertIn('start_and_wait "mdm_verify_graph"', text)
+        self.assertIn("warn_lingering_neo4j_references", text)
+        self.assertIn("WARNING", text)
+        self.assertIn("NEO4J_*", text)

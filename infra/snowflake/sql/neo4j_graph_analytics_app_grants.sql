@@ -13,6 +13,11 @@
 -- included because Neo4j Graph Analytics algorithms write bounded result tables
 -- into the governed graph schema.
 
+GRANT CREATE COMPUTE POOL ON ACCOUNT
+  TO APPLICATION Neo4j_Graph_Analytics;
+GRANT CREATE WAREHOUSE ON ACCOUNT
+  TO APPLICATION Neo4j_Graph_Analytics;
+
 USE DATABASE EDGARTOOLS_DEV;
 
 SHOW APPLICATIONS LIKE 'Neo4j_Graph_Analytics';

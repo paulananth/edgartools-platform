@@ -3,7 +3,7 @@
 workstream: neo4j-snowflake
 status: active
 milestone: v1.3 Neo4j Snowflake Native App Migration
-updated: 2026-06-11
+updated: 2026-06-12
 
 ---
 
