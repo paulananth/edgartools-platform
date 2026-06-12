@@ -160,8 +160,17 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     # verify-graph
     vg = mdm_sub.add_parser(
         "verify-graph",
-        help="Query Neo4j for node and relationship counts and print JSON",
+        help="Verify Snowflake graph parity and Native App graph execution",
     )
+    vg.add_argument(
+        "--skip-native-app",
+        action="store_true",
+        default=False,
+        help="Skip Native App smoke checks for local/offline tests; not valid for live Phase 3 acceptance",
+    )
+    vg.add_argument("--native-app-name", default=None, help="Snowflake Native App name")
+    vg.add_argument("--native-app-database-role", default=None, help="Database role granted to the Native App")
+    vg.add_argument("--native-app-compute-pool", default=None, help="Native App compute pool selector")
     vg.set_defaults(handler=_logged_handler("verify-graph", _handle_verify_graph))
 
     # backfill-relationships
@@ -834,42 +843,48 @@ def _handle_load_relationships(args) -> int:
 
 def _handle_verify_graph(args) -> int:
     from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
-    from edgar_warehouse.mdm.snowflake_graph import DEFAULT_TARGET_SCHEMA
+    from edgar_warehouse.mdm.snowflake_graph import (
+        DEFAULT_MDM_SCHEMA,
+        DEFAULT_NATIVE_APP_COMPUTE_POOL,
+        DEFAULT_NATIVE_APP_DATABASE_ROLE,
+        DEFAULT_NATIVE_APP_NAME,
+        DEFAULT_TARGET_SCHEMA,
+        SnowflakeGraphVerificationConfig,
+        SnowflakeGraphVerifier,
+    )
 
     try:
         settings = SnowflakeConnectionSettings.from_env()
-        target_database = settings.database
-        target_schema = DEFAULT_TARGET_SCHEMA
-        nodes_table = _snowflake_graph_table(target_database, target_schema, "MDM_GRAPH_NODES")
-        edges_table = _snowflake_graph_table(target_database, target_schema, "MDM_GRAPH_EDGES")
-
         connection = settings.connect()
-        cursor = connection.cursor()
         try:
-            node_count = _snowflake_scalar(cursor, f"SELECT COUNT(*) FROM {nodes_table}")
-            edge_count = _snowflake_scalar(cursor, f"SELECT COUNT(*) FROM {edges_table}")
+            result = SnowflakeGraphVerifier(
+                connection,
+                default_database=settings.database,
+            ).verify(
+                SnowflakeGraphVerificationConfig(
+                    target_database=settings.database,
+                    target_schema=DEFAULT_TARGET_SCHEMA,
+                    mdm_database=settings.database,
+                    mdm_schema=DEFAULT_MDM_SCHEMA,
+                    verify_native_app=not args.skip_native_app,
+                    native_app_name=args.native_app_name or DEFAULT_NATIVE_APP_NAME,
+                    native_app_database_role=(
+                        args.native_app_database_role or DEFAULT_NATIVE_APP_DATABASE_ROLE
+                    ),
+                    native_app_compute_pool=(
+                        args.native_app_compute_pool or DEFAULT_NATIVE_APP_COMPUTE_POOL
+                    ),
+                )
+            )
         finally:
-            cursor.close()
             connection.close()
     except (RuntimeError, ValueError) as exc:
         print(f"verify-graph: {exc}", file=sys.stderr)
         return 1
 
-    payload = {
-        "status": "ok" if node_count > 0 and edge_count > 0 else "failed",
-        "snowflake_graph_nodes": node_count,
-        "snowflake_graph_edges": edge_count,
-        "target": {
-            "database": target_database,
-            "schema": target_schema,
-        },
-    }
-    print(json.dumps(payload, indent=2, sort_keys=True))
-    if node_count <= 0 or edge_count <= 0:
-        print(
-            "verify-graph: Snowflake graph node and edge counts must both be greater than 0",
-            file=sys.stderr,
-        )
+    print(json.dumps(result.payload, indent=2, sort_keys=True))
+    if not result.passed:
+        print("verify-graph: Snowflake graph verification checks failed", file=sys.stderr)
         return 1
     return 0
 

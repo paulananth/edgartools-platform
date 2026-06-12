@@ -450,3 +450,28 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
             "load button",
         ):
             self.assertNotIn(forbidden, lowered)
+
+    def test_aws_mdm_e2e_uses_hosted_graph_validation_gate(self) -> None:
+        text = _read(REPO_ROOT / "infra" / "scripts" / "run-aws-mdm-e2e.sh")
+
+        self.assertIn("AWS-only MDM hosted graph e2e", text)
+        self.assertIn("Snowflake-hosted graph validation", text)
+        self.assertNotIn('start_and_wait "mdm_check_connectivity"', text)
+        self.assertIn('start_and_wait "mdm_sync_graph"', text)
+        self.assertIn('start_and_wait "mdm_verify_graph"', text)
+        self.assertIn("warn_lingering_neo4j_references", text)
+        self.assertIn("WARNING", text)
+        self.assertIn("NEO4J_*", text)
+        self.assertIn("--snow-connection", text)
+        self.assertIn("--snowflake-database", text)
+        self.assertIn("--native-app-compute-pool", text)
+        self.assertIn("--skip-preflight", text)
+        self.assertIn("run_hosted_graph_preflight", text)
+        self.assertIn("uv run --extra snowflake edgar-warehouse mdm verify-graph", text)
+        self.assertIn("SNOWFLAKE_CONNECTION=${SNOW_CONNECTION_NAME}", text)
+        self.assertIn("DBT_SNOWFLAKE_DATABASE=${SNOWFLAKE_DATABASE_NAME}", text)
+        self.assertIn("MDM_SNOWFLAKE_DATABASE=${SNOWFLAKE_DATABASE_NAME}", text)
+
+        status_only_block = text.index('if [[ "$RUN_E2E" != "true" ]]; then')
+        preflight_call = text.rindex("run_hosted_graph_preflight")
+        self.assertLess(status_only_block, preflight_call)
