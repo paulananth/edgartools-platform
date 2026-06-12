@@ -73,6 +73,28 @@ CREATE TABLE sec_financial_derived (
 );
 """
 
+# Stage 1 DDL for sec_financial_fact (period_end in PK, period_start column
+# does not exist yet). Represents a store that picked up PR #57/#61 but not
+# Stage 2 of the period_end PK fix.
+_STAGE1_FINANCIAL_FACT_DDL = """
+CREATE TABLE sec_financial_fact (
+    cik                 BIGINT NOT NULL,
+    accession_number    TEXT NOT NULL,
+    fiscal_year         INTEGER NOT NULL,
+    fiscal_period       TEXT NOT NULL,
+    period_end          DATE NOT NULL,
+    form_type           TEXT NOT NULL,
+    concept             TEXT NOT NULL,
+    value               DOUBLE,
+    unit                TEXT,
+    decimals            INTEGER,
+    segment             TEXT NOT NULL DEFAULT 'consolidated',
+    parser_version      TEXT,
+    ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (cik, accession_number, concept, fiscal_period, segment, period_end)
+);
+"""
+
 
 def _pk_columns(conn: duckdb.DuckDBPyConnection, table: str) -> list[str]:
     row = conn.execute(
@@ -205,10 +227,111 @@ def test_migration_is_noop_for_fresh_store(tmp_path, caplog):
     with caplog.at_level(logging.WARNING, logger="edgar_warehouse.silver_store"):
         db = SilverDatabase(db_path)
     try:
-        assert "period_end" in _pk_columns(db._conn, "sec_financial_fact")
+        fact_pk = _pk_columns(db._conn, "sec_financial_fact")
+        assert "period_end" in fact_pk
+        assert "period_start" in fact_pk
         assert "period_end" in _pk_columns(db._conn, "sec_financial_derived")
     finally:
         db.close()
 
     assert "sec_financial_fact" not in caplog.text
     assert "sec_financial_derived" not in caplog.text
+
+
+def _build_stage1_pk_store(db_path: str) -> None:
+    """Build a sec_financial_fact table on the Stage 1 PK (period_end, no
+    period_start column) with a QTD/YTD "Frankenstein" pair: same PK columns
+    (including period_end), different durations.
+    """
+    conn = duckdb.connect(db_path)
+    try:
+        conn.execute(_STAGE1_FINANCIAL_FACT_DDL)
+        conn.execute(_OLD_FINANCIAL_DERIVED_DDL)
+        conn.execute(
+            """
+            INSERT INTO sec_financial_fact
+                (cik, accession_number, fiscal_year, fiscal_period, period_end,
+                 form_type, concept, value, unit, decimals, segment, parser_version)
+            VALUES (320193, '0000320193-25-000050', 2024, 'Q2', '2024-06-30',
+                    '10-Q', 'us-gaap/AntidilutiveSecurities', 12345, 'shares', 0,
+                    'consolidated', 'stage1-pk-test')
+            """
+        )
+    finally:
+        conn.close()
+
+
+def test_migration_adds_period_start_to_pk_and_drops_old_rows(tmp_path, caplog):
+    db_path = str(tmp_path / "silver.duckdb")
+    _build_stage1_pk_store(db_path)
+
+    with caplog.at_level(logging.WARNING, logger="edgar_warehouse.silver_store"):
+        db = SilverDatabase(db_path)
+    try:
+        fact_pk = _pk_columns(db._conn, "sec_financial_fact")
+        assert "period_start" in fact_pk
+
+        # Old rows are discarded as part of the drop+recreate.
+        assert db.fetch("SELECT COUNT(*) AS n FROM sec_financial_fact")[0]["n"] == 0
+    finally:
+        db.close()
+
+    assert "sec_financial_fact" in caplog.text
+
+
+def test_merge_financial_facts_with_period_start_succeeds_after_migration(tmp_path):
+    """The QTD/YTD collision case Stage 2 resolves: two rows sharing every
+    Stage 1 PK column (including period_end) but with different period_start
+    (3-month vs. 6-month window ending on the same date) must upsert as two
+    distinct rows, not collide.
+    """
+    db_path = str(tmp_path / "silver.duckdb")
+    _build_stage1_pk_store(db_path)
+
+    db = SilverDatabase(db_path)
+    try:
+        rows = [
+            {
+                "cik": 320193,
+                "accession_number": "0000320193-25-000050",
+                "fiscal_year": 2024,
+                "fiscal_period": "Q2",
+                "period_end": "2024-06-30",
+                "period_start": "2024-04-01",  # QTD: 3 months ended 2024-06-30
+                "form_type": "10-Q",
+                "concept": "us-gaap/AntidilutiveSecurities",
+                "value": 1000,
+                "unit": "shares",
+                "decimals": 0,
+                "segment": "consolidated",
+                "parser_version": "test",
+            },
+            {
+                "cik": 320193,
+                "accession_number": "0000320193-25-000050",
+                "fiscal_year": 2024,
+                "fiscal_period": "Q2",
+                "period_end": "2024-06-30",
+                "period_start": "2024-01-01",  # YTD: 6 months ended 2024-06-30
+                "form_type": "10-Q",
+                "concept": "us-gaap/AntidilutiveSecurities",
+                "value": 2000,
+                "unit": "shares",
+                "decimals": 0,
+                "segment": "consolidated",
+                "parser_version": "test",
+            },
+        ]
+
+        count = db.merge_financial_facts(rows, sync_run_id="test-sync")
+        assert count == 2
+
+        stored = db.fetch(
+            "SELECT period_start, value FROM sec_financial_fact ORDER BY period_start"
+        )
+        assert len(stored) == 2
+        # period_start=2024-01-01 (YTD, value=2000) sorts before
+        # period_start=2024-04-01 (QTD, value=1000).
+        assert [r["value"] for r in stored] == [2000, 1000]
+    finally:
+        db.close()

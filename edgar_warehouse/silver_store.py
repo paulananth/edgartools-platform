@@ -397,6 +397,7 @@ CREATE TABLE IF NOT EXISTS sec_financial_fact (
     fiscal_year         INTEGER NOT NULL,
     fiscal_period       TEXT NOT NULL,   -- FY | Q1 | Q2 | Q3 | Q4
     period_end          DATE NOT NULL,
+    period_start        DATE NOT NULL,   -- sentinel 0001-01-01 for instant (no-duration) facts
     form_type           TEXT NOT NULL,   -- 10-K | 10-Q
     concept             TEXT NOT NULL,   -- XBRL concept name (e.g. us-gaap/Revenues)
     value               DOUBLE,
@@ -409,7 +410,9 @@ CREATE TABLE IF NOT EXISTS sec_financial_fact (
     -- both the current-period and comparative prior-period value for the
     -- same (accn, concept, fiscal_period, segment) -- omitting period_end
     -- collapses these into one row with a Frankenstein period_end/value pair.
-    PRIMARY KEY (cik, accession_number, concept, fiscal_period, segment, period_end)
+    -- period_start additionally disambiguates QTD vs. YTD duration facts that
+    -- share the same period_end (e.g. "3 months ended" vs "6 months ended").
+    PRIMARY KEY (cik, accession_number, concept, fiscal_period, segment, period_end, period_start)
 );
 
 CREATE TABLE IF NOT EXISTS sec_financial_derived (
@@ -569,6 +572,12 @@ CREATE TABLE IF NOT EXISTS sec_thirteenf_holding (
 # them via _migrate_financial_period_end_pk.
 _FINANCIAL_TABLES_REQUIRING_PERIOD_END_PK = ("sec_financial_fact", "sec_financial_derived")
 
+# Sentinel period_start for "instant" (no-duration) XBRL facts -- e.g. balance
+# sheet concepts, which the SEC companyfacts API reports with only an "end"
+# date and no "start". Keeps period_start NOT NULL so it can sit in the
+# sec_financial_fact primary key (added in Stage 2 of the period_end PK fix).
+_INSTANT_FACT_PERIOD_START_SENTINEL = "0001-01-01"
+
 
 class SilverDatabase:
     """Manages the silver-layer DuckDB instance for a warehouse root."""
@@ -582,6 +591,7 @@ class SilverDatabase:
 
     def _ensure_schema_evolution(self) -> None:
         self._migrate_financial_period_end_pk()
+        self._migrate_financial_fact_period_start_pk()
 
         migration_statements = [
             "ALTER TABLE sec_parse_run ADD COLUMN IF NOT EXISTS rows_written INTEGER",
@@ -623,6 +633,36 @@ class SilverDatabase:
             self._conn.execute(f"DROP TABLE {table}")
 
         if tables_to_recreate:
+            self._conn.execute(_DDL)
+
+    def _migrate_financial_fact_period_start_pk(self) -> None:
+        """Drop and recreate sec_financial_fact if its PK predates Stage 2
+        of the period_end PK fix (period_start added to the PK).
+
+        Same rationale and drop+recreate pattern as
+        ``_migrate_financial_period_end_pk``: a store whose sec_financial_fact
+        PK already includes period_end (Stage 1) but not period_start (Stage 2)
+        would otherwise raise a binder error on the first
+        ``merge_financial_facts`` call, since its
+        ``ON CONFLICT (..., period_start)`` target has no backing constraint.
+        A store still on the pre-Stage-1 PK is handled by
+        ``_migrate_financial_period_end_pk`` above, which recreates it via the
+        current (Stage-2) ``_DDL`` -- making this check a no-op for it.
+        """
+        row = self._conn.execute(
+            """
+            SELECT constraint_column_names
+            FROM duckdb_constraints()
+            WHERE table_name = 'sec_financial_fact' AND constraint_type = 'PRIMARY KEY'
+            """
+        ).fetchone()
+        if row is not None and "period_start" not in row[0]:
+            logger.warning(
+                "Migrating sec_financial_fact to the period_start primary key "
+                "(Stage 2 of the period_end PK fix): dropping and recreating "
+                "with no rows. Re-bootstrap to repopulate."
+            )
+            self._conn.execute("DROP TABLE sec_financial_fact")
             self._conn.execute(_DDL)
 
     def close(self) -> None:
@@ -2084,6 +2124,7 @@ class SilverDatabase:
                     fiscal_year         INTEGER,
                     fiscal_period       TEXT,
                     period_end          DATE,
+                    period_start        DATE,
                     form_type           TEXT,
                     concept             TEXT,
                     value               DOUBLE,
@@ -2095,29 +2136,29 @@ class SilverDatabase:
             """,
             insert_first_sql="""
                 INSERT INTO sec_financial_fact
-                    (cik, accession_number, fiscal_year, fiscal_period, period_end,
+                    (cik, accession_number, fiscal_year, fiscal_period, period_end, period_start,
                      form_type, concept, value, unit, decimals, segment, parser_version)
-                SELECT cik, accession_number, fiscal_year, fiscal_period, period_end,
+                SELECT cik, accession_number, fiscal_year, fiscal_period, period_end, period_start,
                        form_type, concept, value, unit, decimals, segment, parser_version
                 FROM stg_sec_financial_fact
                 QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY cik, accession_number, concept, fiscal_period, segment, period_end
+                    PARTITION BY cik, accession_number, concept, fiscal_period, segment, period_end, period_start
                     ORDER BY seq ASC
                 ) = 1
-                ON CONFLICT (cik, accession_number, concept, fiscal_period, segment, period_end) DO NOTHING
+                ON CONFLICT (cik, accession_number, concept, fiscal_period, segment, period_end, period_start) DO NOTHING
             """,
             insert_last_sql="""
                 INSERT INTO sec_financial_fact
-                    (cik, accession_number, fiscal_year, fiscal_period, period_end,
+                    (cik, accession_number, fiscal_year, fiscal_period, period_end, period_start,
                      form_type, concept, value, unit, decimals, segment, parser_version)
-                SELECT cik, accession_number, fiscal_year, fiscal_period, period_end,
+                SELECT cik, accession_number, fiscal_year, fiscal_period, period_end, period_start,
                        form_type, concept, value, unit, decimals, segment, parser_version
                 FROM stg_sec_financial_fact
                 QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY cik, accession_number, concept, fiscal_period, segment, period_end
+                    PARTITION BY cik, accession_number, concept, fiscal_period, segment, period_end, period_start
                     ORDER BY seq DESC
                 ) = 1
-                ON CONFLICT (cik, accession_number, concept, fiscal_period, segment, period_end) DO UPDATE SET
+                ON CONFLICT (cik, accession_number, concept, fiscal_period, segment, period_end, period_start) DO UPDATE SET
                     value = excluded.value,
                     decimals = excluded.decimals,
                     parser_version = excluded.parser_version
@@ -2125,7 +2166,9 @@ class SilverDatabase:
             rows=rows,
             values_fn=lambda r: [
                 r["cik"], r["accession_number"], r.get("fiscal_year"),
-                r["fiscal_period"], r.get("period_end"), r.get("form_type", ""),
+                r["fiscal_period"], r.get("period_end"),
+                r.get("period_start", _INSTANT_FACT_PERIOD_START_SENTINEL),
+                r.get("form_type", ""),
                 r["concept"], r.get("value"), r.get("unit"),
                 r.get("decimals"), r.get("segment", "consolidated"),
                 r.get("parser_version"),
