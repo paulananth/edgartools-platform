@@ -10,6 +10,7 @@ requires:
     provides: Strict hosted `verify-graph` with required Native App proof
 provides:
   - AWS MDM E2E script cut over from external Neo4j connectivity success gate to hosted graph validation semantics
+  - Local strict `verify-graph` preflight before AWS Step Functions executions
   - Warning-only handling for lingering Neo4j deployment/script references
   - Live dev evidence showing SQL parity and grants pass, with Native App compute pool as the remaining blocker
 affects:
@@ -20,6 +21,7 @@ tech-stack:
   added: []
   patterns:
     - `mdm_check_connectivity` is no longer a required success step for hosted graph E2E
+    - full E2E runs preflight local strict `verify-graph` before starting AWS executions
     - `mdm_sync_graph` and strict `mdm_verify_graph` remain required E2E steps
     - stale `NEO4J_*` references are warnings unless they block the hosted path
 
@@ -53,6 +55,9 @@ Plan 03-03 was partially executed and is blocked on live Snowflake Native App co
 - Updated `infra/scripts/run-aws-mdm-e2e.sh` wording from MDM/Neo4j to MDM hosted graph validation.
 - Removed `mdm_check_connectivity` from the required E2E start-and-wait chain.
 - Preserved `--status-only` behavior.
+- Added default local strict `edgar-warehouse mdm verify-graph` preflight before AWS Step Functions executions.
+- Added `--snow-connection`, `--snowflake-database`, and `--native-app-compute-pool` preflight flags.
+- Added emergency `--skip-preflight`, with warning output that skipped-preflight runs cannot satisfy Phase 3 acceptance.
 - Kept `mdm_migrate`, `mdm_run`, `mdm_backfill_relationships`, `mdm_sync_graph`, `mdm_verify_graph`, and `mdm_counts` as the hosted graph E2E chain.
 - Added warning-only detection for lingering `NEO4J_*`, `neo4j`, `--neo4j`, and `mdm_check_connectivity` references in deployment artifacts/scripts.
 - Added architecture coverage for the hosted graph E2E script contract.
@@ -89,7 +94,9 @@ After the Native App compute pool is available and a dev AWS image containing th
 ```bash
 bash infra/scripts/run-aws-mdm-e2e.sh \
   --env dev \
-  --aws-profile sec_platform_deployer
+  --aws-profile sec_platform_deployer \
+  --snow-connection snowconn \
+  --snowflake-database EDGARTOOLS_DEV
 ```
 
 Then update `03-LIVE-DEV-RUN.md` with passing `GRAPH_INFO`/`BFS`/`WCC` proof and Step Functions execution ARNs/statuses.

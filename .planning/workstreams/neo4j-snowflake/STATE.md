@@ -147,8 +147,13 @@ projection surfaces should change.
 - Plan 03-03 updated the AWS MDM E2E script so success now flows through
   Snowflake-hosted graph validation (`mdm_sync_graph` plus strict
   `mdm_verify_graph`) and no longer starts `mdm_check_connectivity` as a
-  required success step. Lingering `NEO4J_*` or Neo4j deployment/script
-  references are emitted as warnings unless they block the hosted path.
+  required success step. Full E2E runs now preflight local strict
+  `edgar-warehouse mdm verify-graph` before starting AWS Step Functions,
+  with `--snow-connection`, `--snowflake-database`, and
+  `--native-app-compute-pool` overrides; `--skip-preflight` is warning-only
+  and cannot satisfy Phase 3 acceptance. Lingering `NEO4J_*` or Neo4j
+  deployment/script references are emitted as warnings unless they block the
+  hosted path.
 
 - Live dev validation for Plan 03-03 applied the Native App schema/database
   grants and account-level `CREATE COMPUTE POOL` / `CREATE WAREHOUSE`
@@ -174,7 +179,7 @@ projection surfaces should change.
   `CALL Neo4j_Graph_Analytics.graph.show_available_compute_pools();` returns
   `CPU_X64_XS` or another supported selector.
 - Deploy an AWS dev image containing strict hosted `verify-graph`, then rerun
-  `bash infra/scripts/run-aws-mdm-e2e.sh --env dev --aws-profile sec_platform_deployer`.
+  `bash infra/scripts/run-aws-mdm-e2e.sh --env dev --aws-profile sec_platform_deployer --snow-connection snowconn --snowflake-database EDGARTOOLS_DEV`.
 
 ## Session Continuity
 

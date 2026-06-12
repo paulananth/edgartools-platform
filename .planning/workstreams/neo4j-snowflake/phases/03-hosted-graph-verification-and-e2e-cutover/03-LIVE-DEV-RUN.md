@@ -112,6 +112,11 @@ The updated local script emitted warning-only messages for lingering Neo4j refer
 the deployment summary and deploy script. It no longer starts `mdm_check_connectivity`
 as a required success step.
 
+After follow-up grilling, the script was further updated so full E2E runs preflight
+local strict `edgar-warehouse mdm verify-graph` before starting AWS Step Functions.
+`--status-only` remains a pure AWS status report, and `--skip-preflight` is available
+only for emergency/debug runs that cannot satisfy Phase 3 acceptance.
+
 ## Acceptance Status
 
 Phase 3 final live acceptance is blocked.
@@ -139,7 +144,9 @@ latest historical `mdm_verify_graph` Step Functions success is not treated as fi
 ```bash
 bash infra/scripts/run-aws-mdm-e2e.sh \
   --env dev \
-  --aws-profile sec_platform_deployer
+  --aws-profile sec_platform_deployer \
+  --snow-connection snowconn \
+  --snowflake-database EDGARTOOLS_DEV
 ```
 
 5. Capture the new Step Functions execution ARNs/statuses and the passing
