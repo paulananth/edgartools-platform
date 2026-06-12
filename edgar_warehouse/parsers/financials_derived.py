@@ -203,15 +203,24 @@ def compute_derived_for_accession(
     if not fact_rows:
         return {"sec_financial_derived": []}
 
-    # Build concept → value map (unit=USD preferred, then shares, then pure)
+    # Build concept → value map (unit=USD preferred, then shares, then pure).
+    # A single (accn, fiscal_period, period_end) group can contain BOTH a QTD
+    # and a YTD row for the same duration concept (e.g. "3 months ended" vs.
+    # "6 months ended", both ending on the same date) -- sec_financial_fact's
+    # Stage 2 PK (silver_store.py) retains both. For a per-fiscal_period
+    # derived row, prefer the QTD (incremental) value: the row with the LATEST
+    # period_start, i.e. the shortest duration. Instant facts and Q1/FY rows
+    # have a single period_start, so this is a no-op for them.
     fact_map: dict[str, float | None] = {}
+    fact_map_starts: dict[str, str] = {}
     for row in fact_rows:
         concept = row.get("concept")
         value = row.get("value")
+        start = row.get("period_start") or ""
         if concept and value is not None:
-            # Keep first value seen (rows already deduplicated by primary key in silver)
-            if concept not in fact_map:
+            if concept not in fact_map or start > fact_map_starts.get(concept, ""):
                 fact_map[concept] = value
+                fact_map_starts[concept] = start
 
     # ── Income statement ─────────────────────────────────────────────────────
     revenue        = _pick(fact_map, _REVENUE_CONCEPTS)

@@ -95,8 +95,11 @@ second query or a join — needs design before implementing.
 **Status:** Stage 1 MERGED to main 2026-06-11 (commits `f1d9eea`, `7226630`, PR #57
 / `8481e6e`). A schema-migration gap in the merged code, flagged by code review
 post-merge, is now RESOLVED — see "Stage 1 follow-up: schema migration gap
-(RESOLVED)" below. Stage 2 (period_start, residual 2,440 collisions) remains
-OPEN — see "Recommended fix" step 1-3 below for the Stage 2 plan.
+(RESOLVED)" below. Stage 2 (period_start, residual 2,440 collisions) is now
+RESOLVED — see "Stage 2 resolution summary" below. Stage 3 (export/Snowflake
+MERGE path doesn't carry `period_start`, so gold can still collapse the QTD/YTD
+rows Stage 2 preserves in silver) is OPEN — see "Stage 3: export/Snowflake
+MERGE key gap (OPEN)" below.
 
 **Stage 1 resolution summary:**
 - Added `period_end` to the PK of `sec_financial_fact`
@@ -117,6 +120,45 @@ OPEN — see "Recommended fix" step 1-3 below for the Stage 2 plan.
   so no re-bootstrap was needed. Dropped + recreated the two empty tables in
   the monolith with the new PK and re-uploaded to S3. Shards don't have these
   tables yet — they'll be created fresh with the new PK on first write.
+
+**Stage 2 resolution summary:**
+- Added `period_start DATE NOT NULL` to `sec_financial_fact`, with a sentinel
+  `0001-01-01` (`_INSTANT_FACT_PERIOD_START_SENTINEL`) for "instant" facts
+  (balance-sheet concepts) whose SEC companyfacts JSON has no `"start"` key
+  (`edgar_warehouse/parsers/financials.py`, `edgar_warehouse/silver_store.py`).
+- Extended `sec_financial_fact`'s PK to `(cik, accession_number, concept,
+  fiscal_period, segment, period_end, period_start)`. New
+  `_migrate_financial_fact_period_start_pk()` (called from
+  `_ensure_schema_evolution()`, same drop+recreate pattern as Stage 1's
+  `_migrate_financial_period_end_pk()`) handles stores created on the Stage 1
+  PK (period_end but no period_start).
+- `merge_financial_facts`'s staging table, `QUALIFY ROW_NUMBER() OVER
+  (PARTITION BY ...)`, and `ON CONFLICT (...)` clauses extended with
+  `period_start`; rows without an explicit `period_start` fall back to the
+  same sentinel.
+- `sec_financial_derived`'s PK was NOT changed — it already includes
+  `period_end` from Stage 1, which is sufficient (this supersedes/corrects
+  original "Recommended fix" step 3 below, written before Stage 1 landed).
+  However, a real downstream issue was found and fixed: a single
+  `(accn, fiscal_period, period_end)` group passed to
+  `compute_derived_for_accession` can now legitimately contain BOTH a QTD
+  (e.g. "3 months ended") and YTD (e.g. "6 months ended") row for the same
+  duration concept (same `period_end`, different `period_start`). The
+  fact_map build in `edgar_warehouse/parsers/financials_derived.py` now
+  prefers the row with the LATEST `period_start` (shortest/incremental
+  duration) per concept, instead of first-value-seen — avoiding
+  nondeterministic QTD/YTD flip-flop in `sec_financial_derived` based on JSON
+  iteration order.
+- Migration: no re-bootstrap needed (dev `sec_financial_fact` tables were
+  empty after Stage 1's drop+recreate); the new PK applies on first write.
+- Tests: `tests/unit/test_silver_store_schema_migration.py` gained 2 tests
+  (Stage-1-PK store migrates to add `period_start` to the PK and drops old
+  rows; `merge_financial_facts` upserts a QTD/YTD pair sharing every Stage 1
+  PK column as two distinct rows post-migration). New
+  `tests/unit/test_financials_period_start.py` (4 tests): `period_start`
+  capture for duration facts, sentinel for instant facts, and
+  `compute_derived_for_accession`'s QTD-preference (and no-op when only one
+  duration is present).
 
 **Stage 1 follow-up: schema migration gap (RESOLVED)**
 
@@ -178,6 +220,55 @@ fresh/already-migrated store is a silent no-op).
 
 ---
 
+**Stage 3: export/Snowflake MERGE key gap (OPEN)**
+
+**What:** Stage 2 makes `period_start` part of `sec_financial_fact`'s silver PK
+so a QTD row (e.g. "3 months ended 2024-06-30") and a YTD row ("6 months ended
+2024-06-30") for the same concept are stored as two distinct rows. But the
+export/Snowflake path drops that distinction again:
+- `_build_sec_financial_fact()` (`edgar_warehouse/serving/gold_models.py:1112`)
+  SELECTs `period_end` but not `period_start` from `sec_financial_fact`.
+- `_SEC_FINANCIAL_FACT_SCHEMA` (`edgar_warehouse/serving/gold_models.py:246`)
+  has no `period_start` field.
+- The Snowflake `SEC_FINANCIAL_FACT` MERGE keys
+  (`infra/snowflake/sql/bootstrap/06_fundamentals_load_wrapper.sql:51`,
+  `["CIK", "ACCESSION_NUMBER", "CONCEPT", "FISCAL_PERIOD", "SEGMENT"]`) include
+  neither `PERIOD_END` nor `PERIOD_START` — so a QTD and YTD row exported in the
+  same run MERGE onto the same target row, and the later one wins.
+
+**Why:** Without `period_start` (and `period_end`) in the export schema and
+MERGE keys, the Stage 2 silver-layer fix doesn't reach
+`EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT` / gold — the QTD/YTD collision Stage 2
+resolves in silver re-appears in gold via the MERGE collapsing one of the two
+rows.
+
+**Where:**
+- `edgar_warehouse/serving/gold_models.py:246` — `_SEC_FINANCIAL_FACT_SCHEMA`
+  (add `period_start`).
+- `edgar_warehouse/serving/gold_models.py:1112` — `_build_sec_financial_fact()`
+  SELECT list (add `period_start`).
+- `infra/snowflake/sql/bootstrap/06_fundamentals_load_wrapper.sql:51` —
+  `mergeKeys.SEC_FINANCIAL_FACT` (add `PERIOD_END`, `PERIOD_START`).
+- `EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT` table DDL — add `PERIOD_START` column
+  (and confirm `PERIOD_END` exists; it's in the PyArrow schema but not in the
+  current MERGE keys either).
+
+**Fix approach:** Mirror Stage 1/2's PK change through the export path: add
+`period_start` to the PyArrow schema and builder SELECT, add `PERIOD_END` and
+`PERIOD_START` to the Snowflake `SEC_FINANCIAL_FACT` MERGE keys, and add the
+corresponding column(s) to the `EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT` table DDL.
+Needs a differential check against real data (e.g. re-export Apple CIK 320193
+sec_financial_fact and confirm the QTD/YTD pair survives into
+`EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT` as two rows, not one).
+
+**Surfaced:** `codex review` of PR #62 diff (`claude/silver-financial-period-start-pk`
+vs `codex/main-sync`), 2026-06-12: "[P2] Carry period_start through the export
+path ... the Snowflake MERGE on (CIK, ACCESSION_NUMBER, CONCEPT, FISCAL_PERIOD,
+SEGMENT) can collapse one value, so gold still loses the collision this change
+is meant to preserve."
+
+---
+
 **Audit results** (real Apple/CIK 320193 companyfacts data, 24,195 raw fact rows,
 script `/tmp/audit_period_end_collision.py`, since deleted):
 
@@ -210,17 +301,22 @@ script `/tmp/audit_period_end_collision.py`, since deleted):
   `_extract_financial_fact_row` in `parsers/financials.py:139-170` — `fact.get("start")`
   is dropped). Only 17 residual collisions are exact duplicates (harmless).
 
-**Recommended fix (two-stage, needs design sign-off before implementing):**
+**Recommended fix (two-stage) — HISTORICAL, see "Stage 2 resolution summary"
+above for what was actually implemented.** Step 3 below was superseded:
+Stage 1 already added `period_end` to `sec_financial_derived`'s PK, so no
+further PK change was needed there; Stage 2 instead fixed
+`compute_derived_for_accession`'s fact-map QTD/YTD selection.
 1. Capture `period_start` in `_extract_financial_fact_row` (new nullable
    column on `sec_financial_fact`).
 2. Extend PK to `(cik, accession_number, concept, fiscal_period, segment,
    period_end, period_start)` (or `period_start` nullable + `COALESCE` to a
    sentinel for instant facts where `start` is absent).
-3. `sec_financial_derived` has the analogous issue — its PK
+3. ~~`sec_financial_derived` has the analogous issue — its PK
    `(cik, accession_number, fiscal_period)` collapses the same
    `(fy, period_end)` groups that `compute_derived_for_accession`'s caller
    already groups by (`fundamentals_ingest.py:200-208`); the derived PK needs
-   `period_end` (and likely `fiscal_year`) added too.
+   `period_end` (and likely `fiscal_year`) added too.~~ (Already done in
+   Stage 1; see Stage 2 resolution summary above for the actual fix.)
 4. **Migration**: existing `sec_financial_fact`/`sec_financial_derived` rows
    already contain Frankenstein pairings — a schema PK change alone won't fix
    stored data. Re-bootstrapping (`bootstrap-fundamentals --mode entity-facts

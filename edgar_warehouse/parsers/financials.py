@@ -47,6 +47,12 @@ _DEI_AUDITOR_CONCEPTS = {
 # Forms that carry annual financial statements
 _ANNUAL_FORMS = frozenset({"10-K", "10-K/A", "20-F", "20-F/A"})
 
+# Sentinel period_start for "instant" (no-duration) facts -- e.g. balance
+# sheet concepts, which the SEC companyfacts API reports with only an "end"
+# date and no "start". Matches the sentinel sec_financial_fact's DDL/migration
+# expect (edgar_warehouse/silver_store.py).
+_INSTANT_FACT_PERIOD_START_SENTINEL = "0001-01-01"
+
 
 def parse_entity_facts(
     cik: int,
@@ -160,6 +166,10 @@ def _extract_financial_fact_row(
         "fiscal_year": _to_int(fact.get("fy")),
         "fiscal_period": fp,
         "period_end": fact.get("end"),
+        # "instant" facts (e.g. balance sheet concepts) have no "start" in the
+        # source JSON; use a sentinel so period_start can be NOT NULL and sit
+        # in the sec_financial_fact PK (Stage 2 of the period_end PK fix).
+        "period_start": fact.get("start") or _INSTANT_FACT_PERIOD_START_SENTINEL,
         "form_type": fact.get("form", ""),
         "concept": concept,
         "value": _to_float(val),
