@@ -96,7 +96,10 @@ second query or a join — needs design before implementing.
 / `8481e6e`). A schema-migration gap in the merged code, flagged by code review
 post-merge, is now RESOLVED — see "Stage 1 follow-up: schema migration gap
 (RESOLVED)" below. Stage 2 (period_start, residual 2,440 collisions) is now
-RESOLVED — see "Stage 2 resolution summary" below.
+RESOLVED — see "Stage 2 resolution summary" below. Stage 3 (export/Snowflake
+MERGE path doesn't carry `period_start`, so gold can still collapse the QTD/YTD
+rows Stage 2 preserves in silver) is OPEN — see "Stage 3: export/Snowflake
+MERGE key gap (OPEN)" below.
 
 **Stage 1 resolution summary:**
 - Added `period_end` to the PK of `sec_financial_fact`
@@ -214,6 +217,55 @@ fresh/already-migrated store is a silent no-op).
 
 **Surfaced:** `codex review` of PR #59 diff (`codex/main-sync` vs `main`),
 2026-06-11.
+
+---
+
+**Stage 3: export/Snowflake MERGE key gap (OPEN)**
+
+**What:** Stage 2 makes `period_start` part of `sec_financial_fact`'s silver PK
+so a QTD row (e.g. "3 months ended 2024-06-30") and a YTD row ("6 months ended
+2024-06-30") for the same concept are stored as two distinct rows. But the
+export/Snowflake path drops that distinction again:
+- `_build_sec_financial_fact()` (`edgar_warehouse/serving/gold_models.py:1112`)
+  SELECTs `period_end` but not `period_start` from `sec_financial_fact`.
+- `_SEC_FINANCIAL_FACT_SCHEMA` (`edgar_warehouse/serving/gold_models.py:246`)
+  has no `period_start` field.
+- The Snowflake `SEC_FINANCIAL_FACT` MERGE keys
+  (`infra/snowflake/sql/bootstrap/06_fundamentals_load_wrapper.sql:51`,
+  `["CIK", "ACCESSION_NUMBER", "CONCEPT", "FISCAL_PERIOD", "SEGMENT"]`) include
+  neither `PERIOD_END` nor `PERIOD_START` — so a QTD and YTD row exported in the
+  same run MERGE onto the same target row, and the later one wins.
+
+**Why:** Without `period_start` (and `period_end`) in the export schema and
+MERGE keys, the Stage 2 silver-layer fix doesn't reach
+`EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT` / gold — the QTD/YTD collision Stage 2
+resolves in silver re-appears in gold via the MERGE collapsing one of the two
+rows.
+
+**Where:**
+- `edgar_warehouse/serving/gold_models.py:246` — `_SEC_FINANCIAL_FACT_SCHEMA`
+  (add `period_start`).
+- `edgar_warehouse/serving/gold_models.py:1112` — `_build_sec_financial_fact()`
+  SELECT list (add `period_start`).
+- `infra/snowflake/sql/bootstrap/06_fundamentals_load_wrapper.sql:51` —
+  `mergeKeys.SEC_FINANCIAL_FACT` (add `PERIOD_END`, `PERIOD_START`).
+- `EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT` table DDL — add `PERIOD_START` column
+  (and confirm `PERIOD_END` exists; it's in the PyArrow schema but not in the
+  current MERGE keys either).
+
+**Fix approach:** Mirror Stage 1/2's PK change through the export path: add
+`period_start` to the PyArrow schema and builder SELECT, add `PERIOD_END` and
+`PERIOD_START` to the Snowflake `SEC_FINANCIAL_FACT` MERGE keys, and add the
+corresponding column(s) to the `EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT` table DDL.
+Needs a differential check against real data (e.g. re-export Apple CIK 320193
+sec_financial_fact and confirm the QTD/YTD pair survives into
+`EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT` as two rows, not one).
+
+**Surfaced:** `codex review` of PR #62 diff (`claude/silver-financial-period-start-pk`
+vs `codex/main-sync`), 2026-06-12: "[P2] Carry period_start through the export
+path ... the Snowflake MERGE on (CIK, ACCESSION_NUMBER, CONCEPT, FISCAL_PERIOD,
+SEGMENT) can collapse one value, so gold still loses the collision this change
+is meant to preserve."
 
 ---
 
