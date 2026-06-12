@@ -2,28 +2,28 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Neo4j Snowflake Native App Migration
-status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-06-11T10:47:00Z"
-last_activity: 2026-06-11 -- Phase 3 context gathered
+status: active
+stopped_at: Phase 3 complete; next is Phase 4 dashboard hosted graph migration
+last_updated: "2026-06-12T16:25:48Z"
+last_activity: 2026-06-12 -- Phase 3 live AWS hosted graph E2E accepted
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
-  percent: 50
+  completed_phases: 3
+  total_plans: 9
+  completed_plans: 9
+  percent: 75
 ---
 
 # Project State - neo4j-snowflake
 
 ## Current Position
 
-Phase: 3 (Hosted Graph Verification And E2E Cutover) — READY TO PLAN
+Phase: 4 (Dashboard Hosted Graph Migration) — READY TO PLAN
 Plan: TBD
-Status: Phase 3 context gathered; ready to plan hosted graph verification and E2E cutover
-Last activity: 2026-06-11 -- Phase 3 context gathered
+Status: Phase 3 hosted graph verification and AWS E2E accepted; dashboard migration remains
+Last activity: 2026-06-12 -- Phase 3 live AWS hosted graph E2E accepted
 
-Progress: [#####-----] 50% (Phases 1 and 2 complete; milestone v1.3 remains in progress)
+Progress: [########--] 75% (Phases 1, 2, and 3 complete; Phase 4 not started)
 
 ## Milestone Context
 
@@ -124,17 +124,65 @@ projection surfaces should change.
   validated; AWS MDM E2E success should use Snowflake `sync-graph` plus strict
   `verify-graph` and include Step Functions validation.
 
+- Phase 3 planning produced three executable plans: `03-01` for strict SQL
+  parity and structured diagnostics in `verify-graph`; `03-02` for Native App
+  grant automation, grant validation, and `GRAPH_INFO`/`BFS`/`WCC` smoke proof;
+  and `03-03` for AWS MDM E2E cutover plus live dev validation evidence.
+
+- Plan 03-01 replaced the minimal `verify-graph` table-count check with a
+  strict Snowflake SQL parity gate. Verification now compares active MDM
+  entities by entity type, active MDM relationships by relationship type,
+  missing/extra graph node IDs, missing/extra graph edge IDs, and missing graph
+  edge endpoints before returning success.
+
+- Plan 03-02 added repo-managed Native App grants in
+  `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql` and extended
+  `verify-graph` with required Native App checks for installation, app role
+  grants, database-role grants, schema privileges, compute pool availability,
+  graph schema sample access, and default `GRAPH_INFO`/`BFS`/`WCC` smoke SQL.
+  Missing Native App prerequisites now fail the command with structured
+  remediation; `--skip-native-app` is marked offline-only with
+  `phase3_acceptance: false`.
+
+- Plan 03-03 updated the AWS MDM E2E script so success now flows through
+  Snowflake-hosted graph validation (`mdm_sync_graph` plus strict
+  `mdm_verify_graph`) and no longer starts `mdm_check_connectivity` as a
+  required success step. Full E2E runs now preflight local strict
+  `edgar-warehouse mdm verify-graph` before starting AWS Step Functions,
+  with `--snow-connection`, `--snowflake-database`, and
+  `--native-app-compute-pool` overrides; `--skip-preflight` is warning-only
+  and cannot satisfy Phase 3 acceptance. Lingering `NEO4J_*` or Neo4j
+  deployment/script references are emitted as warnings unless they block the
+  hosted path.
+
+- Live dev validation for Plan 03-03 applied the Native App schema/database
+  grants and account-level `CREATE COMPUTE POOL` / `CREATE WAREHOUSE`
+  privileges. Strict `verify-graph` then proved SQL parity cleanly
+  (`15` graph nodes, `4` graph edges, no missing/extra diagnostics) but failed
+  the required Native App proof because
+  `Neo4j_Graph_Analytics.graph.show_available_compute_pools()` returned no
+  compute pool selectors.
+
+- After operator activation/repair, Plan 03-03 live dev acceptance passed.
+  Strict local `edgar-warehouse mdm verify-graph` succeeded with exact SQL
+  parity (`15` graph nodes, `4` graph edges), Native App compute pool
+  `CPU_X64_XS`, and `GRAPH_INFO` / `BFS` / `WCC` smoke checks all `ok`.
+  Latest AWS hosted graph E2E executions `aws-mdm-e2e-1781277675-*` also
+  succeeded for `mdm_migrate`, `mdm_run`, `mdm_backfill_relationships`,
+  `mdm_sync_graph`, `mdm_verify_graph`, and `mdm_counts`.
+
 ## Blockers
 
-- Live Marketplace app availability, Snowflake account privileges, and app role grant details must
-  be confirmed in a real Snowflake account before implementation can be treated as production-ready.
+- None currently recorded for Phase 4 planning.
 
 ## Pending Todos
 
-None.
+- Plan Phase 4 dashboard hosted graph migration.
+- Keep stale `NEO4J_*` deployment/script references warning-only unless they
+  block the hosted graph dashboard or E2E path.
 
 ## Session Continuity
 
-Last session: 2026-06-11T10:47:00Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/workstreams/neo4j-snowflake/phases/03-hosted-graph-verification-and-e2e-cutover/03-CONTEXT.md
+Last session: 2026-06-12T16:25:48Z
+Stopped at: Phase 3 complete; next is Phase 4 dashboard hosted graph migration
+Resume file: .planning/workstreams/neo4j-snowflake/ROADMAP.md
