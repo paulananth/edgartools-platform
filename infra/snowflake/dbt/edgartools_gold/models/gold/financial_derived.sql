@@ -1,10 +1,20 @@
--- FINANCIAL_DERIVED: Normalised financial metrics per (cik, accession, fiscal_period).
+-- FINANCIAL_DERIVED: Normalised financial metrics per (cik, accession, fiscal_period, period_end).
 --
 -- Isolated DAG branch — zero ref() edges into the existing 9-table chain.
 -- Adds YoY growth rates, TTM (trailing-twelve-month) revenue/EBITDA/FCF,
 -- and peer rank percentiles within SIC-4 groupings using Snowflake window functions.
 --
--- Grain: one row per (cik, accession_number, fiscal_period).
+-- Grain: one row per (cik, accession_number, fiscal_period, period_end). A
+-- single accession can yield both a "current" and a "comparative prior
+-- period" row for the same fiscal_period, distinguished by period_end —
+-- see sec_financial_derived's silver PK.
+--
+-- NOTE: the YoY lag() windows below partition by (cik, fiscal_period)
+-- ordered by fiscal_year. If two rows share (cik, fiscal_period,
+-- fiscal_year) — e.g. a comparative row from one filing and a current row
+-- from another filing reporting the same fiscal_year — lag() ordering
+-- across those rows is non-deterministic. Not addressed here; flagged in
+-- TODOS.md as a follow-up.
 {{ gold_model_config('FINANCIAL_DERIVED') }}
 
 with base as (
