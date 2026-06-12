@@ -252,6 +252,7 @@ _SEC_FINANCIAL_FACT_SCHEMA = pa.schema(
         pa.field("segment", pa.string(), nullable=False),
         pa.field("fiscal_year", pa.int32()),
         pa.field("period_end", pa.date32()),
+        pa.field("period_start", pa.date32(), nullable=False),
         pa.field("form_type", pa.string()),
         pa.field("value", pa.float64()),
         pa.field("unit", pa.string()),
@@ -1121,6 +1122,7 @@ def _build_sec_financial_fact(conn: Any) -> pa.Table:
                 segment,
                 fiscal_year::INTEGER AS fiscal_year,
                 period_end,
+                period_start,
                 form_type,
                 value,
                 unit,
@@ -1128,7 +1130,7 @@ def _build_sec_financial_fact(conn: Any) -> pa.Table:
                 parser_version,
                 ingested_at
             FROM sec_financial_fact
-            ORDER BY cik, accession_number, concept, fiscal_period, segment
+            ORDER BY cik, accession_number, concept, fiscal_period, segment, period_end, period_start
             """
         )
     )

@@ -86,7 +86,7 @@ models:
   # These models use separate source() blocks and zero ref() into the existing
   # 9-table chain.  A failed fundamentals model must not block existing refresh.
   - name: financial_facts
-    description: XBRL financial facts per (cik, accession_number, concept, fiscal_period, segment). Dynamic table from SEC_FINANCIAL_FACT silver export.
+    description: XBRL financial facts per (cik, accession_number, concept, fiscal_period, segment, period_end, period_start). Dynamic table from SEC_FINANCIAL_FACT silver export.
     columns:
       - name: cik
         tests:

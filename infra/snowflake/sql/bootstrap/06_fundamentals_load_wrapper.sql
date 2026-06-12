@@ -11,7 +11,7 @@
 -- The existing LOAD_EXPORTS_FOR_RUN proc (file 03) assumes a single scalar
 -- merge key per table (e.g. FACT_KEY).  The 3 fundamentals passthrough tables
 -- have composite natural keys:
---   SEC_FINANCIAL_FACT      → (CIK, ACCESSION_NUMBER, CONCEPT, FISCAL_PERIOD, SEGMENT)
+--   SEC_FINANCIAL_FACT      → (CIK, ACCESSION_NUMBER, CONCEPT, FISCAL_PERIOD, SEGMENT, PERIOD_END, PERIOD_START)
 --   SEC_THIRTEENF_HOLDING   → (CIK, ACCESSION_NUMBER, HOLDING_INDEX)
 --   SEC_FINANCIAL_DERIVED   → (CIK, ACCESSION_NUMBER, FISCAL_PERIOD)
 --
@@ -48,7 +48,7 @@ const targetTables = {
 // Q4-A: hardcoded composite merge keys.  Each array lists the column names
 // that together identify a row.  MERGE ON joins them with AND.
 const mergeKeys = {
-  SEC_FINANCIAL_FACT:     ["CIK", "ACCESSION_NUMBER", "CONCEPT", "FISCAL_PERIOD", "SEGMENT"],
+  SEC_FINANCIAL_FACT:     ["CIK", "ACCESSION_NUMBER", "CONCEPT", "FISCAL_PERIOD", "SEGMENT", "PERIOD_END", "PERIOD_START"],
   SEC_THIRTEENF_HOLDING:  ["CIK", "ACCESSION_NUMBER", "HOLDING_INDEX"],
   SEC_FINANCIAL_DERIVED:  ["CIK", "ACCESSION_NUMBER", "FISCAL_PERIOD"]
 };
