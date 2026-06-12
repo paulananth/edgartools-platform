@@ -98,8 +98,8 @@ post-merge, is now RESOLVED — see "Stage 1 follow-up: schema migration gap
 (RESOLVED)" below. Stage 2 (period_start, residual 2,440 collisions) is now
 RESOLVED — see "Stage 2 resolution summary" below. Stage 3 (export/Snowflake
 MERGE path doesn't carry `period_start`, so gold can still collapse the QTD/YTD
-rows Stage 2 preserves in silver) is OPEN — see "Stage 3: export/Snowflake
-MERGE key gap (OPEN)" below.
+rows Stage 2 preserves in silver) is now RESOLVED — see "Stage 3 resolution
+summary" below.
 
 **Stage 1 resolution summary:**
 - Added `period_end` to the PK of `sec_financial_fact`
@@ -220,7 +220,51 @@ fresh/already-migrated store is a silent no-op).
 
 ---
 
-**Stage 3: export/Snowflake MERGE key gap (OPEN)**
+**Stage 3 resolution summary:**
+- `_SEC_FINANCIAL_FACT_SCHEMA` (`edgar_warehouse/serving/gold_models.py`) gains
+  `period_start` (`date32`, `nullable=False`, matching silver's
+  `DATE NOT NULL` with the `0001-01-01` sentinel).
+- `_build_sec_financial_fact()`'s SELECT and `ORDER BY` now include
+  `period_start` alongside `period_end`.
+- `infra/snowflake/sql/bootstrap/06_fundamentals_load_wrapper.sql`'s
+  `mergeKeys.SEC_FINANCIAL_FACT` extended to
+  `["CIK", "ACCESSION_NUMBER", "CONCEPT", "FISCAL_PERIOD", "SEGMENT", "PERIOD_END", "PERIOD_START"]`
+  (the comment at the top of the file is updated to match).
+- `infra/snowflake/sql/bootstrap/01_source_stage.sql`'s
+  `EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT` `CREATE TABLE IF NOT EXISTS` DDL gains
+  `period_start DATE NOT NULL DEFAULT '0001-01-01'`, plus an idempotent
+  `ALTER TABLE SEC_FINANCIAL_FACT ADD COLUMN IF NOT EXISTS period_start DATE
+  NOT NULL DEFAULT '0001-01-01'` for already-deployed tables — Snowflake
+  backfills existing rows with the sentinel, so this is non-destructive.
+  `PERIOD_END` was already a column on this table (added for Stage 1's
+  PyArrow schema but never in the MERGE keys); it is now also part of the
+  MERGE keys above. It remains nullable in the DDL — making it `NOT NULL`
+  would require confirming no existing rows have a NULL `period_end`, which
+  is a separate, lower-priority follow-up (the Stage-1-era DDL gap).
+- `infra/snowflake/dbt/edgartools_gold/models/gold/financial_facts.sql` (a
+  straight passthrough `select`, no grouping) now selects `period_start` too,
+  and its grain comment is updated to
+  `(cik, accession_number, concept, fiscal_period, segment, period_end,
+  period_start)`. `gold.yml`'s `financial_facts` description updated to match.
+- Tests: new `tests/unit/test_gold_models_financial_fact.py` — a QTD/YTD pair
+  sharing every column except `period_start`/`value` round-trips through
+  `_build_sec_financial_fact()` as two distinct rows with the correct
+  `period_start`/`value` pairing, against `_SEC_FINANCIAL_FACT_SCHEMA`; plus an
+  empty-table case.
+- **Remaining (live-validation, not done here):** re-export Apple CIK 320193
+  and confirm a real QTD/YTD pair survives the Snowflake MERGE into
+  `EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT` as two rows (requires live Snowflake
+  creds, not available in this session).
+- **Related, separate follow-up (not in scope here):** `SEC_FINANCIAL_DERIVED`'s
+  Snowflake `mergeKeys` (`["CIK", "ACCESSION_NUMBER", "FISCAL_PERIOD"]`,
+  `06_fundamentals_load_wrapper.sql`) likewise omit `period_end`, which Stage 1
+  added to `sec_financial_derived`'s silver PK. Same shape of gap as this
+  Stage 3 fix, but for the derived table — worth its own follow-up.
+
+---
+
+<details>
+<summary>Stage 3 original analysis (for reference)</summary>
 
 **What:** Stage 2 makes `period_start` part of `sec_financial_fact`'s silver PK
 so a QTD row (e.g. "3 months ended 2024-06-30") and a YTD row ("6 months ended
@@ -266,6 +310,8 @@ vs `codex/main-sync`), 2026-06-12: "[P2] Carry period_start through the export
 path ... the Snowflake MERGE on (CIK, ACCESSION_NUMBER, CONCEPT, FISCAL_PERIOD,
 SEGMENT) can collapse one value, so gold still loses the collision this change
 is meant to preserve."
+
+</details>
 
 ---
 

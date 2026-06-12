@@ -5,7 +5,9 @@
 -- A NULL source (no fundamentals bootstrap yet) produces an empty table; the
 -- existing gold chain is unaffected.
 --
--- Grain: one row per (cik, accession_number, concept, fiscal_period, segment).
+-- Grain: one row per (cik, accession_number, concept, fiscal_period, segment,
+-- period_end, period_start). period_start distinguishes QTD ("3 months ended")
+-- from YTD ("6 months ended") rows that share every other grain column.
 {{ gold_model_config('FINANCIAL_FACTS') }}
 
 select
@@ -14,6 +16,7 @@ select
     fiscal_year,
     fiscal_period,
     period_end,
+    period_start,
     form_type,
     concept,
     value,
