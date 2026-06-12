@@ -9,49 +9,66 @@
 -- period" row for the same fiscal_period, distinguished by period_end —
 -- see sec_financial_derived's silver PK.
 --
--- NOTE: the YoY lag() windows below partition by (cik, fiscal_period)
--- ordered by fiscal_year. If two rows share (cik, fiscal_period,
--- fiscal_year) — e.g. a comparative row from one filing and a current row
--- from another filing reporting the same fiscal_year — lag() ordering
--- across those rows is non-deterministic. Not addressed here; flagged in
--- TODOS.md as a follow-up.
+-- YoY growth (Stage 5): looked up via a self-join to `prior_year_values`,
+-- which picks ONE canonical row per (cik, fiscal_period, fiscal_year) --
+-- preferring each accession's own "current" period (the row whose period_end
+-- is the max within that accession's (cik, accession_number, fiscal_period)
+-- group) over a later filing's "comparative" restatement of the same
+-- fiscal_year, with the most-recently-filed accession_number as a final
+-- tiebreaker. This replaces the prior lag()-over-fiscal_year approach, whose
+-- ordering became non-deterministic once a single accession could
+-- contribute two rows (current + comparative) for the same
+-- (cik, fiscal_period) -- every fiscal_year then appears at least twice,
+-- tying lag()'s ORDER BY with no tiebreaker.
 {{ gold_model_config('FINANCIAL_DERIVED') }}
 
 with base as (
-    select
-        d.*,
-        -- YoY growth (requires prior-year FY row for same CIK)
-        lag(revenue) over (
-            partition by d.cik, d.fiscal_period
-            order by d.fiscal_year
-        ) as revenue_prior,
-        lag(ebitda) over (
-            partition by d.cik, d.fiscal_period
-            order by d.fiscal_year
-        ) as ebitda_prior,
-        lag(net_income) over (
-            partition by d.cik, d.fiscal_period
-            order by d.fiscal_year
-        ) as net_income_prior
+    select d.*
     from {{ source("edgartools_source", "SEC_FINANCIAL_DERIVED") }} d
+),
+
+prior_year_values as (
+    select
+        cik,
+        fiscal_period,
+        fiscal_year,
+        revenue,
+        ebitda,
+        net_income
+    from base
+    qualify row_number() over (
+        partition by cik, fiscal_period, fiscal_year
+        order by
+            (period_end = max(period_end) over (
+                partition by cik, accession_number, fiscal_period
+            )) desc,
+            accession_number desc
+    ) = 1
 ),
 
 with_growth as (
     select
-        *,
+        b.*,
+        py.revenue as revenue_prior,
+        py.ebitda as ebitda_prior,
+        py.net_income as net_income_prior,
         case
-            when revenue_prior is not null and revenue_prior <> 0
-            then (revenue - revenue_prior) / revenue_prior
+            when py.revenue is not null and py.revenue <> 0
+            then (b.revenue - py.revenue) / py.revenue
         end as revenue_yoy_growth,
         case
-            when ebitda_prior is not null and ebitda_prior <> 0
-            then (ebitda - ebitda_prior) / ebitda_prior
+            when py.ebitda is not null and py.ebitda <> 0
+            then (b.ebitda - py.ebitda) / py.ebitda
         end as ebitda_yoy_growth,
         case
-            when net_income_prior is not null and net_income_prior <> 0
-            then (net_income - net_income_prior) / net_income_prior
+            when py.net_income is not null and py.net_income <> 0
+            then (b.net_income - py.net_income) / py.net_income
         end as net_income_yoy_growth
-    from base
+    from base b
+    left join prior_year_values py
+        on py.cik = b.cik
+        and py.fiscal_period = b.fiscal_period
+        and py.fiscal_year = b.fiscal_year - 1
 )
 
 select

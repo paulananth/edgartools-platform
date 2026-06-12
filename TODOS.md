@@ -101,7 +101,10 @@ MERGE path doesn't carry `period_start`, so gold can still collapse the QTD/YTD
 rows Stage 2 preserves in silver) is now RESOLVED — see "Stage 3 resolution
 summary" below. Stage 4 (`SEC_FINANCIAL_DERIVED`'s Snowflake `mergeKeys` omit
 `period_end`, same shape of gap as Stage 3 but for the derived table) is now
-RESOLVED — see "Stage 4 resolution summary" below.
+RESOLVED — see "Stage 4 resolution summary" below. Stage 5
+(`financial_derived.sql`'s YoY `lag()` windows had non-deterministic ordering
+once a single accession could contribute current + comparative rows) is now
+RESOLVED — see "Stage 5 resolution summary" below.
 
 **Stage 1 resolution summary:**
 - Added `period_end` to the PK of `sec_financial_fact`
@@ -281,7 +284,7 @@ fresh/already-migrated store is a silent no-op).
   `(cik, accession_number, fiscal_period)` but differing in `period_end`
   round-trips through `_build_sec_financial_derived()` as two distinct rows
   matching `_SEC_FINANCIAL_DERIVED_SCHEMA`; plus an empty-table case.
-- **New follow-up discovered (not in scope here):**
+- **New follow-up discovered, now RESOLVED (Stage 5):**
   `financial_derived.sql`'s YoY `lag()` windows partition by
   `(cik, fiscal_period)` ordered by `fiscal_year`. Now that a single accession
   can contribute two rows (current + comparative, distinguished by
@@ -291,6 +294,39 @@ fresh/already-migrated store is a silent no-op).
   non-deterministic (no tiebreaker). Needs its own follow-up: either add
   `period_end`/`accession_number` as a `lag()` tiebreaker or de-duplicate to
   one row per `(cik, fiscal_period, fiscal_year)` before windowing.
+
+---
+
+**Stage 5 resolution summary:**
+- `infra/snowflake/dbt/edgartools_gold/models/gold/financial_derived.sql`'s
+  three `lag(...) over (partition by cik, fiscal_period order by fiscal_year)`
+  windows (revenue/ebitda/net_income "prior" values) replaced with a
+  `prior_year_values` CTE + `left join`. `prior_year_values` picks ONE
+  canonical row per `(cik, fiscal_period, fiscal_year)` via
+  `qualify row_number() ... = 1`, ordered by:
+  1. `(period_end = max(period_end) over (partition by cik, accession_number,
+     fiscal_period)) desc` — prefer the row that is each accession's own
+     "current" period (max `period_end` within that accession's filing) over
+     a later filing's "comparative" restatement of the same `fiscal_year`.
+  2. `accession_number desc` — final tiebreaker (most-recently-filed accession
+     wins, e.g. a 10-K/A amendment over the original 10-K).
+- `with_growth` then `left join`s `base` to `prior_year_values` on
+  `(cik, fiscal_period, fiscal_year - 1)` to compute
+  `revenue_yoy_growth`/`ebitda_yoy_growth`/`net_income_yoy_growth` — same
+  output columns/semantics as before, but deterministic regardless of how
+  many current/comparative rows share a `fiscal_year`.
+- File header comment rewritten to document the tiebreaker rationale in place
+  of the old "not addressed here" note.
+- Verification: `uv run --with dbt-snowflake dbt compile --select
+  financial_derived` — Jinja/SQL parses successfully (16 models, 36 data
+  tests, 16 sources, 528 macros found); fails only at the live-connection step
+  with dummy credentials (expected, no Snowflake creds in this session).
+- **Not done here (live validation):** re-running this dynamic table against
+  real `EDGARTOOLS_SOURCE.SEC_FINANCIAL_DERIVED` data containing a
+  current+comparative pair from one accession plus a later accession's
+  comparative row for the same `fiscal_year`, to confirm
+  `revenue_yoy_growth` etc. come out identical across repeated runs (requires
+  live Snowflake creds, not available in this session).
 
 ---
 
