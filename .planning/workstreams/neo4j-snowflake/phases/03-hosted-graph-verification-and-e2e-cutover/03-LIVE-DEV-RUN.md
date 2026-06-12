@@ -117,29 +117,87 @@ local strict `edgar-warehouse mdm verify-graph` before starting AWS Step Functio
 `--status-only` remains a pure AWS status report, and `--skip-preflight` is available
 only for emergency/debug runs that cannot satisfy Phase 3 acceptance.
 
+## Post-Blocker Verification
+
+After the operator activation/repair step completed, strict local verification was rerun:
+
+```bash
+SNOW_CONNECTION=snowconn \
+SNOWFLAKE_CONNECTION=snowconn \
+DBT_SNOWFLAKE_DATABASE=EDGARTOOLS_DEV \
+uv run --extra snowflake edgar-warehouse mdm verify-graph
+```
+
+Result: succeeded.
+
+Non-secret verification payload summary:
+
+- Overall status: `ok`
+- Snowflake graph nodes: `15`
+- Snowflake graph edges: `4`
+- Node parity status: `ok`
+- Relationship parity status: `ok`
+- Missing/extra node diagnostics: none
+- Missing/extra edge diagnostics: none
+- Missing edge endpoint diagnostics: none
+- Native App status: `ok`
+- Native App compute pool: `CPU_X64_XS`
+- Native App checks:
+  - `app_installation`: `ok`
+  - `app_user_role_grant`: `ok`
+  - `app_admin_role_grant`: `ok`
+  - `database_role_to_application`: `ok`
+  - `database_role_privileges`: `ok`
+  - `compute_pool`: `ok` (`7` rows)
+  - `graph_schema_sample`: `ok`
+  - `graph_info`: `ok`
+  - `bfs`: `ok`
+  - `wcc`: `ok`
+- `phase3_acceptance`: `true`
+
+The hosted graph E2E status was then verified:
+
+```bash
+bash infra/scripts/run-aws-mdm-e2e.sh \
+  --env dev \
+  --aws-profile sec_platform_deployer \
+  --status-only
+```
+
+Result: succeeded.
+
+Relevant latest Step Functions status:
+
+| Workflow | Latest status | Latest execution name | Started |
+| --- | --- | --- | --- |
+| `mdm_migrate` | `SUCCEEDED` | `aws-mdm-e2e-1781277675-migrate` | `2026-06-12T11:21:17.727000-04:00` |
+| `mdm_run` | `SUCCEEDED` | `aws-mdm-e2e-1781277675-run` | `2026-06-12T11:22:27.408000-04:00` |
+| `mdm_backfill_relationships` | `SUCCEEDED` | `aws-mdm-e2e-1781277675-backfill` | `2026-06-12T11:24:20.873000-04:00` |
+| `mdm_sync_graph` | `SUCCEEDED` | `aws-mdm-e2e-1781277675-sync` | `2026-06-12T11:26:16.952000-04:00` |
+| `mdm_verify_graph` | `SUCCEEDED` | `aws-mdm-e2e-1781277675-verify` | `2026-06-12T11:27:51.841000-04:00` |
+| `mdm_counts` | `SUCCEEDED` | `aws-mdm-e2e-1781277675-counts` | `2026-06-12T11:29:26.038000-04:00` |
+
+The status-only command still emitted warning-only messages for lingering Neo4j references
+in deployment artifacts/scripts. Those references did not block `mdm_sync_graph` or
+`mdm_verify_graph`.
+
 ## Acceptance Status
 
-Phase 3 final live acceptance is blocked.
+Phase 3 final live acceptance passed.
 
-The hosted Snowflake SQL parity portion is clean, and grant validation now succeeds, but
-Native App algorithm proof cannot run until the application exposes at least one compute
-pool selector such as `CPU_X64_XS`.
+The hosted Snowflake SQL parity gate is clean, the Neo4j Graph Analytics Native App exposes
+`CPU_X64_XS`, the default `GRAPH_INFO`/`BFS`/`WCC` smoke proof succeeds, and the latest AWS
+MDM hosted graph E2E chain reached `mdm_sync_graph` and strict `mdm_verify_graph`
+successfully without external Neo4j credential validation.
 
-Full AWS E2E execution was not started after the local strict `verify-graph` failure,
-because the current dev environment cannot satisfy the Native App compute-pool gate. The
-latest historical `mdm_verify_graph` Step Functions success is not treated as final Phase
-3 acceptance evidence for this branch.
+## Remaining Follow-Up
 
-## Required Follow-Up
+1. Continue treating stale deployment/script `NEO4J_*` references as warning-only unless
+   they block the hosted graph path.
+2. Start Phase 4 dashboard migration so dashboard comparison moves to the Snowflake-hosted
+   graph target.
 
-1. In Snowsight, activate or repair `Neo4j_Graph_Analytics` so
-   `CALL Neo4j_Graph_Analytics.graph.show_available_compute_pools();` returns
-   `CPU_X64_XS` or another supported selector.
-2. If the supported selector is not `CPU_X64_XS`, rerun `verify-graph` with
-   `--native-app-compute-pool <selector>` and update the default only after operator
-   review.
-3. Deploy an AWS dev image containing the strict hosted `verify-graph` implementation.
-4. Run:
+Useful Phase 3 regression command:
 
 ```bash
 bash infra/scripts/run-aws-mdm-e2e.sh \
@@ -148,6 +206,3 @@ bash infra/scripts/run-aws-mdm-e2e.sh \
   --snow-connection snowconn \
   --snowflake-database EDGARTOOLS_DEV
 ```
-
-5. Capture the new Step Functions execution ARNs/statuses and the passing
-   `verify-graph` Native App smoke status.

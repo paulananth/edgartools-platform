@@ -2,28 +2,28 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Neo4j Snowflake Native App Migration
-status: blocked
-stopped_at: Phase 3 Plan 03-03 blocked on Native App compute pool availability
-last_updated: "2026-06-12T01:12:00Z"
-last_activity: 2026-06-12 -- Phase 3 Plan 03-03 partially executed; live acceptance blocked
+status: active
+stopped_at: Phase 3 complete; next is Phase 4 dashboard hosted graph migration
+last_updated: "2026-06-12T16:25:48Z"
+last_activity: 2026-06-12 -- Phase 3 live AWS hosted graph E2E accepted
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 9
-  completed_plans: 8
-  percent: 67
+  completed_plans: 9
+  percent: 75
 ---
 
 # Project State - neo4j-snowflake
 
 ## Current Position
 
-Phase: 3 (Hosted Graph Verification And E2E Cutover) — IN PROGRESS
-Plan: 03-03 (AWS MDM E2E cutover and live dev proof) — BLOCKED
-Status: AWS script cutover implemented; live acceptance blocked by missing Native App compute pool selector
-Last activity: 2026-06-12 -- Phase 3 Plan 03-03 partially executed; live acceptance blocked
+Phase: 4 (Dashboard Hosted Graph Migration) — READY TO PLAN
+Plan: TBD
+Status: Phase 3 hosted graph verification and AWS E2E accepted; dashboard migration remains
+Last activity: 2026-06-12 -- Phase 3 live AWS hosted graph E2E accepted
 
-Progress: [#######---] 67% (Phases 1 and 2 complete; Phase 3 plans 03-01 and 03-02 complete; 03-03 blocked)
+Progress: [########--] 75% (Phases 1, 2, and 3 complete; Phase 4 not started)
 
 ## Milestone Context
 
@@ -163,26 +163,26 @@ projection surfaces should change.
   `Neo4j_Graph_Analytics.graph.show_available_compute_pools()` returned no
   compute pool selectors.
 
+- After operator activation/repair, Plan 03-03 live dev acceptance passed.
+  Strict local `edgar-warehouse mdm verify-graph` succeeded with exact SQL
+  parity (`15` graph nodes, `4` graph edges), Native App compute pool
+  `CPU_X64_XS`, and `GRAPH_INFO` / `BFS` / `WCC` smoke checks all `ok`.
+  Latest AWS hosted graph E2E executions `aws-mdm-e2e-1781277675-*` also
+  succeeded for `mdm_migrate`, `mdm_run`, `mdm_backfill_relationships`,
+  `mdm_sync_graph`, `mdm_verify_graph`, and `mdm_counts`.
+
 ## Blockers
 
-- Live Marketplace app availability, Snowflake account privileges, and app role grant details must
-  be confirmed in a real Snowflake account before implementation can be treated as production-ready.
-- Plan 03-03 final acceptance is blocked until the dev `Neo4j_Graph_Analytics`
-  Native App exposes `CPU_X64_XS` or another supported compute pool selector.
-- After the compute pool is available, an AWS dev image containing strict
-  hosted `verify-graph` must be deployed before full AWS E2E can count as
-  passing evidence for this branch.
+- None currently recorded for Phase 4 planning.
 
 ## Pending Todos
 
-- Activate or repair the dev Snowflake `Neo4j_Graph_Analytics` Native App so
-  `CALL Neo4j_Graph_Analytics.graph.show_available_compute_pools();` returns
-  `CPU_X64_XS` or another supported selector.
-- Deploy an AWS dev image containing strict hosted `verify-graph`, then rerun
-  `bash infra/scripts/run-aws-mdm-e2e.sh --env dev --aws-profile sec_platform_deployer --snow-connection snowconn --snowflake-database EDGARTOOLS_DEV`.
+- Plan Phase 4 dashboard hosted graph migration.
+- Keep stale `NEO4J_*` deployment/script references warning-only unless they
+  block the hosted graph dashboard or E2E path.
 
 ## Session Continuity
 
-Last session: 2026-06-12T01:12:00Z
-Stopped at: Phase 3 Plan 03-03 blocked on Native App compute pool availability
-Resume file: .planning/workstreams/neo4j-snowflake/phases/03-hosted-graph-verification-and-e2e-cutover/03-03-PLAN.md
+Last session: 2026-06-12T16:25:48Z
+Stopped at: Phase 3 complete; next is Phase 4 dashboard hosted graph migration
+Resume file: .planning/workstreams/neo4j-snowflake/ROADMAP.md

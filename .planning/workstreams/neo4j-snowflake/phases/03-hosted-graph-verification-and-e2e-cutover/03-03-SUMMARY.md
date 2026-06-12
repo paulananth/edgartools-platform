@@ -2,7 +2,7 @@
 phase: 03-hosted-graph-verification-and-e2e-cutover
 plan: 03
 subsystem: aws-mdm-e2e
-status: blocked
+status: completed
 tags: [aws, snowflake, mdm, graph, e2e]
 
 requires:
@@ -12,7 +12,7 @@ provides:
   - AWS MDM E2E script cut over from external Neo4j connectivity success gate to hosted graph validation semantics
   - Local strict `verify-graph` preflight before AWS Step Functions executions
   - Warning-only handling for lingering Neo4j deployment/script references
-  - Live dev evidence showing SQL parity and grants pass, with Native App compute pool as the remaining blocker
+  - Live dev evidence showing strict hosted graph verification and AWS MDM E2E pass
 affects:
   - Phase 3 final verification
   - AWS dev hosted graph E2E acceptance run
@@ -36,19 +36,19 @@ key-files:
 
 key-decisions:
   - "The AWS E2E script now runs MDM hosted graph validation, not MDM/Neo4j connectivity validation."
-  - "Live dev final acceptance is blocked until `Neo4j_Graph_Analytics` exposes a compute pool selector."
+  - "Live dev final acceptance requires both local strict `verify-graph` Native App proof and AWS `mdm_sync_graph` plus `mdm_verify_graph` Step Functions success."
   - "The grant SQL now includes Native App account privileges required by the Phase 1 runbook: `CREATE COMPUTE POOL` and `CREATE WAREHOUSE`."
 
-requirements-progress: [SYNC-04]
-blocked-requirements: [VERIFY-05]
+requirements-progress: [SYNC-04, VERIFY-05]
+blocked-requirements: []
 
-completed: null
-blocked: 2026-06-12
+completed: 2026-06-12
+blocked: null
 ---
 
 # Phase 3 Plan 03: AWS Hosted Graph E2E Cutover Summary
 
-Plan 03-03 was partially executed and is blocked on live Snowflake Native App compute-pool availability.
+Plan 03-03 was executed and accepted in live dev.
 
 ## Accomplishments
 
@@ -73,23 +73,30 @@ Plan 03-03 was partially executed and is blocked on live Snowflake Native App co
 ## Live Dev Result
 
 - Native App/database grants were applied successfully.
-- `verify-graph` SQL parity passed:
+- The initial strict `verify-graph` run proved SQL parity but failed because
+  `CALL Neo4j_Graph_Analytics.graph.show_available_compute_pools();` returned no rows.
+- After operator activation/repair, strict `verify-graph` passed:
   - graph nodes: `15`
   - graph edges: `4`
   - node parity: `ok`
   - relationship parity: `ok`
   - diagnostics: no missing/extra nodes, edges, or endpoints
-- Native App prerequisite checks passed through database privileges and graph schema sample access.
-- Native App compute pool check failed because `CALL Neo4j_Graph_Analytics.graph.show_available_compute_pools();` returned no rows.
-- AWS Step Functions status-only check succeeded and showed existing `mdm_sync_graph` and `mdm_verify_graph` historical successes, but those are not final acceptance evidence for this branch.
-
-## Blocker
-
-`Neo4j_Graph_Analytics` must be activated or repaired in Snowflake dev so the Native App exposes `CPU_X64_XS` or another supported compute pool selector. Until then, strict `verify-graph` correctly fails and full AWS hosted graph E2E cannot be counted as successful.
+  - Native App compute pool: `CPU_X64_XS`
+  - Native App smoke proof: `GRAPH_INFO`, `BFS`, and `WCC` all `ok`
+  - `phase3_acceptance`: `true`
+- AWS Step Functions status-only check succeeded and showed the latest hosted graph E2E
+  executions succeeded:
+  - `mdm_migrate`: `aws-mdm-e2e-1781277675-migrate`
+  - `mdm_run`: `aws-mdm-e2e-1781277675-run`
+  - `mdm_backfill_relationships`: `aws-mdm-e2e-1781277675-backfill`
+  - `mdm_sync_graph`: `aws-mdm-e2e-1781277675-sync`
+  - `mdm_verify_graph`: `aws-mdm-e2e-1781277675-verify`
+  - `mdm_counts`: `aws-mdm-e2e-1781277675-counts`
 
 ## Next
 
-After the Native App compute pool is available and a dev AWS image containing this branch is deployed, rerun:
+Phase 4 should migrate the review dashboard to the Snowflake-hosted graph target. For
+future regression checks, rerun:
 
 ```bash
 bash infra/scripts/run-aws-mdm-e2e.sh \
@@ -98,5 +105,3 @@ bash infra/scripts/run-aws-mdm-e2e.sh \
   --snow-connection snowconn \
   --snowflake-database EDGARTOOLS_DEV
 ```
-
-Then update `03-LIVE-DEV-RUN.md` with passing `GRAPH_INFO`/`BFS`/`WCC` proof and Step Functions execution ARNs/statuses.
