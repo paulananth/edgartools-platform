@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: milestone
 status: verifying
-stopped_at: Phase 4 context gathered
-last_updated: "2026-06-12T21:14:48.219Z"
+stopped_at: Phase 4 UI-SPEC approved
+last_updated: "2026-06-12T21:49:35.677Z"
 last_activity: 2026-06-12 -- Phase 3 live AWS hosted graph E2E accepted
 progress:
   total_phases: 4
@@ -184,6 +184,6 @@ projection surfaces should change.
 
 ## Session Continuity
 
-Last session: 2026-06-12T21:14:48.206Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/workstreams/neo4j-snowflake/phases/04-dashboard-hosted-graph-migration/04-CONTEXT.md
+Last session: 2026-06-12T21:49:35.667Z
+Stopped at: Phase 4 UI-SPEC approved
+Resume file: .planning/workstreams/neo4j-snowflake/phases/04-dashboard-hosted-graph-migration/04-UI-SPEC.md
