@@ -99,7 +99,9 @@ post-merge, is now RESOLVED — see "Stage 1 follow-up: schema migration gap
 RESOLVED — see "Stage 2 resolution summary" below. Stage 3 (export/Snowflake
 MERGE path doesn't carry `period_start`, so gold can still collapse the QTD/YTD
 rows Stage 2 preserves in silver) is now RESOLVED — see "Stage 3 resolution
-summary" below.
+summary" below. Stage 4 (`SEC_FINANCIAL_DERIVED`'s Snowflake `mergeKeys` omit
+`period_end`, same shape of gap as Stage 3 but for the derived table) is now
+RESOLVED — see "Stage 4 resolution summary" below.
 
 **Stage 1 resolution summary:**
 - Added `period_end` to the PK of `sec_financial_fact`
@@ -255,11 +257,40 @@ fresh/already-migrated store is a silent no-op).
   and confirm a real QTD/YTD pair survives the Snowflake MERGE into
   `EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT` as two rows (requires live Snowflake
   creds, not available in this session).
-- **Related, separate follow-up (not in scope here):** `SEC_FINANCIAL_DERIVED`'s
-  Snowflake `mergeKeys` (`["CIK", "ACCESSION_NUMBER", "FISCAL_PERIOD"]`,
-  `06_fundamentals_load_wrapper.sql`) likewise omit `period_end`, which Stage 1
-  added to `sec_financial_derived`'s silver PK. Same shape of gap as this
-  Stage 3 fix, but for the derived table — worth its own follow-up.
+---
+
+**Stage 4 resolution summary:**
+- `infra/snowflake/sql/bootstrap/06_fundamentals_load_wrapper.sql`'s
+  `mergeKeys.SEC_FINANCIAL_DERIVED` extended from
+  `["CIK", "ACCESSION_NUMBER", "FISCAL_PERIOD"]` to
+  `["CIK", "ACCESSION_NUMBER", "FISCAL_PERIOD", "PERIOD_END"]` (comment at the
+  top of the file updated to match). `_SEC_FINANCIAL_DERIVED_SCHEMA` and
+  `_build_sec_financial_derived()` already selected `period_end` (Stage 1), so
+  no Python/PyArrow change was needed — only the Snowflake MERGE key was
+  missing it.
+- `infra/snowflake/dbt/edgartools_gold/models/gold/financial_derived.sql`'s
+  grain comment updated to
+  `(cik, accession_number, fiscal_period, period_end)`; `gold.yml`'s
+  `financial_derived` description updated to match.
+- `EDGARTOOLS_SOURCE.SEC_FINANCIAL_DERIVED.period_end` remains nullable in the
+  DDL (same Stage-1-era nullability gap as `SEC_FINANCIAL_FACT.period_end`,
+  item above) — silver guarantees `period_end NOT NULL` so the export always
+  carries a real value; no DDL change made here.
+- Tests: new `tests/unit/test_gold_models_financial_derived.py` — a
+  "current period" + "comparative prior period" row pair sharing
+  `(cik, accession_number, fiscal_period)` but differing in `period_end`
+  round-trips through `_build_sec_financial_derived()` as two distinct rows
+  matching `_SEC_FINANCIAL_DERIVED_SCHEMA`; plus an empty-table case.
+- **New follow-up discovered (not in scope here):**
+  `financial_derived.sql`'s YoY `lag()` windows partition by
+  `(cik, fiscal_period)` ordered by `fiscal_year`. Now that a single accession
+  can contribute two rows (current + comparative, distinguished by
+  `period_end`), if two rows ever share `(cik, fiscal_period, fiscal_year)`
+  — e.g. one filing's comparative row and a later filing's current row both
+  reporting the same `fiscal_year` — `lag()` ordering between them is
+  non-deterministic (no tiebreaker). Needs its own follow-up: either add
+  `period_end`/`accession_number` as a `lag()` tiebreaker or de-duplicate to
+  one row per `(cik, fiscal_period, fiscal_year)` before windowing.
 
 ---
 

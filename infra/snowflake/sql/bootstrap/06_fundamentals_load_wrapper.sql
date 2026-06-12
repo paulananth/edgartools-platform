@@ -13,7 +13,7 @@
 -- have composite natural keys:
 --   SEC_FINANCIAL_FACT      → (CIK, ACCESSION_NUMBER, CONCEPT, FISCAL_PERIOD, SEGMENT, PERIOD_END, PERIOD_START)
 --   SEC_THIRTEENF_HOLDING   → (CIK, ACCESSION_NUMBER, HOLDING_INDEX)
---   SEC_FINANCIAL_DERIVED   → (CIK, ACCESSION_NUMBER, FISCAL_PERIOD)
+--   SEC_FINANCIAL_DERIVED   → (CIK, ACCESSION_NUMBER, FISCAL_PERIOD, PERIOD_END)
 --
 -- Keeping a separate proc preserves the working Branch A code path untouched
 -- (zero regression risk) and isolates Branch B failure modes per AD-13.
@@ -50,7 +50,7 @@ const targetTables = {
 const mergeKeys = {
   SEC_FINANCIAL_FACT:     ["CIK", "ACCESSION_NUMBER", "CONCEPT", "FISCAL_PERIOD", "SEGMENT", "PERIOD_END", "PERIOD_START"],
   SEC_THIRTEENF_HOLDING:  ["CIK", "ACCESSION_NUMBER", "HOLDING_INDEX"],
-  SEC_FINANCIAL_DERIVED:  ["CIK", "ACCESSION_NUMBER", "FISCAL_PERIOD"]
+  SEC_FINANCIAL_DERIVED:  ["CIK", "ACCESSION_NUMBER", "FISCAL_PERIOD", "PERIOD_END"]
 };
 
 function q(value) {
