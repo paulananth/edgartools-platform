@@ -99,7 +99,7 @@ models:
           - not_null
 
   - name: financial_derived
-    description: Derived financial metrics with YoY growth per (cik, accession_number, fiscal_period). Computed from SEC_FINANCIAL_DERIVED silver export.
+    description: Derived financial metrics with YoY growth per (cik, accession_number, fiscal_period, period_end). Computed from SEC_FINANCIAL_DERIVED silver export.
     columns:
       - name: cik
         tests:
