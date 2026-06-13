@@ -263,9 +263,7 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
             "deploy-aws-application.sh",
             "publish-warehouse-image.sh",
             "infra/snowflake/dbt",
-            "snowflake",
-            "dbt",
-            "terraform",
+            "infra/terraform",
             "generated application json",
             "edgar_universe_dashboard.py",
         ]
