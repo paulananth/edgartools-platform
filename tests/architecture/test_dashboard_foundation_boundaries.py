@@ -140,8 +140,7 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
 
     def test_graph_readonly_contains_no_write_cypher_tokens(self) -> None:
         target = REPO_ROOT / "edgar_warehouse" / "mdm" / "graph_readonly.py"
-        if not target.exists():
-            self.skipTest("graph_readonly.py not created yet")
+        self.assertTrue(target.exists(), "graph_readonly.py must exist for hosted graph dashboard reads")
         text = _read(target)
         offenders = [
             token
@@ -149,6 +148,48 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
             if re.search(rf"\b{token}\b", text)
         ]
         self.assertEqual(offenders, [])
+
+    def test_graph_readonly_avoids_cli_subprocess_and_external_neo4j_dependencies(self) -> None:
+        target = REPO_ROOT / "edgar_warehouse" / "mdm" / "graph_readonly.py"
+        self.assertTrue(target.exists(), "graph_readonly.py must exist for hosted graph dashboard reads")
+        text = _read(target)
+
+        forbidden = [
+            "subprocess",
+            "edgar_warehouse.mdm.cli",
+            "edgar-warehouse",
+            "stdout",
+            "check_output",
+            "popen",
+            "NEO4J_URI",
+            "NEO4J_USER",
+            "NEO4J_PASSWORD",
+            "NEO4J_DATABASE",
+            "NEO4J_SECRET_JSON",
+            "bolt://",
+            "neo4j://",
+            "Aura",
+        ]
+        offenders = {token for token in forbidden if token in text}
+        self.assertEqual(offenders, set())
+
+    def test_graph_readonly_exposes_hosted_snowflake_dashboard_contract(self) -> None:
+        target = REPO_ROOT / "edgar_warehouse" / "mdm" / "graph_readonly.py"
+        self.assertTrue(target.exists(), "graph_readonly.py must exist for hosted graph dashboard reads")
+        text = _read(target)
+
+        for token in (
+            "get_snowflake_graph_metrics",
+            "SnowflakeGraphVerifier",
+            "SnowflakeGraphVerificationConfig",
+            "entity_comparison",
+            "relationship_comparison",
+            "missing_graph_edge_endpoints",
+            "failing_checks",
+            "SNOWFLAKE_GRAPH_UNAVAILABLE_MESSAGE",
+            "SNOWFLAKE_GRAPH_PERMISSION_DENIED_MESSAGE",
+        ):
+            self.assertIn(token, text)
 
     def test_streamlit_contains_no_raw_sql_or_cypher(self) -> None:
         target = REPO_ROOT / "examples" / "mdm_graph_dashboard" / "streamlit_app.py"
