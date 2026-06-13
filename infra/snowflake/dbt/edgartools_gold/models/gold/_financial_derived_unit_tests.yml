@@ -6,8 +6,10 @@ version: 2
 #
 # Each `given` row provides the full SEC_FINANCIAL_DERIVED column set so
 # `select d.*` chains resolve cleanly; unused columns reuse the
-# `row_defaults` anchor. `expect` rows are partial -- only the columns
-# relevant to each scenario's assertion are checked.
+# `row_defaults` anchor. `expect.rows` must enumerate ONE row per `given`
+# row (dbt unit tests compare the full result set, not a subset) -- columns
+# omitted from an `expect` row are still checked, but only the
+# growth/grain-relevant columns are listed explicitly here.
 unit_tests:
   - name: financial_derived_yoy_basic_growth
     description: Basic YoY growth -- one prior-year row, one current-year row, simple positive growth.
@@ -54,13 +56,16 @@ unit_tests:
     expect:
       rows:
         - cik: 1
+          accession_number: "0001"
+          fiscal_year: 2023
+          revenue_yoy_growth: null
+          ebitda_yoy_growth: null
+          net_income_yoy_growth: null
+        - cik: 1
           accession_number: "0002"
           fiscal_year: 2024
-          revenue_prior: 100
           revenue_yoy_growth: 0.2
-          ebitda_prior: 30
           ebitda_yoy_growth: 0.2
-          net_income_prior: 10
           net_income_yoy_growth: 0.2
 
   - name: financial_derived_yoy_no_prior_year
@@ -82,11 +87,8 @@ unit_tests:
         - cik: 2
           accession_number: "0003"
           fiscal_year: 2023
-          revenue_prior: null
           revenue_yoy_growth: null
-          ebitda_prior: null
           ebitda_yoy_growth: null
-          net_income_prior: null
           net_income_yoy_growth: null
 
   - name: financial_derived_yoy_zero_prior_revenue
@@ -114,13 +116,16 @@ unit_tests:
     expect:
       rows:
         - cik: 3
+          accession_number: "0004"
+          fiscal_year: 2023
+          revenue_yoy_growth: null
+          ebitda_yoy_growth: null
+          net_income_yoy_growth: null
+        - cik: 3
           accession_number: "0005"
           fiscal_year: 2024
-          revenue_prior: 0
           revenue_yoy_growth: null
-          ebitda_prior: 30
           ebitda_yoy_growth: 0.2
-          net_income_prior: 10
           net_income_yoy_growth: 0.2
 
   - name: financial_derived_yoy_negative_to_positive
@@ -148,9 +153,12 @@ unit_tests:
     expect:
       rows:
         - cik: 4
+          accession_number: "0006"
+          fiscal_year: 2023
+          net_income_yoy_growth: null
+        - cik: 4
           accession_number: "0007"
           fiscal_year: 2024
-          net_income_prior: -10
           net_income_yoy_growth: -3.0
 
   - name: financial_derived_yoy_prefers_own_current_over_later_comparative
@@ -187,10 +195,17 @@ unit_tests:
     expect:
       rows:
         - cik: 5
+          accession_number: "0008"
+          fiscal_year: 2023
+          revenue_yoy_growth: null
+        - cik: 5
           accession_number: "0009"
           fiscal_year: 2024
-          revenue_prior: 100
           revenue_yoy_growth: 0.3
+        - cik: 5
+          accession_number: "0009"
+          fiscal_year: 2023
+          revenue_yoy_growth: null
 
   - name: financial_derived_yoy_amendment_tiebreaker
     description: >
@@ -221,9 +236,16 @@ unit_tests:
     expect:
       rows:
         - cik: 6
+          accession_number: "0010"
+          fiscal_year: 2023
+          revenue_yoy_growth: null
+        - cik: 6
+          accession_number: "0011"
+          fiscal_year: 2023
+          revenue_yoy_growth: null
+        - cik: 6
           accession_number: "0012"
           fiscal_year: 2024
-          revenue_prior: 105
           revenue_yoy_growth: 0.2
 
   - name: financial_derived_yoy_fiscal_period_mismatch
@@ -249,10 +271,14 @@ unit_tests:
     expect:
       rows:
         - cik: 7
+          accession_number: "0013"
+          fiscal_year: 2023
+          fiscal_period: "Q1"
+          revenue_yoy_growth: null
+        - cik: 7
           accession_number: "0014"
           fiscal_year: 2024
           fiscal_period: "FY"
-          revenue_prior: null
           revenue_yoy_growth: null
 
   - name: financial_derived_yoy_no_fanout_both_years_duplicated
@@ -306,27 +332,22 @@ unit_tests:
         - cik: 8
           accession_number: "0015"
           fiscal_year: 2022
-          revenue_prior: null
           revenue_yoy_growth: null
         - cik: 8
           accession_number: "0016"
           fiscal_year: 2023
-          revenue_prior: 80
           revenue_yoy_growth: 0.125
         - cik: 8
           accession_number: "0016"
           fiscal_year: 2022
-          revenue_prior: null
           revenue_yoy_growth: null
         - cik: 8
           accession_number: "0017"
           fiscal_year: 2024
-          revenue_prior: 90
           revenue_yoy_growth: 0.1
         - cik: 8
           accession_number: "0017"
           fiscal_year: 2023
-          revenue_prior: 80
           revenue_yoy_growth: 0.1375
 
   - name: financial_derived_yoy_null_prior_metric
@@ -354,11 +375,14 @@ unit_tests:
     expect:
       rows:
         - cik: 9
+          accession_number: "0018"
+          fiscal_year: 2023
+          ebitda_yoy_growth: null
+          revenue_yoy_growth: null
+        - cik: 9
           accession_number: "0019"
           fiscal_year: 2024
-          ebitda_prior: null
           ebitda_yoy_growth: null
-          revenue_prior: 100
           revenue_yoy_growth: 0.2
 
   - name: financial_derived_yoy_multi_company_isolation
@@ -394,14 +418,20 @@ unit_tests:
     expect:
       rows:
         - cik: 10
+          accession_number: "0020"
+          fiscal_year: 2023
+          revenue_yoy_growth: null
+        - cik: 10
           accession_number: "0021"
           fiscal_year: 2024
-          revenue_prior: 100
           revenue_yoy_growth: 0.1
+        - cik: 11
+          accession_number: "0022"
+          fiscal_year: 2023
+          revenue_yoy_growth: null
         - cik: 11
           accession_number: "0023"
           fiscal_year: 2024
-          revenue_prior: 200
           revenue_yoy_growth: 0.2
 
   - name: financial_derived_yoy_multi_year_chain
@@ -431,12 +461,14 @@ unit_tests:
     expect:
       rows:
         - cik: 12
+          accession_number: "0024"
+          fiscal_year: 2022
+          revenue_yoy_growth: null
+        - cik: 12
           accession_number: "0025"
           fiscal_year: 2023
-          revenue_prior: 100
           revenue_yoy_growth: 0.1
         - cik: 12
           accession_number: "0026"
           fiscal_year: 2024
-          revenue_prior: 110
           revenue_yoy_growth: 0.1
