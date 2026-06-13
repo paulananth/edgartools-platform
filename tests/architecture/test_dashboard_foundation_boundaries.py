@@ -52,9 +52,16 @@ class _FakeStreamlit:
     def __init__(self) -> None:
         self.cache_data = _FakeCacheData()
         self.dataframes: list[list[dict[str, object]]] = []
+        self.messages: list[str] = []
 
     def subheader(self, *_args, **_kwargs) -> None:
         return None
+
+    def warning(self, message, *_args, **_kwargs) -> None:
+        self.messages.append(str(message))
+
+    def caption(self, message, *_args, **_kwargs) -> None:
+        self.messages.append(str(message))
 
     def bar_chart(self, *_args, **_kwargs) -> None:
         return None
@@ -72,6 +79,7 @@ def _load_streamlit_app_with_fake_streamlit() -> tuple[object, _FakeStreamlit]:
     fake_dashboard_readonly.get_active_relationship_diagnostic_inputs = lambda: None
     fake_dashboard_readonly.build_relationship_coverage_rows = lambda *_args, **_kwargs: []
     fake_graph_readonly.get_neo4j_graph_metrics = lambda *_args, **_kwargs: None
+    fake_graph_readonly.get_snowflake_graph_metrics = lambda *_args, **_kwargs: None
     spec = importlib.util.spec_from_file_location(
         "_phase9_streamlit_app_under_test",
         target,
@@ -140,8 +148,7 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
 
     def test_graph_readonly_contains_no_write_cypher_tokens(self) -> None:
         target = REPO_ROOT / "edgar_warehouse" / "mdm" / "graph_readonly.py"
-        if not target.exists():
-            self.skipTest("graph_readonly.py not created yet")
+        self.assertTrue(target.exists(), "graph_readonly.py must exist for hosted graph dashboard reads")
         text = _read(target)
         offenders = [
             token
@@ -149,6 +156,48 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
             if re.search(rf"\b{token}\b", text)
         ]
         self.assertEqual(offenders, [])
+
+    def test_graph_readonly_avoids_cli_subprocess_and_external_neo4j_dependencies(self) -> None:
+        target = REPO_ROOT / "edgar_warehouse" / "mdm" / "graph_readonly.py"
+        self.assertTrue(target.exists(), "graph_readonly.py must exist for hosted graph dashboard reads")
+        text = _read(target)
+
+        forbidden = [
+            "subprocess",
+            "edgar_warehouse.mdm.cli",
+            "edgar-warehouse",
+            "stdout",
+            "check_output",
+            "popen",
+            "NEO4J_URI",
+            "NEO4J_USER",
+            "NEO4J_PASSWORD",
+            "NEO4J_DATABASE",
+            "NEO4J_SECRET_JSON",
+            "bolt://",
+            "neo4j://",
+            "Aura",
+        ]
+        offenders = {token for token in forbidden if token in text}
+        self.assertEqual(offenders, set())
+
+    def test_graph_readonly_exposes_hosted_snowflake_dashboard_contract(self) -> None:
+        target = REPO_ROOT / "edgar_warehouse" / "mdm" / "graph_readonly.py"
+        self.assertTrue(target.exists(), "graph_readonly.py must exist for hosted graph dashboard reads")
+        text = _read(target)
+
+        for token in (
+            "get_snowflake_graph_metrics",
+            "SnowflakeGraphVerifier",
+            "SnowflakeGraphVerificationConfig",
+            "entity_comparison",
+            "relationship_comparison",
+            "missing_graph_edge_endpoints",
+            "failing_checks",
+            "SNOWFLAKE_GRAPH_UNAVAILABLE_MESSAGE",
+            "SNOWFLAKE_GRAPH_PERMISSION_DENIED_MESSAGE",
+        ):
+            self.assertIn(token, text)
 
     def test_streamlit_contains_no_raw_sql_or_cypher(self) -> None:
         target = REPO_ROOT / "examples" / "mdm_graph_dashboard" / "streamlit_app.py"
@@ -159,10 +208,6 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
             text.replace("No rows match the current filters.", "")
             .replace(
                 "MDM database permission denied. Confirm the configured database user can run read-only SELECT queries.",
-                "",
-            )
-            .replace(
-                "Neo4j permission denied. Confirm the configured graph user can run read-only MATCH queries.",
                 "",
             )
         )
@@ -218,9 +263,7 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
             "deploy-aws-application.sh",
             "publish-warehouse-image.sh",
             "infra/snowflake/dbt",
-            "snowflake",
-            "dbt",
-            "terraform",
+            "infra/terraform",
             "generated application json",
             "edgar_universe_dashboard.py",
         ]
@@ -240,8 +283,8 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         self.assertIn("dashboard_readonly", text)
         self.assertIn("graph_readonly", text)
         self.assertIn("dashboard_readonly.get_mdm_dashboard_metrics", text)
-        self.assertIn("dashboard_readonly.get_active_relationship_diagnostic_inputs", text)
-        self.assertIn("graph_readonly.get_neo4j_graph_metrics", text)
+        self.assertIn("graph_readonly.get_snowflake_graph_metrics", text)
+        self.assertNotIn("graph_readonly.get_neo4j_graph_metrics", text)
 
     def test_streamlit_graph_queries_use_full_registry_not_bounded_samples(self) -> None:
         target = REPO_ROOT / "examples" / "mdm_graph_dashboard" / "streamlit_app.py"
@@ -255,48 +298,38 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         self.assertNotIn("_entity_labels_from_diagnostics", text)
         self.assertNotIn("known_mdm_edge_keys", text)
 
-    def test_entity_comparison_uses_registry_labels_for_neo4j_node_counts(self) -> None:
-        """GRAPH-01 regression: entity coverage uses registry Neo4j labels."""
+    def test_entity_comparison_renders_snowflake_verifier_rows(self) -> None:
         module, fake_streamlit = _load_streamlit_app_with_fake_streamlit()
 
         module._render_entity_comparison(
-            mdm_metrics={
+            graph_metrics={
                 "available": True,
-                "entity_counts": {
-                    "company": {"label": "Companies", "count": 3},
-                    "security": {"label": "Securities", "count": 4},
-                    "person": {"label": "People", "count": 5},
-                },
-                "registry": {
-                    "entity_type_details": [
-                        {"entity_type": "company", "neo4j_label": "Company"},
-                        {"entity_type": "security", "neo4j_label": "Security"},
-                        {"entity_type": "person", "neo4j_label": "Person"},
-                    ]
-                },
-            },
-            neo4j_metrics={
-                "available": True,
-                "node_counts": {
-                    "Company": {"node_count": 30},
-                    "Security": {"node_count": 40},
-                    "Person": {"node_count": 50},
-                },
+                "entity_comparison": [
+                    {
+                        "entity_type": "company",
+                        "mdm_active_count": 3,
+                        "snowflake_graph_node_count": 30,
+                        "mdm_minus_graph": 0,
+                        "graph_minus_mdm": 27,
+                        "status": "Mismatch",
+                    }
+                ],
             },
         )
 
         detail_rows = fake_streamlit.dataframes[-1]
-        neo4j_counts = {
-            str(row["Domain"]): row["Neo4j Count"]
-            for row in detail_rows
-        }
         self.assertEqual(
-            neo4j_counts,
-            {
-                "Companies": 30,
-                "Securities": 40,
-                "People": 50,
-            },
+            detail_rows,
+            [
+                {
+                    "Entity Type": "company",
+                    "MDM Active": 3,
+                    "Snowflake Graph Nodes": 30,
+                    "MDM Minus Graph": 0,
+                    "Graph Minus MDM": 27,
+                    "Status": "Mismatch",
+                }
+            ],
         )
 
     def test_phase10_navigation_labels_are_final_operator_views(self) -> None:
@@ -360,8 +393,9 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         expected_copy = [
             "MDM configuration is required. Set `MDM_DATABASE_URL`, then restart the dashboard.",
             "MDM database unavailable. Check `MDM_DATABASE_URL`, confirm the database is reachable, and restart the dashboard.",
-            "Neo4j graph metrics unavailable. MDM overview remains available.",
-            "Neo4j permission denied. Confirm the configured graph user can run read-only MATCH queries.",
+            "Snowflake graph metrics unavailable. MDM overview remains available.",
+            "Snowflake graph permission denied. Confirm the configured Snowflake role can run read-only graph diagnostics.",
+            "Snowflake Native App check failed. Run `edgar-warehouse mdm verify-graph` for the acceptance gate and review the remediation below.",
             "No rows match the current filters.",
             "Adjust the selected type or row limit, then review the table again.",
         ]
@@ -379,6 +413,117 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
             "RuntimeError(",
         ):
             self.assertNotIn(unsafe_token, text)
+
+    def test_dashboard_sidebar_copy_names_snowflake_hosted_graph_status(self) -> None:
+        text = _dashboard_source()
+
+        self.assertIn(
+            'st.sidebar.caption("Read-only MDM and Snowflake-hosted graph status")',
+            text,
+        )
+
+    def test_active_streamlit_copy_avoids_external_neo4j_credentials_and_bolt(self) -> None:
+        text = _dashboard_source()
+        allowed_route_copy = text.replace("Neo4j Overview", "")
+        allowed_route_copy = allowed_route_copy.replace(
+            "Snowflake-hosted Neo4j Graph Analytics",
+            "",
+        )
+
+        forbidden = (
+            "NEO4J_URI",
+            "NEO4J_USER",
+            "NEO4J_PASSWORD",
+            "NEO4J_DATABASE",
+            "NEO4J_SECRET_JSON",
+            "bolt://",
+            "neo4j://",
+            "Aura",
+            "read-only MATCH",
+            "configured graph user",
+            "external Neo4j",
+        )
+        offenders = [token for token in forbidden if token in allowed_route_copy]
+        self.assertEqual(offenders, [])
+
+    def test_dashboard_contains_required_hosted_graph_table_labels(self) -> None:
+        text = _dashboard_source()
+        for label in (
+            "Snowflake graph nodes",
+            "Snowflake graph edges",
+            "Entity Type",
+            "MDM Active",
+            "Snowflake Graph Nodes",
+            "MDM Minus Graph",
+            "Graph Minus MDM",
+            "Relationship Type",
+            "Snowflake Graph Edges",
+            "Missing Graph Nodes",
+            "Extra Graph Nodes",
+            "Missing Graph Edges",
+            "Extra Graph Edges",
+            "Missing Graph Edge Endpoints",
+            "Source Node ID",
+            "Target Node ID",
+            "Missing Source Node",
+            "Missing Target Node",
+            "Direction",
+        ):
+            self.assertIn(label, text)
+
+    def test_native_app_failures_render_failure_only_table(self) -> None:
+        module, fake_streamlit = _load_streamlit_app_with_fake_streamlit()
+        failing_checks = [
+            ("compute_pool", "Activate the Native App compute pool."),
+            ("GRAPH_INFO", "Run `edgar-warehouse mdm verify-graph`."),
+            ("BFS", "Review `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`."),
+            ("WCC", "Review `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`."),
+        ]
+
+        module._render_native_app_failures(
+            {
+                "native_app": {
+                    "failing_checks": [
+                        {
+                            "check": check,
+                            "status": "failed",
+                            "detail": "Check failed before returning rows.",
+                            "remediation": remediation,
+                        }
+                        for check, remediation in failing_checks
+                    ]
+                }
+            }
+        )
+
+        self.assertEqual(
+            fake_streamlit.dataframes[-1],
+            [
+                {
+                    "Check": check,
+                    "Status": "failed",
+                    "Detail": "Check failed before returning rows.",
+                    "Remediation": remediation,
+                }
+                for check, remediation in failing_checks
+            ],
+        )
+        self.assertTrue(
+            any(
+                "Snowflake Native App check failed. Run `edgar-warehouse mdm verify-graph`"
+                in message
+                for message in fake_streamlit.messages
+            )
+        )
+
+    def test_overview_does_not_render_healthy_native_app_proof_as_primary_chrome(self) -> None:
+        text = _dashboard_source()
+        render_overview = text.split("def render_overview(", 1)[1].split("\ndef ", 1)[0]
+
+        self.assertNotIn("GRAPH_INFO", render_overview)
+        self.assertNotIn("BFS", render_overview)
+        self.assertNotIn("WCC", render_overview)
+        self.assertNotIn("compute pool", render_overview.lower())
 
     def test_d13_d14_d15_d16_readme_contract_matches_operator_runbook(self) -> None:
         text = _dashboard_readme()

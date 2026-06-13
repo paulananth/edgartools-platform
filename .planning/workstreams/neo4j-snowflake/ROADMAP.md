@@ -114,7 +114,19 @@ MDM relationship parity, dashboard inspection, and end-to-end AWS verification.
 4. Dashboard tests use fixtures or mocks and do not require live Snowflake credentials.
 5. The milestone final verification includes dashboard comparison plus CLI verification results.
 
-**Plans**: TBD
+**Plans**:
+
+| Plan | Wave | Objective | Requirements |
+|------|------|-----------|--------------|
+| 04-01 | 1 | Create the missing hosted graph read-only helper that normalizes strict Snowflake `verify-graph` semantics into dashboard-ready payloads. | VERIFY-04, DASH-01, DASH-02, DASH-03 |
+| 04-02 | 2 | Migrate the existing Streamlit dashboard in place from external Neo4j assumptions to Snowflake-hosted graph comparison. | VERIFY-04, DASH-01, DASH-02, DASH-03 |
+| 04-03 | 3 | Update dashboard documentation and guardrails so Phase 4 closes with hosted graph dashboard comparison plus strict CLI verification evidence. | VERIFY-04, DASH-01, DASH-02, DASH-03 |
+
+Cross-cutting constraints:
+- Dashboard and helper behavior must remain strictly read-only.
+- Failure copy and verification evidence must stay secret-safe.
+- The dashboard is an inspection surface; `edgar-warehouse mdm verify-graph` remains the acceptance gate.
+- The existing Streamlit route labels, row-limit options, manual refresh, and single-select filters remain stable.
 
 ---
 
@@ -125,4 +137,4 @@ MDM relationship parity, dashboard inspection, and end-to-end AWS verification.
 | 1. Snowflake Native App Feasibility And Architecture Decision | v1.3 Neo4j Snowflake Native App Migration | 3/3 | Complete    | 2026-05-26 |
 | 2. Snowflake Graph Sync Contract | v1.3 Neo4j Snowflake Native App Migration | 3/3 | Complete    | 2026-05-27 |
 | 3. Hosted Graph Verification And E2E Cutover | v1.3 Neo4j Snowflake Native App Migration | 3/3 | Complete    | 2026-06-12 |
-| 4. Dashboard Hosted Graph Migration | v1.3 Neo4j Snowflake Native App Migration | 0/TBD | Not started | - |
+| 4. Dashboard Hosted Graph Migration | v1.3 Neo4j Snowflake Native App Migration | 2/3 | In progress | - |

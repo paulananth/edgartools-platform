@@ -24,10 +24,11 @@ MDM_CONFIG_REQUIRED_COPY = (
 )
 MDM_UNAVAILABLE_COPY = "MDM database unavailable. Check `MDM_DATABASE_URL`, confirm the database is reachable, and restart the dashboard."
 MDM_PERMISSION_DENIED_COPY = "MDM database permission denied. Confirm the configured database user can run read-only SELECT queries."
-NEO4J_UNAVAILABLE_COPY = "Neo4j graph metrics unavailable. MDM overview remains available."
-NEO4J_PERMISSION_DENIED_COPY = (
-    "Neo4j permission denied. Confirm the configured graph user can run read-only MATCH queries."
+SNOWFLAKE_GRAPH_UNAVAILABLE_COPY = (
+    "Snowflake graph metrics unavailable. MDM overview remains available."
 )
+SNOWFLAKE_GRAPH_PERMISSION_DENIED_COPY = "Snowflake graph permission denied. Confirm the configured Snowflake role can run read-only graph diagnostics."
+NATIVE_APP_FAILURE_COPY = "Snowflake Native App check failed. Run `edgar-warehouse mdm verify-graph` for the acceptance gate and review the remediation below."
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -36,22 +37,8 @@ def _read_mdm_metrics() -> dict[str, Any]:
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def _read_mdm_diagnostic_inputs() -> dict[str, Any]:
-    return dashboard_readonly.get_active_relationship_diagnostic_inputs().as_dict()
-
-
-@st.cache_data(ttl=60, show_spinner=False)
-def _read_neo4j_metrics(
-    mdm_metrics: Mapping[str, Any],
-    mdm_diagnostic_inputs: Mapping[str, Any],
-) -> dict[str, Any]:
-    relationship_types = _relationship_types_from_mdm_metrics(mdm_metrics)
-    entity_labels = _entity_labels_from_mdm_metrics(mdm_metrics)
-    return graph_readonly.get_neo4j_graph_metrics(
-        entity_labels=entity_labels,
-        relationship_types=relationship_types,
-        mdm_diagnostic_inputs=mdm_diagnostic_inputs,
-    ).as_dict()
+def _read_snowflake_graph_metrics(row_limit: int) -> dict[str, Any]:
+    return graph_readonly.get_snowflake_graph_metrics(sample_limit=row_limit).as_dict()
 
 
 def _clear_dashboard_cache() -> None:
@@ -62,11 +49,40 @@ def _relationship_types_from_mdm_metrics(payload: Mapping[str, Any]) -> list[str
     relationship_counts = payload.get("relationship_counts")
     if isinstance(relationship_counts, Mapping):
         return [str(key) for key in relationship_counts]
+    registry = payload.get("registry")
+    if isinstance(registry, Mapping):
+        relationship_types = registry.get("relationship_types")
+        if isinstance(relationship_types, list):
+            return [str(value) for value in relationship_types if value]
     return []
 
 
-def _relationship_filter_options(payload: Mapping[str, Any]) -> list[str]:
-    return [FILTER_ALL, *_relationship_types_from_mdm_metrics(payload)]
+def _relationship_types_from_graph_metrics(payload: Mapping[str, Any] | None) -> list[str]:
+    if not payload:
+        return []
+    relationship_types = {
+        str(row.get("relationship_type"))
+        for row in _mapping_values(payload.get("relationship_comparison"))
+        if row.get("relationship_type")
+    }
+    diagnostics = payload.get("diagnostics")
+    if isinstance(diagnostics, Mapping):
+        for rows in diagnostics.values():
+            for row in _mapping_values(rows):
+                if row.get("relationship_type"):
+                    relationship_types.add(str(row["relationship_type"]))
+    return sorted(relationship_types)
+
+
+def _relationship_filter_options(
+    mdm_metrics: Mapping[str, Any],
+    graph_metrics: Mapping[str, Any] | None = None,
+) -> list[str]:
+    options = {
+        *_relationship_types_from_mdm_metrics(mdm_metrics),
+        *_relationship_types_from_graph_metrics(graph_metrics),
+    }
+    return [FILTER_ALL, *sorted(options)]
 
 
 def _entity_labels_from_mdm_metrics(payload: Mapping[str, Any]) -> list[str]:
@@ -96,30 +112,36 @@ def _entity_registry_details(payload: Mapping[str, Any]) -> list[Mapping[str, An
     return [row for row in details if isinstance(row, Mapping)]
 
 
-def _entity_filter_options(payload: Mapping[str, Any]) -> list[str]:
-    options = [
-        str(row["entity_type"])
-        for row in _entity_registry_details(payload)
+def _entity_types_from_graph_metrics(payload: Mapping[str, Any] | None) -> list[str]:
+    if not payload:
+        return []
+    entity_types = {
+        str(row.get("entity_type"))
+        for row in _mapping_values(payload.get("entity_comparison"))
         if row.get("entity_type")
-    ]
-    if not options:
-        options = [domain for domain, _row in _mapping_items(payload.get("entity_counts"))]
-    return [FILTER_ALL, *options]
+    }
+    diagnostics = payload.get("diagnostics")
+    if isinstance(diagnostics, Mapping):
+        for key in ("missing_graph_nodes", "extra_graph_nodes"):
+            for row in _mapping_values(diagnostics.get(key)):
+                if row.get("entity_type"):
+                    entity_types.add(str(row["entity_type"]))
+    return sorted(entity_types)
 
 
-def _neo4j_label_for_entity(
-    *,
+def _entity_filter_options(
     mdm_metrics: Mapping[str, Any],
-    domain: str,
-    entity_row: Mapping[str, Any],
-) -> str:
-    explicit_label = entity_row.get("neo4j_label")
-    if explicit_label:
-        return str(explicit_label)
-    for detail in _entity_registry_details(mdm_metrics):
-        if str(detail.get("entity_type") or "") == domain and detail.get("neo4j_label"):
-            return str(detail["neo4j_label"])
-    return domain
+    graph_metrics: Mapping[str, Any] | None = None,
+) -> list[str]:
+    options = {
+        str(row["entity_type"])
+        for row in _entity_registry_details(mdm_metrics)
+        if row.get("entity_type")
+    }
+    if not options:
+        options.update(domain for domain, _row in _mapping_items(mdm_metrics.get("entity_counts")))
+    options.update(_entity_types_from_graph_metrics(graph_metrics))
+    return [FILTER_ALL, *sorted(options)]
 
 
 def _format_count(value: Any) -> str:
@@ -127,15 +149,6 @@ def _format_count(value: Any) -> str:
         return f"{int(value or 0):,}"
     except (TypeError, ValueError):
         return "0"
-
-
-def _format_percent(value: Any) -> str:
-    if value is None:
-        return "-"
-    try:
-        return f"{float(value):.1f}%"
-    except (TypeError, ValueError):
-        return "-"
 
 
 def _timestamp_caption(label: str, payload: Mapping[str, Any]) -> None:
@@ -179,13 +192,13 @@ def _mdm_state_copy(mdm_metrics: Mapping[str, Any]) -> str:
     return MDM_UNAVAILABLE_COPY
 
 
-def _neo4j_state_copy(neo4j_metrics: Mapping[str, Any] | None) -> str:
-    payload = neo4j_metrics or {}
+def _snowflake_graph_state_copy(graph_metrics: Mapping[str, Any] | None) -> str:
+    payload = graph_metrics or {}
     state = str(payload.get("state") or "").lower()
     message = str(payload.get("message") or "").lower()
     if "permission" in state or "permission" in message:
-        return NEO4J_PERMISSION_DENIED_COPY
-    return NEO4J_UNAVAILABLE_COPY
+        return SNOWFLAKE_GRAPH_PERMISSION_DENIED_COPY
+    return SNOWFLAKE_GRAPH_UNAVAILABLE_COPY
 
 
 def _render_mdm_unavailable(mdm_metrics: Mapping[str, Any]) -> bool:
@@ -195,60 +208,55 @@ def _render_mdm_unavailable(mdm_metrics: Mapping[str, Any]) -> bool:
     return True
 
 
+def _pending_sync_total(mdm_metrics: Mapping[str, Any]) -> int:
+    return sum(
+        _int_value(row.get("pending_graph_sync_count"))
+        for row in _mapping_values(mdm_metrics.get("relationship_counts"))
+    )
+
+
 def _render_snapshot(
     *,
     mdm_metrics: Mapping[str, Any],
-    neo4j_metrics: Mapping[str, Any] | None,
-    coverage_rows: list[dict[str, Any]],
+    graph_metrics: Mapping[str, Any] | None,
 ) -> None:
     entity_total = sum(
-        int(row.get("count") or 0)
+        _int_value(row.get("count"))
         for row in _mapping_values(mdm_metrics.get("entity_counts"))
     )
     relationship_total = sum(
-        int(row.get("active_count") or 0)
+        _int_value(row.get("active_count"))
         for row in _mapping_values(mdm_metrics.get("relationship_counts"))
     )
-    pending_total = sum(
-        int(row.get("pending_graph_sync_count") or 0)
-        for row in _mapping_values(mdm_metrics.get("relationship_counts"))
-    )
-    node_total = 0
-    edge_total = 0
-    if neo4j_metrics and neo4j_metrics.get("available"):
-        node_total = sum(
-            int(row.get("node_count") or 0)
-            for row in _mapping_values(neo4j_metrics.get("node_counts"))
-        )
-        edge_total = sum(
-            int(row.get("edge_count") or 0)
-            for row in _mapping_values(neo4j_metrics.get("relationship_counts"))
-        )
-
-    missing_total = sum(int(row.get("missing_estimate") or 0) for row in coverage_rows)
-    extra_total = sum(int(row.get("extra_graph_count") or 0) for row in coverage_rows)
-    neo_status = "OK" if neo4j_metrics and neo4j_metrics.get("available") else "Unavailable"
-    relationship_status = "OK"
-    if missing_total:
-        relationship_status = "Missing graph data"
-    elif extra_total:
-        relationship_status = "Extra graph data"
-    elif pending_total:
-        relationship_status = "Pending sync"
+    pending_total = _pending_sync_total(mdm_metrics)
+    graph_available = bool(graph_metrics and graph_metrics.get("available"))
+    node_total = _int_value((graph_metrics or {}).get("snowflake_graph_nodes"))
+    edge_total = _int_value((graph_metrics or {}).get("snowflake_graph_edges"))
 
     metric_cols = st.columns(5)
     metric_cols[0].metric("MDM entities", _format_count(entity_total), "OK")
-    metric_cols[1].metric("MDM relationships", _format_count(relationship_total), relationship_status)
-    metric_cols[2].metric("Neo4j nodes", _format_count(node_total), neo_status)
-    metric_cols[3].metric("Neo4j edges", _format_count(edge_total), neo_status)
-    metric_cols[4].metric("Pending sync", _format_count(pending_total), "Review" if pending_total else "OK")
+    metric_cols[1].metric("MDM relationships", _format_count(relationship_total), "OK")
+    metric_cols[2].metric(
+        "Snowflake graph nodes",
+        _format_count(node_total),
+        "OK" if graph_available else "Unavailable",
+    )
+    metric_cols[3].metric(
+        "Snowflake graph edges",
+        _format_count(edge_total),
+        "OK" if graph_available else "Unavailable",
+    )
+    metric_cols[4].metric(
+        "Pending sync",
+        _format_count(pending_total),
+        "Review" if pending_total else "OK",
+    )
 
 
 def _render_grouped_warnings(
     *,
     mdm_metrics: Mapping[str, Any],
-    neo4j_metrics: Mapping[str, Any] | None,
-    coverage_rows: list[dict[str, Any]],
+    graph_metrics: Mapping[str, Any] | None,
 ) -> None:
     blocking: list[dict[str, str]] = []
     coverage: list[dict[str, str]] = []
@@ -265,32 +273,32 @@ def _render_grouped_warnings(
         else:
             coverage.append(row)
 
-    if neo4j_metrics and not neo4j_metrics.get("available"):
+    if graph_metrics and not graph_metrics.get("available"):
         coverage.append(
             {
                 "severity": "warning",
-                "message": _neo4j_state_copy(neo4j_metrics),
-                "action": "Check graph configuration and network access outside the dashboard.",
+                "message": _snowflake_graph_state_copy(graph_metrics),
+                "action": "Check Snowflake connection context and Native App prerequisites outside the dashboard.",
             }
         )
 
-    for row in coverage_rows:
-        if int(row.get("missing_estimate") or 0) > 0:
-            coverage.append(
-                {
-                    "severity": "warning",
-                    "message": f"{row['relationship_type']} has missing graph data.",
-                    "action": "Review pending and missing-edge samples.",
-                }
-            )
-        if int(row.get("extra_graph_count") or 0) > 0:
-            coverage.append(
-                {
-                    "severity": "warning",
-                    "message": f"{row['relationship_type']} has extra graph data.",
-                    "action": "Review extra graph samples against the MDM registry.",
-                }
-            )
+    if _has_graph_mismatches(graph_metrics):
+        coverage.append(
+            {
+                "severity": "warning",
+                "message": "Snowflake-hosted graph diagnostics contain mismatches.",
+                "action": "Review Mismatch Diagnostics, then run `edgar-warehouse mdm verify-graph` for the acceptance gate.",
+            }
+        )
+
+    if _native_app_failure_rows(graph_metrics):
+        coverage.append(
+            {
+                "severity": "warning",
+                "message": NATIVE_APP_FAILURE_COPY,
+                "action": "Review the Native App failure table below.",
+            }
+        )
 
     if not blocking and not coverage:
         st.success("No blocking failures or coverage warnings.")
@@ -319,7 +327,7 @@ def _render_entity_table(
     rows = [
         {
             "Domain": row.get("label"),
-            "Count": int(row.get("count") or 0),
+            "Count": _int_value(row.get("count")),
             "Status": row.get("status"),
         }
         for domain, row in _mapping_items(mdm_metrics.get("entity_counts"))
@@ -334,33 +342,24 @@ def _render_entity_table(
     )
 
 
-def _render_relationship_table(
+def _render_mdm_relationship_table(
     *,
     mdm_metrics: Mapping[str, Any],
-    neo4j_metrics: Mapping[str, Any] | None,
     relationship_filter: str = FILTER_ALL,
     row_limit: int | None = None,
-    include_neo4j_edges: bool = True,
 ) -> None:
-    neo4j_relationships = (
-        neo4j_metrics.get("relationship_counts", {})
-        if neo4j_metrics and neo4j_metrics.get("available")
-        else {}
-    )
     rows = []
     for rel_type, row in sorted(_mapping_items(mdm_metrics.get("relationship_counts"))):
         if relationship_filter != FILTER_ALL and relationship_filter != rel_type:
             continue
-        graph_row = neo4j_relationships.get(rel_type, {}) if isinstance(neo4j_relationships, Mapping) else {}
-        display_row: dict[str, Any] = {
-            "Relationship Type": rel_type,
-            "MDM Active": int(row.get("active_count") or 0),
-            "Pending Sync": int(row.get("pending_graph_sync_count") or 0),
-            "Status": row.get("status"),
-        }
-        if include_neo4j_edges:
-            display_row["Neo4j Edges"] = _format_count(graph_row.get("edge_count")) if graph_row else "-"
-        rows.append(display_row)
+        rows.append(
+            {
+                "Relationship Type": rel_type,
+                "MDM Active": _int_value(row.get("active_count")),
+                "Pending Sync": _int_value(row.get("pending_graph_sync_count")),
+                "Status": row.get("status"),
+            }
+        )
     _render_table_or_empty(
         _limit_rows(rows, row_limit),
         filtered=relationship_filter != FILTER_ALL,
@@ -370,143 +369,181 @@ def _render_relationship_table(
 
 def _render_entity_comparison(
     *,
-    mdm_metrics: Mapping[str, Any],
-    neo4j_metrics: Mapping[str, Any] | None,
+    graph_metrics: Mapping[str, Any] | None,
     entity_filter: str = FILTER_ALL,
     row_limit: int | None = None,
 ) -> None:
-    node_counts = (
-        neo4j_metrics.get("node_counts", {})
-        if neo4j_metrics and neo4j_metrics.get("available")
-        else {}
-    )
-    detail_rows: list[dict[str, Any]] = []
-    chart_rows: list[dict[str, Any]] = []
-    for domain, row in _mapping_items(mdm_metrics.get("entity_counts")):
-        if (
-            entity_filter != FILTER_ALL
-            and entity_filter != domain
-            and entity_filter != str(row.get("label") or "")
-        ):
-            continue
-        label = str(row.get("label") or domain)
-        graph_key = _neo4j_label_for_entity(
-            mdm_metrics=mdm_metrics,
-            domain=domain,
-            entity_row=row,
-        )
-        graph_count = 0
-        if isinstance(node_counts, Mapping):
-            graph_count = int((node_counts.get(graph_key) or {}).get("node_count") or 0)
-        mdm_count = int(row.get("count") or 0)
-        detail_rows.append(
-            {
-                "Domain": label,
-                "MDM Count": mdm_count,
-                "Neo4j Label": graph_key,
-                "Neo4j Count": graph_count if neo4j_metrics and neo4j_metrics.get("available") else "-",
-                "Status": "Unavailable" if not (neo4j_metrics and neo4j_metrics.get("available")) else "OK",
-            }
-        )
-        chart_rows.append({"Domain": label, "Source": "MDM", "Count": mdm_count})
-        if neo4j_metrics and neo4j_metrics.get("available"):
-            chart_rows.append({"Domain": label, "Source": "Neo4j", "Count": graph_count})
-
-    st.subheader("Entity Domain Coverage")
-    if chart_rows:
-        st.bar_chart(chart_rows, x="Domain", y="Count", color="Source")
-    _render_table_or_empty(
-        _limit_rows(detail_rows, row_limit),
-        filtered=entity_filter != FILTER_ALL,
-        empty_copy="No MDM rows were returned for this review surface.",
-    )
-
-
-def _relationship_coverage_rows(
-    *,
-    mdm_metrics: Mapping[str, Any],
-    neo4j_metrics: Mapping[str, Any] | None,
-) -> list[dict[str, Any]]:
-    neo4j_relationships = (
-        neo4j_metrics.get("relationship_counts", {})
-        if neo4j_metrics and neo4j_metrics.get("available")
-        else {}
-    )
-    return [
-        row.as_dict()
-        for row in dashboard_readonly.build_relationship_coverage_rows(
-            mdm_metrics.get("relationship_counts", {}),
-            neo4j_relationships if isinstance(neo4j_relationships, Mapping) else {},
-        )
+    rows = [
+        {
+            "Entity Type": row.get("entity_type"),
+            "MDM Active": _int_value(row.get("mdm_active_count")),
+            "Snowflake Graph Nodes": _int_value(row.get("snowflake_graph_node_count")),
+            "MDM Minus Graph": _int_value(row.get("mdm_minus_graph")),
+            "Graph Minus MDM": _int_value(row.get("graph_minus_mdm")),
+            "Status": row.get("status"),
+        }
+        for row in _mapping_values((graph_metrics or {}).get("entity_comparison"))
+        if entity_filter == FILTER_ALL
+        or entity_filter == str(row.get("entity_type") or "")
     ]
+    st.subheader("Entity Comparison")
+    _render_table_or_empty(
+        _limit_rows(rows, row_limit),
+        filtered=entity_filter != FILTER_ALL,
+        empty_copy="No Snowflake graph entity comparison rows were returned.",
+    )
 
 
-def _render_relationship_coverage(
-    rows: list[dict[str, Any]],
+def _render_relationship_comparison(
     *,
+    graph_metrics: Mapping[str, Any] | None,
     relationship_filter: str = FILTER_ALL,
     row_limit: int | None = None,
 ) -> None:
-    table_rows = [
+    rows = [
         {
             "Relationship Type": row.get("relationship_type"),
-            "MDM Active": int(row.get("mdm_active_count") or 0),
-            "Neo4j Edges": int(row.get("neo4j_edge_count") or 0),
-            "Pending Sync": int(row.get("pending_graph_sync_count") or 0),
-            "Missing Estimate": int(row.get("missing_estimate") or 0),
-            "Coverage": _format_percent(row.get("coverage_percent")),
+            "MDM Active": _int_value(row.get("mdm_active_count")),
+            "Snowflake Graph Edges": _int_value(row.get("snowflake_graph_edge_count")),
+            "MDM Minus Graph": _int_value(row.get("mdm_minus_graph")),
+            "Graph Minus MDM": _int_value(row.get("graph_minus_mdm")),
             "Status": row.get("status"),
         }
-        for row in rows
+        for row in _mapping_values((graph_metrics or {}).get("relationship_comparison"))
         if relationship_filter == FILTER_ALL
         or relationship_filter == str(row.get("relationship_type") or "")
     ]
-    st.subheader("Relationship Coverage")
+    st.subheader("Relationship Parity")
     _render_table_or_empty(
-        _limit_rows(table_rows, row_limit),
+        _limit_rows(rows, row_limit),
         filtered=relationship_filter != FILTER_ALL,
-        empty_copy="No relationship coverage rows were returned.",
+        empty_copy="No Snowflake graph relationship comparison rows were returned.",
     )
 
 
-def _render_samples(
+def _render_diagnostic_samples(
     title: str,
     rows: list[dict[str, Any]],
     *,
+    columns: Mapping[str, str],
+    entity_filter: str = FILTER_ALL,
     relationship_filter: str = FILTER_ALL,
     row_limit: int | None = None,
 ) -> None:
     st.subheader(title)
-    st.caption(BOUNDED_SAMPLE_COPY)
-    filtered_rows = [
-        row
-        for row in rows
-        if relationship_filter == FILTER_ALL
-        or relationship_filter == str(row.get("relationship_type") or "")
-    ]
-    display_rows = [
-        {
-            "Relationship Type": row.get("relationship_type"),
-            "Source": row.get("source_entity_name") or row.get("source_entity_id"),
-            "Target": row.get("target_entity_name") or row.get("target_entity_id"),
-            "Created": row.get("created_at", "-"),
-        }
-        for row in filtered_rows
-    ]
+    filtered_rows = []
+    for row in rows:
+        if entity_filter != FILTER_ALL and row.get("entity_type") != entity_filter:
+            continue
+        if (
+            relationship_filter != FILTER_ALL
+            and row.get("relationship_type") != relationship_filter
+        ):
+            continue
+        filtered_rows.append({label: row.get(key) for key, label in columns.items()})
     _render_table_or_empty(
-        _limit_rows(display_rows, row_limit),
-        filtered=relationship_filter != FILTER_ALL,
-        empty_copy="No bounded sample rows were returned.",
+        _limit_rows(filtered_rows, row_limit),
+        filtered=entity_filter != FILTER_ALL or relationship_filter != FILTER_ALL,
+        empty_copy="No bounded diagnostic sample rows were returned.",
     )
 
 
-def _flatten_sample_map(payload: Any) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    if isinstance(payload, Mapping):
-        for samples in payload.values():
-            if isinstance(samples, list):
-                rows.extend(row for row in samples if isinstance(row, Mapping))
-    return rows
+def _render_mismatch_samples(
+    *,
+    graph_metrics: Mapping[str, Any] | None,
+    entity_filter: str = FILTER_ALL,
+    relationship_filter: str = FILTER_ALL,
+    row_limit: int | None = None,
+) -> None:
+    diagnostics = (graph_metrics or {}).get("diagnostics")
+    if not isinstance(diagnostics, Mapping):
+        diagnostics = {}
+    st.caption(BOUNDED_SAMPLE_COPY)
+    _render_diagnostic_samples(
+        "Missing Graph Nodes",
+        _mapping_values(diagnostics.get("missing_graph_nodes")),
+        columns={"entity_type": "Entity Type", "node_id": "Node ID"},
+        entity_filter=entity_filter,
+        row_limit=row_limit,
+    )
+    _render_diagnostic_samples(
+        "Extra Graph Nodes",
+        _mapping_values(diagnostics.get("extra_graph_nodes")),
+        columns={"entity_type": "Entity Type", "node_id": "Node ID"},
+        entity_filter=entity_filter,
+        row_limit=row_limit,
+    )
+    _render_diagnostic_samples(
+        "Missing Graph Edges",
+        _mapping_values(diagnostics.get("missing_graph_edges")),
+        columns={"relationship_type": "Relationship Type", "edge_id": "Edge ID"},
+        relationship_filter=relationship_filter,
+        row_limit=row_limit,
+    )
+    _render_diagnostic_samples(
+        "Extra Graph Edges",
+        _mapping_values(diagnostics.get("extra_graph_edges")),
+        columns={"relationship_type": "Relationship Type", "edge_id": "Edge ID"},
+        relationship_filter=relationship_filter,
+        row_limit=row_limit,
+    )
+    _render_diagnostic_samples(
+        "Missing Graph Edge Endpoints",
+        _mapping_values(diagnostics.get("missing_graph_edge_endpoints")),
+        columns={
+            "relationship_type": "Relationship Type",
+            "edge_id": "Edge ID",
+            "source_node_id": "Source Node ID",
+            "target_node_id": "Target Node ID",
+            "missing_source_node": "Missing Source Node",
+            "missing_target_node": "Missing Target Node",
+            "direction": "Direction",
+        },
+        relationship_filter=relationship_filter,
+        row_limit=row_limit,
+    )
+
+
+def _native_app_failure_rows(
+    graph_metrics: Mapping[str, Any] | None,
+) -> list[Mapping[str, Any]]:
+    native_app = (graph_metrics or {}).get("native_app")
+    if not isinstance(native_app, Mapping):
+        return []
+    return _mapping_values(native_app.get("failing_checks"))
+
+
+def _render_native_app_failures(graph_metrics: Mapping[str, Any] | None) -> None:
+    failing_checks = _native_app_failure_rows(graph_metrics)
+    if not failing_checks:
+        return
+    st.subheader("Snowflake Native App Failures")
+    st.warning(NATIVE_APP_FAILURE_COPY)
+    rows = [
+        {
+            "Check": row.get("check"),
+            "Status": row.get("status"),
+            "Detail": row.get("detail"),
+            "Remediation": row.get("remediation"),
+        }
+        for row in failing_checks
+    ]
+    st.dataframe(rows, use_container_width=True, hide_index=True)
+
+
+def _has_graph_mismatches(graph_metrics: Mapping[str, Any] | None) -> bool:
+    if not graph_metrics or not graph_metrics.get("available"):
+        return False
+    for row in _mapping_values(graph_metrics.get("entity_comparison")):
+        if _int_value(row.get("mdm_minus_graph")) or _int_value(row.get("graph_minus_mdm")):
+            return True
+    for row in _mapping_values(graph_metrics.get("relationship_comparison")):
+        if _int_value(row.get("mdm_minus_graph")) or _int_value(row.get("graph_minus_mdm")):
+            return True
+    diagnostics = graph_metrics.get("diagnostics")
+    if isinstance(diagnostics, Mapping):
+        return any(_mapping_values(rows) for rows in diagnostics.values())
+    return False
 
 
 def _mapping_values(value: Any) -> list[Mapping[str, Any]]:
@@ -527,29 +564,36 @@ def _mapping_items(value: Any) -> list[tuple[str, Mapping[str, Any]]]:
     ]
 
 
+def _int_value(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def render_overview(
     *,
     mdm_metrics: Mapping[str, Any],
-    neo4j_metrics: Mapping[str, Any] | None,
-    coverage_rows: list[dict[str, Any]],
+    graph_metrics: Mapping[str, Any] | None,
 ) -> None:
     st.title("EdgarTools MDM Graph")
-    st.caption("Read-only MDM and Neo4j coverage review.")
+    st.caption(
+        "Read-only MDM and Snowflake-hosted graph status. Dashboard refresh is inspection only; `edgar-warehouse mdm verify-graph` remains the acceptance gate."
+    )
     if _render_mdm_unavailable(mdm_metrics):
         return
     _render_grouped_warnings(
         mdm_metrics=mdm_metrics,
-        neo4j_metrics=neo4j_metrics,
-        coverage_rows=coverage_rows,
+        graph_metrics=graph_metrics,
     )
+    _render_native_app_failures(graph_metrics)
     _render_snapshot(
         mdm_metrics=mdm_metrics,
-        neo4j_metrics=neo4j_metrics,
-        coverage_rows=coverage_rows,
+        graph_metrics=graph_metrics,
     )
     _timestamp_caption("MDM metrics", mdm_metrics)
-    if neo4j_metrics:
-        _timestamp_caption("Neo4j metrics", neo4j_metrics)
+    if graph_metrics:
+        _timestamp_caption("Snowflake graph metrics", graph_metrics)
 
 
 def render_mdm_overview(*, mdm_metrics: Mapping[str, Any], row_limit: int) -> None:
@@ -560,94 +604,90 @@ def render_mdm_overview(*, mdm_metrics: Mapping[str, Any], row_limit: int) -> No
     relationship_filter = st.selectbox("Relationship type", _relationship_filter_options(mdm_metrics), index=0)
     _timestamp_caption("MDM metrics", mdm_metrics)
     _render_entity_table(mdm_metrics, entity_filter=entity_filter, row_limit=row_limit)
-    _render_relationship_table(
+    _render_mdm_relationship_table(
         mdm_metrics=mdm_metrics,
-        neo4j_metrics=None,
         relationship_filter=relationship_filter,
         row_limit=row_limit,
-        include_neo4j_edges=False,
     )
 
 
 def render_neo4j_overview(
     *,
     mdm_metrics: Mapping[str, Any],
-    neo4j_metrics: Mapping[str, Any] | None,
+    graph_metrics: Mapping[str, Any] | None,
     row_limit: int,
 ) -> None:
     st.title("Neo4j Overview")
+    st.caption("Snowflake-hosted Neo4j Graph Analytics comparison.")
     if _render_mdm_unavailable(mdm_metrics):
         return
-    if neo4j_metrics and not neo4j_metrics.get("available"):
-        st.info(_neo4j_state_copy(neo4j_metrics))
+    if graph_metrics and not graph_metrics.get("available"):
+        st.info(_snowflake_graph_state_copy(graph_metrics))
+        _render_native_app_failures(graph_metrics)
         return
-    entity_filter = st.selectbox("Entity type", _entity_filter_options(mdm_metrics), index=0)
-    relationship_filter = st.selectbox("Relationship type", _relationship_filter_options(mdm_metrics), index=0)
-    _timestamp_caption("Neo4j metrics", neo4j_metrics or {})
+    entity_filter = st.selectbox(
+        "Entity type",
+        _entity_filter_options(mdm_metrics, graph_metrics),
+        index=0,
+    )
+    relationship_filter = st.selectbox(
+        "Relationship type",
+        _relationship_filter_options(mdm_metrics, graph_metrics),
+        index=0,
+    )
+    _timestamp_caption("Snowflake graph metrics", graph_metrics or {})
     _render_entity_comparison(
-        mdm_metrics=mdm_metrics,
-        neo4j_metrics=neo4j_metrics,
+        graph_metrics=graph_metrics,
         entity_filter=entity_filter,
         row_limit=row_limit,
     )
-    _render_relationship_table(
-        mdm_metrics=mdm_metrics,
-        neo4j_metrics=neo4j_metrics,
+    _render_relationship_comparison(
+        graph_metrics=graph_metrics,
         relationship_filter=relationship_filter,
         row_limit=row_limit,
     )
+    _render_native_app_failures(graph_metrics)
 
 
 def render_mismatch_diagnostics(
     *,
     mdm_metrics: Mapping[str, Any],
-    neo4j_metrics: Mapping[str, Any] | None,
-    coverage_rows: list[dict[str, Any]],
+    graph_metrics: Mapping[str, Any] | None,
     row_limit: int,
 ) -> None:
     st.title("Mismatch Diagnostics")
     if _render_mdm_unavailable(mdm_metrics):
         return
-    if not neo4j_metrics or not neo4j_metrics.get("available"):
-        st.warning(_neo4j_state_copy(neo4j_metrics))
-    entity_filter = st.selectbox("Entity type", _entity_filter_options(mdm_metrics), index=0)
-    relationship_filter = st.selectbox("Relationship type", _relationship_filter_options(mdm_metrics), index=0)
-    _render_entity_comparison(
-        mdm_metrics=mdm_metrics,
-        neo4j_metrics=neo4j_metrics,
+    if not graph_metrics or not graph_metrics.get("available"):
+        st.warning(_snowflake_graph_state_copy(graph_metrics))
+    entity_filter = st.selectbox(
+        "Entity type",
+        _entity_filter_options(mdm_metrics, graph_metrics),
+        index=0,
+    )
+    relationship_filter = st.selectbox(
+        "Relationship type",
+        _relationship_filter_options(mdm_metrics, graph_metrics),
+        index=0,
+    )
+    _render_relationship_comparison(
+        graph_metrics=graph_metrics,
+        relationship_filter=relationship_filter,
+        row_limit=row_limit,
+    )
+    _render_mismatch_samples(
+        graph_metrics=graph_metrics,
         entity_filter=entity_filter,
-        row_limit=row_limit,
-    )
-    _render_relationship_coverage(
-        coverage_rows,
         relationship_filter=relationship_filter,
         row_limit=row_limit,
     )
-    _render_samples(
-        "Pending Sync Samples",
-        list(mdm_metrics.get("pending_sync_samples") or []),
-        relationship_filter=relationship_filter,
-        row_limit=row_limit,
-    )
-    if neo4j_metrics and neo4j_metrics.get("available"):
-        _render_samples(
-            "Missing Edge Samples",
-            _flatten_sample_map(neo4j_metrics.get("missing_edge_samples")),
-            relationship_filter=relationship_filter,
-            row_limit=row_limit,
-        )
-        _render_samples(
-            "Extra Graph Data Samples",
-            _flatten_sample_map(neo4j_metrics.get("extra_graph_samples")),
-            relationship_filter=relationship_filter,
-            row_limit=row_limit,
-        )
+    _render_native_app_failures(graph_metrics)
 
 
 def main() -> None:
     st.set_page_config(page_title="EdgarTools MDM Graph", layout="wide")
     st.sidebar.title("EdgarTools MDM")
-    st.sidebar.caption("Read-only MDM and Neo4j status")
+    st.sidebar.caption("Read-only MDM and Snowflake-hosted graph status")
     section_name = st.sidebar.radio("Section", SECTIONS)
     row_limit = st.sidebar.selectbox("Row limit", ROW_LIMIT_OPTIONS, index=1)
     st.sidebar.divider()
@@ -656,38 +696,29 @@ def main() -> None:
         st.rerun()
 
     mdm_metrics = _read_mdm_metrics()
-    mdm_diagnostic_inputs = (
-        _read_mdm_diagnostic_inputs() if mdm_metrics.get("available") else {}
-    )
-    neo4j_metrics = (
-        _read_neo4j_metrics(mdm_metrics, mdm_diagnostic_inputs)
+    graph_metrics = (
+        _read_snowflake_graph_metrics(row_limit)
         if mdm_metrics.get("available")
         else None
     )
-    coverage_rows = _relationship_coverage_rows(
-        mdm_metrics=mdm_metrics,
-        neo4j_metrics=neo4j_metrics,
-    ) if mdm_metrics.get("available") else []
 
     if section_name == "Overview":
         render_overview(
             mdm_metrics=mdm_metrics,
-            neo4j_metrics=neo4j_metrics,
-            coverage_rows=coverage_rows,
+            graph_metrics=graph_metrics,
         )
     elif section_name == "MDM Overview":
         render_mdm_overview(mdm_metrics=mdm_metrics, row_limit=row_limit)
     elif section_name == "Neo4j Overview":
         render_neo4j_overview(
             mdm_metrics=mdm_metrics,
-            neo4j_metrics=neo4j_metrics,
+            graph_metrics=graph_metrics,
             row_limit=row_limit,
         )
     elif section_name == "Mismatch Diagnostics":
         render_mismatch_diagnostics(
             mdm_metrics=mdm_metrics,
-            neo4j_metrics=neo4j_metrics,
-            coverage_rows=coverage_rows,
+            graph_metrics=graph_metrics,
             row_limit=row_limit,
         )
 

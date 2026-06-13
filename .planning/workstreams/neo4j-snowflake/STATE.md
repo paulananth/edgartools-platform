@@ -1,31 +1,30 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.3
-milestone_name: Neo4j Snowflake Native App Migration
-status: active
-stopped_at: Phase 3 complete; next is Phase 4 dashboard hosted graph migration
-last_updated: "2026-06-12T16:25:48Z"
-last_activity: 2026-06-12 -- Phase 3 live AWS hosted graph E2E accepted
-last_summary: 2026-06-12 -- Milestone v1.3 onboarding/status summary generated
+milestone_name: milestone
+status: executing
+stopped_at: Plan 04-02 complete; ready for Plan 04-03
+last_updated: "2026-06-13T02:53:50Z"
+last_activity: 2026-06-12 -- Plan 04-02 Streamlit hosted graph dashboard migration complete
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
-  percent: 75
+  total_plans: 13
+  completed_plans: 11
+  percent: 85
 ---
 
 # Project State - neo4j-snowflake
 
 ## Current Position
 
-Phase: 4 (Dashboard Hosted Graph Migration) — READY TO PLAN
-Plan: TBD
-Status: Phase 3 hosted graph verification and AWS E2E accepted; dashboard migration remains
-Last activity: 2026-06-12 -- Phase 3 live AWS hosted graph E2E accepted
-Last summary: 2026-06-12 -- `.planning/workstreams/neo4j-snowflake/reports/MILESTONE_SUMMARY-v1.3.md`
+Phase: 4 (Dashboard Hosted Graph Migration) — IN PROGRESS
+Plan: 04-03
+Status: Plan 04-02 complete; ready for dashboard documentation and final verification evidence
+Last activity: 2026-06-12 -- Plan 04-02 Streamlit hosted graph dashboard migration complete
+Last summary: 2026-06-12 -- `.planning/workstreams/neo4j-snowflake/phases/04-dashboard-hosted-graph-migration/04-02-SUMMARY.md`
 
-Progress: [########--] 75% (Phases 1, 2, and 3 complete; Phase 4 not started)
+Progress: [#########-] 85% (Phases 1, 2, and 3 complete; Phase 4 in progress, 11/13 plans complete)
 
 ## Milestone Context
 
@@ -173,18 +172,31 @@ projection surfaces should change.
   succeeded for `mdm_migrate`, `mdm_run`, `mdm_backfill_relationships`,
   `mdm_sync_graph`, `mdm_verify_graph`, and `mdm_counts`.
 
+- Plan 04-01 added `edgar_warehouse/mdm/graph_readonly.py`, a read-only
+  dashboard helper that reuses strict Snowflake `verify-graph` semantics and
+  normalizes node/edge counts, entity and relationship comparison rows,
+  bounded diagnostics, Native App failing checks, timestamps, and secret-safe
+  unavailable states for the hosted graph dashboard.
+
+- Plan 04-02 migrated `examples/mdm_graph_dashboard/streamlit_app.py` to the
+  hosted graph helper. The dashboard preserves the existing route labels and
+  Streamlit controls while rendering Snowflake graph node/edge metrics,
+  verifier-shaped entity and relationship comparison tables, bounded mismatch
+  diagnostics, and failure-only Native App detail for compute pool,
+  `GRAPH_INFO`, `BFS`, and `WCC` failures.
+
 ## Blockers
 
-- None currently recorded for Phase 4 planning.
+- None currently recorded for Phase 4 execution.
 
 ## Pending Todos
 
-- Plan Phase 4 dashboard hosted graph migration.
+- Execute Plan 04-03 dashboard documentation and final verification evidence.
 - Keep stale `NEO4J_*` deployment/script references warning-only unless they
   block the hosted graph dashboard or E2E path.
 
 ## Session Continuity
 
-Last session: 2026-06-12T18:49:12Z
-Stopped at: Milestone v1.3 summary generated; next is Phase 4 dashboard hosted graph migration
-Resume file: .planning/workstreams/neo4j-snowflake/reports/MILESTONE_SUMMARY-v1.3.md
+Last session: 2026-06-13T02:53:50Z
+Stopped at: Plan 04-02 complete
+Resume file: .planning/workstreams/neo4j-snowflake/phases/04-dashboard-hosted-graph-migration/04-03-PLAN.md
