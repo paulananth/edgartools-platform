@@ -1,0 +1,442 @@
+version: 2
+
+# Stage 5 follow-up (Tension 2): unit-test suite for financial_derived's
+# YoY growth logic, the is_current_period/accession_number tiebreaker in
+# `prior_year_values`, and join-fanout (grain) safety.
+#
+# Each `given` row provides the full SEC_FINANCIAL_DERIVED column set so
+# `select d.*` chains resolve cleanly; unused columns reuse the
+# `row_defaults` anchor. `expect` rows are partial -- only the columns
+# relevant to each scenario's assertion are checked.
+unit_tests:
+  - name: financial_derived_yoy_basic_growth
+    description: Basic YoY growth -- one prior-year row, one current-year row, simple positive growth.
+    model: financial_derived
+    given:
+      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+        rows:
+          - &row_defaults
+            cik: 1
+            accession_number: "0001"
+            fiscal_year: 2023
+            fiscal_period: "FY"
+            period_end: "2023-12-31"
+            form_type: "10-K"
+            revenue: 100
+            gross_profit: 0
+            ebitda: 30
+            ebit: 0
+            net_income: 10
+            eps_diluted: 0
+            total_assets: 0
+            total_liabilities: 0
+            total_equity: 0
+            cash_and_equivalents: 0
+            total_debt: 0
+            operating_cash_flow: 0
+            capex: 0
+            free_cash_flow: 0
+            gross_margin: 0
+            ebitda_margin: 0
+            net_margin: 0
+            roic: 0
+            roe: 0
+            roa: 0
+            parser_version: "1.0"
+            ingested_at: "2024-01-01 00:00:00"
+          - <<: *row_defaults
+            accession_number: "0002"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            revenue: 120
+            ebitda: 36
+            net_income: 12
+    expect:
+      rows:
+        - cik: 1
+          accession_number: "0002"
+          fiscal_year: 2024
+          revenue_prior: 100
+          revenue_yoy_growth: 0.2
+          ebitda_prior: 30
+          ebitda_yoy_growth: 0.2
+          net_income_prior: 10
+          net_income_yoy_growth: 0.2
+
+  - name: financial_derived_yoy_no_prior_year
+    description: First filing for a company -- no prior-year row exists, growth columns are null.
+    model: financial_derived
+    given:
+      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+        rows:
+          - <<: *row_defaults
+            cik: 2
+            accession_number: "0003"
+            fiscal_year: 2023
+            period_end: "2023-12-31"
+            revenue: 100
+            ebitda: 30
+            net_income: 10
+    expect:
+      rows:
+        - cik: 2
+          accession_number: "0003"
+          fiscal_year: 2023
+          revenue_prior: null
+          revenue_yoy_growth: null
+          ebitda_prior: null
+          ebitda_yoy_growth: null
+          net_income_prior: null
+          net_income_yoy_growth: null
+
+  - name: financial_derived_yoy_zero_prior_revenue
+    description: Prior-year revenue is zero -- division guard returns null for revenue_yoy_growth while other metrics compute normally.
+    model: financial_derived
+    given:
+      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+        rows:
+          - <<: *row_defaults
+            cik: 3
+            accession_number: "0004"
+            fiscal_year: 2023
+            period_end: "2023-12-31"
+            revenue: 0
+            ebitda: 30
+            net_income: 10
+          - <<: *row_defaults
+            cik: 3
+            accession_number: "0005"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            revenue: 50
+            ebitda: 36
+            net_income: 12
+    expect:
+      rows:
+        - cik: 3
+          accession_number: "0005"
+          fiscal_year: 2024
+          revenue_prior: 0
+          revenue_yoy_growth: null
+          ebitda_prior: 30
+          ebitda_yoy_growth: 0.2
+          net_income_prior: 10
+          net_income_yoy_growth: 0.2
+
+  - name: financial_derived_yoy_negative_to_positive
+    description: Net income flips from negative to positive -- formula handles sign correctly (no special-casing).
+    model: financial_derived
+    given:
+      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+        rows:
+          - <<: *row_defaults
+            cik: 4
+            accession_number: "0006"
+            fiscal_year: 2023
+            period_end: "2023-12-31"
+            revenue: 100
+            ebitda: 30
+            net_income: -10
+          - <<: *row_defaults
+            cik: 4
+            accession_number: "0007"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            revenue: 120
+            ebitda: 36
+            net_income: 20
+    expect:
+      rows:
+        - cik: 4
+          accession_number: "0007"
+          fiscal_year: 2024
+          net_income_prior: -10
+          net_income_yoy_growth: -3.0
+
+  - name: financial_derived_yoy_prefers_own_current_over_later_comparative
+    description: >
+      A later filing's "comparative" restatement of last year's FY must NOT
+      win over that year's own "current" row when computing this year's
+      prior-year baseline (1A/3A tiebreaker).
+    model: financial_derived
+    given:
+      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+        rows:
+          # Accession 0008 is FY2023's own 10-K -- its FY2023 row is "current"
+          # (period_end == max(period_end) for this accession/fiscal_period).
+          - <<: *row_defaults
+            cik: 5
+            accession_number: "0008"
+            fiscal_year: 2023
+            period_end: "2023-12-31"
+            revenue: 100
+          # Accession 0009 is FY2024's 10-K, containing FY2024 (current) and a
+          # restated FY2023 "comparative" row (not current for accession 0009).
+          - <<: *row_defaults
+            cik: 5
+            accession_number: "0009"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            revenue: 130
+          - <<: *row_defaults
+            cik: 5
+            accession_number: "0009"
+            fiscal_year: 2023
+            period_end: "2023-12-31"
+            revenue: 95
+    expect:
+      rows:
+        - cik: 5
+          accession_number: "0009"
+          fiscal_year: 2024
+          revenue_prior: 100
+          revenue_yoy_growth: 0.3
+
+  - name: financial_derived_yoy_amendment_tiebreaker
+    description: >
+      Two "current" rows for the same fiscal_year (original 10-K + 10-K/A
+      amendment) -- accession_number desc picks the amendment (3A).
+    model: financial_derived
+    given:
+      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+        rows:
+          - <<: *row_defaults
+            cik: 6
+            accession_number: "0010"
+            fiscal_year: 2023
+            period_end: "2023-12-31"
+            revenue: 100
+          - <<: *row_defaults
+            cik: 6
+            accession_number: "0011"
+            fiscal_year: 2023
+            period_end: "2023-12-31"
+            revenue: 105
+          - <<: *row_defaults
+            cik: 6
+            accession_number: "0012"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            revenue: 126
+    expect:
+      rows:
+        - cik: 6
+          accession_number: "0012"
+          fiscal_year: 2024
+          revenue_prior: 105
+          revenue_yoy_growth: 0.2
+
+  - name: financial_derived_yoy_fiscal_period_mismatch
+    description: A prior-year row exists but for a different fiscal_period (Q1 vs FY) -- join condition excludes it, growth is null.
+    model: financial_derived
+    given:
+      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+        rows:
+          - <<: *row_defaults
+            cik: 7
+            accession_number: "0013"
+            fiscal_year: 2023
+            fiscal_period: "Q1"
+            period_end: "2023-03-31"
+            revenue: 25
+          - <<: *row_defaults
+            cik: 7
+            accession_number: "0014"
+            fiscal_year: 2024
+            fiscal_period: "FY"
+            period_end: "2024-12-31"
+            revenue: 120
+    expect:
+      rows:
+        - cik: 7
+          accession_number: "0014"
+          fiscal_year: 2024
+          fiscal_period: "FY"
+          revenue_prior: null
+          revenue_yoy_growth: null
+
+  - name: financial_derived_yoy_no_fanout_both_years_duplicated
+    description: >
+      Grain/dedup test (Tension 2): three accessions where both FY2022 and
+      FY2023 each have a "current" row plus a later filing's "comparative"
+      restatement. prior_year_values must dedup to ONE canonical row per
+      (cik, fiscal_period, fiscal_year), so the left join in with_growth
+      produces exactly one output row per input row (5 in, 5 out) -- no
+      fanout -- and each row's prior-year lookup resolves to the canonical
+      "current" predecessor, not a comparative restatement.
+    model: financial_derived
+    given:
+      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+        rows:
+          # 0015: FY2022's own 10-K -- FY2022 current.
+          - <<: *row_defaults
+            cik: 8
+            accession_number: "0015"
+            fiscal_year: 2022
+            period_end: "2022-12-31"
+            revenue: 80
+          # 0016: FY2023's 10-K -- FY2023 current + FY2022 comparative.
+          - <<: *row_defaults
+            cik: 8
+            accession_number: "0016"
+            fiscal_year: 2023
+            period_end: "2023-12-31"
+            revenue: 90
+          - <<: *row_defaults
+            cik: 8
+            accession_number: "0016"
+            fiscal_year: 2022
+            period_end: "2022-12-31"
+            revenue: 82
+          # 0017: FY2024's 10-K -- FY2024 current + FY2023 comparative.
+          - <<: *row_defaults
+            cik: 8
+            accession_number: "0017"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            revenue: 99
+          - <<: *row_defaults
+            cik: 8
+            accession_number: "0017"
+            fiscal_year: 2023
+            period_end: "2023-12-31"
+            revenue: 91
+    expect:
+      rows:
+        - cik: 8
+          accession_number: "0015"
+          fiscal_year: 2022
+          revenue_prior: null
+          revenue_yoy_growth: null
+        - cik: 8
+          accession_number: "0016"
+          fiscal_year: 2023
+          revenue_prior: 80
+          revenue_yoy_growth: 0.125
+        - cik: 8
+          accession_number: "0016"
+          fiscal_year: 2022
+          revenue_prior: null
+          revenue_yoy_growth: null
+        - cik: 8
+          accession_number: "0017"
+          fiscal_year: 2024
+          revenue_prior: 90
+          revenue_yoy_growth: 0.1
+        - cik: 8
+          accession_number: "0017"
+          fiscal_year: 2023
+          revenue_prior: 80
+          revenue_yoy_growth: 0.1375
+
+  - name: financial_derived_yoy_null_prior_metric
+    description: Prior-year ebitda is null (not zero) -- NULL guard returns null for ebitda_yoy_growth without affecting other metrics.
+    model: financial_derived
+    given:
+      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+        rows:
+          - <<: *row_defaults
+            cik: 9
+            accession_number: "0018"
+            fiscal_year: 2023
+            period_end: "2023-12-31"
+            revenue: 100
+            ebitda: null
+            net_income: 10
+          - <<: *row_defaults
+            cik: 9
+            accession_number: "0019"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            revenue: 120
+            ebitda: 40
+            net_income: 12
+    expect:
+      rows:
+        - cik: 9
+          accession_number: "0019"
+          fiscal_year: 2024
+          ebitda_prior: null
+          ebitda_yoy_growth: null
+          revenue_prior: 100
+          revenue_yoy_growth: 0.2
+
+  - name: financial_derived_yoy_multi_company_isolation
+    description: Two companies with overlapping fiscal years -- partitioning by cik keeps growth calcs independent.
+    model: financial_derived
+    given:
+      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+        rows:
+          - <<: *row_defaults
+            cik: 10
+            accession_number: "0020"
+            fiscal_year: 2023
+            period_end: "2023-12-31"
+            revenue: 100
+          - <<: *row_defaults
+            cik: 10
+            accession_number: "0021"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            revenue: 110
+          - <<: *row_defaults
+            cik: 11
+            accession_number: "0022"
+            fiscal_year: 2023
+            period_end: "2023-12-31"
+            revenue: 200
+          - <<: *row_defaults
+            cik: 11
+            accession_number: "0023"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            revenue: 240
+    expect:
+      rows:
+        - cik: 10
+          accession_number: "0021"
+          fiscal_year: 2024
+          revenue_prior: 100
+          revenue_yoy_growth: 0.1
+        - cik: 11
+          accession_number: "0023"
+          fiscal_year: 2024
+          revenue_prior: 200
+          revenue_yoy_growth: 0.2
+
+  - name: financial_derived_yoy_multi_year_chain
+    description: Three consecutive fiscal years for one company -- each year's growth uses its own immediate predecessor, not an earlier year.
+    model: financial_derived
+    given:
+      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+        rows:
+          - <<: *row_defaults
+            cik: 12
+            accession_number: "0024"
+            fiscal_year: 2022
+            period_end: "2022-12-31"
+            revenue: 100
+          - <<: *row_defaults
+            cik: 12
+            accession_number: "0025"
+            fiscal_year: 2023
+            period_end: "2023-12-31"
+            revenue: 110
+          - <<: *row_defaults
+            cik: 12
+            accession_number: "0026"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            revenue: 121
+    expect:
+      rows:
+        - cik: 12
+          accession_number: "0025"
+          fiscal_year: 2023
+          revenue_prior: 100
+          revenue_yoy_growth: 0.1
+        - cik: 12
+          accession_number: "0026"
+          fiscal_year: 2024
+          revenue_prior: 110
+          revenue_yoy_growth: 0.1
