@@ -1,0 +1,22 @@
+{
+  "name": "go-live",
+  "branch": "workspace/go-live",
+  "workspace_path": "/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform",
+  "scope": "Plan and execute production go-live readiness for the AWS-first EdgarTools Platform without overlapping active implementation workstreams.",
+  "protected_from": [
+    "neo4j-pipe implementation artifacts",
+    "neo4j-snowflake in-progress phase files unless explicitly integrated",
+    "mdm-neo4j-dashboard historical UAT artifacts unless explicitly integrated",
+    "Claude-owned worktrees and branches",
+    "generated deployment JSON with sensitive values",
+    "Terraform state or live secret values"
+  ],
+  "workflow": {
+    "research": false,
+    "text_mode": true,
+    "plan_review_convergence": true,
+    "nyquist_validation": true,
+    "_auto_chain_active": false,
+    "use_worktrees": true
+  }
+}
