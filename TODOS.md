@@ -500,11 +500,30 @@ matches the Stage 5 `prior_year_values`/`is_current_period` logic).
   doesn't drift.
 - `EDGARTOOLS_PROD_DEPLOYER` likely needs the analogous grant — not checked.
 - T6 (before/after row-level comparison vs the pre-Stage-5 `lag()` output) is
-  **still blocked**, but now by a different, unrelated cause:
-  `EDGARTOOLS_SOURCE.SEC_FINANCIAL_DERIVED` has 0 rows in dev, so
-  `FINANCIAL_DERIVED` refreshes to 0 rows — there is no data to
-  spot-check YoY values against. This is a pre-existing dev data-population
-  gap, out of scope for PR #66.
+  **RESOLVED 2026-06-13** — populated dev with real data for Apple (CIK
+  320193) via `bootstrap-fundamentals --mode entity-facts --cik-list 320193`
+  (282 `sec_financial_derived` rows), manually uploaded
+  `silver/fundamentals/shard-0.duckdb` to S3 (no existing code path does this
+  — see follow-up below), ran `gold-refresh` to export to
+  `EDGARTOOLS_SOURCE.SEC_FINANCIAL_DERIVED` (282 rows), then
+  `ALTER DYNAMIC TABLE FINANCIAL_DERIVED REFRESH` (282 rows inserted).
+  Spot-checked `revenue_yoy_growth`/`ebitda_yoy_growth`/`net_income_yoy_growth`
+  for CIK 320193: values match expected Apple YoY (e.g. FY2025 revenue
+  $416.16B vs FY2024 $391.04B → ~6.4% growth, matches `revenue_yoy_growth`).
+  Confirmed the Stage 5 fan-in fix on real duplicate-accession groups: every
+  `(fiscal_year, fiscal_period, period_end)` group with 2 rows (2010-2012
+  series) produces consistent non-zero YoY across both rows; the earliest
+  periods (2007-2009, no prior-year comparative available) correctly show
+  zero/null YoY.
+- **New follow-up (not yet filed as its own item):** no existing code path
+  uploads `silver/fundamentals/shard-0.duckdb` to S3 after
+  `bootstrap-fundamentals` runs — `_hydrate_fundamentals_shard` in
+  `warehouse_orchestrator.py` only *downloads* it for `gold-refresh`. In a
+  remote-storage (S3) environment, `bootstrap-fundamentals` output is
+  effectively stranded locally unless manually uploaded (as done here). Needs
+  an upload step analogous to the existing ownership-shard publish path
+  (`silver/sec/shards/shard-N.duckdb`) before this can run unattended in CI/
+  Step Functions.
 
 **What:** `dbt run --select financial_derived --full-refresh` (run as
 `EDGARTOOLS_DEV_DEPLOYER`, the standard dbt deploy role) fails:
