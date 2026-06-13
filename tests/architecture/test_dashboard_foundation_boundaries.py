@@ -473,20 +473,24 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
 
     def test_native_app_failures_render_failure_only_table(self) -> None:
         module, fake_streamlit = _load_streamlit_app_with_fake_streamlit()
+        failing_checks = [
+            ("compute_pool", "Activate the Native App compute pool."),
+            ("GRAPH_INFO", "Run `edgar-warehouse mdm verify-graph`."),
+            ("BFS", "Review `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`."),
+            ("WCC", "Review `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`."),
+        ]
 
         module._render_native_app_failures(
             {
                 "native_app": {
                     "failing_checks": [
                         {
-                            "check": "GRAPH_INFO",
+                            "check": check,
                             "status": "failed",
                             "detail": "Check failed before returning rows.",
-                            "remediation": (
-                                "Run `edgar-warehouse mdm verify-graph` and review "
-                                "`infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`."
-                            ),
+                            "remediation": remediation,
                         }
+                        for check, remediation in failing_checks
                     ]
                 }
             }
@@ -496,15 +500,20 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
             fake_streamlit.dataframes[-1],
             [
                 {
-                    "Check": "GRAPH_INFO",
+                    "Check": check,
                     "Status": "failed",
                     "Detail": "Check failed before returning rows.",
-                    "Remediation": (
-                        "Run `edgar-warehouse mdm verify-graph` and review "
-                        "`infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`."
-                    ),
+                    "Remediation": remediation,
                 }
+                for check, remediation in failing_checks
             ],
+        )
+        self.assertTrue(
+            any(
+                "Snowflake Native App check failed. Run `edgar-warehouse mdm verify-graph`"
+                in message
+                for message in fake_streamlit.messages
+            )
         )
 
     def test_overview_does_not_render_healthy_native_app_proof_as_primary_chrome(self) -> None:
