@@ -3,28 +3,28 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: milestone
 status: executing
-stopped_at: Phase 4 planning complete
-last_updated: "2026-06-13T01:57:42.368Z"
-last_activity: 2026-06-13 -- Phase 04 planning complete
+stopped_at: Plan 04-01 complete; ready for Plan 04-02
+last_updated: "2026-06-13T02:15:57Z"
+last_activity: 2026-06-12 -- Plan 04-01 hosted graph read-only helper complete
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 13
-  completed_plans: 9
-  percent: 50
+  completed_plans: 10
+  percent: 77
 ---
 
 # Project State - neo4j-snowflake
 
 ## Current Position
 
-Phase: 4 (Dashboard Hosted Graph Migration) — READY TO EXECUTE
-Plan: 04-01
-Status: Planning complete; three Phase 4 plans are ready for execution
-Last activity: 2026-06-13 -- Phase 04 planning complete
+Phase: 4 (Dashboard Hosted Graph Migration) — IN PROGRESS
+Plan: 04-02
+Status: Plan 04-01 complete; ready to migrate the Streamlit dashboard
+Last activity: 2026-06-12 -- Plan 04-01 hosted graph read-only helper complete
 Last summary: 2026-06-12 -- `.planning/workstreams/neo4j-snowflake/reports/MILESTONE_SUMMARY-v1.3.md`
 
-Progress: [########--] 75% (Phases 1, 2, and 3 complete; Phase 4 planned, 9/13 plans complete)
+Progress: [########--] 77% (Phases 1, 2, and 3 complete; Phase 4 in progress, 10/13 plans complete)
 
 ## Milestone Context
 
@@ -172,18 +172,24 @@ projection surfaces should change.
   succeeded for `mdm_migrate`, `mdm_run`, `mdm_backfill_relationships`,
   `mdm_sync_graph`, `mdm_verify_graph`, and `mdm_counts`.
 
+- Plan 04-01 added `edgar_warehouse/mdm/graph_readonly.py`, a read-only
+  dashboard helper that reuses strict Snowflake `verify-graph` semantics and
+  normalizes node/edge counts, entity and relationship comparison rows,
+  bounded diagnostics, Native App failing checks, timestamps, and secret-safe
+  unavailable states for the hosted graph dashboard.
+
 ## Blockers
 
-- None currently recorded for Phase 4 planning.
+- None currently recorded for Phase 4 execution.
 
 ## Pending Todos
 
-- Plan Phase 4 dashboard hosted graph migration.
+- Execute Plan 04-02 dashboard migration against the hosted graph helper.
 - Keep stale `NEO4J_*` deployment/script references warning-only unless they
   block the hosted graph dashboard or E2E path.
 
 ## Session Continuity
 
-Last session: 2026-06-12T21:49:35.667Z
-Stopped at: Phase 4 UI-SPEC approved
-Resume file: .planning/workstreams/neo4j-snowflake/phases/04-dashboard-hosted-graph-migration/04-UI-SPEC.md
+Last session: 2026-06-13T02:15:57Z
+Stopped at: Plan 04-01 complete
+Resume file: .planning/workstreams/neo4j-snowflake/phases/04-dashboard-hosted-graph-migration/04-02-PLAN.md
