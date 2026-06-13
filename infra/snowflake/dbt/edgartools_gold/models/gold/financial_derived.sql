@@ -11,19 +11,32 @@
 --
 -- YoY growth (Stage 5): looked up via a self-join to `prior_year_values`,
 -- which picks ONE canonical row per (cik, fiscal_period, fiscal_year) --
--- preferring each accession's own "current" period (the row whose period_end
--- is the max within that accession's (cik, accession_number, fiscal_period)
--- group) over a later filing's "comparative" restatement of the same
--- fiscal_year, with the most-recently-filed accession_number as a final
--- tiebreaker. This replaces the prior lag()-over-fiscal_year approach, whose
--- ordering became non-deterministic once a single accession could
--- contribute two rows (current + comparative) for the same
+-- preferring each accession's own "current" period over a later filing's
+-- "comparative" restatement of the same fiscal_year, with accession_number
+-- desc as a final tiebreaker. This replaces the prior lag()-over-fiscal_year
+-- approach, whose ordering became non-deterministic once a single accession
+-- could contribute two rows (current + comparative) for the same
 -- (cik, fiscal_period) -- every fiscal_year then appears at least twice,
 -- tying lag()'s ORDER BY with no tiebreaker.
+--
+-- "Current period" is precomputed as `is_current_period` in `base` (the row
+-- whose period_end is the max within that accession's
+-- (cik, accession_number, fiscal_period) group) because Snowflake rejects a
+-- window function inside the ORDER BY of `qualify row_number() over (...)`
+-- -- the inner max() over() must be materialised as a plain column first.
+--
+-- The accession_number desc tiebreaker is an approximation of "most
+-- recently filed": SEC accession numbers are dominated by a 10-digit
+-- filer-agent prefix, not strictly chronological across filers. A true
+-- filed_date-based tiebreaker is tracked as a follow-up (see TODOS.md).
 {{ gold_model_config('FINANCIAL_DERIVED') }}
 
 with base as (
-    select d.*
+    select
+        d.*,
+        (d.period_end = max(d.period_end) over (
+            partition by d.cik, d.accession_number, d.fiscal_period
+        )) as is_current_period
     from {{ source("edgartools_source", "SEC_FINANCIAL_DERIVED") }} d
 ),
 
@@ -39,9 +52,7 @@ prior_year_values as (
     qualify row_number() over (
         partition by cik, fiscal_period, fiscal_year
         order by
-            (period_end = max(period_end) over (
-                partition by cik, accession_number, fiscal_period
-            )) desc,
+            is_current_period desc,
             accession_number desc
     ) = 1
 ),
@@ -52,18 +63,9 @@ with_growth as (
         py.revenue as revenue_prior,
         py.ebitda as ebitda_prior,
         py.net_income as net_income_prior,
-        case
-            when py.revenue is not null and py.revenue <> 0
-            then (b.revenue - py.revenue) / py.revenue
-        end as revenue_yoy_growth,
-        case
-            when py.ebitda is not null and py.ebitda <> 0
-            then (b.ebitda - py.ebitda) / py.ebitda
-        end as ebitda_yoy_growth,
-        case
-            when py.net_income is not null and py.net_income <> 0
-            then (b.net_income - py.net_income) / py.net_income
-        end as net_income_yoy_growth
+        {{ yoy_growth('b.revenue', 'py.revenue') }} as revenue_yoy_growth,
+        {{ yoy_growth('b.ebitda', 'py.ebitda') }} as ebitda_yoy_growth,
+        {{ yoy_growth('b.net_income', 'py.net_income') }} as net_income_yoy_growth
     from base b
     left join prior_year_values py
         on py.cik = b.cik

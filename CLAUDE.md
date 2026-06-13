@@ -299,6 +299,47 @@ uv pip install -r requirements.txt
 streamlit run edgar_universe_dashboard.py
 ```
 
+## dbt gold model SQL changes — smoke test convention
+
+When a gold model's SQL body changes (not just its config), `dbt run`
+**will not** detect the change for `materialized='dynamic_table'` models —
+dbt-snowflake's dynamic-table materialization only diffs *configuration*
+(target_lag, warehouse, refresh_mode, etc.), not the SQL body. An unchanged
+config means `dbt run` is a silent no-op even though the deployed dynamic
+table still runs the old SQL.
+
+To force redeploy of a changed dynamic table, use:
+
+```bash
+uv run --with dbt-snowflake dbt run --select <model_name> --full-refresh
+```
+
+This issues `CREATE OR REPLACE DYNAMIC TABLE ... initialize = ON_CREATE`,
+which triggers an immediate INITIAL refresh.
+
+**Known gap blocking `--full-refresh` (dev, as of 2026-06-13):** the
+`EDGARTOOLS_DEV_DEPLOYER` role lacks a direct `SELECT` grant on
+`EDGARTOOLS_SOURCE` tables. Ad-hoc queries succeed (via the
+`ACCOUNTADMIN`/`ORGADMIN` secondary roles), but Snowflake's dynamic-table
+INITIAL refresh checks the table owner role's *direct* grants only —
+`CREATE OR REPLACE DYNAMIC TABLE` makes `EDGARTOOLS_DEV_DEPLOYER` the new
+owner, so the refresh fails with "not authorized ... (Note: the primary role
+is the owner role of the dynamic table)". This affects **any**
+`EDGARTOOLS_GOLD` dynamic table's `--full-refresh`, not just one model. See
+`TODOS.md` ("EDGARTOOLS_DEV_DEPLOYER lacks direct SELECT on
+EDGARTOOLS_SOURCE") for the fix and status.
+
+Required env vars for `dbt run`/`dbt compile` against Snowflake (none have
+defaults except role/database/warehouse, which fall back to the dev target's
+values in `profiles.yml`):
+
+```bash
+export DBT_SNOWFLAKE_ACCOUNT=<account_locator.region.cloud>
+export DBT_SNOWFLAKE_USER=<user>
+export DBT_SNOWFLAKE_PASSWORD=<password>
+export DBT_SNOWFLAKE_WAREHOUSE=EDGARTOOLS_DEV_REFRESH_WH
+```
+
 ## Image management
 
 Use AWS ECR only for deployable images. Do not add Azure Container Registry,
