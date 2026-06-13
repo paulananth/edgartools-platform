@@ -321,12 +321,20 @@ fresh/already-migrated store is a silent no-op).
   financial_derived` — Jinja/SQL parses successfully (16 models, 36 data
   tests, 16 sources, 528 macros found); fails only at the live-connection step
   with dummy credentials (expected, no Snowflake creds in this session).
-- **Not done here (live validation):** re-running this dynamic table against
-  real `EDGARTOOLS_SOURCE.SEC_FINANCIAL_DERIVED` data containing a
-  current+comparative pair from one accession plus a later accession's
-  comparative row for the same `fiscal_year`, to confirm
-  `revenue_yoy_growth` etc. come out identical across repeated runs (requires
-  live Snowflake creds, not available in this session).
+- **Live validation: RESOLVED via T6, 2026-06-13.** Re-ran this dynamic table
+  against real `EDGARTOOLS_SOURCE.SEC_FINANCIAL_DERIVED` data (Apple, CIK
+  320193, 282 rows) containing exactly the current+comparative-row fan-in
+  scenario described above (9 `(fiscal_year, fiscal_period, period_end)`
+  groups with 2 rows each, spanning 2010-2012). Confirmed not just
+  determinism but correctness — Tension 3's underlying point was that
+  determinism alone doesn't prove the *values* are right:
+  `revenue_yoy_growth`/`ebitda_yoy_growth`/`net_income_yoy_growth` match
+  expected real-world Apple YoY figures (e.g. FY2025 revenue $416.16B vs
+  FY2024 $391.04B -> ~6.4% growth, matches `revenue_yoy_growth`), and every
+  2-row fan-in group produces identical YoY values across both rows. The
+  earliest periods (2007-2009, no prior-year comparative available)
+  correctly show zero/null YoY. Full run log in the "EDGARTOOLS_DEV_DEPLOYER
+  lacks direct SELECT..." section below (T6 entry).
 
 ---
 
@@ -473,6 +481,77 @@ before deciding the PK needs to change.
 
 ---
 
+## financial_derived YoY tiebreaker approximates filed_date with accession_number desc (Issue 3B, deferred)
+
+**Status:** Deferred, not blocking PR #66 (`claude/financial-derived-lag-tiebreaker`,
+Stage 5).
+
+Stage 5's `prior_year_values` CTE in
+`infra/snowflake/dbt/edgartools_gold/models/gold/financial_derived.sql` picks
+one canonical row per `(cik, fiscal_period, fiscal_year)` via `qualify
+row_number() ... = 1`, with `accession_number desc` as the final tiebreaker —
+i.e. "most recently filed accession wins" (e.g. a 10-K/A amendment over the
+original 10-K). SEC accession numbers are assigned sequentially per filer at
+submission time, so within a single `cik` they correlate very strongly with
+actual filing date, but `accession_number desc` is a proxy, not a real
+`filed_date` timestamp.
+
+**Why deferred:** neither `sec_financial_derived` (silver) nor
+`SEC_FINANCIAL_DERIVED` (Snowflake source) currently has a `filed_date`
+column. Adding one would require the same multi-stage silver -> export ->
+gold migration pattern as Stages 1-4: extend the silver schema/parser to
+capture `filed_date` from the SEC companyfacts/submissions payload, add it to
+the export manifest and `SEC_FINANCIAL_DERIVED` DDL/MERGE keys, then update
+`financial_derived.sql`'s tiebreaker to order by `filed_date desc` (falling
+back to `accession_number desc` for any pre-migration rows without it).
+
+**Risk if left as-is:** low in practice — the accession-number proxy is
+expected to agree with `filed_date` for the vast majority of filings. Edge
+cases (e.g. a filing submitted in multiple parts, or SEC accession-number
+allocation quirks) could theoretically produce a different tiebreaker
+ordering than true filing chronology, but this has not been observed in real
+data (see T6's validation against Apple, CIK 320193).
+
+**Surfaced by:** plan-eng-review of PR #66 (Issue 3B), 2026-06-12.
+
+---
+
+## CI does not run dbt against live Snowflake (Issue 2B, deferred per T4)
+
+**Status:** Deferred, not blocking PR #66 (`claude/financial-derived-lag-tiebreaker`,
+Stage 5).
+
+`dbt compile` only validates Jinja templating and SQL syntax — it cannot
+catch errors that only surface when Snowflake actually plans/executes the
+SQL (e.g. the Issue 1 nested-window-function bug in `financial_derived.sql`,
+which `dbt compile` passed but a live `dbt run --select financial_derived`
+against `EDGARTOOLS_DEV` would have failed on). T4 documented the manual
+`dbt run --select <model_name> --full-refresh` smoke-test convention in
+`CLAUDE.md` (see "dbt gold model SQL changes — smoke test convention"), but
+there is no CI job that runs this automatically, so a future change could
+reintroduce a Snowflake-execution-only error and still pass CI.
+
+**Why deferred:** enabling this in CI requires:
+1. Snowflake credentials (keypair or password) provisioned as CI secrets,
+   scoped to a role/warehouse that can run `dbt run`/`dbt test` against
+   `EDGARTOOLS_DEV` without affecting other environments.
+2. A decision on scope/cadence — full `dbt run` on every PR touching
+   `infra/snowflake/dbt/**`, vs. `--select state:modified+` for changed
+   models only, vs. a nightly scheduled run.
+3. Handling for the `EDGARTOOLS_DEV_DEPLOYER` grants gap documented in the
+   section below — CI would hit the same "not authorized" error on
+   `--full-refresh` until that grant is codified in Terraform/bootstrap SQL.
+
+**Interim mitigation:** the manual `dbt run --select <model> --full-refresh`
+convention in `CLAUDE.md` is the current substitute — contributors changing a
+gold model's SQL body are expected to run it against `EDGARTOOLS_DEV` before
+merging.
+
+**Surfaced by:** plan-eng-review of PR #66 (Issue 2B, deferred per task 2A/T4),
+2026-06-12.
+
+---
+
 ## EDGARTOOLS_DEV_DEPLOYER lacks direct SELECT on EDGARTOOLS_SOURCE — blocks `dbt run --full-refresh` for any gold dynamic table
 
 **Status:** RESOLVED for dev 2026-06-13. Discovered while attempting T1 live
@@ -500,11 +579,30 @@ matches the Stage 5 `prior_year_values`/`is_current_period` logic).
   doesn't drift.
 - `EDGARTOOLS_PROD_DEPLOYER` likely needs the analogous grant — not checked.
 - T6 (before/after row-level comparison vs the pre-Stage-5 `lag()` output) is
-  **still blocked**, but now by a different, unrelated cause:
-  `EDGARTOOLS_SOURCE.SEC_FINANCIAL_DERIVED` has 0 rows in dev, so
-  `FINANCIAL_DERIVED` refreshes to 0 rows — there is no data to
-  spot-check YoY values against. This is a pre-existing dev data-population
-  gap, out of scope for PR #66.
+  **RESOLVED 2026-06-13** — populated dev with real data for Apple (CIK
+  320193) via `bootstrap-fundamentals --mode entity-facts --cik-list 320193`
+  (282 `sec_financial_derived` rows), manually uploaded
+  `silver/fundamentals/shard-0.duckdb` to S3 (no existing code path does this
+  — see follow-up below), ran `gold-refresh` to export to
+  `EDGARTOOLS_SOURCE.SEC_FINANCIAL_DERIVED` (282 rows), then
+  `ALTER DYNAMIC TABLE FINANCIAL_DERIVED REFRESH` (282 rows inserted).
+  Spot-checked `revenue_yoy_growth`/`ebitda_yoy_growth`/`net_income_yoy_growth`
+  for CIK 320193: values match expected Apple YoY (e.g. FY2025 revenue
+  $416.16B vs FY2024 $391.04B → ~6.4% growth, matches `revenue_yoy_growth`).
+  Confirmed the Stage 5 fan-in fix on real duplicate-accession groups: every
+  `(fiscal_year, fiscal_period, period_end)` group with 2 rows (2010-2012
+  series) produces consistent non-zero YoY across both rows; the earliest
+  periods (2007-2009, no prior-year comparative available) correctly show
+  zero/null YoY.
+- **New follow-up (not yet filed as its own item):** no existing code path
+  uploads `silver/fundamentals/shard-0.duckdb` to S3 after
+  `bootstrap-fundamentals` runs — `_hydrate_fundamentals_shard` in
+  `warehouse_orchestrator.py` only *downloads* it for `gold-refresh`. In a
+  remote-storage (S3) environment, `bootstrap-fundamentals` output is
+  effectively stranded locally unless manually uploaded (as done here). Needs
+  an upload step analogous to the existing ownership-shard publish path
+  (`silver/sec/shards/shard-N.duckdb`) before this can run unattended in CI/
+  Step Functions.
 
 **What:** `dbt run --select financial_derived --full-refresh` (run as
 `EDGARTOOLS_DEV_DEPLOYER`, the standard dbt deploy role) fails:
