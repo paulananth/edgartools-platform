@@ -473,6 +473,90 @@ before deciding the PK needs to change.
 
 ---
 
+## EDGARTOOLS_DEV_DEPLOYER lacks direct SELECT on EDGARTOOLS_SOURCE — blocks `dbt run --full-refresh` for any gold dynamic table
+
+**Status:** ROOT-CAUSED, NOT FIXED. Discovered while attempting T1 live
+verification of the Stage 5 `financial_derived.sql` change (PR #66,
+`claude/financial-derived-lag-tiebreaker`), but is generic to **any**
+`EDGARTOOLS_GOLD` dynamic table, not specific to that PR.
+
+**What:** `dbt run --select financial_derived --full-refresh` (run as
+`EDGARTOOLS_DEV_DEPLOYER`, the standard dbt deploy role) fails:
+
+```
+SQL compilation error: Failed to refresh dynamic table with refresh_trigger
+INITIAL ... Object 'EDGARTOOLS_DEV.EDGARTOOLS_SOURCE.SEC_FINANCIAL_DERIVED'
+does not exist or not authorized. (Note: the primary role is the owner role
+of the dynamic table)
+```
+
+**5-whys:**
+1. `dbt run --full-refresh` issues `CREATE OR REPLACE DYNAMIC TABLE ...
+   initialize = ON_CREATE`, which triggers an immediate INITIAL refresh.
+2. The INITIAL refresh fails with "not authorized" on the source table,
+   even though an ad-hoc `SELECT * FROM
+   EDGARTOOLS_DEV.EDGARTOOLS_SOURCE.SEC_FINANCIAL_DERIVED` run in the same
+   session/role succeeds.
+3. Ad-hoc queries succeed because `EDGARTOOLS_DEV_DEPLOYER` has
+   `CURRENT_SECONDARY_ROLES() = {"roles":"ACCOUNTADMIN,ORGADMIN","value":"ALL"}`
+   — secondary roles ARE consulted for ad-hoc session queries.
+4. Dynamic table refresh (including the `ON_CREATE` INITIAL refresh) checks
+   privileges **strictly against the dynamic table's owner role's DIRECT
+   grants only** — it does not consult secondary roles. `CREATE OR REPLACE
+   DYNAMIC TABLE` run as `EDGARTOOLS_DEV_DEPLOYER` makes that role the new
+   owner.
+5. `SHOW GRANTS TO ROLE EDGARTOOLS_DEV_DEPLOYER` confirms the role has only
+   `USAGE`/`CREATE *` on the `EDGARTOOLS_SOURCE`/`EDGARTOOLS_GOLD` schemas
+   and `EDGARTOOLS_DEV` database — **no direct `SELECT` on any
+   `EDGARTOOLS_SOURCE` table**. Root cause: this `SELECT` grant was never
+   provisioned for the deployer role (gap exists in both Terraform
+   `account_baseline` module, which defines `local.roles` but has no
+   `snowflake_grant_privileges_to_role` resource for it in the files read so
+   far, and in `infra/snowflake/sql/bootstrap/01_source_stage.sql`, which
+   references `$deployer_role_name` but has no `GRANT SELECT` statements).
+
+**Why this was latent until now:** the currently-deployed `FINANCIAL_DERIVED`
+dynamic table is owned by `ACCOUNTADMIN` (created directly as ACCOUNTADMIN or
+by a process with the right grants at some earlier point) and still runs the
+pre-Stage-5 `lag()`-based SQL from 2026-06-05. The canonical deploy path
+(`infra/scripts/deploy-snowflake-stack.sh`) runs `dbt run --target dev`
+**without** `--full-refresh`, and dbt-snowflake's dynamic-table materialization
+only diffs *configuration*, not SQL body — so it has never issued a
+`CREATE OR REPLACE` for this table and never hit the missing grant. Confirmed
+generic (not Stage-5-specific) via two throwaway dynamic tables
+(`ZZ_TEST_FD` from `SEC_FINANCIAL_DERIVED`, `ZZ_TEST_COMPANY` from
+`COMPANY`) — both `CREATE OR REPLACE DYNAMIC TABLE ... initialize =
+ON_CREATE` as `EDGARTOOLS_DEV_DEPLOYER` fail identically; both cleaned up
+(`DROP DYNAMIC TABLE IF EXISTS` — no orphaned objects left).
+
+**Fix approach:** Grant `EDGARTOOLS_DEV_DEPLOYER` direct `SELECT` on
+`EDGARTOOLS_SOURCE`:
+
+```sql
+GRANT SELECT ON ALL TABLES IN SCHEMA EDGARTOOLS_DEV.EDGARTOOLS_SOURCE
+  TO ROLE EDGARTOOLS_DEV_DEPLOYER;
+GRANT SELECT ON FUTURE TABLES IN SCHEMA EDGARTOOLS_DEV.EDGARTOOLS_SOURCE
+  TO ROLE EDGARTOOLS_DEV_DEPLOYER;
+```
+
+Should be codified as the source of truth (Terraform `account_baseline`
+module and/or `01_source_stage.sql`), not just an ad-hoc ACCOUNTADMIN grant,
+to avoid drift — exact location TBD, needs a focused look at the
+`account_baseline` module's variables/other `.tf` files for where
+`local.roles` is (or should be) wired to grant resources. The prod role
+(`EDGARTOOLS_PROD_DEPLOYER`) likely needs the analogous grant too, and should
+be checked before it hits the same wall.
+
+**Impact:** blocks `dbt run --full-refresh` for ANY `EDGARTOOLS_GOLD` dynamic
+table (not just `financial_derived`) — i.e. blocks recovering from the
+known dbt-snowflake dynamic-table SQL-diffing gap (see
+`financial_derived.sql`'s deployed body being stale since 2026-06-05 despite
+multiple `dbt run`s).
+
+**Surfaced:** T1 live verification of PR #66 (Stage 5), 2026-06-13.
+
+---
+
 ## Dev Terraform MDM-cutover state reconciliation — RESOLVED
 
 **Status:** RESOLVED 2026-06-11. `infra/terraform/accounts/dev/` now matches AWS
