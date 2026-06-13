@@ -475,10 +475,36 @@ before deciding the PK needs to change.
 
 ## EDGARTOOLS_DEV_DEPLOYER lacks direct SELECT on EDGARTOOLS_SOURCE — blocks `dbt run --full-refresh` for any gold dynamic table
 
-**Status:** ROOT-CAUSED, NOT FIXED. Discovered while attempting T1 live
+**Status:** RESOLVED for dev 2026-06-13. Discovered while attempting T1 live
 verification of the Stage 5 `financial_derived.sql` change (PR #66,
 `claude/financial-derived-lag-tiebreaker`), but is generic to **any**
 `EDGARTOOLS_GOLD` dynamic table, not specific to that PR.
+
+**Dev fix applied (ad-hoc, as ACCOUNTADMIN):**
+```sql
+GRANT SELECT ON ALL TABLES IN SCHEMA EDGARTOOLS_DEV.EDGARTOOLS_SOURCE
+  TO ROLE EDGARTOOLS_DEV_DEPLOYER;
+GRANT SELECT ON FUTURE TABLES IN SCHEMA EDGARTOOLS_DEV.EDGARTOOLS_SOURCE
+  TO ROLE EDGARTOOLS_DEV_DEPLOYER;
+```
+17 existing tables affected, plus a FUTURE grant for new ones. Verified
+`dbt run --select financial_derived --full-refresh` now succeeds
+(`CREATE OR REPLACE DYNAMIC TABLE` completes, owner is now
+`EDGARTOOLS_DEV_DEPLOYER`, `data_timestamp` updated, deployed SQL body now
+matches the Stage 5 `prior_year_values`/`is_current_period` logic).
+
+**Still open / not done here:**
+- This grant is ad-hoc and not codified in Terraform/bootstrap SQL — it will
+  not survive an environment rebuild and should be added to the
+  `account_baseline` module (or `01_source_stage.sql`) as a follow-up so dev
+  doesn't drift.
+- `EDGARTOOLS_PROD_DEPLOYER` likely needs the analogous grant — not checked.
+- T6 (before/after row-level comparison vs the pre-Stage-5 `lag()` output) is
+  **still blocked**, but now by a different, unrelated cause:
+  `EDGARTOOLS_SOURCE.SEC_FINANCIAL_DERIVED` has 0 rows in dev, so
+  `FINANCIAL_DERIVED` refreshes to 0 rows — there is no data to
+  spot-check YoY values against. This is a pre-existing dev data-population
+  gap, out of scope for PR #66.
 
 **What:** `dbt run --select financial_derived --full-refresh` (run as
 `EDGARTOOLS_DEV_DEPLOYER`, the standard dbt deploy role) fails:
