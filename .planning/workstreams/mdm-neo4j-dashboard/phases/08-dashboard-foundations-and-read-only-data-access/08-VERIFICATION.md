@@ -1,24 +1,24 @@
 ---
 phase: 08-dashboard-foundations-and-read-only-data-access
-verified: 2026-05-17T23:32:40Z
-status: human_needed
+verified: 2026-06-13T18:47:37Z
+status: passed
 score: 5/5 must-haves verified
 overrides_applied: 0
-human_verification:
-  - test: "Launch local Streamlit dashboard with an existing MDM database"
-    expected: "Dashboard opens in a browser through the documented uv command, shows MDM connected or a safe MDM configuration error, and exposes no secret values."
-    why_human: "Requires a live local/dev MDM_DATABASE_URL and browser-based Streamlit interaction."
-  - test: "Exercise optional Neo4j states in the running dashboard"
-    expected: "Without Neo4j variables the dashboard stays in MDM-only mode; with valid Neo4j variables it shows connected status; with invalid variables it shows the safe query-failed copy."
-    why_human: "Requires operator-provided Neo4j credentials/network state and visual confirmation in Streamlit."
+human_verification: []
+human_uat:
+  file: 08-HUMAN-UAT.md
+  status: complete
+  completed_at: 2026-06-13T18:47:37Z
+  passed: 2
+  total: 2
 ---
 
 # Phase 8: Dashboard Foundations And Read-Only Data Access Verification Report
 
 **Phase Goal:** Operators can launch a local read-only dashboard shell that connects to MDM and Neo4j using existing environment variables without mutating either store.  
-**Verified:** 2026-05-17T23:32:40Z  
-**Status:** human_needed  
-**Re-verification:** No - initial verification
+**Verified:** 2026-06-13T18:47:37Z
+**Status:** passed
+**Re-verification:** Yes - human UAT completed
 
 ## Goal Achievement
 
@@ -26,7 +26,7 @@ human_verification:
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | Dashboard can be launched locally through `uv` with documented environment variables. | VERIFIED | `examples/mdm_graph_dashboard/README.md:16` documents `uv run --extra dashboard --extra mdm-runtime streamlit run examples/mdm_graph_dashboard/streamlit_app.py`; `pyproject.toml:41` and `pyproject.toml:59` define the `dashboard` and `mdm-runtime` extras; `uv run --extra dashboard --extra mdm-runtime streamlit --version` returned Streamlit 1.56.0; importing `examples.mdm_graph_dashboard.streamlit_app` succeeded and exposed the required sections. Browser launch still needs human verification with live `MDM_DATABASE_URL`. |
+| 1 | Dashboard can be launched locally through `uv` with documented environment variables. | VERIFIED | `examples/mdm_graph_dashboard/README.md` documents `uv run --extra dashboard --extra mdm-runtime streamlit run examples/mdm_graph_dashboard/streamlit_app.py`; `pyproject.toml` defines the `dashboard` and `mdm-runtime` extras; prior automated checks confirmed Streamlit runtime availability and module import. Human UAT in `08-HUMAN-UAT.md` passed against the dev Snowflake Postgres MDM DSN loaded from `edgartools-dev/mdm/postgres_dsn`. |
 | 2 | MDM connection uses read-only query helpers or transaction handling that prevents mutation. | VERIFIED | `edgar_warehouse/mdm/dashboard_readonly.py:61` exposes `check_mdm_status`; `dashboard_readonly.py:88` exposes `run_mdm_smoke_query`; both use SQLAlchemy `select` (`dashboard_readonly.py:74`, `dashboard_readonly.py:103`) and owned sessions are rolled back/closed (`dashboard_readonly.py:159`) with no `commit` calls. `tests/mdm/test_dashboard_readonly.py:56` monkeypatches commit to fail and still exercises both helpers. |
 | 3 | Neo4j connection uses read-only sessions/transactions for review queries. | VERIFIED | `edgar_warehouse/mdm/graph_readonly.py:20` defines static `RETURN 1 AS ok`; `graph_readonly.py:99` runs only that smoke query through `client.session()`. `tests/mdm/test_graph_readonly.py:144` asserts the captured Cypher is exactly `RETURN 1 AS ok` and contains no write tokens. |
 | 4 | Missing configuration and connection errors are actionable and do not print secret values. | VERIFIED | MDM safe copy is fixed in `dashboard_readonly.py:21`; Neo4j safe copies are fixed in `graph_readonly.py:13` and `graph_readonly.py:16`. Tests cover missing config and failed secret-bearing exceptions without leaking DSNs, usernames, passwords, hosts, or raw exception text (`tests/mdm/test_dashboard_readonly.py:68`, `tests/mdm/test_dashboard_readonly.py:85`, `tests/mdm/test_graph_readonly.py:181`). |
@@ -87,7 +87,7 @@ human_verification:
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|-------------|-------------|--------|----------|
-| DASH-01 | 08-03 | Operator can launch the dashboard locally with existing MDM and Neo4j environment variables, without adding new secret-management steps. | SATISFIED, human launch pending | README documents exact `uv` launch and existing env vars only; Streamlit dependency and app import spot-checks passed. Browser launch with live MDM remains human verification. |
+| DASH-01 | 08-03 | Operator can launch the dashboard locally with existing MDM and Neo4j environment variables, without adding new secret-management steps. | SATISFIED | README documents exact `uv` launch and existing env vars; Streamlit dependency and app import spot-checks passed; `08-HUMAN-UAT.md` confirms browser launch with live dev MDM and safe optional graph-state handling passed. |
 | DASH-02 | 08-01, 08-03 | Dashboard reads MDM relational state in read-only mode and never mutates MDM tables. | SATISFIED | MDM helpers use SELECT queries and no commit; tests monkeypatch commit to fail; architecture guards block mutation surfaces. |
 | DASH-03 | 08-02, 08-03 | Dashboard reads Neo4j graph state in read-only mode and never writes nodes, edges, labels, or properties. | SATISFIED | Neo4j helper uses static `RETURN 1 AS ok`; tests assert no write tokens and architecture guard blocks graph sync/write surfaces. |
 | ISO-01 | 08-03 | Work is developed only in the `workspace/mdm-neo4j-dashboard` worktree and does not modify other workstreams or generated deployment JSON. | SATISFIED | Active workstream is `mdm-neo4j-dashboard`; diff scope is dashboard/helper/test/planning files only; guard blocks generated application JSON references. |
@@ -117,23 +117,18 @@ All trackable CONTEXT.md decisions are honored by shipped artifacts. `gsd-sdk qu
 
 ### Human Verification Required
 
-#### 1. Local MDM Dashboard Launch
+None. Human UAT is complete in `08-HUMAN-UAT.md`:
 
-**Test:** Run `MDM_DATABASE_URL="<local-or-dev-db-url>" uv run --extra dashboard --extra mdm-runtime streamlit run examples/mdm_graph_dashboard/streamlit_app.py`, open the browser, and inspect Overview.  
-**Expected:** Dashboard opens, MDM status is connected or shows the exact safe unavailable copy, Refresh data is present, Overview smoke output is bounded, and no database URL, username, password, host, or raw exception appears.  
-**Why human:** Requires a live local/dev MDM database URL and browser interaction.
-
-#### 2. Optional Neo4j State Check
-
-**Test:** Launch once without Neo4j variables, once with valid `NEO4J_URI`/`NEO4J_USER`/`NEO4J_PASSWORD`, and once with intentionally invalid Neo4j connectivity.  
-**Expected:** Missing Neo4j shows `Neo4j is not configured. MDM relationship tables are still available.` and keeps MDM usable; valid Neo4j shows connected status; invalid Neo4j shows `Neo4j query failed. Check `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, and network access.` without leaking values.  
-**Why human:** Requires operator-provided Neo4j credentials/network state and visual confirmation in Streamlit.
+| Test | Result |
+|------|--------|
+| Local MDM dashboard launch with an existing MDM database | PASS |
+| Optional graph-state handling in the running dashboard | PASS |
 
 ### Gaps Summary
 
-No automated implementation gaps found. The phase is `human_needed` only because the final user-facing launch and external-service state checks require real local/dev MDM and optional Neo4j credentials plus browser inspection.
+No automated or human UAT gaps remain. Phase 8 is passed.
 
 ---
 
-_Verified: 2026-05-17T23:32:40Z_  
+_Verified: 2026-06-13T18:47:37Z_
 _Verifier: the agent (gsd-verifier)_
