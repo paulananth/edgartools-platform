@@ -11,7 +11,7 @@ updated: 2026-06-13
 
 ### Launch Gate And Cutover
 
-- [ ] **LIVE-01**: Operator can run a documented production preflight that verifies required AWS passive infrastructure outputs, application deployment artifacts, Snowflake connections, and secret containers without printing secret values.
+- [x] **LIVE-01**: Operator can run a documented production preflight that verifies required AWS passive infrastructure outputs, application deployment artifacts, Snowflake connections, and secret containers without printing secret values.
 - [ ] **LIVE-02**: Operator can deploy or update active AWS application components through existing deploy scripts with explicit image references, MDM enabled when required, and no Terraform-owned runtime commands or secret values.
 - [ ] **LIVE-03**: Operator can run bounded production status and E2E checks, distinguish known blockers from launch failures, and stop before expensive AWS execution when local acceptance gates cannot pass.
 
@@ -36,12 +36,12 @@ updated: 2026-06-13
 
 - [ ] **OPS-01**: Go/no-go runbook lists launch commands, expected pass criteria, rollback or stop procedures, resume steps, required approvals, and evidence capture rules.
 - [ ] **OPS-02**: Post-launch monitoring and incident checklist covers Step Functions status, CloudWatch logs, Snowflake task/dbt failures, Native App compute pool health, dashboard availability, and escalation paths.
-- [ ] **SEC-01**: Evidence bundle is secret-scrubbed, IAM and Snowflake grants are reviewed for launch scope, and no DSNs, tokens, passwords, Terraform state, or sensitive generated deployment values are committed.
+- [x] **SEC-01**: Evidence bundle is secret-scrubbed, IAM and Snowflake grants are reviewed for launch scope, and no DSNs, tokens, passwords, Terraform state, or sensitive generated deployment values are committed.
 
 ### Isolation
 
-- [ ] **ISO-01**: Work stays isolated under `.planning/workstreams/go-live/` and reviewed launch docs unless a phase explicitly scopes source-code or runbook changes.
-- [ ] **ISO-02**: The milestone preserves the locked AWS-only architecture and does not introduce non-AWS deployment paths, registries, storage targets, workflow engines, or secret-management systems.
+- [x] **ISO-01**: Work stays isolated under `.planning/workstreams/go-live/` and reviewed launch docs unless a phase explicitly scopes source-code or runbook changes.
+- [x] **ISO-02**: The milestone preserves the locked AWS-only architecture and does not introduce non-AWS deployment paths, registries, storage targets, workflow engines, or secret-management systems.
 
 ## Future Requirements
 
@@ -65,10 +65,10 @@ updated: 2026-06-13
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LIVE-01 | Phase 1 | Pending |
-| SEC-01 | Phase 1 | Pending |
-| ISO-01 | Phase 1 | Pending |
-| ISO-02 | Phase 1 | Pending |
+| LIVE-01 | Phase 1 | Complete |
+| SEC-01 | Phase 1 | Complete |
+| ISO-01 | Phase 1 | Complete |
+| ISO-02 | Phase 1 | Complete |
 | LIVE-02 | Phase 2 | Pending |
 | SNOW-01 | Phase 2 | Pending |
 | SNOW-02 | Phase 2 | Pending |

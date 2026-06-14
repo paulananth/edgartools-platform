@@ -2,28 +2,28 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Go Live
-status: planning
-stopped_at: Phase 1 context gathered
-last_updated: "2026-06-13T20:31:28.489Z"
-last_activity: 2026-06-13 -- Phase 1 context gathered; ready to plan
+status: active
+stopped_at: Phase 1 execution complete; ready to plan Phase 2
+last_updated: "2026-06-14T02:15:00Z"
+last_activity: 2026-06-14 -- Phase 1 execution complete and verified
 progress:
   total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 3
+  completed_plans: 3
+  percent: 20
 ---
 
 # Project State - go-live
 
 ## Current Position
 
-Phase: 1 (Production Readiness Inventory And Launch Gate Contract)
+Phase: 2
 Plan: Not started
-Status: Phase 1 context gathered; ready to plan
-Last activity: 2026-06-13 -- Phase 1 context gathered; ready to plan
+Status: Phase 1 complete; ready to plan Phase 2 AWS and Snowflake production deployment dry run
+Last activity: 2026-06-14 -- Phase 1 execution complete and verified
 
-Progress: 0% (5 phases planned, 0 plans executed)
+Progress: 20% (1/5 phases complete, 3/3 Phase 1 plans executed)
 
 ## Milestone Context
 
@@ -51,17 +51,22 @@ Branch: `workspace/go-live`
 - Dev hosted graph E2E succeeded through strict Snowflake-hosted verification.
 - Dashboard UAT passed locally after loading MDM configuration from AWS Secrets Manager without printing the DSN.
 - `neo4j-snowflake` Phase 4 still has hosted graph dashboard documentation and final evidence closeout work recorded in its state.
+- Phase 1 produced `01-LAUNCH-GATE-MATRIX.md`, four `evidence/*.md` templates, and `01-VERIFICATION.md` under the go-live workstream.
+- Phase 1 verification passed for LIVE-01, SEC-01, ISO-01, and ISO-02; production readiness itself remains blocked until later phases capture prod proof.
 - Root `.planning` is multi-workstream; this workstream should not rewrite existing workstream artifacts.
 
 ## Blockers
 
-None confirmed yet. Phase 1 must classify production prerequisites and unresolved workstream closeout items as launch-blocking, warning-only, or deferred.
+- `infra/aws-prod-application.json` is absent until live production discovery or successful production deploy supplies equivalent evidence.
+- Production AWS/Snowflake identifiers, digest image refs, MDM secret names, and Native App app/compute-pool selector are required before Phase 2 execution planning.
+- Dashboard README `NEO4J_*` cleanup remains launch-blocking until upstream hosted graph dashboard docs closeout is merged and rechecked.
+- Stale `edgar-identity` ARN and ECR cleanup/digest hazards require explicit runbook mitigations before production deploy.
 
 ## Pending Todos
 
-- Plan Phase 1 (`/gsd-plan-phase 1 --ws go-live`). Research decision was pending when paused: recommendation is **skip research** (CONTEXT.md already has 29 locked decisions + canonical refs to the exact scripts/docs the planner needs; `research_enabled: false` in config).
-- Reconcile current prod AWS/Snowflake/MDM/hosted graph/dashboard readiness evidence.
-- Confirm which production account, Snowflake connection, image references, and operator approval steps apply before Phase 2 execution.
+- Run `$gsd-secure-phase 1 --ws go-live` if a formal security artifact is required before advancing.
+- Plan Phase 2 (`$gsd-plan-phase 2 --ws go-live`) using the Phase 1 launch gate matrix.
+- Confirm production AWS profile/account, Snowflake connection/database, warehouse and MDM digest image refs, generated app summary path, MDM secret names, and Native App app/compute-pool selector before Phase 2 execution.
 
 ## Pre-Planning Branch Audit (2026-06-13)
 
@@ -79,6 +84,6 @@ needed — it was already current.
 ## Session Continuity
 
 Last session: 2026-06-13T20:30:11.873Z
-Stopped at: Branch audit complete; go-live confirmed current with main; ready to plan Phase 1 (skip research recommended)
-Resume file: .planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/01-CONTEXT.md
-Resume command: `/gsd-plan-phase 1 --ws go-live` (or `--skip-research` to bypass the research prompt)
+Stopped at: Phase 1 execution complete and verified; Phase 2 ready to plan
+Resume file: .planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/01-VERIFICATION.md
+Resume command: `$gsd-plan-phase 2 --ws go-live`

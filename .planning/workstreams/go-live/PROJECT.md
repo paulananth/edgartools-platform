@@ -3,7 +3,7 @@
 workstream: go-live
 status: active
 milestone: v1.5 Go Live
-updated: 2026-06-13
+updated: 2026-06-14
 
 ---
 
@@ -52,6 +52,9 @@ a go/no-go call with evidence that is complete, repeatable, and secret-safe.
   needs production readiness and evidence, not a new graph architecture.
 - The dashboard has passed local UAT for foundation and read-only MDM connectivity; go-live
   needs production-oriented operator validation and data issue routing.
+- Phase 1 is complete: the go-live workstream now has a launch gate matrix, secret-safe
+  evidence templates, production identifier checklist, and data issue triage table under
+  `.planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/`.
 - The root `.planning` state is multi-workstream. This milestone is isolated under
   `.planning/workstreams/go-live/` and must not overwrite existing workstream artifacts.
 
