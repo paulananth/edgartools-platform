@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-14T11:50:00.000Z",
+  "timestamp": "2026-06-14T19:54:07.306Z",
   "workstream": "go-live",
   "branch": "workspace/go-live",
   "workspace_path": "/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform",
@@ -8,85 +8,114 @@
   "phase_name": "aws-and-snowflake-production-deployment-dry-run",
   "phase_dir": ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run",
   "plan": null,
-  "task": null,
-  "total_tasks": 0,
-  "status": "in_progress",
+  "task": "10-12",
+  "total_tasks": 14,
+  "status": "in_progress_needs_revision",
   "completed_tasks": [
     {
       "id": "02-context",
-      "name": "Phase 2 discuss-phase context (CONTEXT.md, decisions D-01..D-07)",
+      "name": "Phase 2 context and decisions D-01 through D-07",
       "status": "done",
       "commit": "f3160cf",
       "artifact": ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-CONTEXT.md"
     },
     {
       "id": "02-research",
-      "name": "Phase 2 research (gsd-phase-researcher) on prod Terraform, deploy scripts, dbt, ECR promotion, gold status, and the 9 BLOCKED launch-gate-matrix rows",
-      "status": "done_unverified",
+      "name": "Phase 2 research on AWS, Snowflake, dbt, ECR, and launch-gate blockers",
+      "status": "done",
+      "commit": "0ddc694",
+      "artifact": ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-RESEARCH.md"
+    },
+    {
+      "id": "02-validation",
+      "name": "Phase 2 validation strategy",
+      "status": "done",
+      "commit": "aa54b19",
+      "artifact": ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-VALIDATION.md"
+    },
+    {
+      "id": "02-patterns",
+      "name": "Phase 2 pattern mapping",
+      "status": "done",
+      "commit": "6f73702",
+      "artifact": ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-PATTERNS.md"
+    },
+    {
+      "id": "02-plans",
+      "name": "Phase 2 execution plans 02-01 and 02-02 with threat models",
+      "status": "done_needs_revision",
+      "commit": "ff39406",
+      "artifact": ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-01-PLAN.md and 02-02-PLAN.md",
+      "note": "Plans exist and were committed, but a later plan-checker run found four blockers that must be patched before Step 13 coverage gates."
+    },
+    {
+      "id": "02-plan-checker",
+      "name": "Plan-checker retry completed",
+      "status": "done_issues_found",
       "commit": null,
-      "artifact": ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-RESEARCH.md",
-      "note": "829-line RESEARCH.md written to disk (all sections through Metadata/Confidence present, incl. '## Validation Architecture' at line 728). The Agent() call hit a Claude session limit before returning the '## RESEARCH COMPLETE' marker text, so the plan-phase orchestrator never processed the return. File is structurally complete and self-describes confidence as HIGH (live AWS/Snowflake discovery + full reads of prod Terraform, deploy scripts, dbt config). Stray trailing '</content>' tag was removed by hand. UNCOMMITTED — currently untracked in git status. Agent ID a937dd9292161b45a is resumable via SendMessage if anything looks incomplete on review, but treat the file as research-complete and proceed to step 5.5 unless a read-through finds gaps."
+      "agent_id": "019ec77b-b8bb-7842-a0bf-86bb624d1f7d",
+      "note": "Returned ## ISSUES FOUND: D-03/SNOW-02 narrowed to docs-only, SNOW-01 smoke can become state-changing, D-07 MDM secret-name blocker list partial, and 02-RESEARCH.md open questions unresolved."
     }
   ],
   "remaining_tasks": [
     {
-      "id": "plan-02-resume",
-      "name": "Resume /gsd:plan-phase 2 go-live workflow from Step 8 onward (Steps 5.5-7.8 DONE)",
-      "status": "not_started",
+      "id": "fix-plan-checker-blockers",
+      "name": "Patch Phase 2 plan docs for the four plan-checker blockers",
+      "status": "next",
       "steps": [
-        "5.5 DONE - 02-VALIDATION.md written and committed (aa54b19).",
-        "5.55 DONE - Security Threat Model Gate banner displayed (ASVS L1, block-on-high, <threat_model> block required in PLAN.md).",
-        "5.6/5.7 DONE - UI and schema-push gates skipped silently (no frontend/ORM scope).",
-        "6 DONE - confirmed no *-PLAN.md exists yet for phase 2.",
-        "7.8 DONE - gsd-pattern-mapper spawned, wrote 02-PATTERNS.md, committed (6f73702, docs(phase-2): add pattern mapping for plan-phase). TaskList: tasks #1-4 completed, task #5 (Step 8 planner spawn) in_progress.",
-        "8 DONE - Retry gsd-planner (agentId a6af68f58bb1cb78c) completed 02-01-PLAN.md (fixed truncation, added <threat_model>) and wrote new 02-02-PLAN.md (SNOW-01/SNOW-02, wave 2, depends on 02-01). 02-VALIDATION.md placeholders all replaced with real task IDs (02-01-01, 02-01-02, 02-02-01, 02-02-02), nyquist_compliant: true set, sign-off boxes checked. Committed as ff39406 (docs(phase-2): add execution plans and finalize validation mapping). Both plans pass gsd-sdk frontmatter.validate --schema plan and verify.plan-structure per planner's own report. TaskList: task #5 completed, task #6 (10-12 plan-checker loop) in_progress.",
-        "10-12 BLOCKED (iteration 1 of max 3, not yet started) - TWO consecutive gsd-plan-checker spawns (agentId ab95c433bdd6f94ec then a3b46db07700e5cfb, both model sonnet) hit 'socket connection closed unexpectedly' (28 tool_uses/~52min, then 14 tool_uses/~18min), 0 tokens, NO verdict either time. Both are read-only agents (Read/Bash/Glob/Grep) so worktree confirmed clean both times (git status clean at fcb2cc0). This is now a 3rd/4th instance of long-agent connection drops this session (researcher session-limit + first planner socket error + 2x plan-checker socket errors) -- treating as environmental/session pattern, NOT a content problem with the plans themselves. STOPPING POINT.\n\nFALLBACK OPTIONS for next session (try in order):\n1. Retry gsd-plan-checker ONE more time (would be iteration 1 of 3 -- the 2 failures don't count as iterations since no verdict was returned). If a 3rd consecutive socket error occurs, treat plan_checker_enabled as effectively unavailable this session and fall back to option 2.\n2. SKIP automated plan-checker: the planner self-reported (in its PLANNING COMPLETE summary, commit ff39406) that both 02-01-PLAN.md and 02-02-PLAN.md pass `gsd-sdk frontmatter.validate --schema plan` and `verify.plan-structure`, include <threat_model> blocks (ASVS L1), and 02-VALIDATION.md has nyquist_compliant: true with all placeholders replaced. Run those two gsd-sdk commands directly (cheap, no agent spawn) as a lightweight substitute, do a quick manual read-through of both <threat_model> blocks for any 'high' severity not marked mitigate, then proceed to step 13 (coverage gates) with a note in STATE.md/commit message that full automated plan-checker review did not complete due to repeated connection errors and may be re-run later via `/gsd:plan-phase 2 go-live --skip-research` (research+plans already exist, would just re-trigger checker) or a manual `/gsd:verify-work`-style pass.\n3. If retrying gsd-plan-checker, consider splitting into TWO smaller spawns (one per plan file) to reduce per-call duration/tool-use count, which may avoid whatever is triggering the socket closures on long calls.\n\nRemaining steps after 10-12 resolves one way or another: 13/13a-d (requirements + decision coverage gates LIVE-02/SNOW-01/SNOW-02 + D-01..D-07, gsd-sdk query state.planned-phase, roadmap.annotate-dependencies, commit STATE.md+ROADMAP.md), 14 (final status, PHASE 2 PLANNED summary, point to /gsd:execute-phase 2 go-live).",
-        "10-12 gsd-plan-checker revision loop (max 3 iterations, model sonnet)",
-        "13/13a/13b/13c/13d Requirements + decision coverage gates, STATE.md update, ROADMAP annotation, commit plans",
-        "14 Present final status / offer next (execute-phase 2)"
+        "Patch 02-02-PLAN.md and 02-VALIDATION.md so D-03/SNOW-02 includes a secret-safe credential checkpoint and dev-target dbt deps/compile/run/test --target dev evidence path.",
+        "Patch 02-02-PLAN.md so SNOW-01 first asserts the three prod backend.hcl files are absent and statically verifies deploy-snowflake-stack.sh checks backends before any state-changing Terraform/Snowflake/dbt/dashboard action.",
+        "Patch 02-01-PLAN.md so D-07 requires matrix/evidence blocked identifiers for edgartools-prod/mdm/postgres_dsn, edgartools-prod/mdm/neo4j, edgartools-prod/mdm/api_keys, and edgartools-prod/mdm/snowflake.",
+        "Patch 02-RESEARCH.md so Open Questions are explicitly resolved with the A1 ECR decision, the dev dbt credential-checkpoint decision, and Pattern 1 as plan of record for versions.tf.",
+        "Run direct gsd-sdk frontmatter and plan-structure checks for both plans.",
+        "Run targeted greps for MDM secret names, dev-target dbt commands, backend guard/static-order wording, and resolved open questions.",
+        "Only after those pass, continue Step 13 coverage gates and update STATE/ROADMAP."
       ]
     }
   ],
   "blockers": [
     {
-      "description": "Production app summary is absent: infra/aws-prod-application.json does not exist.",
-      "type": "external",
-      "workaround": "Phase 2 documents this as a BLOCKED launch-gate-matrix row per D-01 (document-and-validate only)."
+      "description": "Plan-checker found four content blockers in Phase 2 plans.",
+      "type": "technical",
+      "workaround": "Patch the plan docs exactly as listed in remaining_tasks before Step 13."
     },
     {
-      "description": "No prod Snowflake connection exists (only 2 unrelated personal connections in `snow connection list`).",
-      "type": "human_action",
-      "workaround": "D-04: document prod-target dbt commands with placeholders as the BLOCKED row's required fix; dev-target dbt run is the validation proxy (D-03)."
+      "description": "Correct worktree is easy to miss because the shell may start elsewhere.",
+      "type": "process",
+      "workaround": "Use /Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform for all commands; verify branch workspace/go-live and active workstream go-live before edits."
     },
     {
-      "description": "edgartools-prod-warehouse / edgartools-prod-mdm ECR repos do not exist yet (confirmed live this session) -- only edgartools-dev-* exist.",
+      "description": "Prod AWS passive infrastructure, prod app summary, and prod Snowflake connection do not exist.",
       "type": "external",
-      "workaround": "D-06: documented as re-tag-to-:prod-within-same-repo procedure; research captured exact aws ecr put-image/digest-capture commands."
+      "workaround": "Phase 2 remains document-and-validate only; represent these as BLOCKED rows and required-fix commands."
     }
   ],
   "human_actions_pending": [
     {
-      "action": "Confirm production AWS/Snowflake identifiers, digest image refs, MDM secret names, and Native App app/compute-pool selector before Phase 2 EXECUTION (not planning) -- per STATE.md Pending Todos.",
-      "context": "Phase 2 is document-and-validate only (D-01/D-02); planning can proceed without these, but execution evidence capture for some BLOCKED rows needs them.",
+      "action": "Supply dev Snowflake/dbt credentials during Phase 2 execution if dev-precedent dbt validation is to run.",
+      "context": "The plan must include a credential checkpoint and must record BLOCKED/failed evidence if credentials are unavailable.",
       "blocking": false
     }
   ],
   "decisions": [
     {
-      "decision": "Phase 2 research was run (user explicitly chose 'Research first' over the recommended 'Skip research').",
-      "rationale": "User wanted the researcher to verify current repo/AWS/Snowflake state directly rather than rely solely on CONTEXT.md's discuss-phase summary.",
+      "decision": "Do not continue to Step 13 until plan-checker blockers are patched.",
+      "rationale": "The checker returned real content issues, not just a tooling failure.",
       "phase": "02"
     },
     {
-      "decision": "Phase 2 is document-and-validate only (D-01..D-07, carried from 02-CONTEXT.md).",
-      "rationale": "No terraform apply for prod, no deploy-aws-application.sh --env prod execution, no Snowflake DDL against prod. Produce runbook commands + evidence entries for checks that CAN run today + updated BLOCKED rows in 01-LAUNCH-GATE-MATRIX.md.",
+      "decision": "Keep Phase 2 document-and-validate only.",
+      "rationale": "D-01 prohibits prod terraform apply, prod app deploy, and prod Snowflake DDL in this phase.",
+      "phase": "02"
+    },
+    {
+      "decision": "Use a guarded SNOW-01 smoke test if it remains in the plan.",
+      "rationale": "The wrapper currently stops on backend.hcl before state-changing actions, but the plan must verify that condition before running it.",
       "phase": "02"
     }
   ],
-  "uncommitted_files": [
-    ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-RESEARCH.md"
-  ],
+  "uncommitted_files": [],
   "background_processes": [],
-  "next_action": "Resume /gsd:plan-phase 2 go-live (this exact invocation: '/gsd-plan-phase 2 go-live', TEXT_MODE=true, MVP_MODE=false, CHUNKED_MODE=false, plan_checker_enabled=true, nyquist_validation_enabled=true). Step 1 init JSON already captured (see context_notes). Skip the research-decision question (already answered: research first, completed). Start at Step 5.5 (Validation Strategy) using 02-RESEARCH.md's '## Validation Architecture' section (line 728).",
-  "context_notes": "Working directory for ALL of this is the go-live worktree: /Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform (branch workspace/go-live) -- NOT /Users/aneenaananth/projects/edgartools-platform (main worktree, currently on claude/financial-derived-lag-tiebreaker, unrelated work; do not touch). Init JSON from `gsd-sdk query init.plan-phase 2` (already run, values stable): researcher_model=sonnet, planner_model=opus, checker_model=sonnet, tdd_mode=false, research_enabled=false (but user overrode to research anyway), plan_checker_enabled=true, nyquist_validation_enabled=true, commit_docs=true, text_mode=true, auto_advance=false, auto_chain_active=false, phase_found=true, phase_dir='.planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run', phase_number='02', phase_name='aws-and-snowflake-production-deployment-dry-run', padded_phase='02', phase_req_ids='LIVE-02, SNOW-01, SNOW-02', phase_status='Pending', has_research=false (now true once 02-RESEARCH.md is committed), has_context=true, has_reviews=false, has_plans=false, plan_count=0, state_path='.planning/workstreams/go-live/STATE.md', roadmap_path='.planning/workstreams/go-live/ROADMAP.md', requirements_path='.planning/workstreams/go-live/REQUIREMENTS.md', context_path='.planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-CONTEXT.md'. roadmap.get-phase '2' goal: 'Operators can prove production deployment readiness for AWS active components, Snowflake native pull, and dbt gold through existing scripts and non-secret evidence.' phase.mvp-mode '2' = false. Config keys workflow.mvp_mode/pattern_mapper/plan_chunked/security_enforcement/ui_phase/ui_safety_gate/discuss_mode/context_coverage_gate/ai_integration_phase/post_planning_gaps are ALL unset in .planning/workstreams/go-live/config.json (each config-get returns exit 1) -> use documented defaults: mvp=false, pattern_mapper=true(enabled), chunked=false, security_enforcement=true(L1,block on high), ui_phase=true, ui_safety_gate=true, discuss_mode=discuss, context_coverage_gate=true, ai_integration_phase=true, post_planning_gaps=true. AI-SPEC gate (4.5): no AI keywords in phase goal -> skipped silently, no AI-SPEC.md needed. AGENT_SKILLS_* queries (gsd-phase-researcher/gsd-planner/gsd-plan-checker) all return empty string -- treat as ''."
+  "next_action": "In /Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform, patch only the Phase 2 planning docs for the four plan-checker findings, then run direct gsd-sdk validation before Step 13 coverage gates.",
+  "context_notes": "This side conversation intentionally did not patch Phase 2 plans or advance the workflow. It only refreshed the handoff for Claude after a successful plan-checker retry found concrete issues."
 }
