@@ -86,3 +86,47 @@ To be filled only after production checks actually run:
 ## Generated-JSON Summary Rule
 
 Any generated Snowflake or dbt artifact referenced by go-live evidence must be summarized only as path, existence, top-level purpose, and pass/fail result. Do not paste raw logs, compiled SQL containing sensitive values, Terraform state, or full generated JSON bodies.
+
+## Phase 2 Read-Only Checks Actually Run
+
+### SNOW-01 structural-blocker smoke test
+
+Preflight guard (run before the smoke test, per Task 02-02-01): confirmed
+the 3 prod `backend.hcl` files
+(`infra/terraform/access/aws/accounts/prod/backend.hcl`,
+`infra/terraform/snowflake/accounts/prod/backend.hcl`,
+`infra/terraform/access/snowflake/accounts/prod/backend.hcl`) are absent
+(only `.example` files exist), and statically confirmed in
+`infra/scripts/deploy-snowflake-stack.sh` that the `backend.hcl` existence
+checks (lines 226-228) occur before the first state-changing call site
+(`terraform_apply` at line 349, the first of 5 sequential apply steps across
+the 3 Terraform roots).
+
+```bash
+bash infra/scripts/deploy-snowflake-stack.sh --env prod --snow-connection edgartools-prod --run-validation
+```
+
+Result: failed (structural blocker proven) — exited non-zero (`rc=1`) with a
+`backend.hcl` message.
+
+- The script exited non-zero (`rc=1`) before any output other than the error
+  message.
+- The first (and only) failure reached was the `backend.hcl` existence check
+  for the AWS bootstrap root (`infra/terraform/access/aws/accounts/prod`) —
+  no `terraform apply`/`terraform init`, Snowflake SQL (`snow sql`), dbt
+  (`--run-validation`/`--run-dbt`), or dashboard-upload
+  (`--upload-dashboard`) action was reached.
+- This proves the documented structural blocker (02-RESEARCH.md Pitfall 2)
+  is real and repeatable: the script is a 5-step, 3-root Terraform apply
+  orchestrator that runs unconditionally BEFORE any opt-in flag tail, and it
+  cannot proceed without the 3 prod `backend.hcl` files (which require a
+  production Snowflake account + real S3 tfstate backend to create — out of
+  scope, D-01).
+- BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `Snowflake native S3 pull
+  stack (infra/scripts/deploy-snowflake-stack.sh)`. See
+  [runbook/snowflake-native-pull.md](../../02-aws-and-snowflake-production-deployment-dry-run/runbook/snowflake-native-pull.md)
+  for the full invocation, root cause, required fix (3 missing
+  `backend.hcl` files + real tfvars + prod Snowflake account), and the
+  `native_pull` target-state resource list (1 storage integration, 2 file
+  formats, 1 external stage, source mirror tables, 1 pipe, 1 stream, 3
+  stored procedures, 1 task).
