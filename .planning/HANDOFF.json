@@ -31,10 +31,10 @@
   "remaining_tasks": [
     {
       "id": "plan-02-resume",
-      "name": "Resume /gsd:plan-phase 2 go-live workflow from Step 5.5 onward",
+      "name": "Resume /gsd:plan-phase 2 go-live workflow from Step 5.55 onward (Step 5.5 DONE)",
       "status": "not_started",
       "steps": [
-        "5.5 Create Validation Strategy: '## Validation Architecture' exists in 02-RESEARCH.md (line 728) -> write 02-VALIDATION.md from template, commit",
+        "5.5 DONE - 02-VALIDATION.md written and committed (aa54b19, docs(phase-2): add validation strategy). Also see TaskList: task #1 completed, task #2 (5.55) in_progress.",
         "5.55 Security Threat Model Gate: workflow.security_enforcement not set in config -> defaults true, ASVS L1, display banner, pass threat-model requirement to planner",
         "5.6 UI Design Contract Gate: Phase 2 has no frontend indicators (AWS/Snowflake/dbt only) -> skip silently",
         "5.7 Schema Push Detection Gate: no Payload/Prisma/Drizzle/Supabase/TypeORM schema files in scope -> skip silently",
