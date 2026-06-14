@@ -60,6 +60,23 @@ This is recorded as a matrix blocker, not a pass:
 
 - BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `Snowflake deployer direct grants for gold dynamic tables`.
 
+### Required-fix check (Task 02-02-03)
+
+The required-fix command for matrix row 7 (`Snowflake deployer direct grants
+for gold dynamic tables`), parallel to the resolved
+`EDGARTOOLS_DEV_DEPLOYER` dev gap recorded in `TODOS.md`:
+
+```sql
+SHOW GRANTS TO ROLE EDGARTOOLS_PROD_DEPLOYER;
+```
+
+This must be run (or live discovery performed) against a production
+Snowflake account to confirm `EDGARTOOLS_PROD_DEPLOYER` has direct `SELECT`
+on the `EDGARTOOLS_SOURCE` tables consumed by gold dynamic-table refresh.
+This is recorded as a matrix blocker, not a pass, until that check runs:
+
+- BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `Snowflake deployer direct grants for gold dynamic tables`.
+
 ## Dev Precedent Reconciliation
 
 dev precedent only — prod proof required separately
