@@ -85,6 +85,71 @@ Production still requires:
 - post-cleanup digest re-resolution proof,
 - production status and E2E evidence captured without secret values.
 
+## Phase 2 Read-Only Checks Actually Run
+
+```bash
+cd infra/terraform/accounts/prod
+
+# 1. TEMPORARY edit (reverted in step 4, never committed):
+#    required_version = "~> 1.14.7"  ->  ">= 1.14.7"
+
+# 2. Local-backend override (NOT committed, deleted in step 4)
+cat > override.tf <<'EOF'
+terraform {
+  backend "local" {
+    path = "/tmp/edgartools-prod-plan/terraform.tfstate"
+  }
+}
+EOF
+
+terraform init -input=false -no-color
+terraform plan -input=false -no-color
+
+# 4. Revert everything
+git checkout -- versions.tf
+rm -rf override.tf .terraform .terraform.lock.hcl terraform.tfstate* /tmp/edgartools-prod-plan
+git status --short infra/terraform/accounts/prod
+```
+
+Result: succeeded. `Plan: 37 to add, 0 to change, 0 to destroy.`
+
+- Resource-add count: `Plan: 37 to add, 0 to change, 0 to destroy` against account `077127448006` (per D-05, non-secret account label).
+- Output names present in `infra/terraform/accounts/prod/outputs.tf` (22 total, names only): `bronze_bucket_name`, `bronze_bucket_arn`, `warehouse_bucket_name`, `warehouse_bucket_arn`, `snowflake_export_bucket_name`, `snowflake_export_bucket_arn`, `ecr_repository_url`, `cluster_name`, `cluster_arn`, `public_subnet_ids`, `public_ecs_security_group_id`, `log_group_name`, `edgar_identity_secret_arn`, `snowflake_manifest_sns_topic_arn`, `snowflake_export_root_url`, `snowflake_export_prefix`, `snowflake_export_kms_key_arn`, `runner_credentials_secret_arn`, `mdm_postgres_dsn_secret_arn`, `mdm_neo4j_secret_arn`, `mdm_api_keys_secret_arn`, `mdm_snowflake_secret_arn`.
+- Revert confirmed: `git status --short infra/terraform/accounts/prod` is empty (clean) after the procedure — `versions.tf` restored to its committed `~> 1.14.7` content, `override.tf`/`.terraform`/`.terraform.lock.hcl`/`terraform.tfstate*`/`/tmp/edgartools-prod-plan` all removed.
+- Required-fix note: `infra/terraform/accounts/prod/versions.tf` carries `required_version = "~> 1.14.7"` (pessimistic `~>` constraint, accepts only `1.14.x`), which fails `terraform init` under the locally installed Terraform `1.15.5` until temporarily relaxed to `>= 1.14.7` as in step 1 above. The dev-side equivalent already uses `>= 1.14.7`. This is a real, unfixed repo bug recorded here for a future task to fix permanently — Phase 2 did not fix it (Pattern 1, temporary edit-then-revert only).
+- This is plan-only context. It is not production proof — no real backend/state exists; "AWS passive infrastructure outputs" remains BLOCKED (see `01-LAUNCH-GATE-MATRIX.md` row `AWS passive infrastructure outputs`).
+
+### Image-Promotion Digest Capture (read-only)
+
+```bash
+aws ecr describe-images --region us-east-1 \
+  --repository-name edgartools-dev-warehouse \
+  --image-ids imageTag=dev \
+  --query 'imageDetails[0].imageDigest' --output text
+
+aws ecr describe-images --region us-east-1 \
+  --repository-name edgartools-dev-mdm \
+  --image-ids imageTag=dev \
+  --query 'imageDetails[0].imageDigest' --output text
+```
+
+Result: succeeded for both repositories.
+
+- `edgartools-dev-warehouse:dev` and `edgartools-dev-mdm:dev` each resolved to a digest in the standard `sha256:<64-hex-chars>` format (the `@sha256:` digest form usable for `--image-ref`/`--mdm-image-ref`).
+- This is the read-only half of the image-promotion procedure documented in `runbook/aws-deploy.md`; the `aws ecr put-image` re-tag to `:prod` is operator-executed at cutover, not run during Phase 2.
+- Digest values themselves are not recorded here (non-secret but ephemeral/mutable-on-rebuild) — only the format was confirmed.
+
+## Required MDM Secret Names
+
+The following MDM Secrets Manager secret names are required by `deploy-aws-application.sh --env prod --enable-mdm` (names only — no ARNs, values, or DSNs):
+
+- `edgartools-prod/mdm/postgres_dsn`
+- `edgartools-prod/mdm/neo4j`
+- `edgartools-prod/mdm/api_keys`
+- `edgartools-prod/mdm/snowflake`
+
+These are required-identifier `BLOCKED` items — see `01-LAUNCH-GATE-MATRIX.md` `## Required Production Identifiers`. Actual secret creation/population is Phase 3 (MDM-01) scope.
+
 ## Generated-JSON Summary Rule
 
 When `infra/aws-prod-application.json` exists, evidence must summarize only:
