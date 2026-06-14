@@ -64,9 +64,9 @@ operator handoff.
 
 **Plans:**
 
-**Wave 1**
+1/2 plans executed
 
-- [ ] 02-01-PLAN.md — LIVE-02 AWS deploy readiness, ECR image-promotion runbook, MDM secret-name blockers, and AWS evidence/matrix updates.
+- [x] 02-01-PLAN.md — LIVE-02 AWS deploy readiness, ECR image-promotion runbook, MDM secret-name blockers, and AWS evidence/matrix updates.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -133,7 +133,7 @@ operator handoff.
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Production Readiness Inventory And Launch Gate Contract | v1.5 Go Live | 3/3 | Complete    | 2026-06-14 |
-| 2. AWS And Snowflake Production Deployment Dry Run | v1.5 Go Live | 0/2 | Planned    |  |
+| 2. AWS And Snowflake Production Deployment Dry Run | v1.5 Go Live | 1/2 | In Progress|  |
 | 3. MDM Hosted Graph E2E Acceptance | v1.5 Go Live | 0/TBD | Not started | - |
 | 4. Operator Dashboard And Data Issue Triage | v1.5 Go Live | 0/TBD | Not started | - |
 | 5. Go/No-Go Launch, Evidence, And Handoff | v1.5 Go Live | 0/TBD | Not started | - |
