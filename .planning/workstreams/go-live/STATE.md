@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: milestone
-status: planning
-stopped_at: Phase 2 context gathered
-last_updated: "2026-06-14T10:44:33.654Z"
-last_activity: 2026-06-14 -- Phase 1 execution complete and verified
+status: ready_to_execute
+stopped_at: Phase 2 planned; ready to execute
+last_updated: "2026-06-14T20:08:39Z"
+last_activity: 2026-06-14 -- Phase 2 planning complete; 2 plans ready for execution
 progress:
   total_phases: 5
   completed_phases: 1
@@ -19,9 +19,9 @@ progress:
 ## Current Position
 
 Phase: 2
-Plan: Not started
-Status: Phase 1 complete; ready to plan Phase 2 AWS and Snowflake production deployment dry run
-Last activity: 2026-06-14 -- Phase 1 execution complete and verified
+Plan: 2 planned, 0 executed
+Status: Phase 2 planned; ready to execute AWS/Snowflake production deployment dry run
+Last activity: 2026-06-14 -- Phase 2 planning complete; plan-checker blockers fixed and local plan validation passed
 
 Progress: 20% (1/5 phases complete, 3/3 Phase 1 plans executed)
 
@@ -58,15 +58,15 @@ Branch: `workspace/go-live`
 ## Blockers
 
 - `infra/aws-prod-application.json` is absent until live production discovery or successful production deploy supplies equivalent evidence.
-- Production AWS/Snowflake identifiers, digest image refs, MDM secret names, and Native App app/compute-pool selector are required before Phase 2 execution planning.
+- Production AWS/Snowflake identifiers, digest image refs, MDM secret names, and Native App app/compute-pool selector are still required before production launch proof can pass; Phase 2 plans now document the blocked identifier/evidence path.
 - Dashboard README `NEO4J_*` cleanup remains launch-blocking until upstream hosted graph dashboard docs closeout is merged and rechecked.
 - Stale `edgar-identity` ARN and ECR cleanup/digest hazards require explicit runbook mitigations before production deploy.
 
 ## Pending Todos
 
 - Run `$gsd-secure-phase 1 --ws go-live` if a formal security artifact is required before advancing.
-- Plan Phase 2 (`$gsd-plan-phase 2 --ws go-live`) using the Phase 1 launch gate matrix.
-- Confirm production AWS profile/account, Snowflake connection/database, warehouse and MDM digest image refs, generated app summary path, MDM secret names, and Native App app/compute-pool selector before Phase 2 execution.
+- Execute Phase 2 (`$gsd-execute-phase 2 --ws go-live`) using the two planned waves.
+- During Plan 02 execution, supply dev `DBT_SNOWFLAKE_*` credentials outside git or record the dev dbt gate as BLOCKED/failed evidence.
 
 ## Pre-Planning Branch Audit (2026-06-13)
 
@@ -83,7 +83,7 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-14T10:44:33.642Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-CONTEXT.md
-Resume command: `$gsd-plan-phase 2 --ws go-live`
+Last session: 2026-06-14T20:08:39Z
+Stopped at: Phase 2 planned; ready to execute
+Resume file: .planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-01-PLAN.md
+Resume command: `$gsd-execute-phase 2 --ws go-live`

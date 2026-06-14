@@ -3,7 +3,7 @@
 workstream: go-live
 status: active
 milestone: v1.5 Go Live
-updated: 2026-06-13
+updated: 2026-06-14
 
 ---
 
@@ -62,7 +62,15 @@ operator handoff.
 4. dbt compile/run/test commands for the production target are documented and produce pass/fail evidence.
 5. `EDGARTOOLS_GOLD_STATUS`, dynamic table status, and freshness checks are captured as non-secret launch evidence.
 
-**Plans**: TBD
+**Plans:**
+
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — LIVE-02 AWS deploy readiness, ECR image-promotion runbook, MDM secret-name blockers, and AWS evidence/matrix updates.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 02-02-PLAN.md — SNOW-01/SNOW-02 guarded Snowflake native-pull smoke, credential-gated dev dbt gate, dbt runbook, and Snowflake evidence/matrix updates.
 
 ### Phase 3: MDM Hosted Graph E2E Acceptance
 
@@ -125,7 +133,7 @@ operator handoff.
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Production Readiness Inventory And Launch Gate Contract | v1.5 Go Live | 3/3 | Complete    | 2026-06-14 |
-| 2. AWS And Snowflake Production Deployment Dry Run | v1.5 Go Live | 0/TBD | Not started | - |
+| 2. AWS And Snowflake Production Deployment Dry Run | v1.5 Go Live | 0/2 | Planned    |  |
 | 3. MDM Hosted Graph E2E Acceptance | v1.5 Go Live | 0/TBD | Not started | - |
 | 4. Operator Dashboard And Data Issue Triage | v1.5 Go Live | 0/TBD | Not started | - |
 | 5. Go/No-Go Launch, Evidence, And Handoff | v1.5 Go Live | 0/TBD | Not started | - |

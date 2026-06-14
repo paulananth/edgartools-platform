@@ -638,59 +638,40 @@ and actively used for dev.
 
 **If this table is empty:** N/A — see entries above.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **D-06 ECR repo interpretation (A1)**
-   - What we know: `edgartools-dev-warehouse` and `edgartools-dev-mdm` exist with
-     `:dev` and `:sha-<hash>` tags; `edgartools-prod-warehouse`/`edgartools-prod-mdm`
-     do not exist.
-   - What's unclear: whether "same ECR repos" in D-06 was written with awareness that
-     prod-named repos don't exist (i.e., intentionally meaning "tag the dev repo with
-     `:prod`"), or whether the user assumed prod-named repos already existed.
-   - Recommendation: Planner should surface this explicitly in the Phase 2 plan's
-     first task ("confirm image-promotion target: tag `edgartools-dev-{warehouse,mdm}:prod`
-     in place") so the user can confirm/correct before the runbook is written. Given
-     D-05 (same-account, prefix-distinguished, no separate ECR), interpretation A1 is
-     the only one consistent with D-05+D-01+D-02 together — but it's worth one
-     confirming sentence.
+1. **D-06 ECR repo interpretation (A1) — resolved**
+   - Decision: D-06 uses the existing same-account repos. Phase 2 documents tagging
+     `edgartools-dev-warehouse:prod` and `edgartools-dev-mdm:prod` in place, then
+     capturing immutable `@sha256:` image references for the deploy command.
+   - Reason: `edgartools-prod-warehouse`/`edgartools-prod-mdm` do not exist, D-05 says
+     prod is prefix-distinguished in the same account, and D-01/D-02 forbid creating new
+     prod infrastructure in this phase.
+   - Boundary: the state-changing `aws ecr put-image` re-tag is documented as a future
+     cutover/operator action. Phase 2 does not run it.
 
-2. **Dev Snowflake credential availability for D-03 (A3)**
-   - What we know: AWS Secrets Manager has no dbt/Snowflake-deployer credential for
-     dev; `snow connection list` has no `edgartools-dev` connection.
-   - What's unclear: whether the operator (user) has dev Snowflake credentials
-     available locally (e.g., in `~/.snowflake/config.toml`, 1Password, or shell
-     history/exports from the `TODOS.md`-documented grants-gap work on 2026-06-13).
-   - Recommendation: Planner should add an early task: "operator supplies
-     `DBT_SNOWFLAKE_{ACCOUNT,USER,PASSWORD,WAREHOUSE}` for dev as environment
-     variables (not committed)" as a `checkpoint:human-verify`-gated prerequisite for
-     the D-03 dev-precedent dbt run. If unavailable, the dev-precedent dbt
-     run/evidence becomes a documented-but-unexecuted command (same disposition as
-     the prod-target command), and matrix row 8 stays fully BLOCKED rather than
-     partially evidenced.
+2. **Dev Snowflake credential availability for D-03 (A3) — resolved**
+   - Decision: Plan 02 includes a secret-safe human credential checkpoint plus an
+     explicit dev-target dbt validation task. The task runs
+     `uv run --with dbt-snowflake dbt compile --target dev`,
+     `uv run --with dbt-snowflake dbt run --target dev`, and
+     `uv run --with dbt-snowflake dbt test --target dev` when the operator supplies
+     non-committed `DBT_SNOWFLAKE_*` values.
+   - If credentials are unavailable at execution time, execution must record the
+     D-03 dev-precedent check as `BLOCKED`/failed evidence and leave SNOW-02 blocked.
+     The plan may not silently downgrade D-03 to documentation-only.
+   - Boundary: prod-target dbt remains documentation-only until a real production
+     Snowflake connection and grants exist.
 
-3. **Should Pattern 0 (committed versions.tf fix) be authorized as an additional,
-   explicitly-scoped task for Phase 2?**
-   - What we know: ISO-01 says "Work stays isolated under
-     `.planning/workstreams/go-live/` and reviewed launch docs unless a phase
-     explicitly scopes source-code or runbook changes." Phase 2's `02-CONTEXT.md`
-     phase boundary describes producing a runbook and updating matrix/evidence docs;
-     it does not explicitly list "commit a Terraform version-constraint fix under
-     `infra/terraform/**/prod/versions.tf`" as in-scope source-code work. The fix
-     itself is small, real, and low-risk (one line per file, 4 files, no provisioning
-     impact, provider pins unaffected) — verified mechanically this session.
-   - What's unclear: whether the user wants to take this opportunity to fix a genuine
-     repo bug permanently (Pattern 0) or keep Phase 2 strictly to its documented
-     boundary, leaving the bug as a documented "required fix" for whoever next
-     provisions these Terraform roots (Pattern 1 alone, no commit).
-   - Recommendation: Pattern 1 (temporary edit-then-revert) is sufficient to satisfy
-     D-02's read-only `terraform plan` requirement and requires NO authorization —
-     treat it as the default plan-of-record. If the planner/user wants Pattern 0 as
-     well, add it as an explicitly-authorized, separately-scoped task (e.g., a
-     `checkpoint:human-verify` early in the plan: "Authorize committing a 4-file,
-     one-line-per-file Terraform version-constraint fix under `infra/terraform/**
-     /prod/versions.tf` as part of Phase 2? [yes/no]"). Either answer leaves D-02
-     satisfied; only the "is the repo bug fixed for real, with a commit, by the end of
-     this phase" outcome differs.
+3. **Pattern 0 committed versions.tf fix — resolved**
+   - Decision: Pattern 0 is not authorized for Phase 2. Pattern 1 remains the
+     plan-of-record: temporarily relax the prod `versions.tf` constraint, run the
+     read-only `terraform plan` with a local backend override, then fully revert.
+   - Reason: Phase 2 is scoped to planning/runbook/evidence artifacts. A committed
+     `infra/terraform/**/prod/versions.tf` fix is a real source-tree change and needs
+     separate authorization.
+   - Boundary: the persistent `versions.tf` fix is documented as a required follow-up;
+     it is not committed during Phase 2 execution.
 
 ## Environment Availability
 
