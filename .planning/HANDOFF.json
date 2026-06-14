@@ -31,19 +31,16 @@
   "remaining_tasks": [
     {
       "id": "plan-02-resume",
-      "name": "Resume /gsd:plan-phase 2 go-live workflow from Step 5.55 onward (Step 5.5 DONE)",
+      "name": "Resume /gsd:plan-phase 2 go-live workflow from Step 8 onward (Steps 5.5-7.8 DONE)",
       "status": "not_started",
       "steps": [
-        "5.5 DONE - 02-VALIDATION.md written and committed (aa54b19, docs(phase-2): add validation strategy). Also see TaskList: task #1 completed, task #2 (5.55) in_progress.",
-        "5.55 Security Threat Model Gate: workflow.security_enforcement not set in config -> defaults true, ASVS L1, display banner, pass threat-model requirement to planner",
-        "5.6 UI Design Contract Gate: Phase 2 has no frontend indicators (AWS/Snowflake/dbt only) -> skip silently",
-        "5.7 Schema Push Detection Gate: no Payload/Prisma/Drizzle/Supabase/TypeORM schema files in scope -> skip silently",
-        "6 Check existing plans: none yet (*-PLAN.md absent in phase dir)",
-        "7 Load context paths from init JSON (already captured below)",
-        "7.5 Verify Nyquist artifacts: depends on 5.5 completing 02-VALIDATION.md",
-        "7.8 Spawn gsd-pattern-mapper (pattern_mapper config unset -> default true; no PATTERNS.md yet for phase 2)",
-        "8 Spawn gsd-planner with CONTEXT.md + RESEARCH.md + PATTERNS.md + phase_req_ids 'LIVE-02, SNOW-01, SNOW-02'",
-        "10-12 gsd-plan-checker revision loop (max 3 iterations)",
+        "5.5 DONE - 02-VALIDATION.md written and committed (aa54b19).",
+        "5.55 DONE - Security Threat Model Gate banner displayed (ASVS L1, block-on-high, <threat_model> block required in PLAN.md).",
+        "5.6/5.7 DONE - UI and schema-push gates skipped silently (no frontend/ORM scope).",
+        "6 DONE - confirmed no *-PLAN.md exists yet for phase 2.",
+        "7.8 DONE - gsd-pattern-mapper spawned, wrote 02-PATTERNS.md, committed (6f73702, docs(phase-2): add pattern mapping for plan-phase). TaskList: tasks #1-4 completed, task #5 (Step 8 planner spawn) in_progress.",
+        "8 NEXT - Spawn gsd-planner (model opus) with CONTEXT.md + RESEARCH.md + PATTERNS.md + VALIDATION.md, phase_req_ids 'LIVE-02, SNOW-01, SNOW-02', threat_model requirement (ASVS L1 block-on-high). MUST instruct planner to cd into /Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform first (worktree caveat).",
+        "10-12 gsd-plan-checker revision loop (max 3 iterations, model sonnet)",
         "13/13a/13b/13c/13d Requirements + decision coverage gates, STATE.md update, ROADMAP annotation, commit plans",
         "14 Present final status / offer next (execute-phase 2)"
       ]
