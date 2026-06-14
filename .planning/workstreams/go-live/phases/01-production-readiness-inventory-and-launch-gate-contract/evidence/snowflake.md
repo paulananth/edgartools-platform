@@ -130,3 +130,31 @@ Result: failed (structural blocker proven) — exited non-zero (`rc=1`) with a
   `native_pull` target-state resource list (1 storage integration, 2 file
   formats, 1 external stage, source mirror tables, 1 pipe, 1 stream, 3
   stored procedures, 1 task).
+
+### SNOW-02 dev-target dbt gate (Task 02-02-02)
+
+dev precedent only — prod proof required separately
+
+The operator confirmed that the following dev dbt/Snowflake credential
+environment variables are NOT set in this shell:
+
+- `DBT_SNOWFLAKE_ACCOUNT`
+- `DBT_SNOWFLAKE_USER`
+- `DBT_SNOWFLAKE_PASSWORD`
+- `DBT_SNOWFLAKE_ROLE`
+- `DBT_SNOWFLAKE_DATABASE`
+- `DBT_SNOWFLAKE_WAREHOUSE`
+
+Result: BLOCKED — `dbt compile --target dev`, `dbt run --target dev`, and
+`dbt test --target dev` were NOT executed.
+
+- No dbt command was run (per the plan's action: do not run dbt without the
+  required credentials).
+- This is recorded as a failed prerequisite for SNOW-02's dev-target dbt
+  gate (D-03), not a silent documentation-only downgrade: the dev-target
+  dbt compile/run/test gate remains BLOCKED until an operator supplies all
+  6 variables above as environment variables outside git.
+- BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `dbt compile/run/test for
+  production target`. The prod-target command surface and this dev-gate
+  cross-reference are documented in
+  [runbook/dbt-gold.md](../../02-aws-and-snowflake-production-deployment-dry-run/runbook/dbt-gold.md).
