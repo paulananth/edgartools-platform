@@ -19,7 +19,7 @@ operator handoff.
 ## Phases
 
 - [x] **Phase 1: Production Readiness Inventory And Launch Gate Contract** - define the go/no-go checklist, reconcile existing workstream evidence, inventory production prerequisites, and set the evidence and secret-safety rules. (completed 2026-06-14)
-- [ ] **Phase 2: AWS And Snowflake Production Deployment Dry Run** - validate production AWS application deployment readiness, Snowflake native pull, dbt gold, and gold freshness evidence through existing scripts and commands.
+- [x] **Phase 2: AWS And Snowflake Production Deployment Dry Run** - validate production AWS application deployment readiness, Snowflake native pull, dbt gold, and gold freshness evidence through existing scripts and commands. (completed 2026-06-14)
 - [ ] **Phase 3: MDM Hosted Graph E2E Acceptance** - prove production MDM Snowflake Postgres, hosted graph sync, strict Native App verification, and AWS MDM E2E acceptance without external Neo4j credentials.
 - [ ] **Phase 4: Operator Dashboard And Data Issue Triage** - make the dashboard and runbook the operator inspection path for MDM, hosted graph, gold, and data quality issues.
 - [ ] **Phase 5: Go/No-Go Launch, Evidence, And Handoff** - assemble final evidence, run launch approval, document rollback or stop paths, and hand off post-launch monitoring.
@@ -64,13 +64,13 @@ operator handoff.
 
 **Plans:**
 
-1/2 plans executed
+2/2 plans complete
 
 - [x] 02-01-PLAN.md — LIVE-02 AWS deploy readiness, ECR image-promotion runbook, MDM secret-name blockers, and AWS evidence/matrix updates.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-02-PLAN.md — SNOW-01/SNOW-02 guarded Snowflake native-pull smoke, credential-gated dev dbt gate, dbt runbook, and Snowflake evidence/matrix updates.
+- [x] 02-02-PLAN.md — SNOW-01/SNOW-02 guarded Snowflake native-pull smoke, credential-gated dev dbt gate, dbt runbook, and Snowflake evidence/matrix updates.
 
 ### Phase 3: MDM Hosted Graph E2E Acceptance
 
@@ -133,7 +133,7 @@ operator handoff.
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Production Readiness Inventory And Launch Gate Contract | v1.5 Go Live | 3/3 | Complete    | 2026-06-14 |
-| 2. AWS And Snowflake Production Deployment Dry Run | v1.5 Go Live | 1/2 | In Progress|  |
+| 2. AWS And Snowflake Production Deployment Dry Run | v1.5 Go Live | 2/2 | Complete   | 2026-06-14 |
 | 3. MDM Hosted Graph E2E Acceptance | v1.5 Go Live | 0/TBD | Not started | - |
 | 4. Operator Dashboard And Data Issue Triage | v1.5 Go Live | 0/TBD | Not started | - |
 | 5. Go/No-Go Launch, Evidence, And Handoff | v1.5 Go Live | 0/TBD | Not started | - |
