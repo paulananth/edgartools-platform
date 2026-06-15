@@ -12,13 +12,13 @@ updated: 2026-06-13
 ### Launch Gate And Cutover
 
 - [x] **LIVE-01**: Operator can run a documented production preflight that verifies required AWS passive infrastructure outputs, application deployment artifacts, Snowflake connections, and secret containers without printing secret values.
-- [ ] **LIVE-02**: Operator can deploy or update active AWS application components through existing deploy scripts with explicit image references, MDM enabled when required, and no Terraform-owned runtime commands or secret values.
+- [x] **LIVE-02**: Operator can deploy or update active AWS application components through existing deploy scripts with explicit image references, MDM enabled when required, and no Terraform-owned runtime commands or secret values.
 - [ ] **LIVE-03**: Operator can run bounded production status and E2E checks, distinguish known blockers from launch failures, and stop before expensive AWS execution when local acceptance gates cannot pass.
 
 ### Snowflake Native Pull And Gold
 
-- [ ] **SNOW-01**: Operator can deploy or validate the Snowflake native S3 pull stack for production, including storage integration, stage, source mirror tables, pipe, stream, procedures, tasks, and access grants.
-- [ ] **SNOW-02**: Operator can run dbt compile/run/test for the production target and capture non-secret `EDGARTOOLS_GOLD_STATUS` and dynamic table freshness evidence.
+- [x] **SNOW-01**: Operator can deploy or validate the Snowflake native S3 pull stack for production, including storage integration, stage, source mirror tables, pipe, stream, procedures, tasks, and access grants.
+- [x] **SNOW-02**: Operator can run dbt compile/run/test for the production target and capture non-secret `EDGARTOOLS_GOLD_STATUS` and dynamic table freshness evidence.
 
 ### MDM And Hosted Graph
 
@@ -69,9 +69,9 @@ updated: 2026-06-13
 | SEC-01 | Phase 1 | Complete |
 | ISO-01 | Phase 1 | Complete |
 | ISO-02 | Phase 1 | Complete |
-| LIVE-02 | Phase 2 | Pending |
-| SNOW-01 | Phase 2 | Pending |
-| SNOW-02 | Phase 2 | Pending |
+| LIVE-02 | Phase 2 | Complete |
+| SNOW-01 | Phase 2 | Complete |
+| SNOW-02 | Phase 2 | Complete |
 | MDM-01 | Phase 3 | Pending |
 | GRAPH-01 | Phase 3 | Pending |
 | GRAPH-02 | Phase 3 | Pending |
