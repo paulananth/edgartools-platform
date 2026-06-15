@@ -80,7 +80,7 @@ echo "${ECR}/edgartools-dev-warehouse@${WAREHOUSE_DEV_DIGEST}"
 echo "${ECR}/edgartools-dev-mdm@${MDM_DEV_DIGEST}"
 ```
 
-**IMPORTANT — see section 3 (Pre-deploy ordering requirement):** the deploy
+**IMPORTANT — see section 4 (Pre-deploy ordering requirement):** the deploy
 script in section 2 runs ECR cleanup BEFORE the deploy. Re-resolve these
 digests immediately before invoking the deploy command, in the same session,
 AFTER cleanup has run — never reuse a digest captured in an earlier session.
@@ -106,7 +106,7 @@ bash infra/scripts/deploy-aws-application.sh \
 ```
 
 `<DIGEST>` is the `sha256:<64-hex-chars>` value captured (and re-resolved per
-section 3) in step 1c — for `--image-ref`/`--mdm-image-ref` the full form is
+section 4) in step 1c — for `--image-ref`/`--mdm-image-ref` the full form is
 `<repo-url>@sha256:<digest>`.
 
 ### Parameter resolution order
@@ -172,7 +172,60 @@ is explicitly out of scope for Phase 2 (D-01). The 22 output names that WILL
 supply most of these values once `apply` runs are listed in `evidence/aws.md`
 (Phase 2 Pattern 1 terraform-plan section).
 
-## 3. Pre-deploy ordering requirement (Pitfall 3 / matrix row "ECR cleanup deleting in-flight image digest mitigation")
+## 3. Seed production bronze from existing dev bronze
+
+Run this once after prod passive storage exists and before the first production
+bootstrap/capture workload. SEC filing artifacts in bronze are additive and
+immutable after capture, so production can reuse the already-downloaded dev
+bronze source files instead of re-fetching the same historical SEC artifacts.
+
+Only copy the bronze source tree. Do not copy dev warehouse/silver/gold outputs
+into prod, and do not use `--delete`: prod bronze is protected, append-only
+launch input.
+
+```bash
+# 5. Resolve source/destination bronze roots after prod Terraform apply.
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+export AWS_REGION="us-east-1"
+export DEV_BRONZE_ROOT="s3://edgartools-dev-bronze-077127448006/warehouse/bronze/"
+
+PROD_BRONZE_BUCKET="$(terraform -chdir="${REPO_ROOT}/infra/terraform/accounts/prod" output -raw bronze_bucket_name)"
+export PROD_BRONZE_ROOT="s3://${PROD_BRONZE_BUCKET}/warehouse/bronze/"
+
+# 6. Preview the one-time copy. Keep the dry-run summary as operator evidence,
+#    but do not paste full object listings into launch evidence.
+aws s3 sync "$DEV_BRONZE_ROOT" "$PROD_BRONZE_ROOT" \
+  --source-region "$AWS_REGION" \
+  --region "$AWS_REGION" \
+  --size-only \
+  --dryrun
+
+# 7. Copy immutable bronze artifacts into prod. No --delete.
+aws s3 sync "$DEV_BRONZE_ROOT" "$PROD_BRONZE_ROOT" \
+  --source-region "$AWS_REGION" \
+  --region "$AWS_REGION" \
+  --size-only \
+  --only-show-errors
+
+# 8. Capture non-secret proof: source/destination prefixes, object count, and
+#    total size only. Do not paste full key lists.
+aws s3api list-objects-v2 \
+  --bucket "$PROD_BRONZE_BUCKET" \
+  --prefix "warehouse/bronze/" \
+  --query '{object_count: length(Contents[]), total_bytes: sum(Contents[].Size)}' \
+  --output json
+```
+
+After this copy, run normal production warehouse commands without `--force`.
+The loaders should keep their default idempotent behavior and skip already
+captured SEC files; use `--force` only for explicit operator repair. Daily or
+bounded production capture still runs afterward to pick up any filings not
+present in the dev bronze snapshot at copy time.
+
+This step remains `BLOCKED` until prod passive infrastructure has been applied
+and `terraform output -raw bronze_bucket_name` returns a live bucket name.
+
+## 4. Pre-deploy ordering requirement (Pitfall 3 / matrix row "ECR cleanup deleting in-flight image digest mitigation")
 
 **Known issue:** `deploy-aws-application.sh` unconditionally (non-fatally)
 runs `cleanup-ecr-images.sh --env prod --apply` before any build/publish step,
@@ -194,7 +247,7 @@ image digest mitigation" matrix row addressed by runbook command/ordering
 documentation, even though the row itself stays `BLOCKED` pending a real prod
 deploy to prove the ordering in practice.
 
-## 4. Generated manifest (`infra/aws-prod-application.json`)
+## 5. Generated manifest (`infra/aws-prod-application.json`)
 
 Once a production deploy succeeds, `deploy-aws-application.sh` writes
 `infra/aws-prod-application.json` (parallel to the existing
@@ -221,6 +274,7 @@ The JSON body is never pasted into evidence files or this runbook.
 - `infra/scripts/cleanup-ecr-images.sh` — retention policy (`:dev`/`:prod` +
   2 newest `:sha-*` per repo).
 - `01-LAUNCH-GATE-MATRIX.md` rows "AWS passive infrastructure outputs",
+  "Production bronze data reuse from dev bronze",
   "AWS active application deploy (`infra/scripts/deploy-aws-application.sh`)",
   "Stale `edgar-identity` secret ARN mitigation", "ECR cleanup deleting
   in-flight image digest mitigation".

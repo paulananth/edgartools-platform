@@ -239,6 +239,55 @@ The helper creates `sec_platform_deployer`; the older
 
 ---
 
+## Step 2b — Reuse Dev Bronze SEC Artifacts For Prod
+
+After the prod bronze bucket exists, seed it from the existing dev bronze
+bucket before the first production bootstrap/capture run. Bronze SEC filing
+artifacts are additive and immutable after capture, so this avoids re-fetching
+the same historical SEC data from EDGAR. Copy only the bronze source tree; do
+not copy dev warehouse, silver, or gold outputs into prod.
+
+Use an operator profile that can read the dev bronze bucket and write the prod
+bronze bucket:
+
+```bash
+export AWS_PROFILE=aws-admin-prod
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+export AWS_REGION=us-east-1
+export DEV_BRONZE_ROOT="s3://edgartools-dev-bronze-077127448006/warehouse/bronze/"
+
+PROD_BRONZE_BUCKET="$(terraform -chdir="${REPO_ROOT}/infra/terraform/accounts/prod" output -raw bronze_bucket_name)"
+export PROD_BRONZE_ROOT="s3://${PROD_BRONZE_BUCKET}/warehouse/bronze/"
+
+# Preview first. Keep only counts/size in evidence, not a full object listing.
+aws s3 sync "$DEV_BRONZE_ROOT" "$PROD_BRONZE_ROOT" \
+  --source-region "$AWS_REGION" \
+  --region "$AWS_REGION" \
+  --size-only \
+  --dryrun
+
+# Copy immutable bronze artifacts. Do not add --delete.
+aws s3 sync "$DEV_BRONZE_ROOT" "$PROD_BRONZE_ROOT" \
+  --source-region "$AWS_REGION" \
+  --region "$AWS_REGION" \
+  --size-only \
+  --only-show-errors
+
+aws s3api list-objects-v2 \
+  --bucket "$PROD_BRONZE_BUCKET" \
+  --prefix "warehouse/bronze/" \
+  --query '{object_count: length(Contents[]), total_bytes: sum(Contents[].Size)}' \
+  --output json
+```
+
+After this copy, run normal production warehouse commands without `--force`.
+The loaders should keep their default idempotent behavior and skip already
+captured SEC files; use `--force` only for explicit operator repair. Daily or
+bounded production capture still runs afterward to pick up filings that were
+not present in the dev bronze snapshot at copy time.
+
+---
+
 ## Step 3 — Deploy AWS Application Components
 
 The ECR repository, ECS cluster, access roles, subnets, log group, and empty secret

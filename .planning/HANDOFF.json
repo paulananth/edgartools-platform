@@ -1,144 +1,108 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-14T21:14:27.427Z",
+  "timestamp": "2026-06-14T22:44:18.021Z",
+  "handoff_target": "Claude",
   "workstream": "go-live",
   "branch": "workspace/go-live",
+  "head": "4316732",
   "workspace_path": "/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform",
   "phase": "02",
   "phase_name": "aws-and-snowflake-production-deployment-dry-run",
   "phase_dir": ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run",
-  "plan": null,
-  "task": "post-execution-gates",
-  "total_tasks": 5,
-  "status": "in_progress",
+  "plan": "post-user-doc-update",
+  "task": "bronze-reuse-runbook-handoff",
+  "status": "paused",
   "completed_tasks": [
     {
-      "id": "02-context",
-      "name": "Phase 2 context and decisions D-01 through D-07",
-      "status": "done",
-      "commit": "f3160cf",
-      "artifact": ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-CONTEXT.md"
+      "id": "resume-state",
+      "name": "Resumed workspace/go-live and confirmed active workstream is go-live",
+      "status": "done"
     },
     {
-      "id": "02-research",
-      "name": "Phase 2 research on AWS, Snowflake, dbt, ECR, and launch-gate blockers",
+      "id": "bronze-reuse-docs",
+      "name": "Added a production bronze reuse step that seeds prod bronze from existing dev bronze SEC artifacts",
       "status": "done",
-      "commit": "0ddc694",
-      "artifact": ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-RESEARCH.md"
+      "files": [
+        "docs/runbook.md",
+        ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/runbook/aws-deploy.md",
+        ".planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md",
+        ".planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/evidence/aws.md"
+      ]
     },
     {
-      "id": "02-validation",
-      "name": "Phase 2 validation strategy",
+      "id": "verification",
+      "name": "Ran lightweight markdown and diff checks",
       "status": "done",
-      "commit": "aa54b19",
-      "artifact": ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-VALIDATION.md"
-    },
-    {
-      "id": "02-patterns",
-      "name": "Phase 2 pattern mapping",
-      "status": "done",
-      "commit": "6f73702",
-      "artifact": ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-PATTERNS.md"
-    },
-    {
-      "id": "02-plans",
-      "name": "Phase 2 execution plans 02-01 and 02-02 (plan-checker blockers patched in prior session)",
-      "status": "done",
-      "commit": "20e9f87",
-      "artifact": ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-01-PLAN.md and 02-02-PLAN.md"
-    },
-    {
-      "id": "02-01-wave1",
-      "name": "Wave 1 (AWS-side): Pattern 1 terraform plan reproduced+reverted; aws-deploy.md runbook written",
-      "status": "done",
-      "commit": "d630450",
-      "artifact": ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-01-SUMMARY.md"
-    },
-    {
-      "id": "02-02-wave2",
-      "name": "Wave 2 (Snowflake/dbt-side): SNOW-01 structural blocker proven, SNOW-02 dev dbt gate recorded BLOCKED (no dev creds), dbt-gold.md runbook written",
-      "status": "done",
-      "commit": "0a2db1e",
-      "artifact": ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-02-SUMMARY.md"
+      "checks": [
+        "git diff --check passed",
+        "targeted gate-matrix table pipe-count check for rows 10-28 passed",
+        "rg consistency check confirmed new section references and absence of old aws s3 ls proof command"
+      ]
     }
   ],
   "remaining_tasks": [
     {
-      "id": "code_review_gate",
-      "name": "Invoke Skill(skill=\"gsd-code-review\", args=\"02\") and check 02-REVIEW.md (advisory only)",
+      "id": "claude-review",
+      "name": "Claude should inspect the uncommitted diff and either finalize, adjust, or commit per operator preference",
       "status": "next"
     },
     {
-      "id": "regression_gate",
-      "name": "Find prior *-VERIFICATION.md under phase 01 and run any referenced regression tests (likely no-op, doc-only phase)",
-      "status": "pending"
-    },
-    {
-      "id": "schema_drift_gate",
-      "name": "Run gsd-sdk query verify.schema-drift 02; expect drift_detected: false (only .planning/ markdown changed)",
-      "status": "pending"
-    },
-    {
-      "id": "codebase_drift_gate",
-      "name": "Run codebase-drift-gate.md step",
-      "status": "pending"
-    },
-    {
-      "id": "verify_phase_goal",
-      "name": "Spawn gsd-verifier to produce 02-VERIFICATION.md, checking must_haves from both plans (SNOW-01 proven+documented, SNOW-02 dev-gate BLOCKED-with-evidence + prod placeholders documented, LIVE-02 runbook+MDM-identifiers documented) and requirement IDs LIVE-02/SNOW-01/SNOW-02",
-      "status": "pending"
-    },
-    {
-      "id": "aggregate_results",
-      "name": "Present final Phase 2 completion table; check workflow.security_enforcement and look for 02-SECURITY.md; if absent and enforcement on, surface /gsd:secure-phase 2 go-live as a non-blocking next step",
+      "id": "phase2-post-gates",
+      "name": "Phase 2 post-execution gates remain available from the older go-live state: code review, regression, schema/codebase drift, verifier, and aggregate results",
       "status": "pending"
     }
   ],
   "blockers": [
     {
-      "description": "Prod AWS passive infrastructure, infra/aws-prod-application.json, and prod Snowflake connection do not exist (by design, D-01). Phase 2 documents these as BLOCKED rows with required-fix commands; not expected to be resolved in this phase.",
+      "description": "Prod passive storage has not been applied, so the new bronze sync step remains a blocked runbook/checklist item. No aws s3 sync command was run.",
       "type": "external",
-      "workaround": "Phase 2 remains document-and-validate only; BLOCKED rows + required-fix commands are the accepted output."
+      "workaround": "Run the documented sync only after terraform output -raw bronze_bucket_name resolves for prod."
     },
     {
-      "description": "Dev DBT_SNOWFLAKE_* credentials are not available in this environment. SNOW-02's dev-target dbt validation gate is recorded as BLOCKED in evidence/snowflake.md (missing var names only, no values).",
+      "description": "Production proof is still absent for launch gates by design. This handoff only documents the added reuse step.",
       "type": "external",
-      "workaround": "If dev credentials become available later, re-run task 02-02-02's dbt deps/compile/run/test sequence and update the evidence entry."
+      "workaround": "Keep the launch matrix row BLOCKED until the operator runs the dry-run/final sync and records count/byte proof."
     }
   ],
-  "human_actions_pending": [],
+  "human_actions_pending": [
+    {
+      "action": "Decide whether to commit the current uncommitted docs + handoff changes or let Claude continue editing first.",
+      "context": "The user asked for handoff to Claude, not for a commit. Changes were left unstaged.",
+      "blocking": false
+    }
+  ],
   "decisions": [
     {
-      "decision": "Resync confirmed prior session's commits (c66e311, 20e9f87) already fixed all 4 plan-checker blockers and marked Phase 2 Planned/ready_to_execute; no merge/rebase needed, proceeded straight to execute-phase.",
-      "rationale": "git log/worktree inspection showed both fixes already applied on workspace/go-live with the same git identity.",
+      "decision": "Treat the request as a runbook/checklist update, not a code path or Terraform change.",
+      "rationale": "SEC bronze artifacts are immutable after capture, so prod can be hydrated by S3 copy once prod storage exists without changing loaders or Terraform.",
       "phase": "02"
     },
     {
-      "decision": "Both 02-01-PLAN.md and 02-02-PLAN.md executed via gsd-executor in worktree isolation (USE_WORKTREES=true).",
-      "rationale": "Standard execute-phase wave execution pattern for this config.",
+      "decision": "Copy only the bronze source tree and never use --delete.",
+      "rationale": "Prod bronze is protected, append-only launch input; dev warehouse/silver/gold outputs should not be copied into prod.",
       "phase": "02"
     },
     {
-      "decision": "At the 02-02-02 checkpoint, user explicitly confirmed dev DBT_SNOWFLAKE_* credentials are NOT set. Continuation agent recorded BLOCKED/failed evidence (D-03 compliant) and did not downgrade SNOW-02 to docs-only.",
-      "rationale": "D-03 requires honest BLOCKED evidence when prerequisites fail, not a silent documentation-only downgrade.",
+      "decision": "Capture proof via s3api object_count and total_bytes instead of full object listings.",
+      "rationale": "Launch evidence should stay concise and avoid pasted object listings or raw copied object bodies.",
       "phase": "02"
     },
     {
-      "decision": "Post-merge build/test gate skipped both waves as not-applicable.",
-      "rationale": "All changed files are under .planning/, no source code touched, and 02-VALIDATION.md states no test framework covers this phase's domain.",
-      "phase": "02"
-    },
-    {
-      "decision": "Paused before execute-phase post-execution gates (code review, verification, security check) due to hitting the 75% context-critical threshold.",
-      "rationale": "Avoid mid-gate context exhaustion; resume cleanly with has_summary: true for both plans so execution is not repeated.",
+      "decision": "Leave loader defaults idempotent and warn against --force except explicit repair.",
+      "rationale": "Repo policy says loaders should skip already loaded SEC files by default; --force is operator repair only.",
       "phase": "02"
     }
   ],
   "uncommitted_files": [
+    ".planning/HANDOFF.json",
     ".planning/workstreams/go-live/.continue-here.md",
-    ".planning/HANDOFF.json"
+    ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/.continue-here.md",
+    ".planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md",
+    ".planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/evidence/aws.md",
+    ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/runbook/aws-deploy.md",
+    "docs/runbook.md"
   ],
   "background_processes": [],
-  "next_action": "In /Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform (branch workspace/go-live, HEAD 0a2db1e), re-invoke /gsd:execute-phase 2 --ws go-live. Both plans show has_summary: true, so the orchestrator should skip task execution and proceed directly through code_review_gate -> regression_gate -> schema_drift_gate -> codebase_drift_gate -> verify_phase_goal (spawn gsd-verifier -> 02-VERIFICATION.md) -> aggregate_results (security gate check) -> final PHASE 2 COMPLETE report.",
-  "context_notes": "Phase 2 (AWS and Snowflake production deployment dry run) execution is complete for both plans (02-01 wave 1 AWS-side, 02-02 wave 2 Snowflake/dbt-side), merged into workspace/go-live and tracked as Complete in ROADMAP.md/STATE.md. Only the execute-phase orchestrator's post-execution gates (code review, regression, schema/codebase drift, phase-goal verification, security check) remain. Session paused at 75% context before starting those gates; this handoff (plus .continue-here.md) preserves state for the next session to resume directly into those gates without re-executing tasks."
+  "next_action": "Claude should start with: cd /Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform && git status --short --branch && cat .planning/active-workstream && git diff --stat. Then read .planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/.continue-here.md and inspect the four documentation diffs.",
+  "context_notes": "Latest user request: 'can you add a step reusing of the data downloaded for dev bronze for prod as SEC data never changes'. Codex added that step to the operator runbook and go-live launch evidence/matrix, then user requested 'handoff to claude'. No AWS, Terraform apply, ECR mutation, Snowflake DDL, dbt, or S3 sync command was run."
 }

@@ -62,6 +62,7 @@ The command also reported lingering Neo4j references in the dev deployment summa
 ## Not-Yet-Runnable Production Steps
 
 - BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `AWS passive infrastructure outputs`.
+- BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `Production bronze data reuse from dev bronze`.
 - BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `Production AWS application manifest (infra/aws-prod-application.json)`.
 - BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `AWS active application deploy (infra/scripts/deploy-aws-application.sh)`.
 - BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `Stale edgar-identity secret ARN mitigation`.
@@ -149,6 +150,18 @@ The following MDM Secrets Manager secret names are required by `deploy-aws-appli
 - `edgartools-prod/mdm/snowflake`
 
 These are required-identifier `BLOCKED` items — see `01-LAUNCH-GATE-MATRIX.md` `## Required Production Identifiers`. Actual secret creation/population is Phase 3 (MDM-01) scope.
+
+## Required Bronze Reuse Prefixes
+
+Production should reuse the already-downloaded dev bronze SEC artifacts before
+the first prod bootstrap/capture workload because bronze SEC filing artifacts
+are additive and immutable after capture. This is a planned production step,
+not Phase 2 evidence, because prod passive storage has not been applied yet.
+
+- Dev bronze source root: `s3://edgartools-dev-bronze-077127448006/warehouse/bronze/`.
+- Prod bronze destination root: blocked until `terraform -chdir=infra/terraform/accounts/prod output -raw bronze_bucket_name` resolves after prod apply, then use `s3://<prod-bronze-bucket>/warehouse/bronze/`.
+- Required evidence after the operator runs the step: dry-run/final `aws s3 sync` command, source/destination prefixes, object count, and total size only. Do not paste full object key listings.
+- BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `Production bronze data reuse from dev bronze`.
 
 ## Generated-JSON Summary Rule
 
