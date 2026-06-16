@@ -106,7 +106,18 @@ operator handoff.
 4. Dashboard UAT records pass/fail notes for launch-critical views without storing credentials, raw exceptions, or unbounded exports.
 5. The dashboard remains an inspection surface; CLI verification remains the acceptance gate.
 
-**Plans**: TBD
+**Plans:**
+
+3 plans across 2 waves (0/3 complete)
+
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — README rewrite + architecture-test gate: remove active external NEO4J_* setup, preserve Neo4j Overview route label (DASH-03, DASH-01).
+
+**Wave 2** *(depends on 04-01)*
+
+- [ ] 04-02-PLAN.md — Data issue triage guide covering all 8 layers with read-only diagnostics, owners, escalation paths (DASH-02).
+- [ ] 04-03-PLAN.md — Dashboard UAT (dev precedent): fill 5 evidence rows, update launch gate matrix rows 26-27 (DASH-01, DASH-03).
 
 ### Phase 5: Go/No-Go Launch, Evidence, And Handoff
 
@@ -135,5 +146,5 @@ operator handoff.
 | 1. Production Readiness Inventory And Launch Gate Contract | v1.5 Go Live | 3/3 | Complete    | 2026-06-14 |
 | 2. AWS And Snowflake Production Deployment Dry Run | v1.5 Go Live | 2/2 | Complete    | 2026-06-15 |
 | 3. MDM Hosted Graph E2E Acceptance | v1.5 Go Live | 0/TBD | Not started | - |
-| 4. Operator Dashboard And Data Issue Triage | v1.5 Go Live | 0/TBD | Not started | - |
+| 4. Operator Dashboard And Data Issue Triage | v1.5 Go Live | 0/3 | Planned | - |
 | 5. Go/No-Go Launch, Evidence, And Handoff | v1.5 Go Live | 0/TBD | Not started | - |
