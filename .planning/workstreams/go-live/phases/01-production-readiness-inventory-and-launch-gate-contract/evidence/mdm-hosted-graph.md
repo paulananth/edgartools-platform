@@ -111,6 +111,62 @@ Date: 2026-06-15 UTC
 Environment: dev (rehearsal); prod --status-only (blocker reproduction).
 This section records the live acceptance evidence from Phase 3 plan 03-01-live-mdm-graph-rehearsal.
 
+### Dev Rehearsal — Full E2E (D-09/D-10)
+
+```bash
+bash infra/scripts/run-aws-mdm-e2e.sh \
+  --env dev \
+  --aws-profile sec_platform_deployer \
+  --snow-connection snowconn \
+  --snowflake-database EDGARTOOLS_DEV
+```
+
+Result: succeeded (exit 0).
+
+The local strict `verify-graph` preflight PASSED and that pass was the gate that allowed the AWS Step Functions executions to proceed (LIVE-03 / D-10). Preflight output:
+
+- Overall status: `ok`
+- Snowflake graph nodes: `15`
+- Snowflake graph edges: `4`
+- Node parity status: `ok` (0 missing, 0 extra)
+- Relationship parity status: `ok` (0 missing, 0 extra)
+- Native App status: `ok`
+- Native App compute pool: `CPU_X64_XS`
+- `graph_info`: `ok`
+- `bfs`: `ok`
+- `wcc`: `ok`
+- `phase3_acceptance`: `true`
+
+All 6 AWS Step Functions stages completed SUCCEEDED (execution epoch `1781568895`):
+
+| Workflow | Latest status | Latest execution name | Started |
+| --- | --- | --- | --- |
+| `mdm_migrate` | `SUCCEEDED` | `aws-mdm-e2e-1781568895-migrate` | 2026-06-15T20:14:57-04:00 |
+| `mdm_run` | `SUCCEEDED` | `aws-mdm-e2e-1781568895-run` | 2026-06-15T20:16:52-04:00 |
+| `mdm_backfill_relationships` | `SUCCEEDED` | `aws-mdm-e2e-1781568895-backfill` | 2026-06-15T20:18:46-04:00 |
+| `mdm_sync_graph` | `SUCCEEDED` | `aws-mdm-e2e-1781568895-sync` | 2026-06-15T20:21:02-04:00 |
+| `mdm_verify_graph` | `SUCCEEDED` | `aws-mdm-e2e-1781568895-verify` | 2026-06-15T20:24:56-04:00 |
+| `mdm_counts` | `SUCCEEDED` | `aws-mdm-e2e-1781568895-counts` | 2026-06-15T20:26:06-04:00 |
+
+dev precedent only — prod proof required separately
+
+Production still requires: production Snowflake connection/database, production Native App app and compute-pool selector, production strict verify-graph proof, and production AWS MDM E2E proof.
+
+### GRAPH-01/GRAPH-02 Dev Precedent Citation (D-04)
+
+Citing `.planning/workstreams/neo4j-snowflake/phases/03-hosted-graph-verification-and-e2e-cutover/03-LIVE-DEV-RUN.md` as-is for GRAPH-01/GRAPH-02 (no standalone verify-graph re-run performed — D-04). The rehearsal's preflight and `mdm_verify_graph` stage above are incidental byproducts that supplement this citation.
+
+From `03-LIVE-DEV-RUN.md` (2026-06-12):
+- strict local `edgar-warehouse mdm verify-graph` succeeded in dev
+- Snowflake graph nodes: `15`, edges: `4`
+- Node parity: `ok`, relationship parity: `ok`
+- Native App: `ok`, compute pool: `CPU_X64_XS`
+- `graph_info`, `bfs`, `wcc`: all `ok`
+- `phase3_acceptance`: `true`
+- AWS MDM E2E: all 6 stages SUCCEEDED
+
+Script `--help` covers `--skip-preflight` (debug-only escape hatch that cannot satisfy Phase 3 acceptance).
+
 ### Prod --status-only Structural-Blocker Reproduction (D-02)
 
 ```bash
