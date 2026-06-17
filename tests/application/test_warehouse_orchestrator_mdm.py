@@ -417,3 +417,58 @@ def test_bootstrap_fundamentals_upload_failure_returns_exit_code_1(
         rc = bootstrap_fundamentals.execute(_Args())
 
     assert rc == 1
+
+
+def test_bootstrap_fundamentals_upload_success_sets_metrics(
+    tmp_path, monkeypatch
+):
+    """Upload succeeds → metrics carry uploaded=True and size_bytes, rc=0."""
+    monkeypatch.setenv("WAREHOUSE_STORAGE_ROOT", "s3://bucket/warehouse")
+    monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
+
+    shard_path = tmp_path / "shard-0.duckdb"
+    shard_path.write_bytes(b"duckdb")
+
+    from edgar_warehouse.application.commands import bootstrap_fundamentals
+
+    upload_record = {
+        "layer": "fundamentals_shard",
+        "path": "s3://bucket/warehouse/silver/fundamentals/shard-0.duckdb",
+        "relative_path": "silver/fundamentals/shard-0.duckdb",
+        "size_bytes": len(b"duckdb"),
+    }
+
+    with patch(
+        "edgar_warehouse.application.commands.bootstrap_fundamentals._resolve_fundamentals_ciks",
+        return_value=[320193],
+    ), patch(
+        "edgar_warehouse.silver_support.session.open_silver_shard"
+    ) as mock_open, patch(
+        "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
+        return_value={"entity_facts_written": 1},
+    ), patch(
+        "edgar_warehouse.application.warehouse_orchestrator._publish_fundamentals_shard_if_remote",
+        return_value=upload_record,
+    ):
+        mock_db = MagicMock()
+        mock_open.return_value = mock_db
+
+        import io, json
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+
+        class _Args:
+            cik_list = [320193]
+            mode = "entity-facts"
+            run_id = "test-run"
+            fundamentals_silver_path = str(shard_path)
+            cik_offset = 0
+            cik_limit = None
+
+        with redirect_stdout(buf):
+            rc = bootstrap_fundamentals.execute(_Args())
+
+    assert rc == 0
+    payload = json.loads(buf.getvalue())
+    assert payload["metrics"]["fundamentals_shard_uploaded"] is True
+    assert payload["metrics"]["fundamentals_shard_size_bytes"] == len(b"duckdb")
