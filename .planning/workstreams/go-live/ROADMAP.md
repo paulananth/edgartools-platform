@@ -135,7 +135,17 @@ operator handoff.
 4. Final approval explicitly states whether launch is go, no-go, or partial with documented blockers.
 5. Follow-up work is captured as future requirements or todos rather than silently expanding the launch milestone.
 
-**Plans**: TBD
+**Plans:**
+
+2 plans across 2 waves (0/2 complete)
+
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — Go/no-go packet (NO-GO — Conditional) + launch-ops stop/rollback runbook for AWS Step Functions, Snowflake tasks/dbt, MDM, dashboard (OPS-01).
+
+**Wave 2** *(depends on 05-01)*
+
+- [ ] 05-02-PLAN.md — Post-launch monitoring checklist (8 OPS-02 systems) + TODOS.md follow-up capture (OPS-02).
 
 ---
 
@@ -147,4 +157,4 @@ operator handoff.
 | 2. AWS And Snowflake Production Deployment Dry Run | v1.5 Go Live | 2/2 | Complete    | 2026-06-15 |
 | 3. MDM Hosted Graph E2E Acceptance | v1.5 Go Live | 0/TBD | Not started | - |
 | 4. Operator Dashboard And Data Issue Triage | v1.5 Go Live | 0/3 | Planned | - |
-| 5. Go/No-Go Launch, Evidence, And Handoff | v1.5 Go Live | 0/TBD | Not started | - |
+| 5. Go/No-Go Launch, Evidence, And Handoff | v1.5 Go Live | 0/2 | Planned | - |
