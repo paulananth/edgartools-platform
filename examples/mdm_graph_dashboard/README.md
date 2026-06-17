@@ -20,6 +20,27 @@ current helper payloads.
   `NEO4J_PASSWORD`.
 - Optional graph settings: `NEO4J_DATABASE` and `NEO4J_SECRET_JSON`.
 
+For the dev AWS/Snowflake path, `MDM_DATABASE_URL` is stored in AWS Secrets
+Manager at `edgartools-dev/mdm/postgres_dsn`. That secret contains the
+Snowflake Postgres application-role DSN for the `mdm` database and must include
+`sslmode=require`.
+
+Load it for local dashboard testing without printing the value:
+
+```bash
+export MDM_DATABASE_URL="$(
+  aws secretsmanager get-secret-value \
+    --profile sec_platform_deployer \
+    --region us-east-1 \
+    --secret-id edgartools-dev/mdm/postgres_dsn \
+    --query SecretString \
+    --output text
+)"
+```
+
+If the secret is JSON, extract the `dsn`, `url`, or `MDM_DATABASE_URL` field
+before exporting it.
+
 ## Launch
 
 ```bash

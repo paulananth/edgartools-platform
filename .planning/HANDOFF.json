@@ -1,73 +1,71 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-08T21:40:05.747Z",
-  "phase": null,
-  "phase_name": "MDM Snowflake Postgres Cutover (Live Execution)",
-  "phase_dir": null,
-  "plan": null,
-  "task": 5,
-  "total_tasks": 8,
-  "status": "paused",
-  "branch": "mdm/snowflake-postgres-cutover-live",
+  "timestamp": "2026-06-15T11:30:00.000Z",
+  "handoff_target": "Claude",
+  "workstream": "go-live",
+  "branch": "workspace/go-live",
+  "head": "07da6ee",
+  "workspace_path": "/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform",
+  "phase": "03",
+  "phase_name": "mdm-hosted-graph-e2e-acceptance",
+  "phase_dir": ".planning/workstreams/go-live/phases/03-mdm-hosted-graph-e2e-acceptance",
+  "plan": "discuss-phase",
+  "task": "discuss-phase-3",
+  "status": "in_progress",
   "completed_tasks": [
-    {"id": 1, "name": "Provision Snowflake Postgres MDM instance + network policy", "status": "done", "commit": "33d5669"},
-    {"id": 2, "name": "Apply schema migrations (mdm migrate) + seed from silver layer", "status": "done", "commit": "uncommitted"},
-    {"id": 3, "name": "Write runtime DSN to Secrets Manager (bootstrap-aws-mdm-secrets.sh)", "status": "done"},
-    {"id": 4, "name": "Redeploy AWS runtime with --mdm-database-source snowflake-postgres", "status": "done", "notes": "Required 3 attempts due to 3 latent infra bugs — all documented in runbook"},
-    {"id": 5, "name": "Regenerate MDM data from silver layer via ECS (companies)", "status": "done", "notes": "companies: 5500, exit_code: 0, duration_ms: 2934665 (~49 min). ECS proven stable — no connection-drop issue."}
+    {
+      "id": "phase-02-complete",
+      "name": "Phase 2 (AWS and Snowflake production deployment dry-run) fully completed: post-execution gates run, 02-VERIFICATION.md created (11/11 must-haves passed), ROADMAP/STATE/REQUIREMENTS updated, LIVE-02/SNOW-01/SNOW-02 marked Complete",
+      "status": "done",
+      "files": [
+        ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-VERIFICATION.md",
+        ".planning/workstreams/go-live/ROADMAP.md",
+        ".planning/workstreams/go-live/STATE.md",
+        ".planning/workstreams/go-live/REQUIREMENTS.md"
+      ]
+    },
+    {
+      "id": "discuss-phase-3-init",
+      "name": "Started /gsd-discuss-phase 3 go-live; ran init.phase-op '3' --ws go-live (read-only)",
+      "status": "done",
+      "checks": [
+        "phase_found: true, phase_name: 'MDM Hosted Graph E2E Acceptance', padded_phase: '03'",
+        "phase_dir: null (not yet created), expected_phase_dir: '.planning/workstreams/go-live/phases/03-mdm-hosted-graph-e2e-acceptance'",
+        "has_research: false, has_context: false, has_plans: false, plan_count: 0"
+      ]
+    }
   ],
   "remaining_tasks": [
-    {"id": 6, "name": "Wait for persons + securities ECS tasks to complete", "status": "in_progress", "notes": "persons task 9fc589d60b84416c9f7dedb3a9af7b4c running, securities task 782333c415654d9eb1458841fdfc255b running (estimated several hours for securities at ~534ms/row for 37102 rows)"},
-    {"id": 7, "name": "Run relationships derivation from ECS once persons+securities done", "status": "not_started", "notes": "Command: ecs run-task edgartools-dev-mdm-medium:69 with ['mdm','run','--entity-type','relationships']"},
-    {"id": 8, "name": "Coverage-report + mdm counts parity verification", "status": "not_started"},
-    {"id": 9, "name": "Step 5: Audit gate (audit-mdm-snowflake-postgres-cutover.py --run-runtime-smoke)", "status": "not_started"},
-    {"id": 10, "name": "Step 6 (CHECKPOINT — IRREVERSIBLE): Remove RDS references via remove-aws-mdm-rds-after-cutover.sh", "status": "not_started", "notes": "GATED ON: full coverage parity confirmed. Must checkpoint with user before running."}
-  ],
-  "blockers": [],
-  "human_actions_pending": [
-    {"action": "Approve Step 6 (RDS removal) after coverage parity is confirmed", "context": "Irreversible — remove-aws-mdm-rds-after-cutover.sh. User has standing preference for checkpoint before every irreversible action.", "blocking": true}
-  ],
-  "decisions": [
-    {"decision": "Run MDM data regeneration from ECS, not local laptop", "rationale": "Local batched runs would take ~15+ hours. ECS (same AWS network) has no connection-drop issue — company full run (5500 rows) completed in ~49 min unbatched. Offset-batching strategy is moot from ECS."},
-    {"decision": "Do NOT use the mdm-check-connectivity Step Functions state machine", "rationale": "It hardcodes a removed --neo4j flag (broken since commit 8784fd5 decommissioned Neo4j). Use ecs run-task directly with ['mdm','check-connectivity'] instead."},
-    {"decision": "Always re-resolve ECR image digests fresh immediately before deploy-aws-application.sh", "rationale": "The script's own ECR cleanup step deletes images matching non-sha-* tags — including the digest just resolved by the caller. Passing stale cached digests breaks the task definition. Always use 'aws ecr describe-images ... sort_by ... [-1]' freshly."},
-    {"decision": "Always pass --edgar-identity-secret-arn explicitly with live-looked-up ARN when redeploying", "rationale": "deploy-aws-application.sh prefers cached manifest ARN over live lookup. If secret was recreated (ARN suffix changed), the manifest caches the dead ARN. Pass --edgar-identity-secret-arn $(aws secretsmanager describe-secret --secret-id edgartools-dev-edgar-identity --query ARN --output text) explicitly."},
-    {"decision": "Discard --offset pagination code changes to pipeline.py/cli.py", "rationale": "Added to support local batched runs when a connection-drop timeout was hypothesised. ECS runs full domains unbatched without issue. Changes are uncommitted on mdm/snowflake-postgres-cutover-live — should be reverted before committing."}
-  ],
-  "uncommitted_files": [
-    "docs/aws-mdm-snowflake-postgres-cutover.md — 3 new known-issue sections with 5-whys root cause analyses",
-    "edgar_warehouse/mdm/cli.py — --offset CLI flag (recommend REVERT: unnecessary, ECS is unbatched)",
-    "edgar_warehouse/mdm/pipeline.py — offset parameter in run_* methods (recommend REVERT: same reason)",
-    "infra/aws-dev-application.json — updated manifest from latest redeploy (should be committed)"
-  ],
-  "ecs_tasks_running": {
-    "persons": {
-      "arn": "arn:aws:ecs:us-east-1:077127448006:task/edgartools-dev-warehouse/9fc589d60b84416c9f7dedb3a9af7b4c",
-      "task_def": "edgartools-dev-mdm-medium:69",
-      "log_stream": "mdm-mdm-medium/edgar-warehouse/9fc589d60b84416c9f7dedb3a9af7b4c",
-      "entity_count_target": 2251
-    },
-    "securities": {
-      "arn": "arn:aws:ecs:us-east-1:077127448006:task/edgartools-dev-warehouse/782333c415654d9eb1458841fdfc255b",
-      "task_def": "edgartools-dev-mdm-medium:69",
-      "log_stream": "mdm-mdm-medium/edgar-warehouse/782333c415654d9eb1458841fdfc255b",
-      "entity_count_target": 37102,
-      "estimated_duration_hours": 5.5
+    {
+      "id": "discuss-phase-3-resume",
+      "name": "Re-invoke /gsd-discuss-phase 3 go-live from the top. init.phase-op result is already known (see completed_tasks); workflow will proceed: check_blocking_antipatterns (no .continue-here.md exists yet in phase 03 dir — dir doesn't exist — so no blocking anti-patterns), check_spec (no SPEC.md), check_existing (no CONTEXT.md, no checkpoint -> load_prior_context), load_prior_context (read .planning/PROJECT.md, .planning/workstreams/go-live/REQUIREMENTS.md, .planning/workstreams/go-live/STATE.md, plus most recent CONTEXT.md files: 02-CONTEXT.md and 01-CONTEXT.md), cross_reference_todos, scout_codebase, analyze_phase, present_gray_areas (AskUserQuestion — interactive), discuss_areas, write_context (creates 03-CONTEXT.md), confirm_creation, git_commit, update_state.",
+      "status": "next"
     }
-  },
-  "ecs_run_config": {
-    "cluster": "edgartools-dev-warehouse",
-    "task_def": "edgartools-dev-mdm-medium:69",
-    "subnet": "subnet-070406420a32a17c5",
-    "security_group_file": "/tmp/mdm-cutover-secrets/sg.txt",
-    "env_overrides": [
-      {"name": "WAREHOUSE_RUNTIME_MODE", "value": "bronze_capture"},
-      {"name": "WAREHOUSE_BRONZE_ROOT", "value": "s3://edgartools-dev-bronze-077127448006/warehouse/bronze"},
-      {"name": "WAREHOUSE_STORAGE_ROOT", "value": "s3://edgartools-dev-warehouse-077127448006/warehouse"},
-      {"name": "SERVING_EXPORT_ROOT", "value": "s3://edgartools-dev-snowflake-export-077127448006/warehouse/artifacts/snowflake_exports/"},
-      {"name": "EDGAR_IDENTITY", "value": "EdgarTools Platform thepaulananth@gmail.com"}
-    ]
-  },
-  "next_action": "Check persons + securities ECS task status via 'aws ecs describe-tasks --region us-east-1 --cluster edgartools-dev-warehouse --tasks <arn> --query tasks[0].{status:lastStatus,exitCode:containers[0].exitCode}'. When both STOPPED exit_code=0, launch relationships run, then verify with mdm counts/coverage-report, then proceed to audit gate (Step 5).",
-  "context_notes": "Three latent infra bugs found during deploy (stale secret ARN, ECR cleanup self-deletion, broken --neo4j flag in SFN). All documented with 5-whys in docs/aws-mdm-snowflake-postgres-cutover.md. ECS connectivity and full-domain population proven stable. Security and credential hygiene: never print plaintext passwords. /tmp/mdm-cutover-secrets/ contains working credential files (chmod 600)."
+  ],
+  "blockers": [
+    {
+      "description": "Prod passive infrastructure (infra/aws-prod-application.json, prod AWS network/storage/runtime Terraform, prod Snowflake connection) still does not exist — carried forward from Phase 2, BLOCKED rows documented in 01-LAUNCH-GATE-MATRIX.md.",
+      "type": "external",
+      "workaround": "Out of scope for Phase 3 discussion itself; relevant context for MDM/hosted-graph E2E acceptance discussion since some MDM secrets/grants depend on prod infra existing."
+    },
+    {
+      "description": "Dev DBT_SNOWFLAKE_* credentials not available in this environment (SNOW-02 dev gate recorded BLOCKED in evidence/snowflake.md).",
+      "type": "external",
+      "workaround": "Not directly relevant to Phase 3 (MDM/Neo4j focus) but carried forward as known environment constraint."
+    },
+    {
+      "description": "Phase 2 has no 02-SECURITY.md; security enforcement defaults to enabled.",
+      "type": "advisory",
+      "workaround": "/gsd:secure-phase 2 go-live is optional, non-blocking per D-01. Not addressed this session; can be done anytime before Phase 2 work is considered fully closed out."
+    }
+  ],
+  "human_actions_pending": [],
+  "decisions": [],
+  "uncommitted_files": [
+    ".planning/HANDOFF.json",
+    ".planning/workstreams/go-live/.continue-here.md"
+  ],
+  "background_processes": [],
+  "next_action": "cd /Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform && git status --short --branch && git add .planning/HANDOFF.json .planning/workstreams/go-live/.continue-here.md && git commit -m 'wip: go-live phase 03 discuss-phase paused before gray-area discussion'. Then re-invoke /gsd-discuss-phase 3 go-live to resume the interactive discussion (present_gray_areas / AskUserQuestion step) for Phase 3 (MDM Hosted Graph E2E Acceptance).",
+  "context_notes": "Phase 2 fully complete and committed (07da6ee). Immediately started /gsd-discuss-phase 3 go-live (the recommended next step) and ran the read-only init.phase-op query for phase 3, then hit CONTEXT CRITICAL (79%) before any analysis, prior-context loading, or user-facing questions. No CONTEXT.md, DISCUSSION-LOG.md, or checkpoint file exists for phase 3 yet — clean restart of discuss-phase is safe and cheap."
 }

@@ -3,7 +3,7 @@
 workstream: mdm-neo4j-dashboard
 status: active
 milestone: v1.2 MDM Neo4j Review Dashboard
-updated: 2026-05-17
+updated: 2026-06-13
 
 ---
 
@@ -15,7 +15,7 @@ Build a read-only dashboard for reviewing MDM relational data and Neo4j graph da
 
 ## Phases
 
-- [ ] **Phase 8: Dashboard Foundations And Read-Only Data Access** - establish the dashboard shell, read-only MDM access, read-only Neo4j access, and configuration safety
+- [x] **Phase 8: Dashboard Foundations And Read-Only Data Access** - establish the dashboard shell, read-only MDM access, read-only Neo4j access, and configuration safety (completed 2026-06-13)
 - [ ] **Phase 9: MDM And Neo4j Review Metrics** - expose entity counts, relationship counts, pending sync, and missing-edge comparison queries
 - [x] **Phase 10: Operator Review Experience** - build review-first dashboard views, bounded filters, error states, and run documentation (completed 2026-06-04)
 
@@ -72,6 +72,6 @@ Build a read-only dashboard for reviewing MDM relational data and Neo4j graph da
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 8. Dashboard Foundations And Read-Only Data Access | v1.2 MDM Neo4j Review Dashboard | 3/3 | Verification pending | - |
+| 8. Dashboard Foundations And Read-Only Data Access | v1.2 MDM Neo4j Review Dashboard | 3/3 | Complete | 2026-06-13 |
 | 9. MDM And Neo4j Review Metrics | v1.2 MDM Neo4j Review Dashboard | 0/TBD | Not started | - |
 | 10. Operator Review Experience | v1.2 MDM Neo4j Review Dashboard | 4/4 | Complete    | 2026-06-04 |

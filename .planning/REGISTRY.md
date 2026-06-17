@@ -14,6 +14,20 @@ Worktree convention: `/Users/aneenaananth/gsd-workspaces/<workstream>/edgartools
 
 ## Active Workstreams
 
+### go-live
+
+| Field | Value |
+|-------|-------|
+| **Runtime** | Codex |
+| **Status** | active |
+| **Branch** | `workspace/go-live` |
+| **Worktree path** | `/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform` |
+| **Claimed at** | 2026-06-13T19:52:40Z |
+| **Last session** | 2026-06-13 |
+| **Current phase** | Phase 1 - Production Readiness Inventory And Launch Gate Contract |
+| **Current plan** | TBD |
+| **Blocking** | - |
+
 ### neo4j-pipe
 
 | Field | Value |
