@@ -594,15 +594,16 @@ matches the Stage 5 `prior_year_values`/`is_current_period` logic).
   series) produces consistent non-zero YoY across both rows; the earliest
   periods (2007-2009, no prior-year comparative available) correctly show
   zero/null YoY.
-- **New follow-up (not yet filed as its own item):** no existing code path
-  uploads `silver/fundamentals/shard-0.duckdb` to S3 after
-  `bootstrap-fundamentals` runs — `_hydrate_fundamentals_shard` in
-  `warehouse_orchestrator.py` only *downloads* it for `gold-refresh`. In a
-  remote-storage (S3) environment, `bootstrap-fundamentals` output is
-  effectively stranded locally unless manually uploaded (as done here). Needs
-  an upload step analogous to the existing ownership-shard publish path
-  (`silver/sec/shards/shard-N.duckdb`) before this can run unattended in CI/
-  Step Functions.
+- **T1 RESOLVED 2026-06-17:** `bootstrap-fundamentals` had no S3 upload step
+  after writing `silver/fundamentals/shard-0.duckdb` — in ECS the shard was
+  silently discarded on container exit. Fixed by adding
+  `_publish_fundamentals_shard_if_remote` to `warehouse_orchestrator.py`
+  (mirror of `_hydrate_fundamentals_shard`) and calling it from
+  `bootstrap_fundamentals.execute` after `db.close()`. Upload is gated on
+  `WAREHOUSE_STORAGE_ROOT` env var (absent in local dev → no-op). Upload
+  failure returns exit code 1 (distinct from config error 2) so Step Functions
+  marks the task failed rather than silently losing data. Tests added to
+  `tests/application/test_warehouse_orchestrator_mdm.py`.
 
 **What:** `dbt run --select financial_derived --full-refresh` (run as
 `EDGARTOOLS_DEV_DEPLOYER`, the standard dbt deploy role) fails:

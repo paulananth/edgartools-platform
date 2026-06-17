@@ -158,6 +158,31 @@ def execute(args: Any) -> int:
 
     db.close()
 
+    # Upload shard to remote storage so gold-refresh can consume it.
+    # ECS container filesystems are ephemeral — without this the shard is lost on exit.
+    storage_root_uri = os.environ.get("WAREHOUSE_STORAGE_ROOT", "")
+    if storage_root_uri:
+        from edgar_warehouse.application.warehouse_orchestrator import (
+            _publish_fundamentals_shard_if_remote,
+        )
+        try:
+            upload_result = _publish_fundamentals_shard_if_remote(
+                local_shard_path=fundamentals_silver_path,
+                storage_root_uri=storage_root_uri,
+            )
+            if upload_result:
+                _log(
+                    "fundamentals_shard_uploaded",
+                    destination=upload_result["path"],
+                    size_bytes=upload_result["size_bytes"],
+                    run_id=run_id,
+                )
+                metrics["fundamentals_shard_uploaded"] = True
+                metrics["fundamentals_shard_size_bytes"] = upload_result["size_bytes"]
+        except Exception as exc:
+            _err(f"Failed to upload fundamentals shard to remote storage: {exc}")
+            return 1
+
     duration = (datetime.now(UTC) - started_at).total_seconds()
     payload = {
         "command": "bootstrap-fundamentals",

@@ -709,6 +709,46 @@ def _hydrate_fundamentals_shard(context: WarehouseCommandContext) -> str | None:
     return str(local_path)
 
 
+def _publish_fundamentals_shard_if_remote(
+    local_shard_path: str,
+    storage_root_uri: str,
+) -> dict[str, Any] | None:
+    """Upload silver/fundamentals/shard-0.duckdb to remote storage.
+
+    Mirror of _hydrate_fundamentals_shard: hydrate downloads, this uploads.
+    Called by bootstrap-fundamentals after closing the shard so gold-refresh
+    can consume the data from S3 (ECS container filesystem is ephemeral).
+
+    Returns a write-record dict on upload, or None if storage is local.
+    Raises WarehouseRuntimeError if the local file does not exist.
+    """
+    storage = StorageLocation(root=storage_root_uri)
+    if not storage.is_remote:
+        return None
+
+    local_path = Path(local_shard_path)
+    if not local_path.exists():
+        raise WarehouseRuntimeError(
+            f"Fundamentals shard not found at {local_path}"
+        )
+
+    relative_path = "silver/fundamentals/shard-0.duckdb"
+    destination = storage.upload_file(relative_path, local_path)
+    size_bytes = local_path.stat().st_size
+    _emit_pipeline_event(
+        "fundamentals_shard_published",
+        path=destination,
+        local_path=str(local_path),
+        size_bytes=size_bytes,
+    )
+    return {
+        "layer": "fundamentals_shard",
+        "path": destination,
+        "relative_path": relative_path,
+        "size_bytes": size_bytes,
+    }
+
+
 def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict[str, Any] | None:
     if not context.storage_root.is_remote:
         return None
