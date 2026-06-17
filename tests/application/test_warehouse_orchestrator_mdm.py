@@ -267,3 +267,153 @@ def test_apply_bronze_cik_limit_emits_deprecation_warning(monkeypatch):
         result = _apply_bronze_cik_limit([100, 200, 300, 400, 500])
 
     assert result == [100, 200, 300]
+
+
+# ---------------------------------------------------------------------------
+# _publish_fundamentals_shard_if_remote — T1 upload gap fix
+# ---------------------------------------------------------------------------
+
+def test_publish_fundamentals_shard_returns_none_for_local_storage(tmp_path):
+    """Local storage_root_uri → skip upload, return None."""
+    shard = tmp_path / "shard-0.duckdb"
+    shard.write_bytes(b"duckdb")
+
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _publish_fundamentals_shard_if_remote,
+    )
+    result = _publish_fundamentals_shard_if_remote(
+        local_shard_path=str(shard),
+        storage_root_uri=str(tmp_path / "storage"),
+    )
+    assert result is None
+
+
+def test_publish_fundamentals_shard_uploads_to_remote(tmp_path):
+    """Remote storage_root_uri → upload shard and return write-record dict."""
+    shard = tmp_path / "shard-0.duckdb"
+    shard.write_bytes(b"duckdb-data")
+
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _publish_fundamentals_shard_if_remote,
+    )
+    with patch(
+        "edgar_warehouse.application.warehouse_orchestrator.StorageLocation"
+    ) as MockStorage:
+        mock_storage = MockStorage.return_value
+        mock_storage.is_remote = True
+        mock_storage.upload_file.return_value = "s3://bucket/warehouse/silver/fundamentals/shard-0.duckdb"
+
+        result = _publish_fundamentals_shard_if_remote(
+            local_shard_path=str(shard),
+            storage_root_uri="s3://bucket/warehouse",
+        )
+
+    assert result is not None
+    assert result["layer"] == "fundamentals_shard"
+    assert result["relative_path"] == "silver/fundamentals/shard-0.duckdb"
+    assert result["size_bytes"] == len(b"duckdb-data")
+    mock_storage.upload_file.assert_called_once_with(
+        "silver/fundamentals/shard-0.duckdb", shard
+    )
+
+
+def test_publish_fundamentals_shard_raises_when_file_missing(tmp_path):
+    """Missing local shard → WarehouseRuntimeError (not silent data loss)."""
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _publish_fundamentals_shard_if_remote,
+    )
+    with patch(
+        "edgar_warehouse.application.warehouse_orchestrator.StorageLocation"
+    ) as MockStorage:
+        mock_storage = MockStorage.return_value
+        mock_storage.is_remote = True
+
+        with pytest.raises(WarehouseRuntimeError, match="not found"):
+            _publish_fundamentals_shard_if_remote(
+                local_shard_path=str(tmp_path / "missing.duckdb"),
+                storage_root_uri="s3://bucket/warehouse",
+            )
+
+
+# ---------------------------------------------------------------------------
+# bootstrap_fundamentals.execute — upload block wiring
+# ---------------------------------------------------------------------------
+
+def test_bootstrap_fundamentals_skips_upload_without_storage_root(
+    tmp_path, monkeypatch
+):
+    """No WAREHOUSE_STORAGE_ROOT → upload block is skipped entirely."""
+    monkeypatch.delenv("WAREHOUSE_STORAGE_ROOT", raising=False)
+    monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
+
+    shard_path = tmp_path / "shard-0.duckdb"
+    shard_path.write_bytes(b"duckdb")
+
+    from edgar_warehouse.application.commands import bootstrap_fundamentals
+
+    with patch(
+        "edgar_warehouse.application.commands.bootstrap_fundamentals._resolve_fundamentals_ciks",
+        return_value=[320193],
+    ), patch(
+        "edgar_warehouse.silver_support.session.open_silver_shard"
+    ) as mock_open, patch(
+        "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
+        return_value={"entity_facts_written": 1},
+    ), patch(
+        "edgar_warehouse.application.warehouse_orchestrator._publish_fundamentals_shard_if_remote"
+    ) as mock_upload:
+        mock_db = MagicMock()
+        mock_open.return_value = mock_db
+
+        class _Args:
+            cik_list = [320193]
+            mode = "entity-facts"
+            run_id = "test-run"
+            fundamentals_silver_path = str(shard_path)
+            cik_offset = 0
+            cik_limit = None
+
+        rc = bootstrap_fundamentals.execute(_Args())
+
+    assert rc == 0
+    mock_upload.assert_not_called()
+
+
+def test_bootstrap_fundamentals_upload_failure_returns_exit_code_1(
+    tmp_path, monkeypatch
+):
+    """Upload error → exit code 1 (distinct from config error 2)."""
+    monkeypatch.setenv("WAREHOUSE_STORAGE_ROOT", "s3://bucket/warehouse")
+    monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
+
+    shard_path = tmp_path / "shard-0.duckdb"
+    shard_path.write_bytes(b"duckdb")
+
+    from edgar_warehouse.application.commands import bootstrap_fundamentals
+
+    with patch(
+        "edgar_warehouse.application.commands.bootstrap_fundamentals._resolve_fundamentals_ciks",
+        return_value=[320193],
+    ), patch(
+        "edgar_warehouse.silver_support.session.open_silver_shard"
+    ) as mock_open, patch(
+        "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
+        return_value={"entity_facts_written": 1},
+    ), patch(
+        "edgar_warehouse.application.warehouse_orchestrator._publish_fundamentals_shard_if_remote",
+        side_effect=WarehouseRuntimeError("S3 write failed"),
+    ):
+        mock_db = MagicMock()
+        mock_open.return_value = mock_db
+
+        class _Args:
+            cik_list = [320193]
+            mode = "entity-facts"
+            run_id = "test-run"
+            fundamentals_silver_path = str(shard_path)
+            cik_offset = 0
+            cik_limit = None
+
+        rc = bootstrap_fundamentals.execute(_Args())
+
+    assert rc == 1
