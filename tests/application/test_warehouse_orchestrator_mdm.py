@@ -3,6 +3,9 @@ for company universe tracking. Silver DuckDB fallbacks have been removed.
 """
 from __future__ import annotations
 
+import io
+import json
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -360,6 +363,9 @@ def test_bootstrap_fundamentals_skips_upload_without_storage_root(
         "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
         return_value={"entity_facts_written": 1},
     ), patch(
+        "edgar_warehouse.parsers.accounting_flags.backfill_accounting_flags",
+        return_value=0,
+    ), patch(
         "edgar_warehouse.application.warehouse_orchestrator._publish_fundamentals_shard_if_remote"
     ) as mock_upload:
         mock_db = MagicMock()
@@ -399,6 +405,9 @@ def test_bootstrap_fundamentals_upload_failure_returns_exit_code_1(
     ) as mock_open, patch(
         "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
         return_value={"entity_facts_written": 1},
+    ), patch(
+        "edgar_warehouse.parsers.accounting_flags.backfill_accounting_flags",
+        return_value=0,
     ), patch(
         "edgar_warehouse.application.warehouse_orchestrator._publish_fundamentals_shard_if_remote",
         side_effect=WarehouseRuntimeError("S3 write failed"),
@@ -447,14 +456,15 @@ def test_bootstrap_fundamentals_upload_success_sets_metrics(
         "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
         return_value={"entity_facts_written": 1},
     ), patch(
+        "edgar_warehouse.parsers.accounting_flags.backfill_accounting_flags",
+        return_value=0,
+    ), patch(
         "edgar_warehouse.application.warehouse_orchestrator._publish_fundamentals_shard_if_remote",
         return_value=upload_record,
     ):
         mock_db = MagicMock()
         mock_open.return_value = mock_db
 
-        import io, json
-        from contextlib import redirect_stdout
         buf = io.StringIO()
 
         class _Args:
