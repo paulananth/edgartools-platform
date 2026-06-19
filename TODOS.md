@@ -726,3 +726,72 @@ were never reconciled with pre-existing out-of-band secrets.
 
 **Surfaced:** carried over from `.continue-here.md` (Stage-1 PK-collision
 handoff), resolved 2026-06-11.
+
+---
+
+## Production dashboard UAT
+
+**What:** Run dashboard UAT against production Snowflake/MDM connections
+once prod credentials and infrastructure are available.
+
+**Why:** Phase 4 dashboard UAT (go-live workstream) ran only against dev
+credentials; the launch gate matrix lists "Dashboard operator inspection
+views" as BLOCKED until a prod UAT pass is recorded as separate evidence.
+Dev evidence is precedent only and does not substitute for prod proof.
+
+**Where:** `.planning/workstreams/go-live/phases/04-operator-dashboard-and-data-issue-triage/` (dev UAT evidence); prod UAT evidence to be captured under the go-live workstream when prod credentials exist.
+
+---
+
+## Production MDM secrets population runbook execution
+
+**What:** Execute the MDM secrets runbook against real production values to
+populate `edgartools-prod/mdm/postgres_dsn` and `edgartools-prod/mdm/snowflake`
+in Secrets Manager.
+
+**Why:** The launch gate matrix's "MDM Snowflake Postgres secret container
+and connectivity" row is BLOCKED — the runbook steps are documented but have
+not yet been executed against real prod secret values, so prod MDM
+connectivity is unverified.
+
+**Where:** `.planning/workstreams/go-live/phases/03-mdm-hosted-graph-e2e-acceptance/runbook/mdm-secrets.md` (runbook to execute); `.planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md` (Required Production Identifiers checklist).
+
+---
+
+## EDGARTOOLS_PROD_DEPLOYER direct SELECT grants on EDGARTOOLS_SOURCE
+
+**What:** Grant the `EDGARTOOLS_PROD_DEPLOYER` role direct `SELECT` on
+`EDGARTOOLS_SOURCE` tables before any `dbt run --full-refresh` is attempted
+against production dynamic tables.
+
+**Why:** This is the production analog of the dev gap already documented
+above for `EDGARTOOLS_DEV_DEPLOYER` — Snowflake's dynamic-table INITIAL
+refresh checks the owner role's *direct* grants only, and a role lacking
+direct `SELECT` on `EDGARTOOLS_SOURCE` will fail `--full-refresh` with
+"not authorized" even though ad-hoc queries succeed via secondary roles.
+Without this grant in place ahead of time, the first production
+`--full-refresh` of any `EDGARTOOLS_GOLD` dynamic table will fail.
+
+**Where:** `infra/snowflake/dbt/edgartools_gold/` (dbt project); CLAUDE.md
+"dbt gold model SQL changes — smoke test convention" section (dev-side
+precedent and known gap).
+
+---
+
+## External Neo4j runtime remnant deprecation
+
+**What:** Formally remove or deprecate any remaining external (Aura) Neo4j
+runtime references and infrastructure remnants now that the platform is
+fully migrated to the Snowflake-hosted graph Native App.
+
+**Why:** Phase 4 already cleaned up `NEO4J_*` environment variable
+references from the dashboard README, but a formal Neo4j runtime remnant
+deprecation pass (any remaining Terraform resources, secrets, or
+documentation pointing at an external Neo4j runtime) has not been done.
+This is tracked as a deferred "Future Requirements" item in
+REQUIREMENTS.md and should not silently expand the go-live milestone
+scope.
+
+**Where:** REQUIREMENTS.md ("Future Requirements" section); search for
+remaining `NEO4J_*`/Aura references outside the dashboard README already
+cleaned up in Phase 4.
