@@ -55,7 +55,7 @@ completed: 2026-06-19
 - Confirmed `:prod` tag present on both `edgartools-dev-warehouse` and `edgartools-dev-mdm` ECR images, registry-side re-tag, no docker pull/push
 - Verified the EDGAR identity secret ARN and both image digests were resolved fresh, in-session, after the deploy script's internal `cleanup-ecr-images.sh --apply` step ran (matrix rows 16/17 mitigations)
 - Confirmed `deploy-aws-application.sh --env prod --enable-mdm --skip-build` exited 0 and produced `infra/aws-prod-application.json` at the repo root
-- Verified the manifest structurally (17 top-level keys, 22 state machine names, 5 task definitions) without printing any ARN, digest value, or the JSON body
+- Verified the manifest structurally (18 top-level keys, 22 state machine names, 5 task definitions) without printing any ARN, digest value, or the JSON body
 - Appended a non-secret Phase 6 Plan 02 evidence section to the phase-01 `evidence/aws.md`
 - Flipped launch gate matrix rows 12, 14, 15, 16, 17 from BLOCKED to PASS with concrete citations; row 13 (dev→prod bronze sync) correctly left BLOCKED with an updated prerequisite note (prod bronze bucket now exists, sync itself out of scope)
 - Caught and fixed a state-machine count discrepancy (21 vs. the actual 22) in the evidence draft before committing

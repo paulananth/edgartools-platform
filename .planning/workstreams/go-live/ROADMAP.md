@@ -158,7 +158,7 @@ contracts, flips the launch decision only if every blocker is PASS, and hands of
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | LIVE-04 | Phase 6 | Complete |
-| LIVE-05 | Phase 6 | Pending |
+| LIVE-05 | Phase 6 | Complete |
 | SNOW-03 | Phase 7 | Pending |
 | SNOW-04 | Phase 7 | Pending |
 | MDM-02 | Phase 8 | Pending |
