@@ -31,10 +31,10 @@ and captures non-secret evidence for both passive outputs and active app manifes
 **Depends on:** v1.5 launch gate matrix, `runbook/aws-deploy.md`, approved image references,
 and AWS operator approval.
 
-**Plans:** 2
+**Plans:** 2/2 plans complete
 
 - [x] **06-01:** Prod Terraform apply and passive infrastructure evidence capture.
-- [ ] **06-02:** Active AWS application deploy, `infra/aws-prod-application.json` presence/summary evidence, and launch gate matrix update.
+- [x] **06-02:** Active AWS application deploy, `infra/aws-prod-application.json` presence/summary evidence, and launch gate matrix update.
 
 **Success criteria:**
 
