@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
-status: ready_for_phase_planning
-stopped_at: Milestone v1.6 roadmap approved; paused before Phase 6 discussion/planning
-last_updated: "2026-06-19T10:56:24Z"
-last_activity: 2026-06-19 -- /gsd-pause-work: v1.6 roadmap approved, handoff created for Phase 6 start
+status: Roadmap approved; ready to discuss or plan Phase 6
+stopped_at: Phase 6 context gathered
+last_updated: "2026-06-19T11:55:41.718Z"
+last_activity: 2026-06-19 -- Milestone v1.6 roadmap approved and handoff created
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 11
+  total_plans: 0
   completed_plans: 0
   percent: 0
 ---
@@ -49,6 +49,7 @@ Branch: `codex/go-live-v1.6-production-launch`
 - [Phase 05]: TODOS.md D-05b follow-up items appended append-only: prod dashboard UAT, prod MDM secrets runbook execution, EDGARTOOLS_PROD_DEPLOYER grants, external Neo4j runtime remnant deprecation
 - [Milestone v1.6]: Continue phase numbering from v1.5; do not delete v1.5 phase
   evidence because the archived roadmap and go/no-go packet still link to those files.
+
 - [Milestone v1.6]: Research is optional and disabled by workstream default; production
   launch execution should prefer existing runbooks and evidence gates over new architecture.
 
@@ -58,6 +59,7 @@ Branch: `codex/go-live-v1.6-production-launch`
 - Dashboard UAT passed locally after loading MDM configuration from AWS Secrets Manager without printing the DSN.
 - v1.5 shipped a secret-safe launch gate matrix, production runbooks, go/no-go packet,
   rollback procedures, and post-launch monitoring checklist.
+
 - `neo4j-snowflake` Phase 4 still has hosted graph dashboard documentation and final evidence closeout work recorded in its state.
 - Phase 1 produced `01-LAUNCH-GATE-MATRIX.md`, four `evidence/*.md` templates, and `01-VERIFICATION.md` under the go-live workstream.
 - Phase 1 verification passed for LIVE-01, SEC-01, ISO-01, and ISO-02; production readiness itself remains blocked until later phases capture prod proof.
@@ -67,11 +69,14 @@ Branch: `codex/go-live-v1.6-production-launch`
 
 - Blocker 1: Prod AWS infrastructure is not yet applied; `infra/aws-prod-application.json`
   is absent until live production discovery or successful production deploy supplies equivalent evidence.
+
 - Blocker 2: Production MDM Secrets Manager values are not populated for
   `edgartools-prod/mdm/postgres_dsn` and `edgartools-prod/mdm/snowflake`.
+
 - Blocker 3: Prod Snowflake native pull and dbt gold deployment have not yet run.
 - Blocker 4: Prod hosted graph E2E has not yet passed against production Snowflake,
   MDM secrets, and Native App compute pool.
+
 - Blocker 5: Prod dashboard UAT has not yet run against a production or
   production-like read-only configuration.
 
@@ -95,9 +100,9 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-19T10:56:24.417Z
-Stopped at: Milestone v1.6 roadmap approved; paused before Phase 6 discussion/planning.
-Resume file: .planning/workstreams/go-live/ROADMAP.md (Current Milestone section)
+Last session: 2026-06-19T11:55:41.705Z
+Stopped at: Phase 6 context gathered
+Resume file: .planning/workstreams/go-live/phases/06-production-aws-infrastructure-and-application-deploy/06-CONTEXT.md
 Resume command: Run `/gsd:discuss-phase 6 --ws go-live` or `/gsd:plan-phase 6 --ws go-live`.
 
 ## Performance Metrics
