@@ -1,10 +1,10 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-19T23:26:05.715Z",
+  "timestamp": "2026-06-19T23:55:00.000Z",
   "context": "workstream",
   "workstream": "go-live",
   "branch": "claude/go-live-v1.6-phase6",
-  "head": "17a655a",
+  "head": "0f37393",
   "workspace_path": "/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform",
   "phase": "06",
   "phase_name": "production-aws-infrastructure-and-application-deploy",
@@ -12,7 +12,21 @@
   "plan": null,
   "task": null,
   "total_tasks": null,
-  "status": "phase_complete",
+  "status": "handed_off_to_codex",
+  "handoff_notice": "HARD RULE (CLAUDE.md): Claude and Codex must never commit to the same branch. claude/go-live-v1.6-phase6 is Claude-owned and pushed to origin. Before any commit, run: git fetch origin claude/go-live-v1.6-phase6 && git checkout -b codex/go-live-v1.6-phase6-continuation origin/claude/go-live-v1.6-phase6",
+  "ship_workflow_state": {
+    "in_progress": true,
+    "base_branch": "main",
+    "rebase_done": true,
+    "tests_passed": true,
+    "test_note": "455 passed after installing the locally-missing 'mdm' uv extra in this worktree's venv — a venv gap, not a real bug; no source change needed",
+    "coverage_audit": "skipped — no new application code paths (docs + 1-line versions.tf fix)",
+    "plan_completion_audit": "skipped — GSD's own 06-VERIFICATION.md already covers this (PASSED, 10/10 must-haves)",
+    "scope_drift": "CLEAN",
+    "pre_landing_review": "2 informational findings, both auto-fixed and committed as 0f37393 (ROADMAP.md LIVE-05 Pending→Complete; 06-02-SUMMARY.md stale 17→18 key count)",
+    "stopped_at": "Step 9 completion — per /ship's own rule, a run that applies fixes must stop and the next /ship run re-verifies from scratch",
+    "next_steps_not_yet_run": ["re-run /ship to re-verify Steps 0-9 are clean", "Step 9.1+ Greptile (no PR exists yet, will be a no-op)", "adversarial review", "TODOS.md check", "CHANGELOG/VERSION bump (this repo has neither file, so likely not applicable)", "push + PR creation targeting main"]
+  },
   "completed_tasks": [
     {
       "id": "06-01",
