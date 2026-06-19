@@ -26,6 +26,7 @@ htmlcov/
 terraform.tfstate
 terraform.tfstate.*
 *.tfplan
+infra/terraform/**/tfplan
 .terraform/
 .terraform.lock.hcl
 infra/terraform/**/backend.hcl
