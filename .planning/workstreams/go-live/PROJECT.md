@@ -15,6 +15,32 @@ handling.
 
 ---
 
+## Current Milestone: v1.6 Production Launch Execution
+
+**Goal:** Turn the v1.5 `NO-GO - Conditional` launch decision into `GO` by executing the
+documented production sequence and capturing secret-safe PASS evidence.
+
+**Target features:**
+
+- Prod AWS infrastructure is applied and the active AWS application deploy is recorded with
+  non-secret evidence.
+- Prod MDM Secrets Manager values are populated for the two required production secrets,
+  then MDM connectivity, migration, and counts pass.
+- Snowflake native pull is deployed for production, and `dbt run --target prod` plus
+  `dbt test --target prod` pass with freshness evidence.
+- Prod hosted graph E2E passes through bounded `mdm sync-graph`, strict
+  `mdm verify-graph`, and AWS MDM E2E execution.
+- Dashboard reviewer completes production or production-like read-only UAT for all 5
+  launch-critical views.
+- Release owner flips the go/no-go packet only after all five blockers report PASS.
+
+**Success metric:** the five blocker themes in
+`phases/05-go-no-go-launch-evidence-and-handoff/05-GO-NO-GO-PACKET.md` move from
+NO-GO to PASS with owner sign-off, ordered execution, and evidence that preserves the
+v1.5 secret-safety contract.
+
+---
+
 ## Current State
 
 **Shipped:** v1.5 Go Live (2026-06-19) — see [`milestones/v1.5-ROADMAP.md`](milestones/v1.5-ROADMAP.md) and [`milestones/v1.5-REQUIREMENTS.md`](milestones/v1.5-REQUIREMENTS.md).
@@ -42,10 +68,10 @@ itself the next milestone's work, not a continuation of v1.5 planning.
 
 ---
 
-## Next Milestone Goals
+## Active Milestone Goals
 
-Candidate scope for the next milestone (execute the actual production launch sequence
-documented in `05-GO-NO-GO-PACKET.md`):
+Scope for v1.6 (execute the actual production launch sequence documented in
+`05-GO-NO-GO-PACKET.md`):
 
 - AWS operator applies the prod Terraform stack and runs the production deploy script.
 - MDM operator populates the two production secrets and re-verifies connectivity/migration/counts.
@@ -61,7 +87,9 @@ Also carried forward from v1.5's Future Requirements (re-scope as needed):
 - Production cost dashboards for Snowflake Native App compute pools and AWS Step Functions runs.
 - Removal or formal deprecation of external Neo4j runtime remnants after production hosted graph validation is stable.
 
-Start with `/gsd:new-milestone --ws go-live` to define fresh requirements for this scope.
+The milestone remains AWS/Snowflake-focused and does not authorize out-of-order
+production writes. Each production action must follow the existing runbooks, owner
+approvals, and evidence-capture rules.
 
 ---
 
