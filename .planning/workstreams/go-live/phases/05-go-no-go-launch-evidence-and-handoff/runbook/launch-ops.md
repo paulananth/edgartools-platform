@@ -95,7 +95,7 @@ snow sql --connection <conn> \
 Suspending a task is always safe to do and always safe to undo — it leaves
 the last successful refresh of the dynamic table in place. If a dynamic-table
 refresh failed mid-run, recover by re-running dbt against the same target
-following [`runbook/dbt-gold.md`](../02-aws-and-snowflake-production-deployment-dry-run/runbook/dbt-gold.md)
+following [`runbook/dbt-gold.md`](../../02-aws-and-snowflake-production-deployment-dry-run/runbook/dbt-gold.md)
 (link, not pasted here). Before re-running dbt, confirm freshness and current
 status read-only:
 
@@ -229,13 +229,13 @@ Rules in the launch gate matrix.
 
 ## References
 
-- [`../01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md`](../01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md)
+- [`../01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md`](../../01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md)
   — authoritative per-gate list and full Secret-Safety Rules section.
-- [`../02-aws-and-snowflake-production-deployment-dry-run/runbook/aws-deploy.md`](../02-aws-and-snowflake-production-deployment-dry-run/runbook/aws-deploy.md)
+- [`../02-aws-and-snowflake-production-deployment-dry-run/runbook/aws-deploy.md`](../../02-aws-and-snowflake-production-deployment-dry-run/runbook/aws-deploy.md)
   — AWS production deploy procedure this runbook's Step Functions stop path complements.
-- [`../02-aws-and-snowflake-production-deployment-dry-run/runbook/dbt-gold.md`](../02-aws-and-snowflake-production-deployment-dry-run/runbook/dbt-gold.md)
+- [`../02-aws-and-snowflake-production-deployment-dry-run/runbook/dbt-gold.md`](../../02-aws-and-snowflake-production-deployment-dry-run/runbook/dbt-gold.md)
   — dbt run/test procedure referenced for Snowflake task recovery above.
-- [`../03-mdm-hosted-graph-e2e-acceptance/runbook/mdm-secrets.md`](../03-mdm-hosted-graph-e2e-acceptance/runbook/mdm-secrets.md)
+- [`../03-mdm-hosted-graph-e2e-acceptance/runbook/mdm-secrets.md`](../../03-mdm-hosted-graph-e2e-acceptance/runbook/mdm-secrets.md)
   — MDM production secrets runbook; populate secrets before any MDM rerun that needs them.
 - [`../05-GO-NO-GO-PACKET.md`](../05-GO-NO-GO-PACKET.md)
   — companion go/no-go launch decision packet; this runbook is the "how to
