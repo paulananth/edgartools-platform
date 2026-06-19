@@ -34,7 +34,7 @@ updated: 2026-06-13
 
 ### Operations And Security
 
-- [ ] **OPS-01**: Go/no-go runbook lists launch commands, expected pass criteria, rollback or stop procedures, resume steps, required approvals, and evidence capture rules.
+- [x] **OPS-01**: Go/no-go runbook lists launch commands, expected pass criteria, rollback or stop procedures, resume steps, required approvals, and evidence capture rules.
 - [ ] **OPS-02**: Post-launch monitoring and incident checklist covers Step Functions status, CloudWatch logs, Snowflake task/dbt failures, Native App compute pool health, dashboard availability, and escalation paths.
 - [x] **SEC-01**: Evidence bundle is secret-scrubbed, IAM and Snowflake grants are reviewed for launch scope, and no DSNs, tokens, passwords, Terraform state, or sensitive generated deployment values are committed.
 
@@ -79,7 +79,7 @@ updated: 2026-06-13
 | DASH-01 | Phase 4 | Pending |
 | DASH-02 | Phase 4 | Pending |
 | DASH-03 | Phase 4 | Pending |
-| OPS-01 | Phase 5 | Pending |
+| OPS-01 | Phase 5 | Complete |
 | OPS-02 | Phase 5 | Pending |
 
 **Coverage:**
