@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
 status: executing
-stopped_at: Phase 6 context gathered
-last_updated: "2026-06-19T16:05:00.000Z"
-last_activity: 2026-06-19 -- Phase 06 Plan 01 Task 1 complete; awaiting Task 2 apply approval
+stopped_at: Phase 6 Plan 01 complete; Plan 02 not yet started
+last_updated: "2026-06-19T17:00:00.000Z"
+last_activity: 2026-06-19 -- Phase 06 Plan 01 complete (all 3 tasks); LIVE-04 satisfied, Blocker 1 remediated
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 2
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 9
 ---
 
 # Project State - go-live
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 06 (Production AWS Infrastructure And Application Deploy) — EXECUTING
-Plan: 1 of 2
-Status: Plan 06-01 Task 1 complete (commit a6f6dad); blocked at Task 2 checkpoint:decision (blocking) awaiting explicit terraform apply approval
-Last activity: 2026-06-19 -- Phase 06 Plan 01 Task 1 complete; awaiting Task 2 apply approval
+Plan: 1 of 2 COMPLETE; 2 of 2 not started
+Status: Plan 06-01 complete — Task 1 (commit a6f6dad), Task 2 approved by user ("approved"), Task 3 (commit 92b7127). terraform apply succeeded (42 added, 0 changed, 0 destroyed); edgartools-prod-edgar-identity secret populated; 4 MDM secrets remain empty shells; non-secret evidence appended to phase-01 evidence/aws.md.
+Last activity: 2026-06-19 -- Phase 06 Plan 01 complete (all 3 tasks); LIVE-04 satisfied, Blocker 1 remediated
 
-Progress: 0% (0/6 phases complete, 0/11 plans complete)
+Progress: 9% (0/6 phases complete, 1/11 plans complete)
 
 ## Milestone Context
 
@@ -52,6 +52,15 @@ Branch: `codex/go-live-v1.6-production-launch`
 
 - [Milestone v1.6]: Research is optional and disabled by workstream default; production
   launch execution should prefer existing runbooks and evidence gates over new architecture.
+- [Phase 06 Plan 01]: terraform apply tfplan run from the exact saved/approved plan file
+  (no re-plan) per D-04; first real production state change in the go-live workstream
+  (42 added, 0 changed, 0 destroyed). Only edgartools-prod-edgar-identity received a
+  put-secret-value call; the 4 MDM secret containers remain empty shells deferred to
+  Phase 8 / MDM-02.
+- [Phase 06 Plan 01]: AWS Secrets Manager CLI calls require an explicit `--region us-east-1`
+  flag in this environment — the default AWS CLI profile region (`us-east-2`) caused a
+  transient ResourceNotFoundException on the first put-secret-value attempt despite the
+  secret existing.
 
 ## Known Inputs
 
@@ -67,8 +76,11 @@ Branch: `codex/go-live-v1.6-production-launch`
 
 ## Blockers
 
-- Blocker 1: Prod AWS infrastructure is not yet applied; `infra/aws-prod-application.json`
-  is absent until live production discovery or successful production deploy supplies equivalent evidence.
+- Blocker 1: PARTIALLY REMEDIATED (2026-06-19, Plan 06-01) — prod passive AWS infrastructure
+  (VPC, S3, KMS, ECR, ECS cluster/logs, SNS, 5 secret containers, edgar-identity secret value)
+  is now applied; see phase-01 `evidence/aws.md` "Phase 6 Production Apply" section. The
+  remaining piece — `infra/aws-prod-application.json` (active application deploy manifest) —
+  is still absent and is Plan 06-02 scope.
 
 - Blocker 2: Production MDM Secrets Manager values are not populated for
   `edgartools-prod/mdm/postgres_dsn` and `edgartools-prod/mdm/snowflake`.
@@ -82,12 +94,9 @@ Branch: `codex/go-live-v1.6-production-launch`
 
 ## Pending Todos
 
-- Discuss or plan Phase 6 (`production-aws-infrastructure-and-application-deploy`).
 - Preserve all v1.5 evidence and milestone archives while adding v1.6 planning artifacts.
-- [Phase 06 Plan 01]: Resolve Task 2 checkpoint:decision (gate=blocking) — review the
-  saved `infra/terraform/accounts/prod/tfplan` (42 to add, 0 to change, 0 to destroy)
-  and give explicit go-ahead before Task 3 runs `terraform apply tfplan` against
-  production AWS.
+- [Phase 06 Plan 02]: Active AWS application deploy, `infra/aws-prod-application.json`
+  presence/summary evidence, and launch gate matrix update (LIVE-05). Not yet started.
 
 ## Pre-Planning Branch Audit (2026-06-13)
 
@@ -104,13 +113,14 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-19T11:55:41.705Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/workstreams/go-live/phases/06-production-aws-infrastructure-and-application-deploy/06-CONTEXT.md
-Resume command: Run `/gsd:discuss-phase 6 --ws go-live` or `/gsd:plan-phase 6 --ws go-live`.
+Last session: 2026-06-19T17:00:00.000Z
+Stopped at: Plan 06-01 complete (all 3 tasks); Plan 06-02 not yet started
+Resume file: .planning/workstreams/go-live/phases/06-production-aws-infrastructure-and-application-deploy/06-02-PLAN.md
+Resume command: Run `/gsd:execute-phase 6 --ws go-live` to continue with Plan 06-02.
 
 ## Performance Metrics
 
 | Phase | Plan | Duration | Notes |
 |-------|------|----------|-------|
 | Phase 05 P02 | 25min | 2 tasks | 2 files |
+| Phase 06 P01 | ~35min | 3 tasks | 4 files (2 committed, 2 gitignored) |
