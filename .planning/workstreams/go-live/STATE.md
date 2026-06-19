@@ -1,41 +1,41 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.5
-milestone_name: milestone
-status: complete
-stopped_at: Milestone v1.5 go-live archived and tagged — shipped 2026-06-19 (5/5 phases, 12/12 plans, prod launch NO-GO — Conditional per 05-GO-NO-GO-PACKET.md)
-last_updated: "2026-06-19T02:30:00.000Z"
-last_activity: 2026-06-19 -- /gsd-complete-milestone: archived ROADMAP.md/REQUIREMENTS.md to milestones/v1.5-*, PROJECT.md evolved, fresh REQUIREMENTS.md pending next milestone
+milestone: v1.6
+milestone_name: Production Launch Execution
+status: ready_for_phase_planning
+stopped_at: Milestone v1.6 roadmap approved; paused before Phase 6 discussion/planning
+last_updated: "2026-06-19T10:56:24Z"
+last_activity: 2026-06-19 -- /gsd-pause-work: v1.6 roadmap approved, handoff created for Phase 6 start
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 12
-  completed_plans: 12
-  percent: 100
+  total_phases: 6
+  completed_phases: 0
+  total_plans: 11
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State - go-live
 
 ## Current Position
 
-Phase: 05 (go-no-go-launch-evidence-and-handoff) — VERIFIED COMPLETE
-Plan: 2 of 2
-Status: All 12 plans executed and verified (5/5 phases); milestone v1.5 go-live complete
-Last activity: 2026-06-19 -- Phase 05 independent verification PASSED (17/17 must-haves, 0 gaps)
+Phase: 06 (production-aws-infrastructure-and-application-deploy) — NOT STARTED
+Plan: —
+Status: Roadmap approved; ready to discuss or plan Phase 6
+Last activity: 2026-06-19 -- Milestone v1.6 roadmap approved and handoff created
 
-Progress: 100% (5/5 phases complete, 12/12 plans complete) — milestone v1.5 go-live complete
+Progress: 0% (0/6 phases complete, 0/11 plans complete)
 
 ## Milestone Context
 
-Prepare the AWS-first EdgarTools Platform for production go-live. The milestone is a launch
-readiness overlay across already-built AWS, Snowflake, MDM, hosted graph, and dashboard
-surfaces, not an architecture rewrite.
+Execute the production launch sequence documented by v1.5. The milestone exists to flip
+the current `NO-GO - Conditional` decision to `GO` only after the five documented blockers
+are remediated, owner-approved, and backed by non-secret production evidence.
 
 ## Active Worktree
 
 `/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform`
 
-Branch: `workspace/go-live`
+Branch: `codex/go-live-v1.6-production-launch`
 
 ## Decisions
 
@@ -47,11 +47,17 @@ Branch: `workspace/go-live`
 - No secrets, DSNs, tokens, raw connector errors, Terraform state, or sensitive generated deployment values may be committed.
 - [Phase 05]: Post-launch monitoring checklist documents exactly 8 OPS-02 systems with read-only diagnostics only; cross-references the launch gate matrix Data-Issue Triage Table rather than duplicating it
 - [Phase 05]: TODOS.md D-05b follow-up items appended append-only: prod dashboard UAT, prod MDM secrets runbook execution, EDGARTOOLS_PROD_DEPLOYER grants, external Neo4j runtime remnant deprecation
+- [Milestone v1.6]: Continue phase numbering from v1.5; do not delete v1.5 phase
+  evidence because the archived roadmap and go/no-go packet still link to those files.
+- [Milestone v1.6]: Research is optional and disabled by workstream default; production
+  launch execution should prefer existing runbooks and evidence gates over new architecture.
 
 ## Known Inputs
 
 - Dev hosted graph E2E succeeded through strict Snowflake-hosted verification.
 - Dashboard UAT passed locally after loading MDM configuration from AWS Secrets Manager without printing the DSN.
+- v1.5 shipped a secret-safe launch gate matrix, production runbooks, go/no-go packet,
+  rollback procedures, and post-launch monitoring checklist.
 - `neo4j-snowflake` Phase 4 still has hosted graph dashboard documentation and final evidence closeout work recorded in its state.
 - Phase 1 produced `01-LAUNCH-GATE-MATRIX.md`, four `evidence/*.md` templates, and `01-VERIFICATION.md` under the go-live workstream.
 - Phase 1 verification passed for LIVE-01, SEC-01, ISO-01, and ISO-02; production readiness itself remains blocked until later phases capture prod proof.
@@ -59,16 +65,20 @@ Branch: `workspace/go-live`
 
 ## Blockers
 
-- `infra/aws-prod-application.json` is absent until live production discovery or successful production deploy supplies equivalent evidence.
-- Production AWS/Snowflake identifiers, digest image refs, MDM secret names, and Native App app/compute-pool selector are still required before production launch proof can pass; Phase 2 plans now document the blocked identifier/evidence path.
-- Dashboard README `NEO4J_*` cleanup: RESOLVED in Plan 04-01 (e5865ba). README rewritten; arch test contract flipped; 24 tests passing.
-- Stale `edgar-identity` ARN and ECR cleanup/digest hazards require explicit runbook mitigations before production deploy.
+- Blocker 1: Prod AWS infrastructure is not yet applied; `infra/aws-prod-application.json`
+  is absent until live production discovery or successful production deploy supplies equivalent evidence.
+- Blocker 2: Production MDM Secrets Manager values are not populated for
+  `edgartools-prod/mdm/postgres_dsn` and `edgartools-prod/mdm/snowflake`.
+- Blocker 3: Prod Snowflake native pull and dbt gold deployment have not yet run.
+- Blocker 4: Prod hosted graph E2E has not yet passed against production Snowflake,
+  MDM secrets, and Native App compute pool.
+- Blocker 5: Prod dashboard UAT has not yet run against a production or
+  production-like read-only configuration.
 
 ## Pending Todos
 
-- Run `$gsd-secure-phase 1 --ws go-live` if a formal security artifact is required before advancing.
-- Execute Phase 2 (`$gsd-execute-phase 2 --ws go-live`) using the two planned waves.
-- During Plan 02 execution, supply dev `DBT_SNOWFLAKE_*` credentials outside git or record the dev dbt gate as BLOCKED/failed evidence.
+- Discuss or plan Phase 6 (`production-aws-infrastructure-and-application-deploy`).
+- Preserve all v1.5 evidence and milestone archives while adding v1.6 planning artifacts.
 
 ## Pre-Planning Branch Audit (2026-06-13)
 
@@ -85,10 +95,10 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-19T02:30:00.000Z
-Stopped at: Milestone v1.5 go-live archived and tagged (v1.5). Fresh REQUIREMENTS.md needed for next milestone.
-Resume file: .planning/workstreams/go-live/PROJECT.md (Next Milestone Goals section)
-Resume command: Run `/gsd:new-milestone --ws go-live` to define requirements for the actual production launch sequence (the 5 NO-GO blockers in 05-GO-NO-GO-PACKET.md).
+Last session: 2026-06-19T10:56:24.417Z
+Stopped at: Milestone v1.6 roadmap approved; paused before Phase 6 discussion/planning.
+Resume file: .planning/workstreams/go-live/ROADMAP.md (Current Milestone section)
+Resume command: Run `/gsd:discuss-phase 6 --ws go-live` or `/gsd:plan-phase 6 --ws go-live`.
 
 ## Performance Metrics
 
