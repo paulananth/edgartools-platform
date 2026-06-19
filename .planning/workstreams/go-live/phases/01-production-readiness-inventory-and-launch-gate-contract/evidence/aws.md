@@ -259,7 +259,7 @@ export EDGAR_IDENTITY_SECRET_ARN="$(aws secretsmanager describe-secret --region 
 
 bash infra/scripts/deploy-aws-application.sh \
   --env prod \
-  --cluster-arn "arn:aws:ecs:us-east-1:077127448006:cluster/edgartools-prod-warehouse" \
+  --cluster-arn "<cluster-arn>" \
   --cluster-name "edgartools-prod-warehouse" \
   --image-ref "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@<DIGEST>" \
   --mdm-image-ref "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@<DIGEST>" \
@@ -280,7 +280,7 @@ Result: succeeded, exit code 0.
 ### `infra/aws-prod-application.json` Summary (Generated-JSON Summary Rule)
 
 - File presence: confirmed present at repo root after the deploy command above.
-- Top-level keys (17 total): `bronze_bucket_name`, `cluster`, `ecr_repository_url`, `edgar_identity_secret_arn`, `environment`, `execution_role_arn`, `image_ref`, `log_groups`, `mdm`, `mdm_image_ref`, `name_prefix`, `region`, `snowflake_export_bucket_name`, `state_machines`, `step_functions_role_arn`, `task_definitions`, `task_role_arn`, `warehouse_bucket_name` — matches the dev manifest's key set (Phase 1 evidence above).
+- Top-level keys (18 total): `bronze_bucket_name`, `cluster`, `ecr_repository_url`, `edgar_identity_secret_arn`, `environment`, `execution_role_arn`, `image_ref`, `log_groups`, `mdm`, `mdm_image_ref`, `name_prefix`, `region`, `snowflake_export_bucket_name`, `state_machines`, `step_functions_role_arn`, `task_definitions`, `task_role_arn`, `warehouse_bucket_name` — matches the dev manifest's key set (Phase 1 evidence above).
 - `state_machines` name list (22 total): `bootstrap`, `bootstrap_batched`, `bootstrap_full`, `catch_up_daily_form_index`, `daily_incremental`, `full_reconcile`, `gold_refresh`, `load_daily_form_index_for_date`, `load_history`, `mdm_backfill_relationships`, `mdm_check_connectivity`, `mdm_counts`, `mdm_gold`, `mdm_migrate`, `mdm_run`, `mdm_seed_from_silver`, `mdm_seed_universe`, `mdm_sync_graph`, `mdm_verify_graph`, `ownership_mdm_gold`, `silver_mdm_gold`, `targeted_resync`.
 - `image_ref`/`mdm_image_ref` format: both use the immutable `@sha256:<64-hex-chars>` digest form (not a mutable tag) — confirmed via pattern match, no digest value pasted.
 - The JSON body, all ARNs, and all digest values are intentionally omitted from this evidence entry (D-10).
