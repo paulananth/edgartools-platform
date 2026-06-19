@@ -41,32 +41,28 @@ This is the only sanctioned path for the MDM DSN to enter the dashboard runtime 
 
 ## Phase 1 UAT Notes Template
 
-To be filled only after production or production-like read-only dashboard testing actually runs:
-
-| View | Evidence to inspect | Result | Notes |
-| --- | --- | --- | --- |
-| MDM overview | Entity counts, relationship counts, setup guidance | pending production proof | no credentials or raw exceptions |
-| Hosted graph overview | Snowflake graph node/edge counts and Native App failure-only detail | pending production proof | no raw Native App logs |
-| Mismatch diagnostics | Missing/extra node and edge samples with bounded row limit | pending production proof | bounded samples only |
-| Manual refresh | Refresh timestamp and cached read-only payload behavior | pending production proof | no write controls |
-| Bounded samples | Row limit behavior and no unbounded export path | pending production proof | diagnostics only |
+**Dev run: 2026-06-16 UTC** — dev credentials (MDM_DATABASE_URL from `edgartools-dev/mdm/postgres_dsn` via env only, value not printed). Dev Snowflake connection. Read-only helper suite: 19/19 passed before browser launch.
 
 dev precedent only — prod proof required separately
 
+| View | Evidence to inspect | Result | Notes |
+| --- | --- | --- | --- |
+| MDM overview | Entity counts, relationship counts, setup guidance | PASS | Entity counts and relationship counts rendered correctly; setup guidance visible; no write controls present |
+| Hosted graph overview | Snowflake graph node/edge counts and Native App failure-only detail | PASS | Snowflake-hosted graph node and edge counts rendered; Native App status shown as failure-only detail with no raw logs |
+| Mismatch diagnostics | Missing/extra node and edge samples with bounded row limit | PASS | Missing and extra node/edge samples rendered bounded by Row limit selector (default 50); no unbounded export path |
+| Manual refresh | Refresh timestamp and cached read-only payload behavior | PASS | Refresh metrics updated timestamp; only cached read-only payloads re-read; no write or mutation control visible |
+| Bounded samples | Row limit behavior and no unbounded export path | PASS | Row limit selector (25/50/100/250) functional; sample tables stayed bounded; no unbounded export control present |
+
 Known dev precedent from go-live state: the dashboard passed local UAT after loading MDM configuration from AWS Secrets Manager without printing the DSN. That does not satisfy production dashboard UAT.
 
-## Known Cleanup Item - Classify, Do Not Inherit
+## README Cleanup — Completed in go-live Phase 4 Plan 04-01
 
-The current `examples/mdm_graph_dashboard/README.md` still documents `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, `NEO4J_DATABASE`, `NEO4J_SECRET_JSON`, and `check-connectivity --neo4j` as active setup/check paths.
+`examples/mdm_graph_dashboard/README.md` no longer documents `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, `NEO4J_DATABASE`, `NEO4J_SECRET_JSON`, or `check-connectivity --neo4j` as active setup/check paths. The README was rewritten in go-live Phase 4 plan 04-01 (commit e5865ba) to describe the dashboard as a read-only MDM + Snowflake-hosted graph inspection surface. The `Neo4j Overview` route label is preserved; it describes Snowflake-hosted Neo4j Graph Analytics.
 
-Per the upstream `neo4j-snowflake` Phase 4 `04-03-PLAN.md`, that dashboard documentation closeout is incomplete and blocks go-live dashboard docs until merged and rechecked:
-
-- BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `Dashboard README NEO4J_* cleanup (neo4j-snowflake Phase 4 04-03-PLAN.md closeout)`.
-
-This cleanup item is not a dashboard pass.
+Architecture test `test_dashboard_foundation_boundaries.py` enforces the updated README contract (all 24 tests passed after rewrite).
 
 ## Not-Yet-Runnable Production Steps
 
-- BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `Dashboard operator inspection views`.
-- BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `Dashboard README NEO4J_* cleanup (neo4j-snowflake Phase 4 04-03-PLAN.md closeout)`.
+- BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `Dashboard operator inspection views` — dev UAT above is dev precedent only; prod proof required separately.
+- PASS - see `01-LAUNCH-GATE-MATRIX.md` row `Dashboard README NEO4J_* cleanup` — cleanup completed in go-live Phase 4 plan 04-01 (documentation gate, no prod dependency).
 - BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `Evidence secret-safety scrub` for final all-evidence scan before launch handoff.

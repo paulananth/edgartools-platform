@@ -549,13 +549,32 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         )
         for env_var in (
             "MDM_DATABASE_URL",
+        ):
+            self.assertIn(env_var, text)
+
+        # Assert absence of active external Neo4j setup in README.
+        # Strip the allowed route label and Snowflake-hosted copy first so they
+        # do not trigger a false positive (mirrors the streamlit test at lines
+        # 425-447).
+        allowed_readme_copy = text.replace("Neo4j Overview", "")
+        allowed_readme_copy = allowed_readme_copy.replace(
+            "Snowflake-hosted Neo4j Graph Analytics",
+            "",
+        )
+        readme_forbidden = (
             "NEO4J_URI",
             "NEO4J_USER",
             "NEO4J_PASSWORD",
             "NEO4J_DATABASE",
             "NEO4J_SECRET_JSON",
-        ):
-            self.assertIn(env_var, text)
+            "bolt://",
+            "neo4j://",
+            "Aura",
+            "read-only MATCH",
+            "check-connectivity --neo4j",
+        )
+        readme_offenders = [token for token in readme_forbidden if token in allowed_readme_copy]
+        self.assertEqual(readme_offenders, [])
 
         self.assertIn("Overview", text)
         self.assertIn("MDM Overview", text)
@@ -569,7 +588,6 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         self.assertIn("All", text)
 
         allowed_commands = {
-            "edgar-warehouse mdm check-connectivity --neo4j",
             "edgar-warehouse mdm counts",
             "edgar-warehouse mdm verify-graph",
         }

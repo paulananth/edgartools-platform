@@ -104,3 +104,124 @@ Production still requires production Snowflake connection/database, production N
 - BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `Snowflake native S3 pull stack (infra/scripts/deploy-snowflake-stack.sh)`.
 
 These planned production commands are not evidence entries because they were not run during Phase 1.
+
+## Phase 3 Live Checks Actually Run
+
+Date: 2026-06-15 UTC
+Environment: dev (rehearsal); prod --status-only (blocker reproduction).
+This section records the live acceptance evidence from Phase 3 plan 03-01-live-mdm-graph-rehearsal.
+
+### Dev Rehearsal — Full E2E (D-09/D-10)
+
+```bash
+bash infra/scripts/run-aws-mdm-e2e.sh \
+  --env dev \
+  --aws-profile sec_platform_deployer \
+  --snow-connection snowconn \
+  --snowflake-database EDGARTOOLS_DEV
+```
+
+Result: succeeded (exit 0).
+
+The local strict `verify-graph` preflight PASSED and that pass was the gate that allowed the AWS Step Functions executions to proceed (LIVE-03 / D-10). Preflight output:
+
+- Overall status: `ok`
+- Snowflake graph nodes: `15`
+- Snowflake graph edges: `4`
+- Node parity status: `ok` (0 missing, 0 extra)
+- Relationship parity status: `ok` (0 missing, 0 extra)
+- Native App status: `ok`
+- Native App compute pool: `CPU_X64_XS`
+- `graph_info`: `ok`
+- `bfs`: `ok`
+- `wcc`: `ok`
+- `phase3_acceptance`: `true`
+
+All 6 AWS Step Functions stages completed SUCCEEDED (execution epoch `1781568895`):
+
+| Workflow | Latest status | Latest execution name | Started |
+| --- | --- | --- | --- |
+| `mdm_migrate` | `SUCCEEDED` | `aws-mdm-e2e-1781568895-migrate` | 2026-06-15T20:14:57-04:00 |
+| `mdm_run` | `SUCCEEDED` | `aws-mdm-e2e-1781568895-run` | 2026-06-15T20:16:52-04:00 |
+| `mdm_backfill_relationships` | `SUCCEEDED` | `aws-mdm-e2e-1781568895-backfill` | 2026-06-15T20:18:46-04:00 |
+| `mdm_sync_graph` | `SUCCEEDED` | `aws-mdm-e2e-1781568895-sync` | 2026-06-15T20:21:02-04:00 |
+| `mdm_verify_graph` | `SUCCEEDED` | `aws-mdm-e2e-1781568895-verify` | 2026-06-15T20:24:56-04:00 |
+| `mdm_counts` | `SUCCEEDED` | `aws-mdm-e2e-1781568895-counts` | 2026-06-15T20:26:06-04:00 |
+
+dev precedent only — prod proof required separately
+
+Production still requires: production Snowflake connection/database, production Native App app and compute-pool selector, production strict verify-graph proof, and production AWS MDM E2E proof.
+
+### GRAPH-01/GRAPH-02 Dev Precedent Citation (D-04)
+
+Citing `.planning/workstreams/neo4j-snowflake/phases/03-hosted-graph-verification-and-e2e-cutover/03-LIVE-DEV-RUN.md` as-is for GRAPH-01/GRAPH-02 (no standalone verify-graph re-run performed — D-04). The rehearsal's preflight and `mdm_verify_graph` stage above are incidental byproducts that supplement this citation.
+
+From `03-LIVE-DEV-RUN.md` (2026-06-12):
+- strict local `edgar-warehouse mdm verify-graph` succeeded in dev
+- Snowflake graph nodes: `15`, edges: `4`
+- Node parity: `ok`, relationship parity: `ok`
+- Native App: `ok`, compute pool: `CPU_X64_XS`
+- `graph_info`, `bfs`, `wcc`: all `ok`
+- `phase3_acceptance`: `true`
+- AWS MDM E2E: all 6 stages SUCCEEDED
+
+Script `--help` covers `--skip-preflight` (debug-only escape hatch that cannot satisfy Phase 3 acceptance).
+
+### Prod --status-only Structural-Blocker Reproduction (D-02)
+
+```bash
+bash infra/scripts/run-aws-mdm-e2e.sh --env prod --status-only
+```
+
+Result: failed (exit 1).
+
+Failed at the `infra/aws-prod-application.json` existence check (line 77 of `run-aws-mdm-e2e.sh`) with zero AWS API calls — no `==> Step Functions` output was produced. The error text:
+
+```
+ERROR: deployment summary not found: <repo-root>/infra/aws-prod-application.json
+```
+
+BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `AWS MDM hosted graph E2E`.
+
+dev precedent only — prod proof required separately
+
+Production still requires: `infra/aws-prod-application.json` (populated by a successful production deploy) before `run-aws-mdm-e2e.sh --env prod` can proceed past the preflight existence check.
+
+### Dev MDM Postgres Re-Verification (D-03)
+
+DSN loaded from AWS Secrets Manager (`edgartools-dev/mdm/postgres_dsn`) without printing. Mask-check confirmed dev `.snowflake.app` target before running `mdm migrate`.
+
+```bash
+uv run --extra mdm-runtime edgar-warehouse mdm check-connectivity
+uv run --extra mdm-runtime edgar-warehouse mdm migrate
+uv run --extra mdm-runtime edgar-warehouse mdm counts
+```
+
+Result: succeeded (exit 0 for all three commands).
+
+**check-connectivity** — `{"connected": true, "dialect": "postgresql", "missing_tables": []}` — 20 tables introspected, SELECT 1 returned 1 row.
+
+**migrate** (idempotent re-apply) — `{"dialect": "postgresql", "seeded": true}` — 19 tables present; non-zero row counts: mdm_entity=8083, mdm_company=5500, mdm_person=2251, mdm_security=322, mdm_source_ref=68249, mdm_change_log=69435, mdm_entity_attribute_stage=223637, mdm_relationship_instance=62061, mdm_relationship_type=11, mdm_relationship_property_def=46, mdm_relationship_source_mapping=11, mdm_entity_type_definition=6, mdm_field_survivorship=11, mdm_match_threshold=5, mdm_normalization_rule=31, mdm_source_priority=4.
+
+**counts** — 19 tables queried; relationship totals: IS_INSIDER=25647 active, HOLDS=35846 active, ISSUED_BY=322 active, COMPANY_HOLDS=246 active (all with pending_graph_sync matching active — graph sync due on next E2E run).
+
+`MDM_DATABASE_URL` unset after all three commands.
+
+dev precedent only — prod proof required separately
+
+Production still requires: `edgartools-prod/mdm/postgres_dsn` secret populated (see `runbook/mdm-secrets.md`) and `edgartools-prod/mdm/snowflake` secret populated before any of these commands can target prod MDM Postgres.
+
+### Dev postgres_dsn Shape Reference (D-07 — for plan 03-02)
+
+The prod `postgres_dsn` secret must satisfy the same connection-string structure as the dev DSN (values replaced with placeholders):
+
+```
+postgresql://<user>:<password>@<host>.snowflake.app:<port>/<database>?sslmode=require
+```
+
+Invariants enforced by `audit-mdm-snowflake-postgres-cutover.py`'s `validate_snowflake_postgres_dsn()`:
+- Host must end in `.snowflake.app`
+- Database must be `mdm`
+- `sslmode=require` must be present
+
+This heading is the stable format reference consumed by plan 03-02 (D-07).

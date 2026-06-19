@@ -2,28 +2,28 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: milestone
-status: executing
-stopped_at: Phase 2 planned; ready to execute
-last_updated: "2026-06-15T10:39:02.428Z"
-last_activity: 2026-06-15
+status: complete
+stopped_at: Milestone v1.5 go-live archived and tagged — shipped 2026-06-19 (5/5 phases, 12/12 plans, prod launch NO-GO — Conditional per 05-GO-NO-GO-PACKET.md)
+last_updated: "2026-06-19T02:30:00.000Z"
+last_activity: 2026-06-19 -- /gsd-complete-milestone: archived ROADMAP.md/REQUIREMENTS.md to milestones/v1.5-*, PROJECT.md evolved, fresh REQUIREMENTS.md pending next milestone
 progress:
   total_phases: 5
-  completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
-  percent: 40
+  completed_phases: 5
+  total_plans: 12
+  completed_plans: 12
+  percent: 100
 ---
 
 # Project State - go-live
 
 ## Current Position
 
-Phase: 3
-Plan: Not started
-Status: Executing Phase 02
-Last activity: 2026-06-15
+Phase: 05 (go-no-go-launch-evidence-and-handoff) — VERIFIED COMPLETE
+Plan: 2 of 2
+Status: All 12 plans executed and verified (5/5 phases); milestone v1.5 go-live complete
+Last activity: 2026-06-19 -- Phase 05 independent verification PASSED (17/17 must-haves, 0 gaps)
 
-Progress: 20% (1/5 phases complete, 3/3 Phase 1 plans executed)
+Progress: 100% (5/5 phases complete, 12/12 plans complete) — milestone v1.5 go-live complete
 
 ## Milestone Context
 
@@ -45,6 +45,8 @@ Branch: `workspace/go-live`
 - `edgar-warehouse mdm verify-graph` remains the hosted graph acceptance gate.
 - Dashboard launch evidence is operator inspection evidence; it does not replace CLI acceptance.
 - No secrets, DSNs, tokens, raw connector errors, Terraform state, or sensitive generated deployment values may be committed.
+- [Phase 05]: Post-launch monitoring checklist documents exactly 8 OPS-02 systems with read-only diagnostics only; cross-references the launch gate matrix Data-Issue Triage Table rather than duplicating it
+- [Phase 05]: TODOS.md D-05b follow-up items appended append-only: prod dashboard UAT, prod MDM secrets runbook execution, EDGARTOOLS_PROD_DEPLOYER grants, external Neo4j runtime remnant deprecation
 
 ## Known Inputs
 
@@ -59,7 +61,7 @@ Branch: `workspace/go-live`
 
 - `infra/aws-prod-application.json` is absent until live production discovery or successful production deploy supplies equivalent evidence.
 - Production AWS/Snowflake identifiers, digest image refs, MDM secret names, and Native App app/compute-pool selector are still required before production launch proof can pass; Phase 2 plans now document the blocked identifier/evidence path.
-- Dashboard README `NEO4J_*` cleanup remains launch-blocking until upstream hosted graph dashboard docs closeout is merged and rechecked.
+- Dashboard README `NEO4J_*` cleanup: RESOLVED in Plan 04-01 (e5865ba). README rewritten; arch test contract flipped; 24 tests passing.
 - Stale `edgar-identity` ARN and ECR cleanup/digest hazards require explicit runbook mitigations before production deploy.
 
 ## Pending Todos
@@ -83,7 +85,13 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-14T20:08:39Z
-Stopped at: Phase 2 planned; ready to execute
-Resume file: .planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-01-PLAN.md
-Resume command: `$gsd-execute-phase 2 --ws go-live`
+Last session: 2026-06-19T02:30:00.000Z
+Stopped at: Milestone v1.5 go-live archived and tagged (v1.5). Fresh REQUIREMENTS.md needed for next milestone.
+Resume file: .planning/workstreams/go-live/PROJECT.md (Next Milestone Goals section)
+Resume command: Run `/gsd:new-milestone --ws go-live` to define requirements for the actual production launch sequence (the 5 NO-GO blockers in 05-GO-NO-GO-PACKET.md).
+
+## Performance Metrics
+
+| Phase | Plan | Duration | Notes |
+|-------|------|----------|-------|
+| Phase 05 P02 | 25min | 2 tasks | 2 files |

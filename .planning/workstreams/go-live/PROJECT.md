@@ -2,8 +2,7 @@
 
 workstream: go-live
 status: active
-milestone: v1.5 Go Live
-updated: 2026-06-14
+updated: 2026-06-19
 
 ---
 
@@ -15,6 +14,59 @@ and dashboard inspection are ready without adding non-AWS architecture or unsafe
 handling.
 
 ---
+
+## Current State
+
+**Shipped:** v1.5 Go Live (2026-06-19) — see [`milestones/v1.5-ROADMAP.md`](milestones/v1.5-ROADMAP.md) and [`milestones/v1.5-REQUIREMENTS.md`](milestones/v1.5-REQUIREMENTS.md).
+
+v1.5 delivered a complete, secret-safe, independently-verified launch-readiness evidence
+bundle and operator handoff across 5 phases / 12 plans: launch gate matrix and blocker
+inventory (Phase 1), AWS/Snowflake production deployment dry run (Phase 2), MDM and hosted
+graph dev rehearsal (Phase 3), operator dashboard and data-issue triage (Phase 4), and the
+final go/no-go decision packet plus stop/rollback and post-launch monitoring runbooks
+(Phase 5).
+
+**Current production launch decision: NO-GO — Conditional.** Production launch is blocked
+on exactly 5 documented items, each with a named owner and remediation step in
+`phases/05-go-no-go-launch-evidence-and-handoff/05-GO-NO-GO-PACKET.md`:
+
+1. Prod AWS infrastructure not yet applied.
+2. Prod MDM Secrets Manager secrets not yet populated.
+3. Prod Snowflake dbt not yet deployed.
+4. Prod hosted graph E2E not yet verified.
+5. Prod dashboard UAT not yet run.
+
+No part of v1.5's output authorizes a production deploy, a production data load, or any
+write action against production AWS, Snowflake, or MDM systems. Flipping NO-GO to GO is
+itself the next milestone's work, not a continuation of v1.5 planning.
+
+---
+
+## Next Milestone Goals
+
+Candidate scope for the next milestone (execute the actual production launch sequence
+documented in `05-GO-NO-GO-PACKET.md`):
+
+- AWS operator applies the prod Terraform stack and runs the production deploy script.
+- MDM operator populates the two production secrets and re-verifies connectivity/migration/counts.
+- Snowflake operator deploys the native-pull stack and runs `dbt run --target prod` / `dbt test --target prod`.
+- MDM operator runs the production `mdm sync-graph` → strict `mdm verify-graph` → AWS MDM E2E sequence.
+- Dashboard reviewer runs UAT against a production-like read-only configuration for all 5 launch-critical views.
+- Release owner flips the go/no-go decision once all 5 blockers report PASS.
+
+Also carried forward from v1.5's Future Requirements (re-scope as needed):
+
+- Managed dashboard deployment after local/operator dashboard launch is proven.
+- Historical trend views for data quality, graph parity, and launch gate outcomes.
+- Production cost dashboards for Snowflake Native App compute pools and AWS Step Functions runs.
+- Removal or formal deprecation of external Neo4j runtime remnants after production hosted graph validation is stable.
+
+Start with `/gsd:new-milestone --ws go-live` to define fresh requirements for this scope.
+
+---
+
+<details>
+<summary>v1.5 Go Live — original milestone definition (archived 2026-06-19)</summary>
 
 ## Current Milestone: v1.5 Go Live
 
@@ -41,9 +93,7 @@ Developer-facing success metric: an operator can follow the go-live runbook from
 production environment, prove the AWS/Snowflake/MDM/hosted graph/dashboard gates, and make
 a go/no-go call with evidence that is complete, repeatable, and secret-safe.
 
----
-
-## Current Context
+### Current Context (as of milestone start)
 
 - AWS remains the only active deployment path.
 - Terraform remains passive infrastructure only: no runnable ECS task definitions, Step
@@ -52,11 +102,10 @@ a go/no-go call with evidence that is complete, repeatable, and secret-safe.
   needs production readiness and evidence, not a new graph architecture.
 - The dashboard has passed local UAT for foundation and read-only MDM connectivity; go-live
   needs production-oriented operator validation and data issue routing.
-- Phase 1 is complete: the go-live workstream now has a launch gate matrix, secret-safe
-  evidence templates, production identifier checklist, and data issue triage table under
-  `.planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/`.
 - The root `.planning` state is multi-workstream. This milestone is isolated under
   `.planning/workstreams/go-live/` and must not overwrite existing workstream artifacts.
+
+</details>
 
 ---
 
@@ -106,7 +155,7 @@ This document evolves at phase transitions and milestone boundaries.
 
 **After this milestone:**
 
-1. Archive go-live evidence into the release handoff.
-2. Promote stable operator commands into permanent docs.
-3. Decide whether remaining local-only dashboard workflows need managed deployment.
-4. Capture production follow-up items as future milestones rather than expanding launch scope.
+1. Archive go-live evidence into the release handoff. — Done: `milestones/v1.5-ROADMAP.md`, `milestones/v1.5-REQUIREMENTS.md`.
+2. Promote stable operator commands into permanent docs. — Pending next milestone.
+3. Decide whether remaining local-only dashboard workflows need managed deployment. — Carried to Future Requirements.
+4. Capture production follow-up items as future milestones rather than expanding launch scope. — Done: `TODOS.md` D-05b entries.

@@ -2,9 +2,10 @@
 
 ## Purpose
 
-Use this local Streamlit dashboard to review MDM and Neo4j coverage from the
-read-only metric helpers. The first pass is triage: start with system-wide
-attention items, then inspect MDM counts, graph counts, and mismatch samples.
+Use this local Streamlit dashboard to review MDM and Snowflake-hosted Neo4j
+Graph Analytics coverage from the read-only metric helpers. The first pass is
+triage: start with system-wide attention items, then inspect MDM counts, graph
+counts, and mismatch samples.
 
 ## Read-only guarantee
 
@@ -16,9 +17,11 @@ current helper payloads.
 
 - Python environment managed with `uv`.
 - Required: `MDM_DATABASE_URL` for an existing MDM database.
-- Optional graph connection variables: `NEO4J_URI`, `NEO4J_USER`, and
-  `NEO4J_PASSWORD`.
-- Optional graph settings: `NEO4J_DATABASE` and `NEO4J_SECRET_JSON`.
+- The Snowflake-hosted graph is read via the Snowflake connection context the
+  helper accepts (`SNOWFLAKE_CONNECTION`, `DBT_SNOWFLAKE_*`, `MDM_SNOWFLAKE_*`).
+  Native App grant and compute-pool prerequisites are documented in
+  `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql` (text reference only;
+  no credentials are configured in this dashboard).
 
 For the dev AWS/Snowflake path, `MDM_DATABASE_URL` is stored in AWS Secrets
 Manager at `edgartools-dev/mdm/postgres_dsn`. That secret contains the
@@ -39,7 +42,7 @@ export MDM_DATABASE_URL="$(
 ```
 
 If the secret is JSON, extract the `dsn`, `url`, or `MDM_DATABASE_URL` field
-before exporting it.
+before exporting it. Do not print or paste the resolved value.
 
 ## Launch
 
@@ -48,15 +51,16 @@ uv run --extra dashboard --extra mdm-runtime streamlit run examples/mdm_graph_da
 ```
 
 The dashboard opens locally in the browser. MDM metrics are required for review;
-Neo4j metrics are optional and do not block the MDM-only pages.
+Snowflake-hosted graph metrics are optional and do not block the MDM-only pages.
 
 ## Review workflow
 
 1. Open `Overview` first. Review blocking failures and coverage warnings before
    comparing counts.
 2. Open `MDM Overview` to inspect registered entity and relationship counts.
-3. Open `Neo4j Overview` to inspect graph node and relationship counts when the
-   graph connection is available.
+3. Open `Neo4j Overview` to inspect Snowflake-hosted Neo4j Graph Analytics node
+   and edge counts. This page reads graph data from the Snowflake Native App, not
+   from an external graph database connection.
 4. Open `Mismatch Diagnostics` to review entity coverage, relationship coverage,
    pending sync samples, missing-edge samples, and extra graph samples.
 
@@ -82,9 +86,10 @@ MDM connection or permission failures block dependent MDM and graph-backed
 rendering with setup or permission guidance. Error copy names expected
 environment variables and next actions only.
 
-Neo4j unavailable or permission-denied states do not block `MDM Overview`.
-`Neo4j Overview` and `Mismatch Diagnostics` show graph availability guidance
-while keeping MDM review available.
+Snowflake-hosted graph unavailable or permission-denied states do not block
+`MDM Overview`. `Neo4j Overview` and `Mismatch Diagnostics` show graph
+availability guidance while keeping MDM review available. See `edgar-warehouse
+mdm verify-graph` for the acceptance gate when graph metrics are unavailable.
 
 ## Existing checks
 
@@ -92,10 +97,14 @@ Run these existing checks outside the dashboard when the review output needs
 confirmation:
 
 ```bash
-edgar-warehouse mdm check-connectivity --neo4j
 edgar-warehouse mdm counts
 edgar-warehouse mdm verify-graph
 ```
+
+Additional documentation-text references:
+- `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql` — Native App grant
+  and compute-pool prerequisites for the Snowflake-hosted graph.
+- `infra/scripts/run-aws-mdm-e2e.sh` — AWS-only hosted graph E2E acceptance gate.
 
 ## Validation
 

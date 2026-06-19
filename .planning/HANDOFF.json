@@ -1,10 +1,10 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-15T11:30:00.000Z",
+  "timestamp": "2026-06-15T12:15:00.000Z",
   "handoff_target": "Claude",
   "workstream": "go-live",
   "branch": "workspace/go-live",
-  "head": "07da6ee",
+  "head": "caf3e5d",
   "workspace_path": "/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform",
   "phase": "03",
   "phase_name": "mdm-hosted-graph-e2e-acceptance",
@@ -14,58 +14,101 @@
   "status": "in_progress",
   "completed_tasks": [
     {
-      "id": "phase-02-complete",
-      "name": "Phase 2 (AWS and Snowflake production deployment dry-run) fully completed: post-execution gates run, 02-VERIFICATION.md created (11/11 must-haves passed), ROADMAP/STATE/REQUIREMENTS updated, LIVE-02/SNOW-01/SNOW-02 marked Complete",
-      "status": "done",
-      "files": [
-        ".planning/workstreams/go-live/phases/02-aws-and-snowflake-production-deployment-dry-run/02-VERIFICATION.md",
-        ".planning/workstreams/go-live/ROADMAP.md",
-        ".planning/workstreams/go-live/STATE.md",
-        ".planning/workstreams/go-live/REQUIREMENTS.md"
-      ]
+      "id": "go-live-pr-71-merged",
+      "name": "Pushed workspace/go-live (48 commits, Phase 1-2 go-live work), created PR #71, merged into main as 4c3e386 before starting Phase 3 discussion (per user request).",
+      "status": "done"
     },
     {
       "id": "discuss-phase-3-init",
-      "name": "Started /gsd-discuss-phase 3 go-live; ran init.phase-op '3' --ws go-live (read-only)",
-      "status": "done",
-      "checks": [
-        "phase_found: true, phase_name: 'MDM Hosted Graph E2E Acceptance', padded_phase: '03'",
-        "phase_dir: null (not yet created), expected_phase_dir: '.planning/workstreams/go-live/phases/03-mdm-hosted-graph-e2e-acceptance'",
-        "has_research: false, has_context: false, has_plans: false, plan_count: 0"
-      ]
+      "name": "Re-ran init.phase-op '3' --ws go-live (clean restart), confirmed no USER-PROFILE.md (ADVISOR_MODE=false), no flags, default discuss mode.",
+      "status": "done"
+    },
+    {
+      "id": "discuss-phase-3-load-prior-context",
+      "name": "Read PROJECT.md, REQUIREMENTS.md, STATE.md, 02-CONTEXT.md, 01-CONTEXT.md, ROADMAP.md (Phase 3 section). cross_reference_todos: todo.match-phase '3' returned 0 matches. scout_codebase: no .planning/codebase/*.md maps; grepped infra/scripts/run-aws-mdm-e2e.sh and edgar_warehouse/mdm/cli.py (sync-graph/verify-graph), and 01-LAUNCH-GATE-MATRIX.md MDM/hosted-graph BLOCKED rows + Required Production Identifiers.",
+      "status": "done"
+    },
+    {
+      "id": "discuss-phase-3-present-gray-areas",
+      "name": "Presented 4 gray areas via AskUserQuestion (multiSelect). User selected 3: 'Phase 3 scope given prod AWS blocker', 'MDM secret population runbook (MDM-01)', 'Acceptance-vs-debug framing for --status-only/--skip-preflight'. NOT selected: 'Dev hosted-graph E2E precedent refresh'.",
+      "status": "done"
+    },
+    {
+      "id": "discuss-phase-3-area-1",
+      "name": "Discussed and resolved 'Phase 3 scope given prod AWS blocker' (4 questions, all answered). Checkpoint written after completion.",
+      "status": "done"
+    },
+    {
+      "id": "discuss-phase-3-area-2",
+      "name": "Discussed and resolved 'MDM secret population runbook (MDM-01)' (4 questions, all answered). Checkpoint updated after completion.",
+      "status": "done"
     }
   ],
   "remaining_tasks": [
     {
-      "id": "discuss-phase-3-resume",
-      "name": "Re-invoke /gsd-discuss-phase 3 go-live from the top. init.phase-op result is already known (see completed_tasks); workflow will proceed: check_blocking_antipatterns (no .continue-here.md exists yet in phase 03 dir — dir doesn't exist — so no blocking anti-patterns), check_spec (no SPEC.md), check_existing (no CONTEXT.md, no checkpoint -> load_prior_context), load_prior_context (read .planning/PROJECT.md, .planning/workstreams/go-live/REQUIREMENTS.md, .planning/workstreams/go-live/STATE.md, plus most recent CONTEXT.md files: 02-CONTEXT.md and 01-CONTEXT.md), cross_reference_todos, scout_codebase, analyze_phase, present_gray_areas (AskUserQuestion — interactive), discuss_areas, write_context (creates 03-CONTEXT.md), confirm_creation, git_commit, update_state.",
+      "id": "discuss-phase-3-area-3",
+      "name": "Discuss 'Acceptance-vs-debug framing for --status-only/--skip-preflight' (4 single-question AskUserQuestion turns per default.md mode, then the 'More questions or move to next?' check). This is the last selected gray area.",
       "status": "next"
+    },
+    {
+      "id": "discuss-phase-3-final-check",
+      "name": "After area 3 completes: 'We've discussed [areas]. Which gray areas remain unclear?' — options 'Explore more gray areas' / 'I'm ready for context'. Likely 'I'm ready for context' given only 3 areas were selected and all are now resolved.",
+      "status": "pending"
+    },
+    {
+      "id": "discuss-phase-3-write-context",
+      "name": "write_context: Read workflows/discuss-phase/templates/context.md (lazy-loaded), then write .planning/workstreams/go-live/phases/03-mdm-hosted-graph-e2e-acceptance/03-CONTEXT.md using the checkpoint's accumulated decisions (areas 1-3) plus the canonical_refs list already accumulated in 03-DISCUSS-CHECKPOINT.json.",
+      "status": "pending"
+    },
+    {
+      "id": "discuss-phase-3-confirm-creation",
+      "name": "confirm_creation: present summary of decisions captured + next steps (/clear then /gsd:plan-phase 3 go-live).",
+      "status": "pending"
+    },
+    {
+      "id": "discuss-phase-3-git-commit",
+      "name": "git_commit: Read workflows/discuss-phase/templates/discussion-log.md (lazy-loaded), write 03-DISCUSSION-LOG.md from the discussion log accumulator (area names, options presented, user selections — already captured in 03-DISCUSS-CHECKPOINT.json's decisions block, reuse that data). rm -f 03-DISCUSS-CHECKPOINT.json. gsd-sdk query commit 'docs(03): capture phase context' --files 03-CONTEXT.md 03-DISCUSSION-LOG.md.",
+      "status": "pending"
+    },
+    {
+      "id": "discuss-phase-3-update-state",
+      "name": "update_state: gsd-sdk query state.record-session --stopped-at 'Phase 3 context gathered' --resume-file 03-CONTEXT.md, then commit STATE.md.",
+      "status": "pending"
     }
   ],
   "blockers": [
     {
-      "description": "Prod passive infrastructure (infra/aws-prod-application.json, prod AWS network/storage/runtime Terraform, prod Snowflake connection) still does not exist — carried forward from Phase 2, BLOCKED rows documented in 01-LAUNCH-GATE-MATRIX.md.",
+      "description": "infra/aws-prod-application.json does not exist (prod AWS passive infra Terraform not applied — carried forward from Phase 2). run-aws-mdm-e2e.sh --env prod hard-fails its file-existence check before doing anything.",
       "type": "external",
-      "workaround": "Out of scope for Phase 3 discussion itself; relevant context for MDM/hosted-graph E2E acceptance discussion since some MDM secrets/grants depend on prod infra existing."
+      "workaround": "Decided in Area 1: Phase 3 will live-reproduce this via 'bash infra/scripts/run-aws-mdm-e2e.sh --env prod --status-only' (read-only) as concrete BLOCKED-row proof, same pattern as Phase 2's SNOW-01 backend.hcl reproduction."
     },
     {
-      "description": "Dev DBT_SNOWFLAKE_* credentials not available in this environment (SNOW-02 dev gate recorded BLOCKED in evidence/snowflake.md).",
+      "description": "The 4 edgartools-prod/mdm/* secrets (postgres_dsn, neo4j, api_keys, snowflake) don't exist yet (prod Terraform not applied).",
       "type": "external",
-      "workaround": "Not directly relevant to Phase 3 (MDM/Neo4j focus) but carried forward as known environment constraint."
+      "workaround": "Decided in Area 2: document full put-secret-value commands w/ placeholders for postgres_dsn + snowflake only; neo4j = legacy/N/A under Snowflake-hosted graph; api_keys deferred (purpose unclear)."
     },
     {
-      "description": "Phase 2 has no 02-SECURITY.md; security enforcement defaults to enabled.",
+      "description": "Dev MDM Postgres re-verification (decided in Area 1, MDM-01 question) has NOT been run yet — it's a planning decision for the eventual Phase 3 plan/execution, not something done during discuss-phase.",
       "type": "advisory",
-      "workaround": "/gsd:secure-phase 2 go-live is optional, non-blocking per D-01. Not addressed this session; can be done anytime before Phase 2 work is considered fully closed out."
+      "workaround": "This is downstream work for plan-phase/execute-phase, not discuss-phase. Captured as a decision in the checkpoint for the planner to act on."
     }
   ],
   "human_actions_pending": [],
-  "decisions": [],
+  "decisions": [
+    "Phase 3 scope: dev rehearsal run (run-aws-mdm-e2e.sh --env dev) + documentation, NOT pure document-and-validate-only like Phase 2 D-01.",
+    "Live-reproduce run-aws-mdm-e2e.sh --env prod --status-only structural blocker as BLOCKED-row proof.",
+    "MDM-01: re-verify dev MDM Postgres connectivity/migration/counts live as dev-precedent refresh, in addition to documenting prod commands.",
+    "GRAPH-01/GRAPH-02: cite existing 03-LIVE-DEV-RUN.md as dev precedent, no new live hosted-graph verify run.",
+    "MDM secret population runbook: full put-secret-value commands w/ placeholders for postgres_dsn + snowflake; neo4j=legacy/N/A; api_keys deferred.",
+    "Use dev MDM Postgres DSN shape (no values) as a reference for the prod postgres_dsn secret format.",
+    "Evidence for secret population: aws secretsmanager describe-secret presence check only (non-secret)."
+  ],
   "uncommitted_files": [
     ".planning/HANDOFF.json",
-    ".planning/workstreams/go-live/.continue-here.md"
+    ".planning/workstreams/go-live/.continue-here.md",
+    ".planning/workstreams/go-live/phases/03-mdm-hosted-graph-e2e-acceptance/03-DISCUSS-CHECKPOINT.json"
   ],
   "background_processes": [],
-  "next_action": "cd /Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform && git status --short --branch && git add .planning/HANDOFF.json .planning/workstreams/go-live/.continue-here.md && git commit -m 'wip: go-live phase 03 discuss-phase paused before gray-area discussion'. Then re-invoke /gsd-discuss-phase 3 go-live to resume the interactive discussion (present_gray_areas / AskUserQuestion step) for Phase 3 (MDM Hosted Graph E2E Acceptance).",
-  "context_notes": "Phase 2 fully complete and committed (07da6ee). Immediately started /gsd-discuss-phase 3 go-live (the recommended next step) and ran the read-only init.phase-op query for phase 3, then hit CONTEXT CRITICAL (79%) before any analysis, prior-context loading, or user-facing questions. No CONTEXT.md, DISCUSSION-LOG.md, or checkpoint file exists for phase 3 yet — clean restart of discuss-phase is safe and cheap."
+  "next_action": "cd /Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform && git add .planning/HANDOFF.json .planning/workstreams/go-live/.continue-here.md .planning/workstreams/go-live/phases/03-mdm-hosted-graph-e2e-acceptance/03-DISCUSS-CHECKPOINT.json && git commit -m 'wip: go-live phase 03 discuss-phase paused after area 2/3 (2 of 3 gray areas discussed)'. Then re-invoke /gsd-discuss-phase 3 go-live — check_existing will detect the 03-DISCUSS-CHECKPOINT.json and offer to Resume (load decisions, skip to Area 3).",
+  "context_notes": "PR #71 merged into main (4c3e386) before Phase 3 work started, per user's explicit request ('checkin create pr merge before phase 3'). Phase 3 discuss-phase: presented 4 gray areas, user selected 3 (skipped 'Dev hosted-graph E2E precedent refresh'). Areas 1 and 2 fully discussed and resolved (8 questions total, all answered with specific choices — none used 'Other'). Checkpoint file has all decisions + canonical_refs accumulated so far. Area 3 ('Acceptance-vs-debug framing for --status-only/--skip-preflight') not yet started. CONTEXT CRITICAL (76%) hit immediately after writing the area-2 checkpoint update, before starting Area 3."
 }
