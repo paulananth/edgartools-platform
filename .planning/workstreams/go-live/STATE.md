@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
 status: planning
-stopped_at: Milestone v1.6 started; defining requirements for production launch execution
+stopped_at: Milestone v1.6 roadmap drafted; awaiting approval
 last_updated: "2026-06-19T02:15:50Z"
-last_activity: 2026-06-19 -- /gsd-new-milestone: v1.6 Production Launch Execution started from v1.5 NO-GO packet
+last_activity: 2026-06-19 -- /gsd-new-milestone: v1.6 roadmap drafted for approval
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
-  total_plans: 0
+  total_plans: 11
   completed_plans: 0
   percent: 0
 ---
@@ -18,12 +18,12 @@ progress:
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 06 (production-aws-infrastructure-and-application-deploy) — NOT STARTED
 Plan: —
-Status: Defining requirements for v1.6 Production Launch Execution
-Last activity: 2026-06-19 -- Milestone v1.6 started
+Status: Roadmap drafted; awaiting approval
+Last activity: 2026-06-19 -- Milestone v1.6 roadmap drafted
 
-Progress: 0% (requirements and roadmap not yet created)
+Progress: 0% (0/6 phases complete, 0/11 plans complete)
 
 ## Milestone Context
 
@@ -77,10 +77,8 @@ Branch: `codex/go-live-v1.6-production-launch`
 
 ## Pending Todos
 
-- Define v1.6 requirements from the five NO-GO blockers in
-  `phases/05-go-no-go-launch-evidence-and-handoff/05-GO-NO-GO-PACKET.md`.
-- Create a v1.6 roadmap that executes production actions in the documented order:
-  AWS, Snowflake/dbt, MDM secrets, hosted graph E2E, dashboard UAT, final GO decision.
+- Approve or adjust the drafted v1.6 roadmap.
+- After approval, discuss or plan Phase 6 (`production-aws-infrastructure-and-application-deploy`).
 - Preserve all v1.5 evidence and milestone archives while adding v1.6 planning artifacts.
 
 ## Pre-Planning Branch Audit (2026-06-13)
@@ -99,9 +97,9 @@ needed — it was already current.
 ## Session Continuity
 
 Last session: 2026-06-19T02:30:00.000Z
-Stopped at: Milestone v1.6 started; research decision and requirements definition next.
-Resume file: .planning/workstreams/go-live/PROJECT.md (Current Milestone section)
-Resume command: Continue `/gsd:new-milestone --ws go-live` from the research decision and requirements definition step.
+Stopped at: Milestone v1.6 roadmap drafted; awaiting approval.
+Resume file: .planning/workstreams/go-live/ROADMAP.md (Current Milestone section)
+Resume command: Approve or adjust the v1.6 roadmap, then run `/gsd:discuss-phase 6 --ws go-live` or `/gsd:plan-phase 6 --ws go-live`.
 
 ## Performance Metrics
 

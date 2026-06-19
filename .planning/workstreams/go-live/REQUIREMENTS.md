@@ -1,7 +1,7 @@
 # Requirements: v1.6 Production Launch Execution
 
 workstream: go-live
-status: defining
+status: planned
 milestone: v1.6 Production Launch Execution
 defined: 2026-06-19
 
@@ -63,30 +63,30 @@ handling.
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
+Which phases cover which requirements.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LIVE-04 | TBD | Pending |
-| LIVE-05 | TBD | Pending |
-| LIVE-06 | TBD | Pending |
-| SNOW-03 | TBD | Pending |
-| SNOW-04 | TBD | Pending |
-| MDM-02 | TBD | Pending |
-| GRAPH-03 | TBD | Pending |
-| GRAPH-04 | TBD | Pending |
-| DASH-04 | TBD | Pending |
-| OPS-03 | TBD | Pending |
-| SEC-02 | TBD | Pending |
-| ISO-03 | TBD | Pending |
+| LIVE-04 | Phase 6 | Pending |
+| LIVE-05 | Phase 6 | Pending |
+| SNOW-03 | Phase 7 | Pending |
+| SNOW-04 | Phase 7 | Pending |
+| MDM-02 | Phase 8 | Pending |
+| GRAPH-03 | Phase 9 | Pending |
+| GRAPH-04 | Phase 9 | Pending |
+| DASH-04 | Phase 10 | Pending |
+| LIVE-06 | Phase 11 | Pending |
+| OPS-03 | Phase 11 | Pending |
+| SEC-02 | Phase 11 | Pending |
+| ISO-03 | Phase 11 | Pending |
 
 **Coverage:**
 
 - v1.6 requirements: 12 total
-- Mapped to phases: 0
-- Unmapped: 12
+- Mapped to phases: 12
+- Unmapped: 0
 
 ---
 
 *Requirements defined: 2026-06-19*
-*Last updated: 2026-06-19 after v1.6 milestone initialization*
+*Last updated: 2026-06-19 after v1.6 roadmap creation*
