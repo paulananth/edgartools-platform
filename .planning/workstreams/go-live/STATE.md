@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: milestone
 status: complete
-stopped_at: Phase 5 verified PASS (17/17 must-haves, 0 gaps) — all 12 plans executed and verified; milestone v1.5 go-live complete
-last_updated: "2026-06-19T02:10:00.000Z"
-last_activity: 2026-06-19 -- Phase 05 independent verification PASSED (17/17 must-haves); milestone v1.5 complete (5/5 phases, 12/12 plans)
+stopped_at: Milestone v1.5 go-live archived and tagged — shipped 2026-06-19 (5/5 phases, 12/12 plans, prod launch NO-GO — Conditional per 05-GO-NO-GO-PACKET.md)
+last_updated: "2026-06-19T02:30:00.000Z"
+last_activity: 2026-06-19 -- /gsd-complete-milestone: archived ROADMAP.md/REQUIREMENTS.md to milestones/v1.5-*, PROJECT.md evolved, fresh REQUIREMENTS.md pending next milestone
 progress:
   total_phases: 5
   completed_phases: 5
@@ -85,10 +85,10 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-19T02:10:00.000Z
-Stopped at: Phase 5 independent verification PASSED (17/17 must-haves, 0 gaps) — milestone v1.5 go-live complete (5/5 phases, 12/12 plans)
-Resume file: .planning/workstreams/go-live/phases/05-go-no-go-launch-evidence-and-handoff/05-VERIFICATION.md
-Resume command: Milestone v1.5 go-live is plan/verification complete. Production launch itself remains NO-GO — Conditional per 05-GO-NO-GO-PACKET.md until the 5 documented prod gates flip to PASS — that is a separate, future production-launch action, not blocked on any remaining planning work.
+Last session: 2026-06-19T02:30:00.000Z
+Stopped at: Milestone v1.5 go-live archived and tagged (v1.5). Fresh REQUIREMENTS.md needed for next milestone.
+Resume file: .planning/workstreams/go-live/PROJECT.md (Next Milestone Goals section)
+Resume command: Run `/gsd:new-milestone --ws go-live` to define requirements for the actual production launch sequence (the 5 NO-GO blockers in 05-GO-NO-GO-PACKET.md).
 
 ## Performance Metrics
 
