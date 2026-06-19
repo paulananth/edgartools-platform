@@ -47,11 +47,13 @@ specifies, or touch Snowflake (Phase 7).
   `terraform init -backend-config=backend.hcl`. Confirmed live (2026-06-19,
   `aws s3api head-bucket --bucket edgartools-prod-tfstate` → 404) that this
   bucket does not exist — this is not a dry-run assumption.
-- **D-02:** Add S3-native state locking to `backend.hcl`
-  (`use_lockfile = true` — Terraform 1.10+, no DynamoDB table needed).
-  `versions.tf`'s existing `~> 1.14.7` constraint (once fixed per D-07) is
-  well above the 1.10 minimum, so no separate version bump is needed for
-  locking itself.
+- **D-02 (CORRECTED post-pattern-mapping, no code change needed):**
+  `use_lockfile = true` is **already present** in `versions.tf`'s
+  `backend "s3" {}` block (confirmed live by reading the file — not added
+  via `backend.hcl`, which only carries `bucket`/`key`/`region`/`encrypt`).
+  Dev's `versions.tf` has the identical block. D-02's intent (S3-native
+  locking, no DynamoDB) is already satisfied — **no task needed** for this;
+  do not plan a redundant edit.
 
 ### First-Apply Approval Gate (D-03, D-04)
 
@@ -100,6 +102,12 @@ specifies, or touch Snowflake (Phase 7).
   any real apply (per launch gate matrix row 12) and is in scope because
   Phase 6 is the phase that runs that apply. Commit lands on the go-live
   branch like any other Phase 6 commit — no separate non-go-live commit.
+- **D-09a (exact fix value, confirmed via pattern mapping):** Change
+  `required_version = "~> 1.14.7"` to `required_version = ">= 1.14.7"`.
+  Confirmed by reading `infra/terraform/accounts/dev/versions.tf`, which
+  already has this exact corrected value — dev hit and fixed the same
+  constraint bug previously. This is the single-line diff the planner
+  should specify, not an open research question.
 
 ### Secret Safety (consistent with all prior phases)
 

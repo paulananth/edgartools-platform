@@ -91,7 +91,7 @@
 
 ## Claude's Discretion
 
-- Exact corrected `required_version` constraint value in `versions.tf` — user did not specify the replacement string; planner/researcher should check Phase 2 evidence for the value that was "temporarily worked around via a reverted edit" (per launch gate matrix row 12) and use that as the fix.
+- ~~Exact corrected `required_version` constraint value~~ — **resolved** during pattern mapping (post-discussion): `infra/terraform/accounts/dev/versions.tf` already has `required_version = ">= 1.14.7"`, confirming the prod fix value. Also discovered `use_lockfile = true` is already present in prod's `versions.tf` `backend "s3" {}` block, making D-02 a no-op (corrected in 06-CONTEXT.md).
 
 ## Deferred Ideas
 
