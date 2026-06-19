@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
 status: completed
-last_updated: "2026-06-06T12:07:16.162Z"
+last_updated: "2026-06-17T10:45:14.082Z"
 last_activity: 2026-06-06 -- Phase 5 bounded real-data sample synced to EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION; MDM_MINUS_GRAPH=0 for every active relationship type
 progress:
   total_phases: 4
