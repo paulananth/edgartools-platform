@@ -22,7 +22,7 @@ operator handoff.
 - [x] **Phase 2: AWS And Snowflake Production Deployment Dry Run** - validate production AWS application deployment readiness, Snowflake native pull, dbt gold, and gold freshness evidence through existing scripts and commands. (completed 2026-06-14)
 - [ ] **Phase 3: MDM Hosted Graph E2E Acceptance** - prove production MDM Snowflake Postgres, hosted graph sync, strict Native App verification, and AWS MDM E2E acceptance without external Neo4j credentials.
 - [ ] **Phase 4: Operator Dashboard And Data Issue Triage** - make the dashboard and runbook the operator inspection path for MDM, hosted graph, gold, and data quality issues.
-- [ ] **Phase 5: Go/No-Go Launch, Evidence, And Handoff** - assemble final evidence, run launch approval, document rollback or stop paths, and hand off post-launch monitoring.
+- [x] **Phase 5: Go/No-Go Launch, Evidence, And Handoff** - assemble final evidence, run launch approval, document rollback or stop paths, and hand off post-launch monitoring. (completed 2026-06-19)
 
 ---
 
@@ -137,7 +137,7 @@ operator handoff.
 
 **Plans:**
 
-2 plans across 2 waves (1/2 complete)
+2/2 plans complete
 
 **Wave 1**
 
@@ -145,7 +145,7 @@ operator handoff.
 
 **Wave 2** *(depends on 05-01)*
 
-- [ ] 05-02-PLAN.md — Post-launch monitoring checklist (8 OPS-02 systems) + TODOS.md follow-up capture (OPS-02).
+- [x] 05-02-PLAN.md — Post-launch monitoring checklist (8 OPS-02 systems) + TODOS.md follow-up capture (OPS-02).
 
 ---
 
@@ -157,4 +157,4 @@ operator handoff.
 | 2. AWS And Snowflake Production Deployment Dry Run | v1.5 Go Live | 2/2 | Complete    | 2026-06-15 |
 | 3. MDM Hosted Graph E2E Acceptance | v1.5 Go Live | 0/TBD | Not started | - |
 | 4. Operator Dashboard And Data Issue Triage | v1.5 Go Live | 0/3 | Planned | - |
-| 5. Go/No-Go Launch, Evidence, And Handoff | v1.5 Go Live | 1/2 | In progress | - |
+| 5. Go/No-Go Launch, Evidence, And Handoff | v1.5 Go Live | 2/2 | Complete   | 2026-06-19 |
