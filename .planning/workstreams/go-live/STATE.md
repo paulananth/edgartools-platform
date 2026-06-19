@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: milestone
-status: complete
-stopped_at: Phase 5 Plan 02 complete (runbook/post-launch-monitoring.md + TODOS.md follow-up) — milestone v1.5 documentation/planning scope complete
+status: ready_for_verification
+stopped_at: Phase 5 Plan 02 complete (runbook/post-launch-monitoring.md + TODOS.md follow-up) — all 12 plans executed; Phase 5 ready for independent verification
 last_updated: "2026-06-19T01:23:40.412Z"
-last_activity: 2026-06-19 -- Phase 05 Plan 02 complete (post-launch monitoring checklist + TODOS.md D-05b follow-up); Phase 5 and milestone v1.5 planning scope complete (5/5 phases, 12/12 plans)
+last_activity: 2026-06-19 -- Phase 05 Plan 02 complete (post-launch monitoring checklist + TODOS.md D-05b follow-up); all 5 phases / 12 plans executed; Phase 5 ready for independent verification
 progress:
   total_phases: 5
   completed_phases: 5
@@ -18,12 +18,12 @@ progress:
 
 ## Current Position
 
-Phase: 05 (go-no-go-launch-evidence-and-handoff) — COMPLETE
+Phase: 05 (go-no-go-launch-evidence-and-handoff) — READY FOR VERIFICATION
 Plan: 2 of 2
-Status: Milestone v1.5 documentation/planning scope complete (all 5 phases, 12/12 plans)
+Status: All 12 plans executed (5/5 phases); Phase 5 ready for independent verification
 Last activity: 2026-06-19 -- Phase 05 Plan 02 complete (post-launch monitoring checklist + TODOS.md D-05b follow-up)
 
-Progress: 100% (5/5 phases complete, 12/12 plans complete)
+Progress: 100% (5/5 phases complete, 12/12 plans complete) — Phase 5 pending independent verification
 
 ## Milestone Context
 
@@ -86,9 +86,9 @@ needed — it was already current.
 ## Session Continuity
 
 Last session: 2026-06-19T01:23:40.412Z
-Stopped at: Phase 5 Plan 02 complete (runbook/post-launch-monitoring.md + TODOS.md D-05b follow-up) — milestone v1.5 planning/documentation scope complete
+Stopped at: Phase 5 Plan 02 complete (runbook/post-launch-monitoring.md + TODOS.md D-05b follow-up) — all 12 plans executed; Phase 5 ready for independent verification
 Resume file: .planning/workstreams/go-live/phases/05-go-no-go-launch-evidence-and-handoff/05-02-SUMMARY.md
-Resume command: None — milestone v1.5 planning/documentation scope complete. Production launch itself remains NO-GO — Conditional per 05-GO-NO-GO-PACKET.md until prod credentials/infrastructure gates flip to PASS.
+Resume command: Dispatch the Phase 5 verifier (verifier enabled per workstream config). Production launch itself remains NO-GO — Conditional per 05-GO-NO-GO-PACKET.md until prod credentials/infrastructure gates flip to PASS.
 
 ## Performance Metrics
 
