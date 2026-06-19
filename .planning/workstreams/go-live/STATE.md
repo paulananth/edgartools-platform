@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
-status: executing
-stopped_at: Phase 6 Plan 01 complete; Plan 02 not yet started
-last_updated: "2026-06-19T17:00:00.000Z"
-last_activity: 2026-06-19 -- Phase 06 Plan 01 complete (all 3 tasks); LIVE-04 satisfied, Blocker 1 remediated
+status: phase_complete
+stopped_at: Phase 06 complete and verified (10/10 must-haves); Phase 07 not yet started
+last_updated: "2026-06-19T22:30:00.000Z"
+last_activity: 2026-06-19 -- Phase 06 (both plans + verification) complete; LIVE-04 and LIVE-05 satisfied, Blocker 1 fully remediated
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 9
+  completed_plans: 2
+  percent: 17
 ---
 
 # Project State - go-live
@@ -52,11 +52,13 @@ Branch: `codex/go-live-v1.6-production-launch`
 
 - [Milestone v1.6]: Research is optional and disabled by workstream default; production
   launch execution should prefer existing runbooks and evidence gates over new architecture.
+
 - [Phase 06 Plan 01]: terraform apply tfplan run from the exact saved/approved plan file
   (no re-plan) per D-04; first real production state change in the go-live workstream
   (42 added, 0 changed, 0 destroyed). Only edgartools-prod-edgar-identity received a
   put-secret-value call; the 4 MDM secret containers remain empty shells deferred to
   Phase 8 / MDM-02.
+
 - [Phase 06 Plan 01]: AWS Secrets Manager CLI calls require an explicit `--region us-east-1`
   flag in this environment — the default AWS CLI profile region (`us-east-2`) caused a
   transient ResourceNotFoundException on the first put-secret-value attempt despite the
@@ -76,11 +78,12 @@ Branch: `codex/go-live-v1.6-production-launch`
 
 ## Blockers
 
-- Blocker 1: PARTIALLY REMEDIATED (2026-06-19, Plan 06-01) — prod passive AWS infrastructure
-  (VPC, S3, KMS, ECR, ECS cluster/logs, SNS, 5 secret containers, edgar-identity secret value)
-  is now applied; see phase-01 `evidence/aws.md` "Phase 6 Production Apply" section. The
-  remaining piece — `infra/aws-prod-application.json` (active application deploy manifest) —
-  is still absent and is Plan 06-02 scope.
+- Blocker 1: FULLY REMEDIATED (2026-06-19, Phase 06 complete) — prod passive AWS
+  infrastructure (VPC, S3, KMS, ECR, ECS cluster/logs, SNS, 5 secret containers,
+  edgar-identity secret value) is applied (06-01), and the active application deploy
+  manifest (`infra/aws-prod-application.json`, 22 state machines, 5 ECS task defs)
+  exists and is summarized in phase-01 `evidence/aws.md` (06-02). LIVE-04 and LIVE-05
+  satisfied.
 
 - Blocker 2: Production MDM Secrets Manager values are not populated for
   `edgartools-prod/mdm/postgres_dsn` and `edgartools-prod/mdm/snowflake`.
@@ -95,8 +98,6 @@ Branch: `codex/go-live-v1.6-production-launch`
 ## Pending Todos
 
 - Preserve all v1.5 evidence and milestone archives while adding v1.6 planning artifacts.
-- [Phase 06 Plan 02]: Active AWS application deploy, `infra/aws-prod-application.json`
-  presence/summary evidence, and launch gate matrix update (LIVE-05). Not yet started.
 
 ## Pre-Planning Branch Audit (2026-06-13)
 
@@ -113,10 +114,10 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-19T17:00:00.000Z
-Stopped at: Plan 06-01 complete (all 3 tasks); Plan 06-02 not yet started
-Resume file: .planning/workstreams/go-live/phases/06-production-aws-infrastructure-and-application-deploy/06-02-PLAN.md
-Resume command: Run `/gsd:execute-phase 6 --ws go-live` to continue with Plan 06-02.
+Last session: 2026-06-19T22:30:00.000Z
+Stopped at: Phase 06 complete and verified (06-VERIFICATION.md: 10/10 must-haves, PASSED). No plan in progress.
+Resume file: None
+Resume command: Run `/gsd:discuss-phase 7 --ws go-live` to start Phase 7 (Snowflake native-pull stack deploy).
 
 ## Performance Metrics
 

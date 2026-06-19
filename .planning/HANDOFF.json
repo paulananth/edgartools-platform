@@ -1,80 +1,61 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-19T10:46:56.302Z",
+  "timestamp": "2026-06-19T23:26:05.715Z",
   "context": "workstream",
   "workstream": "go-live",
-  "branch": "codex/go-live-v1.6-production-launch",
-  "head": "0437095",
+  "branch": "claude/go-live-v1.6-phase6",
+  "head": "17a655a",
   "workspace_path": "/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform",
   "phase": "06",
   "phase_name": "production-aws-infrastructure-and-application-deploy",
-  "phase_dir": null,
+  "phase_dir": ".planning/workstreams/go-live/phases/06-production-aws-infrastructure-and-application-deploy",
   "plan": null,
   "task": null,
-  "total_tasks": 11,
-  "status": "paused",
+  "total_tasks": null,
+  "status": "phase_complete",
   "completed_tasks": [
     {
-      "id": "branch-start",
-      "name": "Created fresh branch codex/go-live-v1.6-production-launch from origin/main after PR #73 landed.",
-      "status": "done"
+      "id": "06-01",
+      "name": "Production AWS Infrastructure (passive) + edgar-identity secret — terraform apply (42 added, 0 destroyed), versions.tf fix, edgar-identity secret populated, human-approved at checkpoint.",
+      "status": "done",
+      "commit": "990fd25"
     },
     {
-      "id": "v1.6-project-state",
-      "name": "Started milestone v1.6 Production Launch Execution in PROJECT.md and STATE.md.",
+      "id": "06-02",
+      "name": "Active Application Deploy — :dev->:prod ECR re-tag, deploy-aws-application.sh --env prod (exit 0, 22 state machines, 5 ECS task defs), non-secret evidence + matrix flips.",
       "status": "done",
-      "commit": "b6666aa"
+      "commit": "46f47ef"
     },
     {
-      "id": "v1.6-requirements",
-      "name": "Defined v1.6 requirements for AWS launch execution, Snowflake native pull, MDM, hosted graph, dashboard UAT, operations, security, and AWS-only scope.",
+      "id": "06-verify",
+      "name": "Phase 06 goal verification against live AWS state.",
       "status": "done",
-      "commit": "9369be9"
-    },
-    {
-      "id": "v1.6-roadmap",
-      "name": "Created v1.6 roadmap with 6 phases, 11 plans, and 12/12 requirements mapped.",
-      "status": "done",
-      "commit": "0437095"
+      "commit": "17a655a",
+      "result": "PASSED, 10/10 must-haves (after fixing two doc-accuracy gaps a first verifier pass found)"
     }
   ],
   "remaining_tasks": [
     {
-      "id": "phase-6-start",
-      "name": "Run /gsd:discuss-phase 6 --ws go-live or /gsd:plan-phase 6 --ws go-live.",
+      "id": "phase-7-start",
+      "name": "Run /gsd:discuss-phase 7 --ws go-live to scope Phase 7 (Snowflake native-pull stack deploy).",
       "status": "next"
     },
     {
-      "id": "06-01",
-      "name": "Prod Terraform apply and passive infrastructure evidence capture.",
-      "status": "not_started"
-    },
-    {
-      "id": "06-02",
-      "name": "Active AWS application deploy, infra/aws-prod-application.json presence or summary evidence, and launch gate matrix update.",
-      "status": "not_started"
-    },
-    {
-      "id": "phases-7-11",
-      "name": "Execute production Snowflake, MDM secrets/connectivity, hosted graph E2E, dashboard UAT, and final GO decision phases in roadmap order.",
+      "id": "phases-8-11",
+      "name": "Execute MDM secrets/connectivity, hosted graph E2E, dashboard UAT, and final GO decision phases in roadmap order.",
       "status": "not_started"
     }
   ],
   "blockers": [
     {
-      "description": "Prod AWS infrastructure is not yet applied; infra/aws-prod-application.json is absent until live production discovery or successful production deploy supplies equivalent evidence.",
-      "type": "external",
-      "workaround": "Start with Phase 6 so AWS operator applies passive infrastructure and captures non-secret output evidence before active application deploy."
-    },
-    {
-      "description": "Production MDM Secrets Manager values are not populated for edgartools-prod/mdm/postgres_dsn and edgartools-prod/mdm/snowflake.",
+      "description": "Production MDM Secrets Manager values are not populated for edgartools-prod/mdm/postgres_dsn, edgartools-prod/mdm/neo4j, edgartools-prod/mdm/api_keys, edgartools-prod/mdm/snowflake. The 4 empty containers exist (created by Phase 6's terraform apply) but carry no AWSCURRENT version.",
       "type": "human_action",
-      "workaround": "Phase 8 should use the v1.5 runbook and record only secret names, command status, and sanitized counts."
+      "workaround": "Owned by Phase 8 / MDM-02, explicitly deferred (D-05/D-06) — not in scope for Phase 6 or 7."
     },
     {
-      "description": "Prod Snowflake native pull and dbt gold deployment have not yet run.",
+      "description": "Prod Snowflake native pull and dbt gold deployment have not yet run; 3 prod backend.hcl files are missing.",
       "type": "external",
-      "workaround": "Phase 7 follows Phase 6 AWS storage/export output capture."
+      "workaround": "Phase 7, next up, follows Phase 6's AWS storage/export bucket outputs (now live)."
     },
     {
       "description": "Prod hosted graph E2E has not yet passed against production Snowflake, MDM secrets, and Native App compute pool.",
@@ -85,52 +66,51 @@
       "description": "Prod dashboard UAT has not yet run against production or production-like read-only configuration.",
       "type": "external",
       "workaround": "Phase 10 follows CLI, dbt, and Native App gates."
+    },
+    {
+      "description": "Row 13 of the launch gate matrix (dev->prod bronze data sync) stays BLOCKED — the prod bronze bucket now exists (Phase 6 prerequisite satisfied) but the documented S3-to-S3 sync itself has not been run; explicitly out of Phase 6 scope.",
+      "type": "external",
+      "workaround": "Run the documented sync (01-LAUNCH-GATE-MATRIX.md row 13) whenever bronze data parity with dev is needed; no phase currently owns this as a hard gate."
     }
   ],
   "human_actions_pending": [
     {
-      "action": "AWS operator approval and credentials for Phase 6 production infrastructure and application deploy.",
-      "context": "Phase 6 starts the actual production launch execution sequence.",
-      "blocking": true
+      "action": "Run /gsd:secure-phase 6 --ws go-live",
+      "context": "Security enforcement is on for this workstream and no 06-SECURITY.md exists yet. Advisory — does not block starting Phase 7, but should be closed before the final v1.6 go/no-go audit.",
+      "blocking": false
     },
     {
-      "action": "Later Snowflake, MDM, dashboard reviewer, release owner, and security or isolation approvals as required by Phases 7-11.",
+      "action": "Later Snowflake, MDM, dashboard reviewer, release owner, and security/isolation approvals as required by Phases 7-11.",
       "context": "The v1.6 roadmap requires owner sign-off before the go/no-go packet can flip to GO.",
       "blocking": true
     }
   ],
   "decisions": [
     {
-      "decision": "v1.6 is Production Launch Execution.",
-      "rationale": "The milestone exists to flip the v1.5 NO-GO - Conditional decision to GO only after all blocker themes have PASS evidence and sign-off.",
-      "phase": "milestone"
+      "decision": "Phase 6 fixes the versions.tf constraint bug directly as an ISO-01 exception (same pattern as Phase 4's dashboard README rewrite).",
+      "rationale": "Hard blocker for the real apply this phase exists to run; fixing in-phase avoids a separate non-go-live commit.",
+      "phase": "06"
     },
     {
-      "decision": "Skip research for milestone initialization.",
-      "rationale": "User selected the skip-research path; v1.6 should execute existing runbooks and gates rather than introduce new architecture.",
-      "phase": "milestone"
+      "decision": "Only edgartools-prod-edgar-identity receives a put-secret-value call; the other 5 secret containers (4 MDM + runner_credentials) stay empty shells.",
+      "rationale": "D-05/D-06 — MDM secret values are explicitly Phase 8/MDM-02 scope, not Phase 6.",
+      "phase": "06"
     },
     {
-      "decision": "Continue phase numbering from v1.5, starting with Phase 6.",
-      "rationale": "Archived v1.5 roadmap, requirements, evidence, and go/no-go packet link to Phases 1-5 and must remain stable.",
-      "phase": "milestone"
+      "decision": "terraform apply uses the saved plan file (apply tfplan), never a fresh re-plan.",
+      "rationale": "D-04 — zero drift between human approval and execution for the project's first real prod apply.",
+      "phase": "06"
     },
     {
-      "decision": "Preserve all v1.5 phase evidence and milestone archives.",
-      "rationale": "Do not run phase-clearing cleanup because existing archives and evidence are required for launch traceability.",
-      "phase": "milestone"
-    },
-    {
-      "decision": "Keep AWS-only architecture and secret-safety contract.",
-      "rationale": "No non-AWS deployment paths, registries, storage targets, workflow engines, or secret-management systems are authorized; no DSNs, tokens, passwords, Terraform state, raw connector traces, raw Native App logs, or sensitive generated JSON may be committed.",
-      "phase": "milestone"
+      "decision": "infra/aws-prod-application.json is generated but deliberately never staged/committed; only a non-secret summary (file presence, top-level keys, state-machine names, digest-vs-tag format) is recorded in evidence/aws.md.",
+      "rationale": "D-10 / Generated-JSON Summary Rule — the manifest contains ARNs and resource identifiers that must not be committed.",
+      "phase": "06"
     }
   ],
   "uncommitted_files": [
-    ".planning/HANDOFF.json",
-    ".planning/workstreams/go-live/.continue-here.md"
+    "infra/aws-prod-application.json (intentionally untracked — generated deploy manifest, never to be committed per D-10)"
   ],
   "background_processes": [],
-  "next_action": "cd /Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform && /gsd:discuss-phase 6 --ws go-live",
-  "context_notes": "Milestone v1.6 initialization is complete on branch codex/go-live-v1.6-production-launch. The branch has three planning commits on top of origin/main before the pause/handoff commit and has not been pushed. Worktree was clean before pause artifacts. Root checkout /Users/aneenaananth/projects/edgartools-platform has an unrelated uncommitted TODOS.md change; do not touch it. The roadmap is approved and Phase 6 is next."
+  "next_action": "cd /Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform && /gsd:discuss-phase 7 --ws go-live",
+  "context_notes": "Phase 6 — the project's first real production-mutating phase — is fully complete and verified on branch claude/go-live-v1.6-phase6 (branched off Codex's codex/go-live-v1.6-production-launch per the CLAUDE.md Claude/Codex branch-separation rule; upstream tracking was explicitly unset to prevent an accidental push onto Codex's branch). terraform apply succeeded (42 resources, 0 destroys), edgar-identity secret populated, active app deploy succeeded (22 state machines, 5 ECS task defs, exit 0), launch gate matrix rows 12/14/15/16/17 flipped to PASS, row 13 left correctly BLOCKED (out of scope, prerequisite satisfied). One mid-execution session-limit interruption during 06-02 was recovered by verifying live AWS state directly (ECR tags, JSON manifest structure via Python, live describe-secret) rather than trusting the draft SUMMARY.md at face value; a verifier pass then caught a doc-accuracy off-by-one (actual: 18 manifest keys / 22 state machines, draft said 17/21) and one unredacted ECS cluster ARN value in evidence/aws.md — both fixed and a re-verification pass confirmed clean (10/10). No plan or task is currently in progress — this is a clean phase boundary, not a mid-task pause. Next: discuss-phase for Phase 7 (Snowflake native-pull stack deploy)."
 }
