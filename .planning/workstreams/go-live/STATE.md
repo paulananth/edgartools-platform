@@ -4,8 +4,8 @@ milestone: v1.6
 milestone_name: Production Launch Execution
 status: executing
 stopped_at: Phase 6 context gathered
-last_updated: "2026-06-19T14:52:50.846Z"
-last_activity: 2026-06-19 -- Phase 6 planning complete
+last_updated: "2026-06-19T16:05:00.000Z"
+last_activity: 2026-06-19 -- Phase 06 Plan 01 Task 1 complete; awaiting Task 2 apply approval
 progress:
   total_phases: 6
   completed_phases: 0
@@ -18,10 +18,10 @@ progress:
 
 ## Current Position
 
-Phase: 06 (production-aws-infrastructure-and-application-deploy) — NOT STARTED
-Plan: —
-Status: Ready to execute
-Last activity: 2026-06-19 -- Phase 6 planning complete
+Phase: 06 (Production AWS Infrastructure And Application Deploy) — EXECUTING
+Plan: 1 of 2
+Status: Plan 06-01 Task 1 complete (commit a6f6dad); blocked at Task 2 checkpoint:decision (blocking) awaiting explicit terraform apply approval
+Last activity: 2026-06-19 -- Phase 06 Plan 01 Task 1 complete; awaiting Task 2 apply approval
 
 Progress: 0% (0/6 phases complete, 0/11 plans complete)
 
@@ -84,6 +84,10 @@ Branch: `codex/go-live-v1.6-production-launch`
 
 - Discuss or plan Phase 6 (`production-aws-infrastructure-and-application-deploy`).
 - Preserve all v1.5 evidence and milestone archives while adding v1.6 planning artifacts.
+- [Phase 06 Plan 01]: Resolve Task 2 checkpoint:decision (gate=blocking) — review the
+  saved `infra/terraform/accounts/prod/tfplan` (42 to add, 0 to change, 0 to destroy)
+  and give explicit go-ahead before Task 3 runs `terraform apply tfplan` against
+  production AWS.
 
 ## Pre-Planning Branch Audit (2026-06-13)
 
