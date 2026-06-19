@@ -174,3 +174,54 @@ When `infra/aws-prod-application.json` exists, evidence must summarize only:
 - relevant sanitized paths.
 
 Do not paste the JSON body.
+
+## Phase 6 Production Apply
+
+Date: 2026-06-19 UTC
+Environment: production (`infra/terraform/accounts/prod/`).
+AWS account: `077127448006` (per D-05, non-secret account label).
+
+### tfstate Bucket Bootstrap
+
+```bash
+aws s3api create-bucket --bucket edgartools-prod-tfstate --region us-east-1
+aws s3api put-bucket-versioning --bucket edgartools-prod-tfstate --versioning-configuration Status=Enabled
+aws s3api put-bucket-encryption --bucket edgartools-prod-tfstate --server-side-encryption-configuration '{...AES256...}'
+aws s3api put-public-access-block --bucket edgartools-prod-tfstate --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+aws s3api head-bucket --bucket edgartools-prod-tfstate
+```
+
+Result: succeeded.
+
+- `edgartools-prod-tfstate` bucket created in `us-east-1`, versioned, SSE (AES256) encrypted.
+- All four public-access-block flags confirmed `true` (BlockPublicAcls, IgnorePublicAcls, BlockPublicPolicy, RestrictPublicBuckets).
+- `head-bucket` returned success, confirming the bucket exists and is reachable before `terraform init`.
+
+### Terraform Plan / Apply (real, non-reverted)
+
+```bash
+cd infra/terraform/accounts/prod
+terraform init -backend-config=backend.hcl
+terraform plan -out=tfplan
+terraform apply tfplan
+```
+
+Result: succeeded.
+
+- Saved plan (`tfplan`): `Plan: 42 to add, 0 to change, 0 to destroy.`
+- Apply executed against the exact saved `tfplan` file (no re-plan) per D-04: `Apply complete! Resources: 42 added, 0 changed, 0 destroyed.`
+- `versions.tf` permanently fixed to `required_version = ">= 1.14.7"` (committed; no longer requires the Phase 2 temporary-edit-then-revert workaround).
+- 22 Terraform output **names** captured (no values): `bronze_bucket_name`, `bronze_bucket_arn`, `warehouse_bucket_name`, `warehouse_bucket_arn`, `snowflake_export_bucket_name`, `snowflake_export_bucket_arn`, `ecr_repository_url`, `cluster_name`, `cluster_arn`, `public_subnet_ids`, `public_ecs_security_group_id`, `log_group_name`, `edgar_identity_secret_arn`, `snowflake_manifest_sns_topic_arn`, `snowflake_export_root_url`, `snowflake_export_prefix`, `snowflake_export_kms_key_arn`, `runner_credentials_secret_arn`, `mdm_postgres_dsn_secret_arn`, `mdm_neo4j_secret_arn`, `mdm_api_keys_secret_arn`, `mdm_snowflake_secret_arn`.
+- This is the first real production state-changing Terraform action in the go-live workstream. It remediates Blocker 1 from the v1.5 go/no-go packet.
+- BLOCKED item resolved - see `01-LAUNCH-GATE-MATRIX.md` row `AWS passive infrastructure outputs`.
+
+### EDGAR Identity Secret Value
+
+- `aws secretsmanager put-secret-value --secret-id edgartools-prod-edgar-identity` run once with the SEC EDGAR User-Agent string. EDGAR_IDENTITY value set, not pasted (D-06/D-10).
+- `describe-secret` confirms exactly one secret version exists (value populated); `get-secret-value` confirms the value is non-empty without printing it.
+- None of the 4 MDM secret containers (`edgartools-prod/mdm/postgres_dsn`, `/neo4j`, `/api_keys`, `/snowflake`) received a `put-secret-value` call in this plan — each resolves an ARN via `describe-secret` but has no `AWSCURRENT` version, confirming they remain empty shells per D-05/D-06. MDM value population is deferred to Phase 8 / MDM-02.
+
+### Status
+
+- Blocker 1 (prod AWS infrastructure not yet applied) is remediated. LIVE-04 satisfied.
+- Blocker 2 (MDM secret values not populated) remains open — owned by Phase 8 / MDM-02, unchanged by this plan.
