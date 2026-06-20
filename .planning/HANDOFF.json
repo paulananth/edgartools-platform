@@ -1,85 +1,71 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-20T11:00:00.000Z",
+  "timestamp": "2026-06-20T16:21:06.000Z",
   "context": "workstream",
   "workstream": "go-live",
   "branch": "claude/go-live-v1.6-phase7",
-  "head": "955ec2f",
+  "head": "8e4d945",
   "workspace_path": "/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform",
-  "phase": "07",
-  "phase_name": "production-snowflake-native-pull-and-gold",
-  "phase_dir": ".planning/workstreams/go-live/phases/07-production-snowflake-native-pull-and-gold",
+  "phase": "08",
+  "phase_name": "production-mdm-secrets-and-connectivity",
+  "phase_dir": ".planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity",
   "plan": null,
   "task": null,
   "total_tasks": null,
-  "status": "snow_03_and_snow_04_passed_phase_7_closed",
-  "handoff_notice": "HARD RULE (CLAUDE.md): Claude and Codex must never commit to the same branch. claude/go-live-v1.6-phase7 was created at the user's explicit instruction by branching from Codex's codex/go-live-v1.6-phase7 at the same tip commit (b67acfd, no content change) and is now Claude-owned and pushed to origin. Codex's original branch/worktree (/Users/aneenaananth/gsd-workspaces/codex-go-live-phase7/edgartools-platform) was left untouched, not deleted, not rebased. All further commits must go to claude/go-live-v1.6-phase7, not the codex branch.",
+  "status": "phase_8_planning_complete_pending_plan_checker",
+  "handoff_notice": "HARD RULE (CLAUDE.md): Claude and Codex must never commit to the same branch. claude/go-live-v1.6-phase7 remains Claude-owned. This session also rebased it onto origin/main (now at PR #78's merge commit 650616a) and force-pushed with --force-with-lease after confirming no remote-only commits would be lost. Branch is fully in sync with origin (0/0 divergence) as of head 8e4d945.",
   "completed_tasks": [
     {
-      "id": "06-01",
-      "name": "Production AWS Infrastructure (passive) + edgar-identity secret — terraform apply (42 added, 0 destroyed), versions.tf fix, edgar-identity secret populated, human-approved at checkpoint.",
-      "status": "done",
-      "commit": "990fd25"
-    },
-    {
-      "id": "06-02",
-      "name": "Active Application Deploy — :dev->:prod ECR re-tag, deploy-aws-application.sh --env prod (exit 0, 22 state machines, 5 ECS task defs), non-secret evidence + matrix flips.",
-      "status": "done",
-      "commit": "46f47ef"
-    },
-    {
-      "id": "06-verify",
-      "name": "Phase 06 goal verification against live AWS state.",
-      "status": "done",
-      "commit": "17a655a",
-      "result": "PASSED, 10/10 must-haves (after fixing two doc-accuracy gaps a first verifier pass found)"
-    },
-    {
-      "id": "07-01",
-      "name": "Production native-pull preflight (Codex-authored). Stopped before the approval checkpoint: all six prod operator-local Terraform input files are absent. Recorded SNOW-03 as BLOCKED with secret-safe evidence.",
-      "status": "blocked",
-      "commit": "6e26dc1"
-    },
-    {
-      "id": "07-02",
-      "name": "Production dbt/gold dependency check (Codex-authored). Stopped at Task 1: 07-02 requires 07-01 to pass first. Recorded SNOW-04 as dependency-BLOCKED with secret-safe evidence.",
-      "status": "blocked",
-      "commit": "af4572a"
-    },
-    {
-      "id": "07-01-retry",
-      "name": "Real production native-pull apply (branch takeover continuation). Operator supplied ACCOUNTADMIN access; created the 6 local input files; fixed 6 versions.tf constraints, a bad tfvars.example default, imported 3 shared IAM roles, namespaced 3 inline policies, switched auth to password, resolved a dashboard-object ordering race. All 3 Terraform roots applied with zero destroys. native_pull_ready=true.",
-      "status": "done",
-      "commit": "62633c2",
-      "result": "SNOW-03 PASS"
-    },
-    {
-      "id": "07-deployer-user",
-      "name": "Created EDGARTOOLS_PROD_DEPLOYER Snowflake user, granted the role, verified end-to-end (auth + live SELECT on source tables), stored credentials in new secret edgartools-prod/dbt/snowflake. Rotated once after an internal scripting bug briefly exposed a since-invalidated password in tool output (see TODOS.md).",
-      "status": "done",
-      "commit": "62633c2",
-      "result": "SNOW-04 dependency cleared; dbt deps/run/test deliberately not run"
-    },
-    {
       "id": "07-dbt-run",
-      "name": "Ran dbt deps/run/test --target prod using edgartools-prod/dbt/snowflake credentials. 15 of 16 models passed immediately; FINANCIAL_FACTS failed on a genuine pre-existing schema-drift bug (live SEC_FINANCIAL_FACT table missing PERIOD_START, also present in dev). Fixed with a non-destructive 3-step ALTER TABLE migration against prod only. Retry: 16/16 models built, 47/47 tests pass. Captured EDGARTOOLS_GOLD_STATUS (no rows, expected) and dynamic-table freshness (all 15 ACTIVE) evidence.",
+      "name": "Ran dbt deps/run/test --target prod. 16/16 models built, 47/47 tests pass after fixing a PERIOD_START schema-drift bug. SNOW-04 PASS.",
       "status": "done",
-      "commit": "pending",
-      "result": "SNOW-04 PASS"
+      "commit": "8e4d945 (rebased SHA of the prior 'pending' commit, now landed and pushed)"
+    },
+    {
+      "id": "08-research",
+      "name": "Spawned gsd-phase-researcher for Phase 8 (Production MDM Secrets And Connectivity). Resolved discrepancy between HANDOFF.json (4 MDM secrets blocking) and ROADMAP.md (2 secrets required): neo4j is legacy (Snowflake-hosted graph replaced external Neo4j/Aura), api_keys is the unrelated MDM FastAPI auth layer. Both confirmed out of scope for Phase 8. Surfaced a new gap: no Terraform or prod-targeted SQL script in this repo provisions the actual production Snowflake Postgres MDM instance behind postgres_dsn -- existence in production is unconfirmed and must be checked before any plan attempts to populate that secret with a real DSN.",
+      "status": "done",
+      "commit": "committed this session alongside the updated HANDOFF.json and .continue-here.md"
+    },
+    {
+      "id": "08-planning",
+      "name": "Re-checked after the apparent gsd-planner session-limit interruption: both PLAN.md files (08-01-populate-prod-mdm-secrets-PLAN.md, 08-02-verify-prod-mdm-connectivity-PLAN.md) were actually written to disk in full before the interruption -- they are NOT partial/empty. Verified by reading both end-to-end: 08-01 (3 tasks: prod Postgres instance existence precondition, populate postgres_dsn via --dsn-stdin + snowflake via put-secret-value, clarify neo4j/api_keys out-of-scope in HANDOFF.json) and 08-02 (1 auto task running check-connectivity/migrate/counts + unset DSN, 1 human-verify checkpoint to flip launch gate matrix rows). Both correctly scope to exactly postgres_dsn + snowflake, both include the required existence-precondition / never-fabricate-a-DSN guardrail, both explicitly exclude neo4j/api_keys, both have full STRIDE threat models and verification blocks. The earlier 'planner interrupted, no result' read on the agent's return message was wrong -- the agent had already written its files before the session-limit message was returned.",
+      "status": "done",
+      "commit": "committed this session"
     }
   ],
   "remaining_tasks": [
     {
-      "id": "phases-8-11",
-      "name": "Execute MDM secrets/connectivity, hosted graph E2E, dashboard UAT, and final GO decision phases in roadmap order.",
+      "id": "08-plan-checker",
+      "name": "Spawn gsd-plan-checker against the two existing PLAN.md files (08-01, 08-02), per standard plan-phase workflow steps 10-12 (revision loop, max 3 iterations). Planning itself does not need to be redone -- only verification.",
+      "status": "not_started"
+    },
+    {
+      "id": "08-execute",
+      "name": "Execute Phase 8 plans (08-01 secret population, 08-02 connectivity/migrate/counts verification) once planning passes.",
+      "status": "not_started"
+    },
+    {
+      "id": "phases-9-11",
+      "name": "Hosted graph E2E (Phase 9), dashboard UAT (Phase 10), final GO decision (Phase 11).",
       "status": "not_started"
     }
   ],
   "blockers": [
     {
-      "description": "Production MDM Secrets Manager values are not populated for edgartools-prod/mdm/postgres_dsn, edgartools-prod/mdm/neo4j, edgartools-prod/mdm/api_keys, edgartools-prod/mdm/snowflake. The 4 empty containers exist (created by Phase 6's terraform apply) but carry no AWSCURRENT version.",
+      "description": "Production MDM Secrets Manager values are not populated for edgartools-prod/mdm/postgres_dsn and edgartools-prod/mdm/snowflake (the 2 secrets actually in scope for Phase 8 per ROADMAP.md and confirmed by 08-RESEARCH.md). edgartools-prod/mdm/neo4j and edgartools-prod/mdm/api_keys remain empty but are confirmed OUT OF SCOPE for Phase 8 (neo4j is legacy/superseded by the Snowflake-hosted graph; api_keys belongs to the unrelated MDM FastAPI auth layer) -- this corrects the prior handoff's blocker text, which incorrectly listed all 4 as Phase 8 blockers.",
       "type": "human_action",
-      "workaround": "Owned by Phase 8 / MDM-02, explicitly deferred (D-05/D-06) — not in scope for Phase 6 or 7."
+      "workaround": "Phase 8 plans (not yet written) will cover postgres_dsn and snowflake population using the v1.5 runbook procedure documented in 08-RESEARCH.md."
+    },
+    {
+      "description": "No Terraform resource or prod-targeted SQL script in this repo provisions the actual production Snowflake Postgres instance backing the postgres_dsn secret. mdm_create_instance.sql only creates EDGARTOOLS_DEV_MDM. Whether a production instance already exists is unverifiable from the repo alone.",
+      "type": "human_action",
+      "workaround": "08-RESEARCH.md documents this as Open Question 1. Whichever plan populates postgres_dsn must include a precondition/discovery task that checks for the prod instance's existence before writing any DSN to the secret -- do not fabricate a DSN if the instance is unconfirmed."
+    },
+    {
+      "description": "Phase 8 plan-checker verification has not run yet. The gsd-planner agent spawn returned a session-limit message with no completion marker, but its two PLAN.md files were in fact written to disk in full beforehand (verified by reading both files end-to-end -- see completed_tasks/08-planning). Only the plan-checker step remains, not re-planning.",
+      "type": "technical",
+      "workaround": "Spawn gsd-plan-checker against 08-01-populate-prod-mdm-secrets-PLAN.md and 08-02-verify-prod-mdm-connectivity-PLAN.md. If it passes, proceed straight to execute-phase."
     },
     {
       "description": "Prod hosted graph E2E has not yet passed against production Snowflake, MDM secrets, and Native App compute pool.",
@@ -92,7 +78,7 @@
       "workaround": "Phase 10 follows CLI, dbt, and Native App gates."
     },
     {
-      "description": "Row 13 of the launch gate matrix (dev->prod bronze data sync) stays BLOCKED — the prod bronze bucket now exists (Phase 6 prerequisite satisfied) but the documented S3-to-S3 sync itself has not been run; explicitly out of Phase 6 scope.",
+      "description": "Row 13 of the launch gate matrix (dev->prod bronze data sync) stays BLOCKED.",
       "type": "external",
       "workaround": "Run the documented sync (01-LAUNCH-GATE-MATRIX.md row 13) whenever bronze data parity with dev is needed; no phase currently owns this as a hard gate."
     }
@@ -104,13 +90,13 @@
       "blocking": false
     },
     {
-      "action": "Consider whether the dev/prod shared, non-namespaced IAM roles in runtime_access module (TODOS.md) warrant a coordinated fix across both environments.",
-      "context": "Not blocking Phase 7; the 3 inline policies were namespaced to stop cross-environment secret overwrite, but the 3 roles themselves remain shared by design until a coordinated re-pointing of both envs' ECS task defs is done.",
-      "blocking": false
+      "action": "Confirm whether the production Snowflake Postgres MDM instance already exists, and if so, its connection details (to be supplied directly into Secrets Manager by an operator, never through git or chat).",
+      "context": "08-RESEARCH.md Open Question 1 -- no in-repo automation confirms or provisions this.",
+      "blocking": true
     },
     {
       "action": "Run /gsd:secure-phase 6 --ws go-live",
-      "context": "Security enforcement is on for this workstream and no 06-SECURITY.md exists yet. Advisory — does not block Phase 7 retry, but should be closed before the final v1.6 go/no-go audit.",
+      "context": "Security enforcement is on for this workstream and no 06-SECURITY.md exists yet. Advisory.",
       "blocking": false
     },
     {
@@ -121,40 +107,35 @@
   ],
   "decisions": [
     {
-      "decision": "User explicitly instructed taking over codex/go-live-v1.6-phase7 (\"take over branch codex/go-live-v1.6-phase7\"). Re-rooted as claude/go-live-v1.6-phase7 from the same tip commit (b67acfd) in the Claude go-live worktree, pushed to origin.",
-      "rationale": "CLAUDE.md HARD RULE permits taking over the other runtime's branch only with explicit user instruction; Codex's original branch/worktree was left untouched rather than deleted or rebased.",
-      "phase": "07"
+      "decision": "Phase 8 plans must scope to exactly 2 MDM secrets (postgres_dsn, snowflake), excluding neo4j and api_keys, which are confirmed out of scope.",
+      "rationale": "08-RESEARCH.md resolved the discrepancy between HANDOFF.json's 4-secret blocker list and ROADMAP.md's 2-secret requirement: neo4j is legacy (Snowflake-hosted graph superseded external Neo4j/Aura), api_keys belongs to the unrelated MDM FastAPI auth layer.",
+      "phase": "08"
     },
     {
-      "decision": "Plans 07-01 and 07-02 (both Codex-authored, inherited as-is) correctly stopped at secret-safe BLOCKED evidence rather than fabricating prod credentials or running dbt against an unconfirmed source layer.",
-      "rationale": "D-05/D-06/D-10 discipline — no plan should synthesize placeholder secrets or skip a dependency gate to make progress look real.",
-      "phase": "07"
+      "decision": "Append exactly one new TODOS.md entry (do not touch existing entries) recording a follow-up to remove the now-unused edgartools-prod/mdm/neo4j Secrets Manager container from Terraform. This is a separate, not-yet-scheduled infra change -- explicitly NOT bundled into a Phase 8 execution task.",
+      "rationale": "User explicitly chose this option when asked whether neo4j cleanup should be doc-only or also flag the Terraform resource for future removal.",
+      "phase": "08"
     },
     {
-      "decision": "Phase 6 fixes the versions.tf constraint bug directly as an ISO-01 exception (same pattern as Phase 4's dashboard README rewrite).",
-      "rationale": "Hard blocker for the real apply this phase exists to run; fixing in-phase avoids a separate non-go-live commit.",
-      "phase": "06"
+      "decision": "Whichever Phase 8 plan populates postgres_dsn must include a precondition task verifying the production Postgres instance exists before writing a DSN to the secret -- never fabricate a DSN.",
+      "rationale": "CLAUDE.md 5-whys discipline + D-05/D-06 -- no plan should synthesize placeholder secrets or skip a dependency gate to make progress look real.",
+      "phase": "08"
     },
     {
-      "decision": "Only edgartools-prod-edgar-identity receives a put-secret-value call; the other 5 secret containers (4 MDM + runner_credentials) stay empty shells.",
-      "rationale": "D-05/D-06 — MDM secret values are explicitly Phase 8/MDM-02 scope, not Phase 6.",
-      "phase": "06"
+      "decision": "claude/go-live-v1.6-phase7 was rebased onto origin/main (now at PR #78's merge commit) and force-pushed with --force-with-lease after confirming via 'git log origin/<branch> --not HEAD' that zero remote-only commits would be lost.",
+      "rationale": "User asked to bring the branch up to date with PR #78 without losing any work; verified safety before force-pushing rather than assuming.",
+      "phase": "08"
     },
     {
-      "decision": "terraform apply uses the saved plan file (apply tfplan), never a fresh re-plan.",
-      "rationale": "D-04 — zero drift between human approval and execution for the project's first real prod apply.",
-      "phase": "06"
-    },
-    {
-      "decision": "infra/aws-prod-application.json is generated but deliberately never staged/committed; only a non-secret summary (file presence, top-level keys, state-machine names, digest-vs-tag format) is recorded in evidence/aws.md.",
-      "rationale": "D-10 / Generated-JSON Summary Rule — the manifest contains ARNs and resource identifiers that must not be committed.",
-      "phase": "06"
+      "decision": "An uncommitted TODOS.md edit (HAS_PARENT_COMPANY always-zero relationship bug) found sitting in the shared main-repo checkout (/Users/aneenaananth/projects/edgartools-platform, NOT this go-live worktree) was stashed, moved to claude/financial-derived-lag-tiebreaker via checkout+stash-pop, and committed there as d9b5111 -- rather than committed to whatever branch (codex/archive-go-live-v1.5-phases) happened to be checked out in that shared directory at the time.",
+      "rationale": "CLAUDE.md HARD RULE: Claude must never commit to a Codex-owned/active branch. The shared checkout's branch had changed underneath the session (reflog showed claude/financial-derived-lag-tiebreaker -> codex/go-live-wizard-tui -> codex/archive-go-live-v1.5-phases), so the safe path was to relocate the uncommitted diff to a Claude branch before committing. This is unrelated to the go-live workstream but is recorded here because it happened in the same session.",
+      "phase": "n/a (cross-cutting session hygiene, separate from go-live workstream)"
     }
   ],
   "uncommitted_files": [
-    "infra/aws-prod-application.json (intentionally untracked — generated deploy manifest, never to be committed per D-10)"
+    "infra/aws-prod-application.json (intentionally untracked -- generated deploy manifest, never to be committed per D-10)"
   ],
   "background_processes": [],
-  "next_action": "Phase 7's Snowflake gates (SNOW-03, SNOW-04) are both PASS. Next is Phase 8 (MDM secrets/connectivity).",
-  "context_notes": "Phase 6 is fully complete and verified (10/10 must-haves). Codex independently scoped/planned/executed Phase 7 on codex/go-live-v1.6-phase7, reaching two BLOCKED-with-evidence outcomes (SNOW-03/SNOW-04) for the correct reason: missing prod Snowflake credentials. At the user's explicit instruction this branch was taken over by Claude. SNOW-03 passed via a real production terraform apply across all 3 Snowflake-side Terraform roots. SNOW-04 then required running dbt deps/run/test --target prod, which surfaced a genuine pre-existing schema-drift bug: the live SEC_FINANCIAL_FACT table (in both prod and dev) was missing a PERIOD_START column the dbt model, the Python silver parser, and the Python serving schema all already expected. The fix already existed in the checked-in bootstrap SQL as an ALTER TABLE migration statement but had never been (re-)executed against either live database. Applied a non-destructive 3-step migration (ADD COLUMN nullable -> backfill UPDATE, 0 rows affected since table was empty -> SET NOT NULL) against prod only; dev intentionally left with the identical gap, out of scope for this prod-only task. Re-ran dbt: 16/16 gold models built, 47/47 tests pass. SNOW-04 now PASSES. A password was briefly exposed in agent tool output earlier in this phase due to a Python quoting bug; it was immediately rotated before being stored anywhere (see TODOS.md). Full 5-whys for the PERIOD_START bug is also in TODOS.md."
+  "next_action": "Spawn gsd-plan-checker against the existing 08-01-populate-prod-mdm-secrets-PLAN.md and 08-02-verify-prod-mdm-connectivity-PLAN.md (both already written and committed). If the checker passes, proceed directly to /gsd:execute-phase 8 --ws go-live. Planning does not need to be re-run.",
+  "context_notes": "Phase 7's Snowflake gates (SNOW-03, SNOW-04) are both PASS and closed. Phase 8 (Production MDM Secrets And Connectivity, requirement MDM-02) planning is DONE: research completed (HIGH confidence, resolved scope to 2 secrets not 4, surfaced unconfirmed prod Postgres instance existence as an open question), and despite the gsd-planner agent's tool call returning a 'session limit hit' message with no completion marker, both PLAN.md files (08-01-populate-prod-mdm-secrets-PLAN.md, 08-02-verify-prod-mdm-connectivity-PLAN.md) were confirmed written to disk in full and correctly scoped (read end-to-end this session). Only gsd-plan-checker has not yet run. Two unrelated git-hygiene actions also happened this session: (1) claude/go-live-v1.6-phase7 was rebased onto main through PR #78 and safely force-pushed (verified zero work lost), now 0/0 in sync with origin; (2) an uncommitted TODOS.md edit found in the separate, non-worktree main repo checkout was rescued from a Codex-active branch and committed onto claude/financial-derived-lag-tiebreaker (commit d9b5111) -- this is a different repo checkout entirely from this go-live worktree and does not affect go-live state, but is recorded for cross-session awareness since both happened in the same conversation."
 }
