@@ -53,9 +53,9 @@ readiness through production-target run/test evidence.
 **Depends on:** Phase 6 AWS storage/export outputs, production Snowflake identifiers, and
 Snowflake operator approval.
 
-**Plans:** 0/2 plans executed
+**Plans:** 1/2 plans executed
 
-- [ ] **07-01:** Prod Snowflake native-pull stack deploy and access reconciliation.
+- [x] **07-01:** Prod Snowflake native-pull stack deploy and access reconciliation.
 - [ ] **07-02:** Prod dbt run/test, `EDGARTOOLS_GOLD_STATUS`, and dynamic-table freshness evidence.
 
 **Success criteria:**
