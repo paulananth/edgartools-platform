@@ -74,8 +74,8 @@ are legacy/deferred and explicitly out of scope.
 @.planning/workstreams/go-live/ROADMAP.md
 @.planning/workstreams/go-live/REQUIREMENTS.md
 @.planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/08-RESEARCH.md
-@.planning/workstreams/go-live/phases/03-mdm-hosted-graph-e2e-acceptance/runbook/mdm-secrets.md
-@.planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/evidence/mdm-hosted-graph.md
+@.planning/workstreams/go-live/milestones/v1.5-phases/03-mdm-hosted-graph-e2e-acceptance/runbook/mdm-secrets.md
+@.planning/workstreams/go-live/milestones/v1.5-phases/01-production-readiness-inventory-and-launch-gate-contract/evidence/mdm-hosted-graph.md
 @CLAUDE.md
 </context>
 
@@ -121,9 +121,9 @@ are legacy/deferred and explicitly out of scope.
   <name>Task 2: Populate both required prod MDM secrets + capture presence evidence</name>
   <files>.planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md</files>
   <read_first>
-    - .planning/workstreams/go-live/phases/03-mdm-hosted-graph-e2e-acceptance/runbook/mdm-secrets.md (Sections 1, 2, 5, Security Note — authoritative population + presence-check procedure)
+    - .planning/workstreams/go-live/milestones/v1.5-phases/03-mdm-hosted-graph-e2e-acceptance/runbook/mdm-secrets.md (Sections 1, 2, 5, Security Note — authoritative population + presence-check procedure)
     - infra/scripts/bootstrap-aws-mdm-secrets.sh (DSN validation helper; supports --dsn-stdin and --dry-run)
-    - .planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/evidence/mdm-hosted-graph.md (D-07 DSN shape reference, D-08 describe-secret evidence pattern)
+    - .planning/workstreams/go-live/milestones/v1.5-phases/01-production-readiness-inventory-and-launch-gate-contract/evidence/mdm-hosted-graph.md (D-07 DSN shape reference, D-08 describe-secret evidence pattern)
   </read_first>
   <action>
     Only execute if Task 1 confirmed the prod Postgres instance exists. Populate
@@ -148,7 +148,7 @@ are legacy/deferred and explicitly out of scope.
     Always pass --region us-east-1 explicitly (infra is us-east-1, not the AWS CLI default us-east-2).
   </action>
   <verify>
-    <automated>grep -q "VersionIdsToStages" .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md && grep -q "edgartools-prod/mdm/postgres_dsn" .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md && grep -q "edgartools-prod/mdm/snowflake" .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md && ! grep -qiE "sslmode=require|password|snowflake.app:5432" .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md</automated>
+    <automated>grep -q "VersionIdsToStages" .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md && grep -q "edgartools-prod/mdm/postgres_dsn" .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md && grep -q "edgartools-prod/mdm/snowflake" .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md && ! grep -qiE "sslmode=require|password|snowflake\.app" .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md</automated>
   </verify>
   <acceptance_criteria>
     - describe-secret metadata (Name, ARN, LastChangedDate, VersionIdsToStages) for BOTH postgres_dsn and snowflake is recorded in the evidence file, each showing an AWSCURRENT version.

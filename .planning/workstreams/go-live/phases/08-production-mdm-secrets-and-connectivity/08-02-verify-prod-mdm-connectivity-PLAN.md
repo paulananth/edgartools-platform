@@ -6,7 +6,7 @@ wave: 2
 depends_on: [08-01]
 files_modified:
   - .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md
-  - .planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md
+  - .planning/workstreams/go-live/milestones/v1.5-phases/01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md
 autonomous: false
 requirements: [MDM-02]
 user_setup:
@@ -66,8 +66,8 @@ connectivity-verified here.
 <context>
 @.planning/workstreams/go-live/STATE.md
 @.planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/08-RESEARCH.md
-@.planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/evidence/mdm-hosted-graph.md
-@.planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md
+@.planning/workstreams/go-live/milestones/v1.5-phases/01-production-readiness-inventory-and-launch-gate-contract/evidence/mdm-hosted-graph.md
+@.planning/workstreams/go-live/milestones/v1.5-phases/01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md
 @CLAUDE.md
 
 <interfaces>
@@ -91,7 +91,7 @@ None of these handlers echo MDM_DATABASE_URL (confirmed in research) — operato
   <files>.planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md</files>
   <read_first>
     - .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/08-RESEARCH.md (Pattern 3 load-DSN-without-printing; Pitfall 3 unset; Code Examples expected output shapes)
-    - .planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/evidence/mdm-hosted-graph.md (D-03 dev precedent: exact command sequence + expected non-secret JSON shapes + the "MDM_DATABASE_URL unset after all three commands" evidence line)
+    - .planning/workstreams/go-live/milestones/v1.5-phases/01-production-readiness-inventory-and-launch-gate-contract/evidence/mdm-hosted-graph.md (D-03 dev precedent: exact command sequence + expected non-secret JSON shapes + the "MDM_DATABASE_URL unset after all three commands" evidence line)
     - .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md (confirm 08-01 populated postgres_dsn — AWSCURRENT present; do not run if 08-01 recorded BLOCKED)
   </read_first>
   <action>
@@ -114,7 +114,7 @@ None of these handlers echo MDM_DATABASE_URL (confirmed in research) — operato
     sanitize to a non-secret description of the failure class.
   </action>
   <verify>
-    <automated>grep -q "check-connectivity" .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md && grep -qi "unset" .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md && ! grep -qiE "sslmode=require|snowflake.app:5432|password" .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md</automated>
+    <automated>grep -q "check-connectivity" .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md && grep -qi "unset" .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md && ! grep -qiE "sslmode=require|snowflake\.app|password" .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md</automated>
   </verify>
   <acceptance_criteria>
     - Evidence contains sanitized JSON for check-connectivity (connected:true, dialect:postgresql), migrate (seeded), and counts (non-zero table + relationship counts) — OR a sanitized BLOCKED item with a 5-whys chain if connectivity failed.
@@ -127,9 +127,9 @@ None of these handlers echo MDM_DATABASE_URL (confirmed in research) — operato
 
 <task type="checkpoint:human-verify" gate="blocking">
   <name>Task 2: Operator confirms evidence is secret-safe, then flip launch gate matrix rows</name>
-  <files>.planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md</files>
+  <files>.planning/workstreams/go-live/milestones/v1.5-phases/01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md</files>
   <read_first>
-    - .planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md (the MDM secret/container readiness rows, ~rows 22-25, and the Secret-Safety Rules section)
+    - .planning/workstreams/go-live/milestones/v1.5-phases/01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md (the MDM secret/container readiness rows, ~rows 22-25, and the Secret-Safety Rules section)
     - .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md (the evidence produced by 08-01 and 08-02 Task 1)
   </read_first>
   <what-built>
@@ -158,7 +158,7 @@ None of these handlers echo MDM_DATABASE_URL (confirmed in research) — operato
     Phase 9. If 08-02 Task 1 recorded BLOCKED, do not flip to PASS; record the blocked status instead.
   </action>
   <verify>
-    <automated>grep -qi "mdm-prod-secrets-and-connectivity" .planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md</automated>
+    <automated>grep -qi "mdm-prod-secrets-and-connectivity" .planning/workstreams/go-live/milestones/v1.5-phases/01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md</automated>
   </verify>
   <acceptance_criteria>
     - Operator has confirmed the evidence file is secret-safe (no DSN/host/password/connector error).
