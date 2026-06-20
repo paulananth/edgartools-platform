@@ -31,10 +31,10 @@ and captures non-secret evidence for both passive outputs and active app manifes
 **Depends on:** v1.5 launch gate matrix, `runbook/aws-deploy.md`, approved image references,
 and AWS operator approval.
 
-**Plans:** 2
+**Plans:** 2/2 plans complete
 
-- [ ] **06-01:** Prod Terraform apply and passive infrastructure evidence capture.
-- [ ] **06-02:** Active AWS application deploy, `infra/aws-prod-application.json` presence/summary evidence, and launch gate matrix update.
+- [x] **06-01:** Prod Terraform apply and passive infrastructure evidence capture.
+- [x] **06-02:** Active AWS application deploy, `infra/aws-prod-application.json` presence/summary evidence, and launch gate matrix update.
 
 **Success criteria:**
 
@@ -157,8 +157,8 @@ contracts, flips the launch decision only if every blocker is PASS, and hands of
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LIVE-04 | Phase 6 | Pending |
-| LIVE-05 | Phase 6 | Pending |
+| LIVE-04 | Phase 6 | Complete |
+| LIVE-05 | Phase 6 | Complete |
 | SNOW-03 | Phase 7 | Pending |
 | SNOW-04 | Phase 7 | Pending |
 | MDM-02 | Phase 8 | Pending |
