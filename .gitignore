@@ -69,3 +69,6 @@ Thumbs.db
 # AI agent tooling
 .claude/
 .codex
+
+# Local go-live wizard state and sanitized reports
+.edgartools-go-live/
