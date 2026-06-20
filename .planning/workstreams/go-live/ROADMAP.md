@@ -53,10 +53,10 @@ readiness through production-target run/test evidence.
 **Depends on:** Phase 6 AWS storage/export outputs, production Snowflake identifiers, and
 Snowflake operator approval.
 
-**Plans:** 2
+**Plans:** 2/2 plans executed; SNOW-03 and SNOW-04 remain BLOCKED
 
-- [ ] **07-01:** Prod Snowflake native-pull stack deploy and access reconciliation.
-- [ ] **07-02:** Prod dbt run/test, `EDGARTOOLS_GOLD_STATUS`, and dynamic-table freshness evidence.
+- [x] **07-01:** Prod Snowflake native-pull preflight evidence; deploy not run because required local inputs are absent.
+- [x] **07-02:** Prod dbt/gold dependency evidence; dbt and status/freshness checks not run because SNOW-03 is blocked.
 
 **Success criteria:**
 
@@ -159,8 +159,8 @@ contracts, flips the launch decision only if every blocker is PASS, and hands of
 |-------------|-------|--------|
 | LIVE-04 | Phase 6 | Complete |
 | LIVE-05 | Phase 6 | Complete |
-| SNOW-03 | Phase 7 | Pending |
-| SNOW-04 | Phase 7 | Pending |
+| SNOW-03 | Phase 7 | Blocked |
+| SNOW-04 | Phase 7 | Blocked |
 | MDM-02 | Phase 8 | Pending |
 | GRAPH-03 | Phase 9 | Pending |
 | GRAPH-04 | Phase 9 | Pending |
@@ -176,4 +176,4 @@ contracts, flips the launch decision only if every blocker is PASS, and hands of
 
 ## Next Step
 
-Start with `/gsd:discuss-phase 6 --ws go-live` or `/gsd:plan-phase 6 --ws go-live`.
+Provide the missing prod native-pull Terraform local input files outside git, then create a retry/gap plan for Phase 7 before starting Phase 8.

@@ -175,3 +175,52 @@ Result: BLOCKED — `dbt compile --target dev`, `dbt run --target dev`, and
   production target`. The prod-target command surface and this dev-gate
   cross-reference are documented in
   [runbook/dbt-gold.md](../../02-aws-and-snowflake-production-deployment-dry-run/runbook/dbt-gold.md).
+
+## Phase 7 Production Execution Attempt
+
+### SNOW-03 native-pull preflight
+
+```bash
+for f in infra/terraform/access/aws/accounts/prod/backend.hcl \
+  infra/terraform/access/aws/accounts/prod/terraform.tfvars \
+  infra/terraform/snowflake/accounts/prod/backend.hcl \
+  infra/terraform/snowflake/accounts/prod/terraform.tfvars \
+  infra/terraform/access/snowflake/accounts/prod/backend.hcl \
+  infra/terraform/access/snowflake/accounts/prod/terraform.tfvars
+do
+  test -f "$f"
+done
+```
+
+Result: failed preflight; state-changing Snowflake/native-pull execution was
+not started.
+
+- All six prod operator-local Terraform input files checked by Phase 7 Plan
+  07-01 were absent in this worktree.
+- Terraform output reads for the AWS access, Snowflake, and Snowflake access
+  prod roots were skipped because backend configuration is absent.
+- `deploy-snowflake-stack.sh --env prod --snow-connection edgartools-prod --run-validation`
+  was not run; no `terraform init`, `terraform apply`, Snowflake SQL, dbt, or
+  dashboard upload action was reached.
+- Detailed non-secret evidence is in
+  [../../07-production-snowflake-native-pull-and-gold/evidence/native-pull.md](../../07-production-snowflake-native-pull-and-gold/evidence/native-pull.md).
+- BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `Snowflake native S3 pull
+  stack (infra/scripts/deploy-snowflake-stack.sh)`.
+
+### SNOW-04 dbt/gold dependency preflight
+
+Result: dependency blocked; production dbt/gold execution was not started.
+
+- Phase 7 Plan 07-02 was not allowed to run dbt because Phase 7 Plan 07-01
+  recorded SNOW-03 as BLOCKED.
+- The six required `DBT_SNOWFLAKE_*` environment variables were unset in this
+  shell, and `infra/snowflake/dbt/edgartools_gold/profiles.yml` was absent.
+- `profiles.yml` was intentionally not created because the native-pull
+  prerequisite stopped execution before dbt setup.
+- No grant discovery, dbt deps/run/test, `EDGARTOOLS_GOLD_STATUS`, dynamic-table
+  freshness, task-history, or source row-count query ran.
+- Detailed non-secret evidence is in
+  [../../07-production-snowflake-native-pull-and-gold/evidence/dbt-gold.md](../../07-production-snowflake-native-pull-and-gold/evidence/dbt-gold.md).
+- BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` rows `Snowflake deployer direct
+  grants for gold dynamic tables`, `dbt compile/run/test for production target`,
+  and `EDGARTOOLS_GOLD_STATUS and dynamic-table freshness`.

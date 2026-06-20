@@ -1,32 +1,19 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-19T23:55:00.000Z",
+  "timestamp": "2026-06-19T23:30:00.000Z",
   "context": "workstream",
   "workstream": "go-live",
-  "branch": "claude/go-live-v1.6-phase6",
-  "head": "0f37393",
+  "branch": "claude/go-live-v1.6-phase7",
+  "head": "62633c2",
   "workspace_path": "/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform",
-  "phase": "06",
-  "phase_name": "production-aws-infrastructure-and-application-deploy",
-  "phase_dir": ".planning/workstreams/go-live/phases/06-production-aws-infrastructure-and-application-deploy",
+  "phase": "07",
+  "phase_name": "production-snowflake-native-pull-and-gold",
+  "phase_dir": ".planning/workstreams/go-live/phases/07-production-snowflake-native-pull-and-gold",
   "plan": null,
   "task": null,
   "total_tasks": null,
-  "status": "handed_off_to_codex",
-  "handoff_notice": "HARD RULE (CLAUDE.md): Claude and Codex must never commit to the same branch. claude/go-live-v1.6-phase6 is Claude-owned and pushed to origin. Before any commit, run: git fetch origin claude/go-live-v1.6-phase6 && git checkout -b codex/go-live-v1.6-phase6-continuation origin/claude/go-live-v1.6-phase6",
-  "ship_workflow_state": {
-    "in_progress": true,
-    "base_branch": "main",
-    "rebase_done": true,
-    "tests_passed": true,
-    "test_note": "455 passed after installing the locally-missing 'mdm' uv extra in this worktree's venv — a venv gap, not a real bug; no source change needed",
-    "coverage_audit": "skipped — no new application code paths (docs + 1-line versions.tf fix)",
-    "plan_completion_audit": "skipped — GSD's own 06-VERIFICATION.md already covers this (PASSED, 10/10 must-haves)",
-    "scope_drift": "CLEAN",
-    "pre_landing_review": "2 informational findings, both auto-fixed and committed as 0f37393 (ROADMAP.md LIVE-05 Pending→Complete; 06-02-SUMMARY.md stale 17→18 key count)",
-    "stopped_at": "Step 9 completion — per /ship's own rule, a run that applies fixes must stop and the next /ship run re-verifies from scratch",
-    "next_steps_not_yet_run": ["re-run /ship to re-verify Steps 0-9 are clean", "Step 9.1+ Greptile (no PR exists yet, will be a no-op)", "adversarial review", "TODOS.md check", "CHANGELOG/VERSION bump (this repo has neither file, so likely not applicable)", "push + PR creation targeting main"]
-  },
+  "status": "snow_03_passed_snow_04_dependency_cleared",
+  "handoff_notice": "HARD RULE (CLAUDE.md): Claude and Codex must never commit to the same branch. claude/go-live-v1.6-phase7 was created at the user's explicit instruction by branching from Codex's codex/go-live-v1.6-phase7 at the same tip commit (b67acfd, no content change) and is now Claude-owned and pushed to origin. Codex's original branch/worktree (/Users/aneenaananth/gsd-workspaces/codex-go-live-phase7/edgartools-platform) was left untouched, not deleted, not rebased. All further commits must go to claude/go-live-v1.6-phase7, not the codex branch.",
   "completed_tasks": [
     {
       "id": "06-01",
@@ -46,13 +33,39 @@
       "status": "done",
       "commit": "17a655a",
       "result": "PASSED, 10/10 must-haves (after fixing two doc-accuracy gaps a first verifier pass found)"
+    },
+    {
+      "id": "07-01",
+      "name": "Production native-pull preflight (Codex-authored). Stopped before the approval checkpoint: all six prod operator-local Terraform input files are absent. Recorded SNOW-03 as BLOCKED with secret-safe evidence.",
+      "status": "blocked",
+      "commit": "6e26dc1"
+    },
+    {
+      "id": "07-02",
+      "name": "Production dbt/gold dependency check (Codex-authored). Stopped at Task 1: 07-02 requires 07-01 to pass first. Recorded SNOW-04 as dependency-BLOCKED with secret-safe evidence.",
+      "status": "blocked",
+      "commit": "af4572a"
+    },
+    {
+      "id": "07-01-retry",
+      "name": "Real production native-pull apply (branch takeover continuation). Operator supplied ACCOUNTADMIN access; created the 6 local input files; fixed 6 versions.tf constraints, a bad tfvars.example default, imported 3 shared IAM roles, namespaced 3 inline policies, switched auth to password, resolved a dashboard-object ordering race. All 3 Terraform roots applied with zero destroys. native_pull_ready=true.",
+      "status": "done",
+      "commit": "62633c2",
+      "result": "SNOW-03 PASS"
+    },
+    {
+      "id": "07-deployer-user",
+      "name": "Created EDGARTOOLS_PROD_DEPLOYER Snowflake user, granted the role, verified end-to-end (auth + live SELECT on source tables), stored credentials in new secret edgartools-prod/dbt/snowflake. Rotated once after an internal scripting bug briefly exposed a since-invalidated password in tool output (see TODOS.md).",
+      "status": "done",
+      "commit": "62633c2",
+      "result": "SNOW-04 dependency cleared; dbt deps/run/test deliberately not run"
     }
   ],
   "remaining_tasks": [
     {
-      "id": "phase-7-start",
-      "name": "Run /gsd:discuss-phase 7 --ws go-live to scope Phase 7 (Snowflake native-pull stack deploy).",
-      "status": "next"
+      "id": "phase-7-dbt-run",
+      "name": "On explicit approval, run dbt deps/run/test --target prod using edgartools-prod/dbt/snowflake credentials to actually build the 9 gold dynamic tables + status view, then capture EDGARTOOLS_GOLD_STATUS/freshness/task-history evidence.",
+      "status": "ready_pending_approval"
     },
     {
       "id": "phases-8-11",
@@ -62,14 +75,14 @@
   ],
   "blockers": [
     {
+      "description": "SNOW-04 (dbt/gold) — dependency on SNOW-03 is now cleared and a verified deployer user/credentials exist, but dbt deps/run/test has not actually been run yet (deliberately, to avoid assuming approval for building 9 production gold tables beyond the explicitly requested user-creation/secret-population scope).",
+      "type": "human_action",
+      "workaround": "Get explicit approval, then run dbt deps/run/test --target prod using edgartools-prod/dbt/snowflake, then capture EDGARTOOLS_GOLD_STATUS/freshness/task-history evidence per dbt-gold.md's remaining remediation steps."
+    },
+    {
       "description": "Production MDM Secrets Manager values are not populated for edgartools-prod/mdm/postgres_dsn, edgartools-prod/mdm/neo4j, edgartools-prod/mdm/api_keys, edgartools-prod/mdm/snowflake. The 4 empty containers exist (created by Phase 6's terraform apply) but carry no AWSCURRENT version.",
       "type": "human_action",
       "workaround": "Owned by Phase 8 / MDM-02, explicitly deferred (D-05/D-06) — not in scope for Phase 6 or 7."
-    },
-    {
-      "description": "Prod Snowflake native pull and dbt gold deployment have not yet run; 3 prod backend.hcl files are missing.",
-      "type": "external",
-      "workaround": "Phase 7, next up, follows Phase 6's AWS storage/export bucket outputs (now live)."
     },
     {
       "description": "Prod hosted graph E2E has not yet passed against production Snowflake, MDM secrets, and Native App compute pool.",
@@ -89,8 +102,18 @@
   ],
   "human_actions_pending": [
     {
+      "action": "Approve running dbt deps/run/test --target prod against edgartools-prod/dbt/snowflake credentials.",
+      "context": "Creates 9 production gold dynamic tables + 1 status view in EDGARTOOLS_PROD.EDGARTOOLS_GOLD. All inputs are ready (user/role/grants verified); this is the only remaining step for SNOW-04.",
+      "blocking": true
+    },
+    {
+      "action": "Consider whether the dev/prod shared, non-namespaced IAM roles in runtime_access module (TODOS.md) warrant a coordinated fix across both environments.",
+      "context": "Not blocking Phase 7; the 3 inline policies were namespaced to stop cross-environment secret overwrite, but the 3 roles themselves remain shared by design until a coordinated re-pointing of both envs' ECS task defs is done.",
+      "blocking": false
+    },
+    {
       "action": "Run /gsd:secure-phase 6 --ws go-live",
-      "context": "Security enforcement is on for this workstream and no 06-SECURITY.md exists yet. Advisory — does not block starting Phase 7, but should be closed before the final v1.6 go/no-go audit.",
+      "context": "Security enforcement is on for this workstream and no 06-SECURITY.md exists yet. Advisory — does not block Phase 7 retry, but should be closed before the final v1.6 go/no-go audit.",
       "blocking": false
     },
     {
@@ -100,6 +123,16 @@
     }
   ],
   "decisions": [
+    {
+      "decision": "User explicitly instructed taking over codex/go-live-v1.6-phase7 (\"take over branch codex/go-live-v1.6-phase7\"). Re-rooted as claude/go-live-v1.6-phase7 from the same tip commit (b67acfd) in the Claude go-live worktree, pushed to origin.",
+      "rationale": "CLAUDE.md HARD RULE permits taking over the other runtime's branch only with explicit user instruction; Codex's original branch/worktree was left untouched rather than deleted or rebased.",
+      "phase": "07"
+    },
+    {
+      "decision": "Plans 07-01 and 07-02 (both Codex-authored, inherited as-is) correctly stopped at secret-safe BLOCKED evidence rather than fabricating prod credentials or running dbt against an unconfirmed source layer.",
+      "rationale": "D-05/D-06/D-10 discipline — no plan should synthesize placeholder secrets or skip a dependency gate to make progress look real.",
+      "phase": "07"
+    },
     {
       "decision": "Phase 6 fixes the versions.tf constraint bug directly as an ISO-01 exception (same pattern as Phase 4's dashboard README rewrite).",
       "rationale": "Hard blocker for the real apply this phase exists to run; fixing in-phase avoids a separate non-go-live commit.",
@@ -125,6 +158,6 @@
     "infra/aws-prod-application.json (intentionally untracked — generated deploy manifest, never to be committed per D-10)"
   ],
   "background_processes": [],
-  "next_action": "cd /Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform && /gsd:discuss-phase 7 --ws go-live",
-  "context_notes": "Phase 6 — the project's first real production-mutating phase — is fully complete and verified on branch claude/go-live-v1.6-phase6 (branched off Codex's codex/go-live-v1.6-production-launch per the CLAUDE.md Claude/Codex branch-separation rule; upstream tracking was explicitly unset to prevent an accidental push onto Codex's branch). terraform apply succeeded (42 resources, 0 destroys), edgar-identity secret populated, active app deploy succeeded (22 state machines, 5 ECS task defs, exit 0), launch gate matrix rows 12/14/15/16/17 flipped to PASS, row 13 left correctly BLOCKED (out of scope, prerequisite satisfied). One mid-execution session-limit interruption during 06-02 was recovered by verifying live AWS state directly (ECR tags, JSON manifest structure via Python, live describe-secret) rather than trusting the draft SUMMARY.md at face value; a verifier pass then caught a doc-accuracy off-by-one (actual: 18 manifest keys / 22 state machines, draft said 17/21) and one unredacted ECS cluster ARN value in evidence/aws.md — both fixed and a re-verification pass confirmed clean (10/10). No plan or task is currently in progress — this is a clean phase boundary, not a mid-task pause. Next: discuss-phase for Phase 7 (Snowflake native-pull stack deploy)."
+  "next_action": "Get explicit approval to run dbt deps/run/test --target prod (builds 9 production gold tables); otherwise next is Phase 8 (MDM secrets/connectivity).",
+  "context_notes": "Phase 6 is fully complete and verified (10/10 must-haves). Codex independently scoped/planned/executed Phase 7 on codex/go-live-v1.6-phase7, reaching two BLOCKED-with-evidence outcomes (SNOW-03/SNOW-04) for the correct reason: missing prod Snowflake credentials. At the user's explicit instruction this branch was taken over by Claude (re-rooted from the same tip, zero content change, pushed to origin). The user then supplied real Snowflake ACCOUNTADMIN access via a local SnowCLI connection and asked to unblock the Snowflake blockers by creating an appropriate user and updating the AWS secret store. This was done: a real production terraform apply ran across all 3 Snowflake-side Terraform roots (after fixing several real bugs — pessimistic version constraints, a bad tfvars.example default, a dev/prod shared-IAM-role collision, an externalbrowser-vs-password auth mismatch, and a dashboard-object creation ordering race), SNOW-03 now PASSES, and a verified EDGARTOOLS_PROD_DEPLOYER user/credentials now exist in a new secret (edgartools-prod/dbt/snowflake), clearing SNOW-04's dependency. dbt deps/run/test itself was deliberately not run, since building 9 production gold tables is a further state change beyond the literal ask. A password was briefly exposed in agent tool output due to a Python quoting bug during this work; it was immediately rotated before being stored anywhere, and the incident plus root cause is logged in TODOS.md. Source-code fixes (versions.tf x6, runtime_access module policy namespacing) are real, durable fixes and have been committed."
 }

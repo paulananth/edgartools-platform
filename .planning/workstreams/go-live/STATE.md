@@ -2,28 +2,28 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
-status: phase_complete
-stopped_at: Phase 06 complete and verified (10/10 must-haves); Phase 07 not yet started
-last_updated: "2026-06-19T22:30:00.000Z"
-last_activity: 2026-06-19 -- Phase 06 (both plans + verification) complete; LIVE-04 and LIVE-05 satisfied, Blocker 1 fully remediated
+status: blocked
+stopped_at: SNOW-03 PASSED (real production native-pull apply); SNOW-04 dependency cleared but dbt deps/run/test not yet executed
+last_updated: "2026-06-19T23:30:00.000Z"
+last_activity: 2026-06-19 -- Claude (on claude/go-live-v1.6-phase7) ran the real production Snowflake native-pull apply with operator-supplied ACCOUNTADMIN access; fixed 6 versions.tf constraints, a bad tfvars.example default, imported 3 shared IAM roles, namespaced 3 inline policies, switched auth to password, resolved a dashboard-object ordering race; created and verified EDGARTOOLS_PROD_DEPLOYER end-to-end; stored credentials in new secret edgartools-prod/dbt/snowflake. dbt deps/run/test deliberately not run (separate further state change).
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 17
+  completed_phases: 2
+  total_plans: 4
+  completed_plans: 4
+  percent: 33
 ---
 
 # Project State - go-live
 
 ## Current Position
 
-Phase: 06 (Production AWS Infrastructure And Application Deploy) — EXECUTING
-Plan: 1 of 2 COMPLETE; 2 of 2 not started
-Status: Plan 06-01 complete — Task 1 (commit a6f6dad), Task 2 approved by user ("approved"), Task 3 (commit 92b7127). terraform apply succeeded (42 added, 0 changed, 0 destroyed); edgartools-prod-edgar-identity secret populated; 4 MDM secrets remain empty shells; non-secret evidence appended to phase-01 evidence/aws.md.
-Last activity: 2026-06-19 -- Phase 06 Plan 01 complete (all 3 tasks); LIVE-04 satisfied, Blocker 1 remediated
+Phase: 07 (Production Snowflake Native Pull And Gold) — SNOW-03 PASS, SNOW-04 dependency cleared
+Plan: 2 of 2 executed, then retried on branch takeover
+Status: SNOW-03 now PASSES — real production `terraform apply` ran across all 3 Snowflake-side roots (access/aws, snowflake, access/snowflake), zero destroys, native_pull_ready=true. SNOW-04's blocking dependency on SNOW-03 is cleared and a verified production deployer user/credentials now exist, but `dbt deps/run/test` has deliberately not been run yet (separate further state change against production gold tables, not assumed approved by this continuation).
+Last activity: 2026-06-19 -- Real production Snowflake native-pull apply completed and verified; see evidence/native-pull.md and evidence/dbt-gold.md for full detail.
 
-Progress: 9% (0/6 phases complete, 1/11 plans complete)
+Progress: 33% (2/6 phases have plan-execution summaries; SNOW-03 unblocked, SNOW-04 ready to retry pending explicit approval to run dbt)
 
 ## Milestone Context
 
@@ -35,7 +35,10 @@ are remediated, owner-approved, and backed by non-secret production evidence.
 
 `/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform`
 
-Branch: `codex/go-live-v1.6-production-launch`
+Branch: `claude/go-live-v1.6-phase7` (taken over from Codex's `codex/go-live-v1.6-phase7`
+at user's explicit instruction on 2026-06-19; tip commit `b67acfd` unchanged, branch
+re-rooted and pushed to origin under the new name per the CLAUDE.md HARD RULE that
+Claude and Codex must never commit to the same branch going forward)
 
 ## Decisions
 
@@ -63,6 +66,20 @@ Branch: `codex/go-live-v1.6-production-launch`
   flag in this environment — the default AWS CLI profile region (`us-east-2`) caused a
   transient ResourceNotFoundException on the first put-secret-value attempt despite the
   secret existing.
+
+- [Phase 07]: Plans 07-01 and 07-02 correctly stopped at BLOCKED evidence rather than
+  fabricating prod Snowflake credentials or running dbt against an unconfirmed source
+  layer. 5-whys root cause for both: production Snowflake Terraform backend/tfvars files
+  (6 total, across the access/aws, snowflake, and access/snowflake prod stacks) have never
+  been provisioned by a human operator — this is the first phase to touch the Snowflake
+  side of prod, and SNOW-04 (dbt/gold) is purely dependency-blocked on SNOW-03
+  (native-pull) rather than an independent failure.
+
+- [Phase 07 takeover]: User explicitly instructed taking over `codex/go-live-v1.6-phase7`
+  on 2026-06-19. Re-rooted as `claude/go-live-v1.6-phase7` from the same tip commit
+  (`b67acfd`, no content change) in the Claude go-live worktree and pushed to origin.
+  Codex's original branch/worktree left untouched (not deleted, not rebased) per the
+  HARD RULE — only the new Claude-owned branch will receive further commits.
 
 ## Known Inputs
 
@@ -114,10 +131,12 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-19T22:30:00.000Z
-Stopped at: Phase 06 complete and verified (06-VERIFICATION.md: 10/10 must-haves, PASSED). No plan in progress.
+Last session: 2026-06-19T22:05:00.000Z
+Stopped at: Branch ownership taken over from Codex (`codex/go-live-v1.6-phase7` ->
+`claude/go-live-v1.6-phase7`, tip `b67acfd` unchanged). Phase 7 plans executed;
+SNOW-03 and SNOW-04 remain BLOCKED on missing prod Snowflake Terraform local inputs.
 Resume file: None
-Resume command: Run `/gsd:discuss-phase 7 --ws go-live` to start Phase 7 (Snowflake native-pull stack deploy).
+Resume command: Provide the missing prod Terraform local input files outside git, then create a Phase 7 retry/gap plan before starting Phase 8, from branch `claude/go-live-v1.6-phase7`.
 
 ## Performance Metrics
 

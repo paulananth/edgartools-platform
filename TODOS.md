@@ -761,6 +761,16 @@ connectivity is unverified.
 
 ## EDGARTOOLS_PROD_DEPLOYER direct SELECT grants on EDGARTOOLS_SOURCE
 
+**RESOLVED (2026-06-19, Phase 7 branch takeover):** The `access/snowflake/
+accounts/prod` Terraform root's `deployer_source_all_objects`/
+`deployer_source_future_objects` grants already cover this — confirmed live
+by creating the `EDGARTOOLS_PROD_DEPLOYER` user, authenticating as it using
+only credentials read back from `edgartools-prod/dbt/snowflake`, and running
+a real `SELECT` against `EDGARTOOLS_SOURCE` tables, which succeeded. No
+additional grant was needed beyond what Terraform already applies. Leaving
+the rest of this entry for context; the `EDGARTOOLS_DEV_DEPLOYER` dev-side
+gap referenced below may still be worth checking separately.
+
 **What:** Grant the `EDGARTOOLS_PROD_DEPLOYER` role direct `SELECT` on
 `EDGARTOOLS_SOURCE` tables before any `dbt run --full-refresh` is attempted
 against production dynamic tables.
@@ -796,3 +806,82 @@ scope.
 **Where:** REQUIREMENTS.md ("Future Requirements" section); search for
 remaining `NEO4J_*`/Aura references outside the dashboard README already
 cleaned up in Phase 4.
+
+---
+
+## Password leak via Python quoting bug (resolved in-session)
+
+**Problem:** While creating the `EDGARTOOLS_PROD_DEPLOYER` Snowflake user
+during Phase 7's branch takeover, a generated password briefly appeared in
+plaintext in agent tool output (a Claude Code session transcript), not in
+any committed file.
+
+1. Symptom: a Python `json.dumps({...})` one-liner, passed as a `python3 -c`
+   argument nested inside `$(...)` command substitution inside an outer
+   double-quoted string, threw 6 separate `SyntaxError`s — one per dict key —
+   and one of the error traces echoed the literal password value.
+2. Why did it throw 6 separate errors instead of one? The shell/tool layer
+   that executes the agent's Bash command appears to have split the
+   multi-line `-c` argument into multiple invocations at single-quote
+   boundaries, rather than passing it through as one atomic string — each
+   resulting in `python3 -c '<one dict line>'` being run on its own.
+3. Why did this expose the value at all? The dict's `os.environ[...]` lookup
+   pattern was not used in the first attempt; the password was interpolated
+   directly into the Python source text via shell variable expansion before
+   the command was sent, so the broken-up fragments still contained the
+   resolved literal value, and Python's syntax-error trace printed the
+   offending source line verbatim.
+4. Why was the password interpolated directly instead of read from an env
+   var inside the script? Convenience — written as a single inline `-c`
+   string instead of a script file, to avoid an extra `Write` call.
+5. Root cause: inline multi-line `python3 -c "..."` strings with nested
+   quoting are unsafe in this environment when they carry secret values,
+   because (a) the command-splitting behavior above is not obvious in
+   advance, and (b) any resulting syntax error reprints the source text
+   that produced it, including any interpolated secret.
+
+**Resolution:** The leaked password was immediately rotated
+(`ALTER USER ... SET PASSWORD`) before being stored anywhere, so the exposed
+value was never persisted to Secrets Manager. The retry used a `Write`-created
+script file that reads the secret only from `os.environ["NEW_PW"]` (never
+interpolated into source text), with all command output redirected to a log
+file and only `grep -vi password`-filtered lines ever surfaced — this
+succeeded with no further exposure.
+
+**Going forward:** When a Bash command must build a secret-bearing payload
+(JSON, SQL, etc.) in Python, always write the logic to a file via the `Write`
+tool first and have it read the secret from an environment variable via
+`os.environ`, never interpolate a secret into Python (or any) source text via
+shell expansion inside an inline `-c`/`-e` one-liner — even when the line
+looks like it should be safe, a downstream parse error can reprint it
+verbatim.
+
+---
+
+## runtime_access module: shared, non-namespaced IAM roles across dev/prod
+
+**What:** `infra/terraform/access/aws/modules/runtime_access/main.tf` hardcodes
+3 role names (`sec_platform_runner_execution`, `sec_platform_runner_task`,
+`sec_platform_runner_step_functions`) without `${var.name_prefix}` env
+namespacing, unlike every other resource in the same file. Confirmed live
+that dev created these roles first and prod's already-deployed (Phase 6) ECS
+task definitions already reference the identical literal role ARNs — dev and
+prod genuinely share these 3 roles today, in the same AWS account.
+
+**Why this matters:** Renaming the roles now would break live ECS task
+definitions in both environments (their `executionRoleArn`/`taskRoleArn`
+fields are the literal ARN string, which changes if the role is renamed).
+The 3 *inline policies* attached to these roles were namespaced during Phase
+7's branch takeover (`${var.name_prefix}-runner-execution-secret` etc.) to
+stop one environment's apply from silently overwriting the other's secret/
+bucket grants — but the roles themselves remain intentionally shared and
+un-namespaced, which is a real environment-isolation gap (a policy change
+intended for prod's role trust, attached managed-policy set, or assume-role
+policy would also affect dev, and vice versa).
+
+**Where:** `infra/terraform/access/aws/modules/runtime_access/main.tf` lines
+17-19 (`local.runner_execution_role_name` etc.); live AWS IAM roles
+`sec_platform_runner_execution`/`_task`/`_step_functions` in account
+`077127448006`. A proper fix would need to namespace the role names AND
+re-point both dev's and prod's ECS task definitions at the new ARNs in a
+single coordinated change — out of scope for an ad-hoc unblock.
