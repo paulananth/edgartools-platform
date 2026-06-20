@@ -682,6 +682,32 @@ multiple `dbt run`s).
 
 ---
 
+## parent_company_entity_id_always_none: HAS_PARENT_COMPANY always derives 0 relationships
+
+**Status:** OPEN — pre-production blocker. Not Phase 5 scope (Phase 5 is documentation-only); fix before any production launch.
+
+**What:** `MdmCompany.parent_company_entity_id` is always `None` for every MDM company record. As a result, `_derive_has_parent_company` in `pipeline.py` (which filters on `MdmCompany.parent_company_entity_id.isnot(None)`) always produces 0 rows, and the `HAS_PARENT_COMPANY` relationship type is never written to the graph.
+
+**Why (5-whys):**
+1. `_derive_has_parent_company` queries `MdmCompany` rows where `parent_company_entity_id IS NOT NULL` — but that column is always NULL for every company.
+2. `parent_company_entity_id` is set by `CompanyResolver._parent_company_entity_id()` during MDM resolution (`run_companies` → `CompanyResolver.resolve_one` → `staged["parent_company_entity_id"]`).
+3. `_parent_company_entity_id` reads `company_row.get("parent_company_cik") or company_row.get("parent_cik") or company_row.get("ultimate_parent_cik")` (lines 172-175 of `resolvers/company.py`).
+4. `company_row` is a DuckDB dict from `SELECT * FROM sec_company`.
+5. Root cause: `sec_company`'s DDL (`silver_store.py:24`) has no `parent_company_cik`, `parent_cik`, or `ultimate_parent_cik` column — those names match nothing in the schema. The actual columns are `cik, entity_name, entity_type, sic, sic_description, state_of_incorporation, fiscal_year_end, ein, description, category`. The `.get()` calls silently return `None` for every row.
+
+**Where:**
+- `edgar_warehouse/mdm/resolvers/company.py:172-175` — reads three non-existent silver columns.
+- `edgar_warehouse/silver_store.py:24` — the authoritative `sec_company` DDL (no parent columns).
+- `edgar_warehouse/mdm/pipeline.py:681-707` — `_derive_has_parent_company` silently produces 0 edges.
+
+**Fix approach:** Two steps required. (a) Identify a data source for parent/subsidiary CIK relationships — SEC `submissions.json` does not carry a parent CIK field, so either a supplemental mapping (e.g. SEC EDGAR company search, SIC-based grouping, or a manually curated mapping) is needed, or the `HAS_PARENT_COMPANY` feature should be explicitly documented as not-yet-sourced. (b) Once a source is identified, add the parent CIK to the `sec_company` silver DDL and the runtime that writes those rows, then correct the three column names in `_parent_company_entity_id`. Until step (a) is resolved, the resolver should at minimum log a warning rather than silently returning `None`, to make the gap observable in production logs.
+
+**Impact:** `HAS_PARENT_COMPANY` relationships are never written to the graph for any company. Downstream features relying on corporate ownership graph traversals (subsidiary detection, ultimate-parent roll-ups) silently produce empty results with no error signal.
+
+**Surfaced:** pre-production bug hunt (go-live v1.5), 2026-06-17.
+
+---
+
 ## Dev Terraform MDM-cutover state reconciliation — RESOLVED
 
 **Status:** RESOLVED 2026-06-11. `infra/terraform/accounts/dev/` now matches AWS
