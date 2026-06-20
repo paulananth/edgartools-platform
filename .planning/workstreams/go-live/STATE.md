@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
 status: blocked
-stopped_at: SNOW-03 PASSED (real production native-pull apply); SNOW-04 dependency cleared but dbt deps/run/test not yet executed
-last_updated: "2026-06-19T23:30:00.000Z"
-last_activity: 2026-06-19 -- Claude (on claude/go-live-v1.6-phase7) ran the real production Snowflake native-pull apply with operator-supplied ACCOUNTADMIN access; fixed 6 versions.tf constraints, a bad tfvars.example default, imported 3 shared IAM roles, namespaced 3 inline policies, switched auth to password, resolved a dashboard-object ordering race; created and verified EDGARTOOLS_PROD_DEPLOYER end-to-end; stored credentials in new secret edgartools-prod/dbt/snowflake. dbt deps/run/test deliberately not run (separate further state change).
+stopped_at: SNOW-03 and SNOW-04 both PASS; Phase 7 Snowflake gates fully closed; Phase 8 (MDM secrets/connectivity) is next
+last_updated: "2026-06-20T11:00:00.000Z"
+last_activity: 2026-06-20 -- Claude ran `dbt deps`/`dbt run --target prod`/`dbt test --target prod` against production using edgartools-prod/dbt/snowflake credentials. 15 of 16 models passed immediately; FINANCIAL_FACTS failed on a genuine pre-existing schema-drift bug (live SEC_FINANCIAL_FACT table missing PERIOD_START, also present in dev). Fixed with a non-destructive 3-step ALTER TABLE migration against prod only (5-whys in TODOS.md). Retry: 16/16 models built, 47/47 tests pass. SNOW-04 now PASSES.
 progress:
   total_phases: 6
   completed_phases: 2
@@ -18,12 +18,12 @@ progress:
 
 ## Current Position
 
-Phase: 07 (Production Snowflake Native Pull And Gold) — SNOW-03 PASS, SNOW-04 dependency cleared
-Plan: 2 of 2 executed, then retried on branch takeover
-Status: SNOW-03 now PASSES — real production `terraform apply` ran across all 3 Snowflake-side roots (access/aws, snowflake, access/snowflake), zero destroys, native_pull_ready=true. SNOW-04's blocking dependency on SNOW-03 is cleared and a verified production deployer user/credentials now exist, but `dbt deps/run/test` has deliberately not been run yet (separate further state change against production gold tables, not assumed approved by this continuation).
-Last activity: 2026-06-19 -- Real production Snowflake native-pull apply completed and verified; see evidence/native-pull.md and evidence/dbt-gold.md for full detail.
+Phase: 07 (Production Snowflake Native Pull And Gold) — SNOW-03 PASS, SNOW-04 PASS
+Plan: 2 of 2 executed, then retried on branch takeover, then dbt run/test completed
+Status: SNOW-03 and SNOW-04 both PASS. `dbt deps`/`dbt run --target prod`/`dbt test --target prod` ran against production; 16/16 gold models built and 47/47 tests pass after fixing a pre-existing schema-drift bug (missing PERIOD_START column on the live SEC_FINANCIAL_FACT table, fixed via non-destructive ALTER TABLE migration against prod; dev has the identical gap, intentionally not fixed — out of scope). Phase 7's Snowflake gates are fully closed.
+Last activity: 2026-06-20 -- dbt deps/run/test executed against production; FINANCIAL_FACTS schema-drift bug found and fixed; 16/16 models, 47/47 tests passing. See evidence/native-pull.md and evidence/dbt-gold.md for full detail.
 
-Progress: 33% (2/6 phases have plan-execution summaries; SNOW-03 unblocked, SNOW-04 ready to retry pending explicit approval to run dbt)
+Progress: 33% (2/6 phases have plan-execution summaries; Phase 7's two Snowflake gates SNOW-03/SNOW-04 both pass; Phase 8 (MDM secrets/connectivity) is next)
 
 ## Milestone Context
 
@@ -131,12 +131,15 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-19T22:05:00.000Z
-Stopped at: Branch ownership taken over from Codex (`codex/go-live-v1.6-phase7` ->
-`claude/go-live-v1.6-phase7`, tip `b67acfd` unchanged). Phase 7 plans executed;
-SNOW-03 and SNOW-04 remain BLOCKED on missing prod Snowflake Terraform local inputs.
+Last session: 2026-06-20T11:00:00.000Z
+Stopped at: SNOW-03 and SNOW-04 both PASS. Phase 7's Snowflake gates are fully
+closed (native-pull infra live, 16/16 gold dbt models built, 47/47 tests pass).
 Resume file: None
-Resume command: Provide the missing prod Terraform local input files outside git, then create a Phase 7 retry/gap plan before starting Phase 8, from branch `claude/go-live-v1.6-phase7`.
+Resume command: Start Phase 8 (MDM secrets/connectivity) from branch
+`claude/go-live-v1.6-phase7`. Note: dev's SEC_FINANCIAL_FACT table has the
+identical PERIOD_START schema-drift gap fixed in prod this session — apply the
+same fix there before ever running `dbt run --target dev --select
+financial_facts`.
 
 ## Performance Metrics
 

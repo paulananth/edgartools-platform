@@ -858,6 +858,70 @@ verbatim.
 
 ---
 
+## SEC_FINANCIAL_FACT missing PERIOD_START column blocked `dbt run --target prod` (resolved in-session)
+
+**Problem:** Running `dbt deps/run/test --target prod` (Phase 7, SNOW-04) built
+15 of 16 gold models successfully, but `FINANCIAL_FACTS` failed with
+`SQL compilation error: error line 44 ... invalid identifier 'PERIOD_START'`.
+
+1. Symptom: the dbt model's `select ... period_start ... from
+   {{ source("edgartools_source", "SEC_FINANCIAL_FACT") }}` failed to compile
+   against the live table.
+2. Why? `INFORMATION_SCHEMA.COLUMNS` confirmed the live
+   `EDGARTOOLS_PROD.EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT` table has only 13
+   columns — no `PERIOD_START`.
+3. Why, when the model expects it? Checked `EDGARTOOLS_DEV`'s identical
+   table — also missing the column. Not a prod-only gap; systemic across both
+   environments.
+4. Why is it missing from both, when the Python silver parser
+   (`edgar_warehouse/parsers/financials.py:172`) and the PyArrow serving
+   schema (`edgar_warehouse/serving/gold_models.py`'s
+   `_SEC_FINANCIAL_FACT_SCHEMA`) both already produce/expect this field?
+   `infra/snowflake/sql/bootstrap/01_source_stage.sql` already declares
+   `period_start DATE NOT NULL DEFAULT '0001-01-01'` in the `CREATE TABLE IF
+   NOT EXISTS` body and carries an explicit migration line
+   (`ALTER TABLE SEC_FINANCIAL_FACT ADD COLUMN IF NOT EXISTS period_start
+   DATE NOT NULL DEFAULT '0001-01-01';`) intended for tables created before
+   the column existed.
+5. Root cause: `CREATE TABLE IF NOT EXISTS` is a no-op once the table already
+   exists, and the bootstrap script's migration step has never actually been
+   (re-)executed against either live database since it was added to the file
+   — the fix existed in the repo but was never deployed.
+
+**Resolution:** Applied the migration directly against
+`EDGARTOOLS_PROD.EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT` via the `snowconn`
+(ACCOUNTADMIN) SnowCLI connection. The checked-in statement's exact literal
+form (`DEFAULT '0001-01-01'` and `DEFAULT TO_DATE('0001-01-01')`) both failed
+in this Snowflake account — `ADD COLUMN ... DEFAULT '<string>'` was
+type-coerced as VARCHAR instead of DATE, and `DEFAULT TO_DATE(...)` was
+rejected with "Invalid column default expression" (Snowflake's `ALTER TABLE
+ADD COLUMN` only accepts literal constants as defaults, not function calls).
+Used the 3-step non-literal-safe form instead: `ADD COLUMN period_start
+DATE` (nullable) → `UPDATE ... SET period_start = DATE '0001-01-01' WHERE
+period_start IS NULL` (0 rows affected — table was empty, no backfill data
+loss possible) → `ALTER COLUMN period_start SET NOT NULL`. A trailing
+`ALTER COLUMN ... SET DEFAULT` additionally failed with "Unsupported feature
+'Alter Column Set Default'" (Snowflake does not support setting a default on
+an existing column at all) — left without a stored default, which is safe
+here because this is a passthrough loader-managed table where every
+INSERT already supplies `period_start` explicitly. Re-ran
+`dbt run --target prod --select financial_facts` (SUCCESS) and
+`dbt test --target prod` (47/47 PASS, 0 ERROR). **`EDGARTOOLS_DEV`'s
+identical table was not touched — same gap exists there but is out of scope
+for this prod-only task.**
+
+**Going forward:** `01_source_stage.sql`'s `ALTER TABLE ... ADD COLUMN`
+migration statements are not automatically re-applied by any deploy
+script when a column is added to an existing table — they must be run
+explicitly (and on this Snowflake account, with a non-literal-constant
+default, via the 3-step `ADD COLUMN` → `UPDATE` → `SET NOT NULL` pattern, not
+a single `ADD COLUMN ... DEFAULT` statement). If `01_source_stage.sql` gains
+further such migrations, re-run them against dev before running `dbt run
+--target dev`, or `FINANCIAL_FACTS` will fail there with the identical
+error.
+
+---
+
 ## runtime_access module: shared, non-namespaced IAM roles across dev/prod
 
 **What:** `infra/terraform/access/aws/modules/runtime_access/main.tf` hardcodes

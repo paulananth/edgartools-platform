@@ -224,3 +224,52 @@ Result: dependency blocked; production dbt/gold execution was not started.
 - BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` rows `Snowflake deployer direct
   grants for gold dynamic tables`, `dbt compile/run/test for production target`,
   and `EDGARTOOLS_GOLD_STATUS and dynamic-table freshness`.
+
+### SNOW-04 dbt/gold — PASS (2026-06-20, branch takeover continuation)
+
+`dbt deps`, `dbt run --target prod`, and `dbt test --target prod` ran against
+production using `EDGARTOOLS_PROD_DEPLOYER` credentials sourced live from
+`edgartools-prod/dbt/snowflake` (never written to disk or printed).
+
+- `dbt deps`: exit 0, no external packages.
+- `dbt run --target prod` (first attempt): 15 of 16 models succeeded;
+  `FINANCIAL_FACTS` failed with a genuine schema-drift bug (live
+  `SEC_FINANCIAL_FACT` table missing a `PERIOD_START` column that the model,
+  the Python silver parser, and the Python serving schema all already
+  expected). This is a pre-existing gap, not caused by this deploy — full
+  5-whys and fix are documented in `TODOS.md` ("SEC_FINANCIAL_FACT missing
+  PERIOD_START column blocked `dbt run --target prod`"). Confirmed the
+  identical gap exists in `EDGARTOOLS_DEV`'s table too (not fixed there —
+  out of scope for this prod-only task).
+- Fix applied directly to `EDGARTOOLS_PROD.EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT`
+  via the `snowconn` (ACCOUNTADMIN) connection: added `PERIOD_START DATE NOT
+  NULL` via a 3-step migration (`ADD COLUMN` nullable -> backfill `UPDATE`,
+  0 rows affected, table was empty -> `SET NOT NULL`). No data loss; the
+  checked-in single-statement `ADD COLUMN ... DEFAULT '0001-01-01'` form
+  failed on this Snowflake account with a type-coercion error, and Snowflake
+  does not support `ALTER COLUMN ... SET DEFAULT` on an existing column at
+  all, so the column carries no stored default (acceptable — the loader
+  always supplies the value explicitly on insert).
+- `dbt run --target prod --select financial_facts` (retry): SUCCESS,
+  `PASS=1 ERROR=0`.
+- `dbt test --target prod` (full suite): `PASS=47 WARN=0 ERROR=0 SKIP=0
+  NO-OP=0 TOTAL=47` (36 data tests + 11 unit tests, including all
+  `financial_derived` YoY tiebreaker/amendment/multi-company-isolation unit
+  tests against real production data).
+- `SHOW DYNAMIC TABLES IN SCHEMA EDGARTOOLS_PROD.EDGARTOOLS_GOLD`: all 15
+  dynamic tables report `scheduling_state = ACTIVE`, `target_lag =
+  DOWNSTREAM`, never suspended.
+- `SELECT * FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS`:
+  no rows (expected — this build used dbt's direct `CREATE OR REPLACE
+  DYNAMIC TABLE` path, not a completed Snowflake-managed manifest refresh
+  cycle, which is what populates this status view).
+- Full detail in
+  [../../07-production-snowflake-native-pull-and-gold/evidence/dbt-gold.md](../../07-production-snowflake-native-pull-and-gold/evidence/dbt-gold.md).
+- PASS - matrix rows `dbt compile/run/test for production target` and
+  `EDGARTOOLS_GOLD_STATUS and dynamic-table freshness` flip to PASS.
+- Note: matrix row `Snowflake deployer direct grants for gold dynamic
+  tables` is satisfied as a side effect (the deployer already had the
+  `SELECT`/`CREATE` grants needed for these 16 models to build and refresh)
+  but the original required-fix check (`SHOW GRANTS TO ROLE
+  EDGARTOOLS_PROD_DEPLOYER`) was not separately re-run in this continuation;
+  leave that row's disposition to whichever check explicitly covers it.

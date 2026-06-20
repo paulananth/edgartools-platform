@@ -1,10 +1,10 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-19T23:30:00.000Z",
+  "timestamp": "2026-06-20T11:00:00.000Z",
   "context": "workstream",
   "workstream": "go-live",
   "branch": "claude/go-live-v1.6-phase7",
-  "head": "62633c2",
+  "head": "955ec2f",
   "workspace_path": "/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform",
   "phase": "07",
   "phase_name": "production-snowflake-native-pull-and-gold",
@@ -12,7 +12,7 @@
   "plan": null,
   "task": null,
   "total_tasks": null,
-  "status": "snow_03_passed_snow_04_dependency_cleared",
+  "status": "snow_03_and_snow_04_passed_phase_7_closed",
   "handoff_notice": "HARD RULE (CLAUDE.md): Claude and Codex must never commit to the same branch. claude/go-live-v1.6-phase7 was created at the user's explicit instruction by branching from Codex's codex/go-live-v1.6-phase7 at the same tip commit (b67acfd, no content change) and is now Claude-owned and pushed to origin. Codex's original branch/worktree (/Users/aneenaananth/gsd-workspaces/codex-go-live-phase7/edgartools-platform) was left untouched, not deleted, not rebased. All further commits must go to claude/go-live-v1.6-phase7, not the codex branch.",
   "completed_tasks": [
     {
@@ -59,14 +59,16 @@
       "status": "done",
       "commit": "62633c2",
       "result": "SNOW-04 dependency cleared; dbt deps/run/test deliberately not run"
+    },
+    {
+      "id": "07-dbt-run",
+      "name": "Ran dbt deps/run/test --target prod using edgartools-prod/dbt/snowflake credentials. 15 of 16 models passed immediately; FINANCIAL_FACTS failed on a genuine pre-existing schema-drift bug (live SEC_FINANCIAL_FACT table missing PERIOD_START, also present in dev). Fixed with a non-destructive 3-step ALTER TABLE migration against prod only. Retry: 16/16 models built, 47/47 tests pass. Captured EDGARTOOLS_GOLD_STATUS (no rows, expected) and dynamic-table freshness (all 15 ACTIVE) evidence.",
+      "status": "done",
+      "commit": "pending",
+      "result": "SNOW-04 PASS"
     }
   ],
   "remaining_tasks": [
-    {
-      "id": "phase-7-dbt-run",
-      "name": "On explicit approval, run dbt deps/run/test --target prod using edgartools-prod/dbt/snowflake credentials to actually build the 9 gold dynamic tables + status view, then capture EDGARTOOLS_GOLD_STATUS/freshness/task-history evidence.",
-      "status": "ready_pending_approval"
-    },
     {
       "id": "phases-8-11",
       "name": "Execute MDM secrets/connectivity, hosted graph E2E, dashboard UAT, and final GO decision phases in roadmap order.",
@@ -74,11 +76,6 @@
     }
   ],
   "blockers": [
-    {
-      "description": "SNOW-04 (dbt/gold) — dependency on SNOW-03 is now cleared and a verified deployer user/credentials exist, but dbt deps/run/test has not actually been run yet (deliberately, to avoid assuming approval for building 9 production gold tables beyond the explicitly requested user-creation/secret-population scope).",
-      "type": "human_action",
-      "workaround": "Get explicit approval, then run dbt deps/run/test --target prod using edgartools-prod/dbt/snowflake, then capture EDGARTOOLS_GOLD_STATUS/freshness/task-history evidence per dbt-gold.md's remaining remediation steps."
-    },
     {
       "description": "Production MDM Secrets Manager values are not populated for edgartools-prod/mdm/postgres_dsn, edgartools-prod/mdm/neo4j, edgartools-prod/mdm/api_keys, edgartools-prod/mdm/snowflake. The 4 empty containers exist (created by Phase 6's terraform apply) but carry no AWSCURRENT version.",
       "type": "human_action",
@@ -102,9 +99,9 @@
   ],
   "human_actions_pending": [
     {
-      "action": "Approve running dbt deps/run/test --target prod against edgartools-prod/dbt/snowflake credentials.",
-      "context": "Creates 9 production gold dynamic tables + 1 status view in EDGARTOOLS_PROD.EDGARTOOLS_GOLD. All inputs are ready (user/role/grants verified); this is the only remaining step for SNOW-04.",
-      "blocking": true
+      "action": "Apply the identical PERIOD_START migration to EDGARTOOLS_DEV.EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT before ever running dbt run --target dev --select financial_facts.",
+      "context": "Confirmed dev has the identical schema-drift gap as prod did; intentionally not fixed in this prod-only continuation.",
+      "blocking": false
     },
     {
       "action": "Consider whether the dev/prod shared, non-namespaced IAM roles in runtime_access module (TODOS.md) warrant a coordinated fix across both environments.",
@@ -158,6 +155,6 @@
     "infra/aws-prod-application.json (intentionally untracked — generated deploy manifest, never to be committed per D-10)"
   ],
   "background_processes": [],
-  "next_action": "Get explicit approval to run dbt deps/run/test --target prod (builds 9 production gold tables); otherwise next is Phase 8 (MDM secrets/connectivity).",
-  "context_notes": "Phase 6 is fully complete and verified (10/10 must-haves). Codex independently scoped/planned/executed Phase 7 on codex/go-live-v1.6-phase7, reaching two BLOCKED-with-evidence outcomes (SNOW-03/SNOW-04) for the correct reason: missing prod Snowflake credentials. At the user's explicit instruction this branch was taken over by Claude (re-rooted from the same tip, zero content change, pushed to origin). The user then supplied real Snowflake ACCOUNTADMIN access via a local SnowCLI connection and asked to unblock the Snowflake blockers by creating an appropriate user and updating the AWS secret store. This was done: a real production terraform apply ran across all 3 Snowflake-side Terraform roots (after fixing several real bugs — pessimistic version constraints, a bad tfvars.example default, a dev/prod shared-IAM-role collision, an externalbrowser-vs-password auth mismatch, and a dashboard-object creation ordering race), SNOW-03 now PASSES, and a verified EDGARTOOLS_PROD_DEPLOYER user/credentials now exist in a new secret (edgartools-prod/dbt/snowflake), clearing SNOW-04's dependency. dbt deps/run/test itself was deliberately not run, since building 9 production gold tables is a further state change beyond the literal ask. A password was briefly exposed in agent tool output due to a Python quoting bug during this work; it was immediately rotated before being stored anywhere, and the incident plus root cause is logged in TODOS.md. Source-code fixes (versions.tf x6, runtime_access module policy namespacing) are real, durable fixes and have been committed."
+  "next_action": "Phase 7's Snowflake gates (SNOW-03, SNOW-04) are both PASS. Next is Phase 8 (MDM secrets/connectivity).",
+  "context_notes": "Phase 6 is fully complete and verified (10/10 must-haves). Codex independently scoped/planned/executed Phase 7 on codex/go-live-v1.6-phase7, reaching two BLOCKED-with-evidence outcomes (SNOW-03/SNOW-04) for the correct reason: missing prod Snowflake credentials. At the user's explicit instruction this branch was taken over by Claude. SNOW-03 passed via a real production terraform apply across all 3 Snowflake-side Terraform roots. SNOW-04 then required running dbt deps/run/test --target prod, which surfaced a genuine pre-existing schema-drift bug: the live SEC_FINANCIAL_FACT table (in both prod and dev) was missing a PERIOD_START column the dbt model, the Python silver parser, and the Python serving schema all already expected. The fix already existed in the checked-in bootstrap SQL as an ALTER TABLE migration statement but had never been (re-)executed against either live database. Applied a non-destructive 3-step migration (ADD COLUMN nullable -> backfill UPDATE, 0 rows affected since table was empty -> SET NOT NULL) against prod only; dev intentionally left with the identical gap, out of scope for this prod-only task. Re-ran dbt: 16/16 gold models built, 47/47 tests pass. SNOW-04 now PASSES. A password was briefly exposed in agent tool output earlier in this phase due to a Python quoting bug; it was immediately rotated before being stored anywhere (see TODOS.md). Full 5-whys for the PERIOD_START bug is also in TODOS.md."
 }
