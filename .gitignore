@@ -26,6 +26,7 @@ htmlcov/
 terraform.tfstate
 terraform.tfstate.*
 *.tfplan
+infra/terraform/**/tfplan
 .terraform/
 .terraform.lock.hcl
 infra/terraform/**/backend.hcl
@@ -69,3 +70,6 @@ Thumbs.db
 # AI agent tooling
 .claude/
 .codex
+
+# Local go-live wizard state and sanitized reports
+.edgartools-go-live/

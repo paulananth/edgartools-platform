@@ -1,80 +1,88 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-19T10:46:56.302Z",
+  "timestamp": "2026-06-19T23:30:00.000Z",
   "context": "workstream",
   "workstream": "go-live",
-  "branch": "codex/go-live-v1.6-production-launch",
-  "head": "0437095",
+  "branch": "claude/go-live-v1.6-phase7",
+  "head": "62633c2",
   "workspace_path": "/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform",
-  "phase": "06",
-  "phase_name": "production-aws-infrastructure-and-application-deploy",
-  "phase_dir": null,
+  "phase": "07",
+  "phase_name": "production-snowflake-native-pull-and-gold",
+  "phase_dir": ".planning/workstreams/go-live/phases/07-production-snowflake-native-pull-and-gold",
   "plan": null,
   "task": null,
-  "total_tasks": 11,
-  "status": "paused",
+  "total_tasks": null,
+  "status": "snow_03_passed_snow_04_dependency_cleared",
+  "handoff_notice": "HARD RULE (CLAUDE.md): Claude and Codex must never commit to the same branch. claude/go-live-v1.6-phase7 was created at the user's explicit instruction by branching from Codex's codex/go-live-v1.6-phase7 at the same tip commit (b67acfd, no content change) and is now Claude-owned and pushed to origin. Codex's original branch/worktree (/Users/aneenaananth/gsd-workspaces/codex-go-live-phase7/edgartools-platform) was left untouched, not deleted, not rebased. All further commits must go to claude/go-live-v1.6-phase7, not the codex branch.",
   "completed_tasks": [
     {
-      "id": "branch-start",
-      "name": "Created fresh branch codex/go-live-v1.6-production-launch from origin/main after PR #73 landed.",
-      "status": "done"
+      "id": "06-01",
+      "name": "Production AWS Infrastructure (passive) + edgar-identity secret — terraform apply (42 added, 0 destroyed), versions.tf fix, edgar-identity secret populated, human-approved at checkpoint.",
+      "status": "done",
+      "commit": "990fd25"
     },
     {
-      "id": "v1.6-project-state",
-      "name": "Started milestone v1.6 Production Launch Execution in PROJECT.md and STATE.md.",
+      "id": "06-02",
+      "name": "Active Application Deploy — :dev->:prod ECR re-tag, deploy-aws-application.sh --env prod (exit 0, 22 state machines, 5 ECS task defs), non-secret evidence + matrix flips.",
       "status": "done",
-      "commit": "b6666aa"
+      "commit": "46f47ef"
     },
     {
-      "id": "v1.6-requirements",
-      "name": "Defined v1.6 requirements for AWS launch execution, Snowflake native pull, MDM, hosted graph, dashboard UAT, operations, security, and AWS-only scope.",
+      "id": "06-verify",
+      "name": "Phase 06 goal verification against live AWS state.",
       "status": "done",
-      "commit": "9369be9"
+      "commit": "17a655a",
+      "result": "PASSED, 10/10 must-haves (after fixing two doc-accuracy gaps a first verifier pass found)"
     },
     {
-      "id": "v1.6-roadmap",
-      "name": "Created v1.6 roadmap with 6 phases, 11 plans, and 12/12 requirements mapped.",
+      "id": "07-01",
+      "name": "Production native-pull preflight (Codex-authored). Stopped before the approval checkpoint: all six prod operator-local Terraform input files are absent. Recorded SNOW-03 as BLOCKED with secret-safe evidence.",
+      "status": "blocked",
+      "commit": "6e26dc1"
+    },
+    {
+      "id": "07-02",
+      "name": "Production dbt/gold dependency check (Codex-authored). Stopped at Task 1: 07-02 requires 07-01 to pass first. Recorded SNOW-04 as dependency-BLOCKED with secret-safe evidence.",
+      "status": "blocked",
+      "commit": "af4572a"
+    },
+    {
+      "id": "07-01-retry",
+      "name": "Real production native-pull apply (branch takeover continuation). Operator supplied ACCOUNTADMIN access; created the 6 local input files; fixed 6 versions.tf constraints, a bad tfvars.example default, imported 3 shared IAM roles, namespaced 3 inline policies, switched auth to password, resolved a dashboard-object ordering race. All 3 Terraform roots applied with zero destroys. native_pull_ready=true.",
       "status": "done",
-      "commit": "0437095"
+      "commit": "62633c2",
+      "result": "SNOW-03 PASS"
+    },
+    {
+      "id": "07-deployer-user",
+      "name": "Created EDGARTOOLS_PROD_DEPLOYER Snowflake user, granted the role, verified end-to-end (auth + live SELECT on source tables), stored credentials in new secret edgartools-prod/dbt/snowflake. Rotated once after an internal scripting bug briefly exposed a since-invalidated password in tool output (see TODOS.md).",
+      "status": "done",
+      "commit": "62633c2",
+      "result": "SNOW-04 dependency cleared; dbt deps/run/test deliberately not run"
     }
   ],
   "remaining_tasks": [
     {
-      "id": "phase-6-start",
-      "name": "Run /gsd:discuss-phase 6 --ws go-live or /gsd:plan-phase 6 --ws go-live.",
-      "status": "next"
+      "id": "phase-7-dbt-run",
+      "name": "On explicit approval, run dbt deps/run/test --target prod using edgartools-prod/dbt/snowflake credentials to actually build the 9 gold dynamic tables + status view, then capture EDGARTOOLS_GOLD_STATUS/freshness/task-history evidence.",
+      "status": "ready_pending_approval"
     },
     {
-      "id": "06-01",
-      "name": "Prod Terraform apply and passive infrastructure evidence capture.",
-      "status": "not_started"
-    },
-    {
-      "id": "06-02",
-      "name": "Active AWS application deploy, infra/aws-prod-application.json presence or summary evidence, and launch gate matrix update.",
-      "status": "not_started"
-    },
-    {
-      "id": "phases-7-11",
-      "name": "Execute production Snowflake, MDM secrets/connectivity, hosted graph E2E, dashboard UAT, and final GO decision phases in roadmap order.",
+      "id": "phases-8-11",
+      "name": "Execute MDM secrets/connectivity, hosted graph E2E, dashboard UAT, and final GO decision phases in roadmap order.",
       "status": "not_started"
     }
   ],
   "blockers": [
     {
-      "description": "Prod AWS infrastructure is not yet applied; infra/aws-prod-application.json is absent until live production discovery or successful production deploy supplies equivalent evidence.",
-      "type": "external",
-      "workaround": "Start with Phase 6 so AWS operator applies passive infrastructure and captures non-secret output evidence before active application deploy."
-    },
-    {
-      "description": "Production MDM Secrets Manager values are not populated for edgartools-prod/mdm/postgres_dsn and edgartools-prod/mdm/snowflake.",
+      "description": "SNOW-04 (dbt/gold) — dependency on SNOW-03 is now cleared and a verified deployer user/credentials exist, but dbt deps/run/test has not actually been run yet (deliberately, to avoid assuming approval for building 9 production gold tables beyond the explicitly requested user-creation/secret-population scope).",
       "type": "human_action",
-      "workaround": "Phase 8 should use the v1.5 runbook and record only secret names, command status, and sanitized counts."
+      "workaround": "Get explicit approval, then run dbt deps/run/test --target prod using edgartools-prod/dbt/snowflake, then capture EDGARTOOLS_GOLD_STATUS/freshness/task-history evidence per dbt-gold.md's remaining remediation steps."
     },
     {
-      "description": "Prod Snowflake native pull and dbt gold deployment have not yet run.",
-      "type": "external",
-      "workaround": "Phase 7 follows Phase 6 AWS storage/export output capture."
+      "description": "Production MDM Secrets Manager values are not populated for edgartools-prod/mdm/postgres_dsn, edgartools-prod/mdm/neo4j, edgartools-prod/mdm/api_keys, edgartools-prod/mdm/snowflake. The 4 empty containers exist (created by Phase 6's terraform apply) but carry no AWSCURRENT version.",
+      "type": "human_action",
+      "workaround": "Owned by Phase 8 / MDM-02, explicitly deferred (D-05/D-06) — not in scope for Phase 6 or 7."
     },
     {
       "description": "Prod hosted graph E2E has not yet passed against production Snowflake, MDM secrets, and Native App compute pool.",
@@ -85,52 +93,71 @@
       "description": "Prod dashboard UAT has not yet run against production or production-like read-only configuration.",
       "type": "external",
       "workaround": "Phase 10 follows CLI, dbt, and Native App gates."
+    },
+    {
+      "description": "Row 13 of the launch gate matrix (dev->prod bronze data sync) stays BLOCKED — the prod bronze bucket now exists (Phase 6 prerequisite satisfied) but the documented S3-to-S3 sync itself has not been run; explicitly out of Phase 6 scope.",
+      "type": "external",
+      "workaround": "Run the documented sync (01-LAUNCH-GATE-MATRIX.md row 13) whenever bronze data parity with dev is needed; no phase currently owns this as a hard gate."
     }
   ],
   "human_actions_pending": [
     {
-      "action": "AWS operator approval and credentials for Phase 6 production infrastructure and application deploy.",
-      "context": "Phase 6 starts the actual production launch execution sequence.",
+      "action": "Approve running dbt deps/run/test --target prod against edgartools-prod/dbt/snowflake credentials.",
+      "context": "Creates 9 production gold dynamic tables + 1 status view in EDGARTOOLS_PROD.EDGARTOOLS_GOLD. All inputs are ready (user/role/grants verified); this is the only remaining step for SNOW-04.",
       "blocking": true
     },
     {
-      "action": "Later Snowflake, MDM, dashboard reviewer, release owner, and security or isolation approvals as required by Phases 7-11.",
+      "action": "Consider whether the dev/prod shared, non-namespaced IAM roles in runtime_access module (TODOS.md) warrant a coordinated fix across both environments.",
+      "context": "Not blocking Phase 7; the 3 inline policies were namespaced to stop cross-environment secret overwrite, but the 3 roles themselves remain shared by design until a coordinated re-pointing of both envs' ECS task defs is done.",
+      "blocking": false
+    },
+    {
+      "action": "Run /gsd:secure-phase 6 --ws go-live",
+      "context": "Security enforcement is on for this workstream and no 06-SECURITY.md exists yet. Advisory — does not block Phase 7 retry, but should be closed before the final v1.6 go/no-go audit.",
+      "blocking": false
+    },
+    {
+      "action": "Later Snowflake, MDM, dashboard reviewer, release owner, and security/isolation approvals as required by Phases 7-11.",
       "context": "The v1.6 roadmap requires owner sign-off before the go/no-go packet can flip to GO.",
       "blocking": true
     }
   ],
   "decisions": [
     {
-      "decision": "v1.6 is Production Launch Execution.",
-      "rationale": "The milestone exists to flip the v1.5 NO-GO - Conditional decision to GO only after all blocker themes have PASS evidence and sign-off.",
-      "phase": "milestone"
+      "decision": "User explicitly instructed taking over codex/go-live-v1.6-phase7 (\"take over branch codex/go-live-v1.6-phase7\"). Re-rooted as claude/go-live-v1.6-phase7 from the same tip commit (b67acfd) in the Claude go-live worktree, pushed to origin.",
+      "rationale": "CLAUDE.md HARD RULE permits taking over the other runtime's branch only with explicit user instruction; Codex's original branch/worktree was left untouched rather than deleted or rebased.",
+      "phase": "07"
     },
     {
-      "decision": "Skip research for milestone initialization.",
-      "rationale": "User selected the skip-research path; v1.6 should execute existing runbooks and gates rather than introduce new architecture.",
-      "phase": "milestone"
+      "decision": "Plans 07-01 and 07-02 (both Codex-authored, inherited as-is) correctly stopped at secret-safe BLOCKED evidence rather than fabricating prod credentials or running dbt against an unconfirmed source layer.",
+      "rationale": "D-05/D-06/D-10 discipline — no plan should synthesize placeholder secrets or skip a dependency gate to make progress look real.",
+      "phase": "07"
     },
     {
-      "decision": "Continue phase numbering from v1.5, starting with Phase 6.",
-      "rationale": "Archived v1.5 roadmap, requirements, evidence, and go/no-go packet link to Phases 1-5 and must remain stable.",
-      "phase": "milestone"
+      "decision": "Phase 6 fixes the versions.tf constraint bug directly as an ISO-01 exception (same pattern as Phase 4's dashboard README rewrite).",
+      "rationale": "Hard blocker for the real apply this phase exists to run; fixing in-phase avoids a separate non-go-live commit.",
+      "phase": "06"
     },
     {
-      "decision": "Preserve all v1.5 phase evidence and milestone archives.",
-      "rationale": "Do not run phase-clearing cleanup because existing archives and evidence are required for launch traceability.",
-      "phase": "milestone"
+      "decision": "Only edgartools-prod-edgar-identity receives a put-secret-value call; the other 5 secret containers (4 MDM + runner_credentials) stay empty shells.",
+      "rationale": "D-05/D-06 — MDM secret values are explicitly Phase 8/MDM-02 scope, not Phase 6.",
+      "phase": "06"
     },
     {
-      "decision": "Keep AWS-only architecture and secret-safety contract.",
-      "rationale": "No non-AWS deployment paths, registries, storage targets, workflow engines, or secret-management systems are authorized; no DSNs, tokens, passwords, Terraform state, raw connector traces, raw Native App logs, or sensitive generated JSON may be committed.",
-      "phase": "milestone"
+      "decision": "terraform apply uses the saved plan file (apply tfplan), never a fresh re-plan.",
+      "rationale": "D-04 — zero drift between human approval and execution for the project's first real prod apply.",
+      "phase": "06"
+    },
+    {
+      "decision": "infra/aws-prod-application.json is generated but deliberately never staged/committed; only a non-secret summary (file presence, top-level keys, state-machine names, digest-vs-tag format) is recorded in evidence/aws.md.",
+      "rationale": "D-10 / Generated-JSON Summary Rule — the manifest contains ARNs and resource identifiers that must not be committed.",
+      "phase": "06"
     }
   ],
   "uncommitted_files": [
-    ".planning/HANDOFF.json",
-    ".planning/workstreams/go-live/.continue-here.md"
+    "infra/aws-prod-application.json (intentionally untracked — generated deploy manifest, never to be committed per D-10)"
   ],
   "background_processes": [],
-  "next_action": "cd /Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform && /gsd:discuss-phase 6 --ws go-live",
-  "context_notes": "Milestone v1.6 initialization is complete on branch codex/go-live-v1.6-production-launch. The branch has three planning commits on top of origin/main before the pause/handoff commit and has not been pushed. Worktree was clean before pause artifacts. Root checkout /Users/aneenaananth/projects/edgartools-platform has an unrelated uncommitted TODOS.md change; do not touch it. The roadmap is approved and Phase 6 is next."
+  "next_action": "Get explicit approval to run dbt deps/run/test --target prod (builds 9 production gold tables); otherwise next is Phase 8 (MDM secrets/connectivity).",
+  "context_notes": "Phase 6 is fully complete and verified (10/10 must-haves). Codex independently scoped/planned/executed Phase 7 on codex/go-live-v1.6-phase7, reaching two BLOCKED-with-evidence outcomes (SNOW-03/SNOW-04) for the correct reason: missing prod Snowflake credentials. At the user's explicit instruction this branch was taken over by Claude (re-rooted from the same tip, zero content change, pushed to origin). The user then supplied real Snowflake ACCOUNTADMIN access via a local SnowCLI connection and asked to unblock the Snowflake blockers by creating an appropriate user and updating the AWS secret store. This was done: a real production terraform apply ran across all 3 Snowflake-side Terraform roots (after fixing several real bugs — pessimistic version constraints, a bad tfvars.example default, a dev/prod shared-IAM-role collision, an externalbrowser-vs-password auth mismatch, and a dashboard-object creation ordering race), SNOW-03 now PASSES, and a verified EDGARTOOLS_PROD_DEPLOYER user/credentials now exist in a new secret (edgartools-prod/dbt/snowflake), clearing SNOW-04's dependency. dbt deps/run/test itself was deliberately not run, since building 9 production gold tables is a further state change beyond the literal ask. A password was briefly exposed in agent tool output due to a Python quoting bug during this work; it was immediately rotated before being stored anywhere, and the incident plus root cause is logged in TODOS.md. Source-code fixes (versions.tf x6, runtime_access module policy namespacing) are real, durable fixes and have been committed."
 }
