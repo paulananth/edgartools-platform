@@ -206,3 +206,21 @@ not started.
   [../../07-production-snowflake-native-pull-and-gold/evidence/native-pull.md](../../07-production-snowflake-native-pull-and-gold/evidence/native-pull.md).
 - BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` row `Snowflake native S3 pull
   stack (infra/scripts/deploy-snowflake-stack.sh)`.
+
+### SNOW-04 dbt/gold dependency preflight
+
+Result: dependency blocked; production dbt/gold execution was not started.
+
+- Phase 7 Plan 07-02 was not allowed to run dbt because Phase 7 Plan 07-01
+  recorded SNOW-03 as BLOCKED.
+- The six required `DBT_SNOWFLAKE_*` environment variables were unset in this
+  shell, and `infra/snowflake/dbt/edgartools_gold/profiles.yml` was absent.
+- `profiles.yml` was intentionally not created because the native-pull
+  prerequisite stopped execution before dbt setup.
+- No grant discovery, dbt deps/run/test, `EDGARTOOLS_GOLD_STATUS`, dynamic-table
+  freshness, task-history, or source row-count query ran.
+- Detailed non-secret evidence is in
+  [../../07-production-snowflake-native-pull-and-gold/evidence/dbt-gold.md](../../07-production-snowflake-native-pull-and-gold/evidence/dbt-gold.md).
+- BLOCKED - see `01-LAUNCH-GATE-MATRIX.md` rows `Snowflake deployer direct
+  grants for gold dynamic tables`, `dbt compile/run/test for production target`,
+  and `EDGARTOOLS_GOLD_STATUS and dynamic-table freshness`.
