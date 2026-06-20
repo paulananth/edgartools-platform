@@ -4,7 +4,7 @@
   "context": "workstream",
   "workstream": "go-live",
   "branch": "claude/go-live-v1.6-phase7",
-  "head": "pending-commit",
+  "head": "62633c2",
   "workspace_path": "/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform",
   "phase": "07",
   "phase_name": "production-snowflake-native-pull-and-gold",
@@ -50,14 +50,14 @@
       "id": "07-01-retry",
       "name": "Real production native-pull apply (branch takeover continuation). Operator supplied ACCOUNTADMIN access; created the 6 local input files; fixed 6 versions.tf constraints, a bad tfvars.example default, imported 3 shared IAM roles, namespaced 3 inline policies, switched auth to password, resolved a dashboard-object ordering race. All 3 Terraform roots applied with zero destroys. native_pull_ready=true.",
       "status": "done",
-      "commit": "pending-commit",
+      "commit": "62633c2",
       "result": "SNOW-03 PASS"
     },
     {
       "id": "07-deployer-user",
       "name": "Created EDGARTOOLS_PROD_DEPLOYER Snowflake user, granted the role, verified end-to-end (auth + live SELECT on source tables), stored credentials in new secret edgartools-prod/dbt/snowflake. Rotated once after an internal scripting bug briefly exposed a since-invalidated password in tool output (see TODOS.md).",
       "status": "done",
-      "commit": "pending-commit",
+      "commit": "62633c2",
       "result": "SNOW-04 dependency cleared; dbt deps/run/test deliberately not run"
     }
   ],
