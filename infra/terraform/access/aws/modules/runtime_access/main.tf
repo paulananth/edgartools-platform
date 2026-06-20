@@ -175,7 +175,12 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_warehouse_managed"
 }
 
 resource "aws_iam_role_policy" "ecs_task_execution_warehouse_secret" {
-  name = "sec_platform_runner_execution_secret"
+  # Namespaced by name_prefix because the execution role itself is shared
+  # across environments in this AWS account (sec_platform_runner_execution is
+  # not env-prefixed and is already referenced by live ECS task definitions in
+  # both dev and prod). A shared, non-namespaced policy name here would let
+  # one environment's apply silently overwrite the other's secret grants.
+  name = "${var.name_prefix}-runner-execution-secret"
   role = aws_iam_role.ecs_task_execution_warehouse.id
 
   policy = jsonencode({
@@ -215,7 +220,10 @@ resource "aws_iam_role" "ecs_task_warehouse" {
 }
 
 resource "aws_iam_role_policy" "ecs_task_warehouse_storage" {
-  name = "sec_platform_runner_task_storage"
+  # See ecs_task_execution_warehouse_secret above: the task role is also
+  # shared across environments, so this policy name must be env-namespaced
+  # to avoid one environment's apply overwriting the other's bucket grants.
+  name = "${var.name_prefix}-runner-task-storage"
   role = aws_iam_role.ecs_task_warehouse.id
 
   policy = jsonencode({
@@ -303,7 +311,11 @@ resource "aws_iam_role" "step_functions" {
 }
 
 resource "aws_iam_role_policy" "step_functions_runtime" {
-  name = "sec_platform_runner_step_functions_runtime"
+  # See ecs_task_execution_warehouse_secret above: the Step Functions role is
+  # also shared across environments, so this policy name must be
+  # env-namespaced to avoid one environment's apply overwriting the other's
+  # runtime grants.
+  name = "${var.name_prefix}-runner-step-functions-runtime"
   role = aws_iam_role.step_functions.id
 
   policy = jsonencode({

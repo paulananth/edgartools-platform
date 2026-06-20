@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
 status: blocked
-stopped_at: Branch taken over by Claude from Codex (claude/go-live-v1.6-phase7, tip b67acfd); SNOW-03 and SNOW-04 remain BLOCKED
-last_updated: "2026-06-19T22:05:00.000Z"
-last_activity: 2026-06-19 -- Claude took over codex/go-live-v1.6-phase7 as claude/go-live-v1.6-phase7 at explicit user instruction; Phase 07 plans 07-01/07-02 (Codex-authored) remain at safe BLOCKED evidence, no state-changing Snowflake/dbt commands ran
+stopped_at: SNOW-03 PASSED (real production native-pull apply); SNOW-04 dependency cleared but dbt deps/run/test not yet executed
+last_updated: "2026-06-19T23:30:00.000Z"
+last_activity: 2026-06-19 -- Claude (on claude/go-live-v1.6-phase7) ran the real production Snowflake native-pull apply with operator-supplied ACCOUNTADMIN access; fixed 6 versions.tf constraints, a bad tfvars.example default, imported 3 shared IAM roles, namespaced 3 inline policies, switched auth to password, resolved a dashboard-object ordering race; created and verified EDGARTOOLS_PROD_DEPLOYER end-to-end; stored credentials in new secret edgartools-prod/dbt/snowflake. dbt deps/run/test deliberately not run (separate further state change).
 progress:
   total_phases: 6
   completed_phases: 2
@@ -18,12 +18,12 @@ progress:
 
 ## Current Position
 
-Phase: 07 (Production Snowflake Native Pull And Gold) — BLOCKED AFTER EXECUTION
-Plan: 2 of 2 executed
-Status: Plan 07-01 recorded SNOW-03 as BLOCKED by missing prod native-pull Terraform local input files. Plan 07-02 recorded SNOW-04 as dependency BLOCKED because SNOW-03 did not pass and dbt local inputs are absent. No Terraform init/apply, Snowflake SQL, dbt, dashboard, grant discovery, status, freshness, task-history, or source row-count command ran.
-Last activity: 2026-06-20 -- Phase 07 plans 07-01 and 07-02 executed to safe BLOCKED evidence; no state-changing Snowflake/dbt commands ran
+Phase: 07 (Production Snowflake Native Pull And Gold) — SNOW-03 PASS, SNOW-04 dependency cleared
+Plan: 2 of 2 executed, then retried on branch takeover
+Status: SNOW-03 now PASSES — real production `terraform apply` ran across all 3 Snowflake-side roots (access/aws, snowflake, access/snowflake), zero destroys, native_pull_ready=true. SNOW-04's blocking dependency on SNOW-03 is cleared and a verified production deployer user/credentials now exist, but `dbt deps/run/test` has deliberately not been run yet (separate further state change against production gold tables, not assumed approved by this continuation).
+Last activity: 2026-06-19 -- Real production Snowflake native-pull apply completed and verified; see evidence/native-pull.md and evidence/dbt-gold.md for full detail.
 
-Progress: 33% (2/6 phases have plan-execution summaries; Phase 7 launch requirements remain blocked)
+Progress: 33% (2/6 phases have plan-execution summaries; SNOW-03 unblocked, SNOW-04 ready to retry pending explicit approval to run dbt)
 
 ## Milestone Context
 
