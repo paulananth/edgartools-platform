@@ -155,8 +155,8 @@
   ],
   "decisions": [
     {
-      "decision": "Production Snowflake (org IXKYQWK, account YW12138) is a genuinely separate account from dev (np05015.ca-central-1.aws) -- confirmed via infra/terraform/snowflake/accounts/prod/terraform.tfvars and a real prod dbt run (SNOW-04 PASS).",
-      "rationale": "Avoids the anti-pattern of fabricating a prod-labeled connection that actually points at the dev account.",
+      "decision": "CORRECTION (2026-06-21): Snowflake prod and dev are NOT separate accounts. CURRENT_ACCOUNT()/CURRENT_ACCOUNT_NAME()/CURRENT_ORGANIZATION_NAME() are identical (NP05015 / YW12138 / IXKYQWK) when queried via both the edgartools-prod and snowconn (dev) connections. EDGARTOOLS_DEV and EDGARTOOLS_PROD are two databases inside one shared Snowflake account, matching the existing same-account prefix-distinguished pattern already used for AWS. The prior decision in this slot (claiming a genuinely separate prod account) was incorrect and is superseded by this entry.",
+      "rationale": "Direct empirical verification: SELECT CURRENT_ACCOUNT(), CURRENT_ACCOUNT_NAME(), CURRENT_ORGANIZATION_NAME() returned identical values via both connections. Also explains why SHOW POSTGRES INSTANCES via edgartools-prod listed both EDGARTOOLS_DEV_MDM and EDGARTOOLS_PROD_MDM -- Postgres instances and network policies are account-scoped, not database-scoped, so dev and prod MDM Postgres instances/network policies now share one blast radius.",
       "phase": "08"
     },
     {
