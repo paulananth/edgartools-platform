@@ -123,9 +123,20 @@ Claude and Codex must never commit to the same branch going forward)
   unblocked and ready to run; not yet executed pending explicit operator
   go-ahead to write real production secret values.
 
-- Blocker 3: Prod Snowflake native pull and dbt gold deployment have not yet run.
+- Blocker 3: FULLY REMEDIATED (2026-06-20/21, Phase 07 complete) -- this entry was stale;
+  both SNOW-03 (native-pull) and SNOW-04 (dbt/gold) reached final status PASS. All three
+  prod Terraform roots (access/aws, snowflake, access/snowflake) applied against
+  production with zero destroys; native-pull objects (stages, manifest tables/pipe/stream,
+  stream-processor task) verified live. `EDGARTOOLS_PROD_DEPLOYER` service user created,
+  credentials stored in `edgartools-prod/dbt/snowflake`. 16/16 dbt gold models built
+  (15 dynamic tables + status view), 47/47 tests passing against real production data
+  (including the `financial_derived` YoY tiebreaker/amendment suite). See
+  `.planning/workstreams/go-live/phases/07-production-snowflake-native-pull-and-gold/evidence/native-pull.md`
+  and `evidence/dbt-gold.md` for full detail.
+
 - Blocker 4: Prod hosted graph E2E has not yet passed against production Snowflake,
-  MDM secrets, and Native App compute pool.
+  MDM secrets, and Native App compute pool. Depends on Phase 8 (MDM secrets population +
+  connectivity verification, in progress) and Phase 9 (hosted graph E2E, not yet started).
 
 - Blocker 5: Prod dashboard UAT has not yet run against a production or
   production-like read-only configuration.

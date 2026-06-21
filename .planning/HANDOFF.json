@@ -1,10 +1,9 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-21T11:30:00.000Z",
+  "timestamp": "2026-06-21T21:09:25.000Z",
   "context": "phase",
   "workstream": "go-live",
   "branch": "claude/go-live-v1.6-phase7",
-  "head": "5432c90",
   "workspace_path": "/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform",
   "phase": "08",
   "phase_name": "production-mdm-secrets-and-connectivity",
@@ -12,135 +11,127 @@
   "plan": "08-01-populate-prod-mdm-secrets-PLAN.md",
   "task": 2,
   "total_tasks": 3,
-  "status": "unblocked_awaiting_explicit_go_ahead_to_write_prod_secrets",
-  "handoff_notice": "HARD RULE (CLAUDE.md): Claude and Codex must never commit to the same branch. claude/go-live-v1.6-phase7 remains Claude-owned. SECURITY: two credential-exposure incidents occurred earlier this session (see Critical Anti-Patterns below) -- both were remediated by rotation. ARCHITECTURE: a separate, unrelated false-blocker mistake (aws-admin-prod 'needs a real prod account') was also found and corrected this session -- see decisions.",
+  "status": "paused_mid_credential_rotation_step",
+  "handoff_notice": "HARD RULE (CLAUDE.md): Claude and Codex must never commit to the same branch. claude/go-live-v1.6-phase7 remains Claude-owned. SECURITY: this phase has had TWO prior credential-exposure incidents (both remediated by rotation + redact_text() fixes). A 4th rotation is now required because the 3rd rotation's credential, while never displayed, was also never persisted anywhere -- it is unrecoverable, not just hidden.",
   "completed_tasks": [
     {
-      "id": "08-parameterize-mdm-sql",
-      "name": "Parameterized mdm_create_instance.sql and mdm_create_network_policy.sql by environment via Snow CLI Jinja templating; updated go-live.sh's 'Snowflake Postgres / graph prerequisites' stage to compute env-specific names and invoke the network-policy script (previously missing from the pipeline).",
+      "id": "08-correct-blocker3-stale-docs",
+      "name": "Corrected STATE.md: Blocker 3 (Prod Snowflake native pull and dbt gold deployment) was stale -- Phase 07 evidence (evidence/native-pull.md, evidence/dbt-gold.md) shows SNOW-03 and SNOW-04 both already at final status PASS (16/16 dbt models built, 47/47 tests passing against live prod data, all 3 Terraform roots applied with zero destroys). STATE.md now reads FULLY REMEDIATED with evidence citations. No Terraform/dbt command needs to be re-run for Blocker 3.",
       "status": "done",
-      "commit": "1930aef"
+      "commit": "uncommitted -- see uncommitted_files"
     },
     {
-      "id": "08-create-mdm-schema-prod",
-      "name": "Created the missing EDGARTOOLS_PROD.MDM schema (ad-hoc CREATE SCHEMA IF NOT EXISTS, mirroring how dev's MDM schema was created -- no IaC tracks this in either environment) so mdm_create_network_policy.sql's USE SCHEMA could succeed.",
+      "id": "08-confirm-postgres-instance-reachable",
+      "name": "Confirmed EDGARTOOLS_PROD_MDM Postgres instance is reachable via the edgartools-prod SnowCLI connection. Ran DESCRIBE POSTGRES INSTANCE EDGARTOOLS_PROD_MDM (non-secret) and enumerated its property list: name, owner, owner_role_type, created_on, updated_on, type, host, privatelink_service_identifier, compute_family, storage_size_gb, postgres_version, postgres_settings, high_availability, authentication_authority, maintenance_window_start, state, comment, origin, replicas, operations, network_policy, storage_integration, certificate. No credential-rotation property/command is exposed by DESCRIBE -- that requires a separate ALTER statement whose exact syntax is not saved anywhere in this repo (confirmed via repo-wide grep in an earlier session segment).",
       "status": "done",
-      "commit": "not a git change -- live Snowflake DDL only"
+      "commit": "not a git change -- live read-only Snowflake query only"
     },
     {
-      "id": "08-provision-prod-postgres",
-      "name": "Ran the parameterized SQL against the edgartools-prod Snowflake connection: created network rule + network policy (edgartools_prod_mdm_postgres_policy), then provisioned EDGARTOOLS_PROD_MDM Postgres instance (state READY).",
+      "id": "08-discover-rotation-irrecoverability",
+      "name": "Read go-live.sh's execute_stage()/redact_text() functions directly and confirmed: raw command output is piped straight through redact_text with no intermediate capture to any file or variable. This means the 3rd Postgres credential rotation earlier this session, while never displayed in chat (the redaction worked), was also never persisted anywhere -- it is permanently unrecoverable, not merely hidden. This corrects the .continue-here.md framing from a prior session segment, which called it 'never exposed' in a way that implied it was safely available -- it is not.",
       "status": "done",
-      "commit": "live Snowflake DDL; evidence in f24cb99"
+      "commit": "not a git change -- investigative read only"
     },
     {
-      "id": "08-fix-go-live-redaction",
-      "name": "Fixed two credential-redaction gaps in go-live.sh's redact_text(): (1) added --format JSON to the mdm_create_instance.sql invocation and a pattern matching the snowflake_admin/application/admin_password JSON keys CREATE POSTGRES INSTANCE emits; (2) added the generic 'password' key (used by ALTER POSTGRES INSTANCE ... RESET ACCESS FOR) after a second leak. Also made execute_stage() redact all stage output by default, and added missing --enable-templating JINJA flags.",
+      "id": "08-find-snowflake-secret-shortcut",
+      "name": "Found that edgartools-prod/mdm/snowflake does NOT need a brand-new credential. Phase 07 already created service user EDGARTOOLS_PROD_DEPLOYER and stored its credentials in a separate secret, edgartools-prod/dbt/snowflake (deliberately separate per D-05/D-06, same underlying Snowflake identity). This credential can be copied read-secret -> remap DBT_SNOWFLAKE_* keys to MDM_SNOWFLAKE_* keys -> write-secret, entirely via a piped shell command, with no human ever typing or seeing the password. MDM_SNOWFLAKE_SCHEMA must be hardcoded to EDGARTOOLS_GOLD (not copied from source secret, which has no schema key in dbt's profiles.yml shape -- schema is a separate profiles.yml field, not an env var there).",
       "status": "done",
-      "commit": "509ac16, 10be2d9"
-    },
-    {
-      "id": "08-correct-account-separation-premise",
-      "name": "Disproved a false decision recorded in a prior HANDOFF.json: Snowflake prod and dev are NOT separate accounts. SELECT CURRENT_ACCOUNT()/CURRENT_ACCOUNT_NAME()/CURRENT_ORGANIZATION_NAME() returned identical values (NP05015 / YW12138 / IXKYQWK) via both the edgartools-prod and snowconn (dev) connections. EDGARTOOLS_DEV and EDGARTOOLS_PROD are two databases in one shared account -- matching the already-documented AWS same-account pattern. Corrected the decision entry and the evidence file.",
-      "status": "done",
-      "commit": "f24cb99"
-    },
-    {
-      "id": "08-01-task-1-rerun",
-      "name": "Re-ran Plan 08-01 Task 1 (precondition check). Outcome: CONFIRMED -- EDGARTOOLS_PROD_MDM exists and is READY.",
-      "status": "done",
-      "commit": "f24cb99"
-    },
-    {
-      "id": "08-rotate-mdm-prod-credentials",
-      "name": "Rotated EDGARTOOLS_PROD_MDM's snowflake_admin and application credentials via ALTER POSTGRES INSTANCE ... RESET ACCESS FOR, after the original CREATE POSTGRES INSTANCE output and a first rotation attempt both leaked credentials into chat (see Critical Anti-Patterns). Third rotation attempt, run after fixing redact_text, redacted cleanly -- current credentials were never printed.",
-      "status": "done",
-      "commit": "10be2d9 (script fix); rotation itself is live Snowflake state, not a git change"
-    },
-    {
-      "id": "08-correct-aws-account-false-blocker",
-      "name": "Disproved a recurring false blocker repeated across STATE.md, 08-01-SUMMARY.md, the evidence file, and a prior HANDOFF.json: aws-admin-prod resolving to account 077127448006 was wrongly treated as 'the dev account, needs a real prod account.' D-05 (v1.5 Phase 2, .planning/workstreams/go-live/milestones/v1.5-phases/02-aws-and-snowflake-production-deployment-dry-run/02-CONTEXT.md) already settled this: aws-admin-dev and aws-admin-prod are INTENTIONALLY the same account; prod is a same-account, prefix-distinguished resource set, not a separate account. Verified live: edgartools-prod-* S3 buckets exist, and edgartools-prod/mdm/postgres_dsn + edgartools-prod/mdm/snowflake secrets already exist (created by the prod Terraform apply, 2026-06-19) with VersionIdsToStages: null -- created but never populated. Corrected STATE.md Blocker 2 and the evidence file.",
-      "status": "done",
-      "commit": "pending in this turn"
+      "commit": "not a git change -- planning/investigation only"
     }
   ],
   "remaining_tasks": [
     {
-      "id": "08-01-task-2",
-      "name": "Plan 08-01 Task 2: populate edgartools-prod/mdm/postgres_dsn (via bootstrap-aws-mdm-secrets.sh --dsn-stdin) and edgartools-prod/mdm/snowflake (raw put-secret-value, 7 keys per the plan) using the rotated EDGARTOOLS_PROD_MDM application credential. NOT blocked -- both secrets exist, unpopulated, aws-admin-prod is correctly configured per D-05. Has not been executed yet pending explicit operator go-ahead to write real production secret values (a meaningful, hard-to-reverse action).",
-      "status": "ready"
+      "id": "08-01-task2-rotate-and-populate-postgres-dsn",
+      "name": "4th Postgres MDM credential rotation + populate edgartools-prod/mdm/postgres_dsn. MUST be done as a single atomic shell pipeline: rotation command (exact ALTER POSTGRES INSTANCE ... syntax not yet confirmed -- must be reconstructed carefully, e.g. by testing against Snowflake's actual error messages for syntax hints) -> JSON parse -> DSN string construction (postgresql://<application_user>:<password>@<host>.snowflake.app:5432/mdm?sslmode=require) -> directly piped into `bash infra/scripts/bootstrap-aws-mdm-secrets.sh --dsn-stdin --env prod --aws-profile aws-admin-prod --aws-region us-east-1`. The raw credential must NEVER appear in any individual Bash tool result -- do not run the rotation in one tool call and the DSN construction in a separate tool call where the intermediate raw JSON would be visible. Was deliberately NOT started this session due to low context budget -- this step needs full attention, not a rushed attempt.",
+      "status": "not_started"
     },
     {
-      "id": "08-01-task-3",
-      "name": "Plan 08-01 Task 3: edit the HANDOFF.json blocker description to clarify neo4j/api_keys are out of scope for Phase 8 (only postgres_dsn + snowflake are MDM-02). Pre-satisfied by a prior session per 08-01-SUMMARY.md -- verify and close out, no edit expected to be needed.",
-      "status": "likely_already_satisfied"
+      "id": "08-01-task2-populate-snowflake-secret",
+      "name": "Populate edgartools-prod/mdm/snowflake via: aws secretsmanager get-secret-value --profile aws-admin-prod --region us-east-1 --secret-id edgartools-prod/dbt/snowflake --query SecretString --output text | jq (remap DBT_SNOWFLAKE_* keys to MDM_SNOWFLAKE_* keys, same values, hardcode MDM_SNOWFLAKE_SCHEMA=EDGARTOOLS_GOLD) | aws secretsmanager put-secret-value --profile aws-admin-prod --region us-east-1 --secret-id edgartools-prod/mdm/snowflake --secret-string file:///dev/stdin > /dev/null. Single piped command, no human supplies a password. Lower risk than the postgres_dsn step -- can be done first if it's preferred to bank a win before the harder rotation step.",
+      "status": "not_started"
     },
     {
-      "id": "08-02",
-      "name": "Plan 08-02: connectivity/migrate/counts verification + launch-gate-matrix checkpoint. Cannot start until 08-01 Task 2 completes (secrets must exist populated for connectivity checks).",
+      "id": "08-01-task2-capture-evidence",
+      "name": "Append describe-secret metadata only (Name/ARN/LastChangedDate/VersionIdsToStages) for both secrets to evidence/mdm-prod-secrets-and-connectivity.md.",
+      "status": "not_started"
+    },
+    {
+      "id": "08-01-task3-verify-handoff-scope",
+      "name": "Verify HANDOFF.json already scopes out neo4j/api_keys as non-blockers for Phase 8 (likely a no-op per 08-01-SUMMARY.md from a prior session).",
+      "status": "not_started"
+    },
+    {
+      "id": "08-02-task1-connectivity-verification",
+      "name": "Plan 08-02 Task 1: load MDM_DATABASE_URL from edgartools-prod/mdm/postgres_dsn in-shell only (never echoed), run uv run --extra mdm-runtime edgar-warehouse mdm check-connectivity / migrate / counts against prod, unset MDM_DATABASE_URL immediately after, append sanitized JSON evidence. Depends on postgres_dsn being populated first.",
+      "status": "not_started"
+    },
+    {
+      "id": "08-02-task2-human-checkpoint-and-matrix-flip",
+      "name": "Blocking human checkpoint: user confirms evidence file is secret-safe (no DSN/host/password/connector error), then Phase 8 MDM rows in 01-LAUNCH-GATE-MATRIX.md are flipped to PASS (only Phase 8 rows, not Phase 9 rows).",
+      "status": "not_started"
+    },
+    {
+      "id": "delete-run-this-yourself-script",
+      "name": "Delete .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/RUN-THIS-YOURSELF.sh -- it is superseded by the piped, no-manual-password-entry approach in the approved plan (/Users/aneenaananth/.claude/plans/reflective-shimmying-badger.md). It currently contains only placeholder tokens, no real values, but should be removed before any commit to avoid confusion about which approach is current.",
+      "status": "not_started"
+    },
+    {
+      "id": "phase-09-hosted-graph-e2e",
+      "name": "Phase 9: hosted graph E2E against production Snowflake + MDM secrets + Native App compute pool. Not started. Materially larger scope (compute pool provisioning, full graph sync/export test) -- this is the remaining piece of full Blocker 4 resolution beyond what Phase 8 covers. Should be planned/discussed as its own phase, not folded into Phase 8 execution.",
       "status": "not_started"
     },
     {
       "id": "rotate-ananp11-password",
-      "name": "Confirm with user whether the ANANP11 Snowflake password (exposed in chat in an earlier, unrelated session) has been rotated. Still unconfirmed.",
-      "status": "not_started"
-    },
-    {
-      "id": "phases-9-11",
-      "name": "Hosted graph E2E (Phase 9), dashboard UAT (Phase 10), final GO decision (Phase 11).",
+      "name": "Confirm with user whether the ANANP11 Snowflake password (exposed in an earlier, unrelated session) has been rotated. Still unconfirmed across multiple sessions.",
       "status": "not_started"
     }
   ],
-  "blockers": [
-    {
-      "description": "ANANP11 Snowflake password exposure from an earlier session remains unconfirmed-rotated. Unrelated to this session's incidents.",
-      "type": "human_action",
-      "workaround": "User should rotate and confirm."
-    }
-  ],
+  "blockers": [],
   "human_actions_pending": [
+    {
+      "action": "None blocking right now -- the remaining rotation/secret-population work is agent-executable, just deferred to a fresh session for careful execution under full context budget.",
+      "context": "Paused due to low context budget (25% remaining when paused), not due to any missing credential or approval. The user already authorized proceeding on Blocker 4 (responded 'b' earlier this session) and approved the full plan via ExitPlanMode.",
+      "blocking": false
+    },
     {
       "action": "Confirm whether the ANANP11 Snowflake password has been rotated (separate, earlier-session incident).",
       "context": "Still unconfirmed across multiple sessions.",
       "blocking": false
     },
     {
-      "action": "Explicit go-ahead to write real production secret values for edgartools-prod/mdm/postgres_dsn and edgartools-prod/mdm/snowflake (Task 2).",
-      "context": "Both secrets exist and are unpopulated; nothing technical blocks this, but writing real production secrets is treated as requiring explicit confirmation, not assumed authorization.",
+      "action": "After 08-02 Task 1 connectivity verification passes, the user must explicitly confirm the evidence file is secret-safe before launch gate matrix rows are flipped to PASS (per the approved plan's Task 6 / Plan 08-02 Task 2 checkpoint).",
+      "context": "This is a deliberate human checkpoint gate in the plan, not a credential gap.",
       "blocking": true
     }
   ],
   "decisions": [
     {
-      "decision": "Snowflake prod and dev are the SAME account (NP05015 / YW12138 / IXKYQWK), distinguished only by database name (EDGARTOOLS_DEV vs EDGARTOOLS_PROD) -- not separate accounts as a prior session incorrectly concluded.",
-      "rationale": "SELECT CURRENT_ACCOUNT(), CURRENT_ACCOUNT_NAME(), CURRENT_ORGANIZATION_NAME() returned identical values via both the edgartools-prod and snowconn (dev) connections. Matches the already-documented AWS same-account, prefix-distinguished pattern.",
+      "decision": "Blocker 3 (STATE.md) was stale documentation, not a real gap. SNOW-03 and SNOW-04 both reached final PASS in Phase 07's evidence files. STATE.md corrected this session.",
+      "rationale": "Read evidence/native-pull.md and evidence/dbt-gold.md in full -- both end with explicit 'Status: PASS' sections with concrete verification detail (16/16 models, 47/47 tests, live Terraform apply with zero destroys).",
+      "phase": "07"
+    },
+    {
+      "decision": "A 4th Postgres MDM credential rotation is required and unavoidable -- the 3rd rotation's credential was not 'safely stored but hidden', it was never persisted anywhere and is permanently lost.",
+      "rationale": "Read go-live.sh's execute_stage() function directly: raw stage output is piped straight into redact_text with 2>&1 | redact_text and no intermediate capture to disk or variable. Nothing retains the unredacted value after that pipe completes.",
       "phase": "08"
     },
     {
-      "decision": "Snowflake Postgres instances and network policies are account-scoped, not database-scoped -- so EDGARTOOLS_PROD_MDM and EDGARTOOLS_DEV_MDM (and their network policies) share one blast radius within the single shared account.",
-      "rationale": "Direct consequence of the account-separation correction above; confirmed by SHOW POSTGRES INSTANCES listing both instances regardless of which connection (dev or prod) issued the query.",
+      "decision": "edgartools-prod/mdm/snowflake will be populated by copying EDGARTOOLS_PROD_DEPLOYER's existing credentials from edgartools-prod/dbt/snowflake (Phase 07's secret), not by creating or requesting a new credential.",
+      "rationale": "Both secrets are meant to hold the same underlying Snowflake identity per D-05/D-06 (kept in separate Secrets Manager containers only to avoid cross-phase overwrite risk, not because they need different credentials). MDM only needs SELECT on EDGARTOOLS_GOLD, which EDGARTOOLS_PROD_DEPLOYER already has via the dbt grants from Phase 07.",
       "phase": "08"
     },
     {
-      "decision": "snow sql's default --enable-templating mode (LEGACY) does NOT support {{ }} Jinja syntax used by the parameterized SQL files; --enable-templating JINJA must be passed explicitly.",
-      "rationale": "Discovered empirically: running the network-policy SQL without the flag raised a syntax error on the literal '{{ schema }}' string.",
-      "phase": "08"
-    },
-    {
-      "decision": "grep/sed-based credential redaction must be verified against the EXACT output shape of the command being filtered, not assumed from a generically-named pattern like 'password|secret|token'. Two separate redaction-gap incidents this session both stemmed from key names that did not match the existing filter pattern.",
-      "rationale": "CLAUDE.md 5-whys discipline -- the root cause both times was an unverified assumption about output shape, not a one-off typo.",
-      "phase": "08"
-    },
-    {
-      "decision": "aws-admin-prod resolving to account 077127448006 is CORRECT, by-design behavior -- not a blocker. Per D-05 (v1.5 Phase 2), aws-admin-dev and aws-admin-prod are intentionally the same AWS account; prod is a same-account, prefix-distinguished resource set (separate Terraform root, :prod-tagged images, edgartools-prod-* named resources), not a separate account. This reverses a false blocker repeated across STATE.md, 08-01-SUMMARY.md, the evidence file, and a prior HANDOFF.json, all of which wrongly called 077127448006 'the dev account' and demanded a 'genuine production AWS account.'",
-      "rationale": "D-05 is an explicit, already-settled architecture decision recorded in 02-CONTEXT.md, repeated consistently across multiple v1.5 phase artifacts (01-LAUNCH-GATE-MATRIX.md, 02-RESEARCH.md, 02-DISCUSSION-LOG.md, 03-PATTERNS.md). Live verification confirms: edgartools-prod-* S3 buckets exist and are visible via aws-admin-prod; edgartools-prod/mdm/postgres_dsn and edgartools-prod/mdm/snowflake secrets already exist (created by the prod Terraform apply on 2026-06-19) with VersionIdsToStages: null, i.e. created but never populated -- exactly Task 2's expected starting state.",
+      "decision": "RUN-THIS-YOURSELF.sh (written earlier this session, asking the operator to manually type a DSN and a password into a script) is superseded and should be deleted.",
+      "rationale": "Both credential-population steps can now be done as fully piped, no-manual-entry shell pipelines -- the manual-entry approach was based on an incomplete understanding of what credentials were actually needed/available at the time it was written.",
       "phase": "08"
     }
   ],
   "uncommitted_files": [
-    "infra/aws-prod-application.json (intentionally untracked -- generated deploy manifest, never to be committed per D-10)"
+    ".planning/workstreams/go-live/STATE.md (Blocker 3 correction, this session)",
+    "infra/aws-prod-application.json (intentionally untracked -- generated deploy manifest, never to be committed per D-10)",
+    ".planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/RUN-THIS-YOURSELF.sh (untracked, superseded, pending deletion)"
   ],
   "background_processes": [],
-  "next_action": "Get explicit operator go-ahead, then run Plan 08-01 Task 2: populate edgartools-prod/mdm/postgres_dsn (via bootstrap-aws-mdm-secrets.sh --dsn-stdin) and edgartools-prod/mdm/snowflake (via raw put-secret-value, 7 keys per the plan) using the freshly-rotated EDGARTOOLS_PROD_MDM application credential -- NOT the original or first-rotation values, both compromised. Then verify Task 3 is still satisfied, then Plan 08-02.",
-  "context_notes": "This session closed BOTH gaps blocking Phase 8: the Snowflake side (instance provisioned, network policy created, credentials rotated after two redaction-gap incidents) and a separate false AWS blocker (aws-admin-prod resolving to 077127448006 was incorrectly treated as needing a distinct prod account, when D-05 already settled that this is the correct same-account design and both target secrets already exist, unpopulated). Task 2 is technically unblocked but was not executed in this session -- writing real production secret values is treated as requiring an explicit go-ahead, not assumed from 'unblock the path' framing. See Critical Anti-Patterns in .continue-here.md before running any further Postgres-instance SQL through go-live.sh or manually."
+  "next_action": "Resume by reconstructing the exact Postgres credential rotation syntax (DESCRIBE POSTGRES INSTANCE EDGARTOOLS_PROD_MDM was already run this session and returned a property list with no rotation hint -- the ALTER syntax used 3 times in earlier sessions was never saved to any file). Build it as a single atomic piped command (rotation -> JSON parse -> DSN construction -> bootstrap-aws-mdm-secrets.sh --dsn-stdin) so the raw credential never surfaces in any individual tool result. Then do the lower-risk edgartools-prod/mdm/snowflake population (copy from edgartools-prod/dbt/snowflake). Then Plan 08-02 connectivity verification. Then the human checkpoint for the launch gate matrix flip. Full plan is at /Users/aneenaananth/.claude/plans/reflective-shimmying-badger.md (approved).",
+  "context_notes": "Paused purely on context budget (25% remaining), not on any blocker -- the user already authorized this work and approved the plan via ExitPlanMode. The riskiest remaining step (constructing/running the credential rotation command) deserves a fresh, unhurried session rather than being squeezed through a thin context window where a mistake could leak a credential into the transcript. All discovery/investigation needed to execute the remaining steps has already been done and is captured in completed_tasks and decisions above -- the resuming agent should not need to re-investigate, just execute carefully."
 }
