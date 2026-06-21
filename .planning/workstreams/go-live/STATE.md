@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
 status: executing
-stopped_at: Phase 9 Plan 09-01 Task 2 operator approval checkpoint; Task 1 preflight evidence committed
-last_updated: "2026-06-21T22:35:10.000Z"
-last_activity: 2026-06-21 -- Phase 9 Plan 09-01 Task 1 read-only preflight complete
+stopped_at: Phase 9 Plan 09-01 Task 4 blocked at sync-graph runtime-role grants
+last_updated: "2026-06-21T23:02:00.000Z"
+last_activity: 2026-06-21 -- Phase 9 Plan 09-01 Task 4 stopped at bounded sync-graph PrivilegeError
 progress:
   total_phases: 6
   completed_phases: 3
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 09 (production-hosted-graph-e2e) — EXECUTING Plan 09-01
-Plan: 0 of 2 executed; Plan 09-01 Task 1 read-only preflight is complete and committed; Task 2 is the operator approval checkpoint for production Native App provisioning and bounded graph writes; Plan 09-02 covers production AWS MDM E2E and launch matrix reconciliation
-Status: Paused at Phase 9 Plan 09-01 Task 2. No production graph grants, MDM writes, graph sync, Native App graph algorithms, or launch matrix edits have run.
-Last activity: 2026-06-21 -- Phase 9 Plan 09-01 Task 1 preflight recorded a production graph schema/database-role grant gap
+Plan: 0 of 2 executed; Plan 09-01 Tasks 1-3 are complete and committed; Task 4 is blocked at bounded `sync-graph --limit 100`; Plan 09-02 covers production AWS MDM E2E and launch matrix reconciliation
+Status: Paused at Phase 9 Plan 09-01 Task 4. Production Native App/schema/database-role prerequisites are applied, but local graph sync cannot proceed until the runtime Snowflake role receives the minimum MDM/graph schema grants.
+Last activity: 2026-06-21 -- Phase 9 Plan 09-01 Task 4 loaded secrets in one non-printing shell invocation, ran counts, skipped bounded MDM smoke because seeded entity rows exist, and stopped at sync-graph PrivilegeError before strict verify-graph
 
-Progress: 55% (3/6 v1.6 phases complete: Phase 6 AWS, Phase 7 Snowflake/dbt, Phase 8 MDM secrets/connectivity; Phase 9 executing and paused at Plan 09-01 Task 2 approval)
+Progress: 55% (3/6 v1.6 phases complete: Phase 6 AWS, Phase 7 Snowflake/dbt, Phase 8 MDM secrets/connectivity; Phase 9 executing and paused at Plan 09-01 Task 4 runtime-role grants)
 
 ## Milestone Context
 
@@ -95,6 +95,20 @@ after PR #80 merged; Claude-owned branches remain untouched)
   or not visible, so execution is paused before production provisioning/writes
   at the Task 2 operator approval checkpoint.
 
+- [Phase 09 Plan 01 Tasks 2-4]: Operator approved production Native App
+  provisioning and bounded graph writes. Task 3 production-scoped Native App
+  prerequisites were applied and committed: graph schema/database role created,
+  Native App grants and application-role grants passed, future table/view grants
+  and `CPU_X64_XS` compute-pool visibility passed. Task 4 loaded
+  `MDM_DATABASE_URL` and `MDM_SNOWFLAKE_SECRET_JSON` in one non-printing shell
+  invocation and unset both values before exit. `mdm counts` passed with seeded
+  entity rows already present, so bounded MDM smoke was skipped. Bounded
+  `sync-graph --limit 100` stopped with a sanitized `PrivilegeError`: the
+  expected runtime role `EDGARTOOLS_PROD_DEPLOYER` lacks usage on
+  `EDGARTOOLS_PROD.MDM`, usage/create-table/create-view on
+  `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION`, and future select on MDM
+  tables/views. Strict `verify-graph` did not run.
+
 ## Known Inputs
 
 - Dev hosted graph E2E succeeded through strict Snowflake-hosted verification.
@@ -140,11 +154,11 @@ after PR #80 merged; Claude-owned branches remain untouched)
   verification) is complete — see `evidence/mdm-prod-secrets-and-connectivity.md`
   (Postgres credentials rotated, `mdm` database created/migrated/granted, both AWS secrets
   populated, `check-connectivity` and `counts` passing against prod via the
-  `application` role). Phase 9 Plan 09-01 Task 1 preflight is complete and
-  blocked before production graph writes on missing/not-visible
-  `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION` database-role grant prerequisites;
-  Blocker 4 remains open until local strict `mdm verify-graph` and production
-  AWS MDM E2E both pass. A reusable
+  `application` role). Phase 9 Plan 09-01 Tasks 1-3 are complete, but Task 4 is
+  blocked at local bounded `sync-graph` because the production Snowflake runtime
+  role lacks the MDM/graph schema grant categories needed to materialize graph
+  tables. Blocker 4 remains open until local strict `mdm verify-graph` and
+  production AWS MDM E2E both pass. A reusable
   one-click provisioning script,
   `infra/scripts/bootstrap-prod-mdm.sh`, now encapsulates the full rotate→create→migrate→grant→
   populate-secrets→verify sequence for future re-runs (e.g. dev cutover, prod re-provisioning).
@@ -171,14 +185,14 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-21T22:35:10.000Z
-Stopped at: Phase 9 Plan 09-01 Task 2 operator approval checkpoint after
-Task 1 read-only preflight. No production graph grants, MDM writes, graph sync,
-Native App graph algorithms, or launch matrix edits have run.
+Last session: 2026-06-21T23:02:00.000Z
+Stopped at: Phase 9 Plan 09-01 Task 4 after bounded `sync-graph --limit 100`
+returned a sanitized `PrivilegeError`. Production Native App prerequisites are
+applied; strict `verify-graph`, AWS MDM E2E, and launch matrix edits have not run.
 Resume file: .planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/09-01-PLAN.md
 Resume command: `$gsd-execute-phase 9 --ws go-live` from branch
-`codex/go-live-v1.6-phase9` after explicit operator approval for the Plan 09-01
-state-changing checkpoints. Do not redo Phase 8.
+`codex/go-live-v1.6-phase9` after explicit operator approval for the runtime-role
+grant remediation. Do not redo Phase 8 or the completed Task 3 Native App grants.
 
 ## Performance Metrics
 
