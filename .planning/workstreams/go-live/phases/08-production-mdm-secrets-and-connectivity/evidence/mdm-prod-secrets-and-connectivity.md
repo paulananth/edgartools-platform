@@ -1,7 +1,7 @@
 # MDM Prod Secrets and Connectivity Evidence - Phase 8
 
 Date: 2026-06-20 UTC (Task 1 initial BLOCKED attempt). Updated 2026-06-21 UTC (Task 1 re-run,
-instance now provisioned).
+instance now provisioned). Updated again 2026-06-21 UTC (credential rotation completed).
 
 Environment: production. This evidence records Task 1's precondition outcome, not Task 2/3
 secret-population proof (Task 2 remains separately blocked — see below).
@@ -37,10 +37,19 @@ instance, `EDGARTOOLS_PROD_MDM`, was provisioned in this Snowflake account and c
 - owner role: `ACCOUNTADMIN`
 - comment: references the MDM Snowflake Postgres runtime database (prod)
 
-No host string, DSN, or credential is recorded above or anywhere in this file. (Note: this
-instance's `snowflake_admin`/`application` credentials were inadvertently exposed in a chat
-transcript during creation and must be treated as compromised and rotated — tracked
-separately, not part of this evidence file.)
+No host string, DSN, or credential is recorded above or anywhere in this file.
+
+### Credential rotation (2026-06-21) — COMPLETE
+
+This instance's original `snowflake_admin`/`application` credentials were inadvertently
+exposed in a chat transcript during creation and were treated as compromised. A first rotation
+attempt (`ALTER POSTGRES INSTANCE ... RESET ACCESS FOR`) also leaked its output before a
+redaction-filter gap in `go-live.sh` was identified and fixed (the command returns a generic
+`password` field that the existing filter did not match). A third rotation attempt, run after
+the fix, completed cleanly with no credential values printed anywhere in the transcript or
+written to any file. The instance now has fresh `snowflake_admin`/`application` credentials
+that have never been exposed. The original (pre-rotation) credentials are permanently invalid
+and must never be used in any secret value or DSN.
 
 Per the architecture correction above, this instance shares its Snowflake account with the dev
 instance (`EDGARTOOLS_DEV_MDM`, also `READY` in the same account) — they are distinguished by
@@ -68,9 +77,8 @@ gap is now resolved (connection configured, instance provisioned and `READY`). T
 
 1. Configure genuine production AWS admin credentials under the `aws-admin-prod` profile such
    that `aws sts get-caller-identity --profile aws-admin-prod` resolves to a real production AWS
-   account distinct from `077127448006`.
-2. Rotate the `EDGARTOOLS_PROD_MDM` Postgres instance's `snowflake_admin`/`application`
-   credentials (compromised via chat exposure during creation) before using them in any
-   `postgres_dsn` secret value.
-3. Once both are done, proceed to Task 2 secret population using the documented helper script
-   and raw `put-secret-value` pattern in `runbook/mdm-secrets.md`.
+   account distinct from `077127448006`. This is the sole remaining blocker — credential
+   rotation (item 2, originally listed here) is complete as of 2026-06-21; see above.
+2. Once done, proceed to Task 2 secret population using the documented helper script and raw
+   `put-secret-value` pattern in `runbook/mdm-secrets.md`, using the rotated (post-2026-06-21)
+   `application` credential — never the original pre-rotation value.
