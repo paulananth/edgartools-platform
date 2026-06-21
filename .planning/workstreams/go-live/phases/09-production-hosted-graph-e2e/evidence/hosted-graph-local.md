@@ -145,3 +145,57 @@ Post-grant metadata checks:
 
 No raw Snowflake rows, connector traces, Native App logs, or account identifiers
 were recorded. Task 3 unblocks Task 4.
+
+## Task 4 Bounded Local Graph Sync And Strict Verify
+
+Execution time: 2026-06-21 UTC.
+
+Secret handling:
+
+- `MDM_DATABASE_URL` was loaded from `edgartools-prod/mdm/postgres_dsn`.
+- `MDM_SNOWFLAKE_SECRET_JSON` was loaded from `edgartools-prod/mdm/snowflake`.
+- Both values were loaded and consumed inside one non-printing shell invocation.
+- Shell tracing remained disabled.
+- Both environment variables were unset before the shell exited.
+
+Command summary:
+
+| Command category | Bound | Status | Sanitized result |
+|---|---:|---:|---|
+| `mdm counts` | read-only | PASS | Selected graph-source counts: entity rows 10; company/adviser/person/security/fund rows 0; active relationships 0; pending graph sync 0. |
+| bounded MDM smoke | `run --entity-type all --limit 5`; `backfill-relationships --limit 100` | SKIPPED | Graph inputs were not all zero because seeded entity rows already existed. |
+| `sync-graph` | `--limit 100` | BLOCKED | Failure class: `PrivilegeError`. No secret-shaped output was emitted by the sanitized wrapper. |
+| strict `verify-graph` | `--native-app-compute-pool CPU_X64_XS` | NOT RUN | Stopped because bounded graph sync did not complete. |
+
+### 5-Whys Failure Summary
+
+1. Symptom: bounded `sync-graph --limit 100` did not complete.
+2. Why: graph materialization reads production Snowflake MDM mirror tables and
+   writes graph-ready tables/views.
+3. Why: the Snowflake runtime role used by the MDM Snowflake secret does not
+   currently have all required schema/object privilege categories.
+4. Why: Task 3 prepared the Native App database role and compute-pool path, but
+   did not broaden the runtime deployer role used by local `sync-graph`.
+5. Root cause: production `sync-graph` runtime grants are incomplete for
+   `EDGARTOOLS_PROD_DEPLOYER` against `EDGARTOOLS_PROD.MDM` and
+   `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION`.
+
+Read-only runtime-role diagnostic:
+
+| Runtime privilege category | Status |
+|---|---:|
+| Runtime role exists | PASS |
+| Runtime usage on database | PASS |
+| Runtime usage on `MDM` schema | BLOCKED |
+| Runtime usage on `NEO4J_GRAPH_MIGRATION` schema | BLOCKED |
+| Runtime create-table on graph schema | BLOCKED |
+| Runtime create-view on graph schema | BLOCKED |
+| Runtime future select on MDM tables | BLOCKED |
+| Runtime future select on MDM views | BLOCKED |
+| MDM source table metadata query | PASS |
+
+Remediation category: explicitly approve and apply the minimum production
+runtime-role grants required for local `sync-graph`, then rerun Task 4 from
+the same branch. Do not run unbounded MDM commands, Native App algorithms, or
+launch matrix reconciliation until `sync-graph --limit 100` and strict
+`verify-graph` pass.
