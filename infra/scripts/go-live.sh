@@ -303,7 +303,7 @@ redact_text() {
     -e "s#sha256:[0-9a-fA-F]{32,}#<redacted-image-digest>#g" \
     -e "s#([Ee][Xx][Tt][Ee][Rr][Nn][Aa][Ll][ _-]?[Ii][Dd][^A-Za-z0-9]+)[A-Za-z0-9._:/=-]+#\1<redacted-external-id>#g" \
     -e "s#([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy])([=:][^[:space:]]+)#\1=<redacted>#g" \
-    -e "s#\"(snowflake_admin|application|admin_password)\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"\1\": \"<redacted>\"#g" \
+    -e "s#\"(snowflake_admin|application|admin_password|password)\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"\1\": \"<redacted>\"#g" \
     -e "s#(^|[^0-9])([0-9]{12})([^0-9]|$)#\1<redacted-account-id>\3#g"
 }
 
