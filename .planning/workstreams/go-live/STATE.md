@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
 status: executing
-stopped_at: Phase 9 planned; ready to execute 09-01 Native App prerequisites and local strict graph verification
-last_updated: "2026-06-21T22:25:27.000Z"
-last_activity: 2026-06-21 -- Phase 9 planning complete
+stopped_at: Phase 9 Plan 09-01 Task 2 operator approval checkpoint; Task 1 preflight evidence committed
+last_updated: "2026-06-21T22:35:10.000Z"
+last_activity: 2026-06-21 -- Phase 9 Plan 09-01 Task 1 read-only preflight complete
 progress:
   total_phases: 6
   completed_phases: 3
@@ -18,12 +18,12 @@ progress:
 
 ## Current Position
 
-Phase: 09 (production-hosted-graph-e2e) — PLANNED, ready to execute Plan 09-01
-Plan: 0 of 2 executed; Plan 09-01 covers production Native App prerequisites, bounded local graph sync, and strict verify-graph; Plan 09-02 covers production AWS MDM E2E and launch matrix reconciliation
-Status: Ready to execute Phase 9 Plan 09-01; Phase 8 is complete and must not be redone
-Last activity: 2026-06-21 -- Phase 9 planning complete
+Phase: 09 (production-hosted-graph-e2e) — EXECUTING Plan 09-01
+Plan: 0 of 2 executed; Plan 09-01 Task 1 read-only preflight is complete and committed; Task 2 is the operator approval checkpoint for production Native App provisioning and bounded graph writes; Plan 09-02 covers production AWS MDM E2E and launch matrix reconciliation
+Status: Paused at Phase 9 Plan 09-01 Task 2. No production graph grants, MDM writes, graph sync, Native App graph algorithms, or launch matrix edits have run.
+Last activity: 2026-06-21 -- Phase 9 Plan 09-01 Task 1 preflight recorded a production graph schema/database-role grant gap
 
-Progress: 55% (3/6 v1.6 phases complete: Phase 6 AWS, Phase 7 Snowflake/dbt, Phase 8 MDM secrets/connectivity; Phase 9 planned and ready for execution)
+Progress: 55% (3/6 v1.6 phases complete: Phase 6 AWS, Phase 7 Snowflake/dbt, Phase 8 MDM secrets/connectivity; Phase 9 executing and paused at Plan 09-01 Task 2 approval)
 
 ## Milestone Context
 
@@ -85,6 +85,16 @@ after PR #80 merged; Claude-owned branches remain untouched)
   AWS MDM hosted graph E2E. `--skip-preflight` remains non-acceptance and is
   not part of Phase 9 execution.
 
+- [Phase 09 Plan 01 Task 1]: Read-only preflight completed on 2026-06-21 and
+  evidence was committed in
+  `.planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/evidence/hosted-graph-local.md`.
+  Phase 7 native-pull/dbt and Phase 8 MDM evidence preconditions pass; both
+  required Phase 8 secrets have AWSCURRENT metadata. Native App installation,
+  app role mappings, grants to the app, and `CPU_X64_XS` compute-pool visibility
+  pass. The production graph schema/database role privilege target is missing
+  or not visible, so execution is paused before production provisioning/writes
+  at the Task 2 operator approval checkpoint.
+
 ## Known Inputs
 
 - Dev hosted graph E2E succeeded through strict Snowflake-hosted verification.
@@ -130,8 +140,11 @@ after PR #80 merged; Claude-owned branches remain untouched)
   verification) is complete — see `evidence/mdm-prod-secrets-and-connectivity.md`
   (Postgres credentials rotated, `mdm` database created/migrated/granted, both AWS secrets
   populated, `check-connectivity` and `counts` passing against prod via the
-  `application` role). Phase 9 is now planned but not executed; Blocker 4 remains open
-  until local strict `mdm verify-graph` and production AWS MDM E2E both pass. A reusable
+  `application` role). Phase 9 Plan 09-01 Task 1 preflight is complete and
+  blocked before production graph writes on missing/not-visible
+  `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION` database-role grant prerequisites;
+  Blocker 4 remains open until local strict `mdm verify-graph` and production
+  AWS MDM E2E both pass. A reusable
   one-click provisioning script,
   `infra/scripts/bootstrap-prod-mdm.sh`, now encapsulates the full rotate→create→migrate→grant→
   populate-secrets→verify sequence for future re-runs (e.g. dev cutover, prod re-provisioning).
@@ -158,10 +171,10 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-21T22:25:27.000Z
-Stopped at: Phase 9 planned; ready to execute 09-01 Native App prerequisites,
-bounded local graph sync, and strict verify-graph. No production commands were
-run during planning.
+Last session: 2026-06-21T22:35:10.000Z
+Stopped at: Phase 9 Plan 09-01 Task 2 operator approval checkpoint after
+Task 1 read-only preflight. No production graph grants, MDM writes, graph sync,
+Native App graph algorithms, or launch matrix edits have run.
 Resume file: .planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/09-01-PLAN.md
 Resume command: `$gsd-execute-phase 9 --ws go-live` from branch
 `codex/go-live-v1.6-phase9` after explicit operator approval for the Plan 09-01
