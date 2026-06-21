@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
 status: blocked
-stopped_at: SNOW-03 PASSED (real production native-pull apply); SNOW-04 dependency cleared but dbt deps/run/test not yet executed
-last_updated: "2026-06-19T23:30:00.000Z"
-last_activity: 2026-06-19 -- Claude (on claude/go-live-v1.6-phase7) ran the real production Snowflake native-pull apply with operator-supplied ACCOUNTADMIN access; fixed 6 versions.tf constraints, a bad tfvars.example default, imported 3 shared IAM roles, namespaced 3 inline policies, switched auth to password, resolved a dashboard-object ordering race; created and verified EDGARTOOLS_PROD_DEPLOYER end-to-end; stored credentials in new secret edgartools-prod/dbt/snowflake. dbt deps/run/test deliberately not run (separate further state change).
+stopped_at: Phase 08 Plan 01 (populate prod MDM secrets) halted at Task 1 -- BLOCKED, no genuine prod AWS access and no prod Snowflake connection configured in this environment; Task 2 not executed; Task 3 found pre-satisfied by a prior session
+last_updated: "2026-06-20T22:00:00.000Z"
+last_activity: 2026-06-20 -- Phase 08 Plan 01 executed: Task 1 BLOCKED (commit e21f777) with secret-safe 5-whys evidence; Task 2 correctly skipped per plan gating; Task 3 pre-satisfied, no new edit. SUMMARY committed (b9d5c00).
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 4
+  total_plans: 6
   completed_plans: 4
   percent: 33
 ---
@@ -18,12 +18,12 @@ progress:
 
 ## Current Position
 
-Phase: 07 (Production Snowflake Native Pull And Gold) — SNOW-03 PASS, SNOW-04 dependency cleared
-Plan: 2 of 2 executed, then retried on branch takeover
-Status: SNOW-03 now PASSES — real production `terraform apply` ran across all 3 Snowflake-side roots (access/aws, snowflake, access/snowflake), zero destroys, native_pull_ready=true. SNOW-04's blocking dependency on SNOW-03 is cleared and a verified production deployer user/credentials now exist, but `dbt deps/run/test` has deliberately not been run yet (separate further state change against production gold tables, not assumed approved by this continuation).
-Last activity: 2026-06-19 -- Real production Snowflake native-pull apply completed and verified; see evidence/native-pull.md and evidence/dbt-gold.md for full detail.
+Phase: 08 (production-mdm-secrets-and-connectivity) — BLOCKED on Plan 1 of 2
+Plan: 1 of 2 executed (BLOCKED outcome); Plan 2 (08-02 verify-prod-mdm-connectivity) cannot start until Plan 1's blocker clears
+Status: Plan 08-01 ran Task 1 (precondition check), found neither a genuine production AWS account nor a production Snowflake connection configured in this execution environment, and correctly stopped at secret-safe BLOCKED evidence rather than fabricate a DSN/credential (Phase 7 precedent). Task 2 (secret population) was not executed. Task 3 (HANDOFF.json scope clarification) was found already satisfied by a prior session's edit -- no new change made.
+Last activity: 2026-06-20 -- Phase 08 Plan 01 executed and summarized; human action required before retry (see Blockers).
 
-Progress: 33% (2/6 phases have plan-execution summaries; SNOW-03 unblocked, SNOW-04 ready to retry pending explicit approval to run dbt)
+Progress: 33% (2/6 phases have plan-execution summaries; Phase 7's two Snowflake gates SNOW-03/SNOW-04 both pass; Phase 8 Plan 1 BLOCKED pending operator-provisioned prod Snowflake connection + prod AWS credentials)
 
 ## Milestone Context
 
@@ -104,10 +104,46 @@ Claude and Codex must never commit to the same branch going forward)
 
 - Blocker 2: Production MDM Secrets Manager values are not populated for
   `edgartools-prod/mdm/postgres_dsn` and `edgartools-prod/mdm/snowflake`.
+  [2026-06-20, Phase 08 Plan 01] Attempted population; BLOCKED at the Task 1
+  precondition check -- no `edgartools-prod` Snowflake connection was
+  configured, so the production Postgres MDM instance's existence/readiness
+  could not be verified. Per the Phase 7 precedent, execution stopped at
+  secret-safe BLOCKED evidence (see evidence/mdm-prod-secrets-and-connectivity.md,
+  commit e21f777) instead of fabricating a DSN.
+  [2026-06-21 update] The Snowflake gap is now closed: `edgartools-prod`
+  connection configured, `EDGARTOOLS_PROD_MDM` Postgres instance provisioned
+  and `READY`, credentials rotated (after two self-corrected redaction-gap
+  incidents). The "genuine production AWS account" framing above was a
+  documentation error -- per D-05
+  (`.planning/workstreams/go-live/milestones/v1.5-phases/02-aws-and-snowflake-production-deployment-dry-run/02-CONTEXT.md`),
+  `aws-admin-prod` resolving to `077127448006` is the correct, by-design
+  behavior (same account, prefix-distinguished, not a separate account).
+  Both target secrets already exist in that account (created by the prod
+  Terraform apply, unpopulated -- `VersionIdsToStages: null`). Task 2 is
+  unblocked and ready to run; not yet executed pending explicit operator
+  go-ahead to write real production secret values.
 
-- Blocker 3: Prod Snowflake native pull and dbt gold deployment have not yet run.
+- Blocker 3: FULLY REMEDIATED (2026-06-20/21, Phase 07 complete) -- this entry was stale;
+  both SNOW-03 (native-pull) and SNOW-04 (dbt/gold) reached final status PASS. All three
+  prod Terraform roots (access/aws, snowflake, access/snowflake) applied against
+  production with zero destroys; native-pull objects (stages, manifest tables/pipe/stream,
+  stream-processor task) verified live. `EDGARTOOLS_PROD_DEPLOYER` service user created,
+  credentials stored in `edgartools-prod/dbt/snowflake`. 16/16 dbt gold models built
+  (15 dynamic tables + status view), 47/47 tests passing against real production data
+  (including the `financial_derived` YoY tiebreaker/amendment suite). See
+  `.planning/workstreams/go-live/phases/07-production-snowflake-native-pull-and-gold/evidence/native-pull.md`
+  and `evidence/dbt-gold.md` for full detail.
+
 - Blocker 4: Prod hosted graph E2E has not yet passed against production Snowflake,
-  MDM secrets, and Native App compute pool.
+  MDM secrets, and Native App compute pool. Phase 8 (MDM secrets population + connectivity
+  verification) is now **complete pending human checkpoint** — see
+  `evidence/mdm-prod-secrets-and-connectivity.md` (4 Postgres credential rotations this phase,
+  `mdm` database created/migrated/granted, both AWS secrets populated, `check-connectivity` and
+  `counts` passing against prod via the `application` role). Phase 9 (hosted graph E2E against
+  the Native App compute pool) is separate, materially larger scope, and has not started. Blocker
+  4 remains open until Phase 9 completes. A reusable one-click provisioning script,
+  `infra/scripts/bootstrap-prod-mdm.sh`, now encapsulates the full rotate→create→migrate→grant→
+  populate-secrets→verify sequence for future re-runs (e.g. dev cutover, prod re-provisioning).
 
 - Blocker 5: Prod dashboard UAT has not yet run against a production or
   production-like read-only configuration.
@@ -131,12 +167,21 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-19T22:05:00.000Z
-Stopped at: Branch ownership taken over from Codex (`codex/go-live-v1.6-phase7` ->
-`claude/go-live-v1.6-phase7`, tip `b67acfd` unchanged). Phase 7 plans executed;
-SNOW-03 and SNOW-04 remain BLOCKED on missing prod Snowflake Terraform local inputs.
-Resume file: None
-Resume command: Provide the missing prod Terraform local input files outside git, then create a Phase 7 retry/gap plan before starting Phase 8, from branch `claude/go-live-v1.6-phase7`.
+Last session: 2026-06-20T22:00:00.000Z
+Stopped at: Phase 08 Plan 01 BLOCKED at Task 1 (prod Postgres MDM instance
+precondition check) -- no genuine prod AWS account, no prod Snowflake
+connection configured. Task 2 not executed. Task 3 pre-satisfied by a prior
+session. See 08-01-SUMMARY.md and evidence/mdm-prod-secrets-and-connectivity.md.
+Resume file: .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/08-01-SUMMARY.md
+Resume command: Operator must (1) configure an `edgartools-prod` SnowCLI
+connection pointing at the genuine production Snowflake account and confirm
+the prod Postgres MDM instance exists/is ready, and (2) configure genuine
+production AWS admin credentials under `aws-admin-prod` (currently resolves
+to dev account 077127448006). Once both are done, re-run Plan 08-01 Task 1,
+then proceed to Task 2 and Plan 08-02. Note: dev's SEC_FINANCIAL_FACT table
+has the identical PERIOD_START schema-drift gap fixed in prod in an earlier
+session — apply the same fix there before ever running `dbt run --target dev
+--select financial_facts`.
 
 ## Performance Metrics
 

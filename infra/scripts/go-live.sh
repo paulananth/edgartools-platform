@@ -303,6 +303,7 @@ redact_text() {
     -e "s#sha256:[0-9a-fA-F]{32,}#<redacted-image-digest>#g" \
     -e "s#([Ee][Xx][Tt][Ee][Rr][Nn][Aa][Ll][ _-]?[Ii][Dd][^A-Za-z0-9]+)[A-Za-z0-9._:/=-]+#\1<redacted-external-id>#g" \
     -e "s#([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy])([=:][^[:space:]]+)#\1=<redacted>#g" \
+    -e "s#\"(snowflake_admin|application|admin_password|password)\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"\1\": \"<redacted>\"#g" \
     -e "s#(^|[^0-9])([0-9]{12})([^0-9]|$)#\1<redacted-account-id>\3#g"
 }
 
@@ -475,6 +476,8 @@ add_stage() {
 
 build_stages() {
   local aws_profile_q region_q deployer_q env_q snow_q image_tag db_name
+  local mdm_instance_name mdm_network_policy_name mdm_network_rule_name mdm_schema_name
+  local mdm_instance_name_q mdm_network_policy_name_q mdm_network_rule_name_q mdm_schema_name_q mdm_comment_env_q
   STAGE_NAMES=()
   STAGE_DESCRIPTIONS=()
   STAGE_COMMANDS=()
@@ -485,6 +488,15 @@ build_stages() {
   snow_q="$(shell_quote "$SNOW_CONNECTION")"
   db_name="EDGARTOOLS_${ENV_UPPER}"
   image_tag="sha-$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD 2>/dev/null || echo HEAD)"
+  mdm_instance_name="${db_name}_MDM"
+  mdm_network_policy_name="edgartools_${ENVIRONMENT}_mdm_postgres_policy"
+  mdm_network_rule_name="mdm_postgres_ingress_all"
+  mdm_schema_name="${db_name}.MDM"
+  mdm_instance_name_q="$(shell_quote "$mdm_instance_name")"
+  mdm_network_policy_name_q="$(shell_quote "$mdm_network_policy_name")"
+  mdm_network_rule_name_q="$(shell_quote "$mdm_network_rule_name")"
+  mdm_schema_name_q="$(shell_quote "$mdm_schema_name")"
+  mdm_comment_env_q="$(shell_quote "$ENVIRONMENT")"
 
   add_stage \
     "AWS: Terraform state bucket" \
@@ -541,7 +553,8 @@ uv run --with dbt-snowflake dbt test --target ${ENVIRONMENT}"
   add_stage \
     "Snowflake Postgres / graph prerequisites" \
     "Prepares Snowflake Postgres and hosted graph prerequisites before MDM runtime use." \
-    "snow sql --connection ${SNOW_CONNECTION} --filename infra/snowflake/postgres/mdm_create_instance.sql
+    "snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --filename infra/snowflake/postgres/mdm_create_network_policy.sql -D schema=${mdm_schema_name_q} -D network_rule_name=${mdm_network_rule_name_q} -D network_policy_name=${mdm_network_policy_name_q}
+snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --format JSON --filename infra/snowflake/postgres/mdm_create_instance.sql -D instance_name=${mdm_instance_name_q} -D network_policy=${mdm_network_policy_name_q} -D comment_env=${mdm_comment_env_q}
 snow sql --connection ${SNOW_CONNECTION} --filename infra/snowflake/postgres/mdm_post_restore.sql
 snow sql --connection ${SNOW_CONNECTION} --filename infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql"
 
@@ -636,8 +649,11 @@ PY
 
 execute_stage() {
   local command_block="$1"
-  (cd "$REPO_ROOT" && bash -c "set -euo pipefail
-${command_block}")
+  (
+    set -o pipefail
+    cd "$REPO_ROOT" && bash -c "set -euo pipefail
+${command_block}" 2>&1 | redact_text
+  )
 }
 
 run_doctor() {
