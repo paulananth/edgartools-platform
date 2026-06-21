@@ -141,7 +141,7 @@ Launch Gate Matrix rows (22+) updated PASS
 **When to use:** Always, for `postgres_dsn`. Do not hand-roll a raw `put-secret-value` call for this secret — the helper script's validation is the only place the DSN-shape invariants (`.snowflake.app` suffix, `database=mdm`, `sslmode=require`) are enforced before write.
 **Example:**
 ```bash
-# Source: .planning/workstreams/go-live/phases/03-mdm-hosted-graph-e2e-acceptance/runbook/mdm-secrets.md
+# Source: .planning/workstreams/go-live/milestones/v1.5-phases/03-mdm-hosted-graph-e2e-acceptance/runbook/mdm-secrets.md
 printf '%s' "postgresql://<APPLICATION_ROLE_USER>:<APPLICATION_ROLE_PASSWORD>@<PROD_SNOWFLAKE_POSTGRES_HOST>.snowflake.app:5432/mdm?sslmode=require" | \
   bash infra/scripts/bootstrap-aws-mdm-secrets.sh \
     --env prod \
@@ -155,7 +155,7 @@ printf '%s' "postgresql://<APPLICATION_ROLE_USER>:<APPLICATION_ROLE_PASSWORD>@<P
 **When to use:** Only for `edgartools-prod/mdm/snowflake`.
 **Example:**
 ```bash
-# Source: .planning/workstreams/go-live/phases/03-mdm-hosted-graph-e2e-acceptance/runbook/mdm-secrets.md
+# Source: .planning/workstreams/go-live/milestones/v1.5-phases/03-mdm-hosted-graph-e2e-acceptance/runbook/mdm-secrets.md
 aws secretsmanager put-secret-value \
   --profile aws-admin-prod \
   --region us-east-1 \
@@ -177,7 +177,7 @@ aws secretsmanager put-secret-value \
 **When to use:** Immediately before running `check-connectivity`/`migrate`/`counts` in 08-02; unset immediately after.
 **Example:**
 ```bash
-# Source: .planning/workstreams/go-live/phases/03-mdm-hosted-graph-e2e-acceptance/03-01-live-mdm-graph-rehearsal-PLAN.md:212-213
+# Source: .planning/workstreams/go-live/milestones/v1.5-phases/03-mdm-hosted-graph-e2e-acceptance/03-01-live-mdm-graph-rehearsal-PLAN.md:212-213
 export MDM_DATABASE_URL="$(aws secretsmanager get-secret-value \
   --profile aws-admin-prod --region us-east-1 \
   --secret-id edgartools-prod/mdm/postgres_dsn --query SecretString --output text)"
@@ -271,7 +271,7 @@ def _handle_check_connectivity(args) -> int:
 
 ### Expected non-secret output shapes (dev precedent — prod will differ only in row counts)
 ```text
-# Source: .planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/evidence/mdm-hosted-graph.md (D-03, lines 190-212)
+# Source: .planning/workstreams/go-live/milestones/v1.5-phases/01-production-readiness-inventory-and-launch-gate-contract/evidence/mdm-hosted-graph.md (D-03, lines 190-212)
 check-connectivity --> {"connected": true, "dialect": "postgresql", "missing_tables": []}
 migrate (idempotent) --> {"dialect": "postgresql", "seeded": true}
 counts --> 19 tables with non-zero counts (mdm_entity, mdm_company, mdm_person, mdm_security, etc.)
@@ -297,17 +297,19 @@ counts --> 19 tables with non-zero counts (mdm_entity, mdm_company, mdm_person, 
 
 **This table is intentionally short** — the vast majority of this phase's procedural content (commands, output shapes, security rules) is directly verified from existing repo files (the v1.5 runbook and Phase 1 evidence), not assumed.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does the production Snowflake Postgres MDM instance already exist?**
    - What we know: `infra/snowflake/postgres/mdm_create_instance.sql` only creates `EDGARTOOLS_DEV_MDM`; comments say "Update the instance name... before running" for other environments, implying manual edit-and-run per environment with no prod automation in this repo. No Terraform resource models a Snowflake Postgres instance (Snowflake-side compute, not AWS).
    - What's unclear: Whether a Snowflake operator has already created the prod instance out-of-band (Snowsight) as part of earlier v1.5/v1.6 work, or whether this is still pending.
    - Recommendation: Phase 8 (or a precondition immediately before 08-01) should include a verification step — `snow sql --connection <prod> -q "DESCRIBE POSTGRES INSTANCE <prod-instance-name>"` or equivalent Snowsight check — and if the instance does not exist, that becomes a documented blocker requiring Snowflake operator action (analogous to the existing `mdm_create_instance.sql` step, run for prod) before secret population can proceed meaningfully.
+   - **RESOLVED:** existence is verified at runtime, not assumed here — 08-01 Task 1 implements exactly this check as a blocking precondition and stops with a documented 5-whys BLOCKED if the instance is absent, rather than fabricating a DSN.
 
 2. **What is the exact production prod instance/host naming convention?**
    - What we know: Dev uses `EDGARTOOLS_DEV_MDM` (Snowflake Postgres instance name) and the DSN host suffix is `.snowflake.app`.
    - What's unclear: The exact prod instance name and resulting host string aren't documented anywhere in the repo (correctly redacted, since this would be a real-world identifier).
    - Recommendation: Operator supplies this at execution time; no placeholder guess should be hardcoded into the plan beyond the `<PROD_SNOWFLAKE_POSTGRES_HOST>` placeholder already used in the runbook.
+   - **RESOLVED:** operator supplies the exact instance name and host string at execution time; no placeholder is hardcoded into either plan beyond the documented `<PROD_SNOWFLAKE_POSTGRES_HOST>` token.
 
 ## Environment Availability
 
@@ -373,8 +375,8 @@ None — existing CLI commands and evidence template fully cover phase requireme
 ## Sources
 
 ### Primary (HIGH confidence)
-- `.planning/workstreams/go-live/phases/03-mdm-hosted-graph-e2e-acceptance/runbook/mdm-secrets.md` — authoritative v1.5 runbook for secret population, scope (2 vs 4 secrets), and security rules
-- `.planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/evidence/mdm-hosted-graph.md` — dev precedent for CLI command sequence and output shapes (D-03), DSN shape reference (D-07)
+- `.planning/workstreams/go-live/milestones/v1.5-phases/03-mdm-hosted-graph-e2e-acceptance/runbook/mdm-secrets.md` — authoritative v1.5 runbook for secret population, scope (2 vs 4 secrets), and security rules
+- `.planning/workstreams/go-live/milestones/v1.5-phases/01-production-readiness-inventory-and-launch-gate-contract/evidence/mdm-hosted-graph.md` — dev precedent for CLI command sequence and output shapes (D-03), DSN shape reference (D-07)
 - `edgar_warehouse/mdm/cli.py` — exact handler implementations for `migrate`/`counts`/`check-connectivity`
 - `edgar_warehouse/mdm/database.py` — `get_engine()` confirms `MDM_DATABASE_URL` env var contract
 - `edgar_warehouse/mdm/export.py` — `_snowflake_setting()` confirms the `snowflake` secret's real (different) consumer
