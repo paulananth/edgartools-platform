@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
 status: blocked
-stopped_at: SNOW-03 and SNOW-04 both PASS; Phase 7 Snowflake gates fully closed; Phase 8 (MDM secrets/connectivity) is next
-last_updated: "2026-06-20T11:00:00.000Z"
-last_activity: 2026-06-20 -- Claude ran `dbt deps`/`dbt run --target prod`/`dbt test --target prod` against production using edgartools-prod/dbt/snowflake credentials. 15 of 16 models passed immediately; FINANCIAL_FACTS failed on a genuine pre-existing schema-drift bug (live SEC_FINANCIAL_FACT table missing PERIOD_START, also present in dev). Fixed with a non-destructive 3-step ALTER TABLE migration against prod only (5-whys in TODOS.md). Retry: 16/16 models built, 47/47 tests pass. SNOW-04 now PASSES.
+stopped_at: Phase 08 Plan 01 (populate prod MDM secrets) halted at Task 1 -- BLOCKED, no genuine prod AWS access and no prod Snowflake connection configured in this environment; Task 2 not executed; Task 3 found pre-satisfied by a prior session
+last_updated: "2026-06-20T22:00:00.000Z"
+last_activity: 2026-06-20 -- Phase 08 Plan 01 executed: Task 1 BLOCKED (commit e21f777) with secret-safe 5-whys evidence; Task 2 correctly skipped per plan gating; Task 3 pre-satisfied, no new edit. SUMMARY committed (b9d5c00).
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 4
+  total_plans: 6
   completed_plans: 4
   percent: 33
 ---
@@ -18,12 +18,12 @@ progress:
 
 ## Current Position
 
-Phase: 07 (Production Snowflake Native Pull And Gold) — SNOW-03 PASS, SNOW-04 PASS
-Plan: 2 of 2 executed, then retried on branch takeover, then dbt run/test completed
-Status: SNOW-03 and SNOW-04 both PASS. `dbt deps`/`dbt run --target prod`/`dbt test --target prod` ran against production; 16/16 gold models built and 47/47 tests pass after fixing a pre-existing schema-drift bug (missing PERIOD_START column on the live SEC_FINANCIAL_FACT table, fixed via non-destructive ALTER TABLE migration against prod; dev has the identical gap, intentionally not fixed — out of scope). Phase 7's Snowflake gates are fully closed.
-Last activity: 2026-06-20 -- dbt deps/run/test executed against production; FINANCIAL_FACTS schema-drift bug found and fixed; 16/16 models, 47/47 tests passing. See evidence/native-pull.md and evidence/dbt-gold.md for full detail.
+Phase: 08 (production-mdm-secrets-and-connectivity) — BLOCKED on Plan 1 of 2
+Plan: 1 of 2 executed (BLOCKED outcome); Plan 2 (08-02 verify-prod-mdm-connectivity) cannot start until Plan 1's blocker clears
+Status: Plan 08-01 ran Task 1 (precondition check), found neither a genuine production AWS account nor a production Snowflake connection configured in this execution environment, and correctly stopped at secret-safe BLOCKED evidence rather than fabricate a DSN/credential (Phase 7 precedent). Task 2 (secret population) was not executed. Task 3 (HANDOFF.json scope clarification) was found already satisfied by a prior session's edit -- no new change made.
+Last activity: 2026-06-20 -- Phase 08 Plan 01 executed and summarized; human action required before retry (see Blockers).
 
-Progress: 33% (2/6 phases have plan-execution summaries; Phase 7's two Snowflake gates SNOW-03/SNOW-04 both pass; Phase 8 (MDM secrets/connectivity) is next)
+Progress: 33% (2/6 phases have plan-execution summaries; Phase 7's two Snowflake gates SNOW-03/SNOW-04 both pass; Phase 8 Plan 1 BLOCKED pending operator-provisioned prod Snowflake connection + prod AWS credentials)
 
 ## Milestone Context
 
@@ -104,6 +104,16 @@ Claude and Codex must never commit to the same branch going forward)
 
 - Blocker 2: Production MDM Secrets Manager values are not populated for
   `edgartools-prod/mdm/postgres_dsn` and `edgartools-prod/mdm/snowflake`.
+  [2026-06-20, Phase 08 Plan 01] Attempted population; BLOCKED at the Task 1
+  precondition check -- this execution environment has neither a genuine
+  production AWS account (`aws-admin-prod` resolves to dev account
+  `077127448006`) nor a configured `edgartools-prod` Snowflake connection, so
+  the production Postgres MDM instance's existence/readiness could not be
+  verified. Per the Phase 7 precedent, execution stopped at secret-safe
+  BLOCKED evidence (see evidence/mdm-prod-secrets-and-connectivity.md,
+  commit e21f777) instead of fabricating a DSN. Operator must provision a
+  production Snowflake connection and genuine production AWS credentials
+  before this plan can be retried.
 
 - Blocker 3: Prod Snowflake native pull and dbt gold deployment have not yet run.
 - Blocker 4: Prod hosted graph E2E has not yet passed against production Snowflake,
@@ -131,15 +141,21 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-20T11:00:00.000Z
-Stopped at: SNOW-03 and SNOW-04 both PASS. Phase 7's Snowflake gates are fully
-closed (native-pull infra live, 16/16 gold dbt models built, 47/47 tests pass).
-Resume file: None
-Resume command: Start Phase 8 (MDM secrets/connectivity) from branch
-`claude/go-live-v1.6-phase7`. Note: dev's SEC_FINANCIAL_FACT table has the
-identical PERIOD_START schema-drift gap fixed in prod this session — apply the
-same fix there before ever running `dbt run --target dev --select
-financial_facts`.
+Last session: 2026-06-20T22:00:00.000Z
+Stopped at: Phase 08 Plan 01 BLOCKED at Task 1 (prod Postgres MDM instance
+precondition check) -- no genuine prod AWS account, no prod Snowflake
+connection configured. Task 2 not executed. Task 3 pre-satisfied by a prior
+session. See 08-01-SUMMARY.md and evidence/mdm-prod-secrets-and-connectivity.md.
+Resume file: .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/08-01-SUMMARY.md
+Resume command: Operator must (1) configure an `edgartools-prod` SnowCLI
+connection pointing at the genuine production Snowflake account and confirm
+the prod Postgres MDM instance exists/is ready, and (2) configure genuine
+production AWS admin credentials under `aws-admin-prod` (currently resolves
+to dev account 077127448006). Once both are done, re-run Plan 08-01 Task 1,
+then proceed to Task 2 and Plan 08-02. Note: dev's SEC_FINANCIAL_FACT table
+has the identical PERIOD_START schema-drift gap fixed in prod in an earlier
+session — apply the same fix there before ever running `dbt run --target dev
+--select financial_facts`.
 
 ## Performance Metrics
 
