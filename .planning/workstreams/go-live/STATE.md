@@ -105,15 +105,23 @@ Claude and Codex must never commit to the same branch going forward)
 - Blocker 2: Production MDM Secrets Manager values are not populated for
   `edgartools-prod/mdm/postgres_dsn` and `edgartools-prod/mdm/snowflake`.
   [2026-06-20, Phase 08 Plan 01] Attempted population; BLOCKED at the Task 1
-  precondition check -- this execution environment has neither a genuine
-  production AWS account (`aws-admin-prod` resolves to dev account
-  `077127448006`) nor a configured `edgartools-prod` Snowflake connection, so
-  the production Postgres MDM instance's existence/readiness could not be
-  verified. Per the Phase 7 precedent, execution stopped at secret-safe
-  BLOCKED evidence (see evidence/mdm-prod-secrets-and-connectivity.md,
-  commit e21f777) instead of fabricating a DSN. Operator must provision a
-  production Snowflake connection and genuine production AWS credentials
-  before this plan can be retried.
+  precondition check -- no `edgartools-prod` Snowflake connection was
+  configured, so the production Postgres MDM instance's existence/readiness
+  could not be verified. Per the Phase 7 precedent, execution stopped at
+  secret-safe BLOCKED evidence (see evidence/mdm-prod-secrets-and-connectivity.md,
+  commit e21f777) instead of fabricating a DSN.
+  [2026-06-21 update] The Snowflake gap is now closed: `edgartools-prod`
+  connection configured, `EDGARTOOLS_PROD_MDM` Postgres instance provisioned
+  and `READY`, credentials rotated (after two self-corrected redaction-gap
+  incidents). The "genuine production AWS account" framing above was a
+  documentation error -- per D-05
+  (`.planning/workstreams/go-live/milestones/v1.5-phases/02-aws-and-snowflake-production-deployment-dry-run/02-CONTEXT.md`),
+  `aws-admin-prod` resolving to `077127448006` is the correct, by-design
+  behavior (same account, prefix-distinguished, not a separate account).
+  Both target secrets already exist in that account (created by the prod
+  Terraform apply, unpopulated -- `VersionIdsToStages: null`). Task 2 is
+  unblocked and ready to run; not yet executed pending explicit operator
+  go-ahead to write real production secret values.
 
 - Blocker 3: Prod Snowflake native pull and dbt gold deployment have not yet run.
 - Blocker 4: Prod hosted graph E2E has not yet passed against production Snowflake,

@@ -62,23 +62,43 @@ The initial Task 1 attempt found no `edgartools-prod` SnowCLI connection configu
 gap is now resolved (connection configured, instance provisioned and `READY`). The AWS half is
 **not** resolved — see Task 2 status below.
 
+## AWS architecture correction (2026-06-21)
+
+A prior pass of this evidence (and `08-01-SUMMARY.md`, `STATE.md` Blocker 2, and
+`.planning/HANDOFF.json`) treated `aws-admin-prod` resolving to account `077127448006` as a
+blocker — framing it as "the dev account" and requiring "genuine production AWS credentials" in
+a *different* account. This was a documentation error, not a real gap, and repeats (in the
+opposite direction) the same kind of mistake already corrected for Snowflake above.
+
+The settled architecture decision is **D-05**
+(`.planning/workstreams/go-live/milestones/v1.5-phases/02-aws-and-snowflake-production-deployment-dry-run/02-CONTEXT.md`),
+made in v1.5 Phase 2: `aws-admin-dev` and `aws-admin-prod` are **intentionally** the same AWS
+account. "Prod" is a same-account, prefix-distinguished resource set (separate Terraform root,
+`:prod`-tagged ECR images, `edgartools-prod-*` named resources) — not a separate account. D-05
+explicitly states: "Downstream agents must not assume a separate prod account/ECR exists."
+
+Live verification via the `aws-admin-prod` profile (same underlying credentials as `default`,
+by design — see `docs/aws-authentication.md`) confirms prod resources already exist in this
+account:
+- S3: `edgartools-prod-bronze`, `edgartools-prod-warehouse`, `edgartools-prod-snowflake-export`,
+  `edgartools-prod-tfstate`.
+- Secrets Manager: `edgartools-prod/mdm/postgres_dsn` and `edgartools-prod/mdm/snowflake` both
+  exist (created by the prod Terraform apply, 2026-06-19), with `VersionIdsToStages: null` —
+  i.e. created but never populated. This is exactly the precondition Task 2 expects.
+
+**Practical consequence: there is no AWS-side blocker.** Task 2 can run now using the
+`aws-admin-prod` profile as already configured.
+
 ### Implication for Task 2 and Task 3
 
-- **Task 2 (populate both required prod secrets): still NOT executed.** `aws-admin-prod`
-  continues to resolve to IAM user `cli-access` in account `077127448006` (the dev account),
-  confirmed via `aws sts get-caller-identity --profile aws-admin-prod` immediately before this
-  update. Writing `postgres_dsn`/`snowflake` secrets without genuine production AWS access
-  would write to the wrong account or require fabricating values — both prohibited. Task 2
-  remains blocked on operator provisioning of real `aws-admin-prod` credentials.
-- **Task 3 (HANDOFF.json neo4j/api_keys scope clarification):** independent of the above
-  blocker; not yet executed in this update, can proceed on request.
+- **Task 2 (populate both required prod secrets): ready to execute.** Both target secrets exist,
+  unpopulated. The only remaining precondition (rotated, never-exposed Postgres credentials) was
+  satisfied earlier in this session. No further blocker exists — population was not run in this
+  update pending explicit operator go-ahead before writing to a real production secret.
+- **Task 3 (HANDOFF.json neo4j/api_keys scope clarification):** independent of the above;
+  pre-satisfied by a prior session per `08-01-SUMMARY.md`.
 
 ### Required Operator Action Before Task 2 Retry
 
-1. Configure genuine production AWS admin credentials under the `aws-admin-prod` profile such
-   that `aws sts get-caller-identity --profile aws-admin-prod` resolves to a real production AWS
-   account distinct from `077127448006`. This is the sole remaining blocker — credential
-   rotation (item 2, originally listed here) is complete as of 2026-06-21; see above.
-2. Once done, proceed to Task 2 secret population using the documented helper script and raw
-   `put-secret-value` pattern in `runbook/mdm-secrets.md`, using the rotated (post-2026-06-21)
-   `application` credential — never the original pre-rotation value.
+None. The previously-listed AWS-credentials blocker did not exist — `aws-admin-prod` was
+already correctly configured per D-05. Task 2 is unblocked and ready to run.
