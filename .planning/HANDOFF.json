@@ -1,96 +1,87 @@
 {
   "version": "1.0",
-  "timestamp": "2026-06-21T02:07:14.919Z",
+  "timestamp": "2026-06-21T10:49:49.000Z",
   "context": "phase",
   "workstream": "go-live",
   "branch": "claude/go-live-v1.6-phase7",
-  "head": "0f7c5e9",
+  "head": "10be2d9",
   "workspace_path": "/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform",
   "phase": "08",
   "phase_name": "production-mdm-secrets-and-connectivity",
   "phase_dir": ".planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity",
   "plan": "08-01-populate-prod-mdm-secrets-PLAN.md",
-  "task": 1,
+  "task": 2,
   "total_tasks": 3,
-  "status": "paused_blocked_on_prod_postgres_provisioning",
-  "handoff_notice": "HARD RULE (CLAUDE.md): Claude and Codex must never commit to the same branch. claude/go-live-v1.6-phase7 remains Claude-owned. SECURITY INCIDENT THIS SESSION: an unfiltered `cat ~/.snowflake/connections.toml | grep -A6` printed the real Snowflake password for user ANANP11 (shared across snowconn, YG91578, edgartools-prod connections) into the chat transcript. Treat as compromised; user has NOT confirmed rotation yet -- raise again before further routine use of that account.",
+  "status": "paused_blocked_on_aws_prod_credentials",
+  "handoff_notice": "HARD RULE (CLAUDE.md): Claude and Codex must never commit to the same branch. claude/go-live-v1.6-phase7 remains Claude-owned. SECURITY: two credential-exposure incidents occurred this session (see Critical Anti-Patterns below) -- both were remediated by rotation, but the pattern (grep/sed-based secret filters silently failing to match actual output shape) must be treated as structurally unsafe, not a one-off mistake.",
   "completed_tasks": [
     {
-      "id": "07-dbt-run",
-      "name": "Ran dbt deps/run/test --target prod. 16/16 models built, 47/47 tests pass after fixing a PERIOD_START schema-drift bug. SNOW-04 PASS.",
+      "id": "08-parameterize-mdm-sql",
+      "name": "Parameterized mdm_create_instance.sql and mdm_create_network_policy.sql by environment via Snow CLI Jinja templating; updated go-live.sh's 'Snowflake Postgres / graph prerequisites' stage to compute env-specific names and invoke the network-policy script (previously missing from the pipeline).",
       "status": "done",
-      "commit": "8e4d945"
+      "commit": "1930aef"
     },
     {
-      "id": "08-research",
-      "name": "Resolved MDM secret scope to exactly 2 secrets (postgres_dsn, snowflake); neo4j and api_keys confirmed out of scope.",
+      "id": "08-create-mdm-schema-prod",
+      "name": "Created the missing EDGARTOOLS_PROD.MDM schema (ad-hoc CREATE SCHEMA IF NOT EXISTS, mirroring how dev's MDM schema was created -- no IaC tracks this in either environment) so mdm_create_network_policy.sql's USE SCHEMA could succeed.",
       "status": "done",
-      "commit": "committed prior session"
+      "commit": "not a git change -- live Snowflake DDL only"
     },
     {
-      "id": "08-planning",
-      "name": "Confirmed both 08-01 and 08-02 PLAN.md files written in full and correctly scoped.",
+      "id": "08-provision-prod-postgres",
+      "name": "Ran the parameterized SQL against the edgartools-prod Snowflake connection: created network rule + network policy (edgartools_prod_mdm_postgres_policy), then provisioned EDGARTOOLS_PROD_MDM Postgres instance (state READY).",
       "status": "done",
-      "commit": "committed prior session"
+      "commit": "live Snowflake DDL; evidence in f24cb99"
     },
     {
-      "id": "08-plan-checker",
-      "name": "Re-ran gsd-plan-checker on 08-01/08-02 -- passed cleanly. Confirmed commit 730aec5 fixed prior blockers (unresolved research questions, missing 08-VALIDATION.md).",
+      "id": "08-fix-go-live-redaction",
+      "name": "Fixed two credential-redaction gaps in go-live.sh's redact_text(): (1) added --format JSON to the mdm_create_instance.sql invocation and a pattern matching the snowflake_admin/application/admin_password JSON keys CREATE POSTGRES INSTANCE emits; (2) added the generic 'password' key (used by ALTER POSTGRES INSTANCE ... RESET ACCESS FOR) after a second leak. Also made execute_stage() redact all stage output by default, and added missing --enable-templating JINJA flags.",
       "status": "done",
-      "commit": "730aec5 (pre-existing)"
+      "commit": "509ac16, 10be2d9"
     },
     {
-      "id": "08-01-task-1-attempt",
-      "name": "Executed Plan 08-01 Task 1 (prod Postgres instance existence precondition). Correctly halted BLOCKED rather than fabricating a DSN -- no real prod AWS or Snowflake access existed at the time.",
-      "status": "done_blocked",
-      "commit": "e21f777 (evidence), b9d5c00 (SUMMARY.md), 0f7c5e9 (STATE.md update)"
+      "id": "08-correct-account-separation-premise",
+      "name": "Disproved a false decision recorded in a prior HANDOFF.json: Snowflake prod and dev are NOT separate accounts. SELECT CURRENT_ACCOUNT()/CURRENT_ACCOUNT_NAME()/CURRENT_ORGANIZATION_NAME() returned identical values (NP05015 / YW12138 / IXKYQWK) via both the edgartools-prod and snowconn (dev) connections. EDGARTOOLS_DEV and EDGARTOOLS_PROD are two databases in one shared account -- matching the already-documented AWS same-account pattern. Corrected the decision entry and the evidence file.",
+      "status": "done",
+      "commit": "f24cb99"
     },
     {
-      "id": "08-prod-snowflake-connection-fix",
-      "name": "Diagnosed and fixed the edgartools-prod SnowCLI connection: account field had bare locator YW12138 (404s), corrected to org-account format IXKYQWK-YW12138 in ~/.snowflake/connections.toml (not part of git). Verified with `snow connection test --connection edgartools-prod` (output filtered to redact secrets): Status OK, host IXKYQWK-YW12138.snowflakecomputing.com, database EDGARTOOLS_PROD, role ACCOUNTADMIN, warehouse COMPUTE_WH.",
+      "id": "08-01-task-1-rerun",
+      "name": "Re-ran Plan 08-01 Task 1 (precondition check). Outcome: CONFIRMED -- EDGARTOOLS_PROD_MDM exists and is READY. Evidence file updated with non-secret outcome, the account-separation correction, and Task 2's continuing AWS blocker.",
       "status": "done",
-      "commit": "not a git change -- local connections.toml only"
+      "commit": "f24cb99"
+    },
+    {
+      "id": "08-rotate-mdm-prod-credentials",
+      "name": "Rotated EDGARTOOLS_PROD_MDM's snowflake_admin and application credentials via ALTER POSTGRES INSTANCE ... RESET ACCESS FOR, after the original CREATE POSTGRES INSTANCE output and a first rotation attempt both leaked credentials into chat (see Critical Anti-Patterns). Third rotation attempt, run after fixing redact_text, redacted cleanly -- current credentials were never printed.",
+      "status": "done",
+      "commit": "10be2d9 (script fix); rotation itself is live Snowflake state, not a git change"
     }
   ],
   "remaining_tasks": [
     {
-      "id": "08-parameterize-mdm-sql",
-      "name": "Parameterize infra/snowflake/postgres/mdm_create_instance.sql by environment so it creates EDGARTOOLS_PROD_MDM (not the hardcoded EDGARTOOLS_DEV_MDM) when run against edgartools-prod. Update the matching DESCRIBE POSTGRES INSTANCE line.",
-      "status": "not_started"
+      "id": "08-01-task-2",
+      "name": "Plan 08-01 Task 2: populate edgartools-prod/mdm/postgres_dsn and edgartools-prod/mdm/snowflake secrets via bootstrap-aws-mdm-secrets.sh --dsn-stdin and raw put-secret-value. BLOCKED: aws-admin-prod still resolves to the dev AWS account (077127448006), confirmed via aws sts get-caller-identity --profile aws-admin-prod immediately before pausing. Do not attempt until a genuine prod AWS profile is configured.",
+      "status": "blocked"
     },
     {
-      "id": "08-update-go-live-sh",
-      "name": "Update infra/scripts/go-live.sh's 'Snowflake Postgres / graph prerequisites' stage (build_stages, ~line 541-546) to pass/derive the correct env-specific instance name, consistent with the existing db_name=\"EDGARTOOLS_${ENV_UPPER}\" pattern.",
-      "status": "not_started"
-    },
-    {
-      "id": "08-provision-prod-postgres",
-      "name": "Run the fixed mdm_create_instance.sql against edgartools-prod to actually provision the production Postgres MDM instance. Confirm with user before running (real production-affecting action). Operator must capture generated admin credentials out-of-band -- never into chat.",
-      "status": "not_started"
-    },
-    {
-      "id": "08-01-resume",
-      "name": "Re-run Plan 08-01 Task 1 precondition check now that a real prod Snowflake connection exists and (once provisioned) the instance exists. If it passes, continue to Task 2 (populate postgres_dsn + snowflake secrets) and Task 3.",
+      "id": "08-01-task-3",
+      "name": "Plan 08-01 Task 3: edit the HANDOFF.json blocker description to clarify neo4j/api_keys are out of scope for Phase 8 (only postgres_dsn + snowflake are MDM-02). Independent of Task 2's AWS blocker -- can be done any time.",
       "status": "not_started"
     },
     {
       "id": "08-02",
-      "name": "Plan 08-02: connectivity/migrate/counts verification + launch-gate-matrix checkpoint.",
-      "status": "not_started"
-    },
-    {
-      "id": "08-document-evidence",
-      "name": "Document the new edgartools-prod connection and provisioned instance in evidence/mdm-prod-secrets-and-connectivity.md -- non-secret metadata only (connection name, account identifier format, instance name, timestamps).",
+      "name": "Plan 08-02: connectivity/migrate/counts verification + launch-gate-matrix checkpoint. Cannot start until 08-01 Task 2 completes (secrets must exist for connectivity checks).",
       "status": "not_started"
     },
     {
       "id": "rotate-ananp11-password",
-      "name": "Confirm with user whether the ANANP11 Snowflake password has been rotated since exposure in chat this session. Independent of Phase 8 progress -- raise again if not yet done.",
+      "name": "Confirm with user whether the ANANP11 Snowflake password (exposed in chat in an earlier session, unrelated to this session's incidents) has been rotated. Still unconfirmed.",
       "status": "not_started"
     },
     {
       "id": "aws-prod-credentials",
-      "name": "AWS production credentials (aws-admin-prod) remain unconfigured -- resolves to dev account 077127448006. Needed before Plan 08-01's AWS-side secret population step.",
+      "name": "Configure aws-admin-prod to resolve to a real, separate production AWS account. Currently resolves to dev account 077127448006 -- confirmed multiple times across sessions, not yet fixed.",
       "status": "not_started"
     },
     {
@@ -101,82 +92,47 @@
   ],
   "blockers": [
     {
-      "description": "No production Postgres instance exists yet in the edgartools-prod Snowflake account. mdm_create_instance.sql is hardcoded to EDGARTOOLS_DEV_MDM and not environment-parameterized -- unsafe to run against prod as-is via go-live.sh (would create a misleadingly-named instance inside the prod account).",
-      "type": "technical",
-      "workaround": "Parameterize the SQL and go-live.sh stage first, then provision with explicit user confirmation."
-    },
-    {
-      "description": "AWS production credentials (aws-admin-prod profile) still not configured -- resolves to dev account 077127448006.",
+      "description": "aws-admin-prod AWS profile resolves to the dev account (077127448006), not a real production AWS account. Blocks Plan 08-01 Task 2 (secret population requires genuine prod Secrets Manager write access).",
       "type": "human_action",
-      "workaround": "Needed before any AWS-side Phase 8 secret population (Plan 08-01 Task 2's snowflake secret put-secret-value / AWS half)."
+      "workaround": "Operator must configure aws-admin-prod with real prod credentials."
     },
     {
-      "description": "SECURITY: The ANANP11 Snowflake password was inadvertently printed in this chat session (unfiltered cat|grep on connections.toml) and must be treated as compromised.",
+      "description": "ANANP11 Snowflake password exposure from an earlier session remains unconfirmed-rotated. Unrelated to this session's two new incidents.",
       "type": "human_action",
-      "workaround": "User should rotate the password for ANANP11. Not yet confirmed done."
-    },
-    {
-      "description": "Prod hosted graph E2E has not yet passed against production Snowflake, MDM secrets, and Native App compute pool.",
-      "type": "external",
-      "workaround": "Phase 9 follows Snowflake/dbt readiness and MDM database readiness."
-    },
-    {
-      "description": "Prod dashboard UAT has not yet run.",
-      "type": "external",
-      "workaround": "Phase 10 follows CLI, dbt, and Native App gates."
+      "workaround": "User should rotate and confirm."
     }
   ],
   "human_actions_pending": [
     {
-      "action": "Rotate the Snowflake password for user ANANP11 (shared across snowconn, YG91578, edgartools-prod connections) -- it was printed in this chat transcript.",
-      "context": "Security incident this session: unfiltered `cat | grep -A6` on ~/.snowflake/connections.toml.",
-      "blocking": true
-    },
-    {
-      "action": "Confirm/approve running the parameterized mdm_create_instance.sql against edgartools-prod to provision the real production Postgres MDM instance.",
-      "context": "Real production-affecting action; must not run without explicit confirmation.",
-      "blocking": true
-    },
-    {
       "action": "Configure aws-admin-prod AWS credentials to resolve to the real production account, not dev (077127448006).",
-      "context": "Required before Plan 08-01 Task 2's AWS-side secret population.",
+      "context": "Required before Plan 08-01 Task 2's secret population.",
       "blocking": true
     },
     {
-      "action": "Apply the identical PERIOD_START migration to EDGARTOOLS_DEV.EDGARTOOLS_SOURCE.SEC_FINANCIAL_FACT before ever running dbt run --target dev --select financial_facts.",
-      "context": "Confirmed dev has the identical schema-drift gap as prod did; intentionally not fixed in this prod-only continuation.",
-      "blocking": false
-    },
-    {
-      "action": "Later Snowflake, MDM, dashboard reviewer, release owner, and security/isolation approvals as required by Phases 7-11.",
-      "context": "The v1.6 roadmap requires owner sign-off before the go/no-go packet can flip to GO.",
+      "action": "Confirm whether the ANANP11 Snowflake password has been rotated (separate, earlier-session incident).",
+      "context": "Still unconfirmed across multiple sessions.",
       "blocking": true
     }
   ],
   "decisions": [
     {
-      "decision": "CORRECTION (2026-06-21): Snowflake prod and dev are NOT separate accounts. CURRENT_ACCOUNT()/CURRENT_ACCOUNT_NAME()/CURRENT_ORGANIZATION_NAME() are identical (NP05015 / YW12138 / IXKYQWK) when queried via both the edgartools-prod and snowconn (dev) connections. EDGARTOOLS_DEV and EDGARTOOLS_PROD are two databases inside one shared Snowflake account, matching the existing same-account prefix-distinguished pattern already used for AWS. The prior decision in this slot (claiming a genuinely separate prod account) was incorrect and is superseded by this entry.",
-      "rationale": "Direct empirical verification: SELECT CURRENT_ACCOUNT(), CURRENT_ACCOUNT_NAME(), CURRENT_ORGANIZATION_NAME() returned identical values via both connections. Also explains why SHOW POSTGRES INSTANCES via edgartools-prod listed both EDGARTOOLS_DEV_MDM and EDGARTOOLS_PROD_MDM -- Postgres instances and network policies are account-scoped, not database-scoped, so dev and prod MDM Postgres instances/network policies now share one blast radius.",
+      "decision": "Snowflake prod and dev are the SAME account (NP05015 / YW12138 / IXKYQWK), distinguished only by database name (EDGARTOOLS_DEV vs EDGARTOOLS_PROD) -- not separate accounts as a prior session incorrectly concluded.",
+      "rationale": "SELECT CURRENT_ACCOUNT(), CURRENT_ACCOUNT_NAME(), CURRENT_ORGANIZATION_NAME() returned identical values via both the edgartools-prod and snowconn (dev) connections. Matches the already-documented AWS same-account, prefix-distinguished pattern.",
       "phase": "08"
     },
     {
-      "decision": "SnowCLI connections for this account need the org-account identifier format (IXKYQWK-YW12138), not the bare account_name Terraform variable value (YW12138 alone 404s).",
-      "rationale": "Diagnosed empirically via snow connection test failure and fix.",
+      "decision": "Snowflake Postgres instances and network policies are account-scoped, not database-scoped -- so EDGARTOOLS_PROD_MDM and EDGARTOOLS_DEV_MDM (and their network policies) share one blast radius within the single shared account.",
+      "rationale": "Direct consequence of the account-separation correction above; confirmed by SHOW POSTGRES INSTANCES listing both instances regardless of which connection (dev or prod) issued the query.",
       "phase": "08"
     },
     {
-      "decision": "Never read a credentials file with an unfiltered cat/grep -A again -- always redact inline as part of the same command that reads it (e.g. grep -v -i \"password|secret|token\").",
-      "rationale": "Self-caused security incident this session: a password was printed into the chat transcript via an unfiltered read.",
+      "decision": "snow sql's default --enable-templating mode (LEGACY) does NOT support {{ }} Jinja syntax used by the parameterized SQL files; --enable-templating JINJA must be passed explicitly. Both invocations in go-live.sh's Postgres-prerequisites stage were missing this flag and were silently no-ops on the template substitution until fixed.",
+      "rationale": "Discovered empirically: running the network-policy SQL without the flag raised a syntax error on the literal '{{ schema }}' string.",
       "phase": "08"
     },
     {
-      "decision": "mdm_create_instance.sql must be parameterized by environment before being run against prod; never run the dev-hardcoded version against the prod account.",
-      "rationale": "go-live.sh already pipes this same file through both dev and prod SNOW_CONNECTION values, so as written it would silently create a misleadingly-named EDGARTOOLS_DEV_MDM instance inside the prod account.",
-      "phase": "08"
-    },
-    {
-      "decision": "Whichever Phase 8 plan populates postgres_dsn must include a precondition task verifying the production Postgres instance exists before writing a DSN to the secret -- never fabricate a DSN.",
-      "rationale": "CLAUDE.md 5-whys discipline -- no plan should synthesize placeholder secrets or skip a dependency gate to make progress look real.",
+      "decision": "grep/sed-based credential redaction must be verified against the EXACT output shape of the command being filtered (including --format JSON vs default TABLE rendering, and the exact JSON key names used), not assumed from a generically-named pattern like 'password|secret|token'. Two separate redaction-gap incidents this session both stemmed from key names (snowflake_admin/application from CREATE POSTGRES INSTANCE; generic 'password' from ALTER POSTGRES INSTANCE ... RESET ACCESS FOR) that did not match the existing filter pattern, leaking credentials into chat both times.",
+      "rationale": "CLAUDE.md 5-whys discipline -- the root cause both times was an unverified assumption about output shape, not a one-off typo. Structural fix: redact_text() now matches generic 'password' plus the specific Postgres-instance key names, and was tested against captured real output before being relied upon again.",
       "phase": "08"
     }
   ],
@@ -184,6 +140,6 @@
     "infra/aws-prod-application.json (intentionally untracked -- generated deploy manifest, never to be committed per D-10)"
   ],
   "background_processes": [],
-  "next_action": "Parameterize infra/snowflake/postgres/mdm_create_instance.sql for environment-specific instance naming, then update go-live.sh's matching stage, THEN (with explicit user confirmation) run it against edgartools-prod to provision the real instance -- in that order, so the script is correct before it touches real production infrastructure.",
-  "context_notes": "Phase 8 plan-checker passed cleanly this session (re-run after confirming commit 730aec5 fixed prior blockers). Plan 08-01 Task 1 correctly halted BLOCKED earlier in the session due to no real prod access; this session closed the Snowflake-connection half of that gap (edgartools-prod SnowCLI connection now verified working) but NOT the Postgres-instance-provisioning half (still doesn't exist) or the AWS-credentials half (aws-admin-prod still resolves to dev). A real security incident occurred and is not yet resolved (password rotation unconfirmed) -- flag this prominently on resume, independent of Phase 8 progress."
+  "next_action": "Configure a genuine aws-admin-prod AWS profile pointing at a real production account (distinct from 077127448006), then run Plan 08-01 Task 2: populate edgartools-prod/mdm/postgres_dsn (via bootstrap-aws-mdm-secrets.sh --dsn-stdin) and edgartools-prod/mdm/snowflake (via raw put-secret-value with the freshly-rotated EDGARTOOLS_PROD_MDM application credential -- NOT the original or first-rotation values, both compromised). Then Task 3 (HANDOFF.json neo4j/api_keys scope note), then Plan 08-02.",
+  "context_notes": "This session fully closed the Snowflake-side gap for Phase 8: instance provisioned, network policy created, account-separation premise corrected, credentials safely rotated after two redaction-gap incidents (both remediated by rotation + filter fixes, verified against captured real output). The AWS-side gap (aws-admin-prod resolving to dev) is the sole remaining blocker on Task 2. Two new credential-exposure incidents occurred and were both self-corrected within the same session by rotating immediately and fixing the underlying filter -- see Critical Anti-Patterns in .continue-here.md before running any further Postgres-instance SQL through go-live.sh or manually."
 }
