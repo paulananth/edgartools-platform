@@ -91,3 +91,57 @@ operator-approved and recorded.
 Task 1 completed its read-only preflight and stopped before state-changing
 work. Phase 9 Plan 09-01 may continue only at the explicit operator approval
 checkpoint for production Native App provisioning and bounded graph writes.
+
+## Task 2 Operator Approval
+
+Operator approval received in-thread after the Task 1 checkpoint. Approved
+target state:
+
+- Database/schema: `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION`
+- Native App: `Neo4j_Graph_Analytics`
+- Database role: `NEO4J_GRAPH_ANALYTICS_MIGRATION_ROLE`
+- Compute pool selector: `CPU_X64_XS`
+- Bounded local MDM smoke only if graph inputs are empty:
+  `run --entity-type all --limit 5` and
+  `backfill-relationships --limit 100`
+- Bounded graph sync: `sync-graph --limit 100`
+
+## Task 3 Production Native App Grants
+
+Execution time: 2026-06-21 UTC.
+
+The dev-scoped grant file was used only as a template. The executed target was
+production-scoped: `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION`.
+
+Statement categories:
+
+| Category | Status |
+|---|---:|
+| Grant Native App account create-compute-pool privilege | PASS |
+| Grant Native App account create-warehouse privilege | PASS |
+| Create/confirm graph schema | PASS |
+| Create/confirm production database role | PASS |
+| Grant database usage to database role | PASS |
+| Grant graph schema usage to database role | PASS |
+| Grant select on current graph-schema tables/views to database role | PASS |
+| Grant select on future graph-schema tables/views to database role | PASS |
+| Grant create-table on graph schema to database role | PASS |
+| Grant database role to Native App | PASS |
+| Create/confirm Native App user/admin roles | PASS |
+| Grant Native App `app_user` and `app_admin` application roles | PASS |
+| Grant graph database/schema read visibility to Native App user role | PASS |
+
+Post-grant metadata checks:
+
+| Check | Status | Sanitized result |
+|---|---:|---|
+| Production graph schema exists | PASS | Schema metadata visible. |
+| Production database role exists | PASS | Database role metadata visible. |
+| Database/schema usage grants | PASS | Required categories visible. |
+| Graph schema create-table grant | PASS | Required category visible. |
+| Future table/view select grants | PASS | Required future-grant categories visible. |
+| Current graph table count before sync | PASS | zero current graph tables, expected before `sync-graph`. |
+| Compute pool selector visibility | PASS | `CPU_X64_XS` remains available. |
+
+No raw Snowflake rows, connector traces, Native App logs, or account identifiers
+were recorded. Task 3 unblocks Task 4.
