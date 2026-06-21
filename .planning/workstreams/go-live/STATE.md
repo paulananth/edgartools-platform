@@ -135,8 +135,15 @@ Claude and Codex must never commit to the same branch going forward)
   and `evidence/dbt-gold.md` for full detail.
 
 - Blocker 4: Prod hosted graph E2E has not yet passed against production Snowflake,
-  MDM secrets, and Native App compute pool. Depends on Phase 8 (MDM secrets population +
-  connectivity verification, in progress) and Phase 9 (hosted graph E2E, not yet started).
+  MDM secrets, and Native App compute pool. Phase 8 (MDM secrets population + connectivity
+  verification) is now **complete pending human checkpoint** — see
+  `evidence/mdm-prod-secrets-and-connectivity.md` (4 Postgres credential rotations this phase,
+  `mdm` database created/migrated/granted, both AWS secrets populated, `check-connectivity` and
+  `counts` passing against prod via the `application` role). Phase 9 (hosted graph E2E against
+  the Native App compute pool) is separate, materially larger scope, and has not started. Blocker
+  4 remains open until Phase 9 completes. A reusable one-click provisioning script,
+  `infra/scripts/bootstrap-prod-mdm.sh`, now encapsulates the full rotate→create→migrate→grant→
+  populate-secrets→verify sequence for future re-runs (e.g. dev cutover, prod re-provisioning).
 
 - Blocker 5: Prod dashboard UAT has not yet run against a production or
   production-like read-only configuration.

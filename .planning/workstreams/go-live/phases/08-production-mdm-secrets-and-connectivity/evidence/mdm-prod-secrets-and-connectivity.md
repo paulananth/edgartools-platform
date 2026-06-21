@@ -102,3 +102,103 @@ account:
 
 None. The previously-listed AWS-credentials blocker did not exist — `aws-admin-prod` was
 already correctly configured per D-05. Task 2 is unblocked and ready to run.
+
+## Task 2 — Secret population (2026-06-21) — COMPLETE
+
+### 4th Postgres credential rotation + `edgartools-prod/mdm/postgres_dsn`
+
+Recovered the exact rotation statement from Snowflake `QUERY_HISTORY` (query *text* only,
+no result set, no secret) instead of reconstructing it from memory:
+
+```
+ALTER POSTGRES INSTANCE EDGARTOOLS_PROD_MDM RESET ACCESS FOR 'application';
+```
+
+Ran as a single atomic shell pipeline: rotation command → JSON parse (extracts only the
+`password` field, in-process, never printed) → directly into
+`infra/scripts/bootstrap-aws-mdm-secrets.sh --host <host> --username application --database mdm
+--password-stdin --env prod --aws-profile aws-admin-prod --aws-region us-east-1`, which
+constructs, validates, and writes the DSN itself. The raw credential never appeared in any
+individual tool result or intermediate variable echo. Host (non-secret, from `DESCRIBE POSTGRES
+INSTANCE`) and username (`application`, literal from the rotation statement) were the only
+inputs supplied outside the pipe.
+
+### `edgartools-prod/mdm/snowflake`
+
+Populated by copying `EDGARTOOLS_PROD_DEPLOYER`'s existing credentials from
+`edgartools-prod/dbt/snowflake` (Phase 07), remapped `DBT_SNOWFLAKE_*` → `MDM_SNOWFLAKE_*`,
+with `MDM_SNOWFLAKE_SCHEMA` hardcoded to `EDGARTOOLS_GOLD`. Single piped command
+(`get-secret-value | jq | put-secret-value --secret-string file:///dev/stdin > /dev/null`); no
+human typed or saw a password. Post-write verification checked only key *names* and value
+*types* (`jq 'with_entries(.value = (.value | type))'`), never the values themselves — confirmed
+all 7 expected keys present as non-empty strings.
+
+### `describe-secret` metadata (non-secret)
+
+| Secret | ARN suffix | LastChangedDate | AWSCURRENT |
+|---|---|---|---|
+| `edgartools-prod/mdm/postgres_dsn` | `...postgres_dsn-s71voe` | 2026-06-21T17:32:22-04:00 | present |
+| `edgartools-prod/mdm/snowflake` | `...snowflake-CNgES5` | 2026-06-21T17:32:35-04:00 | present |
+
+Both secrets show a current AWSCURRENT version. No DSN, host, password, username value, or
+connector error is recorded in this file.
+
+## Task 3 — HANDOFF.json scope check (2026-06-21)
+
+Confirmed: `.planning/HANDOFF.json`'s `human_actions_pending`/`remaining_tasks` entries for this
+phase reference only `postgres_dsn` and `snowflake` secrets. No reference to `neo4j` or
+`api_keys` secrets exists anywhere in the file — pre-satisfied, no edit needed.
+
+## Plan 08-02 Task 1 — Connectivity verification (2026-06-21) — COMPLETE
+
+### Root-cause: `mdm` database did not exist on the instance
+
+The first `check-connectivity` attempt against the rotated `application` credential failed with
+`FATAL: database "mdm" does not exist` — auth succeeded (proving the rotation/secret were
+correct), but the database itself had never been created on this fresh instance. Per the 5-whys
+discipline: (1) symptom — connection refused at the database-selection step; (2) why — only
+`postgres`/`snowflake_monitoring` databases existed (checked non-secretly via `pg_database`);
+(3) why — `docs/aws-mdm-snowflake-postgres-cutover.md` documents `CREATE DATABASE mdm` as a
+required one-time step using `snowflake_admin`, never run for this prod instance; (4) why — this
+is a brand-new MDM install (no RDS restore), so the existing runbook's restore-oriented grant
+script (`mdm_post_restore.sql`) was never triggered; (5) root cause — database provisioning was
+not yet performed as part of this rotation cycle. Fixed by rotating `snowflake_admin` access
+(5th rotation overall, ALTER POSTGRES INSTANCE EDGARTOOLS_PROD_MDM RESET ACCESS FOR
+'snowflake_admin') and running `CREATE DATABASE mdm` via a transient, never-persisted admin
+connection (password held only in-process, never printed, discarded immediately after use).
+
+A connection-retry loop (up to ~40s) was required immediately after each rotation — the new
+Snowflake-hosted Postgres credential is not instantly active; this matches the workstream's
+known propagation-delay characteristic for this feature.
+
+### Schema migration required snowflake_admin (6th rotation)
+
+`edgar-warehouse mdm migrate` initially failed under the `application` role with
+`InsufficientPrivilege: permission denied to create extension "pgcrypto"` — Postgres 15+
+revokes `CREATE` on the `public` schema from non-owner roles by default, so the runtime
+application role cannot create extensions/tables on a freshly created database. Re-ran the
+migration with a 6th, freshly rotated `snowflake_admin` credential passed only as an in-process
+env var to a child `edgar-warehouse mdm migrate` invocation (never written to any secret, file,
+or the chat transcript), then applied the same grant set as
+`infra/snowflake/postgres/mdm_post_restore.sql` (CONNECT, schema USAGE, table/sequence DML,
+default privileges) so the long-lived `application` role in the secret has correct runtime
+access going forward. Admin password discarded (`pw = None`) immediately after the grants
+committed; it is not stored anywhere and the admin role is not used by the application secret.
+
+### Final verification (sanitized — `application` role only)
+
+```
+check-connectivity: {"sql": {"connected": true, "dialect": "postgresql", "missing_tables": []}}
+migrate (re-run, idempotent no-op confirmed): exit_code 0
+counts: all 19 MDM tables queried successfully, all counts 0 (expected — fresh database, no data loaded yet)
+```
+
+`MDM_DATABASE_URL` was exported only for the duration of each command and `unset` immediately
+after in every invocation. No DSN, host-with-credentials, password, or raw connector error
+appears in this file or in any tool output during this session.
+
+## Disposition
+
+Plan 08-01 (Task 2, Task 3) and Plan 08-02 (Task 1) are complete. Plan 08-02 Task 2 (human
+checkpoint — confirm this evidence file is secret-safe before flipping launch gate matrix rows)
+is the only remaining gate for Phase 8.
