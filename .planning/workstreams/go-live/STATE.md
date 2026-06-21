@@ -2,28 +2,28 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
-status: blocked
-stopped_at: Phase 08 Plan 01 (populate prod MDM secrets) halted at Task 1 -- BLOCKED, no genuine prod AWS access and no prod Snowflake connection configured in this environment; Task 2 not executed; Task 3 found pre-satisfied by a prior session
-last_updated: "2026-06-20T22:00:00.000Z"
-last_activity: 2026-06-20 -- Phase 08 Plan 01 executed: Task 1 BLOCKED (commit e21f777) with secret-safe 5-whys evidence; Task 2 correctly skipped per plan gating; Task 3 pre-satisfied, no new edit. SUMMARY committed (b9d5c00).
+status: executing
+stopped_at: Phase 9 planned; ready to execute 09-01 Native App prerequisites and local strict graph verification
+last_updated: "2026-06-21T22:25:27.000Z"
+last_activity: 2026-06-21 -- Phase 9 planning complete
 progress:
   total_phases: 6
-  completed_phases: 2
-  total_plans: 6
-  completed_plans: 4
-  percent: 33
+  completed_phases: 3
+  total_plans: 11
+  completed_plans: 6
+  percent: 55
 ---
 
 # Project State - go-live
 
 ## Current Position
 
-Phase: 08 (production-mdm-secrets-and-connectivity) — BLOCKED on Plan 1 of 2
-Plan: 1 of 2 executed (BLOCKED outcome); Plan 2 (08-02 verify-prod-mdm-connectivity) cannot start until Plan 1's blocker clears
-Status: Plan 08-01 ran Task 1 (precondition check), found neither a genuine production AWS account nor a production Snowflake connection configured in this execution environment, and correctly stopped at secret-safe BLOCKED evidence rather than fabricate a DSN/credential (Phase 7 precedent). Task 2 (secret population) was not executed. Task 3 (HANDOFF.json scope clarification) was found already satisfied by a prior session's edit -- no new change made.
-Last activity: 2026-06-20 -- Phase 08 Plan 01 executed and summarized; human action required before retry (see Blockers).
+Phase: 09 (production-hosted-graph-e2e) — PLANNED, ready to execute Plan 09-01
+Plan: 0 of 2 executed; Plan 09-01 covers production Native App prerequisites, bounded local graph sync, and strict verify-graph; Plan 09-02 covers production AWS MDM E2E and launch matrix reconciliation
+Status: Ready to execute Phase 9 Plan 09-01; Phase 8 is complete and must not be redone
+Last activity: 2026-06-21 -- Phase 9 planning complete
 
-Progress: 33% (2/6 phases have plan-execution summaries; Phase 7's two Snowflake gates SNOW-03/SNOW-04 both pass; Phase 8 Plan 1 BLOCKED pending operator-provisioned prod Snowflake connection + prod AWS credentials)
+Progress: 55% (3/6 v1.6 phases complete: Phase 6 AWS, Phase 7 Snowflake/dbt, Phase 8 MDM secrets/connectivity; Phase 9 planned and ready for execution)
 
 ## Milestone Context
 
@@ -33,12 +33,10 @@ are remediated, owner-approved, and backed by non-secret production evidence.
 
 ## Active Worktree
 
-`/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform`
+`/Users/aneenaananth/projects/edgartools-platform`
 
-Branch: `claude/go-live-v1.6-phase7` (taken over from Codex's `codex/go-live-v1.6-phase7`
-at user's explicit instruction on 2026-06-19; tip commit `b67acfd` unchanged, branch
-re-rooted and pushed to origin under the new name per the CLAUDE.md HARD RULE that
-Claude and Codex must never commit to the same branch going forward)
+Branch: `codex/go-live-v1.6-phase9` (created by Codex from latest `origin/main`
+after PR #80 merged; Claude-owned branches remain untouched)
 
 ## Decisions
 
@@ -81,6 +79,12 @@ Claude and Codex must never commit to the same branch going forward)
   Codex's original branch/worktree left untouched (not deleted, not rebased) per the
   HARD RULE — only the new Claude-owned branch will receive further commits.
 
+- [Phase 09 planning]: Phase 8 is treated as complete from PR #80 and is not
+  re-executed. Phase 9 plans were created on `codex/go-live-v1.6-phase9` for
+  Native App prod prerequisites, bounded local graph sync/strict verify, and
+  AWS MDM hosted graph E2E. `--skip-preflight` remains non-acceptance and is
+  not part of Phase 9 execution.
+
 ## Known Inputs
 
 - Dev hosted graph E2E succeeded through strict Snowflake-hosted verification.
@@ -102,26 +106,13 @@ Claude and Codex must never commit to the same branch going forward)
   exists and is summarized in phase-01 `evidence/aws.md` (06-02). LIVE-04 and LIVE-05
   satisfied.
 
-- Blocker 2: Production MDM Secrets Manager values are not populated for
-  `edgartools-prod/mdm/postgres_dsn` and `edgartools-prod/mdm/snowflake`.
-  [2026-06-20, Phase 08 Plan 01] Attempted population; BLOCKED at the Task 1
-  precondition check -- no `edgartools-prod` Snowflake connection was
-  configured, so the production Postgres MDM instance's existence/readiness
-  could not be verified. Per the Phase 7 precedent, execution stopped at
-  secret-safe BLOCKED evidence (see evidence/mdm-prod-secrets-and-connectivity.md,
-  commit e21f777) instead of fabricating a DSN.
-  [2026-06-21 update] The Snowflake gap is now closed: `edgartools-prod`
-  connection configured, `EDGARTOOLS_PROD_MDM` Postgres instance provisioned
-  and `READY`, credentials rotated (after two self-corrected redaction-gap
-  incidents). The "genuine production AWS account" framing above was a
-  documentation error -- per D-05
-  (`.planning/workstreams/go-live/milestones/v1.5-phases/02-aws-and-snowflake-production-deployment-dry-run/02-CONTEXT.md`),
-  `aws-admin-prod` resolving to `077127448006` is the correct, by-design
-  behavior (same account, prefix-distinguished, not a separate account).
-  Both target secrets already exist in that account (created by the prod
-  Terraform apply, unpopulated -- `VersionIdsToStages: null`). Task 2 is
-  unblocked and ready to run; not yet executed pending explicit operator
-  go-ahead to write real production secret values.
+- Blocker 2: FULLY REMEDIATED (2026-06-21, Phase 08 complete via PR #80) —
+  `edgartools-prod/mdm/postgres_dsn` and `edgartools-prod/mdm/snowflake` are
+  populated and carry AWSCURRENT versions; the production `mdm` Postgres
+  database exists, is migrated, has application-role grants applied, and
+  `check-connectivity`/`counts` passed against prod without printing secret
+  values. See
+  `.planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md`.
 
 - Blocker 3: FULLY REMEDIATED (2026-06-20/21, Phase 07 complete) -- this entry was stale;
   both SNOW-03 (native-pull) and SNOW-04 (dbt/gold) reached final status PASS. All three
@@ -136,12 +127,12 @@ Claude and Codex must never commit to the same branch going forward)
 
 - Blocker 4: Prod hosted graph E2E has not yet passed against production Snowflake,
   MDM secrets, and Native App compute pool. Phase 8 (MDM secrets population + connectivity
-  verification) is now **complete pending human checkpoint** — see
-  `evidence/mdm-prod-secrets-and-connectivity.md` (4 Postgres credential rotations this phase,
-  `mdm` database created/migrated/granted, both AWS secrets populated, `check-connectivity` and
-  `counts` passing against prod via the `application` role). Phase 9 (hosted graph E2E against
-  the Native App compute pool) is separate, materially larger scope, and has not started. Blocker
-  4 remains open until Phase 9 completes. A reusable one-click provisioning script,
+  verification) is complete — see `evidence/mdm-prod-secrets-and-connectivity.md`
+  (Postgres credentials rotated, `mdm` database created/migrated/granted, both AWS secrets
+  populated, `check-connectivity` and `counts` passing against prod via the
+  `application` role). Phase 9 is now planned but not executed; Blocker 4 remains open
+  until local strict `mdm verify-graph` and production AWS MDM E2E both pass. A reusable
+  one-click provisioning script,
   `infra/scripts/bootstrap-prod-mdm.sh`, now encapsulates the full rotate→create→migrate→grant→
   populate-secrets→verify sequence for future re-runs (e.g. dev cutover, prod re-provisioning).
 
@@ -167,21 +158,14 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-20T22:00:00.000Z
-Stopped at: Phase 08 Plan 01 BLOCKED at Task 1 (prod Postgres MDM instance
-precondition check) -- no genuine prod AWS account, no prod Snowflake
-connection configured. Task 2 not executed. Task 3 pre-satisfied by a prior
-session. See 08-01-SUMMARY.md and evidence/mdm-prod-secrets-and-connectivity.md.
-Resume file: .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/08-01-SUMMARY.md
-Resume command: Operator must (1) configure an `edgartools-prod` SnowCLI
-connection pointing at the genuine production Snowflake account and confirm
-the prod Postgres MDM instance exists/is ready, and (2) configure genuine
-production AWS admin credentials under `aws-admin-prod` (currently resolves
-to dev account 077127448006). Once both are done, re-run Plan 08-01 Task 1,
-then proceed to Task 2 and Plan 08-02. Note: dev's SEC_FINANCIAL_FACT table
-has the identical PERIOD_START schema-drift gap fixed in prod in an earlier
-session — apply the same fix there before ever running `dbt run --target dev
---select financial_facts`.
+Last session: 2026-06-21T22:25:27.000Z
+Stopped at: Phase 9 planned; ready to execute 09-01 Native App prerequisites,
+bounded local graph sync, and strict verify-graph. No production commands were
+run during planning.
+Resume file: .planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/09-01-PLAN.md
+Resume command: `$gsd-execute-phase 9 --ws go-live` from branch
+`codex/go-live-v1.6-phase9` after explicit operator approval for the Plan 09-01
+state-changing checkpoints. Do not redo Phase 8.
 
 ## Performance Metrics
 
