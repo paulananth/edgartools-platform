@@ -190,6 +190,24 @@ after PR #80 merged; Claude-owned branches remain untouched)
   reconciled there. A reusable one-click provisioning script,
   `infra/scripts/bootstrap-prod-mdm.sh`, still encapsulates the Phase 8
   rotate/create/migrate/grant/populate/verify sequence for future re-runs.
+  [2026-06-22, Claude takeover from Codex on `claude/go-live-v1.6-phase9`,
+  re-rooted from Codex's tip, no content change] `infra/aws-prod-application.json`
+  was present in this worktree; status-only preflight now passes cleanly
+  (exit 0, all 21 state machines resolved, all NO_RUNS) — the Plan 09-02
+  precondition above is satisfied. Operator approved the bounded production
+  AWS MDM E2E command; it **FAILED at the first stage, `mdm_migrate`**: the ECS
+  task could not start because its task definition injects a secret from
+  `edgartools-prod/mdm/neo4j`, which this workstream forbids ever populating
+  (Neo4j is deprecated, superseded by the Snowflake-hosted graph). Root cause:
+  legacy `NEO4J_*` secrets wiring in the MDM ECS task-definition template
+  (`deploy-aws-application.sh`), previously tracked only as TODOS.md D-05b
+  cleanup debt, now confirmed a hard production blocker. See
+  `phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md` for the
+  5-whys and sanitized failure detail (no raw cause/ARNs/account ID). Fix
+  requires editing the task-definition template and redeploying the
+  already-applied Phase 6 ECS task definitions — production-impacting,
+  not done this session pending explicit operator approval. Blocker 4
+  remains open.
 
 - Blocker 5: Prod dashboard UAT has not yet run against a production or
   production-like read-only configuration.

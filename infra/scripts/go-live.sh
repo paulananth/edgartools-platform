@@ -453,6 +453,17 @@ run_checks() {
   else
     add_check "local config files" "warn" "missing ignored local config files:${missing_configs}"
   fi
+
+  # Phase 9 finding: infra/aws-<env>-application.json is generated, gitignored,
+  # and never committed (D-10). It does not survive a fresh checkout/worktree
+  # and is the AWS MDM E2E stage's hard precondition (run-aws-mdm-e2e.sh exits 1
+  # before any Step Functions status call if it is missing). Surface its absence
+  # here rather than letting that stage fail with a less obvious error.
+  if [[ -f "${REPO_ROOT}/infra/aws-${ENVIRONMENT}-application.json" ]]; then
+    add_check "prod application summary" "pass" "infra/aws-${ENVIRONMENT}-application.json present"
+  else
+    add_check "prod application summary" "warn" "infra/aws-${ENVIRONMENT}-application.json missing; regenerate via the 'AWS: ECS task definitions and Step Functions' stage before running the AWS MDM E2E stage"
+  fi
 }
 
 print_checks() {
