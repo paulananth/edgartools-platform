@@ -3,27 +3,27 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
 status: executing
-stopped_at: Phase 9 Plan 09-01 Task 4 blocked at missing Snowflake MDM source mirror objects
-last_updated: "2026-06-22T00:04:34.000Z"
-last_activity: 2026-06-22 -- Phase 9 Plan 09-01 runtime-role grants applied; bounded sync-graph now stops at SnowflakeObjectMissing
+stopped_at: Phase 9 Plan 09-01 complete; ready for Phase 9 Plan 09-02 production AWS MDM E2E
+last_updated: "2026-06-22T00:24:51.000Z"
+last_activity: 2026-06-22 -- Phase 9 Plan 09-01 first-time MDM Snowflake mirror load completed; bounded sync-graph and strict verify-graph passed
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 11
-  completed_plans: 6
-  percent: 55
+  completed_plans: 7
+  percent: 64
 ---
 
 # Project State - go-live
 
 ## Current Position
 
-Phase: 09 (production-hosted-graph-e2e) — EXECUTING Plan 09-01
-Plan: 0 of 2 executed; Plan 09-01 Tasks 1-3 are complete and committed; Task 4 is blocked at bounded `sync-graph --limit 100`; Plan 09-02 covers production AWS MDM E2E and launch matrix reconciliation
-Status: Paused at Phase 9 Plan 09-01 Task 4. Production Native App/schema/database-role prerequisites and the runtime-role grants are applied, but local graph sync cannot proceed because `EDGARTOOLS_PROD.MDM` has zero current source tables/views visible for the graph materializer.
-Last activity: 2026-06-22 -- Phase 9 Plan 09-01 runtime-role grants were applied and verified. The Task 4 one-shot secret-consuming wrapper was rerun; it passed `mdm counts`, skipped bounded MDM smoke because seeded entity rows exist, and stopped at `sync-graph` with sanitized `SnowflakeObjectMissing` before strict verify-graph.
+Phase: 09 (production-hosted-graph-e2e) — EXECUTING Plan 09-02 next
+Plan: 1 of 2 executed; Plan 09-01 is complete and committed; Plan 09-02 covers production AWS MDM E2E and launch matrix reconciliation
+Status: Phase 9 Plan 09-01 completed local production hosted-graph acceptance. Production Native App/schema/database-role prerequisites, runtime grants, first-time `EDGARTOOLS_PROD.MDM` mirror load, bounded `sync-graph --limit 100`, and strict `verify-graph --native-app-compute-pool CPU_X64_XS` all passed. Phase 9 remains open for AWS MDM E2E.
+Last activity: 2026-06-22 -- Operator approved the first-time production MDM Snowflake mirror load. The load created 19 mirror tables with 135 total rows, bounded graph sync materialized 10 nodes and 0 edges, and strict verify-graph passed SQL parity plus Native App compute-pool, graph_info, BFS, and WCC checks.
 
-Progress: 55% (3/6 v1.6 phases complete: Phase 6 AWS, Phase 7 Snowflake/dbt, Phase 8 MDM secrets/connectivity; Phase 9 executing and paused at Plan 09-01 Task 4 MDM source mirror gap)
+Progress: 64% (3/6 v1.6 phases complete: Phase 6 AWS, Phase 7 Snowflake/dbt, Phase 8 MDM secrets/connectivity; Phase 9 executing with Plan 09-01 complete and Plan 09-02 next)
 
 ## Milestone Context
 
@@ -120,6 +120,16 @@ after PR #80 merged; Claude-owned branches remain untouched)
   `EDGARTOOLS_PROD.MDM`. Strict `verify-graph`, AWS MDM E2E, and launch matrix
   edits remain not run.
 
+- [Phase 09 Plan 01 first-time load]: Operator approved a first-time production
+  MDM Snowflake mirror load after the source-object gap. The load created 19
+  `EDGARTOOLS_PROD.MDM` mirror tables with 135 total rows from the existing
+  Snowflake Postgres MDM database, then bounded `sync-graph --limit 100`
+  materialized 10 nodes and 0 edges into `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION`.
+  Strict `verify-graph --native-app-compute-pool CPU_X64_XS` passed with SQL
+  parity and Native App checks enabled after `app_user`/`app_admin` application
+  roles were granted to `EDGARTOOLS_PROD_DEPLOYER`. First-time load/deploy
+  runbook: `docs/prod-mdm-snowflake-graph-first-load.md`.
+
 ## Known Inputs
 
 - Dev hosted graph E2E succeeded through strict Snowflake-hosted verification.
@@ -160,19 +170,18 @@ after PR #80 merged; Claude-owned branches remain untouched)
   `.planning/workstreams/go-live/phases/07-production-snowflake-native-pull-and-gold/evidence/native-pull.md`
   and `evidence/dbt-gold.md` for full detail.
 
-- Blocker 4: Prod hosted graph E2E has not yet passed against production Snowflake,
-  MDM secrets, and Native App compute pool. Phase 8 (MDM secrets population + connectivity
-  verification) is complete — see `evidence/mdm-prod-secrets-and-connectivity.md`
-  (Postgres credentials rotated, `mdm` database created/migrated/granted, both AWS secrets
-  populated, `check-connectivity` and `counts` passing against prod via the
-  `application` role). Phase 9 Plan 09-01 Tasks 1-3 are complete and runtime
-  role grants are remediated, but Task 4 is blocked at local bounded
-  `sync-graph` because the production Snowflake MDM source mirror objects are
-  absent/not materialized in `EDGARTOOLS_PROD.MDM`. Blocker 4 remains open until
-  local strict `mdm verify-graph` and production AWS MDM E2E both pass. A reusable
-  one-click provisioning script,
-  `infra/scripts/bootstrap-prod-mdm.sh`, now encapsulates the full rotate→create→migrate→grant→
-  populate-secrets→verify sequence for future re-runs (e.g. dev cutover, prod re-provisioning).
+- Blocker 4: PARTIALLY REMEDIATED (2026-06-22, Phase 09 Plan 09-01) — local
+  production hosted-graph acceptance now passes against production Snowflake,
+  MDM secrets, and the Native App compute pool. Phase 8 remains the source of
+  truth for populated prod MDM secrets and Postgres connectivity. Phase 9 Plan
+  09-01 applied production Native App/runtime prerequisites, documented the
+  first-time `EDGARTOOLS_PROD.MDM` mirror load, completed bounded `sync-graph
+  --limit 100`, and passed strict `mdm verify-graph` with SQL parity,
+  compute_pool, graph_info, BFS, and WCC checks enabled. Blocker 4 remains open
+  until Phase 9 Plan 09-02 production AWS MDM E2E passes and launch matrix rows
+  are reconciled there. A reusable one-click provisioning script,
+  `infra/scripts/bootstrap-prod-mdm.sh`, still encapsulates the Phase 8
+  rotate/create/migrate/grant/populate/verify sequence for future re-runs.
 
 - Blocker 5: Prod dashboard UAT has not yet run against a production or
   production-like read-only configuration.
@@ -196,17 +205,16 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-22T00:04:34.000Z
-Stopped at: Phase 9 Plan 09-01 Task 4 after runtime-role grants were applied
-and bounded `sync-graph --limit 100` returned sanitized `SnowflakeObjectMissing`.
-Production Native App prerequisites and runtime-role grants are applied; strict
-`verify-graph`, AWS MDM E2E, and launch matrix edits have not run.
-Resume file: .planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/09-01-PLAN.md
+Last session: 2026-06-22T00:24:51.000Z
+Stopped at: Phase 9 Plan 09-01 complete. Production Native App prerequisites,
+runtime-role grants, first-time `EDGARTOOLS_PROD.MDM` mirror load, bounded
+`sync-graph --limit 100`, and strict `verify-graph --native-app-compute-pool
+CPU_X64_XS` passed. AWS MDM E2E and launch matrix edits have not run.
+Resume file: .planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/09-02-PLAN.md
 Resume command: `$gsd-execute-phase 9 --ws go-live` from branch
-`codex/go-live-v1.6-phase9` after explicit operator approval for a minimal
-MDM-to-Snowflake source mirror/export bootstrap or a planned revision to the
-`sync-graph` source. Do not redo Phase 8, Task 3 Native App grants, or the
-runtime-role grant remediation.
+`codex/go-live-v1.6-phase9`. Do not redo Phase 8, Task 3 Native App grants,
+runtime-role grant remediation, first-time mirror load, or local strict
+verify-graph. Continue with Plan 09-02 production AWS MDM E2E.
 
 ## Performance Metrics
 
@@ -214,3 +222,4 @@ runtime-role grant remediation.
 |-------|------|----------|-------|
 | Phase 05 P02 | 25min | 2 tasks | 2 files |
 | Phase 06 P01 | ~35min | 3 tasks | 4 files (2 committed, 2 gitignored) |
+| Phase 09 P01 | ~1h50min | 4 tasks | 5 files |
