@@ -5,6 +5,12 @@
 --     --set=ON_ERROR_STOP=1 \
 --     --file=infra/snowflake/postgres/mdm_post_restore.sql
 
+-- Restored tables/indexes/sequences are owned by snowflake_admin (the role
+-- that ran pg_restore). Ownership, not just DML grants, is required for DDL
+-- the runtime re-issues idempotently (e.g. CREATE INDEX IF NOT EXISTS) --
+-- Postgres gates that on table ownership regardless of IF NOT EXISTS.
+REASSIGN OWNED BY snowflake_admin TO application;
+
 GRANT CONNECT ON DATABASE mdm TO application;
 GRANT USAGE ON SCHEMA public TO application;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO application;
