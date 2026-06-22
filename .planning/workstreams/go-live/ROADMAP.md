@@ -97,10 +97,10 @@ strict graph verification and AWS MDM E2E execution.
 **Depends on:** Phase 7 Snowflake/dbt readiness, Phase 8 MDM database readiness, production
 Native App compute pool selector, and MDM operator approval.
 
-**Plans:** 2
+**Plans:** 2/2 plan attempts executed; GRAPH-03 complete and GRAPH-04 blocked
 
-- [ ] **09-01:** Bounded prod `mdm sync-graph` and strict prod `mdm verify-graph`.
-- [ ] **09-02:** Prod AWS MDM E2E through migrate, run, relationship backfill, graph sync, graph verify, and counts.
+- [x] **09-01:** Bounded prod `mdm sync-graph` and strict prod `mdm verify-graph`.
+- [x] **09-02:** Prod AWS MDM E2E preflight blocked because `infra/aws-prod-application.json` is absent.
 
 **Success criteria:**
 
@@ -147,7 +147,7 @@ contracts, flips the launch decision only if every blocker is PASS, and hands of
 
 1. All five NO-GO blocker themes are PASS before any GO decision is recorded.
 2. Required approvers sign off in the documented sequence.
-3. Evidence contains no DSNs, tokens, passwords, Terraform state, raw connector traces, raw Native App logs, or sensitive generated JSON.
+3. Evidence contains no DSNs, credential values, Terraform state, raw connector traces, raw Native App logs, or sensitive generated JSON.
 4. No non-AWS deployment paths, registries, storage targets, workflow engines, or secret-management systems are introduced.
 5. Post-launch monitoring owners know the first-run checks and escalation thresholds.
 
@@ -162,8 +162,8 @@ contracts, flips the launch decision only if every blocker is PASS, and hands of
 | SNOW-03 | Phase 7 | Blocked |
 | SNOW-04 | Phase 7 | Blocked |
 | MDM-02 | Phase 8 | Pending |
-| GRAPH-03 | Phase 9 | Pending |
-| GRAPH-04 | Phase 9 | Pending |
+| GRAPH-03 | Phase 9 | Complete |
+| GRAPH-04 | Phase 9 | Blocked |
 | DASH-04 | Phase 10 | Pending |
 | LIVE-06 | Phase 11 | Pending |
 | OPS-03 | Phase 11 | Pending |
@@ -176,4 +176,6 @@ contracts, flips the launch decision only if every blocker is PASS, and hands of
 
 ## Next Step
 
-Provide the missing prod native-pull Terraform local input files outside git, then create a retry/gap plan for Phase 7 before starting Phase 8.
+Restore or regenerate `infra/aws-prod-application.json` outside git, rerun
+Phase 9 Plan 09-02, and reconcile Blocker 4 launch matrix rows only if the
+production AWS MDM E2E path passes.

@@ -3,27 +3,27 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
 status: blocked
-stopped_at: Phase 08 Plan 01 (populate prod MDM secrets) halted at Task 1 -- BLOCKED, no genuine prod AWS access and no prod Snowflake connection configured in this environment; Task 2 not executed; Task 3 found pre-satisfied by a prior session
-last_updated: "2026-06-20T22:00:00.000Z"
-last_activity: 2026-06-20 -- Phase 08 Plan 01 executed: Task 1 BLOCKED (commit e21f777) with secret-safe 5-whys evidence; Task 2 correctly skipped per plan gating; Task 3 pre-satisfied, no new edit. SUMMARY committed (b9d5c00).
+stopped_at: Phase 9 Plan 09-02 blocked at missing generated production application summary
+last_updated: "2026-06-22T00:30:15.000Z"
+last_activity: 2026-06-22 -- Phase 9 Plan 09-02 status-only preflight failed before AWS status listing because infra/aws-prod-application.json is absent
 progress:
   total_phases: 6
-  completed_phases: 2
-  total_plans: 6
-  completed_plans: 4
-  percent: 33
+  completed_phases: 3
+  total_plans: 11
+  completed_plans: 8
+  percent: 73
 ---
 
 # Project State - go-live
 
 ## Current Position
 
-Phase: 08 (production-mdm-secrets-and-connectivity) — BLOCKED on Plan 1 of 2
-Plan: 1 of 2 executed (BLOCKED outcome); Plan 2 (08-02 verify-prod-mdm-connectivity) cannot start until Plan 1's blocker clears
-Status: Plan 08-01 ran Task 1 (precondition check), found neither a genuine production AWS account nor a production Snowflake connection configured in this execution environment, and correctly stopped at secret-safe BLOCKED evidence rather than fabricate a DSN/credential (Phase 7 precedent). Task 2 (secret population) was not executed. Task 3 (HANDOFF.json scope clarification) was found already satisfied by a prior session's edit -- no new change made.
-Last activity: 2026-06-20 -- Phase 08 Plan 01 executed and summarized; human action required before retry (see Blockers).
+Phase: 09 (production-hosted-graph-e2e) — BLOCKED after Plan 09-02 Task 1
+Plan: 2 of 2 plan attempts closed; Plan 09-01 passed local production hosted-graph acceptance; Plan 09-02 is blocked before the AWS E2E approval checkpoint
+Status: Phase 9 Plan 09-02 cannot enumerate production MDM Step Functions because `infra/aws-prod-application.json` is absent in this checkout. The planned `--status-only` command exited 1 at the local file guard before Step Functions status output. No production AWS MDM E2E executions started, and launch matrix Blocker 4 PASS rows were not updated.
+Last activity: 2026-06-22 -- `bash infra/scripts/run-aws-mdm-e2e.sh --env prod --aws-profile sec_platform_deployer --aws-region us-east-1 --status-only` failed on missing generated production application summary. Evidence recorded in `.planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md`.
 
-Progress: 33% (2/6 phases have plan-execution summaries; Phase 7's two Snowflake gates SNOW-03/SNOW-04 both pass; Phase 8 Plan 1 BLOCKED pending operator-provisioned prod Snowflake connection + prod AWS credentials)
+Progress: 73% (3/6 v1.6 phases complete: Phase 6 AWS, Phase 7 Snowflake/dbt, Phase 8 MDM secrets/connectivity; Phase 9 Plan 09-01 complete and Plan 09-02 blocked)
 
 ## Milestone Context
 
@@ -33,12 +33,10 @@ are remediated, owner-approved, and backed by non-secret production evidence.
 
 ## Active Worktree
 
-`/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform`
+`/Users/aneenaananth/projects/edgartools-platform`
 
-Branch: `claude/go-live-v1.6-phase7` (taken over from Codex's `codex/go-live-v1.6-phase7`
-at user's explicit instruction on 2026-06-19; tip commit `b67acfd` unchanged, branch
-re-rooted and pushed to origin under the new name per the CLAUDE.md HARD RULE that
-Claude and Codex must never commit to the same branch going forward)
+Branch: `codex/go-live-v1.6-phase9` (created by Codex from latest `origin/main`
+after PR #80 merged; Claude-owned branches remain untouched)
 
 ## Decisions
 
@@ -81,6 +79,63 @@ Claude and Codex must never commit to the same branch going forward)
   Codex's original branch/worktree left untouched (not deleted, not rebased) per the
   HARD RULE — only the new Claude-owned branch will receive further commits.
 
+- [Phase 09 planning]: Phase 8 is treated as complete from PR #80 and is not
+  re-executed. Phase 9 plans were created on `codex/go-live-v1.6-phase9` for
+  Native App prod prerequisites, bounded local graph sync/strict verify, and
+  AWS MDM hosted graph E2E. `--skip-preflight` remains non-acceptance and is
+  not part of Phase 9 execution.
+
+- [Phase 09 Plan 01 Task 1]: Read-only preflight completed on 2026-06-21 and
+  evidence was committed in
+  `.planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/evidence/hosted-graph-local.md`.
+  Phase 7 native-pull/dbt and Phase 8 MDM evidence preconditions pass; both
+  required Phase 8 secrets have AWSCURRENT metadata. Native App installation,
+  app role mappings, grants to the app, and `CPU_X64_XS` compute-pool visibility
+  pass. The production graph schema/database role privilege target is missing
+  or not visible, so execution is paused before production provisioning/writes
+  at the Task 2 operator approval checkpoint.
+
+- [Phase 09 Plan 01 Tasks 2-4]: Operator approved production Native App
+  provisioning and bounded graph writes. Task 3 production-scoped Native App
+  prerequisites were applied and committed: graph schema/database role created,
+  Native App grants and application-role grants passed, future table/view grants
+  and `CPU_X64_XS` compute-pool visibility passed. Task 4 loaded
+  `MDM_DATABASE_URL` and `MDM_SNOWFLAKE_SECRET_JSON` in one non-printing shell
+  invocation and unset both values before exit. `mdm counts` passed with seeded
+  entity rows already present, so bounded MDM smoke was skipped. Bounded
+  `sync-graph --limit 100` stopped with a sanitized `PrivilegeError`: the
+  expected runtime role `EDGARTOOLS_PROD_DEPLOYER` lacks usage on
+  `EDGARTOOLS_PROD.MDM`, usage/create-table/create-view on
+  `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION`, and future select on MDM
+  tables/views. Strict `verify-graph` did not run.
+
+- [Phase 09 Plan 01 Task 4 grant remediation]: Operator approved and the
+  minimum runtime-role grants for `EDGARTOOLS_PROD_DEPLOYER` were applied:
+  usage on `EDGARTOOLS_PROD.MDM`, current/future select on MDM tables/views,
+  usage on `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION`, and create-table/create-view
+  on the graph schema. The Task 4 wrapper was rerun with both secrets loaded
+  in one non-printing shell invocation and unset after use. `sync-graph --limit
+  100` progressed past the prior `PrivilegeError` and now stops with sanitized
+  `SnowflakeObjectMissing`; metadata checks show zero current tables/views in
+  `EDGARTOOLS_PROD.MDM`. Strict `verify-graph`, AWS MDM E2E, and launch matrix
+  edits remain not run.
+
+- [Phase 09 Plan 01 first-time load]: Operator approved a first-time production
+  MDM Snowflake mirror load after the source-object gap. The load created 19
+  `EDGARTOOLS_PROD.MDM` mirror tables with 135 total rows from the existing
+  Snowflake Postgres MDM database, then bounded `sync-graph --limit 100`
+  materialized 10 nodes and 0 edges into `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION`.
+  Strict `verify-graph --native-app-compute-pool CPU_X64_XS` passed with SQL
+  parity and Native App checks enabled after `app_user`/`app_admin` application
+  roles were granted to `EDGARTOOLS_PROD_DEPLOYER`. First-time load/deploy
+  runbook: `docs/prod-mdm-snowflake-graph-first-load.md`.
+
+- [Phase 09 Plan 02 Task 1]: Production AWS MDM E2E is blocked before the
+  approval checkpoint because `infra/aws-prod-application.json` is absent in
+  this checkout. The planned status-only command exited 1 at the local
+  file-existence guard before Step Functions status output, so no AWS E2E
+  execution started and no launch matrix PASS rows were updated.
+
 ## Known Inputs
 
 - Dev hosted graph E2E succeeded through strict Snowflake-hosted verification.
@@ -102,26 +157,13 @@ Claude and Codex must never commit to the same branch going forward)
   exists and is summarized in phase-01 `evidence/aws.md` (06-02). LIVE-04 and LIVE-05
   satisfied.
 
-- Blocker 2: Production MDM Secrets Manager values are not populated for
-  `edgartools-prod/mdm/postgres_dsn` and `edgartools-prod/mdm/snowflake`.
-  [2026-06-20, Phase 08 Plan 01] Attempted population; BLOCKED at the Task 1
-  precondition check -- no `edgartools-prod` Snowflake connection was
-  configured, so the production Postgres MDM instance's existence/readiness
-  could not be verified. Per the Phase 7 precedent, execution stopped at
-  secret-safe BLOCKED evidence (see evidence/mdm-prod-secrets-and-connectivity.md,
-  commit e21f777) instead of fabricating a DSN.
-  [2026-06-21 update] The Snowflake gap is now closed: `edgartools-prod`
-  connection configured, `EDGARTOOLS_PROD_MDM` Postgres instance provisioned
-  and `READY`, credentials rotated (after two self-corrected redaction-gap
-  incidents). The "genuine production AWS account" framing above was a
-  documentation error -- per D-05
-  (`.planning/workstreams/go-live/milestones/v1.5-phases/02-aws-and-snowflake-production-deployment-dry-run/02-CONTEXT.md`),
-  `aws-admin-prod` resolving to `077127448006` is the correct, by-design
-  behavior (same account, prefix-distinguished, not a separate account).
-  Both target secrets already exist in that account (created by the prod
-  Terraform apply, unpopulated -- `VersionIdsToStages: null`). Task 2 is
-  unblocked and ready to run; not yet executed pending explicit operator
-  go-ahead to write real production secret values.
+- Blocker 2: FULLY REMEDIATED (2026-06-21, Phase 08 complete via PR #80) —
+  `edgartools-prod/mdm/postgres_dsn` and `edgartools-prod/mdm/snowflake` are
+  populated and carry AWSCURRENT versions; the production `mdm` Postgres
+  database exists, is migrated, has application-role grants applied, and
+  `check-connectivity`/`counts` passed against prod without printing secret
+  values. See
+  `.planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md`.
 
 - Blocker 3: FULLY REMEDIATED (2026-06-20/21, Phase 07 complete) -- this entry was stale;
   both SNOW-03 (native-pull) and SNOW-04 (dbt/gold) reached final status PASS. All three
@@ -134,22 +176,45 @@ Claude and Codex must never commit to the same branch going forward)
   `.planning/workstreams/go-live/phases/07-production-snowflake-native-pull-and-gold/evidence/native-pull.md`
   and `evidence/dbt-gold.md` for full detail.
 
-- Blocker 4: Prod hosted graph E2E has not yet passed against production Snowflake,
-  MDM secrets, and Native App compute pool. Phase 8 (MDM secrets population + connectivity
-  verification) is now **complete pending human checkpoint** — see
-  `evidence/mdm-prod-secrets-and-connectivity.md` (4 Postgres credential rotations this phase,
-  `mdm` database created/migrated/granted, both AWS secrets populated, `check-connectivity` and
-  `counts` passing against prod via the `application` role). Phase 9 (hosted graph E2E against
-  the Native App compute pool) is separate, materially larger scope, and has not started. Blocker
-  4 remains open until Phase 9 completes. A reusable one-click provisioning script,
-  `infra/scripts/bootstrap-prod-mdm.sh`, now encapsulates the full rotate→create→migrate→grant→
-  populate-secrets→verify sequence for future re-runs (e.g. dev cutover, prod re-provisioning).
+- Blocker 4: PARTIALLY REMEDIATED (2026-06-22, Phase 09 Plan 09-01) — local
+  production hosted-graph acceptance now passes against production Snowflake,
+  MDM secrets, and the Native App compute pool. Phase 8 remains the source of
+  truth for populated prod MDM secrets and Postgres connectivity. Phase 9 Plan
+  09-01 applied production Native App/runtime prerequisites, documented the
+  first-time `EDGARTOOLS_PROD.MDM` mirror load, completed bounded `sync-graph
+  --limit 100`, and passed strict `mdm verify-graph` with SQL parity,
+  compute_pool, graph_info, BFS, and WCC checks enabled. GRAPH-04 remains
+  BLOCKED because Plan 09-02 cannot run status/E2E without the generated
+  `infra/aws-prod-application.json` summary. Blocker 4 remains open until Phase
+  9 Plan 09-02 production AWS MDM E2E passes and launch matrix rows are
+  reconciled there. A reusable one-click provisioning script,
+  `infra/scripts/bootstrap-prod-mdm.sh`, still encapsulates the Phase 8
+  rotate/create/migrate/grant/populate/verify sequence for future re-runs.
+  [2026-06-22, Claude takeover from Codex on `claude/go-live-v1.6-phase9`,
+  re-rooted from Codex's tip, no content change] `infra/aws-prod-application.json`
+  was present in this worktree; status-only preflight now passes cleanly
+  (exit 0, all 21 state machines resolved, all NO_RUNS) — the Plan 09-02
+  precondition above is satisfied. Operator approved the bounded production
+  AWS MDM E2E command; it **FAILED at the first stage, `mdm_migrate`**: the ECS
+  task could not start because its task definition injects a secret from
+  `edgartools-prod/mdm/neo4j`, which this workstream forbids ever populating
+  (Neo4j is deprecated, superseded by the Snowflake-hosted graph). Root cause:
+  legacy `NEO4J_*` secrets wiring in the MDM ECS task-definition template
+  (`deploy-aws-application.sh`), previously tracked only as TODOS.md D-05b
+  cleanup debt, now confirmed a hard production blocker. See
+  `phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md` for the
+  5-whys and sanitized failure detail (no raw cause/ARNs/account ID). Fix
+  requires editing the task-definition template and redeploying the
+  already-applied Phase 6 ECS task definitions — production-impacting,
+  not done this session pending explicit operator approval. Blocker 4
+  remains open.
 
 - Blocker 5: Prod dashboard UAT has not yet run against a production or
   production-like read-only configuration.
 
 ## Pending Todos
 
+- Restore or regenerate `infra/aws-prod-application.json` outside git, then rerun Phase 9 Plan 09-02 from the status-only preflight.
 - Preserve all v1.5 evidence and milestone archives while adding v1.6 planning artifacts.
 
 ## Pre-Planning Branch Audit (2026-06-13)
@@ -167,21 +232,17 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-20T22:00:00.000Z
-Stopped at: Phase 08 Plan 01 BLOCKED at Task 1 (prod Postgres MDM instance
-precondition check) -- no genuine prod AWS account, no prod Snowflake
-connection configured. Task 2 not executed. Task 3 pre-satisfied by a prior
-session. See 08-01-SUMMARY.md and evidence/mdm-prod-secrets-and-connectivity.md.
-Resume file: .planning/workstreams/go-live/phases/08-production-mdm-secrets-and-connectivity/08-01-SUMMARY.md
-Resume command: Operator must (1) configure an `edgartools-prod` SnowCLI
-connection pointing at the genuine production Snowflake account and confirm
-the prod Postgres MDM instance exists/is ready, and (2) configure genuine
-production AWS admin credentials under `aws-admin-prod` (currently resolves
-to dev account 077127448006). Once both are done, re-run Plan 08-01 Task 1,
-then proceed to Task 2 and Plan 08-02. Note: dev's SEC_FINANCIAL_FACT table
-has the identical PERIOD_START schema-drift gap fixed in prod in an earlier
-session — apply the same fix there before ever running `dbt run --target dev
---select financial_facts`.
+Last session: 2026-06-22T00:30:15.000Z
+Stopped at: Phase 9 Plan 09-02 Task 1. Plan 09-01 passed. Plan 09-02
+status-only preflight failed because `infra/aws-prod-application.json` is
+absent; no Step Functions status output appeared, no AWS E2E execution started,
+and launch matrix edits were not made.
+Resume file: .planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/09-02-PLAN.md
+Resume command: `$gsd-execute-phase 9 --ws go-live` from branch
+`codex/go-live-v1.6-phase9`. Do not redo Phase 8, Task 3 Native App grants,
+runtime-role grant remediation, first-time mirror load, or local strict
+verify-graph. Restore/regenerate `infra/aws-prod-application.json` outside git,
+then continue Plan 09-02 from Task 1.
 
 ## Performance Metrics
 
@@ -189,3 +250,5 @@ session — apply the same fix there before ever running `dbt run --target dev
 |-------|------|----------|-------|
 | Phase 05 P02 | 25min | 2 tasks | 2 files |
 | Phase 06 P01 | ~35min | 3 tasks | 4 files (2 committed, 2 gitignored) |
+| Phase 09 P01 | ~1h50min | 4 tasks | 5 files |
+| Phase 09 P02 | ~5min | 1/4 tasks reached | 4 files |
