@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
 status: blocked
-stopped_at: Phase 9 Plan 09-02 blocked at missing generated production application summary
-last_updated: "2026-06-22T00:30:15.000Z"
-last_activity: 2026-06-22 -- Phase 9 Plan 09-02 status-only preflight failed before AWS status listing because infra/aws-prod-application.json is absent
+stopped_at: Phase 9 merged to main via PR #81; Blocker 4 remains open on legacy Neo4j secret wiring in MDM ECS task definition
+last_updated: "2026-06-22T01:31:45.000Z"
+last_activity: 2026-06-22 -- PR #81 (claude/go-live-v1.6-phase9, carrying Codex's 12 Phase 9 commits + 1 Claude takeover commit) merged to main (merge commit 24ab70c). All 7 CI checks passed. Blocker 4 remains open pending the task-definition fix.
 progress:
   total_phases: 6
   completed_phases: 3
@@ -18,12 +18,12 @@ progress:
 
 ## Current Position
 
-Phase: 09 (production-hosted-graph-e2e) — BLOCKED after Plan 09-02 Task 1
-Plan: 2 of 2 plan attempts closed; Plan 09-01 passed local production hosted-graph acceptance; Plan 09-02 is blocked before the AWS E2E approval checkpoint
-Status: Phase 9 Plan 09-02 cannot enumerate production MDM Step Functions because `infra/aws-prod-application.json` is absent in this checkout. The planned `--status-only` command exited 1 at the local file guard before Step Functions status output. No production AWS MDM E2E executions started, and launch matrix Blocker 4 PASS rows were not updated.
-Last activity: 2026-06-22 -- `bash infra/scripts/run-aws-mdm-e2e.sh --env prod --aws-profile sec_platform_deployer --aws-region us-east-1 --status-only` failed on missing generated production application summary. Evidence recorded in `.planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md`.
+Phase: 09 (production-hosted-graph-e2e) — MERGED to main (PR #81); Blocker 4 still open
+Plan: 2 of 2 plan attempts closed; Plan 09-01 passed local production hosted-graph acceptance; Plan 09-02 ran the operator-approved AWS MDM E2E and found a new hard blocker (legacy Neo4j secret wiring), documented and merged
+Status: Phase 9's branch work (Codex's 12 commits + Claude's takeover commit documenting the `mdm_migrate` AWS failure and a `go-live.sh` doctor-check fix) is merged to `main` via PR #81 (merge commit `24ab70c`, all 7 CI checks passed). This merges the *documentation and tooling* of Phase 9, not blocker resolution — Blocker 4 remains open because the production AWS MDM E2E chain has not succeeded end-to-end. The unresolved root cause (legacy `NEO4J_*` secret wiring in the MDM ECS task-definition template) still needs a separate, explicitly-approved fix and redeploy before the chain can be retried.
+Last activity: 2026-06-22 -- PR #81 merged to main. `claude/go-live-v1.6-phase9` and `codex/go-live-v1.6-phase9` both left intact (not deleted) per standard practice; no further commits should land on either — new work should branch from `main` post-merge.
 
-Progress: 73% (3/6 v1.6 phases complete: Phase 6 AWS, Phase 7 Snowflake/dbt, Phase 8 MDM secrets/connectivity; Phase 9 Plan 09-01 complete and Plan 09-02 blocked)
+Progress: 73% (3/6 v1.6 phases complete: Phase 6 AWS, Phase 7 Snowflake/dbt, Phase 8 MDM secrets/connectivity; Phase 9 merged to main with Blocker 4 still open)
 
 ## Milestone Context
 
@@ -33,10 +33,12 @@ are remediated, owner-approved, and backed by non-secret production evidence.
 
 ## Active Worktree
 
-`/Users/aneenaananth/projects/edgartools-platform`
+`/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform`
 
-Branch: `codex/go-live-v1.6-phase9` (created by Codex from latest `origin/main`
-after PR #80 merged; Claude-owned branches remain untouched)
+Branch: `claude/go-live-phase9-merge-followup` (created from `origin/main` post-PR#81
+merge, for this STATE.md/TODOS.md documentation update only). `codex/go-live-v1.6-phase9`
+and `claude/go-live-v1.6-phase9` are both fully merged into `main` (PR #81, merge commit
+`24ab70c`) and should not receive further commits.
 
 ## Decisions
 
@@ -208,13 +210,22 @@ after PR #80 merged; Claude-owned branches remain untouched)
   already-applied Phase 6 ECS task definitions — production-impacting,
   not done this session pending explicit operator approval. Blocker 4
   remains open.
+  [2026-06-22, merge] All of the above (Plan 09-01 production hosted-graph
+  acceptance, the Plan 09-02 AWS MDM E2E failure documentation, and the
+  `go-live.sh` doctor-check fix) merged to `main` via PR #81 (merge commit
+  `24ab70c`, 7/7 CI checks passed). The merge lands documentation/tooling
+  only — it does not resolve Blocker 4. Next concrete step: get explicit
+  operator approval to edit the MDM ECS task-definition template (remove the
+  `NEO4J_*`/`edgartools-prod/mdm/neo4j` secrets injection), redeploy, then
+  retry the AWS MDM E2E chain from `mdm_migrate` onward.
 
 - Blocker 5: Prod dashboard UAT has not yet run against a production or
   production-like read-only configuration.
 
 ## Pending Todos
 
-- Restore or regenerate `infra/aws-prod-application.json` outside git, then rerun Phase 9 Plan 09-02 from the status-only preflight.
+- Get explicit operator approval to remove the legacy `NEO4J_*`/`edgartools-prod/mdm/neo4j` secrets injection from the MDM ECS task-definition template (`deploy-aws-application.sh`), then redeploy the already-applied Phase 6 ECS task definitions.
+- Re-run the operator-approved production AWS MDM E2E command from `mdm_migrate` onward once the task-definition fix is deployed; flip Blocker 4 launch-matrix rows to PASS only after the full chain reaches `SUCCEEDED`.
 - Preserve all v1.5 evidence and milestone archives while adding v1.6 planning artifacts.
 
 ## Pre-Planning Branch Audit (2026-06-13)
@@ -232,17 +243,18 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-22T00:30:15.000Z
-Stopped at: Phase 9 Plan 09-02 Task 1. Plan 09-01 passed. Plan 09-02
-status-only preflight failed because `infra/aws-prod-application.json` is
-absent; no Step Functions status output appeared, no AWS E2E execution started,
-and launch matrix edits were not made.
-Resume file: .planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/09-02-PLAN.md
-Resume command: `$gsd-execute-phase 9 --ws go-live` from branch
-`codex/go-live-v1.6-phase9`. Do not redo Phase 8, Task 3 Native App grants,
-runtime-role grant remediation, first-time mirror load, or local strict
-verify-graph. Restore/regenerate `infra/aws-prod-application.json` outside git,
-then continue Plan 09-02 from Task 1.
+Last session: 2026-06-22T01:31:45.000Z
+Stopped at: PR #81 merged to `main` (merge commit `24ab70c`). Phase 9 plans
+(09-01, 09-02) and their evidence are now on `main`. Blocker 4 remains open:
+the AWS MDM E2E chain failed at `mdm_migrate` due to legacy Neo4j secret
+wiring in the MDM ECS task definition; the fix (template edit + redeploy)
+was explicitly deferred pending separate operator approval.
+Resume file: .planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md
+Resume command: branch from `main` (do not reuse `codex/go-live-v1.6-phase9`
+or `claude/go-live-v1.6-phase9` — both are merged). Do not redo Phase 8,
+Task 3 Native App grants, runtime-role grant remediation, first-time mirror
+load, or local strict verify-graph (all already PASS on main). Next step is
+the task-definition fix + redeploy + AWS MDM E2E re-run described above.
 
 ## Performance Metrics
 
