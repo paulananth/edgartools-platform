@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
 status: executing
-stopped_at: Phase 9 Plan 09-01 Task 4 blocked at sync-graph runtime-role grants
-last_updated: "2026-06-21T23:02:00.000Z"
-last_activity: 2026-06-21 -- Phase 9 Plan 09-01 Task 4 stopped at bounded sync-graph PrivilegeError
+stopped_at: Phase 9 Plan 09-01 Task 4 blocked at missing Snowflake MDM source mirror objects
+last_updated: "2026-06-22T00:04:34.000Z"
+last_activity: 2026-06-22 -- Phase 9 Plan 09-01 runtime-role grants applied; bounded sync-graph now stops at SnowflakeObjectMissing
 progress:
   total_phases: 6
   completed_phases: 3
@@ -20,10 +20,10 @@ progress:
 
 Phase: 09 (production-hosted-graph-e2e) — EXECUTING Plan 09-01
 Plan: 0 of 2 executed; Plan 09-01 Tasks 1-3 are complete and committed; Task 4 is blocked at bounded `sync-graph --limit 100`; Plan 09-02 covers production AWS MDM E2E and launch matrix reconciliation
-Status: Paused at Phase 9 Plan 09-01 Task 4. Production Native App/schema/database-role prerequisites are applied, but local graph sync cannot proceed until the runtime Snowflake role receives the minimum MDM/graph schema grants.
-Last activity: 2026-06-21 -- Phase 9 Plan 09-01 Task 4 loaded secrets in one non-printing shell invocation, ran counts, skipped bounded MDM smoke because seeded entity rows exist, and stopped at sync-graph PrivilegeError before strict verify-graph
+Status: Paused at Phase 9 Plan 09-01 Task 4. Production Native App/schema/database-role prerequisites and the runtime-role grants are applied, but local graph sync cannot proceed because `EDGARTOOLS_PROD.MDM` has zero current source tables/views visible for the graph materializer.
+Last activity: 2026-06-22 -- Phase 9 Plan 09-01 runtime-role grants were applied and verified. The Task 4 one-shot secret-consuming wrapper was rerun; it passed `mdm counts`, skipped bounded MDM smoke because seeded entity rows exist, and stopped at `sync-graph` with sanitized `SnowflakeObjectMissing` before strict verify-graph.
 
-Progress: 55% (3/6 v1.6 phases complete: Phase 6 AWS, Phase 7 Snowflake/dbt, Phase 8 MDM secrets/connectivity; Phase 9 executing and paused at Plan 09-01 Task 4 runtime-role grants)
+Progress: 55% (3/6 v1.6 phases complete: Phase 6 AWS, Phase 7 Snowflake/dbt, Phase 8 MDM secrets/connectivity; Phase 9 executing and paused at Plan 09-01 Task 4 MDM source mirror gap)
 
 ## Milestone Context
 
@@ -109,6 +109,17 @@ after PR #80 merged; Claude-owned branches remain untouched)
   `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION`, and future select on MDM
   tables/views. Strict `verify-graph` did not run.
 
+- [Phase 09 Plan 01 Task 4 grant remediation]: Operator approved and the
+  minimum runtime-role grants for `EDGARTOOLS_PROD_DEPLOYER` were applied:
+  usage on `EDGARTOOLS_PROD.MDM`, current/future select on MDM tables/views,
+  usage on `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION`, and create-table/create-view
+  on the graph schema. The Task 4 wrapper was rerun with both secrets loaded
+  in one non-printing shell invocation and unset after use. `sync-graph --limit
+  100` progressed past the prior `PrivilegeError` and now stops with sanitized
+  `SnowflakeObjectMissing`; metadata checks show zero current tables/views in
+  `EDGARTOOLS_PROD.MDM`. Strict `verify-graph`, AWS MDM E2E, and launch matrix
+  edits remain not run.
+
 ## Known Inputs
 
 - Dev hosted graph E2E succeeded through strict Snowflake-hosted verification.
@@ -154,11 +165,11 @@ after PR #80 merged; Claude-owned branches remain untouched)
   verification) is complete — see `evidence/mdm-prod-secrets-and-connectivity.md`
   (Postgres credentials rotated, `mdm` database created/migrated/granted, both AWS secrets
   populated, `check-connectivity` and `counts` passing against prod via the
-  `application` role). Phase 9 Plan 09-01 Tasks 1-3 are complete, but Task 4 is
-  blocked at local bounded `sync-graph` because the production Snowflake runtime
-  role lacks the MDM/graph schema grant categories needed to materialize graph
-  tables. Blocker 4 remains open until local strict `mdm verify-graph` and
-  production AWS MDM E2E both pass. A reusable
+  `application` role). Phase 9 Plan 09-01 Tasks 1-3 are complete and runtime
+  role grants are remediated, but Task 4 is blocked at local bounded
+  `sync-graph` because the production Snowflake MDM source mirror objects are
+  absent/not materialized in `EDGARTOOLS_PROD.MDM`. Blocker 4 remains open until
+  local strict `mdm verify-graph` and production AWS MDM E2E both pass. A reusable
   one-click provisioning script,
   `infra/scripts/bootstrap-prod-mdm.sh`, now encapsulates the full rotate→create→migrate→grant→
   populate-secrets→verify sequence for future re-runs (e.g. dev cutover, prod re-provisioning).
@@ -185,14 +196,17 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-21T23:02:00.000Z
-Stopped at: Phase 9 Plan 09-01 Task 4 after bounded `sync-graph --limit 100`
-returned a sanitized `PrivilegeError`. Production Native App prerequisites are
-applied; strict `verify-graph`, AWS MDM E2E, and launch matrix edits have not run.
+Last session: 2026-06-22T00:04:34.000Z
+Stopped at: Phase 9 Plan 09-01 Task 4 after runtime-role grants were applied
+and bounded `sync-graph --limit 100` returned sanitized `SnowflakeObjectMissing`.
+Production Native App prerequisites and runtime-role grants are applied; strict
+`verify-graph`, AWS MDM E2E, and launch matrix edits have not run.
 Resume file: .planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/09-01-PLAN.md
 Resume command: `$gsd-execute-phase 9 --ws go-live` from branch
-`codex/go-live-v1.6-phase9` after explicit operator approval for the runtime-role
-grant remediation. Do not redo Phase 8 or the completed Task 3 Native App grants.
+`codex/go-live-v1.6-phase9` after explicit operator approval for a minimal
+MDM-to-Snowflake source mirror/export bootstrap or a planned revision to the
+`sync-graph` source. Do not redo Phase 8, Task 3 Native App grants, or the
+runtime-role grant remediation.
 
 ## Performance Metrics
 
