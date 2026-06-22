@@ -63,7 +63,6 @@ Options:
                                     Use snowflake-postgres after the secret contains the Snowflake Postgres application DSN.
   --mdm-postgres-dsn-secret-arn <arn>
                                     Secrets Manager ARN injected as MDM_DATABASE_URL.
-  --mdm-neo4j-secret-arn <arn>      Secrets Manager ARN injected as NEO4J_SECRET_JSON.
   --mdm-api-keys-secret-arn <arn>   Secrets Manager ARN injected as MDM_API_KEYS.
   --mdm-snowflake-secret-arn <arn>  Secrets Manager ARN injected as MDM_SNOWFLAKE_SECRET_JSON.
   --mdm-silver-duckdb <uri>         MDM_SILVER_DUCKDB. Default: s3://<warehouse-bucket>/warehouse/silver/sec/silver.duckdb.
@@ -145,7 +144,6 @@ MDM_DEPLOYMENT_MODE="auto"
 MDM_DATABASE_SOURCE=""
 MDM_ECR_REPOSITORY_URL=""
 MDM_POSTGRES_DSN_SECRET_ARN=""
-MDM_NEO4J_SECRET_ARN=""
 MDM_API_KEYS_SECRET_ARN=""
 MDM_SNOWFLAKE_SECRET_ARN=""
 MDM_SILVER_DUCKDB=""
@@ -197,7 +195,6 @@ while [[ $# -gt 0 ]]; do
     --mdm-database-source) MDM_DATABASE_SOURCE="${2:?}"; shift 2 ;;
     --mdm-ecr-repository-url) MDM_ECR_REPOSITORY_URL="${2:?}"; shift 2 ;;
     --mdm-postgres-dsn-secret-arn) MDM_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
-    --mdm-neo4j-secret-arn) MDM_NEO4J_SECRET_ARN="${2:?}"; shift 2 ;;
     --mdm-api-keys-secret-arn) MDM_API_KEYS_SECRET_ARN="${2:?}"; shift 2 ;;
     --mdm-snowflake-secret-arn) MDM_SNOWFLAKE_SECRET_ARN="${2:?}"; shift 2 ;;
     --mdm-silver-duckdb) MDM_SILVER_DUCKDB="${2:?}"; shift 2 ;;
@@ -379,9 +376,6 @@ EDGAR_IDENTITY_SECRET_ARN="$(first_nonempty "$EDGAR_IDENTITY_SECRET_ARN" \
 MDM_POSTGRES_DSN_SECRET_ARN="$(first_nonempty "$MDM_POSTGRES_DSN_SECRET_ARN" \
   "$(manifest_value mdm.secrets.postgres_dsn)" \
   "$(secret_arn_by_name "${NAME_PREFIX}/mdm/postgres_dsn")")"
-MDM_NEO4J_SECRET_ARN="$(first_nonempty "$MDM_NEO4J_SECRET_ARN" \
-  "$(manifest_value mdm.secrets.neo4j)" \
-  "$(secret_arn_by_name "${NAME_PREFIX}/mdm/neo4j")")"
 MDM_API_KEYS_SECRET_ARN="$(first_nonempty "$MDM_API_KEYS_SECRET_ARN" \
   "$(manifest_value mdm.secrets.api_keys)" \
   "$(secret_arn_by_name "${NAME_PREFIX}/mdm/api_keys")")"
@@ -458,7 +452,6 @@ MDM_SILVER_DUCKDB="$(first_nonempty "$MDM_SILVER_DUCKDB" "s3://${WAREHOUSE_BUCKE
 DEPLOY_MDM=false
 missing_mdm_values=()
 is_empty "$MDM_POSTGRES_DSN_SECRET_ARN" && missing_mdm_values+=("mdm_postgres_dsn_secret_arn")
-is_empty "$MDM_NEO4J_SECRET_ARN" && missing_mdm_values+=("mdm_neo4j_secret_arn")
 is_empty "$MDM_API_KEYS_SECRET_ARN" && missing_mdm_values+=("mdm_api_keys_secret_arn")
 is_empty "$MDM_SNOWFLAKE_SECRET_ARN" && missing_mdm_values+=("mdm_snowflake_secret_arn")
 case "$MDM_DEPLOYMENT_MODE" in
@@ -816,7 +809,7 @@ write_mdm_container_definitions() {
   local output_file="$1" profile="$2"
   MSYS_NO_PATHCONV=1 python3 - "$(win_path "$output_file")" "$profile" "$MDM_IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
     "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" "$MDM_SILVER_DUCKDB" "$MDM_POSTGRES_DSN_SECRET_ARN" \
-    "$MDM_NEO4J_SECRET_ARN" "$MDM_API_KEYS_SECRET_ARN" "$MDM_SNOWFLAKE_SECRET_ARN" \
+    "$MDM_API_KEYS_SECRET_ARN" "$MDM_SNOWFLAKE_SECRET_ARN" \
     "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" <<'PY'
 import json
 import pathlib
@@ -832,7 +825,6 @@ import sys
     warehouse_bucket,
     mdm_silver_duckdb,
     mdm_database_secret_arn,
-    neo4j_secret_arn,
     api_keys_secret_arn,
     snowflake_secret_arn,
     edgar_secret_arn,
@@ -857,7 +849,6 @@ container_definitions = [{
     "environment": environment_values,
     "secrets": [
         {"name": "MDM_DATABASE_URL", "valueFrom": mdm_database_secret_arn},
-        {"name": "NEO4J_SECRET_JSON", "valueFrom": neo4j_secret_arn},
         {"name": "MDM_API_KEYS", "valueFrom": api_keys_secret_arn},
         {"name": "MDM_SNOWFLAKE_SECRET_JSON", "valueFrom": snowflake_secret_arn},
         {"name": "EDGAR_IDENTITY", "valueFrom": edgar_secret_arn},
@@ -965,7 +956,7 @@ workflow_cik_command_expression() {
 mdm_workflow_command_expression() {
   case "$1" in
     mdm_migrate) printf '%s\n' "States.Array('mdm', 'migrate')" ;;
-    mdm_check_connectivity) printf '%s\n' "States.Array('mdm', 'check-connectivity', '--neo4j')" ;;
+    mdm_check_connectivity) printf '%s\n' "States.Array('mdm', 'check-connectivity')" ;;
     mdm_run)
       if [[ "$MDM_RUN_LIMIT" -gt 0 ]]; then
         printf '%s\n' "States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '${MDM_RUN_LIMIT}')"
@@ -2135,7 +2126,7 @@ python3 - "$SUMMARY_FILE" "$ENVIRONMENT" "$AWS_REGION_NAME" "$NAME_PREFIX" "$IMA
   "$STEP_FUNCTIONS_ROLE_ARN" "$STEP_FUNCTIONS_LOG_GROUP_NAME" \
   "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
   "$DEPLOY_MDM" "$MDM_DATABASE_SOURCE" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$MDM_SILVER_DUCKDB" \
-  "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_NEO4J_SECRET_ARN" "$MDM_API_KEYS_SECRET_ARN" "$MDM_SNOWFLAKE_SECRET_ARN" \
+  "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_API_KEYS_SECRET_ARN" "$MDM_SNOWFLAKE_SECRET_ARN" \
   "$WORKFLOW_ARNS_FILE" \
   "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" "$SNOWFLAKE_EXPORT_BUCKET_NAME" \
   "$EXECUTION_ROLE_ARN" "$TASK_ROLE_ARN" "$EDGAR_IDENTITY_SECRET_ARN" <<'PY'
@@ -2165,7 +2156,6 @@ import sys
     mdm_medium_task_definition,
     mdm_silver_duckdb,
     mdm_database_secret_arn,
-    neo4j_secret_arn,
     api_keys_secret_arn,
     snowflake_secret_arn,
     workflow_arns_file,
@@ -2218,7 +2208,6 @@ if deploy_mdm == "true":
         "silver_duckdb": mdm_silver_duckdb,
         "secrets": {
             "postgres_dsn": mdm_database_secret_arn,
-            "neo4j": neo4j_secret_arn,
             "api_keys": api_keys_secret_arn,
             "snowflake": snowflake_secret_arn,
         },
