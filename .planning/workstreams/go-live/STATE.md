@@ -2,28 +2,28 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
-status: executing
-stopped_at: Phase 9 Plan 09-01 complete; ready for Phase 9 Plan 09-02 production AWS MDM E2E
-last_updated: "2026-06-22T00:24:51.000Z"
-last_activity: 2026-06-22 -- Phase 9 Plan 09-01 first-time MDM Snowflake mirror load completed; bounded sync-graph and strict verify-graph passed
+status: blocked
+stopped_at: Phase 9 Plan 09-02 blocked at missing generated production application summary
+last_updated: "2026-06-22T00:30:15.000Z"
+last_activity: 2026-06-22 -- Phase 9 Plan 09-02 status-only preflight failed before AWS status listing because infra/aws-prod-application.json is absent
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 11
-  completed_plans: 7
-  percent: 64
+  completed_plans: 8
+  percent: 73
 ---
 
 # Project State - go-live
 
 ## Current Position
 
-Phase: 09 (production-hosted-graph-e2e) — EXECUTING Plan 09-02 next
-Plan: 1 of 2 executed; Plan 09-01 is complete and committed; Plan 09-02 covers production AWS MDM E2E and launch matrix reconciliation
-Status: Phase 9 Plan 09-01 completed local production hosted-graph acceptance. Production Native App/schema/database-role prerequisites, runtime grants, first-time `EDGARTOOLS_PROD.MDM` mirror load, bounded `sync-graph --limit 100`, and strict `verify-graph --native-app-compute-pool CPU_X64_XS` all passed. Phase 9 remains open for AWS MDM E2E.
-Last activity: 2026-06-22 -- Operator approved the first-time production MDM Snowflake mirror load. The load created 19 mirror tables with 135 total rows, bounded graph sync materialized 10 nodes and 0 edges, and strict verify-graph passed SQL parity plus Native App compute-pool, graph_info, BFS, and WCC checks.
+Phase: 09 (production-hosted-graph-e2e) — BLOCKED after Plan 09-02 Task 1
+Plan: 2 of 2 plan attempts closed; Plan 09-01 passed local production hosted-graph acceptance; Plan 09-02 is blocked before the AWS E2E approval checkpoint
+Status: Phase 9 Plan 09-02 cannot enumerate production MDM Step Functions because `infra/aws-prod-application.json` is absent in this checkout. The planned `--status-only` command exited 1 at the local file guard before Step Functions status output. No production AWS MDM E2E executions started, and launch matrix Blocker 4 PASS rows were not updated.
+Last activity: 2026-06-22 -- `bash infra/scripts/run-aws-mdm-e2e.sh --env prod --aws-profile sec_platform_deployer --aws-region us-east-1 --status-only` failed on missing generated production application summary. Evidence recorded in `.planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md`.
 
-Progress: 64% (3/6 v1.6 phases complete: Phase 6 AWS, Phase 7 Snowflake/dbt, Phase 8 MDM secrets/connectivity; Phase 9 executing with Plan 09-01 complete and Plan 09-02 next)
+Progress: 73% (3/6 v1.6 phases complete: Phase 6 AWS, Phase 7 Snowflake/dbt, Phase 8 MDM secrets/connectivity; Phase 9 Plan 09-01 complete and Plan 09-02 blocked)
 
 ## Milestone Context
 
@@ -130,6 +130,12 @@ after PR #80 merged; Claude-owned branches remain untouched)
   roles were granted to `EDGARTOOLS_PROD_DEPLOYER`. First-time load/deploy
   runbook: `docs/prod-mdm-snowflake-graph-first-load.md`.
 
+- [Phase 09 Plan 02 Task 1]: Production AWS MDM E2E is blocked before the
+  approval checkpoint because `infra/aws-prod-application.json` is absent in
+  this checkout. The planned status-only command exited 1 at the local
+  file-existence guard before Step Functions status output, so no AWS E2E
+  execution started and no launch matrix PASS rows were updated.
+
 ## Known Inputs
 
 - Dev hosted graph E2E succeeded through strict Snowflake-hosted verification.
@@ -177,9 +183,11 @@ after PR #80 merged; Claude-owned branches remain untouched)
   09-01 applied production Native App/runtime prerequisites, documented the
   first-time `EDGARTOOLS_PROD.MDM` mirror load, completed bounded `sync-graph
   --limit 100`, and passed strict `mdm verify-graph` with SQL parity,
-  compute_pool, graph_info, BFS, and WCC checks enabled. Blocker 4 remains open
-  until Phase 9 Plan 09-02 production AWS MDM E2E passes and launch matrix rows
-  are reconciled there. A reusable one-click provisioning script,
+  compute_pool, graph_info, BFS, and WCC checks enabled. GRAPH-04 remains
+  BLOCKED because Plan 09-02 cannot run status/E2E without the generated
+  `infra/aws-prod-application.json` summary. Blocker 4 remains open until Phase
+  9 Plan 09-02 production AWS MDM E2E passes and launch matrix rows are
+  reconciled there. A reusable one-click provisioning script,
   `infra/scripts/bootstrap-prod-mdm.sh`, still encapsulates the Phase 8
   rotate/create/migrate/grant/populate/verify sequence for future re-runs.
 
@@ -188,6 +196,7 @@ after PR #80 merged; Claude-owned branches remain untouched)
 
 ## Pending Todos
 
+- Restore or regenerate `infra/aws-prod-application.json` outside git, then rerun Phase 9 Plan 09-02 from the status-only preflight.
 - Preserve all v1.5 evidence and milestone archives while adding v1.6 planning artifacts.
 
 ## Pre-Planning Branch Audit (2026-06-13)
@@ -205,16 +214,17 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-22T00:24:51.000Z
-Stopped at: Phase 9 Plan 09-01 complete. Production Native App prerequisites,
-runtime-role grants, first-time `EDGARTOOLS_PROD.MDM` mirror load, bounded
-`sync-graph --limit 100`, and strict `verify-graph --native-app-compute-pool
-CPU_X64_XS` passed. AWS MDM E2E and launch matrix edits have not run.
+Last session: 2026-06-22T00:30:15.000Z
+Stopped at: Phase 9 Plan 09-02 Task 1. Plan 09-01 passed. Plan 09-02
+status-only preflight failed because `infra/aws-prod-application.json` is
+absent; no Step Functions status output appeared, no AWS E2E execution started,
+and launch matrix edits were not made.
 Resume file: .planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/09-02-PLAN.md
 Resume command: `$gsd-execute-phase 9 --ws go-live` from branch
 `codex/go-live-v1.6-phase9`. Do not redo Phase 8, Task 3 Native App grants,
 runtime-role grant remediation, first-time mirror load, or local strict
-verify-graph. Continue with Plan 09-02 production AWS MDM E2E.
+verify-graph. Restore/regenerate `infra/aws-prod-application.json` outside git,
+then continue Plan 09-02 from Task 1.
 
 ## Performance Metrics
 
@@ -223,3 +233,4 @@ verify-graph. Continue with Plan 09-02 production AWS MDM E2E.
 | Phase 05 P02 | 25min | 2 tasks | 2 files |
 | Phase 06 P01 | ~35min | 3 tasks | 4 files (2 committed, 2 gitignored) |
 | Phase 09 P01 | ~1h50min | 4 tasks | 5 files |
+| Phase 09 P02 | ~5min | 1/4 tasks reached | 4 files |

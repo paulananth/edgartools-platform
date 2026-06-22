@@ -97,10 +97,10 @@ strict graph verification and AWS MDM E2E execution.
 **Depends on:** Phase 7 Snowflake/dbt readiness, Phase 8 MDM database readiness, production
 Native App compute pool selector, and MDM operator approval.
 
-**Plans:** 2
+**Plans:** 2/2 plan attempts executed; GRAPH-03 complete and GRAPH-04 blocked
 
 - [x] **09-01:** Bounded prod `mdm sync-graph` and strict prod `mdm verify-graph`.
-- [ ] **09-02:** Prod AWS MDM E2E through migrate, run, relationship backfill, graph sync, graph verify, and counts.
+- [x] **09-02:** Prod AWS MDM E2E preflight blocked because `infra/aws-prod-application.json` is absent.
 
 **Success criteria:**
 
@@ -163,7 +163,7 @@ contracts, flips the launch decision only if every blocker is PASS, and hands of
 | SNOW-04 | Phase 7 | Blocked |
 | MDM-02 | Phase 8 | Pending |
 | GRAPH-03 | Phase 9 | Complete |
-| GRAPH-04 | Phase 9 | Pending |
+| GRAPH-04 | Phase 9 | Blocked |
 | DASH-04 | Phase 10 | Pending |
 | LIVE-06 | Phase 11 | Pending |
 | OPS-03 | Phase 11 | Pending |
@@ -176,5 +176,6 @@ contracts, flips the launch decision only if every blocker is PASS, and hands of
 
 ## Next Step
 
-Execute Phase 9 Plan 09-02 for production AWS MDM E2E, then reconcile the
-Blocker 4 launch matrix rows only if the AWS path passes.
+Restore or regenerate `infra/aws-prod-application.json` outside git, rerun
+Phase 9 Plan 09-02, and reconcile Blocker 4 launch matrix rows only if the
+production AWS MDM E2E path passes.
