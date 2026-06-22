@@ -199,3 +199,82 @@ runtime-role grants required for local `sync-graph`, then rerun Task 4 from
 the same branch. Do not run unbounded MDM commands, Native App algorithms, or
 launch matrix reconciliation until `sync-graph --limit 100` and strict
 `verify-graph` pass.
+
+## Task 4 Runtime-Role Grant Remediation
+
+Execution time: 2026-06-22 UTC.
+
+Operator approval received in-thread for the minimum runtime-role grant
+remediation and a Task 4 rerun. No credential was rotated or repopulated.
+
+Approved role and scope:
+
+- Runtime Snowflake role: `EDGARTOOLS_PROD_DEPLOYER`
+- Source schema: `EDGARTOOLS_PROD.MDM`
+- Graph schema: `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION`
+
+Applied statement categories:
+
+| Category | Status |
+|---|---:|
+| Runtime usage on database | PASS |
+| Runtime usage on MDM schema | PASS |
+| Runtime select on current MDM tables/views | PASS |
+| Runtime select on future MDM tables/views | PASS |
+| Runtime usage on graph schema | PASS |
+| Runtime create-table on graph schema | PASS |
+| Runtime create-view on graph schema | PASS |
+
+Post-grant metadata checks:
+
+| Check | Status | Sanitized result |
+|---|---:|---|
+| Runtime role exists | PASS | Role metadata visible. |
+| Runtime usage on database | PASS | Required category visible. |
+| Runtime usage on MDM schema | PASS | Required category visible. |
+| Runtime usage on graph schema | PASS | Required category visible. |
+| Runtime create-table on graph schema | PASS | Required category visible. |
+| Runtime create-view on graph schema | PASS | Required category visible. |
+| Future select on MDM tables/views | PASS | Required future-grant categories visible. |
+| Current MDM table metadata | PASS | Metadata query completed; zero current tables visible. |
+| Current MDM view metadata | PASS | Metadata query completed; zero current views visible. |
+
+## Task 4 Rerun After Runtime Grants
+
+Execution time: 2026-06-22 UTC.
+
+Secret handling:
+
+- `MDM_DATABASE_URL` and `MDM_SNOWFLAKE_SECRET_JSON` were loaded in one
+  non-printing shell invocation.
+- The sanitized wrapper reported no secret-shaped output.
+- Shell-level unset confirmation reported both values unset after the command.
+
+Command summary:
+
+| Command category | Bound | Status | Sanitized result |
+|---|---:|---:|---|
+| `mdm counts` | read-only | PASS | Selected graph-source counts unchanged: entity rows 10; company/adviser/person/security/fund rows 0; active relationships 0; pending graph sync 0. |
+| bounded MDM smoke | `run --entity-type all --limit 5`; `backfill-relationships --limit 100` | SKIPPED | Graph inputs were not all zero because seeded entity rows already existed. |
+| `sync-graph` | `--limit 100` | BLOCKED | Failure class changed from `PrivilegeError` to `SnowflakeObjectMissing`. No secret-shaped output was emitted. |
+| strict `verify-graph` | `--native-app-compute-pool CPU_X64_XS` | NOT RUN | Stopped because bounded graph sync did not complete. |
+
+### 5-Whys Failure Summary After Grant Remediation
+
+1. Symptom: bounded `sync-graph --limit 100` still did not complete after
+   runtime-role grants were applied.
+2. Why: graph materialization reads the production Snowflake MDM mirror objects
+   in `EDGARTOOLS_PROD.MDM`.
+3. Why: metadata checks show the runtime role can query the MDM schema, but
+   there are zero current tables and zero current views visible there.
+4. Why: Phase 8 verified the production Postgres MDM database and application
+   role, but did not materialize a Snowflake MDM mirror table set for
+   `sync-graph`.
+5. Root cause: `EDGARTOOLS_PROD.MDM` source mirror objects are absent or not yet
+   materialized for local Snowflake graph sync.
+
+Remediation category: explicitly plan and approve the minimum MDM-to-Snowflake
+mirror/export bootstrap required by `sync-graph`, or revise `sync-graph` to
+consume the intended production source. Do not run a new export/bootstrap path,
+Native App graph algorithms, AWS MDM E2E, or launch matrix reconciliation until
+this source-object gap is resolved and bounded `sync-graph --limit 100` passes.
