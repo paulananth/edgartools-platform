@@ -535,13 +535,19 @@ AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform apply"
 
   add_stage \
     "AWS: ECR image publish" \
-    "Publishes the warehouse image to AWS ECR with dev and immutable rollback/audit tags." \
-    "AWS_PROFILE=${deployer_q} bash infra/scripts/publish-warehouse-image.sh --aws-region ${AWS_REGION_NAME} --ecr-repository edgartools-${ENVIRONMENT}-warehouse --role warehouse --image-tag ${image_tag} --mode auto --cache-from-tag ${ENVIRONMENT} --also-tag ${ENVIRONMENT}"
+    "Publishes the warehouse image to AWS ECR with dev and immutable rollback/audit tags. Writes the resolved digest-pinned image ref to a local file so the next stage can pick it up automatically." \
+    "AWS_PROFILE=${deployer_q} bash infra/scripts/publish-warehouse-image.sh --aws-region ${AWS_REGION_NAME} --ecr-repository edgartools-${ENVIRONMENT}-warehouse --role warehouse --image-tag ${image_tag} --mode auto --cache-from-tag ${ENVIRONMENT} --also-tag ${ENVIRONMENT} --output-file infra/aws-${ENVIRONMENT}-warehouse-image-ref.txt"
 
   add_stage \
     "AWS: ECS task definitions and Step Functions" \
-    "Registers ECS task definitions, creates or updates Step Functions, and wires application CloudWatch logs from passive outputs." \
-    "AWS_PROFILE=${deployer_q} bash infra/scripts/deploy-aws-application.sh --env ${ENVIRONMENT} --aws-profile ${DEPLOYER_PROFILE} --aws-region ${AWS_REGION_NAME} --skip-build --image-ref \"\${WAREHOUSE_IMAGE_REF:?set WAREHOUSE_IMAGE_REF to the published warehouse image reference}\" --output-file infra/aws-${ENVIRONMENT}-application.json"
+    "Registers ECS task definitions, creates or updates Step Functions, and wires application CloudWatch logs from passive outputs. Auto-resolves the warehouse image ref from the ECR publish stage's output file; falls back to WAREHOUSE_IMAGE_REF only if that file is missing (e.g. publish stage skipped)." \
+    "warehouse_image_ref_file=\"infra/aws-${ENVIRONMENT}-warehouse-image-ref.txt\"
+if [[ -s \"\${warehouse_image_ref_file}\" ]]; then
+  resolved_warehouse_image_ref=\"\$(cat \"\${warehouse_image_ref_file}\")\"
+else
+  resolved_warehouse_image_ref=\"\${WAREHOUSE_IMAGE_REF:?set WAREHOUSE_IMAGE_REF, or run the ECR image publish stage first so \${warehouse_image_ref_file} is created}\"
+fi
+AWS_PROFILE=${deployer_q} bash infra/scripts/deploy-aws-application.sh --env ${ENVIRONMENT} --aws-profile ${DEPLOYER_PROFILE} --aws-region ${AWS_REGION_NAME} --skip-build --image-ref \"\${resolved_warehouse_image_ref}\" --output-file infra/aws-${ENVIRONMENT}-application.json"
 
   add_stage \
     "Snowflake: native-pull foundation" \
@@ -783,7 +789,7 @@ generate_report() {
   echo "## Remediation"
   echo "- Run doctor until fail statuses are resolved."
   echo "- Create missing ignored Terraform backend and tfvars files from the templates staged under ${WORKSPACE}/setup/${ENVIRONMENT}/."
-  echo "- Set WAREHOUSE_IMAGE_REF only after a reviewed ECR image publish."
+  echo "- WAREHOUSE_IMAGE_REF is auto-resolved from the ECR image publish stage's output file; only set it manually if that stage was skipped."
   echo "- Keep data smoke bounded; do not run unbounded bootstrap from the wizard default path."
 }
 
