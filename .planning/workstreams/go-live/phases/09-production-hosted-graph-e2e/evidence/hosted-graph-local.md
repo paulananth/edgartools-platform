@@ -278,3 +278,167 @@ mirror/export bootstrap required by `sync-graph`, or revise `sync-graph` to
 consume the intended production source. Do not run a new export/bootstrap path,
 Native App graph algorithms, AWS MDM E2E, or launch matrix reconciliation until
 this source-object gap is resolved and bounded `sync-graph --limit 100` passes.
+
+## Task 4 First-Time MDM Mirror Load Approval
+
+Execution time: 2026-06-22 UTC.
+
+Operator approval received in-thread for a first-time production MDM
+Snowflake mirror load and graph deploy. This did not rerun Phase 8, rotate
+secrets, or repopulate AWS secret containers. The approved scope was:
+
+- Create/load the first-time `EDGARTOOLS_PROD.MDM` mirror from the existing
+  Snowflake Postgres MDM database.
+- Keep all existing secret values inside one non-printing shell process.
+- Rerun bounded `sync-graph --limit 100`.
+- Rerun strict `verify-graph --native-app-compute-pool CPU_X64_XS`.
+- Document the first-time load/deploy path for future operators.
+
+Runbook added:
+
+- `docs/prod-mdm-snowflake-graph-first-load.md`
+
+## Task 4 First-Time MDM Mirror Load
+
+Secret handling:
+
+- Existing production MDM and Snowflake connection values were loaded and
+  consumed inside one non-printing shell invocation.
+- Shell tracing remained disabled.
+- The values were not echoed, written to evidence, or copied into the runbook.
+- Both environment variables were unset before the shell exited.
+
+Initial attempt outcome:
+
+| Step | Status | Sanitized result |
+|---|---:|---|
+| Reflect Snowflake Postgres MDM schema | PASS | Expected table set discovered from the local MDM migration contract. |
+| Create/load `EDGARTOOLS_PROD.MDM` mirror tables | BLOCKED | Runtime role lacked create-table on the MDM mirror schema. Raw connector output was not recorded. |
+
+Approved remediation:
+
+| Statement category | Status |
+|---|---:|
+| Grant runtime role create-table on `EDGARTOOLS_PROD.MDM` | PASS |
+
+Rerun outcome:
+
+| Check | Status | Sanitized result |
+|---|---:|---|
+| MDM mirror table count | PASS | 19 current MDM mirror tables present. |
+| Total mirror row count | PASS | 135 rows loaded across mirror tables. |
+| Fresh-production zero-row tables | PASS | Empty domain/source/review/relationship-instance tables are expected for the current seed state. |
+| Graph contract seed tables | PASS | Source priority, survivorship, thresholds, normalization, entity-type definitions, relationship types, relationship property definitions, and relationship source mappings are populated. |
+
+Sanitized table-shape summary:
+
+| Table | Rows |
+|---|---:|
+| `MDM_ENTITY` | 10 |
+| `MDM_SOURCE_REF` | 0 |
+| `MDM_COMPANY` | 0 |
+| `MDM_ADVISER` | 0 |
+| `MDM_PERSON` | 0 |
+| `MDM_SECURITY` | 0 |
+| `MDM_FUND` | 0 |
+| `MDM_SOURCE_PRIORITY` | 4 |
+| `MDM_FIELD_SURVIVORSHIP` | 11 |
+| `MDM_MATCH_THRESHOLD` | 5 |
+| `MDM_NORMALIZATION_RULE` | 31 |
+| `MDM_ENTITY_ATTRIBUTE_STAGE` | 0 |
+| `MDM_MATCH_REVIEW` | 0 |
+| `MDM_CHANGE_LOG` | 0 |
+| `MDM_ENTITY_TYPE_DEFINITION` | 6 |
+| `MDM_RELATIONSHIP_TYPE` | 11 |
+| `MDM_RELATIONSHIP_PROPERTY_DEF` | 46 |
+| `MDM_RELATIONSHIP_SOURCE_MAPPING` | 11 |
+| `MDM_RELATIONSHIP_INSTANCE` | 0 |
+
+## Task 4 Bounded Graph Sync And Verification Resolution
+
+Execution time: 2026-06-22 UTC.
+
+Bounded graph sync:
+
+| Command category | Bound | Status | Sanitized result |
+|---|---:|---:|---|
+| `sync-graph` | `--limit 100` | PASS | Materialized 10 nodes and 0 edges into `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION`. |
+
+Applied graph filters:
+
+| Filter | Value |
+|---|---|
+| Entity types | none |
+| Relationship types | none |
+| Global limit | 100 |
+| Limit per type | none |
+
+Diagnostic verification:
+
+| Command category | Status | Sanitized result |
+|---|---:|---|
+| `verify-graph --skip-native-app` | PASS | SQL parity passed with 10 nodes and 0 edges. |
+
+Initial strict verification after graph sync:
+
+| Check | Status | Sanitized result |
+|---|---:|---|
+| SQL node parity | PASS | Parity status `ok`. |
+| SQL relationship parity | PASS | Parity status `ok`. |
+| Graph schema sample | PASS | Graph table sample query succeeded. |
+| Native App visibility from runtime role | BLOCKED | Runtime role could not see all required Native App/application-role context. |
+
+Approved Native App runtime-role remediation:
+
+| Grant category | Status |
+|---|---:|
+| Native App `app_user` application role to runtime role | PASS |
+| Native App `app_admin` application role to runtime role | PASS |
+
+Post-remediation metadata checks:
+
+| Check | Status | Sanitized result |
+|---|---:|---|
+| `app_user` role visible to runtime role | PASS | Application-role mapping visible. |
+| `app_admin` role visible to runtime role | PASS | Application-role mapping visible. |
+
+Final strict verification:
+
+| Check | Status | Sanitized result |
+|---|---:|---|
+| `verify-graph --native-app-compute-pool CPU_X64_XS` | PASS | Command exited 0. |
+| Overall payload status | PASS | `ok`. |
+| Node count | PASS | 10. |
+| Edge count | PASS | 0. |
+| Node parity | PASS | `ok`. |
+| Relationship parity | PASS | `ok`. |
+| Native App status | PASS | `ok`. |
+| Compute pool | PASS | `CPU_X64_XS`. |
+| Native App installation check | PASS | Installed application visible to runtime role. |
+| Native App user role check | PASS | Expected application-role grant visible. |
+| Native App admin role check | PASS | Expected application-role grant visible. |
+| Database role to application check | PASS | Expected database-role grant visible. |
+| Database role privilege check | PASS | Required privilege categories visible. |
+| Compute pool check | PASS | Approved compute pool visible. |
+| Graph schema sample check | PASS | Graph tables queryable. |
+| Graph info check | PASS | Native App graph metadata query passed. |
+| BFS check | PASS | Native App bounded traversal check passed. |
+| WCC check | PASS | Native App component check passed. |
+
+Final secret-safety checks:
+
+- No secret-shaped output was emitted by the sanitized wrappers.
+- Raw connector traces and full generated JSON were not committed.
+- Both secret-derived environment variables were unset after use.
+
+## Plan 09-01 Final Disposition
+
+Phase 9 Plan 09-01 is complete:
+
+- Production Native App prerequisites are ready.
+- First-time `EDGARTOOLS_PROD.MDM` mirror load is documented and complete.
+- Bounded production graph sync passed with explicit limits.
+- Strict production `mdm verify-graph` passed with Native App checks enabled.
+
+Blocker 4 remains open until Phase 9 Plan 09-02 runs the production AWS MDM
+E2E path and the launch matrix is reconciled there.
