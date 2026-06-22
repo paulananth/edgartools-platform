@@ -815,23 +815,44 @@ precedent and known gap).
 
 ---
 
-## External Neo4j runtime remnant deprecation
+## External Neo4j runtime remnant deprecation — CONFIRMED HARD PRODUCTION BLOCKER (2026-06-22)
 
 **What:** Formally remove or deprecate any remaining external (Aura) Neo4j
 runtime references and infrastructure remnants now that the platform is
 fully migrated to the Snowflake-hosted graph Native App.
 
-**Why:** Phase 4 already cleaned up `NEO4J_*` environment variable
-references from the dashboard README, but a formal Neo4j runtime remnant
-deprecation pass (any remaining Terraform resources, secrets, or
-documentation pointing at an external Neo4j runtime) has not been done.
-This is tracked as a deferred "Future Requirements" item in
-REQUIREMENTS.md and should not silently expand the go-live milestone
-scope.
+**Why (updated):** Originally tracked as deferred cleanup debt. The go-live
+workstream's Phase 9 Plan 09-02 production AWS MDM E2E run (PR #81, merged
+to `main` as `24ab70c`) proved this is not just cleanup debt — it is a hard
+production blocker. The `edgartools-prod-mdm-small` ECS task definition
+(produced by `infra/scripts/deploy-aws-application.sh`) still wires a
+`NEO4J_*`-prefixed secrets injection from `edgartools-prod/mdm/neo4j` into
+every MDM task, including `mdm migrate`, which has nothing to do with
+Neo4j. `edgartools-prod/mdm/neo4j` is intentionally never populated (Neo4j
+is deprecated, superseded by the Snowflake-hosted graph) — so the
+`mdm_migrate` ECS task fails to start (`ResourceInitializationError`,
+no `AWSCURRENT` secret version), and every downstream state machine in the
+chain (`mdm_check_connectivity`, `mdm_run`, `mdm_backfill_relationships`,
+`mdm_sync_graph`, `mdm_verify_graph`, `mdm_counts`) never starts.
+`run-aws-mdm-e2e.sh`'s own preflight warning about lingering `NEO4J_*`
+references treats this as warning-only "unless it blocks `mdm_sync_graph`
+or `mdm_verify_graph`" — that scope was too narrow; the wiring also blocks
+`mdm_migrate`, upstream of both. Full 5-whys and sanitized failure detail:
+`.planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md`.
 
-**Where:** REQUIREMENTS.md ("Future Requirements" section); search for
-remaining `NEO4J_*`/Aura references outside the dashboard README already
-cleaned up in Phase 4.
+**Fix (not yet done, requires separate operator approval):** Remove the
+`NEO4J_*`/`edgartools-prod/mdm/neo4j` secrets injection from the MDM task
+definition(s) in `deploy-aws-application.sh` (or its template), redeploy
+the already-applied Phase 6 ECS task definitions (production-impacting),
+then re-run the AWS MDM E2E chain from `mdm_migrate` onward. Do not
+populate `edgartools-prod/mdm/neo4j` as a workaround — that secret is out
+of scope for this architecture. This blocks go-live Blocker 4
+(STATE.md) from closing.
+
+**Where:** `infra/scripts/deploy-aws-application.sh` (MDM task-definition
+template); REQUIREMENTS.md ("Future Requirements" section, now superseded
+by the above for go-live purposes); search for remaining `NEO4J_*`/Aura
+references outside the dashboard README already cleaned up in Phase 4.
 
 ---
 
