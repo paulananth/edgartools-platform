@@ -1877,6 +1877,133 @@ pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", en
 PY
 }
 
+# One-click cold-start/recovery pipeline for an existing bronze snapshot:
+#   seed-bronze-batches (lists CIKs from S3 bronze directly) → parallel bootstrap-batch
+#   (uses cached bronze, zero SEC calls) → MDM chain → gold-refresh.
+# Use when an environment's bronze was copied in from elsewhere (e.g. dev → prod via
+# `aws s3 sync`) and silver/MDM/Neo4j/Snowflake have never been built from it — unlike
+# silver_mdm_gold, this does NOT depend on silver DuckDB's own bookkeeping tables
+# (sec_company_sync_state), which are empty in that scenario. No execution input required.
+write_bronze_seed_silver_gold_definition() {
+  local output_file="$1"
+  local wh_task_medium_arn="$2"  # warehouse medium (seed-bronze-batches, bootstrap-batch)
+  local mdm_task_small_arn="$3"  # mdm small   (mdm verify-graph)
+  local mdm_task_medium_arn="$4" # mdm medium  (mdm run, backfill, sync)
+  local wh_task_large_arn="$5"   # warehouse large (gold-refresh)
+
+  python3 - "$output_file" "$CLUSTER_ARN" \
+    "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
+    "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
+    "$BOOTSTRAP_BATCH_CONCURRENCY" "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" <<'PY'
+import json, pathlib, sys
+
+(output_file, cluster_arn,
+ wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
+ container_name, bronze_bucket_name, subnet_json, security_group_json,
+ batch_concurrency, mdm_run_limit, mdm_graph_limit) = sys.argv[1:]
+
+subnets = json.loads(subnet_json)
+security_groups = json.loads(security_group_json)
+
+def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=120):
+    s = {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::ecs:runTask.sync",
+        "Parameters": {
+            "LaunchType": "FARGATE",
+            "Cluster": cluster_arn,
+            "TaskDefinition": task_def_arn,
+            "PropagateTags": "TASK_DEFINITION",
+            "NetworkConfiguration": {"AwsvpcConfiguration": {
+                "AssignPublicIp": "ENABLED",
+                "SecurityGroups": security_groups,
+                "Subnets": subnets,
+            }},
+            "Overrides": {"ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}]},
+        },
+        "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": retry_secs,
+                   "BackoffRate": 2.0, "MaxAttempts": 3}],
+    }
+    if is_end:
+        s["End"] = True
+    else:
+        s["Next"] = next_state
+    return s
+
+mdm_limit   = str(mdm_run_limit)
+graph_limit = str(mdm_graph_limit)
+
+# seed-bronze-batches lists CIKs straight from S3 bronze (submissions/sec/cik={cik}/...) —
+# no SEC API calls, no dependency on silver's own bookkeeping tables. Writes the same
+# cik_batches.jsonl format bootstrap-batch expects, so BatchSilver below is unchanged
+# from silver_mdm_gold's.
+seed_from_bronze = ecs_state(wh_medium_arn,
+    "States.Array('seed-bronze-batches', '--run-id', $$.Execution.Name, '--batch-size', $.batch_size)",
+    next_state="BatchSilver", retry_secs=60)
+
+# INVARIANT: bronze_seed_silver_gold must make ZERO SEC API calls.
+# --artifact-policy skip is REQUIRED here — without it bootstrap-batch fetches
+# ownership XMLs for every Form 3/4/5 filing even though every byte of bronze
+# this pipeline touches is already cached in S3.
+batch = ecs_state(wh_medium_arn,
+    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'skip', '--run-id', $$.Execution.Name)",
+    is_end=True)
+
+batch_map = {
+    "Type": "Map",
+    "MaxConcurrency": int(batch_concurrency),
+    "Comment": "Re-process silver + artifacts from cached bronze. Submissions not re-downloaded.",
+    "ToleratedFailurePercentage": 0,
+    "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
+        "Parameters": {
+            "Bucket": bronze_bucket_name,
+            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_batches.jsonl', $$.Execution.Name)",
+        },
+    },
+    "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
+        "StartAt": "RunBatch",
+        "States": {"RunBatch": batch},
+    },
+    "ResultPath": None,
+    "Next": "MdmRun",
+}
+
+# INVARIANT: No --limit on MDM commands here. bronze_seed_silver_gold is always a full
+# bulk run (all CIKs found in bronze), not an incremental daily update.
+mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="MdmBackfill")
+mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmSync")
+mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="MdmVerify")
+mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh")
+gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
+
+definition = {
+    "Comment": (
+        "One-click cold-start/recovery from an existing bronze snapshot: "
+        "(1) seed batch file by listing CIKs directly from S3 bronze (zero SEC calls, "
+        "works even when silver has never been built), "
+        "(2) parallel bootstrap-batch uses bronze SHA256 cache for submissions + runs artifact pipeline, "
+        "(3) MDM entity resolution + Neo4j sync, "
+        "(4) gold build + Snowflake export manifest. "
+        "Trigger with: {} or {\"batch_size\": 100}"
+    ),
+    "StartAt": "SeedFromBronze",
+    "States": {
+        "SeedFromBronze": seed_from_bronze,
+        "BatchSilver":  batch_map,
+        "MdmRun":       mdm_run,
+        "MdmBackfill":  mdm_backfill,
+        "MdmSync":      mdm_sync,
+        "MdmVerify":    mdm_verify,
+        "GoldRefresh":  gold,
+    },
+}
+pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
 upsert_state_machine() {
   local workflow="$1" definition_file="$2" role_arn="$3" logging_file="$4" name arn existing_arn
   name="${NAME_PREFIX}-${workflow//_/-}"
@@ -2111,6 +2238,20 @@ PY
   silver_mdm_gold_arn="$(upsert_state_machine silver_mdm_gold "$silver_mdm_gold_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
   python3 - "silver_mdm_gold" "$silver_mdm_gold_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+import json, sys
+print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
+PY
+
+  # bronze_seed_silver_gold: one-click cold-start/recovery from an existing bronze
+  # snapshot (e.g. copied in from another environment) through silver → MDM → Neo4j →
+  # Snowflake. Unlike silver_mdm_gold, does not depend on silver already knowing about
+  # the CIKs — discovers them directly from S3 bronze.
+  bronze_seed_silver_gold_file="$(json_file sfn-bronze-seed-silver-gold)"
+  write_bronze_seed_silver_gold_definition "$bronze_seed_silver_gold_file" \
+    "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN"
+  bronze_seed_silver_gold_arn="$(upsert_state_machine bronze_seed_silver_gold "$bronze_seed_silver_gold_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
+  python3 - "bronze_seed_silver_gold" "$bronze_seed_silver_gold_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
 import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
