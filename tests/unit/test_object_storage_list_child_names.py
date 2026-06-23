@@ -25,3 +25,20 @@ def test_list_child_names_returns_empty_when_dir_empty(tmp_path):
     (tmp_path / "submissions" / "sec").mkdir(parents=True)
 
     assert root.list_child_names("submissions/sec") == []
+
+
+def test_find_existing_matches_glob_across_date_segments(tmp_path):
+    root = StorageLocation(str(tmp_path))
+    (tmp_path / "submissions" / "sec" / "cik=320193" / "main" / "2026" / "01" / "01").mkdir(parents=True)
+    (tmp_path / "submissions" / "sec" / "cik=320193" / "main" / "2026" / "01" / "01" / "CIK0000320193.json").write_text("{}")
+
+    matches = root.find_existing("submissions/sec/cik=320193/main/*/*/*/CIK0000320193.json")
+
+    assert len(matches) == 1
+    assert matches[0].endswith("CIK0000320193.json")
+
+
+def test_find_existing_returns_empty_when_no_match(tmp_path):
+    root = StorageLocation(str(tmp_path))
+
+    assert root.find_existing("submissions/sec/cik=320193/main/*/*/*/CIK0000320193.json") == []

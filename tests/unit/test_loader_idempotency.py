@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 
 from edgar_warehouse import bronze_filing_artifacts
 from edgar_warehouse.application import warehouse_orchestrator
+from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 
 
@@ -25,6 +26,13 @@ class _CheckpointDb:
             "bronze_path": self._bronze_path,
             "last_sha256": self._sha256,
         }
+
+
+class _NoCheckpointDb:
+    """Simulates a fresh silver database that has never processed this CIK locally."""
+
+    def get_source_checkpoint(self, source_name: str, source_key: str):
+        return None
 
 
 class _ArtifactDb:
@@ -104,6 +112,55 @@ class LoaderIdempotencyTests(unittest.TestCase):
                     cik=320193,
                     fetch_date=date(2026, 5, 8),
                     force=True,
+                )
+
+        self.assertFalse(result["write_record"].get("cached", False))
+        self.assertEqual(downloader.call_count, 1)
+
+    def test_no_checkpoint_but_existing_bronze_skips_sec_download(self) -> None:
+        """A fresh silver DB (no checkpoint for this CIK) must still find bronze that
+        already exists in storage from another environment's run (e.g. synced via
+        `aws s3 sync`), rather than re-fetching from SEC. Regression test for the bug
+        where bronze_seed_silver_gold made thousands of live SEC calls despite the
+        CIKs already having bronze in S3."""
+        cik = 320193
+        payload = b'{"cik": "0000320193", "filings": {"recent": {}}}'
+        with tempfile.TemporaryDirectory() as tmp:
+            bronze_root = StorageLocation(tmp)
+            # Bronze was captured on a past date by a different run/environment —
+            # there is no checkpoint for it in this (fresh) silver database.
+            relative_path = default_path_resolver().submissions_main_path(cik, date(2026, 1, 1))
+            bronze_root.write_bytes(relative_path, payload)
+            context = SimpleNamespace(bronze_root=bronze_root, identity="tester@example.com")
+            db = _NoCheckpointDb()
+
+            with patch.object(warehouse_orchestrator, "_download_sec_bytes", side_effect=AssertionError("SEC download")):
+                result = warehouse_orchestrator._capture_submissions_main(
+                    context=context,
+                    db=db,
+                    cik=cik,
+                    fetch_date=date(2026, 5, 8),
+                    force=False,
+                )
+
+        self.assertTrue(result["write_record"]["cached"])
+        self.assertEqual(result["write_record"]["sha256"], hashlib.sha256(payload).hexdigest())
+
+    def test_no_checkpoint_and_no_existing_bronze_downloads_from_sec(self) -> None:
+        """No checkpoint and no existing bronze anywhere -> must still hit SEC."""
+        with tempfile.TemporaryDirectory() as tmp:
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+            db = _NoCheckpointDb()
+            payload = b'{"cik": "0000320193", "filings": {"recent": {}}}'
+            downloader = Mock(return_value=payload)
+
+            with patch.object(warehouse_orchestrator, "_download_sec_bytes", downloader):
+                result = warehouse_orchestrator._capture_submissions_main(
+                    context=context,
+                    db=db,
+                    cik=320193,
+                    fetch_date=date(2026, 5, 8),
+                    force=False,
                 )
 
         self.assertFalse(result["write_record"].get("cached", False))

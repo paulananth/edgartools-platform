@@ -192,6 +192,28 @@ class WarehousePathResolver:
             document_name=self.submissions_main_filename(cik),
         )
 
+    def submissions_main_glob(self, cik: int) -> str:
+        """Glob matching this CIK's main snapshot under any previously-captured date.
+
+        Used to find bronze already captured by another run/environment without
+        knowing which date_path it was written under.
+        """
+        return self._render(
+            "submissions.main.path",
+            cik=cik,
+            date_path="*/*/*",
+            document_name=self.submissions_main_filename(cik),
+        )
+
+    def submissions_pagination_glob(self, cik: int, document_name: str) -> str:
+        """Glob matching this CIK's pagination file under any previously-captured date."""
+        return self._render(
+            "submissions.pagination.path",
+            cik=cik,
+            date_path="*/*/*",
+            document_name=document_name,
+        )
+
     def submissions_pagination_path(self, cik: int, fetch_date: date, document_name: str) -> str:
         return self._render(
             "submissions.pagination.path",
