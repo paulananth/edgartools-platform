@@ -1878,7 +1878,7 @@ PY
 }
 
 # One-click cold-start/recovery pipeline for an existing bronze snapshot:
-#   seed-bronze-batches (lists CIKs from S3 bronze directly) → parallel bootstrap-batch
+#   seed-bronze-batches (lists CIKs from S3 bronze directly) → sequential bootstrap-batch
 #   (uses cached bronze, zero SEC calls) → MDM chain → gold-refresh.
 # Use when an environment's bronze was copied in from elsewhere (e.g. dev → prod via
 # `aws s3 sync`) and silver/MDM/Neo4j/Snowflake have never been built from it — unlike
@@ -1970,8 +1970,8 @@ batch = ecs_state(wh_medium_arn,
 
 batch_map = {
     "Type": "Map",
-    "MaxConcurrency": int(batch_concurrency),
-    "Comment": "Re-process silver + artifacts from cached bronze. Submissions not re-downloaded.",
+    "MaxConcurrency": 1,
+    "Comment": "First-load recovery from cached bronze. Runs sequentially so monolith fallback cannot race.",
     "ToleratedFailurePercentage": 0,
     "ItemReader": {
         "Resource": "arn:aws:states:::s3:getObject",
@@ -2003,7 +2003,7 @@ definition = {
         "One-click cold-start/recovery from an existing bronze snapshot: "
         "(1) seed batch file by listing CIKs directly from S3 bronze (zero SEC calls, "
         "works even when silver has never been built), "
-        "(2) parallel bootstrap-batch uses bronze SHA256 cache for submissions + runs artifact pipeline, "
+        "(2) sequential bootstrap-batch uses bronze SHA256 cache for submissions + runs artifact pipeline, "
         "(3) MDM entity resolution + Neo4j sync, "
         "(4) gold build + Snowflake export manifest. "
         "Trigger with: {} or {\"batch_size\": 100}"

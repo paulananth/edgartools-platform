@@ -65,6 +65,14 @@ def test_bronze_seed_state_machine_defaults_and_stringifies_batch_size() -> None
     assert "'--batch-size', $.batch_size" not in text
 
 
+def test_bronze_seed_state_machine_runs_batch_silver_sequentially() -> None:
+    text = _read(DEPLOY_SCRIPT)
+
+    assert '"MaxConcurrency": 1' in text
+    assert "First-load recovery from cached bronze. Runs sequentially so monolith fallback cannot race." in text
+    assert "sequential bootstrap-batch uses bronze SHA256 cache" in text
+
+
 def test_deploy_script_still_injects_mdm_database_url_into_warehouse_and_mdm_tasks() -> None:
     text = _read(DEPLOY_SCRIPT)
 
