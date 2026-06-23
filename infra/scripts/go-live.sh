@@ -370,8 +370,10 @@ known_go_live_notes_markdown() {
 - `bronze_seed_silver_gold` now needs the Step Functions `batch_size` input defaulted and stringified before ECS `ContainerOverrides.Command`; older deployed definitions can fail immediately in `SeedFromBronze`.
 - Fresh silver stores may not contain the legacy `sec_tracked_universe` table; table-count reporting must treat that missing table as zero so `seed-bronze-batches` can finish after writing the CIK batch manifest.
 - First-time copied-bronze loads may not have `warehouse/silver/sec/shard-manifest.json`; current code falls back to monolith silver and the `bronze_seed_silver_gold` recovery workflow runs `BatchSilver` sequentially to avoid write races.
-- Current prod status: `SeedFromBronze` has succeeded and discovered 8,006 CIKs / 81 batches, but prod still needs redeploy with the latest warehouse image and a fresh live `bronze_seed_silver_gold` run before MDM, graph verification, and gold can be accepted.
+- Current prod status (2026-06-23): prod redeployed at ECS task-def revision 11 with the correct warehouse and MDM images; a fresh `bronze_seed_silver_gold` execution is in flight. Do not flip Blocker 4 to PASS until it's confirmed SUCCEEDED.
 - Do not flip Blocker 4 / hosted graph E2E to PASS until `SeedFromBronze`, `BatchSilver`, `MdmRun`, `MdmBackfill`, `MdmSync`, `MdmVerify`, and `GoldRefresh` all succeed in prod and the run shows zero `sec_pull_started` events during `BatchSilver`.
+- `deploy-aws-application.sh --enable-mdm` silently defaults MDM task definitions to the *warehouse* image ref when `--mdm-image-ref` is omitted -- they need different images (MDM installs `.[s3,mdm-runtime]`, warehouse installs `.[s3]`). Always pass `--mdm-image-ref` explicitly; the go-live wizard's stages now do this automatically by publishing and resolving both image refs separately.
+- `cleanup-ecr-images.sh` only protects image digests referenced by *currently active* ECS task definitions. If you redeploy with a stale cached image ref (e.g. from an old `infra/aws-<env>-application.json` or a manually-typed digest) and then run cleanup, the digest you're about to deploy can be deleted out from under you if it isn't the one already active. Always redeploy with a freshly published or freshly verified-present image ref before running ECR cleanup, not after assuming an old digest is still around.
 EOF
 }
 
@@ -578,19 +580,26 @@ AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform apply"
 
   add_stage \
     "AWS: ECR image publish" \
-    "Publishes the warehouse image to AWS ECR with dev and immutable rollback/audit tags. Writes the resolved digest-pinned image ref to a local file so the next stage can pick it up automatically." \
-    "AWS_PROFILE=${deployer_q} bash infra/scripts/publish-warehouse-image.sh --aws-region ${AWS_REGION_NAME} --ecr-repository edgartools-${ENVIRONMENT}-warehouse --role warehouse --image-tag ${image_tag} --mode auto --cache-from-tag ${ENVIRONMENT} --also-tag ${ENVIRONMENT} --output-file infra/aws-${ENVIRONMENT}-warehouse-image-ref.txt"
+    "Publishes the warehouse AND MDM images to AWS ECR with dev and immutable rollback/audit tags. Writes both resolved digest-pinned image refs to local files so the next stage can pick them up automatically. Publishing both here (not just warehouse) is required: deploy-aws-application.sh silently defaults the MDM task definitions to the warehouse image ref when --mdm-image-ref is omitted, which is wrong (MDM has different runtime deps, .[s3,mdm-runtime] vs .[s3]) and was hit live in production on 2026-06-23." \
+    "AWS_PROFILE=${deployer_q} bash infra/scripts/publish-warehouse-image.sh --aws-region ${AWS_REGION_NAME} --ecr-repository edgartools-${ENVIRONMENT}-warehouse --role warehouse --image-tag ${image_tag} --mode auto --cache-from-tag ${ENVIRONMENT} --also-tag ${ENVIRONMENT} --output-file infra/aws-${ENVIRONMENT}-warehouse-image-ref.txt
+AWS_PROFILE=${deployer_q} bash infra/scripts/publish-warehouse-image.sh --aws-region ${AWS_REGION_NAME} --ecr-repository edgartools-${ENVIRONMENT}-mdm --role mdm --image-tag ${image_tag} --mode auto --cache-from-tag ${ENVIRONMENT} --also-tag ${ENVIRONMENT} --output-file infra/aws-${ENVIRONMENT}-mdm-image-ref.txt"
 
   add_stage \
     "AWS: ECS task definitions and Step Functions" \
-    "Registers ECS task definitions, creates or updates Step Functions, and wires application CloudWatch logs from passive outputs. Auto-resolves the warehouse image ref from the ECR publish stage's output file; falls back to WAREHOUSE_IMAGE_REF only if that file is missing (e.g. publish stage skipped)." \
+    "Registers ECS task definitions (warehouse AND MDM), creates or updates all Step Functions including bronze_seed_silver_gold, and wires application CloudWatch logs from passive outputs. Auto-resolves both image refs from the ECR publish stage's output files; falls back to WAREHOUSE_IMAGE_REF/MDM_IMAGE_REF only if those files are missing (e.g. publish stage skipped). Always passes --mdm-image-ref explicitly and --enable-mdm so the MDM task definitions never silently fall back to the warehouse image." \
     "warehouse_image_ref_file=\"infra/aws-${ENVIRONMENT}-warehouse-image-ref.txt\"
+mdm_image_ref_file=\"infra/aws-${ENVIRONMENT}-mdm-image-ref.txt\"
 if [[ -s \"\${warehouse_image_ref_file}\" ]]; then
   resolved_warehouse_image_ref=\"\$(cat \"\${warehouse_image_ref_file}\")\"
 else
   resolved_warehouse_image_ref=\"\${WAREHOUSE_IMAGE_REF:?set WAREHOUSE_IMAGE_REF, or run the ECR image publish stage first so \${warehouse_image_ref_file} is created}\"
 fi
-AWS_PROFILE=${deployer_q} bash infra/scripts/deploy-aws-application.sh --env ${ENVIRONMENT} --aws-profile ${DEPLOYER_PROFILE} --aws-region ${AWS_REGION_NAME} --skip-build --image-ref \"\${resolved_warehouse_image_ref}\" --output-file infra/aws-${ENVIRONMENT}-application.json"
+if [[ -s \"\${mdm_image_ref_file}\" ]]; then
+  resolved_mdm_image_ref=\"\$(cat \"\${mdm_image_ref_file}\")\"
+else
+  resolved_mdm_image_ref=\"\${MDM_IMAGE_REF:?set MDM_IMAGE_REF, or run the ECR image publish stage first so \${mdm_image_ref_file} is created}\"
+fi
+AWS_PROFILE=${deployer_q} bash infra/scripts/deploy-aws-application.sh --env ${ENVIRONMENT} --aws-profile ${DEPLOYER_PROFILE} --aws-region ${AWS_REGION_NAME} --skip-build --image-ref \"\${resolved_warehouse_image_ref}\" --mdm-image-ref \"\${resolved_mdm_image_ref}\" --enable-mdm --output-file infra/aws-${ENVIRONMENT}-application.json"
 
   add_stage \
     "Snowflake: native-pull foundation" \
@@ -622,6 +631,25 @@ snow sql --connection ${SNOW_CONNECTION} --filename infra/snowflake/sql/neo4j_gr
     "MDM + graph: secret bootstrap" \
     "Writes the Snowflake Postgres application DSN to the AWS Secrets Manager container without putting the value in Terraform." \
     "printf '%s' \"\${SNOWFLAKE_APPLICATION_MDM_DSN:?set SNOWFLAKE_APPLICATION_MDM_DSN}\" | bash infra/scripts/bootstrap-aws-mdm-secrets.sh --env ${ENVIRONMENT} --aws-profile ${AWS_PROFILE_NAME} --aws-region ${AWS_REGION_NAME} --dsn-stdin"
+
+  add_stage \
+    "AWS: bronze_seed_silver_gold (one-click data refresh)" \
+    "Starts the bronze_seed_silver_gold Step Function, which discovers CIKs directly from existing S3 bronze (zero new SEC calls) and chains SeedFromBronze -> BatchSilver -> MdmRun -> MdmBackfill -> MdmSync -> MdmVerify -> GoldRefresh on ECS. Polls until the execution reaches a terminal state and fails this stage unless it reaches SUCCEEDED. This is the canonical one-click path for cold-starting or recovering an environment's silver/MDM/gold from a bronze snapshot that's already in S3 (e.g. synced in from another environment) -- see CLAUDE.md's phased pipeline table." \
+    "account_id=\"\$(aws --profile ${deployer_q} sts get-caller-identity --query Account --output text)\"
+state_machine_arn=\"arn:aws:states:${AWS_REGION_NAME}:\${account_id}:stateMachine:edgartools-${ENVIRONMENT}-bronze-seed-silver-gold\"
+execution_name=\"bronze-seed-silver-gold-\$(date +%s)\"
+execution_arn=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions start-execution --state-machine-arn \"\${state_machine_arn}\" --name \"\${execution_name}\" --input '{\"batch_size\": 100}' --query executionArn --output text)\"
+echo \"Started execution: \${execution_arn}\"
+while true; do
+  status=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions describe-execution --execution-arn \"\${execution_arn}\" --query status --output text)\"
+  echo \"Status: \${status}\"
+  case \"\${status}\" in
+    SUCCEEDED) break ;;
+    FAILED|ABORTED|TIMED_OUT) echo \"Execution did not succeed: \${status}. Inspect via: aws stepfunctions get-execution-history --execution-arn \${execution_arn}\" >&2; exit 1 ;;
+    *) sleep 25 ;;
+  esac
+done
+echo \"bronze_seed_silver_gold SUCCEEDED. Do not treat this alone as Blocker 4 / hosted-graph-E2E PASS -- separately confirm via CloudWatch logs that zero sec_pull_started events occurred during BatchSilver.\""
 
   add_stage \
     "MDM + graph: connectivity, migrations, sync, verification" \
