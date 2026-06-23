@@ -174,6 +174,16 @@ class WarehousePathResolver:
     def submissions_main_filename(self, cik: int) -> str:
         return self._render("submissions.main.filename", cik=cik)
 
+    def submissions_cik_root_path(self) -> str:
+        """Return the relative directory containing per-CIK submissions folders."""
+        template = self._catalog.get("submissions.main.path")
+        marker = "/cik={cik}/"
+        if marker not in template:
+            raise WarehouseRuntimeError(
+                "submissions.main.path must contain a per-CIK directory segment"
+            )
+        return template.split(marker, 1)[0]
+
     def submissions_main_path(self, cik: int, fetch_date: date) -> str:
         return self._render(
             "submissions.main.path",
