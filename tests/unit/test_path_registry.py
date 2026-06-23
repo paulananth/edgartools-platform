@@ -90,6 +90,7 @@ class WarehousePathResolverTests(unittest.TestCase):
     def test_resolver_builds_submission_paths_and_filename_contracts(self) -> None:
         fetch_date = date(2026, 4, 22)
         self.assertEqual(self.resolver.submissions_main_filename(1750), "CIK0000001750.json")
+        self.assertEqual(self.resolver.submissions_cik_root_path(), "submissions/sec")
         self.assertEqual(
             self.resolver.submissions_main_path(1750, fetch_date),
             "submissions/sec/cik=1750/main/2026/04/22/CIK0000001750.json",

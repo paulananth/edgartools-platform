@@ -2380,11 +2380,9 @@ def _write_cik_universe_batches(
 def _list_bronze_submission_ciks(context: WarehouseCommandContext) -> list[str]:
     """List distinct CIKs that have submissions bronze data, by listing S3/local
     directly (no SEC calls, no silver/MDM bookkeeping dependency).
-
-    Mirrors the `submissions/sec/cik={cik}/...` layout in
-    edgar_warehouse/config/warehouse_paths.properties.
     """
-    names = context.bronze_root.list_child_names("submissions/sec")
+    submissions_root = default_path_resolver().submissions_cik_root_path()
+    names = context.bronze_root.list_child_names(submissions_root)
     ciks: set[str] = set()
     for name in names:
         if not name.startswith("cik="):
