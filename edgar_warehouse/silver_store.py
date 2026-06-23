@@ -2105,6 +2105,13 @@ class SilverDatabase:
         ]
         counts: dict[str, int] = {}
         for table in tables:
+            exists = self._conn.execute(
+                "SELECT 1 FROM duckdb_tables() WHERE table_name = ? LIMIT 1",
+                [table],
+            ).fetchone()
+            if exists is None:
+                counts[table] = 0
+                continue
             row = self._conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
             counts[table] = row[0] if row else 0
         return counts
