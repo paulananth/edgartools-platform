@@ -295,9 +295,9 @@ secret_arn_by_name() {
 # neither candidate exists yet (e.g. infra not provisioned yet, dry-run).
 resolve_bucket_name() {
   local purpose="$1" suffixed="${NAME_PREFIX}-${1}-${ACCOUNT_ID}" unsuffixed="${NAME_PREFIX}-${1}"
-  if aws_cli s3api head-bucket --bucket "$unsuffixed" 2>/dev/null; then
+  if aws_cli s3api head-bucket --bucket "$unsuffixed" >/dev/null 2>&1; then
     echo "$unsuffixed"
-  elif aws_cli s3api head-bucket --bucket "$suffixed" 2>/dev/null; then
+  elif aws_cli s3api head-bucket --bucket "$suffixed" >/dev/null 2>&1; then
     echo "$suffixed"
   else
     echo "WARNING: neither s3://${unsuffixed} nor s3://${suffixed} exists; defaulting to s3://${suffixed} (verify Terraform has been applied)" >&2
