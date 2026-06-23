@@ -368,6 +368,78 @@ def test_bootstrap_chunk_uses_shard_aware_hydrate() -> None:
     )
 
 
+def test_bootstrap_chunk_missing_shard_manifest_falls_back_to_monolith() -> None:
+    """First-load recovery can run before shard-manifest.json exists."""
+    from unittest.mock import MagicMock, patch
+
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _execute_warehouse_bronze_capture,
+    )
+
+    storage_root = MagicMock()
+    storage_root.is_remote = True
+    storage_root.root = "s3://bucket"
+    storage_root.join.side_effect = lambda *parts: "s3://bucket/" + "/".join(parts)
+
+    silver_root = MagicMock()
+    silver_root.is_remote = False
+    silver_root.root = "/tmp/silver"
+    silver_root.join.side_effect = lambda *parts: "/tmp/silver/" + "/".join(parts)
+
+    context = MagicMock()
+    context.bronze_root = storage_root
+    context.storage_root = storage_root
+    context.silver_root = silver_root
+    context.snowflake_export_root = None
+    context.runtime_mode = "bronze_capture"
+    context.environment_name = "test"
+
+    mock_db = MagicMock()
+    mock_db.get_table_counts.return_value = {}
+
+    with (
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._read_shard_manifest",
+            side_effect=FileNotFoundError("shard-manifest.json"),
+        ) as mock_read_manifest,
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage",
+        ) as mock_monolith_hydrate,
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
+            return_value=mock_db,
+        ) as mock_open_monolith,
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator.open_silver_shard",
+        ) as mock_open_shard,
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_if_remote",
+            return_value=None,
+        ) as mock_monolith_publish,
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._capture_bronze_raw",
+            return_value=([], {"rows_inserted": 0, "rows_skipped": 0, "sync_status": "succeeded"}),
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._planned_writes",
+            return_value={},
+        ),
+        patch("edgar_warehouse.application.warehouse_orchestrator._emit_pipeline_event"),
+        patch("edgar_warehouse.application.warehouse_orchestrator._resolve_run_id", return_value="run-1"),
+    ):
+        _execute_warehouse_bronze_capture(
+            context=context,
+            command_name="bootstrap-batch",
+            arguments={"cik_list": [1_100_000, 1_200_000]},
+        )
+
+    mock_read_manifest.assert_called_once()
+    mock_monolith_hydrate.assert_called_once()
+    assert mock_open_monolith.called
+    mock_open_shard.assert_not_called()
+    mock_monolith_publish.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # Plan 03: ShardedSilverReader multi-shard ATTACH union (Plan 03 implements)
 # ---------------------------------------------------------------------------

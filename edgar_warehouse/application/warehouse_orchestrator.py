@@ -297,39 +297,52 @@ def _execute_warehouse_bronze_capture(
         cik_min = min(chunk_ciks)
         cik_max = max(chunk_ciks)
         from edgar_warehouse.application.sharding.shard_manifest import shards_for_window
-        manifest = _read_shard_manifest(context)
-        overlapping = shards_for_window(manifest, cik_min, cik_max)
-        if not overlapping:
-            # No shard covers this window — fall back to monolith path.
+
+        try:
+            manifest = _read_shard_manifest(context)
+        except (FileNotFoundError, OSError):
+            # First-load recovery can start from copied bronze before a shard
+            # manifest exists. Fall back to the monolith path; the recovery
+            # state machine runs BatchSilver sequentially to avoid write races.
+            _emit_pipeline_event(
+                "shard_manifest_missing_monolith_fallback",
+                command=command_name,
+                run_id=run_id,
+            )
             _using_shard_path = False
         else:
-            if len(overlapping) > 1:
-                # A 500-CIK window spanning two shard bands is unusual but possible near
-                # band boundaries.  Only the first overlapping shard is the write target
-                # (operational invariant: configure cik_limit so windows don't straddle
-                # boundaries).  Log a warning but do not error out.
-                _emit_pipeline_event(
-                    "shard_window_crosses_band_boundary",
-                    command=command_name,
-                    run_id=run_id,
-                    cik_min=cik_min,
-                    cik_max=cik_max,
-                    overlapping_shards=overlapping,
-                    write_shard=overlapping[0],
-                )
-            _active_shard_index = overlapping[0]
-            local_shard_path = _hydrate_shard_for_window(context, _active_shard_index)
-            if local_shard_path is None:
-                # Shard doesn't exist in remote storage yet — fall back to monolith.
+            overlapping = shards_for_window(manifest, cik_min, cik_max)
+            if not overlapping:
+                # No shard covers this window — fall back to monolith path.
                 _using_shard_path = False
             else:
-                scope = _resolve_scope(
-                    command_name=command_name,
-                    arguments=arguments,
-                    now=now,
-                    silver_root=None,
-                )
-                db = open_silver_shard(local_shard_path)
+                if len(overlapping) > 1:
+                    # A 500-CIK window spanning two shard bands is unusual but possible near
+                    # band boundaries.  Only the first overlapping shard is the write target
+                    # (operational invariant: configure cik_limit so windows don't straddle
+                    # boundaries).  Log a warning but do not error out.
+                    _emit_pipeline_event(
+                        "shard_window_crosses_band_boundary",
+                        command=command_name,
+                        run_id=run_id,
+                        cik_min=cik_min,
+                        cik_max=cik_max,
+                        overlapping_shards=overlapping,
+                        write_shard=overlapping[0],
+                    )
+                _active_shard_index = overlapping[0]
+                local_shard_path = _hydrate_shard_for_window(context, _active_shard_index)
+                if local_shard_path is None:
+                    # Shard doesn't exist in remote storage yet — fall back to monolith.
+                    _using_shard_path = False
+                else:
+                    scope = _resolve_scope(
+                        command_name=command_name,
+                        arguments=arguments,
+                        now=now,
+                        silver_root=None,
+                    )
+                    db = open_silver_shard(local_shard_path)
 
     if not _using_shard_path:
         _hydrate_silver_database_from_storage(context)
