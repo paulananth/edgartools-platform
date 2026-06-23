@@ -286,6 +286,25 @@ secret_arn_by_name() {
     --query 'ARN' --output text 2>/dev/null || true
 }
 
+# Resolve an S3 bucket name without assuming a naming convention. Terraform's
+# account-suffix convention differs across environments (dev appends
+# ${ACCOUNT_ID}, prod does not — see infra/terraform/accounts/prod/main.tf),
+# so guessing one fixed pattern silently points task defs at a bucket that
+# doesn't exist. Instead, check which candidate name actually exists in S3
+# and use that; only fall back to construction (with a loud warning) if
+# neither candidate exists yet (e.g. infra not provisioned yet, dry-run).
+resolve_bucket_name() {
+  local purpose="$1" suffixed="${NAME_PREFIX}-${1}-${ACCOUNT_ID}" unsuffixed="${NAME_PREFIX}-${1}"
+  if aws_cli s3api head-bucket --bucket "$unsuffixed" 2>/dev/null; then
+    echo "$unsuffixed"
+  elif aws_cli s3api head-bucket --bucket "$suffixed" 2>/dev/null; then
+    echo "$suffixed"
+  else
+    echo "WARNING: neither s3://${unsuffixed} nor s3://${suffixed} exists; defaulting to s3://${suffixed} (verify Terraform has been applied)" >&2
+    echo "$suffixed"
+  fi
+}
+
 MDM_DATABASE_SOURCE="$(first_nonempty "$MDM_DATABASE_SOURCE" "$(manifest_value mdm.database_source)" "rds")"
 case "$MDM_DATABASE_SOURCE" in
   rds|snowflake-postgres) ;;
@@ -339,16 +358,19 @@ CLUSTER_NAME="$(first_nonempty "$CLUSTER_NAME" "$(manifest_value cluster.name)")
 ECR_REPOSITORY_URL="$(first_nonempty "$ECR_REPOSITORY_URL" "$(manifest_value ecr_repository_url)" \
   "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION_NAME}.amazonaws.com/${NAME_PREFIX}-warehouse")"
 
-# S3 buckets — naming convention matches Terraform: <prefix>-<purpose>-<account_id>
+# S3 buckets — naming convention is environment-dependent (dev appends
+# ${ACCOUNT_ID}, prod does not), so resolve_bucket_name checks which name
+# actually exists in S3 rather than assuming a fixed pattern. CLI flag and
+# manifest value (a name a prior run confirmed/was told to use) still win.
 BRONZE_BUCKET_NAME="$(first_nonempty "$BRONZE_BUCKET_NAME" \
   "$(manifest_value bronze_bucket_name)" \
-  "${NAME_PREFIX}-bronze-${ACCOUNT_ID}")"
+  "$(resolve_bucket_name bronze)")"
 WAREHOUSE_BUCKET_NAME="$(first_nonempty "$WAREHOUSE_BUCKET_NAME" \
   "$(manifest_value warehouse_bucket_name)" \
-  "${NAME_PREFIX}-warehouse-${ACCOUNT_ID}")"
+  "$(resolve_bucket_name warehouse)")"
 SNOWFLAKE_EXPORT_BUCKET_NAME="$(first_nonempty "$SNOWFLAKE_EXPORT_BUCKET_NAME" \
   "$(manifest_value snowflake_export_bucket_name)" \
-  "${NAME_PREFIX}-snowflake-export-${ACCOUNT_ID}")"
+  "$(resolve_bucket_name snowflake-export)")"
 
 # IAM roles — fixed names provisioned by Terraform access layer; look up via IAM API
 EXECUTION_ROLE_ARN="$(first_nonempty "$EXECUTION_ROLE_ARN" \

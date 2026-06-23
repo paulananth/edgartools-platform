@@ -190,6 +190,16 @@ conn = connect(database)
 conn.autocommit = True
 cur = conn.cursor()
 for stmt in [
+    # `mdm migrate` above ran as snowflake_admin, so it owns every table,
+    # index, and sequence it just created. Ownership (not just DML grants)
+    # is required for DDL the runtime re-issues idempotently on every
+    # `mdm migrate` call (e.g. `CREATE INDEX IF NOT EXISTS`) — Postgres
+    # gates CREATE INDEX/ALTER TABLE on ownership regardless of IF NOT
+    # EXISTS, unlike CREATE TABLE IF NOT EXISTS which only needs schema
+    # USAGE. Reassign first so `application` (the long-lived runtime role)
+    # owns everything snowflake_admin (the one-shot provisioning role) just
+    # created.
+    "REASSIGN OWNED BY snowflake_admin TO application;",
     "GRANT CONNECT ON DATABASE %s TO application;" % database,
     "GRANT USAGE ON SCHEMA public TO application;",
     "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO application;",
