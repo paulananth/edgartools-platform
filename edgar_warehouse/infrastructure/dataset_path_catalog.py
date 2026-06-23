@@ -259,6 +259,7 @@ class WarehousePathResolver:
         if command_name in (
             "seed-universe",
             "seed-silver-batches",
+            "seed-bronze-batches",
             "parse-ownership-bronze",
             "parse-adv-bronze",
         ):

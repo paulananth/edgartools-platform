@@ -106,6 +106,30 @@ class StorageLocation:
         shutil.copy2(str(local_path), str(destination_path))
         return str(destination_path)
 
+    def list_child_names(self, relative_path: str) -> list[str]:
+        """List immediate child names (files or directories) under relative_path.
+
+        Returns an empty list if relative_path does not exist — callers that
+        need to distinguish "doesn't exist yet" from "exists but empty" should
+        check existence separately.
+        """
+        relative = sanitize_relative_path(relative_path)
+        base = self.join(relative)
+        if self.is_remote:
+            protocol = _protocol_for_uri(self.root)
+            _assert_protocol_allowed(protocol)
+            import fsspec
+
+            fs = fsspec.filesystem(protocol, **_remote_storage_options(base))
+            if not fs.exists(base):
+                return []
+            entries = fs.ls(base, detail=False)
+            return [entry.rstrip("/").rsplit("/", 1)[-1] for entry in entries]
+        base_path = Path(base)
+        if not base_path.is_dir():
+            return []
+        return [child.name for child in base_path.iterdir()]
+
     def write_bytes(self, relative_path: str, payload: bytes) -> str:
         relative = sanitize_relative_path(relative_path)
         destination = self.join(relative)

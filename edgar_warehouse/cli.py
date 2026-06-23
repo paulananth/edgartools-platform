@@ -167,6 +167,10 @@ def _handle_seed_silver_batches(args: argparse.Namespace) -> int:
     return run_command("seed-silver-batches", args)
 
 
+def _handle_seed_bronze_batches(args: argparse.Namespace) -> int:
+    return run_command("seed-bronze-batches", args)
+
+
 def _handle_parse_ownership_bronze(args: argparse.Namespace) -> int:
     return run_command("parse-ownership-bronze", args)
 
@@ -405,6 +409,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(seed_silver_batches)
     seed_silver_batches.set_defaults(handler=_handle_seed_silver_batches)
+
+    seed_bronze_batches = subparsers.add_parser(
+        "seed-bronze-batches",
+        help=(
+            "Write a CIK batch file by listing CIKs that actually have bronze data "
+            "in S3, with zero SEC calls. Used by bronze_seed_silver_gold to stand up "
+            "silver/MDM/gold from an existing bronze snapshot (e.g. one copied in "
+            "from another environment) without re-fetching from SEC."
+        ),
+    )
+    seed_bronze_batches.add_argument(
+        "--batch-size",
+        type=int,
+        default=100,
+        help="Companies per batch (default: 100).",
+    )
+    _add_run_id_arg(seed_bronze_batches)
+    seed_bronze_batches.set_defaults(handler=_handle_seed_bronze_batches)
 
     parse_ownership_bronze = subparsers.add_parser(
         "parse-ownership-bronze",

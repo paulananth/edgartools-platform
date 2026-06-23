@@ -1362,6 +1362,44 @@ def _capture_bronze_raw(
         metrics["cik_count"] = len(rows)
         return raw_writes, metrics
 
+    if command_name == "seed-bronze-batches":
+        batch_size = int(arguments.get("batch_size") or 100)
+        ciks = _list_bronze_submission_ciks(context)
+        _emit_pipeline_event(
+            "seed_bronze_batches_started",
+            cik_count=len(ciks),
+            batch_size=batch_size,
+            run_id=sync_run_id,
+        )
+        if not ciks:
+            _emit_pipeline_event(
+                "seed_bronze_batches_completed",
+                cik_count=0,
+                batch_count=0,
+                run_id=sync_run_id,
+            )
+            metrics["cik_count"] = 0
+            return raw_writes, metrics
+        rows = [{"cik": cik} for cik in ciks]
+        cik_universe_path = _write_cik_universe_batches(
+            context=context,
+            rows=rows,
+            fetch_date=now.date(),
+            sync_run_id=sync_run_id,
+            batch_size=batch_size,
+        )
+        batch_count = -(-len(rows) // batch_size)  # ceiling division
+        _emit_pipeline_event(
+            "seed_bronze_batches_completed",
+            cik_count=len(rows),
+            batch_count=batch_count,
+            cik_universe_path=cik_universe_path,
+            run_id=sync_run_id,
+        )
+        metrics["cik_universe_path"] = cik_universe_path
+        metrics["cik_count"] = len(rows)
+        return raw_writes, metrics
+
     if command_name == "bootstrap-batch":
         cik_list = list(arguments.get("cik_list") or [])
         include_pagination = bool(arguments.get("include_pagination", True))
@@ -2339,6 +2377,24 @@ def _write_cik_universe_batches(
     return context.bronze_root.write_text(relative_path, content)
 
 
+def _list_bronze_submission_ciks(context: WarehouseCommandContext) -> list[str]:
+    """List distinct CIKs that have submissions bronze data, by listing S3/local
+    directly (no SEC calls, no silver/MDM bookkeeping dependency).
+
+    Mirrors the `submissions/sec/cik={cik}/...` layout in
+    edgar_warehouse/config/warehouse_paths.properties.
+    """
+    names = context.bronze_root.list_child_names("submissions/sec")
+    ciks: set[str] = set()
+    for name in names:
+        if not name.startswith("cik="):
+            continue
+        cik = name[len("cik="):].strip()
+        if cik.isdigit():
+            ciks.add(cik)
+    return sorted(ciks, key=int)
+
+
 def _reference_sources_for_scope(scope_key: str) -> list[str]:
     normalized = scope_key.strip().lower()
     if normalized in {"", "all", "reference"}:
@@ -3292,6 +3348,11 @@ def _resolve_scope(
     if command_name == "seed-silver-batches":
         return {
             "tracking_status_filter": arguments.get("tracking_status_filter") or "all",
+            "batch_size": arguments.get("batch_size") or 100,
+        }
+
+    if command_name == "seed-bronze-batches":
+        return {
             "batch_size": arguments.get("batch_size") or 100,
         }
 
