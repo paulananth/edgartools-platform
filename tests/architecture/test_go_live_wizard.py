@@ -251,6 +251,10 @@ def test_plan_prints_preview_only_aws_ordered_commands(tmp_path: Path) -> None:
     assert "MDM + graph: secret bootstrap" in out
     assert "Data: bounded smoke only" in out
     assert "bootstrap-next --limit 100" in out
+    assert "Current go-live notes and issues:" in out
+    assert "batch_size" in out
+    assert "shard-manifest.json" in out
+    assert "Blocker 4" in out
     assert "bootstrap-full" not in out
     assert "full bootstrap" not in out.lower()
     assert not workspace.exists()
@@ -275,6 +279,7 @@ def test_doctor_init_plan_do_not_call_state_changing_commands(tmp_path: Path) ->
     assert "dbt run" not in calls
     assert "docker build" not in calls
     assert "sts get-caller-identity" in calls
+    assert "s3api head-object" in calls
     assert "snow connection test --connection snowconn" in calls
     assert (workspace / "state.json").is_file()
     assert (workspace / "reports").is_dir()
@@ -351,6 +356,8 @@ def test_report_redacts_sensitive_values_from_state_and_commands(tmp_path: Path)
     assert "<redacted-s3-url>" in report
     assert "<redacted-dsn>" in report
     assert "<redacted-image-digest>" in report
+    assert "## Current Notes and Issues" in report
+    assert "shard-manifest.json" in report
 
 
 def test_gum_is_used_when_present_and_forced(tmp_path: Path) -> None:
