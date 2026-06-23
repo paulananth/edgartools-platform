@@ -45,6 +45,13 @@ def test_deploy_script_snowflake_postgres_source_skips_rds_secret_sync() -> None
     assert '"database_source": mdm_database_source' in text
 
 
+def test_deploy_script_bucket_discovery_does_not_capture_head_bucket_output() -> None:
+    text = _read(DEPLOY_SCRIPT)
+
+    assert 'aws_cli s3api head-bucket --bucket "$unsuffixed" >/dev/null 2>&1' in text
+    assert 'aws_cli s3api head-bucket --bucket "$suffixed" >/dev/null 2>&1' in text
+
+
 def test_deploy_script_still_injects_mdm_database_url_into_warehouse_and_mdm_tasks() -> None:
     text = _read(DEPLOY_SCRIPT)
 
