@@ -52,6 +52,19 @@ def test_deploy_script_bucket_discovery_does_not_capture_head_bucket_output() ->
     assert 'aws_cli s3api head-bucket --bucket "$suffixed" >/dev/null 2>&1' in text
 
 
+def test_bronze_seed_state_machine_defaults_and_stringifies_batch_size() -> None:
+    text = _read(DEPLOY_SCRIPT)
+
+    assert '"StartAt": "BatchSizeCheck"' in text
+    assert '"BatchSizeDefault": batch_size_default' in text
+    assert '"ResultPath": "$.batch_size"' in text
+    assert (
+        "States.Array('seed-bronze-batches', '--run-id', $$.Execution.Name, "
+        "'--batch-size', States.Format('{}', $.batch_size))"
+    ) in text
+    assert "'--batch-size', $.batch_size" not in text
+
+
 def test_deploy_script_still_injects_mdm_database_url_into_warehouse_and_mdm_tasks() -> None:
     text = _read(DEPLOY_SCRIPT)
 

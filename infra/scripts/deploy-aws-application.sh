@@ -1937,8 +1937,27 @@ graph_limit = str(mdm_graph_limit)
 # no SEC API calls, no dependency on silver's own bookkeeping tables. Writes the same
 # cik_batches.jsonl format bootstrap-batch expects, so BatchSilver below is unchanged
 # from silver_mdm_gold's.
+batch_size_check = {
+    "Type": "Choice",
+    "Comment": "Route to SeedFromBronze directly when caller supplied batch_size; otherwise inject the default.",
+    "Choices": [{
+        "Variable": "$.batch_size",
+        "IsPresent": True,
+        "Next": "SeedFromBronze",
+    }],
+    "Default": "BatchSizeDefault",
+}
+
+batch_size_default = {
+    "Type": "Pass",
+    "Comment": "Inject default batch_size=100 when caller passed {} or omitted the key.",
+    "Result": 100,
+    "ResultPath": "$.batch_size",
+    "Next": "SeedFromBronze",
+}
+
 seed_from_bronze = ecs_state(wh_medium_arn,
-    "States.Array('seed-bronze-batches', '--run-id', $$.Execution.Name, '--batch-size', $.batch_size)",
+    "States.Array('seed-bronze-batches', '--run-id', $$.Execution.Name, '--batch-size', States.Format('{}', $.batch_size))",
     next_state="BatchSilver", retry_secs=60)
 
 # INVARIANT: bronze_seed_silver_gold must make ZERO SEC API calls.
@@ -1989,8 +2008,10 @@ definition = {
         "(4) gold build + Snowflake export manifest. "
         "Trigger with: {} or {\"batch_size\": 100}"
     ),
-    "StartAt": "SeedFromBronze",
+    "StartAt": "BatchSizeCheck",
     "States": {
+        "BatchSizeCheck": batch_size_check,
+        "BatchSizeDefault": batch_size_default,
         "SeedFromBronze": seed_from_bronze,
         "BatchSilver":  batch_map,
         "MdmRun":       mdm_run,
