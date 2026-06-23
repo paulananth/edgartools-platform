@@ -130,6 +130,29 @@ class StorageLocation:
             return []
         return [child.name for child in base_path.iterdir()]
 
+    def find_existing(self, relative_glob: str) -> list[str]:
+        """Return full storage paths matching a glob pattern (`*` wildcards, no `**`).
+
+        Used to locate a previously-captured object by content key (e.g. CIK) without
+        knowing the exact date-keyed path segment it was written under. Returned paths
+        are suitable for passing directly to read_bytes().
+        """
+        relative = sanitize_relative_path(relative_glob)
+        pattern = self.join(relative)
+        if self.is_remote:
+            protocol = _protocol_for_uri(self.root)
+            _assert_protocol_allowed(protocol)
+            import fsspec
+
+            fs = fsspec.filesystem(protocol, **_remote_storage_options(pattern))
+            matches = fs.glob(pattern)
+            return sorted(
+                match if "://" in match else f"{protocol}://{match}" for match in matches
+            )
+        import glob as glob_module
+
+        return sorted(glob_module.glob(pattern))
+
     def write_bytes(self, relative_path: str, payload: bytes) -> str:
         relative = sanitize_relative_path(relative_path)
         destination = self.join(relative)

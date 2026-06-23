@@ -2441,6 +2441,18 @@ def _capture_submissions_main(
         )
         if cached is not None:
             return cached
+        # No local silver checkpoint (e.g. fresh silver DB that never processed this
+        # CIK), but bronze may already exist in storage from another environment's
+        # run. Check by CIK before falling back to a live SEC call.
+        cached = _read_bronze_by_glob_if_present(
+            bronze_root=context.bronze_root,
+            source_name=capture_spec.source_name,
+            source_url=capture_spec.source_url or "",
+            relative_glob=default_path_resolver().submissions_main_glob(cik),
+            cik=cik,
+        )
+        if cached is not None:
+            return cached
 
     payload_bytes = _download_sec_bytes(url=capture_spec.source_url or "", identity=context.identity)
     write_record = _write_bronze_object(
@@ -2480,6 +2492,15 @@ def _capture_submissions_pagination(
         )
         if cached is not None:
             return cached
+        cached = _read_bronze_by_glob_if_present(
+            bronze_root=context.bronze_root,
+            source_name=capture_spec.source_name,
+            source_url=capture_spec.source_url or "",
+            relative_glob=default_path_resolver().submissions_pagination_glob(cik, file_name),
+            cik=cik,
+        )
+        if cached is not None:
+            return cached
 
     payload_bytes = _download_sec_bytes(url=capture_spec.source_url or "", identity=context.identity)
     write_record = _write_bronze_object(
@@ -2493,6 +2514,52 @@ def _capture_submissions_pagination(
     return {
         "payload": _decode_json_bytes(payload_bytes, capture_spec.source_url or ""),
         "write_record": write_record,
+    }
+
+
+def _read_bronze_by_glob_if_present(
+    *,
+    bronze_root: "StorageLocation",
+    source_name: str,
+    source_url: str,
+    relative_glob: str,
+    cik: int | None = None,
+) -> "dict[str, Any] | None":
+    """Return cached write_record+payload for a bronze file matching relative_glob.
+
+    Fallback for when no silver checkpoint exists for this source_key (e.g. a fresh
+    silver database that never processed this CIK locally) but bronze may already
+    exist in S3/local storage from another environment's run (e.g. synced in via
+    `aws s3 sync`). Without this, _read_bronze_if_cached's checkpoint-only lookup
+    always misses on a fresh silver database, forcing a redundant SEC API call even
+    though the bronze file is already sitting in storage — defeating the purpose of
+    seed-bronze-batches / bronze_seed_silver_gold ("zero new SEC calls").
+    Returns None when no match exists or the matched file can't be read.
+    """
+    matches = bronze_root.find_existing(relative_glob)
+    if not matches:
+        return None
+    chosen = matches[-1]
+    try:
+        payload_bytes = read_bytes(chosen)
+    except Exception:
+        return None
+    chosen_relative = chosen[len(bronze_root.root) :].lstrip("/") if chosen.startswith(bronze_root.root) else chosen
+    record: dict[str, Any] = {
+        "layer": "bronze_raw",
+        "path": chosen,
+        "relative_path": chosen_relative,
+        "sha256": hashlib.sha256(payload_bytes).hexdigest(),
+        "size_bytes": len(payload_bytes),
+        "source_name": source_name,
+        "source_url": source_url,
+        "cached": True,
+    }
+    if cik is not None:
+        record["cik"] = cik
+    return {
+        "payload": _decode_json_bytes(payload_bytes, source_url),
+        "write_record": record,
     }
 
 
