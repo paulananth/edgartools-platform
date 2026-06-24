@@ -388,7 +388,8 @@ resource "aws_iam_role_policy" "step_functions_runtime" {
         Action = [
           "states:StartExecution",
           "states:DescribeExecution",
-          "states:StopExecution"
+          "states:StopExecution",
+          "states:RedriveExecution"
         ]
         Resource = "*"
       }
