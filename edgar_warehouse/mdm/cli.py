@@ -262,7 +262,10 @@ def _silver_reader():
 
     Shard-aware (Phase 9): downloads all shards via the shard manifest when
     storage_root is remote (S3), or lists shard-*.duckdb files when
-    MDM_SILVER_DUCKDB is a local directory path.
+    MDM_SILVER_DUCKDB is a local directory path. Falls back to reading the
+    monolith silver.duckdb directly when no shard manifest exists yet (e.g. a
+    fresh environment seeded via bronze_seed_silver_gold's first-load monolith
+    path before any shard has been built).
 
     MDM_SILVER_DUCKDB semantics after sharding:
       - Absent/empty → return None (no silver source configured)
@@ -284,11 +287,27 @@ def _silver_reader():
 
     # Remote mode: WAREHOUSE_STORAGE_ROOT is an S3 URI (or similar remote)
     if storage_root_env and "://" in storage_root_env:
-        from edgar_warehouse.application.warehouse_orchestrator import _hydrate_all_shards
+        from pathlib import Path as _Path
+
+        from edgar_warehouse.application.warehouse_orchestrator import (
+            _hydrate_all_shards,
+            _hydrate_silver_database_from_storage,
+        )
         from edgar_warehouse.application.command_context_factory import build_warehouse_context
 
         context = build_warehouse_context("mdm-run")
-        local_paths = _hydrate_all_shards(context)
+        try:
+            local_paths = _hydrate_all_shards(context)
+        except (FileNotFoundError, OSError):
+            # First-load recovery (bronze_seed_silver_gold) may have written a
+            # monolith silver.duckdb before any shard manifest exists -- mirror
+            # bootstrap-batch's shard_manifest_missing_monolith_fallback path
+            # (warehouse_orchestrator.py) instead of failing the MDM read.
+            _hydrate_silver_database_from_storage(context)
+            monolith_local_path = _Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
+            if not monolith_local_path.exists():
+                return None
+            return ShardedSilverReader([str(monolith_local_path)])
         shard_paths = [p for p in local_paths if p is not None]
         if not shard_paths:
             return None
