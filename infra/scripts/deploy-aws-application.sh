@@ -1805,14 +1805,14 @@ seed = ecs_state(wh_medium_arn,
     "States.Array('seed-silver-batches', '--run-id', $$.Execution.Name, '--tracking-status-filter', $.tracking_status_filter)",
     next_state="BatchSilver", retry_secs=60)
 
-# INVARIANT: silver_mdm_gold must make ZERO SEC API calls.
-# --artifact-policy skip is REQUIRED here — without it bootstrap-batch fetches
-# ownership XMLs for every Form 3/4/5 filing (sec_pull_started events, thousands
-# per batch). silver_mdm_gold is for reprocessing already-loaded bronze only.
-# If ownership artifacts are needed, run a separate targeted pipeline with
-# --artifact-policy=fetch after silver_mdm_gold completes.
+# INVARIANT: silver_mdm_gold must make ZERO SEC API calls and must not fan out
+# parser work inside each BatchSilver chunk. --artifact-policy skip prevents
+# ownership XML fetches; --parser-policy skip prevents each chunk from
+# re-parsing the full configured-form corpus. Run artifact fetch/parse as a
+# separate targeted pipeline after silver_mdm_gold completes when ownership
+# artifacts are needed.
 batch = ecs_state(wh_medium_arn,
-    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'skip', '--run-id', $$.Execution.Name)",
+    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'skip', '--parser-policy', 'skip', '--run-id', $$.Execution.Name)",
     is_end=True)
 
 batch_map = {
@@ -1960,12 +1960,13 @@ seed_from_bronze = ecs_state(wh_medium_arn,
     "States.Array('seed-bronze-batches', '--run-id', $$.Execution.Name, '--batch-size', States.Format('{}', $.batch_size))",
     next_state="BatchSilver", retry_secs=60)
 
-# INVARIANT: bronze_seed_silver_gold must make ZERO SEC API calls.
-# --artifact-policy skip is REQUIRED here — without it bootstrap-batch fetches
-# ownership XMLs for every Form 3/4/5 filing even though every byte of bronze
-# this pipeline touches is already cached in S3.
+# INVARIANT: bronze_seed_silver_gold must make ZERO SEC API calls and must not
+# fan out parser work inside each BatchSilver chunk. --artifact-policy skip
+# prevents ownership XML fetches; --parser-policy skip prevents each chunk from
+# re-parsing the full configured-form corpus. Parse cached artifacts later
+# through a targeted operator run if ownership tables need refresh.
 batch = ecs_state(wh_medium_arn,
-    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'skip', '--run-id', $$.Execution.Name)",
+    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'skip', '--parser-policy', 'skip', '--run-id', $$.Execution.Name)",
     is_end=True)
 
 batch_map = {
