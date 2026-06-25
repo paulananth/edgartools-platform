@@ -815,6 +815,19 @@ precedent and known gap).
 
 ---
 
+## External Neo4j runtime remnant deprecation — RESOLVED (2026-06-25)
+
+**Resolution:** Confirmed `infra/scripts/deploy-aws-application.sh` no longer
+contains any `NEO4J_*` references (`grep -n "NEO4J\|neo4j"` returns nothing).
+Live verification against the deployed prod task definition
+(`aws ecs describe-task-definition edgartools-prod-mdm-medium:19`) shows only
+`MDM_DATABASE_URL`, `MDM_SNOWFLAKE_SECRET_JSON`, and `EDGAR_IDENTITY` injected
+— no Neo4j secret. Blocker 4 (go-live STATE.md) closed via the new
+`bronze_seed_silver_gold` Step Function, which doesn't call `mdm_migrate` at
+all (see PASS evidence in
+`.planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md`).
+Original blocker description retained below for history.
+
 ## External Neo4j runtime remnant deprecation — CONFIRMED HARD PRODUCTION BLOCKER (2026-06-22)
 
 **What:** Formally remove or deprecate any remaining external (Aura) Neo4j
