@@ -3,27 +3,27 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
 status: blocked
-stopped_at: Phase 9 merged to main via PR #81; Blocker 4 remains open on legacy Neo4j secret wiring in MDM ECS task definition
-last_updated: "2026-06-22T01:31:45.000Z"
-last_activity: 2026-06-22 -- PR #81 (claude/go-live-v1.6-phase9, carrying Codex's 12 Phase 9 commits + 1 Claude takeover commit) merged to main (merge commit 24ab70c). All 7 CI checks passed. Blocker 4 remains open pending the task-definition fix.
+stopped_at: Blocker 4 PASS; Blocker 5 production dashboard UAT remains open
+last_updated: "2026-06-25T04:20:32.130Z"
+last_activity: 2026-06-25 -- Production `bronze_seed_silver_gold` retry `bronze-seed-silver-gold-1782351277` succeeded end-to-end with zero `sec_pull_started` and zero parser fanout during BatchSilver. Blocker 4 is PASS; Blocker 5 remains open.
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 11
-  completed_plans: 8
-  percent: 73
+  completed_plans: 9
+  percent: 83
 ---
 
 # Project State - go-live
 
 ## Current Position
 
-Phase: 09 (production-hosted-graph-e2e) — MERGED to main (PR #81); Blocker 4 still open
-Plan: 2 of 2 plan attempts closed; Plan 09-01 passed local production hosted-graph acceptance; Plan 09-02 ran the operator-approved AWS MDM E2E and found a new hard blocker (legacy Neo4j secret wiring), documented and merged
-Status: Phase 9's branch work (Codex's 12 commits + Claude's takeover commit documenting the `mdm_migrate` AWS failure and a `go-live.sh` doctor-check fix) is merged to `main` via PR #81 (merge commit `24ab70c`, all 7 CI checks passed). This merges the *documentation and tooling* of Phase 9, not blocker resolution — Blocker 4 remains open because the production AWS MDM E2E chain has not succeeded end-to-end. The unresolved root cause (legacy `NEO4J_*` secret wiring in the MDM ECS task-definition template) still needs a separate, explicitly-approved fix and redeploy before the chain can be retried.
-Last activity: 2026-06-22 -- PR #81 merged to main. `claude/go-live-v1.6-phase9` and `codex/go-live-v1.6-phase9` both left intact (not deleted) per standard practice; no further commits should land on either — new work should branch from `main` post-merge.
+Phase: 09 (production-hosted-graph-e2e) — PASS for Blocker 4 after the live production retry
+Plan: 2 of 2 plan attempts closed; Plan 09-01 passed local production hosted-graph acceptance; Plan 09-02 is now closed by the successful production `bronze_seed_silver_gold` retry.
+Status: Blocker 4 is PASS. The final production execution `bronze-seed-silver-gold-1782351277` completed `SeedFromBronze -> BatchSilver -> MdmRun -> MdmBackfill -> MdmSync -> MdmVerify -> GoldRefresh` with no live SEC refetch and no BatchSilver parser fanout. The validated live state used `edgartools-prod-medium:19`, `edgartools-prod-mdm-medium:19`, the PR #95-capable warehouse image, and BatchSilver `MaxConcurrency=2`. Blocker 5 remains the only open launch blocker.
+Last activity: 2026-06-25 -- production retry succeeded and the Phase 9 evidence was updated on `codex/blocker4-docs-pass`.
 
-Progress: 73% (3/6 v1.6 phases complete: Phase 6 AWS, Phase 7 Snowflake/dbt, Phase 8 MDM secrets/connectivity; Phase 9 merged to main with Blocker 4 still open)
+Progress: 83% (4/6 v1.6 phases complete: Phase 6 AWS, Phase 7 Snowflake/dbt, Phase 8 MDM secrets/connectivity, Phase 9 production hosted graph E2E / Blocker 4 PASS)
 
 ## Milestone Context
 
@@ -35,10 +35,11 @@ are remediated, owner-approved, and backed by non-secret production evidence.
 
 `/Users/aneenaananth/gsd-workspaces/go-live/edgartools-platform`
 
-Branch: `claude/go-live-phase9-merge-followup` (created from `origin/main` post-PR#81
-merge, for this STATE.md/TODOS.md documentation update only). `codex/go-live-v1.6-phase9`
-and `claude/go-live-v1.6-phase9` are both fully merged into `main` (PR #81, merge commit
-`24ab70c`) and should not receive further commits.
+Branch: `codex/blocker4-docs-pass` (created from the go-live worktree after the
+production Blocker 4 retry, for evidence/state/TODO documentation only). The
+older `codex/go-live-v1.6-phase9` and `claude/go-live-v1.6-phase9` branches are
+merged into `main` (PR #81, merge commit `24ab70c`) and should not receive
+further commits.
 
 ## Decisions
 
@@ -178,54 +179,37 @@ and `claude/go-live-v1.6-phase9` are both fully merged into `main` (PR #81, merg
   `.planning/workstreams/go-live/phases/07-production-snowflake-native-pull-and-gold/evidence/native-pull.md`
   and `evidence/dbt-gold.md` for full detail.
 
-- Blocker 4: PARTIALLY REMEDIATED (2026-06-22, Phase 09 Plan 09-01) — local
-  production hosted-graph acceptance now passes against production Snowflake,
-  MDM secrets, and the Native App compute pool. Phase 8 remains the source of
-  truth for populated prod MDM secrets and Postgres connectivity. Phase 9 Plan
-  09-01 applied production Native App/runtime prerequisites, documented the
-  first-time `EDGARTOOLS_PROD.MDM` mirror load, completed bounded `sync-graph
-  --limit 100`, and passed strict `mdm verify-graph` with SQL parity,
-  compute_pool, graph_info, BFS, and WCC checks enabled. GRAPH-04 remains
-  BLOCKED because Plan 09-02 cannot run status/E2E without the generated
-  `infra/aws-prod-application.json` summary. Blocker 4 remains open until Phase
-  9 Plan 09-02 production AWS MDM E2E passes and launch matrix rows are
-  reconciled there. A reusable one-click provisioning script,
-  `infra/scripts/bootstrap-prod-mdm.sh`, still encapsulates the Phase 8
-  rotate/create/migrate/grant/populate/verify sequence for future re-runs.
-  [2026-06-22, Claude takeover from Codex on `claude/go-live-v1.6-phase9`,
-  re-rooted from Codex's tip, no content change] `infra/aws-prod-application.json`
-  was present in this worktree; status-only preflight now passes cleanly
-  (exit 0, all 21 state machines resolved, all NO_RUNS) — the Plan 09-02
-  precondition above is satisfied. Operator approved the bounded production
-  AWS MDM E2E command; it **FAILED at the first stage, `mdm_migrate`**: the ECS
-  task could not start because its task definition injects a secret from
-  `edgartools-prod/mdm/neo4j`, which this workstream forbids ever populating
-  (Neo4j is deprecated, superseded by the Snowflake-hosted graph). Root cause:
-  legacy `NEO4J_*` secrets wiring in the MDM ECS task-definition template
-  (`deploy-aws-application.sh`), previously tracked only as TODOS.md D-05b
-  cleanup debt, now confirmed a hard production blocker. See
-  `phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md` for the
-  5-whys and sanitized failure detail (no raw cause/ARNs/account ID). Fix
-  requires editing the task-definition template and redeploying the
-  already-applied Phase 6 ECS task definitions — production-impacting,
-  not done this session pending explicit operator approval. Blocker 4
-  remains open.
-  [2026-06-22, merge] All of the above (Plan 09-01 production hosted-graph
-  acceptance, the Plan 09-02 AWS MDM E2E failure documentation, and the
-  `go-live.sh` doctor-check fix) merged to `main` via PR #81 (merge commit
-  `24ab70c`, 7/7 CI checks passed). The merge lands documentation/tooling
-  only — it does not resolve Blocker 4. Next concrete step: get explicit
-  operator approval to edit the MDM ECS task-definition template (remove the
-  `NEO4J_*`/`edgartools-prod/mdm/neo4j` secrets injection), redeploy, then
-  retry the AWS MDM E2E chain from `mdm_migrate` onward.
+- Blocker 4: PASS (2026-06-25, Phase 09 Plan 09-02 final production retry) —
+  the live production execution `bronze-seed-silver-gold-1782351277`
+  completed `SeedFromBronze -> BatchSilver -> MdmRun -> MdmBackfill ->
+  MdmSync -> MdmVerify -> GoldRefresh` with parent status `SUCCEEDED`.
+  `SeedFromBronze` discovered 8006 production bronze CIKs and wrote 81
+  batches. BatchSilver completed 81/81 child executions on the PR
+  #95-capable warehouse image with `--artifact-policy skip --parser-policy
+  skip`; CloudWatch searches from the execution start returned 0
+  `sec_pull_started` events and 0 `filing_artifact_pipeline_started` events.
+  BatchSilver timing was seconds-scale (min 1.240s, median 12.514s, max
+  30.742s, average 14.544s across 81 `bronze_capture_completed` logs).
+  MDM `run`, `backfill-relationships`, `sync-graph`, and `verify-graph`
+  each emitted `mdm_command_completed` with exit code 0. Graph sync
+  materialized/synced 10 nodes and 0 edges; strict verify reported Native App
+  checks, BFS, WCC, node parity, and relationship parity all `ok`.
+  `GoldRefresh` built 22 gold tables and wrote the Snowflake export manifest
+  for `workflow_name=gold_refresh/business_date=2026-06-25/run_id=bronze-seed-silver-gold-1782351277`.
+  The validated live state used `edgartools-prod-medium:19`,
+  `edgartools-prod-mdm-medium:19`, warehouse digest `sha256:036b7487...`,
+  MDM digest `sha256:50af1f66...`, and BatchSilver `MaxConcurrency=2`.
+  The later source edit to `MaxConcurrency=5` is not production-proven.
+  Evidence:
+  `.planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md`.
 
 - Blocker 5: Prod dashboard UAT has not yet run against a production or
   production-like read-only configuration.
 
 ## Pending Todos
 
-- Get explicit operator approval to remove the legacy `NEO4J_*`/`edgartools-prod/mdm/neo4j` secrets injection from the MDM ECS task-definition template (`deploy-aws-application.sh`), then redeploy the already-applied Phase 6 ECS task definitions.
-- Re-run the operator-approved production AWS MDM E2E command from `mdm_migrate` onward once the task-definition fix is deployed; flip Blocker 4 launch-matrix rows to PASS only after the full chain reaches `SUCCEEDED`.
+- Run production dashboard UAT against a production or production-like read-only configuration and capture Blocker 5 evidence.
+- Do not rerun Blocker 4 unless the warehouse image, MDM image, task definitions, or `bronze_seed_silver_gold` definition change.
 - Preserve all v1.5 evidence and milestone archives while adding v1.6 planning artifacts.
 
 ## Pre-Planning Branch Audit (2026-06-13)
@@ -243,18 +227,17 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-22T01:31:45.000Z
-Stopped at: PR #81 merged to `main` (merge commit `24ab70c`). Phase 9 plans
-(09-01, 09-02) and their evidence are now on `main`. Blocker 4 remains open:
-the AWS MDM E2E chain failed at `mdm_migrate` due to legacy Neo4j secret
-wiring in the MDM ECS task definition; the fix (template edit + redeploy)
-was explicitly deferred pending separate operator approval.
+Last session: 2026-06-25T04:20:32.130Z
+Stopped at: Blocker 4 PASS. Production execution
+`bronze-seed-silver-gold-1782351277` succeeded end-to-end with zero
+`sec_pull_started` and zero BatchSilver parser fanout. The next launch blocker
+is Blocker 5 production dashboard UAT.
 Resume file: .planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md
-Resume command: branch from `main` (do not reuse `codex/go-live-v1.6-phase9`
-or `claude/go-live-v1.6-phase9` — both are merged). Do not redo Phase 8,
-Task 3 Native App grants, runtime-role grant remediation, first-time mirror
-load, or local strict verify-graph (all already PASS on main). Next step is
-the task-definition fix + redeploy + AWS MDM E2E re-run described above.
+Resume command: continue from `codex/blocker4-docs-pass` for documentation
+closeout or branch from latest `main` for Blocker 5 implementation. Do not
+redo Phase 8, Task 3 Native App grants, runtime-role grant remediation,
+first-time mirror load, local strict verify-graph, or the successful Blocker 4
+production retry unless the deployed runtime changes.
 
 ## Performance Metrics
 

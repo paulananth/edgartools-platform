@@ -1,152 +1,104 @@
 # AWS MDM Hosted Graph E2E Evidence - Phase 9 Plan 09-02
 
-Date: 2026-06-22T00:30:15Z
+Date: 2026-06-25T04:20:32.130Z
 
-Environment: production. This artifact records secret-safe preflight evidence
-for the production AWS MDM hosted graph E2E path. It intentionally omits
-generated deployment JSON bodies, AWS resource identifiers, image references,
-credential values, raw Step Functions failure payloads, connector traces, and
-Native App logs.
+Environment: production. This artifact records secret-safe evidence for the
+production AWS bronze-from-existing-bronze, silver, MDM hosted graph, and gold
+refresh path. It omits secret values, DSNs, raw Step Functions cause JSON, and
+generated deployment JSON bodies.
 
-## Scope
+## Final PASS - `bronze_seed_silver_gold`
 
-Plan 09-02 depends on Plan 09-01 local strict hosted-graph verification. This
-task was read-only:
-
-- No Step Functions execution was started.
-- No local strict preflight was rerun.
-- No MDM data write command was run.
-- No AWS secret value command was run.
-- No generated deployment JSON body was printed or committed.
-
-## Plan 09-01 Precondition
-
-| Evidence | Status | Notes |
-|---|---:|---|
-| `.planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/09-01-SUMMARY.md` | PASS | Plan 09-01 summary exists and records local strict production hosted-graph verification passing. |
-| `.planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/evidence/hosted-graph-local.md` | PASS | Evidence records first-time mirror load, bounded `sync-graph`, and strict `verify-graph` PASS. |
-
-## Production Application Summary Preflight
-
-Required local generated file:
-
-- `infra/aws-prod-application.json`
-
-Result:
-
-| Check | Status | Sanitized result |
-|---|---:|---|
-| Production application summary exists | BLOCKED | File is absent from this checkout. |
-| Required MDM state-machine key listing | NOT RUN | The status script cannot parse MDM state-machine keys without the generated production application summary. |
-| Step Functions latest-status query | NOT RUN | The script failed before any Step Functions status output. |
-
-## Status-Only Command
-
-Command:
-
-```bash
-bash infra/scripts/run-aws-mdm-e2e.sh \
-  --env prod \
-  --aws-profile sec_platform_deployer \
-  --aws-region us-east-1 \
-  --status-only
-```
-
-Sanitized result:
+The production `edgartools-prod-bronze-seed-silver-gold` state machine
+completed successfully.
 
 | Field | Result |
-|---|---|
-| Exit code | 1 |
-| Failure class | missing generated production application summary |
-| Step Functions status output | none |
-| AWS E2E executions started | no |
+| --- | --- |
+| Execution name | `bronze-seed-silver-gold-1782351277` |
+| Input | `{"batch_size": 100}` |
+| Started | 2026-06-25T01:34:39.738Z |
+| Succeeded | 2026-06-25T04:20:32.130Z |
+| Parent status | `SUCCEEDED` |
+| BatchSilver map run | 81 succeeded, 0 failed, 0 aborted |
 
-The failure happened at the script's local file-existence guard before the
-`--status-only` path could list Step Functions statuses.
+Validated task/runtime state:
 
-## BLOCKED - Missing Production Application Summary
+- Warehouse task definition: `edgartools-prod-medium:19`
+- Warehouse image digest: `sha256:036b7487...`
+- MDM task definition: `edgartools-prod-mdm-medium:19`
+- MDM image digest: `sha256:50af1f66...`
+- BatchSilver command included both `--artifact-policy skip` and
+  `--parser-policy skip`.
+- Live BatchSilver `MaxConcurrency=2` is the setting proven by this evidence.
+  A later source edit to `MaxConcurrency=5` was not part of the successful
+  production run.
 
-Owner: production AWS deploy operator.
+## Stage Evidence
 
-Remediation category:
+| Stage | Evidence | Status |
+| --- | --- | --- |
+| `SeedFromBronze` | `seed_bronze_batches_started` and `seed_bronze_batches_completed` logged `cik_count=8006`, `batch_count=81`, and the production bronze CIK universe path for this run. | PASS |
+| `BatchSilver` | 81 child executions completed. Example child ran on `edgartools-prod-medium:19` using the PR #95-capable warehouse image and skip policies. | PASS |
+| No SEC refetch | CloudWatch search in `/aws/ecs/edgartools-prod-warehouse` from execution start returned 0 `sec_pull_started` events. | PASS |
+| No parser fanout | CloudWatch search from execution start returned 0 `filing_artifact_pipeline_started` events. | PASS |
+| Bronze/silver reuse | Batch logs include `parser_policy=skip`, `shard_manifest_missing_monolith_fallback`, and `silver_database_hydrated` from the existing production warehouse silver database. | PASS |
+| Batch timing | 81 `bronze_capture_completed` events: min 1.240s, median 12.514s, max 30.742s, average 14.544s. | PASS |
+| `MdmRun` | `mdm_command_completed` for `run`, exit code 0, duration 4,195,363 ms. Summary: `companies_processed=8006`, optional parser-derived entity counts 0. | PASS |
+| `MdmBackfill` | `mdm_command_completed` for `backfill-relationships`, exit code 0, duration 18,789 ms; `backfilled=0`, `issuers_repaired=0`, `synced=0`. | PASS |
+| `MdmSync` | `mdm_command_completed` for `sync-graph`, exit code 0, duration 12,715 ms; 10 graph nodes materialized and synced, 0 graph edges. | PASS |
+| `MdmVerify` | `mdm_command_completed` for `verify-graph`, exit code 0, duration 35,140 ms. Native App installation, roles, compute pool, graph sample, graph info, BFS, WCC, node parity, and relationship parity all `ok`. | PASS |
+| `GoldRefresh` | `gold_refresh` completed exit 0. Logs show `gold_build_completed`, `gold_storage_write_completed`, `gold_snowflake_export_completed`, and `gold_publish_completed`. | PASS |
 
-1. Restore or regenerate `infra/aws-prod-application.json` from the successful
-   production application deploy flow.
-2. Keep the generated file uncommitted.
-3. Re-run the 09-02 status-only preflight.
-4. Continue to the production AWS MDM E2E approval checkpoint only after the
-   required MDM state-machine keys are visible from the generated summary.
+Optional ADV and ownership rows were 0 by design for this run because
+BatchSilver intentionally skipped parser fanout. The acceptance gate for
+Blocker 4 was production chain correctness without a live SEC refetch, not
+parser backfill.
 
-Do not start production AWS MDM E2E executions, update Blocker 4 launch-matrix
-rows to PASS, or proceed to dashboard/final GO evidence until this blocker is
-resolved.
+## Gold Output Evidence
 
-## Update (2026-06-22, Claude takeover from Codex) — Missing summary blocker resolved; new blocker found
+Gold refresh produced production-scale company and filing outputs:
 
-`infra/aws-prod-application.json` was present in this worktree (generated by the
-Phase 6 deploy, untracked per D-10). Re-ran the status-only preflight: exit 0,
-all 21 state machines resolved to ARNs, all `NO_RUNS`. This cleared the prior
-BLOCKED finding above.
+| Output | Rows |
+| --- | ---: |
+| `dim_company` | 8006 |
+| `dim_filing` | 4017296 |
+| `fact_filing_activity` | 4017296 |
+| `dim_date` | 11859 |
+| `dim_form` | 481 |
+| `dim_geography` | 121 |
 
-### Operator-approved AWS MDM E2E execution — FAILED at `mdm_migrate`
+Snowflake export evidence:
 
-Command run (operator-approved via explicit checkpoint):
+- Export counts included `company=8006`, `filing_activity=4017296`, and
+  `filing_detail=4017296`.
+- Manifest path:
+  `s3://edgartools-prod-snowflake-export/warehouse/artifacts/snowflake_exports/manifests/workflow_name=gold_refresh/business_date=2026-06-25/run_id=bronze-seed-silver-gold-1782351277/run_manifest.json`
 
-```bash
-bash infra/scripts/run-aws-mdm-e2e.sh --env prod \
-  --aws-profile sec_platform_deployer --aws-region us-east-1 \
-  --snow-connection edgartools-prod --snowflake-database EDGARTOOLS_PROD \
-  --native-app-compute-pool CPU_X64_XS --mdm-run-limit 5 --graph-limit 100
-```
+## Timeline
 
-Local strict preflight (`sync-graph` + `verify-graph` against the dev/local
-Postgres mirror) passed: 10 graph nodes, 0 edges, reconciliation `status: ok`
-for all relationship types. The AWS-only stage then started `mdm_migrate`;
-it transitioned to `FAILED` after the ECS task failed to start. No further
-state machine in the chain (`mdm_check_connectivity`, `mdm_run`,
-`mdm_backfill_relationships`, `mdm_sync_graph`, `mdm_verify_graph`,
-`mdm_counts`) was started.
+| Stage | Entered | Succeeded |
+| --- | --- | --- |
+| `SeedFromBronze` | 2026-06-25T01:34:39.764Z | 2026-06-25T01:36:14.224Z |
+| `BatchSilver` map run | 2026-06-25T01:36:14.381Z | 2026-06-25T03:03:57.678Z |
+| `MdmRun` | 2026-06-25T03:03:57.766Z | 2026-06-25T04:14:52.852Z |
+| `MdmBackfill` | 2026-06-25T04:14:52.877Z | 2026-06-25T04:16:08.327Z |
+| `MdmSync` | 2026-06-25T04:16:08.343Z | 2026-06-25T04:17:15.035Z |
+| `MdmVerify` | 2026-06-25T04:17:15.049Z | 2026-06-25T04:18:42.867Z |
+| `GoldRefresh` | 2026-06-25T04:18:42.882Z | 2026-06-25T04:20:32.082Z |
 
-Sanitized failure summary (raw `cause` JSON, ARNs, account ID, and ENI/subnet
-detail are intentionally omitted per the threat model — T-09-06):
+## Superseded Failure Evidence
 
-| Field | Result |
-|---|---|
-| Stage | `mdm_migrate` |
-| Final status | FAILED |
-| StopCode | `TaskFailedToStart` |
-| Failure class | `ResourceInitializationError` — ECS could not retrieve a required Secrets Manager value (`GetSecretValue` / `ResourceNotFoundException`, no `AWSCURRENT` version) for a secret container under the `edgartools-prod/mdm/` prefix |
+Earlier Phase 9 attempts found real blockers and were intentionally left as
+diagnostic history in `STATE.md` and `TODOS.md`. They are superseded by the
+final pass above:
 
-### 5-whys
+- Legacy Neo4j/API-key secret injection in MDM ECS task definitions.
+- Prod bucket-name mismatch and empty prod warehouse path.
+- Lack of a production bootstrap path from an existing bronze snapshot.
+- BatchSilver attempting live SEC/parser work instead of reusing bronze.
+- MDM task runtime using the wrong image/default runtime.
+- MDM preflight requiring nonempty optional parser-derived tables despite
+  intentionally skipped parser fanout.
 
-1. **Symptom**: `mdm_migrate` ECS task never reached `RUNNING`; it stopped immediately after task creation.
-2. **Why**: The Fargate agent could not pull a secret value required by the task definition's secrets injection — the named secret container exists but has no `AWSCURRENT` version (never populated).
-3. **Why**: The unpopulated secret container is `edgartools-prod/mdm/neo4j`. Per this workstream's explicit, standing rule, that secret (and `edgartools-prod/mdm/api_keys`) must **never** be populated or referenced — Neo4j is deprecated and superseded by the Snowflake-hosted graph runtime that Phase 7-9 actually use.
-4. **Why**: The `edgartools-prod-mdm-small` ECS task definition (produced by `infra/scripts/deploy-aws-application.sh`) still wires a `NEO4J_*`-prefixed secret injection from that container into every MDM task, including `mdm migrate`, which doesn't even touch Neo4j.
-5. **Root cause**: The legacy Neo4j wiring in the MDM task-definition template was never removed when the runtime moved to Snowflake-hosted Postgres + Native App graph. `run-aws-mdm-e2e.sh`'s own preflight already prints `WARNING: deployment summary still contains lingering NEO4J_* or Neo4j references` and treats it as warning-only "unless it blocks `mdm_sync_graph` or `mdm_verify_graph`" — but the same legacy wiring also reaches `mdm_migrate`, which is upstream of those two and was not covered by that warning's stated scope. This is the same gap already tracked as a TODOS.md D-05b follow-up ("external Neo4j runtime remnant deprecation"), now confirmed to be a hard production blocker, not just cleanup debt.
-
-### BLOCKED — Legacy Neo4j secret wiring in MDM ECS task definition
-
-Owner: production AWS deploy operator / next runtime to pick this up.
-
-Remediation category (NOT executed this session — requires editing
-`deploy-aws-application.sh` and/or its task-definition template, then
-redeploying the already-applied Phase 6 ECS task definitions, which is itself
-a production-impacting action requiring explicit operator approval before
-any redeploy):
-
-1. Remove the `NEO4J_*`/`edgartools-prod/mdm/neo4j` secrets injection from the
-   MDM task definition(s) in `deploy-aws-application.sh` (or its template) —
-   do not populate the neo4j secret as a workaround; that secret is explicitly
-   out of scope for this architecture.
-2. Re-run the "AWS: ECS task definitions and Step Functions" stage to update
-   the live task definitions (operator approval required; this updates
-   already-applied production infrastructure).
-3. Re-run the operator-approved AWS MDM E2E command above from `mdm_migrate`
-   onward.
-4. Only after all six state machines reach `SUCCEEDED` should Blocker 4's
-   Phase 9 rows be considered for launch-matrix PASS.
-
-Do not update Blocker 4 launch-matrix rows to PASS, populate
-`edgartools-prod/mdm/neo4j` or `edgartools-prod/mdm/api_keys`, or proceed to
-dashboard/final GO evidence until this blocker is resolved.
+The final pass did not populate or require `edgartools-prod/mdm/neo4j` or
+`edgartools-prod/mdm/api_keys`.
