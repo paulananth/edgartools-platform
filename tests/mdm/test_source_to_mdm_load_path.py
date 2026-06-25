@@ -675,6 +675,16 @@ class TestRequiredTableValidation:
     These tests are RED because required-table validation does not exist today.
     """
 
+    class _CountReader:
+        def __init__(self, counts: dict[str, int]) -> None:
+            self._counts = counts
+
+        def fetch(self, sql: str, params: Optional[list] = None) -> list[dict]:
+            table_name = sql.split(" FROM ", 1)[1].split()[0]
+            if table_name not in self._counts:
+                raise RuntimeError(f"Catalog Error: Table with name {table_name} does not exist")
+            return [{"n": self._counts[table_name]}]
+
     def test_empty_duckdb_fails_required_table_check(self, tmp_path, monkeypatch):
         """An empty DuckDB (no tables) must fail preflight with a missing-table message."""
         import edgar_warehouse.mdm.cli as mdm_cli
@@ -724,6 +734,76 @@ class TestRequiredTableValidation:
         assert rc != 0, (
             "Expected nonzero exit when silver DB is missing sec_ownership_reporting_owner "
             "for 'person' entity type run"
+        )
+
+    def test_all_run_preflight_allows_empty_optional_parser_tables(self):
+        """Bulk MDM recovery may load companies even when optional parser domains are empty."""
+        import edgar_warehouse.mdm.cli as mdm_cli
+
+        counts = {
+            "sec_company": 120,
+            "sec_company_filing": 500,
+            "sec_adv_filing": 0,
+            "sec_adv_office": 0,
+            "sec_adv_private_fund": 0,
+            "sec_ownership_reporting_owner": 0,
+            "sec_ownership_non_derivative_txn": 0,
+            "sec_ownership_derivative_txn": 0,
+        }
+
+        failures = mdm_cli._validate_silver_tables(
+            self._CountReader(counts),
+            mdm_cli._required_tables_for_run("all"),
+        )
+
+        assert failures == []
+
+    def test_relationship_preflight_allows_empty_ownership_tables(self):
+        """Relationship commands should no-op on empty ownership schemas instead of blocking."""
+        import edgar_warehouse.mdm.cli as mdm_cli
+
+        counts = {
+            "sec_company": 120,
+            "sec_company_filing": 500,
+            "sec_ownership_reporting_owner": 0,
+            "sec_ownership_non_derivative_txn": 0,
+            "sec_ownership_derivative_txn": 0,
+        }
+
+        failures = mdm_cli._validate_silver_tables(
+            self._CountReader(counts),
+            mdm_cli._REQUIRED_TABLES_RELATIONSHIPS,
+        )
+
+        assert failures == []
+
+    def test_targeted_person_and_security_runs_still_require_ownership_rows(self):
+        """Direct ownership-backed entity loads should still fail clearly on empty inputs."""
+        import edgar_warehouse.mdm.cli as mdm_cli
+
+        counts = {
+            "sec_company_filing": 500,
+            "sec_ownership_reporting_owner": 0,
+            "sec_ownership_non_derivative_txn": 0,
+            "sec_ownership_derivative_txn": 0,
+        }
+
+        person_failures = mdm_cli._validate_silver_tables(
+            self._CountReader(counts),
+            mdm_cli._required_tables_for_run("person"),
+        )
+        security_failures = mdm_cli._validate_silver_tables(
+            self._CountReader(counts),
+            mdm_cli._required_tables_for_run("security"),
+        )
+
+        assert (
+            "required table 'sec_ownership_reporting_owner' is empty (0 rows)"
+            in person_failures
+        )
+        assert (
+            "required table 'sec_ownership_non_derivative_txn' is empty (0 rows)"
+            in security_failures
         )
 
 
