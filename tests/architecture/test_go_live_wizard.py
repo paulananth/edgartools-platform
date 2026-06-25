@@ -260,6 +260,21 @@ def test_plan_prints_preview_only_aws_ordered_commands(tmp_path: Path) -> None:
     assert not workspace.exists()
 
 
+def test_bronze_seed_stage_uses_pr95_batchsilver_progress_contract(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+
+    result = run_wizard("plan", "--workspace", str(workspace))
+
+    out = result.stdout
+    assert "PR95" in out
+    assert "bulk-upsert" in out
+    assert "executionCounts.succeeded" in out
+    assert "executionCounts.failed" in out
+    assert "executionCounts.total" in out
+    assert "itemCounts" not in out
+    assert "7-10 minutes per batch" not in out
+
+
 def test_doctor_init_plan_do_not_call_state_changing_commands(tmp_path: Path) -> None:
     fakebin, call_log = make_fake_tools(tmp_path)
     workspace = tmp_path / "workspace"

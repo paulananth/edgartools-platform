@@ -362,6 +362,7 @@ _REQUIRED_TABLES_RUN: dict[str, dict[str, bool]] = {
     "security": {
         "sec_company_filing": True,  # nonempty
         "sec_ownership_non_derivative_txn": True,  # nonempty
+        "sec_ownership_derivative_txn": False,  # referenced by security UNION; may be empty
     },
 }
 
@@ -369,29 +370,31 @@ _REQUIRED_TABLES_RUN: dict[str, dict[str, bool]] = {
 _REQUIRED_TABLES_RELATIONSHIPS: dict[str, bool] = {
     "sec_company": True,
     "sec_company_filing": True,
-    "sec_ownership_reporting_owner": True,
+    "sec_ownership_reporting_owner": False,
+    "sec_ownership_non_derivative_txn": False,
+    "sec_ownership_derivative_txn": False,
 }
 
 
 def _required_tables_for_run(entity_type: str) -> dict[str, bool]:
     """Return the fixed required-table mapping for the given entity type.
 
-    For 'all': adviser/fund tables are excluded from the non-empty requirement
-    because they are legitimately empty until the ADV pipeline runs. Blocking a
-    company-population run on ADV data that may never arrive is wrong.
+    For 'all': optional parser-backed domains are allowed to be empty. A bulk
+    production run still needs the table schemas because the loaders issue fixed
+    queries against them, but it must not fail just because optional ownership or
+    ADV parsers have not populated rows yet.
     """
     if entity_type == "all":
-        # Only enforce the core tables that are always populated after a company
-        # bootstrap; adviser and fund tables are optional for 'all' runs.
-        _ADV_ONLY_TYPES = {"adviser", "fund"}
-        merged: dict[str, bool] = {}
-        for et, tables in _REQUIRED_TABLES_RUN.items():
-            if et in _ADV_ONLY_TYPES:
-                continue
-            for table, must_be_nonempty in tables.items():
-                existing = merged.get(table, False)
-                merged[table] = existing or must_be_nonempty
-        return merged
+        return {
+            "sec_company": False,
+            "sec_company_filing": True,
+            "sec_adv_filing": False,
+            "sec_adv_office": False,
+            "sec_adv_private_fund": False,
+            "sec_ownership_reporting_owner": False,
+            "sec_ownership_non_derivative_txn": False,
+            "sec_ownership_derivative_txn": False,
+        }
     return _REQUIRED_TABLES_RUN.get(entity_type, {})
 
 

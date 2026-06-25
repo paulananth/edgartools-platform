@@ -73,6 +73,17 @@ def test_bronze_seed_state_machine_runs_batch_silver_sequentially() -> None:
     assert "sequential bootstrap-batch uses bronze SHA256 cache" in text
 
 
+def test_cached_bronze_batch_silver_skips_artifact_fetch_and_parser_pipeline() -> None:
+    text = _read(DEPLOY_SCRIPT)
+    expected = (
+        "States.Array('bootstrap-batch', '--cik-list', $.cik_list, "
+        "'--artifact-policy', 'skip', '--parser-policy', 'skip', "
+        "'--run-id', $$.Execution.Name)"
+    )
+
+    assert text.count(expected) == 2
+
+
 def test_deploy_script_still_injects_mdm_database_url_into_warehouse_and_mdm_tasks() -> None:
     text = _read(DEPLOY_SCRIPT)
 
