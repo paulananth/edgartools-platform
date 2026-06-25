@@ -369,11 +369,13 @@ known_go_live_notes_markdown() {
   cat <<'EOF'
 - `bronze_seed_silver_gold` now needs the Step Functions `batch_size` input defaulted and stringified before ECS `ContainerOverrides.Command`; older deployed definitions can fail immediately in `SeedFromBronze`.
 - Fresh silver stores may not contain the legacy `sec_tracked_universe` table; table-count reporting must treat that missing table as zero so `seed-bronze-batches` can finish after writing the CIK batch manifest.
-- First-time copied-bronze loads may not have `warehouse/silver/sec/shard-manifest.json`; current code falls back to monolith silver and the `bronze_seed_silver_gold` recovery workflow runs `BatchSilver` sequentially to avoid write races.
-- Current prod status (2026-06-23): prod redeployed at ECS task-def revision 11 with the correct warehouse and MDM images; a fresh `bronze_seed_silver_gold` execution is in flight. Do not flip Blocker 4 to PASS until it's confirmed SUCCEEDED.
-- Do not flip Blocker 4 / hosted graph E2E to PASS until `SeedFromBronze`, `BatchSilver`, `MdmRun`, `MdmBackfill`, `MdmSync`, `MdmVerify`, and `GoldRefresh` all succeed in prod and the run shows zero `sec_pull_started` events during `BatchSilver`.
+- First-time copied-bronze loads may not have `warehouse/silver/sec/shard-manifest.json`; `bootstrap-batch` and `mdm run`'s silver reader both fall back to the monolith `silver.duckdb` when no shard manifest exists yet (write side: `warehouse_orchestrator.py`'s `shard_manifest_missing_monolith_fallback`; read side: `mdm/cli.py`'s `_silver_reader()`). The `bronze_seed_silver_gold` recovery workflow runs `BatchSilver` sequentially (`maxConcurrency=1`) to avoid write races on that single monolith file.
+- `bootstrap-batch`'s idempotency check only consulted the silver checkpoint table, not S3 bronze existence directly -- on a fresh silver DB this caused real per-CIK SEC API calls during `BatchSilver` despite the bronze already existing in S3 (confirmed live: ~1 batch/hour with live `sec_pull_started` events, vs ~7-10 min/batch with zero SEC calls after the fix). Fixed via a CIK-prefix glob fallback (`StorageLocation.find_existing`). Always verify a `bronze_seed_silver_gold` run's first batch shows zero `sec_pull_started` events in CloudWatch within minutes of starting -- don't wait an hour to check.
+- Do not treat `BatchSilver` succeeding as proof the whole chain works: the first time this chain ever reached `MdmRun` in prod, it failed separately (read-side shard-manifest-missing bug, distinct from the write-side bug above). Do not flip Blocker 4 / hosted graph E2E to PASS until `SeedFromBronze`, `BatchSilver`, `MdmRun`, `MdmBackfill`, `MdmSync`, `MdmVerify`, and `GoldRefresh` all succeed in prod and the run shows zero `sec_pull_started` events during `BatchSilver`.
+- **Do not redrive a failed `bronze_seed_silver_gold` execution after deploying a fix.** AWS Step Functions pins a redriven execution to the exact task-definition revision that was active when that execution last reached the failed state -- it does NOT pick up newly deployed revisions. Confirmed live: redriving after deploying a fix still ran the OLD task-definition revision and reproduced the OLD failure. Always start a fresh execution to pick up a new image/fix; only redrive when no relevant image has changed since the failure (e.g. a transient network blip) and you want to skip re-running already-succeeded `BatchSilver` batches.
 - `deploy-aws-application.sh --enable-mdm` silently defaults MDM task definitions to the *warehouse* image ref when `--mdm-image-ref` is omitted -- they need different images (MDM installs `.[s3,mdm-runtime]`, warehouse installs `.[s3]`). Always pass `--mdm-image-ref` explicitly; the go-live wizard's stages now do this automatically by publishing and resolving both image refs separately.
 - `cleanup-ecr-images.sh` only protects image digests referenced by *currently active* ECS task definitions. If you redeploy with a stale cached image ref (e.g. from an old `infra/aws-<env>-application.json` or a manually-typed digest) and then run cleanup, the digest you're about to deploy can be deleted out from under you if it isn't the one already active. Always redeploy with a freshly published or freshly verified-present image ref before running ECR cleanup, not after assuming an old digest is still around.
+- `sec_platform_runner_step_functions` needs `states:RedriveExecution` (in addition to `StartExecution`/`DescribeExecution`/`StopExecution`) for redrive to work at all -- this was missing and is now in Terraform (`infra/terraform/access/aws/modules/runtime_access/main.tf`). If a redrive call fails with an IAM authorization error, check this policy is actually applied (`terraform apply` in `infra/terraform/access/aws/accounts/<env>/`, not a CLI-only patch that can drift from source).
 EOF
 }
 
@@ -640,13 +642,30 @@ state_machine_arn=\"arn:aws:states:${AWS_REGION_NAME}:\${account_id}:stateMachin
 execution_name=\"bronze-seed-silver-gold-\$(date +%s)\"
 execution_arn=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions start-execution --state-machine-arn \"\${state_machine_arn}\" --name \"\${execution_name}\" --input '{\"batch_size\": 100}' --query executionArn --output text)\"
 echo \"Started execution: \${execution_arn}\"
+echo \"This runs BatchSilver sequentially (maxConcurrency=1, required while no shard manifest exists yet) -- expect roughly 7-10 minutes per batch of 100 CIKs, dominated by per-CIK silver/MDM writes, not bronze capture. A first-time load of ~80 batches can take several hours; this is a one-time cold-start/recovery cost, not a recurring one.\"
+last_succeeded=-1
 while true; do
   status=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions describe-execution --execution-arn \"\${execution_arn}\" --query status --output text)\"
-  echo \"Status: \${status}\"
+  map_run_arn=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions list-map-runs --execution-arn \"\${execution_arn}\" --query 'mapRuns[0].mapRunArn' --output text 2>/dev/null)\"
+  if [[ -n \"\${map_run_arn}\" && \"\${map_run_arn}\" != \"None\" ]]; then
+    succeeded=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions describe-map-run --map-run-arn \"\${map_run_arn}\" --query itemCounts.succeeded --output text 2>/dev/null || echo -1)\"
+    failed=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions describe-map-run --map-run-arn \"\${map_run_arn}\" --query itemCounts.failed --output text 2>/dev/null || echo 0)\"
+    total=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions describe-map-run --map-run-arn \"\${map_run_arn}\" --query itemCounts.total --output text 2>/dev/null || echo '?')\"
+    if [[ \"\${succeeded}\" != \"\${last_succeeded}\" ]]; then
+      echo \"Status: \${status} -- BatchSilver \${succeeded}/\${total} succeeded, \${failed} failed\"
+      last_succeeded=\"\${succeeded}\"
+    fi
+  else
+    echo \"Status: \${status}\"
+  fi
   case \"\${status}\" in
     SUCCEEDED) break ;;
-    FAILED|ABORTED|TIMED_OUT) echo \"Execution did not succeed: \${status}. Inspect via: aws stepfunctions get-execution-history --execution-arn \${execution_arn}\" >&2; exit 1 ;;
-    *) sleep 25 ;;
+    FAILED|ABORTED|TIMED_OUT)
+      echo \"Execution did not succeed: \${status}. Inspect via: aws stepfunctions get-execution-history --execution-arn \${execution_arn}\" >&2
+      echo \"If only BatchSilver succeeded and a later stage (MdmRun etc.) failed, and you intend to redeploy a fix before retrying: do NOT redrive this execution -- AWS Step Functions pins a redriven execution to the task-definition revision that was active when it last reached that state, not whatever you redeploy afterward. Start a fresh execution instead so it binds to the current state machine definition.\" >&2
+      exit 1
+      ;;
+    *) sleep 60 ;;
   esac
 done
 echo \"bronze_seed_silver_gold SUCCEEDED. Do not treat this alone as Blocker 4 / hosted-graph-E2E PASS -- separately confirm via CloudWatch logs that zero sec_pull_started events occurred during BatchSilver.\""
