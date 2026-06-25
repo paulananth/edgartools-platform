@@ -931,17 +931,71 @@ class SilverDatabase:
     # ------------------------------------------------------------------
 
     def merge_filings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        """Bulk UPSERT into sec_company_filing.
+
+        A single CIK's full filing history can be hundreds to low-thousands of
+        rows (first-load recovery stages a company's entire "recent" + all
+        pagination-file filings at once, not just a day's worth). The previous
+        row-by-row execute() loop was the dominant cost of bronze_seed_silver_gold's
+        BatchSilver stage (~93% of per-batch time, measured live) -- per-statement
+        parse/plan/exec overhead repeated per row against a growing table, not
+        anything sharding would fix. _merge_rows_bulk (already used by
+        merge_financial_facts/merge_financial_derived) stages all rows in one
+        executemany() then applies the upsert as two set-based SQL statements.
+        """
+        if not rows:
+            return 0
         now = datetime.now(UTC)
-        count = 0
-        for row in rows:
-            self._conn.execute(
-                """
+        return self._merge_rows_bulk(
+            staging_table="stg_sec_company_filing",
+            staging_ddl="""
+                CREATE TEMP TABLE IF NOT EXISTS stg_sec_company_filing (
+                    seq                 BIGINT,
+                    accession_number    TEXT,
+                    cik                 BIGINT,
+                    form                TEXT,
+                    filing_date         DATE,
+                    report_date         DATE,
+                    acceptance_datetime TEXT,
+                    act                 TEXT,
+                    file_number         TEXT,
+                    film_number         TEXT,
+                    items               TEXT,
+                    size                BIGINT,
+                    is_xbrl             BOOLEAN,
+                    is_inline_xbrl      BOOLEAN,
+                    primary_document    TEXT,
+                    primary_doc_desc    TEXT,
+                    last_sync_run_id    TEXT,
+                    last_synced_at      TIMESTAMPTZ
+                )
+            """,
+            insert_first_sql="""
                 INSERT INTO sec_company_filing
                     (accession_number, cik, form, filing_date, report_date,
                      acceptance_datetime, act, file_number, film_number, items,
                      size, is_xbrl, is_inline_xbrl, primary_document,
                      primary_doc_desc, last_sync_run_id, last_synced_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                SELECT accession_number, cik, form, filing_date, report_date,
+                       acceptance_datetime, act, file_number, film_number, items,
+                       size, is_xbrl, is_inline_xbrl, primary_document,
+                       primary_doc_desc, last_sync_run_id, last_synced_at
+                FROM stg_sec_company_filing
+                QUALIFY ROW_NUMBER() OVER (PARTITION BY accession_number ORDER BY seq ASC) = 1
+                ON CONFLICT (accession_number) DO NOTHING
+            """,
+            insert_last_sql="""
+                INSERT INTO sec_company_filing
+                    (accession_number, cik, form, filing_date, report_date,
+                     acceptance_datetime, act, file_number, film_number, items,
+                     size, is_xbrl, is_inline_xbrl, primary_document,
+                     primary_doc_desc, last_sync_run_id, last_synced_at)
+                SELECT accession_number, cik, form, filing_date, report_date,
+                       acceptance_datetime, act, file_number, film_number, items,
+                       size, is_xbrl, is_inline_xbrl, primary_document,
+                       primary_doc_desc, last_sync_run_id, last_synced_at
+                FROM stg_sec_company_filing
+                QUALIFY ROW_NUMBER() OVER (PARTITION BY accession_number ORDER BY seq DESC) = 1
                 ON CONFLICT (accession_number) DO UPDATE SET
                     form = excluded.form,
                     filing_date = excluded.filing_date,
@@ -954,29 +1008,28 @@ class SilverDatabase:
                     primary_doc_desc = excluded.primary_doc_desc,
                     last_sync_run_id = excluded.last_sync_run_id,
                     last_synced_at = excluded.last_synced_at
-                """,
-                [
-                    row["accession_number"],
-                    row["cik"],
-                    row.get("form"),
-                    row.get("filing_date"),
-                    row.get("report_date"),
-                    row.get("acceptance_datetime"),
-                    row.get("act"),
-                    row.get("file_number"),
-                    row.get("film_number"),
-                    row.get("items"),
-                    row.get("size"),
-                    row.get("is_xbrl"),
-                    row.get("is_inline_xbrl"),
-                    row.get("primary_document"),
-                    row.get("primary_doc_desc"),
-                    sync_run_id,
-                    now,
-                ],
-            )
-            count += 1
-        return count
+            """,
+            rows=rows,
+            values_fn=lambda row: [
+                row["accession_number"],
+                row["cik"],
+                row.get("form"),
+                row.get("filing_date"),
+                row.get("report_date"),
+                row.get("acceptance_datetime"),
+                row.get("act"),
+                row.get("file_number"),
+                row.get("film_number"),
+                row.get("items"),
+                row.get("size"),
+                row.get("is_xbrl"),
+                row.get("is_inline_xbrl"),
+                row.get("primary_document"),
+                row.get("primary_doc_desc"),
+                sync_run_id,
+                now,
+            ],
+        )
 
     def get_filing_count(self, cik: int) -> int:
         return self._conn.execute(
@@ -1047,17 +1100,24 @@ class SilverDatabase:
         rows_written += self.merge_addresses(address_rows, sync_run_id)
         rows_written += self.merge_former_names(former_name_rows, sync_run_id)
         rows_written += self.merge_submission_files(manifest_rows, sync_run_id)
-        rows_written += self.merge_filings(recent_rows, sync_run_id)
 
+        # Collect recent + all pagination-file rows and merge in ONE bulk call
+        # instead of one call per pagination file (a well-filed company can
+        # have 50+ pagination files). merge_filings' staged-bulk upsert already
+        # dedupes correctly when the same accession_number appears more than
+        # once across recent/pagination rows, so combining is safe and avoids
+        # paying per-call staging-table overhead dozens of times per CIK.
+        all_filing_rows = list(recent_rows)
         pagination_accessions: list[str] = []
         for _file_name, pagination_payload in pagination_payloads:
             pagination_rows = stage_pagination_filing_loader(
                 pagination_payload, cik, sync_run_id, raw_object_id, load_mode
             )
-            rows_written += self.merge_filings(pagination_rows, sync_run_id)
+            all_filing_rows.extend(pagination_rows)
             pagination_accessions.extend(
                 row["accession_number"] for row in pagination_rows if row.get("accession_number")
             )
+        rows_written += self.merge_filings(all_filing_rows, sync_run_id)
 
         return {
             "rows_written": rows_written,
