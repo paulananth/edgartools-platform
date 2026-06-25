@@ -70,7 +70,7 @@ def test_bronze_seed_state_machine_runs_batch_silver_with_bounded_parallelism() 
 
     assert '"MaxConcurrency": 4' in text
     assert "First-load recovery from cached bronze. Runs four batches at a time" in text
-    assert "only MaxConcurrency=2 has been validated end-to-end in prod" in text
+    assert "Validated end-to-end in prod at MaxConcurrency=4" in text
     assert "sequential bootstrap-batch uses bronze SHA256 cache" in text
 
 
