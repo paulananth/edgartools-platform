@@ -150,3 +150,70 @@ any redeploy):
 Do not update Blocker 4 launch-matrix rows to PASS, populate
 `edgartools-prod/mdm/neo4j` or `edgartools-prod/mdm/api_keys`, or proceed to
 dashboard/final GO evidence until this blocker is resolved.
+
+## Update (2026-06-25) — Blocker 4 resolved via `bronze_seed_silver_gold`, not `run-aws-mdm-e2e.sh`
+
+The Neo4j-wiring blocker documented above was never fixed by editing
+`run-aws-mdm-e2e.sh`'s `mdm_migrate` path. Instead, a new Step Function,
+`bronze_seed_silver_gold`, was added in this session to cold-start/recover an
+environment from an already-present S3 bronze snapshot with zero new SEC
+calls. Its chain is `SeedFromBronze -> BatchSilver -> MdmRun -> MdmBackfill ->
+MdmSync -> MdmVerify -> GoldRefresh` — it never calls `mdm_migrate`, so the
+legacy `NEO4J_*` secrets-injection failure documented above does not apply to
+this path at all.
+
+Verified live that the underlying task-definition wiring issue is also gone:
+
+```bash
+aws ecs describe-task-definition --region us-east-1 \
+  --task-definition edgartools-prod-mdm-medium:19 \
+  --query "taskDefinition.containerDefinitions[0].secrets"
+```
+
+Result: only `MDM_DATABASE_URL`, `MDM_SNOWFLAKE_SECRET_JSON`, and
+`EDGAR_IDENTITY` are injected. No `NEO4J_*` entry. The legacy wiring was
+removed from the MDM task-definition template at some point in this
+session's redeploy cycle.
+
+### PASS evidence
+
+Execution: `bronze-seed-silver-gold-1782351277`
+Start: 2026-06-24T21:34:39-04:00
+Stop: 2026-06-25T00:20:32-04:00
+Final status: `SUCCEEDED`
+
+| Stage | Result |
+|---|---|
+| `SeedFromBronze` | exited 21:36:14 |
+| `BatchSilver` (Distributed Map, `MaxConcurrency=2` at the time of this run) | Map run `SUCCEEDED` 23:03:57; 81/81 batches succeeded, 0 failed |
+| `MdmRun` | exited 00:14:52 |
+| `MdmBackfill` | exited 00:16:08 |
+| `MdmSync` | exited 00:17:15 |
+| `MdmVerify` | exited 00:18:42 |
+| `GoldRefresh` | exited 00:20:32 |
+
+Zero-SEC-call requirement: filtered `/aws/ecs/edgartools-prod-warehouse`
+CloudWatch logs for `sec_pull_started` across the full `BatchSilver` window
+(21:36:14-23:03:57) — zero matches. Confirmed the log group/window were
+correct by also pulling `bronze_capture_completed` events in the same window
+(non-empty, ~25-30s per 100-CIK batch, consistent with the PR95
+`merge_filings` bulk-upsert fix landing as expected).
+
+**Blocker 4 / GRAPH-04: PASS.**
+
+### Open follow-up: BatchSilver concurrency
+
+The state machine deployed for this PASS ran `BatchSilver` at
+`MaxConcurrency=2` — a value that was live in prod but had not been committed
+to `infra/scripts/deploy-aws-application.sh` source at the time. Source also
+briefly carried an unvalidated `MaxConcurrency=5` bump
+(`codex/blocker4-live-retry`'s `7ba5ec6`), which was reverted (PR #97) because
+raising concurrency on this code path is a write-race risk lever, not just a
+throughput lever — all concurrent batches write to the same monolith
+`silver.duckdb` fallback file when no shard manifest exists yet.
+
+Per explicit operator direction (2026-06-25), source has been updated to
+`MaxConcurrency=4`. This value is **unvalidated** — only `2` produced the PASS
+documented above. The next live `bronze_seed_silver_gold` execution should be
+monitored closely for monolith write-contention symptoms (DuckDB lock errors,
+duplicate or partial filing rows) before `4` is treated as confirmed safe.

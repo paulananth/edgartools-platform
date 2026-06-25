@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Production Launch Execution
-status: blocked
-stopped_at: Phase 9 merged to main via PR #81; Blocker 4 remains open on legacy Neo4j secret wiring in MDM ECS task definition
-last_updated: "2026-06-22T01:31:45.000Z"
-last_activity: 2026-06-22 -- PR #81 (claude/go-live-v1.6-phase9, carrying Codex's 12 Phase 9 commits + 1 Claude takeover commit) merged to main (merge commit 24ab70c). All 7 CI checks passed. Blocker 4 remains open pending the task-definition fix.
+status: in_progress
+stopped_at: Blocker 4 PASS confirmed via bronze_seed_silver_gold execution bronze-seed-silver-gold-1782351277 (full chain SUCCEEDED, zero sec_pull_started); BatchSilver MaxConcurrency raised to 4 in source (unvalidated, PR pending) on top of the validated MaxConcurrency=2 run
+last_updated: "2026-06-25T06:34:00.000Z"
+last_activity: 2026-06-25 -- bronze_seed_silver_gold reached SUCCEEDED end-to-end in prod for the first time (PR #92, #93, #95, #97 all merged this session). Blocker 4 flipped to PASS. MaxConcurrency bumped 2->4 in source per operator request; unvalidated, needs a fresh live run to confirm before being trusted at scale.
 progress:
   total_phases: 6
   completed_phases: 3
@@ -218,14 +218,56 @@ and `claude/go-live-v1.6-phase9` are both fully merged into `main` (PR #81, merg
   operator approval to edit the MDM ECS task-definition template (remove the
   `NEO4J_*`/`edgartools-prod/mdm/neo4j` secrets injection), redeploy, then
   retry the AWS MDM E2E chain from `mdm_migrate` onward.
+  [2026-06-23/24, Claude session] The legacy Neo4j secrets-injection blocker
+  above is moot for the path actually used to reach PASS: `bronze_seed_silver_gold`
+  (new Step Function, added this session) never runs `mdm_migrate` at all — it
+  discovers CIKs directly from S3 bronze and chains `SeedFromBronze ->
+  BatchSilver -> MdmRun -> MdmBackfill -> MdmSync -> MdmVerify -> GoldRefresh`.
+  Confirmed live (`aws ecs describe-task-definition
+  edgartools-prod-mdm-medium:19`) that the deployed MDM task definition's
+  `secrets` list only contains `MDM_DATABASE_URL`, `MDM_SNOWFLAKE_SECRET_JSON`,
+  and `EDGAR_IDENTITY` — no `NEO4J_*` entry. The legacy wiring was removed from
+  the task-definition template at some point in this session's redeploys; the
+  remaining TODOS.md D-05b cleanup-debt note is now historical.
+  Along the way: found and fixed `mdm run`'s silver reader missing the
+  write-side monolith fallback (PR #92), a missing `states:RedriveExecution`
+  IAM permission blocking redrive recovery (PR #93), a real `BatchSilver`
+  per-row `merge_filings` perf bug (PR #95, ~4.2x faster bulk-upsert), and a
+  `describe-map-run` query-field bug (`itemCounts` vs `executionCounts`) in
+  `go-live.sh`'s progress polling (PR #97). PR #97 also reverted an
+  unvalidated `BatchSilver MaxConcurrency` bump from 1 to 5 found on
+  `codex/blocker4-live-retry` (write-race risk on the monolith silver.duckdb
+  fallback, never tested in prod).
+  **PASS evidence**: execution `bronze-seed-silver-gold-1782351277`
+  (2026-06-24T21:34:39-04:00 to 2026-06-25T00:20:32-04:00) reached
+  `ExecutionSucceeded`. All seven stages exited cleanly: `SeedFromBronze`,
+  `BatchSilver` (Map run `SUCCEEDED`, 81/81 batches, zero `sec_pull_started`
+  events confirmed across the full window via CloudWatch
+  `/aws/ecs/edgartools-prod-warehouse`, ~25-30s per 100-CIK batch matching the
+  PR95 perf fix), `MdmRun`, `MdmBackfill`, `MdmSync`, `MdmVerify`,
+  `GoldRefresh`. The live deployed state machine ran `BatchSilver` at
+  `MaxConcurrency=2` (not yet committed to source at the time of the PASS).
+  [2026-06-25, operator decision] Operator directed source be set to
+  `MaxConcurrency=4` going forward (PR pending) — this value is **unvalidated**
+  in prod; only `MaxConcurrency=2` produced the PASS above. Blocker 4 / hosted
+  graph E2E is flipped to **PASS** on the strength of the `MaxConcurrency=2`
+  evidence; the next live run at `MaxConcurrency=4` should be watched closely
+  for monolith write-contention regressions before being treated as
+  re-confirming this PASS.
+
+- Blocker 4: **FULLY REMEDIATED** (2026-06-25) — see detailed evidence above
+  and `phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md`
+  (bronze_seed_silver_gold addendum). GRAPH-04 satisfied.
 
 - Blocker 5: Prod dashboard UAT has not yet run against a production or
   production-like read-only configuration.
 
 ## Pending Todos
 
-- Get explicit operator approval to remove the legacy `NEO4J_*`/`edgartools-prod/mdm/neo4j` secrets injection from the MDM ECS task-definition template (`deploy-aws-application.sh`), then redeploy the already-applied Phase 6 ECS task definitions.
-- Re-run the operator-approved production AWS MDM E2E command from `mdm_migrate` onward once the task-definition fix is deployed; flip Blocker 4 launch-matrix rows to PASS only after the full chain reaches `SUCCEEDED`.
+- Watch the next live `bronze_seed_silver_gold` run at `MaxConcurrency=4`
+  (source updated 2026-06-25, unvalidated) for monolith write-contention
+  regressions; revert to `MaxConcurrency=2` if any DuckDB lock errors or
+  duplicate/partial rows appear.
 - Preserve all v1.5 evidence and milestone archives while adding v1.6 planning artifacts.
 
 ## Pre-Planning Branch Audit (2026-06-13)
@@ -243,12 +285,16 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-22T01:31:45.000Z
-Stopped at: PR #81 merged to `main` (merge commit `24ab70c`). Phase 9 plans
-(09-01, 09-02) and their evidence are now on `main`. Blocker 4 remains open:
-the AWS MDM E2E chain failed at `mdm_migrate` due to legacy Neo4j secret
-wiring in the MDM ECS task definition; the fix (template edit + redeploy)
-was explicitly deferred pending separate operator approval.
+Last session: 2026-06-25T06:34:00.000Z
+Stopped at: Blocker 4 flipped to PASS. `bronze_seed_silver_gold` (new Step
+Function added this session, bypasses `mdm_migrate`/Neo4j entirely) reached
+`ExecutionSucceeded` end-to-end in prod for the first time, with confirmed
+zero `sec_pull_started` events during `BatchSilver`. Four bugs found and
+fixed along the way (PR #92, #93, #95, #97), all merged to `main`. Source
+`BatchSilver MaxConcurrency` was then bumped from the validated `2` to an
+unvalidated `4` per explicit operator request (PR pending) — the next live
+run should be watched closely before treating it as re-confirming the PASS.
+Remaining open item: Blocker 5 (dashboard UAT against prod/prod-like config).
 Resume file: .planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md
 Resume command: branch from `main` (do not reuse `codex/go-live-v1.6-phase9`
 or `claude/go-live-v1.6-phase9` — both are merged). Do not redo Phase 8,
