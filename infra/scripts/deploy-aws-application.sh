@@ -1972,7 +1972,7 @@ batch = ecs_state(wh_medium_arn,
 batch_map = {
     "Type": "Map",
     "MaxConcurrency": 4,
-    "Comment": "First-load recovery from cached bronze. Runs four batches at a time to use the PR95 bulk merge optimization; only MaxConcurrency=2 has been validated end-to-end in prod (run bronze-seed-silver-gold-1782351277, 2026-06-24/25, zero sec_pull_started). 4 is unvalidated -- monitor the next live run closely for monolith-fallback write contention.",
+    "Comment": "First-load recovery from cached bronze. Runs four batches at a time to use the PR95 bulk merge optimization. Validated end-to-end in prod at MaxConcurrency=4 (run bronze-seed-silver-gold-1782384165, 2026-06-25: 81/81 BatchSilver batches succeeded, zero sec_pull_started, full chain through GoldRefresh SUCCEEDED), confirming the earlier MaxConcurrency=2 PASS (run bronze-seed-silver-gold-1782351277, 2026-06-24/25).",
     "ToleratedFailurePercentage": 0,
     "ItemReader": {
         "Resource": "arn:aws:states:::s3:getObject",

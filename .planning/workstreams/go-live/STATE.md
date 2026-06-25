@@ -259,8 +259,16 @@ and `claude/go-live-v1.6-phase9` are both fully merged into `main` (PR #81, merg
   and `phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md`
   (bronze_seed_silver_gold addendum). GRAPH-04 satisfied.
 
-- Blocker 5: Prod dashboard UAT has not yet run against a production or
-  production-like read-only configuration.
+- Blocker 5: **FULLY REMEDIATED** (2026-06-25) — dashboard UAT run against
+  edgartools-dev (production-like config) post `bronze_seed_silver_gold` SUCCEEDED
+  run. All 5 launch-critical views PASS: MDM overview (5,500 companies, 2,251
+  people, 322 securities), hosted graph overview (entity comparison all OK, 6
+  types), mismatch diagnostics (zero mismatches, bounded sample copy present),
+  manual refresh timestamps (both MDM and Snowflake timestamps live), bounded
+  samples (row limit selector functional). DASH-01, DASH-03, DASH-04 satisfied.
+  Security check clean (no secrets, no mutation controls, no unbounded exports).
+  43/43 credential-free tests pass. Operator sign-off received 2026-06-25.
+  Evidence: `phases/10-dashboard-uat/evidence/blocker5-dashboard-uat.md`.
 
 ## Pending Todos
 
@@ -269,6 +277,8 @@ and `claude/go-live-v1.6-phase9` are both fully merged into `main` (PR #81, merg
   regressions; revert to `MaxConcurrency=2` if any DuckDB lock errors or
   duplicate/partial rows appear.
 - Preserve all v1.5 evidence and milestone archives while adding v1.6 planning artifacts.
+- **All blockers (1–5) are now FULLY REMEDIATED.** Proceed to Phase 11:
+  go/no-go evidence audit and final operator sign-off packet.
 
 ## Pre-Planning Branch Audit (2026-06-13)
 
@@ -285,22 +295,15 @@ needed — it was already current.
 
 ## Session Continuity
 
-Last session: 2026-06-25T06:34:00.000Z
-Stopped at: Blocker 4 flipped to PASS. `bronze_seed_silver_gold` (new Step
-Function added this session, bypasses `mdm_migrate`/Neo4j entirely) reached
-`ExecutionSucceeded` end-to-end in prod for the first time, with confirmed
-zero `sec_pull_started` events during `BatchSilver`. Four bugs found and
-fixed along the way (PR #92, #93, #95, #97), all merged to `main`. Source
-`BatchSilver MaxConcurrency` was then bumped from the validated `2` to an
-unvalidated `4` per explicit operator request (PR pending) — the next live
-run should be watched closely before treating it as re-confirming the PASS.
-Remaining open item: Blocker 5 (dashboard UAT against prod/prod-like config).
-Resume file: .planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md
-Resume command: branch from `main` (do not reuse `codex/go-live-v1.6-phase9`
-or `claude/go-live-v1.6-phase9` — both are merged). Do not redo Phase 8,
-Task 3 Native App grants, runtime-role grant remediation, first-time mirror
-load, or local strict verify-graph (all already PASS on main). Next step is
-the task-definition fix + redeploy + AWS MDM E2E re-run described above.
+Last session: 2026-06-25T23:55:00.000Z
+Stopped at: Blocker 5 flipped to PASS. Dashboard UAT (Phase 10) completed
+against edgartools-dev production-like config. All 5 launch-critical views
+confirmed PASS, security check clean, operator sign-off received. Evidence at
+`phases/10-dashboard-uat/evidence/blocker5-dashboard-uat.md`. All 5 go-live
+blockers (1–5) are now FULLY REMEDIATED.
+Resume file: .planning/workstreams/go-live/phases/10-dashboard-uat/evidence/blocker5-dashboard-uat.md
+Resume command: branch from `main`. Next step is Phase 11 — go/no-go evidence
+audit (11-01) and final operator sign-off packet (11-02).
 
 ## Performance Metrics
 

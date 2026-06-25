@@ -120,7 +120,7 @@ production-like configuration after the CLI/dbt/Native App gates are available.
 
 **Plans:** 1
 
-- [ ] **10-01:** Production or production-like dashboard UAT for all 5 launch-critical views.
+- [x] **10-01:** Production or production-like dashboard UAT for all 5 launch-critical views. — PASS 2026-06-25; evidence at `phases/10-dashboard-uat/evidence/blocker5-dashboard-uat.md`
 
 **Success criteria:**
 
@@ -164,7 +164,7 @@ contracts, flips the launch decision only if every blocker is PASS, and hands of
 | MDM-02 | Phase 8 | Pending |
 | GRAPH-03 | Phase 9 | Complete |
 | GRAPH-04 | Phase 9 | Blocked |
-| DASH-04 | Phase 10 | Pending |
+| DASH-04 | Phase 10 | Complete |
 | LIVE-06 | Phase 11 | Pending |
 | OPS-03 | Phase 11 | Pending |
 | SEC-02 | Phase 11 | Pending |
