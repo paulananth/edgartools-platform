@@ -1971,8 +1971,8 @@ batch = ecs_state(wh_medium_arn,
 
 batch_map = {
     "Type": "Map",
-    "MaxConcurrency": 1,
-    "Comment": "First-load recovery from cached bronze. Runs sequentially so monolith fallback cannot race.",
+    "MaxConcurrency": 5,
+    "Comment": "First-load recovery from cached bronze. Runs five batches at a time to use the PR95 bulk merge optimization while limiting monolith fallback write contention.",
     "ToleratedFailurePercentage": 0,
     "ItemReader": {
         "Resource": "arn:aws:states:::s3:getObject",
