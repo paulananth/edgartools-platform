@@ -815,20 +815,7 @@ precedent and known gap).
 
 ---
 
-## External Neo4j runtime remnant deprecation — RESOLVED (2026-06-25)
-
-**Resolution:** Confirmed `infra/scripts/deploy-aws-application.sh` no longer
-contains any `NEO4J_*` references (`grep -n "NEO4J\|neo4j"` returns nothing).
-Live verification against the deployed prod task definition
-(`aws ecs describe-task-definition edgartools-prod-mdm-medium:19`) shows only
-`MDM_DATABASE_URL`, `MDM_SNOWFLAKE_SECRET_JSON`, and `EDGAR_IDENTITY` injected
-— no Neo4j secret. Blocker 4 (go-live STATE.md) closed via the new
-`bronze_seed_silver_gold` Step Function, which doesn't call `mdm_migrate` at
-all (see PASS evidence in
-`.planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md`).
-Original blocker description retained below for history.
-
-## External Neo4j runtime remnant deprecation — CONFIRMED HARD PRODUCTION BLOCKER (2026-06-22)
+## External Neo4j runtime remnant deprecation — RESOLVED for Blocker 4 (2026-06-25)
 
 **What:** Formally remove or deprecate any remaining external (Aura) Neo4j
 runtime references and infrastructure remnants now that the platform is
@@ -836,36 +823,102 @@ fully migrated to the Snowflake-hosted graph Native App.
 
 **Why (updated):** Originally tracked as deferred cleanup debt. The go-live
 workstream's Phase 9 Plan 09-02 production AWS MDM E2E run (PR #81, merged
-to `main` as `24ab70c`) proved this is not just cleanup debt — it is a hard
-production blocker. The `edgartools-prod-mdm-small` ECS task definition
-(produced by `infra/scripts/deploy-aws-application.sh`) still wires a
-`NEO4J_*`-prefixed secrets injection from `edgartools-prod/mdm/neo4j` into
-every MDM task, including `mdm migrate`, which has nothing to do with
-Neo4j. `edgartools-prod/mdm/neo4j` is intentionally never populated (Neo4j
-is deprecated, superseded by the Snowflake-hosted graph) — so the
-`mdm_migrate` ECS task fails to start (`ResourceInitializationError`,
-no `AWSCURRENT` secret version), and every downstream state machine in the
-chain (`mdm_check_connectivity`, `mdm_run`, `mdm_backfill_relationships`,
-`mdm_sync_graph`, `mdm_verify_graph`, `mdm_counts`) never starts.
-`run-aws-mdm-e2e.sh`'s own preflight warning about lingering `NEO4J_*`
-references treats this as warning-only "unless it blocks `mdm_sync_graph`
-or `mdm_verify_graph`" — that scope was too narrow; the wiring also blocks
-`mdm_migrate`, upstream of both. Full 5-whys and sanitized failure detail:
-`.planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md`.
+to `main` as `24ab70c`) proved this was a hard production blocker: MDM ECS
+tasks still injected a secret from `edgartools-prod/mdm/neo4j`, which this
+architecture intentionally never populates. That failure mode has been fixed
+for the validated Blocker 4 path without populating Neo4j or API-key secrets.
 
-**Fix (not yet done, requires separate operator approval):** Remove the
-`NEO4J_*`/`edgartools-prod/mdm/neo4j` secrets injection from the MDM task
-definition(s) in `deploy-aws-application.sh` (or its template), redeploy
-the already-applied Phase 6 ECS task definitions (production-impacting),
-then re-run the AWS MDM E2E chain from `mdm_migrate` onward. Do not
-populate `edgartools-prod/mdm/neo4j` as a workaround — that secret is out
-of scope for this architecture. This blocks go-live Blocker 4
-(STATE.md) from closing.
+**Resolution:** The final production retry on 2026-06-25 used live task
+definitions `edgartools-prod-medium:19` and `edgartools-prod-mdm-medium:19`
+and completed `bronze-seed-silver-gold-1782351277` end-to-end. The chain
+reached `MdmRun`, `MdmBackfill`, `MdmSync`, `MdmVerify`, and `GoldRefresh`,
+all with success logs. `edgartools-prod/mdm/neo4j` and
+`edgartools-prod/mdm/api_keys` remain unpopulated and unused by the final pass.
 
 **Where:** `infra/scripts/deploy-aws-application.sh` (MDM task-definition
 template); REQUIREMENTS.md ("Future Requirements" section, now superseded
 by the above for go-live purposes); search for remaining `NEO4J_*`/Aura
 references outside the dashboard README already cleaned up in Phase 4.
+
+---
+
+## Blocker 4 production retry postmortem — RESOLVED (2026-06-25)
+
+**Status:** RESOLVED. Production execution
+`bronze-seed-silver-gold-1782351277` succeeded end-to-end on 2026-06-25 with
+zero `sec_pull_started` and zero `filing_artifact_pipeline_started` events
+during BatchSilver. Evidence:
+`.planning/workstreams/go-live/phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md`.
+
+### SEC refetch bug
+
+1. **Symptom:** BatchSilver risked making live SEC calls even though prod had
+   an existing bronze snapshot.
+2. **Why:** The reprocessing path checked silver-side bookkeeping first; on a
+   fresh or incomplete silver database, the absence of checkpoint rows looked
+   like missing capture work.
+3. **Why:** There was no reliable S3 bronze existence fallback in the cold-start
+   BatchSilver path, so existing immutable bronze artifacts were not treated as
+   the source of truth.
+4. **Why:** The state-machine path had been designed for reprocessing CIKs
+   already known to silver, not rebuilding an environment from a copied bronze
+   corpus.
+5. **Root cause:** The runtime conflated "silver has no checkpoint yet" with
+   "bronze must be fetched from SEC", and there was no production guard that
+   failed fast on `sec_pull_started` during a no-refetch retry.
+
+**Fix:** Use the PR #91 bronze glob/fallback path and run BatchSilver with
+`--artifact-policy skip --parser-policy skip`. The final production evidence
+shows 0 `sec_pull_started`, 0 parser-fanout events, and 81/81 BatchSilver
+children completed from existing bronze/silver artifacts.
+
+### MDM image default bug
+
+1. **Symptom:** MDM tasks could fail or run with the wrong runtime surface when
+   the MDM image was omitted or silently defaulted to the warehouse image.
+2. **Why:** The deployment path allowed MDM-enabled rollout to inherit the
+   warehouse image instead of requiring an explicit MDM image reference.
+3. **Why:** Warehouse and MDM images have different dependency sets and runtime
+   assumptions, so the fallback only worked accidentally for some commands.
+4. **Why:** The go-live deploy checks verified that task definitions existed,
+   but did not force a separate MDM image digest before production retry.
+5. **Root cause:** MDM and warehouse runtime ownership were separated in code,
+   but the deploy script still treated the image reference as optional shared
+   state.
+
+**Fix:** Build and deploy a separate MDM image. The successful run used MDM
+digest `sha256:50af1f66...` on `edgartools-prod-mdm-medium:19`, while the
+warehouse tasks used digest `sha256:036b7487...` on
+`edgartools-prod-medium:19`.
+
+### ECR cleanup ordering hazard
+
+1. **Symptom:** Prod deploy cleanup could delete image tags or digests that the
+   same deploy was about to register in ECS task definitions.
+2. **Why:** Cleanup inspected active task definitions before the new task
+   definitions had been registered, so the image refs for the pending deploy
+   could appear unused.
+3. **Why:** The cleanup step ran before successful registration made the new
+   refs observable through ECS.
+4. **Why:** The retention logic protected currently active refs, but did not
+   also protect the explicit candidate refs passed to the deploy command.
+5. **Root cause:** The cleanup order used live ECS state as the only source of
+   protection, ignoring the operator-selected image refs for the in-flight
+   rollout.
+
+**Fix / follow-up:** Treat `--image-ref`, `--mdm-image-ref`, and dependency
+image refs as protected before any cleanup, or move cleanup after successful
+task-definition registration. For production retries, prefer skipping cleanup
+unless the exact candidate refs are explicitly protected.
+
+### PR #95 BatchSilver optimization
+
+The final warehouse image includes the PR #95 bulk filings merge optimization.
+That optimization was necessary for BatchSilver to be practical on the
+production bronze corpus. The validated state-machine concurrency for the
+successful run was `MaxConcurrency=2`; a later source edit to `MaxConcurrency=5`
+is not production-proven and should be validated separately before being used
+as a go-live assertion.
 
 ---
 
