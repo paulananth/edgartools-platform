@@ -214,7 +214,7 @@ CREATE TABLE IF NOT EXISTS SEC_FINANCIAL_FACT (
   segment          STRING        NOT NULL,
   fiscal_year      NUMBER(38, 0),
   period_end       DATE,
-  period_start     DATE          NOT NULL DEFAULT '0001-01-01',
+  period_start     DATE          NOT NULL,
   form_type        STRING,
   value            FLOAT,
   unit             STRING,
@@ -225,10 +225,14 @@ CREATE TABLE IF NOT EXISTS SEC_FINANCIAL_FACT (
 COMMENT = 'XBRL us-gaap fact per (cik, accession, concept, fiscal_period, segment, period_end, period_start). Passthrough from silver sec_financial_fact.';
 
 -- Stage 3 (period_start MERGE-key) migration for tables created before this
--- column existed. ADD COLUMN ... NOT NULL DEFAULT is non-destructive: Snowflake
--- backfills existing rows with the sentinel '0001-01-01' (matching silver's
--- _INSTANT_FACT_PERIOD_START_SENTINEL for "instant" facts with no XBRL "start").
-ALTER TABLE SEC_FINANCIAL_FACT ADD COLUMN IF NOT EXISTS period_start DATE NOT NULL DEFAULT '0001-01-01';
+-- column existed. Snowflake rejects ADD COLUMN ... NOT NULL DEFAULT for this
+-- DATE literal shape on existing tables, so use the live-safe three-step form.
+-- The loader/export path writes period_start explicitly for every row.
+ALTER TABLE SEC_FINANCIAL_FACT ADD COLUMN IF NOT EXISTS period_start DATE;
+UPDATE SEC_FINANCIAL_FACT
+SET period_start = DATE '0001-01-01'
+WHERE period_start IS NULL;
+ALTER TABLE SEC_FINANCIAL_FACT ALTER COLUMN period_start SET NOT NULL;
 
 CREATE TABLE IF NOT EXISTS SEC_THIRTEENF_HOLDING (
   cik                 NUMBER(38, 0) NOT NULL,

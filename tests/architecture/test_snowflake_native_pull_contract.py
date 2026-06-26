@@ -18,6 +18,7 @@ NATIVE_PULL_PROC = (
     / "source_load_procedure.sql"
 )
 BOOTSTRAP_LOAD_PROC = REPO_ROOT / "infra" / "snowflake" / "sql" / "bootstrap" / "03_source_load_wrapper.sql"
+SOURCE_STAGE_SQL = REPO_ROOT / "infra" / "snowflake" / "sql" / "bootstrap" / "01_source_stage.sql"
 
 
 class SnowflakeNativePullContractTests(unittest.TestCase):
@@ -60,6 +61,17 @@ class SnowflakeNativePullContractTests(unittest.TestCase):
         self.assertIn(
             f'["SEC_FINANCIAL_FACT", {expected}]',
             BOOTSTRAP_LOAD_PROC.read_text(encoding="utf-8"),
+        )
+
+    def test_financial_fact_period_start_migration_uses_live_safe_snowflake_form(self) -> None:
+        source_stage = SOURCE_STAGE_SQL.read_text(encoding="utf-8")
+
+        self.assertIn("ALTER TABLE SEC_FINANCIAL_FACT ADD COLUMN IF NOT EXISTS period_start DATE;", source_stage)
+        self.assertIn("SET period_start = DATE '0001-01-01'", source_stage)
+        self.assertIn("ALTER TABLE SEC_FINANCIAL_FACT ALTER COLUMN period_start SET NOT NULL;", source_stage)
+        self.assertNotIn(
+            "ALTER TABLE SEC_FINANCIAL_FACT ADD COLUMN IF NOT EXISTS period_start DATE NOT NULL DEFAULT",
+            source_stage,
         )
 
 
