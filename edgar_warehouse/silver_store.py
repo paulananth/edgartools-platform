@@ -435,6 +435,15 @@ CREATE TABLE IF NOT EXISTS sec_financial_derived (
     total_equity        DOUBLE,
     cash_and_equivalents DOUBLE,
     total_debt          DOUBLE,
+    current_assets      DOUBLE,
+    current_liabilities DOUBLE,
+    accounts_receivable DOUBLE,
+    inventory           DOUBLE,
+    selling_general_admin_expense DOUBLE,
+    retained_earnings   DOUBLE,
+    depreciation_amortization DOUBLE,
+    property_plant_equipment_net DOUBLE,
+    shares_outstanding  DOUBLE,
     -- Cash flow
     operating_cash_flow DOUBLE,
     capex               DOUBLE,
@@ -578,6 +587,18 @@ _FINANCIAL_TABLES_REQUIRING_PERIOD_END_PK = ("sec_financial_fact", "sec_financia
 # sec_financial_fact primary key (added in Stage 2 of the period_end PK fix).
 _INSTANT_FACT_PERIOD_START_SENTINEL = "0001-01-01"
 
+_SEC_FINANCIAL_DERIVED_FACTOR_COLUMNS = {
+    "current_assets": "DOUBLE",
+    "current_liabilities": "DOUBLE",
+    "accounts_receivable": "DOUBLE",
+    "inventory": "DOUBLE",
+    "selling_general_admin_expense": "DOUBLE",
+    "retained_earnings": "DOUBLE",
+    "depreciation_amortization": "DOUBLE",
+    "property_plant_equipment_net": "DOUBLE",
+    "shares_outstanding": "DOUBLE",
+}
+
 
 class SilverDatabase:
     """Manages the silver-layer DuckDB instance for a warehouse root."""
@@ -596,6 +617,10 @@ class SilverDatabase:
         migration_statements = [
             "ALTER TABLE sec_parse_run ADD COLUMN IF NOT EXISTS rows_written INTEGER",
             "ALTER TABLE sec_source_checkpoint ADD COLUMN IF NOT EXISTS bronze_path TEXT",
+            *[
+                f"ALTER TABLE sec_financial_derived ADD COLUMN IF NOT EXISTS {column} {column_type}"
+                for column, column_type in _SEC_FINANCIAL_DERIVED_FACTOR_COLUMNS.items()
+            ],
         ]
         for statement in migration_statements:
             self._conn.execute(statement)
@@ -2265,6 +2290,15 @@ class SilverDatabase:
                     total_equity         DOUBLE,
                     cash_and_equivalents DOUBLE,
                     total_debt           DOUBLE,
+                    current_assets       DOUBLE,
+                    current_liabilities  DOUBLE,
+                    accounts_receivable  DOUBLE,
+                    inventory            DOUBLE,
+                    selling_general_admin_expense DOUBLE,
+                    retained_earnings    DOUBLE,
+                    depreciation_amortization DOUBLE,
+                    property_plant_equipment_net DOUBLE,
+                    shares_outstanding   DOUBLE,
                     operating_cash_flow  DOUBLE,
                     capex                DOUBLE,
                     free_cash_flow       DOUBLE,
@@ -2282,13 +2316,19 @@ class SilverDatabase:
                     (cik, accession_number, fiscal_year, fiscal_period, period_end, form_type,
                      revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
                      total_assets, total_liabilities, total_equity, cash_and_equivalents,
-                     total_debt, operating_cash_flow, capex, free_cash_flow,
+                     total_debt, current_assets, current_liabilities, accounts_receivable,
+                     inventory, selling_general_admin_expense, retained_earnings,
+                     depreciation_amortization, property_plant_equipment_net,
+                     shares_outstanding, operating_cash_flow, capex, free_cash_flow,
                      gross_margin, ebitda_margin, net_margin, roic, roe, roa,
                      parser_version)
                 SELECT cik, accession_number, fiscal_year, fiscal_period, period_end, form_type,
                        revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
                        total_assets, total_liabilities, total_equity, cash_and_equivalents,
-                       total_debt, operating_cash_flow, capex, free_cash_flow,
+                       total_debt, current_assets, current_liabilities, accounts_receivable,
+                       inventory, selling_general_admin_expense, retained_earnings,
+                       depreciation_amortization, property_plant_equipment_net,
+                       shares_outstanding, operating_cash_flow, capex, free_cash_flow,
                        gross_margin, ebitda_margin, net_margin, roic, roe, roa,
                        parser_version
                 FROM stg_sec_financial_derived
@@ -2303,13 +2343,19 @@ class SilverDatabase:
                     (cik, accession_number, fiscal_year, fiscal_period, period_end, form_type,
                      revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
                      total_assets, total_liabilities, total_equity, cash_and_equivalents,
-                     total_debt, operating_cash_flow, capex, free_cash_flow,
+                     total_debt, current_assets, current_liabilities, accounts_receivable,
+                     inventory, selling_general_admin_expense, retained_earnings,
+                     depreciation_amortization, property_plant_equipment_net,
+                     shares_outstanding, operating_cash_flow, capex, free_cash_flow,
                      gross_margin, ebitda_margin, net_margin, roic, roe, roa,
                      parser_version)
                 SELECT cik, accession_number, fiscal_year, fiscal_period, period_end, form_type,
                        revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
                        total_assets, total_liabilities, total_equity, cash_and_equivalents,
-                       total_debt, operating_cash_flow, capex, free_cash_flow,
+                       total_debt, current_assets, current_liabilities, accounts_receivable,
+                       inventory, selling_general_admin_expense, retained_earnings,
+                       depreciation_amortization, property_plant_equipment_net,
+                       shares_outstanding, operating_cash_flow, capex, free_cash_flow,
                        gross_margin, ebitda_margin, net_margin, roic, roe, roa,
                        parser_version
                 FROM stg_sec_financial_derived
@@ -2329,6 +2375,15 @@ class SilverDatabase:
                     total_equity = excluded.total_equity,
                     cash_and_equivalents = excluded.cash_and_equivalents,
                     total_debt = excluded.total_debt,
+                    current_assets = excluded.current_assets,
+                    current_liabilities = excluded.current_liabilities,
+                    accounts_receivable = excluded.accounts_receivable,
+                    inventory = excluded.inventory,
+                    selling_general_admin_expense = excluded.selling_general_admin_expense,
+                    retained_earnings = excluded.retained_earnings,
+                    depreciation_amortization = excluded.depreciation_amortization,
+                    property_plant_equipment_net = excluded.property_plant_equipment_net,
+                    shares_outstanding = excluded.shares_outstanding,
                     operating_cash_flow = excluded.operating_cash_flow,
                     capex = excluded.capex,
                     free_cash_flow = excluded.free_cash_flow,
@@ -2348,6 +2403,11 @@ class SilverDatabase:
                 r.get("ebit"), r.get("net_income"), r.get("eps_diluted"),
                 r.get("total_assets"), r.get("total_liabilities"), r.get("total_equity"),
                 r.get("cash_and_equivalents"), r.get("total_debt"),
+                r.get("current_assets"), r.get("current_liabilities"),
+                r.get("accounts_receivable"), r.get("inventory"),
+                r.get("selling_general_admin_expense"), r.get("retained_earnings"),
+                r.get("depreciation_amortization"),
+                r.get("property_plant_equipment_net"), r.get("shares_outstanding"),
                 r.get("operating_cash_flow"), r.get("capex"), r.get("free_cash_flow"),
                 r.get("gross_margin"), r.get("ebitda_margin"), r.get("net_margin"),
                 r.get("roic"), r.get("roe"), r.get("roa"),

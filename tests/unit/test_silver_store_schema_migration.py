@@ -95,6 +95,40 @@ CREATE TABLE sec_financial_fact (
 );
 """
 
+_PRE_FACTOR_FINANCIAL_DERIVED_DDL = """
+CREATE TABLE sec_financial_derived (
+    cik                 BIGINT NOT NULL,
+    accession_number    TEXT NOT NULL,
+    fiscal_year         INTEGER NOT NULL,
+    fiscal_period       TEXT NOT NULL,
+    period_end          DATE NOT NULL,
+    form_type           TEXT NOT NULL,
+    revenue             DOUBLE,
+    gross_profit        DOUBLE,
+    ebitda              DOUBLE,
+    ebit                DOUBLE,
+    net_income          DOUBLE,
+    eps_diluted         DOUBLE,
+    total_assets        DOUBLE,
+    total_liabilities   DOUBLE,
+    total_equity        DOUBLE,
+    cash_and_equivalents DOUBLE,
+    total_debt          DOUBLE,
+    operating_cash_flow DOUBLE,
+    capex               DOUBLE,
+    free_cash_flow      DOUBLE,
+    gross_margin        DOUBLE,
+    ebitda_margin       DOUBLE,
+    net_margin          DOUBLE,
+    roic                DOUBLE,
+    roe                 DOUBLE,
+    roa                 DOUBLE,
+    parser_version      TEXT,
+    ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (cik, accession_number, fiscal_period, period_end)
+);
+"""
+
 
 def _pk_columns(conn: duckdb.DuckDBPyConnection, table: str) -> list[str]:
     row = conn.execute(
@@ -261,6 +295,26 @@ def _build_stage1_pk_store(db_path: str) -> None:
         conn.close()
 
 
+def _build_pre_factor_derived_store(db_path: str) -> None:
+    """Build a current-PK sec_financial_derived table from before the
+    accounting factor input columns existed.
+    """
+    conn = duckdb.connect(db_path)
+    try:
+        conn.execute(_PRE_FACTOR_FINANCIAL_DERIVED_DDL)
+        conn.execute(
+            """
+            INSERT INTO sec_financial_derived
+                (cik, accession_number, fiscal_year, fiscal_period, period_end,
+                 form_type, revenue, parser_version)
+            VALUES (320193, '0000320193-24-000123', 2024, 'FY', '2024-09-28',
+                    '10-K', 391035000000, 'pre-factor-test')
+            """
+        )
+    finally:
+        conn.close()
+
+
 def test_migration_adds_period_start_to_pk_and_drops_old_rows(tmp_path, caplog):
     db_path = str(tmp_path / "silver.duckdb")
     _build_stage1_pk_store(db_path)
@@ -333,5 +387,67 @@ def test_merge_financial_facts_with_period_start_succeeds_after_migration(tmp_pa
         # period_start=2024-01-01 (YTD, value=2000) sorts before
         # period_start=2024-04-01 (QTD, value=1000).
         assert [r["value"] for r in stored] == [2000, 1000]
+    finally:
+        db.close()
+
+
+def test_factor_input_columns_are_added_without_dropping_rows(tmp_path):
+    db_path = str(tmp_path / "silver.duckdb")
+    _build_pre_factor_derived_store(db_path)
+
+    db = SilverDatabase(db_path)
+    try:
+        assert db.fetch("SELECT COUNT(*) AS n FROM sec_financial_derived")[0]["n"] == 1
+
+        columns = {
+            row[1]
+            for row in db._conn.execute("PRAGMA table_info('sec_financial_derived')").fetchall()
+        }
+        for column in (
+            "current_assets",
+            "current_liabilities",
+            "accounts_receivable",
+            "inventory",
+            "selling_general_admin_expense",
+            "retained_earnings",
+            "depreciation_amortization",
+            "property_plant_equipment_net",
+            "shares_outstanding",
+        ):
+            assert column in columns
+
+        db.merge_financial_derived(
+            [
+                {
+                    "cik": 320193,
+                    "accession_number": "0000320193-24-000123",
+                    "fiscal_year": 2024,
+                    "fiscal_period": "FY",
+                    "period_end": "2024-09-28",
+                    "form_type": "10-K",
+                    "revenue": 391035000000,
+                    "current_assets": 152987000000,
+                    "current_liabilities": 176392000000,
+                    "accounts_receivable": 33410000000,
+                    "inventory": 7286000000,
+                    "selling_general_admin_expense": 26097000000,
+                    "retained_earnings": -19154000000,
+                    "depreciation_amortization": 11445000000,
+                    "property_plant_equipment_net": 45680000000,
+                    "shares_outstanding": 15116786000,
+                    "parser_version": "factor-test",
+                }
+            ],
+            sync_run_id="test-sync",
+        )
+        stored = db.fetch(
+            """
+            SELECT current_assets, current_liabilities, shares_outstanding
+            FROM sec_financial_derived
+            """
+        )[0]
+        assert stored["current_assets"] == 152987000000
+        assert stored["current_liabilities"] == 176392000000
+        assert stored["shares_outstanding"] == 15116786000
     finally:
         db.close()

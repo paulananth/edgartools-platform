@@ -27,9 +27,9 @@ def _df(sql: str, params: list | None = None):
     return session.sql(sql).to_pandas()
 
 
-def _safe_df(label: str, sql: str):
+def _safe_df(label: str, sql: str, params: list | None = None):
     try:
-        return _df(sql)
+        return _df(sql, params=params)
     except Exception as exc:
         st.warning(f"{label} is not available: {exc}")
         return None
@@ -44,6 +44,12 @@ def _show_dataframe(df, columns: list[str] | None = None):
         if visible:
             df = df[visible]
     st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+def _metric_text(value, fmt: str) -> str:
+    if value is None or value != value:
+        return "—"
+    return format(float(value), fmt)
 
 
 def _kpi_row():
@@ -217,6 +223,42 @@ def _company_recent_filings(company_key: int, limit: int = 100):
     )
 
 
+def _company_financial_factors(cik: int, limit: int = 40):
+    return _safe_df(
+        "Financial factors",
+        f"""
+        select
+          fiscal_year,
+          fiscal_period,
+          period_end,
+          revenue,
+          total_assets,
+          current_assets,
+          current_liabilities,
+          working_capital,
+          current_ratio,
+          quick_ratio,
+          receivables_to_revenue,
+          inventory_to_assets,
+          sga_to_revenue,
+          retained_earnings_to_assets,
+          asset_turnover,
+          debt_to_assets,
+          cash_to_assets,
+          free_cash_flow_to_revenue,
+          accruals_to_assets,
+          asset_growth_yoy,
+          shares_outstanding,
+          shares_outstanding_yoy_change
+        from {GOLD_SCHEMA}.FINANCIAL_FACTORS
+        where cik = ?
+        order by period_end desc nulls last, fiscal_year desc nulls last, fiscal_period desc
+        limit {int(limit)}
+        """,
+        params=[int(cik)],
+    )
+
+
 def _company_timeline(company_key: int):
     return _df(
         f"""
@@ -256,10 +298,11 @@ def render_details():
         st.error("Selected company not found.")
         return
     row = meta.iloc[0]
+    cik = int(row["CIK"])
 
     st.subheader(row["ENTITY_NAME"])
     col1, col2, col3 = st.columns(3)
-    col1.metric("CIK", int(row["CIK"]))
+    col1.metric("CIK", cik)
     col2.metric("Tickers", row["TICKERS"] or "—")
     col3.metric("Entity type", row["ENTITY_TYPE"] or "—")
 
@@ -272,6 +315,53 @@ def render_details():
                 "Fiscal year end": row["FISCAL_YEAR_END"],
             }
         )
+
+    st.subheader("Financial factors")
+    factors = _company_financial_factors(cik)
+    if factors is not None:
+        if factors.empty:
+            st.info("No financial factors loaded for this company.")
+        else:
+            latest_fy = factors.loc[factors["FISCAL_PERIOD"] == "FY"]
+            latest = latest_fy.iloc[0] if not latest_fy.empty else factors.iloc[0]
+            factor_cols = st.columns(4)
+            factor_cols[0].metric(
+                "Current ratio",
+                _metric_text(latest["CURRENT_RATIO"], ".2f"),
+            )
+            factor_cols[1].metric(
+                "Debt/assets",
+                _metric_text(latest["DEBT_TO_ASSETS"], ".2f"),
+            )
+            factor_cols[2].metric(
+                "FCF/revenue",
+                _metric_text(latest["FREE_CASH_FLOW_TO_REVENUE"], ".2f"),
+            )
+            factor_cols[3].metric(
+                "Shares",
+                _metric_text(latest["SHARES_OUTSTANDING"], ",.0f"),
+            )
+            _show_dataframe(
+                factors,
+                [
+                    "FISCAL_YEAR",
+                    "FISCAL_PERIOD",
+                    "PERIOD_END",
+                    "REVENUE",
+                    "TOTAL_ASSETS",
+                    "WORKING_CAPITAL",
+                    "CURRENT_RATIO",
+                    "QUICK_RATIO",
+                    "ASSET_TURNOVER",
+                    "DEBT_TO_ASSETS",
+                    "CASH_TO_ASSETS",
+                    "FREE_CASH_FLOW_TO_REVENUE",
+                    "ACCRUALS_TO_ASSETS",
+                    "ASSET_GROWTH_YOY",
+                    "SHARES_OUTSTANDING",
+                    "SHARES_OUTSTANDING_YOY_CHANGE",
+                ],
+            )
 
     st.divider()
     col_left, col_right = st.columns(2)

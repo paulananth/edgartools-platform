@@ -269,6 +269,15 @@ CREATE TABLE IF NOT EXISTS SEC_FINANCIAL_DERIVED (
   total_equity         FLOAT,
   cash_and_equivalents FLOAT,
   total_debt           FLOAT,
+  current_assets       FLOAT,
+  current_liabilities  FLOAT,
+  accounts_receivable  FLOAT,
+  inventory            FLOAT,
+  selling_general_admin_expense FLOAT,
+  retained_earnings    FLOAT,
+  depreciation_amortization FLOAT,
+  property_plant_equipment_net FLOAT,
+  shares_outstanding   FLOAT,
   operating_cash_flow  FLOAT,
   capex                FLOAT,
   free_cash_flow       FLOAT,
@@ -282,6 +291,16 @@ CREATE TABLE IF NOT EXISTS SEC_FINANCIAL_DERIVED (
   ingested_at          TIMESTAMP_TZ
 )
 COMMENT = 'Derived per-period financial metrics. Passthrough from silver sec_financial_derived. Forensic scores live on ACCOUNTING_FLAG (annual constructs).';
+
+ALTER TABLE SEC_FINANCIAL_DERIVED ADD COLUMN IF NOT EXISTS current_assets FLOAT;
+ALTER TABLE SEC_FINANCIAL_DERIVED ADD COLUMN IF NOT EXISTS current_liabilities FLOAT;
+ALTER TABLE SEC_FINANCIAL_DERIVED ADD COLUMN IF NOT EXISTS accounts_receivable FLOAT;
+ALTER TABLE SEC_FINANCIAL_DERIVED ADD COLUMN IF NOT EXISTS inventory FLOAT;
+ALTER TABLE SEC_FINANCIAL_DERIVED ADD COLUMN IF NOT EXISTS selling_general_admin_expense FLOAT;
+ALTER TABLE SEC_FINANCIAL_DERIVED ADD COLUMN IF NOT EXISTS retained_earnings FLOAT;
+ALTER TABLE SEC_FINANCIAL_DERIVED ADD COLUMN IF NOT EXISTS depreciation_amortization FLOAT;
+ALTER TABLE SEC_FINANCIAL_DERIVED ADD COLUMN IF NOT EXISTS property_plant_equipment_net FLOAT;
+ALTER TABLE SEC_FINANCIAL_DERIVED ADD COLUMN IF NOT EXISTS shares_outstanding FLOAT;
 
 -- =====================================================================
 -- 3 DIMENSIONAL tables (low-cardinality, surrogate fact_key MERGE).

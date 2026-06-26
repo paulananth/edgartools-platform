@@ -53,7 +53,10 @@ def backfill_accounting_flags(cik: int, silver: "SilverDatabase") -> int:
         SELECT accession_number, fiscal_year, period_end, form_type,
                revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
                total_assets, total_liabilities, total_equity, cash_and_equivalents,
-               total_debt, operating_cash_flow, capex, free_cash_flow,
+               total_debt, current_assets, current_liabilities, accounts_receivable,
+               inventory, selling_general_admin_expense, retained_earnings,
+               depreciation_amortization, property_plant_equipment_net,
+               shares_outstanding, operating_cash_flow, capex, free_cash_flow,
                gross_margin, ebitda_margin, net_margin, roic, roe, roa
         FROM sec_financial_derived
         WHERE cik = ? AND fiscal_period = 'FY'
@@ -134,46 +137,67 @@ def _beneish_cross_period(
     gp_c   = g(curr, "gross_profit"); gp_p   = g(prev, "gross_profit")
     ta_c   = g(curr, "total_assets"); ta_p   = g(prev, "total_assets")
     ni_c   = g(curr, "net_income");   ocf_c  = g(curr, "operating_cash_flow")
-    da_c   = g(curr, "ebitda");       da_p   = g(prev, "ebitda")
-    tl_c   = g(curr, "total_liabilities"); tl_p = g(prev, "total_liabilities")
-    ca_c   = g(curr, "cash_and_equivalents"); ca_p = g(prev, "cash_and_equivalents")
+    ar_c   = g(curr, "accounts_receivable"); ar_p = g(prev, "accounts_receivable")
+    sga_c  = g(curr, "selling_general_admin_expense"); sga_p = g(prev, "selling_general_admin_expense")
+    da_c   = g(curr, "depreciation_amortization"); da_p = g(prev, "depreciation_amortization")
+    ca_c   = g(curr, "current_assets"); ca_p = g(prev, "current_assets")
+    ppe_c  = g(curr, "property_plant_equipment_net"); ppe_p = g(prev, "property_plant_equipment_net")
 
     # DSRI = (Receivables_t / Revenue_t) / (Receivables_t-1 / Revenue_t-1)
-    # Proxy: no receivables concept here — skip DSRI
-    dsri: float | None = None  # requires receivables sub-concept
+    dsri = _safe_div(_safe_div(ar_c, rev_c), _safe_div(ar_p, rev_p))
 
     # GMI = Gross Margin t-1 / Gross Margin t
     gm_c = _safe_div(gp_c, rev_c)
     gm_p = _safe_div(gp_p, rev_p)
-    gmi  = _safe_div(gm_p, gm_c) if gm_c and gm_p else None
+    gmi  = _safe_div(gm_p, gm_c)
+
+    # AQI = [1 - (CurrentAssets_t + PPE_t) / TA_t] /
+    #       [1 - (CurrentAssets_t-1 + PPE_t-1) / TA_t-1]
+    asset_quality_c: float | None = None
+    asset_quality_p: float | None = None
+    if ca_c is not None and ppe_c is not None:
+        current_ppe_to_assets_c = _safe_div(ca_c + ppe_c, ta_c)
+        if current_ppe_to_assets_c is not None:
+            asset_quality_c = 1 - current_ppe_to_assets_c
+    if ca_p is not None and ppe_p is not None:
+        current_ppe_to_assets_p = _safe_div(ca_p + ppe_p, ta_p)
+        if current_ppe_to_assets_p is not None:
+            asset_quality_p = 1 - current_ppe_to_assets_p
+    aqi = _safe_div(asset_quality_c, asset_quality_p)
 
     # SGI = Revenue_t / Revenue_t-1
-    sgi = _safe_div(rev_c, rev_p) if rev_c and rev_p else None
+    sgi = _safe_div(rev_c, rev_p)
 
-    # DEPI = (DA_t-1 / (DA_t-1 + EBIT_t-1)) / (DA_t / (DA_t + EBIT_t))
-    # Omit — requires DA separate from EBITDA
+    # DEPI = [Dep_t-1 / (Dep_t-1 + PPE_t-1)] / [Dep_t / (Dep_t + PPE_t)]
+    depi = _safe_div(
+        _safe_div(da_p, (da_p + ppe_p) if da_p is not None and ppe_p is not None else None),
+        _safe_div(da_c, (da_c + ppe_c) if da_c is not None and ppe_c is not None else None),
+    )
+
+    # SGAI = (SGA_t / Revenue_t) / (SGA_t-1 / Revenue_t-1)
+    sgai = _safe_div(_safe_div(sga_c, rev_c), _safe_div(sga_p, rev_p))
 
     # LVGI = (LT_Debt_t / TA_t) / (LT_Debt_t-1 / TA_t-1)
     ltd_c = g(curr, "total_debt"); ltd_p = g(prev, "total_debt")
     lev_c = _safe_div(ltd_c, ta_c); lev_p = _safe_div(ltd_p, ta_p)
-    lvgi  = _safe_div(lev_c, lev_p) if lev_c and lev_p else None
+    lvgi  = _safe_div(lev_c, lev_p)
 
     # TATA = (Net Income - CFO) / Total Assets
     tata: float | None = None
-    if ni_c is not None and ocf_c is not None and ta_c is not None and ta_c != 0:
-        tata = (ni_c - ocf_c) / ta_c
+    if ni_c is not None and ocf_c is not None:
+        tata = _safe_div(ni_c - ocf_c, ta_c)
 
-    # AQI = (1 - CurrentAssets_t / TA_t) / (1 - CurrentAssets_t-1 / TA_t-1)
-    # Omit — current_assets not in sec_financial_derived; use single-period proxy
-
-    available = sum(1 for v in [gmi, sgi, lvgi, tata] if v is not None)
+    available = sum(1 for v in [dsri, gmi, aqi, sgi, depi, sgai, lvgi, tata] if v is not None)
     if available < 2:
         return None
 
     m = -4.84
     if dsri  is not None: m += 0.920 * dsri
     if gmi   is not None: m += 0.528 * gmi
+    if aqi   is not None: m += 0.404 * aqi
     if sgi   is not None: m += 0.892 * sgi
+    if depi  is not None: m += 0.115 * depi
+    if sgai  is not None: m -= 0.172 * sgai
     if lvgi  is not None: m -= 0.327 * lvgi
     if tata  is not None: m += 4.679 * tata
 
@@ -192,23 +216,30 @@ def _altman_enhanced(
     def x(k: str) -> float | None:
         return curr.get(k)
 
-    ca = x("cash_and_equivalents")   # proxy for current assets
     rev = x("revenue")
-    re  = None                        # retained earnings not in derived table
+    current_assets = x("current_assets")
+    current_liabilities = x("current_liabilities")
+    re  = x("retained_earnings")
     ebit = x("ebit")
     eq  = x("total_equity")
     tl  = x("total_liabilities")
 
-    # X1 (working capital / TA) — cannot compute without current assets/liabilities
+    working_capital: float | None = None
+    if current_assets is not None and current_liabilities is not None:
+        working_capital = current_assets - current_liabilities
+    x1 = _safe_div(working_capital, ta)
+    x2 = _safe_div(re, ta)
     x3 = _safe_div(ebit, ta)
     x4 = _safe_div(eq, tl) if tl else None
     x5 = _safe_div(rev, ta)
 
-    available = sum(1 for v in [x3, x4, x5] if v is not None)
+    available = sum(1 for v in [x1, x2, x3, x4, x5] if v is not None)
     if available < 2:
         return None
 
     z = 0.0
+    if x1 is not None: z += 1.2 * x1
+    if x2 is not None: z += 1.4 * x2
     if x3 is not None: z += 3.3 * x3
     if x4 is not None: z += 0.6 * x4
     if x5 is not None: z += 1.0 * x5
@@ -227,6 +258,9 @@ def _piotroski_full(
     ltd_c = curr.get("total_debt")
     gm_c = curr.get("gross_margin")
     rev_c = curr.get("revenue")
+    current_assets_c = curr.get("current_assets")
+    current_liabilities_c = curr.get("current_liabilities")
+    shares_c = curr.get("shares_outstanding")
 
     signals: list[int] = []
 
@@ -256,8 +290,18 @@ def _piotroski_full(
         if lev_c is not None and lev_p is not None:
             signals.append(1 if lev_c < lev_p else 0)
 
-    # F6: ΔLiquidity (current ratio — not in derived; skip)
-    # F7: No new shares (shares not in derived; skip)
+    # F6: ΔLiquidity (current ratio) > 0 (requires prior year)
+    if prev is not None:
+        cr_c = _safe_div(current_assets_c, current_liabilities_c)
+        cr_p = _safe_div(prev.get("current_assets"), prev.get("current_liabilities"))
+        if cr_c is not None and cr_p is not None:
+            signals.append(1 if cr_c > cr_p else 0)
+
+    # F7: No new shares (shares outstanding did not increase)
+    if prev is not None:
+        shares_p = prev.get("shares_outstanding")
+        if shares_c is not None and shares_p is not None:
+            signals.append(1 if shares_c <= shares_p else 0)
 
     # F8: ΔGross Margin > 0 (requires prior year)
     if prev is not None:

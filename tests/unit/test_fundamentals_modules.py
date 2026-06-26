@@ -100,6 +100,16 @@ class FinancialsDerivedTests(unittest.TestCase):
             {"concept": "Liabilities", "value": 50_000_000_000},
             {"concept": "OperatingIncomeLoss", "value": 25_000_000_000},
             {"concept": "StockholdersEquity", "value": 150_000_000_000},
+            {"concept": "AssetsCurrent", "value": 80_000_000_000},
+            {"concept": "LiabilitiesCurrent", "value": 40_000_000_000},
+            {"concept": "AccountsReceivableNetCurrent", "value": 10_000_000_000},
+            {"concept": "InventoryNet", "value": 5_000_000_000},
+            {"concept": "SellingGeneralAndAdministrativeExpense", "value": 7_000_000_000},
+            {"concept": "RetainedEarningsAccumulatedDeficit", "value": 100_000_000_000},
+            {"concept": "DepreciationAndAmortization", "value": 3_000_000_000},
+            {"concept": "PropertyPlantAndEquipmentNet", "value": 60_000_000_000},
+            {"concept": "CommonStockSharesIssued", "value": 20_000_000_000},
+            {"concept": "CommonStockSharesOutstanding", "value": 16_000_000_000},
         ]
 
     def test_empty_fact_rows_returns_empty(self) -> None:
@@ -126,43 +136,92 @@ class FinancialsDerivedTests(unittest.TestCase):
         # Revenue + EBIT are present in fact rows; derived row must include them
         self.assertEqual(row["revenue"], 100_000_000_000)
         self.assertEqual(row["ebit"], 25_000_000_000)
+        self.assertEqual(row["ebitda"], 28_000_000_000)
+        self.assertEqual(row["current_assets"], 80_000_000_000)
+        self.assertEqual(row["current_liabilities"], 40_000_000_000)
+        self.assertEqual(row["accounts_receivable"], 10_000_000_000)
+        self.assertEqual(row["inventory"], 5_000_000_000)
+        self.assertEqual(row["selling_general_admin_expense"], 7_000_000_000)
+        self.assertEqual(row["retained_earnings"], 100_000_000_000)
+        self.assertEqual(row["depreciation_amortization"], 3_000_000_000)
+        self.assertEqual(row["property_plant_equipment_net"], 60_000_000_000)
+        self.assertEqual(row["shares_outstanding"], 16_000_000_000)
         # Forensic scores live exclusively on sec_accounting_flag (see audit
         # findings in commit history); derived rows must NOT carry them.
         self.assertNotIn("beneish_m_score", row)
         self.assertNotIn("altman_z_score", row)
         self.assertNotIn("piotroski_f_score", row)
 
-    def test_cross_period_beneish_returns_float_or_none(self) -> None:
+    def test_cross_period_beneish_complete_inputs(self) -> None:
         from edgar_warehouse.parsers.accounting_flags import _beneish_cross_period
 
         curr = {
-            "revenue": 100_000, "cost_of_revenue": 40_000, "net_income": 15_000,
-            "cash_flow_operating": 18_000, "total_assets": 200_000, "total_debt": 50_000,
-            "accounts_receivable": 12_000, "shares_outstanding": 1_000,
-            "selling_general_admin_expense": 20_000, "depreciation_amortization": 5_000,
+            "revenue": 120.0, "gross_profit": 60.0, "net_income": 24.0,
+            "operating_cash_flow": 30.0, "total_assets": 300.0,
+            "total_debt": 75.0, "accounts_receivable": 30.0,
+            "selling_general_admin_expense": 18.0,
+            "depreciation_amortization": 12.0,
+            "current_assets": 90.0, "property_plant_equipment_net": 120.0,
         }
         prev = {
-            "revenue": 80_000, "cost_of_revenue": 35_000, "net_income": 10_000,
-            "cash_flow_operating": 12_000, "total_assets": 180_000, "total_debt": 60_000,
-            "accounts_receivable": 8_000, "shares_outstanding": 1_000,
-            "selling_general_admin_expense": 18_000, "depreciation_amortization": 4_500,
+            "revenue": 100.0, "gross_profit": 50.0, "net_income": 20.0,
+            "operating_cash_flow": 24.0, "total_assets": 250.0,
+            "total_debt": 50.0, "accounts_receivable": 20.0,
+            "selling_general_admin_expense": 16.0,
+            "depreciation_amortization": 10.0,
+            "current_assets": 75.0, "property_plant_equipment_net": 100.0,
         }
-        result = _beneish_cross_period(curr, prev)
-        self.assertTrue(result is None or isinstance(result, float))
+        self.assertEqual(_beneish_cross_period(curr, prev), -2.2362)
 
-    def test_cross_period_piotroski_in_valid_range(self) -> None:
+    def test_cross_period_beneish_missing_inputs_returns_none(self) -> None:
+        from edgar_warehouse.parsers.accounting_flags import _beneish_cross_period
+
+        curr = {"revenue": 120.0}
+        prev = {"revenue": 100.0}
+        self.assertIsNone(_beneish_cross_period(curr, prev))
+
+    def test_altman_complete_inputs(self) -> None:
+        from edgar_warehouse.parsers.accounting_flags import _altman_enhanced
+
+        curr = {
+            "total_assets": 300.0,
+            "current_assets": 90.0,
+            "current_liabilities": 30.0,
+            "retained_earnings": 90.0,
+            "ebit": 30.0,
+            "total_equity": 180.0,
+            "total_liabilities": 120.0,
+            "revenue": 120.0,
+        }
+        self.assertEqual(_altman_enhanced(curr, None), 2.29)
+
+    def test_altman_missing_inputs_returns_none(self) -> None:
+        from edgar_warehouse.parsers.accounting_flags import _altman_enhanced
+
+        curr = {"total_assets": 300.0, "revenue": 120.0}
+        self.assertIsNone(_altman_enhanced(curr, None))
+
+    def test_cross_period_piotroski_complete_inputs(self) -> None:
         from edgar_warehouse.parsers.accounting_flags import _piotroski_full
 
         curr = {
-            "revenue": 100_000, "cost_of_revenue": 40_000, "net_income": 15_000,
-            "cash_flow_operating": 18_000, "total_assets": 200_000, "total_debt": 50_000,
+            "revenue": 120.0, "net_income": 24.0, "operating_cash_flow": 30.0,
+            "total_assets": 300.0, "total_debt": 75.0, "gross_margin": 0.50,
+            "current_assets": 90.0, "current_liabilities": 30.0,
+            "shares_outstanding": 900.0,
         }
         prev = {
-            "revenue": 80_000, "cost_of_revenue": 35_000, "net_income": 10_000,
-            "cash_flow_operating": 12_000, "total_assets": 180_000, "total_debt": 60_000,
+            "revenue": 90.0, "net_income": 10.0, "operating_cash_flow": 15.0,
+            "total_assets": 250.0, "total_debt": 100.0, "gross_margin": 0.40,
+            "current_assets": 60.0, "current_liabilities": 30.0,
+            "shares_outstanding": 1_000.0,
         }
-        result = _piotroski_full(curr, prev)
-        self.assertTrue(result is None or 0 <= result <= 9)
+        self.assertEqual(_piotroski_full(curr, prev), 9)
+
+    def test_cross_period_piotroski_missing_inputs_returns_none(self) -> None:
+        from edgar_warehouse.parsers.accounting_flags import _piotroski_full
+
+        self.assertIsNone(_piotroski_full({}, None))
 
 
 # ---------------------------------------------------------------------------

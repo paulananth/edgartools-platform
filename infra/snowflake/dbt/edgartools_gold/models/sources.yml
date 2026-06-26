@@ -30,9 +30,9 @@ sources:
       # PR-1 split (Q1-C hybrid):
       #   PASSTHROUGH (>1M rows, composite natural keys, retain SEC_ prefix):
       - name: SEC_FINANCIAL_FACT
-        description: XBRL us-gaap fact per (cik, accession, concept, fiscal_period, segment). Composite-key passthrough from silver.
+        description: XBRL us-gaap fact per (cik, accession, concept, fiscal_period, segment, period_end, period_start). Composite-key passthrough from silver.
       - name: SEC_FINANCIAL_DERIVED
-        description: Derived per-period metrics (EBITDA, FCF, margins, returns) per (cik, accession, fiscal_period). Passthrough from silver. Forensic scores live on ACCOUNTING_FLAG.
+        description: Derived per-period metrics and accounting line items per (cik, accession, fiscal_period, period_end). Passthrough from silver. Forensic scores live on ACCOUNTING_FLAG.
       - name: SEC_THIRTEENF_HOLDING
         description: 13F INFORMATION TABLE holding per (cik, accession, holding_index). Passthrough from silver.
       #   DIMENSIONAL (<1M rows, surrogate fact_key, joined to COMPANY+DATE+FORM in the build step):
