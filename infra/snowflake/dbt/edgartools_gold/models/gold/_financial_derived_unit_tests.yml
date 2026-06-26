@@ -35,6 +35,15 @@ unit_tests:
             total_equity: 0
             cash_and_equivalents: 0
             total_debt: 0
+            current_assets: 0
+            current_liabilities: 0
+            accounts_receivable: 0
+            inventory: 0
+            selling_general_admin_expense: 0
+            retained_earnings: 0
+            depreciation_amortization: 0
+            property_plant_equipment_net: 0
+            shares_outstanding: 0
             operating_cash_flow: 0
             capex: 0
             free_cash_flow: 0

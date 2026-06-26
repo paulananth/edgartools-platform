@@ -145,9 +145,15 @@ _SGA_CONCEPTS = [
     "GeneralAndAdministrativeExpense",
 ]
 
-_SHARES_ISSUED_CONCEPTS = [
-    "CommonStockSharesIssued",
+_PPE_NET_CONCEPTS = [
+    "PropertyPlantAndEquipmentNet",
+    "PropertyPlantAndEquipmentAndFinanceLeaseRightOfUseAssetAfterAccumulatedDepreciationAndAmortization",
+    "PropertyPlantAndEquipmentIncludingFinanceLeaseRightOfUseAssetAfterAccumulatedDepreciationAndAmortization",
+]
+
+_SHARES_OUTSTANDING_CONCEPTS = [
     "CommonStockSharesOutstanding",
+    "CommonStockSharesIssued",
 ]
 
 
@@ -249,7 +255,8 @@ def compute_derived_for_accession(
     current_liabilities = _pick(fact_map, _CURRENT_LIABILITIES_CONCEPTS)
     receivables        = _pick(fact_map, _RECEIVABLES_CONCEPTS)
     inventory          = _pick(fact_map, _INVENTORY_CONCEPTS)
-    shares_issued      = _pick(fact_map, _SHARES_ISSUED_CONCEPTS)
+    property_plant_equipment_net = _pick(fact_map, _PPE_NET_CONCEPTS)
+    shares_outstanding = _pick(fact_map, _SHARES_OUTSTANDING_CONCEPTS)
 
     # ── Cash flow ─────────────────────────────────────────────────────────────
     ocf   = _pick(fact_map, _OCF_CONCEPTS)
@@ -305,6 +312,15 @@ def compute_derived_for_accession(
         "total_equity":       total_equity,
         "cash_and_equivalents": cash,
         "total_debt":         total_debt,
+        "current_assets":     current_assets,
+        "current_liabilities": current_liabilities,
+        "accounts_receivable": receivables,
+        "inventory":          inventory,
+        "selling_general_admin_expense": sga,
+        "retained_earnings":  retained_earnings,
+        "depreciation_amortization": da,
+        "property_plant_equipment_net": property_plant_equipment_net,
+        "shares_outstanding": shares_outstanding,
         "operating_cash_flow": ocf,
         "capex":              capex,
         "free_cash_flow":     free_cash_flow,
@@ -317,5 +333,4 @@ def compute_derived_for_accession(
         "parser_version":     PARSER_VERSION,
     }
     return {"sec_financial_derived": [row]}
-
 

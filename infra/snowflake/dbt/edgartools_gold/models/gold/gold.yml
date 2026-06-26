@@ -108,6 +108,19 @@ models:
         tests:
           - not_null
 
+  - name: financial_factors
+    description: Accounting-only fundamental factors per (cik, accession_number, fiscal_period, period_end). Excludes price, market cap, and market-derived ratios.
+    columns:
+      - name: cik
+        tests:
+          - not_null
+      - name: accession_number
+        tests:
+          - not_null
+      - name: fiscal_period
+        tests:
+          - not_null
+
   - name: earnings_releases
     description: 8-K earnings releases with beat/miss flags and cumulative beat streaks per (cik, accession_number).
     columns:

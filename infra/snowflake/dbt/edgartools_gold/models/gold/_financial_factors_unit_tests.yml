@@ -1,0 +1,110 @@
+version: 2
+
+unit_tests:
+  - name: financial_factors_complete_fy_ratios
+    description: Complete FY rows produce accounting-only ratios and FY-only prior-year factors.
+    model: financial_factors
+    given:
+      - input: ref('financial_derived')
+        rows:
+          - &factor_row_defaults
+            cik: 1
+            accession_number: "0001"
+            fiscal_year: 2023
+            fiscal_period: "FY"
+            period_end: "2023-12-31"
+            form_type: "10-K"
+            revenue: 125
+            total_assets: 250
+            total_liabilities: 100
+            total_equity: 150
+            cash_and_equivalents: 25
+            total_debt: 50
+            operating_cash_flow: 20
+            free_cash_flow: 10
+            net_income: 15
+            current_assets: 75
+            current_liabilities: 25
+            accounts_receivable: 25
+            inventory: 25
+            selling_general_admin_expense: 12.5
+            retained_earnings: 50
+            depreciation_amortization: 5
+            property_plant_equipment_net: 100
+            shares_outstanding: 1000
+            parser_version: "1"
+            ingested_at: "2024-01-01 00:00:00"
+          - <<: *factor_row_defaults
+            accession_number: "0002"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            revenue: 150
+            total_assets: 300
+            total_liabilities: 120
+            total_equity: 180
+            cash_and_equivalents: 30
+            total_debt: 75
+            operating_cash_flow: 35
+            free_cash_flow: 15
+            net_income: 20
+            current_assets: 90
+            current_liabilities: 30
+            accounts_receivable: 30
+            inventory: 30
+            selling_general_admin_expense: 15
+            retained_earnings: 60
+            depreciation_amortization: 6
+            property_plant_equipment_net: 120
+            shares_outstanding: 900
+    expect:
+      rows:
+        - cik: 1
+          accession_number: "0001"
+          fiscal_year: 2023
+          working_capital: 50
+          asset_growth_yoy: null
+          shares_outstanding_yoy_change: null
+        - cik: 1
+          accession_number: "0002"
+          fiscal_year: 2024
+          working_capital: 60
+          working_capital_to_assets: 0.2
+          current_ratio: 3.0
+          quick_ratio: 2.0
+          receivables_to_revenue: 0.2
+          inventory_to_assets: 0.1
+          sga_to_revenue: 0.1
+          retained_earnings_to_assets: 0.2
+          asset_turnover: 0.5
+          debt_to_assets: 0.25
+          cash_to_assets: 0.1
+          free_cash_flow_to_revenue: 0.1
+          accruals_to_assets: -0.05
+          asset_growth_yoy: 0.2
+          shares_outstanding_yoy_change: -100
+
+  - name: financial_factors_quarterly_cross_year_factors_are_null
+    description: Non-FY rows keep same-period accounting ratios but do not emit FY-only prior-year factors.
+    model: financial_factors
+    given:
+      - input: ref('financial_derived')
+        rows:
+          - <<: *factor_row_defaults
+            cik: 2
+            accession_number: "0003"
+            fiscal_year: 2024
+            fiscal_period: "Q1"
+            period_end: "2024-03-31"
+            form_type: "10-Q"
+            total_assets: 300
+            current_assets: 90
+            current_liabilities: 30
+            shares_outstanding: 900
+    expect:
+      rows:
+        - cik: 2
+          accession_number: "0003"
+          fiscal_period: "Q1"
+          current_ratio: 3.0
+          asset_growth_yoy: null
+          shares_outstanding_yoy_change: null
