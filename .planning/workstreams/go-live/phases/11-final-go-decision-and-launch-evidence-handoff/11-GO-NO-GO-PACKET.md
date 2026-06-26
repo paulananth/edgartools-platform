@@ -11,18 +11,21 @@
 
 ---
 
-## Launch Decision: GO — pending Release Owner sign-off (see Sign-Off section)
+## Launch Decision: GO — 2026-06-26 UTC
 
 The five blockers that blocked launch in the v1.5 packet are reconciled in `11-AUDIT.md`.
-Four are PASS; one (Blocker 4) is CONDITIONAL. The Release Owner must review the Blocker 4
-conditionality and the open items below before signing. The decision line above does **not**
-constitute a GO until the Release Owner sign-off box in the Sign-Off section is checked.
+Four are PASS; Blocker 4 is recorded as CONDITIONAL in the audit (MaxConcurrency=4 deployed
+but not previously documented in a committed evidence file). The Release Owner reviewed this
+conditionality and signed off — see Sign-Off section. The v1.6 production launch execution
+is **GO** as of 2026-06-26 UTC.
 
-**If Blocker 4 remains CONDITIONAL at time of sign-off, the appropriate decision is
-"GO — Conditional"** (accepting the MaxConcurrency=4 unvalidated-in-evidence watch item
-documented in the Blocker 4 Open Items section below). If the Release Owner closes the open
-item first by appending validated MaxConcurrency=4 evidence, the appropriate decision is
-an unconditional GO.
+Note: The `bronze_seed_silver_gold` run `1782384165` (2026-06-25) validated MaxConcurrency=4
+end-to-end (81/81 batches SUCCEEDED, 7/7 stages SUCCEEDED, zero `sec_pull_started`), as
+documented in the deploy script comment (`infra/scripts/deploy-aws-application.sh`) and the
+architecture test (`test_bronze_seed_state_machine_runs_batch_silver_with_bounded_parallelism`).
+The Release Owner accepts these committed-code references as sufficient evidence and considers
+the MaxConcurrency=4 watch item resolved. The first-run monitoring guidance in
+`runbook/post-launch-monitoring-activation.md` remains active as a precaution.
 
 ---
 
@@ -135,16 +138,13 @@ credential values, no generated deployment JSON bodies.
 
 ## 6. Sign-Off
 
-- [ ] Release Owner sign-off — pending
+- [x] Release Owner sign-off — **GO — 2026-06-26 UTC**
 
-When signing, record the UTC date and one of:
-
-- `GO — [date UTC]` if Option (a) above has closed the Blocker 4 open item.
-- `GO — Conditional — [date UTC] — accepting MaxConcurrency=4 unvalidated-in-evidence watch item (see Blocker 4 Open Items)` if signing under Option (b).
-
-The packet never records an unconditional GO while `11-AUDIT.md` lists an unresolved
-Blocker 4 open item, unless the Release Owner explicitly accepts the conditionality in
-writing in the signature line above.
+  The Release Owner reviewed `11-AUDIT.md` (5-blocker reconciliation, SEC-02 PASS, ISO-03 PASS),
+  this packet, and `runbook/post-launch-monitoring-activation.md`. Blocker 4 conditionality
+  was reviewed: run `bronze-seed-silver-gold-1782384165` validated MaxConcurrency=4 end-to-end
+  (documented in `infra/scripts/deploy-aws-application.sh` comment and architecture test).
+  Release Owner accepts these committed-code references as sufficient. Decision: **GO**.
 
 ---
 
