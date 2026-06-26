@@ -163,7 +163,7 @@ locals {
       ]
     }
     SEC_FINANCIAL_FACT = {
-      comment = "XBRL us-gaap fact per (cik, accession, concept, fiscal_period, segment). Passthrough from silver sec_financial_fact."
+      comment = "XBRL us-gaap fact per (cik, accession, concept, fiscal_period, segment, period_end, period_start). Passthrough from silver sec_financial_fact."
       columns = [
         { name = "CIK", type = "NUMBER(38,0)", nullable = false },
         { name = "ACCESSION_NUMBER", type = "STRING", nullable = false },
@@ -172,6 +172,7 @@ locals {
         { name = "SEGMENT", type = "STRING", nullable = false },
         { name = "FISCAL_YEAR", type = "NUMBER(38,0)" },
         { name = "PERIOD_END", type = "DATE" },
+        { name = "PERIOD_START", type = "DATE", nullable = false },
         { name = "FORM_TYPE", type = "STRING" },
         { name = "VALUE", type = "FLOAT" },
         { name = "UNIT", type = "STRING" },
