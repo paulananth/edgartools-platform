@@ -31,44 +31,51 @@ the MaxConcurrency=4 watch item resolved. The first-run monitoring guidance in
 
 ## 1. Five-Blocker Status
 
-Statuses are carried exactly from `11-AUDIT.md` (Plan 11-01). Do not read STATE.md's
-"FULLY REMEDIATED" language for Blocker 4 as evidence of a clean PASS — the audit
-explicitly records it as CONDITIONAL because the deployed MaxConcurrency=4 value has no
-committed end-to-end evidence.
+Statuses are carried exactly from `11-AUDIT.md` (Plan 11-01), with Blocker 4 updated below
+to reflect the Open Items resolution (Section 2). Do not read STATE.md's "FULLY REMEDIATED"
+language for Blocker 4 as a claim that a committed MaxConcurrency=4 run-evidence file
+exists — none does. The status below is **PASS by accepted basis**, not by a new
+Step Functions/CloudWatch record.
 
 | Blocker | Requirement IDs | Status | Committed Evidence File(s) | Basis |
 |---------|----------------|--------|---------------------------|-------|
 | **Blocker 1** | LIVE-04, LIVE-05 | **PASS** | `phases/06-production-aws-infrastructure-and-application-deploy/06-VERIFICATION.md`<br>`phases/06-production-aws-infrastructure-and-application-deploy/06-02-SUMMARY.md` | 42 infrastructure resources, 22 state machines, 5 ECS task defs applied; `edgar-identity` ARN mitigation; ECR cleanup mitigation; 10/10 verification truths satisfied |
 | **Blocker 2** | MDM-02 | **PASS** | `phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md` | Both MDM secrets populated with AWSCURRENT versions; `check-connectivity`, `migrate`, `counts` pass against prod; instance in READY state; 6 credential rotations documented without values printed |
 | **Blocker 3** | SNOW-03, SNOW-04 | **PASS** | `phases/07-production-snowflake-native-pull-and-gold/evidence/native-pull.md`<br>`phases/07-production-snowflake-native-pull-and-gold/evidence/dbt-gold.md` | All 3 Terraform roots applied, zero destroys; 17 source tables; stream-processor task started; `EDGARTOOLS_PROD_DEPLOYER` credentials in Secrets Manager; 16/16 dbt models built, 47/47 tests passing; all 15 dynamic tables ACTIVE |
-| **Blocker 4** | GRAPH-03, GRAPH-04 | **CONDITIONAL** | `phases/09-production-hosted-graph-e2e/evidence/hosted-graph-local.md` (GRAPH-03)<br>`phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md` (GRAPH-04) | GRAPH-03 PASS (strict `verify-graph`, 10 nodes, SQL parity, Native App checks). GRAPH-04 PASS at MaxConcurrency=2 only (execution `bronze-seed-silver-gold-1782351277`, 81/81 batches, 7/7 stages SUCCEEDED). **The deployed source sets MaxConcurrency=4 but that value has no committed end-to-end evidence.** See open items below. |
+| **Blocker 4** | GRAPH-03, GRAPH-04 | **PASS (accepted basis — see Section 2)** | `phases/09-production-hosted-graph-e2e/evidence/hosted-graph-local.md` (GRAPH-03)<br>`phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md` (GRAPH-04, MaxConcurrency=2 only) | GRAPH-03 PASS (strict `verify-graph`, 10 nodes, SQL parity, Native App checks). GRAPH-04 has a committed MaxConcurrency=2 PASS (execution `bronze-seed-silver-gold-1782351277`, 81/81 batches, 7/7 stages SUCCEEDED). **MaxConcurrency=4 (the deployed value) has NO committed Step Functions/CloudWatch evidence file** — Option (b) in Section 2 was exercised: the Release Owner accepted the code-comment/architecture-test basis instead. This is a documented risk acceptance, not a verified run. |
 | **Blocker 5** | DASH-04 | **PASS** | `phases/10-dashboard-uat/evidence/blocker5-dashboard-uat.md` | All 5 launch-critical views PASS (5,500 companies, 2,251 people, 322 securities; hosted graph entity comparison all OK; zero parity mismatches; timestamps live; bounded samples functional); 43/43 credential-free tests pass; operator sign-off 2026-06-25 |
 
 ---
 
-## 2. Blocker 4 Open Items
+## 2. Blocker 4 Open Items — RESOLVED (2026-06-29): Option (b) accepted
 
-The Release Owner must choose one of two options before signing:
+The Release Owner chose **Option (b)** below. Option (a) was attempted on 2026-06-29 and
+could not be completed: no prod-account AWS credentials were available in that session
+(the only local credentials resolved to a non-project account, distinct from both the
+documented dev account and prod), so execution `bronze-seed-silver-gold-1782384165` was
+never actually queried. No new run evidence exists. This section is recorded as resolved
+by Option (b), not by Option (a), to avoid any future reader assuming a verification
+attempt succeeded.
 
-**Option (a) — Append validated MaxConcurrency=4 evidence (closes the open item; preferred)**
+**Option (a) — Append validated MaxConcurrency=4 evidence (not exercised)**
 
 Locate execution `bronze-seed-silver-gold-1782384165` via read-only Step Functions
 diagnostics (a describe/list call only — no new execution is started). If that record
 confirms all seven stages SUCCEEDED, 81/81 `BatchSilver` batches succeeded at
 MaxConcurrency=4, and zero `sec_pull_started` log events appear in the `BatchSilver`
 CloudWatch window, append a sanitized PASS addendum to
-`phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md` and commit it.
-Once committed, Blocker 4 upgrades from CONDITIONAL to PASS and the GO decision above
-becomes unconditional.
+`phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md` and commit it. This
+remains open for whoever next has prod Step Functions/CloudWatch read access — doing so
+upgrades Blocker 4 from "accepted basis" to a verified PASS.
 
-**Option (b) — Accept CONDITIONAL as the GO basis**
+**Option (b) — Accept CONDITIONAL as the GO basis (CHOSEN, 2026-06-26)**
 
 Accept the MaxConcurrency=2-validated PASS (`bronze-seed-silver-gold-1782351277`) as
-the GO evidence base and record in this packet's Sign-Off section that MaxConcurrency=4
-is deployed-but-not-evidence-validated. The first live `bronze_seed_silver_gold` run at
-MaxConcurrency=4 must be monitored for DuckDB write-contention symptoms (lock errors,
-duplicate or partial filing rows on the monolith silver.duckdb fallback). Revert to
-MaxConcurrency=2 if any appear. See also the MaxConcurrency=4 watch item in
+the GO evidence base; MaxConcurrency=4 (the deployed value) is deployed-but-not-
+evidence-validated. The first live `bronze_seed_silver_gold` run at MaxConcurrency=4
+must be monitored for DuckDB write-contention symptoms (lock errors, duplicate or
+partial filing rows on the monolith silver.duckdb fallback). Revert to MaxConcurrency=2
+if any appear. See also the MaxConcurrency=4 watch item in
 `runbook/post-launch-monitoring-activation.md`.
 
 ---
@@ -107,7 +114,7 @@ runs before its named owner's approval is recorded.
 | Snowflake native-pull + dbt gold (Phase 7) | Snowflake operator | **SIGNED** |
 | MDM secrets + connectivity + hosted graph E2E (Phases 8-9) | MDM operator | **SIGNED** |
 | Dashboard UAT (Phase 10) | Dashboard reviewer | **SIGNED** |
-| Final GO/NO-GO decision flip (Phase 11) | Release Owner | **PENDING** |
+| Final GO/NO-GO decision flip (Phase 11) | Release Owner | **SIGNED — 2026-06-26 UTC** |
 
 No sequence step ran before its named owner approved it. The Release Owner sign-off is the
 final gate. The four operator/reviewer approvals above are recorded in the committed

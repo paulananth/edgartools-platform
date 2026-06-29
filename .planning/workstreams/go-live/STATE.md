@@ -257,7 +257,13 @@ and `claude/go-live-v1.6-phase9` are both fully merged into `main` (PR #81, merg
 
 - Blocker 4: **FULLY REMEDIATED** (2026-06-25) — see detailed evidence above
   and `phases/09-production-hosted-graph-e2e/evidence/aws-mdm-e2e.md`
-  (bronze_seed_silver_gold addendum). GRAPH-04 satisfied.
+  (bronze_seed_silver_gold addendum). GRAPH-04 satisfied at MaxConcurrency=2.
+  [2026-06-26, Phase 11] `11-AUDIT.md` recorded this as CONDITIONAL pending
+  MaxConcurrency=4 evidence (the deployed value, never separately validated
+  end-to-end). [2026-06-29] Resolved via Option (b) in
+  `11-GO-NO-GO-PACKET.md` Section 2 — accepted as the GO basis without new
+  run evidence; MaxConcurrency=4 itself remains unverified by a committed
+  Step Functions/CloudWatch record.
 
 - Blocker 5: **FULLY REMEDIATED** (2026-06-25) — dashboard UAT run against
   edgartools-dev (production-like config) post `bronze_seed_silver_gold` SUCCEEDED

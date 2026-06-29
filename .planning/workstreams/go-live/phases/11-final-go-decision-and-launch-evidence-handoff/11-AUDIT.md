@@ -108,6 +108,12 @@ DuckDB write-contention symptoms (lock errors, duplicate or partial filing rows)
 MaxConcurrency=4 is treated as confirmed safe. The STATE.md monitoring note (2026-06-25) already
 documents this obligation.
 
+**Resolution (2026-06-29, recorded in `11-GO-NO-GO-PACKET.md` Section 2):** Option (b) was
+chosen. An attempt at Option (a) on 2026-06-29 could not obtain prod AWS credentials, so
+execution `bronze-seed-silver-gold-1782384165` was never queried — this audit's CONDITIONAL
+finding above stands unchanged as the point-in-time record; the packet records Blocker 4 as
+PASS by accepted basis, not by new run evidence.
+
 ### Blocker 5 Detail
 
 All 5 launch-critical views PASS: MDM Overview (5,500 companies, 2,251 people, 322 securities),
