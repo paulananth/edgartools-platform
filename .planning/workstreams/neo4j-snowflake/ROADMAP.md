@@ -1,9 +1,9 @@
 # Roadmap: Neo4j Snowflake Native App Migration
 
 workstream: neo4j-snowflake
-status: active
+status: complete
 milestone: v1.3 Neo4j Snowflake Native App Migration
-updated: 2026-06-12
+updated: 2026-06-29
 
 ---
 
@@ -20,7 +20,7 @@ MDM relationship parity, dashboard inspection, and end-to-end AWS verification.
 - [x] **Phase 1: Snowflake Native App Feasibility And Architecture Decision** - validate marketplace installation, permissions, graph projection contract, and the decision to cut over from external Neo4j (completed 2026-05-26)
 - [x] **Phase 2: Snowflake Graph Sync Contract** - adapt `edgar-warehouse mdm sync-graph` to materialize MDM graph state into Snowflake graph-ready node and edge tables/views (completed 2026-05-27)
 - [x] **Phase 3: Hosted Graph Verification And E2E Cutover** - move `verify-graph` and AWS pipeline validation onto the Snowflake-hosted Native App path (completed 2026-06-12)
-- [ ] **Phase 4: Dashboard Hosted Graph Migration** - update the MDM Neo4j review dashboard to compare MDM state with the Snowflake-hosted graph target
+- [x] **Phase 4: Dashboard Hosted Graph Migration** - update the MDM Neo4j review dashboard to compare MDM state with the Snowflake-hosted graph target (completed 2026-06-29)
 
 ---
 
@@ -137,4 +137,4 @@ Cross-cutting constraints:
 | 1. Snowflake Native App Feasibility And Architecture Decision | v1.3 Neo4j Snowflake Native App Migration | 3/3 | Complete    | 2026-05-26 |
 | 2. Snowflake Graph Sync Contract | v1.3 Neo4j Snowflake Native App Migration | 3/3 | Complete    | 2026-05-27 |
 | 3. Hosted Graph Verification And E2E Cutover | v1.3 Neo4j Snowflake Native App Migration | 3/3 | Complete    | 2026-06-12 |
-| 4. Dashboard Hosted Graph Migration | v1.3 Neo4j Snowflake Native App Migration | 2/3 | In progress | - |
+| 4. Dashboard Hosted Graph Migration | v1.3 Neo4j Snowflake Native App Migration | 3/3 | Complete    | 2026-06-29 |

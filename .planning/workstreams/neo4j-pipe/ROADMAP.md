@@ -1,9 +1,9 @@
 # Roadmap: ADV Bronze-To-Silver Backfill
 
 workstream: neo4j-pipe
-status: active
+status: complete
 milestone: v1.4 ADV Bronze-To-Silver Backfill
-updated: 2026-06-03
+updated: 2026-06-29
 
 ---
 

@@ -35,14 +35,14 @@ updated: 2026-06-12
 - [x] **VERIFY-01**: Verification reports matching node counts between MDM active entities, Snowflake graph node tables/views, and Native App graph projection results.
 - [x] **VERIFY-02**: Verification reports exact relationship parity between active MDM relationship rows and Snowflake graph edge tables/views by relationship type.
 - [x] **VERIFY-03**: Verification reports query-level graph traversal checks that prove important ownership/adviser/fund relationships are reachable.
-- [ ] **VERIFY-04**: Verification includes dashboard comparison against the Snowflake-hosted graph target.
+- [x] **VERIFY-04**: Verification includes dashboard comparison against the Snowflake-hosted graph target.
 - [x] **VERIFY-05**: Verification includes an end-to-end AWS pipeline run that reaches the Snowflake-hosted graph validation path.
 
 ### Dashboard Migration
 
-- [ ] **DASH-01**: Operator can use the existing MDM Neo4j review dashboard against the Snowflake-hosted graph target instead of an external Neo4j service.
-- [ ] **DASH-02**: Dashboard comparison views show MDM-to-Snowflake-hosted graph mismatches with bounded filters and no mutation of MDM or graph state.
-- [ ] **DASH-03**: Dashboard configuration and error messages remove stale external Neo4j credential assumptions and do not print Snowflake secrets.
+- [x] **DASH-01**: Operator can use the existing MDM Neo4j review dashboard against the Snowflake-hosted graph target instead of an external Neo4j service.
+- [x] **DASH-02**: Dashboard comparison views show MDM-to-Snowflake-hosted graph mismatches with bounded filters and no mutation of MDM or graph state.
+- [x] **DASH-03**: Dashboard configuration and error messages remove stale external Neo4j credential assumptions and do not print Snowflake secrets.
 
 ### Isolation
 
@@ -82,10 +82,10 @@ updated: 2026-06-12
 | VERIFY-01 | Phase 3 | Complete |
 | VERIFY-02 | Phase 3 | Complete |
 | VERIFY-03 | Phase 3 | Complete |
-| VERIFY-04 | Phase 4 | Pending |
+| VERIFY-04 | Phase 4 | Complete |
 | VERIFY-05 | Phase 3 | Complete |
-| DASH-01 | Phase 4 | Pending |
-| DASH-02 | Phase 4 | Pending |
-| DASH-03 | Phase 4 | Pending |
+| DASH-01 | Phase 4 | Complete |
+| DASH-02 | Phase 4 | Complete |
+| DASH-03 | Phase 4 | Complete |
 | ISO-01 | Phase 1 | Complete |
 | ISO-02 | Phase 1 | Complete |

@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.4
-milestone_name: milestone
+milestone_name: ADV Bronze-To-Silver Backfill
 status: completed
-last_updated: "2026-06-17T10:45:14.082Z"
-last_activity: 2026-06-06 -- Phase 5 bounded real-data sample synced to EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION; MDM_MINUS_GRAPH=0 for every active relationship type
+last_updated: "2026-06-29T00:00:00.000Z"
+last_activity: 2026-06-06 -- Phase 10 (Live ADV Backfill Validation) complete; all MDM-ADV-01/02/03 requirements satisfied. Progress block below corrected — it tracked a stale phase count (4 total/3 complete) left over from an earlier milestone definition; v1.4 actually spans Phases 8-10, all complete, per Current Position and Phase Summary below.
 progress:
-  total_phases: 4
+  total_phases: 3
   completed_phases: 3
   total_plans: 5
   completed_plans: 5
-  percent: 75
+  percent: 100
 ---
 
 # Project State — neo4j-pipe
