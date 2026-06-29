@@ -73,3 +73,4 @@ Thumbs.db
 
 # Local go-live wizard state and sanitized reports
 .edgartools-go-live/
+.gstack/
