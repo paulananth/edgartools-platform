@@ -684,7 +684,18 @@ multiple `dbt run`s).
 
 ## parent_company_entity_id_always_none: HAS_PARENT_COMPANY always derives 0 relationships
 
-**Status:** OPEN — pre-production blocker. Not Phase 5 scope (Phase 5 is documentation-only); fix before any production launch.
+**Status:** MITIGATED (2026-06-29) — observability fix landed; the underlying data-source
+gap is NOT resolved and still requires a product decision (see Fix approach (a) below)
+before `HAS_PARENT_COMPANY` can ever be populated. Do not read this as closed — only the
+"silent" half of the bug is fixed.
+
+**What changed:** `CompanyResolver._parent_company_entity_id` now logs one `WARNING` per
+pipeline run (deduplicated via `ResolverContext.warned`, not per-row) the first time it
+sees a `sec_company` row with none of `parent_company_cik`/`parent_cik`/`ultimate_parent_cik`
+present — i.e. every run, today, since no writer ever sets those columns. The gap is now
+visible in production logs instead of silently producing zero edges. See
+`edgar_warehouse/mdm/resolvers/company.py` and
+`tests/mdm/test_company_resolver.py::test_warns_once_per_run_when_parent_cik_source_missing`.
 
 **What:** `MdmCompany.parent_company_entity_id` is always `None` for every MDM company record. As a result, `_derive_has_parent_company` in `pipeline.py` (which filters on `MdmCompany.parent_company_entity_id.isnot(None)`) always produces 0 rows, and the `HAS_PARENT_COMPANY` relationship type is never written to the graph.
 
@@ -696,7 +707,7 @@ multiple `dbt run`s).
 5. Root cause: `sec_company`'s DDL (`silver_store.py:24`) has no `parent_company_cik`, `parent_cik`, or `ultimate_parent_cik` column — those names match nothing in the schema. The actual columns are `cik, entity_name, entity_type, sic, sic_description, state_of_incorporation, fiscal_year_end, ein, description, category`. The `.get()` calls silently return `None` for every row.
 
 **Where:**
-- `edgar_warehouse/mdm/resolvers/company.py:172-175` — reads three non-existent silver columns.
+- `edgar_warehouse/mdm/resolvers/company.py:189-192` — reads three non-existent silver columns (now warns once per run when none are present; see "What changed" above).
 - `edgar_warehouse/silver_store.py:24` — the authoritative `sec_company` DDL (no parent columns).
 - `edgar_warehouse/mdm/pipeline.py:681-707` — `_derive_has_parent_company` silently produces 0 edges.
 

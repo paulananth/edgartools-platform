@@ -6,6 +6,7 @@ needed because SEC CIK is a stable, unique key.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Optional
 
@@ -15,6 +16,11 @@ from edgar_warehouse.mdm.database import MdmCompany, MdmEntity, MdmSourceRef
 from edgar_warehouse.mdm.match import CIKExactMatcher, FuzzyNameMatcher, MatchPipeline
 from edgar_warehouse.mdm.resolvers.base import BaseResolver, ResolveOutcome, ResolverContext
 from edgar_warehouse.mdm.survivorship import run_survivorship_for_entity
+
+logger = logging.getLogger(__name__)
+
+_PARENT_CIK_SOURCE_WARNING_KEY = "company.parent_cik_source"
+_PARENT_CIK_KEYS = ("parent_company_cik", "parent_cik", "ultimate_parent_cik")
 
 COMPANY_FIELDS = [
     "canonical_name",
@@ -169,6 +175,17 @@ class CompanyResolver(BaseResolver):
 
     @staticmethod
     def _parent_company_entity_id(ctx: ResolverContext, company_row: dict) -> Optional[str]:
+        if not any(key in company_row for key in _PARENT_CIK_KEYS):
+            if _PARENT_CIK_SOURCE_WARNING_KEY not in ctx.warned:
+                ctx.warned.add(_PARENT_CIK_SOURCE_WARNING_KEY)
+                logger.warning(
+                    "No parent CIK source column (%s) found on sec_company rows this run; "
+                    "HAS_PARENT_COMPANY relationships will not be derived. "
+                    "See TODOS.md parent_company_entity_id_always_none.",
+                    " / ".join(_PARENT_CIK_KEYS),
+                )
+            return None
+
         parent_cik = (
             company_row.get("parent_company_cik")
             or company_row.get("parent_cik")

@@ -30,6 +30,9 @@ class ResolverContext:
     silver: SilverReader
     pipeline: Optional[MatchPipeline] = None
     run_id: str = ""
+    # One-time warning markers, keyed by an arbitrary id (e.g. "company.parent_cik_source"),
+    # so resolvers can flag a structural data gap once per run instead of once per row.
+    warned: set = field(default_factory=set)
 
 
 @dataclass
