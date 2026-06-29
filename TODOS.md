@@ -767,32 +767,32 @@ handoff), resolved 2026-06-11.
 
 ---
 
-## Production dashboard UAT
+## Production dashboard UAT — RESOLVED (2026-06-25)
 
-**What:** Run dashboard UAT against production Snowflake/MDM connections
+**Status:** RESOLVED. v1.6 go-live Phase 10 (`10-dashboard-uat`, not Phase 4 —
+this entry predates the v1.6 renumbering that started at Phase 6) ran UAT
+against production-like edgartools-dev config with real AWS Secrets Manager
+MDM/Snowflake credentials. All 5 launch-critical views PASS; operator
+sign-off 2026-06-25. See `phases/10-dashboard-uat/evidence/blocker5-dashboard-uat.md`
+and Blocker 5 in `STATE.md`.
+
+**Original ask:** Run dashboard UAT against production Snowflake/MDM connections
 once prod credentials and infrastructure are available.
-
-**Why:** Phase 4 dashboard UAT (go-live workstream) ran only against dev
-credentials; the launch gate matrix lists "Dashboard operator inspection
-views" as BLOCKED until a prod UAT pass is recorded as separate evidence.
-Dev evidence is precedent only and does not substitute for prod proof.
-
-**Where:** `.planning/workstreams/go-live/phases/04-operator-dashboard-and-data-issue-triage/` (dev UAT evidence); prod UAT evidence to be captured under the go-live workstream when prod credentials exist.
 
 ---
 
-## Production MDM secrets population runbook execution
+## Production MDM secrets population runbook execution — RESOLVED (2026-06-21)
 
-**What:** Execute the MDM secrets runbook against real production values to
+**Status:** RESOLVED. v1.6 go-live Phase 8 (PR #80) populated
+`edgartools-prod/mdm/postgres_dsn` and `edgartools-prod/mdm/snowflake` with
+AWSCURRENT versions; `check-connectivity`/`migrate`/`counts` passed against
+the real production MDM database. See
+`phases/08-production-mdm-secrets-and-connectivity/evidence/mdm-prod-secrets-and-connectivity.md`
+and Blocker 2 in `STATE.md`.
+
+**Original ask:** Execute the MDM secrets runbook against real production values to
 populate `edgartools-prod/mdm/postgres_dsn` and `edgartools-prod/mdm/snowflake`
 in Secrets Manager.
-
-**Why:** The launch gate matrix's "MDM Snowflake Postgres secret container
-and connectivity" row is BLOCKED — the runbook steps are documented but have
-not yet been executed against real prod secret values, so prod MDM
-connectivity is unverified.
-
-**Where:** `.planning/workstreams/go-live/phases/03-mdm-hosted-graph-e2e-acceptance/runbook/mdm-secrets.md` (runbook to execute); `.planning/workstreams/go-live/phases/01-production-readiness-inventory-and-launch-gate-contract/01-LAUNCH-GATE-MATRIX.md` (Required Production Identifiers checklist).
 
 ---
 
