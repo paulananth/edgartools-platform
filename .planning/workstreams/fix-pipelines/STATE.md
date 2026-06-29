@@ -1,24 +1,34 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: milestone
-current_plan: 1
-status: executing
-stopped_at: Phase 2 context updated (D-06 added, D-05 resolved with Python assert)
-last_updated: "2026-05-16T22:26:05.361Z"
-last_activity: 2026-05-16 -- Phase 04 planning complete
+milestone_name: Pipeline Observability
+current_plan: 4
+status: complete
+stopped_at: All 4 phases shipped 2026-05-16 and archived to milestones/v1.0-phases/.
+  This STATE.md was never updated after archival (still showed Phase 2 mid-execution
+  with Phases 3-4 "Not started") — corrected 2026-06-29 to match
+  milestones/v1.0-REQUIREMENTS.md and ROADMAP.md, both of which already correctly
+  show the milestone shipped.
+last_updated: "2026-06-29T00:00:00.000Z"
+last_activity: 2026-05-16 -- Phase 4 (SEC rate limiter) shipped, commit e029629. OBS-01
+  tracked as "Complete — Definition verified; runtime re-test pending" in
+  milestones/v1.0-REQUIREMENTS.md: the deployed ToleratedFailurePercentage=0 state
+  machine definition is correct, but the live-behavior test script
+  (scripts/ops/test-failure-surfacing.sh) has its own injection-mechanism race
+  condition, never redesigned. This is a known, accepted, low-severity residual
+  gap in test tooling, not in the production Step Functions definition.
 ---
 
 # Project State — fix-pipelines
 
 ## Current Position
 
-Phase: 02 — COMPLETE
-Plan: 1 of 1
-Status: Ready to execute
-Last activity: 2026-05-16 -- Phase 04 planning complete
+Phase: 4 (SEC Rate Limiting) — COMPLETE
+Plan: 4 of 4
+Status: All phases complete; milestone archived
+Last activity: 2026-05-16 -- Phase 4 shipped, commit e029629
 
-[██████████░░░░░░░░░░░░░░░░░░░░] 33% (1/3 phases complete)
+[██████████████████████████████] 100% (4/4 phases complete)
 
 ## Milestone Context
 
@@ -33,19 +43,20 @@ Requirements: OBS-01 through OBS-06 (see REQUIREMENTS.md)
 
 | Phase | Goal | Requirements | Status |
 |-------|------|--------------|--------|
-| 1 — Failure Surfacing | Hard FAILED state on any stage error, all 5 machines | OBS-01, OBS-02 | Complete |
-| 2 — Status Completeness | Complete stage display + active stage marker in status.sh | OBS-03, OBS-04 | Not started |
-| 3 — Failure Notifications | SNS email on FAILED with pipeline name, ARN, stage, CW deep-link | OBS-05, OBS-06 | Not started |
+| 1 — Failure Surfacing | Hard FAILED state on any stage error, all 5 machines | OBS-01, OBS-02 | Complete (OBS-01 runtime re-test pending, see above) |
+| 2 — Status Completeness | Complete stage display + active stage marker in status.sh | OBS-03, OBS-04 | Complete |
+| 3 — Failure Notifications | SNS email on FAILED with pipeline name, ARN, stage, CW deep-link | OBS-05, OBS-06 | Complete (commit 5b0254c) |
+| 4 — SEC Rate Limiting | Enforce minimum 2 and maximum 5 concurrent calls to SEC website | (added post-hoc, see Roadmap Evolution) | Complete (commit e029629) |
 
 ## Progress
 
-**Phases Complete:** 1/3
-**Current Plan:** 1
+**Phases Complete:** 4/4
+**Current Plan:** 4 (final)
 
 ## Session Continuity
 
-**Stopped At:** Phase 2 context updated (D-06 added, D-05 resolved with Python assert)
-**Resume File:** .planning/workstreams/fix-pipelines/phases/02-status-completeness/02-CONTEXT.md
+**Stopped At:** Milestone shipped 2026-05-16, archived to milestones/v1.0-phases/.
+**Resume File:** None
 
 ## Accumulated Context
 
