@@ -120,6 +120,12 @@ models:
       - name: fiscal_period
         tests:
           - not_null
+      - name: roic
+        description: >
+          Simplified pre-tax ROIC (EBIT / Average Invested Capital). Does not apply
+          a NOPAT tax adjustment — financials_derived.py has no parsed
+          income_tax_expense/effective-tax-rate field today (see
+          edgar_warehouse/parsers/financials_derived.py line 279).
 
   - name: earnings_releases
     description: 8-K earnings releases with beat/miss flags and cumulative beat streaks per (cik, accession_number).
