@@ -67,8 +67,9 @@ Conducted ahead of formal phase planning, to confirm the no-new-loader constrain
       total assets.
 
 - [ ] **Phase 2: Profitability And Returns Factors** — add gross/operating/net margin,
-      ROE, ROA to `financial_factors.sql`; surface existing `roic` column. (STARTING PHASE
-      — zero silver risk, no research gate, see "Suggested order" below.) **Planned: 2 plans.**
+      ROE, ROA to `financial_factors.sql`; surface existing `roic` column. **2/2 plans
+      executed and code-verified (dbt compile), HELD OPEN pending live `dbt test`** —
+      see Phase 2 detail below.
 
 - [ ] **Phase 3: Cash Conversion Cycle** — research `cost_of_revenue` XBRL-tag coverage,
       then conditionally parse it and add DSO/DIO/DPO.
@@ -110,18 +111,31 @@ recommended after Phase 2 — see "Suggested order").
 
 **Depends on:** Nothing in this workstream. Lowest-risk phase — recommended starting point.
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans executed (code + dbt compile verified); phase HELD OPEN pending live `dbt test`
 
 - [x] 02-01-PLAN.md — Create the `safe_ratio_signed` dbt macro (ROE negative-equity null guard, D-01)
-- [ ] 02-02-PLAN.md — Add gross/operating/net margin, ROE, ROA + surface `roic` in `financial_factors.sql`; extend unit tests; document ROIC simplification in `gold.yml`
+- [x] 02-02-PLAN.md — Add gross/operating/net margin, ROE, ROA + surface `roic` in `financial_factors.sql`; extend unit tests; document ROIC simplification in `gold.yml`
+
+**Verification status (2026-06-30):** Both plans executed, committed, and merged. `dbt parse`
+and `dbt compile --select financial_factors` both succeed against real Snowflake credentials
+— SQL/Jinja confirmed valid, all structural acceptance criteria pass. **Live `dbt test
+--select financial_factors` could not run**: this dev Snowflake account's deployed
+`SEC_FINANCIAL_DERIVED` source table is missing columns (`current_assets`, etc.) that
+`financial_derived.sql` already selects — a pre-existing schema-sync gap in this account,
+confirmed unrelated to this phase's code (reproduced the identical failure against the
+*unmodified* pre-existing test case in isolation; also tried `dbt run --select
+financial_derived --full-refresh`, which fails one level deeper because the underlying
+source table itself lacks the column). **Decision: phase held open, not marked complete,
+until live `dbt test` passes against an environment with a fully-synced source schema** —
+see Phase 4 success criterion 4 is NOT yet satisfied for real.
 
 **Success criteria:**
 
-1. `financial_factors.sql` adds `gross_margin` (`gross_profit / revenue`), `operating_margin` (`ebit / revenue`), `net_margin` (`net_income / revenue`) using the existing `safe_ratio()` macro.
-2. `financial_factors.sql` adds `return_on_equity` (`net_income / total_equity`), `return_on_assets` (`net_income / total_assets`) using `safe_ratio()`.
-3. Existing `financial_derived.roic` column is surfaced in `financial_factors.sql` (not recomputed).
-4. dbt schema tests cover representative companies including at least one with negative net income (verifies `safe_ratio()` null-guards correctly, not a negative-margin display bug).
-5. No changes to `financials_derived.py`, `silver_store.py`, or any loader/runtime file — gold-layer SQL only.
+1. ✅ `financial_factors.sql` adds `gross_margin` (`gross_profit / revenue`), `operating_margin` (`ebit / revenue`), `net_margin` (`net_income / revenue`) using the existing `safe_ratio()` macro. (compile-verified)
+2. ✅ `financial_factors.sql` adds `return_on_equity` (`net_income / total_equity`, sign-guarded via `safe_ratio_signed`), `return_on_assets` (`net_income / total_assets`) using `safe_ratio()`. (compile-verified)
+3. ✅ Existing `financial_derived.roic` column is surfaced in `financial_factors.sql` (not recomputed). (compile-verified)
+4. ⏸ **NOT YET VERIFIED LIVE** — dbt schema tests cover representative companies including at least one with negative net income; tests are written (`financial_factors_negative_equity_nulls_roe` etc.) but have never executed successfully against a real Snowflake target, due to the source-schema gap above.
+5. ✅ No changes to `financials_derived.py`, `silver_store.py`, or any loader/runtime file — gold-layer SQL only. (confirmed via `git diff --stat`)
 
 ### Phase 3: Cash Conversion Cycle
 

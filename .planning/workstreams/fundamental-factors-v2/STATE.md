@@ -4,14 +4,18 @@ milestone: v1.0
 milestone_name: Fundamental Factors V2 (Growth, Profitability, Returns)
 current_phase: 2
 current_phase_name: profitability-and-returns-factors
-status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-06-30T05:55:16.427Z"
+status: blocked
+stopped_at: Phase 2 both plans executed and merged (02-01 safe_ratio_signed macro,
+  02-02 six factors + tests + gold.yml docs). dbt parse/compile verified against real
+  Snowflake credentials. HELD OPEN — live dbt test cannot run because this dev Snowflake
+  account's SEC_FINANCIAL_DERIVED source table predates financial_derived.sql's current
+  column set (missing current_assets etc.), confirmed unrelated to this phase's code.
+last_updated: "2026-06-30T06:20:00.000Z"
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 2
-  completed_plans: 0
+  completed_plans: 2
   percent: 0
 ---
 
@@ -19,8 +23,12 @@ progress:
 
 ## Current Position
 
-Phase: 2 (profitability-and-returns-factors) — EXECUTING
-Status: Executing Phase 2
+Phase: 2 (profitability-and-returns-factors) — BLOCKED (verification incomplete)
+Status: Both plans (02-01, 02-02) executed, committed, and merged to main. Code-level
+  verification passed (dbt parse, dbt compile --select financial_factors both succeed).
+  Live dbt test blocked by an environment data-gap in this Snowflake account — see
+  Blockers below. Phase is explicitly NOT marked complete per operator decision
+  (2026-06-30): hold open until live dbt test passes somewhere with a synced source schema.
 
 ## Milestone Context
 
@@ -43,19 +51,32 @@ no new loader, no new SEC fetch path, only silver/gold changes.
 
 ## Blockers
 
-- None.
+- **Phase 2 live dbt test verification (2026-06-30).** `dbt test --select financial_factors`
+  fails with `Invalid column name: 'current_assets' in unit test fixture for
+  'financial_derived'` — this dev Snowflake account's deployed `EDGARTOOLS_DEV.
+  EDGARTOOLS_SOURCE.SEC_FINANCIAL_DERIVED` source table is missing columns that
+  `financial_derived.sql` already selects from it. Confirmed pre-existing and unrelated to
+  Phase 2's code: reproduced the identical failure against the unmodified pre-existing
+  `financial_factors_complete_fy_ratios` test case in isolation. Also attempted
+  `dbt run --select financial_derived --full-refresh` to fix it directly — failed one
+  level deeper (`invalid identifier 'W.CURRENT_ASSETS'`) because the underlying source
+  table itself, not just the dynamic table, lacks the column. This Snowflake account was
+  never kept in sync with the project's schema evolution (it is not the project's
+  documented canonical dev/prod account — see go-live workstream's account-mismatch
+  finding from earlier this session). Resolving this needs either: (a) access to the
+  project's actual documented dev/prod Snowflake account, or (b) a full native-pull +
+  silver re-sync of this account's source data.
 
 ## Pending Todos
 
-- Write the Phase 2 plan (profitability/returns factors) and execute it.
-- After Phase 2 ships, write the Phase 1 plan (CAGR) — needs sign-change (GROW-02) and
+- Resolve the Phase 2 live-dbt-test blocker above, then mark Phase 2 complete.
+- After Phase 2 closes, write the Phase 1 plan (CAGR) — needs sign-change (GROW-02) and
   fiscal-year-gap (GROW-03) handling designed before implementation, not just the join.
-
 - Phase 3 (cash conversion cycle) needs a coverage-research spike on `CostOfRevenue`/
   `CostOfGoodsAndServicesSold` XBRL tag prevalence before any implementation commitment.
 
 ## Session Continuity
 
-Last session: 2026-06-30T05:20:33.176Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/workstreams/fundamental-factors-v2/phases/02-profitability-and-returns-factors/02-CONTEXT.md
+Last session: 2026-06-30T06:20:00.000Z
+Stopped at: Phase 2 plans executed and merged; held open pending live dbt test (see Blockers).
+Resume file: .planning/workstreams/fundamental-factors-v2/phases/02-profitability-and-returns-factors/02-02-SUMMARY.md
