@@ -1,11 +1,12 @@
 ---
 gsd_state_version: 1.0
-workstream: fundamental-factors-v2
 milestone: v1.0
 milestone_name: Fundamental Factors V2 (Growth, Profitability, Returns)
+current_phase: 2
+current_phase_name: Profitability And Returns Factors
 status: planning
-last_updated: "2026-06-29T00:00:00.000Z"
-last_activity: 2026-06-29 -- Activated. Starting with Phase 2 (Profitability And Returns Factors) per the suggested build order in ROADMAP.md — zero silver risk, no research gate, every input field already confirmed present in financial_derived. Phase numbering in ROADMAP.md is unchanged (1=CAGR, 2=Profitability/Returns, 3=Cash Conversion Cycle); execution order starts at 2 by design.
+stopped_at: Phase 2 context gathered
+last_updated: "2026-06-30T05:20:33.184Z"
 progress:
   total_phases: 3
   completed_phases: 0
@@ -19,7 +20,7 @@ progress:
 ## Current Position
 
 Phase: 2 (Profitability And Returns Factors) — planning
-Status: Activated. Research complete (see ROADMAP.md "Research Evidence"). Next step is writing the Phase 2 plan: add gross margin, operating margin, net margin, ROE, ROA to financial_factors.sql, and surface the existing roic column.
+Status: Context gathered via /gsd-discuss-phase 2 (3 gray areas decided, research-backed — see 02-CONTEXT.md and 02-DISCUSSION-LOG.md). Next step: /gsd-plan-phase 2.
 
 ## Milestone Context
 
@@ -35,6 +36,7 @@ no new loader, no new SEC fetch path, only silver/gold changes.
   `financial_derived`. The third group (cash conversion cycle) needs one new silver
   parser field but still no new loader, since it reads from data the existing loader
   already fetches.
+
 - Suggested phase order is profitability/returns first (zero risk) before CAGR
   (needs sign-change/gap-handling care) before cash conversion cycle (feasibility-gated
   on XBRL tag coverage research).
@@ -48,12 +50,12 @@ no new loader, no new SEC fetch path, only silver/gold changes.
 - Write the Phase 2 plan (profitability/returns factors) and execute it.
 - After Phase 2 ships, write the Phase 1 plan (CAGR) — needs sign-change (GROW-02) and
   fiscal-year-gap (GROW-03) handling designed before implementation, not just the join.
+
 - Phase 3 (cash conversion cycle) needs a coverage-research spike on `CostOfRevenue`/
   `CostOfGoodsAndServicesSold` XBRL tag prevalence before any implementation commitment.
 
 ## Session Continuity
 
-Last session: 2026-06-29T00:00:00.000Z
-Stopped at: Workstream activated; Phase 2 selected as the starting phase. No plan
-written yet.
-Resume file: .planning/workstreams/fundamental-factors-v2/ROADMAP.md
+Last session: 2026-06-30T05:20:33.176Z
+Stopped at: Phase 2 context gathered
+Resume file: .planning/workstreams/fundamental-factors-v2/phases/02-profitability-and-returns-factors/02-CONTEXT.md
