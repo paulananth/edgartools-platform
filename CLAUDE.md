@@ -160,6 +160,20 @@ against that same Snowflake target. One credential (the same `MDM_SNOWFLAKE_*`/
 grants: `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`. Full migration history:
 `.planning/workstreams/neo4j-snowflake/`.
 
+**MDM database (read this before assuming a separate AWS RDS instance):**
+MDM's operational Postgres database was cut over from AWS RDS (private VPC) to Snowflake's
+native Postgres service — provisioned and managed inside the same Snowflake account as
+gold and the graph (`infra/scripts/bootstrap-prod-mdm.sh` provisions a "Snowflake Postgres
+instance," e.g. `EDGARTOOLS_PROD_MDM`; connects via `snowflake_admin`). No AWS RDS module,
+no VPC subnet group, no RDS security group remain for MDM — confirmed via repo-wide search,
+zero `rds_mdm`/`mdm_database` Terraform files exist anymore (only `mdm_secret_moves.tf` in
+the AWS accounts, handling the Secrets Manager migration). One platform (Snowflake) hosts
+gold, the graph, and now MDM's operational store — eliminating the separate AWS RDS
+network/credential surface. Note: this is still a distinct Postgres-wire-protocol DSN
+(`MDM_DATABASE_URL`, port 5432) from the Snowflake SQL connection used for dbt/gold/graph
+(`DBT_SNOWFLAKE_*`/`MDM_SNOWFLAKE_*`, HTTPS) — "one platform" means one Snowflake account
+and governance boundary, not literally one shared connection string for both protocols.
+
 **When to use what:**
 
 | Scenario | Command / State Machine |
@@ -182,8 +196,13 @@ aws stepfunctions start-execution \
 # Monitor: aws stepfunctions describe-execution --execution-arn <arn> --query status
 ```
 
-**Do NOT run `bootstrap-next` locally for large batches** — it is sequential and cannot reach
-MDM Postgres (private VPC). Reserve it for single-company ad-hoc loads with explicit `--cik-list`.
+**Do NOT run `bootstrap-next` locally for large batches** — it is sequential, so throughput
+alone rules it out at scale. Reserve it for single-company ad-hoc loads with explicit
+`--cik-list`. (Historical note: this guidance originally also cited "cannot reach MDM
+Postgres, private VPC" — that no longer applies. MDM Postgres moved off AWS RDS onto
+Snowflake's native Postgres service; see "MDM database" note below. Local reachability to
+the current Snowflake-hosted instance has not been re-verified, so treat the sequential-
+throughput reason as the one to rely on.)
 
 **Key invariants (do not break):**
 - `bootstrap-batch` must NOT be in `GOLD_AFFECTING_COMMANDS` — enforced in `warehouse_orchestrator.py:79`
