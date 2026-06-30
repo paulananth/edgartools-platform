@@ -60,24 +60,79 @@ Conducted ahead of formal phase planning, to confirm the no-new-loader constrain
 
 ---
 
-## Phases (proposed, not yet planned in detail)
+## Phases
 
 - [ ] **Phase 1: CAGR Macro And Multi-Year Joins** — add `cagr()` dbt macro, extend
       `financial_factors.sql` with N-year self-joins (3yr, 5yr) for revenue, net income,
-      total assets. Verify sign-change handling (GROW-02) and fiscal-year-gap handling
-      (GROW-03) with real multi-year company data before shipping.
-- [ ] **Phase 2: Profitability And Returns Factors (STARTING PHASE)** — add gross/operating/net margin,
-      ROE, ROA to `financial_factors.sql`; surface existing `roic` column. Pure SQL
-      addition, no parser changes — lowest-risk phase, could ship independently and first.
-- [ ] **Phase 3: Cash Conversion Cycle (conditional)** — research `cost_of_revenue`
-      XBRL-tag coverage across a representative filer sample first. If coverage is poor,
-      declare CCC-01 out of scope (per CCC-02) rather than ship a low-coverage factor.
-      If coverage is acceptable, parse `cost_of_revenue` in `financials_derived.py`, add
-      DSO/DIO/DPO to `financial_factors.sql`.
+      total assets.
+- [ ] **Phase 2: Profitability And Returns Factors** — add gross/operating/net margin,
+      ROE, ROA to `financial_factors.sql`; surface existing `roic` column. (STARTING PHASE
+      — zero silver risk, no research gate, see "Suggested order" below.)
+- [ ] **Phase 3: Cash Conversion Cycle** — research `cost_of_revenue` XBRL-tag coverage,
+      then conditionally parse it and add DSO/DIO/DPO.
 
 **Suggested order:** Phase 2 first (zero risk, immediate value, no research needed),
 then Phase 1 (needs sign-change/gap-handling care but no silver risk), then Phase 3
 (only phase with real feasibility risk — research gates the build).
+
+---
+
+## Phase Details
+
+### Phase 1: CAGR Macro And Multi-Year Joins
+
+**Goal:** Consumers can query 3-year and 5-year CAGR for revenue, net income, and total
+assets per `(cik, fiscal_year)`, computed from existing multi-year history with no new
+loader or fetch path.
+
+**Requirements:** GROW-01, GROW-02, GROW-03
+
+**Depends on:** Nothing in this workstream (can run independently of Phase 2/3, but
+recommended after Phase 2 — see "Suggested order").
+
+**Plans:** TBD
+
+**Success criteria:**
+
+1. New `cagr()` dbt macro added to `infra/snowflake/dbt/edgartools_gold/macros/`, following the same pattern as `yoy_growth()` (case/null guard, no division-by-zero or negative-base errors).
+2. `financial_factors.sql` extended with N-year self-joins (`fiscal_year - 3`, `fiscal_year - 5`) for revenue, net income, total assets — same join shape as the existing `prior_fy_values` CTE.
+3. Sign-change handling verified (GROW-02): negative-to-positive or positive-to-negative spans produce null, not a misleading or complex-valued result.
+4. Fiscal-year-gap handling verified (GROW-03): a missed `FY` filing in the N-year window produces null, not an incorrectly-spanning calculation.
+5. dbt schema tests cover at least one real multi-year company fixture for each of 3yr and 5yr CAGR.
+
+### Phase 2: Profitability And Returns Factors
+
+**Goal:** Consumers can query gross margin, operating margin, net margin, ROE, ROA, and ROIC from `FINANCIAL_FACTORS` — all computable from columns already present in `financial_derived`, zero parser changes.
+
+**Requirements:** PROF-01, PROF-02, PROF-03
+
+**Depends on:** Nothing in this workstream. Lowest-risk phase — recommended starting point.
+
+**Plans:** TBD
+
+**Success criteria:**
+
+1. `financial_factors.sql` adds `gross_margin` (`gross_profit / revenue`), `operating_margin` (`ebit / revenue`), `net_margin` (`net_income / revenue`) using the existing `safe_ratio()` macro.
+2. `financial_factors.sql` adds `return_on_equity` (`net_income / total_equity`), `return_on_assets` (`net_income / total_assets`) using `safe_ratio()`.
+3. Existing `financial_derived.roic` column is surfaced in `financial_factors.sql` (not recomputed).
+4. dbt schema tests cover representative companies including at least one with negative net income (verifies `safe_ratio()` null-guards correctly, not a negative-margin display bug).
+5. No changes to `financials_derived.py`, `silver_store.py`, or any loader/runtime file — gold-layer SQL only.
+
+### Phase 3: Cash Conversion Cycle
+
+**Goal:** Consumers can query Days Sales Outstanding, Days Inventory Outstanding, and Days Payable Outstanding — or this is explicitly declared out of scope if `cost_of_revenue` XBRL-tag coverage is too poor to be useful.
+
+**Requirements:** CCC-01, CCC-02
+
+**Depends on:** Nothing in this workstream. Run last — the only phase with real feasibility risk (research-gated).
+
+**Plans:** TBD
+
+**Success criteria:**
+
+1. Research spike measures `CostOfRevenue`/`CostOfGoodsAndServicesSold` (and close variant) XBRL concept tag prevalence across a representative filer sample, before any implementation commitment.
+2. If coverage is acceptable (threshold defined during the research spike): `cost_of_revenue` is parsed in `financials_derived.py` from the same already-fetched `companyfacts` JSON (no new loader), added to the silver schema, and DSO/DIO/DPO are added to `financial_factors.sql`.
+3. If coverage is poor: CCC-01 is formally declared out of scope in `REQUIREMENTS.md` with the measured coverage rate as evidence, per CCC-02 — no low-coverage factor ships.
 
 ---
 
