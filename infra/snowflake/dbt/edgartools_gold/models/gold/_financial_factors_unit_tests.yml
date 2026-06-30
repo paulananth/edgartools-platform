@@ -56,6 +56,9 @@ unit_tests:
             depreciation_amortization: 6
             property_plant_equipment_net: 120
             shares_outstanding: 900
+            gross_profit: 90
+            ebit: 30
+            roic: 0.15
     expect:
       rows:
         - cik: 1
@@ -82,6 +85,12 @@ unit_tests:
           accruals_to_assets: -0.05
           asset_growth_yoy: 0.2
           shares_outstanding_yoy_change: -100
+          gross_margin: 0.6
+          operating_margin: 0.2
+          net_margin: 0.1333333333333333
+          return_on_equity: 0.1111111111111111
+          return_on_assets: 0.0666666666666667
+          roic: 0.15
 
   - name: financial_factors_quarterly_cross_year_factors_are_null
     description: Non-FY rows keep same-period accounting ratios but do not emit FY-only prior-year factors.
@@ -100,6 +109,12 @@ unit_tests:
             current_assets: 90
             current_liabilities: 30
             shares_outstanding: 900
+            revenue: 150
+            net_income: 20
+            total_equity: 180
+            gross_profit: 90
+            ebit: 30
+            roic: 0.15
     expect:
       rows:
         - cik: 2
@@ -108,3 +123,36 @@ unit_tests:
           current_ratio: 3.0
           asset_growth_yoy: null
           shares_outstanding_yoy_change: null
+          net_margin: 0.1333333333333333
+          return_on_assets: 0.0666666666666667
+          return_on_equity: 0.1111111111111111
+          roic: 0.15
+
+  - name: financial_factors_negative_equity_nulls_roe
+    description: >
+      Negative total_equity nulls return_on_equity (D-01, Damodaran treatment) while
+      return_on_assets and margins compute normally from the same negative net_income.
+    model: financial_factors
+    given:
+      - input: ref('financial_derived')
+        rows:
+          - <<: *factor_row_defaults
+            cik: 99
+            accession_number: "0099"
+            fiscal_year: 2024
+            net_income: -30
+            total_equity: -20
+            total_assets: 300
+            revenue: 150
+            gross_profit: 60
+            ebit: -10
+    expect:
+      rows:
+        - cik: 99
+          accession_number: "0099"
+          fiscal_year: 2024
+          return_on_equity: null
+          return_on_assets: -0.1
+          net_margin: -0.2
+          gross_margin: 0.4
+          operating_margin: -0.0666666666666667
