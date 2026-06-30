@@ -7,14 +7,14 @@
 #   - SnowCLI installed with a configured connection
 #
 # Usage:
-#   SNOW_CONNECTION=edgartools-dev bash scripts/test/ownership-neo4j-e2e-quick.sh
+#   SNOW_CONNECTION=snowconn bash scripts/test/ownership-neo4j-e2e-quick.sh
 
 set -euo pipefail
 
 REGION="us-east-1"
-ACCOUNT_ID="690839588395"
+ACCOUNT_ID="077127448006"
 NAME_PREFIX="edgartools-dev"
-SNOW_CONNECTION="${SNOW_CONNECTION:-edgartools-dev}"
+SNOW_CONNECTION="${SNOW_CONNECTION:-snowconn}"
 DB="EDGARTOOLS_DEV"
 
 SM_RESYNC="${NAME_PREFIX}-targeted-resync"

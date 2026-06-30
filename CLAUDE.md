@@ -296,10 +296,11 @@ terraform plan
 terraform apply
 
 # AWS-only Snowflake native-pull deploy (dev)
-# Requires SnowCLI connection edgartools-dev and keeps Snowflake secrets out of repo files.
+# Requires a SnowCLI connection (configured in ~/.snowflake/config.toml) and keeps
+# Snowflake secrets out of repo files.
 bash infra/scripts/deploy-snowflake-stack.sh \
   --env dev \
-  --snow-connection edgartools-dev \
+  --snow-connection snowconn \
   --run-validation \
   --run-dbt
 
@@ -374,6 +375,18 @@ export DBT_SNOWFLAKE_USER=<user>
 export DBT_SNOWFLAKE_PASSWORD=<password>
 export DBT_SNOWFLAKE_WAREHOUSE=EDGARTOOLS_DEV_REFRESH_WH
 ```
+
+**SnowCLI connection naming.** No literal Snowflake account locator is ever committed to
+this repo (always a placeholder like `<account_locator.region.cloud>` above) — the only
+project-level convention is the **connection name**, resolved from
+`~/.snowflake/config.toml`. `infra/scripts/go-live.sh`'s `default_snow_connection_for_env()`
+defines: **`snowconn`** for dev, **`edgartools-prod`** for prod. `go-live.sh` is the
+current orchestration entry point and always passes `--snow-connection` explicitly to
+`deploy-snowflake-stack.sh`, so its own internal fallback default
+(`edgartools-${ENVIRONMENT}`, i.e. `edgartools-dev` for dev) only matters if you invoke
+`deploy-snowflake-stack.sh` directly without `--snow-connection` — prefer passing
+`--snow-connection snowconn` explicitly for dev rather than relying on either script's
+default, since the two scripts disagree.
 
 ## Image management
 

@@ -53,19 +53,40 @@ no new loader, no new SEC fetch path, only silver/gold changes.
 
 - **Phase 2 live dbt test verification (2026-06-30).** `dbt test --select financial_factors`
   fails with `Invalid column name: 'current_assets' in unit test fixture for
-  'financial_derived'` — this dev Snowflake account's deployed `EDGARTOOLS_DEV.
+  'financial_derived'` — the `snowconn` dev Snowflake account's deployed `EDGARTOOLS_DEV.
   EDGARTOOLS_SOURCE.SEC_FINANCIAL_DERIVED` source table is missing columns that
   `financial_derived.sql` already selects from it. Confirmed pre-existing and unrelated to
   Phase 2's code: reproduced the identical failure against the unmodified pre-existing
   `financial_factors_complete_fy_ratios` test case in isolation. Also attempted
   `dbt run --select financial_derived --full-refresh` to fix it directly — failed one
   level deeper (`invalid identifier 'W.CURRENT_ASSETS'`) because the underlying source
-  table itself, not just the dynamic table, lacks the column. This Snowflake account was
-  never kept in sync with the project's schema evolution (it is not the project's
-  documented canonical dev/prod account — see go-live workstream's account-mismatch
-  finding from earlier this session). Resolving this needs either: (a) access to the
-  project's actual documented dev/prod Snowflake account, or (b) a full native-pull +
-  silver re-sync of this account's source data.
+  table itself, not just the dynamic table, lacks the column.
+
+  **Correction (2026-06-30):** an earlier version of this note speculated this was a
+  "non-canonical"/unrelated personal Snowflake account, not the project's real dev
+  environment. That claim was unsupported and has been retracted — `infra/scripts/
+  go-live.sh`'s `default_snow_connection_for_env()` defines `snowconn` as THE canonical
+  dev Snowflake CLI connection name (prod uses `edgartools-prod`); the repo never commits
+  a literal Snowflake account locator to compare against (always a placeholder like
+  `<account_locator.region.cloud>` in `CLAUDE.md`/`docs/runbook.md`), so there was no
+  basis for the mismatch claim. `snowconn` pointing at `ixkyqwk-yw12138` is, per the
+  project's own tooling, correctly "the dev Snowflake account" — and its
+  `EDGARTOOLS_DEV` database holds substantial real data (11,002 companies, 5.7M filings),
+  not sandbox/toy data. The real finding stands on its own without that framing: **the
+  actual dev Snowflake environment's `SEC_FINANCIAL_DERIVED` source table is stale**,
+  missing columns that `financial_derived.sql` (shipped via PR #102, 2026-06-26) already
+  expects. This is a genuine native-pull/source-sync gap in dev, not a sandbox quirk.
+  (Note: the AWS account mismatch finding from earlier this session is unrelated and
+  remains valid — that one IS grounded in literal account IDs `CLAUDE.md` hardcodes
+  throughout, e.g. `077127448006` in ECR/S3 bucket names, verified against this machine's
+  actual `aws sts get-caller-identity` output.)
+
+  `SEC_FINANCIAL_DERIVED` is a native S3 pull source (per CLAUDE.md's architecture), not
+  a dbt model — `dbt run`/`--full-refresh` cannot repopulate it. Resolving this needs the
+  Snowflake native-pull pipeline (S3 stage → stream-processor task → source table) to
+  re-run against current silver data for this dev account, then `dbt run --select
+  financial_derived financial_factors --full-refresh` to redeploy the dynamic tables on
+  top of the refreshed source.
 
 ## Pending Todos
 

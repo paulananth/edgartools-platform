@@ -20,7 +20,7 @@ Use the Snowflake CLI connection already configured for the environment:
 ```bash
 python scripts/ops/neo4j-snowflake-migration.py \
   --env dev \
-  --snow-connection edgartools-dev \
+  --snow-connection snowconn \
   --output-dir .tmp/neo4j-snowflake-graph \
   --apply
 ```
@@ -47,7 +47,7 @@ When graph tables already exist in Snowflake, run only the hosted e2e check:
 ```bash
 python scripts/ops/neo4j-snowflake-migration.py \
   --env dev \
-  --snow-connection edgartools-dev \
+  --snow-connection snowconn \
   --output-dir .tmp/neo4j-snowflake-graph \
   --hosted-e2e
 ```

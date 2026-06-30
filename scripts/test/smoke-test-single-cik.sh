@@ -14,7 +14,7 @@
 # Usage:
 #   bash scripts/test/smoke-test-single-cik.sh
 #   bash scripts/test/smoke-test-single-cik.sh --cik 789019 --env dev
-#   bash scripts/test/smoke-test-single-cik.sh --snow-connection edgartools-dev --timeout 1200
+#   bash scripts/test/smoke-test-single-cik.sh --snow-connection snowconn --timeout 1200
 
 set -euo pipefail
 
@@ -23,7 +23,7 @@ CIK="${SMOKE_TEST_CIK:-320193}"         # Apple — dense Form 4 history, good c
 ENV="${SMOKE_TEST_ENV:-dev}"
 AWS_REGION_NAME="${AWS_REGION:-us-east-1}"
 AWS_PROFILE_NAME="${AWS_PROFILE:-}"
-SNOW_CONNECTION="${SNOW_CONNECTION:-edgartools-dev}"
+SNOW_CONNECTION="${SNOW_CONNECTION:-snowconn}"
 POLL_INTERVAL=20                         # seconds between Step Functions status polls
 SF_POLL_INTERVAL=15                      # seconds between Snowflake refresh polls
 SF_TIMEOUT=180                           # seconds to wait for manifest task auto-pickup
