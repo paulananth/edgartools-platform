@@ -65,6 +65,8 @@ select
     l.depreciation_amortization,
     l.property_plant_equipment_net,
     l.shares_outstanding,
+    l.gross_profit,
+    l.ebit,
 
     -- V1 accounting-only factors.
     l.working_capital,
@@ -90,6 +92,14 @@ select
          and py.shares_outstanding is not null
         then l.shares_outstanding - py.shares_outstanding
     end as shares_outstanding_yoy_change,
+
+    -- V2 profitability and returns factors (Phase 2).
+    {{ safe_ratio('l.gross_profit', 'l.revenue') }} as gross_margin,
+    {{ safe_ratio('l.ebit', 'l.revenue') }} as operating_margin,
+    {{ safe_ratio('l.net_income', 'l.revenue') }} as net_margin,
+    {{ safe_ratio_signed('l.net_income', 'l.total_equity') }} as return_on_equity,
+    {{ safe_ratio('l.net_income', 'l.total_assets') }} as return_on_assets,
+    l.roic,
 
     l.parser_version,
     l.ingested_at
