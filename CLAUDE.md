@@ -39,6 +39,8 @@ Claude and Codex may work on this repository independently, but they must not sh
 | Batch scripts per form type | `scripts/batch/` |
 | dbt gold models (8 dynamic tables) | `infra/snowflake/dbt/edgartools_gold/models/gold/` |
 | Snowflake bootstrap SQL | `infra/snowflake/sql/bootstrap/` |
+| MDM graph (Snowflake-hosted, NOT external Neo4j) | `edgar_warehouse/mdm/graph_readonly.py`, `mdm sync-graph`/`mdm verify-graph` CLI, `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql` |
+| Operator MDM/graph review dashboard | `examples/mdm_graph_dashboard/` |
 | Streamlit-in-Snowflake dashboard | `infra/snowflake/streamlit/streamlit_app.py` |
 | Standalone Streamlit dashboard | `examples/dashboard/edgar_universe_dashboard.py` |
 | AWS Terraform (prod) | `infra/terraform/accounts/prod/` |
@@ -115,7 +117,8 @@ follow that format for new entries.
    every parallel batch task rebuilt gold tables and uploaded silver.duckdb — work that
    operates on the whole warehouse state and multiplies I/O by batch count.
 4. The three phases (bronze, MDM, gold) were mixed into a single command, preventing the
-   MDM entity resolution + Neo4j sync from running against the complete silver dataset.
+   MDM entity resolution + graph sync (Snowflake-hosted Neo4j Graph Analytics Native App —
+   see "Graph storage" note below) from running against the complete silver dataset.
 5. There was no single Step Function that encoded the correct sequence: parallel bronze
    → MDM in bulk → gold once.
 
@@ -136,13 +139,26 @@ Stage 1 — Bronze + Silver (parallel, N×10 concurrent ECS tasks)
 Stage 2 — MDM entity resolution (sequential Step Functions)
   mdm-run  →  mdm-backfill-relationships  →  mdm-sync-graph  →  mdm-verify-graph
   • Runs after ALL batches complete so entity resolution sees the full silver dataset
-  • Derives IS_INSIDER, MANAGES_FUND etc. and syncs to Neo4j
+  • Derives IS_INSIDER, MANAGES_FUND etc. and syncs to the graph (Snowflake, not external Neo4j)
 
 Stage 3 — Gold refresh (single ECS task)
   gold-refresh
   • Reads complete silver DuckDB, builds all 9 gold tables, writes Snowflake export manifests
   • SNOWFLAKE_RUN_MANIFEST_TASK picks up the manifest and refreshes EDGARTOOLS_GOLD within 1 min
 ```
+
+**Graph storage (read this before assuming "Neo4j" means an external service):**
+As of the `neo4j-snowflake` workstream (v1.3, completed 2026-06-12), graph data lives
+*inside* Snowflake — the Neo4j Graph Analytics Native App, installed in the same Snowflake
+account as gold. There is no separate Neo4j database, no `NEO4J_URI`/`NEO4J_PASSWORD`
+secret, and no external Bolt connection. `mdm sync-graph` materializes
+`MDM_GRAPH_NODES`/`MDM_GRAPH_EDGES` (plus per-label/per-type compatibility views) into a
+Snowflake schema (e.g. `EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION`); `mdm verify-graph` runs a
+strict SQL parity check plus Native App checks (compute pool, `GRAPH_INFO`, `BFS`, `WCC`)
+against that same Snowflake target. One credential (the same `MDM_SNOWFLAKE_*`/
+`DBT_SNOWFLAKE_*`/Snowflake CLI connection used everywhere else), one platform. Native App
+grants: `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`. Full migration history:
+`.planning/workstreams/neo4j-snowflake/`.
 
 **When to use what:**
 
