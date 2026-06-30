@@ -2,15 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Fundamental Factors V2 (Growth, Profitability, Returns)
-current_phase: 2
-current_phase_name: profitability-and-returns-factors
-status: blocked
-stopped_at: Phase 2 both plans executed and merged (02-01 safe_ratio_signed macro,
-  02-02 six factors + tests + gold.yml docs). dbt parse/compile verified against real
-  Snowflake credentials. HELD OPEN — live dbt test cannot run because this dev Snowflake
-  account's SEC_FINANCIAL_DERIVED source table predates financial_derived.sql's current
-  column set (missing current_assets etc.), confirmed unrelated to this phase's code.
-last_updated: "2026-06-30T06:20:00.000Z"
+current_phase: 1
+current_phase_name: cagr-macro-and-multi-year-joins
+status: executing
+stopped_at: Phase 1 context gathered (advisor-mode discuss-phase, research-backed
+  decisions on quarterly scope, negative-value handling, fiscal-year tolerance).
+  Phase 2 remains separately blocked (see Blockers) — not complete, not counted below.
+last_updated: "2026-06-30T06:38:36.094Z"
 progress:
   total_phases: 3
   completed_phases: 0
@@ -23,12 +21,17 @@ progress:
 
 ## Current Position
 
-Phase: 2 (profitability-and-returns-factors) — BLOCKED (verification incomplete)
-Status: Both plans (02-01, 02-02) executed, committed, and merged to main. Code-level
-  verification passed (dbt parse, dbt compile --select financial_factors both succeed).
-  Live dbt test blocked by an environment data-gap in this Snowflake account — see
-  Blockers below. Phase is explicitly NOT marked complete per operator decision
-  (2026-06-30): hold open until live dbt test passes somewhere with a synced source schema.
+Phase: 1 (cagr-macro-and-multi-year-joins) — context gathered, ready for research/planning.
+Phase 2 (profitability-and-returns-factors) — BLOCKED (verification incomplete), running
+  concurrently with Phase 1 since they have no dependency on each other per ROADMAP.md.
+Status (Phase 2): Both plans (02-01, 02-02) executed, committed, and merged to main.
+  Code-level verification passed (dbt parse, dbt compile --select financial_factors both
+  succeed). Live dbt test blocked by a dev-environment source-sync gap — see Blockers
+  below. Phase is explicitly NOT marked complete per operator decision (2026-06-30): hold
+  open until live dbt test passes somewhere with a synced source schema.
+Status (Phase 1): Context gathered via /gsd-discuss-phase 1 (advisor mode). 3 decisions
+  locked, 2 research-backed (quarterly-scope rejection, confirmed via web search against
+  practitioner consensus). Next step: /gsd-plan-phase 1.
 
 ## Milestone Context
 
@@ -93,11 +96,12 @@ no new loader, no new SEC fetch path, only silver/gold changes.
 - Resolve the Phase 2 live-dbt-test blocker above, then mark Phase 2 complete.
 - After Phase 2 closes, write the Phase 1 plan (CAGR) — needs sign-change (GROW-02) and
   fiscal-year-gap (GROW-03) handling designed before implementation, not just the join.
+
 - Phase 3 (cash conversion cycle) needs a coverage-research spike on `CostOfRevenue`/
   `CostOfGoodsAndServicesSold` XBRL tag prevalence before any implementation commitment.
 
 ## Session Continuity
 
-Last session: 2026-06-30T06:20:00.000Z
-Stopped at: Phase 2 plans executed and merged; held open pending live dbt test (see Blockers).
-Resume file: .planning/workstreams/fundamental-factors-v2/phases/02-profitability-and-returns-factors/02-02-SUMMARY.md
+Last session: 2026-06-30T06:38:36.086Z
+Stopped at: Phase 1 context gathered
+Resume file: .planning/workstreams/fundamental-factors-v2/phases/01-cagr-macro-and-multi-year-joins/01-CONTEXT.md
