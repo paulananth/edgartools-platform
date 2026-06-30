@@ -65,9 +65,11 @@ Conducted ahead of formal phase planning, to confirm the no-new-loader constrain
 - [ ] **Phase 1: CAGR Macro And Multi-Year Joins** — add `cagr()` dbt macro, extend
       `financial_factors.sql` with N-year self-joins (3yr, 5yr) for revenue, net income,
       total assets.
+
 - [ ] **Phase 2: Profitability And Returns Factors** — add gross/operating/net margin,
       ROE, ROA to `financial_factors.sql`; surface existing `roic` column. (STARTING PHASE
       — zero silver risk, no research gate, see "Suggested order" below.) **Planned: 2 plans.**
+
 - [ ] **Phase 3: Cash Conversion Cycle** — research `cost_of_revenue` XBRL-tag coverage,
       then conditionally parse it and add DSO/DIO/DPO.
 
@@ -108,9 +110,9 @@ recommended after Phase 2 — see "Suggested order").
 
 **Depends on:** Nothing in this workstream. Lowest-risk phase — recommended starting point.
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
-- [ ] 02-01-PLAN.md — Create the `safe_ratio_signed` dbt macro (ROE negative-equity null guard, D-01)
+- [x] 02-01-PLAN.md — Create the `safe_ratio_signed` dbt macro (ROE negative-equity null guard, D-01)
 - [ ] 02-02-PLAN.md — Add gross/operating/net margin, ROE, ROA + surface `roic` in `financial_factors.sql`; extend unit tests; document ROIC simplification in `gold.yml`
 
 **Success criteria:**
