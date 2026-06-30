@@ -1,8 +1,8 @@
 # Roadmap: Fundamental Factors V2 (Growth, Profitability, Returns)
 
 workstream: fundamental-factors-v2
-status: proposed
-milestone: Fundamental Factors V2
+status: active (starting at Phase 2 per suggested build order)
+milestone: v1.0 Fundamental Factors V2
 updated: 2026-06-29
 
 ---
@@ -15,8 +15,10 @@ sub-feature (cash conversion cycle), a silver parser addition that reads fields 
 present in the `companyfacts` JSON the existing loader fetches. No new loader, no new SEC
 fetch path, no bronze change.
 
-This is a proposed milestone, not yet activated. Research below establishes feasibility
-ahead of a planning decision.
+**Activated 2026-06-29.** Execution starts with Phase 2 (Profitability And Returns
+Factors) rather than Phase 1, per the "Suggested order" note below — Phase 2 has zero
+silver risk and no research gate, since every required input already exists in
+`financial_derived`. Phase numbers below are unchanged from the original proposal.
 
 ---
 
@@ -64,7 +66,7 @@ Conducted ahead of formal phase planning, to confirm the no-new-loader constrain
       `financial_factors.sql` with N-year self-joins (3yr, 5yr) for revenue, net income,
       total assets. Verify sign-change handling (GROW-02) and fiscal-year-gap handling
       (GROW-03) with real multi-year company data before shipping.
-- [ ] **Phase 2: Profitability And Returns Factors** — add gross/operating/net margin,
+- [ ] **Phase 2: Profitability And Returns Factors (STARTING PHASE)** — add gross/operating/net margin,
       ROE, ROA to `financial_factors.sql`; surface existing `roic` column. Pure SQL
       addition, no parser changes — lowest-risk phase, could ship independently and first.
 - [ ] **Phase 3: Cash Conversion Cycle (conditional)** — research `cost_of_revenue`

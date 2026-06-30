@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
 workstream: fundamental-factors-v2
-milestone: proposed
+milestone: v1.0
 milestone_name: Fundamental Factors V2 (Growth, Profitability, Returns)
-status: proposed
+status: planning
 last_updated: "2026-06-29T00:00:00.000Z"
-last_activity: 2026-06-29 -- Research completed confirming the no-new-loader constraint is satisfiable for CAGR and profitability/returns factors via gold-layer SQL alone; cash conversion cycle needs one new silver parser field (cost_of_revenue), feasibility unverified pending Phase 3 research.
+last_activity: 2026-06-29 -- Activated. Starting with Phase 2 (Profitability And Returns Factors) per the suggested build order in ROADMAP.md — zero silver risk, no research gate, every input field already confirmed present in financial_derived. Phase numbering in ROADMAP.md is unchanged (1=CAGR, 2=Profitability/Returns, 3=Cash Conversion Cycle); execution order starts at 2 by design.
 progress:
   total_phases: 3
   completed_phases: 0
@@ -18,8 +18,8 @@ progress:
 
 ## Current Position
 
-Phase: none started — proposed milestone, not yet activated
-Status: Research complete (see ROADMAP.md "Research Evidence"); awaiting decision to activate and begin phase planning.
+Phase: 2 (Profitability And Returns Factors) — planning
+Status: Activated. Research complete (see ROADMAP.md "Research Evidence"). Next step is writing the Phase 2 plan: add gross margin, operating margin, net margin, ROE, ROA to financial_factors.sql, and surface the existing roic column.
 
 ## Milestone Context
 
@@ -41,16 +41,19 @@ no new loader, no new SEC fetch path, only silver/gold changes.
 
 ## Blockers
 
-- None. Not yet activated — no phase has started.
+- None.
 
 ## Pending Todos
 
-- Decide whether to activate this milestone and begin Phase 1/2 planning.
+- Write the Phase 2 plan (profitability/returns factors) and execute it.
+- After Phase 2 ships, write the Phase 1 plan (CAGR) — needs sign-change (GROW-02) and
+  fiscal-year-gap (GROW-03) handling designed before implementation, not just the join.
 - Phase 3 (cash conversion cycle) needs a coverage-research spike on `CostOfRevenue`/
   `CostOfGoodsAndServicesSold` XBRL tag prevalence before any implementation commitment.
 
 ## Session Continuity
 
 Last session: 2026-06-29T00:00:00.000Z
-Stopped at: Research and requirements/roadmap written; no phases planned yet.
+Stopped at: Workstream activated; Phase 2 selected as the starting phase. No plan
+written yet.
 Resume file: .planning/workstreams/fundamental-factors-v2/ROADMAP.md

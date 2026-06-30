@@ -1,8 +1,8 @@
 # Requirements: Fundamental Factors V2 (Growth, Profitability, Returns)
 
 workstream: fundamental-factors-v2
-status: proposed
-milestone: future Fundamental Factors V2
+status: active
+milestone: v1.0 Fundamental Factors V2
 updated: 2026-06-29
 
 ---
