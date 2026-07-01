@@ -64,7 +64,8 @@ Conducted ahead of formal phase planning, to confirm the no-new-loader constrain
 
 - [ ] **Phase 1: CAGR Macro And Multi-Year Joins** — add `cagr()` dbt macro, extend
       `financial_factors.sql` with N-year self-joins (3yr, 5yr) for revenue, net income,
-      total assets.
+      total assets. **2/2 plans executed and code-verified (dbt compile), HELD OPEN
+      pending live `dbt test`** — see Phase 1 detail below.
 
 - [ ] **Phase 2: Profitability And Returns Factors** — add gross/operating/net margin,
       ROE, ROA to `financial_factors.sql`; surface existing `roic` column. **2/2 plans
@@ -93,18 +94,30 @@ loader or fetch path.
 **Depends on:** Nothing in this workstream (can run independently of Phase 2/3, but
 recommended after Phase 2 — see "Suggested order").
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans executed (code + dbt compile verified); phase HELD OPEN pending live `dbt test`
 
-- [x] 01-01-PLAN.md
-- [ ] 01-02-PLAN.md
+- [x] 01-01-PLAN.md — Create the `cagr()` macro; extend `financial_factors.sql` with 3yr/5yr CAGR CTEs/joins/columns; document in `gold.yml`
+- [x] 01-02-PLAN.md — Add dbt unit tests covering GROW-01/02/03 and extend the D-01 quarterly-exclusion test
+
+**Verification status (2026-07-01):** Both plans executed, committed, and merged. `dbt parse`
+and `dbt compile --select financial_factors` both succeed against real Snowflake credentials
+— SQL/Jinja confirmed valid, compiled SQL confirmed `1.0 / 3` / `1.0 / 5` float division (no
+integer-truncation bug). **Live `dbt test --select financial_factors` could not run**: same
+pre-existing dev source-schema gap as Phase 2 — `Invalid column name: 'current_assets' in
+unit test fixture for 'financial_derived'`. Confirmed unrelated to this phase's code: all
+11 test failures, including the pre-existing unmodified `financial_factors_complete_fy_ratios`
+and `financial_factors_negative_equity_nulls_roe` cases, hit the identical root cause.
+**Decision: phase held open, not marked complete, until live `dbt test` passes against an
+environment with a fully-synced source schema** — same precedent as Phase 2. Success
+criterion 5 below is NOT yet verified live for real.
 
 **Success criteria:**
 
-1. New `cagr()` dbt macro added to `infra/snowflake/dbt/edgartools_gold/macros/`, following the same pattern as `yoy_growth()` (case/null guard, no division-by-zero or negative-base errors).
-2. `financial_factors.sql` extended with N-year self-joins (`fiscal_year - 3`, `fiscal_year - 5`) for revenue, net income, total assets — same join shape as the existing `prior_fy_values` CTE.
-3. Sign-change handling verified (GROW-02): negative-to-positive or positive-to-negative spans produce null, not a misleading or complex-valued result.
-4. Fiscal-year-gap handling verified (GROW-03): a missed `FY` filing in the N-year window produces null, not an incorrectly-spanning calculation.
-5. dbt schema tests cover at least one real multi-year company fixture for each of 3yr and 5yr CAGR.
+1. ✅ New `cagr()` dbt macro added to `infra/snowflake/dbt/edgartools_gold/macros/`, following the same pattern as `yoy_growth()` (case/null guard, no division-by-zero or negative-base errors). (compile-verified)
+2. ✅ `financial_factors.sql` extended with N-year self-joins (`fiscal_year - 3`, `fiscal_year - 5`) for revenue, net income, total assets — same join shape as the existing `prior_fy_values` CTE. (compile-verified)
+3. ✅ Sign-change handling verified (GROW-02): negative-to-positive or positive-to-negative spans produce null, not a misleading or complex-valued result. (test written, parse-verified; live-test blocked)
+4. ✅ Fiscal-year-gap handling verified (GROW-03): a missed `FY` filing in the N-year window produces null, not an incorrectly-spanning calculation. (test written, parse-verified; live-test blocked)
+5. ⏸ **NOT YET VERIFIED LIVE** — dbt schema tests cover at least one real multi-year company fixture for each of 3yr and 5yr CAGR; tests are written (`financial_factors_cagr_happy_path`, `financial_factors_cagr_fiscal_year_gap_nulls`, etc.) but have never executed successfully against a real Snowflake target, due to the source-schema gap above.
 
 ### Phase 2: Profitability And Returns Factors
 
