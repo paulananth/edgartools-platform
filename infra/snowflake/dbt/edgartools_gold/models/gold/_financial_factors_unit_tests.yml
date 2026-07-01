@@ -250,3 +250,86 @@ unit_tests:
           revenue_cagr_5y: null
           net_income_cagr_5y: null
           total_assets_cagr_5y: null
+
+  - name: financial_factors_cagr_negative_to_negative_nulls
+    description: >
+      Both endpoints of net_income negative (an improving-but-still-negative trend, -100
+      to -50) nulls net_income_cagr_3y rather than emitting a misleadingly positive CAGR
+      (D-02, GROW-02) — the case a naive same-sign guard would get wrong (Pitfall 2).
+    model: financial_factors
+    given:
+      - input: ref('financial_derived')
+        rows:
+          - <<: *factor_row_defaults
+            cik: 13
+            accession_number: "1301"
+            fiscal_year: 2021
+            period_end: "2021-12-31"
+            net_income: -100
+          - <<: *factor_row_defaults
+            cik: 13
+            accession_number: "1302"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            net_income: -50
+    expect:
+      rows:
+        - cik: 13
+          accession_number: "1302"
+          fiscal_year: 2024
+          net_income_cagr_3y: null
+
+  - name: financial_factors_cagr_single_negative_endpoint_nulls
+    description: >
+      Two ciks prove the strict-positive guard is checked on BOTH operands independently
+      (D-02, GROW-02). cik 11: a negative CURRENT net_income with a positive prior value
+      nulls net_income_cagr_3y while revenue_cagr_3y/total_assets_cagr_3y (positive at
+      both ends, same row) compute normally — proving the guard is per-column, not
+      row-level. cik 12: a negative PRIOR net_income with a positive current value nulls
+      net_income_cagr_3y — proving the prior operand (not just the numerator) is guarded.
+      revenue_cagr_3y value verified against a live Snowflake POWER() query (Open
+      Question 2): POWER(200.0 / 100, 1.0 / 3) - 1 = 0.25992075879133236.
+    model: financial_factors
+    given:
+      - input: ref('financial_derived')
+        rows:
+          - <<: *factor_row_defaults
+            cik: 11
+            accession_number: "1101"
+            fiscal_year: 2021
+            period_end: "2021-12-31"
+            revenue: 100
+            net_income: 50
+            total_assets: 100
+          - <<: *factor_row_defaults
+            cik: 11
+            accession_number: "1102"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            revenue: 200
+            net_income: -20
+            total_assets: 200
+          - <<: *factor_row_defaults
+            cik: 12
+            accession_number: "1201"
+            fiscal_year: 2021
+            period_end: "2021-12-31"
+            net_income: -50
+          - <<: *factor_row_defaults
+            cik: 12
+            accession_number: "1202"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            net_income: 100
+    expect:
+      rows:
+        - cik: 11
+          accession_number: "1102"
+          fiscal_year: 2024
+          net_income_cagr_3y: null
+          revenue_cagr_3y: 0.25992075879133236
+          total_assets_cagr_3y: 0.25992075879133236
+        - cik: 12
+          accession_number: "1202"
+          fiscal_year: 2024
+          net_income_cagr_3y: null
