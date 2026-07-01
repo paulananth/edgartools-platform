@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Fundamental Factors V2 (Growth, Profitability, Returns)
-current_phase: 01
-current_phase_name: cagr-macro-and-multi-year-joins
+current_phase: 03
+current_phase_name: cash-conversion-cycle
 status: executing
-stopped_at: Phase 1 both plans (01-01, 01-02) executed, committed, and code-verified
-  (dbt parse/compile). Held open pending live dbt test, same as Phase 2 — not complete.
-last_updated: "2026-07-01T17:35:00.000Z"
+stopped_at: Phase 3 context gathered — 3 decisions locked (coverage threshold, DSO/DIO/DPO
+  bundling, factor priority), ready for /gsd-plan-phase 3
+last_updated: "2026-07-01T18:15:00.000Z"
 progress:
   total_phases: 3
   completed_phases: 0
@@ -20,10 +20,20 @@ progress:
 
 ## Current Position
 
-Phase: 01 (cagr-macro-and-multi-year-joins) — Both plans (01-01, 01-02) executed and
+Phase: 03 (cash-conversion-cycle) — Research complete (live SEC XBRL Frames API coverage
+  measurement) and context gathered via advisor-mode /gsd-discuss-phase. 4 decisions
+  locked (D-01 through D-04). Next step: /gsd-plan-phase 3.
+Phase 1 (cagr-macro-and-multi-year-joins) — Both plans (01-01, 01-02) executed and
   code-verified. HELD OPEN (not complete) pending live dbt test — see Blockers below.
 Phase 2 (profitability-and-returns-factors) — BLOCKED (verification incomplete), running
   concurrently with Phase 1 since they have no dependency on each other per ROADMAP.md.
+Status (Phase 3): 03-RESEARCH.md measured CostOfGoodsAndServicesSold/CostOfRevenue
+  coverage at 51.5-63.3% of economically-applicable filers (live SEC Frames API, not a
+  sample) — judged acceptable per D-01. D-02: DSO ships independently (Wave 1, zero new
+  fields); DIO/DPO ship conditionally (Wave 2, now unblocked). D-03: DSO gets build/
+  verification priority. D-04: accounts_payable (needed for DPO, previously unparsed and
+  unmentioned in REQUIREMENTS.md) is in-scope as a parser-field scope-gap fix. See
+  03-CONTEXT.md, 03-DISCUSSION-LOG.md.
 Status (Phase 2): Both plans (02-01, 02-02) executed, committed, and merged to main.
   Code-level verification passed (dbt parse, dbt compile --select financial_factors both
   succeed). Live dbt test blocked by a dev-environment source-sync gap — see Blockers
@@ -115,11 +125,14 @@ no new loader, no new SEC fetch path, only silver/gold changes.
 
 - Resolve the shared Phase 1 + Phase 2 live-dbt-test blocker above (native-pull source-sync
   gap), then run `dbt test --select financial_factors` live and mark both phases complete.
-- Phase 3 (cash conversion cycle) needs a coverage-research spike on `CostOfRevenue`/
-  `CostOfGoodsAndServicesSold` XBRL tag prevalence before any implementation commitment.
+- Run `/gsd-plan-phase 3` — Phase 3 (cash conversion cycle) research and context are both
+  done (coverage spike passed per D-01); planning is the next step, not research. Note
+  Phase 3 will inherit the same live-dbt-test-blocked risk as Phase 1/2 once its own
+  Terraform column addition (`cost_of_revenue`, `accounts_payable`) lands — budget for the
+  same "held open" treatment unless the source-sync gap is resolved first.
 
 ## Session Continuity
 
-Last session: 2026-07-01T17:35:00.000Z
-Stopped at: Phase 1 both plans executed and code-verified; held open pending live dbt test
-Resume file: .planning/workstreams/fundamental-factors-v2/phases/01-cagr-macro-and-multi-year-joins/01-02-SUMMARY.md
+Last session: 2026-07-01T18:15:00.000Z
+Stopped at: Phase 3 context gathered; ready for /gsd-plan-phase 3
+Resume file: .planning/workstreams/fundamental-factors-v2/phases/03-cash-conversion-cycle/03-CONTEXT.md
