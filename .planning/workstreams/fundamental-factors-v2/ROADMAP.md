@@ -159,9 +159,12 @@ see Phase 4 success criterion 4 is NOT yet satisfied for real.
 
 **Requirements:** CCC-01, CCC-02
 
-**Depends on:** Nothing in this workstream. Run last — the only phase with real feasibility risk (research-gated).
+**Depends on:** Nothing in this workstream. Run last — the only phase with real feasibility risk (research-gated). Research resolved the coverage question as acceptable (D-01), so the build is unblocked.
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+- [ ] 03-01-PLAN.md (Wave 1) — Create the `days_outstanding()` dbt macro; add `days_sales_outstanding` to `financial_factors.sql` from existing accounts_receivable/revenue (zero new silver fields, D-02); document in gold.yml; DSO happy-path + null-guard unit tests (D-03 heaviest verification)
+- [ ] 03-02-PLAN.md (Wave 2, depends on 03-01) — Add `cost_of_revenue`/`accounts_payable` silver parser fields (9-touchpoint pattern, D-04); Terraform column addition + apply + SHOW COLUMNS verification (Pitfall 1); add DIO/DPO to `financial_factors.sql`; document CCC-02 coverage evidence (D-01) in gold.yml; DIO/DPO + explicit-null unit tests
 
 **Success criteria:**
 
