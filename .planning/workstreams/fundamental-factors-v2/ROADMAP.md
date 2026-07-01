@@ -93,7 +93,10 @@ loader or fetch path.
 **Depends on:** Nothing in this workstream (can run independently of Phase 2/3, but
 recommended after Phase 2 — see "Suggested order").
 
-**Plans:** TBD
+**Plans:** 1/2 plans executed
+
+- [x] 01-01-PLAN.md
+- [ ] 01-02-PLAN.md
 
 **Success criteria:**
 
