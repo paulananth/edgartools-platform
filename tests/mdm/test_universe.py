@@ -170,24 +170,22 @@ def test_migrate_runtime_includes_003_for_postgres_path():
 # ---------------------------------------------------------------------------
 
 def test_seed_universe_cli_handler(engine, monkeypatch):
-    """_handle_seed_universe must download SEC JSON, parse it, and upsert into MDM."""
+    """_handle_seed_universe must fetch tickers via edgartools, parse them, and upsert into MDM."""
     import argparse
     import edgar_warehouse.mdm.cli as mdm_cli
 
-    captured: dict = {}
+    fake_payload = {
+        "fields": ["cik", "ticker", "exchange"],
+        "data": [[1234, "AAPL", "NASDAQ"], [5678, "MSFT", "NASDAQ"]],
+    }
 
-    def fake_download(url: str) -> bytes:
-        captured["url"] = url
-        return b'{"0":{"cik_str":1234,"ticker":"AAPL","exchange":"NASDAQ"},"1":{"cik_str":5678,"ticker":"MSFT","exchange":"NASDAQ"}}'
-
-    monkeypatch.setattr(mdm_cli, "_download_sec_bytes", fake_download)
+    monkeypatch.setattr(mdm_cli, "_company_tickers_payload", lambda: fake_payload)
     monkeypatch.setattr(mdm_cli, "_get_mdm_engine", lambda: engine)
 
     args = argparse.Namespace(limit=None, tracking_status="active")
     result = mdm_cli._handle_seed_universe(args)
 
     assert result == 0
-    assert "sec.gov" in captured["url"]
     assert sorted(get_tracked_ciks(engine, "active")) == [1234, 5678]
 
 
@@ -195,9 +193,12 @@ def test_seed_universe_cli_handler_respects_limit(engine, monkeypatch):
     import argparse
     import edgar_warehouse.mdm.cli as mdm_cli
 
-    payload = b'{"0":{"cik_str":1,"ticker":"A","exchange":"NYSE"},"1":{"cik_str":2,"ticker":"B","exchange":"NYSE"},"2":{"cik_str":3,"ticker":"C","exchange":"NYSE"}}'
+    payload = {
+        "fields": ["cik", "ticker", "exchange"],
+        "data": [[1, "A", "NYSE"], [2, "B", "NYSE"], [3, "C", "NYSE"]],
+    }
 
-    monkeypatch.setattr(mdm_cli, "_download_sec_bytes", lambda url: payload)
+    monkeypatch.setattr(mdm_cli, "_company_tickers_payload", lambda: payload)
     monkeypatch.setattr(mdm_cli, "_get_mdm_engine", lambda: engine)
 
     args = argparse.Namespace(limit=1, tracking_status="active")
@@ -210,7 +211,9 @@ def test_seed_universe_cli_handler_respects_tracking_status(engine, monkeypatch)
     import argparse
     import edgar_warehouse.mdm.cli as mdm_cli
 
-    monkeypatch.setattr(mdm_cli, "_download_sec_bytes", lambda url: b'{"0":{"cik_str":99,"ticker":"ZZZ","exchange":"NYSE"}}')
+    payload = {"fields": ["cik", "ticker", "exchange"], "data": [[99, "ZZZ", "NYSE"]]}
+
+    monkeypatch.setattr(mdm_cli, "_company_tickers_payload", lambda: payload)
     monkeypatch.setattr(mdm_cli, "_get_mdm_engine", lambda: engine)
 
     args = argparse.Namespace(limit=None, tracking_status="bootstrap_pending")
@@ -218,3 +221,27 @@ def test_seed_universe_cli_handler_respects_tracking_status(engine, monkeypatch)
 
     assert get_tracked_ciks(engine, "bootstrap_pending") == [99]
     assert get_tracked_ciks(engine, "active") == []
+
+
+def test_company_tickers_payload_uses_edgartools_not_direct_sec_call(monkeypatch):
+    """_company_tickers_payload must source data from edgar.get_company_tickers,
+    not a direct SEC HTTP call, and must tolerate a missing (None) exchange
+    without turning it into the truthy string "nan" (pandas NaN vs. None trap)."""
+    import pandas as pd
+    import edgar_warehouse.mdm.cli as mdm_cli
+
+    fake_df = pd.DataFrame(
+        {
+            "cik": [1234, 5678],
+            "ticker": ["AAPL", "ZZZZ"],
+            "exchange": ["NASDAQ", None],
+            "company": ["Apple Inc.", "No Exchange Co."],
+        }
+    )
+    monkeypatch.setattr(mdm_cli.edgar, "get_company_tickers", lambda: fake_df)
+
+    payload = mdm_cli._company_tickers_payload()
+
+    assert payload["fields"] == ["cik", "ticker", "exchange"]
+    assert [1234, "AAPL", "NASDAQ"] in payload["data"]
+    assert [5678, "ZZZZ", None] in payload["data"]

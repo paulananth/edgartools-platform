@@ -11,8 +11,9 @@ import os
 from pathlib import Path
 import sys
 import time
-from typing import Callable
+from typing import Any, Callable
 
+import edgar
 from sqlalchemy.orm import Session
 
 from edgar_warehouse.mdm.observability import elapsed_ms, emit_mdm_event
@@ -201,11 +202,20 @@ def _session() -> Session:
     return get_session(get_engine())
 
 
-def _download_sec_bytes(url: str) -> bytes:
-    from edgar_warehouse.infrastructure.sec_client import download_sec_bytes
-
-    edgar_identity = os.environ.get("EDGAR_IDENTITY", "edgartools-platform contact@example.com")
-    return download_sec_bytes(url, edgar_identity)
+def _company_tickers_payload() -> dict[str, Any]:
+    """Build the SEC company_tickers_exchange.json {fields, data} shape from
+    edgartools instead of a direct SEC HTTP call, so seed_universe_loader's
+    existing fields/data branch (which already captures exchange) needs no
+    changes. edgartools' exchange column may be None for some entries (real
+    Python None, not float NaN -- confirmed, so plain truthiness is safe)."""
+    df = edgar.get_company_tickers()
+    return {
+        "fields": ["cik", "ticker", "exchange"],
+        "data": [
+            [int(row.cik), str(row.ticker), str(row.exchange) if row.exchange else None]
+            for row in df.itertuples()
+        ],
+    }
 
 
 def _logged_handler(command_name: str, handler: Callable[[argparse.Namespace], int]) -> Callable[[argparse.Namespace], int]:
@@ -547,8 +557,7 @@ def _handle_seed_universe(args) -> int:
     from edgar_warehouse.loaders import seed_universe_loader
     from edgar_warehouse.mdm.universe import bulk_upsert_universe
 
-    url = "https://www.sec.gov/files/company_tickers_exchange.json"
-    payload = json.loads(_download_sec_bytes(url))
+    payload = _company_tickers_payload()
     rows = seed_universe_loader(
         payload,
         sync_run_id="mdm-seed-universe",
