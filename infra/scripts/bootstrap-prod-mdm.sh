@@ -171,6 +171,40 @@ else:
 cur.close()
 conn.close()
 
+# Take ownership back from `application` before migrating. On a first-ever
+# bootstrap there's nothing to reassign yet (fine -- `application` may not
+# even exist as a role, handled below). On a *re*-bootstrap (this database
+# already went through one full cycle), the end-of-run REASSIGN OWNED BY
+# snowflake_admin TO application below already moved everything to
+# `application`, so this freshly-rotated snowflake_admin session no longer
+# owns any table -- `mdm migrate`'s CREATE INDEX IF NOT EXISTS statements
+# require ownership (unlike CREATE TABLE IF NOT EXISTS, which only needs
+# schema USAGE), and fail with InsufficientPrivilege without this step.
+conn = connect(database)
+conn.autocommit = True
+cur = conn.cursor()
+try:
+    # REASSIGN OWNED requires membership in *both* the source and target
+    # roles (per REASSIGN OWNED's own docs), not just admin-ish privileges
+    # on the instance. snowflake_admin is deliberately not a Postgres
+    # superuser (Snowflake's own docs: "some operations remain restricted"),
+    # but it does have the equivalent of CREATEROLE ("create and manage
+    # Postgres roles"). Postgres 16 relaxed CREATEROLE so a non-superuser
+    # holding it can GRANT membership in a role that isn't itself more
+    # privileged (application is a plain non-superuser role) -- so this
+    # explicit GRANT should succeed here even though the bare REASSIGN
+    # attempted directly, without first holding application's privileges,
+    # did not.
+    cur.execute("GRANT application TO snowflake_admin;")
+    print("GRANTED_APPLICATION_TO_SNOWFLAKE_ADMIN", file=sys.stderr)
+    cur.execute("REASSIGN OWNED BY application TO snowflake_admin;")
+    print("REASSIGNED_APPLICATION_TO_SNOWFLAKE_ADMIN", file=sys.stderr)
+except psycopg2.errors.UndefinedObject:
+    conn.rollback()
+    print("REASSIGN_SKIPPED: application role does not exist yet (first-ever bootstrap)", file=sys.stderr)
+cur.close()
+conn.close()
+
 admin_dsn = f"postgresql://snowflake_admin:{quote_plus(pw)}@{host}:5432/{database}?sslmode=require"
 env = dict(os.environ)
 env["MDM_DATABASE_URL"] = admin_dsn
@@ -240,25 +274,40 @@ sys.stdout.write(pw)
 PYEOF
 
 log "Rotating snowflake_admin access and ensuring database '${DATABASE}' exists + is migrated"
+# python (not python3): uv-managed venvs on Windows only ship python.exe, no
+# python3.exe, so a bare `python3` here falls through PATH to an unrelated
+# system interpreter (e.g. the Windows Store stub) that doesn't have this
+# project's psycopg2 installed -- ModuleNotFoundError, silently the wrong
+# Python rather than a "not found" error. `python` resolves correctly to the
+# uv-managed venv on every platform (Linux/macOS venvs alias both names).
 snow sql --connection "$SNOW_CONNECTION" --format json -q "ALTER POSTGRES INSTANCE ${INSTANCE_NAME} RESET ACCESS FOR 'snowflake_admin';" 2>/dev/null \
-  | DATABASE="$DATABASE" HOST="$HOST" REPO_ROOT="$REPO_ROOT" uv run --project "$REPO_ROOT" --extra mdm-runtime python3 "$ADMIN_PY"
+  | DATABASE="$DATABASE" HOST="$HOST" REPO_ROOT="$REPO_ROOT" uv run --project "$REPO_ROOT" --extra mdm-runtime python "$ADMIN_PY"
 
 log "Rotating application access and writing ${NAME_PREFIX}/mdm/postgres_dsn"
+# Build args conditionally rather than passing --aws-profile "$AWS_PROFILE_NAME"
+# unconditionally: bootstrap-aws-mdm-secrets.sh's arg parser uses ${2:?} for
+# --aws-profile (same as this script's own parser, and as intended --aws-profile
+# is optional), which errors on an *empty* value, not just a missing flag.
+# $AWS_PROFILE_NAME defaults to "" whenever the AWS_PROFILE env var isn't set
+# (ambient/instance-role credentials), which is the common case -- mirrors the
+# same conditional-inclusion pattern this script's own aws_cli() already uses.
+SECRETS_SCRIPT_ARGS=(
+  --env "$ENVIRONMENT" --aws-region "$AWS_REGION_NAME" --name-prefix "$NAME_PREFIX"
+  --host "$HOST" --username application --database "$DATABASE" --password-stdin
+)
+[[ -n "$AWS_PROFILE_NAME" ]] && SECRETS_SCRIPT_ARGS+=(--aws-profile "$AWS_PROFILE_NAME")
 snow sql --connection "$SNOW_CONNECTION" --format json -q "ALTER POSTGRES INSTANCE ${INSTANCE_NAME} RESET ACCESS FOR 'application';" 2>/dev/null \
   | python3 "$APP_PY" \
-  | bash "$SCRIPT_DIR/bootstrap-aws-mdm-secrets.sh" \
-    --env "$ENVIRONMENT" \
-    --aws-profile "$AWS_PROFILE_NAME" \
-    --aws-region "$AWS_REGION_NAME" \
-    --name-prefix "$NAME_PREFIX" \
-    --host "$HOST" \
-    --username application \
-    --database "$DATABASE" \
-    --password-stdin
+  | bash "$SCRIPT_DIR/bootstrap-aws-mdm-secrets.sh" "${SECRETS_SCRIPT_ARGS[@]}"
 
 if [[ "$SKIP_SNOWFLAKE_SECRET" != "true" ]]; then
   log "Populating ${NAME_PREFIX}/mdm/snowflake from ${NAME_PREFIX}/dbt/snowflake"
-  aws_cli secretsmanager get-secret-value \
+  # Capture into a variable rather than `--secret-string file:///dev/stdin`:
+  # /dev/stdin is not reliably present as a readable special file on Windows
+  # Git Bash, so the paramfile trick failed there ("No such file or
+  # directory"). $(cat) is portable and matches the same in-variable-only
+  # pattern this script already uses for PASSWORD in bootstrap-aws-mdm-secrets.sh.
+  MDM_SNOWFLAKE_SECRET_JSON="$(aws_cli secretsmanager get-secret-value \
       --secret-id "${NAME_PREFIX}/dbt/snowflake" \
       --query SecretString --output text \
     | jq --arg schema "$GOLD_SCHEMA" '{
@@ -269,10 +318,11 @@ if [[ "$SKIP_SNOWFLAKE_SECRET" != "true" ]]; then
         MDM_SNOWFLAKE_DATABASE: .DBT_SNOWFLAKE_DATABASE,
         MDM_SNOWFLAKE_SCHEMA: $schema,
         MDM_SNOWFLAKE_ROLE: .DBT_SNOWFLAKE_ROLE
-      }' \
-    | aws_cli secretsmanager put-secret-value \
-        --secret-id "${NAME_PREFIX}/mdm/snowflake" \
-        --secret-string file:///dev/stdin >/dev/null
+      }')"
+  aws_cli secretsmanager put-secret-value \
+      --secret-id "${NAME_PREFIX}/mdm/snowflake" \
+      --secret-string "$MDM_SNOWFLAKE_SECRET_JSON" >/dev/null
+  MDM_SNOWFLAKE_SECRET_JSON=""
 fi
 
 log "Verifying connectivity via the application credential"

@@ -14,9 +14,17 @@ locals {
 }
 
 resource "aws_ecr_repository" "warehouse" {
-  name                 = "${local.name_prefix}-warehouse"
-  force_delete         = var.ecr_force_delete
-  image_tag_mutability = "IMMUTABLE"
+  name         = "${local.name_prefix}-warehouse"
+  force_delete = var.ecr_force_delete
+  # MUTABLE, not IMMUTABLE: :dev is deliberately overwritten on every build
+  # (see repo docs' "Tagging strategy" table -- ":dev" is the mutable latest
+  # dev image). IMMUTABLE here broke every push to :dev after the first one,
+  # since ECR refuses to overwrite an immutable tag -- this is what took the
+  # Deploy GitHub Actions workflow down on every run from PR #107 onward
+  # until fixed directly via `aws ecr put-image-tag-mutability`. Declaring it
+  # MUTABLE here too (not just live) so `terraform apply` doesn't silently
+  # revert that fix back to IMMUTABLE the next time state is reconciled.
+  image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {
     scan_on_push = true

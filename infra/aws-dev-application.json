@@ -21,11 +21,11 @@
   "step_functions_role_arn": "arn:aws:iam::690839588395:role/sec_platform_runner_step_functions",
   "edgar_identity_secret_arn": "arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-dev-edgar-identity-uD5HdN",
   "task_definitions": {
-    "small": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-small:31",
-    "medium": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-medium:28",
-    "large": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-large:28",
-    "mdm_small": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-mdm-small:8",
-    "mdm_medium": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-mdm-medium:8"
+    "small": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-small:33",
+    "medium": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-medium:30",
+    "large": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-large:30",
+    "mdm_small": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-mdm-small:10",
+    "mdm_medium": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-mdm-medium:10"
   },
   "state_machines": {
     "bootstrap_full": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-bootstrap-full",
@@ -58,7 +58,7 @@
     "silver_duckdb": "s3://edgartools-dev-warehouse/warehouse/silver/sec/silver.duckdb",
     "secrets": {
       "postgres_dsn": "arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-dev/mdm/postgres_dsn-AempIg",
-      "snowflake": "arn:aws:secretsmanager:us-east-1:077127448006:secret:edgartools-dev/mdm/snowflake-euKuPM"
+      "snowflake": "arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-dev/mdm/snowflake-d7X99N"
     }
   }
 }
