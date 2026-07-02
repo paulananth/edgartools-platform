@@ -8,6 +8,12 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "infra" / "scripts" / "go-live.sh"
+# Relative to REPO_ROOT (both subprocess.run calls below set cwd=REPO_ROOT) rather
+# than an absolute path: on Windows, Git Bash's MSYS layer doesn't reliably resolve
+# an absolute `C:/...`-style path passed as a bash argv element, even in POSIX
+# (forward-slash) form. A relative path sidesteps the drive-letter/path-mapping
+# ambiguity entirely and behaves identically on Linux, macOS, and Windows Git Bash.
+SCRIPT_ARG = SCRIPT.relative_to(REPO_ROOT).as_posix()
 
 
 def run_wizard(
@@ -21,7 +27,7 @@ def run_wizard(
     if env:
         proc_env.update(env)
     result = subprocess.run(
-        ["bash", SCRIPT.as_posix(), *args],
+        ["bash", SCRIPT_ARG, *args],
         cwd=REPO_ROOT,
         input=input_text,
         text=True,
@@ -70,7 +76,7 @@ exit 0
 
 
 def test_go_live_script_has_valid_bash_syntax() -> None:
-    subprocess.run(["bash", "-n", str(SCRIPT)], cwd=REPO_ROOT, check=True)
+    subprocess.run(["bash", "-n", SCRIPT_ARG], cwd=REPO_ROOT, check=True)
 
 
 def test_default_env_is_dev_and_decline_exits_without_mutation(tmp_path: Path) -> None:
