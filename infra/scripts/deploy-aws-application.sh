@@ -270,10 +270,26 @@ aws_cli() {
 # Usage: manifest_value "key"  OR  manifest_value "mdm.secrets.postgres_dsn"
 manifest_value() {
   [[ -f "$MANIFEST_FILE" ]] || return 0
+  # On Windows Git Bash, REPO_ROOT/MANIFEST_FILE are MSYS-style paths
+  # (e.g. /c/work/...) from `pwd`. bash resolves these fine, but the
+  # native Windows python3 invoked below cannot -- open('/c/work/...')
+  # fails with "No such file or directory" (it looks for a literal
+  # directory named "c", not drive C:), so this silently returned empty
+  # on Windows and every dependent value fell through to "could not
+  # resolve". cygpath -m gives the drive-letter form with forward
+  # slashes (C:/work/...), which both bash and native python understand,
+  # and avoids embedding backslashes in the python string literal below
+  # (a literal "C:\work\...\aws-..." would corrupt via \a being read as
+  # a bell-character escape). No-op on Linux/macOS: no cygpath there,
+  # and REPO_ROOT is already a plain POSIX path python3 handles natively.
+  local manifest_path="$MANIFEST_FILE"
+  if command -v cygpath >/dev/null 2>&1; then
+    manifest_path="$(cygpath -m "$MANIFEST_FILE")"
+  fi
   python3 -c "
 import json, sys
 try:
-    d = json.load(open('${MANIFEST_FILE}'))
+    d = json.load(open('${manifest_path}'))
     for k in '${1}'.split('.'): d = d[k]
     print(d or '', end='')
 except Exception: pass
@@ -2297,13 +2313,22 @@ fi
 printf '\n}\n' >> "$WORKFLOW_ARNS_FILE"
 
 SUMMARY_FILE="$(json_file deployment-summary)"
-python3 - "$SUMMARY_FILE" "$ENVIRONMENT" "$AWS_REGION_NAME" "$NAME_PREFIX" "$IMAGE_REF" "$MDM_IMAGE_REF" \
+# MSYS_NO_PATHCONV=1: same fix as the ensure_log_group call above -- without
+# it, Git Bash rewrites the /aws/ecs/... and /aws/states/... argv strings
+# below into Windows filesystem paths (e.g. C:/Program Files/Git/aws/ecs/...)
+# before python3 ever sees them, corrupting log_groups in the written
+# deployment-summary manifest even though the actual ECS task definitions
+# (registered earlier via the already-guarded call) are unaffected.
+# MSYS_NO_PATHCONV=1 also disables the (wanted) translation of the two real
+# temp-file paths below, so those are converted explicitly via win_path()
+# instead -- same split responsibility as the earlier guarded call.
+MSYS_NO_PATHCONV=1 python3 - "$(win_path "$SUMMARY_FILE")" "$ENVIRONMENT" "$AWS_REGION_NAME" "$NAME_PREFIX" "$IMAGE_REF" "$MDM_IMAGE_REF" \
   "$CLUSTER_NAME" "$CLUSTER_ARN" "$ECR_REPOSITORY_URL" "$LOG_GROUP_NAME" \
   "$STEP_FUNCTIONS_ROLE_ARN" "$STEP_FUNCTIONS_LOG_GROUP_NAME" \
   "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
   "$DEPLOY_MDM" "$MDM_DATABASE_SOURCE" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$MDM_SILVER_DUCKDB" \
   "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_SNOWFLAKE_SECRET_ARN" \
-  "$WORKFLOW_ARNS_FILE" \
+  "$(win_path "$WORKFLOW_ARNS_FILE")" \
   "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" "$SNOWFLAKE_EXPORT_BUCKET_NAME" \
   "$EXECUTION_ROLE_ARN" "$TASK_ROLE_ARN" "$EDGAR_IDENTITY_SECRET_ARN" <<'PY'
 import json

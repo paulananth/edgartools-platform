@@ -1073,3 +1073,242 @@ policy would also affect dev, and vice versa).
 `077127448006`. A proper fix would need to namespace the role names AND
 re-point both dev's and prod's ECS task definitions at the new ARNs in a
 single coordinated change — out of scope for an ad-hoc unblock.
+
+---
+
+## Post-migration AWS deploy pipeline was fully broken since PR #107 — RESOLVED (2026-07-02)
+
+**Status:** RESOLVED for the deploy script itself. `deploy.yml` (image build)
+and `deploy-aws-application.sh` (ECS task defs / Step Functions update) both
+now run clean end-to-end on Windows and in CI. Surfaced two further,
+*unresolved* infra gaps while verifying this — see the two entries below.
+
+**What:** Asked to "test end to end on AWS" after merging PR #108 (edgartools
+filing fetch) and PR #111 (edgartools ticker/exchange + 13F list). Before any
+of that could be meaningfully tested, discovered the `Deploy` GitHub Actions
+workflow (`.github/workflows/deploy.yml`, triggers on every push to `main`)
+had failed on **every** run since PR #107 — five failures in a row
+(`28587973849`, `28588001570`, `28591407313`, `28593361361`, plus #107's own
+run), meaning no deployed image has reflected `main` in over three weeks.
+`CLAUDE.md` still references a `build-images.yml` workflow that no longer
+exists; `deploy.yml`'s `build-push` job is the current replacement and wasn't
+cross-referenced anywhere.
+
+**Why (5-whys), bug 1 — ECR tag immutability:**
+1. Symptom: `Deploy` fails at "Build and push warehouse" on every run since PR #107.
+2. Why: `docker push ...edgartools-dev-warehouse:dev` fails: "The image tag
+   'dev' already exists ... and cannot be overwritten because the tag is
+   immutable."
+3. Why: The `edgartools-dev-warehouse` ECR repository's tag-mutability
+   setting is `IMMUTABLE`, but `:dev` is documented (this file's "Tagging
+   strategy" table) as the mutable, continuously-overwritten latest tag.
+4. Why: PR #106 (AWS account migration, `claude/aws-account-migration`)
+   recreated the ECR repositories in the new account (`690839588395`) via
+   Terraform, which defaults to `IMMUTABLE` — the `MUTABLE` override that had
+   been manually applied to the old account's repo (see this file's Docker
+   image-management section) was never reapplied to the new account's repo.
+   `edgartools-dev-mdm` and both `-deps` repos were unaffected (already
+   `MUTABLE`), which is why PR #106's own Deploy run "succeeded" — it was the
+   first push to a then-empty warehouse repo, so there was no existing `:dev`
+   tag to conflict with yet.
+5. Root cause: a manually-applied, not-Terraform-managed repository setting
+   from the pre-migration account didn't carry over to the new account.
+   **Resolution:** `aws ecr put-image-tag-mutability --region us-east-1
+   --repository-name edgartools-dev-warehouse --image-tag-mutability
+   MUTABLE`. One-time AWS-console-state fix, no code change.
+
+**Why (5-whys), bug 2 — `deploy-aws-application.sh` couldn't read its own
+manifest on Windows:**
+1. Symptom: `bash infra/scripts/deploy-aws-application.sh --skip-build
+   --image-ref ... --mdm-image-ref ...` fails immediately: "could not resolve
+   ECS cluster ARN ... ensure the manifest file
+   /c/work/.../infra/aws-dev-application.json exists" — even though the file
+   demonstrably exists and has a valid `cluster.arn` key.
+2. Why: `manifest_value()` calls `python3 -c "... json.load(open('${MANIFEST_FILE}'))..."`
+   and `$MANIFEST_FILE` is built from `REPO_ROOT="$(cd ... && pwd)"`, which on
+   Windows Git Bash is an MSYS-style path (`/c/work/...`).
+3. Why: bash itself (`[[ -f "$MANIFEST_FILE" ]]`) resolves MSYS paths fine
+   via the MSYS runtime, but the `python3` this resolves to is a native
+   Windows interpreter — `open('/c/work/...')` looks for a literal directory
+   named `c` under the process's current drive root, not drive `C:`, and
+   fails with `FileNotFoundError`.
+4. Why: `manifest_value()`'s python call is wrapped in `except Exception:
+   pass`, so this failure is silently swallowed and every caller just sees
+   an empty string, cascading into "could not resolve X" for every manifest
+   field, not just the cluster ARN.
+5. Root cause: no path-format translation between bash's MSYS path and the
+   native-Windows `python3` it invokes. **Resolution:**
+   `infra/scripts/deploy-aws-application.sh`'s `manifest_value()` now converts
+   via `cygpath -m` (forward-slash drive-letter form — deliberately *not*
+   `cygpath -w`'s backslash form, since the converted path is interpolated
+   into a Python string literal via bash `${...}` substitution, and a
+   backslash form like `C:\work\...\aws-...` would have its `\a` silently
+   read as a Python bell-character escape, corrupting the path a second,
+   subtler way). No-op on Linux/macOS (no `cygpath`; `REPO_ROOT` is already a
+   plain POSIX path `python3` handles natively there).
+
+**Why (5-whys), bug 3 — same script, different call site, opposite failure
+mode:** after fixing bug 2, a *live* `--skip-build` deploy run produced a
+`deployment-summary`/manifest JSON with `"log_groups": {"ecs": "C:/Program
+Files/Git/aws/ecs/edgartools-dev-warehouse", ...}` — a mangled Windows path
+where a clean `/aws/ecs/edgartools-dev-warehouse` CloudWatch log group name
+belonged. Verified the *actual* ECS task definitions were unaffected
+(`aws ecs describe-task-definition` showed the correct `awslogs-group` —
+this call site only feeds the informational manifest file, not real AWS
+config) — but the manifest itself is committed to git, so the corruption
+would persist across runs and mislead any tooling that reads `log_groups`
+from it. Root cause: the `python3 -` heredoc call that writes
+`deployment-summary` (line ~2316) was missing the same `MSYS_NO_PATHCONV=1`
+guard that an earlier, structurally-identical call in the same file already
+uses (documented at that call site: "prevents Git Bash from translating
+`/aws/ecs/...` style log group names into Windows filesystem paths") — a
+plain inconsistency, not a new class of bug. **First fix attempt added only
+`MSYS_NO_PATHCONV=1` and regressed a third way**: that env var *disables*
+MSYS path translation for the whole call, which also broke the two
+genuinely-needed temp-file-path arguments (`$SUMMARY_FILE`,
+`$WORKFLOW_ARNS_FILE`) that `python3` DOES need translated to open — task
+definitions came back as empty strings because the summary-writer script
+threw `FileNotFoundError` on an untranslated `/tmp/...` path before it ever
+got there. **Final resolution:** `MSYS_NO_PATHCONV=1` for the whole call
+(protects the `/aws/...`-style strings) *plus* explicit `win_path()`
+(`cygpath -w`, safe here since these two arguments are passed as plain
+`sys.argv` values, not interpolated into Python source text) for just the
+two real file-path arguments — mirroring the existing call's already-correct
+split-responsibility pattern exactly.
+
+**Also discovered, and left alone as a genuinely separate, stale-data
+problem rather than folding into this fix (see two entries below):** the
+first clean end-to-end deploy surfaced that `targeted-resync` for CIK 320193
+completes bronze capture successfully (confirms PR #108's edgartools-based
+fetch works against live SEC infrastructure with zero HTTP errors) but then
+fails at MDM tracking-status sync, and `mdm-seed-universe` fails before its
+container even starts. Neither is caused by anything in this entry or by
+PR #108/#111 — both trace to AWS account-migration gaps in MDM secrets/RDS,
+not the deploy script or application code.
+
+**Surfaced:** live AWS end-to-end verification after merging PR #108 and
+PR #111, 2026-07-02.
+
+---
+
+## MDM Postgres secret still points at a live RDS instance, not Snowflake — contradicts documented cutover
+
+**What:** `edgartools-dev/mdm/postgres_dsn` (Secrets Manager, account
+`690839588395`, the ARN referenced by every ECS task definition's
+`MDM_DATABASE_URL`) currently holds a DSN for
+`edgartools-dev-mdm.ce7yggsiul70.us-east-1.rds.amazonaws.com:5432`, an AWS
+RDS Postgres endpoint. This directly contradicts two existing documented
+claims: (1) this file's own "Dev Terraform MDM-cutover state reconciliation
+— RESOLVED 2026-06-11" entry, which explicitly states "Confirmed
+`module.mdm[0].aws_db_instance.mdm` is fully gone from both state and AWS
+(no leftover anomaly)"; and (2) `CLAUDE.md`'s "MDM database" note, which
+states MDM's operational Postgres "was cut over from AWS RDS ... to
+Snowflake's native Postgres service" and that "No AWS RDS module ... remain
+for MDM."
+
+**Live-verified, not speculation:** `aws rds describe-db-instances` (account
+`690839588395`, `us-east-1`) currently returns exactly one instance:
+`edgartools-dev-mdm`, status `available`, endpoint matching the DSN above.
+It is real, running, and (RDS billing being what it is) very likely costing
+money right now regardless of whether anything is actually using it.
+
+**Why (5-whys, as far as verifiable without git-blaming the secret's value
+or the RDS instance's creation event, neither of which is in scope here):**
+1. Symptom: `targeted-resync` (PR #108's edgartools-based bronze fetch)
+   succeeds completely — `bronze_capture_completed`, 1 CIK, 2 raw objects,
+   zero HTTP errors — then crashes in `_sync_mdm_tracking_status` with
+   `psycopg2.OperationalError`.
+2. Why: `FATAL: password authentication failed for user "mdm_admin"` /
+   `no pg_hba.conf entry for host "10.20.0.97" ...` — a real, responding
+   Postgres server actively rejected the connection (not a DNS failure or
+   timeout, which is what a *fully destroyed* RDS instance would produce).
+3. Why: The connection target resolved from `MDM_DATABASE_URL` is the RDS
+   endpoint above, not a Snowflake Postgres endpoint.
+4. Why: The `edgartools-dev/mdm/postgres_dsn` secret's ARN is correctly
+   namespaced in the current (post-migration) account, but its *stored
+   value* is an RDS DSN.
+5. Root cause — best current hypothesis, needs owner confirmation before
+   acting: the AWS account migration (PR #106) most likely stood up fresh
+   parity infrastructure in the new account (`690839588395`) — including
+   recreating an `edgartools-dev-mdm` RDS instance and populating
+   `postgres_dsn` with its DSN — without carrying forward the RDS→Snowflake
+   cutover that had already been completed and verified in the old account
+   on 2026-06-11. If true, this migration *regressed* a previously-resolved
+   piece of infra, rather than being a new gap.
+
+**Explicitly not fixed:** did not modify the secret value, the RDS instance,
+or any Terraform. This is a live database credential / a running billed
+resource; guessing at the "correct" Snowflake Postgres DSN or deleting the
+RDS instance without the owner's confirmation of what's actually
+authoritative right now would risk real data loss or breaking something
+currently depending on the RDS path. Needs a decision: (a) confirm the
+Snowflake Postgres instance from the 2026-06-11 cutover still exists and get
+its real DSN into this secret, or (b) confirm RDS is now the intentional
+path again and update `CLAUDE.md`/this file's 06-11 entry accordingly. Either
+way, `aws rds describe-db-instances` should be re-run before deciding to
+delete anything — do not assume this instance is safe to destroy.
+
+**Where:** Secrets Manager `edgartools-dev/mdm/postgres_dsn` (arn ending
+`-AempIg`, account `690839588395`, `us-east-1`); RDS instance
+`edgartools-dev-mdm` (same account/region).
+
+**Surfaced:** live AWS end-to-end verification after merging PR #108/#111,
+2026-07-02, via `targeted-resync` execution
+`e2e-verify-1783001014` (CloudWatch log group `/aws/ecs/edgartools-dev-warehouse`,
+stream `warehouse-large/edgar-warehouse/16d6a46d868047b186bf8bf4518b89e5`).
+
+---
+
+## MDM Snowflake secret missing from new AWS account — cross-account access denied
+
+**What:** The MDM ECS task definitions' `secrets` block still points
+`edgartools-dev/mdm/snowflake` at
+`arn:aws:secretsmanager:us-east-1:077127448006:secret:edgartools-dev/mdm/snowflake-euKuPM`
+— account `077127448006`, not the current account `690839588395`. No
+resource-based policy on that secret grants the new account's execution role
+access, and (confirmed via `aws secretsmanager list-secrets` in
+`690839588395`) no `edgartools-dev/mdm/snowflake` secret exists in the new
+account at all — only `postgres_dsn`, `neo4j`, and `api_keys` were
+created/migrated there.
+
+**Impact:** Any MDM workflow needing this secret fails before its ECS task
+even starts (`TaskFailedToStart`, not an application error) — confirmed live
+via the `mdm-seed-universe` Step Function, but this affects every MDM
+workflow with `--enable-mdm` deployed the same way, not just seed-universe.
+
+**Why (5-whys):**
+1. Symptom: `mdm-seed-universe` execution's ECS task never starts;
+   `ResourceInitializationError: unable to pull secrets or registry auth`.
+2. Why: `AccessDeniedException ... secretsmanager:GetSecretValue on resource:
+   arn:...:077127448006:secret:edgartools-dev/mdm/snowflake-euKuPM because no
+   resource-based policy allows` it.
+3. Why: The assuming role (`sec_platform_runner_execution`) lives in account
+   `690839588395`; the secret lives in account `077127448006` — a
+   cross-account call, and nothing grants it.
+4. Why: No equivalent secret was ever created in `690839588395` for the
+   task definition to point at instead.
+5. Root cause: the account migration (PR #106) created/migrated
+   `postgres_dsn`, `neo4j`, and `api_keys` into the new account but missed
+   `snowflake` — an incomplete migration, not a permissions oversight to
+   patch with a cross-account grant. (Note: `077127448006` is also the
+   account referenced by the "runtime_access module: shared, non-namespaced
+   IAM roles across dev/prod" entry above, for the *IAM roles* — so
+   `077127448006` was evidently the primary/shared account before the
+   690839588395 migration; this secret simply never got carried over.)
+
+**Explicitly not fixed:** did not create a new secret, copy the old one, or
+add a cross-account resource policy — don't know what the "current"
+Snowflake MDM credentials should be post-migration, and this is exactly the
+kind of secret-content decision that needs the owner, not a guess. The
+right fix is almost certainly creating `edgartools-dev/mdm/snowflake` in
+`690839588395` (mirroring how `postgres_dsn`/`neo4j`/`api_keys` were already
+migrated) and re-pointing the task definition's `secrets` block at it, once
+someone confirms the credential values to put there.
+
+**Where:** ECS task definitions `edgartools-dev-mdm-small`/`-medium`
+(`secrets` block); Secrets Manager, both accounts (`077127448006` has the
+stale secret, `690839588395` has none).
+
+**Surfaced:** live AWS end-to-end verification after merging PR #108/#111,
+2026-07-02, via `mdm-seed-universe` execution
+`e2e-verify-seed-1783001033`.
