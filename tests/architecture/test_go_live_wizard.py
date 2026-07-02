@@ -21,7 +21,7 @@ def run_wizard(
     if env:
         proc_env.update(env)
     result = subprocess.run(
-        ["bash", str(SCRIPT), *args],
+        ["bash", SCRIPT.as_posix(), *args],
         cwd=REPO_ROOT,
         input=input_text,
         text=True,

@@ -1,0 +1,9 @@
+# Force LF line endings for all text files, regardless of the checkout
+# platform's core.autocrlf setting. Shell scripts are executed directly by
+# bash (via `bash script.sh`, not through a Windows-native interpreter), and
+# a stray \r corrupts the last token on any line — e.g. `set -euo pipefail\r`
+# fails with "invalid option name" only on Windows checkouts where Git for
+# Windows' common core.autocrlf=true default silently converts LF -> CRLF.
+* text=auto eol=lf
+
+*.sh text eol=lf
