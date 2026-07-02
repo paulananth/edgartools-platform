@@ -2,8 +2,8 @@
   "environment": "dev",
   "region": "us-east-1",
   "name_prefix": "edgartools-dev",
-  "image_ref": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@sha256:fe9f389daa9048711e38249876ccd1861139af608012e4fd1a66d2a0087fe1f8",
-  "mdm_image_ref": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:699f49848144ee3cf641aaee4833a966831ccfb4671b657550ee0a8674acf9ac",
+  "image_ref": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@sha256:f45525538ff78eba33f3d8598fc726fef172e4897a5c88689cfcf71b09fcd3cc",
+  "mdm_image_ref": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:69f9f4b919324251926212bb80777eec3212111979531530ce1d528efd34b6ec",
   "cluster": {
     "name": "edgartools-dev-warehouse",
     "arn": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-dev-warehouse"
@@ -21,11 +21,11 @@
   "step_functions_role_arn": "arn:aws:iam::690839588395:role/sec_platform_runner_step_functions",
   "edgar_identity_secret_arn": "arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-dev-edgar-identity-uD5HdN",
   "task_definitions": {
-    "small": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-small:29",
-    "medium": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-medium:26",
-    "large": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-large:26",
-    "mdm_small": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-mdm-small:6",
-    "mdm_medium": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-mdm-medium:6"
+    "small": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-small:31",
+    "medium": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-medium:28",
+    "large": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-large:28",
+    "mdm_small": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-mdm-small:8",
+    "mdm_medium": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-mdm-medium:8"
   },
   "state_machines": {
     "bootstrap_full": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-bootstrap-full",
@@ -41,6 +41,7 @@
     "mdm_gold": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-mdm-gold",
     "ownership_mdm_gold": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-ownership-mdm-gold",
     "silver_mdm_gold": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-silver-mdm-gold",
+    "bronze_seed_silver_gold": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-bronze-seed-silver-gold",
     "mdm_migrate": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-mdm-migrate",
     "mdm_check_connectivity": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-mdm-check-connectivity",
     "mdm_run": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-mdm-run",
@@ -52,13 +53,11 @@
     "mdm_seed_from_silver": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-mdm-seed-from-silver"
   },
   "mdm": {
-    "image_ref": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:699f49848144ee3cf641aaee4833a966831ccfb4671b657550ee0a8674acf9ac",
+    "image_ref": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:69f9f4b919324251926212bb80777eec3212111979531530ce1d528efd34b6ec",
     "database_source": "snowflake-postgres",
     "silver_duckdb": "s3://edgartools-dev-warehouse/warehouse/silver/sec/silver.duckdb",
     "secrets": {
       "postgres_dsn": "arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-dev/mdm/postgres_dsn-AempIg",
-      "neo4j": "arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-dev/mdm/neo4j-hjMMTi",
-      "api_keys": "arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-dev/mdm/api_keys-1F8Svs",
       "snowflake": "arn:aws:secretsmanager:us-east-1:077127448006:secret:edgartools-dev/mdm/snowflake-euKuPM"
     }
   }
