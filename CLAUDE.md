@@ -189,7 +189,7 @@ and governance boundary, not literally one shared connection string for both pro
 ```bash
 aws stepfunctions start-execution \
   --region us-east-1 \
-  --state-machine-arn arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-load-history \
+  --state-machine-arn arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-load-history \
   --name "load-history-$(date +%s)" \
   --input '{}'
 # Runs ~15 min for 100 companies (vs 30-90 min sequential)
@@ -266,9 +266,9 @@ When the `edgartools` version is bumped, run the batch scripts in `scripts/batch
 # Required env vars before any warehouse command
 export EDGAR_IDENTITY="EdgarTools Platform thepaulananth@gmail.com"   # SEC User-Agent; must contain email
 export WAREHOUSE_RUNTIME_MODE="bronze_capture"
-export WAREHOUSE_BRONZE_ROOT="s3://edgartools-dev-bronze-077127448006/warehouse/bronze"
-export WAREHOUSE_STORAGE_ROOT="s3://edgartools-dev-warehouse-077127448006/warehouse"
-export SERVING_EXPORT_ROOT="s3://edgartools-dev-snowflake-export-077127448006/warehouse/artifacts/snowflake_exports/"
+export WAREHOUSE_BRONZE_ROOT="s3://edgartools-dev-bronze/warehouse/bronze"
+export WAREHOUSE_STORAGE_ROOT="s3://edgartools-dev-warehouse/warehouse"
+export SERVING_EXPORT_ROOT="s3://edgartools-dev-snowflake-export/warehouse/artifacts/snowflake_exports/"
 export MDM_DATABASE_URL="postgresql://postgres:test@localhost:5432/mdm"  # local Colima postgres
 export AWS_DEFAULT_REGION=us-east-1  # infra is us-east-1, not the default us-east-2
 
@@ -319,7 +319,7 @@ colima start
 export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
 aws ecr get-login-password --region us-east-1 \
   | docker login --username AWS --password-stdin \
-    077127448006.dkr.ecr.us-east-1.amazonaws.com
+    690839588395.dkr.ecr.us-east-1.amazonaws.com
 bash infra/scripts/publish-warehouse-image.sh \
   --aws-region us-east-1 \
   --ecr-repository edgartools-dev-warehouse \
@@ -422,7 +422,7 @@ export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
 # 2. Authenticate to ECR (token valid for 12 h).
 aws ecr get-login-password --region us-east-1 \
   | docker login --username AWS --password-stdin \
-    077127448006.dkr.ecr.us-east-1.amazonaws.com
+    690839588395.dkr.ecr.us-east-1.amazonaws.com
 
 # NOTE: ECR repositories must have MUTABLE tags for :dev to be overwritten.
 # If you see "tag is immutable" on push, run once per affected repo:
@@ -456,12 +456,12 @@ WAREHOUSE_REF=$(aws ecr describe-images \
   --region us-east-1 \
   --repository-name edgartools-dev-warehouse \
   --query "sort_by(imageDetails,&imagePushedAt)[-1].imageDigest" \
-  --output text | xargs -I{} echo "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@{}")
+  --output text | xargs -I{} echo "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@{}")
 MDM_REF=$(aws ecr describe-images \
   --region us-east-1 \
   --repository-name edgartools-dev-mdm \
   --query "sort_by(imageDetails,&imagePushedAt)[-1].imageDigest" \
-  --output text | xargs -I{} echo "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@{}")
+  --output text | xargs -I{} echo "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@{}")
 
 # 5. Deploy ECS task definitions and Step Functions state machines.
 bash infra/scripts/deploy-aws-application.sh \
@@ -483,7 +483,7 @@ MDM_DEPS=$(aws ecr describe-images --region us-east-1 \
   --repository-name edgartools-dev-mdm-deps \
   --query "sort_by(imageDetails,&imagePushedAt)[-1].imageTags[0]" --output text)
 
-ECR="077127448006.dkr.ecr.us-east-1.amazonaws.com"
+ECR="690839588395.dkr.ecr.us-east-1.amazonaws.com"
 SHA_TAG="sha-$(git rev-parse --short=12 HEAD)"
 
 # Rebuild warehouse directly
@@ -531,7 +531,7 @@ docker builder prune -f
 
 # 3. Remove old named images — keep only :dev and the latest :sha-* per repo.
 #    List old tags from the output above and delete explicitly:
-ECR="077127448006.dkr.ecr.us-east-1.amazonaws.com"
+ECR="690839588395.dkr.ecr.us-east-1.amazonaws.com"
 docker rmi \
   "${ECR}/edgartools-dev-warehouse:sha-<old>" \
   "${ECR}/edgartools-dev-mdm:sha-<old>" \

@@ -38,9 +38,9 @@ Set the required env vars:
 export SNOW_CONNECTION=snowconn                           # ACCOUNTADMIN — required for CREATE STORAGE INTEGRATION
 export SNOWFLAKE_DATABASE=EDGARTOOLS_DEV
 export SNOWFLAKE_DEPLOYER_ROLE=EDGARTOOLS_DEV_DEPLOYER
-export SNOWFLAKE_STORAGE_ROLE_ARN=arn:aws:iam::077127448006:role/edgartools-dev-snowflake-s3
-export SNOWFLAKE_EXPORT_ROOT_URL=s3://edgartools-dev-snowflake-export-077127448006/warehouse/artifacts/snowflake_exports/
-export SNOWFLAKE_MANIFEST_SNS_TOPIC_ARN=arn:aws:sns:us-east-1:077127448006:edgartools-dev-snowflake-manifest-events
+export SNOWFLAKE_STORAGE_ROLE_ARN=arn:aws:iam::690839588395:role/edgartools-dev-snowflake-s3
+export SNOWFLAKE_EXPORT_ROOT_URL=s3://edgartools-dev-snowflake-export/warehouse/artifacts/snowflake_exports/
+export SNOWFLAKE_MANIFEST_SNS_TOPIC_ARN=arn:aws:sns:us-east-1:690839588395:edgartools-dev-snowflake-manifest-events
 
 bash scripts/verify-pr1/run_all.sh
 ```
