@@ -5,11 +5,9 @@ from __future__ import annotations
 import hashlib
 import mimetypes
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
 
-from bs4 import BeautifulSoup
+import edgar
 
 from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory
 from edgar_warehouse.infrastructure.object_storage import read_bytes
@@ -22,6 +20,7 @@ def fetch_filing_artifacts(
     accession_number: str,
     sync_run_id: str,
     download_bytes,
+    get_filing=edgar.get_by_accession_number,
     force: bool = False,
 ) -> dict[str, Any]:
     filing = db.get_filing(accession_number)
@@ -69,47 +68,17 @@ def fetch_filing_artifacts(
                 }
             ]
         else:
-            # Fall back to index fetch when primary_document is unknown or cached index exists.
-            index_spec = capture_specs.filing_index(cik, accession_number)
-            cached_index = None if force else _read_cached_index(db, accession_number)
-            if cached_index is None:
-                index_bytes = download_bytes(index_spec.source_url or "", context.identity)
-                index_record = _write_raw_artifact(
-                    context=context,
-                    db=db,
-                    payload=index_bytes,
-                    relative_path=index_spec.relative_path,
-                    source_type="filing_index",
-                    source_url=index_spec.source_url or "",
-                    cik=cik,
-                    accession_number=accession_number,
-                    form=filing.get("form"),
-                )
-            else:
-                index_bytes = cached_index["payload"]
-                index_record = cached_index["write_record"]
-
-            attachment_rows = _extract_attachment_rows(
-                index_html=index_bytes.decode("utf-8", errors="replace"),
-                base_url=index_spec.source_url or "",
-                accession_number=accession_number,
-                primary_document=filing.get("primary_document"),
-            )
-            if not attachment_rows and filing.get("primary_document"):
-                attachment_rows = [
-                    {
-                        "accession_number": accession_number,
-                        "document_name": filing["primary_document"],
-                        "document_type": filing.get("form"),
-                        "document_url": capture_specs.filing_document(
-                            cik=cik,
-                            accession_number=accession_number,
-                            document_name=filing["primary_document"],
-                            is_primary=True,
-                        ).source_url,
-                        "is_primary": True,
-                    }
-                ]
+            # Fall back to edgartools when primary_document is unknown. edgartools
+            # fetches the full SGML submission bundle in one request (rather than a
+            # separate -index.html fetch plus N per-document fetches), and its own
+            # retry budget survives the 503s that sec_client.py's fixed 3-attempt
+            # retry does not — see docs/runbook.md smoke-test 503 investigation.
+            filing_obj = get_filing(accession_number)
+            if filing_obj is None:
+                raise ValueError(f"edgartools could not resolve filing for accession {accession_number}")
+            attachment_rows = _map_edgartools_attachments(filing_obj, accession_number)
+            if not attachment_rows:
+                raise ValueError(f"edgartools found no attachments for accession {accession_number}")
 
     raw_writes = [index_record] if index_record is not None else []
     hydrated_rows: list[dict[str, Any]] = []
@@ -128,7 +97,13 @@ def fetch_filing_artifacts(
             document_name=document_name,
             is_primary=bool(row.get("is_primary")),
         )
-        payload = download_bytes(document_url, context.identity)
+        # edgartools fetches attachment content as part of resolving the filing
+        # (see _map_edgartools_attachments); reuse it instead of a second HTTP
+        # round-trip. The fast path (raw_doc_name known) has no pre-fetched
+        # content and still fetches via download_bytes.
+        payload = row.get("content_bytes")
+        if payload is None:
+            payload = download_bytes(document_url, context.identity)
         raw_record = _write_raw_artifact(
             context=context,
             db=db,
@@ -141,7 +116,7 @@ def fetch_filing_artifacts(
             form=filing.get("form"),
         )
         raw_writes.append(raw_record)
-        hydrated = dict(row)
+        hydrated = {key: value for key, value in row.items() if key != "content_bytes"}
         hydrated["raw_object_id"] = raw_record["raw_object_id"]
         hydrated_rows.append(hydrated)
 
@@ -255,46 +230,30 @@ def _write_raw_artifact(
     }
 
 
-def _extract_attachment_rows(
-    *,
-    index_html: str,
-    base_url: str,
-    accession_number: str,
-    primary_document: str | None,
-) -> list[dict[str, Any]]:
-    soup = BeautifulSoup(index_html, "html.parser")
-    rows: list[dict[str, Any]] = []
-    seen: set[str] = set()
+def _map_edgartools_attachments(filing_obj: Any, accession_number: str) -> list[dict[str, Any]]:
+    """Map an edgartools Filing's attachments onto this module's attachment_rows
+    shape, pre-fetching content bytes to avoid a second HTTP round-trip in the
+    caller's write loop.
 
-    for table_row in soup.find_all("tr"):
-        cells = table_row.find_all("td")
-        if len(cells) < 3:
-            continue
-        links = table_row.find_all("a")
-        if not links:
-            continue
-        link = links[0]
-        href = link.get("href")
-        if not href:
-            continue
-        document_url = urljoin(base_url, href)
-        document_name = Path(href).name
-        if not document_name or document_name in seen:
-            continue
-        seen.add(document_name)
-        sequence_number = cells[0].get_text(" ", strip=True) if cells else None
-        document_type = cells[3].get_text(" ", strip=True) if len(cells) > 3 else None
-        description = cells[1].get_text(" ", strip=True) if len(cells) > 1 else None
+    is_primary is derived via membership in attachments.primary_documents rather
+    than string-matching a primary_document name — more general, since a filing
+    can have an unusual primary document that isn't html/xml.
+    """
+    primary_documents = list(filing_obj.attachments.primary_documents)
+    rows: list[dict[str, Any]] = []
+    for attachment in filing_obj.attachments:
+        content = attachment.content
+        content_bytes = content.encode("utf-8") if isinstance(content, str) else content
         rows.append(
             {
                 "accession_number": accession_number,
-                "sequence_number": sequence_number or None,
-                "document_name": document_name,
-                "document_type": document_type or Path(document_name).suffix.lstrip(".").upper() or "DOCUMENT",
-                "document_description": description or None,
-                "document_url": document_url,
-                "is_primary": document_name == primary_document,
+                "sequence_number": attachment.sequence_number,
+                "document_name": attachment.document,
+                "document_type": attachment.document_type,
+                "document_description": attachment.description,
+                "document_url": attachment.url,
+                "is_primary": attachment in primary_documents,
+                "content_bytes": content_bytes,
             }
         )
-
     return rows
