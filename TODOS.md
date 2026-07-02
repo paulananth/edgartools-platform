@@ -1191,7 +1191,15 @@ PR #111, 2026-07-02.
 
 ---
 
-## MDM Postgres secret still points at a live RDS instance, not Snowflake — contradicts documented cutover
+## MDM Postgres secret still points at a live RDS instance, not Snowflake — contradicts documented cutover — RESOLVED (2026-07-02)
+
+**Status:** RESOLVED same day. `edgartools-dev/mdm/postgres_dsn` now correctly
+holds the Snowflake Postgres `application` DSN
+(`postgresql://application:***@2mvgjthkubafxiu7vfyp3jd3di.ixkyqwk-yw12138.ca-central-1.aws.postgres.snowflake.app:5432/mdm?sslmode=require`);
+`aws rds describe-db-instances` now returns `[]` — the RDS instance is gone.
+`infra/scripts/audit-mdm-snowflake-postgres-cutover.py --env dev
+--run-runtime-smoke` passes fully, including a real `mdm check-connectivity`
+ECS task run.
 
 **What:** `edgartools-dev/mdm/postgres_dsn` (Secrets Manager, account
 `690839588395`, the ARN referenced by every ECS task definition's
@@ -1236,21 +1244,49 @@ or the RDS instance's creation event, neither of which is in scope here):**
    on 2026-06-11. If true, this migration *regressed* a previously-resolved
    piece of infra, rather than being a new gap.
 
-**Explicitly not fixed:** did not modify the secret value, the RDS instance,
-or any Terraform. This is a live database credential / a running billed
-resource; guessing at the "correct" Snowflake Postgres DSN or deleting the
-RDS instance without the owner's confirmation of what's actually
-authoritative right now would risk real data loss or breaking something
-currently depending on the RDS path. Needs a decision: (a) confirm the
-Snowflake Postgres instance from the 2026-06-11 cutover still exists and get
-its real DSN into this secret, or (b) confirm RDS is now the intentional
-path again and update `CLAUDE.md`/this file's 06-11 entry accordingly. Either
-way, `aws rds describe-db-instances` should be re-run before deciding to
-delete anything — do not assume this instance is safe to destroy.
+**Resolution:** Confirmed the 2026-06-11 cutover's Snowflake Postgres instance
+(`EDGARTOOLS_DEV_MDM`, created 2026-06-07) was never destroyed — it was
+`READY` the whole time, just never re-wired into the new account. Ran
+`infra/scripts/bootstrap-prod-mdm.sh --env dev --snow-connection snowconn
+--instance-name EDGARTOOLS_DEV_MDM` to rotate credentials and repopulate
+`postgres_dsn`. Hit and fixed three bugs in that script along the way (all
+committed): (1) it invoked bare `python3` for a `uv run --extra mdm-runtime`
+step -- uv-managed venvs on Windows only ship `python.exe`, so this silently
+ran against an unrelated system Python missing `psycopg2`; (2) `mdm migrate`
+failed with `InsufficientPrivilege` on `CREATE INDEX IF NOT EXISTS` because
+this database had already been through one bootstrap cycle, so ownership sat
+with `application`, not the freshly-rotated `snowflake_admin` -- fixed by
+adding `GRANT application TO snowflake_admin;` before `REASSIGN OWNED BY
+application TO snowflake_admin;` (Postgres 16 lets a CREATEROLE-holding
+non-superuser grant membership in a role that isn't itself more privileged;
+confirmed via Snowflake's own Postgres-role docs that `snowflake_admin` is
+deliberately not a full superuser but does hold the "create and manage
+Postgres roles" privilege); (3) the script unconditionally passed
+`--aws-profile ""` downstream when `AWS_PROFILE` wasn't set, tripping a
+`${2:?}` check in the callee -- fixed by building that call's args
+conditionally, matching the pattern the same script's own `aws_cli()` helper
+already uses; also fixed a `file:///dev/stdin` paramfile reference (not
+reliably readable on Windows Git Bash) by capturing into a shell variable
+instead. Then deleted the RDS instance via
+`infra/scripts/remove-aws-mdm-rds-after-cutover.sh --env dev
+--confirm-rds-removal` (its own audit gate now passing) and reconciled
+Terraform (`infra/terraform/accounts/dev`) to destroy the now-orphaned
+`aws_db_subnet_group`/`aws_security_group`/2 `aws_subnet` resources --
+`terraform plan` is clean (no changes) afterward. Along the way also found
+and fixed a *second* instance of the exact bug this file's 06-11 entry
+already fixed once (a missing `moved` block for `aws_secretsmanager_secret.neo4j`
+in `mdm_secret_moves.tf`, which would have destroyed-then-tried-to-recreate
+the live neo4j secret and hit Secrets Manager's 30-day name-reuse block
+again), and a Terraform-config/live-state mismatch on the warehouse ECR
+repo's `image_tag_mutability` (config said `IMMUTABLE`, live was manually
+set to `MUTABLE` to fix the Deploy workflow -- a plain `terraform apply`
+would have silently reverted that fix on the next unrelated apply).
 
 **Where:** Secrets Manager `edgartools-dev/mdm/postgres_dsn` (arn ending
-`-AempIg`, account `690839588395`, `us-east-1`); RDS instance
-`edgartools-dev-mdm` (same account/region).
+`-AempIg`, account `690839588395`, `us-east-1`); `infra/scripts/bootstrap-prod-mdm.sh`;
+`infra/terraform/accounts/{dev,prod}/mdm_secret_moves.tf`;
+`infra/terraform/modules/warehouse_runtime/main.tf`. RDS instance
+`edgartools-dev-mdm` no longer exists.
 
 **Surfaced:** live AWS end-to-end verification after merging PR #108/#111,
 2026-07-02, via `targeted-resync` execution
@@ -1259,7 +1295,12 @@ stream `warehouse-large/edgar-warehouse/16d6a46d868047b186bf8bf4518b89e5`).
 
 ---
 
-## MDM Snowflake secret missing from new AWS account — cross-account access denied
+## MDM Snowflake secret missing from new AWS account — cross-account access denied — RESOLVED (2026-07-02)
+
+**Status:** RESOLVED same day, alongside the postgres_dsn/RDS entry above.
+`edgartools-dev/mdm/snowflake` now exists in `690839588395` and the MDM task
+definitions reference it; the full audit including a real `mdm
+check-connectivity` ECS run passes.
 
 **What:** The MDM ECS task definitions' `secrets` block still points
 `edgartools-dev/mdm/snowflake` at
@@ -1296,18 +1337,40 @@ workflow with `--enable-mdm` deployed the same way, not just seed-universe.
    `077127448006` was evidently the primary/shared account before the
    690839588395 migration; this secret simply never got carried over.)
 
-**Explicitly not fixed:** did not create a new secret, copy the old one, or
-add a cross-account resource policy — don't know what the "current"
-Snowflake MDM credentials should be post-migration, and this is exactly the
-kind of secret-content decision that needs the owner, not a guess. The
-right fix is almost certainly creating `edgartools-dev/mdm/snowflake` in
-`690839588395` (mirroring how `postgres_dsn`/`neo4j`/`api_keys` were already
-migrated) and re-pointing the task definition's `secrets` block at it, once
-someone confirms the credential values to put there.
+**Resolution:** Per owner direction, sourced the new secret's Snowflake
+credentials from the same identity the `snowconn` SnowCLI connection already
+uses (account/user/warehouse/role from `~/.snowflake/config.toml`), rather
+than copying the never-migrated `dbt/snowflake` secret (which, separately
+confirmed, doesn't exist anywhere in `690839588395` either -- zero secrets
+match "dbt" or "snowflake" by name search, so it wasn't just this one
+secret). This matches `CLAUDE.md`'s own documented intent ("one credential ...
+used everywhere else"). Created `edgartools-dev/mdm/snowflake` via
+`terraform apply` in `infra/terraform/accounts/dev` (the empty-container
+resource was already declared in `infra/terraform/modules/warehouse_runtime/main.tf`
+but had never been applied to this account's state -- see the neo4j
+`moved`-block note in the entry above, applied in the same operation),
+populated its value from `snowconn`, then found and fixed two more gaps
+surfaced only once the container and value both existed: (1) the ECS
+execution role's inline policy (`sec_platform_runner_execution_secret`)
+allowlists exact secret ARNs rather than a name-prefix wildcard, so the new
+secret's freshly-generated ARN suffix wasn't covered -- added it directly via
+`aws iam put-role-policy` rather than through the `infra/terraform/access/aws`
+root, which had substantial unrelated drift (unexplained resource renames,
+an SNS topic policy referencing an unfamiliar third AWS account) not worth
+untangling for a one-line allowlist addition; (2) redeploying via
+`deploy-aws-application.sh` did *not* pick up the new secret ARN by itself --
+it resolves `MDM_SNOWFLAKE_SECRET_ARN` from the cached deployment manifest
+(`infra/aws-dev-application.json`) when `--mdm-snowflake-secret-arn` isn't
+passed explicitly, so the stale ARN had to be passed on the command line for
+one redeploy to correct the manifest for future runs.
 
 **Where:** ECS task definitions `edgartools-dev-mdm-small`/`-medium`
-(`secrets` block); Secrets Manager, both accounts (`077127448006` has the
-stale secret, `690839588395` has none).
+(`secrets` block); Secrets Manager `690839588395` (new secret, arn ending
+`-d7X99N`) and `077127448006` (old, now unreferenced); IAM role
+`sec_platform_runner_execution` inline policy
+`sec_platform_runner_execution_secret`; `infra/terraform/modules/warehouse_runtime/main.tf`
+(`aws_secretsmanager_secret.mdm_snowflake`, already declared, just never
+applied here).
 
 **Surfaced:** live AWS end-to-end verification after merging PR #108/#111,
 2026-07-02, via `mdm-seed-universe` execution
