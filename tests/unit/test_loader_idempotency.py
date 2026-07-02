@@ -73,6 +73,38 @@ class _ArtifactDb:
         return len(rows)
 
 
+class _FakeAttachment:
+    """Minimal double for edgar.attachments.Attachment — only the fields
+    _map_edgartools_attachments() reads."""
+
+    def __init__(self, *, sequence_number, document, document_type, description, url, content):
+        self.sequence_number = sequence_number
+        self.document = document
+        self.document_type = document_type
+        self.description = description
+        self.url = url
+        self.content = content
+
+
+class _FakeAttachments:
+    """Minimal double for edgar.attachments.Attachments — iterable, plus
+    primary_documents for is_primary derivation."""
+
+    def __init__(self, items, primary_documents=None):
+        self._items = list(items)
+        self.primary_documents = list(primary_documents) if primary_documents is not None else list(items)
+
+    def __iter__(self):
+        return iter(self._items)
+
+
+class _FakeFiling:
+    """Minimal double for edgar.Filing — only the .attachments attribute is used."""
+
+    def __init__(self, *, attachments):
+        self.attachments = attachments
+
+
 class LoaderIdempotencyTests(unittest.TestCase):
     def test_cached_submission_main_skips_sec_download(self) -> None:
         payload = b'{"cik": "0000320193", "filings": {"recent": {}}}'
@@ -198,6 +230,7 @@ class LoaderIdempotencyTests(unittest.TestCase):
                 accession_number=accession,
                 sync_run_id="run-1",
                 download_bytes=Mock(side_effect=AssertionError("SEC download")),
+                get_filing=Mock(side_effect=AssertionError("edgartools fetch")),
                 force=False,
             )
 
@@ -205,17 +238,24 @@ class LoaderIdempotencyTests(unittest.TestCase):
         self.assertEqual(result["raw_writes"][0]["cached"], True)
         self.assertEqual(db.merged_rows, [])
 
-    def test_force_filing_artifact_downloads_index_and_document(self) -> None:
+    def test_force_filing_artifact_uses_edgartools_fallback_when_primary_document_unknown(self) -> None:
+        """When primary_document is unknown (fast path unavailable) or force=True, the
+        fallback must fetch via edgartools (injected as get_filing), not the old
+        index.html-fetch-and-BeautifulSoup-parse path. Regression test for the 503 on
+        www.sec.gov/.../{accession}-index.html that survived sec_client's own retries."""
         accession = "0000320193-26-000001"
-        index_html = b"""
-        <html><body><table>
-          <tr>
-            <td>1</td><td>Primary document</td><td><a href="primary.xml">primary.xml</a></td><td>4</td>
-          </tr>
-        </table></body></html>
-        """
-        document = b"<ownershipDocument />"
-        downloads = Mock(side_effect=[index_html, document])
+        primary_attachment = _FakeAttachment(
+            sequence_number="1",
+            document="primary.xml",
+            document_type="4",
+            description="Primary document",
+            url="https://www.sec.gov/Archives/edgar/data/320193/primary.xml",
+            content="<ownershipDocument />",
+        )
+        fake_filing = _FakeFiling(attachments=_FakeAttachments([primary_attachment]))
+        get_filing = Mock(return_value=fake_filing)
+        downloads = Mock(side_effect=AssertionError("download_bytes should not be called — edgartools already fetched content"))
+
         with tempfile.TemporaryDirectory() as tmp:
             db = _ArtifactDb()
             context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
@@ -226,13 +266,61 @@ class LoaderIdempotencyTests(unittest.TestCase):
                 accession_number=accession,
                 sync_run_id="run-1",
                 download_bytes=downloads,
+                get_filing=get_filing,
                 force=True,
             )
 
-        self.assertEqual(downloads.call_count, 2)
+        get_filing.assert_called_once_with(accession)
         self.assertEqual(result["attachment_count"], 1)
-        self.assertEqual(len(result["raw_writes"]), 2)
+        # One raw_writes entry (the document) — no separate index-page artifact anymore.
+        self.assertEqual(len(result["raw_writes"]), 1)
         self.assertEqual(len(db.merged_rows), 1)
+        self.assertTrue(db.merged_rows[0]["is_primary"])
+        self.assertEqual(db.merged_rows[0]["document_name"], "primary.xml")
+
+    def test_edgartools_fallback_maps_non_primary_attachment_correctly(self) -> None:
+        """A filing with multiple attachments must correctly identify which one is
+        primary via membership in attachments.primary_documents, not just take the
+        first row."""
+        accession = "0000320193-26-000002"
+        exhibit = _FakeAttachment(
+            sequence_number="1",
+            document="exhibit99.htm",
+            document_type="EX-99",
+            description="Exhibit",
+            url="https://www.sec.gov/Archives/edgar/data/320193/exhibit99.htm",
+            content="<html>exhibit</html>",
+        )
+        primary = _FakeAttachment(
+            sequence_number="2",
+            document="primary.xml",
+            document_type="4",
+            description="Primary document",
+            url="https://www.sec.gov/Archives/edgar/data/320193/primary.xml",
+            content="<ownershipDocument />",
+        )
+        fake_filing = _FakeFiling(attachments=_FakeAttachments([exhibit, primary], primary_documents=[primary]))
+        get_filing = Mock(return_value=fake_filing)
+        downloads = Mock(side_effect=AssertionError("download_bytes should not be called"))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _ArtifactDb()
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+
+            result = bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context,
+                db=db,
+                accession_number=accession,
+                sync_run_id="run-1",
+                download_bytes=downloads,
+                get_filing=get_filing,
+                force=True,
+            )
+
+        self.assertEqual(result["attachment_count"], 2)
+        rows_by_name = {row["document_name"]: row for row in db.merged_rows}
+        self.assertFalse(rows_by_name["exhibit99.htm"]["is_primary"])
+        self.assertTrue(rows_by_name["primary.xml"]["is_primary"])
 
 
 if __name__ == "__main__":
