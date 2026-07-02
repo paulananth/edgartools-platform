@@ -1,10 +1,8 @@
 """Build the 13F institutional manager CIK list for Branch B bootstrap.
 
-Downloads SEC EDGAR quarterly full-index files to collect every distinct CIK
-that filed a 13F-HR form in the target year range, then writes the result as a
-flat JSON list of integer CIKs.
-
-Target: ~5,500 distinct institutional managers from the full SEC 13F filer list.
+Uses edgartools' quarterly filing index (edgar.get_filings) to collect every
+distinct CIK that filed a 13F-HR form in the target year range, then writes
+the result as a flat JSON list of integer CIKs.
 
 Usage:
   python -m edgar_warehouse.scripts.build_13f_filer_list \\
@@ -18,91 +16,45 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import csv
-import gzip
-import io
 import json
 import logging
 import sys
-import time
 from pathlib import Path
-from typing import Iterator
+
+import edgar
 
 log = logging.getLogger(__name__)
 
-# SEC quarterly full-index URL pattern
-# Each file has columns: company name | form type | CIK | date filed | filename
-_INDEX_URL = "https://www.sec.gov/Archives/edgar/full-index/{year}/QTR{quarter}/company.gz"
-
 _QUARTERS = (1, 2, 3, 4)
 
-# Throttle between index downloads to stay within SEC rate limits (10 req/s)
-_INTER_REQUEST_DELAY_S = 0.15
 
+def collect_13f_ciks(start_year: int, end_year: int, *, get_filings=edgar.get_filings) -> list[int]:
+    """Return sorted unique CIKs that filed 13F-HR in [start_year, end_year].
 
-def _fetch_gz(url: str, *, retries: int = 3) -> bytes:
-    """Download a gzip file, returning raw bytes."""
-    import urllib.request
-
-    for attempt in range(1, retries + 1):
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "edgar-warehouse/1.0 contact@edgartools.io"})
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                return resp.read()
-        except Exception as exc:
-            if attempt == retries:
-                raise
-            delay = 2 ** attempt
-            log.warning("Fetch attempt %d/%d failed for %s (%s); retrying in %ds…",
-                        attempt, retries, url, exc, delay)
-            time.sleep(delay)
-    return b""  # unreachable
-
-
-def _iter_13f_ciks_from_index(raw_gz: bytes) -> Iterator[int]:
-    """Parse company.gz full-index and yield CIKs for 13F-HR filers."""
-    with gzip.open(io.BytesIO(raw_gz), "rt", encoding="latin-1") as f:
-        # First 9 lines are a header block (skip until the dashed separator)
-        for line in f:
-            if line.startswith("---"):
-                break
-        # Remaining lines are pipe-separated: company|form|CIK|date|filename
-        reader = csv.reader(f, delimiter="|")
-        for row in reader:
-            if len(row) < 4:
-                continue
-            form_type = row[1].strip()
-            if form_type.startswith("13F-HR"):
-                try:
-                    yield int(row[2].strip())
-                except ValueError:
-                    pass
-
-
-def collect_13f_ciks(start_year: int, end_year: int) -> list[int]:
-    """Return sorted unique CIKs that filed 13F-HR in [start_year, end_year]."""
+    form="13F-HR" matches both "13F-HR" and "13F-HR/A" (amendments) -- same
+    coverage as the previous raw full-index startswith("13F-HR") filter,
+    confirmed against a live quarter before this change landed.
+    """
     seen: set[int] = set()
 
     for year in range(start_year, end_year + 1):
         for quarter in _QUARTERS:
-            url = _INDEX_URL.format(year=year, quarter=quarter)
-            log.info("Fetching %s…", url)
+            log.info("Fetching %d Q%d 13F-HR filings…", year, quarter)
             try:
-                raw = _fetch_gz(url)
+                filings = get_filings(year=year, quarter=quarter, form="13F-HR")
             except Exception as exc:
-                log.error("Failed to fetch %s: %s — skipping quarter", url, exc)
-                time.sleep(_INTER_REQUEST_DELAY_S)
+                log.error("Failed to fetch %d Q%d: %s — skipping quarter", year, quarter, exc)
                 continue
 
             count_before = len(seen)
-            for cik in _iter_13f_ciks_from_index(raw):
-                seen.add(cik)
+            if filings is not None:
+                for cik in filings.to_pandas()["cik"]:
+                    seen.add(int(cik))
             new_this_quarter = len(seen) - count_before
             log.info(
                 "  %d Q%d: %d new 13F-HR filers (running total: %d)",
                 year, quarter, new_this_quarter, len(seen),
             )
-            time.sleep(_INTER_REQUEST_DELAY_S)
 
     result = sorted(seen)
     log.info("Collected %d distinct 13F-HR filer CIKs (%d–%d)", len(result), start_year, end_year)
