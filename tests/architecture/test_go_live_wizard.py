@@ -16,6 +16,37 @@ SCRIPT = REPO_ROOT / "infra" / "scripts" / "go-live.sh"
 SCRIPT_ARG = SCRIPT.relative_to(REPO_ROOT).as_posix()
 
 
+def _resolve_bash() -> str:
+    # On Linux/macOS there's exactly one "bash", so plain PATH resolution is fine.
+    if os.name != "nt":
+        return "bash"
+    # On Windows, CreateProcess always checks %SystemRoot%\System32 before
+    # consulting PATH (this is an OS-level search-order rule, not a PATH
+    # ordering issue), so a bare "bash" resolves to the WSL launcher stub at
+    # System32\bash.exe whenever WSL is installed -- even when Git Bash
+    # appears earlier in the PATH string. WSL interop only forwards env vars
+    # listed in WSLENV (empty by default), so every env-var-based test double
+    # in this file (GO_LIVE_CALL_LOG, GO_LIVE_NO_GUM, fake tools prepended to
+    # PATH) silently vanishes and the script falls back to unexpected
+    # defaults instead of failing loudly. Explicitly prefer a real Git
+    # Bash/MSYS bash.exe over the WSL stub, searching PATH in its own order
+    # (unlike CreateProcess, Python's own directory walk here has no
+    # System32-first special case).
+    windir = os.environ.get("WINDIR") or os.environ.get("SystemRoot") or ""
+    windir = windir.lower()
+    for directory in os.environ.get("PATH", "").split(os.pathsep):
+        candidate = Path(directory) / "bash.exe"
+        if not candidate.is_file():
+            continue
+        if windir and str(candidate).lower().startswith(windir):
+            continue
+        return str(candidate)
+    return "bash"
+
+
+BASH = _resolve_bash()
+
+
 def run_wizard(
     *args: str,
     input_text: str = "y\n",
@@ -26,14 +57,28 @@ def run_wizard(
     proc_env.setdefault("GO_LIVE_NO_GUM", "1")
     if env:
         proc_env.update(env)
-    result = subprocess.run(
-        ["bash", SCRIPT_ARG, *args],
+    # Deliberately NOT text=True for the subprocess call itself: on Windows,
+    # subprocess's text/universal-newlines mode translates \n in `input` to
+    # \r\n before writing to the child's stdin. bash's `read -r` terminates
+    # on \n but leaves the preceding \r as part of the captured value, so
+    # e.g. an "accept the default" blank-line answer becomes reply="\r"
+    # rather than reply="" -- [[ -z "$reply" ]] then fails and the wizard
+    # takes the wrong branch on every multi-prompt sequence. Encode input as
+    # LF-only bytes explicitly and decode stdout/stderr back to str after,
+    # so callers still get the str-based CompletedProcess they expect.
+    raw_result = subprocess.run(
+        [BASH, SCRIPT_ARG, *args],
         cwd=REPO_ROOT,
-        input=input_text,
-        text=True,
+        input=input_text.encode("utf-8"),
         capture_output=True,
         env=proc_env,
         check=False,
+    )
+    result = subprocess.CompletedProcess(
+        args=raw_result.args,
+        returncode=raw_result.returncode,
+        stdout=raw_result.stdout.decode("utf-8", errors="replace"),
+        stderr=raw_result.stderr.decode("utf-8", errors="replace"),
     )
     if check and result.returncode != 0:
         raise AssertionError(
@@ -70,13 +115,13 @@ exit 0
 """
     for name in ("aws", "snow", "terraform", "docker", "uv"):
         path = fakebin / name
-        path.write_text(tool, encoding="utf-8")
+        path.write_text(tool, encoding="utf-8", newline="\n")
         path.chmod(0o755)
     return fakebin, call_log
 
 
 def test_go_live_script_has_valid_bash_syntax() -> None:
-    subprocess.run(["bash", "-n", SCRIPT_ARG], cwd=REPO_ROOT, check=True)
+    subprocess.run([BASH, "-n", SCRIPT_ARG], cwd=REPO_ROOT, check=True)
 
 
 def test_default_env_is_dev_and_decline_exits_without_mutation(tmp_path: Path) -> None:
@@ -118,6 +163,7 @@ set -euo pipefail
 echo "$*" >> "${BREW_LOG}"
 """,
         encoding="utf-8",
+        newline="\n",
     )
     brew.chmod(0o755)
     workspace = tmp_path / "workspace"
@@ -180,6 +226,7 @@ SH
 chmod +x "{fakebin / 'gum'}"
 """,
         encoding="utf-8",
+        newline="\n",
     )
     brew.chmod(0o755)
     env = {
@@ -393,6 +440,7 @@ echo "$*" >> "${GUM_LOG}"
 exit 0
 """,
         encoding="utf-8",
+        newline="\n",
     )
     gum.chmod(0o755)
 
@@ -443,6 +491,7 @@ case "$1" in
 esac
 """,
         encoding="utf-8",
+        newline="\n",
     )
     gum.chmod(0o755)
 
