@@ -17,7 +17,7 @@ class BoundaryTests(unittest.TestCase):
         offenders = [
             path
             for path in _python_sources()
-            if "import httpx" in path.read_text()
+            if "import httpx" in path.read_text(encoding="utf-8")
             and path != PACKAGE_ROOT / "infrastructure" / "sec_client.py"
         ]
         self.assertEqual(offenders, [])
@@ -27,12 +27,12 @@ class BoundaryTests(unittest.TestCase):
             PACKAGE_ROOT / "silver_support" / "session.py",
             PACKAGE_ROOT / "silver_support" / "access.py",
         }
-        offenders = [path for path in _python_sources() if "db._conn" in path.read_text() and path not in allowed]
+        offenders = [path for path in _python_sources() if "db._conn" in path.read_text(encoding="utf-8") and path not in allowed]
         self.assertEqual(offenders, [])
 
     def test_fsspec_only_lives_in_object_storage_adapter(self) -> None:
         allowed = PACKAGE_ROOT / "infrastructure" / "object_storage.py"
-        offenders = [path for path in _python_sources() if "fsspec.filesystem" in path.read_text() and path != allowed]
+        offenders = [path for path in _python_sources() if "fsspec.filesystem" in path.read_text(encoding="utf-8") and path != allowed]
         self.assertEqual(offenders, [])
 
     def test_only_dataset_path_catalog_reads_packaged_path_templates(self) -> None:
@@ -40,7 +40,7 @@ class BoundaryTests(unittest.TestCase):
         offenders = [
             path
             for path in _python_sources()
-            if "warehouse_paths.properties" in path.read_text() and path != allowed
+            if "warehouse_paths.properties" in path.read_text(encoding="utf-8") and path != allowed
         ]
         self.assertEqual(offenders, [])
 
@@ -72,14 +72,14 @@ class BoundaryTests(unittest.TestCase):
         offenders = [
             path
             for path in targets
-            if any(fragment in path.read_text() for fragment in forbidden_fragments)
+            if any(fragment in path.read_text(encoding="utf-8") for fragment in forbidden_fragments)
         ]
         self.assertEqual(offenders, [])
 
     def test_snowflake_publishers_only_live_in_target_module(self) -> None:
         offenders = []
         for path in _python_sources():
-            text = path.read_text()
+            text = path.read_text(encoding="utf-8")
             if path in {
                 PACKAGE_ROOT / "serving" / "targets" / "snowflake.py",
                 PACKAGE_ROOT / "application" / "workflows" / "serving_publish.py",
