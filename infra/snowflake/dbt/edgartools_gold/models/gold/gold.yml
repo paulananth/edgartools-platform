@@ -126,6 +126,66 @@ models:
           a NOPAT tax adjustment — financials_derived.py has no parsed
           income_tax_expense/effective-tax-rate field today (see
           edgar_warehouse/parsers/financials_derived.py line 279).
+      - name: revenue_cagr_3y
+        description: >
+          3-year compound annual growth rate of revenue: (revenue_t / revenue_{t-3})^(1/3) - 1.
+          FY-only (D-01): null for all non-FY fiscal_period rows (Q1–Q4).
+          Strict-positivity null guard (D-02): null when either endpoint (current or
+          3-years-prior revenue) is zero or negative, including the negative-to-negative
+          case, to avoid misleading positive growth rates for still-unprofitable companies.
+          Exact-N-year-match required (D-03, GROW-03): requires a FY row at exactly
+          fiscal_year - 3; a gap or fiscal-year shift yields null rather than a
+          fuzzy-matched span.
+      - name: net_income_cagr_3y
+        description: >
+          3-year compound annual growth rate of net income: (net_income_t / net_income_{t-3})^(1/3) - 1.
+          FY-only (D-01): null for all non-FY fiscal_period rows (Q1–Q4).
+          Strict-positivity null guard (D-02): null when either endpoint (current or
+          3-years-prior net income) is zero or negative, including the negative-to-negative
+          case, to avoid misleading positive growth rates for still-unprofitable companies.
+          Exact-N-year-match required (D-03, GROW-03): requires a FY row at exactly
+          fiscal_year - 3; a gap or fiscal-year shift yields null rather than a
+          fuzzy-matched span.
+      - name: total_assets_cagr_3y
+        description: >
+          3-year compound annual growth rate of total assets: (total_assets_t / total_assets_{t-3})^(1/3) - 1.
+          FY-only (D-01): null for all non-FY fiscal_period rows (Q1–Q4).
+          Strict-positivity null guard (D-02): null when either endpoint (current or
+          3-years-prior total assets) is zero or negative, including the negative-to-negative
+          case, to avoid misleading positive growth rates.
+          Exact-N-year-match required (D-03, GROW-03): requires a FY row at exactly
+          fiscal_year - 3; a gap or fiscal-year shift yields null rather than a
+          fuzzy-matched span.
+      - name: revenue_cagr_5y
+        description: >
+          5-year compound annual growth rate of revenue: (revenue_t / revenue_{t-5})^(1/5) - 1.
+          FY-only (D-01): null for all non-FY fiscal_period rows (Q1–Q4).
+          Strict-positivity null guard (D-02): null when either endpoint (current or
+          5-years-prior revenue) is zero or negative, including the negative-to-negative
+          case, to avoid misleading positive growth rates for still-unprofitable companies.
+          Exact-N-year-match required (D-03, GROW-03): requires a FY row at exactly
+          fiscal_year - 5; a gap or fiscal-year shift yields null rather than a
+          fuzzy-matched span.
+      - name: net_income_cagr_5y
+        description: >
+          5-year compound annual growth rate of net income: (net_income_t / net_income_{t-5})^(1/5) - 1.
+          FY-only (D-01): null for all non-FY fiscal_period rows (Q1–Q4).
+          Strict-positivity null guard (D-02): null when either endpoint (current or
+          5-years-prior net income) is zero or negative, including the negative-to-negative
+          case, to avoid misleading positive growth rates for still-unprofitable companies.
+          Exact-N-year-match required (D-03, GROW-03): requires a FY row at exactly
+          fiscal_year - 5; a gap or fiscal-year shift yields null rather than a
+          fuzzy-matched span.
+      - name: total_assets_cagr_5y
+        description: >
+          5-year compound annual growth rate of total assets: (total_assets_t / total_assets_{t-5})^(1/5) - 1.
+          FY-only (D-01): null for all non-FY fiscal_period rows (Q1–Q4).
+          Strict-positivity null guard (D-02): null when either endpoint (current or
+          5-years-prior total assets) is zero or negative, including the negative-to-negative
+          case, to avoid misleading positive growth rates.
+          Exact-N-year-match required (D-03, GROW-03): requires a FY row at exactly
+          fiscal_year - 5; a gap or fiscal-year shift yields null rather than a
+          fuzzy-matched span.
 
   - name: earnings_releases
     description: 8-K earnings releases with beat/miss flags and cumulative beat streaks per (cik, accession_number).

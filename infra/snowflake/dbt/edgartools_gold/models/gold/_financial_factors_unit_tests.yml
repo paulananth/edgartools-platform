@@ -93,7 +93,10 @@ unit_tests:
           roic: 0.15
 
   - name: financial_factors_quarterly_cross_year_factors_are_null
-    description: Non-FY rows keep same-period accounting ratios but do not emit FY-only prior-year factors.
+    description: >
+      Non-FY rows keep same-period accounting ratios but do not emit FY-only prior-year
+      factors, including all 6 N-year CAGR columns (D-01) — the outer FY-gating case
+      guarantees quarterly periods never receive a CAGR.
     model: financial_factors
     given:
       - input: ref('financial_derived')
@@ -127,6 +130,12 @@ unit_tests:
           return_on_assets: 0.0666666666666667
           return_on_equity: 0.1111111111111111
           roic: 0.15
+          revenue_cagr_3y: null
+          net_income_cagr_3y: null
+          total_assets_cagr_3y: null
+          revenue_cagr_5y: null
+          net_income_cagr_5y: null
+          total_assets_cagr_5y: null
 
   - name: financial_factors_negative_equity_nulls_roe
     description: >
@@ -156,3 +165,220 @@ unit_tests:
           net_margin: -0.2
           gross_margin: 0.4
           operating_margin: -0.0666666666666667
+
+  - name: financial_factors_cagr_happy_path
+    description: >
+      A three-row FY history (2019/2021/2024) for one cik gives the 2024 row an exact
+      -3 match (2021) and an exact -5 match (2019), producing non-zero 3yr and 5yr CAGR
+      for revenue, net_income, and total_assets (GROW-01). Values verified against a live
+      Snowflake POWER() query (Open Question 2), not hand arithmetic:
+      POWER(200.0 / 130, 1.0 / 3) - 1 = 0.1544156229382383,
+      POWER(200.0 / 100, 1.0 / 5) - 1 = 0.1486983549970351.
+    model: financial_factors
+    given:
+      - input: ref('financial_derived')
+        rows:
+          - <<: *factor_row_defaults
+            cik: 10
+            accession_number: "1001"
+            fiscal_year: 2019
+            period_end: "2019-12-31"
+            revenue: 100
+            net_income: 100
+            total_assets: 100
+          - <<: *factor_row_defaults
+            cik: 10
+            accession_number: "1002"
+            fiscal_year: 2021
+            period_end: "2021-12-31"
+            revenue: 130
+            net_income: 130
+            total_assets: 130
+          - <<: *factor_row_defaults
+            cik: 10
+            accession_number: "1003"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            revenue: 200
+            net_income: 200
+            total_assets: 200
+    expect:
+      rows:
+        - cik: 10
+          accession_number: "1001"
+          fiscal_year: 2019
+          revenue_cagr_3y: null
+          net_income_cagr_3y: null
+          total_assets_cagr_3y: null
+          revenue_cagr_5y: null
+          net_income_cagr_5y: null
+          total_assets_cagr_5y: null
+        - cik: 10
+          accession_number: "1002"
+          fiscal_year: 2021
+          revenue_cagr_3y: null
+          net_income_cagr_3y: null
+          total_assets_cagr_3y: null
+          revenue_cagr_5y: null
+          net_income_cagr_5y: null
+          total_assets_cagr_5y: null
+        - cik: 10
+          accession_number: "1003"
+          fiscal_year: 2024
+          revenue_cagr_3y: 0.1544156229382383
+          net_income_cagr_3y: 0.1544156229382383
+          total_assets_cagr_3y: 0.1544156229382383
+          revenue_cagr_5y: 0.1486983549970351
+          net_income_cagr_5y: 0.1486983549970351
+          total_assets_cagr_5y: 0.1486983549970351
+
+  - name: financial_factors_cagr_insufficient_history
+    description: >
+      A single FY row with no fiscal_year-3 / fiscal_year-5 predecessor row nulls all 6
+      CAGR columns via the left join (GROW-01 insufficient-history case).
+    model: financial_factors
+    given:
+      - input: ref('financial_derived')
+        rows:
+          - <<: *factor_row_defaults
+            cik: 15
+            accession_number: "1501"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            revenue: 200
+            net_income: 200
+            total_assets: 200
+    expect:
+      rows:
+        - cik: 15
+          accession_number: "1501"
+          fiscal_year: 2024
+          revenue_cagr_3y: null
+          net_income_cagr_3y: null
+          total_assets_cagr_3y: null
+          revenue_cagr_5y: null
+          net_income_cagr_5y: null
+          total_assets_cagr_5y: null
+
+  - name: financial_factors_cagr_negative_to_negative_nulls
+    description: >
+      Both endpoints of net_income negative (an improving-but-still-negative trend, -100
+      to -50) nulls net_income_cagr_3y rather than emitting a misleadingly positive CAGR
+      (D-02, GROW-02) — the case a naive same-sign guard would get wrong (Pitfall 2).
+    model: financial_factors
+    given:
+      - input: ref('financial_derived')
+        rows:
+          - <<: *factor_row_defaults
+            cik: 13
+            accession_number: "1301"
+            fiscal_year: 2021
+            period_end: "2021-12-31"
+            net_income: -100
+          - <<: *factor_row_defaults
+            cik: 13
+            accession_number: "1302"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            net_income: -50
+    expect:
+      rows:
+        - cik: 13
+          accession_number: "1302"
+          fiscal_year: 2024
+          net_income_cagr_3y: null
+
+  - name: financial_factors_cagr_single_negative_endpoint_nulls
+    description: >
+      Two ciks prove the strict-positive guard is checked on BOTH operands independently
+      (D-02, GROW-02). cik 11: a negative CURRENT net_income with a positive prior value
+      nulls net_income_cagr_3y while revenue_cagr_3y/total_assets_cagr_3y (positive at
+      both ends, same row) compute normally — proving the guard is per-column, not
+      row-level. cik 12: a negative PRIOR net_income with a positive current value nulls
+      net_income_cagr_3y — proving the prior operand (not just the numerator) is guarded.
+      revenue_cagr_3y value verified against a live Snowflake POWER() query (Open
+      Question 2): POWER(200.0 / 100, 1.0 / 3) - 1 = 0.25992075879133236.
+    model: financial_factors
+    given:
+      - input: ref('financial_derived')
+        rows:
+          - <<: *factor_row_defaults
+            cik: 11
+            accession_number: "1101"
+            fiscal_year: 2021
+            period_end: "2021-12-31"
+            revenue: 100
+            net_income: 50
+            total_assets: 100
+          - <<: *factor_row_defaults
+            cik: 11
+            accession_number: "1102"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            revenue: 200
+            net_income: -20
+            total_assets: 200
+          - <<: *factor_row_defaults
+            cik: 12
+            accession_number: "1201"
+            fiscal_year: 2021
+            period_end: "2021-12-31"
+            net_income: -50
+          - <<: *factor_row_defaults
+            cik: 12
+            accession_number: "1202"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            net_income: 100
+    expect:
+      rows:
+        - cik: 11
+          accession_number: "1102"
+          fiscal_year: 2024
+          net_income_cagr_3y: null
+          revenue_cagr_3y: 0.25992075879133236
+          total_assets_cagr_3y: 0.25992075879133236
+        - cik: 12
+          accession_number: "1202"
+          fiscal_year: 2024
+          net_income_cagr_3y: null
+
+  - name: financial_factors_cagr_fiscal_year_gap_nulls
+    description: >
+      A cik with FY rows only at 2019 and 2024 (no 2021 row) gives the 2024 row an exact
+      -5 match but no -3 match. All *_cagr_3y columns null via the exact equi-join (no
+      fuzzy-match to a nearby year) while the independent *_cagr_5y columns compute
+      normally — proving the two offsets are independent (D-03, GROW-03). 5yr value
+      verified against a live Snowflake POWER() query (Open Question 2):
+      POWER(200.0 / 100, 1.0 / 5) - 1 = 0.1486983549970351.
+    model: financial_factors
+    given:
+      - input: ref('financial_derived')
+        rows:
+          - <<: *factor_row_defaults
+            cik: 14
+            accession_number: "1401"
+            fiscal_year: 2019
+            period_end: "2019-12-31"
+            revenue: 100
+            net_income: 100
+            total_assets: 100
+          - <<: *factor_row_defaults
+            cik: 14
+            accession_number: "1402"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            revenue: 200
+            net_income: 200
+            total_assets: 200
+    expect:
+      rows:
+        - cik: 14
+          accession_number: "1402"
+          fiscal_year: 2024
+          revenue_cagr_3y: null
+          net_income_cagr_3y: null
+          total_assets_cagr_3y: null
+          revenue_cagr_5y: 0.1486983549970351
+          net_income_cagr_5y: 0.1486983549970351
+          total_assets_cagr_5y: 0.1486983549970351

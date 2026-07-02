@@ -57,7 +57,7 @@ module "pipeline_notifications" {
   environment      = "dev"
   name_prefix      = "edgartools-dev"
   aws_region       = var.aws_region
-  account_id       = "077127448006"
+  account_id       = "690839588395"
   subscriber_email = var.pipeline_failure_subscriber_email
   tags             = var.tags
 }

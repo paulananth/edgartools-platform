@@ -30,6 +30,40 @@ prior_fy_values as (
     ) = 1
 ),
 
+prior_fy_values_3y as (
+    select
+        cik,
+        fiscal_year,
+        revenue,
+        net_income,
+        total_assets
+    from base
+    where fiscal_period = 'FY'
+    qualify row_number() over (
+        partition by cik, fiscal_year
+        order by
+            is_current_period desc,
+            accession_number desc
+    ) = 1
+),
+
+prior_fy_values_5y as (
+    select
+        cik,
+        fiscal_year,
+        revenue,
+        net_income,
+        total_assets
+    from base
+    where fiscal_period = 'FY'
+    qualify row_number() over (
+        partition by cik, fiscal_year
+        order by
+            is_current_period desc,
+            accession_number desc
+    ) = 1
+),
+
 line_items as (
     select
         *,
@@ -101,9 +135,41 @@ select
     {{ safe_ratio('l.net_income', 'l.total_assets') }} as return_on_assets,
     l.roic,
 
+    -- V2 growth factors: N-year CAGR (Phase 1).
+    case
+        when l.fiscal_period = 'FY'
+        then {{ cagr('l.revenue', 'py3.revenue', 3) }}
+    end as revenue_cagr_3y,
+    case
+        when l.fiscal_period = 'FY'
+        then {{ cagr('l.net_income', 'py3.net_income', 3) }}
+    end as net_income_cagr_3y,
+    case
+        when l.fiscal_period = 'FY'
+        then {{ cagr('l.total_assets', 'py3.total_assets', 3) }}
+    end as total_assets_cagr_3y,
+    case
+        when l.fiscal_period = 'FY'
+        then {{ cagr('l.revenue', 'py5.revenue', 5) }}
+    end as revenue_cagr_5y,
+    case
+        when l.fiscal_period = 'FY'
+        then {{ cagr('l.net_income', 'py5.net_income', 5) }}
+    end as net_income_cagr_5y,
+    case
+        when l.fiscal_period = 'FY'
+        then {{ cagr('l.total_assets', 'py5.total_assets', 5) }}
+    end as total_assets_cagr_5y,
+
     l.parser_version,
     l.ingested_at
 from line_items l
 left join prior_fy_values py
     on py.cik = l.cik
     and py.fiscal_year = l.fiscal_year - 1
+left join prior_fy_values_3y py3
+    on py3.cik = l.cik
+    and py3.fiscal_year = l.fiscal_year - 3
+left join prior_fy_values_5y py5
+    on py5.cik = l.cik
+    and py5.fiscal_year = l.fiscal_year - 5

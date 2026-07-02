@@ -103,7 +103,7 @@ def sm_arn(env: str, name: str, region: str, acct: str) -> str:
 def ecs_task_config(env: str, region: str) -> dict:
     """Read cluster, task def, subnets, SGs from the gold-refresh SM definition
     (authoritative source; aws-dev-application.json may have empty network config)."""
-    arn = f"arn:aws:states:{region}:077127448006:stateMachine:edgartools-{env}-gold-refresh"
+    arn = f"arn:aws:states:{region}:690839588395:stateMachine:edgartools-{env}-gold-refresh"
     try:
         raw = run_aws("--region", region, "stepfunctions", "describe-state-machine",
                       "--state-machine-arn", arn, "--query", "definition", "--output", "text")
@@ -130,10 +130,10 @@ def ecs_task_config(env: str, region: str) -> dict:
         return None
 
     net = find(d, "AwsvpcConfiguration") or {}
-    cluster = find(d, "Cluster") or f"arn:aws:ecs:{region}:077127448006:cluster/edgartools-{env}-warehouse"
+    cluster = find(d, "Cluster") or f"arn:aws:ecs:{region}:690839588395:cluster/edgartools-{env}-warehouse"
 
     # MDM medium task def — read from silver_mdm_gold SM which has it
-    smg_arn = f"arn:aws:states:{region}:077127448006:stateMachine:edgartools-{env}-silver-mdm-gold"
+    smg_arn = f"arn:aws:states:{region}:690839588395:stateMachine:edgartools-{env}-silver-mdm-gold"
     try:
         raw2 = run_aws("--region", region, "stepfunctions", "describe-state-machine",
                        "--state-machine-arn", smg_arn, "--query", "definition", "--output", "text")

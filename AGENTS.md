@@ -80,9 +80,9 @@ Warehouse commands require:
 export EDGAR_IDENTITY="EdgarTools Platform thepaulananth@gmail.com"
 export WAREHOUSE_ENVIRONMENT="dev"
 export WAREHOUSE_RUNTIME_MODE="bronze_capture"
-export WAREHOUSE_BRONZE_ROOT="s3://edgartools-dev-bronze-077127448006/warehouse/bronze"
-export WAREHOUSE_STORAGE_ROOT="s3://edgartools-dev-warehouse-077127448006/warehouse"
-export SERVING_EXPORT_ROOT="s3://edgartools-dev-snowflake-export-077127448006/warehouse/artifacts/snowflake_exports/"
+export WAREHOUSE_BRONZE_ROOT="s3://edgartools-dev-bronze/warehouse/bronze"
+export WAREHOUSE_STORAGE_ROOT="s3://edgartools-dev-warehouse/warehouse"
+export SERVING_EXPORT_ROOT="s3://edgartools-dev-snowflake-export/warehouse/artifacts/snowflake_exports/"
 export MDM_DATABASE_URL="postgresql://postgres:test@localhost:5432/mdm"
 export AWS_DEFAULT_REGION=us-east-1
 ```

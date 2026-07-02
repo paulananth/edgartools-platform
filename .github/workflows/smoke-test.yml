@@ -22,7 +22,7 @@ permissions:
 
 env:
   AWS_REGION: us-east-1
-  AWS_ACCOUNT: "077127448006"
+  AWS_ACCOUNT: "690839588395"
 
 jobs:
   smoke:

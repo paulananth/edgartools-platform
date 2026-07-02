@@ -191,11 +191,11 @@ values from a prior invocation of this same script:
 WAREHOUSE_REF=$(aws ecr describe-images --region us-east-1 \
   --repository-name edgartools-dev-warehouse \
   --query "sort_by(imageDetails,&imagePushedAt)[-1].imageDigest" --output text \
-  | xargs -I{} echo "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@{}")
+  | xargs -I{} echo "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@{}")
 MDM_REF=$(aws ecr describe-images --region us-east-1 \
   --repository-name edgartools-dev-mdm \
   --query "sort_by(imageDetails,&imagePushedAt)[-1].imageDigest" --output text \
-  | xargs -I{} echo "077127448006.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@{}")
+  | xargs -I{} echo "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@{}")
 ```
 
 **Recommended permanent fix (not yet applied):** either (a) make the cleanup
@@ -224,7 +224,7 @@ aws ecs run-task \
   --task-definition edgartools-dev-mdm-medium:69 \
   --launch-type FARGATE \
   --network-configuration "{\"awsvpcConfiguration\":{\"subnets\":[\"subnet-070406420a32a17c5\"],\"securityGroups\":[\"$SG\"],\"assignPublicIp\":\"ENABLED\"}}" \
-  --overrides '{"containerOverrides":[{"name":"edgar-warehouse","command":["mdm","run","--entity-type","<DOMAIN>"],"environment":[{"name":"WAREHOUSE_RUNTIME_MODE","value":"bronze_capture"},{"name":"WAREHOUSE_BRONZE_ROOT","value":"s3://edgartools-dev-bronze-077127448006/warehouse/bronze"},{"name":"WAREHOUSE_STORAGE_ROOT","value":"s3://edgartools-dev-warehouse-077127448006/warehouse"},{"name":"SERVING_EXPORT_ROOT","value":"s3://edgartools-dev-snowflake-export-077127448006/warehouse/artifacts/snowflake_exports/"},{"name":"EDGAR_IDENTITY","value":"EdgarTools Platform thepaulananth@gmail.com"}]}]}'
+  --overrides '{"containerOverrides":[{"name":"edgar-warehouse","command":["mdm","run","--entity-type","<DOMAIN>"],"environment":[{"name":"WAREHOUSE_RUNTIME_MODE","value":"bronze_capture"},{"name":"WAREHOUSE_BRONZE_ROOT","value":"s3://edgartools-dev-bronze/warehouse/bronze"},{"name":"WAREHOUSE_STORAGE_ROOT","value":"s3://edgartools-dev-warehouse/warehouse"},{"name":"SERVING_EXPORT_ROOT","value":"s3://edgartools-dev-snowflake-export/warehouse/artifacts/snowflake_exports/"},{"name":"EDGAR_IDENTITY","value":"EdgarTools Platform thepaulananth@gmail.com"}]}]}'
 ```
 
 After all entity domains complete, run relationship derivation with the **separate
@@ -237,7 +237,7 @@ aws ecs run-task \
   --task-definition edgartools-dev-mdm-medium:69 \
   --launch-type FARGATE \
   --network-configuration "{\"awsvpcConfiguration\":{\"subnets\":[\"subnet-070406420a32a17c5\"],\"securityGroups\":[\"$SG\"],\"assignPublicIp\":\"ENABLED\"}}" \
-  --overrides '{"containerOverrides":[{"name":"edgar-warehouse","command":["mdm","derive-relationships"],"environment":[{"name":"WAREHOUSE_RUNTIME_MODE","value":"bronze_capture"},{"name":"WAREHOUSE_BRONZE_ROOT","value":"s3://edgartools-dev-bronze-077127448006/warehouse/bronze"},{"name":"WAREHOUSE_STORAGE_ROOT","value":"s3://edgartools-dev-warehouse-077127448006/warehouse"},{"name":"SERVING_EXPORT_ROOT","value":"s3://edgartools-dev-snowflake-export-077127448006/warehouse/artifacts/snowflake_exports/"},{"name":"EDGAR_IDENTITY","value":"EdgarTools Platform thepaulananth@gmail.com"}]}]}'
+  --overrides '{"containerOverrides":[{"name":"edgar-warehouse","command":["mdm","derive-relationships"],"environment":[{"name":"WAREHOUSE_RUNTIME_MODE","value":"bronze_capture"},{"name":"WAREHOUSE_BRONZE_ROOT","value":"s3://edgartools-dev-bronze/warehouse/bronze"},{"name":"WAREHOUSE_STORAGE_ROOT","value":"s3://edgartools-dev-warehouse/warehouse"},{"name":"SERVING_EXPORT_ROOT","value":"s3://edgartools-dev-snowflake-export/warehouse/artifacts/snowflake_exports/"},{"name":"EDGAR_IDENTITY","value":"EdgarTools Platform thepaulananth@gmail.com"}]}]}'
 ```
 
 Check completion (ECS task history expires quickly — use CloudWatch):

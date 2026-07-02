@@ -254,7 +254,7 @@ bronze bucket:
 export AWS_PROFILE=aws-admin-prod
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 export AWS_REGION=us-east-1
-export DEV_BRONZE_ROOT="s3://edgartools-dev-bronze-077127448006/warehouse/bronze/"
+export DEV_BRONZE_ROOT="s3://edgartools-dev-bronze/warehouse/bronze/"
 
 PROD_BRONZE_BUCKET="$(terraform -chdir="${REPO_ROOT}/infra/terraform/accounts/prod" output -raw bronze_bucket_name)"
 export PROD_BRONZE_ROOT="s3://${PROD_BRONZE_BUCKET}/warehouse/bronze/"

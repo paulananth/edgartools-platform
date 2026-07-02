@@ -164,7 +164,7 @@ def report(counts: dict[str, int]) -> None:
 
     aws stepfunctions start-execution \\
       --region us-east-1 \\
-      --state-machine-arn arn:aws:states:us-east-1:077127448006:stateMachine:edgartools-dev-mdm-run \\
+      --state-machine-arn arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-mdm-run \\
       --name "company-only-$(date +%s)" \\
       --input '{{"entity_type": "company", "limit": 5400}}'
 
@@ -203,7 +203,7 @@ def trigger_run(env: str, region: str, entity_type: str, limit: int) -> None:
     $.entity_type from the input payload.  Direct ECS avoids that constraint.
     """
     cfg = _app_json(env)
-    cluster  = cfg.get("cluster", {}).get("arn") or f"arn:aws:ecs:{region}:077127448006:cluster/edgartools-{env}-warehouse"
+    cluster  = cfg.get("cluster", {}).get("arn") or f"arn:aws:ecs:{region}:690839588395:cluster/edgartools-{env}-warehouse"
     task_def = cfg.get("task_definitions", {}).get("mdm_medium") or f"edgartools-{env}-mdm-medium"
     nets     = cfg.get("network", {})
     subnets  = nets.get("subnets", [])
@@ -214,7 +214,7 @@ def trigger_run(env: str, region: str, entity_type: str, limit: int) -> None:
         raw = aws(region,
             "stepfunctions", "describe-state-machine",
             "--state-machine-arn",
-            f"arn:aws:states:{region}:077127448006:stateMachine:edgartools-{env}-mdm-run",
+            f"arn:aws:states:{region}:690839588395:stateMachine:edgartools-{env}-mdm-run",
             "--query", "definition", "--output", "text",
         )
         sm_def = json.loads(raw)

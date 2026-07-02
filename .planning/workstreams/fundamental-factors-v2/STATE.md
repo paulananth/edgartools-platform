@@ -2,36 +2,58 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Fundamental Factors V2 (Growth, Profitability, Returns)
-current_phase: 1
-current_phase_name: cagr-macro-and-multi-year-joins
+current_phase: 03
+current_phase_name: cash-conversion-cycle
 status: executing
-stopped_at: Phase 1 context gathered (advisor-mode discuss-phase, research-backed
-  decisions on quarterly scope, negative-value handling, fiscal-year tolerance).
-  Phase 2 remains separately blocked (see Blockers) — not complete, not counted below.
-last_updated: "2026-06-30T06:38:36.094Z"
+stopped_at: Phase 3 plans created (03-01 DSO, 03-02 DIO/DPO) and plan-checker verified.
+  Ready for /gsd-execute-phase 3.
+last_updated: "2026-07-01T18:45:00.000Z"
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 2
-  completed_plans: 2
-  percent: 0
+  total_plans: 6
+  completed_plans: 4
+  percent: 22
 ---
 
 # Project State — fundamental-factors-v2
 
 ## Current Position
 
-Phase: 1 (cagr-macro-and-multi-year-joins) — context gathered, ready for research/planning.
+Phase: 03 (cash-conversion-cycle) — 2 plans created and plan-checker-verified (03-01 DSO
+  Wave 1 autonomous; 03-02 DIO/DPO Wave 2, non-autonomous with a blocking human-verify
+  checkpoint for the Terraform apply + SHOW COLUMNS step). Next step:
+  /gsd-execute-phase 3.
+Phase 1 (cagr-macro-and-multi-year-joins) — Both plans (01-01, 01-02) executed and
+  code-verified. HELD OPEN (not complete) pending live dbt test — see Blockers below.
 Phase 2 (profitability-and-returns-factors) — BLOCKED (verification incomplete), running
   concurrently with Phase 1 since they have no dependency on each other per ROADMAP.md.
+Status (Phase 3): 03-RESEARCH.md measured CostOfGoodsAndServicesSold/CostOfRevenue
+  coverage at 51.5-63.3% of economically-applicable filers (live SEC Frames API, not a
+  sample) — judged acceptable per D-01. D-02: DSO ships independently (Wave 1, zero new
+  fields); DIO/DPO ship conditionally (Wave 2, now unblocked). D-03: DSO gets build/
+  verification priority. D-04: accounts_payable (needed for DPO, previously unparsed and
+  unmentioned in REQUIREMENTS.md) is in-scope as a parser-field scope-gap fix. See
+  03-CONTEXT.md, 03-DISCUSSION-LOG.md.
 Status (Phase 2): Both plans (02-01, 02-02) executed, committed, and merged to main.
   Code-level verification passed (dbt parse, dbt compile --select financial_factors both
   succeed). Live dbt test blocked by a dev-environment source-sync gap — see Blockers
   below. Phase is explicitly NOT marked complete per operator decision (2026-06-30): hold
   open until live dbt test passes somewhere with a synced source schema.
-Status (Phase 1): Context gathered via /gsd-discuss-phase 1 (advisor mode). 3 decisions
-  locked, 2 research-backed (quarterly-scope rejection, confirmed via web search against
-  practitioner consensus). Next step: /gsd-plan-phase 1.
+Status (Phase 1): Plan 01-01 (2026-07-01) — new `cagr()` macro (strict-positive guard,
+  float-division exponent) and 6 new FY-gated CAGR columns in `financial_factors.sql`
+  (3yr/5yr revenue, net income, total assets), documented in `gold.yml`. Plan 01-02
+  (2026-07-01) — 6 dbt unit tests covering GROW-01/02/03 (happy-path, insufficient-history,
+  all 3 negative-endpoint forms, fiscal-year-gap offset-independence) plus extended the
+  existing quarterly-exclusion test for D-01. Both plans verified live against dev
+  Snowflake at the parse/compile level (`dbt compile --select financial_factors` succeeds;
+  compiled SQL confirmed `1.0 / 3` / `1.0 / 5`, no integer-division truncation). Live
+  `dbt test --select financial_factors` blocked by the SAME pre-existing dev source-schema
+  gap as Phase 2 (see Blockers) — all 11 test failures, including unmodified pre-existing
+  tests, share the identical `current_assets` root cause, confirming it is unrelated to
+  this phase's code. See 01-01-SUMMARY.md, 01-02-SUMMARY.md. Held open per the same
+  operator precedent as Phase 2 until the source-sync gap resolves and a live test run
+  confirms green.
 
 ## Milestone Context
 
@@ -54,7 +76,8 @@ no new loader, no new SEC fetch path, only silver/gold changes.
 
 ## Blockers
 
-- **Phase 2 live dbt test verification (2026-06-30).** `dbt test --select financial_factors`
+- **Phase 1 + Phase 2 live dbt test verification — same root cause (2026-06-30, confirmed
+  affecting Phase 1 too on 2026-07-01).** `dbt test --select financial_factors`
   fails with `Invalid column name: 'current_assets' in unit test fixture for
   'financial_derived'` — the `snowconn` dev Snowflake account's deployed `EDGARTOOLS_DEV.
   EDGARTOOLS_SOURCE.SEC_FINANCIAL_DERIVED` source table is missing columns that
@@ -91,17 +114,27 @@ no new loader, no new SEC fetch path, only silver/gold changes.
   financial_derived financial_factors --full-refresh` to redeploy the dynamic tables on
   top of the refreshed source.
 
+  **2026-07-01 confirmation:** ran the full live `dbt test --select financial_factors`
+  suite after Phase 1's plan 01-02 landed — 11/11 tests failed, and every failure
+  (including the pre-existing, unmodified `financial_factors_complete_fy_ratios` and
+  `financial_factors_negative_equity_nulls_roe` cases) hit the identical `current_assets`
+  root cause. This is one blocker affecting both phases, not two separate issues —
+  resolving the native-pull source-sync gap unblocks live-test verification for both
+  Phase 1 and Phase 2 simultaneously.
+
 ## Pending Todos
 
-- Resolve the Phase 2 live-dbt-test blocker above, then mark Phase 2 complete.
-- After Phase 2 closes, write the Phase 1 plan (CAGR) — needs sign-change (GROW-02) and
-  fiscal-year-gap (GROW-03) handling designed before implementation, not just the join.
-
-- Phase 3 (cash conversion cycle) needs a coverage-research spike on `CostOfRevenue`/
-  `CostOfGoodsAndServicesSold` XBRL tag prevalence before any implementation commitment.
+- Resolve the shared Phase 1 + Phase 2 live-dbt-test blocker above (native-pull source-sync
+  gap), then run `dbt test --select financial_factors` live and mark both phases complete.
+- Run `/gsd-execute-phase 3` — Phase 3 (cash conversion cycle) is planned and
+  plan-checker-verified. 03-02 (Wave 2, DIO/DPO) has a blocking human-verify checkpoint
+  for the Terraform apply + `SHOW COLUMNS` step — expect the execution to pause there.
+  Phase 3 will inherit the same live-dbt-test-blocked risk as Phase 1/2 once its own
+  Terraform column addition (`cost_of_revenue`, `accounts_payable`) lands — budget for the
+  same "held open" treatment unless the source-sync gap is resolved first.
 
 ## Session Continuity
 
-Last session: 2026-06-30T06:38:36.086Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/workstreams/fundamental-factors-v2/phases/01-cagr-macro-and-multi-year-joins/01-CONTEXT.md
+Last session: 2026-07-01T18:45:00.000Z
+Stopped at: Phase 3 plans created and verified; ready for /gsd-execute-phase 3
+Resume file: .planning/workstreams/fundamental-factors-v2/phases/03-cash-conversion-cycle/03-02-PLAN.md

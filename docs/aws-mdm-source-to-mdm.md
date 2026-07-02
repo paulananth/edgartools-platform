@@ -124,7 +124,7 @@ edgar-warehouse parse-adv-bronze --accession-list ADV-105958-20241218,ADV-987654
 
 # Explicit artifact path (when no registry rows exist — the Phase 10 validated path):
 edgar-warehouse parse-adv-bronze \
-  --artifact "ADV-105958-20241218,ADV,s3://edgartools-dev-bronze-077127448006/warehouse/bronze/filings/sec/cik=105958/accession=ADV-105958-20241218/primary_doc.xml,105958"
+  --artifact "ADV-105958-20241218,ADV,s3://edgartools-dev-bronze/warehouse/bronze/filings/sec/cik=105958/accession=ADV-105958-20241218/primary_doc.xml,105958"
 ```
 
 **Required silver counts before MDM load:**
