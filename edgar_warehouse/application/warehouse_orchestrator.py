@@ -88,6 +88,18 @@ GOLD_AFFECTING_COMMANDS = {
 
 SNOWFLAKE_EXPORT_COMMANDS = GOLD_AFFECTING_COMMANDS | {"seed-universe"}
 
+# load_history's tracking-status contract (data-architecture Issue 2): compute-windows,
+# bootstrap-next (via the explicit --tracking-status-filter the load_history state machine
+# passes), and bootstrap-fundamentals's CIK resolution must all query the SAME combined status
+# set. A CIK is 'bootstrap_pending' from seeding until its first full submissions bootstrap
+# completes, then promoted to 'active' (see _sync_mdm_tracking_status below). Filtering
+# ComputeWindows to 'active' alone computed zero windows for every freshly-seeded environment,
+# since nothing is 'active' yet; filtering to 'bootstrap_pending' alone would stop covering
+# already-tracked companies on later runs. Do not change this without updating the matching
+# --tracking-status-filter literal in infra/scripts/deploy-aws-application.sh
+# (write_load_history_definition's `per_window` bootstrap-next command).
+LOAD_HISTORY_TRACKING_STATUS_FILTER = "active,bootstrap_pending"
+
 WAREHOUSE_RUNTIME_MODES = {
     "bronze_capture",
     "infrastructure_validation",
@@ -1446,7 +1458,7 @@ def _capture_bronze_raw(
             raise WarehouseRuntimeError(
                 f"--window-size must be a positive integer, got {window_size}"
             )
-        ciks = _get_mdm_tracked_ciks("active")
+        ciks = _get_mdm_tracked_ciks(LOAD_HISTORY_TRACKING_STATUS_FILTER)
         # Build window descriptors: {window_offset, window_limit} for each slice
         window_descs = [
             {"window_offset": i, "window_limit": min(window_size, len(ciks) - i)}

@@ -58,11 +58,18 @@ def _emit(event: str, **kwargs: Any) -> None:
 def run_bootstrap_fundamentals_per_filing(
     *,
     cik_list: list[int],
-    db,                    # SilverDatabase instance (fundamentals namespace)
-    bronze_root,           # StorageLocation for bronze
+    source,                # ShardedSilverReader | None — read-only Branch A ownership silver
+    db,                    # SilverDatabase instance (fundamentals namespace) — write target
     sync_run_id: str,
 ) -> dict[str, int]:
     """Process 8-K earnings + DEF 14A proxy filings from bronze for the given CIKs.
+
+    Filing/attachment/raw-object metadata is read from ``source`` — Branch A's
+    ownership silver, produced by bootstrap-next/bootstrap-batch — NOT from ``db``,
+    which is Branch B's isolated fundamentals-only shard and never contains those
+    tables. ``source`` is None when Branch A's silver hasn't been published yet
+    (e.g. local dev before any bootstrap run); this is treated as zero available
+    filings rather than an error (AD-13: Branch B is best-effort).
 
     Returns row counts per table written.
     """
@@ -77,10 +84,14 @@ def run_bootstrap_fundamentals_per_filing(
         "rows_executive_record": 0,
     }
 
+    if source is None:
+        _emit("fundamentals_source_unavailable", cik_count=len(cik_list))
+        return metrics
+
     form_list = ", ".join(f"'{f}'" for f in BRANCH_B_FILING_FORMS)
     cik_placeholder = ", ".join("?" * len(cik_list))
 
-    filings = db.fetch(
+    filings = source.fetch(
         f"""
         SELECT f.accession_number, f.cik, f.form, f.filing_date
         FROM sec_company_filing f
@@ -105,12 +116,19 @@ def run_bootstrap_fundamentals_per_filing(
             continue
 
         try:
-            attachments = db.get_filing_attachments(accession_number)
+            attachments = source.fetch(
+                "SELECT * FROM sec_filing_attachment WHERE accession_number = ?",
+                [accession_number],
+            )
             primary = next((r for r in attachments if r.get("is_primary")), None)
             if primary is None or not primary.get("raw_object_id"):
                 metrics["filings_skipped"] += 1
                 continue
-            raw_object = db.get_raw_object(str(primary["raw_object_id"]))
+            raw_rows = source.fetch(
+                "SELECT * FROM sec_raw_object WHERE raw_object_id = ?",
+                [str(primary["raw_object_id"])],
+            )
+            raw_object = raw_rows[0] if raw_rows else None
             if raw_object is None:
                 metrics["filings_skipped"] += 1
                 continue
@@ -154,10 +172,13 @@ def run_bootstrap_entity_facts(
 ) -> dict[str, int]:
     """Fetch SEC companyfacts JSON for each CIK and write to silver.
 
+    Uses the shared SEC client (edgar_warehouse.infrastructure.sec_client) so this
+    direct SEC traffic follows the same host allowlist, rate limit, retry, and
+    response-size-limit contract as the rest of the warehouse runtime.
+
     Returns row counts per table written.
     """
-    import urllib.request
-
+    from edgar_warehouse.infrastructure.sec_client import build_companyfacts_url, download_sec_bytes
     from edgar_warehouse.parsers.financials import parse_entity_facts
     from edgar_warehouse.parsers.financials_derived import compute_derived_for_accession
 
@@ -170,11 +191,10 @@ def run_bootstrap_entity_facts(
     }
 
     for cik in cik_list:
-        url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{int(cik):010d}.json"
+        url = build_companyfacts_url(int(cik))
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": identity})
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                facts_json = json.loads(resp.read().decode("utf-8"))
+            payload = download_sec_bytes(url, identity)
+            facts_json = json.loads(payload.decode("utf-8"))
         except Exception as exc:
             _emit("entity_facts_fetch_error", cik=cik, error=str(exc))
             metrics["ciks_failed"] += 1
@@ -229,7 +249,8 @@ def run_bootstrap_entity_facts(
 def run_bootstrap_thirteenf(
     *,
     cik_list: list[int],
-    db,                     # SilverDatabase instance (fundamentals namespace)
+    source,                 # ShardedSilverReader | None — read-only Branch A ownership silver
+    db,                      # SilverDatabase instance (fundamentals namespace) — write target
     sync_run_id: str,
 ) -> dict[str, int]:
     """Parse 13F-HR INFORMATION TABLE XML attachments for the given CIKs.
@@ -237,6 +258,9 @@ def run_bootstrap_thirteenf(
     The infotable XML lives in a filing attachment with document_type matching
     '13F-HR' or 'INFORMATION TABLE'.  The primary document is the cover XML;
     the attachment is identified by matching document descriptions.
+
+    Filing/attachment/raw-object metadata is read from ``source`` (Branch A's
+    ownership silver) — see run_bootstrap_fundamentals_per_filing for why.
 
     Returns row counts per table written.
     """
@@ -250,8 +274,12 @@ def run_bootstrap_thirteenf(
         "rows_thirteenf_holding": 0,
     }
 
+    if source is None:
+        _emit("fundamentals_source_unavailable", cik_count=len(cik_list))
+        return metrics
+
     cik_placeholder = ", ".join("?" * len(cik_list))
-    filings = db.fetch(
+    filings = source.fetch(
         f"""
         SELECT f.accession_number, f.cik, f.report_date, f.filing_date
         FROM sec_company_filing f
@@ -270,7 +298,10 @@ def run_bootstrap_thirteenf(
 
         # Find the INFORMATION TABLE attachment
         try:
-            attachments = db.get_filing_attachments(accession_number)
+            attachments = source.fetch(
+                "SELECT * FROM sec_filing_attachment WHERE accession_number = ?",
+                [accession_number],
+            )
         except Exception:
             metrics["filings_skipped"] += 1
             continue
@@ -289,7 +320,11 @@ def run_bootstrap_thirteenf(
             continue
 
         try:
-            raw_object = db.get_raw_object(str(infotable_attachment["raw_object_id"]))
+            raw_rows = source.fetch(
+                "SELECT * FROM sec_raw_object WHERE raw_object_id = ?",
+                [str(infotable_attachment["raw_object_id"])],
+            )
+            raw_object = raw_rows[0] if raw_rows else None
             if raw_object is None:
                 metrics["filings_skipped"] += 1
                 continue

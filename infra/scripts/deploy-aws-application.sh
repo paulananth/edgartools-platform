@@ -1347,21 +1347,21 @@ PY
 write_load_history_definition() {
   local output_file="$1"
   local wh_task_small_arn="$2"    # warehouse small  (compute-windows, write-run-summary)
-  local wh_task_medium_arn="$3"   # warehouse medium (seed-universe, per-window bootstrap-next)
+  local wh_task_medium_arn="$3"   # warehouse medium (seed-universe, per-window bootstrap-next/-fundamentals)
   local mdm_task_small_arn="$4"   # mdm small        (mdm verify-graph — lightweight check)
-  local mdm_task_medium_arn="$5"  # mdm medium       (mdm run, backfill-relationships, sync-graph)
+  local mdm_task_medium_arn="$5"  # mdm medium       (mdm seed-universe, run, backfill-relationships, export, sync-graph)
   local wh_task_large_arn="$6"    # warehouse large  (gold-refresh — full-universe DuckDB is multi-GB)
 
   python3 - "$output_file" "$CLUSTER_ARN" \
     "$wh_task_small_arn" "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
-    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" <<'PY'
+    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$MDM_SEED_UNIVERSE_TRACKING_STATUS" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  wh_small_arn, wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
  container_name, bronze_bucket_name, subnet_json, security_group_json,
- mdm_run_limit, mdm_graph_limit) = sys.argv[1:]
+ mdm_run_limit, mdm_graph_limit, mdm_seed_universe_tracking_status) = sys.argv[1:]
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
@@ -1394,14 +1394,32 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
 mdm_limit = str(mdm_run_limit)
 graph_limit = str(mdm_graph_limit)
 
-# (1) SeedUniverse: enrol bootstrap_pending CIKs into MDM — unchanged from prior shape.
+# (1) SeedUniverse: warehouse reference/window seed ONLY — direct-SEC company_tickers.json
+# capture + CIK batch/window bookkeeping (sec_company_ticker, cik_batches.jsonl). Does NOT
+# touch MDM (data-architecture Issue 2: this state's old comment claimed it "enrols CIKs
+# into MDM", which was never true — it calls warehouse `seed-universe`, not
+# `mdm seed-universe`). MDM enrollment is the next state, MdmSeedUniverse.
 seed = ecs_state(wh_medium_arn,
     "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
-    next_state="WindowSizeCheck", retry_secs=60)
+    next_state="MdmSeedUniverse", retry_secs=60)
 # ResultPath: null passes the original SM input (e.g. {"window_size": 25}) unchanged to the
 # next state.  Without this, the ECS runTask.sync result object would replace the entire input,
 # destroying $.window_size before WindowSizeCheck can read it (D-15 bug).
 seed["ResultPath"] = None
+
+# (1b) MdmSeedUniverse: MDM tracked-universe seed — upserts mdm_entity/mdm_company from
+# edgartools ticker data (data-architecture Issue 2). Without this step a fresh environment
+# has no deterministic path from empty MDM tables to a runnable load_history: ComputeWindows
+# queries MDM directly and would silently compute zero windows. Idempotent (upsert), so safe
+# to run on every execution, not just the first. tracking_status matches the value the
+# standalone mdm_seed_universe utility workflow uses (MDM_SEED_UNIVERSE_TRACKING_STATUS) —
+# ComputeWindows/bootstrap-next/bootstrap-fundamentals below all query
+# tracking_status IN ('active','bootstrap_pending') so it doesn't matter which of the two a
+# newly-seeded company lands in for THIS pipeline to pick it up.
+mdm_seed_universe = ecs_state(mdm_medium_arn,
+    f"States.Array('mdm', 'seed-universe', '--tracking-status', '{mdm_seed_universe_tracking_status}')",
+    next_state="WindowSizeCheck", retry_secs=60)
+mdm_seed_universe["ResultPath"] = None
 
 # (2) WindowSizeCheck → WindowSizeDefault → ComputeWindows
 # D-15 backward-compat: SM input {} is valid because WindowSizeDefault injects window_size=500
@@ -1434,24 +1452,41 @@ window_size_default = {
     "Next": "ComputeWindows",
 }
 
-# (3) ComputeWindows: queries MDM for active CIKs, writes cik_windows.jsonl + cik_snapshot.jsonl.
+# (3) ComputeWindows: queries MDM for CIKs eligible for this run and writes
+# cik_windows.jsonl + cik_snapshot.jsonl. tracking_status IN ('active','bootstrap_pending') —
+# NOT 'active' alone (data-architecture Issue 2). A CIK is 'bootstrap_pending' until its first
+# full submissions bootstrap completes, then bootstrap-next promotes it to 'active'
+# (warehouse_orchestrator._sync_mdm_tracking_status). Filtering ComputeWindows to 'active' only
+# would compute zero windows for every freshly-seeded environment, since nothing is 'active' yet.
 # --window-size uses States.Format to coerce the integer $.window_size to a string for argv.
 compute_windows = ecs_state(wh_medium_arn,
     "States.Array('compute-windows', '--window-size', States.Format('{}', $.window_size), '--run-id', $$.Execution.Name)",
     next_state="Stage1Parallel")
 
-# (4) Stage1Parallel: Parallel state running Branch A (ownership) and Branch B (fundamentals)
-# concurrently.  Both branches read the SAME cik_windows.jsonl produced by ComputeWindows; each
-# item is {"window_offset": N, "window_limit": M}.  Branch A writes silver/ownership/, Branch B
-# writes silver/fundamentals/ — separate S3 prefixes + separate local DuckDB shards, so the two
+# (4) Stage1Parallel: Parallel state running Branch A (ownership) and Branch B entity-facts
+# concurrently.  Both read the SAME cik_windows.jsonl produced by ComputeWindows; each item is
+# {"window_offset": N, "window_limit": M}.  Branch A writes silver/ownership/, Branch B writes
+# silver/fundamentals/ — separate S3 prefixes + separate local DuckDB shards, so the two
 # branches never contend for the same writer (AD-05).  Each branch's Map is MaxConcurrency=1 so
 # windows within a branch run sequentially (consistent shard state).
 #
+# Branch B's per-filing and thirteenf modes are NOT in this Parallel state (data-architecture
+# Issue 1) — they read filing/attachment/raw-object metadata that Branch A produces, so running
+# them concurrently with Branch A raced Branch A's own writes: on a fresh environment Branch B
+# would always scan zero filings, silently, because the data didn't exist yet when it looked.
+# They run sequentially AFTER Stage1Parallel instead (see Stage1BPerFiling/Stage1BThirteenF
+# below). entity-facts has no such dependency — it calls the SEC companyfacts API directly — so
+# it stays here, concurrent with Branch A, for throughput.
+#
 # (4a) Branch A — WindowedBootstrap INLINE Map.
-# Per-window command: bootstrap-next --cik-limit M --cik-offset N --run-id <execution-name>
+# Per-window command: bootstrap-next --cik-limit M --cik-offset N --run-id <execution-name>.
+# --tracking-status-filter is explicit here (bootstrap-next's own CLI default is
+# 'bootstrap_pending' alone, for its OTHER standalone/ad-hoc use — process the pending backlog).
+# Within load_history it must match ComputeWindows' filter exactly, or window offsets computed
+# against one CIK list get applied to a different list bootstrap-next resolves independently.
 # Terminal within Branch A's sub-state-machine (End=True), strict failure policy (ToleratedFailurePercentage=0).
 per_window = ecs_state(wh_medium_arn,
-    "States.Array('bootstrap-next', '--cik-limit', States.Format('{}', $.window_limit), '--cik-offset', States.Format('{}', $.window_offset), '--run-id', $$.Execution.Name)",
+    "States.Array('bootstrap-next', '--cik-limit', States.Format('{}', $.window_limit), '--cik-offset', States.Format('{}', $.window_offset), '--tracking-status-filter', 'active,bootstrap_pending', '--run-id', $$.Execution.Name)",
     is_end=True)
 
 windowed_bootstrap = {
@@ -1478,48 +1513,21 @@ windowed_bootstrap = {
     "End": True,
 }
 
-# (4b) Branch B — fundamentals bootstrap: two sequential INLINE Maps that share the cik_windows.jsonl
-# offset/limit windows.  bootstrap-fundamentals resolves the actual CIK slice from the MDM active
-# universe (same ordered source as Branch A's bootstrap-next), so Branch A and Branch B process
-# identical CIK windows for the same {window_offset, window_limit} item.  NO --cik-list is passed:
-# the Map item carries only offset/limit, and MDM is the authoritative CIK source.
+# (4b) Branch B (inside Stage1Parallel) — entity-facts only. No --cik-list is passed: the Map
+# item carries only offset/limit, and bootstrap-fundamentals resolves the actual CIK slice from
+# the same MDM universe/order/status-filter Branch A uses (see ISSUE-2 status-filter note above),
+# so Branch A and Branch B process identical CIK windows for the same {window_offset,
+# window_limit} item.
 #
-# AD-13: partial Branch B failure is accepted.  A failure in either fundamentals Map is caught and
-# routed to BranchBComplete (a Pass terminal), so the Parallel state still completes and the
-# pipeline proceeds to MDM.  Gaps self-heal via the idempotent backfill workflow; a hard abort
-# would defeat that.  Branch A remains strict (critical path).
+# AD-13: partial Branch B failure is accepted.  A failure is caught and routed to
+# BranchBComplete (a Pass terminal), so the Parallel state still completes and the pipeline
+# proceeds.  Gaps self-heal via the idempotent backfill workflow; a hard abort would defeat that.
+# Branch A remains strict (critical path).
 fundamentals_branch_b_catch = [{
     "ErrorEquals": ["States.ALL"],
     "ResultPath": None,
     "Next": "BranchBComplete",
 }]
-
-per_window_fundamentals_per_filing = ecs_state(wh_medium_arn,
-    "States.Array('bootstrap-fundamentals', '--mode', 'per-filing', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
-    is_end=True)
-
-fundamentals_per_filing = {
-    "Type": "Map",
-    "Comment": "Branch B per-filing: 8-K earnings + DEF 14A proxy -> sec_earnings_release, sec_executive_record (silver/fundamentals/).",
-    "MaxConcurrency": 1,
-    "ToleratedFailurePercentage": 0,
-    "ItemReader": {
-        "Resource": "arn:aws:states:::s3:getObject",
-        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
-        "Parameters": {
-            "Bucket": bronze_bucket_name,
-            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)",
-        },
-    },
-    "ItemProcessor": {
-        "ProcessorConfig": {"Mode": "INLINE"},
-        "StartAt": "RunFundamentalsPerFiling",
-        "States": {"RunFundamentalsPerFiling": per_window_fundamentals_per_filing},
-    },
-    "ResultPath": None,
-    "Catch": fundamentals_branch_b_catch,
-    "Next": "FundamentalsEntityFacts",
-}
 
 per_window_fundamentals_entity_facts = ecs_state(wh_medium_arn,
     "States.Array('bootstrap-fundamentals', '--mode', 'entity-facts', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
@@ -1527,7 +1535,7 @@ per_window_fundamentals_entity_facts = ecs_state(wh_medium_arn,
 
 fundamentals_entity_facts = {
     "Type": "Map",
-    "Comment": "Branch B entity-facts: SEC companyfacts XBRL -> sec_financial_fact, sec_financial_derived, sec_accounting_flag (silver/fundamentals/).",
+    "Comment": "Branch B entity-facts: SEC companyfacts XBRL -> sec_financial_fact, sec_financial_derived, sec_accounting_flag (silver/fundamentals/). No Branch A dependency, so it stays concurrent with Branch A here.",
     "MaxConcurrency": 1,
     "ToleratedFailurePercentage": 0,
     "ItemReader": {
@@ -1548,11 +1556,11 @@ fundamentals_entity_facts = {
     "End": True,
 }
 
-# BranchBComplete: graceful terminal for Branch B (reached on success fall-through from
-# FundamentalsEntityFacts, or via Catch from either fundamentals Map).  Pass state ends the branch.
+# BranchBComplete: graceful terminal for Branch B's entity-facts sub-branch (reached on success
+# fall-through, or via Catch).  Pass state ends the branch.
 branch_b_complete = {
     "Type": "Pass",
-    "Comment": "Branch B terminal — reached on success or after a caught fundamentals failure (AD-13).",
+    "Comment": "Branch B (entity-facts) terminal — reached on success or after a caught failure (AD-13).",
     "End": True,
 }
 
@@ -1560,9 +1568,11 @@ stage1_parallel = {
     "Type": "Parallel",
     "Comment": (
         "Stage 1 parallel bootstrap. Branch A: ownership (bootstrap-next -> silver/ownership/). "
-        "Branch B: fundamentals (per-filing then entity-facts -> silver/fundamentals/). Both read the "
-        "same cik_windows.jsonl; each branch's Maps are MaxConcurrency=1. Branch B failures are caught "
-        "so the pipeline still advances to MDM (AD-13); Branch A is strict."
+        "Branch B: fundamentals entity-facts only (-> silver/fundamentals/) — per-filing/thirteenf "
+        "run sequentially AFTER this Parallel state (Stage1BPerFiling/Stage1BThirteenF) because they "
+        "depend on Branch A's output (data-architecture Issue 1). Both here read the same "
+        "cik_windows.jsonl; each branch's Maps are MaxConcurrency=1. Branch B failures are caught "
+        "so the pipeline still advances (AD-13); Branch A is strict."
     ),
     "Branches": [
         {
@@ -1570,25 +1580,104 @@ stage1_parallel = {
             "States": {"WindowedBootstrap": windowed_bootstrap},
         },
         {
-            "StartAt": "FundamentalsPerFiling",
+            "StartAt": "FundamentalsEntityFacts",
             "States": {
-                "FundamentalsPerFiling": fundamentals_per_filing,
                 "FundamentalsEntityFacts": fundamentals_entity_facts,
                 "BranchBComplete": branch_b_complete,
             },
         },
     ],
     "ResultPath": None,
+    "Next": "Stage1BPerFiling",
+}
+
+# (4c) Stage1BPerFiling / Stage1BThirteenF: Branch B modes that read Branch A's filing/attachment/
+# raw-object metadata (data-architecture Issues 1 and 4). Run sequentially, AFTER Stage1Parallel
+# so Branch A has finished writing for every window, and sequentially RELATIVE TO EACH OTHER
+# because both write the same silver/fundamentals/shard-0.duckdb file (AD-05 single-writer
+# constraint) — running them as concurrent ECS tasks would race the S3 round-trip upload/download
+# of that shard and silently drop whichever task's writes lost the race.
+#
+# AD-13 applies here too: a Catch on either stage skips to the next step (not a hard abort) so a
+# transient Branch B failure never blocks MDM/gold for the (strict, already-complete) Branch A data.
+stage1b_per_filing_catch = [{
+    "ErrorEquals": ["States.ALL"],
+    "ResultPath": None,
+    "Next": "Stage1BThirteenF",
+}]
+stage1b_thirteenf_catch = [{
+    "ErrorEquals": ["States.ALL"],
+    "ResultPath": None,
+    "Next": "MdmRun",
+}]
+
+per_window_fundamentals_per_filing = ecs_state(wh_medium_arn,
+    "States.Array('bootstrap-fundamentals', '--mode', 'per-filing', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
+    is_end=True)
+
+fundamentals_per_filing = {
+    "Type": "Map",
+    "Comment": "Branch B per-filing (post-Branch-A): 8-K earnings + DEF 14A proxy -> sec_earnings_release, sec_executive_record (silver/fundamentals/). Reads filing/attachment/raw-object metadata Branch A just finished writing.",
+    "MaxConcurrency": 1,
+    "ToleratedFailurePercentage": 0,
+    "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
+        "Parameters": {
+            "Bucket": bronze_bucket_name,
+            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)",
+        },
+    },
+    "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "INLINE"},
+        "StartAt": "RunFundamentalsPerFiling",
+        "States": {"RunFundamentalsPerFiling": per_window_fundamentals_per_filing},
+    },
+    "ResultPath": None,
+    "Catch": stage1b_per_filing_catch,
+    "Next": "Stage1BThirteenF",
+}
+
+per_window_fundamentals_thirteenf = ecs_state(wh_medium_arn,
+    "States.Array('bootstrap-fundamentals', '--mode', 'thirteenf', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
+    is_end=True)
+
+fundamentals_thirteenf = {
+    "Type": "Map",
+    "Comment": "Branch B 13F (post-Branch-A, data-architecture Issue 4): INFORMATION TABLE XML -> sec_thirteenf_holding (silver/fundamentals/). Same Branch A dependency as per-filing; runs after it in this same sequential stage, not concurrently, so the two modes don't race the shared fundamentals shard.",
+    "MaxConcurrency": 1,
+    "ToleratedFailurePercentage": 0,
+    "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
+        "Parameters": {
+            "Bucket": bronze_bucket_name,
+            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)",
+        },
+    },
+    "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "INLINE"},
+        "StartAt": "RunFundamentalsThirteenF",
+        "States": {"RunFundamentalsThirteenF": per_window_fundamentals_thirteenf},
+    },
+    "ResultPath": None,
+    "Catch": stage1b_thirteenf_catch,
     "Next": "MdmRun",
 }
 
-# (5)–(8) MDM chain + GoldRefresh — verbatim from prior write_bootstrap_phased_definition tail.
-# Run once after ALL windows complete (same invariant as before).
+# (5)–(9) MDM chain + GoldRefresh — run once after ALL windows complete (same invariant as before).
+# MdmExport is new (data-architecture Issue 3): mdm sync-graph materializes Snowflake graph
+# tables from the Snowflake MDM mirror, not from the runtime MDM database directly. Without an
+# export between backfill-relationships and sync-graph, sync-graph can read a stale or missing
+# mirror — graph output wouldn't reflect the MDM run this same execution just did.
 mdm_run = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')",
     next_state="MdmBackfill")
 mdm_backfill = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')",
+    next_state="MdmExport")
+mdm_export = ecs_state(mdm_medium_arn,
+    "States.Array('mdm', 'export')",
     next_state="MdmSync")
 mdm_sync = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')",
@@ -1610,13 +1699,17 @@ write_run_summary = ecs_state(wh_medium_arn,
 
 definition = {
     "Comment": (
-        "Phased bootstrap: (1) seed MDM universe, (2) inject window_size default if absent, "
-        "(3) compute CIK windows + write manifests to S3, "
-        "(4) Stage1Parallel — Branch A ownership (bootstrap-next, silver/ownership/) and "
-        "Branch B fundamentals (per-filing + entity-facts, silver/fundamentals/) run concurrently, "
-        "each branch's Maps MaxConcurrency=1; Branch B failures are caught so the pipeline still "
-        "advances (AD-13), "
-        "(5) MDM entity resolution + Neo4j sync in bulk, "
+        "Phased bootstrap: (1) seed warehouse reference data, (1b) seed MDM tracked universe "
+        "(mdm seed-universe — data-architecture Issue 2), (2) inject window_size default if "
+        "absent, (3) compute CIK windows for tracking_status active-or-bootstrap_pending + write "
+        "manifests to S3, "
+        "(4) Stage1Parallel — Branch A ownership (bootstrap-next, silver/ownership/) and Branch B "
+        "entity-facts (silver/fundamentals/) run concurrently, each Map MaxConcurrency=1; Branch B "
+        "failures are caught so the pipeline still advances (AD-13), "
+        "(4c) Stage1BPerFiling then Stage1BThirteenF — Branch B modes that depend on Branch A's "
+        "output, run sequentially after Stage1Parallel completes (data-architecture Issues 1, 4), "
+        "(5) MDM entity resolution + export to Snowflake mirror + Neo4j sync in bulk "
+        "(data-architecture Issue 3: export precedes sync-graph so graph reflects this run), "
         "(6) single gold build + Snowflake export manifest, "
         "(7) write run-summary.json with window_count and cik_count from S3 manifests. "
         "Implements CHUNK-02 (sequential windowed SM) and CHUNK-04 SM-side."
@@ -1624,12 +1717,16 @@ definition = {
     "StartAt": "SeedUniverse",
     "States": {
         "SeedUniverse":      seed,
+        "MdmSeedUniverse":   mdm_seed_universe,
         "WindowSizeCheck":   window_size_check,
         "WindowSizeDefault": window_size_default,
         "ComputeWindows":    compute_windows,
         "Stage1Parallel":    stage1_parallel,
+        "Stage1BPerFiling":  fundamentals_per_filing,
+        "Stage1BThirteenF":  fundamentals_thirteenf,
         "MdmRun":            mdm_run,
         "MdmBackfill":       mdm_backfill,
+        "MdmExport":         mdm_export,
         "MdmSync":           mdm_sync,
         "MdmVerify":         mdm_verify,
         "GoldRefresh":       gold,
@@ -1706,6 +1803,12 @@ mdm_run = ecs_state(mdm_medium_arn,
     next_state="MdmBackfill")
 mdm_backfill = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')",
+    next_state="MdmExport")
+# MdmExport precedes MdmSync (data-architecture Issue 3): sync-graph materializes Snowflake
+# graph tables from the Snowflake MDM mirror, not the runtime MDM database directly — without
+# an export here the mirror can be stale relative to the run/backfill that just completed.
+mdm_export = ecs_state(mdm_medium_arn,
+    "States.Array('mdm', 'export')",
     next_state="MdmSync")
 mdm_sync = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')",
@@ -1736,6 +1839,7 @@ if workflow_name != "daily_incremental":
             "RunWarehouseTask": run_wh,
             "MdmRun":           mdm_run,
             "MdmBackfill":      mdm_backfill,
+            "MdmExport":        mdm_export,
             "MdmSync":          mdm_sync,
             "MdmVerify":        mdm_verify,
             "GoldRefresh":      gold,
@@ -1752,6 +1856,7 @@ else:
             "RunWarehouseTask": run_wh,
             "MdmRun":           mdm_run,
             "MdmBackfill":      mdm_backfill,
+            "MdmExport":        mdm_export,
             "MdmSync":          mdm_sync,
             "MdmVerify":        mdm_verify,
             "GoldRefresh":      gold,
@@ -1858,7 +1963,9 @@ batch_map = {
 # silently leave the majority of companies unprocessed in MDM and Neo4j.
 # MDM_RUN_LIMIT (incremental default 100) is intentionally NOT used here.
 mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="MdmBackfill")
-mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmSync")
+mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmExport")
+# MdmExport precedes MdmSync (data-architecture Issue 3) — see write_load_history_definition.
+mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="MdmSync")
 mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="MdmVerify")
 mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh")
 gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
@@ -1884,6 +1991,7 @@ definition = {
         "BatchSilver":  batch_map,
         "MdmRun":       mdm_run,
         "MdmBackfill":  mdm_backfill,
+        "MdmExport":    mdm_export,
         "MdmSync":      mdm_sync,
         "MdmVerify":    mdm_verify,
         "GoldRefresh":  gold,
@@ -2010,7 +2118,9 @@ batch_map = {
 # INVARIANT: No --limit on MDM commands here. bronze_seed_silver_gold is always a full
 # bulk run (all CIKs found in bronze), not an incremental daily update.
 mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="MdmBackfill")
-mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmSync")
+mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmExport")
+# MdmExport precedes MdmSync (data-architecture Issue 3) — see write_load_history_definition.
+mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="MdmSync")
 mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="MdmVerify")
 mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh")
 gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
@@ -2033,6 +2143,7 @@ definition = {
         "BatchSilver":  batch_map,
         "MdmRun":       mdm_run,
         "MdmBackfill":  mdm_backfill,
+        "MdmExport":    mdm_export,
         "MdmSync":      mdm_sync,
         "MdmVerify":    mdm_verify,
         "GoldRefresh":  gold,
@@ -2188,7 +2299,9 @@ definition = {
     "StartAt": "MdmRun",
     "States": {
         "MdmRun":      ecs_state(mdm_medium_arn, f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')", next_state="MdmBackfill"),
-        "MdmBackfill": ecs_state(mdm_medium_arn, f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')", next_state="MdmSync"),
+        "MdmBackfill": ecs_state(mdm_medium_arn, f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')", next_state="MdmExport"),
+        # MdmExport precedes MdmSync (data-architecture Issue 3) — see write_load_history_definition.
+        "MdmExport":   ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="MdmSync"),
         "MdmSync":     ecs_state(mdm_medium_arn, f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')", next_state="MdmVerify"),
         "MdmVerify":   ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh"),
         "GoldRefresh": ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60),
@@ -2254,7 +2367,9 @@ definition = {
             "States.Array('parse-ownership-bronze', '--run-id', $$.Execution.Name)",
             next_state="MdmRun", retry_secs=60),
         "MdmRun":      ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="MdmBackfill"),
-        "MdmBackfill": ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmSync"),
+        "MdmBackfill": ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmExport"),
+        # MdmExport precedes MdmSync (data-architecture Issue 3) — see write_load_history_definition.
+        "MdmExport":   ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="MdmSync"),
         "MdmSync":     ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="MdmVerify"),
         "MdmVerify":   ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh"),
         "GoldRefresh": ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60),

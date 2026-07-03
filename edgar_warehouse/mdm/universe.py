@@ -16,11 +16,20 @@ from edgar_warehouse.mdm.database import MdmCompany, MdmEntity
 
 
 def get_tracked_ciks(engine: Engine, status_filter: str = "active") -> list[int]:
-    """Return CIKs from mdm_company where tracking_status == status_filter, ordered ASC."""
+    """Return CIKs from mdm_company where tracking_status is in status_filter, ordered ASC.
+
+    status_filter accepts a single status ("active") or a comma-separated list
+    ("active,bootstrap_pending") — used by load_history to query the combined
+    set of already-bootstrapped and newly-seeded-but-not-yet-bootstrapped
+    companies with one filter, so callers agree on the same CIK list/ordering
+    instead of each independently defaulting to a different single status
+    (data-architecture Issue 2).
+    """
+    statuses = [s.strip() for s in status_filter.split(",") if s.strip()]
     with Session(engine) as session:
         rows = session.execute(
             select(MdmCompany.cik)
-            .where(MdmCompany.tracking_status == status_filter)
+            .where(MdmCompany.tracking_status.in_(statuses))
             .order_by(MdmCompany.cik)
         ).all()
         return [row[0] for row in rows]

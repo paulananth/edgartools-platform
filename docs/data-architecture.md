@@ -76,8 +76,8 @@ Remote storage is intentionally restricted to `s3://` by
 
 | Pipeline | Entry points | Source access | Main data points | Outputs |
 | --- | --- | --- | --- | --- |
-| Reference snapshot and warehouse CIK batching | `edgar-warehouse seed-universe` | Direct SEC fetch of `company_tickers.json` and `company_tickers_exchange.json`. | CIK, ticker, exchange, source rank, source checkpoint, company sync state. | Bronze reference JSON, `sec_company_ticker`, `sec_company_sync_state`, `cik_batches.jsonl`, optional Snowflake `TICKER_REFERENCE` export. |
-| MDM tracked-universe seeding | `edgar-warehouse mdm seed-universe` | edgartools-mediated `edgar.get_company_tickers()`. | CIK, ticker, exchange, MDM entity shell, tracking status. | `mdm_entity`, `mdm_company`. This is the normal control-plane source for bootstrap scope. |
+| Reference snapshot and warehouse CIK batching | `edgar-warehouse seed-universe` | Direct SEC fetch of `company_tickers.json` and `company_tickers_exchange.json`. | CIK, ticker, exchange, source rank, source checkpoint, company sync state. | Bronze reference JSON, `sec_company_ticker`, `sec_company_sync_state`, `cik_batches.jsonl`, optional Snowflake `TICKER_REFERENCE` export. Automated in AWS workflows (`load_history`, `bootstrap_batched`, others) as a bronze/reference prerequisite. Writes no MDM state — do not confuse with MDM tracked-universe seeding below (they are separate commands with separate outputs). |
+| MDM tracked-universe seeding | `edgar-warehouse mdm seed-universe` | edgartools-mediated `edgar.get_company_tickers()`. | CIK, ticker, exchange, MDM entity shell, tracking status. | `mdm_entity`, `mdm_company`. Required prerequisite — automated in `load_history` (the `MdmSeedUniverse` step, idempotent upsert, runs before window computation) so a fresh environment has a deterministic path from empty MDM tables to a runnable load. This is the normal control-plane source for bootstrap scope. |
 | Window computation | `compute-windows`, `write-run-summary` | Internal MDM CIK list and prior bronze window files. | Window offset/limit, CIK snapshot, window count, CIK count. | `cik_windows.jsonl`, `cik_snapshot.jsonl`, `run-summary.json`. |
 | Submissions bootstrap | `bootstrap`, `bootstrap-full`, `bootstrap-next`, `bootstrap-batch` | Direct SEC submissions JSON unless cached bronze is available. Scope comes from explicit CIKs or MDM tracking status. | Company profile, addresses, former names, submission pagination files, filing metadata. | Bronze submissions JSON, `sec_company`, `sec_company_address`, `sec_company_former_name`, `sec_company_submission_file`, `sec_company_filing`, `sec_company_sync_state`. |
 | Daily incremental | `daily-incremental`, `load-daily-form-index-for-date`, `catch-up-daily-form-index` | Direct SEC daily form index text files; impacted CIKs then use submissions bootstrap. | Business date, source year/quarter, row ordinal, form, company name, CIK, filing date, file name, accession, TXT URL, record hash. | Bronze daily index, `stg_daily_index_filing`, `sec_daily_index_checkpoint`, then submissions and parser outputs for selected CIKs. |
@@ -85,14 +85,14 @@ Remote storage is intentionally restricted to `s3://` by
 | Filing text projection | `targeted-resync --include-text` | Internal cached primary artifact bytes. | Source document name, normalized text SHA256, char count, extraction time. | Text file in warehouse storage, `sec_filing_text`. |
 | Ownership parsing | Automatic parser policy for Forms 3/4/5, `parse-ownership-bronze` | edgartools-mediated `Ownership.from_xml` over cached primary XML. `parse-ownership-bronze` makes no SEC calls. | Reporting owner CIK/name/roles/title, non-derivative transactions, derivative transactions, shares, price, codes, ownership nature/directness, exercise/expiration/underlying fields. | `sec_ownership_reporting_owner`, `sec_ownership_non_derivative_txn`, `sec_ownership_derivative_txn`, `sec_parse_run`. |
 | ADV parsing | `parse-adv-bronze` | Operator-provided ADV/IAPD/FOIA bronze artifacts; local parser. ADV is not captured by normal SEC EDGAR bootstrap. | Adviser name, SEC file number, CRD/IARD number, effective date, filing status, offices, disclosures, private funds, AUM. | `sec_adv_filing`, `sec_adv_office`, `sec_adv_disclosure_event`, `sec_adv_private_fund`. |
-| Branch B per-filing fundamentals | `bootstrap-fundamentals --mode per-filing` | Internal cached filing artifacts; edgartools-backed parsers for 8-K earnings and DEF 14A proxy compensation. | Earnings GAAP revenue/net income/EPS, non-GAAP/guidance flags, executive name/role/compensation components. | `sec_earnings_release`, `sec_executive_record` in `silver/fundamentals`. |
-| Branch B entity facts | `bootstrap-fundamentals --mode entity-facts` | Direct SEC `https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json` via `urllib`. | XBRL concept, unit, value, decimals, fiscal year/period, period start/end, form type, auditor DEI fields. | `sec_financial_fact`, `sec_accounting_flag`, `sec_financial_derived`, forensic-score updates. |
-| Branch B 13F | `bootstrap-fundamentals --mode thirteenf` | Internal cached 13F information table attachment; edgartools `parse_infotable_xml`. | CUSIP, issuer, security title/class, shares/principal, market value normalized to USD, put/call, discretion, voting authority. | `sec_thirteenf_holding` in `silver/fundamentals`. |
+| Branch B per-filing fundamentals | `bootstrap-fundamentals --mode per-filing` | Internal cached filing artifacts, read from Branch A's published ownership silver (not the fundamentals shard itself — see Storage Layout note); edgartools-backed parsers for 8-K earnings and DEF 14A proxy compensation. | Earnings GAAP revenue/net income/EPS, non-GAAP/guidance flags, executive name/role/compensation components. | `sec_earnings_release`, `sec_executive_record` in `silver/fundamentals`. Automated in `load_history`, sequenced to run after Branch A (`bootstrap-next`) completes for all windows, because it reads Branch A's output. |
+| Branch B entity facts | `bootstrap-fundamentals --mode entity-facts` | Direct SEC `https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json` via the shared SEC client (`edgar_warehouse/infrastructure/sec_client.py` — host allowlist, rate limit, retries; same contract as the rest of the runtime). | XBRL concept, unit, value, decimals, fiscal year/period, period start/end, form type, auditor DEI fields. | `sec_financial_fact`, `sec_accounting_flag`, `sec_financial_derived`, forensic-score updates. Automated in `load_history`, run concurrently with Branch A (no dependency on Branch A's output). |
+| Branch B 13F | `bootstrap-fundamentals --mode thirteenf` | Internal cached 13F information table attachment, read from Branch A's published ownership silver (same source-reader as per-filing); edgartools `parse_infotable_xml`. | CUSIP, issuer, security title/class, shares/principal, market value normalized to USD, put/call, discretion, voting authority. | `sec_thirteenf_holding` in `silver/fundamentals`. Automated in `load_history`, sequenced after per-filing (same Branch A dependency; the two share the fundamentals shard so they run one after the other, not concurrently). |
 | Reconciliation and repair | `full-reconcile`, `targeted-resync` | Direct SEC submissions snapshot for comparison; optional artifact/text/parser refresh. | Drift object type/key, expected/actual hashes, severity, recommended action, status. | `sec_reconcile_finding`, repaired bronze/silver/parser rows when auto-heal is selected. |
 | Silver shard migration and cached replays | `migrate-silver-shards`, `seed-silver-batches`, `seed-bronze-batches`, `silver_mdm_gold`, `bronze_seed_silver_gold` state machines | Internal silver or existing S3 bronze only; designed to avoid new SEC calls when artifact policies are skipped. | CIK batch lists, shard manifests, shard DuckDB files. | Sharded silver DuckDB, replayed MDM/gold/Snowflake exports. |
 | MDM entity resolution | `mdm run --entity-type ...` | Internal silver DuckDB or sharded reader. | Company, adviser, person, security, fund entities, source references, rule outcomes, survivorship/stewardship state. | `mdm_entity`, `mdm_company`, `mdm_adviser`, `mdm_person`, `mdm_security`, `mdm_fund`, source refs and curation tables. |
 | MDM relationship derivation | `mdm derive-relationships`, `mdm load-relationships`, `mdm backfill-relationships` | Internal MDM plus silver source tables. | `IS_INSIDER`, `HOLDS`, `COMPANY_HOLDS`, `ISSUED_BY`, `IS_ENTITY_OF`, `HAS_PARENT_COMPANY`, `MANAGES_FUND`, `IS_PERSON_OF`, `EMPLOYED_BY`, `AUDITED_BY`, `INSTITUTIONAL_HOLDS`. | `mdm_relationship_instance`, graph-ready sync tables. |
-| MDM Snowflake export and graph sync | `mdm export`, `mdm sync-graph`, `mdm verify-graph` | Internal MDM SQL state and Snowflake connection settings. | Current MDM entity rows, graph nodes, graph edges, graph parity counts. | Snowflake MDM tables and `NEO4J_GRAPH_MIGRATION` graph-ready node/edge tables. |
+| MDM Snowflake export and graph sync | `mdm export`, `mdm sync-graph`, `mdm verify-graph` | Internal MDM SQL state and Snowflake connection settings. | Current MDM entity rows, graph nodes, graph edges, graph parity counts. | Snowflake MDM tables and `NEO4J_GRAPH_MIGRATION` graph-ready node/edge tables. `mdm export` is a required prerequisite for `mdm sync-graph`, not optional or manual-only: every automated AWS MDM chain (`load_history`, `bootstrap`, `daily_incremental`, `silver_mdm_gold`, `bronze_seed_silver_gold`, `mdm_gold`, `ownership_mdm_gold`) runs export immediately before sync-graph so the Snowflake MDM mirror reflects the run/backfill that just completed. |
 | Gold build and export | `gold-refresh`, gold-affecting warehouse commands | Internal silver and fundamentals shards. | Dimension keys, fact keys, filing/ownership/adviser/financial/fundamental measures. | S3 gold Parquet, S3 Snowflake export Parquet, Snowflake run manifest. |
 | Snowflake native pull | `deploy-snowflake-stack.sh`, Snowflake task/procedures | S3 Snowflake export bucket through Snowflake storage integration. | Manifest inbox rows, source load status, per-table row counts, COPY/MERGE results. | `EDGARTOOLS_SOURCE` tables and `SNOWFLAKE_REFRESH_STATUS`. |
 | dbt gold | `uv run --with dbt-snowflake dbt run/test` or Snowflake refresh procedure | Internal Snowflake source tables. | Business-facing dynamic table rows, freshness status, fundamentals growth/factor calculations. | `EDGARTOOLS_GOLD` dynamic tables and `EDGARTOOLS_GOLD_STATUS`. |
@@ -229,17 +229,23 @@ Local code, not edgartools, handles:
 The AWS application deploy script registers ECS task definitions and Step
 Functions. Important data workflows are:
 
+All chains below run the same MDM sequence — `mdm run` -> `mdm backfill-relationships`
+-> `mdm export` -> `mdm sync-graph` -> `mdm verify-graph` (referred to as "MDM chain"
+below) — with `mdm export` immediately before `mdm sync-graph` so the Snowflake MDM
+mirror `sync-graph` reads is never stale relative to the run/backfill that just
+completed.
+
 | State machine/workflow | Shape |
 | --- | --- |
 | `bootstrap_batched` | `seed-universe` -> parallel `bootstrap-batch`. |
-| `load_history` | Seed/window -> Branch A `bootstrap-next` and Branch B `bootstrap-fundamentals` -> MDM run/backfill/sync/verify -> `gold-refresh` -> run summary. |
-| `bootstrap` | Optional seed -> `bootstrap` -> MDM run/backfill/sync/verify -> `gold-refresh`. |
-| `daily_incremental` | `daily-incremental` -> MDM run/backfill/sync/verify -> `gold-refresh`. |
+| `load_history` | `seed-universe` (warehouse reference) -> `mdm seed-universe` (MDM tracked-universe, required prerequisite) -> window size default -> `compute-windows` (tracking_status active-or-bootstrap_pending) -> Stage1Parallel { Branch A `bootstrap-next` (same tracking-status filter as compute-windows, explicit); Branch B `bootstrap-fundamentals --mode entity-facts` } -> `bootstrap-fundamentals --mode per-filing` -> `bootstrap-fundamentals --mode thirteenf` (both post-Branch-A, sequential — they depend on Branch A's output and share the fundamentals shard) -> MDM chain -> `gold-refresh` -> run summary. |
+| `bootstrap` | Optional seed -> `bootstrap` -> MDM chain -> `gold-refresh`. |
+| `daily_incremental` | `daily-incremental` -> MDM chain -> `gold-refresh`. |
 | `silver_mdm_gold` | Seed from existing silver -> cached `bootstrap-batch` -> MDM chain -> `gold-refresh`; intended for zero new SEC calls when policies skip artifact/parser work. |
 | `bronze_seed_silver_gold` | List CIKs from existing S3 bronze -> cached `bootstrap-batch` -> MDM chain -> `gold-refresh`; intended for cold-start/recovery from bronze. |
 | `mdm_gold` | MDM chain -> `gold-refresh`; no bronze/silver capture step. |
 | `ownership_mdm_gold` | `parse-ownership-bronze` -> MDM chain -> `gold-refresh`. |
-| MDM utility workflows | `mdm migrate`, `check-connectivity`, `run`, `backfill-relationships`, `sync-graph`, `verify-graph`, `counts`, `seed-universe`, `seed-from-silver`. |
+| MDM utility workflows | `mdm migrate`, `check-connectivity`, `run`, `backfill-relationships`, `sync-graph`, `verify-graph`, `counts`, `seed-universe`, `seed-from-silver`. Note: `mdm export` has no standalone utility workflow of its own today — it only runs embedded in the MDM chains above. |
 
 Snowflake native pull is deployed by `infra/scripts/deploy-snowflake-stack.sh`.
 It coordinates AWS access, Snowflake storage integration/stage/source tables,
@@ -256,7 +262,17 @@ dashboard upload.
 - ADV is not automatically captured from normal EDGAR submissions; ADV bronze
   must be supplied separately before adviser/fund pipelines can populate data.
 - Branch B fundamentals use a separate `silver/fundamentals` namespace to avoid
-  DuckDB writer conflicts with the ownership/ADV silver path.
+  DuckDB writer conflicts with the ownership/ADV silver path. Branch B's
+  per-filing/thirteenf modes still need to *read* Branch A's filing/attachment
+  metadata to do that work — they open a read-only reader over Branch A's
+  published silver.duckdb for that, while writing only to `silver/fundamentals`.
+- A CIK's `tracking_status` moves `bootstrap_pending` -> `active` the first time
+  its full submissions bootstrap (including pagination) completes; it starts
+  `bootstrap_pending` from MDM seeding. `load_history`'s `compute-windows`,
+  `bootstrap-next`, and `bootstrap-fundamentals` CIK resolution all query the
+  combined `active,bootstrap_pending` set (`LOAD_HISTORY_TRACKING_STATUS_FILTER`
+  in `warehouse_orchestrator.py`) so a freshly-seeded environment is covered on
+  its first run, not just re-runs against an already-`active` universe.
 - Snowflake export packages are validated by manifest row counts before source
   tables are merged.
 - The Streamlit dashboards are read-only consumers of Snowflake tables and do

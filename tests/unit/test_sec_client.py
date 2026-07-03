@@ -99,3 +99,10 @@ class SecClientTests(unittest.TestCase):
                 )
             # Token consumed once per logical request, not once per retry.
             self.assertEqual(mock_try_acquire.call_count, 1)
+
+    def test_build_companyfacts_url_zero_pads_cik(self) -> None:
+        from edgar_warehouse.infrastructure.sec_client import build_companyfacts_url
+        self.assertEqual(
+            build_companyfacts_url(320193),
+            "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json",
+        )
