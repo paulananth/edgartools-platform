@@ -174,6 +174,10 @@ def build_submission_pagination_url(file_name: str) -> str:
     return f"{SecEndpointConfig.from_env().data_url}/submissions/{file_name}"
 
 
+def build_companyfacts_url(cik: int) -> str:
+    return f"{SecEndpointConfig.from_env().data_url}/api/xbrl/companyfacts/CIK{cik:010d}.json"
+
+
 def build_filing_index_url(cik: int, accession_digits: str) -> str:
     return f"{SecEndpointConfig.from_env().archive_url}/data/{cik}/{accession_digits}/{accession_digits}-index.html"
 

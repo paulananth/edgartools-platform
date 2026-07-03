@@ -346,6 +346,7 @@ def test_bootstrap_fundamentals_skips_upload_without_storage_root(
     tmp_path, monkeypatch
 ):
     """No WAREHOUSE_STORAGE_ROOT → upload block is skipped entirely."""
+    monkeypatch.setenv("EDGAR_IDENTITY", "EdgarTools Platform test@example.com")
     monkeypatch.delenv("WAREHOUSE_STORAGE_ROOT", raising=False)
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
 
@@ -389,6 +390,7 @@ def test_bootstrap_fundamentals_upload_failure_returns_exit_code_1(
     tmp_path, monkeypatch
 ):
     """Upload error → exit code 1 (distinct from config error 2)."""
+    monkeypatch.setenv("EDGAR_IDENTITY", "EdgarTools Platform test@example.com")
     monkeypatch.setenv("WAREHOUSE_STORAGE_ROOT", "s3://bucket/warehouse")
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
 
@@ -432,6 +434,7 @@ def test_bootstrap_fundamentals_upload_success_sets_metrics(
     tmp_path, monkeypatch
 ):
     """Upload succeeds → metrics carry uploaded=True and size_bytes, rc=0."""
+    monkeypatch.setenv("EDGAR_IDENTITY", "EdgarTools Platform test@example.com")
     monkeypatch.setenv("WAREHOUSE_STORAGE_ROOT", "s3://bucket/warehouse")
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
 

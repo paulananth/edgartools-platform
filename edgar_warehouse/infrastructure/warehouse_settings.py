@@ -24,6 +24,21 @@ SERVING_EXPORT_COMMANDS = frozenset(
 )
 
 
+def resolve_edgar_identity() -> str:
+    """Resolve and validate EDGAR_IDENTITY — the one primary SEC User-Agent variable.
+
+    Shared by WarehouseSettings.from_env and any command (e.g. bootstrap-fundamentals)
+    that needs a validated identity without pulling in the full warehouse context
+    (bronze/storage root requirements it doesn't otherwise need).
+    """
+    identity = os.environ.get("EDGAR_IDENTITY", "").strip()
+    if not identity:
+        raise WarehouseRuntimeError("EDGAR_IDENTITY is required for warehouse commands")
+    if "@" not in identity:
+        raise WarehouseRuntimeError("EDGAR_IDENTITY must include an email address")
+    return identity
+
+
 @dataclass(frozen=True)
 class WarehouseSettings:
     """Validated environment settings."""
@@ -44,11 +59,7 @@ class WarehouseSettings:
 
     @classmethod
     def from_env(cls, command_name: str) -> "WarehouseSettings":
-        identity = os.environ.get("EDGAR_IDENTITY", "").strip()
-        if not identity:
-            raise WarehouseRuntimeError("EDGAR_IDENTITY is required for warehouse commands")
-        if "@" not in identity:
-            raise WarehouseRuntimeError("EDGAR_IDENTITY must include an email address")
+        identity = resolve_edgar_identity()
 
         runtime_mode = os.environ.get("WAREHOUSE_RUNTIME_MODE", "infrastructure_validation").strip() or "infrastructure_validation"
         if runtime_mode not in RUNTIME_MODES:

@@ -13,6 +13,7 @@ from __future__ import annotations
 import datetime
 import unittest
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 
 # ---------------------------------------------------------------------------
@@ -442,6 +443,31 @@ class BootstrapFundamentalsWiringTests(unittest.TestCase):
         from edgar_warehouse.application.warehouse_orchestrator import GOLD_AFFECTING_COMMANDS
         self.assertNotIn("bootstrap-fundamentals", GOLD_AFFECTING_COMMANDS)
 
+    def test_uses_edgar_identity_not_sec_edgar_identity(self) -> None:
+        """data-architecture Issue 5: one primary identity variable (EDGAR_IDENTITY),
+        validated the same way as every other warehouse command — no silent fallback
+        to a fake default identity via a second, unvalidated SEC_EDGAR_IDENTITY var."""
+        import inspect
+        from edgar_warehouse.application.commands import bootstrap_fundamentals
+        source = inspect.getsource(bootstrap_fundamentals)
+        self.assertNotIn("SEC_EDGAR_IDENTITY", source)
+        self.assertIn("resolve_edgar_identity", source)
+
+    def test_missing_edgar_identity_returns_exit_code_2(self) -> None:
+        from edgar_warehouse.application.commands import bootstrap_fundamentals
+
+        class _Args:
+            cik_list = [320193]
+            mode = "entity-facts"
+            run_id = "test-run"
+            fundamentals_silver_path = None
+            cik_offset = 0
+            cik_limit = None
+
+        with patch.dict("os.environ", {}, clear=True):
+            rc = bootstrap_fundamentals.execute(_Args())
+        self.assertEqual(rc, 2)
+
 
 # ---------------------------------------------------------------------------
 # 8. MDM graph registry — Snowflake-side wiring for new relationships
@@ -696,6 +722,147 @@ class MdmPipelineRegistrationTests(unittest.TestCase):
             "_ensure_security_by_cusip",
         ):
             self.assertTrue(hasattr(MDMPipeline, method), f"MDMPipeline missing {method}")
+
+
+# ---------------------------------------------------------------------------
+# 10. Branch B source/writer boundary (data-architecture Issue 1)
+# ---------------------------------------------------------------------------
+
+class BranchBSourceReaderTests(unittest.TestCase):
+    """per-filing/thirteenf must read filing/attachment/raw-object metadata from
+    Branch A's ownership silver (`source`), never from the fundamentals-only
+    shard (`db`) — `db` never contains those tables, so reading from it always
+    silently returned zero filings, even after Branch A had loaded real data."""
+
+    def test_per_filing_zero_metrics_when_source_unavailable(self) -> None:
+        from edgar_warehouse.application.workflows.fundamentals_ingest import (
+            run_bootstrap_fundamentals_per_filing,
+        )
+        metrics = run_bootstrap_fundamentals_per_filing(
+            cik_list=[320193], source=None, db=MagicMock(), sync_run_id="run-1",
+        )
+        self.assertEqual(metrics["filings_scanned"], 0)
+        self.assertEqual(metrics["filings_parsed"], 0)
+
+    def test_thirteenf_zero_metrics_when_source_unavailable(self) -> None:
+        from edgar_warehouse.application.workflows.fundamentals_ingest import (
+            run_bootstrap_thirteenf,
+        )
+        metrics = run_bootstrap_thirteenf(
+            cik_list=[320193], source=None, db=MagicMock(), sync_run_id="run-1",
+        )
+        self.assertEqual(metrics["filings_scanned"], 0)
+        self.assertEqual(metrics["filings_parsed"], 0)
+
+    def test_per_filing_reads_filings_from_source_never_db(self) -> None:
+        from edgar_warehouse.application.workflows.fundamentals_ingest import (
+            run_bootstrap_fundamentals_per_filing,
+        )
+        fake_source = MagicMock()
+        fake_source.fetch.return_value = []
+        fake_db = MagicMock()
+        metrics = run_bootstrap_fundamentals_per_filing(
+            cik_list=[320193], source=fake_source, db=fake_db, sync_run_id="run-1",
+        )
+        fake_source.fetch.assert_called_once()
+        self.assertIn("sec_company_filing", fake_source.fetch.call_args[0][0])
+        fake_db.fetch.assert_not_called()
+        self.assertEqual(metrics["filings_scanned"], 0)
+
+    def test_thirteenf_reads_filings_from_source_never_db(self) -> None:
+        from edgar_warehouse.application.workflows.fundamentals_ingest import (
+            run_bootstrap_thirteenf,
+        )
+        fake_source = MagicMock()
+        fake_source.fetch.return_value = []
+        fake_db = MagicMock()
+        metrics = run_bootstrap_thirteenf(
+            cik_list=[320193], source=fake_source, db=fake_db, sync_run_id="run-1",
+        )
+        fake_source.fetch.assert_called_once()
+        self.assertIn("sec_company_filing", fake_source.fetch.call_args[0][0])
+        fake_db.fetch.assert_not_called()
+        self.assertEqual(metrics["filings_scanned"], 0)
+
+    def test_per_filing_reads_from_source_writes_to_db(self) -> None:
+        """One 8-K filing exists only in `source`; the parsed row must be written
+        via `db.merge_earnings_releases`, proving reads/writes are split correctly."""
+        from edgar_warehouse.application.workflows.fundamentals_ingest import (
+            run_bootstrap_fundamentals_per_filing,
+        )
+
+        fake_source = MagicMock()
+        fake_source.fetch.side_effect = [
+            [{"accession_number": "0001-test", "cik": 320193, "form": "8-K",
+              "filing_date": "2024-01-05"}],
+            [{"raw_object_id": "raw-1", "is_primary": True}],
+            [{"raw_object_id": "raw-1", "storage_path": "s3://bucket/doc.htm"}],
+        ]
+        fake_db = MagicMock()
+        fake_db.merge_earnings_releases.return_value = 1
+        fake_db.merge_executive_records.return_value = 0
+
+        with patch(
+            "edgar_warehouse.parsers.get_parser",
+            return_value=lambda *a, **kw: {
+                "sec_earnings_release": [{"x": 1}], "sec_executive_record": [],
+            },
+        ), patch(
+            "edgar_warehouse.infrastructure.object_storage.read_bytes",
+            return_value=b"<html>irrelevant</html>",
+        ):
+            metrics = run_bootstrap_fundamentals_per_filing(
+                cik_list=[320193], source=fake_source, db=fake_db, sync_run_id="run-1",
+            )
+
+        self.assertEqual(metrics["filings_scanned"], 1)
+        self.assertEqual(metrics["filings_parsed"], 1)
+        self.assertEqual(metrics["rows_earnings_release"], 1)
+        fake_db.fetch.assert_not_called()
+        fake_db.merge_earnings_releases.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# 11. Entity-facts uses the shared SEC client (data-architecture Issue 5)
+# ---------------------------------------------------------------------------
+
+class EntityFactsSecClientTests(unittest.TestCase):
+    """entity-facts must fetch companyfacts via the shared SEC client (host
+    allowlist, rate limit, retries) instead of a raw urllib call, and must be
+    driven by the same EDGAR_IDENTITY the rest of the runtime validates."""
+
+    def test_entity_facts_uses_shared_sec_client(self) -> None:
+        from edgar_warehouse.application.workflows.fundamentals_ingest import (
+            run_bootstrap_entity_facts,
+        )
+        fake_db = MagicMock()
+        fake_db.merge_financial_facts.return_value = 0
+        fake_db.merge_accounting_flags.return_value = 0
+
+        with patch(
+            "edgar_warehouse.infrastructure.sec_client.download_sec_bytes",
+            return_value=b'{"cik": 320193}',
+        ) as mock_download, patch(
+            "edgar_warehouse.parsers.financials.parse_entity_facts",
+            return_value={"sec_financial_fact": [], "sec_accounting_flag": []},
+        ):
+            run_bootstrap_entity_facts(
+                cik_list=[320193],
+                db=fake_db,
+                identity="EdgarTools Platform test@example.com",
+                sync_run_id="run-1",
+            )
+
+        mock_download.assert_called_once()
+        url, identity = mock_download.call_args[0]
+        self.assertIn("data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json", url)
+        self.assertEqual(identity, "EdgarTools Platform test@example.com")
+
+    def test_no_raw_urllib_import_remains(self) -> None:
+        import inspect
+        from edgar_warehouse.application.workflows import fundamentals_ingest
+        source = inspect.getsource(fundamentals_ingest.run_bootstrap_entity_facts)
+        self.assertNotIn("urllib", source)
 
 
 if __name__ == "__main__":
