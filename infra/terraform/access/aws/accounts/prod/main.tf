@@ -41,6 +41,15 @@ module "runtime_access" {
 
   environment                       = local.environment
   name_prefix                       = local.name_prefix
+  # edgartools-prod-* S3 bucket names are already claimed globally by the real
+  # prod AWS account; this build uses edgartools-prodb-* naming for globally-
+  # namespaced resources (see accounts/prod/terraform.tfvars). The
+  # sec_platform_runner_* IAM roles are NOT namespaced by name_prefix upstream
+  # (account-scoped, historically a single fixed name) and this account
+  # already has dev's sec_platform_runner_* roles, whose attached policies are
+  # scoped to dev's exact resource ARNs -- reusing them here would silently
+  # produce AccessDenied on prodb resources at runtime. Use a distinct prefix.
+  runner_role_name_prefix           = "sec_platform_prodb"
   bronze_bucket_name                = local.provisioning.bronze_bucket_name
   bronze_bucket_arn                 = local.provisioning.bronze_bucket_arn
   warehouse_bucket_arn              = local.provisioning.warehouse_bucket_arn

@@ -8,6 +8,22 @@ variable "name_prefix" {
   type        = string
 }
 
+variable "runner_role_name_prefix" {
+  description = <<-EOT
+    Prefix for the sec_platform_runner_* IAM role names. Defaults to "sec_platform",
+    matching the historical hardcoded names (arg required by deploy-aws-application.sh's
+    --execution-role-arn/--task-role-arn/--step-functions-role-arn defaults). IAM role
+    names are account-scoped, not environment-scoped by default -- if two environments
+    (e.g. dev and a second build) share one AWS account, their runner roles collide on
+    this literal name, and because the attached policies are scoped to that environment's
+    exact resource ARNs (buckets, secrets), silently reusing one environment's role for
+    another produces AccessDenied at runtime, not a plan-time error. Override this to a
+    distinct value for any environment sharing an account with another.
+  EOT
+  type        = string
+  default     = "sec_platform"
+}
+
 variable "bronze_bucket_name" {
   description = "Bronze bucket name."
   type        = string
