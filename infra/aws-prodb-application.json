@@ -1,0 +1,64 @@
+{
+  "environment": "prod",
+  "region": "us-east-1",
+  "name_prefix": "edgartools-prod",
+  "image_ref": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@sha256:80a44c48a6cd4ea852c37f7cf16872c9b90258698af057cd6c62e3563087ba68",
+  "mdm_image_ref": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:51200957bdb12df57acb3603165ff8a1a2c20d036dca5b2d6ac560db1f1a7164",
+  "cluster": {
+    "name": "edgartools-prod-warehouse",
+    "arn": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse"
+  },
+  "ecr_repository_url": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse",
+  "log_groups": {
+    "ecs": "/aws/ecs/edgartools-prod-warehouse",
+    "step_functions": "/aws/states/edgartools-prod-warehouse"
+  },
+  "bronze_bucket_name": "edgartools-prodb-bronze",
+  "warehouse_bucket_name": "edgartools-prodb-warehouse",
+  "snowflake_export_bucket_name": "edgartools-prodb-snowflake-export",
+  "execution_role_arn": "arn:aws:iam::690839588395:role/sec_platform_prodb_runner_execution",
+  "task_role_arn": "arn:aws:iam::690839588395:role/sec_platform_prodb_runner_task",
+  "step_functions_role_arn": "arn:aws:iam::690839588395:role/sec_platform_prodb_runner_step_functions",
+  "edgar_identity_secret_arn": "arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-prod-edgar-identity-ryt4Fs",
+  "task_definitions": {
+    "small": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-small:2",
+    "medium": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:2",
+    "large": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:2",
+    "mdm_small": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-small:2",
+    "mdm_medium": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:2"
+  },
+  "state_machines": {
+    "bootstrap_full": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-bootstrap-full",
+    "targeted_resync": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-targeted-resync",
+    "full_reconcile": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-full-reconcile",
+    "load_daily_form_index_for_date": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-load-daily-form-index-for-date",
+    "catch_up_daily_form_index": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-catch-up-daily-form-index",
+    "gold_refresh": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-gold-refresh",
+    "bootstrap_batched": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-bootstrap-batched",
+    "load_history": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-load-history",
+    "bootstrap": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-bootstrap",
+    "daily_incremental": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-daily-incremental",
+    "mdm_gold": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-gold",
+    "ownership_mdm_gold": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-ownership-mdm-gold",
+    "silver_mdm_gold": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-silver-mdm-gold",
+    "bronze_seed_silver_gold": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-bronze-seed-silver-gold",
+    "mdm_migrate": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-migrate",
+    "mdm_check_connectivity": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-check-connectivity",
+    "mdm_run": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-run",
+    "mdm_backfill_relationships": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-backfill-relationships",
+    "mdm_sync_graph": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-sync-graph",
+    "mdm_verify_graph": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-verify-graph",
+    "mdm_counts": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-counts",
+    "mdm_seed_universe": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-seed-universe",
+    "mdm_seed_from_silver": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-seed-from-silver"
+  },
+  "mdm": {
+    "image_ref": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:51200957bdb12df57acb3603165ff8a1a2c20d036dca5b2d6ac560db1f1a7164",
+    "database_source": "snowflake-postgres",
+    "silver_duckdb": "s3://edgartools-prodb-warehouse/warehouse/silver/sec/silver.duckdb",
+    "secrets": {
+      "postgres_dsn": "arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-prod/mdm/postgres_dsn-FmXxTM",
+      "snowflake": "arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-prod/mdm/snowflake-FmXxTM"
+    }
+  }
+}

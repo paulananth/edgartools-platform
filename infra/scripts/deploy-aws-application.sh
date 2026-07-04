@@ -33,9 +33,18 @@ Options:
   --snowflake-export-bucket-name <name>
                                     Snowflake export bucket name.
   --edgar-identity-secret-arn <arn> EDGAR identity secret ARN.
-  --execution-role-arn <arn>        ECS task execution role ARN. Must be sec_platform_runner_execution.
-  --task-role-arn <arn>             ECS task role ARN. Must be sec_platform_runner_task.
-  --step-functions-role-arn <arn>   Step Functions role ARN. Must be sec_platform_runner_step_functions.
+  --execution-role-arn <arn>        ECS task execution role ARN. Must be named
+                                    <runner-role-name-prefix>_runner_execution.
+  --task-role-arn <arn>             ECS task role ARN. Must be named
+                                    <runner-role-name-prefix>_runner_task.
+  --step-functions-role-arn <arn>   Step Functions role ARN. Must be named
+                                    <runner-role-name-prefix>_runner_step_functions.
+  --runner-role-name-prefix <prefix>
+                                    Expected prefix for the three runner role names above.
+                                    Default: sec_platform. Override when a second environment
+                                    shares this AWS account and Terraform was applied with a
+                                    matching runner_role_name_prefix (see
+                                    infra/terraform/access/aws/modules/runtime_access).
   --log-group-name <name>           ECS task log group name.
   --image-tag <tag>                 Image tag for build/push. Default: git short SHA.
   --image-ref <ref>                 Existing image ref to deploy. Skips build unless --build-image is set.
@@ -149,6 +158,7 @@ MDM_RUN_LIMIT=100
 MDM_GRAPH_LIMIT=200
 MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"
 MDM_SEED_FROM_SILVER_TRACKING_STATUS="bootstrap_pending"
+RUNNER_ROLE_NAME_PREFIX="sec_platform"
 OUTPUT_FILE=""
 
 while [[ $# -gt 0 ]]; do
@@ -199,6 +209,7 @@ while [[ $# -gt 0 ]]; do
     --mdm-graph-limit) MDM_GRAPH_LIMIT="${2:?}"; shift 2 ;;
     --mdm-seed-universe-tracking-status) MDM_SEED_UNIVERSE_TRACKING_STATUS="${2:?}"; shift 2 ;;
     --mdm-seed-from-silver-tracking-status) MDM_SEED_FROM_SILVER_TRACKING_STATUS="${2:?}"; shift 2 ;;
+    --runner-role-name-prefix) RUNNER_ROLE_NAME_PREFIX="${2:?}"; shift 2 ;;
     --output-file) OUTPUT_FILE="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -237,9 +248,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT_DIR="${REPO_ROOT}/infra/scripts"
 MANIFEST_FILE="${REPO_ROOT}/infra/aws-${ENVIRONMENT}-application.json"
 NAME_PREFIX="${NAME_PREFIX:-edgartools-${ENVIRONMENT}}"
-RUNNER_EXECUTION_ROLE_NAME="sec_platform_runner_execution"
-RUNNER_TASK_ROLE_NAME="sec_platform_runner_task"
-RUNNER_STEP_FUNCTIONS_ROLE_NAME="sec_platform_runner_step_functions"
+RUNNER_EXECUTION_ROLE_NAME="${RUNNER_ROLE_NAME_PREFIX}_runner_execution"
+RUNNER_TASK_ROLE_NAME="${RUNNER_ROLE_NAME_PREFIX}_runner_task"
+RUNNER_STEP_FUNCTIONS_ROLE_NAME="${RUNNER_ROLE_NAME_PREFIX}_runner_step_functions"
 BUILD_CONTEXT="${BUILD_CONTEXT:-${REPO_ROOT}}"
 DOCKERFILE_PATH="${DOCKERFILE_PATH:-${REPO_ROOT}/Dockerfile}"
 IMAGE_TAG="${IMAGE_TAG:-$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD 2>/dev/null || printf '%s' "$ENVIRONMENT")}"
@@ -1025,6 +1036,22 @@ mdm_workflow_limit_command_expression() {
   esac
 }
 
+mdm_workflow_relationship_command_expression() {
+  case "$1" in
+    mdm_backfill_relationships) printf '%s\n' "States.Array('mdm', 'derive-relationships', '--relationship-type', $.relationship_type)" ;;
+    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'sync-graph', '--relationship-type', $.relationship_type)" ;;
+    *) return 0 ;;
+  esac
+}
+
+mdm_workflow_relationship_limit_command_expression() {
+  case "$1" in
+    mdm_backfill_relationships) printf '%s\n' "States.Array('mdm', 'derive-relationships', '--relationship-type', $.relationship_type, '--target-per-type', States.Format('{}', $.limit))" ;;
+    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'sync-graph', '--relationship-type', $.relationship_type, '--limit', States.Format('{}', $.limit))" ;;
+    *) return 0 ;;
+  esac
+}
+
 ensure_log_group() {
   local log_group_name="$1" log_group_arn
   if aws_cli logs describe-log-groups --log-group-name-prefix "$log_group_name" --query "logGroups[?logGroupName=='${log_group_name}'].logGroupName | [0]" --output text 2>/dev/null | grep -qx "$log_group_name"; then
@@ -1147,9 +1174,9 @@ PY
 }
 
 write_mdm_workflow_definition() {
-  local output_file="$1" task_definition_arn="$2" default_command="$3" limit_command="$4"
+  local output_file="$1" task_definition_arn="$2" default_command="$3" limit_command="$4" relationship_command="${5:-}" relationship_limit_command="${6:-}"
   python3 - "$output_file" "$CLUSTER_ARN" "$task_definition_arn" "edgar-warehouse" \
-    "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" "$default_command" "$limit_command" <<'PY'
+    "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" "$default_command" "$limit_command" "$relationship_command" "$relationship_limit_command" <<'PY'
 import json
 import pathlib
 import sys
@@ -1163,6 +1190,8 @@ import sys
     security_group_json,
     default_command,
     limit_command,
+    relationship_command,
+    relationship_limit_command,
 ) = sys.argv[1:]
 
 subnets = json.loads(subnet_json)
@@ -1200,7 +1229,53 @@ def run_task_state(command_expression):
         "End": True,
     }
 
-if limit_command:
+if relationship_command and relationship_limit_command:
+    definition = {
+        "Comment": "Run an EdgarTools MDM workflow on ECS Fargate with optional relationship_type and numeric limit overrides.",
+        "StartAt": "HasRelationshipTypeAndLimitOverride",
+        "States": {
+            "HasRelationshipTypeAndLimitOverride": {
+                "Type": "Choice",
+                "Choices": [{
+                    "And": [
+                        {"Variable": "$.relationship_type", "IsPresent": True},
+                        {"Variable": "$.relationship_type", "IsString": True},
+                        {"Variable": "$.limit", "IsPresent": True},
+                        {"Variable": "$.limit", "IsNumeric": True},
+                    ],
+                    "Next": "RunMdmTaskWithRelationshipTypeAndLimit",
+                }],
+                "Default": "HasRelationshipTypeOverride",
+            },
+            "HasRelationshipTypeOverride": {
+                "Type": "Choice",
+                "Choices": [{
+                    "And": [
+                        {"Variable": "$.relationship_type", "IsPresent": True},
+                        {"Variable": "$.relationship_type", "IsString": True},
+                    ],
+                    "Next": "RunMdmTaskWithRelationshipType",
+                }],
+                "Default": "HasLimitOverride",
+            },
+            "HasLimitOverride": {
+                "Type": "Choice",
+                "Choices": [{
+                    "And": [
+                        {"Variable": "$.limit", "IsPresent": True},
+                        {"Variable": "$.limit", "IsNumeric": True},
+                    ],
+                    "Next": "RunMdmTaskWithLimit",
+                }],
+                "Default": "RunMdmTaskDefault",
+            },
+            "RunMdmTaskDefault": run_task_state(default_command),
+            "RunMdmTaskWithLimit": run_task_state(limit_command),
+            "RunMdmTaskWithRelationshipType": run_task_state(relationship_command),
+            "RunMdmTaskWithRelationshipTypeAndLimit": run_task_state(relationship_limit_command),
+        },
+    }
+elif limit_command:
     definition = {
         "Comment": "Run an EdgarTools MDM workflow on ECS Fargate with an optional numeric limit override.",
         "StartAt": "HasLimitOverride",
@@ -2413,8 +2488,10 @@ PY
     task_definition_arn="$(task_definition_for_mdm_workflow "$workflow")"
     command_expression="$(mdm_workflow_command_expression "$workflow")"
     limit_command_expression="$(mdm_workflow_limit_command_expression "$workflow")"
+    relationship_command_expression="$(mdm_workflow_relationship_command_expression "$workflow")"
+    relationship_limit_command_expression="$(mdm_workflow_relationship_limit_command_expression "$workflow")"
     definition_file="$(json_file "sfn-${workflow}")"
-    write_mdm_workflow_definition "$definition_file" "$task_definition_arn" "$command_expression" "$limit_command_expression"
+    write_mdm_workflow_definition "$definition_file" "$task_definition_arn" "$command_expression" "$limit_command_expression" "$relationship_command_expression" "$relationship_limit_command_expression"
     state_machine_arn="$(upsert_state_machine "$workflow" "$definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
     printf ',\n' >> "$WORKFLOW_ARNS_FILE"
     python3 - "$workflow" "$state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'

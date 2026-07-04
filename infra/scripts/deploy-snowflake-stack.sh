@@ -99,7 +99,19 @@ TMP_DIR="${REPO_ROOT}/.tmp"
 # --snow-connection <name>; otherwise everything still works as before
 # because env vars take precedence.
 load_password_from_snow_config() {
-  if [[ -n "${TF_VAR_snowflake_password:-}" || -n "${SNOWFLAKE_PASSWORD:-}" ]]; then
+  if [[ -n "${TF_VAR_snowflake_password:-}" ]]; then
+    return 0
+  fi
+  # SNOWFLAKE_PASSWORD is a supported input (e.g. set in the operator's shell
+  # profile for `snow`/dbt convenience) but Terraform's snowflake provider only
+  # reads TF_VAR_snowflake_password -- without this branch, having only
+  # SNOWFLAKE_PASSWORD set short-circuited the config.toml lookup below
+  # *without* ever populating TF_VAR_snowflake_password, so `terraform apply`
+  # silently ran with a null password and failed with "Incorrect username or
+  # password was specified."
+  if [[ -n "${SNOWFLAKE_PASSWORD:-}" ]]; then
+    export TF_VAR_snowflake_password="${SNOWFLAKE_PASSWORD}"
+    export DBT_SNOWFLAKE_PASSWORD="${DBT_SNOWFLAKE_PASSWORD:-${SNOWFLAKE_PASSWORD}}"
     return 0
   fi
   local config_path=""

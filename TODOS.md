@@ -1312,3 +1312,70 @@ stale secret, `690839588395` has none).
 **Surfaced:** live AWS end-to-end verification after merging PR #108/#111,
 2026-07-02, via `mdm-seed-universe` execution
 `e2e-verify-seed-1783001033`.
+
+---
+
+## AWS access key printed to agent tool output while diagnosing Terraform credential_process failure (resolved in-session)
+
+**What:** While setting up the `prodb` build (a second, prod-shaped
+environment in account `690839588395`, see
+`.planning/workstreams/prodb-environment/README.md`), the `aws-admin-prod`
+profile's `credential_process` (`aws.exe configure export-credentials
+--profile default --format process`) failed under Terraform with "No valid
+credential sources found" despite working fine when the AWS CLI resolved it
+directly. To diagnose, the process command was run directly in an agent Bash
+call — it printed a real AccessKeyId/SecretAccessKey pair to the tool output
+(a Claude Code session transcript), not to any committed file.
+
+**Why (5-whys):**
+1. Symptom: `terraform apply` failed with a credential error even though
+   `aws sts get-caller-identity` worked fine moments earlier using the same
+   named profile.
+2. Why: Terraform's Go AWS SDK invokes `credential_process` itself rather
+   than delegating to the AWS CLI; the profile's `credential_process` string
+   contained a quoted path with spaces (`"C:\Program Files\Amazon\..."`),
+   which the CLI's own process launcher tolerates but Terraform's Go-based
+   invocation did not resolve the same way.
+3. Why did diagnosing it expose a secret? The natural next debugging step —
+   "run the credential_process command directly and check the output" — was
+   executed without first redirecting/suppressing the value; `format=process`
+   emits the resolved AccessKeyId and SecretAccessKey as plaintext JSON on
+   stdout by design, so running it directly for inspection necessarily prints
+   the live secret.
+4. Why wasn't this anticipated before running it? No prior instance in this
+   session of running a `credential_process` command directly — the risk
+   that this specific diagnostic step (as opposed to `sts get-caller-identity`
+   or similar) prints raw key material wasn't flagged before executing it.
+5. Root cause: treating "check whether a credential command succeeds" and
+   "see what a credential command outputs" as the same class of action. They
+   are not — the former should only ever check exit status / redact output,
+   never surface stdout verbatim, exactly the same root cause already
+   documented above in "Password leak via Python quoting bug" for a
+   different secret type (Snowflake password vs. AWS access key). This is
+   the second time this exact class of mistake has happened in this repo.
+
+**Resolution:** Disclosed the exposure to the user immediately in the same
+turn, named the exposed AccessKeyId, and recommended rotation as standard
+practice (rotation is the user/account-owner's action, not something an
+agent should do unilaterally). Worked around the underlying Terraform auth
+failure by switching to `AWS_PROFILE=default` (static, non-`credential_process`
+credentials, same account) for the remainder of the `prodb` build, avoiding
+the broken `credential_process` path entirely rather than continuing to
+debug it.
+
+**Going forward:** Never run a `credential_process` (or any "print
+resolved credentials" / `export-credentials` / `--format process`-style)
+command directly to check whether it works. To check success only, gate on
+exit status (`... >/dev/null 2>&1; echo $?`) or check for the presence of
+expected JSON keys without printing values — never print the command's raw
+stdout when that stdout's entire purpose is to carry secret material. Same
+discipline as the Python-quoting password leak above, generalized to any
+command whose designed output IS a credential.
+
+**Where:** `~/.aws/config` `aws-admin-prod` profile (`credential_process`
+entry, Windows path with spaces); worked around, not fixed, in
+`infra/terraform/access/aws/accounts/prod` and
+`infra/terraform/snowflake/accounts/prod` Terraform applies for the `prodb`
+build via `AWS_PROFILE=default`.
+
+**Surfaced:** `prodb` environment build session, 2026-07-03.

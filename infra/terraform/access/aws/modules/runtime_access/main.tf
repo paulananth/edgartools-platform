@@ -14,9 +14,9 @@ locals {
   )
   aws_region                  = data.aws_region.current.region
   ecs_task_definition_pattern = "arn:aws:ecs:${local.aws_region}:${data.aws_caller_identity.current.account_id}:task-definition/${var.name_prefix}-*:*"
-  runner_execution_role_name  = "sec_platform_runner_execution"
-  runner_task_role_name       = "sec_platform_runner_task"
-  runner_sfn_role_name        = "sec_platform_runner_step_functions"
+  runner_execution_role_name  = "${var.runner_role_name_prefix}_runner_execution"
+  runner_task_role_name       = "${var.runner_role_name_prefix}_runner_task"
+  runner_sfn_role_name        = "${var.runner_role_name_prefix}_runner_step_functions"
   tags = merge(
     {
       Environment = var.environment
