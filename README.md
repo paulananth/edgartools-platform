@@ -54,8 +54,7 @@ For MDM graph configuration, see [docs/neo4j.md](docs/neo4j.md).
 |---|---|
 | `edgar_warehouse/` | Python ETL runtime — exports SEC data to object storage |
 | `infra/terraform/` | Passive AWS/Snowflake provisioning roots plus separate access-control roots |
-| `infra/snowflake/dbt/` | dbt project for Snowflake and Databricks gold tables |
-| `infra/databricks/sql/` | Unity Catalog external table registration templates |
+| `infra/snowflake/dbt/` | dbt project for Snowflake gold tables |
 | `infra/snowflake/sql/bootstrap/` | Bootstrap SQL for Snowflake native S3 pull |
 | `infra/snowflake/streamlit/` | Streamlit-in-Snowflake production dashboard |
 | `scripts/batch/` | Batch processing scripts for individual form types |

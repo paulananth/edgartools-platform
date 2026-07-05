@@ -45,7 +45,7 @@ source: CLAUDE.md, AGENTS.md
 
 type: operational
 content: AWS ECR is the only permitted container registry for deployable images.
-  Do not add: Azure Container Registry (ACR), Azure SDK, ODBC, or Azure deployment steps.
+  Do not add: non-ECR registry (non-ECR registry), non-AWS SDK, ODBC, or non-AWS deployment steps.
   ECR repositories must have MUTABLE tag setting for :dev to be overwritten on each push.
   Tagging strategy:
     :dev — mutable latest dev image
@@ -58,7 +58,7 @@ source: CLAUDE.md, AGENTS.md
 ## CON-005: Terraform is passive infra only
 
 type: protocol
-content: AWS and Azure Terraform roots must not create:
+content: AWS and non-AWS Terraform roots must not create:
   - runnable application jobs or services
   - workflow schedules or Step Functions state machines
   - SQL procedures, tasks, or dashboard apps
@@ -94,7 +94,7 @@ content: Do not commit to the repository:
   - Generated Terraform state
   - application JSON with sensitive values
   - Secret values in any form (AWS Secrets Manager values, Neo4j passwords, MDM API keys,
-    SEC EDGAR identity, Azure Key Vault values)
+    SEC EDGAR identity, external secret manager values)
   Secret containers are created by Terraform (empty); values are populated by operators
   outside Terraform using bootstrap scripts.
 source: AGENTS.md
@@ -128,7 +128,7 @@ content: Required version pins:
   - Terraform CLI: 1.14.7 (AWS roots per infra/terraform/README.md), 1.14.8 (Snowflake roots
     per infra/terraform/snowflake/README.md), 1.14.8 or compatible 1.14.x (runbook)
   - AWS provider: 6.39.0
-  - Azure provider: ~> 3.110
+  - non-AWS provider: ~> 3.110
   - Snowflake provider: 2.14.1
   Note: AWS roots and Snowflake roots specify slightly different Terraform CLI pins (1.14.7 vs
   1.14.8); these are scope-specific, not contradictory. Use 1.14.8 for both to satisfy the
@@ -142,7 +142,7 @@ source: infra/terraform/README.md, infra/terraform/snowflake/README.md, docs/run
 
 type: schema
 content: Snowflake Terraform state must use backend keys separate from AWS account roots.
-  Snowflake provisioning is an analytics/database-object operation, not part of the AWS/Azure
+  Snowflake provisioning is an analytics/database-object operation, not part of the AWS/non-AWS
   passive cloud-infrastructure roots.
   Ownership model:
     - Terraform owns: platform objects, storage integration, native-pull objects, task
@@ -182,13 +182,13 @@ source: docs/neo4j.md
 
 ---
 
-## CON-015: Azure managed identity required — no account keys or SAS tokens
+## CON-015: cloud workload identity required — no account keys or SAS tokens
 
 type: security
-content: Azure storage (ADLS Gen2) must authenticate using managed identity.
-  Databricks Unity Catalog storage must use managed identity.
+content: non-AWS object storage (non-AWS object storage) must authenticate using workload identity.
+  retired analytics platform external catalog storage must use workload identity.
   The following are explicitly prohibited:
-    - Azure storage account keys
+    - non-AWS object storage account keys
     - SAS tokens
     - Connection strings
     - ODBC connection strings in Terraform inputs
@@ -212,12 +212,12 @@ source: CLAUDE.md, AGENTS.md
 
 type: schema
 content: The dbt project (infra/snowflake/dbt/edgartools_gold/) owns curated business-facing
-  gold models, Snowflake dynamic tables, Databricks tables/views, tests on gold-facing objects,
+  gold models, Snowflake dynamic tables, retired analytics platform tables/views, tests on gold-facing objects,
   and the EDGARTOOLS_GOLD_STATUS view.
   It does NOT own:
     - Snowflake platform objects created by Terraform
     - storage integrations
-    - Unity Catalog external locations
+    - external catalog external locations
     - stages
     - source-side procedures or tasks created by infrastructure automation
 source: infra/snowflake/dbt/edgartools_gold/README.md, infra/snowflake/sql/README.md

@@ -14,8 +14,8 @@ Permanently destroys all EdgarTools AWS resources for the selected environment:
 operator-managed AWS app resources, Terraform-managed AWS infrastructure, data
 buckets, ECR images, secrets, RDS resources, and the Terraform state bucket.
 
-Azure resources and Snowflake account/database objects are intentionally out of
-scope. Snowflake Terraform state stored in the AWS state bucket is backed up
+Snowflake account/database objects are intentionally out of scope. Snowflake
+Terraform state stored in the AWS state bucket is backed up
 locally before the bucket is deleted.
 
 Options:

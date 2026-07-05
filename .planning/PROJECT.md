@@ -99,7 +99,7 @@ Do not change without explicit user instruction.
 | DEC-005 | `SNOWFLAKE_RUN_MANIFEST_TASK` must remain in STARTED state in EDGARTOOLS_GOLD | CLAUDE.md |
 | DEC-006 | Use `uv` for all Python dependency management — never bare `pip` or bare `dbt` | CLAUDE.md, AGENTS.md |
 | DEC-007 | Use Colima on macOS for local Docker — no other container runtime stacks permitted | CLAUDE.md, AGENTS.md |
-| DEC-008 | Use AWS ECR only for deployable images — no Azure Container Registry or ACR steps | CLAUDE.md, AGENTS.md |
+| DEC-008 | Use AWS ECR only for deployable images — no non-ECR registry or non-ECR registry steps | CLAUDE.md, AGENTS.md |
 | DEC-009 | SEC filing artifacts are additive and immutable after capture — loaders skip by default; `--force` required to re-fetch | CLAUDE.md, AGENTS.md |
 | DEC-010 | Ownership parser import must use `from edgar.ownership import Ownership` / `Ownership.from_xml(content)` — do not change without checking edgartools changelog | CLAUDE.md |
 

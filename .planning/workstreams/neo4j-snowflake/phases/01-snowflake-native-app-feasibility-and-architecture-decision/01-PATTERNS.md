@@ -59,7 +59,7 @@ These files are read-only references for Phase 1 plans.
 
 ## Non-Patterns
 
-- Do not create or revive Azure deployment paths.
+- Do not create or revive non-AWS deployment paths.
 - Do not introduce new external Neo4j credentials.
 - Do not modify generated application JSON or Terraform state.
 - Do not touch dashboard implementation files in Phase 1.

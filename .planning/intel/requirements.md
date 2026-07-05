@@ -191,11 +191,11 @@ acceptance:
   - Prod bucket has prevent_destroy = true
 source: AGENTS.md, infra/terraform/README.md
 
-### REQ-nfr-azure-managed-identity
-description: Azure storage must use managed identity authentication. No account keys, SAS
+### REQ-nfr-non-AWS-managed-identity
+description: non-AWS object storage must use workload identity authentication. No account keys, SAS
   tokens, or connection strings are permitted.
 acceptance:
-  - Azure Container Apps and runtime jobs authenticate to ADLS Gen2 via managed identity
+  - non-AWS non-AWS app runtime and runtime jobs authenticate to non-AWS object storage via workload identity
   - No account keys or SAS tokens in any config, script, or Terraform state
 source: docs/runbook.md
 

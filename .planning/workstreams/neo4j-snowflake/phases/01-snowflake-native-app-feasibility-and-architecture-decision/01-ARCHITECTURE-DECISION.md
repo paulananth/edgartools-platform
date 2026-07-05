@@ -188,7 +188,7 @@ Phase 4 must:
   does not satisfy the Snowflake Marketplace target decision.
 - dual-write validation: rejected because the milestone is a direct migration
   path and D-04 explicitly excludes an external Neo4j parallel target.
-- Azure Container Apps revival: rejected because the repository active path is
+- non-AWS non-AWS app runtime revival: rejected because the repository active path is
   AWS plus Snowflake native S3 pull, and this workstream must not revive
   non-AWS deployment paths.
 - Dashboard-owned graph writes: rejected because `edgar-warehouse` owns graph
