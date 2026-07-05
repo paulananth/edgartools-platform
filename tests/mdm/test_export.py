@@ -50,6 +50,39 @@ def test_snowflake_connector_writer_upserts_rows_with_merge_sql():
     assert 'ON target."ENTITY_ID" = source."ENTITY_ID"' in merge_sql
 
 
+def test_snowflake_connector_writer_multi_row_upsert_keeps_parse_json_out_of_values():
+    """PARSE_JSON must live in the SELECT list, not the VALUES clause.
+
+    snowflake-connector-python's executemany rewrites INSERT ... VALUES (...)
+    into a multi-row VALUES list, and Snowflake rejects any non-constant
+    expression there ("002014 (22000): Invalid expression [PARSE_JSON(...)]
+    in VALUES clause"). Hit live by bronze_seed_silver_gold's MdmExport at
+    real batch sizes (single-row batches masked it in dev). The supported
+    pattern is INSERT ... SELECT PARSE_JSON(columnN) ... FROM VALUES (...).
+    """
+    connection = FakeConnection()
+    writer = SnowflakeConnectorWriter(connection, database="EDGARTOOLS_PRODB", schema="MDM")
+
+    count = writer.upsert(
+        "MDM_COMPANY",
+        [
+            {"entity_id": "company-1", "canonical_name": "Issuer Corp"},
+            {"entity_id": "company-2", "canonical_name": "Bank 2020 Bnk25"},
+        ],
+    )
+
+    assert count == 2
+    cursor = connection.fake_cursor
+    assert len(cursor.batches) == 1
+    insert_sql, values = cursor.batches[0]
+    values_clause = insert_sql[insert_sql.index("VALUES") :]
+    assert "PARSE_JSON" not in values_clause
+    assert "SELECT PARSE_JSON(column1), PARSE_JSON(column2)" in insert_sql
+    assert "FROM VALUES (%s, %s)" in insert_sql
+    assert len(values) == 2
+    assert all(len(row) == 2 for row in values)
+
+
 def test_snowflake_connection_settings_read_mdm_env(monkeypatch):
     for name in list(os.environ):
         if name.startswith("MDM_SNOWFLAKE_") or name.startswith("DBT_SNOWFLAKE_"):
