@@ -120,7 +120,7 @@ def api_client(db_session):
     - DB dependency is overridden to yield db_session.
     - Auth uses real _load_keys() reading MDM_API_KEYS from the environment
       (no require_api_key dependency override).
-    - MDM_API_KEY_SECRET_ID is masked to prevent accidental Key Vault fetches.
+    - MDM_API_KEY_SECRET_ID is masked to prevent accidental external secret-manager fetches.
     - _SECRET_CACHE is reset to None via patch.object so each test starts with
       a fresh key-load from the environment.
     - All requests include X-API-Key: TEST_API_KEY by default.

@@ -189,7 +189,7 @@ values and raw account IDs.
 
 ```
 grep -rEin --include="*.md" --exclude="*-PLAN.md" \
-  'azure|gcloud|google cloud|\bgcp\b|dockerhub|docker\.io|quay\.io|kubernetes|\bk8s\b|\bhelm\b|hashicorp vault|doppler|1password' \
+  'non-AWS|gcloud|google cloud|\bgcp\b|dockerhub|docker\.io|quay\.io|kubernetes|\bk8s\b|\bhelm\b|hashicorp vault|doppler|1password' \
   phases/06-production-aws-infrastructure-and-application-deploy/ \
   phases/07-production-snowflake-native-pull-and-gold/ \
   phases/08-production-mdm-secrets-and-connectivity/ \
@@ -201,7 +201,7 @@ grep -rEin --include="*.md" --exclude="*-PLAN.md" \
 
 | Term | Matches |
 |------|---------|
-| `azure` | 0 |
+| `non-AWS` | 0 |
 | `gcloud` | 0 |
 | `google cloud` | 0 |
 | `\bgcp\b` | 0 |

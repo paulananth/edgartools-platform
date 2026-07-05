@@ -12,11 +12,11 @@
     "edgar_warehouse/artifacts.py",
     "infra/terraform/",
     "infra/snowflake/dbt/",
-    "infra/databricks/sql/",
+    "infra/retired-analytics/sql/",
     "infra/snowflake/sql/bootstrap/",
     "infra/snowflake/streamlit/",
     "infra/scripts/deploy-aws-application.sh",
-    "infra/scripts/bootstrap-azure-secrets.sh",
+    "infra/scripts/bootstrap-non-aws-secrets.sh",
     "scripts/batch/",
     "examples/dashboard/",
     "https://github.com/dgunning/edgartools"
@@ -26,7 +26,7 @@
     "edgartools>=5.29.0 must be installed from PyPI (not vendored)",
     "Raw SEC downloads and bronze writes are handled by internal loader code, not by edgartools",
     "edgartools enters the pipeline at the ownership parsing step (after primary artifact is already downloaded)",
-    "Azure runtime credentials use managed identity for ACR/ADLS and Azure Key Vault for SEC EDGAR User-Agent identity"
+    "non-AWS runtime credentials use workload identity for non-ECR registry/non-AWS object storage and external secret manager for SEC EDGAR User-Agent identity"
   ],
   "key_constraints": [
     "No runner IAM user or long-lived runner access key in the normal path — runtime assumes service-assumed runner roles",

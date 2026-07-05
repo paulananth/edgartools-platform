@@ -96,7 +96,7 @@ old provisioning states, migrate state before applying the new access roots:
 Use `terraform state mv` when source and destination addresses are known, or
 `terraform import` into the access root before removing the old state entry.
 Do this first in `dev`; do not apply `prod` until plans show no replacement for
-buckets, storage accounts, databases, Key Vaults, or Snowflake database objects.
+buckets, databases, or Snowflake database objects.
 
 ## Post-Infra Operators
 

@@ -85,7 +85,7 @@ Non-functional requirements:
   REQ-nfr-scale-performance — 100 companies in ~15 min via phased pipeline
   REQ-nfr-no-secrets-in-terraform — no secret values in Terraform state
   REQ-nfr-bronze-immutability — bronze Parquet files never mutated; S3 protections kept
-  REQ-nfr-azure-managed-identity — Azure storage via managed identity only
+  REQ-nfr-non-AWS-managed-identity — non-AWS object storage via workload identity only
   REQ-nfr-gold-cache-ttl — dashboard queries cached 1 hour
 
 Full text: .planning/intel/requirements.md
@@ -99,7 +99,7 @@ Total: 20
 Type breakdown:
   api-contract: 3 (edgartools version/import, SNOWFLAKE_ACCOUNT format, SERVING_EXPORT_ROOT trailing slash)
   tooling: 3 (uv required, Colima required, Terraform CLI/provider version pins)
-  security: 5 (no runner IAM user, no secrets in VCS, no S3 protections removed, Neo4j Fleet tokens, Azure managed identity only)
+  security: 5 (no runner IAM user, no secrets in VCS, no S3 protections removed, Neo4j Fleet tokens, cloud workload identity only)
   operational: 3 (ECR only, prod bronze prevent_destroy, large files read in chunks)
   protocol: 1 (Terraform passive infra only)
   schema: 2 (Snowflake separate state keys, dbt ownership boundaries)
@@ -123,7 +123,7 @@ Total: 13 topics covering the full platform scope:
   - Dashboards (Streamlit-in-Snowflake and standalone Streamlit variants)
   - Phased Pipeline Variants (5 Step Function state machines)
   - Terraform Layout (directory structure, apply order)
-  - Current Platform State (AWS active, Azure parallel-run migration)
+  - Current Platform State (AWS active, non-AWS parallel-run migration)
   - Image Management (4 Docker images, rebuild triggers, CI)
 
 Full text: .planning/intel/context.md
@@ -148,8 +148,8 @@ INFO-level findings (all auto-resolved, recorded for transparency):
   4. README.md uses bare pip in install example, contradicting uv policy
      — CLAUDE.md/AGENTS.md win as authoritative developer policy; README install is
      documentation debt (shorthand for new users)
-  5. Azure/Databricks paths in runbook/README vs AWS-only policy in AGENTS.md/CLAUDE.md
-     — consistent in context: Azure is a documented parallel-run migration path, not
+  5. retired non-AWS path paths in runbook/README vs AWS-only policy in AGENTS.md/CLAUDE.md
+     — consistent in context: non-AWS is a documented parallel-run migration path, not
      a revival; AWS-only policy governs new work
 
 Full report: .planning/INGEST-CONFLICTS.md

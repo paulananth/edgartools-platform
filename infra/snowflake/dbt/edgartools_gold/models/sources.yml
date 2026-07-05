@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: edgartools_source
-    database: "{{ env_var('DBT_SOURCE_CATALOG', env_var('DBT_DATABRICKS_CATALOG', env_var('DBT_SNOWFLAKE_DATABASE', 'EDGARTOOLS_DEV'))) }}"
+    database: "{{ env_var('DBT_SNOWFLAKE_DATABASE', 'EDGARTOOLS_DEV') }}"
     schema: "{{ env_var('DBT_SOURCE_SCHEMA', 'EDGARTOOLS_SOURCE') }}"
     tables:
       - name: COMPANY

@@ -101,7 +101,7 @@ None. This plan added planning documentation only and did not introduce new netw
 
 - `test -f .planning/workstreams/neo4j-snowflake/phases/01-snowflake-native-app-feasibility-and-architecture-decision/01-NATIVE-APP-RUNBOOK.md` passed.
 - `rg -n "Neo4j_Graph_Analytics\\.app_user|Neo4j_Graph_Analytics\\.app_admin|CREATE COMPUTE POOL|CREATE WAREHOUSE|CPU_X64_XS|Neo4j_Graph_Analytics_app_warehouse" .planning/workstreams/neo4j-snowflake/phases/01-snowflake-native-app-feasibility-and-architecture-decision/01-NATIVE-APP-RUNBOOK.md` passed.
-- `rg -n "Azure|Container Apps|NEO4J_URI|NEO4J_PASSWORD" .planning/workstreams/neo4j-snowflake/phases/01-snowflake-native-app-feasibility-and-architecture-decision/01-NATIVE-APP-RUNBOOK.md` returned only explicitly rejected assumptions.
+- `rg -n "non-AWS|non-AWS app runtime|NEO4J_URI|NEO4J_PASSWORD" .planning/workstreams/neo4j-snowflake/phases/01-snowflake-native-app-feasibility-and-architecture-decision/01-NATIVE-APP-RUNBOOK.md` returned only explicitly rejected assumptions.
 - Required section heading and source URL checks passed.
 
 ## Next Phase Readiness

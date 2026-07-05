@@ -2,7 +2,7 @@
   "filepath": "infra/snowflake/dbt/edgartools_gold/README.md",
   "type": "DOC",
   "title": "EdgarTools dbt Gold Project",
-  "scope_summary": "Describes the scope, ownership boundaries, and published objects of the dbt gold layer for Snowflake and Databricks. Lists the nine business-facing gold tables managed by this project and clarifies what infrastructure it does not own.",
+  "scope_summary": "Describes the scope, ownership boundaries, and published objects of the dbt gold layer for Snowflake and retired analytics platform. Lists the nine business-facing gold tables managed by this project and clarifies what infrastructure it does not own.",
   "cross_references": [
     "EDGARTOOLS_GOLD",
     "EDGARTOOLS_GOLD_STATUS",
@@ -14,13 +14,13 @@
   "key_requirements": [
     "Nine business tables (COMPANY, FILING_ACTIVITY, OWNERSHIP_ACTIVITY, OWNERSHIP_HOLDINGS, ADVISER_OFFICES, ADVISER_DISCLOSURES, PRIVATE_FUNDS, FILING_DETAIL, TICKER_REFERENCE) must be published in EDGARTOOLS_GOLD",
     "On Snowflake, business tables are dbt-managed dynamic tables with TARGET_LAG = DOWNSTREAM",
-    "On Databricks, models materialize as tables by default via dbt-databricks; set DBT_DATABRICKS_GOLD_MATERIALIZED=view for development",
+    "On retired analytics platform, models materialize as tables by default via retired-dbt-adapter; set DBT_RETIRED_ANALYTICS_GOLD_MATERIALIZED=view for development",
     "Status model reads provider-neutral source name SERVING_REFRESH_STATUS",
-    "DBT_REFRESH_STATUS_IDENTIFIER must be set when Databricks uses a different source table name"
+    "DBT_REFRESH_STATUS_IDENTIFIER must be set when retired analytics platform uses a different source table name"
   ],
   "key_constraints": [
     "Project does not own Snowflake platform objects created by Terraform",
-    "Project does not own storage integrations, Unity Catalog external locations, stages, source-side procedures, or tasks created by infrastructure automation"
+    "Project does not own storage integrations, external catalog external locations, stages, source-side procedures, or tasks created by infrastructure automation"
   ],
   "source": "infra/snowflake/dbt/edgartools_gold"
 }

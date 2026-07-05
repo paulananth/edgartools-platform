@@ -36,7 +36,7 @@
     "SNOWFLAKE_RUN_MANIFEST_TASK must be STARTED in EDGARTOOLS_GOLD",
     "silver_mdm_gold map MUST pass --artifact-policy skip to bootstrap-batch",
     "SEC filing artifacts are additive and immutable after capture — skip by default, re-fetch only with explicit --force flag",
-    "Use AWS ECR only for deployable images — do not add Azure Container Registry, Azure SDK, ODBC, or Azure deployment steps",
+    "Use AWS ECR only for deployable images — do not add non-ECR registry, non-AWS SDK, ODBC, or non-AWS deployment steps",
     "Always use uv for Python dependency management — never bare pip or bare dbt",
     "On macOS use Colima as the local Docker daemon; do not introduce another container build/runtime stack"
   ],

@@ -53,7 +53,7 @@ class WarehouseSettings:
 
     @property
     def snowflake_export_root(self) -> str | None:
-        """Backward-compatible alias during the Snowflake to Databricks migration."""
+        """Backward-compatible alias for legacy SNOWFLAKE_EXPORT_ROOT callers."""
 
         return self.serving_export_root
 
@@ -91,7 +91,7 @@ class WarehouseSettings:
             if not value:
                 raise WarehouseRuntimeError(
                     "SERVING_EXPORT_ROOT is required for gold-affecting warehouse commands "
-                    "(SNOWFLAKE_EXPORT_ROOT is accepted as a temporary migration fallback)"
+                    "(SNOWFLAKE_EXPORT_ROOT is accepted as a compatibility fallback)"
                 )
             serving_export_root = value
 

@@ -167,7 +167,7 @@ Do not add mutation controls. Buttons for sync graph, derive relationships, load
 
 Keep AWS-focused repository guidance intact, but Phase 8 is local-only; do not add new deployment paths, secret-management systems, Terraform, ECS, Step Functions, Snowflake, dbt, or generated application JSON. [VERIFIED: AGENTS.md, REQUIREMENTS.md]
 
-Existing `docs/neo4j.md` includes Azure Key Vault notes, but this phase should document only the existing local/runtime environment variables and must not introduce new non-AWS secret-management steps. [VERIFIED: docs/neo4j.md, AGENTS.md]
+Existing `docs/neo4j.md` includes external secret manager notes, but this phase should document only the existing local/runtime environment variables and must not introduce new non-AWS secret-management steps. [VERIFIED: docs/neo4j.md, AGENTS.md]
 
 Assumptions needing planner awareness:
 - [ASSUMED] Secret-safe error wrappers may need to mask raw SQLAlchemy/Neo4j exception text rather than displaying it directly.

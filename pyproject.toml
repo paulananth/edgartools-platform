@@ -30,9 +30,6 @@ s3 = [
 snowflake = [
     "snowflake-connector-python>=3.7",
 ]
-databricks = [
-    "dbt-databricks>=1.8",
-]
 dashboard = [
     "streamlit>=1.32",
     "plotly>=5.20",
