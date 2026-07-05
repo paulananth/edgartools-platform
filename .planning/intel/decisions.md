@@ -112,8 +112,8 @@ Scope: local development, Docker runtime
 status: policy-locked (project policy)
 source: CLAUDE.md, AGENTS.md
 
-Decision: Use AWS ECR exclusively for deployable container images. Do not add Azure Container
-Registry (ACR), Azure SDK, ODBC, or Azure deployment steps back into this repo unless the
+Decision: Use AWS ECR exclusively for deployable container images. Do not add non-AWS Container
+Registry (non-ECR registry), non-AWS SDK, ODBC, or non-AWS deployment steps back into this repo unless the
 platform architecture changes explicitly.
 
 Scope: container registry, image management
@@ -156,7 +156,7 @@ Scope: parser layer, edgartools integration
 status: policy-locked (project policy)
 source: infra/terraform/README.md, AGENTS.md
 
-Decision: AWS and Azure Terraform roots are infra-only. They may create networks, storage,
+Decision: AWS and non-AWS Terraform roots are infra-only. They may create networks, storage,
 registries, databases, logs, and empty secret containers. They must not create runnable
 application jobs/services, schedules, workflow engines, SQL procedures/tasks, dashboard apps,
 access-control bindings, or runtime secret values. CIK lists, seed data, runtime params, image

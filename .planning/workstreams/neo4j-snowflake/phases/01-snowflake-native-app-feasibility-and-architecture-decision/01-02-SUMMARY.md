@@ -106,7 +106,7 @@ None. This plan added planning documentation only and did not introduce new netw
 
 - `test -f .planning/workstreams/neo4j-snowflake/phases/01-snowflake-native-app-feasibility-and-architecture-decision/01-ARCHITECTURE-DECISION.md` passed.
 - `rg -n "Accepted for milestone planning|Current Runtime Mapping|edgar-warehouse mdm sync-graph|_neo4j_client|NEO4J_URI|NEO4J_USER|NEO4J_USERNAME|NEO4J_PASSWORD|NEO4J_DATABASE|NEO4J_SECRET_JSON|MDM_SNOWFLAKE_|DBT_SNOWFLAKE_|SERVING_EXPORT_ROOT|SNOWFLAKE_EXPORT_ROOT|no external Neo4j parallel validation" .planning/workstreams/neo4j-snowflake/phases/01-snowflake-native-app-feasibility-and-architecture-decision/01-ARCHITECTURE-DECISION.md` passed.
-- `rg -n "Azure|Container Apps|dual-write|external Neo4j" .planning/workstreams/neo4j-snowflake/phases/01-snowflake-native-app-feasibility-and-architecture-decision/01-ARCHITECTURE-DECISION.md` passed, with matches confined to target/exclusion statements, rejected alternatives, stale-credential cleanup, and an open deprecation question.
+- `rg -n "non-AWS|non-AWS app runtime|dual-write|external Neo4j" .planning/workstreams/neo4j-snowflake/phases/01-snowflake-native-app-feasibility-and-architecture-decision/01-ARCHITECTURE-DECISION.md` passed, with matches confined to target/exclusion statements, rejected alternatives, stale-credential cleanup, and an open deprecation question.
 - Acceptance checks for D-02, D-03, D-04, D-05, Snowflake-managed access, Phase 2/3/4 obligations, rejected alternatives, and preserved AWS/Snowflake settings passed.
 
 ## Next Phase Readiness

@@ -73,17 +73,17 @@ documents exist in this ingest set).
   binding constraint. The README pip command is flagged as documentation debt.
   source: README.md, CLAUDE.md, AGENTS.md
 
-[INFO] Azure/Databricks paths appear in runbook and README but AGENTS.md marks AWS as only active path
+[INFO] retired non-AWS path paths appear in runbook and README but AGENTS.md marks AWS as only active path
   Found: AGENTS.md states "AWS is the only active deployment path; non-AWS paths must not
     be added or revived without explicit user request"
-  Found: CLAUDE.md states "Do not add Azure Container Registry, Azure SDK, ODBC, or
-    Azure deployment steps back into this repo unless the platform architecture changes explicitly"
-  Found: docs/runbook.md and README.md document Azure/Databricks parallel-run migration
+  Found: CLAUDE.md states "Do not add non-ECR registry, non-AWS SDK, ODBC, or
+    non-AWS deployment steps back into this repo unless the platform architecture changes explicitly"
+  Found: docs/runbook.md and README.md document retired non-AWS path parallel-run migration
     path with setup instructions, scripts, and environment variables
-  Note: These are consistent when read in context. The Azure/Databricks documentation
+  Note: These are consistent when read in context. The retired non-AWS path documentation
   describes a migration path that is in parallel-run state — it exists to allow output
   validation before decommissioning AWS/Snowflake. "Only active path" means the primary
-  operational path; the Azure path is a documented migration-only path, not a revival.
+  operational path; the non-AWS path is a documented migration-only path, not a revival.
   Resolution: auto-resolved — not a contradiction; context.md records this under
   "Current Platform State" with the correct framing. DEC-001 records the AWS-only policy
   for new work.

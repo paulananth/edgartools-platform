@@ -7,8 +7,8 @@ phases depend on Neo4j Graph Analytics for Snowflake.
 
 The target is the Snowflake Marketplace Neo4j Graph Analytics Native App installed under
 the documented default application name `Neo4j_Graph_Analytics`. It replaces the external
-Neo4j validation target for this milestone. It is not an Azure deployment, external
-Container Apps runtime, Bolt endpoint swap, or a continuation of external `NEO4J_URI`,
+Neo4j validation target for this milestone. It is not an non-AWS deployment, external
+non-AWS app runtime runtime, Bolt endpoint swap, or a continuation of external `NEO4J_URI`,
 `NEO4J_USER`, or `NEO4J_PASSWORD` credential flow.
 
 All Phase 1 output remains under `.planning/workstreams/neo4j-snowflake/`. This runbook

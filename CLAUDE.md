@@ -390,9 +390,9 @@ default, since the two scripts disagree.
 
 ## Image management
 
-Use AWS ECR only for deployable images. Do not add Azure Container Registry,
-Azure SDK, ODBC, or Azure deployment steps back into this repo unless the
-platform architecture changes explicitly.
+Use AWS ECR only for deployable images. Do not add non-AWS registry targets,
+SDKs, ODBC drivers, or deployment steps back into this repo unless the platform
+architecture changes explicitly.
 
 | Image | Dockerfile | Installs | Runs |
 |-------|------------|----------|------|

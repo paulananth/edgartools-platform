@@ -105,7 +105,7 @@ MDM owns the canonical company/adviser/person/fund registry and the tracked comp
 (the list of CIKs the warehouse processes).
 
 Components:
-  - PostgreSQL (prod) or Azure SQL (Azure path) — relational MDM store
+  - PostgreSQL (prod) or external SQL (non-AWS path) — relational MDM store
   - Neo4j AuraDB — graph layer for entity relationships (IS_INSIDER, MANAGES_FUND, etc.)
   - MDM CLI — edgar-warehouse mdm subcommands for migrate, seed-universe, run, sync-graph,
     verify-graph, backfill-relationships, check-connectivity
@@ -211,9 +211,9 @@ The Terraform directory structure separates concerns into:
 bootstrap-state/ — creates the S3 backend for Terraform state
 accounts/{dev,prod}/ — passive AWS infra (networks, storage, ECR, ECS cluster, SNS)
 access/aws/accounts/{dev,prod}/ — IAM roles, SNS trust policies, ECS task roles
-access/azure/accounts/{dev,prod}/ — managed identities, RBAC, Key Vault policies
+access/non-aws/accounts/{dev,prod}/ — workload identities, RBAC, external secret manager policies
 access/snowflake/accounts/{dev,prod}/ — Snowflake roles and grants
-azure/accounts/{dev,prod}/ — Azure passive infra (Container Apps shell, Databricks, storage)
+non-aws/accounts/{dev,prod}/ — non-AWS passive infra (non-AWS app runtime shell, retired analytics platform, storage)
 snowflake/accounts/{dev,prod}/ — Snowflake database objects and native-pull runtime
 
 Apply order matters: bootstrap-state first, then accounts, then access roots.
@@ -226,12 +226,12 @@ source: infra/terraform/README.md, infra/terraform/snowflake/README.md
 ## Topic: Current Platform State (as of document set)
 
 The platform is in active development. The AWS/Snowflake path is the active production path.
-An Azure/Databricks parallel-run path is documented in the runbook as a migration target.
+An retired non-AWS path parallel-run path is documented in the runbook as a migration target.
 Key guidance from AGENTS.md: "Keep agent work AWS-focused. Do not add or revive non-AWS
 deployment paths unless the user explicitly asks for that architecture change."
 
-The dbt project supports both Snowflake (dynamic tables) and Databricks (tables by default,
-views with DBT_DATABRICKS_GOLD_MATERIALIZED=view for dev).
+The dbt project supports both Snowflake (dynamic tables) and retired analytics platform (tables by default,
+views with DBT_RETIRED_ANALYTICS_GOLD_MATERIALIZED=view for dev).
 
 source: AGENTS.md, README.md, docs/runbook.md, infra/snowflake/dbt/edgartools_gold/README.md
 

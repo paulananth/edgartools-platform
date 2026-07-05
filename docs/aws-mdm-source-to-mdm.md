@@ -4,7 +4,7 @@ This document covers running the MDM entity loaders against a local or S3-backed
 produced from already-captured SEC EDGAR bronze artifacts. It does not describe bronze artifact
 capture, Neo4j graph sync, or relationship derivation — those belong to later phases.
 
-**Scope:** This guide is AWS/local only. Do not introduce Azure, Databricks, non-AWS storage
+**Scope:** This guide is AWS/local only. Do not introduce non-AWS storage
 backends, new secret-management paths, or Terraform rollout steps for Phase 5 operations.
 
 ---
