@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 try:
     import duckdb
@@ -711,6 +712,189 @@ class SilverDatabase:
         cols = [d[0] for d in self._conn.description]
         return [dict(zip(cols, r)) for r in rows]
 
+    @contextmanager
+    def _shard_advisory_lock(self) -> Iterator[None]:
+        """Serialize composite shard writes from concurrent local writers."""
+        lock_path = Path(f"{self._path}.lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+b") as lock_handle:
+            try:
+                import fcntl
+            except ImportError:
+                yield
+                return
+
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+
+    @staticmethod
+    def reconcile_shards(
+        shard_paths: list[str],
+        *,
+        table_names: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Compare per-table row counts and newest sync timestamps across shards."""
+        if not shard_paths:
+            raise ValueError("At least one shard path is required")
+
+        tables = table_names or SilverDatabase._reconciliation_table_names(shard_paths)
+        table_reports: dict[str, Any] = {}
+        divergences: list[dict[str, Any]] = []
+
+        for table_name in tables:
+            shard_reports = [
+                SilverDatabase._reconcile_table_for_shard(index, path, table_name)
+                for index, path in enumerate(shard_paths)
+            ]
+            row_count_diverged = SilverDatabase._metric_diverged(shard_reports, "row_count")
+            timestamp_diverged = SilverDatabase._metric_diverged(
+                shard_reports, "newest_last_synced_at"
+            )
+            table_diverged = row_count_diverged or timestamp_diverged or any(
+                shard["error"] for shard in shard_reports
+            )
+
+            table_reports[table_name] = {
+                "shards": shard_reports,
+                "row_count_diverged": row_count_diverged,
+                "newest_last_synced_at_diverged": timestamp_diverged,
+                "diverged": table_diverged,
+            }
+            if row_count_diverged:
+                divergences.append(
+                    SilverDatabase._divergence(
+                        table_name, "row_count", shard_reports
+                    )
+                )
+            if timestamp_diverged:
+                divergences.append(
+                    SilverDatabase._divergence(
+                        table_name, "newest_last_synced_at", shard_reports
+                    )
+                )
+            for shard_report in shard_reports:
+                if shard_report["error"]:
+                    divergences.append(
+                        {
+                            "table": table_name,
+                            "metric": "error",
+                            "values": {shard_report["shard_path"]: shard_report["error"]},
+                        }
+                    )
+
+        return {
+            "shard_count": len(shard_paths),
+            "shard_paths": list(shard_paths),
+            "tables": table_reports,
+            "divergences": divergences,
+        }
+
+    @staticmethod
+    def _reconciliation_table_names(shard_paths: list[str]) -> list[str]:
+        names: set[str] = set()
+        for shard_path in shard_paths:
+            conn = duckdb.connect(shard_path, read_only=True)
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT table_name
+                    FROM information_schema.tables
+                    WHERE table_schema = 'main'
+                      AND table_type = 'BASE TABLE'
+                    """
+                ).fetchall()
+            finally:
+                conn.close()
+            names.update(row[0] for row in rows)
+        return sorted(names)
+
+    @staticmethod
+    def _reconcile_table_for_shard(
+        shard_index: int,
+        shard_path: str,
+        table_name: str,
+    ) -> dict[str, Any]:
+        report = {
+            "shard_index": shard_index,
+            "shard_path": shard_path,
+            "row_count": None,
+            "newest_last_synced_at": None,
+            "error": None,
+        }
+        conn = duckdb.connect(shard_path, read_only=True)
+        try:
+            table_exists = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_schema = 'main'
+                  AND table_name = ?
+                  AND table_type = 'BASE TABLE'
+                """,
+                [table_name],
+            ).fetchone()[0]
+            if not table_exists:
+                report["error"] = "missing table"
+                return report
+
+            quoted_table = SilverDatabase._quote_identifier(table_name)
+            report["row_count"] = conn.execute(
+                f"SELECT COUNT(*) FROM {quoted_table}"
+            ).fetchone()[0]
+            columns = {
+                row[0]
+                for row in conn.execute(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'main'
+                      AND table_name = ?
+                    """,
+                    [table_name],
+                ).fetchall()
+            }
+            if "last_synced_at" in columns:
+                newest = conn.execute(
+                    f"SELECT MAX(last_synced_at) FROM {quoted_table}"
+                ).fetchone()[0]
+                report["newest_last_synced_at"] = (
+                    newest.isoformat() if isinstance(newest, datetime) else newest
+                )
+            return report
+        except Exception as exc:  # pragma: no cover - exercised through report data
+            report["error"] = str(exc)
+            return report
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _quote_identifier(identifier: str) -> str:
+        return '"' + identifier.replace('"', '""') + '"'
+
+    @staticmethod
+    def _metric_diverged(shard_reports: list[dict[str, Any]], metric: str) -> bool:
+        values = {shard[metric] for shard in shard_reports if shard["error"] is None}
+        return len(values) > 1
+
+    @staticmethod
+    def _divergence(
+        table_name: str,
+        metric: str,
+        shard_reports: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        return {
+            "table": table_name,
+            "metric": metric,
+            "values": {
+                shard["shard_path"]: shard[metric]
+                for shard in shard_reports
+                if shard["error"] is None
+            },
+        }
+
 
     # ------------------------------------------------------------------
     # sec_company_ticker
@@ -1100,6 +1284,28 @@ class SilverDatabase:
         recent_limit: int | None = None,
     ) -> dict[str, Any]:
         """Stage one company's full submission into silver: reset lists, run loaders, merge all tables."""
+        with self._shard_advisory_lock():
+            return self._stage_submission_locked(
+                cik=cik,
+                main_payload=main_payload,
+                pagination_payloads=pagination_payloads,
+                sync_run_id=sync_run_id,
+                raw_object_id=raw_object_id,
+                load_mode=load_mode,
+                recent_limit=recent_limit,
+            )
+
+    def _stage_submission_locked(
+        self,
+        *,
+        cik: int,
+        main_payload: dict[str, Any],
+        pagination_payloads: list[tuple[str, dict[str, Any]]],
+        sync_run_id: str,
+        raw_object_id: str,
+        load_mode: str,
+        recent_limit: int | None = None,
+    ) -> dict[str, Any]:
         from edgar_warehouse.loaders.bronze_submission_extractors import (
             stage_address_loader,
             stage_company_loader,
