@@ -651,15 +651,14 @@ class SilverDatabase:
             self._conn.execute(statement)
 
     def _migrate_financial_period_end_pk(self) -> None:
-        """Drop and recreate financial tables whose PK predates PR #57.
+        """Recreate financial tables whose PK predates PR #57 without data loss.
 
         ``CREATE TABLE IF NOT EXISTS`` does not alter an existing table's
         constraints, so a store created before the period_end PK fix
         retains the old PK and the ``ON CONFLICT (..., period_end)``
         targets in ``merge_financial_facts``/``merge_financial_derived``
-        raise a binder error. These tables are re-bootstrappable from SEC
-        bronze data, so old rows are discarded; ``_DDL`` recreates the
-        dropped tables below with the current (period_end-inclusive) PK.
+        raise a binder error. The legacy table is retained as ``backup_*`` and
+        rows are copied into a current-schema replacement table.
         """
         tables_to_recreate = []
         for table in _FINANCIAL_TABLES_REQUIRING_PERIOD_END_PK:
@@ -677,27 +676,29 @@ class SilverDatabase:
         for table in tables_to_recreate:
             logger.warning(
                 "Migrating %s to the period_end primary key (PR #57): "
-                "dropping and recreating with no rows. Re-bootstrap to repopulate.",
+                "backing up the legacy table and copying rows into the current schema.",
                 table,
             )
-            self._conn.execute(f"DROP TABLE {table}")
-
-        if tables_to_recreate:
-            self._conn.execute(_DDL)
+            self._backup_and_recreate_financial_table(
+                table,
+                reason="pre_period_end_pk",
+                missing_values={
+                    "period_start": f"DATE '{_INSTANT_FACT_PERIOD_START_SENTINEL}'",
+                },
+            )
 
     def _migrate_financial_fact_period_start_pk(self) -> None:
-        """Drop and recreate sec_financial_fact if its PK predates Stage 2
+        """Recreate sec_financial_fact if its PK predates Stage 2
         of the period_end PK fix (period_start added to the PK).
 
-        Same rationale and drop+recreate pattern as
+        Same rationale and backup+copy pattern as
         ``_migrate_financial_period_end_pk``: a store whose sec_financial_fact
         PK already includes period_end (Stage 1) but not period_start (Stage 2)
         would otherwise raise a binder error on the first
         ``merge_financial_facts`` call, since its
         ``ON CONFLICT (..., period_start)`` target has no backing constraint.
-        A store still on the pre-Stage-1 PK is handled by
-        ``_migrate_financial_period_end_pk`` above, which recreates it via the
-        current (Stage-2) ``_DDL`` -- making this check a no-op for it.
+        A store still on the pre-Stage-1 PK is handled by the period_end
+        migration above, which recreates it via the current Stage-2 schema.
         """
         row = self._conn.execute(
             """
@@ -709,11 +710,62 @@ class SilverDatabase:
         if row is not None and "period_start" not in row[0]:
             logger.warning(
                 "Migrating sec_financial_fact to the period_start primary key "
-                "(Stage 2 of the period_end PK fix): dropping and recreating "
-                "with no rows. Re-bootstrap to repopulate."
+                "(Stage 2 of the period_end PK fix): backing up the legacy table "
+                "and copying rows into the current schema."
             )
-            self._conn.execute("DROP TABLE sec_financial_fact")
-            self._conn.execute(_DDL)
+            self._backup_and_recreate_financial_table(
+                "sec_financial_fact",
+                reason="pre_period_start_pk",
+                missing_values={
+                    "period_start": f"DATE '{_INSTANT_FACT_PERIOD_START_SENTINEL}'",
+                },
+            )
+
+    def _backup_and_recreate_financial_table(
+        self,
+        table: str,
+        *,
+        reason: str,
+        missing_values: dict[str, str],
+    ) -> str:
+        suffix = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
+        backup_table = f"backup_{table}_{reason}_{suffix}"
+        quoted_table = self._quote_identifier(table)
+        quoted_backup = self._quote_identifier(backup_table)
+
+        self._conn.execute(f"ALTER TABLE {quoted_table} RENAME TO {quoted_backup}")
+        self._conn.execute(_DDL)
+
+        target_columns = self._table_columns(table)
+        backup_columns = set(self._table_columns(backup_table))
+        insert_columns = ", ".join(self._quote_identifier(column) for column in target_columns)
+        select_exprs = []
+        for column in target_columns:
+            if column in backup_columns:
+                select_exprs.append(self._quote_identifier(column))
+            else:
+                select_exprs.append(missing_values.get(column, "NULL"))
+        self._conn.execute(
+            f"""
+            INSERT INTO {quoted_table} ({insert_columns})
+            SELECT {", ".join(select_exprs)}
+            FROM {quoted_backup}
+            """
+        )
+        return backup_table
+
+    def _table_columns(self, table: str) -> list[str]:
+        rows = self._conn.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'main'
+              AND table_name = ?
+            ORDER BY ordinal_position
+            """,
+            [table],
+        ).fetchall()
+        return [row[0] for row in rows]
 
     def close(self) -> None:
         self._conn.close()
