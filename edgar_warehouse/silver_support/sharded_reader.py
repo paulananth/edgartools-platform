@@ -100,11 +100,10 @@ class ShardedSilverReader:
             aliases.append(alias)
 
         # Per-shard table membership: a UNION ALL across aliases that DO contain
-        # the table.  Required for mixed-namespace mounts (e.g. gold-refresh
-        # attaches legacy ownership monolith + fundamentals shard — each has a
-        # disjoint table set).  Without per-shard detection, the UNION ALL would
-        # reference a non-existent table in one of the aliases and DuckDB would
-        # fail the entire CREATE VIEW.
+        # the table. Required for mixed historical/current mounts where table
+        # sets differ between files. Without per-shard detection, the UNION ALL
+        # would reference a non-existent table in one of the aliases and DuckDB
+        # would fail the entire CREATE VIEW.
         for table in self._TABLES:
             aliases_with_table = []
             for alias in aliases:

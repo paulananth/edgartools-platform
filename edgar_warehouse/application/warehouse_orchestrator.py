@@ -418,44 +418,7 @@ def _execute_warehouse_bronze_capture(
 
             _emit_pipeline_event("gold_build_started", command=command_name, run_id=run_id)
 
-            # PR-2: gold-refresh consumes BOTH ownership (silver/sec/silver.duckdb,
-            # via `db`) and fundamentals (silver/fundamentals/shard-0.duckdb) via
-            # a ShardedSilverReader that mounts both files.  ShardedSilverReader's
-            # per-shard table membership detection means each table is sourced
-            # from only the shard(s) that actually contain it.
-            #
-            # If fundamentals shard is absent (bootstrap-fundamentals not run yet),
-            # gold-refresh falls back to the single-database `db` — Branch B's
-            # 6 builders return empty PyArrow tables (existing _empty branch).
-            fundamentals_shard_path = (
-                _hydrate_fundamentals_shard(context)
-                if command_name == "gold-refresh"
-                else None
-            )
-            if fundamentals_shard_path is not None:
-                from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
-                silver_db_path = str(Path(context.silver_root.join("silver", "sec", "silver.duckdb")))
-                # Close the writable SilverDatabase connection so the reader can
-                # ATTACH the same file READ_ONLY (DuckDB exclusive-lock invariant).
-                db.close()
-                db_closed = True
-                gold_silver = ShardedSilverReader([silver_db_path, fundamentals_shard_path])
-                _emit_pipeline_event(
-                    "gold_silver_multi_namespace",
-                    command=command_name,
-                    run_id=run_id,
-                    shards=[silver_db_path, fundamentals_shard_path],
-                )
-            else:
-                gold_silver = db
-
-            gold_tables = build_gold(gold_silver)
-
-            if fundamentals_shard_path is not None:
-                # Close the reader; reopen the writable db for sync_run completion.
-                gold_silver.close()
-                db = _open_silver_database(context.silver_root)
-                db_closed = False
+            gold_tables = build_gold(db)
             _emit_pipeline_event(
                 "gold_build_completed",
                 command=command_name,
@@ -696,82 +659,6 @@ def _hydrate_silver_database_from_storage(context: WarehouseCommandContext) -> N
         local_path=str(local_path),
         size_bytes=len(payload),
     )
-
-
-def _hydrate_fundamentals_shard(context: WarehouseCommandContext) -> str | None:
-    """Download silver/fundamentals/shard-0.duckdb to local silver dir.
-
-    Returns the local path on success, or None when:
-      - storage is local (no download needed; return local path if it exists)
-      - the fundamentals shard does not exist in remote yet (bootstrap-fundamentals
-        has not run — gold-refresh proceeds with ownership data only)
-
-    PR-2: enables gold-refresh to consume Branch B silver alongside the legacy
-    ownership monolith without requiring bootstrap-fundamentals to have completed
-    (per AD-13: Branch B optional, must not block ownership gold).
-    """
-    relative_path = "silver/fundamentals/shard-0.duckdb"
-    local_path = Path(context.silver_root.join(relative_path))
-
-    if not context.storage_root.is_remote or context.silver_root.is_remote:
-        # Local storage — return path if file exists, else None
-        return str(local_path) if local_path.exists() else None
-
-    remote_path = context.storage_root.join(relative_path)
-    try:
-        payload = read_bytes(remote_path)
-    except (FileNotFoundError, OSError):
-        return None  # fundamentals shard absent — gold-refresh skips Branch B
-
-    local_path.parent.mkdir(parents=True, exist_ok=True)
-    local_path.write_bytes(payload)
-    _emit_pipeline_event(
-        "fundamentals_shard_hydrated",
-        path=remote_path,
-        local_path=str(local_path),
-        size_bytes=len(payload),
-    )
-    return str(local_path)
-
-
-def _publish_fundamentals_shard_if_remote(
-    local_shard_path: str,
-    storage_root_uri: str,
-) -> dict[str, Any] | None:
-    """Upload silver/fundamentals/shard-0.duckdb to remote storage.
-
-    Mirror of _hydrate_fundamentals_shard: hydrate downloads, this uploads.
-    Called by bootstrap-fundamentals after closing the shard so gold-refresh
-    can consume the data from S3 (ECS container filesystem is ephemeral).
-
-    Returns a write-record dict on upload, or None if storage is local.
-    Raises WarehouseRuntimeError if the local file does not exist.
-    """
-    storage = StorageLocation(root=storage_root_uri)
-    if not storage.is_remote:
-        return None
-
-    local_path = Path(local_shard_path)
-    if not local_path.exists():
-        raise WarehouseRuntimeError(
-            f"Fundamentals shard not found at {local_path}"
-        )
-
-    relative_path = "silver/fundamentals/shard-0.duckdb"
-    destination = storage.upload_file(relative_path, local_path)
-    size_bytes = local_path.stat().st_size
-    _emit_pipeline_event(
-        "fundamentals_shard_published",
-        path=destination,
-        local_path=str(local_path),
-        size_bytes=size_bytes,
-    )
-    return {
-        "layer": "fundamentals_shard",
-        "path": destination,
-        "relative_path": relative_path,
-        "size_bytes": size_bytes,
-    }
 
 
 def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict[str, Any] | None:

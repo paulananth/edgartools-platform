@@ -388,7 +388,7 @@ CREATE TABLE IF NOT EXISTS sec_reconcile_finding (
 );
 
 -- ==========================================================================
--- FUNDAMENTALS NAMESPACE TABLES  (silver/fundamentals/shard-{0..3}.duckdb)
+-- FUNDAMENTALS TABLES  (same SEC silver database as Branch A)
 -- Branch B bootstrap forms: 8-K earnings, DEF 14A, 10-K/10-Q XBRL, 13F-HR
 -- ==========================================================================
 

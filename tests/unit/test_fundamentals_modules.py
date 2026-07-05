@@ -460,7 +460,7 @@ class BootstrapFundamentalsWiringTests(unittest.TestCase):
             cik_list = [320193]
             mode = "entity-facts"
             run_id = "test-run"
-            fundamentals_silver_path = None
+            silver_root = None
             cik_offset = 0
             cik_limit = None
 
@@ -647,9 +647,8 @@ class FundamentalsShardedReaderTests(unittest.TestCase):
     """PR-2 invariant — ShardedSilverReader supports mixed-namespace mounts.
 
     Verifies the per-shard table-membership detection added to
-    ShardedSilverReader.__init__ so gold-refresh can ATTACH BOTH the legacy
-    ownership monolith and a fundamentals shard (disjoint table sets) without
-    the CREATE VIEW UNION ALL failing.
+    ShardedSilverReader.__init__ so mixed historical/current files with disjoint
+    table sets can be attached without the CREATE VIEW UNION ALL failing.
     """
 
     def test_mixed_namespace_mount(self) -> None:
@@ -730,9 +729,9 @@ class MdmPipelineRegistrationTests(unittest.TestCase):
 
 class BranchBSourceReaderTests(unittest.TestCase):
     """per-filing/thirteenf must read filing/attachment/raw-object metadata from
-    Branch A's ownership silver (`source`), never from the fundamentals-only
-    shard (`db`) — `db` never contains those tables, so reading from it always
-    silently returned zero filings, even after Branch A had loaded real data."""
+    the supplied Branch A source. In the unified silver layout that source is
+    normally the same ``SilverDatabase`` as the write target; these tests keep a
+    separate mock source so the workflow boundary remains explicit."""
 
     def test_per_filing_zero_metrics_when_source_unavailable(self) -> None:
         from edgar_warehouse.application.workflows.fundamentals_ingest import (

@@ -658,7 +658,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Branch B bootstrap: ingest fundamentals silver from bronze. "
             "Runs in parallel with bootstrap-batch (Branch A) via Step Functions. "
             "Modes: per-filing (8-K/DEF 14A), entity-facts (XBRL companyfacts), "
-            "thirteenf (13F INFORMATION TABLE). Writes to silver/fundamentals/ namespace."
+            "thirteenf (13F INFORMATION TABLE). Writes to the unified SEC silver database."
         ),
     )
     bootstrap_fundamentals.add_argument(
@@ -697,12 +697,12 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     bootstrap_fundamentals.add_argument(
-        "--fundamentals-silver-path",
+        "--silver-root",
         default=None,
         help=(
-            "Local path to the fundamentals silver DuckDB shard file. "
-            "Defaults to $FUNDAMENTALS_SILVER_PATH env var or "
-            "/tmp/silver/fundamentals/shard-0.duckdb."
+            "Local root for the unified SEC silver database. Defaults to "
+            "$WAREHOUSE_SILVER_ROOT, a local WAREHOUSE_STORAGE_ROOT, or "
+            "/tmp/edgar-warehouse-silver for remote storage."
         ),
     )
     _add_run_id_arg(bootstrap_fundamentals)
