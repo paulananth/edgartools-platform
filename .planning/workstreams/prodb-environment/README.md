@@ -222,15 +222,92 @@ resource's perpetual plan diff for real configuration drift.
   through), and `deploy-snowflake-stack.sh` (has no override flag at all
   today; this build hand-edited `snowflake/accounts/prod/main.tf`'s locals
   instead).
-- **No dev→prod (or dev→prodb) bronze sync tooling exists.** Stage 11
-  (`bronze_seed_silver_gold`) assumes bronze data already exists in the
-  target environment's S3 bucket ("cold-starting *or recovering* ... from a
-  bronze snapshot that's already in S3"). The go-live workstream's own
-  STATE.md documents this exact gap as launch gate matrix row 13, "stays
-  BLOCKED... run manually whenever bronze parity with dev is needed" — no
-  script for it exists anywhere in the repo (confirmed by search). prodb's
-  `edgartools-prodb-bronze` bucket is currently empty; this is the next
-  concrete blocker once stages 7-10 are done.
+- **No dev→prod (or dev→prodb) bronze sync tooling exists — RESOLVED for
+  this build via S3 Batch Operations (pattern documented for reuse).**
+  Stage 11 (`bronze_seed_silver_gold`) assumes bronze already exists in the
+  target bucket; the go-live workstream's STATE.md tracks this gap as launch
+  gate matrix row 13, and no script exists in the repo. Two approaches were
+  tried for the 283,370-object / ~15 GB dev→prodb copy:
+  1. `aws s3 sync` from the workstation: ~17 objects/sec (≈4 h projected),
+     plus intermittent `SSL: UNEXPECTED_EOF_WHILE_READING` copy failures at
+     `max_concurrent_requests 64` (clean at 20, but far too slow). Not
+     viable at this object count.
+  2. **S3 Batch Operations (used): 283,370/283,370 succeeded, 0 failed,
+     ~4 minutes.** Recipe: boto3 `list_objects_v2` → CSV manifest of
+     `bucket,url-encoded-key` lines → upload to a scratch S3 prefix →
+     temporary IAM role trusting `batchoperations.s3.amazonaws.com` (Get on
+     source prefix, Put on destination prefix, Get/Put on scratch prefix) →
+     `aws s3control create-job` with `S3PutObjectCopy` (keys preserved
+     verbatim, so identical `warehouse/bronze/...` layouts mirror cleanly)
+     → poll `describe-job` to `Complete` → delete temp role + manifest.
+     A permanent `sync-bronze-to-env.sh` wrapper is the obvious follow-up if
+     bronze-parity refreshes become routine.
+- **`edgartools-prod-edgar-identity` is created empty and no go-live.sh
+  stage populates it — every warehouse ECS task fails to launch until it
+  has a value.** First `bronze_seed_silver_gold` attempt failed with
+  `ResourceInitializationError ... ResourceNotFoundException: Secrets
+  Manager can't find the specified secret value for staging label:
+  AWSCURRENT`. 5-whys: task def injects `EDGAR_IDENTITY` from that secret →
+  the passive-infra Terraform intentionally creates *empty* secret
+  containers → real prod's launch populated it via a documented manual
+  `put-secret-value` (Phase 06 evidence) → go-live.sh has stages that
+  populate the `mdm/*` secrets (via the DSN bootstrap) but **no stage for
+  the edgar-identity secret** → nothing in the prodb build ever wrote it.
+  Fixed by `put-secret-value` with the standard identity string; a proper
+  fix is a small go-live.sh stage (or preflight check) that verifies
+  AWSCURRENT exists on `<prefix>-edgar-identity` before any ECS stage runs.
+- **go-live.sh stages 7-10 bake `EDGARTOOLS_${ENV_UPPER}` naming into
+  Snowflake-shared-account resources** (`db_name`, `EDGARTOOLS_PROD_MDM`
+  instance name, `edgartools_prod_mdm_postgres_policy`). For prodb these
+  defaults would have collided with *real prod's live objects in the shared
+  Snowflake account* — most dangerously `CREATE POSTGRES INSTANCE
+  EDGARTOOLS_PROD_MDM` (it already exists; the statement would have errored,
+  but a later `RESET ACCESS` against the wrong instance name would have
+  rotated real prod's MDM credentials out from under it). All stage-7-to-10
+  commands were run by hand with `EDGARTOOLS_PRODB*`/`edgartools_prodb*`
+  substitutions instead. Same root cause as the `--name-prefix` gap above.
+- **go-live.sh stage 9 runs `mdm_post_restore.sql` via `snow sql`, but that
+  file is Postgres SQL** (`REASSIGN OWNED BY`, `ALTER DEFAULT PRIVILEGES`)
+  meant for `psql` against the Postgres instance after a `pg_restore` — it
+  cannot execute as Snowflake SQL. Moot for a fresh bootstrap:
+  `infra/scripts/bootstrap-prod-mdm.sh` (the maintained path, used here)
+  performs the equivalent grants itself in-process. The go-live stage
+  command predates that script and should be replaced by a
+  `bootstrap-prod-mdm.sh` invocation, which also supersedes stage 10's
+  manual `SNOWFLAKE_APPLICATION_MDM_DSN` extraction entirely.
+- **`bootstrap-prod-mdm.sh`'s snowflake-secret step assumes a
+  `<prefix>/dbt/snowflake` source secret that does not exist in this AWS
+  account** (not even for dev — dev's `edgartools-dev/mdm/snowflake` was
+  evidently populated directly). Worked around with
+  `--skip-snowflake-secret` plus a direct `put-secret-value` of the
+  `MDM_SNOWFLAKE_*` JSON (7 keys, mirroring dev's shape; database/warehouse
+  pointed at `EDGARTOOLS_PRODB`/`EDGARTOOLS_PRODB_REFRESH_WH`).
+- **`infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql` hardcodes
+  `EDGARTOOLS_DEV`** — no env templating (unlike the postgres SQL files,
+  which take `-D` Jinja vars). Ran a PRODB-substituted copy for this build;
+  parameterizing it the same way as the postgres files is the clean fix.
+- **`mdm sync-graph`/`verify-graph`'s target schema and the MDM network-rule
+  schema must pre-exist**: created `EDGARTOOLS_PRODB.MDM` (network-rule
+  container) and `EDGARTOOLS_PRODB.NEO4J_GRAPH_MIGRATION` (graph target) by
+  hand — neither the Snowflake Terraform root nor any script creates them
+  for a new environment.
+- **The "zero `sec_pull_started`" invariant on `bronze_seed_silver_gold` is
+  conditional on bronze *completeness*, not just bronze *presence*.** With
+  dev-parity bronze (60,231 CIKs' submissions mains, full form-index
+  universe), the first run made SEC calls after all — 274 in the sampled
+  window, **100% pagination files, zero mains** (verified via CloudWatch
+  filter + classification). Dev never captured pagination files for the
+  wide universe; old large filers (low CIKs) reference them, so
+  `bootstrap-batch` legitimately backfills each missing pagination file
+  once, writes it to bronze (verified: written under
+  `submissions/sec/cik=.../pagination/<today>/`), and never refetches.
+  Bounded (only >1000-filing CIKs have pagination), per-task rate-limited
+  (~0.5 req/s/task observed, each Fargate task has its own public IP), and
+  self-extinguishing. The first attempt was stopped out of caution before
+  this was understood; attempt 2 proceeds with the backfill accepted.
+  Anyone tightening the go-live doc should phrase the invariant as "zero
+  *main-submissions* fetches; pagination backfill may occur once on a
+  freshly synced environment."
 - **No DSN auto-extraction between go-live.sh stages 9 and 10.** Stage 9
   creates the Snowflake Postgres instance and prints its connection info via
   `DESCRIBE POSTGRES INSTANCE ... --format JSON`; stage 10 needs
@@ -264,23 +341,26 @@ Verified directly against AWS/Snowflake APIs, not just trusted from script
 output:
 
 **AWS (`690839588395`, `us-east-1`):**
-- S3: `edgartools-prodb-tfstate`, `-bronze`, `-warehouse`, `-snowflake-export` (bronze is empty — see gaps above)
+- S3: `edgartools-prodb-tfstate`, `-bronze`, `-warehouse`, `-snowflake-export` (bronze holds the dev-parity mirror: 283,888 objects / ~15 GB under `warehouse/bronze/`, copied 2026-07-05 via the S3 Batch Operations recipe in the gaps section)
 - VPC `vpc-0b2a820945cfc0109`, 2 public subnets, security group `sg-0f7de61f13ba27744`
 - ECS cluster `edgartools-prod-warehouse`; 5 active task definition families: `edgartools-prod-{small,medium,large,mdm-small,mdm-medium}` (revision 2)
 - ECR repo `edgartools-prod-warehouse`
 - 23 Step Functions state machines, all prefixed `edgartools-prod-` (full list: `bootstrap`, `bootstrap-batched`, `bootstrap-full`, `bronze-seed-silver-gold`, `catch-up-daily-form-index`, `daily-incremental`, `full-reconcile`, `gold-refresh`, `load-daily-form-index-for-date`, `load-history`, `mdm-backfill-relationships`, `mdm-check-connectivity`, `mdm-counts`, `mdm-gold`, `mdm-migrate`, `mdm-run`, `mdm-seed-from-silver`, `mdm-seed-universe`, `mdm-sync-graph`, `mdm-verify-graph`, `ownership-mdm-gold`, `silver-mdm-gold`, `targeted-resync`)
-- Secrets Manager: `edgartools-prod-edgar-identity`, `edgartools-prod-runner-credentials`, `edgartools-prod/mdm/{api_keys,neo4j,postgres_dsn,snowflake}` (MDM secrets still hold placeholder values — stage 10)
+- Secrets Manager: `edgartools-prod-edgar-identity` (populated 2026-07-05 — was an empty container, see gaps), `edgartools-prod-runner-credentials`, `edgartools-prod/mdm/{api_keys,neo4j,postgres_dsn,snowflake}` (`postgres_dsn` + `snowflake` populated with real values 2026-07-05 via `bootstrap-prod-mdm.sh` + direct put; `api_keys`/`neo4j` remain unpopulated — neither is referenced by any prodb task definition, `neo4j` is legacy)
 - IAM roles: `sec_platform_prodb_runner_{execution,task,step_functions}`, `edgartools-prod-snowflake-s3`
 - SNS topic `edgartools-prod-snowflake-manifest-events`, KMS key aliased `edgartools-prodb-snowflake-export`
 - Terraform drift check (plan-only, all 4 applied roots): `accounts/prod` clean; `access/aws/accounts/prod` shows a plan-only false positive (reverts the Snowflake trust principal to the bootstrap wildcard because a bare `terraform plan` can't reproduce the wrapper's reconcile-pass overlay variables — the actually-applied state is already correctly reconciled, confirmed by the wrapper's own last "No changes" run); `snowflake/accounts/prod` shows only the expected manifest-task tension described above; `access/snowflake/accounts/prod` clean.
 
 **Snowflake (account `IXKYQWK-YW12138`, shared with dev and real prod):**
-- Database `EDGARTOOLS_PRODB`; schemas `EDGARTOOLS_SOURCE`, `EDGARTOOLS_GOLD`, `EDGARTOOLS_DASHBOARD`
+- Database `EDGARTOOLS_PRODB`; schemas `EDGARTOOLS_SOURCE`, `EDGARTOOLS_GOLD`, `EDGARTOOLS_DASHBOARD`, plus `MDM` (network-rule container) and `NEO4J_GRAPH_MIGRATION` (graph target), both created 2026-07-05
 - Warehouses `EDGARTOOLS_PRODB_REFRESH_WH`, `EDGARTOOLS_PRODB_READER_WH`
 - Roles `EDGARTOOLS_PRODB_{DEPLOYER,REFRESHER,READER}`, all granted to SYSADMIN with the documented grant set
 - 17 source tables, 2 file formats, external S3 stage `EDGARTOOLS_SOURCE_EXPORT_STAGE`, manifest pipe + stream, 3 stored procedures, `SNOWFLAKE_RUN_MANIFEST_TASK` (`started`, 1-minute schedule)
 - Storage integration `EDGARTOOLS_PRODB_EXPORT_INTEGRATION`; native-pull validation artifact confirms `native_pull_ready: true` (`infra/snowflake/sql/prod_native_pull_handshake.json`, copy/stage counts both 0 — expected, no data loaded yet)
-- Dashboard schema, internal stage `DASHBOARD_SRC`, and `STREAMLIT` app `EDGARTOOLS_DASHBOARD` all created (after the circular-dependency recovery above)
+- Dashboard schema, internal stage `DASHBOARD_SRC` (holds `streamlit_app.py` + `environment.yml`, uploaded stage 8), and `STREAMLIT` app `EDGARTOOLS_DASHBOARD` all created
+- `EDGARTOOLS_GOLD`: 16 dynamic tables + 1 view + 1 status view deployed via dbt (stage 7)
+- Postgres instance `EDGARTOOLS_PRODB_MDM` (BURST_S, 50 GB, Postgres 16, `READY`, host in `ca-central-1` per Snowflake's placement); network policy `EDGARTOOLS_PRODB_MDM_POSTGRES_POLICY` with `POSTGRES_INGRESS` rule `EDGARTOOLS_PRODB.MDM.MDM_POSTGRES_INGRESS_ALL`; database `mdm` created + migrated (20 tables), ownership with `application` role
+- Neo4j Graph Analytics Native App grants applied for `EDGARTOOLS_PRODB.NEO4J_GRAPH_MIGRATION` (database role `NEO4J_GRAPH_ANALYTICS_MIGRATION_ROLE` granted to the app; app responds — compute pools `CPU_X64_XS/M/L` available)
 
 ## Status log
 
@@ -295,8 +375,48 @@ output:
   cross-root STREAMLIT circular dependency (documented above, same recovery
   as real prod's own launch). `native_pull_ready: true`, verified live, zero
   drift outside the one known pre-existing Terraform/imperative tension.
-- **Stages 7-14**: not started (dbt gold, Streamlit dashboard upload,
-  Snowflake Postgres/graph prerequisites, MDM secret bootstrap, bronze
-  backfill, MDM connectivity/run/sync/verify, AWS MDM E2E, smoke test).
-  Bronze backfill (stage 11) is the next expected hard blocker per the gaps
-  section above.
+- **Stage 7 (dbt gold)**: DONE 2026-07-05. `dbt run --target prod` with
+  `DBT_SNOWFLAKE_{ROLE,DATABASE,WAREHOUSE}` overridden to `EDGARTOOLS_PRODB*`
+  — 17/17 models built (16 dynamic tables + `edgartools_gold_status` view;
+  one more model than real prod's launch-era 16: `FINANCIAL_FACTORS` was
+  added since by the fundamental-factors-v2 workstream). `dbt test`: 51/58
+  pass; all 7 failures are **pre-existing main-branch test debt** in
+  `financial_factors` unit tests (2 ERRORs: expected-row column sets are
+  stale after the model grew to 24 columns; 5 FAILs: float expectations at
+  16 significant digits vs Snowflake DOUBLE's 17). Mock-input unit tests —
+  environment-independent, not a prodb issue; flagged as a separate fix
+  task outside this workstream.
+- **Stage 8 (Streamlit dashboard)**: DONE 2026-07-05. `deploy.sh` with
+  `DASHBOARD_DATABASE=EDGARTOOLS_PRODB` (stage default `EDGARTOOLS_PROD`
+  must be overridden — same shared-account naming gap). Both files verified
+  in `DASHBOARD_SRC`; `STREAMLIT` object live.
+- **Stage 9 (Snowflake Postgres + graph prereqs)**: DONE 2026-07-05, all
+  names hand-substituted to PRODB (see gaps — the stage defaults collide
+  with real prod in the shared Snowflake account). Created `MDM` +
+  `NEO4J_GRAPH_MIGRATION` schemas, network rule/policy, Postgres instance
+  `EDGARTOOLS_PRODB_MDM` (READY in ~90 s), PRODB-adapted Native App grants.
+  `mdm_post_restore.sql` deliberately skipped (see gaps — it's psql SQL and
+  its grants are handled by `bootstrap-prod-mdm.sh`).
+- **Stage 10 (MDM secret bootstrap)**: DONE 2026-07-05 via
+  `bootstrap-prod-mdm.sh --env prod --snow-connection snowconn
+  --instance-name EDGARTOOLS_PRODB_MDM --skip-snowflake-secret` (the
+  maintained one-click that supersedes go-live.sh's manual-DSN stage):
+  rotated both Postgres credentials, created + migrated database `mdm`,
+  wrote `postgres_dsn`, verified `{"connected": true, "missing_tables": []}`
+  — which also proves *local* (workstation) reachability to the
+  Snowflake-hosted instance. `mdm/snowflake` then populated directly
+  (no `dbt/snowflake` source secret exists in this account — see gaps).
+- **Stage 11 (bronze backfill + bronze_seed_silver_gold)**: bronze mirror
+  DONE 2026-07-05 (283,370 objects via S3 Batch Operations, 0 failures,
+  ~4 min — see gaps for the recipe). Pipeline attempt 1 failed-to-start:
+  empty `edgar-identity` secret (root-caused + fixed, see gaps). Attempt 1b
+  stopped by operator on `sec_pull_started` events — investigated, turned
+  out to be the bounded pagination backfill (274 calls, 100% pagination,
+  0 mains — see gaps for the invariant nuance). Attempt 2
+  (`bronze-seed-silver-gold-1783228247`) started 2026-07-05 ~05:10 UTC with
+  the backfill accepted: 603 BatchSilver batches over the 60,231-CIK
+  dev-parity universe at MaxConcurrency=4 — multi-hour run, monitored.
+- **Stages 12-14**: pending attempt 2's completion (local MDM chain script
+  staged; AWS MDM E2E manifest verified — the untracked
+  `infra/aws-prod-application.json` is byte-identical to the committed
+  `infra/aws-prodb-application.json`, both generated by the stage-5 deploy).
