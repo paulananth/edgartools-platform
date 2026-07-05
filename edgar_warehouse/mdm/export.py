@@ -218,7 +218,12 @@ class SnowflakeConnectorWriter(SnowflakeWriter):
         temp_table = f"TEMP_{_safe_identifier(table)}_{uuid.uuid4().hex[:12]}"
         column_defs = ", ".join(f"{_quote_identifier(column)} VARIANT" for column in columns)
         insert_columns = ", ".join(_quote_identifier(column) for column in columns)
-        placeholders = ", ".join(["PARSE_JSON(%s)"] * len(columns))
+        # Snowflake rejects non-constant expressions in a multi-row VALUES list
+        # (002014: "Invalid expression [PARSE_JSON(...)] in VALUES clause"),
+        # and executemany rewrites this INSERT into exactly that. Keep the
+        # placeholders bare and apply PARSE_JSON in a SELECT over FROM VALUES.
+        placeholders = ", ".join(["%s"] * len(columns))
+        select_exprs = ", ".join(f"PARSE_JSON(column{i + 1})" for i in range(len(columns)))
         updates = ", ".join(
             f"target.{_quote_identifier(column)} = source.{_quote_identifier(column)}"
             for column in columns
@@ -232,7 +237,8 @@ class SnowflakeConnectorWriter(SnowflakeWriter):
         try:
             cursor.execute(f"CREATE TEMPORARY TABLE {_quote_identifier(temp_table)} ({column_defs})")
             cursor.executemany(
-                f"INSERT INTO {_quote_identifier(temp_table)} ({insert_columns}) VALUES ({placeholders})",
+                f"INSERT INTO {_quote_identifier(temp_table)} ({insert_columns}) "
+                f"SELECT {select_exprs} FROM VALUES ({placeholders})",
                 values,
             )
             merge_sql = (
