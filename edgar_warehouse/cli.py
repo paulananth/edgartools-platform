@@ -187,6 +187,10 @@ def _handle_bootstrap_fundamentals(args: argparse.Namespace) -> int:
     return run_command("bootstrap-fundamentals", args)
 
 
+def _handle_verify_pipeline_run(args: argparse.Namespace) -> int:
+    return run_command("verify-pipeline-run", args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="edgar-warehouse",
@@ -707,6 +711,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(bootstrap_fundamentals)
     bootstrap_fundamentals.set_defaults(handler=_handle_bootstrap_fundamentals)
+
+    verify_pipeline_run = subparsers.add_parser(
+        "verify-pipeline-run",
+        help="Verify a recorded pipeline run by rechecking stored artifact hashes.",
+    )
+    verify_pipeline_run.add_argument(
+        "--run-id",
+        required=True,
+        help="Pipeline run id to verify.",
+    )
+    verify_pipeline_run.set_defaults(handler=_handle_verify_pipeline_run)
 
     try:
         from edgar_warehouse.mdm.cli import register_mdm_subparser

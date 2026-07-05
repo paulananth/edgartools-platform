@@ -317,6 +317,10 @@ class WarehousePathResolver:
             return {
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }
+        if command_name == "verify-pipeline-run":
+            return {
+                "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
+            }
         if command_name == "load-daily-form-index-for-date":
             business_date = str(scope["target_date"])
             return {

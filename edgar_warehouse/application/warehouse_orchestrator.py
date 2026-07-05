@@ -373,6 +373,39 @@ def _execute_warehouse_bronze_capture(
             "status": "running",
         }
     )
+    pipeline_writes = _planned_pipeline_writes(
+        context=context,
+        command_name=command_name,
+        command_path=command_path,
+        run_id=run_id,
+        scope=scope,
+        now=now,
+        include_snowflake_export_manifest=(
+            context.snowflake_export_root is not None
+            and command_name in SNOWFLAKE_EXPORT_COMMANDS
+        ),
+        shard_index=_active_shard_index if _using_shard_path else None,
+    )
+    db.start_pipeline_run(
+        {
+            "pipeline_run_id": run_id,
+            "command_name": command_name,
+            "runtime_mode": context.runtime_mode,
+            "environment_name": context.environment_name,
+            "started_at": now,
+            "status": "running",
+            "arguments": arguments,
+            "scope": scope,
+            "bronze_root": context.bronze_root.root,
+            "storage_root": context.storage_root.root,
+            "silver_root": context.silver_root.root,
+            "serving_export_root": (
+                context.snowflake_export_root.root
+                if context.snowflake_export_root is not None
+                else None
+            ),
+        }
+    )
 
     raw_writes: list[dict[str, Any]] = []
     metrics: dict[str, Any] = {"rows_inserted": 0, "rows_skipped": 0, "sync_status": "succeeded"}
@@ -475,6 +508,18 @@ def _execute_warehouse_bronze_capture(
             rows_inserted=int(metrics.get("rows_inserted", 0) or 0),
             rows_skipped=int(metrics.get("rows_skipped", 0) or 0),
         )
+        db.complete_pipeline_run(
+            run_id,
+            status=str(metrics.get("sync_status", "succeeded")),
+            writes=pipeline_writes,
+            raw_writes=raw_writes,
+            metrics={
+                **metrics,
+                "silver_table_counts": silver_table_counts or {},
+                "gold_row_counts": gold_row_counts or {},
+                "snowflake_export_row_counts": snowflake_export_counts or {},
+            },
+        )
         db.close()
         db_closed = True
         _emit_pipeline_event(
@@ -496,6 +541,14 @@ def _execute_warehouse_bronze_capture(
     except Exception as exc:
         if not db_closed:
             db.complete_sync_run(run_id, status="failed", error_message=str(exc))
+            db.complete_pipeline_run(
+                run_id,
+                status="failed",
+                writes=pipeline_writes,
+                raw_writes=raw_writes,
+                metrics=metrics,
+                error_message=str(exc),
+            )
         _emit_pipeline_event(
             "pipeline_failed",
             command=command_name,
@@ -3356,11 +3409,83 @@ def _resolve_scope(
             "from_windows_key": arguments.get("from_windows_key"),
         }
 
+    if command_name == "verify-pipeline-run":
+        return {
+            "run_id": arguments.get("run_id"),
+        }
+
     raise WarehouseRuntimeError(f"Unsupported warehouse command: {command_name}")
 
 
 def _planned_writes(command_name: str, command_path: str, run_id: str, scope: dict[str, Any]) -> dict[str, str]:
     return planned_writes(command_name, command_path, run_id, scope)
+
+
+def _planned_pipeline_writes(
+    *,
+    context: WarehouseCommandContext,
+    command_name: str,
+    command_path: str,
+    run_id: str,
+    scope: dict[str, Any],
+    now: datetime,
+    include_snowflake_export_manifest: bool,
+    shard_index: int | None,
+) -> list[dict[str, Any]]:
+    writes: list[dict[str, Any]] = []
+    for layer, relative_path in _planned_writes(
+        command_name=command_name,
+        command_path=command_path,
+        run_id=run_id,
+        scope=scope,
+    ).items():
+        target = context.bronze_root if layer == "bronze" else context.storage_root
+        writes.append(
+            {
+                "layer": layer,
+                "path": target.join(relative_path),
+                "relative_path": relative_path,
+                "planned": True,
+            }
+        )
+
+    if include_snowflake_export_manifest and context.snowflake_export_root is not None:
+        export_business_date = _resolve_export_business_date(
+            command_name=command_name,
+            scope=scope,
+            now=now,
+        )
+        relative_path = _snowflake_export_run_manifest_relative_path(
+            workflow_name=command_name.replace("-", "_"),
+            business_date=export_business_date,
+            run_id=run_id,
+        )
+        writes.append(
+            {
+                "layer": "snowflake_export_manifest",
+                "path": context.snowflake_export_root.join(relative_path),
+                "relative_path": relative_path,
+                "planned": True,
+            }
+        )
+
+    if context.storage_root.is_remote:
+        if shard_index is None:
+            layer = "silver_database"
+            relative_path = "silver/sec/silver.duckdb"
+        else:
+            layer = "silver_shard"
+            relative_path = f"silver/sec/shards/shard-{shard_index}.duckdb"
+        writes.append(
+            {
+                "layer": layer,
+                "path": context.storage_root.join(relative_path),
+                "relative_path": relative_path,
+                "planned": True,
+            }
+        )
+
+    return writes
 
 
 def _resolve_export_business_date(command_name: str, scope: dict[str, Any], now: datetime) -> str:

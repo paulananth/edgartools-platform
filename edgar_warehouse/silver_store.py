@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
@@ -338,6 +339,29 @@ CREATE TABLE IF NOT EXISTS sec_sync_run (
     rows_deleted       INTEGER,
     rows_skipped       INTEGER,
     error_message      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS pipeline_run (
+    pipeline_run_id          TEXT PRIMARY KEY,
+    command_name             TEXT NOT NULL,
+    runtime_mode             TEXT NOT NULL,
+    environment_name         TEXT,
+    started_at               TIMESTAMPTZ NOT NULL,
+    completed_at             TIMESTAMPTZ,
+    status                   TEXT NOT NULL,
+    arguments_json           TEXT,
+    scope_json               TEXT,
+    bronze_root              TEXT,
+    storage_root             TEXT,
+    silver_root              TEXT,
+    serving_export_root      TEXT,
+    writes_json              TEXT,
+    raw_writes_json          TEXT,
+    metrics_json             TEXT,
+    error_message            TEXT,
+    verification_status      TEXT,
+    last_verified_at         TIMESTAMPTZ,
+    verification_report_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sec_source_checkpoint (
@@ -2165,6 +2189,124 @@ class SilverDatabase:
         return dict(zip(cols, result))
 
     # ------------------------------------------------------------------
+    # pipeline_run
+    # ------------------------------------------------------------------
+
+    def start_pipeline_run(self, row: dict[str, Any]) -> None:
+        self._conn.execute(
+            """
+            INSERT INTO pipeline_run
+                (pipeline_run_id, command_name, runtime_mode, environment_name,
+                 started_at, status, arguments_json, scope_json, bronze_root,
+                 storage_root, silver_root, serving_export_root)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (pipeline_run_id) DO UPDATE SET
+                command_name = excluded.command_name,
+                runtime_mode = excluded.runtime_mode,
+                environment_name = excluded.environment_name,
+                started_at = excluded.started_at,
+                status = excluded.status,
+                arguments_json = excluded.arguments_json,
+                scope_json = excluded.scope_json,
+                bronze_root = excluded.bronze_root,
+                storage_root = excluded.storage_root,
+                silver_root = excluded.silver_root,
+                serving_export_root = excluded.serving_export_root,
+                completed_at = NULL,
+                writes_json = NULL,
+                raw_writes_json = NULL,
+                metrics_json = NULL,
+                error_message = NULL,
+                verification_status = NULL,
+                last_verified_at = NULL,
+                verification_report_json = NULL
+            """,
+            [
+                row["pipeline_run_id"],
+                row["command_name"],
+                row["runtime_mode"],
+                row.get("environment_name"),
+                row.get("started_at", datetime.now(UTC)),
+                row.get("status", "running"),
+                self._json_text(row.get("arguments") or {}),
+                self._json_text(row.get("scope") or {}),
+                row.get("bronze_root"),
+                row.get("storage_root"),
+                row.get("silver_root"),
+                row.get("serving_export_root"),
+            ],
+        )
+
+    def complete_pipeline_run(
+        self,
+        pipeline_run_id: str,
+        *,
+        status: str,
+        writes: list[dict[str, Any]],
+        raw_writes: list[dict[str, Any]],
+        metrics: dict[str, Any],
+        error_message: str | None = None,
+    ) -> None:
+        self._conn.execute(
+            """
+            UPDATE pipeline_run
+            SET completed_at = ?,
+                status = ?,
+                writes_json = ?,
+                raw_writes_json = ?,
+                metrics_json = ?,
+                error_message = ?
+            WHERE pipeline_run_id = ?
+            """,
+            [
+                datetime.now(UTC),
+                status,
+                self._json_text(writes),
+                self._json_text(raw_writes),
+                self._json_text(metrics),
+                error_message,
+                pipeline_run_id,
+            ],
+        )
+
+    def record_pipeline_verification(
+        self,
+        pipeline_run_id: str,
+        *,
+        verification_status: str,
+        report: dict[str, Any],
+    ) -> None:
+        self._conn.execute(
+            """
+            UPDATE pipeline_run
+            SET verification_status = ?,
+                last_verified_at = ?,
+                verification_report_json = ?
+            WHERE pipeline_run_id = ?
+            """,
+            [
+                verification_status,
+                datetime.now(UTC),
+                self._json_text(report),
+                pipeline_run_id,
+            ],
+        )
+
+    def get_pipeline_run(self, pipeline_run_id: str) -> dict[str, Any] | None:
+        result = self._conn.execute(
+            "SELECT * FROM pipeline_run WHERE pipeline_run_id = ?",
+            [pipeline_run_id],
+        ).fetchone()
+        if result is None:
+            return None
+        cols = [d[0] for d in self._conn.description]
+        return dict(zip(cols, result))
+
+    @staticmethod
+    def _json_text(value: Any) -> str:
+        return json.dumps(value, default=str, sort_keys=True)
+
+    # ------------------------------------------------------------------
     # sec_source_checkpoint
     # ------------------------------------------------------------------
 
@@ -2390,6 +2532,7 @@ class SilverDatabase:
             "sec_adv_disclosure_event",
             "sec_adv_private_fund",
             "sec_sync_run",
+            "pipeline_run",
             "sec_source_checkpoint",
             "sec_company_sync_state",
             "sec_reconcile_finding",
