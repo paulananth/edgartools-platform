@@ -62,26 +62,6 @@ def execute(args: Any) -> int:
     _cik_limit_raw = getattr(args, "cik_limit", None)
     cik_limit = int(_cik_limit_raw) if _cik_limit_raw is not None else None
 
-    # Resolve the CIK batch.  When no explicit --cik-list is given (the Step
-    # Functions Map case), pull the ordered MDM active universe — the SAME source
-    # and ordering Branch A's bootstrap-next uses — and apply offset-then-limit
-    # windowing.  This guarantees Branch A and Branch B process identical CIK
-    # windows for the same {window_offset, window_limit} Map item.
-    try:
-        cik_list = _resolve_fundamentals_ciks(
-            raw_cik_list=raw_cik_list, cik_offset=cik_offset, cik_limit=cik_limit
-        )
-    except Exception as exc:
-        _err(f"bootstrap-fundamentals could not resolve CIKs: {exc}")
-        return 2
-
-    if not cik_list:
-        _err(
-            "bootstrap-fundamentals requires --cik-list, or an MDM-tracked active "
-            "universe resolvable via --cik-offset/--cik-limit"
-        )
-        return 2
-
     from edgar_warehouse.infrastructure.warehouse_settings import resolve_edgar_identity
     try:
         identity = resolve_edgar_identity()
@@ -91,12 +71,6 @@ def execute(args: Any) -> int:
 
     started_at = datetime.now(UTC)
     context = _build_silver_context(identity=identity, silver_root_override=silver_root_override)
-
-    _log("bootstrap_fundamentals_started", run_id=run_id, mode=mode,
-         cik_count=len(cik_list), cik_offset=cik_offset,
-         cik_limit=(cik_limit if cik_limit is not None else -1),
-         resolved_from=("cik_list" if raw_cik_list else "mdm_active_universe"),
-         silver_root=context.silver_root.root)
 
     from edgar_warehouse.application.warehouse_orchestrator import (
         _hydrate_silver_database_from_storage,
@@ -109,7 +83,35 @@ def execute(args: Any) -> int:
         _err(f"Failed to open silver database: {exc}")
         return 2
 
+    # Resolve the CIK batch. When no explicit --cik-list is given (the Step
+    # Functions Map case), pull the ordered silver tracking universe — the SAME
+    # source and ordering Branch A's bootstrap-next uses — and apply
+    # offset-then-limit windowing. This guarantees Branch A and Branch B process
+    # identical CIK windows for the same {window_offset, window_limit} Map item.
+    try:
+        cik_list = _resolve_fundamentals_ciks(
+            db=db,
+            raw_cik_list=raw_cik_list,
+            cik_offset=cik_offset,
+            cik_limit=cik_limit,
+        )
+    except Exception as exc:
+        _err(f"bootstrap-fundamentals could not resolve CIKs: {exc}")
+        return 2
+
+    if not cik_list:
+        _err(
+            "bootstrap-fundamentals requires --cik-list, or silver tracking state "
+            "resolvable via --cik-offset/--cik-limit"
+        )
+        return 2
+
     metrics: dict[str, Any] = {"mode": mode, "cik_count": len(cik_list)}
+    _log("bootstrap_fundamentals_started", run_id=run_id, mode=mode,
+         cik_count=len(cik_list), cik_offset=cik_offset,
+         cik_limit=(cik_limit if cik_limit is not None else -1),
+         resolved_from=("cik_list" if raw_cik_list else "silver_tracking_state"),
+         silver_root=context.silver_root.root)
 
     # per-filing and thirteenf read Branch A filing/attachment/raw-object
     # metadata from the same canonical silver database they write Branch B rows
@@ -264,6 +266,7 @@ def _resolve_silver_root_uri(
 
 def _resolve_fundamentals_ciks(
     *,
+    db: Any,
     raw_cik_list: list[int],
     cik_offset: int,
     cik_limit: int | None,
@@ -275,7 +278,7 @@ def _resolve_fundamentals_ciks(
     window_limit}`` Map item:
 
     - With an explicit ``--cik-list``: use it as-is, then window.
-    - Without one: pull the MDM tracked universe (ordered ASC by CIK, the same
+    - Without one: pull the silver tracked universe (ordered ASC by CIK, the same
       source/order/status-filter ``compute-windows``/``bootstrap-next`` use —
       LOAD_HISTORY_TRACKING_STATUS_FILTER, not 'active' alone; see that
       constant's docstring for why), then window.
@@ -284,7 +287,6 @@ def _resolve_fundamentals_ciks(
     """
     from edgar_warehouse.application.warehouse_orchestrator import (
         LOAD_HISTORY_TRACKING_STATUS_FILTER,
-        _get_mdm_tracked_ciks,
         _validate_window_args,
     )
 
@@ -292,7 +294,7 @@ def _resolve_fundamentals_ciks(
     if raw_cik_list:
         ciks = list(raw_cik_list)
     else:
-        ciks = _get_mdm_tracked_ciks(LOAD_HISTORY_TRACKING_STATUS_FILTER)
+        ciks = db.get_tracked_ciks(LOAD_HISTORY_TRACKING_STATUS_FILTER)
     ciks = ciks[cik_offset:]
     if cik_limit is not None:
         ciks = ciks[:cik_limit]

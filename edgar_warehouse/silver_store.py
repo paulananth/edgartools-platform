@@ -2597,10 +2597,35 @@ class SilverDatabase:
 
     def get_active_ciks(self) -> list[dict[str, Any]]:
         """Return CIKs already marked active in silver — used by seed-universe to skip re-bootstrapping."""
-        rows = self._conn.execute(
-            "SELECT cik FROM sec_company_sync_state WHERE tracking_status = 'active'"
-        ).fetchall()
-        return [{"cik": row[0]} for row in rows]
+        return [{"cik": cik} for cik in self.get_tracked_ciks("active")]
+
+    def get_tracked_ciks(self, tracking_status_filter: str = "active") -> list[int]:
+        """Return tracked CIKs from silver sync state ordered by CIK.
+
+        ``tracking_status_filter`` accepts ``all`` or a comma-separated list of
+        statuses such as ``active,bootstrap_pending``.
+        """
+        statuses = [
+            status.strip()
+            for status in str(tracking_status_filter or "active").split(",")
+            if status.strip()
+        ]
+        if not statuses or "all" in statuses:
+            rows = self._conn.execute(
+                "SELECT cik FROM sec_company_sync_state ORDER BY cik"
+            ).fetchall()
+        else:
+            placeholders = ", ".join("?" for _ in statuses)
+            rows = self._conn.execute(
+                f"""
+                SELECT cik
+                FROM sec_company_sync_state
+                WHERE tracking_status IN ({placeholders})
+                ORDER BY cik
+                """,
+                statuses,
+            ).fetchall()
+        return [int(row[0]) for row in rows]
 
     def get_ciks_with_bronze(self, tracking_status_filter: str = "all") -> list[dict[str, Any]]:
         """Return CIKs that have bronze submissions loaded (have a submissions_main checkpoint).

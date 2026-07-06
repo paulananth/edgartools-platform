@@ -92,7 +92,7 @@ SNOWFLAKE_EXPORT_COMMANDS = GOLD_AFFECTING_COMMANDS | {"seed-universe"}
 # bootstrap-next (via the explicit --tracking-status-filter the load_history state machine
 # passes), and bootstrap-fundamentals's CIK resolution must all query the SAME combined status
 # set. A CIK is 'bootstrap_pending' from seeding until its first full submissions bootstrap
-# completes, then promoted to 'active' (see _sync_mdm_tracking_status below). Filtering
+# completes, then promoted to 'active' in sec_company_sync_state. Filtering
 # ComputeWindows to 'active' alone computed zero windows for every freshly-seeded environment,
 # since nothing is 'active' yet; filtering to 'bootstrap_pending' alone would stop covering
 # already-tracked companies on later runs. Do not change this without updating the matching
@@ -140,7 +140,7 @@ def run_command(command_name: str, args: Any) -> int:
 
 
 def run_seed_universe_command(args: Any) -> int:
-    """Seed the MDM tracked universe from a SEC reference JSON file."""
+    """Compatibility entry point for explicit MDM universe seeding."""
     try:
         from edgar_warehouse.silver_store import _parse_company_ticker_rows
 
@@ -930,8 +930,8 @@ def _capture_bronze_raw(
                 metrics["sync_status"] = "partial"
                 break
         impacted_ciks = _dedupe_ints(impacted_ciks)
-        _mdm_auto_enroll(impacted_ciks, scope_reason="daily_index")
-        impacted_ciks = _filter_ciks_to_universe(impacted_ciks)
+        _seed_silver_tracking_status(db, impacted_ciks, tracking_status="active")
+        impacted_ciks = _filter_ciks_to_universe(impacted_ciks, db=db)
         cik_limit = arguments.get("cik_limit")
         cik_offset = int(arguments.get("cik_offset") or 0)
         _validate_window_args(cik_limit, cik_offset)
@@ -974,6 +974,7 @@ def _capture_bronze_raw(
 
     if command_name == "bootstrap":
         ciks = _resolve_bootstrap_target_ciks(
+            db=db,
             raw_ciks=scope.get("cik_list"),
             command_name=command_name,
             tracking_status_filter=str(scope.get("tracking_status_filter", "active")),
@@ -1000,6 +1001,7 @@ def _capture_bronze_raw(
 
     if command_name == "bootstrap-full":
         ciks = _resolve_bootstrap_target_ciks(
+            db=db,
             raw_ciks=scope.get("cik_list"),
             command_name=command_name,
             tracking_status_filter=str(scope.get("tracking_status_filter", "active")),
@@ -1027,6 +1029,7 @@ def _capture_bronze_raw(
         pending_pool_limit = int(scope.get("cik_limit") or 100)
         tracking_status_filter = str(scope.get("tracking_status_filter", "bootstrap_pending"))
         ciks = _resolve_bootstrap_target_ciks(
+            db=db,
             raw_ciks=None,
             command_name=command_name,
             tracking_status_filter=tracking_status_filter,
@@ -1244,16 +1247,12 @@ def _capture_bronze_raw(
         if len(limited_ciks) < len(universe_rows):
             allowed = set(limited_ciks)
             universe_rows = [row for row in universe_rows if int(row["cik"]) in allowed]
-        # Exclude companies already fully bootstrapped. Check both silver DuckDB
-        # (sec_company_sync_state.tracking_status = 'active') and MDM Postgres,
-        # since MDM may have been reset while silver still holds accurate status.
-        # Non-fatal: MDM unreachability returns [] and silver is always available.
-        active_ciks = set(_get_mdm_tracked_ciks("active"))
-        silver_active_ciks = set(
+        # Exclude companies already fully bootstrapped. Silver sync state owns
+        # pipeline tracking status; MDM is only used by explicit MDM commands.
+        active_ciks = set(
             row["cik"]
             for row in db.get_active_ciks()
         )
-        active_ciks = active_ciks | silver_active_ciks
         if active_ciks:
             before = len(universe_rows)
             universe_rows = [row for row in universe_rows if int(row["cik"]) not in active_ciks]
@@ -1262,11 +1261,15 @@ def _capture_bronze_raw(
                 total_ciks=before,
                 new_ciks=len(universe_rows),
                 skipped_active=before - len(universe_rows),
-                skipped_mdm_active=len(silver_active_ciks & {int(r["cik"]) for r in universe_rows[:before]}),
-                skipped_silver_active=len(silver_active_ciks),
+                skipped_silver_active=len(active_ciks),
             )
         if arguments.get("limit") is not None:
             universe_rows = universe_rows[: int(arguments["limit"])]
+        _seed_silver_tracking_status(
+            db,
+            [int(row["cik"]) for row in universe_rows],
+            tracking_status="bootstrap_pending",
+        )
         metrics["_ticker_reference_rows"] = ticker_reference_rows
         cik_universe_path = _write_cik_universe_batches(
             context=context,
@@ -1410,7 +1413,7 @@ def _capture_bronze_raw(
             raise WarehouseRuntimeError(
                 f"--window-size must be a positive integer, got {window_size}"
             )
-        ciks = _get_mdm_tracked_ciks(LOAD_HISTORY_TRACKING_STATUS_FILTER)
+        ciks = db.get_tracked_ciks(LOAD_HISTORY_TRACKING_STATUS_FILTER)
         # Build window descriptors: {window_offset, window_limit} for each slice
         window_descs = [
             {"window_offset": i, "window_limit": min(window_size, len(ciks) - i)}
@@ -2228,7 +2231,6 @@ def _apply_submission_snapshot_to_silver(
             "last_error_message": None,
         }
     )
-    _sync_mdm_tracking_status(cik, tracking_status)
     return {
         "raw_writes": raw_writes,
         "rows_written": rows_written,
@@ -3037,8 +3039,9 @@ def _parse_cik(value: Any) -> int:
 
 
 def _get_mdm_tracked_ciks(status_filter: str) -> list[int]:
-    """Query MDM for tracked CIKs. MDM is the sole source of truth for universe tracking.
+    """Query MDM for explicit MDM workflows.
 
+    Warehouse pipeline orchestration reads sec_company_sync_state instead.
     Raises WarehouseRuntimeError if MDM_DATABASE_URL is not set or MDM is unreachable.
     """
     import os
@@ -3056,8 +3059,8 @@ def _get_mdm_tracked_ciks(status_filter: str) -> list[int]:
 def _sync_mdm_tracking_status(cik: int, status: str) -> None:
     """Update mdm_company.tracking_status after a company sync completes.
 
-    Raises on failure — MDM is the tracking source of truth and write failures
-    must surface rather than silently produce stale state.
+    Retained for explicit MDM workflows; warehouse commands update
+    sec_company_sync_state directly.
     """
     import os
     url = os.environ.get("MDM_DATABASE_URL")
@@ -3122,26 +3125,26 @@ def _validate_window_args(cik_limit: int | None, cik_offset: int) -> None:
 
 def _resolve_bootstrap_target_ciks(
     *,
+    db: SilverDatabase,
     raw_ciks: Any,
     command_name: str,
     tracking_status_filter: str,
     cik_limit: int | None = None,
     cik_offset: int = 0,
 ) -> list[int]:
-    """Resolve CIKs from MDM exclusively. SEC bronze is not consulted for scope.
+    """Resolve CIKs from silver tracking state. SEC bronze is not consulted for scope.
 
-    Applies deterministic windowing (cik_offset then cik_limit) after MDM lookup.
+    Applies deterministic windowing (cik_offset then cik_limit) after silver lookup.
     """
     _validate_window_args(cik_limit, cik_offset)
     if raw_ciks:
         ciks = [_parse_cik(value) for value in raw_ciks]
     else:
-        ciks = _get_mdm_tracked_ciks(tracking_status_filter)
+        ciks = db.get_tracked_ciks(tracking_status_filter)
         if not ciks:
             raise WarehouseRuntimeError(
-                f"{command_name} found no companies with tracking_status='{tracking_status_filter}' in MDM. "
-                "Run 'edgar-warehouse mdm seed-universe --tracking-status "
-                f"{tracking_status_filter}' first."
+                f"{command_name} found no companies with tracking_status='{tracking_status_filter}' "
+                "in silver tracking state. Run 'edgar-warehouse seed-universe' first."
             )
     # Apply windowing: offset first, then limit
     ciks = ciks[cik_offset:]
@@ -3152,10 +3155,11 @@ def _resolve_bootstrap_target_ciks(
 
 def _resolve_reconcile_ciks(
     *,
+    db: SilverDatabase,
     raw_ciks: Any,
     sample_limit: int | None,
 ) -> list[int]:
-    ciks = [_parse_cik(value) for value in raw_ciks] if raw_ciks else _get_mdm_tracked_ciks("active")
+    ciks = [_parse_cik(value) for value in raw_ciks] if raw_ciks else db.get_tracked_ciks("active")
     if sample_limit is not None:
         return ciks[: int(sample_limit)]
     return ciks
@@ -3186,17 +3190,42 @@ def _pagination_file_names(submissions_document: dict[str, Any]) -> list[str]:
     return names
 
 
-def _filter_ciks_to_universe(impacted_ciks: list[int]) -> list[int]:
-    """Return only CIKs that are active in the MDM tracked universe.
+def _filter_ciks_to_universe(impacted_ciks: list[int], *, db: SilverDatabase) -> list[int]:
+    """Return only CIKs that are active in silver tracking state.
 
-    Falls through to all impacted_ciks if MDM returns an empty active universe
+    Falls through to all impacted_ciks if silver returns an empty active universe
     (cold-start guard so daily-incremental can run before the first seed).
     """
-    tracked = _get_mdm_tracked_ciks("active")
+    tracked = db.get_tracked_ciks("active")
     if not tracked:
         return impacted_ciks
     tracked_set = set(tracked)
     return [c for c in impacted_ciks if c in tracked_set]
+
+
+def _seed_silver_tracking_status(
+    db: SilverDatabase,
+    ciks: list[int],
+    *,
+    tracking_status: str,
+) -> None:
+    """Create silver tracking-state rows for newly discovered CIKs.
+
+    Existing rows keep their current status so paused or completed companies are
+    not accidentally reactivated by discovery.
+    """
+    now = datetime.now(UTC)
+    for cik in _dedupe_ints(ciks):
+        if db.get_company_sync_state(cik) is not None:
+            continue
+        db.upsert_company_sync_state(
+            {
+                "cik": cik,
+                "tracking_status": tracking_status,
+                "last_main_sync_at": now,
+                "last_error_message": None,
+            }
+        )
 
 
 def _extract_impacted_ciks_from_daily_index(payload: bytes, source_url: str) -> list[int]:

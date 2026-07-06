@@ -597,8 +597,9 @@ def build_parser() -> argparse.ArgumentParser:
     compute_windows = subparsers.add_parser(
         "compute-windows",
         help=(
-            "Query MDM for ordered active CIKs and write cik_windows.jsonl + cik_snapshot.jsonl "
-            "to S3 under the run prefix. Pre-Map step consumed by the windowed bootstrap SM ItemReader."
+            "Query silver tracking state for ordered CIKs and write cik_windows.jsonl + "
+            "cik_snapshot.jsonl to S3 under the run prefix. Pre-Map step consumed by "
+            "the windowed bootstrap SM ItemReader."
         ),
     )
     compute_windows.add_argument(
@@ -675,8 +676,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Comma-separated CIK integers for this batch. "
-            "Optional: when omitted, the batch is resolved from the MDM tracked "
-            "active universe (same ordered source as Branch A bootstrap-next) and "
+            "Optional: when omitted, the batch is resolved from silver tracking "
+            "state (same ordered source as Branch A bootstrap-next) and "
             "windowed by --cik-offset/--cik-limit."
         ),
     )

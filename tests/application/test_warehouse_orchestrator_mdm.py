@@ -1,5 +1,7 @@
-"""Tests that MDM (mdm_company.tracking_status) is the sole system of record
-for company universe tracking. Silver DuckDB fallbacks have been removed.
+"""Tests for MDM helpers and silver-owned warehouse tracking state.
+
+MDM remains an explicit entity-management subsystem, but warehouse pipeline
+tracking_status lives in sec_company_sync_state.
 """
 from __future__ import annotations
 
@@ -131,42 +133,40 @@ def test_resolve_target_ciks_respects_raw_ciks(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# _filter_ciks_to_universe — MDM only, no DuckDB fallback
+# _filter_ciks_to_universe — silver tracking state
 # ---------------------------------------------------------------------------
 
-def test_filter_ciks_to_universe_filters_by_mdm(monkeypatch):
-    monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://localhost/test")
+def test_filter_ciks_to_universe_filters_by_silver_tracking_state(monkeypatch):
+    monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
     from edgar_warehouse.application.warehouse_orchestrator import _filter_ciks_to_universe
 
-    with patch(
-        "edgar_warehouse.application.warehouse_orchestrator._get_mdm_tracked_ciks",
-        return_value=[100, 200],
-    ):
-        result = _filter_ciks_to_universe([100, 200, 300])
+    db = MagicMock()
+    db.get_tracked_ciks.return_value = [100, 200]
+    result = _filter_ciks_to_universe([100, 200, 300], db=db)
 
     assert result == [100, 200]
 
 
-def test_filter_ciks_to_universe_passes_through_when_mdm_empty(monkeypatch):
-    """Cold-start guard: if MDM returns no active CIKs, pass all impacted CIKs through."""
-    monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://localhost/test")
+def test_filter_ciks_to_universe_passes_through_when_silver_empty(monkeypatch):
+    """Cold-start guard: if silver returns no active CIKs, pass all impacted CIKs through."""
+    monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
     from edgar_warehouse.application.warehouse_orchestrator import _filter_ciks_to_universe
 
-    with patch(
-        "edgar_warehouse.application.warehouse_orchestrator._get_mdm_tracked_ciks",
-        return_value=[],
-    ):
-        result = _filter_ciks_to_universe([100, 200, 300])
+    db = MagicMock()
+    db.get_tracked_ciks.return_value = []
+    result = _filter_ciks_to_universe([100, 200, 300], db=db)
 
     assert result == [100, 200, 300]
 
 
-def test_filter_ciks_to_universe_raises_without_mdm_url(monkeypatch):
+def test_filter_ciks_to_universe_does_not_require_mdm_url(monkeypatch):
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
     from edgar_warehouse.application.warehouse_orchestrator import _filter_ciks_to_universe
 
-    with pytest.raises(WarehouseRuntimeError, match="MDM_DATABASE_URL is required"):
-        _filter_ciks_to_universe([100, 200, 300])
+    db = MagicMock()
+    db.get_tracked_ciks.return_value = [100]
+
+    assert _filter_ciks_to_universe([100, 200, 300], db=db) == [100]
 
 
 # ---------------------------------------------------------------------------
@@ -246,17 +246,16 @@ def test_resolve_bootstrap_target_ciks_applies_cik_offset_then_cik_limit(monkeyp
     monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://localhost/test")
     from edgar_warehouse.application.warehouse_orchestrator import _resolve_bootstrap_target_ciks
 
-    with patch(
-        "edgar_warehouse.application.warehouse_orchestrator._get_mdm_tracked_ciks",
-        return_value=[100, 200, 300, 400, 500],
-    ):
-        result = _resolve_bootstrap_target_ciks(
-            raw_ciks=None,
-            command_name="bootstrap-full",
-            tracking_status_filter="active",
-            cik_limit=2,
-            cik_offset=1,
-        )
+    db = MagicMock()
+    db.get_tracked_ciks.return_value = [100, 200, 300, 400, 500]
+    result = _resolve_bootstrap_target_ciks(
+        db=db,
+        raw_ciks=None,
+        command_name="bootstrap-full",
+        tracking_status_filter="active",
+        cik_limit=2,
+        cik_offset=1,
+    )
 
     assert result == [200, 300]
 

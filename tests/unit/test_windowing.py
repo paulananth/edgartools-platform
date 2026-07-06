@@ -55,10 +55,6 @@ def test_compute_windows_output():
 
     with (
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator._get_mdm_tracked_ciks",
-            return_value=fake_ciks,
-        ),
-        patch(
             "edgar_warehouse.application.warehouse_orchestrator._build_warehouse_context",
             return_value=mock_context,
         ),
@@ -84,6 +80,7 @@ def test_compute_windows_output():
         from unittest.mock import MagicMock as MM
         fake_db = MM()
         fake_db.start_sync_run = MM()
+        fake_db.get_tracked_ciks.return_value = fake_ciks
         raw_writes, metrics = _capture_bronze_raw(
             context=mock_context,
             db=fake_db,
@@ -136,11 +133,11 @@ def test_daily_incremental_windowing():
 
     # The windowing is applied after _filter_ciks_to_universe passes everything through
     # We mock the filter to return the full list, then apply the same slice logic
-    with patch(
-        "edgar_warehouse.application.warehouse_orchestrator._get_mdm_tracked_ciks",
-        return_value=input_ciks,
-    ):
-        filtered = _filter_ciks_to_universe(input_ciks)
+    from unittest.mock import MagicMock
+
+    db = MagicMock()
+    db.get_tracked_ciks.return_value = input_ciks
+    filtered = _filter_ciks_to_universe(input_ciks, db=db)
 
     cik_offset = 2
     cik_limit = 3
@@ -160,20 +157,20 @@ def test_cik_limit_rejects_negative():
     """--cik-limit flag rejects negative values with a clear error."""
     from edgar_warehouse.application.errors import WarehouseRuntimeError
     from edgar_warehouse.application.warehouse_orchestrator import _resolve_bootstrap_target_ciks
-    from unittest.mock import patch
 
-    with patch(
-        "edgar_warehouse.application.warehouse_orchestrator._get_mdm_tracked_ciks",
-        return_value=[100, 200, 300],
-    ):
-        with pytest.raises((WarehouseRuntimeError, SystemExit, ValueError)) as exc_info:
-            _resolve_bootstrap_target_ciks(
-                raw_ciks=None,
-                command_name="bootstrap-full",
-                tracking_status_filter="active",
-                cik_limit=-1,
-                cik_offset=0,
-            )
+    from unittest.mock import MagicMock
+
+    db = MagicMock()
+    db.get_tracked_ciks.return_value = [100, 200, 300]
+    with pytest.raises((WarehouseRuntimeError, SystemExit, ValueError)) as exc_info:
+        _resolve_bootstrap_target_ciks(
+            db=db,
+            raw_ciks=None,
+            command_name="bootstrap-full",
+            tracking_status_filter="active",
+            cik_limit=-1,
+            cik_offset=0,
+        )
     err_str = str(exc_info.value).lower()
     assert "cik_limit" in err_str or "cik-limit" in err_str or "limit" in err_str
 
@@ -187,20 +184,20 @@ def test_cik_offset_rejects_negative():
     """--cik-offset flag rejects negative values with a clear error."""
     from edgar_warehouse.application.errors import WarehouseRuntimeError
     from edgar_warehouse.application.warehouse_orchestrator import _resolve_bootstrap_target_ciks
-    from unittest.mock import patch
 
-    with patch(
-        "edgar_warehouse.application.warehouse_orchestrator._get_mdm_tracked_ciks",
-        return_value=[100, 200, 300],
-    ):
-        with pytest.raises((WarehouseRuntimeError, SystemExit, ValueError)) as exc_info:
-            _resolve_bootstrap_target_ciks(
-                raw_ciks=None,
-                command_name="bootstrap-full",
-                tracking_status_filter="active",
-                cik_limit=None,
-                cik_offset=-5,
-            )
+    from unittest.mock import MagicMock
+
+    db = MagicMock()
+    db.get_tracked_ciks.return_value = [100, 200, 300]
+    with pytest.raises((WarehouseRuntimeError, SystemExit, ValueError)) as exc_info:
+        _resolve_bootstrap_target_ciks(
+            db=db,
+            raw_ciks=None,
+            command_name="bootstrap-full",
+            tracking_status_filter="active",
+            cik_limit=None,
+            cik_offset=-5,
+        )
     err_str = str(exc_info.value).lower()
     assert "cik_offset" in err_str or "cik-offset" in err_str or "offset" in err_str
 
