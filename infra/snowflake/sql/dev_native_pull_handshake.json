@@ -1,27 +1,20 @@
 {
   "database_name": "EDGARTOOLS_DEV",
   "gold_schema_name": "EDGARTOOLS_GOLD",
-  "manifest_sns_topic_arn": "arn:aws:sns:us-east-1:077127448006:edgartools-dev-snowflake-manifest-events",
+  "manifest_sns_topic_arn": "arn:aws:sns:us-east-1:690839588395:edgartools-dev-snowflake-manifest-events",
   "native_pull_ready": true,
   "native_pull_validation": {
-    "copy_history_count": 3,
-    "latest_copy_history": {
-      "ERROR_COUNT": 0,
-      "FILE_NAME": "workflow_name=seed_universe/business_date=2026-05-08/run_id=next-100-seed-20260508-195832/run_manifest.json",
-      "FIRST_ERROR_MESSAGE": null,
-      "LAST_LOAD_TIME": "2026-05-09T05:15:39.899000-07:00",
-      "ROW_COUNT": 1,
-      "STATUS": "Loaded"
-    },
-    "stage_manifest_count": 2
+    "copy_history_count": 0,
+    "latest_copy_history": null,
+    "stage_manifest_count": 29
   },
-  "snowflake_export_root_url": "s3://edgartools-dev-snowflake-export-077127448006/warehouse/artifacts/snowflake_exports/",
+  "snowflake_export_root_url": "s3://edgartools-dev-snowflake-export/warehouse/artifacts/snowflake_exports/",
   "source_schema_name": "EDGARTOOLS_SOURCE",
   "storage_allowed_locations": [
-    "s3://edgartools-dev-snowflake-export-077127448006/warehouse/artifacts/snowflake_exports/"
+    "s3://edgartools-dev-snowflake-export/warehouse/artifacts/snowflake_exports/"
   ],
   "storage_aws_external_id": "edgartools-dev-snowflake-native-pull",
-  "storage_aws_iam_user_arn": "arn:aws:iam::975829620079:user/qhzo1000-s",
+  "storage_aws_iam_user_arn": "arn:aws:iam::437537458665:user/hsat1000-s",
   "storage_integration_name": "EDGARTOOLS_DEV_EXPORT_INTEGRATION",
-  "storage_role_arn": "arn:aws:iam::077127448006:role/edgartools-dev-snowflake-s3"
+  "storage_role_arn": "arn:aws:iam::690839588395:role/edgartools-dev-snowflake-s3"
 }

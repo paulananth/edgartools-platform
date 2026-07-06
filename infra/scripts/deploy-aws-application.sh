@@ -966,6 +966,7 @@ workflow_profile() {
     load_daily_form_index_for_date) printf '%s\n' "small" ;;
     catch_up_daily_form_index) printf '%s\n' "small" ;;
     gold_refresh) printf '%s\n' "medium" ;;
+    seed_universe) printf '%s\n' "medium" ;;
     *) fail "unknown workflow: $1" ;;
   esac
 }
@@ -980,6 +981,7 @@ workflow_command_expression() {
     load_daily_form_index_for_date) printf '%s\n' "States.Array('load-daily-form-index-for-date', \$.target_date, '--run-id', \$\$.Execution.Name)" ;;
     catch_up_daily_form_index) printf '%s\n' "States.Array('catch-up-daily-form-index', '--run-id', \$\$.Execution.Name)" ;;
     gold_refresh) printf '%s\n' "States.Array('gold-refresh', '--run-id', \$\$.Execution.Name)" ;;
+    seed_universe) printf '%s\n' "States.Array('seed-universe', '--run-id', \$\$.Execution.Name)" ;;
     *) fail "unknown workflow: $1" ;;
   esac
 }
@@ -2268,7 +2270,12 @@ WORKFLOW_ARNS_FILE="$(json_file workflow-arns)"
 printf '{\n' > "$WORKFLOW_ARNS_FILE"
 first_workflow=true
 
-for workflow in bootstrap_full targeted_resync full_reconcile load_daily_form_index_for_date catch_up_daily_form_index gold_refresh; do
+# seed_universe: the standalone edgartools-dev-seed-universe state machine
+# predates this script's workflow loop and was orphaned (its frozen task-def
+# revision pointed at an ECR digest that had been garbage-collected, so every
+# execution failed with CannotPullContainerError). Managing it here adopts the
+# legacy machine in dev and creates it in newer environments.
+for workflow in bootstrap_full targeted_resync full_reconcile load_daily_form_index_for_date catch_up_daily_form_index gold_refresh seed_universe; do
   profile="$(workflow_profile "$workflow")"
   task_definition_arn="$(task_definition_for_profile "$profile")"
   command_expression="$(workflow_command_expression "$workflow")"
