@@ -6,6 +6,7 @@ from edgar_warehouse.serving.gold_models import (
     build_gold,
     build_ticker_reference_table,
     write_gold_to_storage,
+    write_gold_to_storage_manifest,
 )
 from edgar_warehouse.serving.targets.snowflake import (
     write_gold_to_snowflake_export,
@@ -17,5 +18,6 @@ __all__ = [
     "build_ticker_reference_table",
     "write_gold_to_snowflake_export",
     "write_gold_to_storage",
+    "write_gold_to_storage_manifest",
     "write_ticker_reference_to_snowflake_export",
 ]

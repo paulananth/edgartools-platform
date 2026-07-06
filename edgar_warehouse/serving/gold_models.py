@@ -1380,20 +1380,47 @@ def build_gold(db: Any) -> dict[str, pa.Table]:
     }
 
 
-def _write_parquet(table: pa.Table, storage_root: Any, relative_path: str) -> None:
+def _write_parquet(table: pa.Table, storage_root: Any, relative_path: str) -> dict[str, Any]:
     buffer = pa.BufferOutputStream()
     pq.write_table(table, buffer)
-    storage_root.write_bytes(relative_path, buffer.getvalue().to_pybytes())
+    payload = buffer.getvalue().to_pybytes()
+    path = storage_root.write_bytes(relative_path, payload)
+    return {
+        "path": path,
+        "relative_path": relative_path,
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "byte_size": len(payload),
+    }
 
 
 def write_gold_to_storage(tables: dict[str, pa.Table], storage_root: Any, run_id: str) -> dict[str, int]:
-    counts: dict[str, int] = {}
+    manifest = write_gold_to_storage_manifest(tables, storage_root, run_id)
+    return {entry["table_name"]: entry["row_count"] for entry in manifest}
+
+
+def write_gold_to_storage_manifest(
+    tables: dict[str, pa.Table],
+    storage_root: Any,
+    run_id: str,
+) -> list[dict[str, Any]]:
+    manifest: list[dict[str, Any]] = []
     capture_specs = default_capture_spec_factory()
     for table_name, table in tables.items():
         output_spec = capture_specs.gold_table_output(table_name, run_id)
-        _write_parquet(table, storage_root, output_spec.relative_path)
-        counts[table_name] = table.num_rows
-    return counts
+        write_record = _write_parquet(table, storage_root, output_spec.relative_path)
+        row_count = int(table.num_rows)
+        manifest.append(
+            {
+                "table_name": table_name,
+                "storage_layer": "warehouse_gold",
+                "relative_path": write_record["relative_path"],
+                "storage_path": write_record["path"],
+                "row_count": row_count,
+                "parquet_sha256": write_record["sha256"],
+                "byte_size": write_record["byte_size"],
+            }
+        )
+    return manifest
 
 
 def build_ticker_reference_table(

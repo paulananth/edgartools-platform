@@ -364,6 +364,25 @@ CREATE TABLE IF NOT EXISTS pipeline_run (
     verification_report_json TEXT
 );
 
+CREATE TABLE IF NOT EXISTS gold_manifest (
+    run_id                  TEXT NOT NULL,
+    command_name            TEXT NOT NULL,
+    table_name              TEXT NOT NULL,
+    storage_layer           TEXT NOT NULL,
+    relative_path           TEXT NOT NULL,
+    storage_path            TEXT,
+    row_count               BIGINT NOT NULL,
+    parquet_sha256          TEXT NOT NULL,
+    byte_size               BIGINT,
+    previous_run_id         TEXT,
+    previous_row_count      BIGINT,
+    previous_parquet_sha256 TEXT,
+    row_count_delta         BIGINT,
+    parquet_changed         BOOLEAN NOT NULL,
+    recorded_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (run_id, storage_layer, table_name)
+);
+
 CREATE TABLE IF NOT EXISTS sec_source_checkpoint (
     source_name                    TEXT,
     source_key                     TEXT,
@@ -2354,6 +2373,120 @@ class SilverDatabase:
         cols = [d[0] for d in self._conn.description]
         return dict(zip(cols, result))
 
+    # ------------------------------------------------------------------
+    # gold_manifest
+    # ------------------------------------------------------------------
+
+    def record_gold_manifest(
+        self,
+        *,
+        run_id: str,
+        command_name: str,
+        entries: list[dict[str, Any]],
+    ) -> None:
+        for entry in entries:
+            table_name = str(entry["table_name"])
+            storage_layer = str(entry.get("storage_layer") or "warehouse_gold")
+            row_count = int(entry.get("row_count") or 0)
+            parquet_sha256 = str(entry["parquet_sha256"])
+            previous = self._latest_gold_manifest_for_table(
+                table_name=table_name,
+                storage_layer=storage_layer,
+                exclude_run_id=run_id,
+            )
+            previous_run_id = previous.get("run_id") if previous else None
+            previous_row_count = int(previous["row_count"]) if previous else None
+            previous_parquet_sha256 = previous.get("parquet_sha256") if previous else None
+            row_count_delta = (
+                row_count - previous_row_count if previous_row_count is not None else None
+            )
+            parquet_changed = previous_parquet_sha256 != parquet_sha256
+
+            self._conn.execute(
+                """
+                INSERT INTO gold_manifest
+                    (run_id, command_name, table_name, storage_layer, relative_path,
+                     storage_path, row_count, parquet_sha256, byte_size,
+                     previous_run_id, previous_row_count, previous_parquet_sha256,
+                     row_count_delta, parquet_changed, recorded_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (run_id, storage_layer, table_name) DO UPDATE SET
+                    command_name = excluded.command_name,
+                    relative_path = excluded.relative_path,
+                    storage_path = excluded.storage_path,
+                    row_count = excluded.row_count,
+                    parquet_sha256 = excluded.parquet_sha256,
+                    byte_size = excluded.byte_size,
+                    previous_run_id = excluded.previous_run_id,
+                    previous_row_count = excluded.previous_row_count,
+                    previous_parquet_sha256 = excluded.previous_parquet_sha256,
+                    row_count_delta = excluded.row_count_delta,
+                    parquet_changed = excluded.parquet_changed,
+                    recorded_at = excluded.recorded_at
+                """,
+                [
+                    run_id,
+                    command_name,
+                    table_name,
+                    storage_layer,
+                    str(entry["relative_path"]),
+                    entry.get("storage_path"),
+                    row_count,
+                    parquet_sha256,
+                    entry.get("byte_size"),
+                    previous_run_id,
+                    previous_row_count,
+                    previous_parquet_sha256,
+                    row_count_delta,
+                    parquet_changed,
+                    datetime.now(UTC),
+                ],
+            )
+
+    def get_gold_manifest(self, run_id: str | None = None) -> list[dict[str, Any]]:
+        if run_id is None:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM gold_manifest
+                ORDER BY recorded_at, run_id, storage_layer, table_name
+                """
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM gold_manifest
+                WHERE run_id = ?
+                ORDER BY storage_layer, table_name
+                """,
+                [run_id],
+            ).fetchall()
+        cols = [d[0] for d in self._conn.description]
+        return [dict(zip(cols, row)) for row in rows]
+
+    def _latest_gold_manifest_for_table(
+        self,
+        *,
+        table_name: str,
+        storage_layer: str,
+        exclude_run_id: str,
+    ) -> dict[str, Any] | None:
+        result = self._conn.execute(
+            """
+            SELECT *
+            FROM gold_manifest
+            WHERE table_name = ?
+              AND storage_layer = ?
+              AND run_id <> ?
+            ORDER BY recorded_at DESC, run_id DESC
+            LIMIT 1
+            """,
+            [table_name, storage_layer, exclude_run_id],
+        ).fetchone()
+        if result is None:
+            return None
+        cols = [d[0] for d in self._conn.description]
+        return dict(zip(cols, result))
+
     @staticmethod
     def _json_text(value: Any) -> str:
         return json.dumps(value, default=str, sort_keys=True)
@@ -2585,6 +2718,7 @@ class SilverDatabase:
             "sec_adv_private_fund",
             "sec_sync_run",
             "pipeline_run",
+            "gold_manifest",
             "sec_source_checkpoint",
             "sec_company_sync_state",
             "sec_reconcile_finding",

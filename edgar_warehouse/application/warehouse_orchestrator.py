@@ -410,6 +410,7 @@ def _execute_warehouse_bronze_capture(
     raw_writes: list[dict[str, Any]] = []
     metrics: dict[str, Any] = {"rows_inserted": 0, "rows_skipped": 0, "sync_status": "succeeded"}
     gold_row_counts: dict[str, int] | None = None
+    gold_manifest_entries: list[dict[str, Any]] | None = None
     snowflake_export_counts: dict[str, int] | None = None
     snowflake_export_manifest_write: dict[str, Any] | None = None
     silver_database_write: dict[str, Any] | None = None
@@ -438,7 +439,7 @@ def _execute_warehouse_bronze_capture(
         )
         silver_table_counts = db.get_table_counts()
         if context.snowflake_export_root is not None and command_name in GOLD_AFFECTING_COMMANDS:
-            from edgar_warehouse.serving.gold_models import build_gold, write_gold_to_storage
+            from edgar_warehouse.serving.gold_models import build_gold, write_gold_to_storage_manifest
             from edgar_warehouse.serving.targets.snowflake import write_gold_to_snowflake_export
 
             gold_started_at = datetime.now(UTC)
@@ -462,13 +463,23 @@ def _execute_warehouse_bronze_capture(
 
             storage_started_at = datetime.now(UTC)
             _emit_pipeline_event("gold_storage_write_started", command=command_name, run_id=run_id)
-            gold_row_counts = write_gold_to_storage(gold_tables, context.storage_root, run_id)
+            gold_manifest_entries = write_gold_to_storage_manifest(gold_tables, context.storage_root, run_id)
+            db.record_gold_manifest(
+                run_id=run_id,
+                command_name=command_name,
+                entries=gold_manifest_entries,
+            )
+            gold_row_counts = {
+                entry["table_name"]: int(entry["row_count"])
+                for entry in gold_manifest_entries
+            }
             _emit_pipeline_event(
                 "gold_storage_write_completed",
                 command=command_name,
                 run_id=run_id,
                 duration_seconds=(datetime.now(UTC) - storage_started_at).total_seconds(),
                 gold_row_counts=gold_row_counts,
+                gold_manifest=gold_manifest_entries,
             )
 
             export_business_date = _resolve_export_business_date(command_name=command_name, scope=scope, now=now)
@@ -517,6 +528,7 @@ def _execute_warehouse_bronze_capture(
                 **metrics,
                 "silver_table_counts": silver_table_counts or {},
                 "gold_row_counts": gold_row_counts or {},
+                "gold_manifest": gold_manifest_entries or [],
                 "snowflake_export_row_counts": snowflake_export_counts or {},
             },
         )
