@@ -296,5 +296,8 @@ dashboard upload.
   its first run, not just re-runs against an already-`active` universe.
 - Snowflake export packages are validated by manifest row counts before source
   tables are merged.
+- The serving export interface is provider-neutral in code, but the active AWS
+  path instantiates only the Snowflake target and writes Snowflake-native-pull
+  packages.
 - The Streamlit dashboards are read-only consumers of Snowflake tables and do
   not source data from SEC or edgartools directly.

@@ -440,7 +440,7 @@ def _execute_warehouse_bronze_capture(
         silver_table_counts = db.get_table_counts()
         if context.snowflake_export_root is not None and command_name in GOLD_AFFECTING_COMMANDS:
             from edgar_warehouse.serving.gold_models import build_gold, write_gold_to_storage_manifest
-            from edgar_warehouse.serving.targets.snowflake import write_gold_to_snowflake_export
+            from edgar_warehouse.serving.targets.snowflake import write_gold_to_serving_export
 
             gold_started_at = datetime.now(UTC)
             _emit_pipeline_event(
@@ -490,7 +490,7 @@ def _execute_warehouse_bronze_capture(
                 run_id=run_id,
                 export_business_date=str(export_business_date),
             )
-            snowflake_export_counts = write_gold_to_snowflake_export(
+            snowflake_export_counts = write_gold_to_serving_export(
                 gold_tables,
                 context.snowflake_export_root,
                 run_id,
@@ -625,11 +625,11 @@ def _execute_warehouse_bronze_capture(
         and ticker_reference_rows is not None
     ):
         from edgar_warehouse.serving.gold_models import build_ticker_reference_table
-        from edgar_warehouse.serving.targets.snowflake import write_ticker_reference_to_snowflake_export
+        from edgar_warehouse.serving.targets.snowflake import write_ticker_reference_to_serving_export
 
         export_business_date = _resolve_export_business_date(command_name=command_name, scope=scope, now=now)
         ticker_table = build_ticker_reference_table(ticker_reference_rows, run_id)
-        ticker_row_count = write_ticker_reference_to_snowflake_export(
+        ticker_row_count = write_ticker_reference_to_serving_export(
             ticker_table,
             context.snowflake_export_root,
             run_id,

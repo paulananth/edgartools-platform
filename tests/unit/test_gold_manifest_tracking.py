@@ -134,7 +134,7 @@ def test_gold_refresh_records_gold_manifest_rows(tmp_path) -> None:
             return_value=manifest_entries,
         ),
         patch(
-            "edgar_warehouse.serving.targets.snowflake.write_gold_to_snowflake_export",
+            "edgar_warehouse.serving.targets.snowflake.write_gold_to_serving_export",
             return_value={"company": 1},
         ),
     ):
