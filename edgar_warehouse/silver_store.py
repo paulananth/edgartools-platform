@@ -2561,7 +2561,7 @@ class SilverDatabase:
 
     def get_table_counts(self) -> dict[str, int]:
         """Return current row count for every silver table, keyed by table name."""
-        tables = [
+        baseline_tables = {
             "sec_tracked_universe",
             "sec_company",
             "sec_company_ticker",
@@ -2588,8 +2588,23 @@ class SilverDatabase:
             "sec_source_checkpoint",
             "sec_company_sync_state",
             "sec_reconcile_finding",
-        ]
+            "sec_financial_fact",
+            "sec_financial_derived",
+            "sec_earnings_release",
+            "sec_accounting_flag",
+            "sec_executive_record",
+            "sec_thirteenf_holding",
+        }
+        rows = self._conn.execute(
+            """
+            SELECT table_name
+            FROM duckdb_tables()
+            WHERE table_name NOT LIKE 'backup_%'
+            ORDER BY table_name
+            """
+        ).fetchall()
         counts: dict[str, int] = {}
+        tables = sorted(baseline_tables | {table for (table,) in rows})
         for table in tables:
             exists = self._conn.execute(
                 "SELECT 1 FROM duckdb_tables() WHERE table_name = ? LIMIT 1",
@@ -2598,7 +2613,8 @@ class SilverDatabase:
             if exists is None:
                 counts[table] = 0
                 continue
-            row = self._conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+            quoted_table = self._quote_identifier(table)
+            row = self._conn.execute(f"SELECT COUNT(*) FROM {quoted_table}").fetchone()
             counts[table] = row[0] if row else 0
         return counts
 

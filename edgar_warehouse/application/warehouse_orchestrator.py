@@ -3414,6 +3414,9 @@ def _resolve_scope(
             "run_id": arguments.get("run_id"),
         }
 
+    if command_name == "validate-data-quality":
+        return {}
+
     raise WarehouseRuntimeError(f"Unsupported warehouse command: {command_name}")
 
 

@@ -21,6 +21,7 @@ from edgar_warehouse.application.commands import (
     seed_silver_batches,
     seed_universe,
     targeted_resync,
+    validate_data_quality,
     verify_pipeline_run,
     write_run_summary,
 )
@@ -44,6 +45,7 @@ COMMAND_REGISTRY = {
     "bootstrap-fundamentals": bootstrap_fundamentals.execute,   # Branch B (AD-05)
     "gold-refresh": gold_refresh.execute,
     "migrate-silver-shards": migrate_silver_shards.execute,
+    "validate-data-quality": validate_data_quality.execute,
     "verify-pipeline-run": verify_pipeline_run.execute,
     "write-run-summary": write_run_summary.execute,
 }

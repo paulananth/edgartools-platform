@@ -317,7 +317,7 @@ class WarehousePathResolver:
             return {
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }
-        if command_name == "verify-pipeline-run":
+        if command_name in ("verify-pipeline-run", "validate-data-quality"):
             return {
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }

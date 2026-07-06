@@ -191,6 +191,10 @@ def _handle_verify_pipeline_run(args: argparse.Namespace) -> int:
     return run_command("verify-pipeline-run", args)
 
 
+def _handle_validate_data_quality(args: argparse.Namespace) -> int:
+    return run_command("validate-data-quality", args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="edgar-warehouse",
@@ -722,6 +726,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Pipeline run id to verify.",
     )
     verify_pipeline_run.set_defaults(handler=_handle_verify_pipeline_run)
+
+    validate_data_quality = subparsers.add_parser(
+        "validate-data-quality",
+        help="Validate silver/gold data quality and emit a JSON report.",
+    )
+    validate_data_quality.set_defaults(handler=_handle_validate_data_quality)
 
     try:
         from edgar_warehouse.mdm.cli import register_mdm_subparser
