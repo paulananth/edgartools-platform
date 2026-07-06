@@ -17,6 +17,7 @@ except ImportError as exc:  # pragma: no cover
     ) from exc
 
 from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory
+from edgar_warehouse.serving.gold_schema_registry import GOLD_SCHEMAS
 from edgar_warehouse.silver_store import SilverDatabase
 from edgar_warehouse.silver_support.access import get_connection
 
@@ -56,345 +57,30 @@ def _form_family(form: str | None) -> str:
     return "other"
 
 
-_DIM_COMPANY_SCHEMA = pa.schema(
-    [
-        pa.field("company_key", pa.int64()),
-        pa.field("cik", pa.int64()),
-        pa.field("entity_name", pa.string()),
-        pa.field("entity_type", pa.string()),
-        pa.field("sic", pa.string()),
-        pa.field("sic_description", pa.string()),
-        pa.field("state_of_incorporation", pa.string()),
-        pa.field("fiscal_year_end", pa.string()),
-        pa.field("last_sync_run_id", pa.string()),
-    ]
-)
-_DIM_TICKER_REFERENCE_SCHEMA = pa.schema(
-    [
-        pa.field("cik", pa.int64()),
-        pa.field("ticker", pa.string()),
-        pa.field("exchange", pa.string()),
-        pa.field("last_sync_run_id", pa.string()),
-    ]
-)
-_DIM_FORM_SCHEMA = pa.schema(
-    [
-        pa.field("form_key", pa.int64()),
-        pa.field("form", pa.string()),
-        pa.field("form_family", pa.string()),
-    ]
-)
-_DIM_DATE_SCHEMA = pa.schema(
-    [
-        pa.field("date_key", pa.int32()),
-        pa.field("full_date", pa.date32()),
-        pa.field("year", pa.int32()),
-        pa.field("month", pa.int32()),
-        pa.field("day", pa.int32()),
-        pa.field("quarter", pa.int32()),
-        pa.field("day_of_week", pa.int32()),
-        pa.field("is_weekend", pa.bool_()),
-    ]
-)
-_DIM_FILING_SCHEMA = pa.schema(
-    [
-        pa.field("filing_key", pa.int64()),
-        pa.field("accession_number", pa.string()),
-        pa.field("cik", pa.int64()),
-        pa.field("company_key", pa.int64()),
-        pa.field("form", pa.string()),
-        pa.field("form_key", pa.int64()),
-        pa.field("filing_date", pa.date32()),
-        pa.field("date_key", pa.int32()),
-        pa.field("report_date", pa.date32()),
-        pa.field("is_xbrl", pa.bool_()),
-        pa.field("size", pa.int64()),
-    ]
-)
-_FACT_FILING_ACTIVITY_SCHEMA = pa.schema(
-    [
-        pa.field("fact_key", pa.int64()),
-        pa.field("company_key", pa.int64()),
-        pa.field("filing_key", pa.int64()),
-        pa.field("date_key", pa.int32()),
-        pa.field("form_key", pa.int64()),
-        pa.field("accession_number", pa.string()),
-        pa.field("cik", pa.int64()),
-        pa.field("form", pa.string()),
-        pa.field("filing_date", pa.date32()),
-        pa.field("report_date", pa.date32()),
-        pa.field("is_xbrl", pa.bool_()),
-    ]
-)
-_DIM_PARTY_SCHEMA = pa.schema(
-    [
-        pa.field("party_key", pa.int64()),
-        pa.field("party_natural_key", pa.string()),
-        pa.field("party_name", pa.string()),
-        pa.field("party_cik", pa.int64()),
-    ]
-)
-_DIM_SECURITY_SCHEMA = pa.schema(
-    [
-        pa.field("security_key", pa.int64()),
-        pa.field("security_natural_key", pa.string()),
-        pa.field("security_title", pa.string()),
-        pa.field("issuer_cik", pa.int64()),
-    ]
-)
-_DIM_OWNERSHIP_TXN_TYPE_SCHEMA = pa.schema(
-    [
-        pa.field("ownership_txn_type_key", pa.int64()),
-        pa.field("transaction_code", pa.string()),
-        pa.field("description", pa.string()),
-    ]
-)
-_DIM_GEOGRAPHY_SCHEMA = pa.schema(
-    [
-        pa.field("geography_key", pa.int64()),
-        pa.field("state_or_country", pa.string()),
-        pa.field("country", pa.string()),
-    ]
-)
-_DIM_DISCLOSURE_CATEGORY_SCHEMA = pa.schema(
-    [
-        pa.field("disclosure_category_key", pa.int64()),
-        pa.field("disclosure_category", pa.string()),
-    ]
-)
-_DIM_PRIVATE_FUND_SCHEMA = pa.schema(
-    [
-        pa.field("private_fund_key", pa.int64()),
-        pa.field("private_fund_natural_key", pa.string()),
-        pa.field("fund_name", pa.string()),
-        pa.field("fund_type", pa.string()),
-        pa.field("jurisdiction", pa.string()),
-    ]
-)
-_FACT_OWNERSHIP_TRANSACTION_SCHEMA = pa.schema(
-    [
-        pa.field("fact_key", pa.int64()),
-        pa.field("company_key", pa.int64()),
-        pa.field("date_key", pa.int32()),
-        pa.field("form_key", pa.int64()),
-        pa.field("party_key", pa.int64()),
-        pa.field("security_key", pa.int64()),
-        pa.field("ownership_txn_type_key", pa.int64()),
-        pa.field("accession_number", pa.string()),
-        pa.field("owner_index", pa.int16()),
-        pa.field("txn_index", pa.int16()),
-        pa.field("transaction_code", pa.string()),
-        pa.field("transaction_shares", pa.float64()),
-        pa.field("transaction_price", pa.float64()),
-        pa.field("shares_owned_after", pa.float64()),
-        pa.field("is_derivative", pa.bool_()),
-    ]
-)
-_FACT_OWNERSHIP_HOLDING_SNAPSHOT_SCHEMA = pa.schema(
-    [
-        pa.field("fact_key", pa.int64()),
-        pa.field("company_key", pa.int64()),
-        pa.field("date_key", pa.int32()),
-        pa.field("party_key", pa.int64()),
-        pa.field("security_key", pa.int64()),
-        pa.field("accession_number", pa.string()),
-        pa.field("owner_index", pa.int16()),
-        pa.field("shares_owned_after", pa.float64()),
-        pa.field("ownership_direct_indirect", pa.string()),
-    ]
-)
-_FACT_ADV_OFFICE_SCHEMA = pa.schema(
-    [
-        pa.field("fact_key", pa.int64()),
-        pa.field("company_key", pa.int64()),
-        pa.field("date_key", pa.int32()),
-        pa.field("geography_key", pa.int64()),
-        pa.field("accession_number", pa.string()),
-        pa.field("office_index", pa.int16()),
-        pa.field("office_name", pa.string()),
-        pa.field("is_headquarters", pa.bool_()),
-    ]
-)
-_FACT_ADV_DISCLOSURE_SCHEMA = pa.schema(
-    [
-        pa.field("fact_key", pa.int64()),
-        pa.field("company_key", pa.int64()),
-        pa.field("date_key", pa.int32()),
-        pa.field("disclosure_category_key", pa.int64()),
-        pa.field("accession_number", pa.string()),
-        pa.field("event_index", pa.int16()),
-        pa.field("is_reported", pa.bool_()),
-    ]
-)
-_FACT_ADV_PRIVATE_FUND_SCHEMA = pa.schema(
-    [
-        pa.field("fact_key", pa.int64()),
-        pa.field("company_key", pa.int64()),
-        pa.field("date_key", pa.int32()),
-        pa.field("private_fund_key", pa.int64()),
-        pa.field("accession_number", pa.string()),
-        pa.field("fund_index", pa.int16()),
-        pa.field("aum_amount", pa.float64()),
-    ]
-)
-
-# ── Branch B Fundamentals — PR-1 ─────────────────────────────────────────
-# Passthrough schemas (Q1-C / Q2-A): 1:1 with silver, composite natural keys.
-# PK columns marked nullable=False per Q5-C (prevents NULL MERGE-key surprises
-# that would lead to duplicate INSERTs).
-
-_SEC_FINANCIAL_FACT_SCHEMA = pa.schema(
-    [
-        pa.field("cik", pa.int64(), nullable=False),
-        pa.field("accession_number", pa.string(), nullable=False),
-        pa.field("concept", pa.string(), nullable=False),
-        pa.field("fiscal_period", pa.string(), nullable=False),
-        pa.field("segment", pa.string(), nullable=False),
-        pa.field("fiscal_year", pa.int32()),
-        pa.field("period_end", pa.date32()),
-        pa.field("period_start", pa.date32(), nullable=False),
-        pa.field("form_type", pa.string()),
-        pa.field("value", pa.float64()),
-        pa.field("unit", pa.string()),
-        pa.field("decimals", pa.int32()),
-        pa.field("parser_version", pa.string()),
-        pa.field("ingested_at", pa.timestamp("us", tz="UTC")),
-    ]
-)
-
-_SEC_THIRTEENF_HOLDING_SCHEMA = pa.schema(
-    [
-        pa.field("cik", pa.int64(), nullable=False),
-        pa.field("accession_number", pa.string(), nullable=False),
-        pa.field("holding_index", pa.int64(), nullable=False),
-        pa.field("period_of_report", pa.date32()),
-        pa.field("cusip", pa.string()),
-        pa.field("issuer_name", pa.string()),
-        pa.field("security_title", pa.string()),
-        pa.field("shares_held", pa.float64()),
-        pa.field("market_value", pa.float64()),
-        pa.field("security_class", pa.string()),
-        pa.field("put_call", pa.string()),
-        pa.field("discretion_type", pa.string()),
-        pa.field("voting_auth_sole", pa.float64()),
-        pa.field("voting_auth_shared", pa.float64()),
-        pa.field("voting_auth_none", pa.float64()),
-        pa.field("parser_version", pa.string()),
-        pa.field("ingested_at", pa.timestamp("us", tz="UTC")),
-    ]
-)
-
-_SEC_FINANCIAL_DERIVED_SCHEMA = pa.schema(
-    [
-        pa.field("cik", pa.int64(), nullable=False),
-        pa.field("accession_number", pa.string(), nullable=False),
-        pa.field("fiscal_period", pa.string(), nullable=False),
-        pa.field("fiscal_year", pa.int32()),
-        pa.field("period_end", pa.date32()),
-        pa.field("form_type", pa.string()),
-        pa.field("revenue", pa.float64()),
-        pa.field("gross_profit", pa.float64()),
-        pa.field("ebitda", pa.float64()),
-        pa.field("ebit", pa.float64()),
-        pa.field("net_income", pa.float64()),
-        pa.field("eps_diluted", pa.float64()),
-        pa.field("total_assets", pa.float64()),
-        pa.field("total_liabilities", pa.float64()),
-        pa.field("total_equity", pa.float64()),
-        pa.field("cash_and_equivalents", pa.float64()),
-        pa.field("total_debt", pa.float64()),
-        pa.field("current_assets", pa.float64()),
-        pa.field("current_liabilities", pa.float64()),
-        pa.field("accounts_receivable", pa.float64()),
-        pa.field("inventory", pa.float64()),
-        pa.field("selling_general_admin_expense", pa.float64()),
-        pa.field("retained_earnings", pa.float64()),
-        pa.field("depreciation_amortization", pa.float64()),
-        pa.field("property_plant_equipment_net", pa.float64()),
-        pa.field("shares_outstanding", pa.float64()),
-        pa.field("operating_cash_flow", pa.float64()),
-        pa.field("capex", pa.float64()),
-        pa.field("free_cash_flow", pa.float64()),
-        pa.field("gross_margin", pa.float64()),
-        pa.field("ebitda_margin", pa.float64()),
-        pa.field("net_margin", pa.float64()),
-        pa.field("roic", pa.float64()),
-        pa.field("roe", pa.float64()),
-        pa.field("roa", pa.float64()),
-        pa.field("parser_version", pa.string()),
-        pa.field("ingested_at", pa.timestamp("us", tz="UTC")),
-    ]
-)
-
-# Dimensional schemas (Q3-D): surrogate fact_key (NOT NULL per Q5-C) + dim FKs.
-
-_FACT_EARNINGS_RELEASE_SCHEMA = pa.schema(
-    [
-        pa.field("fact_key", pa.int64(), nullable=False),
-        pa.field("company_key", pa.int64()),
-        pa.field("filing_date_key", pa.int32()),
-        pa.field("period_end_date_key", pa.int32()),
-        pa.field("form_key", pa.int64()),
-        pa.field("accession_number", pa.string()),
-        pa.field("cik", pa.int64()),
-        pa.field("filing_date", pa.date32()),
-        pa.field("fiscal_year", pa.int32()),
-        pa.field("fiscal_quarter", pa.int32()),
-        pa.field("period_end", pa.date32()),
-        pa.field("revenue_gaap", pa.float64()),
-        pa.field("net_income_gaap", pa.float64()),
-        pa.field("eps_gaap_diluted", pa.float64()),
-        pa.field("has_non_gaap", pa.bool_()),
-        pa.field("has_guidance", pa.bool_()),
-        pa.field("parser_version", pa.string()),
-        pa.field("ingested_at", pa.timestamp("us", tz="UTC")),
-    ]
-)
-
-_FACT_EXECUTIVE_RECORD_SCHEMA = pa.schema(
-    [
-        pa.field("fact_key", pa.int64(), nullable=False),
-        pa.field("company_key", pa.int64()),
-        pa.field("fiscal_year_date_key", pa.int32()),
-        pa.field("accession_number", pa.string()),
-        pa.field("cik", pa.int64()),
-        pa.field("fiscal_year", pa.int32()),
-        pa.field("exec_name", pa.string()),
-        pa.field("exec_role", pa.string()),
-        pa.field("total_comp", pa.float64()),
-        pa.field("base_salary", pa.float64()),
-        pa.field("bonus", pa.float64()),
-        pa.field("stock_awards", pa.float64()),
-        pa.field("option_awards", pa.float64()),
-        pa.field("non_equity_incentive", pa.float64()),
-        pa.field("parser_version", pa.string()),
-        pa.field("ingested_at", pa.timestamp("us", tz="UTC")),
-    ]
-)
-
-_FACT_ACCOUNTING_FLAG_SCHEMA = pa.schema(
-    [
-        pa.field("fact_key", pa.int64(), nullable=False),
-        pa.field("company_key", pa.int64()),
-        pa.field("fiscal_year_date_key", pa.int32()),
-        pa.field("form_key", pa.int64()),
-        pa.field("accession_number", pa.string()),
-        pa.field("cik", pa.int64()),
-        pa.field("fiscal_year", pa.int32()),
-        pa.field("period_end", pa.date32()),
-        pa.field("form_type", pa.string()),
-        pa.field("auditor_name", pa.string()),
-        pa.field("auditor_pcaob_id", pa.string()),
-        pa.field("auditor_location", pa.string()),
-        pa.field("icfr_attestation", pa.bool_()),
-        pa.field("auditor_changed", pa.bool_()),
-        pa.field("beneish_m_score", pa.float64()),
-        pa.field("altman_z_score", pa.float64()),
-        pa.field("piotroski_f_score", pa.int32()),
-        pa.field("parser_version", pa.string()),
-        pa.field("ingested_at", pa.timestamp("us", tz="UTC")),
-    ]
-)
+# Gold schemas are externalized in config/gold_schemas.yaml (Issue 5).
+_DIM_COMPANY_SCHEMA = GOLD_SCHEMAS['_DIM_COMPANY_SCHEMA']
+_DIM_TICKER_REFERENCE_SCHEMA = GOLD_SCHEMAS['_DIM_TICKER_REFERENCE_SCHEMA']
+_DIM_FORM_SCHEMA = GOLD_SCHEMAS['_DIM_FORM_SCHEMA']
+_DIM_DATE_SCHEMA = GOLD_SCHEMAS['_DIM_DATE_SCHEMA']
+_DIM_FILING_SCHEMA = GOLD_SCHEMAS['_DIM_FILING_SCHEMA']
+_FACT_FILING_ACTIVITY_SCHEMA = GOLD_SCHEMAS['_FACT_FILING_ACTIVITY_SCHEMA']
+_DIM_PARTY_SCHEMA = GOLD_SCHEMAS['_DIM_PARTY_SCHEMA']
+_DIM_SECURITY_SCHEMA = GOLD_SCHEMAS['_DIM_SECURITY_SCHEMA']
+_DIM_OWNERSHIP_TXN_TYPE_SCHEMA = GOLD_SCHEMAS['_DIM_OWNERSHIP_TXN_TYPE_SCHEMA']
+_DIM_GEOGRAPHY_SCHEMA = GOLD_SCHEMAS['_DIM_GEOGRAPHY_SCHEMA']
+_DIM_DISCLOSURE_CATEGORY_SCHEMA = GOLD_SCHEMAS['_DIM_DISCLOSURE_CATEGORY_SCHEMA']
+_DIM_PRIVATE_FUND_SCHEMA = GOLD_SCHEMAS['_DIM_PRIVATE_FUND_SCHEMA']
+_FACT_OWNERSHIP_TRANSACTION_SCHEMA = GOLD_SCHEMAS['_FACT_OWNERSHIP_TRANSACTION_SCHEMA']
+_FACT_OWNERSHIP_HOLDING_SNAPSHOT_SCHEMA = GOLD_SCHEMAS['_FACT_OWNERSHIP_HOLDING_SNAPSHOT_SCHEMA']
+_FACT_ADV_OFFICE_SCHEMA = GOLD_SCHEMAS['_FACT_ADV_OFFICE_SCHEMA']
+_FACT_ADV_DISCLOSURE_SCHEMA = GOLD_SCHEMAS['_FACT_ADV_DISCLOSURE_SCHEMA']
+_FACT_ADV_PRIVATE_FUND_SCHEMA = GOLD_SCHEMAS['_FACT_ADV_PRIVATE_FUND_SCHEMA']
+_SEC_FINANCIAL_FACT_SCHEMA = GOLD_SCHEMAS['_SEC_FINANCIAL_FACT_SCHEMA']
+_SEC_THIRTEENF_HOLDING_SCHEMA = GOLD_SCHEMAS['_SEC_THIRTEENF_HOLDING_SCHEMA']
+_SEC_FINANCIAL_DERIVED_SCHEMA = GOLD_SCHEMAS['_SEC_FINANCIAL_DERIVED_SCHEMA']
+_FACT_EARNINGS_RELEASE_SCHEMA = GOLD_SCHEMAS['_FACT_EARNINGS_RELEASE_SCHEMA']
+_FACT_EXECUTIVE_RECORD_SCHEMA = GOLD_SCHEMAS['_FACT_EXECUTIVE_RECORD_SCHEMA']
+_FACT_ACCOUNTING_FLAG_SCHEMA = GOLD_SCHEMAS['_FACT_ACCOUNTING_FLAG_SCHEMA']
 
 
 def _empty(schema: pa.Schema) -> pa.Table:
@@ -1380,20 +1066,47 @@ def build_gold(db: Any) -> dict[str, pa.Table]:
     }
 
 
-def _write_parquet(table: pa.Table, storage_root: Any, relative_path: str) -> None:
+def _write_parquet(table: pa.Table, storage_root: Any, relative_path: str) -> dict[str, Any]:
     buffer = pa.BufferOutputStream()
     pq.write_table(table, buffer)
-    storage_root.write_bytes(relative_path, buffer.getvalue().to_pybytes())
+    payload = buffer.getvalue().to_pybytes()
+    path = storage_root.write_bytes(relative_path, payload)
+    return {
+        "path": path,
+        "relative_path": relative_path,
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "byte_size": len(payload),
+    }
 
 
 def write_gold_to_storage(tables: dict[str, pa.Table], storage_root: Any, run_id: str) -> dict[str, int]:
-    counts: dict[str, int] = {}
+    manifest = write_gold_to_storage_manifest(tables, storage_root, run_id)
+    return {entry["table_name"]: entry["row_count"] for entry in manifest}
+
+
+def write_gold_to_storage_manifest(
+    tables: dict[str, pa.Table],
+    storage_root: Any,
+    run_id: str,
+) -> list[dict[str, Any]]:
+    manifest: list[dict[str, Any]] = []
     capture_specs = default_capture_spec_factory()
     for table_name, table in tables.items():
         output_spec = capture_specs.gold_table_output(table_name, run_id)
-        _write_parquet(table, storage_root, output_spec.relative_path)
-        counts[table_name] = table.num_rows
-    return counts
+        write_record = _write_parquet(table, storage_root, output_spec.relative_path)
+        row_count = int(table.num_rows)
+        manifest.append(
+            {
+                "table_name": table_name,
+                "storage_layer": "warehouse_gold",
+                "relative_path": write_record["relative_path"],
+                "storage_path": write_record["path"],
+                "row_count": row_count,
+                "parquet_sha256": write_record["sha256"],
+                "byte_size": write_record["byte_size"],
+            }
+        )
+    return manifest
 
 
 def build_ticker_reference_table(

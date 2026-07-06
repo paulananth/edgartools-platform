@@ -58,6 +58,8 @@ from edgar_warehouse.infrastructure.run_manifest_builder import (
     SNOWFLAKE_EXPORT_TABLES,
     layer_manifest,
     planned_writes,
+    run_manifest,
+    run_manifest_relative_path,
     snowflake_export_manifest,
     snowflake_export_run_manifest,
     snowflake_export_run_manifest_relative_path,
@@ -92,7 +94,7 @@ SNOWFLAKE_EXPORT_COMMANDS = GOLD_AFFECTING_COMMANDS | {"seed-universe"}
 # bootstrap-next (via the explicit --tracking-status-filter the load_history state machine
 # passes), and bootstrap-fundamentals's CIK resolution must all query the SAME combined status
 # set. A CIK is 'bootstrap_pending' from seeding until its first full submissions bootstrap
-# completes, then promoted to 'active' (see _sync_mdm_tracking_status below). Filtering
+# completes, then promoted to 'active' in sec_company_sync_state. Filtering
 # ComputeWindows to 'active' alone computed zero windows for every freshly-seeded environment,
 # since nothing is 'active' yet; filtering to 'bootstrap_pending' alone would stop covering
 # already-tracked companies on later runs. Do not change this without updating the matching
@@ -140,7 +142,7 @@ def run_command(command_name: str, args: Any) -> int:
 
 
 def run_seed_universe_command(args: Any) -> int:
-    """Seed the MDM tracked universe from a SEC reference JSON file."""
+    """Compatibility entry point for explicit MDM universe seeding."""
     try:
         from edgar_warehouse.silver_store import _parse_company_ticker_rows
 
@@ -259,6 +261,19 @@ def _execute_warehouse_infrastructure_validation(
             )
         writes.extend(snowflake_exports)
 
+    writes.append(
+        _write_consolidated_run_manifest(
+            context=context,
+            command_name=command_name,
+            command_path=command_path,
+            run_id=run_id,
+            arguments=arguments,
+            scope=scope,
+            now=now,
+            manifest_writes=list(writes),
+        )
+    )
+
     return {
         "arguments": arguments,
         "command": command_name,
@@ -373,10 +388,44 @@ def _execute_warehouse_bronze_capture(
             "status": "running",
         }
     )
+    pipeline_writes = _planned_pipeline_writes(
+        context=context,
+        command_name=command_name,
+        command_path=command_path,
+        run_id=run_id,
+        scope=scope,
+        now=now,
+        include_snowflake_export_manifest=(
+            context.snowflake_export_root is not None
+            and command_name in SNOWFLAKE_EXPORT_COMMANDS
+        ),
+        shard_index=_active_shard_index if _using_shard_path else None,
+    )
+    db.start_pipeline_run(
+        {
+            "pipeline_run_id": run_id,
+            "command_name": command_name,
+            "runtime_mode": context.runtime_mode,
+            "environment_name": context.environment_name,
+            "started_at": now,
+            "status": "running",
+            "arguments": arguments,
+            "scope": scope,
+            "bronze_root": context.bronze_root.root,
+            "storage_root": context.storage_root.root,
+            "silver_root": context.silver_root.root,
+            "serving_export_root": (
+                context.snowflake_export_root.root
+                if context.snowflake_export_root is not None
+                else None
+            ),
+        }
+    )
 
     raw_writes: list[dict[str, Any]] = []
     metrics: dict[str, Any] = {"rows_inserted": 0, "rows_skipped": 0, "sync_status": "succeeded"}
     gold_row_counts: dict[str, int] | None = None
+    gold_manifest_entries: list[dict[str, Any]] | None = None
     snowflake_export_counts: dict[str, int] | None = None
     snowflake_export_manifest_write: dict[str, Any] | None = None
     silver_database_write: dict[str, Any] | None = None
@@ -405,8 +454,8 @@ def _execute_warehouse_bronze_capture(
         )
         silver_table_counts = db.get_table_counts()
         if context.snowflake_export_root is not None and command_name in GOLD_AFFECTING_COMMANDS:
-            from edgar_warehouse.serving.gold_models import build_gold, write_gold_to_storage
-            from edgar_warehouse.serving.targets.snowflake import write_gold_to_snowflake_export
+            from edgar_warehouse.serving.gold_models import build_gold, write_gold_to_storage_manifest
+            from edgar_warehouse.serving.targets.snowflake import write_gold_to_serving_export
 
             gold_started_at = datetime.now(UTC)
             _emit_pipeline_event(
@@ -418,44 +467,7 @@ def _execute_warehouse_bronze_capture(
 
             _emit_pipeline_event("gold_build_started", command=command_name, run_id=run_id)
 
-            # PR-2: gold-refresh consumes BOTH ownership (silver/sec/silver.duckdb,
-            # via `db`) and fundamentals (silver/fundamentals/shard-0.duckdb) via
-            # a ShardedSilverReader that mounts both files.  ShardedSilverReader's
-            # per-shard table membership detection means each table is sourced
-            # from only the shard(s) that actually contain it.
-            #
-            # If fundamentals shard is absent (bootstrap-fundamentals not run yet),
-            # gold-refresh falls back to the single-database `db` — Branch B's
-            # 6 builders return empty PyArrow tables (existing _empty branch).
-            fundamentals_shard_path = (
-                _hydrate_fundamentals_shard(context)
-                if command_name == "gold-refresh"
-                else None
-            )
-            if fundamentals_shard_path is not None:
-                from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
-                silver_db_path = str(Path(context.silver_root.join("silver", "sec", "silver.duckdb")))
-                # Close the writable SilverDatabase connection so the reader can
-                # ATTACH the same file READ_ONLY (DuckDB exclusive-lock invariant).
-                db.close()
-                db_closed = True
-                gold_silver = ShardedSilverReader([silver_db_path, fundamentals_shard_path])
-                _emit_pipeline_event(
-                    "gold_silver_multi_namespace",
-                    command=command_name,
-                    run_id=run_id,
-                    shards=[silver_db_path, fundamentals_shard_path],
-                )
-            else:
-                gold_silver = db
-
-            gold_tables = build_gold(gold_silver)
-
-            if fundamentals_shard_path is not None:
-                # Close the reader; reopen the writable db for sync_run completion.
-                gold_silver.close()
-                db = _open_silver_database(context.silver_root)
-                db_closed = False
+            gold_tables = build_gold(db)
             _emit_pipeline_event(
                 "gold_build_completed",
                 command=command_name,
@@ -466,13 +478,23 @@ def _execute_warehouse_bronze_capture(
 
             storage_started_at = datetime.now(UTC)
             _emit_pipeline_event("gold_storage_write_started", command=command_name, run_id=run_id)
-            gold_row_counts = write_gold_to_storage(gold_tables, context.storage_root, run_id)
+            gold_manifest_entries = write_gold_to_storage_manifest(gold_tables, context.storage_root, run_id)
+            db.record_gold_manifest(
+                run_id=run_id,
+                command_name=command_name,
+                entries=gold_manifest_entries,
+            )
+            gold_row_counts = {
+                entry["table_name"]: int(entry["row_count"])
+                for entry in gold_manifest_entries
+            }
             _emit_pipeline_event(
                 "gold_storage_write_completed",
                 command=command_name,
                 run_id=run_id,
                 duration_seconds=(datetime.now(UTC) - storage_started_at).total_seconds(),
                 gold_row_counts=gold_row_counts,
+                gold_manifest=gold_manifest_entries,
             )
 
             export_business_date = _resolve_export_business_date(command_name=command_name, scope=scope, now=now)
@@ -483,7 +505,7 @@ def _execute_warehouse_bronze_capture(
                 run_id=run_id,
                 export_business_date=str(export_business_date),
             )
-            snowflake_export_counts = write_gold_to_snowflake_export(
+            snowflake_export_counts = write_gold_to_serving_export(
                 gold_tables,
                 context.snowflake_export_root,
                 run_id,
@@ -512,6 +534,19 @@ def _execute_warehouse_bronze_capture(
             rows_inserted=int(metrics.get("rows_inserted", 0) or 0),
             rows_skipped=int(metrics.get("rows_skipped", 0) or 0),
         )
+        db.complete_pipeline_run(
+            run_id,
+            status=str(metrics.get("sync_status", "succeeded")),
+            writes=pipeline_writes,
+            raw_writes=raw_writes,
+            metrics={
+                **metrics,
+                "silver_table_counts": silver_table_counts or {},
+                "gold_row_counts": gold_row_counts or {},
+                "gold_manifest": gold_manifest_entries or [],
+                "snowflake_export_row_counts": snowflake_export_counts or {},
+            },
+        )
         db.close()
         db_closed = True
         _emit_pipeline_event(
@@ -533,6 +568,14 @@ def _execute_warehouse_bronze_capture(
     except Exception as exc:
         if not db_closed:
             db.complete_sync_run(run_id, status="failed", error_message=str(exc))
+            db.complete_pipeline_run(
+                run_id,
+                status="failed",
+                writes=pipeline_writes,
+                raw_writes=raw_writes,
+                metrics=metrics,
+                error_message=str(exc),
+            )
         _emit_pipeline_event(
             "pipeline_failed",
             command=command_name,
@@ -597,11 +640,11 @@ def _execute_warehouse_bronze_capture(
         and ticker_reference_rows is not None
     ):
         from edgar_warehouse.serving.gold_models import build_ticker_reference_table
-        from edgar_warehouse.serving.targets.snowflake import write_ticker_reference_to_snowflake_export
+        from edgar_warehouse.serving.targets.snowflake import write_ticker_reference_to_serving_export
 
         export_business_date = _resolve_export_business_date(command_name=command_name, scope=scope, now=now)
         ticker_table = build_ticker_reference_table(ticker_reference_rows, run_id)
-        ticker_row_count = write_ticker_reference_to_snowflake_export(
+        ticker_row_count = write_ticker_reference_to_serving_export(
             ticker_table,
             context.snowflake_export_root,
             run_id,
@@ -636,6 +679,24 @@ def _execute_warehouse_bronze_capture(
             "relative_path": run_manifest_relative_path,
         }
         writes.append(snowflake_export_manifest_write)
+
+    writes.append(
+        _write_consolidated_run_manifest(
+            context=context,
+            command_name=command_name,
+            command_path=command_path,
+            run_id=run_id,
+            arguments=arguments,
+            scope=scope,
+            now=now,
+            manifest_writes=list(writes),
+            metrics=metrics,
+            raw_writes=raw_writes,
+            silver_table_counts=silver_table_counts,
+            gold_row_counts=gold_row_counts,
+            serving_export_counts=snowflake_export_counts,
+        )
+    )
 
     return {
         "arguments": arguments,
@@ -696,82 +757,6 @@ def _hydrate_silver_database_from_storage(context: WarehouseCommandContext) -> N
         local_path=str(local_path),
         size_bytes=len(payload),
     )
-
-
-def _hydrate_fundamentals_shard(context: WarehouseCommandContext) -> str | None:
-    """Download silver/fundamentals/shard-0.duckdb to local silver dir.
-
-    Returns the local path on success, or None when:
-      - storage is local (no download needed; return local path if it exists)
-      - the fundamentals shard does not exist in remote yet (bootstrap-fundamentals
-        has not run — gold-refresh proceeds with ownership data only)
-
-    PR-2: enables gold-refresh to consume Branch B silver alongside the legacy
-    ownership monolith without requiring bootstrap-fundamentals to have completed
-    (per AD-13: Branch B optional, must not block ownership gold).
-    """
-    relative_path = "silver/fundamentals/shard-0.duckdb"
-    local_path = Path(context.silver_root.join(relative_path))
-
-    if not context.storage_root.is_remote or context.silver_root.is_remote:
-        # Local storage — return path if file exists, else None
-        return str(local_path) if local_path.exists() else None
-
-    remote_path = context.storage_root.join(relative_path)
-    try:
-        payload = read_bytes(remote_path)
-    except (FileNotFoundError, OSError):
-        return None  # fundamentals shard absent — gold-refresh skips Branch B
-
-    local_path.parent.mkdir(parents=True, exist_ok=True)
-    local_path.write_bytes(payload)
-    _emit_pipeline_event(
-        "fundamentals_shard_hydrated",
-        path=remote_path,
-        local_path=str(local_path),
-        size_bytes=len(payload),
-    )
-    return str(local_path)
-
-
-def _publish_fundamentals_shard_if_remote(
-    local_shard_path: str,
-    storage_root_uri: str,
-) -> dict[str, Any] | None:
-    """Upload silver/fundamentals/shard-0.duckdb to remote storage.
-
-    Mirror of _hydrate_fundamentals_shard: hydrate downloads, this uploads.
-    Called by bootstrap-fundamentals after closing the shard so gold-refresh
-    can consume the data from S3 (ECS container filesystem is ephemeral).
-
-    Returns a write-record dict on upload, or None if storage is local.
-    Raises WarehouseRuntimeError if the local file does not exist.
-    """
-    storage = StorageLocation(root=storage_root_uri)
-    if not storage.is_remote:
-        return None
-
-    local_path = Path(local_shard_path)
-    if not local_path.exists():
-        raise WarehouseRuntimeError(
-            f"Fundamentals shard not found at {local_path}"
-        )
-
-    relative_path = "silver/fundamentals/shard-0.duckdb"
-    destination = storage.upload_file(relative_path, local_path)
-    size_bytes = local_path.stat().st_size
-    _emit_pipeline_event(
-        "fundamentals_shard_published",
-        path=destination,
-        local_path=str(local_path),
-        size_bytes=size_bytes,
-    )
-    return {
-        "layer": "fundamentals_shard",
-        "path": destination,
-        "relative_path": relative_path,
-        "size_bytes": size_bytes,
-    }
 
 
 def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict[str, Any] | None:
@@ -978,26 +963,49 @@ def _capture_bronze_raw(
                 metrics["sync_status"] = "partial"
                 break
         impacted_ciks = _dedupe_ints(impacted_ciks)
-        _mdm_auto_enroll(impacted_ciks, scope_reason="daily_index")
-        impacted_ciks = _filter_ciks_to_universe(impacted_ciks)
+        _seed_silver_tracking_status(db, impacted_ciks, tracking_status="active")
+        impacted_ciks = _filter_ciks_to_universe(impacted_ciks, db=db)
         cik_limit = arguments.get("cik_limit")
         cik_offset = int(arguments.get("cik_offset") or 0)
         _validate_window_args(cik_limit, cik_offset)
         selected_ciks = impacted_ciks[cik_offset:]
         if cik_limit is not None:
             selected_ciks = selected_ciks[:cik_limit]
+        selected_ciks = db.claim_discovery_ciks(
+            selected_ciks,
+            discovery_source="daily_incremental",
+            run_id=sync_run_id,
+            claimed_at=now,
+        )
         if selected_ciks:
-            result = _run_submissions_bronze_then_silver(
-                context=context,
-                db=db,
-                sync_run_id=sync_run_id,
-                ciks=selected_ciks,
-                include_pagination=False,
-                fetch_date=now.date(),
-                force=bool(arguments.get("force")),
-                load_mode="daily_incremental",
-                artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
-                parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
+            try:
+                result = _run_submissions_bronze_then_silver(
+                    context=context,
+                    db=db,
+                    sync_run_id=sync_run_id,
+                    ciks=selected_ciks,
+                    include_pagination=False,
+                    fetch_date=now.date(),
+                    force=bool(arguments.get("force")),
+                    load_mode="daily_incremental",
+                    artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
+                    parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
+                )
+            except Exception:
+                db.finish_discovery_ciks(
+                    selected_ciks,
+                    discovery_source="daily_incremental",
+                    run_id=sync_run_id,
+                    status="failed",
+                    finished_at=now,
+                )
+                raise
+            db.finish_discovery_ciks(
+                selected_ciks,
+                discovery_source="daily_incremental",
+                run_id=sync_run_id,
+                status="succeeded",
+                finished_at=now,
             )
             raw_writes.extend(result["raw_writes"])
             metrics["rows_inserted"] += result["rows_written"]
@@ -1022,6 +1030,7 @@ def _capture_bronze_raw(
 
     if command_name == "bootstrap":
         ciks = _resolve_bootstrap_target_ciks(
+            db=db,
             raw_ciks=scope.get("cik_list"),
             command_name=command_name,
             tracking_status_filter=str(scope.get("tracking_status_filter", "active")),
@@ -1048,6 +1057,7 @@ def _capture_bronze_raw(
 
     if command_name == "bootstrap-full":
         ciks = _resolve_bootstrap_target_ciks(
+            db=db,
             raw_ciks=scope.get("cik_list"),
             command_name=command_name,
             tracking_status_filter=str(scope.get("tracking_status_filter", "active")),
@@ -1075,6 +1085,7 @@ def _capture_bronze_raw(
         pending_pool_limit = int(scope.get("cik_limit") or 100)
         tracking_status_filter = str(scope.get("tracking_status_filter", "bootstrap_pending"))
         ciks = _resolve_bootstrap_target_ciks(
+            db=db,
             raw_ciks=None,
             command_name=command_name,
             tracking_status_filter=tracking_status_filter,
@@ -1082,21 +1093,45 @@ def _capture_bronze_raw(
             cik_offset=int(arguments.get("cik_offset") or 0),
         )
         ciks = ciks[:pending_pool_limit]
-        result = _run_submissions_bronze_then_silver(
-            context=context,
-            db=db,
-            sync_run_id=sync_run_id,
-            ciks=ciks,
-            include_pagination=True,
-            fetch_date=now.date(),
-            force=bool(arguments.get("force")),
-            load_mode="bootstrap_full",
-            artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
-            parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
+        ciks = db.claim_discovery_ciks(
+            ciks,
+            discovery_source="bootstrap_next",
+            run_id=sync_run_id,
+            claimed_at=now,
         )
-        raw_writes.extend(result["raw_writes"])
-        metrics["rows_inserted"] += result["rows_written"]
-        metrics["rows_skipped"] += result["rows_skipped"]
+        if ciks:
+            try:
+                result = _run_submissions_bronze_then_silver(
+                    context=context,
+                    db=db,
+                    sync_run_id=sync_run_id,
+                    ciks=ciks,
+                    include_pagination=True,
+                    fetch_date=now.date(),
+                    force=bool(arguments.get("force")),
+                    load_mode="bootstrap_full",
+                    artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
+                    parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
+                )
+            except Exception:
+                db.finish_discovery_ciks(
+                    ciks,
+                    discovery_source="bootstrap_next",
+                    run_id=sync_run_id,
+                    status="failed",
+                    finished_at=now,
+                )
+                raise
+            db.finish_discovery_ciks(
+                ciks,
+                discovery_source="bootstrap_next",
+                run_id=sync_run_id,
+                status="succeeded",
+                finished_at=now,
+            )
+            raw_writes.extend(result["raw_writes"])
+            metrics["rows_inserted"] += result["rows_written"]
+            metrics["rows_skipped"] += result["rows_skipped"]
         return raw_writes, metrics
 
     if command_name == "targeted-resync":
@@ -1292,16 +1327,12 @@ def _capture_bronze_raw(
         if len(limited_ciks) < len(universe_rows):
             allowed = set(limited_ciks)
             universe_rows = [row for row in universe_rows if int(row["cik"]) in allowed]
-        # Exclude companies already fully bootstrapped. Check both silver DuckDB
-        # (sec_company_sync_state.tracking_status = 'active') and MDM Postgres,
-        # since MDM may have been reset while silver still holds accurate status.
-        # Non-fatal: MDM unreachability returns [] and silver is always available.
-        active_ciks = set(_get_mdm_tracked_ciks("active"))
-        silver_active_ciks = set(
+        # Exclude companies already fully bootstrapped. Silver sync state owns
+        # pipeline tracking status; MDM is only used by explicit MDM commands.
+        active_ciks = set(
             row["cik"]
             for row in db.get_active_ciks()
         )
-        active_ciks = active_ciks | silver_active_ciks
         if active_ciks:
             before = len(universe_rows)
             universe_rows = [row for row in universe_rows if int(row["cik"]) not in active_ciks]
@@ -1310,11 +1341,15 @@ def _capture_bronze_raw(
                 total_ciks=before,
                 new_ciks=len(universe_rows),
                 skipped_active=before - len(universe_rows),
-                skipped_mdm_active=len(silver_active_ciks & {int(r["cik"]) for r in universe_rows[:before]}),
-                skipped_silver_active=len(silver_active_ciks),
+                skipped_silver_active=len(active_ciks),
             )
         if arguments.get("limit") is not None:
             universe_rows = universe_rows[: int(arguments["limit"])]
+        _seed_silver_tracking_status(
+            db,
+            [int(row["cik"]) for row in universe_rows],
+            tracking_status="bootstrap_pending",
+        )
         metrics["_ticker_reference_rows"] = ticker_reference_rows
         cik_universe_path = _write_cik_universe_batches(
             context=context,
@@ -1458,7 +1493,7 @@ def _capture_bronze_raw(
             raise WarehouseRuntimeError(
                 f"--window-size must be a positive integer, got {window_size}"
             )
-        ciks = _get_mdm_tracked_ciks(LOAD_HISTORY_TRACKING_STATUS_FILTER)
+        ciks = db.get_tracked_ciks(LOAD_HISTORY_TRACKING_STATUS_FILTER)
         # Build window descriptors: {window_offset, window_limit} for each slice
         window_descs = [
             {"window_offset": i, "window_limit": min(window_size, len(ciks) - i)}
@@ -2276,7 +2311,6 @@ def _apply_submission_snapshot_to_silver(
             "last_error_message": None,
         }
     )
-    _sync_mdm_tracking_status(cik, tracking_status)
     return {
         "raw_writes": raw_writes,
         "rows_written": rows_written,
@@ -3085,8 +3119,9 @@ def _parse_cik(value: Any) -> int:
 
 
 def _get_mdm_tracked_ciks(status_filter: str) -> list[int]:
-    """Query MDM for tracked CIKs. MDM is the sole source of truth for universe tracking.
+    """Query MDM for explicit MDM workflows.
 
+    Warehouse pipeline orchestration reads sec_company_sync_state instead.
     Raises WarehouseRuntimeError if MDM_DATABASE_URL is not set or MDM is unreachable.
     """
     import os
@@ -3104,8 +3139,8 @@ def _get_mdm_tracked_ciks(status_filter: str) -> list[int]:
 def _sync_mdm_tracking_status(cik: int, status: str) -> None:
     """Update mdm_company.tracking_status after a company sync completes.
 
-    Raises on failure — MDM is the tracking source of truth and write failures
-    must surface rather than silently produce stale state.
+    Retained for explicit MDM workflows; warehouse commands update
+    sec_company_sync_state directly.
     """
     import os
     url = os.environ.get("MDM_DATABASE_URL")
@@ -3170,26 +3205,26 @@ def _validate_window_args(cik_limit: int | None, cik_offset: int) -> None:
 
 def _resolve_bootstrap_target_ciks(
     *,
+    db: SilverDatabase,
     raw_ciks: Any,
     command_name: str,
     tracking_status_filter: str,
     cik_limit: int | None = None,
     cik_offset: int = 0,
 ) -> list[int]:
-    """Resolve CIKs from MDM exclusively. SEC bronze is not consulted for scope.
+    """Resolve CIKs from silver tracking state. SEC bronze is not consulted for scope.
 
-    Applies deterministic windowing (cik_offset then cik_limit) after MDM lookup.
+    Applies deterministic windowing (cik_offset then cik_limit) after silver lookup.
     """
     _validate_window_args(cik_limit, cik_offset)
     if raw_ciks:
         ciks = [_parse_cik(value) for value in raw_ciks]
     else:
-        ciks = _get_mdm_tracked_ciks(tracking_status_filter)
+        ciks = db.get_tracked_ciks(tracking_status_filter)
         if not ciks:
             raise WarehouseRuntimeError(
-                f"{command_name} found no companies with tracking_status='{tracking_status_filter}' in MDM. "
-                "Run 'edgar-warehouse mdm seed-universe --tracking-status "
-                f"{tracking_status_filter}' first."
+                f"{command_name} found no companies with tracking_status='{tracking_status_filter}' "
+                "in silver tracking state. Run 'edgar-warehouse seed-universe' first."
             )
     # Apply windowing: offset first, then limit
     ciks = ciks[cik_offset:]
@@ -3200,10 +3235,11 @@ def _resolve_bootstrap_target_ciks(
 
 def _resolve_reconcile_ciks(
     *,
+    db: SilverDatabase,
     raw_ciks: Any,
     sample_limit: int | None,
 ) -> list[int]:
-    ciks = [_parse_cik(value) for value in raw_ciks] if raw_ciks else _get_mdm_tracked_ciks("active")
+    ciks = [_parse_cik(value) for value in raw_ciks] if raw_ciks else db.get_tracked_ciks("active")
     if sample_limit is not None:
         return ciks[: int(sample_limit)]
     return ciks
@@ -3234,17 +3270,42 @@ def _pagination_file_names(submissions_document: dict[str, Any]) -> list[str]:
     return names
 
 
-def _filter_ciks_to_universe(impacted_ciks: list[int]) -> list[int]:
-    """Return only CIKs that are active in the MDM tracked universe.
+def _filter_ciks_to_universe(impacted_ciks: list[int], *, db: SilverDatabase) -> list[int]:
+    """Return only CIKs that are active in silver tracking state.
 
-    Falls through to all impacted_ciks if MDM returns an empty active universe
+    Falls through to all impacted_ciks if silver returns an empty active universe
     (cold-start guard so daily-incremental can run before the first seed).
     """
-    tracked = _get_mdm_tracked_ciks("active")
+    tracked = db.get_tracked_ciks("active")
     if not tracked:
         return impacted_ciks
     tracked_set = set(tracked)
     return [c for c in impacted_ciks if c in tracked_set]
+
+
+def _seed_silver_tracking_status(
+    db: SilverDatabase,
+    ciks: list[int],
+    *,
+    tracking_status: str,
+) -> None:
+    """Create silver tracking-state rows for newly discovered CIKs.
+
+    Existing rows keep their current status so paused or completed companies are
+    not accidentally reactivated by discovery.
+    """
+    now = datetime.now(UTC)
+    for cik in _dedupe_ints(ciks):
+        if db.get_company_sync_state(cik) is not None:
+            continue
+        db.upsert_company_sync_state(
+            {
+                "cik": cik,
+                "tracking_status": tracking_status,
+                "last_main_sync_at": now,
+                "last_error_message": None,
+            }
+        )
 
 
 def _extract_impacted_ciks_from_daily_index(payload: bytes, source_url: str) -> list[int]:
@@ -3469,11 +3530,96 @@ def _resolve_scope(
             "from_windows_key": arguments.get("from_windows_key"),
         }
 
+    if command_name == "verify-pipeline-run":
+        return {
+            "run_id": arguments.get("run_id"),
+        }
+
+    if command_name == "validate-data-quality":
+        return {}
+
     raise WarehouseRuntimeError(f"Unsupported warehouse command: {command_name}")
 
 
 def _planned_writes(command_name: str, command_path: str, run_id: str, scope: dict[str, Any]) -> dict[str, str]:
     return planned_writes(command_name, command_path, run_id, scope)
+
+
+def _planned_pipeline_writes(
+    *,
+    context: WarehouseCommandContext,
+    command_name: str,
+    command_path: str,
+    run_id: str,
+    scope: dict[str, Any],
+    now: datetime,
+    include_snowflake_export_manifest: bool,
+    shard_index: int | None,
+) -> list[dict[str, Any]]:
+    writes: list[dict[str, Any]] = []
+    for layer, relative_path in _planned_writes(
+        command_name=command_name,
+        command_path=command_path,
+        run_id=run_id,
+        scope=scope,
+    ).items():
+        target = context.bronze_root if layer == "bronze" else context.storage_root
+        writes.append(
+            {
+                "layer": layer,
+                "path": target.join(relative_path),
+                "relative_path": relative_path,
+                "planned": True,
+            }
+        )
+
+    run_manifest_relative_path = _run_manifest_relative_path(command_path, run_id)
+    writes.append(
+        {
+            "layer": "run_manifest",
+            "path": context.bronze_root.join(run_manifest_relative_path),
+            "relative_path": run_manifest_relative_path,
+            "planned": True,
+        }
+    )
+
+    if include_snowflake_export_manifest and context.snowflake_export_root is not None:
+        export_business_date = _resolve_export_business_date(
+            command_name=command_name,
+            scope=scope,
+            now=now,
+        )
+        relative_path = _snowflake_export_run_manifest_relative_path(
+            workflow_name=command_name.replace("-", "_"),
+            business_date=export_business_date,
+            run_id=run_id,
+        )
+        writes.append(
+            {
+                "layer": "snowflake_export_manifest",
+                "path": context.snowflake_export_root.join(relative_path),
+                "relative_path": relative_path,
+                "planned": True,
+            }
+        )
+
+    if context.storage_root.is_remote:
+        if shard_index is None:
+            layer = "silver_database"
+            relative_path = "silver/sec/silver.duckdb"
+        else:
+            layer = "silver_shard"
+            relative_path = f"silver/sec/shards/shard-{shard_index}.duckdb"
+        writes.append(
+            {
+                "layer": layer,
+                "path": context.storage_root.join(relative_path),
+                "relative_path": relative_path,
+                "planned": True,
+            }
+        )
+
+    return writes
 
 
 def _resolve_export_business_date(command_name: str, scope: dict[str, Any], now: datetime) -> str:
@@ -3491,6 +3637,101 @@ def _layer_manifest(
     runtime_mode: str,
 ) -> dict[str, Any]:
     return layer_manifest(command_name, run_id, layer, relative_path, arguments, scope, now, runtime_mode)
+
+
+def _run_manifest_relative_path(command_path: str, run_id: str) -> str:
+    return run_manifest_relative_path(command_path, run_id)
+
+
+def _write_consolidated_run_manifest(
+    *,
+    context: WarehouseCommandContext,
+    command_name: str,
+    command_path: str,
+    run_id: str,
+    arguments: dict[str, Any],
+    scope: dict[str, Any],
+    now: datetime,
+    manifest_writes: list[dict[str, Any]],
+    metrics: dict[str, Any] | None = None,
+    raw_writes: list[dict[str, Any]] | None = None,
+    silver_table_counts: dict[str, int] | None = None,
+    gold_row_counts: dict[str, int] | None = None,
+    serving_export_counts: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    relative_path = _run_manifest_relative_path(command_path, run_id)
+    metrics = metrics or {}
+    raw_writes = raw_writes or []
+    row_counts = _consolidated_run_row_counts(
+        metrics=metrics,
+        raw_writes=raw_writes,
+        silver_table_counts=silver_table_counts,
+        gold_row_counts=gold_row_counts,
+        serving_export_counts=serving_export_counts,
+    )
+    payload = run_manifest(
+        command_name=command_name,
+        run_id=run_id,
+        command_path=command_path,
+        arguments=arguments,
+        scope=scope,
+        now=now,
+        runtime_mode=context.runtime_mode,
+        environment_name=context.environment_name,
+        manifest_writes=manifest_writes,
+        row_counts=row_counts,
+        layer_row_counts=_consolidated_layer_row_counts(
+            row_counts=row_counts,
+            silver_table_counts=silver_table_counts,
+            gold_row_counts=gold_row_counts,
+            serving_export_counts=serving_export_counts,
+        ),
+    )
+    return {
+        "layer": "run_manifest",
+        "path": context.bronze_root.write_json(relative_path, payload),
+        "relative_path": relative_path,
+    }
+
+
+def _consolidated_run_row_counts(
+    *,
+    metrics: dict[str, Any],
+    raw_writes: list[dict[str, Any]],
+    silver_table_counts: dict[str, int] | None,
+    gold_row_counts: dict[str, int] | None,
+    serving_export_counts: dict[str, int] | None,
+) -> dict[str, Any]:
+    return {
+        "gold_row_counts": gold_row_counts or {},
+        "raw_write_count": len(raw_writes),
+        "rows_inserted": int(metrics.get("rows_inserted", 0) or 0),
+        "rows_skipped": int(metrics.get("rows_skipped", 0) or 0),
+        "serving_export_row_counts": serving_export_counts or {},
+        "silver_table_counts": silver_table_counts or {},
+    }
+
+
+def _consolidated_layer_row_counts(
+    *,
+    row_counts: dict[str, Any],
+    silver_table_counts: dict[str, int] | None,
+    gold_row_counts: dict[str, int] | None,
+    serving_export_counts: dict[str, int] | None,
+) -> dict[str, dict[str, Any]]:
+    capture_counts = {
+        "rows_inserted": row_counts["rows_inserted"],
+        "rows_skipped": row_counts["rows_skipped"],
+    }
+    return {
+        "artifacts": {"raw_write_count": row_counts["raw_write_count"]},
+        "bronze": capture_counts,
+        "gold": gold_row_counts or {},
+        "silver": silver_table_counts or {},
+        "snowflake_export": serving_export_counts or {},
+        "snowflake_export_manifest": serving_export_counts or {},
+        "staging": capture_counts,
+    }
 
 
 def _snowflake_export_manifest(

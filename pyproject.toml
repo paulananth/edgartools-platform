@@ -20,6 +20,7 @@ dependencies = [
     "pytz>=2024.1",
     "zstandard>=0.20.0",
     "httpx>=0.25.0",
+    "PyYAML>=6.0.2",
 ]
 
 [project.optional-dependencies]
@@ -72,6 +73,7 @@ Source = "https://github.com/paulananth/edgartools-platform"
 include = [
   "edgar_warehouse/**/*.py",
   "edgar_warehouse/config/*.properties",
+  "edgar_warehouse/config/*.yaml",
   "edgar_warehouse/mdm/migrations/*.sql",
 ]
 

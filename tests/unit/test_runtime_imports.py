@@ -61,6 +61,7 @@ class RuntimeImportTests(unittest.TestCase):
 
         self.assertTrue(hasattr(silver, "SilverDatabase"))
         self.assertTrue(callable(gold.build_gold))
+        self.assertTrue(callable(gold.write_gold_to_serving_export))
         self.assertTrue(callable(gold.write_gold_to_snowflake_export))
 
     def test_command_registry_contains_all_cli_commands(self) -> None:

@@ -3,8 +3,8 @@
 Covers the data-architecture review fixes (see
 .planning/workstreams/claude-data-architecture-fixes/CLAUDE-INSTRUCTIONS.md):
 
-- Issue 1: Branch B per-filing/thirteenf must run AFTER Branch A completes, not
-  concurrently inside Stage1Parallel.
+- Issue 1/3: Branch B fundamentals must run AFTER Branch A completes because
+  Branch A and Branch B now share the same SEC silver DuckDB artifact.
 - Issue 2: MdmSeedUniverse (mdm seed-universe) must run before ComputeWindows,
   and bootstrap-next must pass the same tracking-status filter compute-windows
   uses (not its own single-status CLI default).
@@ -187,26 +187,38 @@ def test_bootstrap_next_and_compute_windows_use_the_same_tracking_status_filter(
 # -- Issue 1 / 4: Branch B sequencing -----------------------------------------
 
 
-def test_stage1_parallel_branch_b_excludes_per_filing_and_thirteenf(definition: dict) -> None:
-    branch_b_states = definition["States"]["Stage1Parallel"]["Branches"][1]["States"]
-    combined_cmds = " ".join(_command_of_state(s) for s in branch_b_states.values())
-    assert "'per-filing'" not in combined_cmds
-    assert "'thirteenf'" not in combined_cmds
+def test_stage1_parallel_contains_only_branch_a(definition: dict) -> None:
+    branches = definition["States"]["Stage1Parallel"]["Branches"]
+    assert len(branches) == 1
+    combined_cmds = " ".join(
+        _command_of_state(state)
+        for branch in branches
+        for state in branch["States"].values()
+    )
+    assert "'bootstrap-next'" in combined_cmds
+    assert "'bootstrap-fundamentals'" not in combined_cmds
 
 
-def test_stage1_parallel_branch_b_still_runs_entity_facts_concurrently(definition: dict) -> None:
-    branch_b_states = definition["States"]["Stage1Parallel"]["Branches"][1]["States"]
-    combined_cmds = " ".join(_command_of_state(s) for s in branch_b_states.values())
-    assert "'entity-facts'" in combined_cmds
-
-
-def test_per_filing_and_thirteenf_run_sequentially_after_stage1_parallel(definition: dict) -> None:
+def test_branch_b_modes_run_sequentially_after_stage1_parallel(definition: dict) -> None:
     order = _linear_order(definition)
-    for name in ("Stage1Parallel", "Stage1BPerFiling", "Stage1BThirteenF", "MdmRun"):
+    for name in (
+        "Stage1Parallel",
+        "Stage1BEntityFacts",
+        "Stage1BPerFiling",
+        "Stage1BThirteenF",
+        "MdmRun",
+    ):
         assert name in order
-    assert order.index("Stage1Parallel") < order.index("Stage1BPerFiling")
+    assert order.index("Stage1Parallel") < order.index("Stage1BEntityFacts")
+    assert order.index("Stage1BEntityFacts") < order.index("Stage1BPerFiling")
     assert order.index("Stage1BPerFiling") < order.index("Stage1BThirteenF")
     assert order.index("Stage1BThirteenF") < order.index("MdmRun")
+
+
+def test_stage1b_entity_facts_command_shape(definition: dict) -> None:
+    cmd = _command_of(definition, "Stage1BEntityFacts")
+    assert "'bootstrap-fundamentals'" in cmd
+    assert "'--mode', 'entity-facts'" in cmd
 
 
 def test_stage1b_per_filing_command_shape(definition: dict) -> None:

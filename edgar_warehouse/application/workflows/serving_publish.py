@@ -27,6 +27,14 @@ def write_gold_to_snowflake_export(*args: Any, **kwargs: Any):
     return _write_gold_to_snowflake_export(*args, **kwargs)
 
 
+def write_gold_to_serving_export(*args: Any, **kwargs: Any):
+    from edgar_warehouse.serving.targets.snowflake import (
+        write_gold_to_serving_export as _write_gold_to_serving_export,
+    )
+
+    return _write_gold_to_serving_export(*args, **kwargs)
+
+
 def write_gold_to_storage(*args: Any, **kwargs: Any):
     from edgar_warehouse.serving.gold_models import write_gold_to_storage as _write_gold_to_storage
 
@@ -39,3 +47,11 @@ def write_ticker_reference_to_snowflake_export(*args: Any, **kwargs: Any):
     )
 
     return _write_ticker_reference_to_snowflake_export(*args, **kwargs)
+
+
+def write_ticker_reference_to_serving_export(*args: Any, **kwargs: Any):
+    from edgar_warehouse.serving.targets.snowflake import (
+        write_ticker_reference_to_serving_export as _write_ticker_reference_to_serving_export,
+    )
+
+    return _write_ticker_reference_to_serving_export(*args, **kwargs)

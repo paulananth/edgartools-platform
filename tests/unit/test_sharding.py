@@ -6,6 +6,8 @@ Plans 02 and 04 convert them to passing tests.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import pytest
 import duckdb
 
@@ -474,3 +476,89 @@ def test_sharded_silver_reader_unions_shards(tmp_path) -> None:
         assert rows == [(1,), (2,)], f"Expected [(1,), (2,)], got: {rows}"
     finally:
         reader.close()
+
+
+# ---------------------------------------------------------------------------
+# Issue 1: silver shard reconciliation and per-CIK write lock
+# ---------------------------------------------------------------------------
+
+
+def test_reconcile_shards_reports_row_count_and_timestamp_divergence(tmp_path) -> None:
+    """Issue 1: reconciliation compares row counts and newest last_synced_at across shards."""
+    from edgar_warehouse.silver_store import SilverDatabase
+
+    shard_paths = [tmp_path / f"shard-{index}.duckdb" for index in range(4)]
+    timestamps = [
+        "2026-01-01T00:00:00Z",
+        "2026-01-02T00:00:00Z",
+        "2026-01-03T00:00:00Z",
+    ]
+
+    dbs = [SilverDatabase(str(path)) for path in shard_paths]
+    try:
+        dbs[0]._conn.execute(
+            """
+            INSERT INTO sec_company (cik, entity_name, last_synced_at)
+            VALUES
+                (100000, 'Alpha', ?),
+                (200000, 'Beta', ?)
+            """,
+            [timestamps[0], timestamps[1]],
+        )
+        dbs[1]._conn.execute(
+            """
+            INSERT INTO sec_company (cik, entity_name, last_synced_at)
+            VALUES (1200000, 'Gamma', ?)
+            """,
+            [timestamps[2]],
+        )
+    finally:
+        for db in dbs:
+            db.close()
+
+    report = SilverDatabase.reconcile_shards(
+        [str(path) for path in shard_paths],
+        table_names=["sec_company"],
+    )
+
+    table_report = report["tables"]["sec_company"]
+    assert [shard["row_count"] for shard in table_report["shards"]] == [2, 1, 0, 0]
+    assert table_report["row_count_diverged"] is True
+    assert table_report["newest_last_synced_at_diverged"] is True
+    assert {
+        (divergence["table"], divergence["metric"]) for divergence in report["divergences"]
+    } == {
+        ("sec_company", "row_count"),
+        ("sec_company", "newest_last_synced_at"),
+    }
+
+
+def test_stage_submission_uses_shard_level_lock(tmp_path, monkeypatch) -> None:
+    """Issue 1: the composite per-CIK submission write is guarded by a shard lock."""
+    from edgar_warehouse.silver_store import SilverDatabase
+
+    db = SilverDatabase(str(tmp_path / "shard-0.duckdb"))
+    lock_events: list[str] = []
+
+    @contextmanager
+    def fake_shard_lock():
+        lock_events.append("enter")
+        yield
+        lock_events.append("exit")
+
+    monkeypatch.setattr(db, "_shard_advisory_lock", fake_shard_lock, raising=False)
+
+    try:
+        result = db.stage_submission(
+            cik=320193,
+            main_payload={"name": "Test Co", "filings": {"recent": {}}},
+            pagination_payloads=[],
+            sync_run_id="run-1",
+            raw_object_id="raw-1",
+            load_mode="bootstrap_full",
+        )
+    finally:
+        db.close()
+
+    assert lock_events == ["enter", "exit"]
+    assert result["rows_written"] >= 1

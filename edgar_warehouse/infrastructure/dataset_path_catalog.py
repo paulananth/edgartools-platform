@@ -71,6 +71,7 @@ _REQUIRED_TEMPLATE_KEYS = frozenset(
         "filings.document.path",
         "text.filename",
         "text.path",
+        "manifest.run.path",
         "manifest.default.bronze.path",
         "manifest.default.staging.path",
         "manifest.default.silver.path",
@@ -162,6 +163,10 @@ class WarehousePathResolver:
     def run_summary_path(self, run_id: str) -> str:
         """Return the S3-relative path for run-summary.json for the given run."""
         return self._render("reference.run_summary.path", run_id=run_id)
+
+    def run_manifest_path(self, command_path: str, run_id: str) -> str:
+        """Return the S3-relative path for a consolidated run_manifest.json."""
+        return self._render("manifest.run.path", command_path=command_path, run_id=run_id)
 
     def shard_manifest_path(self) -> str:
         """Return the S3-relative path for the shard manifest JSON."""
@@ -317,6 +322,10 @@ class WarehousePathResolver:
             return {
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }
+        if command_name in ("verify-pipeline-run", "validate-data-quality"):
+            return {
+                "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
+            }
         if command_name == "load-daily-form-index-for-date":
             business_date = str(scope["target_date"])
             return {
@@ -456,6 +465,13 @@ class CaptureSpecFactory:
         return CaptureSpec(
             source_name="run_summary",
             relative_path=self._resolver.run_summary_path(run_id),
+        )
+
+    def run_manifest(self, command_path: str, run_id: str) -> CaptureSpec:
+        """Return a CaptureSpec for the consolidated run_manifest.json output."""
+        return CaptureSpec(
+            source_name="run_manifest",
+            relative_path=self._resolver.run_manifest_path(command_path, run_id),
         )
 
     def shard_manifest(self) -> CaptureSpec:

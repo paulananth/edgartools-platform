@@ -62,6 +62,56 @@ def layer_manifest(
     }
 
 
+def run_manifest_relative_path(command_path: str, run_id: str) -> str:
+    return default_path_resolver().run_manifest_path(command_path, run_id)
+
+
+def run_manifest(
+    *,
+    command_name: str,
+    run_id: str,
+    command_path: str,
+    arguments: dict[str, Any],
+    scope: dict[str, Any],
+    now: datetime,
+    runtime_mode: str,
+    environment_name: str,
+    manifest_writes: list[dict[str, Any]],
+    row_counts: dict[str, Any],
+    layer_row_counts: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build the consolidated per-run manifest that links layer manifests."""
+    timestamp = now.isoformat().replace("+00:00", "Z")
+    layer_row_counts = layer_row_counts or {}
+    manifests: list[dict[str, Any]] = []
+    for write in manifest_writes:
+        layer = str(write["layer"])
+        entry = {
+            "layer": layer,
+            "path": write["path"],
+            "relative_path": write.get("relative_path"),
+            "row_counts": layer_row_counts.get(layer, {}),
+            "written_at": write.get("written_at", timestamp),
+        }
+        if "table_name" in write:
+            entry["table_name"] = write["table_name"]
+        manifests.append(entry)
+    return {
+        "arguments": arguments,
+        "command": command_name,
+        "command_path": command_path,
+        "created_at": timestamp,
+        "environment": environment_name,
+        "manifest_count": len(manifests),
+        "manifests": manifests,
+        "row_counts": row_counts,
+        "run_id": run_id,
+        "runtime_mode": runtime_mode,
+        "schema_version": 1,
+        "scope": scope,
+    }
+
+
 def snowflake_export_manifest(
     table_name: str,
     command_name: str,

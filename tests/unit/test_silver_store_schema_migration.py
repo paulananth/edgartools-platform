@@ -19,6 +19,14 @@ import pytest
 
 from edgar_warehouse.silver_store import SilverDatabase
 
+_EXPECTED_SCHEMA_MIGRATIONS = [
+    "001_financial_period_end_pk",
+    "002_financial_fact_period_start_pk",
+    "003_parse_run_rows_written",
+    "004_source_checkpoint_bronze_path",
+    "005_financial_derived_factor_columns",
+]
+
 # Pre-PR-#57 DDL (PK omits period_end) for sec_financial_fact / sec_financial_derived.
 _OLD_FINANCIAL_FACT_DDL = """
 CREATE TABLE sec_financial_fact (
@@ -143,6 +151,19 @@ def _pk_columns(conn: duckdb.DuckDBPyConnection, table: str) -> list[str]:
     return list(row[0])
 
 
+def _backup_tables(conn: duckdb.DuckDBPyConnection, table: str) -> list[str]:
+    rows = conn.execute(
+        """
+        SELECT table_name
+        FROM duckdb_tables()
+        WHERE table_name LIKE ?
+        ORDER BY table_name
+        """,
+        [f"backup_{table}_%"],
+    ).fetchall()
+    return [row[0] for row in rows]
+
+
 def _build_old_pk_store(db_path: str) -> None:
     conn = duckdb.connect(db_path)
     try:
@@ -175,7 +196,7 @@ def _build_old_pk_store(db_path: str) -> None:
         conn.close()
 
 
-def test_migration_adds_period_end_to_pk_and_drops_old_rows(tmp_path, caplog):
+def test_migration_adds_period_end_to_pk_and_preserves_old_rows_with_backups(tmp_path, caplog):
     db_path = str(tmp_path / "silver.duckdb")
     _build_old_pk_store(db_path)
 
@@ -187,9 +208,15 @@ def test_migration_adds_period_end_to_pk_and_drops_old_rows(tmp_path, caplog):
         assert "period_end" in fact_pk
         assert "period_end" in derived_pk
 
-        # Old rows are discarded as part of the drop+recreate.
-        assert db.fetch("SELECT COUNT(*) AS n FROM sec_financial_fact")[0]["n"] == 0
-        assert db.fetch("SELECT COUNT(*) AS n FROM sec_financial_derived")[0]["n"] == 0
+        assert db.fetch("SELECT COUNT(*) AS n FROM sec_financial_fact")[0]["n"] == 1
+        assert db.fetch("SELECT COUNT(*) AS n FROM sec_financial_derived")[0]["n"] == 1
+
+        fact_backups = _backup_tables(db._conn, "sec_financial_fact")
+        derived_backups = _backup_tables(db._conn, "sec_financial_derived")
+        assert len(fact_backups) == 1
+        assert len(derived_backups) == 1
+        assert db.fetch(f"SELECT COUNT(*) AS n FROM {fact_backups[0]}")[0]["n"] == 1
+        assert db.fetch(f"SELECT COUNT(*) AS n FROM {derived_backups[0]}")[0]["n"] == 1
     finally:
         db.close()
 
@@ -242,9 +269,19 @@ def test_merge_financial_facts_succeeds_after_migration(tmp_path):
         assert count == 2
 
         stored = db.fetch(
-            "SELECT period_end, value FROM sec_financial_fact ORDER BY period_end"
+            """
+            SELECT period_end, value
+            FROM sec_financial_fact
+            WHERE accession_number = '0000320193-25-000050'
+            ORDER BY period_end
+            """
         )
         assert len(stored) == 2
+
+        old_rows = db.fetch(
+            "SELECT period_end, value FROM sec_financial_fact ORDER BY period_end"
+        )
+        assert len(old_rows) == 3
     finally:
         db.close()
 
@@ -270,6 +307,31 @@ def test_migration_is_noop_for_fresh_store(tmp_path, caplog):
 
     assert "sec_financial_fact" not in caplog.text
     assert "sec_financial_derived" not in caplog.text
+
+
+def test_schema_migrations_are_recorded_in_order_and_idempotent(tmp_path):
+    db_path = str(tmp_path / "silver.duckdb")
+
+    db = SilverDatabase(db_path)
+    try:
+        first_records = db.fetch(
+            "SELECT migration_name, applied_at FROM schema_migration ORDER BY migration_name"
+        )
+    finally:
+        db.close()
+
+    assert [row["migration_name"] for row in first_records] == _EXPECTED_SCHEMA_MIGRATIONS
+    assert all(row["applied_at"] is not None for row in first_records)
+
+    db = SilverDatabase(db_path)
+    try:
+        second_records = db.fetch(
+            "SELECT migration_name, applied_at FROM schema_migration ORDER BY migration_name"
+        )
+    finally:
+        db.close()
+
+    assert second_records == first_records
 
 
 def _build_stage1_pk_store(db_path: str) -> None:
@@ -315,7 +377,7 @@ def _build_pre_factor_derived_store(db_path: str) -> None:
         conn.close()
 
 
-def test_migration_adds_period_start_to_pk_and_drops_old_rows(tmp_path, caplog):
+def test_migration_adds_period_start_to_pk_and_preserves_old_rows_with_backup(tmp_path, caplog):
     db_path = str(tmp_path / "silver.duckdb")
     _build_stage1_pk_store(db_path)
 
@@ -325,8 +387,13 @@ def test_migration_adds_period_start_to_pk_and_drops_old_rows(tmp_path, caplog):
         fact_pk = _pk_columns(db._conn, "sec_financial_fact")
         assert "period_start" in fact_pk
 
-        # Old rows are discarded as part of the drop+recreate.
-        assert db.fetch("SELECT COUNT(*) AS n FROM sec_financial_fact")[0]["n"] == 0
+        assert db.fetch("SELECT COUNT(*) AS n FROM sec_financial_fact")[0]["n"] == 1
+        stored = db.fetch("SELECT period_start FROM sec_financial_fact")[0]
+        assert str(stored["period_start"]) == "0001-01-01"
+
+        fact_backups = _backup_tables(db._conn, "sec_financial_fact")
+        assert len(fact_backups) == 1
+        assert db.fetch(f"SELECT COUNT(*) AS n FROM {fact_backups[0]}")[0]["n"] == 1
     finally:
         db.close()
 
@@ -381,12 +448,22 @@ def test_merge_financial_facts_with_period_start_succeeds_after_migration(tmp_pa
         assert count == 2
 
         stored = db.fetch(
-            "SELECT period_start, value FROM sec_financial_fact ORDER BY period_start"
+            """
+            SELECT period_start, value
+            FROM sec_financial_fact
+            WHERE parser_version = 'test'
+            ORDER BY period_start
+            """
         )
         assert len(stored) == 2
         # period_start=2024-01-01 (YTD, value=2000) sorts before
         # period_start=2024-04-01 (QTD, value=1000).
         assert [r["value"] for r in stored] == [2000, 1000]
+
+        all_rows = db.fetch(
+            "SELECT period_start, value FROM sec_financial_fact ORDER BY period_start"
+        )
+        assert len(all_rows) == 3
     finally:
         db.close()
 

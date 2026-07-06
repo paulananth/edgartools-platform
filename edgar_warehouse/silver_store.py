@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 try:
     import duckdb
@@ -19,7 +21,18 @@ except ImportError as exc:
 logger = logging.getLogger(__name__)
 
 
-_DDL = """
+_SCHEMA_MIGRATION_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS schema_migration (
+    migration_name             TEXT PRIMARY KEY,
+    description                TEXT NOT NULL,
+    applied_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"""
+
+
+_DDL = f"""
+
+{_SCHEMA_MIGRATION_TABLE_DDL}
 
 CREATE TABLE IF NOT EXISTS sec_company (
     cik                        BIGINT PRIMARY KEY,
@@ -268,6 +281,19 @@ CREATE TABLE IF NOT EXISTS sec_daily_index_checkpoint (
     last_success_at           TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS discovery_checkpoint (
+    scope_type                 TEXT NOT NULL,
+    scope_key                  TEXT NOT NULL,
+    discovery_source           TEXT NOT NULL,
+    status                     TEXT NOT NULL,
+    run_id                     TEXT,
+    claimed_at                 TIMESTAMPTZ,
+    finished_at                TIMESTAMPTZ,
+    updated_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    metadata_json              TEXT,
+    PRIMARY KEY (scope_type, scope_key)
+);
+
 CREATE TABLE IF NOT EXISTS sec_raw_object (
     raw_object_id       TEXT PRIMARY KEY,
     source_type         TEXT,
@@ -339,6 +365,48 @@ CREATE TABLE IF NOT EXISTS sec_sync_run (
     error_message      TEXT
 );
 
+CREATE TABLE IF NOT EXISTS pipeline_run (
+    pipeline_run_id          TEXT PRIMARY KEY,
+    command_name             TEXT NOT NULL,
+    runtime_mode             TEXT NOT NULL,
+    environment_name         TEXT,
+    started_at               TIMESTAMPTZ NOT NULL,
+    completed_at             TIMESTAMPTZ,
+    status                   TEXT NOT NULL,
+    arguments_json           TEXT,
+    scope_json               TEXT,
+    bronze_root              TEXT,
+    storage_root             TEXT,
+    silver_root              TEXT,
+    serving_export_root      TEXT,
+    writes_json              TEXT,
+    raw_writes_json          TEXT,
+    metrics_json             TEXT,
+    error_message            TEXT,
+    verification_status      TEXT,
+    last_verified_at         TIMESTAMPTZ,
+    verification_report_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS gold_manifest (
+    run_id                  TEXT NOT NULL,
+    command_name            TEXT NOT NULL,
+    table_name              TEXT NOT NULL,
+    storage_layer           TEXT NOT NULL,
+    relative_path           TEXT NOT NULL,
+    storage_path            TEXT,
+    row_count               BIGINT NOT NULL,
+    parquet_sha256          TEXT NOT NULL,
+    byte_size               BIGINT,
+    previous_run_id         TEXT,
+    previous_row_count      BIGINT,
+    previous_parquet_sha256 TEXT,
+    row_count_delta         BIGINT,
+    parquet_changed         BOOLEAN NOT NULL,
+    recorded_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (run_id, storage_layer, table_name)
+);
+
 CREATE TABLE IF NOT EXISTS sec_source_checkpoint (
     source_name                    TEXT,
     source_key                     TEXT,
@@ -387,7 +455,7 @@ CREATE TABLE IF NOT EXISTS sec_reconcile_finding (
 );
 
 -- ==========================================================================
--- FUNDAMENTALS NAMESPACE TABLES  (silver/fundamentals/shard-{0..3}.duckdb)
+-- FUNDAMENTALS TABLES  (same SEC silver database as Branch A)
 -- Branch B bootstrap forms: 8-K earnings, DEF 14A, 10-K/10-Q XBRL, 13F-HR
 -- ==========================================================================
 
@@ -611,30 +679,93 @@ class SilverDatabase:
         self._ensure_schema_evolution()
 
     def _ensure_schema_evolution(self) -> None:
-        self._migrate_financial_period_end_pk()
-        self._migrate_financial_fact_period_start_pk()
+        self._conn.execute(_SCHEMA_MIGRATION_TABLE_DDL)
+        for migration_name, description, migrate in self._schema_migrations():
+            if self._schema_migration_applied(migration_name):
+                continue
+            self._apply_schema_migration(migration_name, description, migrate)
 
-        migration_statements = [
-            "ALTER TABLE sec_parse_run ADD COLUMN IF NOT EXISTS rows_written INTEGER",
-            "ALTER TABLE sec_source_checkpoint ADD COLUMN IF NOT EXISTS bronze_path TEXT",
-            *[
+    def _schema_migrations(self) -> tuple[tuple[str, str, Any], ...]:
+        return (
+            (
+                "001_financial_period_end_pk",
+                "Recreate financial tables whose primary keys predate period_end.",
+                self._migrate_financial_period_end_pk,
+            ),
+            (
+                "002_financial_fact_period_start_pk",
+                "Recreate sec_financial_fact whose primary key predates period_start.",
+                self._migrate_financial_fact_period_start_pk,
+            ),
+            (
+                "003_parse_run_rows_written",
+                "Add rows_written to sec_parse_run.",
+                self._add_parse_run_rows_written,
+            ),
+            (
+                "004_source_checkpoint_bronze_path",
+                "Add bronze_path to sec_source_checkpoint.",
+                self._add_source_checkpoint_bronze_path,
+            ),
+            (
+                "005_financial_derived_factor_columns",
+                "Add accounting factor input columns to sec_financial_derived.",
+                self._add_financial_derived_factor_columns,
+            ),
+        )
+
+    def _schema_migration_applied(self, migration_name: str) -> bool:
+        row = self._conn.execute(
+            """
+            SELECT 1
+            FROM schema_migration
+            WHERE migration_name = ?
+            """,
+            [migration_name],
+        ).fetchone()
+        return row is not None
+
+    def _apply_schema_migration(self, migration_name: str, description: str, migrate: Any) -> None:
+        self._conn.execute("BEGIN TRANSACTION")
+        try:
+            migrate()
+            self._record_schema_migration(migration_name, description)
+        except Exception:
+            self._conn.execute("ROLLBACK")
+            raise
+        else:
+            self._conn.execute("COMMIT")
+
+    def _record_schema_migration(self, migration_name: str, description: str) -> None:
+        self._conn.execute(
+            """
+            INSERT INTO schema_migration (migration_name, description, applied_at)
+            VALUES (?, ?, ?)
+            """,
+            [migration_name, description, datetime.now(UTC)],
+        )
+
+    def _add_parse_run_rows_written(self) -> None:
+        self._conn.execute("ALTER TABLE sec_parse_run ADD COLUMN IF NOT EXISTS rows_written INTEGER")
+
+    def _add_source_checkpoint_bronze_path(self) -> None:
+        self._conn.execute("ALTER TABLE sec_source_checkpoint ADD COLUMN IF NOT EXISTS bronze_path TEXT")
+
+    def _add_financial_derived_factor_columns(self) -> None:
+        for column, column_type in _SEC_FINANCIAL_DERIVED_FACTOR_COLUMNS.items():
+            self._conn.execute(
                 f"ALTER TABLE sec_financial_derived ADD COLUMN IF NOT EXISTS {column} {column_type}"
-                for column, column_type in _SEC_FINANCIAL_DERIVED_FACTOR_COLUMNS.items()
-            ],
-        ]
-        for statement in migration_statements:
-            self._conn.execute(statement)
+            )
 
     def _migrate_financial_period_end_pk(self) -> None:
-        """Drop and recreate financial tables whose PK predates PR #57.
+        """Recreate financial tables whose PK predates PR #57 without data loss.
 
         ``CREATE TABLE IF NOT EXISTS`` does not alter an existing table's
         constraints, so a store created before the period_end PK fix
         retains the old PK and the ``ON CONFLICT (..., period_end)``
         targets in ``merge_financial_facts``/``merge_financial_derived``
-        raise a binder error. These tables are re-bootstrappable from SEC
-        bronze data, so old rows are discarded; ``_DDL`` recreates the
-        dropped tables below with the current (period_end-inclusive) PK.
+        raise a binder error. The legacy table is retained as ``backup_*`` and
+        rows are copied into a current-schema replacement table.
         """
         tables_to_recreate = []
         for table in _FINANCIAL_TABLES_REQUIRING_PERIOD_END_PK:
@@ -652,27 +783,29 @@ class SilverDatabase:
         for table in tables_to_recreate:
             logger.warning(
                 "Migrating %s to the period_end primary key (PR #57): "
-                "dropping and recreating with no rows. Re-bootstrap to repopulate.",
+                "backing up the legacy table and copying rows into the current schema.",
                 table,
             )
-            self._conn.execute(f"DROP TABLE {table}")
-
-        if tables_to_recreate:
-            self._conn.execute(_DDL)
+            self._backup_and_recreate_financial_table(
+                table,
+                reason="pre_period_end_pk",
+                missing_values={
+                    "period_start": f"DATE '{_INSTANT_FACT_PERIOD_START_SENTINEL}'",
+                },
+            )
 
     def _migrate_financial_fact_period_start_pk(self) -> None:
-        """Drop and recreate sec_financial_fact if its PK predates Stage 2
+        """Recreate sec_financial_fact if its PK predates Stage 2
         of the period_end PK fix (period_start added to the PK).
 
-        Same rationale and drop+recreate pattern as
+        Same rationale and backup+copy pattern as
         ``_migrate_financial_period_end_pk``: a store whose sec_financial_fact
         PK already includes period_end (Stage 1) but not period_start (Stage 2)
         would otherwise raise a binder error on the first
         ``merge_financial_facts`` call, since its
         ``ON CONFLICT (..., period_start)`` target has no backing constraint.
-        A store still on the pre-Stage-1 PK is handled by
-        ``_migrate_financial_period_end_pk`` above, which recreates it via the
-        current (Stage-2) ``_DDL`` -- making this check a no-op for it.
+        A store still on the pre-Stage-1 PK is handled by the period_end
+        migration above, which recreates it via the current Stage-2 schema.
         """
         row = self._conn.execute(
             """
@@ -684,11 +817,62 @@ class SilverDatabase:
         if row is not None and "period_start" not in row[0]:
             logger.warning(
                 "Migrating sec_financial_fact to the period_start primary key "
-                "(Stage 2 of the period_end PK fix): dropping and recreating "
-                "with no rows. Re-bootstrap to repopulate."
+                "(Stage 2 of the period_end PK fix): backing up the legacy table "
+                "and copying rows into the current schema."
             )
-            self._conn.execute("DROP TABLE sec_financial_fact")
-            self._conn.execute(_DDL)
+            self._backup_and_recreate_financial_table(
+                "sec_financial_fact",
+                reason="pre_period_start_pk",
+                missing_values={
+                    "period_start": f"DATE '{_INSTANT_FACT_PERIOD_START_SENTINEL}'",
+                },
+            )
+
+    def _backup_and_recreate_financial_table(
+        self,
+        table: str,
+        *,
+        reason: str,
+        missing_values: dict[str, str],
+    ) -> str:
+        suffix = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
+        backup_table = f"backup_{table}_{reason}_{suffix}"
+        quoted_table = self._quote_identifier(table)
+        quoted_backup = self._quote_identifier(backup_table)
+
+        self._conn.execute(f"ALTER TABLE {quoted_table} RENAME TO {quoted_backup}")
+        self._conn.execute(_DDL)
+
+        target_columns = self._table_columns(table)
+        backup_columns = set(self._table_columns(backup_table))
+        insert_columns = ", ".join(self._quote_identifier(column) for column in target_columns)
+        select_exprs = []
+        for column in target_columns:
+            if column in backup_columns:
+                select_exprs.append(self._quote_identifier(column))
+            else:
+                select_exprs.append(missing_values.get(column, "NULL"))
+        self._conn.execute(
+            f"""
+            INSERT INTO {quoted_table} ({insert_columns})
+            SELECT {", ".join(select_exprs)}
+            FROM {quoted_backup}
+            """
+        )
+        return backup_table
+
+    def _table_columns(self, table: str) -> list[str]:
+        rows = self._conn.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'main'
+              AND table_name = ?
+            ORDER BY ordinal_position
+            """,
+            [table],
+        ).fetchall()
+        return [row[0] for row in rows]
 
     def close(self) -> None:
         self._conn.close()
@@ -710,6 +894,189 @@ class SilverDatabase:
         rows = self._conn.execute(sql, params or []).fetchall()
         cols = [d[0] for d in self._conn.description]
         return [dict(zip(cols, r)) for r in rows]
+
+    @contextmanager
+    def _shard_advisory_lock(self) -> Iterator[None]:
+        """Serialize composite shard writes from concurrent local writers."""
+        lock_path = Path(f"{self._path}.lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+b") as lock_handle:
+            try:
+                import fcntl
+            except ImportError:
+                yield
+                return
+
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+
+    @staticmethod
+    def reconcile_shards(
+        shard_paths: list[str],
+        *,
+        table_names: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Compare per-table row counts and newest sync timestamps across shards."""
+        if not shard_paths:
+            raise ValueError("At least one shard path is required")
+
+        tables = table_names or SilverDatabase._reconciliation_table_names(shard_paths)
+        table_reports: dict[str, Any] = {}
+        divergences: list[dict[str, Any]] = []
+
+        for table_name in tables:
+            shard_reports = [
+                SilverDatabase._reconcile_table_for_shard(index, path, table_name)
+                for index, path in enumerate(shard_paths)
+            ]
+            row_count_diverged = SilverDatabase._metric_diverged(shard_reports, "row_count")
+            timestamp_diverged = SilverDatabase._metric_diverged(
+                shard_reports, "newest_last_synced_at"
+            )
+            table_diverged = row_count_diverged or timestamp_diverged or any(
+                shard["error"] for shard in shard_reports
+            )
+
+            table_reports[table_name] = {
+                "shards": shard_reports,
+                "row_count_diverged": row_count_diverged,
+                "newest_last_synced_at_diverged": timestamp_diverged,
+                "diverged": table_diverged,
+            }
+            if row_count_diverged:
+                divergences.append(
+                    SilverDatabase._divergence(
+                        table_name, "row_count", shard_reports
+                    )
+                )
+            if timestamp_diverged:
+                divergences.append(
+                    SilverDatabase._divergence(
+                        table_name, "newest_last_synced_at", shard_reports
+                    )
+                )
+            for shard_report in shard_reports:
+                if shard_report["error"]:
+                    divergences.append(
+                        {
+                            "table": table_name,
+                            "metric": "error",
+                            "values": {shard_report["shard_path"]: shard_report["error"]},
+                        }
+                    )
+
+        return {
+            "shard_count": len(shard_paths),
+            "shard_paths": list(shard_paths),
+            "tables": table_reports,
+            "divergences": divergences,
+        }
+
+    @staticmethod
+    def _reconciliation_table_names(shard_paths: list[str]) -> list[str]:
+        names: set[str] = set()
+        for shard_path in shard_paths:
+            conn = duckdb.connect(shard_path, read_only=True)
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT table_name
+                    FROM information_schema.tables
+                    WHERE table_schema = 'main'
+                      AND table_type = 'BASE TABLE'
+                    """
+                ).fetchall()
+            finally:
+                conn.close()
+            names.update(row[0] for row in rows)
+        return sorted(names)
+
+    @staticmethod
+    def _reconcile_table_for_shard(
+        shard_index: int,
+        shard_path: str,
+        table_name: str,
+    ) -> dict[str, Any]:
+        report = {
+            "shard_index": shard_index,
+            "shard_path": shard_path,
+            "row_count": None,
+            "newest_last_synced_at": None,
+            "error": None,
+        }
+        conn = duckdb.connect(shard_path, read_only=True)
+        try:
+            table_exists = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_schema = 'main'
+                  AND table_name = ?
+                  AND table_type = 'BASE TABLE'
+                """,
+                [table_name],
+            ).fetchone()[0]
+            if not table_exists:
+                report["error"] = "missing table"
+                return report
+
+            quoted_table = SilverDatabase._quote_identifier(table_name)
+            report["row_count"] = conn.execute(
+                f"SELECT COUNT(*) FROM {quoted_table}"
+            ).fetchone()[0]
+            columns = {
+                row[0]
+                for row in conn.execute(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'main'
+                      AND table_name = ?
+                    """,
+                    [table_name],
+                ).fetchall()
+            }
+            if "last_synced_at" in columns:
+                newest = conn.execute(
+                    f"SELECT MAX(last_synced_at) FROM {quoted_table}"
+                ).fetchone()[0]
+                report["newest_last_synced_at"] = (
+                    newest.isoformat() if isinstance(newest, datetime) else newest
+                )
+            return report
+        except Exception as exc:  # pragma: no cover - exercised through report data
+            report["error"] = str(exc)
+            return report
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _quote_identifier(identifier: str) -> str:
+        return '"' + identifier.replace('"', '""') + '"'
+
+    @staticmethod
+    def _metric_diverged(shard_reports: list[dict[str, Any]], metric: str) -> bool:
+        values = {shard[metric] for shard in shard_reports if shard["error"] is None}
+        return len(values) > 1
+
+    @staticmethod
+    def _divergence(
+        table_name: str,
+        metric: str,
+        shard_reports: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        return {
+            "table": table_name,
+            "metric": metric,
+            "values": {
+                shard["shard_path"]: shard[metric]
+                for shard in shard_reports
+                if shard["error"] is None
+            },
+        }
 
 
     # ------------------------------------------------------------------
@@ -1100,6 +1467,28 @@ class SilverDatabase:
         recent_limit: int | None = None,
     ) -> dict[str, Any]:
         """Stage one company's full submission into silver: reset lists, run loaders, merge all tables."""
+        with self._shard_advisory_lock():
+            return self._stage_submission_locked(
+                cik=cik,
+                main_payload=main_payload,
+                pagination_payloads=pagination_payloads,
+                sync_run_id=sync_run_id,
+                raw_object_id=raw_object_id,
+                load_mode=load_mode,
+                recent_limit=recent_limit,
+            )
+
+    def _stage_submission_locked(
+        self,
+        *,
+        cik: int,
+        main_payload: dict[str, Any],
+        pagination_payloads: list[tuple[str, dict[str, Any]]],
+        sync_run_id: str,
+        raw_object_id: str,
+        load_mode: str,
+        recent_limit: int | None = None,
+    ) -> dict[str, Any]:
         from edgar_warehouse.loaders.bronze_submission_extractors import (
             stage_address_loader,
             stage_company_loader,
@@ -1626,6 +2015,108 @@ class SilverDatabase:
         return [str(row[0]) for row in rows]
 
     # ------------------------------------------------------------------
+    # discovery_checkpoint
+    # ------------------------------------------------------------------
+
+    def get_discovery_checkpoint(self, scope_type: str, scope_key: str) -> dict[str, Any] | None:
+        result = self._conn.execute(
+            """
+            SELECT * FROM discovery_checkpoint
+            WHERE scope_type = ? AND scope_key = ?
+            """,
+            [scope_type, scope_key],
+        ).fetchone()
+        if result is None:
+            return None
+        cols = [d[0] for d in self._conn.description]
+        return dict(zip(cols, result))
+
+    def claim_discovery_ciks(
+        self,
+        ciks: list[int],
+        *,
+        discovery_source: str,
+        run_id: str,
+        claimed_at: datetime,
+    ) -> list[int]:
+        """Claim CIK discovery work, skipping CIKs active in another run."""
+        claimed: list[int] = []
+        seen: set[int] = set()
+        for raw_cik in ciks:
+            cik = int(raw_cik)
+            if cik in seen:
+                continue
+            seen.add(cik)
+            scope_key = str(cik)
+            existing = self.get_discovery_checkpoint("cik", scope_key)
+            if (
+                existing
+                and existing.get("status") == "in_progress"
+                and existing.get("run_id") != run_id
+            ):
+                continue
+            self._conn.execute(
+                """
+                INSERT INTO discovery_checkpoint
+                    (scope_type, scope_key, discovery_source, status, run_id,
+                     claimed_at, finished_at, updated_at, metadata_json)
+                VALUES ('cik', ?, ?, 'in_progress', ?, ?, NULL, ?, NULL)
+                ON CONFLICT (scope_type, scope_key) DO UPDATE SET
+                    discovery_source = excluded.discovery_source,
+                    status = excluded.status,
+                    run_id = excluded.run_id,
+                    claimed_at = excluded.claimed_at,
+                    finished_at = excluded.finished_at,
+                    updated_at = excluded.updated_at,
+                    metadata_json = excluded.metadata_json
+                """,
+                [scope_key, discovery_source, run_id, claimed_at, claimed_at],
+            )
+            claimed.append(cik)
+        return claimed
+
+    def finish_discovery_ciks(
+        self,
+        ciks: list[int],
+        *,
+        discovery_source: str,
+        run_id: str,
+        status: str,
+        finished_at: datetime,
+    ) -> None:
+        """Mark claimed CIK discovery work as succeeded or failed."""
+        seen: set[int] = set()
+        for raw_cik in ciks:
+            cik = int(raw_cik)
+            if cik in seen:
+                continue
+            seen.add(cik)
+            scope_key = str(cik)
+            self._conn.execute(
+                """
+                INSERT INTO discovery_checkpoint
+                    (scope_type, scope_key, discovery_source, status, run_id,
+                     claimed_at, finished_at, updated_at, metadata_json)
+                VALUES ('cik', ?, ?, ?, ?, ?, ?, ?, NULL)
+                ON CONFLICT (scope_type, scope_key) DO UPDATE SET
+                    discovery_source = excluded.discovery_source,
+                    status = excluded.status,
+                    run_id = excluded.run_id,
+                    finished_at = excluded.finished_at,
+                    updated_at = excluded.updated_at
+                """,
+                [
+                    scope_key,
+                    discovery_source,
+                    status,
+                    run_id,
+                    finished_at,
+                    finished_at,
+                    finished_at,
+                ],
+            )
+
+    # ------------------------------------------------------------------
     # sec_raw_object
     # ------------------------------------------------------------------
 
@@ -1959,6 +2450,238 @@ class SilverDatabase:
         return dict(zip(cols, result))
 
     # ------------------------------------------------------------------
+    # pipeline_run
+    # ------------------------------------------------------------------
+
+    def start_pipeline_run(self, row: dict[str, Any]) -> None:
+        self._conn.execute(
+            """
+            INSERT INTO pipeline_run
+                (pipeline_run_id, command_name, runtime_mode, environment_name,
+                 started_at, status, arguments_json, scope_json, bronze_root,
+                 storage_root, silver_root, serving_export_root)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (pipeline_run_id) DO UPDATE SET
+                command_name = excluded.command_name,
+                runtime_mode = excluded.runtime_mode,
+                environment_name = excluded.environment_name,
+                started_at = excluded.started_at,
+                status = excluded.status,
+                arguments_json = excluded.arguments_json,
+                scope_json = excluded.scope_json,
+                bronze_root = excluded.bronze_root,
+                storage_root = excluded.storage_root,
+                silver_root = excluded.silver_root,
+                serving_export_root = excluded.serving_export_root,
+                completed_at = NULL,
+                writes_json = NULL,
+                raw_writes_json = NULL,
+                metrics_json = NULL,
+                error_message = NULL,
+                verification_status = NULL,
+                last_verified_at = NULL,
+                verification_report_json = NULL
+            """,
+            [
+                row["pipeline_run_id"],
+                row["command_name"],
+                row["runtime_mode"],
+                row.get("environment_name"),
+                row.get("started_at", datetime.now(UTC)),
+                row.get("status", "running"),
+                self._json_text(row.get("arguments") or {}),
+                self._json_text(row.get("scope") or {}),
+                row.get("bronze_root"),
+                row.get("storage_root"),
+                row.get("silver_root"),
+                row.get("serving_export_root"),
+            ],
+        )
+
+    def complete_pipeline_run(
+        self,
+        pipeline_run_id: str,
+        *,
+        status: str,
+        writes: list[dict[str, Any]],
+        raw_writes: list[dict[str, Any]],
+        metrics: dict[str, Any],
+        error_message: str | None = None,
+    ) -> None:
+        self._conn.execute(
+            """
+            UPDATE pipeline_run
+            SET completed_at = ?,
+                status = ?,
+                writes_json = ?,
+                raw_writes_json = ?,
+                metrics_json = ?,
+                error_message = ?
+            WHERE pipeline_run_id = ?
+            """,
+            [
+                datetime.now(UTC),
+                status,
+                self._json_text(writes),
+                self._json_text(raw_writes),
+                self._json_text(metrics),
+                error_message,
+                pipeline_run_id,
+            ],
+        )
+
+    def record_pipeline_verification(
+        self,
+        pipeline_run_id: str,
+        *,
+        verification_status: str,
+        report: dict[str, Any],
+    ) -> None:
+        self._conn.execute(
+            """
+            UPDATE pipeline_run
+            SET verification_status = ?,
+                last_verified_at = ?,
+                verification_report_json = ?
+            WHERE pipeline_run_id = ?
+            """,
+            [
+                verification_status,
+                datetime.now(UTC),
+                self._json_text(report),
+                pipeline_run_id,
+            ],
+        )
+
+    def get_pipeline_run(self, pipeline_run_id: str) -> dict[str, Any] | None:
+        result = self._conn.execute(
+            "SELECT * FROM pipeline_run WHERE pipeline_run_id = ?",
+            [pipeline_run_id],
+        ).fetchone()
+        if result is None:
+            return None
+        cols = [d[0] for d in self._conn.description]
+        return dict(zip(cols, result))
+
+    # ------------------------------------------------------------------
+    # gold_manifest
+    # ------------------------------------------------------------------
+
+    def record_gold_manifest(
+        self,
+        *,
+        run_id: str,
+        command_name: str,
+        entries: list[dict[str, Any]],
+    ) -> None:
+        for entry in entries:
+            table_name = str(entry["table_name"])
+            storage_layer = str(entry.get("storage_layer") or "warehouse_gold")
+            row_count = int(entry.get("row_count") or 0)
+            parquet_sha256 = str(entry["parquet_sha256"])
+            previous = self._latest_gold_manifest_for_table(
+                table_name=table_name,
+                storage_layer=storage_layer,
+                exclude_run_id=run_id,
+            )
+            previous_run_id = previous.get("run_id") if previous else None
+            previous_row_count = int(previous["row_count"]) if previous else None
+            previous_parquet_sha256 = previous.get("parquet_sha256") if previous else None
+            row_count_delta = (
+                row_count - previous_row_count if previous_row_count is not None else None
+            )
+            parquet_changed = previous_parquet_sha256 != parquet_sha256
+
+            self._conn.execute(
+                """
+                INSERT INTO gold_manifest
+                    (run_id, command_name, table_name, storage_layer, relative_path,
+                     storage_path, row_count, parquet_sha256, byte_size,
+                     previous_run_id, previous_row_count, previous_parquet_sha256,
+                     row_count_delta, parquet_changed, recorded_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (run_id, storage_layer, table_name) DO UPDATE SET
+                    command_name = excluded.command_name,
+                    relative_path = excluded.relative_path,
+                    storage_path = excluded.storage_path,
+                    row_count = excluded.row_count,
+                    parquet_sha256 = excluded.parquet_sha256,
+                    byte_size = excluded.byte_size,
+                    previous_run_id = excluded.previous_run_id,
+                    previous_row_count = excluded.previous_row_count,
+                    previous_parquet_sha256 = excluded.previous_parquet_sha256,
+                    row_count_delta = excluded.row_count_delta,
+                    parquet_changed = excluded.parquet_changed,
+                    recorded_at = excluded.recorded_at
+                """,
+                [
+                    run_id,
+                    command_name,
+                    table_name,
+                    storage_layer,
+                    str(entry["relative_path"]),
+                    entry.get("storage_path"),
+                    row_count,
+                    parquet_sha256,
+                    entry.get("byte_size"),
+                    previous_run_id,
+                    previous_row_count,
+                    previous_parquet_sha256,
+                    row_count_delta,
+                    parquet_changed,
+                    datetime.now(UTC),
+                ],
+            )
+
+    def get_gold_manifest(self, run_id: str | None = None) -> list[dict[str, Any]]:
+        if run_id is None:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM gold_manifest
+                ORDER BY recorded_at, run_id, storage_layer, table_name
+                """
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM gold_manifest
+                WHERE run_id = ?
+                ORDER BY storage_layer, table_name
+                """,
+                [run_id],
+            ).fetchall()
+        cols = [d[0] for d in self._conn.description]
+        return [dict(zip(cols, row)) for row in rows]
+
+    def _latest_gold_manifest_for_table(
+        self,
+        *,
+        table_name: str,
+        storage_layer: str,
+        exclude_run_id: str,
+    ) -> dict[str, Any] | None:
+        result = self._conn.execute(
+            """
+            SELECT *
+            FROM gold_manifest
+            WHERE table_name = ?
+              AND storage_layer = ?
+              AND run_id <> ?
+            ORDER BY recorded_at DESC, run_id DESC
+            LIMIT 1
+            """,
+            [table_name, storage_layer, exclude_run_id],
+        ).fetchone()
+        if result is None:
+            return None
+        cols = [d[0] for d in self._conn.description]
+        return dict(zip(cols, result))
+
+    @staticmethod
+    def _json_text(value: Any) -> str:
+        return json.dumps(value, default=str, sort_keys=True)
+
+    # ------------------------------------------------------------------
     # sec_source_checkpoint
     # ------------------------------------------------------------------
 
@@ -2064,10 +2787,35 @@ class SilverDatabase:
 
     def get_active_ciks(self) -> list[dict[str, Any]]:
         """Return CIKs already marked active in silver — used by seed-universe to skip re-bootstrapping."""
-        rows = self._conn.execute(
-            "SELECT cik FROM sec_company_sync_state WHERE tracking_status = 'active'"
-        ).fetchall()
-        return [{"cik": row[0]} for row in rows]
+        return [{"cik": cik} for cik in self.get_tracked_ciks("active")]
+
+    def get_tracked_ciks(self, tracking_status_filter: str = "active") -> list[int]:
+        """Return tracked CIKs from silver sync state ordered by CIK.
+
+        ``tracking_status_filter`` accepts ``all`` or a comma-separated list of
+        statuses such as ``active,bootstrap_pending``.
+        """
+        statuses = [
+            status.strip()
+            for status in str(tracking_status_filter or "active").split(",")
+            if status.strip()
+        ]
+        if not statuses or "all" in statuses:
+            rows = self._conn.execute(
+                "SELECT cik FROM sec_company_sync_state ORDER BY cik"
+            ).fetchall()
+        else:
+            placeholders = ", ".join("?" for _ in statuses)
+            rows = self._conn.execute(
+                f"""
+                SELECT cik
+                FROM sec_company_sync_state
+                WHERE tracking_status IN ({placeholders})
+                ORDER BY cik
+                """,
+                statuses,
+            ).fetchall()
+        return [int(row[0]) for row in rows]
 
     def get_ciks_with_bronze(self, tracking_status_filter: str = "all") -> list[dict[str, Any]]:
         """Return CIKs that have bronze submissions loaded (have a submissions_main checkpoint).
@@ -2161,7 +2909,8 @@ class SilverDatabase:
 
     def get_table_counts(self) -> dict[str, int]:
         """Return current row count for every silver table, keyed by table name."""
-        tables = [
+        baseline_tables = {
+            "schema_migration",
             "sec_tracked_universe",
             "sec_company",
             "sec_company_ticker",
@@ -2172,6 +2921,7 @@ class SilverDatabase:
             "sec_current_filing_feed",
             "stg_daily_index_filing",
             "sec_daily_index_checkpoint",
+            "discovery_checkpoint",
             "sec_raw_object",
             "sec_filing_attachment",
             "sec_filing_text",
@@ -2184,11 +2934,28 @@ class SilverDatabase:
             "sec_adv_disclosure_event",
             "sec_adv_private_fund",
             "sec_sync_run",
+            "pipeline_run",
+            "gold_manifest",
             "sec_source_checkpoint",
             "sec_company_sync_state",
             "sec_reconcile_finding",
-        ]
+            "sec_financial_fact",
+            "sec_financial_derived",
+            "sec_earnings_release",
+            "sec_accounting_flag",
+            "sec_executive_record",
+            "sec_thirteenf_holding",
+        }
+        rows = self._conn.execute(
+            """
+            SELECT table_name
+            FROM duckdb_tables()
+            WHERE table_name NOT LIKE 'backup_%'
+            ORDER BY table_name
+            """
+        ).fetchall()
         counts: dict[str, int] = {}
+        tables = sorted(baseline_tables | {table for (table,) in rows})
         for table in tables:
             exists = self._conn.execute(
                 "SELECT 1 FROM duckdb_tables() WHERE table_name = ? LIMIT 1",
@@ -2197,7 +2964,8 @@ class SilverDatabase:
             if exists is None:
                 counts[table] = 0
                 continue
-            row = self._conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+            quoted_table = self._quote_identifier(table)
+            row = self._conn.execute(f"SELECT COUNT(*) FROM {quoted_table}").fetchone()
             counts[table] = row[0] if row else 0
         return counts
 

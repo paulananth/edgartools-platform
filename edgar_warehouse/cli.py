@@ -187,6 +187,14 @@ def _handle_bootstrap_fundamentals(args: argparse.Namespace) -> int:
     return run_command("bootstrap-fundamentals", args)
 
 
+def _handle_verify_pipeline_run(args: argparse.Namespace) -> int:
+    return run_command("verify-pipeline-run", args)
+
+
+def _handle_validate_data_quality(args: argparse.Namespace) -> int:
+    return run_command("validate-data-quality", args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="edgar-warehouse",
@@ -589,8 +597,9 @@ def build_parser() -> argparse.ArgumentParser:
     compute_windows = subparsers.add_parser(
         "compute-windows",
         help=(
-            "Query MDM for ordered active CIKs and write cik_windows.jsonl + cik_snapshot.jsonl "
-            "to S3 under the run prefix. Pre-Map step consumed by the windowed bootstrap SM ItemReader."
+            "Query silver tracking state for ordered CIKs and write cik_windows.jsonl + "
+            "cik_snapshot.jsonl to S3 under the run prefix. Pre-Map step consumed by "
+            "the windowed bootstrap SM ItemReader."
         ),
     )
     compute_windows.add_argument(
@@ -658,7 +667,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Branch B bootstrap: ingest fundamentals silver from bronze. "
             "Runs in parallel with bootstrap-batch (Branch A) via Step Functions. "
             "Modes: per-filing (8-K/DEF 14A), entity-facts (XBRL companyfacts), "
-            "thirteenf (13F INFORMATION TABLE). Writes to silver/fundamentals/ namespace."
+            "thirteenf (13F INFORMATION TABLE). Writes to the unified SEC silver database."
         ),
     )
     bootstrap_fundamentals.add_argument(
@@ -667,8 +676,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Comma-separated CIK integers for this batch. "
-            "Optional: when omitted, the batch is resolved from the MDM tracked "
-            "active universe (same ordered source as Branch A bootstrap-next) and "
+            "Optional: when omitted, the batch is resolved from silver tracking "
+            "state (same ordered source as Branch A bootstrap-next) and "
             "windowed by --cik-offset/--cik-limit."
         ),
     )
@@ -697,16 +706,33 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     bootstrap_fundamentals.add_argument(
-        "--fundamentals-silver-path",
+        "--silver-root",
         default=None,
         help=(
-            "Local path to the fundamentals silver DuckDB shard file. "
-            "Defaults to $FUNDAMENTALS_SILVER_PATH env var or "
-            "/tmp/silver/fundamentals/shard-0.duckdb."
+            "Local root for the unified SEC silver database. Defaults to "
+            "$WAREHOUSE_SILVER_ROOT, a local WAREHOUSE_STORAGE_ROOT, or "
+            "/tmp/edgar-warehouse-silver for remote storage."
         ),
     )
     _add_run_id_arg(bootstrap_fundamentals)
     bootstrap_fundamentals.set_defaults(handler=_handle_bootstrap_fundamentals)
+
+    verify_pipeline_run = subparsers.add_parser(
+        "verify-pipeline-run",
+        help="Verify a recorded pipeline run by rechecking stored artifact hashes.",
+    )
+    verify_pipeline_run.add_argument(
+        "--run-id",
+        required=True,
+        help="Pipeline run id to verify.",
+    )
+    verify_pipeline_run.set_defaults(handler=_handle_verify_pipeline_run)
+
+    validate_data_quality = subparsers.add_parser(
+        "validate-data-quality",
+        help="Validate silver/gold data quality and emit a JSON report.",
+    )
+    validate_data_quality.set_defaults(handler=_handle_validate_data_quality)
 
     try:
         from edgar_warehouse.mdm.cli import register_mdm_subparser

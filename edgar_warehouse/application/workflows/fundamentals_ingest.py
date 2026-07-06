@@ -23,11 +23,11 @@ For each 13F-HR filing in bronze, fetches the INFORMATION TABLE XML attachment
 and dispatches through ``parse_thirteenf``.
 Writes to: sec_thirteenf_holding.
 
-Separation from bootstrap-batch (Branch A)
+Relationship to bootstrap-batch (Branch A)
 ------------------------------------------
-Branch B uses a separate ``silver/fundamentals/`` DuckDB namespace (AD-05) so
-DuckDB's single-writer constraint is never violated.  The orchestrator mounts
-both namespaces in the ShardedSilverReader for MDM.
+Branch B writes fundamentals tables into the same SEC silver DuckDB database as
+Branch A. Per-filing and 13F modes use the same connection as their source so
+filing metadata and fundamentals rows remain application-consistent.
 """
 
 from __future__ import annotations
@@ -58,18 +58,17 @@ def _emit(event: str, **kwargs: Any) -> None:
 def run_bootstrap_fundamentals_per_filing(
     *,
     cik_list: list[int],
-    source,                # ShardedSilverReader | None — read-only Branch A ownership silver
-    db,                    # SilverDatabase instance (fundamentals namespace) — write target
+    source,                # SilverDatabase | None — Branch A metadata source
+    db,                    # SilverDatabase instance — write target
     sync_run_id: str,
 ) -> dict[str, int]:
     """Process 8-K earnings + DEF 14A proxy filings from bronze for the given CIKs.
 
     Filing/attachment/raw-object metadata is read from ``source`` — Branch A's
-    ownership silver, produced by bootstrap-next/bootstrap-batch — NOT from ``db``,
-    which is Branch B's isolated fundamentals-only shard and never contains those
-    tables. ``source`` is None when Branch A's silver hasn't been published yet
-    (e.g. local dev before any bootstrap run); this is treated as zero available
-    filings rather than an error (AD-13: Branch B is best-effort).
+    silver tables, produced by bootstrap-next/bootstrap-batch. In the unified
+    silver layout ``source`` is normally the same ``SilverDatabase`` instance as
+    ``db``. ``source`` may still be None in direct unit tests or ad-hoc local
+    calls; this is treated as zero available filings rather than an error.
 
     Returns row counts per table written.
     """
@@ -166,7 +165,7 @@ def run_bootstrap_fundamentals_per_filing(
 def run_bootstrap_entity_facts(
     *,
     cik_list: list[int],
-    db,                     # SilverDatabase instance (fundamentals namespace)
+    db,                     # SilverDatabase instance
     identity: str,          # SEC User-Agent string
     sync_run_id: str,
 ) -> dict[str, int]:
@@ -249,8 +248,8 @@ def run_bootstrap_entity_facts(
 def run_bootstrap_thirteenf(
     *,
     cik_list: list[int],
-    source,                 # ShardedSilverReader | None — read-only Branch A ownership silver
-    db,                      # SilverDatabase instance (fundamentals namespace) — write target
+    source,                 # SilverDatabase | None — Branch A metadata source
+    db,                      # SilverDatabase instance — write target
     sync_run_id: str,
 ) -> dict[str, int]:
     """Parse 13F-HR INFORMATION TABLE XML attachments for the given CIKs.

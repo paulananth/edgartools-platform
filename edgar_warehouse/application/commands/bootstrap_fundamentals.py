@@ -1,4 +1,4 @@
-"""bootstrap-fundamentals command — Branch B silver ingestion (fundamentals namespace).
+"""bootstrap-fundamentals command — Branch B silver ingestion.
 
 This command is the Branch B counterpart of ``bootstrap-batch``/``bootstrap-next``
 (Branch A).  Each Distributed/inline Map iteration calls this command with a
@@ -21,20 +21,11 @@ thirteenf    Parse 13F INFORMATION TABLE XML attachments from bronze. Same Branc
              dependency and sequencing as per-filing.
              Output: sec_thirteenf_holding.
 
-Source reader (per-filing, thirteenf)
---------------------------------------
-``sec_company_filing``/``sec_filing_attachment``/``sec_raw_object`` are produced by
-Branch A, not by this command — the fundamentals shard ``db`` opens below never
-contains them. ``execute()`` hydrates a read-only reader over Branch A's published
-ownership silver.duckdb (see ``_hydrate_ownership_silver_readonly``) and passes it
-as ``source`` to the per-filing/thirteenf workflow functions; ``db`` remains the
-write-only target for fundamentals output tables.
-
-Silver namespace
-----------------
-Writes to ``silver/fundamentals/`` (separate from Branch A's ``silver/ownership/``).
-This is required by DuckDB's single-writer constraint (AD-05).  Both namespaces
-are mounted as UNION ALL views by ShardedSilverReader during MDM derivation.
+Silver database
+---------------
+Writes to the canonical SEC silver database under ``silver/sec/silver.duckdb``.
+Branch B tables share the same DuckDB file as Branch A tables so application code
+can enforce cross-table consistency through ordinary reads before writing.
 
 Invariants preserved
 --------------------
@@ -51,8 +42,13 @@ import os
 import sys
 import uuid
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
+
+from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
+from edgar_warehouse.infrastructure.object_storage import StorageLocation
+
+
+_DEFAULT_LOCAL_SILVER_ROOT = "/tmp/edgar-warehouse-silver"
 
 
 def execute(args: Any) -> int:
@@ -60,37 +56,11 @@ def execute(args: Any) -> int:
     raw_cik_list: list[int] = getattr(args, "cik_list", None) or []
     mode: str = str(getattr(args, "mode", "per-filing") or "per-filing")
     run_id: str = str(getattr(args, "run_id", None) or str(uuid.uuid4()))
-    fundamentals_silver_path: str = getattr(args, "fundamentals_silver_path", None) or ""
+    silver_root_override: str = getattr(args, "silver_root", None) or ""
 
     cik_offset = int(getattr(args, "cik_offset", 0) or 0)
     _cik_limit_raw = getattr(args, "cik_limit", None)
     cik_limit = int(_cik_limit_raw) if _cik_limit_raw is not None else None
-
-    # Resolve the CIK batch.  When no explicit --cik-list is given (the Step
-    # Functions Map case), pull the ordered MDM active universe — the SAME source
-    # and ordering Branch A's bootstrap-next uses — and apply offset-then-limit
-    # windowing.  This guarantees Branch A and Branch B process identical CIK
-    # windows for the same {window_offset, window_limit} Map item.
-    try:
-        cik_list = _resolve_fundamentals_ciks(
-            raw_cik_list=raw_cik_list, cik_offset=cik_offset, cik_limit=cik_limit
-        )
-    except Exception as exc:
-        _err(f"bootstrap-fundamentals could not resolve CIKs: {exc}")
-        return 2
-
-    if not cik_list:
-        _err(
-            "bootstrap-fundamentals requires --cik-list, or an MDM-tracked active "
-            "universe resolvable via --cik-offset/--cik-limit"
-        )
-        return 2
-
-    if not fundamentals_silver_path:
-        # Fall back to env var (set by ECS task definition)
-        fundamentals_silver_path = os.environ.get(
-            "FUNDAMENTALS_SILVER_PATH", "/tmp/silver/fundamentals/shard-0.duckdb"
-        )
 
     from edgar_warehouse.infrastructure.warehouse_settings import resolve_edgar_identity
     try:
@@ -100,39 +70,53 @@ def execute(args: Any) -> int:
         return 2
 
     started_at = datetime.now(UTC)
+    context = _build_silver_context(identity=identity, silver_root_override=silver_root_override)
 
-    _log("bootstrap_fundamentals_started", run_id=run_id, mode=mode,
-         cik_count=len(cik_list), cik_offset=cik_offset,
-         cik_limit=(cik_limit if cik_limit is not None else -1),
-         resolved_from=("cik_list" if raw_cik_list else "mdm_active_universe"),
-         fundamentals_silver_path=fundamentals_silver_path)
-
-    # Open fundamentals silver shard (creates tables if first run)
-    from edgar_warehouse.silver_support.session import open_silver_shard
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _hydrate_silver_database_from_storage,
+    )
+    from edgar_warehouse.silver_support.session import open_silver_database
     try:
-        db = open_silver_shard(fundamentals_silver_path)
+        _hydrate_silver_database_from_storage(context)
+        db = open_silver_database(context.silver_root)
     except Exception as exc:
-        _err(f"Failed to open fundamentals silver database: {exc}")
+        _err(f"Failed to open silver database: {exc}")
+        return 2
+
+    # Resolve the CIK batch. When no explicit --cik-list is given (the Step
+    # Functions Map case), pull the ordered silver tracking universe — the SAME
+    # source and ordering Branch A's bootstrap-next uses — and apply
+    # offset-then-limit windowing. This guarantees Branch A and Branch B process
+    # identical CIK windows for the same {window_offset, window_limit} Map item.
+    try:
+        cik_list = _resolve_fundamentals_ciks(
+            db=db,
+            raw_cik_list=raw_cik_list,
+            cik_offset=cik_offset,
+            cik_limit=cik_limit,
+        )
+    except Exception as exc:
+        _err(f"bootstrap-fundamentals could not resolve CIKs: {exc}")
+        return 2
+
+    if not cik_list:
+        _err(
+            "bootstrap-fundamentals requires --cik-list, or silver tracking state "
+            "resolvable via --cik-offset/--cik-limit"
+        )
         return 2
 
     metrics: dict[str, Any] = {"mode": mode, "cik_count": len(cik_list)}
+    _log("bootstrap_fundamentals_started", run_id=run_id, mode=mode,
+         cik_count=len(cik_list), cik_offset=cik_offset,
+         cik_limit=(cik_limit if cik_limit is not None else -1),
+         resolved_from=("cik_list" if raw_cik_list else "silver_tracking_state"),
+         silver_root=context.silver_root.root)
 
-    # per-filing and thirteenf read filing/attachment/raw-object metadata from
-    # Branch A's ownership silver (bootstrap-next/bootstrap-batch output) — that
-    # data was never in the fundamentals-only shard `db` opens. Hydrate a
-    # read-only reader over it here; entity-facts needs no source read (it calls
-    # the SEC companyfacts API directly).
-    source = None
-    if mode in ("per-filing", "thirteenf"):
-        source_path = _hydrate_ownership_silver_readonly(
-            storage_root_uri=os.environ.get("WAREHOUSE_STORAGE_ROOT", "").strip(),
-            local_cache_dir=str(Path(fundamentals_silver_path).resolve().parent.parent),
-        )
-        if source_path is not None:
-            from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
-            source = ShardedSilverReader([source_path])
-        else:
-            _log("bootstrap_fundamentals_source_unavailable", run_id=run_id, mode=mode)
+    # per-filing and thirteenf read Branch A filing/attachment/raw-object
+    # metadata from the same canonical silver database they write Branch B rows
+    # to. entity-facts needs no source read because it calls the SEC API directly.
+    source = db if mode in ("per-filing", "thirteenf") else None
 
     try:
         if mode == "per-filing":
@@ -191,41 +175,30 @@ def execute(args: Any) -> int:
             db.close()
         except Exception:
             pass
-        if source is not None:
-            try:
-                source.close()
-            except Exception:
-                pass
         _err(f"bootstrap-fundamentals failed: {exc}")
         return 2
 
     db.close()
-    if source is not None:
-        source.close()
 
-    # Upload shard to remote storage so gold-refresh can consume it.
-    # ECS container filesystems are ephemeral — without this the shard is lost on exit.
-    storage_root_uri = os.environ.get("WAREHOUSE_STORAGE_ROOT", "")
-    if storage_root_uri:
+    # Upload the unified silver database to remote storage so later tasks can
+    # consume the Branch A and Branch B tables from one consistent file.
+    if context.storage_root.root:
         from edgar_warehouse.application.warehouse_orchestrator import (
-            _publish_fundamentals_shard_if_remote,
+            _publish_silver_database_if_remote,
         )
         try:
-            upload_result = _publish_fundamentals_shard_if_remote(
-                local_shard_path=fundamentals_silver_path,
-                storage_root_uri=storage_root_uri,
-            )
+            upload_result = _publish_silver_database_if_remote(context)
             if upload_result:
                 _log(
-                    "fundamentals_shard_uploaded",
+                    "silver_database_uploaded",
                     destination=upload_result["path"],
                     size_bytes=upload_result["size_bytes"],
                     run_id=run_id,
                 )
-                metrics["fundamentals_shard_uploaded"] = True
-                metrics["fundamentals_shard_size_bytes"] = upload_result["size_bytes"]
+                metrics["silver_database_uploaded"] = True
+                metrics["silver_database_size_bytes"] = upload_result["size_bytes"]
         except Exception as exc:
-            _err(f"Failed to upload fundamentals shard to remote storage: {exc}")
+            _err(f"Failed to upload silver database to remote storage: {exc}")
             return 1
 
     duration = (datetime.now(UTC) - started_at).total_seconds()
@@ -247,8 +220,53 @@ def execute(args: Any) -> int:
     return 0
 
 
+def _build_silver_context(
+    *,
+    identity: str,
+    silver_root_override: str,
+) -> WarehouseCommandContext:
+    storage_root_uri = os.environ.get("WAREHOUSE_STORAGE_ROOT", "").strip()
+    silver_root_uri = _resolve_silver_root_uri(
+        storage_root_uri=storage_root_uri,
+        silver_root_override=silver_root_override,
+    )
+    storage_root = StorageLocation(storage_root_uri or silver_root_uri)
+    return WarehouseCommandContext(
+        bronze_root=StorageLocation(
+            os.environ.get("WAREHOUSE_BRONZE_ROOT", "").strip() or storage_root.root
+        ),
+        storage_root=storage_root,
+        silver_root=StorageLocation(silver_root_uri),
+        snowflake_export_root=None,
+        environment_name=os.environ.get("WAREHOUSE_ENVIRONMENT", "dev"),
+        identity=identity,
+        runtime_mode=os.environ.get("WAREHOUSE_RUNTIME_MODE", "bronze_capture"),
+    )
+
+
+def _resolve_silver_root_uri(
+    *,
+    storage_root_uri: str,
+    silver_root_override: str,
+) -> str:
+    if silver_root_override:
+        return silver_root_override
+
+    env_silver_root = os.environ.get("WAREHOUSE_SILVER_ROOT", "").strip()
+    if env_silver_root:
+        return env_silver_root
+
+    if storage_root_uri:
+        storage_root = StorageLocation(storage_root_uri)
+        if not storage_root.is_remote:
+            return storage_root_uri
+
+    return _DEFAULT_LOCAL_SILVER_ROOT
+
+
 def _resolve_fundamentals_ciks(
     *,
+    db: Any,
     raw_cik_list: list[int],
     cik_offset: int,
     cik_limit: int | None,
@@ -260,7 +278,7 @@ def _resolve_fundamentals_ciks(
     window_limit}`` Map item:
 
     - With an explicit ``--cik-list``: use it as-is, then window.
-    - Without one: pull the MDM tracked universe (ordered ASC by CIK, the same
+    - Without one: pull the silver tracked universe (ordered ASC by CIK, the same
       source/order/status-filter ``compute-windows``/``bootstrap-next`` use —
       LOAD_HISTORY_TRACKING_STATUS_FILTER, not 'active' alone; see that
       constant's docstring for why), then window.
@@ -269,7 +287,6 @@ def _resolve_fundamentals_ciks(
     """
     from edgar_warehouse.application.warehouse_orchestrator import (
         LOAD_HISTORY_TRACKING_STATUS_FILTER,
-        _get_mdm_tracked_ciks,
         _validate_window_args,
     )
 
@@ -277,48 +294,11 @@ def _resolve_fundamentals_ciks(
     if raw_cik_list:
         ciks = list(raw_cik_list)
     else:
-        ciks = _get_mdm_tracked_ciks(LOAD_HISTORY_TRACKING_STATUS_FILTER)
+        ciks = db.get_tracked_ciks(LOAD_HISTORY_TRACKING_STATUS_FILTER)
     ciks = ciks[cik_offset:]
     if cik_limit is not None:
         ciks = ciks[:cik_limit]
     return ciks
-
-
-def _hydrate_ownership_silver_readonly(
-    *, storage_root_uri: str, local_cache_dir: str
-) -> str | None:
-    """Download Branch A's ownership silver.duckdb for read-only Branch B access.
-
-    Mirrors the remote/local branching in
-    ``warehouse_orchestrator._hydrate_silver_database_from_storage``, but takes
-    plain strings instead of a full ``WarehouseCommandContext`` — bootstrap-fundamentals
-    has never required ``WAREHOUSE_BRONZE_ROOT`` and shouldn't start requiring it
-    just to read Branch A's silver.
-
-    Returns the local path, or None when unavailable: storage is local and no
-    monolith exists yet, or Branch A hasn't published one to remote storage yet.
-    Callers treat None as "zero filings available" (AD-13), not an error.
-    """
-    from edgar_warehouse.infrastructure.object_storage import StorageLocation, read_bytes
-
-    local_path = Path(local_cache_dir) / "sec" / "silver.duckdb"
-
-    if not storage_root_uri:
-        return str(local_path) if local_path.exists() else None
-
-    storage = StorageLocation(root=storage_root_uri)
-    if not storage.is_remote:
-        return str(local_path) if local_path.exists() else None
-
-    remote_path = storage.join("silver", "sec", "silver.duckdb")
-    try:
-        payload = read_bytes(remote_path)
-    except (FileNotFoundError, OSError):
-        return None
-
-    local_path.parent.mkdir(parents=True, exist_ok=True)
-    local_path.write_bytes(payload)
-    return str(local_path)
 
 
 def _log(event: str, **kwargs: Any) -> None:

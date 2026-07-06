@@ -8,15 +8,56 @@ import pyarrow as pa
 
 from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory
 from edgar_warehouse.serving.gold_models import _write_parquet
+from edgar_warehouse.serving.targets.base import ServingTarget
 
 
-def write_ticker_reference_to_snowflake_export(
+class SnowflakeTarget:
+    """Serving target that writes Parquet packages consumed by Snowflake native pull."""
+
+    provider_name = "snowflake"
+
+    def write_gold(
+        self,
+        tables: dict[str, pa.Table],
+        export_root: Any,
+        *,
+        run_id: str,
+        business_date: str,
+    ) -> dict[str, int]:
+        return write_gold_to_serving_export(
+            tables,
+            export_root,
+            run_id=run_id,
+            business_date=business_date,
+        )
+
+    def write_ticker_reference(
+        self,
+        table: pa.Table,
+        export_root: Any,
+        *,
+        run_id: str,
+        business_date: str,
+    ) -> int:
+        return write_ticker_reference_to_serving_export(
+            table,
+            export_root,
+            run_id=run_id,
+            business_date=business_date,
+        )
+
+
+def default_serving_target() -> ServingTarget:
+    return SnowflakeTarget()
+
+
+def write_ticker_reference_to_serving_export(
     table: pa.Table,
     export_root: Any,
     run_id: str,
     business_date: str,
 ) -> int:
-    export_spec = default_capture_spec_factory().snowflake_export_table(
+    export_spec = default_capture_spec_factory().serving_export_table(
         table_path="ticker_reference",
         business_date=business_date,
         run_id=run_id,
@@ -25,19 +66,20 @@ def write_ticker_reference_to_snowflake_export(
     return table.num_rows
 
 
-def write_gold_to_snowflake_export(
+def write_gold_to_serving_export(
     tables: dict[str, pa.Table],
     export_root: Any,
     run_id: str,
     business_date: str,
 ) -> dict[str, int]:
-    """Write each gold table to its Snowflake-export Parquet path.
+    """Write each gold table to its serving-export Parquet path.
 
     The mapping is:
       <export_name in S3 path>  ←  <build_gold() dict key>
 
-    Existing 8 entries are dimension/fact tables for the ownership graph.
-    PR-2 adds 6 entries for Branch B fundamentals:
+    The current serving package is consumed by Snowflake native pull. Existing
+    entries are dimension/fact tables for the ownership graph. PR-2 adds 6
+    entries for Branch B fundamentals:
       - 3 passthrough tables (SEC_FINANCIAL_FACT etc.) — keep silver-table
         snake_case names matching the export bucket prefix structure.
       - 3 dimensional tables (EARNINGS_RELEASE etc.) — same shape as the
@@ -70,7 +112,7 @@ def write_gold_to_snowflake_export(
         table = tables.get(source_name)
         if table is None:
             continue
-        export_spec = capture_specs.snowflake_export_table(
+        export_spec = capture_specs.serving_export_table(
             table_path=export_name,
             business_date=business_date,
             run_id=run_id,
@@ -78,3 +120,7 @@ def write_gold_to_snowflake_export(
         _write_parquet(table, export_root, export_spec.relative_path)
         counts[export_name] = table.num_rows
     return counts
+
+
+write_ticker_reference_to_snowflake_export = write_ticker_reference_to_serving_export
+write_gold_to_snowflake_export = write_gold_to_serving_export

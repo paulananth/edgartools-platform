@@ -1540,20 +1540,11 @@ compute_windows = ecs_state(wh_medium_arn,
     "States.Array('compute-windows', '--window-size', States.Format('{}', $.window_size), '--run-id', $$.Execution.Name)",
     next_state="Stage1Parallel")
 
-# (4) Stage1Parallel: Parallel state running Branch A (ownership) and Branch B entity-facts
-# concurrently.  Both read the SAME cik_windows.jsonl produced by ComputeWindows; each item is
-# {"window_offset": N, "window_limit": M}.  Branch A writes silver/ownership/, Branch B writes
-# silver/fundamentals/ — separate S3 prefixes + separate local DuckDB shards, so the two
-# branches never contend for the same writer (AD-05).  Each branch's Map is MaxConcurrency=1 so
-# windows within a branch run sequentially (consistent shard state).
-#
-# Branch B's per-filing and thirteenf modes are NOT in this Parallel state (data-architecture
-# Issue 1) — they read filing/attachment/raw-object metadata that Branch A produces, so running
-# them concurrently with Branch A raced Branch A's own writes: on a fresh environment Branch B
-# would always scan zero filings, silently, because the data didn't exist yet when it looked.
-# They run sequentially AFTER Stage1Parallel instead (see Stage1BPerFiling/Stage1BThirteenF
-# below). entity-facts has no such dependency — it calls the SEC companyfacts API directly — so
-# it stays here, concurrent with Branch A, for throughput.
+# (4) Stage1Parallel: Branch A ownership bootstrap. Branch B fundamentals is
+# intentionally sequenced after this state because all Branch B modes now write
+# the same canonical SEC silver DuckDB database as Branch A. Running two ECS
+# tasks against the same S3-backed DuckDB artifact would race the hydrate/publish
+# round trip and could drop whichever task published second.
 #
 # (4a) Branch A — WindowedBootstrap INLINE Map.
 # Per-window command: bootstrap-next --cik-limit M --cik-offset N --run-id <execution-name>.
@@ -1590,20 +1581,19 @@ windowed_bootstrap = {
     "End": True,
 }
 
-# (4b) Branch B (inside Stage1Parallel) — entity-facts only. No --cik-list is passed: the Map
+# (4b) Branch B entity-facts. No --cik-list is passed: the Map
 # item carries only offset/limit, and bootstrap-fundamentals resolves the actual CIK slice from
 # the same MDM universe/order/status-filter Branch A uses (see ISSUE-2 status-filter note above),
 # so Branch A and Branch B process identical CIK windows for the same {window_offset,
 # window_limit} item.
 #
-# AD-13: partial Branch B failure is accepted.  A failure is caught and routed to
-# BranchBComplete (a Pass terminal), so the Parallel state still completes and the pipeline
-# proceeds.  Gaps self-heal via the idempotent backfill workflow; a hard abort would defeat that.
-# Branch A remains strict (critical path).
-fundamentals_branch_b_catch = [{
+# AD-13: partial Branch B failure is accepted. A failure is caught and routed to
+# Stage1BPerFiling so the pipeline proceeds. Gaps self-heal via idempotent
+# backfill; a hard abort would defeat that. Branch A remains strict.
+stage1b_entity_facts_catch = [{
     "ErrorEquals": ["States.ALL"],
     "ResultPath": None,
-    "Next": "BranchBComplete",
+    "Next": "Stage1BPerFiling",
 }]
 
 per_window_fundamentals_entity_facts = ecs_state(wh_medium_arn,
@@ -1612,7 +1602,7 @@ per_window_fundamentals_entity_facts = ecs_state(wh_medium_arn,
 
 fundamentals_entity_facts = {
     "Type": "Map",
-    "Comment": "Branch B entity-facts: SEC companyfacts XBRL -> sec_financial_fact, sec_financial_derived, sec_accounting_flag (silver/fundamentals/). No Branch A dependency, so it stays concurrent with Branch A here.",
+    "Comment": "Branch B entity-facts: SEC companyfacts XBRL -> sec_financial_fact, sec_financial_derived, sec_accounting_flag in unified SEC silver. Runs after Branch A to avoid concurrent writes to the same DuckDB artifact.",
     "MaxConcurrency": 1,
     "ToleratedFailurePercentage": 0,
     "ItemReader": {
@@ -1629,51 +1619,30 @@ fundamentals_entity_facts = {
         "States": {"RunFundamentalsEntityFacts": per_window_fundamentals_entity_facts},
     },
     "ResultPath": None,
-    "Catch": fundamentals_branch_b_catch,
-    "End": True,
-}
-
-# BranchBComplete: graceful terminal for Branch B's entity-facts sub-branch (reached on success
-# fall-through, or via Catch).  Pass state ends the branch.
-branch_b_complete = {
-    "Type": "Pass",
-    "Comment": "Branch B (entity-facts) terminal — reached on success or after a caught failure (AD-13).",
-    "End": True,
+    "Catch": stage1b_entity_facts_catch,
+    "Next": "Stage1BPerFiling",
 }
 
 stage1_parallel = {
     "Type": "Parallel",
     "Comment": (
-        "Stage 1 parallel bootstrap. Branch A: ownership (bootstrap-next -> silver/ownership/). "
-        "Branch B: fundamentals entity-facts only (-> silver/fundamentals/) — per-filing/thirteenf "
-        "run sequentially AFTER this Parallel state (Stage1BPerFiling/Stage1BThirteenF) because they "
-        "depend on Branch A's output (data-architecture Issue 1). Both here read the same "
-        "cik_windows.jsonl; each branch's Maps are MaxConcurrency=1. Branch B failures are caught "
-        "so the pipeline still advances (AD-13); Branch A is strict."
+        "Stage 1 ownership bootstrap. Branch B fundamentals writes the same unified SEC silver "
+        "database, so all bootstrap-fundamentals modes run sequentially after Branch A. Branch A "
+        "is strict; Branch B stages catch failures so the pipeline can still advance (AD-13)."
     ),
     "Branches": [
         {
             "StartAt": "WindowedBootstrap",
             "States": {"WindowedBootstrap": windowed_bootstrap},
         },
-        {
-            "StartAt": "FundamentalsEntityFacts",
-            "States": {
-                "FundamentalsEntityFacts": fundamentals_entity_facts,
-                "BranchBComplete": branch_b_complete,
-            },
-        },
     ],
     "ResultPath": None,
-    "Next": "Stage1BPerFiling",
+    "Next": "Stage1BEntityFacts",
 }
 
 # (4c) Stage1BPerFiling / Stage1BThirteenF: Branch B modes that read Branch A's filing/attachment/
-# raw-object metadata (data-architecture Issues 1 and 4). Run sequentially, AFTER Stage1Parallel
-# so Branch A has finished writing for every window, and sequentially RELATIVE TO EACH OTHER
-# because both write the same silver/fundamentals/shard-0.duckdb file (AD-05 single-writer
-# constraint) — running them as concurrent ECS tasks would race the S3 round-trip upload/download
-# of that shard and silently drop whichever task's writes lost the race.
+# raw-object metadata (data-architecture Issues 1 and 4). Run sequentially after Branch A and
+# entity-facts because all Branch B modes write the same unified SEC silver DuckDB file.
 #
 # AD-13 applies here too: a Catch on either stage skips to the next step (not a hard abort) so a
 # transient Branch B failure never blocks MDM/gold for the (strict, already-complete) Branch A data.
@@ -1694,7 +1663,7 @@ per_window_fundamentals_per_filing = ecs_state(wh_medium_arn,
 
 fundamentals_per_filing = {
     "Type": "Map",
-    "Comment": "Branch B per-filing (post-Branch-A): 8-K earnings + DEF 14A proxy -> sec_earnings_release, sec_executive_record (silver/fundamentals/). Reads filing/attachment/raw-object metadata Branch A just finished writing.",
+    "Comment": "Branch B per-filing (post-Branch-A): 8-K earnings + DEF 14A proxy -> sec_earnings_release, sec_executive_record in unified SEC silver. Reads filing/attachment/raw-object metadata Branch A just finished writing.",
     "MaxConcurrency": 1,
     "ToleratedFailurePercentage": 0,
     "ItemReader": {
@@ -1721,7 +1690,7 @@ per_window_fundamentals_thirteenf = ecs_state(wh_medium_arn,
 
 fundamentals_thirteenf = {
     "Type": "Map",
-    "Comment": "Branch B 13F (post-Branch-A, data-architecture Issue 4): INFORMATION TABLE XML -> sec_thirteenf_holding (silver/fundamentals/). Same Branch A dependency as per-filing; runs after it in this same sequential stage, not concurrently, so the two modes don't race the shared fundamentals shard.",
+    "Comment": "Branch B 13F (post-Branch-A, data-architecture Issue 4): INFORMATION TABLE XML -> sec_thirteenf_holding in unified SEC silver. Same Branch A dependency as per-filing; runs after it in this same sequential stage.",
     "MaxConcurrency": 1,
     "ToleratedFailurePercentage": 0,
     "ItemReader": {
@@ -1780,11 +1749,10 @@ definition = {
         "(mdm seed-universe — data-architecture Issue 2), (2) inject window_size default if "
         "absent, (3) compute CIK windows for tracking_status active-or-bootstrap_pending + write "
         "manifests to S3, "
-        "(4) Stage1Parallel — Branch A ownership (bootstrap-next, silver/ownership/) and Branch B "
-        "entity-facts (silver/fundamentals/) run concurrently, each Map MaxConcurrency=1; Branch B "
-        "failures are caught so the pipeline still advances (AD-13), "
-        "(4c) Stage1BPerFiling then Stage1BThirteenF — Branch B modes that depend on Branch A's "
-        "output, run sequentially after Stage1Parallel completes (data-architecture Issues 1, 4), "
+        "(4) Stage1Parallel — Branch A ownership (bootstrap-next) writes unified SEC silver, "
+        "(4b) Stage1BEntityFacts then (4c) Stage1BPerFiling then Stage1BThirteenF — Branch B "
+        "fundamentals modes run sequentially after Branch A because they share the same silver "
+        "DuckDB artifact; Branch B failures are caught so the pipeline still advances (AD-13), "
         "(5) MDM entity resolution + export to Snowflake mirror + Neo4j sync in bulk "
         "(data-architecture Issue 3: export precedes sync-graph so graph reflects this run), "
         "(6) single gold build + Snowflake export manifest, "
@@ -1799,6 +1767,7 @@ definition = {
         "WindowSizeDefault": window_size_default,
         "ComputeWindows":    compute_windows,
         "Stage1Parallel":    stage1_parallel,
+        "Stage1BEntityFacts": fundamentals_entity_facts,
         "Stage1BPerFiling":  fundamentals_per_filing,
         "Stage1BThirteenF":  fundamentals_thirteenf,
         "MdmRun":            mdm_run,
