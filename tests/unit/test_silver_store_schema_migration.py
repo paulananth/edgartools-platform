@@ -19,6 +19,14 @@ import pytest
 
 from edgar_warehouse.silver_store import SilverDatabase
 
+_EXPECTED_SCHEMA_MIGRATIONS = [
+    "001_financial_period_end_pk",
+    "002_financial_fact_period_start_pk",
+    "003_parse_run_rows_written",
+    "004_source_checkpoint_bronze_path",
+    "005_financial_derived_factor_columns",
+]
+
 # Pre-PR-#57 DDL (PK omits period_end) for sec_financial_fact / sec_financial_derived.
 _OLD_FINANCIAL_FACT_DDL = """
 CREATE TABLE sec_financial_fact (
@@ -299,6 +307,31 @@ def test_migration_is_noop_for_fresh_store(tmp_path, caplog):
 
     assert "sec_financial_fact" not in caplog.text
     assert "sec_financial_derived" not in caplog.text
+
+
+def test_schema_migrations_are_recorded_in_order_and_idempotent(tmp_path):
+    db_path = str(tmp_path / "silver.duckdb")
+
+    db = SilverDatabase(db_path)
+    try:
+        first_records = db.fetch(
+            "SELECT migration_name, applied_at FROM schema_migration ORDER BY migration_name"
+        )
+    finally:
+        db.close()
+
+    assert [row["migration_name"] for row in first_records] == _EXPECTED_SCHEMA_MIGRATIONS
+    assert all(row["applied_at"] is not None for row in first_records)
+
+    db = SilverDatabase(db_path)
+    try:
+        second_records = db.fetch(
+            "SELECT migration_name, applied_at FROM schema_migration ORDER BY migration_name"
+        )
+    finally:
+        db.close()
+
+    assert second_records == first_records
 
 
 def _build_stage1_pk_store(db_path: str) -> None:

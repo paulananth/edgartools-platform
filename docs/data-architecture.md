@@ -116,6 +116,7 @@ for the pipeline it's attached to, or exists purely to check state.
 | `sec_source_checkpoint` | Internal idempotency | `source_name`, `source_key`, `raw_object_id`, last success/SHA/etag/modified/acceptance/accession, `bronze_path`. |
 | `sec_sync_run` | Internal run audit | Run id, sync mode, scope type/key, started/completed time, status, row counts, error. |
 | `sec_parse_run` | Internal parser audit | Parse run id, accession, parser name/version, form family, status, started/completed, error, rows written. |
+| `schema_migration` | Internal schema control | Ordered migration name, description, and applied timestamp for silver DuckDB schema evolution. |
 
 ### Reference and Company Data
 

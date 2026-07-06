@@ -21,7 +21,18 @@ except ImportError as exc:
 logger = logging.getLogger(__name__)
 
 
-_DDL = """
+_SCHEMA_MIGRATION_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS schema_migration (
+    migration_name             TEXT PRIMARY KEY,
+    description                TEXT NOT NULL,
+    applied_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"""
+
+
+_DDL = f"""
+
+{_SCHEMA_MIGRATION_TABLE_DDL}
 
 CREATE TABLE IF NOT EXISTS sec_company (
     cik                        BIGINT PRIMARY KEY,
@@ -668,19 +679,83 @@ class SilverDatabase:
         self._ensure_schema_evolution()
 
     def _ensure_schema_evolution(self) -> None:
-        self._migrate_financial_period_end_pk()
-        self._migrate_financial_fact_period_start_pk()
+        self._conn.execute(_SCHEMA_MIGRATION_TABLE_DDL)
+        for migration_name, description, migrate in self._schema_migrations():
+            if self._schema_migration_applied(migration_name):
+                continue
+            self._apply_schema_migration(migration_name, description, migrate)
 
-        migration_statements = [
-            "ALTER TABLE sec_parse_run ADD COLUMN IF NOT EXISTS rows_written INTEGER",
-            "ALTER TABLE sec_source_checkpoint ADD COLUMN IF NOT EXISTS bronze_path TEXT",
-            *[
+    def _schema_migrations(self) -> tuple[tuple[str, str, Any], ...]:
+        return (
+            (
+                "001_financial_period_end_pk",
+                "Recreate financial tables whose primary keys predate period_end.",
+                self._migrate_financial_period_end_pk,
+            ),
+            (
+                "002_financial_fact_period_start_pk",
+                "Recreate sec_financial_fact whose primary key predates period_start.",
+                self._migrate_financial_fact_period_start_pk,
+            ),
+            (
+                "003_parse_run_rows_written",
+                "Add rows_written to sec_parse_run.",
+                self._add_parse_run_rows_written,
+            ),
+            (
+                "004_source_checkpoint_bronze_path",
+                "Add bronze_path to sec_source_checkpoint.",
+                self._add_source_checkpoint_bronze_path,
+            ),
+            (
+                "005_financial_derived_factor_columns",
+                "Add accounting factor input columns to sec_financial_derived.",
+                self._add_financial_derived_factor_columns,
+            ),
+        )
+
+    def _schema_migration_applied(self, migration_name: str) -> bool:
+        row = self._conn.execute(
+            """
+            SELECT 1
+            FROM schema_migration
+            WHERE migration_name = ?
+            """,
+            [migration_name],
+        ).fetchone()
+        return row is not None
+
+    def _apply_schema_migration(self, migration_name: str, description: str, migrate: Any) -> None:
+        self._conn.execute("BEGIN TRANSACTION")
+        try:
+            migrate()
+            self._record_schema_migration(migration_name, description)
+        except Exception:
+            self._conn.execute("ROLLBACK")
+            raise
+        else:
+            self._conn.execute("COMMIT")
+
+    def _record_schema_migration(self, migration_name: str, description: str) -> None:
+        self._conn.execute(
+            """
+            INSERT INTO schema_migration (migration_name, description, applied_at)
+            VALUES (?, ?, ?)
+            """,
+            [migration_name, description, datetime.now(UTC)],
+        )
+
+    def _add_parse_run_rows_written(self) -> None:
+        self._conn.execute("ALTER TABLE sec_parse_run ADD COLUMN IF NOT EXISTS rows_written INTEGER")
+
+    def _add_source_checkpoint_bronze_path(self) -> None:
+        self._conn.execute("ALTER TABLE sec_source_checkpoint ADD COLUMN IF NOT EXISTS bronze_path TEXT")
+
+    def _add_financial_derived_factor_columns(self) -> None:
+        for column, column_type in _SEC_FINANCIAL_DERIVED_FACTOR_COLUMNS.items():
+            self._conn.execute(
                 f"ALTER TABLE sec_financial_derived ADD COLUMN IF NOT EXISTS {column} {column_type}"
-                for column, column_type in _SEC_FINANCIAL_DERIVED_FACTOR_COLUMNS.items()
-            ],
-        ]
-        for statement in migration_statements:
-            self._conn.execute(statement)
+            )
 
     def _migrate_financial_period_end_pk(self) -> None:
         """Recreate financial tables whose PK predates PR #57 without data loss.
@@ -2835,6 +2910,7 @@ class SilverDatabase:
     def get_table_counts(self) -> dict[str, int]:
         """Return current row count for every silver table, keyed by table name."""
         baseline_tables = {
+            "schema_migration",
             "sec_tracked_universe",
             "sec_company",
             "sec_company_ticker",
