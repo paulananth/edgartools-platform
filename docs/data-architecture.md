@@ -66,6 +66,7 @@ All runtime paths are validated through `edgar_warehouse/config/warehouse_paths.
 | Text projections | `text/sec/cik={cik}/accession={accession_number}/{text_version}.txt` | Normalized text extracted from cached filing artifacts. |
 | Silver | `silver/sec/silver.duckdb`, `silver/sec/shards/shard-{shard_index}.duckdb` | DuckDB staging and serving state, including Branch A and Branch B tables. |
 | Gold Parquet | `gold/{table_name}/run_id={run_id}/{table_name}.parquet` | Warehouse-local gold Parquet outputs. |
+| Consolidated run manifest | `runs/{command_path}/{run_id}/run_manifest.json` | Run-level index of per-layer manifests, paths, row counts, and timestamps. |
 | Snowflake export | `{table_path}/business_date={business_date}/run_id={run_id}/{table_path}.parquet` | S3 package consumed by Snowflake native pull. |
 | Snowflake manifest | `manifests/workflow_name={workflow_name}/business_date={business_date}/run_id={run_id}/run_manifest.json` | Per-run table list, row counts, and paths for Snowflake loading. |
 

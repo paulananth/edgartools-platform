@@ -210,6 +210,10 @@ class WarehousePathResolverTests(unittest.TestCase):
             self.resolver.run_summary_path("run-123"),
             "reference/cik_universe/runs/run-123/run-summary.json",
         )
+        self.assertEqual(
+            self.resolver.run_manifest_path("bootstrap-next", "run-123"),
+            "runs/bootstrap-next/run-123/run_manifest.json",
+        )
 
 
 class CaptureSpecFactoryTests(unittest.TestCase):

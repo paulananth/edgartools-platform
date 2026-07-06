@@ -58,6 +58,8 @@ from edgar_warehouse.infrastructure.run_manifest_builder import (
     SNOWFLAKE_EXPORT_TABLES,
     layer_manifest,
     planned_writes,
+    run_manifest,
+    run_manifest_relative_path,
     snowflake_export_manifest,
     snowflake_export_run_manifest,
     snowflake_export_run_manifest_relative_path,
@@ -258,6 +260,19 @@ def _execute_warehouse_infrastructure_validation(
                 }
             )
         writes.extend(snowflake_exports)
+
+    writes.append(
+        _write_consolidated_run_manifest(
+            context=context,
+            command_name=command_name,
+            command_path=command_path,
+            run_id=run_id,
+            arguments=arguments,
+            scope=scope,
+            now=now,
+            manifest_writes=list(writes),
+        )
+    )
 
     return {
         "arguments": arguments,
@@ -664,6 +679,24 @@ def _execute_warehouse_bronze_capture(
             "relative_path": run_manifest_relative_path,
         }
         writes.append(snowflake_export_manifest_write)
+
+    writes.append(
+        _write_consolidated_run_manifest(
+            context=context,
+            command_name=command_name,
+            command_path=command_path,
+            run_id=run_id,
+            arguments=arguments,
+            scope=scope,
+            now=now,
+            manifest_writes=list(writes),
+            metrics=metrics,
+            raw_writes=raw_writes,
+            silver_table_counts=silver_table_counts,
+            gold_row_counts=gold_row_counts,
+            serving_export_counts=snowflake_export_counts,
+        )
+    )
 
     return {
         "arguments": arguments,
@@ -3540,6 +3573,16 @@ def _planned_pipeline_writes(
             }
         )
 
+    run_manifest_relative_path = _run_manifest_relative_path(command_path, run_id)
+    writes.append(
+        {
+            "layer": "run_manifest",
+            "path": context.bronze_root.join(run_manifest_relative_path),
+            "relative_path": run_manifest_relative_path,
+            "planned": True,
+        }
+    )
+
     if include_snowflake_export_manifest and context.snowflake_export_root is not None:
         export_business_date = _resolve_export_business_date(
             command_name=command_name,
@@ -3594,6 +3637,101 @@ def _layer_manifest(
     runtime_mode: str,
 ) -> dict[str, Any]:
     return layer_manifest(command_name, run_id, layer, relative_path, arguments, scope, now, runtime_mode)
+
+
+def _run_manifest_relative_path(command_path: str, run_id: str) -> str:
+    return run_manifest_relative_path(command_path, run_id)
+
+
+def _write_consolidated_run_manifest(
+    *,
+    context: WarehouseCommandContext,
+    command_name: str,
+    command_path: str,
+    run_id: str,
+    arguments: dict[str, Any],
+    scope: dict[str, Any],
+    now: datetime,
+    manifest_writes: list[dict[str, Any]],
+    metrics: dict[str, Any] | None = None,
+    raw_writes: list[dict[str, Any]] | None = None,
+    silver_table_counts: dict[str, int] | None = None,
+    gold_row_counts: dict[str, int] | None = None,
+    serving_export_counts: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    relative_path = _run_manifest_relative_path(command_path, run_id)
+    metrics = metrics or {}
+    raw_writes = raw_writes or []
+    row_counts = _consolidated_run_row_counts(
+        metrics=metrics,
+        raw_writes=raw_writes,
+        silver_table_counts=silver_table_counts,
+        gold_row_counts=gold_row_counts,
+        serving_export_counts=serving_export_counts,
+    )
+    payload = run_manifest(
+        command_name=command_name,
+        run_id=run_id,
+        command_path=command_path,
+        arguments=arguments,
+        scope=scope,
+        now=now,
+        runtime_mode=context.runtime_mode,
+        environment_name=context.environment_name,
+        manifest_writes=manifest_writes,
+        row_counts=row_counts,
+        layer_row_counts=_consolidated_layer_row_counts(
+            row_counts=row_counts,
+            silver_table_counts=silver_table_counts,
+            gold_row_counts=gold_row_counts,
+            serving_export_counts=serving_export_counts,
+        ),
+    )
+    return {
+        "layer": "run_manifest",
+        "path": context.bronze_root.write_json(relative_path, payload),
+        "relative_path": relative_path,
+    }
+
+
+def _consolidated_run_row_counts(
+    *,
+    metrics: dict[str, Any],
+    raw_writes: list[dict[str, Any]],
+    silver_table_counts: dict[str, int] | None,
+    gold_row_counts: dict[str, int] | None,
+    serving_export_counts: dict[str, int] | None,
+) -> dict[str, Any]:
+    return {
+        "gold_row_counts": gold_row_counts or {},
+        "raw_write_count": len(raw_writes),
+        "rows_inserted": int(metrics.get("rows_inserted", 0) or 0),
+        "rows_skipped": int(metrics.get("rows_skipped", 0) or 0),
+        "serving_export_row_counts": serving_export_counts or {},
+        "silver_table_counts": silver_table_counts or {},
+    }
+
+
+def _consolidated_layer_row_counts(
+    *,
+    row_counts: dict[str, Any],
+    silver_table_counts: dict[str, int] | None,
+    gold_row_counts: dict[str, int] | None,
+    serving_export_counts: dict[str, int] | None,
+) -> dict[str, dict[str, Any]]:
+    capture_counts = {
+        "rows_inserted": row_counts["rows_inserted"],
+        "rows_skipped": row_counts["rows_skipped"],
+    }
+    return {
+        "artifacts": {"raw_write_count": row_counts["raw_write_count"]},
+        "bronze": capture_counts,
+        "gold": gold_row_counts or {},
+        "silver": silver_table_counts or {},
+        "snowflake_export": serving_export_counts or {},
+        "snowflake_export_manifest": serving_export_counts or {},
+        "staging": capture_counts,
+    }
 
 
 def _snowflake_export_manifest(

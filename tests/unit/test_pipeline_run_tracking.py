@@ -105,6 +105,59 @@ def test_bronze_capture_records_pipeline_run(tmp_path) -> None:
     assert any(write["layer"] == "bronze" for write in complete_kwargs["writes"])
 
 
+def test_bronze_capture_writes_consolidated_run_manifest(tmp_path) -> None:
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _execute_warehouse_bronze_capture,
+    )
+
+    context = _context(tmp_path)
+    fake_db = MagicMock()
+    fake_db.get_table_counts.return_value = {"sec_company": 1}
+    raw_writes = [
+        {
+            "layer": "bronze_raw",
+            "path": context.bronze_root.write_bytes("raw/test.json", b'{"ok": true}'),
+            "relative_path": "raw/test.json",
+            "sha256": "c0ffee",
+        }
+    ]
+
+    with (
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage"
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
+            return_value=fake_db,
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._capture_bronze_raw",
+            return_value=(raw_writes, {"rows_inserted": 1, "rows_skipped": 0}),
+        ),
+    ):
+        result = _execute_warehouse_bronze_capture(
+            context=context,
+            command_name="seed-universe",
+            arguments={"run_id": "run-1"},
+        )
+
+    manifest_path = tmp_path / "bronze" / "runs" / "seed-universe" / "run-1" / "run_manifest.json"
+    payload = json.loads(manifest_path.read_text())
+    assert payload["schema_version"] == 1
+    assert payload["command"] == "seed-universe"
+    assert payload["run_id"] == "run-1"
+    assert payload["created_at"].endswith("Z")
+    assert payload["row_counts"]["rows_inserted"] == 1
+    assert payload["row_counts"]["silver_table_counts"] == {"sec_company": 1}
+
+    manifests = {entry["layer"]: entry for entry in payload["manifests"]}
+    assert {"bronze", "staging", "artifacts"} <= set(manifests)
+    assert manifests["bronze"]["path"].endswith("runs/seed-universe/run-1/manifest.json")
+    assert manifests["bronze"]["row_counts"] == {"rows_inserted": 1, "rows_skipped": 0}
+    assert manifests["staging"]["written_at"].endswith("Z")
+    assert any(write["layer"] == "run_manifest" for write in result["writes"])
+
+
 def test_verify_pipeline_run_rechecks_raw_write_hashes(tmp_path) -> None:
     from edgar_warehouse.application.commands.verify_pipeline_run import verify_pipeline_run
     from edgar_warehouse.silver_store import SilverDatabase
