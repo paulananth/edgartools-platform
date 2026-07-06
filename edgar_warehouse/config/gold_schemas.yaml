@@ -1,0 +1,510 @@
+# Gold schema registry. Loaded by edgar_warehouse.serving.gold_schema_registry.
+# Keep field order stable; downstream Parquet and Snowflake loads depend on it.
+SCHEMA_VERSION: 1
+schemas:
+  _DIM_COMPANY_SCHEMA:
+    - name: company_key
+      type: int64
+    - name: cik
+      type: int64
+    - name: entity_name
+      type: string
+    - name: entity_type
+      type: string
+    - name: sic
+      type: string
+    - name: sic_description
+      type: string
+    - name: state_of_incorporation
+      type: string
+    - name: fiscal_year_end
+      type: string
+    - name: last_sync_run_id
+      type: string
+  _DIM_TICKER_REFERENCE_SCHEMA:
+    - name: cik
+      type: int64
+    - name: ticker
+      type: string
+    - name: exchange
+      type: string
+    - name: last_sync_run_id
+      type: string
+  _DIM_FORM_SCHEMA:
+    - name: form_key
+      type: int64
+    - name: form
+      type: string
+    - name: form_family
+      type: string
+  _DIM_DATE_SCHEMA:
+    - name: date_key
+      type: int32
+    - name: full_date
+      type: date32
+    - name: year
+      type: int32
+    - name: month
+      type: int32
+    - name: day
+      type: int32
+    - name: quarter
+      type: int32
+    - name: day_of_week
+      type: int32
+    - name: is_weekend
+      type: bool_
+  _DIM_FILING_SCHEMA:
+    - name: filing_key
+      type: int64
+    - name: accession_number
+      type: string
+    - name: cik
+      type: int64
+    - name: company_key
+      type: int64
+    - name: form
+      type: string
+    - name: form_key
+      type: int64
+    - name: filing_date
+      type: date32
+    - name: date_key
+      type: int32
+    - name: report_date
+      type: date32
+    - name: is_xbrl
+      type: bool_
+    - name: size
+      type: int64
+  _FACT_FILING_ACTIVITY_SCHEMA:
+    - name: fact_key
+      type: int64
+    - name: company_key
+      type: int64
+    - name: filing_key
+      type: int64
+    - name: date_key
+      type: int32
+    - name: form_key
+      type: int64
+    - name: accession_number
+      type: string
+    - name: cik
+      type: int64
+    - name: form
+      type: string
+    - name: filing_date
+      type: date32
+    - name: report_date
+      type: date32
+    - name: is_xbrl
+      type: bool_
+  _DIM_PARTY_SCHEMA:
+    - name: party_key
+      type: int64
+    - name: party_natural_key
+      type: string
+    - name: party_name
+      type: string
+    - name: party_cik
+      type: int64
+  _DIM_SECURITY_SCHEMA:
+    - name: security_key
+      type: int64
+    - name: security_natural_key
+      type: string
+    - name: security_title
+      type: string
+    - name: issuer_cik
+      type: int64
+  _DIM_OWNERSHIP_TXN_TYPE_SCHEMA:
+    - name: ownership_txn_type_key
+      type: int64
+    - name: transaction_code
+      type: string
+    - name: description
+      type: string
+  _DIM_GEOGRAPHY_SCHEMA:
+    - name: geography_key
+      type: int64
+    - name: state_or_country
+      type: string
+    - name: country
+      type: string
+  _DIM_DISCLOSURE_CATEGORY_SCHEMA:
+    - name: disclosure_category_key
+      type: int64
+    - name: disclosure_category
+      type: string
+  _DIM_PRIVATE_FUND_SCHEMA:
+    - name: private_fund_key
+      type: int64
+    - name: private_fund_natural_key
+      type: string
+    - name: fund_name
+      type: string
+    - name: fund_type
+      type: string
+    - name: jurisdiction
+      type: string
+  _FACT_OWNERSHIP_TRANSACTION_SCHEMA:
+    - name: fact_key
+      type: int64
+    - name: company_key
+      type: int64
+    - name: date_key
+      type: int32
+    - name: form_key
+      type: int64
+    - name: party_key
+      type: int64
+    - name: security_key
+      type: int64
+    - name: ownership_txn_type_key
+      type: int64
+    - name: accession_number
+      type: string
+    - name: owner_index
+      type: int16
+    - name: txn_index
+      type: int16
+    - name: transaction_code
+      type: string
+    - name: transaction_shares
+      type: float64
+    - name: transaction_price
+      type: float64
+    - name: shares_owned_after
+      type: float64
+    - name: is_derivative
+      type: bool_
+  _FACT_OWNERSHIP_HOLDING_SNAPSHOT_SCHEMA:
+    - name: fact_key
+      type: int64
+    - name: company_key
+      type: int64
+    - name: date_key
+      type: int32
+    - name: party_key
+      type: int64
+    - name: security_key
+      type: int64
+    - name: accession_number
+      type: string
+    - name: owner_index
+      type: int16
+    - name: shares_owned_after
+      type: float64
+    - name: ownership_direct_indirect
+      type: string
+  _FACT_ADV_OFFICE_SCHEMA:
+    - name: fact_key
+      type: int64
+    - name: company_key
+      type: int64
+    - name: date_key
+      type: int32
+    - name: geography_key
+      type: int64
+    - name: accession_number
+      type: string
+    - name: office_index
+      type: int16
+    - name: office_name
+      type: string
+    - name: is_headquarters
+      type: bool_
+  _FACT_ADV_DISCLOSURE_SCHEMA:
+    - name: fact_key
+      type: int64
+    - name: company_key
+      type: int64
+    - name: date_key
+      type: int32
+    - name: disclosure_category_key
+      type: int64
+    - name: accession_number
+      type: string
+    - name: event_index
+      type: int16
+    - name: is_reported
+      type: bool_
+  _FACT_ADV_PRIVATE_FUND_SCHEMA:
+    - name: fact_key
+      type: int64
+    - name: company_key
+      type: int64
+    - name: date_key
+      type: int32
+    - name: private_fund_key
+      type: int64
+    - name: accession_number
+      type: string
+    - name: fund_index
+      type: int16
+    - name: aum_amount
+      type: float64
+  _SEC_FINANCIAL_FACT_SCHEMA:
+    - name: cik
+      type: int64
+      nullable: false
+    - name: accession_number
+      type: string
+      nullable: false
+    - name: concept
+      type: string
+      nullable: false
+    - name: fiscal_period
+      type: string
+      nullable: false
+    - name: segment
+      type: string
+      nullable: false
+    - name: fiscal_year
+      type: int32
+    - name: period_end
+      type: date32
+    - name: period_start
+      type: date32
+      nullable: false
+    - name: form_type
+      type: string
+    - name: value
+      type: float64
+    - name: unit
+      type: string
+    - name: decimals
+      type: int32
+    - name: parser_version
+      type: string
+    - name: ingested_at
+      type: timestamp_us_utc
+  _SEC_THIRTEENF_HOLDING_SCHEMA:
+    - name: cik
+      type: int64
+      nullable: false
+    - name: accession_number
+      type: string
+      nullable: false
+    - name: holding_index
+      type: int64
+      nullable: false
+    - name: period_of_report
+      type: date32
+    - name: cusip
+      type: string
+    - name: issuer_name
+      type: string
+    - name: security_title
+      type: string
+    - name: shares_held
+      type: float64
+    - name: market_value
+      type: float64
+    - name: security_class
+      type: string
+    - name: put_call
+      type: string
+    - name: discretion_type
+      type: string
+    - name: voting_auth_sole
+      type: float64
+    - name: voting_auth_shared
+      type: float64
+    - name: voting_auth_none
+      type: float64
+    - name: parser_version
+      type: string
+    - name: ingested_at
+      type: timestamp_us_utc
+  _SEC_FINANCIAL_DERIVED_SCHEMA:
+    - name: cik
+      type: int64
+      nullable: false
+    - name: accession_number
+      type: string
+      nullable: false
+    - name: fiscal_period
+      type: string
+      nullable: false
+    - name: fiscal_year
+      type: int32
+    - name: period_end
+      type: date32
+    - name: form_type
+      type: string
+    - name: revenue
+      type: float64
+    - name: gross_profit
+      type: float64
+    - name: ebitda
+      type: float64
+    - name: ebit
+      type: float64
+    - name: net_income
+      type: float64
+    - name: eps_diluted
+      type: float64
+    - name: total_assets
+      type: float64
+    - name: total_liabilities
+      type: float64
+    - name: total_equity
+      type: float64
+    - name: cash_and_equivalents
+      type: float64
+    - name: total_debt
+      type: float64
+    - name: current_assets
+      type: float64
+    - name: current_liabilities
+      type: float64
+    - name: accounts_receivable
+      type: float64
+    - name: inventory
+      type: float64
+    - name: selling_general_admin_expense
+      type: float64
+    - name: retained_earnings
+      type: float64
+    - name: depreciation_amortization
+      type: float64
+    - name: property_plant_equipment_net
+      type: float64
+    - name: shares_outstanding
+      type: float64
+    - name: operating_cash_flow
+      type: float64
+    - name: capex
+      type: float64
+    - name: free_cash_flow
+      type: float64
+    - name: gross_margin
+      type: float64
+    - name: ebitda_margin
+      type: float64
+    - name: net_margin
+      type: float64
+    - name: roic
+      type: float64
+    - name: roe
+      type: float64
+    - name: roa
+      type: float64
+    - name: parser_version
+      type: string
+    - name: ingested_at
+      type: timestamp_us_utc
+  _FACT_EARNINGS_RELEASE_SCHEMA:
+    - name: fact_key
+      type: int64
+      nullable: false
+    - name: company_key
+      type: int64
+    - name: filing_date_key
+      type: int32
+    - name: period_end_date_key
+      type: int32
+    - name: form_key
+      type: int64
+    - name: accession_number
+      type: string
+    - name: cik
+      type: int64
+    - name: filing_date
+      type: date32
+    - name: fiscal_year
+      type: int32
+    - name: fiscal_quarter
+      type: int32
+    - name: period_end
+      type: date32
+    - name: revenue_gaap
+      type: float64
+    - name: net_income_gaap
+      type: float64
+    - name: eps_gaap_diluted
+      type: float64
+    - name: has_non_gaap
+      type: bool_
+    - name: has_guidance
+      type: bool_
+    - name: parser_version
+      type: string
+    - name: ingested_at
+      type: timestamp_us_utc
+  _FACT_EXECUTIVE_RECORD_SCHEMA:
+    - name: fact_key
+      type: int64
+      nullable: false
+    - name: company_key
+      type: int64
+    - name: fiscal_year_date_key
+      type: int32
+    - name: accession_number
+      type: string
+    - name: cik
+      type: int64
+    - name: fiscal_year
+      type: int32
+    - name: exec_name
+      type: string
+    - name: exec_role
+      type: string
+    - name: total_comp
+      type: float64
+    - name: base_salary
+      type: float64
+    - name: bonus
+      type: float64
+    - name: stock_awards
+      type: float64
+    - name: option_awards
+      type: float64
+    - name: non_equity_incentive
+      type: float64
+    - name: parser_version
+      type: string
+    - name: ingested_at
+      type: timestamp_us_utc
+  _FACT_ACCOUNTING_FLAG_SCHEMA:
+    - name: fact_key
+      type: int64
+      nullable: false
+    - name: company_key
+      type: int64
+    - name: fiscal_year_date_key
+      type: int32
+    - name: form_key
+      type: int64
+    - name: accession_number
+      type: string
+    - name: cik
+      type: int64
+    - name: fiscal_year
+      type: int32
+    - name: period_end
+      type: date32
+    - name: form_type
+      type: string
+    - name: auditor_name
+      type: string
+    - name: auditor_pcaob_id
+      type: string
+    - name: auditor_location
+      type: string
+    - name: icfr_attestation
+      type: bool_
+    - name: auditor_changed
+      type: bool_
+    - name: beneish_m_score
+      type: float64
+    - name: altman_z_score
+      type: float64
+    - name: piotroski_f_score
+      type: int32
+    - name: parser_version
+      type: string
+    - name: ingested_at
+      type: timestamp_us_utc
