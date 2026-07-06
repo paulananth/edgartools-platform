@@ -270,6 +270,19 @@ CREATE TABLE IF NOT EXISTS sec_daily_index_checkpoint (
     last_success_at           TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS discovery_checkpoint (
+    scope_type                 TEXT NOT NULL,
+    scope_key                  TEXT NOT NULL,
+    discovery_source           TEXT NOT NULL,
+    status                     TEXT NOT NULL,
+    run_id                     TEXT,
+    claimed_at                 TIMESTAMPTZ,
+    finished_at                TIMESTAMPTZ,
+    updated_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    metadata_json              TEXT,
+    PRIMARY KEY (scope_type, scope_key)
+);
+
 CREATE TABLE IF NOT EXISTS sec_raw_object (
     raw_object_id       TEXT PRIMARY KEY,
     source_type         TEXT,
@@ -1927,6 +1940,108 @@ class SilverDatabase:
         return [str(row[0]) for row in rows]
 
     # ------------------------------------------------------------------
+    # discovery_checkpoint
+    # ------------------------------------------------------------------
+
+    def get_discovery_checkpoint(self, scope_type: str, scope_key: str) -> dict[str, Any] | None:
+        result = self._conn.execute(
+            """
+            SELECT * FROM discovery_checkpoint
+            WHERE scope_type = ? AND scope_key = ?
+            """,
+            [scope_type, scope_key],
+        ).fetchone()
+        if result is None:
+            return None
+        cols = [d[0] for d in self._conn.description]
+        return dict(zip(cols, result))
+
+    def claim_discovery_ciks(
+        self,
+        ciks: list[int],
+        *,
+        discovery_source: str,
+        run_id: str,
+        claimed_at: datetime,
+    ) -> list[int]:
+        """Claim CIK discovery work, skipping CIKs active in another run."""
+        claimed: list[int] = []
+        seen: set[int] = set()
+        for raw_cik in ciks:
+            cik = int(raw_cik)
+            if cik in seen:
+                continue
+            seen.add(cik)
+            scope_key = str(cik)
+            existing = self.get_discovery_checkpoint("cik", scope_key)
+            if (
+                existing
+                and existing.get("status") == "in_progress"
+                and existing.get("run_id") != run_id
+            ):
+                continue
+            self._conn.execute(
+                """
+                INSERT INTO discovery_checkpoint
+                    (scope_type, scope_key, discovery_source, status, run_id,
+                     claimed_at, finished_at, updated_at, metadata_json)
+                VALUES ('cik', ?, ?, 'in_progress', ?, ?, NULL, ?, NULL)
+                ON CONFLICT (scope_type, scope_key) DO UPDATE SET
+                    discovery_source = excluded.discovery_source,
+                    status = excluded.status,
+                    run_id = excluded.run_id,
+                    claimed_at = excluded.claimed_at,
+                    finished_at = excluded.finished_at,
+                    updated_at = excluded.updated_at,
+                    metadata_json = excluded.metadata_json
+                """,
+                [scope_key, discovery_source, run_id, claimed_at, claimed_at],
+            )
+            claimed.append(cik)
+        return claimed
+
+    def finish_discovery_ciks(
+        self,
+        ciks: list[int],
+        *,
+        discovery_source: str,
+        run_id: str,
+        status: str,
+        finished_at: datetime,
+    ) -> None:
+        """Mark claimed CIK discovery work as succeeded or failed."""
+        seen: set[int] = set()
+        for raw_cik in ciks:
+            cik = int(raw_cik)
+            if cik in seen:
+                continue
+            seen.add(cik)
+            scope_key = str(cik)
+            self._conn.execute(
+                """
+                INSERT INTO discovery_checkpoint
+                    (scope_type, scope_key, discovery_source, status, run_id,
+                     claimed_at, finished_at, updated_at, metadata_json)
+                VALUES ('cik', ?, ?, ?, ?, ?, ?, ?, NULL)
+                ON CONFLICT (scope_type, scope_key) DO UPDATE SET
+                    discovery_source = excluded.discovery_source,
+                    status = excluded.status,
+                    run_id = excluded.run_id,
+                    finished_at = excluded.finished_at,
+                    updated_at = excluded.updated_at
+                """,
+                [
+                    scope_key,
+                    discovery_source,
+                    status,
+                    run_id,
+                    finished_at,
+                    finished_at,
+                    finished_at,
+                ],
+            )
+
+    # ------------------------------------------------------------------
     # sec_raw_object
     # ------------------------------------------------------------------
 
@@ -2730,6 +2845,7 @@ class SilverDatabase:
             "sec_current_filing_feed",
             "stg_daily_index_filing",
             "sec_daily_index_checkpoint",
+            "discovery_checkpoint",
             "sec_raw_object",
             "sec_filing_attachment",
             "sec_filing_text",

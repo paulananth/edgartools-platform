@@ -938,18 +938,41 @@ def _capture_bronze_raw(
         selected_ciks = impacted_ciks[cik_offset:]
         if cik_limit is not None:
             selected_ciks = selected_ciks[:cik_limit]
+        selected_ciks = db.claim_discovery_ciks(
+            selected_ciks,
+            discovery_source="daily_incremental",
+            run_id=sync_run_id,
+            claimed_at=now,
+        )
         if selected_ciks:
-            result = _run_submissions_bronze_then_silver(
-                context=context,
-                db=db,
-                sync_run_id=sync_run_id,
-                ciks=selected_ciks,
-                include_pagination=False,
-                fetch_date=now.date(),
-                force=bool(arguments.get("force")),
-                load_mode="daily_incremental",
-                artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
-                parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
+            try:
+                result = _run_submissions_bronze_then_silver(
+                    context=context,
+                    db=db,
+                    sync_run_id=sync_run_id,
+                    ciks=selected_ciks,
+                    include_pagination=False,
+                    fetch_date=now.date(),
+                    force=bool(arguments.get("force")),
+                    load_mode="daily_incremental",
+                    artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
+                    parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
+                )
+            except Exception:
+                db.finish_discovery_ciks(
+                    selected_ciks,
+                    discovery_source="daily_incremental",
+                    run_id=sync_run_id,
+                    status="failed",
+                    finished_at=now,
+                )
+                raise
+            db.finish_discovery_ciks(
+                selected_ciks,
+                discovery_source="daily_incremental",
+                run_id=sync_run_id,
+                status="succeeded",
+                finished_at=now,
             )
             raw_writes.extend(result["raw_writes"])
             metrics["rows_inserted"] += result["rows_written"]
@@ -1037,21 +1060,45 @@ def _capture_bronze_raw(
             cik_offset=int(arguments.get("cik_offset") or 0),
         )
         ciks = ciks[:pending_pool_limit]
-        result = _run_submissions_bronze_then_silver(
-            context=context,
-            db=db,
-            sync_run_id=sync_run_id,
-            ciks=ciks,
-            include_pagination=True,
-            fetch_date=now.date(),
-            force=bool(arguments.get("force")),
-            load_mode="bootstrap_full",
-            artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
-            parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
+        ciks = db.claim_discovery_ciks(
+            ciks,
+            discovery_source="bootstrap_next",
+            run_id=sync_run_id,
+            claimed_at=now,
         )
-        raw_writes.extend(result["raw_writes"])
-        metrics["rows_inserted"] += result["rows_written"]
-        metrics["rows_skipped"] += result["rows_skipped"]
+        if ciks:
+            try:
+                result = _run_submissions_bronze_then_silver(
+                    context=context,
+                    db=db,
+                    sync_run_id=sync_run_id,
+                    ciks=ciks,
+                    include_pagination=True,
+                    fetch_date=now.date(),
+                    force=bool(arguments.get("force")),
+                    load_mode="bootstrap_full",
+                    artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
+                    parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
+                )
+            except Exception:
+                db.finish_discovery_ciks(
+                    ciks,
+                    discovery_source="bootstrap_next",
+                    run_id=sync_run_id,
+                    status="failed",
+                    finished_at=now,
+                )
+                raise
+            db.finish_discovery_ciks(
+                ciks,
+                discovery_source="bootstrap_next",
+                run_id=sync_run_id,
+                status="succeeded",
+                finished_at=now,
+            )
+            raw_writes.extend(result["raw_writes"])
+            metrics["rows_inserted"] += result["rows_written"]
+            metrics["rows_skipped"] += result["rows_skipped"]
         return raw_writes, metrics
 
     if command_name == "targeted-resync":
