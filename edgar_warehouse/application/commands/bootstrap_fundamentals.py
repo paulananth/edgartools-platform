@@ -13,8 +13,9 @@ per-filing   Process 8-K earnings releases + DEF 14A proxy filings from bronze.
              AFTER Branch A completes, not concurrently, so that data exists.
 
 entity-facts Fetch SEC companyfacts API for each CIK. No Branch A dependency — calls
-             SEC directly via the shared SEC client — so in ``load_history`` this
-             mode still runs concurrently with Branch A.
+             SEC directly via the shared SEC client. In ``load_history`` this mode
+             still runs after Branch A because all Branch B modes publish the same
+             canonical silver DuckDB artifact.
              Output: sec_financial_fact, sec_accounting_flag, sec_financial_derived.
 
 thirteenf    Parse 13F INFORMATION TABLE XML attachments from bronze. Same Branch A
