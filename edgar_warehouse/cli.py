@@ -665,7 +665,8 @@ def build_parser() -> argparse.ArgumentParser:
         "bootstrap-fundamentals",
         help=(
             "Branch B bootstrap: ingest fundamentals silver from bronze. "
-            "Runs in parallel with bootstrap-batch (Branch A) via Step Functions. "
+            "Runs after Branch A in load-history Step Functions because both "
+            "paths publish the unified SEC silver database. "
             "Modes: per-filing (8-K/DEF 14A), entity-facts (XBRL companyfacts), "
             "thirteenf (13F INFORMATION TABLE). Writes to the unified SEC silver database."
         ),
