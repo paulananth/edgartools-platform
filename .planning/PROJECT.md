@@ -14,25 +14,42 @@ at scale on AWS ECS and publishes to Snowflake gold tables consumed by analytics
 
 ---
 
-## Current Milestone: v1.4 ADV Bronze-To-Silver Backfill
+## Current Milestone: v2.0 fix-pipelines — Pipeline Data-Source Completeness & Verification
 
-**Goal:** Add a safe operator path that parses already-downloaded ADV bronze artifacts into
-silver ADV tables without SEC re-fetch, unblocking the MDM adviser/fund load path.
-
-**Current progress:** Phase 8 complete. ADV bronze discovery/read contracts are in place; Phase 9 is ready to plan the `parse-adv-bronze` command and silver merge path.
+**Goal:** Close the remaining data-source and verification gaps across the MDM → Neo4j graph
+pipeline so every *derivable* relationship type is populated and independently verified, missing
+source artifacts are either sourced or documented as external blockers, and platform parsing is
+cross-checked against — and where possible replaced by — the `edgartools` reference library.
 
 **Target features:**
-- Discover and select ADV filings already present in bronze or the artifact registry.
-- Parse ADV bronze through the existing ADV parser into `sec_adv_filing`, `sec_adv_office`,
-  `sec_adv_disclosure_event`, and `sec_adv_private_fund`.
-- Provide a bounded idempotent operator command with `--accession-list` and `--limit`.
-- Report missing artifacts clearly and prove the command performs no SEC API re-fetch.
-- Document live validation steps so the paused `neo4j-pipe` Phase 5 checkpoint can resume.
+- **Neo4j graph verification** — graph sync materializes MDM_GRAPH_NODES/EDGES + per-type views
+  with strict MDM↔graph parity across the full active coverage target; Native App verification
+  runs the current API (compute pool + WCC) green; app-side GRAPH_INFO/BFS gaps are resolved or
+  documented with evidence; readiness failures (no compute pool) are distinguished from parity
+  failures.
+- **MDM relationship completeness** — populate still-zero relationship types where source data
+  supports it (AUDITED_BY via fundamentals entity-facts); document unsatisfiable ones (ADV,
+  HAS_PARENT_COMPANY, EMPLOYED_BY, INSTITUTIONAL_HOLDS) as source-coverage exclusions; derivation
+  stays idempotent.
+- **Missing artifacts** — triage missing bronze source artifacts: capture genuinely-fetchable
+  gaps; document unsatisfiable ones (ADV primary attachments are paper filings — see
+  `.planning/workstreams/claude-mdm-source-recovery/FINDINGS.md`); fix the `parse-adv-bronze`
+  silver-clobber hazard that can truncate the canonical silver.duckdb.
+- **edgartools crosscheck** — validate platform-parsed output (ownership, ADV, financials) against
+  `edgartools` for a sample of filings; prefer edgartools' native parsing over hand-built pipeline
+  parsers where the library covers it; audit edgartools API usage against the pinned version's
+  current (non-deprecated) surfaces.
 
-Developer-facing success metric: Given existing ADV bronze artifacts in S3,
-`edgar-warehouse parse-adv-bronze` can populate nonzero ADV silver rows and make
-`edgar-warehouse mdm run --entity-type adviser` / `fund` eligible to run without touching SEC
-network fetches, gold-layer pipeline work, or generated deployment JSON.
+**Key context:** AWS-only (DEC-001); dev account `690839588395` + `EDGARTOOLS_PRODB` only —
+never touch real prod (`077127448006` / `EDGARTOOLS_PROD`). Codex is active on the
+`fundamental-factors-v2` workstream; the AUDITED_BY/fundamentals work overlaps and must be
+isolated per DEC-019. `fix-pipelines v1.0` (Pipeline Observability, 2026-05-16) is the prior
+milestone under this name.
+
+Developer-facing success metric: `mdm verify-graph` exits 0 with strict MDM↔graph parity across
+the full active coverage target, every relationship type is populated or has a documented
+source-coverage exclusion, and a documented crosscheck shows platform parsing agrees with
+`edgartools` (or edgartools has replaced the custom parser) for the sampled filings.
 
 ---
 

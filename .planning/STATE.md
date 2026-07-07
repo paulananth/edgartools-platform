@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
-milestone: multi-milestone
-milestone_name: Multiple active workstreams
-status: executing
-last_updated: "2026-06-13"
-last_activity: 2026-06-13 -- v1.5 Go Live workstream initialized; Phase 1 ready to discuss or plan
+milestone: v2.0
+milestone_name: fix-pipelines
+status: planning
+last_updated: "2026-07-07"
+last_activity: 2026-07-07 -- Milestone fix-pipelines v2.0 started (neo4j verify, MDM completeness, missing artifacts, edgartools crosscheck); defining requirements
 ---
 
 # Project State
@@ -22,6 +22,7 @@ publishing to Snowflake gold tables.
 
 | Milestone | Workstream | Progress | Status | Resumption Point |
 |-----------|-----------|----------|--------|-----------------|
+| **v2.0 fix-pipelines (ACTIVE)** | fix-pipelines-v2 | 0% | Defining requirements | Requirements → roadmap (neo4j verify · MDM completeness · missing artifacts · edgartools crosscheck) |
 | v1.5 Go Live | go-live | 0% | Phase 1 ready to plan | Phase 1: Production Readiness Inventory And Launch Gate Contract |
 | v1.4 ADV Bronze-To-Silver Backfill | neo4j-pipe | 100% complete | All phases done (8, 9, 10) | — milestone closed |
 | v1.1 Neo4j Bronze-To-Graph Pipe | neo4j-pipe | Phase 5 complete | Phase 6 ready to plan | Phase 6: Full Graph Coverage And Verification |
