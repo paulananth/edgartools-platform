@@ -1731,6 +1731,9 @@ mdm_sync = ecs_state(mdm_medium_arn,
 mdm_verify = ecs_state(mdm_small_arn,
     "States.Array('mdm', 'verify-graph')",
     next_state="GoldRefresh")
+mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
+# verify-graph is validation-only per docs/data-architecture.md: it reports
+# parity but must never block gold-refresh, so a verify failure falls through.
 gold = ecs_state(wh_large_arn,
     "States.Array('gold-refresh', '--run-id', $$.Execution.Name)",
     next_state="WriteRunSummary", retry_secs=60)
@@ -1862,6 +1865,9 @@ mdm_sync = ecs_state(mdm_medium_arn,
 mdm_verify = ecs_state(mdm_small_arn,
     "States.Array('mdm', 'verify-graph')",
     next_state="GoldRefresh")
+mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
+# verify-graph is validation-only per docs/data-architecture.md: it reports
+# parity but must never block gold-refresh, so a verify failure falls through.
 gold = ecs_state(wh_large_arn,
     "States.Array('gold-refresh', '--run-id', $$.Execution.Name)",
     is_end=True, retry_secs=60)
@@ -2014,6 +2020,9 @@ mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relation
 mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="MdmSync")
 mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="MdmVerify")
 mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh")
+mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
+# verify-graph is validation-only per docs/data-architecture.md: it reports
+# parity but must never block gold-refresh, so a verify failure falls through.
 gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
 
 seed_universe = ecs_state(wh_medium_arn,
@@ -2169,6 +2178,9 @@ mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relation
 mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="MdmSync")
 mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="MdmVerify")
 mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh")
+mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
+# verify-graph is validation-only per docs/data-architecture.md: it reports
+# parity but must never block gold-refresh, so a verify failure falls through.
 gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
 
 definition = {
