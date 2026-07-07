@@ -32,6 +32,7 @@ ALLOWED_RELATIONSHIP_TYPES = (
 )
 NODE_TABLES = (
     "MDM_GRAPH_NODES",
+    "GRAPH_APP_NODES",
     "GRAPH_NODE_ADVISER",
     "GRAPH_NODE_AUDITFIRM",
     "GRAPH_NODE_COMPANY",
@@ -41,6 +42,7 @@ NODE_TABLES = (
 )
 EDGE_TABLES = (
     "MDM_GRAPH_EDGES",
+    "GRAPH_APP_EDGES",
     "GRAPH_EDGE_AUDITED_BY",
     "GRAPH_EDGE_COMPANY_HOLDS",
     "GRAPH_EDGE_EMPLOYED_BY",
@@ -407,45 +409,35 @@ def _verify_native_app(
             sql=_render_native_app_compute_pools(app_name),
             ok=lambda rows: _rows_contain_all(rows, (compute_pool,)),
             remediation=(
-                f"Activate {app_name} and confirm compute pool selector {compute_pool} "
-                "is available from GRAPH.SHOW_AVAILABLE_COMPUTE_POOLS()."
+                f"Activate {app_name}: CALL {app_name}.INTERNAL.CREATE_COMPUTE_POOLS() and "
+                f"CALL {app_name}.INTERNAL.GRANT_CALLBACK(['CREATE COMPUTE POOL','CREATE WAREHOUSE']) "
+                "(SQL-only installs never fire the grant callback, so the app's pools and "
+                "warehouse are missing until these run); then confirm compute pool selector "
+                f"{compute_pool} is available from GRAPH.SHOW_AVAILABLE_COMPUTE_POOLS()."
             ),
         )
     )
 
-    sample_check, sample_node_id = _native_sample_node_check(cursor, context)
+    sample_check, _sample_node_id = _native_sample_node_check(cursor, context)
     checks.append(sample_check)
     if all(check["status"] == "ok" for check in checks):
-        checks.extend(
-            [
-                _native_execute_check(
-                    cursor,
-                    name="graph_info",
-                    sql=_render_native_app_graph_info(context, app_name, compute_pool),
-                    remediation=(
-                        f"Run {grant_script} and confirm {app_name}.GRAPH.GRAPH_INFO "
-                        "can read the graph schema."
-                    ),
+        # WCC is the single algorithm smoke: it exercises the app end to end
+        # (projection of the ID-only GRAPH_APP_* views, compute-pool job,
+        # write-back). GRAPH_INFO/BFS/LIST_GRAPHS are omitted deliberately —
+        # in the current Marketplace app release all three fail inside the
+        # app's own procedures even with validator-clean config, while WCC
+        # succeeds against the same projection.
+        checks.append(
+            _native_execute_check(
+                cursor,
+                name="wcc",
+                sql=_render_native_app_wcc(context, app_name, compute_pool),
+                remediation=(
+                    f"Run {grant_script}; then retry WCC with compute pool {compute_pool} "
+                    "against the hosted MDM graph (projects the GRAPH_APP_NODES/"
+                    "GRAPH_APP_EDGES ID-only views created by `mdm sync-graph`)."
                 ),
-                _native_execute_check(
-                    cursor,
-                    name="bfs",
-                    sql=_render_native_app_bfs(context, app_name, compute_pool, sample_node_id),
-                    remediation=(
-                        f"Run {grant_script}; then retry BFS with compute pool {compute_pool} "
-                        "against the hosted MDM graph."
-                    ),
-                ),
-                _native_execute_check(
-                    cursor,
-                    name="wcc",
-                    sql=_render_native_app_wcc(context, app_name, compute_pool),
-                    remediation=(
-                        f"Run {grant_script}; then retry WCC with compute pool {compute_pool} "
-                        "against the hosted MDM graph."
-                    ),
-                ),
-            ]
+            )
         )
 
     status = "ok" if all(check["status"] == "ok" for check in checks) else "failed"
@@ -493,6 +485,14 @@ def _native_execute_check(
         rows = _fetch_raw_rows(cursor, sql)
     except Exception as exc:  # pragma: no cover - exercised by live connector failures
         return _native_failed_check(name, remediation, exc)
+    # The app's job procedures report failures as result rows (JOB_STATUS
+    # 'ERROR' with detail in JOB_RESULT) while the SELECT itself succeeds,
+    # so a successful fetch alone does not mean the job ran.
+    for row in rows:
+        values = [str(v) for v in (row if isinstance(row, (list, tuple)) else [row])]
+        if any(v == "ERROR" for v in values):
+            detail = " | ".join(v[:200] for v in values if v and v != "ERROR")
+            return _native_failed_check(name, remediation, RuntimeError(f"job reported ERROR: {detail}"))
     return {"name": name, "status": "ok", "row_count": len(rows)}
 
 
@@ -764,6 +764,14 @@ JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_TYPE")} RT
 WHERE RI.IS_ACTIVE = TRUE
   AND RT.IS_ACTIVE = TRUE{context["relationship_type_filter"]}
 {context["relationship_per_type_limit"]}{context["relationship_limit"]};
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_APP_NODES")} AS
+SELECT NODEID
+FROM {_fq(context, "MDM_GRAPH_NODES")};
+
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_APP_EDGES")} AS
+SELECT SOURCENODEID, TARGETNODEID
+FROM {_fq(context, "MDM_GRAPH_EDGES")};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODES")} AS
 SELECT NODEID, LABEL, PROPERTIES
@@ -1354,73 +1362,43 @@ LIMIT 1
 """
 
 
-def _render_native_app_graph_info(
-    context: dict[str, Any],
-    app_name: str,
-    compute_pool: str,
-) -> str:
-    graph_name = f"{context['target_database']}.{context['target_schema']}"
-    return f"""-- verify_graph:native_app_graph_info
-SELECT *
-FROM TABLE(
-  {app_name}.GRAPH.GRAPH_INFO(
-    {_sql_literal(graph_name)},
-    {{
-      'project_name': 'edgartools_mdm_verify_graph_info',
-      'compute_pool': {_sql_literal(compute_pool)},
-      'node_tables': ['MDM_GRAPH_NODES'],
-      'relationship_tables': ['MDM_GRAPH_EDGES']
-    }}
-  )
-)
-"""
-
-
-def _render_native_app_bfs(
-    context: dict[str, Any],
-    app_name: str,
-    compute_pool: str,
-    sample_node_id: str,
-) -> str:
-    graph_name = f"{context['target_database']}.{context['target_schema']}"
-    return f"""-- verify_graph:native_app_bfs
-SELECT *
-FROM TABLE(
-  {app_name}.GRAPH.BFS(
-    {_sql_literal(graph_name)},
-    {{
-      'project_name': 'edgartools_mdm_verify_bfs',
-      'compute_pool': {_sql_literal(compute_pool)},
-      'node_tables': ['MDM_GRAPH_NODES'],
-      'relationship_tables': ['MDM_GRAPH_EDGES'],
-      'source_node_id': {_sql_literal(sample_node_id)},
-      'max_depth': 2,
-      'write_options': {{'output_prefix': 'MDM_GRAPH_VERIFY_BFS_SMOKE'}}
-    }}
-  )
-)
-"""
-
-
 def _render_native_app_wcc(
     context: dict[str, Any],
     app_name: str,
     compute_pool: str,
 ) -> str:
-    graph_name = f"{context['target_database']}.{context['target_schema']}"
+    """WCC smoke via the app's current job API.
+
+    The compute pool selector is the first *argument* (not config), the
+    config is sectioned ({project, compute, write}) with camelCase keys and
+    fully-qualified table names, and the projection must only see numeric/
+    ID columns — hence the GRAPH_APP_NODES/GRAPH_APP_EDGES ID-only views
+    (the app rejects VARCHAR property columns such as MDM_GRAPH_NODES.LABEL).
+    consecutiveIds remaps the VARCHAR node ids for computation.
+    """
+    nodes = _fq(context, "GRAPH_APP_NODES")
+    edges = _fq(context, "GRAPH_APP_EDGES")
+    output = _fq(context, "MDM_GRAPH_VERIFY_WCC_SMOKE")
     return f"""-- verify_graph:native_app_wcc
-SELECT *
-FROM TABLE(
-  {app_name}.GRAPH.WCC(
-    {_sql_literal(graph_name)},
-    {{
-      'project_name': 'edgartools_mdm_verify_wcc',
-      'compute_pool': {_sql_literal(compute_pool)},
-      'node_tables': ['MDM_GRAPH_NODES'],
-      'relationship_tables': ['MDM_GRAPH_EDGES'],
-      'write_options': {{'output_prefix': 'MDM_GRAPH_VERIFY_WCC_SMOKE'}}
-    }}
-  )
+CALL {app_name}.GRAPH.WCC(
+  {_sql_literal(compute_pool)},
+  {{
+    'project': {{
+      'nodeTables': [{_sql_literal(nodes)}],
+      'relationshipTables': {{
+        {_sql_literal(edges)}: {{
+          'sourceTable': {_sql_literal(nodes)},
+          'targetTable': {_sql_literal(nodes)},
+          'orientation': 'NATURAL'
+        }}
+      }}
+    }},
+    'compute': {{ 'consecutiveIds': true }},
+    'write': [{{
+      'nodeLabel': 'GRAPH_APP_NODES',
+      'outputTable': {_sql_literal(output)}
+    }}]
+  }}
 )
 """
 
