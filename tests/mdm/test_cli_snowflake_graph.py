@@ -350,19 +350,9 @@ def _native_app_success_results() -> dict[str, list[dict[str, object]]]:
                 "NODEID": "company:1",
             }
         ],
-        "verify_graph:native_app_graph_info": [
-            {
-                "STATUS": "ok",
-            }
-        ],
-        "verify_graph:native_app_bfs": [
-            {
-                "STATUS": "ok",
-            }
-        ],
         "verify_graph:native_app_wcc": [
             {
-                "STATUS": "ok",
+                "JOB_STATUS": "SUCCESS",
             }
         ],
     }
@@ -452,8 +442,6 @@ def test_verify_graph_reports_strict_snowflake_parity(monkeypatch, capsys):
         "database_role_privileges",
         "compute_pool",
         "graph_schema_sample",
-        "graph_info",
-        "bfs",
         "wcc",
     ]
     assert payload["node_parity"]["by_entity_type"] == [

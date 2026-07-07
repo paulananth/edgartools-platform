@@ -63,3 +63,11 @@ SHOW GRANTS TO APPLICATION Neo4j_Graph_Analytics;
 SHOW GRANTS OF APPLICATION ROLE Neo4j_Graph_Analytics.app_user;
 SHOW GRANTS OF APPLICATION ROLE Neo4j_Graph_Analytics.app_admin;
 CALL Neo4j_Graph_Analytics.graph.show_available_compute_pools();
+
+-- Activation. A SQL-only install (CREATE APPLICATION ... FROM LISTING) never
+-- fires the app's grant callback the way Snowsight's Activate button does, so
+-- the app's compute pools and its query warehouse
+-- (NEO4J_GRAPH_ANALYTICS_APP_WAREHOUSE) are missing and every job fails
+-- inside the app with a null-parameter error. Both calls are idempotent.
+CALL Neo4j_Graph_Analytics.INTERNAL.CREATE_COMPUTE_POOLS();
+CALL Neo4j_Graph_Analytics.INTERNAL.GRANT_CALLBACK(ARRAY_CONSTRUCT('CREATE COMPUTE POOL', 'CREATE WAREHOUSE'));

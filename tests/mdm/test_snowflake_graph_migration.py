@@ -286,6 +286,7 @@ def test_graph_sync_executor_materializes_filtered_graph_contract_without_creden
     assert result.target_schema == "NEO4J_GRAPH_MIGRATION"
     assert result.node_tables == (
         "MDM_GRAPH_NODES",
+        "GRAPH_APP_NODES",
         "GRAPH_NODE_ADVISER",
         "GRAPH_NODE_AUDITFIRM",
         "GRAPH_NODE_COMPANY",
