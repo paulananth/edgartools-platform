@@ -1,8 +1,8 @@
 # Project: EdgarTools Platform
 
 status: active
-milestone: multi-milestone (v1.2 / v1.3 / v1.4 / model-builder-contract-gaps)
-updated: 2026-06-03
+milestone: multi-milestone (v1.2 / v1.3 / v1.4 / v2.0 fix-pipelines / model-builder-contract-gaps)
+updated: 2026-07-08
 
 ---
 
@@ -45,6 +45,14 @@ never touch real prod (`077127448006` / `EDGARTOOLS_PROD`). Codex is active on t
 `fundamental-factors-v2` workstream; the AUDITED_BY/fundamentals work overlaps and must be
 isolated per DEC-019. `fix-pipelines v1.0` (Pipeline Observability, 2026-05-16) is the prior
 milestone under this name.
+
+**Progress:** Phase 5 (Node And Populated-Relationship Graph Parity) complete 2026-07-08 —
+all 6 MDM entity types have a verified per-type graph view (including the previously-missing
+`GRAPH_NODE_AUDITFIRM`), the 4 populated relationship types have proven MDM↔graph parity via
+named checks in `mdm verify-graph`, and derivation/sync idempotency is a committed regression
+test (both halves: graph-sync full-rebuild and MDM node/relationship derivation). Full detail:
+`.planning/workstreams/fix-pipelines/phases/05-node-and-populated-relationship-graph-parity/05-VERIFICATION.md`.
+Next: Phase 6 (Relationship Investigation And Population).
 
 Developer-facing success metric: `mdm verify-graph` exits 0 with strict MDM↔graph parity across
 the full active coverage target, every relationship type is populated or has a documented
