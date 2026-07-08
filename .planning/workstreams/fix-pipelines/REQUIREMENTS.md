@@ -35,7 +35,7 @@ updated: 2026-07-08
 
 - [ ] **GVER-01**: `mdm verify-graph` output distinguishes Native App readiness failures (e.g. no compute pool available) from actual MDM↔graph parity failures.
 - [ ] **GVER-02**: Any Neo4j Graph Analytics Native App capability still broken app-side (GRAPH_INFO, BFS, LIST_GRAPHS per PR #122 findings) is fixed or documented with exact reproducing commands/dates, distinct from MDM-side issues.
-- [ ] **GVER-03**: Repeated MDM relationship derivation AND repeated graph sync against unchanged data produce zero drift (idempotent) across all 6 node types and 11 relationship types. (Graph-sync/full-rebuild side proven by 05-01's `test_graph_sync_is_idempotent_full_rebuild`; MDM relationship-derivation side is 05-02's scope — not yet complete.)
+- [x] **GVER-03**: Repeated MDM relationship derivation AND repeated graph sync against unchanged data produce zero drift (idempotent) across all 6 node types and 11 relationship types. (Graph-sync/full-rebuild side proven by 05-01's `test_graph_sync_is_idempotent_full_rebuild`; node/relationship-derivation side proven by 05-02's `test_node_resolution_is_idempotent_across_entity_types` and `test_audit_firm_seed_is_idempotent` — both halves complete.)
 
 ### Missing Source Artifacts
 
@@ -81,7 +81,7 @@ mechanisms that aren't tied to any single relationship type.
 | EDGE-02 | Phase 5 | Pending |
 | EDGE-03 | Phase 5 | Pending |
 | EDGE-04 | Phase 5 | Pending |
-| GVER-03 | Phase 5 | Pending |
+| GVER-03 | Phase 5 | Complete |
 | EDGE-05 | Phase 6 | Pending |
 | EDGE-06 | Phase 6 | Pending |
 | EDGE-09 | Phase 6 | Pending |

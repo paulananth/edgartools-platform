@@ -4,18 +4,18 @@ milestone: v2.0
 milestone_name: fix-pipelines — Pipeline Data-Source Completeness & Verification
 current_phase: 5
 current_phase_name: Node And Populated-Relationship Graph Parity
-current_plan: 2 of 3 in current phase
+current_plan: 3 of 3 in current phase (05-02 complete)
 status: in_progress
-stopped_at: Phase 5 Plan 01 complete
-last_updated: "2026-07-08T06:30:00.000Z"
+stopped_at: Phase 5 Plan 02 complete
+last_updated: "2026-07-08T06:37:58.162Z"
 last_activity: 2026-07-08
-last_activity_desc: 05-01 complete — GRAPH_NODE_AUDITFIRM view emitted, graph-sync idempotency regression test committed
+last_activity_desc: 05-02 complete (node-resolution idempotency tests for all 6 MDM entity types; GVER-03 fully satisfied)
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 7
+  completed_plans: 2
+  percent: 67
 ---
 
 # Project State — fix-pipelines
@@ -23,11 +23,11 @@ progress:
 ## Current Position
 
 Phase: 5 (Node And Populated-Relationship Graph Parity) — in progress
-Plan: 2 of 3 in current phase
-Status: 05-01 complete; ready to plan/execute 05-02
-Last activity: 2026-07-08 -- 05-01 complete (GRAPH_NODE_AUDITFIRM view + graph-sync idempotency test)
+Plan: 3 of 3 in current phase
+Status: 05-02 complete; ready to plan/execute 05-03
+Last activity: 2026-07-08 -- 05-02 complete (node-resolution idempotency tests for all 6 MDM entity types; GVER-03 fully satisfied)
 
-[=                             ] 7% (0/5 phases complete, 1/3 plans in phase 5)
+[███████░░░] 67% (0/5 phases complete, 2/3 plans in phase 5)
 
 ## Milestone Context
 
@@ -54,15 +54,18 @@ REQUIREMENTS.md)
 ## Progress
 
 **Phases Complete:** 0/5
-**Current Plan:** 2 of 3 in current phase (05-01 complete)
+**Current Plan:** 3 of 3 in current phase (05-02 complete)
 
 ## Session Continuity
 
-**Stopped At:** Phase 5 Plan 01 complete — `GRAPH_NODE_AUDITFIRM` view emitted in
-`render_graph_tables()` (closes NODE-06 gap) and graph-sync full-rebuild idempotency regression
-test committed (partial GVER-03, sync side only — MDM relationship-derivation side is 05-02's
-scope). Committed on `claude/fix-pipelines-v2`. Not yet planned: 05-02, 05-03.
-**Resume File:** .planning/workstreams/fix-pipelines/phases/05-node-and-populated-relationship-graph-parity/05-01-SUMMARY.md
+**Last session:** 2026-07-08T06:36:52.245Z
+
+**Stopped At:** Phase 5 Plan 02 complete — real-DB node-resolution idempotency regression tests
+committed for all 6 MDM entity types (5 silver-resolved via `test_node_resolution_is_idempotent_across_entity_types`,
+plus the seeded `audit_firm` type via `test_audit_firm_seed_is_idempotent`). GVER-03 is now fully
+satisfied (node/relationship-derivation side here + graph-sync/full-rebuild side from 05-01).
+Committed on `claude/fix-pipelines-v2`. Not yet planned: 05-03.
+**Resume File:** .planning/workstreams/fix-pipelines/phases/05-node-and-populated-relationship-graph-parity/05-02-SUMMARY.md
 
 ## Accumulated Context
 
@@ -87,14 +90,26 @@ scope). Committed on `claude/fix-pipelines-v2`. Not yet planned: 05-02, 05-03.
   `GRAPH_NODE_AUDIT_FIRM`) is authoritative — matches the pre-existing `NODE_TABLES` tuple entry
   and the `result.node_tables` test assertion already in `test_snowflake_graph_migration.py`.
 
-- 05-01: GVER-03 is only partially satisfied by this plan (graph-sync/full-rebuild side only,
-  via `test_graph_sync_is_idempotent_full_rebuild`). REQUIREMENTS.md keeps GVER-03 marked
-  Pending until 05-02 adds the MDM relationship-derivation idempotency side for all 6 node
-  types — do not mark GVER-03 complete again until both halves are proven.
+- 05-01: GVER-03 was only partially satisfied by that plan (graph-sync/full-rebuild side only,
+  via `test_graph_sync_is_idempotent_full_rebuild`). **Superseded by 05-02:** GVER-03 is now
+  fully satisfied — 05-02 added `test_node_resolution_is_idempotent_across_entity_types` and
+  `test_audit_firm_seed_is_idempotent`, covering the node/relationship-derivation side for all
+  6 entity types. REQUIREMENTS.md marks GVER-03 Complete as of 05-02.
 
 - 05-01: `uv sync`/`uv run` for `tests/mdm/*` requires the `mdm` extra (for `sqlalchemy` via
-  `tests/mdm/conftest.py`), not just `s3`+`snowflake` — future 05-02/05-03 plan verify commands
+  `tests/mdm/conftest.py`), not just `s3`+`snowflake` — future 05-03 plan verify commands
   should include `--extra mdm`.
+
+- 05-02: `MdmEntity` has no `is_active` column (unlike `MdmRelationshipInstance`/
+  `MdmRelationshipType`/`MdmEntityTypeDefinition`) — `is_quarantined.is_(False)` is the correct
+  "live entity" filter for node-count idempotency assertions, since resolvers upsert-by-identity
+  rather than soft-delete.
+
+- 05-02: Real-session tests that exercise `MDMPipeline.run_companies`/`run_advisers`/etc. must
+  independently seed `MdmSourcePriority` (`entity_type='all'`) rows — `MDMRuleEngine.load()`
+  raises `KeyError` without them, and the shared `_seed_registry()` fixture in
+  `tests/mdm/test_pipeline_relationships.py` does not provide them (no prior test in that file
+  exercised node resolution against a real session).
 
 ### Blockers
 
@@ -123,3 +138,14 @@ rate-limited to 9 req/sec per ECS task. One known low-severity residual gap: the
 test script for OBS-01 (`scripts/ops/test-failure-surfacing.sh`) has its own injection-mechanism
 race condition — definition-level verification is complete, runtime re-test tooling was never
 redesigned.
+
+## Performance Metrics
+
+| Phase | Plan | Duration | Notes |
+|-------|------|----------|-------|
+| Phase 05 P02 | 25min | 2 tasks | 1 files |
+
+## Decisions
+
+- [Phase ?]: 05-02: MdmEntity has no is_active column -- is_quarantined.is_(False) is the correct 'live entity' filter for node-idempotency count assertions (resolvers upsert-by-identity, not soft-delete).
+- [Phase ?]: 05-02: GVER-03 is now fully satisfied -- both node/relationship-derivation idempotency (this plan) and graph-sync/full-rebuild idempotency (05-01) have committed real-DB regression tests.
