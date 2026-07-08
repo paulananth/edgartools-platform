@@ -417,8 +417,19 @@ def test_sync_graph_uses_snowflake_executor_without_neo4j_credentials(monkeypatc
 
 
 def test_verify_graph_reports_strict_snowflake_parity(monkeypatch, capsys):
+    # Node/relationship rows cover all 6 node types and all 4 populated relationship
+    # types (D-01 named checks require full coverage for an overall 'ok' result) --
+    # see test_verify_graph_named_node_checks_all_6_types_present_and_ok and
+    # test_verify_graph_named_relationship_checks_all_4_populated_types_present_and_ok
+    # for dedicated named-check coverage; this test asserts the aggregate/native_app
+    # gates.
     _clear_graph_env(monkeypatch)
-    connection = FakeSnowflakeConnection(result_sets=_strict_parity_results())
+    connection = FakeSnowflakeConnection(
+        result_sets=_strict_parity_results(
+            node_rows=_all_6_node_rows_at_parity(),
+            relationship_rows=_all_4_populated_relationship_rows_at_parity(),
+        )
+    )
     _patch_verify_settings(monkeypatch, connection)
 
     args = build_parser().parse_args(["mdm", "verify-graph"])
@@ -427,8 +438,8 @@ def test_verify_graph_reports_strict_snowflake_parity(monkeypatch, capsys):
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "ok"
-    assert payload["snowflake_graph_nodes"] == 3
-    assert payload["snowflake_graph_edges"] == 3
+    assert payload["snowflake_graph_nodes"] == 6
+    assert payload["snowflake_graph_edges"] == 4
     assert payload["node_parity"]["status"] == "ok"
     assert payload["relationship_parity"]["status"] == "ok"
     assert payload["native_app"]["status"] == "ok"
@@ -444,22 +455,7 @@ def test_verify_graph_reports_strict_snowflake_parity(monkeypatch, capsys):
         "graph_schema_sample",
         "wcc",
     ]
-    assert payload["node_parity"]["by_entity_type"] == [
-        {
-            "entity_type": "company",
-            "mdm_active_count": 2,
-            "snowflake_graph_node_count": 2,
-            "mdm_minus_graph": 0,
-            "graph_minus_mdm": 0,
-        },
-        {
-            "entity_type": "person",
-            "mdm_active_count": 1,
-            "snowflake_graph_node_count": 1,
-            "mdm_minus_graph": 0,
-            "graph_minus_mdm": 0,
-        },
-    ]
+    assert payload["node_parity"]["by_entity_type"] == _all_6_node_rows_at_parity_payload()
     assert payload["diagnostics"] == {
         "missing_graph_nodes": [],
         "extra_graph_nodes": [],
@@ -507,9 +503,15 @@ def test_verify_graph_fails_hard_when_native_app_grant_missing(monkeypatch, caps
 
 
 def test_verify_graph_skip_native_app_is_explicit_offline_only(monkeypatch, capsys):
+    # Full node/relationship coverage required for an overall 'ok' result under the
+    # D-01 named checks (see test_verify_graph_reports_strict_snowflake_parity).
     _clear_graph_env(monkeypatch)
     connection = FakeSnowflakeConnection(
-        result_sets=_strict_parity_results(include_native_app=False)
+        result_sets=_strict_parity_results(
+            node_rows=_all_6_node_rows_at_parity(),
+            relationship_rows=_all_4_populated_relationship_rows_at_parity(),
+            include_native_app=False,
+        )
     )
     _patch_verify_settings(monkeypatch, connection)
 
@@ -680,6 +682,29 @@ def _all_6_node_rows_at_parity() -> list[dict[str, object]]:
     ]
 
 
+def _all_6_node_rows_at_parity_payload() -> list[dict[str, object]]:
+    # The by_entity_type payload shape (lowercase keys) matching
+    # _all_6_node_rows_at_parity()'s raw SQL row shape, for asserting
+    # node_parity["by_entity_type"] directly.
+    return [
+        {
+            "entity_type": entity_type,
+            "mdm_active_count": 1,
+            "snowflake_graph_node_count": 1,
+            "mdm_minus_graph": 0,
+            "graph_minus_mdm": 0,
+        }
+        for entity_type in (
+            "adviser",
+            "audit_firm",
+            "company",
+            "fund",
+            "person",
+            "security",
+        )
+    ]
+
+
 def _all_4_populated_relationship_rows_at_parity() -> list[dict[str, object]]:
     # D-01 / EDGE-01..04: one parity row per already-populated relationship type.
     return [
@@ -700,7 +725,10 @@ def test_verify_graph_named_node_checks_all_6_types_present_and_ok(monkeypatch, 
     _patch_verify_settings(
         monkeypatch,
         FakeSnowflakeConnection(
-            result_sets=_strict_parity_results(node_rows=_all_6_node_rows_at_parity())
+            result_sets=_strict_parity_results(
+                node_rows=_all_6_node_rows_at_parity(),
+                relationship_rows=_all_4_populated_relationship_rows_at_parity(),
+            )
         ),
     )
 
@@ -801,7 +829,8 @@ def test_verify_graph_named_relationship_checks_all_4_populated_types_present_an
         monkeypatch,
         FakeSnowflakeConnection(
             result_sets=_strict_parity_results(
-                relationship_rows=_all_4_populated_relationship_rows_at_parity()
+                node_rows=_all_6_node_rows_at_parity(),
+                relationship_rows=_all_4_populated_relationship_rows_at_parity(),
             )
         ),
     )
@@ -910,7 +939,8 @@ def test_verify_graph_named_relationship_checks_exclude_unpopulated_types(
         monkeypatch,
         FakeSnowflakeConnection(
             result_sets=_strict_parity_results(
-                relationship_rows=_all_4_populated_relationship_rows_at_parity()
+                node_rows=_all_6_node_rows_at_parity(),
+                relationship_rows=_all_4_populated_relationship_rows_at_parity(),
             )
         ),
     )
