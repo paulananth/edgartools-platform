@@ -6,8 +6,8 @@ current_phase: 6
 current_phase_name: Relationship Investigation And Population
 current_plan: Not started
 status: planning
-stopped_at: Phase 5 Plan 03 complete -- NODE-01..06/EDGE-01..04 named per-type parity checks; Phase 5 fully done
-last_updated: "2026-07-08T07:38:50.943Z"
+stopped_at: Phase 6 context gathered
+last_updated: "2026-07-08T13:28:25.100Z"
 last_activity: 2026-07-08
 last_activity_desc: Phase 05 complete, transitioned to Phase 6
 progress:
@@ -58,14 +58,14 @@ REQUIREMENTS.md)
 
 ## Session Continuity
 
-**Last session:** 2026-07-08T07:02:19.144Z
+**Last session:** 2026-07-08T13:28:25.087Z
 
-**Stopped At:** Phase 5 Plan 03 complete -- NODE-01..06/EDGE-01..04 named per-type parity checks; Phase 5 fully done
+**Stopped At:** Phase 6 context gathered
 committed for all 6 MDM entity types (5 silver-resolved via `test_node_resolution_is_idempotent_across_entity_types`,
 plus the seeded `audit_firm` type via `test_audit_firm_seed_is_idempotent`). GVER-03 is now fully
 satisfied (node/relationship-derivation side here + graph-sync/full-rebuild side from 05-01).
 Committed on `claude/fix-pipelines-v2`. Not yet planned: 05-03.
-**Resume File:** None
+**Resume File:** .planning/workstreams/fix-pipelines/phases/06-relationship-investigation-and-population/06-CONTEXT.md
 
 ## Accumulated Context
 
