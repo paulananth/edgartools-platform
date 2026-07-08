@@ -195,3 +195,12 @@ None - no external service configuration required.
 ---
 *Phase: 06-relationship-investigation-and-population*
 *Completed: 2026-07-08*
+
+## Self-Check: PASSED
+
+- FOUND: edgar_warehouse/mdm/pipeline.py
+- FOUND: tests/mdm/test_pipeline_relationships.py
+- FOUND: .planning/workstreams/fix-pipelines/phases/06-relationship-investigation-and-population/06-01-SUMMARY.md
+- FOUND commit: 3268dc6 (test, Task 1 RED)
+- FOUND commit: decf6c9 (feat, Task 2 GREEN)
+- FOUND commit: 7b9b7d8 (docs, SUMMARY)
