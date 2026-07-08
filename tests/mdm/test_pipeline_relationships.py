@@ -1194,8 +1194,15 @@ class TestInstitutionalHoldsBatching:
         summary = pipe.derive_relationships(
             target_per_type=target_per_type, relationship_types=["INSTITUTIONAL_HOLDS"]
         )
+        # Compare edges by (adviser CIK, security CUSIP) rather than raw
+        # entity_id -- entity_ids are freshly-generated UUIDs per independent
+        # session, so single-batch and multi-batch runs (each its own session)
+        # never share entity_id values even when they represent the same
+        # logical edge.
+        adviser_cik_by_id = dict(session.execute(select(MdmAdviser.entity_id, MdmAdviser.cik)).all())
+        security_cusip_by_id = dict(session.execute(select(MdmSecurity.entity_id, MdmSecurity.cusip)).all())
         edges = {
-            (r.source_entity_id, r.target_entity_id)
+            (adviser_cik_by_id.get(r.source_entity_id), security_cusip_by_id.get(r.target_entity_id))
             for r in session.scalars(
                 select(MdmRelationshipInstance)
                 .join(MdmRelationshipType)
