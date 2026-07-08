@@ -359,6 +359,169 @@ def test_write_run_summary_missing_from_windows_key():
         assert exc.code != 0, f"Expected non-zero exit code, got {exc.code}"
 
 
+# ---------------------------------------------------------------------------
+# test_compute_windows_total_cik_limit_* — Phase 06-03 (fix-pipelines, Option B)
+#
+# compute-windows had no way to bound the TOTAL tracked-CIK universe it
+# processes (only --window-size, which chunks the full universe, not caps
+# it). --total-cik-limit slices the ordered CIK list to at most N entries
+# BEFORE windowing, so downstream WindowedBootstrap/Stage1B* Map states
+# (which independently re-derive CIK slices from cik_windows.jsonl's
+# offset/limit descriptors against the same ordered tracked-CIK query) never
+# see CIKs beyond the cap. See 06-03-LOAD-COVERAGE-EVIDENCE.md for the
+# Rule 4 architectural-blocker writeup this closes.
+# ---------------------------------------------------------------------------
+
+
+def test_compute_windows_total_cik_limit_cli_flag():
+    """compute-windows accepts an optional --total-cik-limit, default None."""
+    from edgar_warehouse.cli import build_parser
+
+    parser = build_parser()
+
+    args = parser.parse_args(["compute-windows", "--total-cik-limit", "150"])
+    assert args.total_cik_limit == 150
+
+    args_default = parser.parse_args(["compute-windows"])
+    assert args_default.total_cik_limit is None
+
+
+def test_compute_windows_total_cik_limit_handler_rejects_negative():
+    """The compute-windows handler rejects --total-cik-limit < 0 with exit code 2."""
+    import argparse
+
+    from edgar_warehouse.cli import _handle_compute_windows
+
+    for bad_value in (-1, -100):
+        args = argparse.Namespace(window_size=500, total_cik_limit=bad_value, run_id="r")
+        assert _handle_compute_windows(args) == 2
+
+
+def test_compute_windows_total_cik_limit_handler_accepts_zero_as_no_limit_sentinel():
+    """0 is a valid sentinel meaning 'no limit' (matches the Step Functions default-injection
+    contract), so the handler must dispatch it, not reject it."""
+    import argparse
+    from unittest.mock import patch
+
+    from edgar_warehouse.cli import _handle_compute_windows
+
+    args = argparse.Namespace(window_size=500, total_cik_limit=0, run_id="r")
+    with patch("edgar_warehouse.cli.run_command", return_value=0) as mock_run:
+        result = _handle_compute_windows(args)
+    assert result == 0
+    mock_run.assert_called_once_with("compute-windows", args)
+
+
+def test_compute_windows_total_cik_limit_bounds_universe():
+    """--total-cik-limit caps the ordered CIK universe (and derived windows) compute-windows writes."""
+    import json
+    from unittest.mock import MagicMock, patch
+
+    # 7 tracked CIKs, window_size=3, total_cik_limit=4 -> only first 4 CIKs
+    # windowed: [0..3), [3..4) = 2 windows (not the 3 windows an unbounded run would produce).
+    fake_ciks = [100, 200, 300, 400, 500, 600, 700]
+
+    written: dict[str, str] = {}
+
+    def capture_write(relative_path: str, content: str) -> str:
+        written[relative_path] = content
+        return relative_path
+
+    mock_context = MagicMock()
+    mock_context.bronze_root.write_text.side_effect = capture_write
+
+    with (
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._build_warehouse_context",
+            return_value=mock_context,
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage",
+        ),
+    ):
+        from edgar_warehouse.application.warehouse_orchestrator import _capture_bronze_raw
+        mock_context.runtime_mode = "bronze_capture"
+
+        fake_db = MagicMock()
+        fake_db.start_sync_run = MagicMock()
+        fake_db.get_tracked_ciks.return_value = fake_ciks
+        raw_writes, metrics = _capture_bronze_raw(
+            context=mock_context,
+            db=fake_db,
+            command_name="compute-windows",
+            arguments={
+                "window_size": 3,
+                "run_id": "test-run-limit",
+                "total_cik_limit": 4,
+                "include_reference_refresh": False,
+            },
+            scope={"window_size": 3, "run_id": "test-run-limit", "total_cik_limit": 4},
+            now=__import__("datetime").datetime(2026, 1, 1, tzinfo=__import__("datetime").timezone.utc),
+            sync_run_id="test-run-limit",
+        )
+
+    from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
+    windows_rel = default_path_resolver().cik_windows_path("test-run-limit")
+    snapshot_rel = default_path_resolver().cik_snapshot_path("test-run-limit")
+
+    windows_lines = [line for line in written[windows_rel].splitlines() if line.strip()]
+    assert len(windows_lines) == 2, f"Expected 2 windows for 4 (capped) CIKs / size=3, got {len(windows_lines)}"
+    assert json.loads(windows_lines[0]) == {"window_offset": 0, "window_limit": 3}
+    assert json.loads(windows_lines[1]) == {"window_offset": 3, "window_limit": 1}
+
+    snapshot_lines = [line for line in written[snapshot_rel].splitlines() if line.strip()]
+    assert len(snapshot_lines) == 4, f"Expected snapshot capped to 4 CIKs, got {len(snapshot_lines)}"
+    assert [json.loads(line)["cik"] for line in snapshot_lines] == [100, 200, 300, 400]
+
+    assert metrics["cik_count"] == 4
+    assert metrics["window_count"] == 2
+
+
+def test_compute_windows_orchestrator_rejects_non_positive_total_cik_limit():
+    """_capture_bronze_raw raises WarehouseRuntimeError for --total-cik-limit <= 0."""
+    from unittest.mock import MagicMock, patch
+
+    from edgar_warehouse.application.errors import WarehouseRuntimeError
+
+    mock_context = MagicMock()
+    mock_context.runtime_mode = "bronze_capture"
+
+    with (
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._build_warehouse_context",
+            return_value=mock_context,
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage",
+        ),
+    ):
+        from edgar_warehouse.application.warehouse_orchestrator import _capture_bronze_raw
+
+        fake_db = MagicMock()
+        fake_db.get_tracked_ciks.return_value = [100, 200]
+        with pytest.raises(WarehouseRuntimeError, match="total-cik-limit"):
+            _capture_bronze_raw(
+                context=mock_context,
+                db=fake_db,
+                command_name="compute-windows",
+                arguments={
+                    "window_size": 3,
+                    "run_id": "test-run-bad",
+                    "total_cik_limit": -1,
+                    "include_reference_refresh": False,
+                },
+                scope={"window_size": 3, "run_id": "test-run-bad", "total_cik_limit": -1},
+                now=__import__("datetime").datetime(2026, 1, 1, tzinfo=__import__("datetime").timezone.utc),
+                sync_run_id="test-run-bad",
+            )
+
+
 def test_write_run_summary_empty_windows_raises():
     """write-run-summary exits with an actionable error when cik_windows.jsonl is empty."""
     from unittest.mock import MagicMock, patch

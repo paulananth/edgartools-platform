@@ -1498,20 +1498,20 @@ mdm_seed_universe = ecs_state(mdm_medium_arn,
     next_state="WindowSizeCheck", retry_secs=60)
 mdm_seed_universe["ResultPath"] = None
 
-# (2) WindowSizeCheck → WindowSizeDefault → ComputeWindows
+# (2) WindowSizeCheck → WindowSizeDefault → TotalCikLimitCheck → TotalCikLimitDefault → ComputeWindows
 # D-15 backward-compat: SM input {} is valid because WindowSizeDefault injects window_size=500
 # when the caller omits it.  The Choice state routes:
-#   - $.window_size IS_PRESENT (caller supplied a value) → skip default, go straight to ComputeWindows
+#   - $.window_size IS_PRESENT (caller supplied a value) → skip default, go to TotalCikLimitCheck
 #   - $.window_size absent (e.g. input was {}) → WindowSizeDefault injects the integer 500
-#     at $.window_size via ResultPath, then falls through to ComputeWindows
+#     at $.window_size via ResultPath, then falls through to TotalCikLimitCheck
 window_size_check = {
     "Type": "Choice",
-    "Comment": "Route to ComputeWindows directly when caller supplied window_size; otherwise inject the default.",
+    "Comment": "Route to TotalCikLimitCheck directly when caller supplied window_size; otherwise inject the default.",
     "Choices": [
         {
             "Variable": "$.window_size",
             "IsPresent": True,
-            "Next": "ComputeWindows",
+            "Next": "TotalCikLimitCheck",
         }
     ],
     "Default": "WindowSizeDefault",
@@ -1526,6 +1526,42 @@ window_size_default = {
                "$.window_size = 500 (not {\"window_size\": 500}) for ComputeWindows.",
     "Result": 500,
     "ResultPath": "$.window_size",
+    "Next": "TotalCikLimitCheck",
+}
+
+# (2b) TotalCikLimitCheck → TotalCikLimitDefault → ComputeWindows
+# Same backward-compat pattern as WindowSizeCheck/Default above (D-15), for an optional
+# $.total_cik_limit SM input field. Added to give load_history a real CIK-scoping bound at
+# trigger time (fix-pipelines 06-03 Rule 4 finding: previously the ONLY exposed bound was
+# window_size, which chunks the full tracking_status IN ('active','bootstrap_pending')
+# universe rather than capping it — every run processed the entire tracked universe
+# regardless of window_size). $.total_cik_limit IS_PRESENT (caller supplied a value, e.g.
+# {"total_cik_limit": 150} for a bounded investigative sample) routes straight to
+# ComputeWindows; absent → TotalCikLimitDefault injects the sentinel 0, which
+# compute-windows' CLI/orchestrator treat as "no limit" (unbounded, full-universe — the
+# pre-existing default behavior every caller of `--input '{}'` already relies on).
+total_cik_limit_check = {
+    "Type": "Choice",
+    "Comment": "Route to ComputeWindows directly when caller supplied total_cik_limit; otherwise inject the no-limit default.",
+    "Choices": [
+        {
+            "Variable": "$.total_cik_limit",
+            "IsPresent": True,
+            "Next": "ComputeWindows",
+        }
+    ],
+    "Default": "TotalCikLimitDefault",
+}
+
+# Pass state: writes integer 0 (the "no limit" sentinel — compute-windows treats
+# total_cik_limit in (None, "", 0, "0") as unbounded) directly to $.total_cik_limit.
+total_cik_limit_default = {
+    "Type": "Pass",
+    "Comment": "Inject the no-limit sentinel 0 when caller passed {} or omitted total_cik_limit, "
+               "preserving pre-existing full-universe behavior for every caller that doesn't "
+               "opt into CIK-scoping.",
+    "Result": 0,
+    "ResultPath": "$.total_cik_limit",
     "Next": "ComputeWindows",
 }
 
@@ -1536,8 +1572,11 @@ window_size_default = {
 # (warehouse_orchestrator._sync_mdm_tracking_status). Filtering ComputeWindows to 'active' only
 # would compute zero windows for every freshly-seeded environment, since nothing is 'active' yet.
 # --window-size uses States.Format to coerce the integer $.window_size to a string for argv.
+# --total-cik-limit (optional CIK-scoping bound, see TotalCikLimitCheck/Default above) is always
+# passed explicitly (0 = no limit) since WindowSizeCheck/TotalCikLimitCheck guarantee both
+# $.window_size and $.total_cik_limit are present by the time this state runs.
 compute_windows = ecs_state(wh_medium_arn,
-    "States.Array('compute-windows', '--window-size', States.Format('{}', $.window_size), '--run-id', $$.Execution.Name)",
+    "States.Array('compute-windows', '--window-size', States.Format('{}', $.window_size), '--total-cik-limit', States.Format('{}', $.total_cik_limit), '--run-id', $$.Execution.Name)",
     next_state="Stage1Parallel")
 
 # (4) Stage1Parallel: Branch A ownership bootstrap. Branch B fundamentals is
@@ -1768,6 +1807,8 @@ definition = {
         "MdmSeedUniverse":   mdm_seed_universe,
         "WindowSizeCheck":   window_size_check,
         "WindowSizeDefault": window_size_default,
+        "TotalCikLimitCheck":   total_cik_limit_check,
+        "TotalCikLimitDefault": total_cik_limit_default,
         "ComputeWindows":    compute_windows,
         "Stage1Parallel":    stage1_parallel,
         "Stage1BEntityFacts": fundamentals_entity_facts,

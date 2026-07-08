@@ -156,6 +156,15 @@ def _handle_compute_windows(args: argparse.Namespace) -> int:
         import sys
         print(f"error: --window-size must be a positive integer, got {args.window_size}", file=sys.stderr)
         return 2
+    total_cik_limit = getattr(args, "total_cik_limit", None)
+    # 0 is a valid sentinel meaning "no limit" (matches the Step Functions default-injection
+    # contract in write_load_history_definition, where an omitted $.total_cik_limit is
+    # defaulted to 0 before ComputeWindows always receives an explicit --total-cik-limit
+    # value). Only negative values are rejected.
+    if total_cik_limit is not None and total_cik_limit < 0:
+        import sys
+        print(f"error: --total-cik-limit must be a non-negative integer, got {total_cik_limit}", file=sys.stderr)
+        return 2
     return run_command("compute-windows", args)
 
 
@@ -607,6 +616,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=500,
         help="Number of CIKs per window (default: 500). Must be > 0.",
+    )
+    compute_windows.add_argument(
+        "--total-cik-limit",
+        type=int,
+        default=None,
+        help=(
+            "Cap the total number of tracked CIKs (across all windows, ordered ascending "
+            "by CIK) this run processes. Omit, or pass 0, for no limit (process the full "
+            "tracked active/bootstrap_pending universe). Used to bound ad-hoc/investigative "
+            "load_history runs to a small company sample without mutating MDM "
+            "tracking_status. Must be a non-negative integer."
+        ),
     )
     _add_run_id_arg(compute_windows)
     compute_windows.set_defaults(handler=_handle_compute_windows)
