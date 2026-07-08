@@ -10,19 +10,19 @@ updated: 2026-07-08
 
 ### Node Verification — MDM ↔ Graph
 
-- [ ] **NODE-01**: MDM active `company` entity count matches Snowflake `GRAPH_NODE_COMPANY` view count.
-- [ ] **NODE-02**: MDM active `adviser` entity count matches `GRAPH_NODE_ADVISER` view count.
-- [ ] **NODE-03**: MDM active `person` entity count matches `GRAPH_NODE_PERSON` view count.
-- [ ] **NODE-04**: MDM active `security` entity count matches `GRAPH_NODE_SECURITY` view count.
-- [ ] **NODE-05**: MDM active `fund` entity count matches `GRAPH_NODE_FUND` view count.
+- [x] **NODE-01**: MDM active `company` entity count matches Snowflake `GRAPH_NODE_COMPANY` view count.
+- [x] **NODE-02**: MDM active `adviser` entity count matches `GRAPH_NODE_ADVISER` view count.
+- [x] **NODE-03**: MDM active `person` entity count matches `GRAPH_NODE_PERSON` view count.
+- [x] **NODE-04**: MDM active `security` entity count matches `GRAPH_NODE_SECURITY` view count.
+- [x] **NODE-05**: MDM active `fund` entity count matches `GRAPH_NODE_FUND` view count.
 - [x] **NODE-06**: A `GRAPH_NODE_AUDIT_FIRM` view exists (currently missing) and its count matches MDM active `audit_firm` entity count (10 seeded Big4/Next6 firms).
 
 ### Relationship Verification — MDM ↔ Graph
 
-- [ ] **EDGE-01**: `IS_INSIDER` (person→company) — populated; graph parity holds.
-- [ ] **EDGE-02**: `HOLDS` (person→security) — populated; graph parity holds.
-- [ ] **EDGE-03**: `COMPANY_HOLDS` (company→security) — populated; graph parity holds.
-- [ ] **EDGE-04**: `ISSUED_BY` (security→company) — populated; graph parity holds.
+- [x] **EDGE-01**: `IS_INSIDER` (person→company) — populated; graph parity holds.
+- [x] **EDGE-02**: `HOLDS` (person→security) — populated; graph parity holds.
+- [x] **EDGE-03**: `COMPANY_HOLDS` (company→security) — populated; graph parity holds.
+- [x] **EDGE-04**: `ISSUED_BY` (security→company) — populated; graph parity holds.
 - [ ] **EDGE-05**: `IS_ENTITY_OF` (adviser→company) — **no bronze/silver artifact dependency**: pairing comes from MDM's own `mdm_adviser.linked_company_entity_id` resolver field, not from a source document. Currently zero; investigate whether the resolver step that populates this field has ever run, and either populate or document why linkage can't be established (e.g. no adviser CIK in-universe also files as a company).
 - [ ] **EDGE-06**: `IS_PERSON_OF` (adviser→person) — **no bronze/silver artifact dependency**: pairing comes from an adviser↔person CIK crosswalk (`MdmAdviser.cik == MdmPerson.owner_cik`), not from a source document. Currently zero; investigate whether any individual-adviser CIKs in-universe also have Form 3/4/5-derived `MdmPerson` records, and either populate or document why no crosswalk matches exist.
 - [ ] **EDGE-07**: `MANAGES_FUND` (adviser→fund) — **source artifact: ADV primary attachment documents** (feed `sec_adv_private_fund`). Confirmed unobtainable: all 30 ADV filings in the active universe are EDGAR paper filings with no electronic document (see `.planning/workstreams/claude-mdm-source-recovery/FINDINGS.md`). Document as a source-coverage exclusion — no further artifact action is possible from EDGAR.
@@ -71,16 +71,16 @@ mechanisms that aren't tied to any single relationship type.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| NODE-01 | Phase 5 | Pending |
-| NODE-02 | Phase 5 | Pending |
-| NODE-03 | Phase 5 | Pending |
-| NODE-04 | Phase 5 | Pending |
-| NODE-05 | Phase 5 | Pending |
+| NODE-01 | Phase 5 | Complete |
+| NODE-02 | Phase 5 | Complete |
+| NODE-03 | Phase 5 | Complete |
+| NODE-04 | Phase 5 | Complete |
+| NODE-05 | Phase 5 | Complete |
 | NODE-06 | Phase 5 | Complete |
-| EDGE-01 | Phase 5 | Pending |
-| EDGE-02 | Phase 5 | Pending |
-| EDGE-03 | Phase 5 | Pending |
-| EDGE-04 | Phase 5 | Pending |
+| EDGE-01 | Phase 5 | Complete |
+| EDGE-02 | Phase 5 | Complete |
+| EDGE-03 | Phase 5 | Complete |
+| EDGE-04 | Phase 5 | Complete |
 | GVER-03 | Phase 5 | Complete |
 | EDGE-05 | Phase 6 | Pending |
 | EDGE-06 | Phase 6 | Pending |

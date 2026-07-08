@@ -6,16 +6,16 @@ current_phase: 5
 current_phase_name: Node And Populated-Relationship Graph Parity
 current_plan: 3 of 3 in current phase (05-02 complete)
 status: in_progress
-stopped_at: Phase 5 Plan 02 complete
-last_updated: "2026-07-08T06:37:58.162Z"
+stopped_at: Phase 5 Plan 03 complete -- NODE-01..06/EDGE-01..04 named per-type parity checks; Phase 5 fully done
+last_updated: "2026-07-08T07:02:19.159Z"
 last_activity: 2026-07-08
 last_activity_desc: 05-02 complete (node-resolution idempotency tests for all 6 MDM entity types; GVER-03 fully satisfied)
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 67
+  completed_plans: 3
+  percent: 20
 ---
 
 # Project State — fix-pipelines
@@ -58,14 +58,14 @@ REQUIREMENTS.md)
 
 ## Session Continuity
 
-**Last session:** 2026-07-08T06:36:52.245Z
+**Last session:** 2026-07-08T07:02:19.144Z
 
-**Stopped At:** Phase 5 Plan 02 complete — real-DB node-resolution idempotency regression tests
+**Stopped At:** Phase 5 Plan 03 complete -- NODE-01..06/EDGE-01..04 named per-type parity checks; Phase 5 fully done
 committed for all 6 MDM entity types (5 silver-resolved via `test_node_resolution_is_idempotent_across_entity_types`,
 plus the seeded `audit_firm` type via `test_audit_firm_seed_is_idempotent`). GVER-03 is now fully
 satisfied (node/relationship-derivation side here + graph-sync/full-rebuild side from 05-01).
 Committed on `claude/fix-pipelines-v2`. Not yet planned: 05-03.
-**Resume File:** .planning/workstreams/fix-pipelines/phases/05-node-and-populated-relationship-graph-parity/05-02-SUMMARY.md
+**Resume File:** None
 
 ## Accumulated Context
 
@@ -144,8 +144,11 @@ redesigned.
 | Phase | Plan | Duration | Notes |
 |-------|------|----------|-------|
 | Phase 05 P02 | 25min | 2 tasks | 1 files |
+| Phase 05 P03 | 25min | 2 tasks | 2 files |
 
 ## Decisions
 
 - [Phase ?]: 05-02: MdmEntity has no is_active column -- is_quarantined.is_(False) is the correct 'live entity' filter for node-idempotency count assertions (resolvers upsert-by-identity, not soft-delete).
 - [Phase ?]: 05-02: GVER-03 is now fully satisfied -- both node/relationship-derivation idempotency (this plan) and graph-sync/full-rebuild idempotency (05-01) have committed real-DB regression tests.
+- [Phase ?]: 05-03: Named per-type parity checks in verify-graph fail closed when a type is entirely absent from parity rows, closing the FULL-OUTER-JOIN silent-omission gap -- POPULATED_RELATIONSHIP_TYPES scopes edge checks to only the 4 already-populated types (COMPANY_HOLDS, HOLDS, ISSUED_BY, IS_INSIDER).
+- [Phase ?]: 05-03: Phase 5 is now fully complete -- NODE-01..06, EDGE-01..04, and GVER-03 (05-01/05-02) all satisfied.

@@ -19,7 +19,7 @@ reference library.
 
 ## Phases
 
-- [ ] **Phase 5: Node And Populated-Relationship Graph Parity** - every MDM node type syncs to a verifiable per-type graph view, the 4 already-populated relationship types have proven MDM↔graph parity, and derivation/sync idempotency is established as a repeatable check.
+- [x] **Phase 5: Node And Populated-Relationship Graph Parity** - every MDM node type syncs to a verifiable per-type graph view, the 4 already-populated relationship types have proven MDM↔graph parity, and derivation/sync idempotency is established as a repeatable check. (completed 2026-07-08)
 - [ ] **Phase 6: Relationship Investigation And Population** - root-cause each still-ambiguous zero relationship type against its actual source artifact (or confirm it has none), and populate whichever ones the investigation shows are unblocked.
 - [ ] **Phase 7: Source-Coverage Exclusions And Artifact Hygiene** - formally document the two artifact-confirmed-unsatisfiable relationship types, and close the two cross-cutting artifact-integrity gaps found during this milestone's investigation.
 - [ ] **Phase 8: Neo4j Native App Verification Gaps** - `mdm verify-graph` cleanly separates environment/readiness problems from real parity problems, and app-side capability gaps are resolved or conclusively documented.
@@ -42,7 +42,7 @@ reference library.
   4. Running MDM relationship derivation twice against unchanged silver data produces zero new/duplicate active rows for the 4 populated types.
   5. Running `mdm sync-graph` twice against unchanged MDM data produces stable node and edge counts.
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 **Wave 1**
 
 - [x] 05-01-PLAN.md — Emit GRAPH_NODE_AUDITFIRM view + graph-sync full-rebuild idempotency test (NODE-06, GVER-03)
@@ -50,7 +50,7 @@ reference library.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 05-03-PLAN.md — Named per-type verify-graph parity checks for 6 node + 4 populated edge types (NODE-01..06, EDGE-01..04)
+- [x] 05-03-PLAN.md — Named per-type verify-graph parity checks for 6 node + 4 populated edge types (NODE-01..06, EDGE-01..04)
 
 **D-06 scope note (plan-checker WARNING resolved 2026-07-08):** 05-01/02/03 are dev-only —
 success criteria 1-5 above are all dev-side (`EDGARTOOLS_DEV`). CONTEXT.md D-06 ("once dev is
@@ -124,7 +124,7 @@ dropped.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 5. Node And Populated-Relationship Graph Parity | v2.0 fix-pipelines | 2/3 | In Progress|  |
+| 5. Node And Populated-Relationship Graph Parity | v2.0 fix-pipelines | 3/3 | Complete   | 2026-07-08 |
 | 6. Relationship Investigation And Population | v2.0 fix-pipelines | 0/TBD | Not started | - |
 | 7. Source-Coverage Exclusions And Artifact Hygiene | v2.0 fix-pipelines | 0/TBD | Not started | - |
 | 8. Neo4j Native App Verification Gaps | v2.0 fix-pipelines | 0/TBD | Not started | - |

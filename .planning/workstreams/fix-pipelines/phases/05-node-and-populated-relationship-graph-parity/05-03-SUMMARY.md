@@ -162,3 +162,8 @@ None — no external service configuration required. All verification used the e
 ---
 *Phase: 05-node-and-populated-relationship-graph-parity*
 *Completed: 2026-07-08*
+
+## Self-Check: PASSED
+
+All modified files verified present on disk; all task commits (ce77957, 05d80cf) and the
+SUMMARY commit (e97abfd) verified present in git log.
