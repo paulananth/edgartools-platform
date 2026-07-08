@@ -3,13 +3,19 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: fix-pipelines — Pipeline Data-Source Completeness & Verification
 current_phase: 5
-current_phase_name: node-and-populated-relationship-graph-parity
+current_phase_name: Node And Populated-Relationship Graph Parity
+current_plan: none yet — next step is `/gsd-discuss-phase 5` or `/gsd-plan-phase 5`
 status: planning
-stopped_at: Requirements (26, across NODE/EDGE/GVER/ARTF/EDGX) and ROADMAP.md (phases 5-9)
-  written and committed. Ready for /gsd-discuss-phase 5 or /gsd-plan-phase 5.
-last_updated: "2026-07-08T00:00:00.000Z"
-last_activity: 2026-07-08 -- Milestone v2.0 defined via /gsd-new-milestone. v1.0 (Pipeline
-  Observability) is archived below and in milestones/v1.0-*.
+stopped_at: Phase 5 context gathered
+last_updated: "2026-07-08T05:34:48.223Z"
+last_activity: 2026-07-08
+last_activity_desc: v2.0 requirements + roadmap committed
+progress:
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State — fix-pipelines
@@ -52,9 +58,9 @@ REQUIREMENTS.md)
 
 ## Session Continuity
 
-**Stopped At:** Milestone v2.0 initialized 2026-07-08 (requirements + roadmap committed on
+**Stopped At:** Phase 5 context gathered (CONTEXT.md + DISCUSSION-LOG.md committed on
 `claude/fix-pipelines-v2`). Not yet planned or executed.
-**Resume File:** None
+**Resume File:** .planning/workstreams/fix-pipelines/phases/05-node-and-populated-relationship-graph-parity/05-CONTEXT.md
 
 ## Accumulated Context
 
@@ -63,12 +69,15 @@ REQUIREMENTS.md)
 - Artifact triage is embedded per-relationship (EDGE-05..11) rather than as a separate generic
   audit, so each zero relationship type's source artifact (or explicit absence of one) is
   traceable — user-directed adjustment during milestone setup (2026-07-08).
+
 - AUDITED_BY (EDGE-10) and any fundamentals-pipeline work must coordinate with the active
   `fundamental-factors-v2` workstream (Codex) — do not run fundamentals in dev without checking
   for overlap first.
+
 - MANAGES_FUND (EDGE-07) is a confirmed dead end from EDGAR: all 30 ADV filings in the active
   universe are paper filings with no electronic document. See
   `.planning/workstreams/claude-mdm-source-recovery/FINDINGS.md`.
+
 - This workstream continues phase numbering from v1.0 (ended at Phase 4) — v2.0 starts at
   Phase 5, per default (non-reset) numbering behavior.
 
