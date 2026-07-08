@@ -4,12 +4,12 @@ milestone: v2.0
 milestone_name: fix-pipelines — Pipeline Data-Source Completeness & Verification
 current_phase: 6
 current_phase_name: Relationship Investigation And Population
-current_plan: Not started
-status: planning
-stopped_at: Phase 6 context gathered
-last_updated: "2026-07-08T13:28:25.100Z"
+current_plan: 06-01 (wave 1 of 4)
+status: planned
+stopped_at: Phase 6 planned (6 plans, 4 waves) — ready to execute
+last_updated: "2026-07-08T14:10:34.000Z"
 last_activity: 2026-07-08
-last_activity_desc: Phase 05 complete, transitioned to Phase 6
+last_activity_desc: Phase 6 planned - 6 plans across 4 waves (06-01..06-06), plan-checker passed, committed to claude/fix-pipelines-v2
 progress:
   total_phases: 5
   completed_phases: 1
@@ -23,11 +23,11 @@ progress:
 ## Current Position
 
 Phase: 6 — Relationship Investigation And Population
-Plan: 3 of 3 in current phase
-Status: 05-02 complete; ready to plan/execute 05-03
-Last activity: 2026-07-08 — Phase 05 complete, transitioned to Phase 6
+Plan: 0 of 6 in current phase (ready to execute Wave 1: 06-01, 06-02)
+Status: Phase 6 planned — 6 plans across 4 waves, plan-checker passed, ready to execute
+Last activity: 2026-07-08 — Phase 6 planned (6 plans, 4 waves)
 
-[███████░░░] 67% (0/5 phases complete, 2/3 plans in phase 5)
+[██░░░░░░░░] 20% (1/5 phases complete; phase 6 planned, 0/6 plans executed)
 
 ## Milestone Context
 
@@ -45,27 +45,29 @@ REQUIREMENTS.md)
 
 | Phase | Goal | Requirements | Status |
 |-------|------|--------------|--------|
-| 5 — Node And Populated-Relationship Graph Parity | All 6 node types + 4 populated relationship types verified, idempotency established | NODE-01..06, EDGE-01..04, GVER-03 | Not started |
-| 6 — Relationship Investigation And Population | Root-cause + populate the 5 ambiguous zero relationship types against their actual artifacts | EDGE-05, 06, 09, 10, 11 | Not started |
+| 5 — Node And Populated-Relationship Graph Parity | All 6 node types + 4 populated relationship types verified, idempotency established | NODE-01..06, EDGE-01..04, GVER-03 | Complete |
+| 6 — Relationship Investigation And Population | Root-cause + populate the 5 ambiguous zero relationship types against their actual artifacts | EDGE-05, 06, 09, 10, 11 | Planned (6 plans, 4 waves) |
 | 7 — Source-Coverage Exclusions And Artifact Hygiene | Document the 2 artifact-confirmed exclusions; fix silver-clobber + fetch-idempotency | EDGE-07, 08, ARTF-01, 02 | Not started |
 | 8 — Neo4j Native App Verification Gaps | verify-graph separates readiness vs parity; GRAPH_INFO/BFS/LIST_GRAPHS resolved or documented | GVER-01, 02 | Not started |
 | 9 — edgartools Crosscheck | Validate platform parsing vs edgartools; replace parsers where it's a clear win; audit API usage | EDGX-01..03 | Not started |
 
 ## Progress
 
-**Phases Complete:** 0/5
-**Current Plan:** Not started
+**Phases Complete:** 1/5
+**Current Plan:** Phase 6 planned, ready to execute (06-01 first, Wave 1)
 
 ## Session Continuity
 
-**Last session:** 2026-07-08T13:28:25.087Z
+**Last session:** 2026-07-08T14:10:34.000Z
 
-**Stopped At:** Phase 6 context gathered
-committed for all 6 MDM entity types (5 silver-resolved via `test_node_resolution_is_idempotent_across_entity_types`,
-plus the seeded `audit_firm` type via `test_audit_firm_seed_is_idempotent`). GVER-03 is now fully
-satisfied (node/relationship-derivation side here + graph-sync/full-rebuild side from 05-01).
-Committed on `claude/fix-pipelines-v2`. Not yet planned: 05-03.
-**Resume File:** .planning/workstreams/fix-pipelines/phases/06-relationship-investigation-and-population/06-CONTEXT.md
+**Stopped At:** Phase 6 planned — 6 plans across 4 waves (06-01..06-06), plan-checker passed
+(0 errors, 0 warnings), all 5 requirement IDs (EDGE-05/06/09/10/11) and all 5 CONTEXT.md
+decisions (D-01..D-05) covered. Committed on `claude/fix-pipelines-v2` (`c8e804a`). Research was
+explicitly skipped this run (rich CONTEXT.md already had file:line-level detail); no VALIDATION.md
+exists as a result — Nyquist Dimension 8 was skipped in the plan-checker, not failed.
+**Resume File:** Ready for `/gsd-execute-phase 6 --ws fix-pipelines` — Wave 1 (06-01, 06-02) runs
+autonomously; Wave 2 (06-03) and one plan in Wave 3 (06-05) each have a blocking human-verify
+checkpoint (fundamentals/Codex coordination, and the real bounded `load_history` AWS run).
 
 ## Accumulated Context
 
