@@ -309,6 +309,51 @@ def test_graph_sync_executor_materializes_filtered_graph_contract_without_creden
     }
 
 
+def test_graph_sync_is_idempotent_full_rebuild():
+    """GVER-03 (sync side, D-04/D-05): repeated sync-graph against unchanged MDM
+    state must be a stable no-op, not merely a one-time manual observation. The
+    graph-sync side rebuilds tables via CREATE OR REPLACE TABLE ... AS SELECT, so
+    idempotency is proven by showing two runs emit byte-identical SQL sequences,
+    stable node/edge counts, and never issue row-level accumulation verbs
+    (INSERT/MERGE/UPDATE/DELETE).
+    """
+    config = SnowflakeGraphSyncConfig(
+        target_database="EDGARTOOLS_DEV",
+        target_schema="NEO4J_GRAPH_MIGRATION",
+        mdm_schema="MDM_TEST",
+        entity_types=("company", "person"),
+        relationship_types=("IS_INSIDER", "HOLDS"),
+        limit=100,
+        limit_per_type=10,
+    )
+
+    first_connection = FakeGraphConnection()
+    first_executor = SnowflakeGraphSyncExecutor(first_connection)
+    first_result = first_executor.sync(config)
+    first_executed = list(first_connection.fake_cursor.executed)
+
+    second_connection = FakeGraphConnection()
+    second_executor = SnowflakeGraphSyncExecutor(second_connection)
+    second_result = second_executor.sync(config)
+    second_executed = list(second_connection.fake_cursor.executed)
+
+    assert first_executed == second_executed
+    assert first_result.node_count == second_result.node_count
+    assert first_result.edge_count == second_result.edge_count
+
+    allowed_leading_verbs = ("CREATE", "SELECT", "--")
+    forbidden_verbs = ("INSERT", "MERGE", "UPDATE", "DELETE")
+    for statement in first_executed + second_executed:
+        stripped = statement.strip()
+        upper = stripped.upper()
+        assert upper.startswith(allowed_leading_verbs), (
+            f"unexpected leading verb in graph-sync statement: {stripped[:80]!r}"
+        )
+        assert not any(upper.startswith(verb) for verb in forbidden_verbs), (
+            f"row-level accumulation verb found in graph-sync statement: {stripped[:80]!r}"
+        )
+
+
 def test_split_sql_statements_preserves_semicolon_inside_string_literal():
     statements = _split_sql_statements("SELECT 'a;b' AS value; SELECT 'c'';d' AS value;")
 
