@@ -76,12 +76,12 @@ dropped.
   5. AUDITED_BY derives nonzero rows in dev once the fundamentals entity-facts prerequisite (SEC companyfacts artifact, confirmed fetchable) lands, coordinated with the `fundamental-factors-v2` workstream to avoid overlap.
   6. Every relationship type investigated in this phase ends with either nonzero graph-verified rows or a written, evidenced source-coverage exclusion that names its artifact dependency (or explicit absence of one) — no type exits this phase in an undocumented zero state.
 
-**Plans**: 1/6 plans executed
+**Plans**: 2/6 plans executed
 
 **Wave 1** *(parallel — no load dependency)*
 
 - [x] 06-01-PLAN.md — INSTITUTIONAL_HOLDS CIK-range batched read (D-03, EDGE-11 code)
-- [ ] 06-02-PLAN.md — Root-cause the 2026-07-06 bootstrap Step Function failure + load_history readiness verdict (D-01)
+- [x] 06-02-PLAN.md — Root-cause the 2026-07-06 bootstrap Step Function failure + load_history readiness verdict (D-01)
 
 **Wave 2** *(the operational load — depends on Wave 1)*
 
@@ -143,7 +143,7 @@ dropped.
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 5. Node And Populated-Relationship Graph Parity | v2.0 fix-pipelines | 3/3 | Complete    | 2026-07-08 |
-| 6. Relationship Investigation And Population | v2.0 fix-pipelines | 1/6 | In Progress|  |
+| 6. Relationship Investigation And Population | v2.0 fix-pipelines | 2/6 | In Progress|  |
 | 7. Source-Coverage Exclusions And Artifact Hygiene | v2.0 fix-pipelines | 0/TBD | Not started | - |
 | 8. Neo4j Native App Verification Gaps | v2.0 fix-pipelines | 0/TBD | Not started | - |
 | 9. edgartools Crosscheck | v2.0 fix-pipelines | 0/TBD | Not started | - |
