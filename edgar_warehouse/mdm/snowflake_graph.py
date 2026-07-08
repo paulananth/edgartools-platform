@@ -30,6 +30,13 @@ ALLOWED_RELATIONSHIP_TYPES = (
     "ISSUED_BY",
     "MANAGES_FUND",
 )
+# D-01 / EDGE-01..04: the 4 relationship types already populated this milestone.
+# The remaining 7 ALLOWED_RELATIONSHIP_TYPES (AUDITED_BY, EMPLOYED_BY,
+# HAS_PARENT_COMPANY, INSTITUTIONAL_HOLDS, IS_ENTITY_OF, IS_PERSON_OF,
+# MANAGES_FUND) are intentionally excluded from named parity checks until
+# Phases 6-7 populate them -- named-checking a legitimately-zero type this
+# milestone does not yet cover would false-fail verify-graph (T-05-05).
+POPULATED_RELATIONSHIP_TYPES = ("COMPANY_HOLDS", "HOLDS", "ISSUED_BY", "IS_INSIDER")
 NODE_TABLES = (
     "MDM_GRAPH_NODES",
     "GRAPH_APP_NODES",
@@ -299,11 +306,21 @@ class SnowflakeGraphVerifier:
             not native_app["required"]
             or native_app["status"] == "ok"
         )
+        # NODE-01..06 / EDGE-01..04 (D-01): named per-type checks over the parity
+        # data already computed above -- no new SQL. A type missing entirely from
+        # the parity rows is a hard failure here even when it contributed no row to
+        # the aggregate node_parity/relationship_parity status (silent-omission gap).
+        node_named_checks = _named_node_parity_checks(node_parity)
+        relationship_named_checks = _named_relationship_parity_checks(relationship_parity)
+        named_checks_ok = all(
+            check["status"] == "ok" for check in node_named_checks
+        ) and all(check["status"] == "ok" for check in relationship_named_checks)
         passed = (
             node_parity["status"] == "ok"
             and relationship_parity["status"] == "ok"
             and diagnostics_clean
             and native_app_ok
+            and named_checks_ok
         )
         payload = {
             "status": "ok" if passed else "failed",
@@ -315,6 +332,10 @@ class SnowflakeGraphVerifier:
             },
             "node_parity": node_parity,
             "relationship_parity": relationship_parity,
+            "named_checks": {
+                "node_parity": node_named_checks,
+                "relationship_parity": relationship_named_checks,
+            },
             "diagnostics": diagnostics,
             "native_app": native_app,
         }
@@ -806,6 +827,11 @@ SELECT NODEID, LABEL, ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_UPDATED_AT, CREATED_AT,
 FROM {_fq(context, "MDM_GRAPH_NODES")}
 WHERE ENTITY_TYPE = 'fund';
 
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODE_AUDITFIRM")} AS
+SELECT NODEID, LABEL, ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_UPDATED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+FROM {_fq(context, "MDM_GRAPH_NODES")}
+WHERE ENTITY_TYPE = 'audit_firm';
+
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_IS_INSIDER")} AS
 SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_EDGES")}
@@ -1162,6 +1188,76 @@ def _relationship_parity_payload(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "total_snowflake_graph": sum(row["snowflake_graph_edge_count"] for row in by_type),
         "by_relationship_type": by_type,
     }
+
+
+def _named_node_parity_checks(node_parity: dict[str, Any]) -> list[dict[str, Any]]:
+    """NODE-01..06 (D-01): one named parity check per expected node type.
+
+    Reads only the already-computed node_parity["by_entity_type"] rows -- no new SQL.
+    A type absent from the parity rows is a hard failure (present=False), closing the
+    silent-omission gap where the FULL OUTER JOIN aggregate stays "ok" when a type
+    contributes no row at all (e.g. a per-type GRAPH_NODE_* view that doesn't exist yet).
+    """
+    by_type = {row["entity_type"]: row for row in node_parity["by_entity_type"]}
+    checks = []
+    for entity_type in ALLOWED_ENTITY_TYPES:
+        row = by_type.get(entity_type)
+        present = row is not None
+        mdm_active_count = row["mdm_active_count"] if present else 0
+        snowflake_graph_node_count = row["snowflake_graph_node_count"] if present else 0
+        at_parity = present and row["mdm_minus_graph"] == 0 and row["graph_minus_mdm"] == 0
+        check = {
+            "name": f"node_parity_{entity_type}",
+            "entity_type": entity_type,
+            "present": present,
+            "mdm_active_count": mdm_active_count,
+            "snowflake_graph_node_count": snowflake_graph_node_count,
+            "status": "ok" if at_parity else "failed",
+        }
+        if not present:
+            check["remediation"] = (
+                f"No parity row for entity_type={entity_type!r}: confirm its "
+                "GRAPH_NODE_* view exists (render_graph_tables()) and re-run "
+                "mdm sync-graph."
+            )
+        checks.append(check)
+    return checks
+
+
+def _named_relationship_parity_checks(
+    relationship_parity: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """EDGE-01..04 (D-01): one named parity check per already-populated relationship type.
+
+    Reads only the already-computed relationship_parity["by_relationship_type"] rows --
+    no new SQL. Scoped to POPULATED_RELATIONSHIP_TYPES only; the 7 not-yet-populated
+    relationship types are intentionally excluded (T-05-05).
+    """
+    by_type = {
+        row["relationship_type"]: row for row in relationship_parity["by_relationship_type"]
+    }
+    checks = []
+    for relationship_type in POPULATED_RELATIONSHIP_TYPES:
+        row = by_type.get(relationship_type)
+        present = row is not None
+        mdm_active_count = row["mdm_active_count"] if present else 0
+        snowflake_graph_edge_count = row["snowflake_graph_edge_count"] if present else 0
+        at_parity = present and row["mdm_minus_graph"] == 0 and row["graph_minus_mdm"] == 0
+        check = {
+            "name": f"relationship_parity_{relationship_type.lower()}",
+            "relationship_type": relationship_type,
+            "present": present,
+            "mdm_active_count": mdm_active_count,
+            "snowflake_graph_edge_count": snowflake_graph_edge_count,
+            "status": "ok" if at_parity else "failed",
+        }
+        if not present:
+            check["remediation"] = (
+                f"No parity row for relationship_type={relationship_type!r}: confirm "
+                "mdm load-relationships has populated this type and re-run mdm sync-graph."
+            )
+        checks.append(check)
+    return checks
 
 
 def _format_sample_rows(rows: list[dict[str, Any]], columns: tuple[str, ...]) -> list[dict[str, Any]]:

@@ -1,91 +1,154 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: Pipeline Observability
-current_plan: 4
-status: complete
-stopped_at: All 4 phases shipped 2026-05-16 and archived to milestones/v1.0-phases/.
-  This STATE.md was never updated after archival (still showed Phase 2 mid-execution
-  with Phases 3-4 "Not started") — corrected 2026-06-29 to match
-  milestones/v1.0-REQUIREMENTS.md and ROADMAP.md, both of which already correctly
-  show the milestone shipped.
-last_updated: "2026-06-29T00:00:00.000Z"
-last_activity: 2026-05-16 -- Phase 4 (SEC rate limiter) shipped, commit e029629. OBS-01
-  tracked as "Complete — Definition verified; runtime re-test pending" in
-  milestones/v1.0-REQUIREMENTS.md: the deployed ToleratedFailurePercentage=0 state
-  machine definition is correct, but the live-behavior test script
-  (scripts/ops/test-failure-surfacing.sh) has its own injection-mechanism race
-  condition, never redesigned. This is a known, accepted, low-severity residual
-  gap in test tooling, not in the production Step Functions definition.
+milestone: v2.0
+milestone_name: fix-pipelines — Pipeline Data-Source Completeness & Verification
+current_phase: 6
+current_phase_name: Relationship Investigation And Population
+current_plan: Not started
+status: planning
+stopped_at: Phase 5 Plan 03 complete -- NODE-01..06/EDGE-01..04 named per-type parity checks; Phase 5 fully done
+last_updated: "2026-07-08T07:38:50.943Z"
+last_activity: 2026-07-08
+last_activity_desc: Phase 05 complete, transitioned to Phase 6
+progress:
+  total_phases: 5
+  completed_phases: 1
+  total_plans: 3
+  completed_plans: 3
+  percent: 20
 ---
 
 # Project State — fix-pipelines
 
 ## Current Position
 
-Phase: 4 (SEC Rate Limiting) — COMPLETE
-Plan: 4 of 4
-Status: All phases complete; milestone archived
-Last activity: 2026-05-16 -- Phase 4 shipped, commit e029629
+Phase: 6 — Relationship Investigation And Population
+Plan: 3 of 3 in current phase
+Status: 05-02 complete; ready to plan/execute 05-03
+Last activity: 2026-07-08 — Phase 05 complete, transitioned to Phase 6
 
-[██████████████████████████████] 100% (4/4 phases complete)
+[███████░░░] 67% (0/5 phases complete, 2/3 plans in phase 5)
 
 ## Milestone Context
 
-**v1.0 Pipeline Observability**
+**v2.0 fix-pipelines — Pipeline Data-Source Completeness & Verification**
 
-Goal: Make pipeline failures impossible to miss — hard Step Functions errors, complete
-status.sh coverage for all 5 state machines, and SNS email notifications on failure.
+Goal: Every MDM node type and relationship type is either verified-populated or has a written,
+evidenced source-coverage exclusion traced to its actual source artifact (or explicit absence
+of one); Neo4j Native App verification cleanly separates readiness from parity failures;
+platform parsing is cross-checked against edgartools.
 
-Requirements: OBS-01 through OBS-06 (see REQUIREMENTS.md)
+Requirements: NODE-01..06, EDGE-01..11, GVER-01..03, ARTF-01..02, EDGX-01..03 (26 total, see
+REQUIREMENTS.md)
 
 ## Phase Summary
 
 | Phase | Goal | Requirements | Status |
 |-------|------|--------------|--------|
-| 1 — Failure Surfacing | Hard FAILED state on any stage error, all 5 machines | OBS-01, OBS-02 | Complete (OBS-01 runtime re-test pending, see above) |
-| 2 — Status Completeness | Complete stage display + active stage marker in status.sh | OBS-03, OBS-04 | Complete |
-| 3 — Failure Notifications | SNS email on FAILED with pipeline name, ARN, stage, CW deep-link | OBS-05, OBS-06 | Complete (commit 5b0254c) |
-| 4 — SEC Rate Limiting | Enforce minimum 2 and maximum 5 concurrent calls to SEC website | (added post-hoc, see Roadmap Evolution) | Complete (commit e029629) |
+| 5 — Node And Populated-Relationship Graph Parity | All 6 node types + 4 populated relationship types verified, idempotency established | NODE-01..06, EDGE-01..04, GVER-03 | Not started |
+| 6 — Relationship Investigation And Population | Root-cause + populate the 5 ambiguous zero relationship types against their actual artifacts | EDGE-05, 06, 09, 10, 11 | Not started |
+| 7 — Source-Coverage Exclusions And Artifact Hygiene | Document the 2 artifact-confirmed exclusions; fix silver-clobber + fetch-idempotency | EDGE-07, 08, ARTF-01, 02 | Not started |
+| 8 — Neo4j Native App Verification Gaps | verify-graph separates readiness vs parity; GRAPH_INFO/BFS/LIST_GRAPHS resolved or documented | GVER-01, 02 | Not started |
+| 9 — edgartools Crosscheck | Validate platform parsing vs edgartools; replace parsers where it's a clear win; audit API usage | EDGX-01..03 | Not started |
 
 ## Progress
 
-**Phases Complete:** 4/4
-**Current Plan:** 4 (final)
+**Phases Complete:** 0/5
+**Current Plan:** Not started
 
 ## Session Continuity
 
-**Stopped At:** Milestone shipped 2026-05-16, archived to milestones/v1.0-phases/.
+**Last session:** 2026-07-08T07:02:19.144Z
+
+**Stopped At:** Phase 5 Plan 03 complete -- NODE-01..06/EDGE-01..04 named per-type parity checks; Phase 5 fully done
+committed for all 6 MDM entity types (5 silver-resolved via `test_node_resolution_is_idempotent_across_entity_types`,
+plus the seeded `audit_firm` type via `test_audit_firm_seed_is_idempotent`). GVER-03 is now fully
+satisfied (node/relationship-derivation side here + graph-sync/full-rebuild side from 05-01).
+Committed on `claude/fix-pipelines-v2`. Not yet planned: 05-03.
 **Resume File:** None
 
 ## Accumulated Context
 
 ### Active Decisions
 
-- SNS email chosen as notification delivery mechanism (not Slack)
-- Failure surfacing covers all 5 state machines: bootstrap-phased, silver-mdm-gold,
-  gold-refresh, mdm-gold, ownership-mdm-gold
+- Artifact triage is embedded per-relationship (EDGE-05..11) rather than as a separate generic
+  audit, so each zero relationship type's source artifact (or explicit absence of one) is
+  traceable — user-directed adjustment during milestone setup (2026-07-08).
 
-- Phase 3 depends on Phase 1: notifications on a lying state machine (reaching SUCCEEDED
-  despite stage errors) are worse than no notifications — Phase 1 must land first
+- AUDITED_BY (EDGE-10) and any fundamentals-pipeline work must coordinate with the active
+  `fundamental-factors-v2` workstream (Codex) — do not run fundamentals in dev without checking
+  for overlap first.
 
-- SNS topic, subscription, and EventBridge rule are Terraform-managed (DEC-011: Terraform
-  is passive infra only — no ad-hoc script wiring for the notification path)
+- MANAGES_FUND (EDGE-07) is a confirmed dead end from EDGAR: all 30 ADV filings in the active
+  universe are paper filings with no electronic document. See
+  `.planning/workstreams/claude-mdm-source-recovery/FINDINGS.md`.
 
-- Distributed Map ToleratedFailurePercentage must not silently absorb child failures
-  (bootstrap-phased BatchBootstrap, silver-mdm-gold BatchSilver) — explicit success
-  criterion in Phase 1
+- This workstream continues phase numbering from v1.0 (ended at Phase 4) — v2.0 starts at
+  Phase 5, per default (non-reset) numbering behavior.
+
+- 05-01: `GRAPH_NODE_AUDITFIRM` identifier (not the CONTEXT.md prose spelling
+  `GRAPH_NODE_AUDIT_FIRM`) is authoritative — matches the pre-existing `NODE_TABLES` tuple entry
+  and the `result.node_tables` test assertion already in `test_snowflake_graph_migration.py`.
+
+- 05-01: GVER-03 was only partially satisfied by that plan (graph-sync/full-rebuild side only,
+  via `test_graph_sync_is_idempotent_full_rebuild`). **Superseded by 05-02:** GVER-03 is now
+  fully satisfied — 05-02 added `test_node_resolution_is_idempotent_across_entity_types` and
+  `test_audit_firm_seed_is_idempotent`, covering the node/relationship-derivation side for all
+  6 entity types. REQUIREMENTS.md marks GVER-03 Complete as of 05-02.
+
+- 05-01: `uv sync`/`uv run` for `tests/mdm/*` requires the `mdm` extra (for `sqlalchemy` via
+  `tests/mdm/conftest.py`), not just `s3`+`snowflake` — future 05-03 plan verify commands
+  should include `--extra mdm`.
+
+- 05-02: `MdmEntity` has no `is_active` column (unlike `MdmRelationshipInstance`/
+  `MdmRelationshipType`/`MdmEntityTypeDefinition`) — `is_quarantined.is_(False)` is the correct
+  "live entity" filter for node-count idempotency assertions, since resolvers upsert-by-identity
+  rather than soft-delete.
+
+- 05-02: Real-session tests that exercise `MDMPipeline.run_companies`/`run_advisers`/etc. must
+  independently seed `MdmSourcePriority` (`entity_type='all'`) rows — `MDMRuleEngine.load()`
+  raises `KeyError` without them, and the shared `_seed_registry()` fixture in
+  `tests/mdm/test_pipeline_relationships.py` does not provide them (no prior test in that file
+  exercised node resolution against a real session).
 
 ### Blockers
 
-None
+- Phase 6 EDGE-10 (AUDITED_BY) is blocked on a fundamentals entity-facts run landing in the
+  unified `silver/sec/silver.duckdb` — external dependency on `fundamental-factors-v2` timing.
 
 ### Roadmap Evolution
 
-- Phase 4 added: enforce minimum 2 and maximum 5 concurrent calls to SEC website
+None yet — roadmap just created.
 
 ### Pending Todos
 
-- Fix race condition in `scripts/ops/test-failure-surfacing.sh`: the "overwrite-after-SeedUniverse"
-  injection strategy is racy — Map state reads S3 within the same millisecond SeedUniverse exits.
-  Redesign needed before OBS-01 can be confirmed at runtime (definition-level verification complete).
+None yet.
+
+---
+
+## Archived: v1.0 Pipeline Observability (complete 2026-05-16)
+
+Full archive: `milestones/v1.0-ROADMAP.md`, `milestones/v1.0-REQUIREMENTS.md`,
+`milestones/v1.0-phases/`.
+
+All 4 phases shipped: Failure Surfacing, Status Completeness, Failure Notifications, SEC Rate
+Limiting. Pipeline failures surface as hard Step Functions FAILED states, `status.sh` covers all
+5 state machines, operators receive SNS email within 60 seconds of failure, SEC EDGAR calls are
+rate-limited to 9 req/sec per ECS task. One known low-severity residual gap: the live-behavior
+test script for OBS-01 (`scripts/ops/test-failure-surfacing.sh`) has its own injection-mechanism
+race condition — definition-level verification is complete, runtime re-test tooling was never
+redesigned.
+
+## Performance Metrics
+
+| Phase | Plan | Duration | Notes |
+|-------|------|----------|-------|
+| Phase 05 P02 | 25min | 2 tasks | 1 files |
+| Phase 05 P03 | 25min | 2 tasks | 2 files |
+
+## Decisions
+
+- [Phase ?]: 05-02: MdmEntity has no is_active column -- is_quarantined.is_(False) is the correct 'live entity' filter for node-idempotency count assertions (resolvers upsert-by-identity, not soft-delete).
+- [Phase ?]: 05-02: GVER-03 is now fully satisfied -- both node/relationship-derivation idempotency (this plan) and graph-sync/full-rebuild idempotency (05-01) have committed real-DB regression tests.
+- [Phase ?]: 05-03: Named per-type parity checks in verify-graph fail closed when a type is entirely absent from parity rows, closing the FULL-OUTER-JOIN silent-omission gap -- POPULATED_RELATIONSHIP_TYPES scopes edge checks to only the 4 already-populated types (COMPANY_HOLDS, HOLDS, ISSUED_BY, IS_INSIDER).
+- [Phase ?]: 05-03: Phase 5 is now fully complete -- NODE-01..06, EDGE-01..04, and GVER-03 (05-01/05-02) all satisfied.
