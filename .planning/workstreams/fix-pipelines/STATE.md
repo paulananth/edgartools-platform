@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: fix-pipelines — Pipeline Data-Source Completeness & Verification
-current_phase: 6
-current_phase_name: Relationship Investigation And Population
-current_plan: 06-01 (wave 1 of 4)
-status: planned
-stopped_at: Phase 6 planned (6 plans, 4 waves) — ready to execute
-last_updated: "2026-07-08T14:10:34.000Z"
+current_phase: 06
+current_phase_name: relationship-investigation-and-population
+current_plan: 1
+status: executing
+stopped_at: "06-01 complete: INSTITUTIONAL_HOLDS CIK-range batching implemented and tested (EDGE-11). Ready for 06-02."
+last_updated: "2026-07-08T15:29:09.626Z"
 last_activity: 2026-07-08
-last_activity_desc: Phase 6 planned - 6 plans across 4 waves (06-01..06-06), plan-checker passed, committed to claude/fix-pipelines-v2
+last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 9
+  completed_plans: 4
   percent: 20
 ---
 
@@ -22,10 +22,10 @@ progress:
 
 ## Current Position
 
-Phase: 6 — Relationship Investigation And Population
-Plan: 0 of 6 in current phase (ready to execute Wave 1: 06-01, 06-02)
-Status: Phase 6 planned — 6 plans across 4 waves, plan-checker passed, ready to execute
-Last activity: 2026-07-08 — Phase 6 planned (6 plans, 4 waves)
+Phase: 06 (relationship-investigation-and-population) — EXECUTING
+Plan: 2 of 6
+Status: Ready to execute
+Last activity: 2026-07-08 — Phase 06 execution started
 
 [██░░░░░░░░] 20% (1/5 phases complete; phase 6 planned, 0/6 plans executed)
 
@@ -54,18 +54,18 @@ REQUIREMENTS.md)
 ## Progress
 
 **Phases Complete:** 1/5
-**Current Plan:** Phase 6 planned, ready to execute (06-01 first, Wave 1)
+**Current Plan:** 1
 
 ## Session Continuity
 
-**Last session:** 2026-07-08T14:10:34.000Z
+**Last session:** 2026-07-08T15:29:09.616Z
 
-**Stopped At:** Phase 6 planned — 6 plans across 4 waves (06-01..06-06), plan-checker passed
+**Stopped At:** 06-01 complete: INSTITUTIONAL_HOLDS CIK-range batching implemented and tested (EDGE-11). Ready for 06-02.
 (0 errors, 0 warnings), all 5 requirement IDs (EDGE-05/06/09/10/11) and all 5 CONTEXT.md
 decisions (D-01..D-05) covered. Committed on `claude/fix-pipelines-v2` (`c8e804a`). Research was
 explicitly skipped this run (rich CONTEXT.md already had file:line-level detail); no VALIDATION.md
 exists as a result — Nyquist Dimension 8 was skipped in the plan-checker, not failed.
-**Resume File:** Ready for `/gsd-execute-phase 6 --ws fix-pipelines` — Wave 1 (06-01, 06-02) runs
+**Resume File:** None
 autonomously; Wave 2 (06-03) and one plan in Wave 3 (06-05) each have a blocking human-verify
 checkpoint (fundamentals/Codex coordination, and the real bounded `load_history` AWS run).
 
@@ -147,6 +147,7 @@ redesigned.
 |-------|------|----------|-------|
 | Phase 05 P02 | 25min | 2 tasks | 1 files |
 | Phase 05 P03 | 25min | 2 tasks | 2 files |
+| Phase 06 P01 | 25min | 2 tasks | 2 files |
 
 ## Decisions
 
@@ -154,3 +155,5 @@ redesigned.
 - [Phase ?]: 05-02: GVER-03 is now fully satisfied -- both node/relationship-derivation idempotency (this plan) and graph-sync/full-rebuild idempotency (05-01) have committed real-DB regression tests.
 - [Phase ?]: 05-03: Named per-type parity checks in verify-graph fail closed when a type is entirely absent from parity rows, closing the FULL-OUTER-JOIN silent-omission gap -- POPULATED_RELATIONSHIP_TYPES scopes edge checks to only the 4 already-populated types (COMPANY_HOLDS, HOLDS, ISSUED_BY, IS_INSIDER).
 - [Phase ?]: 05-03: Phase 5 is now fully complete -- NODE-01..06, EDGE-01..04, and GVER-03 (05-01/05-02) all satisfied.
+- [Phase 06]: CIK-range bounds are always passed as bound params (fetch(sql, params=[lo, hi])), never interpolated into the SQL string -- directly enforced by a test assertion (T-06-01).
+- [Phase 06]: 06-01: batch-equivalence tests must compare edges by (adviser CIK, security CUSIP), not raw entity_id -- entity_ids are freshly-generated UUIDs per independent test session and never match across separate single-batch/multi-batch sessions.
