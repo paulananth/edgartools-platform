@@ -95,6 +95,7 @@ def test_generated_sql_exposes_phase_2_graph_projection_contract(tmp_path):
         "GRAPH_NODE_SECURITY",
         "GRAPH_NODE_ADVISER",
         "GRAPH_NODE_FUND",
+        "GRAPH_NODE_AUDITFIRM",
         "GRAPH_EDGE_IS_INSIDER",
         "GRAPH_EDGE_HOLDS",
         "GRAPH_EDGE_COMPANY_HOLDS",
@@ -129,6 +130,11 @@ def test_generated_sql_exposes_phase_2_graph_projection_contract(tmp_path):
     assert "RI.IS_ACTIVE = TRUE" in graph_sql
     assert "RT.IS_ACTIVE = TRUE" in graph_sql
     assert "OBJECT_CONSTRUCT_KEEP_NULL" in graph_sql
+
+    assert "GRAPH_NODE_AUDITFIRM AS" in graph_sql
+    auditfirm_view_start = graph_sql.index("GRAPH_NODE_AUDITFIRM")
+    auditfirm_view_sql = graph_sql[auditfirm_view_start : auditfirm_view_start + 400]
+    assert "WHERE ENTITY_TYPE = 'audit_firm'" in auditfirm_view_sql
 
     assert "active_mdm_relationship_parity" in validation_sql
     assert "missing_graph_edge_endpoints" in validation_sql
