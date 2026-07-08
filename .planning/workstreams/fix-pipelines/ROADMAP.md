@@ -39,7 +39,10 @@ reference library.
   3. The 4 populated relationship types (IS_INSIDER, HOLDS, COMPANY_HOLDS, ISSUED_BY) show exact MDM-to-graph parity via their `GRAPH_EDGE_*` views.
   4. Running MDM relationship derivation twice against unchanged silver data produces zero new/duplicate active rows for the 4 populated types.
   5. Running `mdm sync-graph` twice against unchanged MDM data produces stable node and edge counts.
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 05-01-PLAN.md — Emit GRAPH_NODE_AUDITFIRM view + graph-sync full-rebuild idempotency test (NODE-06, GVER-03)
+- [ ] 05-02-PLAN.md — Real-DB node-derivation idempotency test for all 6 entity types (GVER-03)
+- [ ] 05-03-PLAN.md — Named per-type verify-graph parity checks for 6 node + 4 populated edge types (NODE-01..06, EDGE-01..04)
 
 ### Phase 6: Relationship Investigation And Population
 **Goal**: Root-cause each still-ambiguous zero relationship type against its actual source artifact (or confirm it has none), and populate whichever ones the investigation shows are unblocked.
