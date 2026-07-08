@@ -44,6 +44,16 @@ reference library.
 - [ ] 05-02-PLAN.md — Real-DB node-derivation idempotency test for all 6 entity types (GVER-03)
 - [ ] 05-03-PLAN.md — Named per-type verify-graph parity checks for 6 node + 4 populated edge types (NODE-01..06, EDGE-01..04)
 
+**D-06 scope note (plan-checker WARNING resolved 2026-07-08):** 05-01/02/03 are dev-only —
+success criteria 1-5 above are all dev-side (`EDGARTOOLS_DEV`). CONTEXT.md D-06 ("once dev is
+green, replicate to `EDGARTOOLS_PRODB`") is intentionally NOT a 4th PLAN.md: it's an operator
+deploy+verify action (run the existing `deploy-aws-application.sh`/`deploy-snowflake-stack.sh`
+tooling, then re-run `mdm verify-graph` pointed at `EDGARTOOLS_PRODB`), not a code-authoring
+task with TDD acceptance criteria. Sequencing was reserved as Claude's Discretion in
+`05-CONTEXT.md`. Phase 5 is dev-complete once 05-01/02/03 execute and verify green; the prodb
+replication step is a follow-on operator action after that, tracked here rather than silently
+dropped.
+
 ### Phase 6: Relationship Investigation And Population
 **Goal**: Root-cause each still-ambiguous zero relationship type against its actual source artifact (or confirm it has none), and populate whichever ones the investigation shows are unblocked.
 **Depends on**: Phase 5 (verification harness must exist to prove any newly-populated rows sync correctly).
