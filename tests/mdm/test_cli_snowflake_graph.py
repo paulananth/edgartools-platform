@@ -659,6 +659,282 @@ def test_verify_graph_fails_with_relationship_and_endpoint_diagnostics(monkeypat
     ]
 
 
+def _all_6_node_rows_at_parity() -> list[dict[str, object]]:
+    # D-01 / NODE-01..06: one parity row per expected node type, all at parity.
+    return [
+        {
+            "ENTITY_TYPE": entity_type,
+            "MDM_ACTIVE_COUNT": 1,
+            "SNOWFLAKE_GRAPH_NODE_COUNT": 1,
+            "MDM_MINUS_GRAPH": 0,
+            "GRAPH_MINUS_MDM": 0,
+        }
+        for entity_type in (
+            "adviser",
+            "audit_firm",
+            "company",
+            "fund",
+            "person",
+            "security",
+        )
+    ]
+
+
+def _all_4_populated_relationship_rows_at_parity() -> list[dict[str, object]]:
+    # D-01 / EDGE-01..04: one parity row per already-populated relationship type.
+    return [
+        {
+            "RELATIONSHIP_TYPE": relationship_type,
+            "MDM_ACTIVE_COUNT": 1,
+            "SNOWFLAKE_GRAPH_EDGE_COUNT": 1,
+            "MDM_MINUS_GRAPH": 0,
+            "GRAPH_MINUS_MDM": 0,
+        }
+        for relationship_type in ("COMPANY_HOLDS", "HOLDS", "ISSUED_BY", "IS_INSIDER")
+    ]
+
+
+def test_verify_graph_named_node_checks_all_6_types_present_and_ok(monkeypatch, capsys):
+    # NODE-01..06 (D-01): named per-type node parity checks for all 6 expected node types.
+    _clear_graph_env(monkeypatch)
+    _patch_verify_settings(
+        monkeypatch,
+        FakeSnowflakeConnection(
+            result_sets=_strict_parity_results(node_rows=_all_6_node_rows_at_parity())
+        ),
+    )
+
+    args = build_parser().parse_args(["mdm", "verify-graph"])
+
+    assert args.handler(args) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "ok"
+    node_checks = payload["named_checks"]["node_parity"]
+    assert len(node_checks) == 6
+    assert {check["entity_type"] for check in node_checks} == {
+        "adviser",
+        "audit_firm",
+        "company",
+        "fund",
+        "person",
+        "security",
+    }
+    for check in node_checks:
+        assert check["status"] == "ok"
+        assert check["present"] is True
+        assert check["name"] == f"node_parity_{check['entity_type']}"
+        assert check["mdm_active_count"] == 1
+        assert check["snowflake_graph_node_count"] == 1
+
+
+def test_verify_graph_named_node_check_fails_when_type_missing_entirely(monkeypatch, capsys):
+    # NODE-06 / silent-omission gap: audit_firm row entirely absent from node_counts
+    # must flip the named check (and overall status/exit code) to failed, even though
+    # the aggregate node_parity['status'] would stay 'ok' for the remaining rows.
+    _clear_graph_env(monkeypatch)
+    node_rows = [
+        row for row in _all_6_node_rows_at_parity() if row["ENTITY_TYPE"] != "audit_firm"
+    ]
+    _patch_verify_settings(
+        monkeypatch,
+        FakeSnowflakeConnection(result_sets=_strict_parity_results(node_rows=node_rows)),
+    )
+
+    args = build_parser().parse_args(["mdm", "verify-graph"])
+
+    assert args.handler(args) == 1
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "failed"
+    # Aggregate parity over the present rows alone stays 'ok' -- proving the named
+    # check is what catches the omission, not the pre-existing aggregate gate.
+    assert payload["node_parity"]["status"] == "ok"
+    node_checks = {
+        check["entity_type"]: check for check in payload["named_checks"]["node_parity"]
+    }
+    assert node_checks["audit_firm"]["status"] == "failed"
+    assert node_checks["audit_firm"]["present"] is False
+    assert node_checks["audit_firm"]["mdm_active_count"] == 0
+    assert node_checks["audit_firm"]["snowflake_graph_node_count"] == 0
+
+
+def test_verify_graph_named_node_check_fails_on_present_type_count_mismatch(
+    monkeypatch, capsys
+):
+    # A named node check must fail (naming the entity_type) when the type is present
+    # but not at parity, independent of the aggregate node_parity status.
+    _clear_graph_env(monkeypatch)
+    node_rows = _all_6_node_rows_at_parity()
+    for row in node_rows:
+        if row["ENTITY_TYPE"] == "company":
+            row["SNOWFLAKE_GRAPH_NODE_COUNT"] = 0
+            row["MDM_MINUS_GRAPH"] = 1
+    _patch_verify_settings(
+        monkeypatch,
+        FakeSnowflakeConnection(result_sets=_strict_parity_results(node_rows=node_rows)),
+    )
+
+    args = build_parser().parse_args(["mdm", "verify-graph"])
+
+    assert args.handler(args) == 1
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "failed"
+    node_checks = {
+        check["entity_type"]: check for check in payload["named_checks"]["node_parity"]
+    }
+    assert node_checks["company"]["status"] == "failed"
+    assert node_checks["company"]["present"] is True
+    for entity_type, check in node_checks.items():
+        if entity_type != "company":
+            assert check["status"] == "ok"
+
+
+def test_verify_graph_named_relationship_checks_all_4_populated_types_present_and_ok(
+    monkeypatch, capsys
+):
+    # EDGE-01..04 (D-01): named per-type relationship parity checks for the 4
+    # already-populated relationship types only.
+    _clear_graph_env(monkeypatch)
+    _patch_verify_settings(
+        monkeypatch,
+        FakeSnowflakeConnection(
+            result_sets=_strict_parity_results(
+                relationship_rows=_all_4_populated_relationship_rows_at_parity()
+            )
+        ),
+    )
+
+    args = build_parser().parse_args(["mdm", "verify-graph"])
+
+    assert args.handler(args) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "ok"
+    relationship_checks = payload["named_checks"]["relationship_parity"]
+    assert len(relationship_checks) == 4
+    assert {check["relationship_type"] for check in relationship_checks} == {
+        "COMPANY_HOLDS",
+        "HOLDS",
+        "ISSUED_BY",
+        "IS_INSIDER",
+    }
+    for check in relationship_checks:
+        assert check["status"] == "ok"
+        assert check["present"] is True
+        assert check["name"] == f"relationship_parity_{check['relationship_type'].lower()}"
+        assert check["mdm_active_count"] == 1
+        assert check["snowflake_graph_edge_count"] == 1
+
+
+def test_verify_graph_named_relationship_check_fails_when_type_missing_entirely(
+    monkeypatch, capsys
+):
+    # EDGE-04 / silent-omission gap: ISSUED_BY row entirely absent from
+    # relationship_counts must flip its named check (and overall status/exit code)
+    # to failed, even though the aggregate relationship_parity['status'] would stay
+    # 'ok' for the remaining rows.
+    _clear_graph_env(monkeypatch)
+    relationship_rows = [
+        row
+        for row in _all_4_populated_relationship_rows_at_parity()
+        if row["RELATIONSHIP_TYPE"] != "ISSUED_BY"
+    ]
+    _patch_verify_settings(
+        monkeypatch,
+        FakeSnowflakeConnection(
+            result_sets=_strict_parity_results(relationship_rows=relationship_rows)
+        ),
+    )
+
+    args = build_parser().parse_args(["mdm", "verify-graph"])
+
+    assert args.handler(args) == 1
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "failed"
+    assert payload["relationship_parity"]["status"] == "ok"
+    relationship_checks = {
+        check["relationship_type"]: check
+        for check in payload["named_checks"]["relationship_parity"]
+    }
+    assert relationship_checks["ISSUED_BY"]["status"] == "failed"
+    assert relationship_checks["ISSUED_BY"]["present"] is False
+    assert relationship_checks["ISSUED_BY"]["mdm_active_count"] == 0
+    assert relationship_checks["ISSUED_BY"]["snowflake_graph_edge_count"] == 0
+
+
+def test_verify_graph_named_relationship_check_fails_on_present_type_count_mismatch(
+    monkeypatch, capsys
+):
+    # A named relationship check must fail (naming the relationship_type) when the
+    # type is present but not at parity.
+    _clear_graph_env(monkeypatch)
+    relationship_rows = _all_4_populated_relationship_rows_at_parity()
+    for row in relationship_rows:
+        if row["RELATIONSHIP_TYPE"] == "HOLDS":
+            row["SNOWFLAKE_GRAPH_EDGE_COUNT"] = 0
+            row["MDM_MINUS_GRAPH"] = 1
+    _patch_verify_settings(
+        monkeypatch,
+        FakeSnowflakeConnection(
+            result_sets=_strict_parity_results(relationship_rows=relationship_rows)
+        ),
+    )
+
+    args = build_parser().parse_args(["mdm", "verify-graph"])
+
+    assert args.handler(args) == 1
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "failed"
+    relationship_checks = {
+        check["relationship_type"]: check
+        for check in payload["named_checks"]["relationship_parity"]
+    }
+    assert relationship_checks["HOLDS"]["status"] == "failed"
+    assert relationship_checks["HOLDS"]["present"] is True
+    for relationship_type, check in relationship_checks.items():
+        if relationship_type != "HOLDS":
+            assert check["status"] == "ok"
+
+
+def test_verify_graph_named_relationship_checks_exclude_unpopulated_types(
+    monkeypatch, capsys
+):
+    # EDGE-01..04 scope: the 7 not-yet-populated relationship types must never
+    # appear as named checks this phase (T-05-05 / false-positive guard).
+    _clear_graph_env(monkeypatch)
+    _patch_verify_settings(
+        monkeypatch,
+        FakeSnowflakeConnection(
+            result_sets=_strict_parity_results(
+                relationship_rows=_all_4_populated_relationship_rows_at_parity()
+            )
+        ),
+    )
+
+    args = build_parser().parse_args(["mdm", "verify-graph"])
+
+    assert args.handler(args) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    relationship_types_checked = {
+        check["relationship_type"] for check in payload["named_checks"]["relationship_parity"]
+    }
+    unpopulated_types = {
+        "AUDITED_BY",
+        "EMPLOYED_BY",
+        "HAS_PARENT_COMPANY",
+        "INSTITUTIONAL_HOLDS",
+        "IS_ENTITY_OF",
+        "IS_PERSON_OF",
+        "MANAGES_FUND",
+    }
+    assert relationship_types_checked.isdisjoint(unpopulated_types)
+
+
 def test_load_relationships_default_derives_without_snowflake_credentials(monkeypatch, capsys):
     _clear_graph_env(monkeypatch)
     _patch_executor(monkeypatch)
