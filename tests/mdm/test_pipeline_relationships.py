@@ -24,7 +24,7 @@ import uuid
 from typing import Any, Optional
 
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -40,6 +40,7 @@ from edgar_warehouse.mdm.database import (
     MdmRelationshipInstance,
     MdmRelationshipType,
     MdmSecurity,
+    MdmSourcePriority,
     MdmSourceRef,
 )
 from edgar_warehouse.mdm.pipeline import MDMPipeline, _derive_role
@@ -925,6 +926,165 @@ class TestRunRelationships:
                 + second[rt]["skipped_unresolved_target"]
                 + second[rt]["skipped_existing"]
             ), f"skipped backward-compat broken for {rt}"
+
+    def test_node_resolution_is_idempotent_across_entity_types(self, session):
+        """Node-side companion to test_all_relationship_types_idempotent (GVER-03, D-04).
+
+        The relationship half of GVER-03 is already proven above via a real
+        SQLAlchemy session (not mocks) -- the pattern that caught the
+        plateau-fix regression a mock could not have surfaced. This test
+        extends that same real-DB pattern to the 5 silver-resolved node
+        types (company, adviser, person, security, fund): running each
+        run_* resolver method a second time over unchanged StubSilver rows
+        must add zero net-new active MdmEntity rows per type. The 6th node
+        type (audit_firm) is seeded, not silver-resolved, and gets its own
+        idempotency test immediately below.
+
+        Uses a fresh `session` (not `fixture_world`) with its own unique CIKs
+        so this test's resolution counts are not polluted by fixture_world's
+        pre-seeded entities.
+        """
+        # resolve_one -> _stage_attrs -> survivorship needs source-priority rules
+        # (mdm_source_priority, entity_type='all') to resolve get_source_priority()
+        # for edgar_cik/adv_filing/ownership_filing -- matches the canonical seed
+        # in edgar_warehouse/mdm/migrations/002_seed_data.sql.
+        for source_system, priority in [
+            ("edgar_cik", 1), ("adv_filing", 2), ("ownership_filing", 3), ("derived", 4),
+        ]:
+            session.add(MdmSourcePriority(
+                entity_type="all", source_system=source_system, priority=priority,
+            ))
+        session.commit()
+
+        silver = StubSilver({
+            "FROM sec_company": [
+                {
+                    "cik": 920001, "entity_name": "Node Issuer Corp", "ein": None,
+                    "sic": None, "sic_description": None,
+                    "state_of_incorporation": None, "fiscal_year_end": None,
+                },
+                {
+                    "cik": 920002, "entity_name": "Node Linked Corp", "ein": None,
+                    "sic": None, "sic_description": None,
+                    "state_of_incorporation": None, "fiscal_year_end": None,
+                },
+            ],
+            "FROM sec_adv_filing": [
+                {
+                    "accession_number": "0002-linked-adv", "cik": 920002,
+                    "crd_number": "CRD-2", "adviser_name": "Node Linked Asset Mgmt",
+                    "sec_file_number": None, "filing_status": None,
+                    "aum_total": None, "fund_count": None,
+                    "effective_date": None,
+                },
+            ],
+            "FROM sec_ownership_reporting_owner": [
+                {
+                    "accession_number": "0000-node-1", "owner_index": 0,
+                    "owner_cik": 920102, "owner_name": "Node Reporting Person",
+                    "officer_title": None, "is_director": True, "is_officer": False,
+                    "is_ten_percent_owner": False, "is_other": False,
+                    "issuer_cik": 920001,
+                },
+            ],
+            "FROM sec_ownership_non_derivative_txn": [
+                {
+                    "accession_number": "0000-node-1", "owner_index": 0, "txn_index": 0,
+                    "security_title": "Common Stock", "issuer_cik": 920001,
+                    "is_derivative": False,
+                },
+            ],
+            "FROM sec_ownership_derivative_txn": [],
+            "sec_adv_private_fund": [
+                {
+                    "accession_number": "0002-linked-adv", "fund_index": 0,
+                    "fund_name": "Node Linked Growth Fund", "fund_type": None,
+                    "jurisdiction": None, "aum_amount": None,
+                    "effective_date": None,
+                },
+            ],
+        })
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        def _snapshot() -> dict[str, int]:
+            # MdmEntity has no is_active column (unlike MdmRelationshipInstance /
+            # MdmRelationshipType) -- resolvers upsert-by-identity rather than
+            # soft-delete, so every row present here is a live entity and a
+            # net-new row in the second pass is exactly the duplicate this
+            # test guards against.
+            rows = session.execute(
+                select(MdmEntity.entity_type, func.count())
+                .where(MdmEntity.is_quarantined.is_(False))
+                .group_by(MdmEntity.entity_type)
+            ).all()
+            return {entity_type: count for entity_type, count in rows}
+
+        pipe.run_companies()
+        pipe.run_advisers()
+        pipe.run_securities()
+        pipe.run_persons()
+        pipe.run_funds()
+        first_counts = _snapshot()
+
+        pipe.run_companies()
+        pipe.run_advisers()
+        pipe.run_securities()
+        pipe.run_persons()
+        pipe.run_funds()
+        second_counts = _snapshot()
+
+        for entity_type in ("company", "adviser", "person", "security", "fund"):
+            assert first_counts.get(entity_type, 0) > 0, (
+                f"fixture produced zero {entity_type} entities on the first pass -- "
+                f"test setup is not exercising this resolver"
+            )
+            assert second_counts.get(entity_type, 0) == first_counts.get(entity_type, 0), (
+                f"entity_type={entity_type}: second resolution pass added "
+                f"{second_counts.get(entity_type, 0) - first_counts.get(entity_type, 0)} "
+                f"net-new active entities (first={first_counts.get(entity_type, 0)}, "
+                f"second={second_counts.get(entity_type, 0)}) -- node resolution must be "
+                f"idempotent over unchanged silver rows (GVER-03)"
+            )
+
+    def test_audit_firm_seed_is_idempotent(self, session):
+        """6th node type (audit_firm is seeded, not silver-resolved) idempotency, GVER-03.
+
+        seed_audit_firms uses a lookup-before-insert pattern keyed by
+        pcaob_firm_id then canonical_name (edgar_warehouse/mdm/seed/audit_firms.py:108).
+        Calling it twice against the same real session must not duplicate any
+        of the 10 seeded firms -- the second call's summary must report zero
+        newly-inserted firms and all 10 as skipped (already present).
+        """
+        from edgar_warehouse.mdm.seed.audit_firms import PCAOB_SEED, seed_audit_firms
+
+        def _audit_firm_counts() -> tuple[int, int]:
+            firm_rows = session.execute(select(func.count()).select_from(MdmAuditFirm)).scalar_one()
+            # MdmEntity has no is_active column -- is_quarantined.is_(False) is the
+            # correct "live" filter (see test_node_resolution_is_idempotent_across_entity_types).
+            entity_rows = session.execute(
+                select(func.count())
+                .select_from(MdmEntity)
+                .where(MdmEntity.entity_type == "audit_firm", MdmEntity.is_quarantined.is_(False))
+            ).scalar_one()
+            return firm_rows, entity_rows
+
+        first_summary = seed_audit_firms(session)
+        first_firm_count, first_entity_count = _audit_firm_counts()
+
+        second_summary = seed_audit_firms(session)
+        second_firm_count, second_entity_count = _audit_firm_counts()
+
+        assert first_summary["inserted"] == len(PCAOB_SEED)
+        assert first_firm_count == len(PCAOB_SEED)
+        assert first_entity_count == len(PCAOB_SEED)
+
+        assert second_summary["inserted"] == 0, (
+            f"second seed_audit_firms() call inserted {second_summary['inserted']} new firms -- "
+            f"expected 0 (lookup-before-insert should skip all already-seeded firms)"
+        )
+        assert second_summary["skipped"] == len(PCAOB_SEED)
+        assert second_firm_count == first_firm_count == len(PCAOB_SEED)
+        assert second_entity_count == first_entity_count == len(PCAOB_SEED)
 
 
 # ---------------------------------------------------------------------------
