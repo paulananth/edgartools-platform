@@ -37,10 +37,6 @@ NODE-01..06, EDGE-01..04, GVER-03.
   `GRAPH_NODE_PERSON` / `GRAPH_NODE_SECURITY` / `GRAPH_NODE_ADVISER` / `GRAPH_NODE_FUND`
   views. This is required regardless of the verification-surface choice — NODE-06 has
   nothing to check until this view exists.
-- **D-03 (considered and rejected):** A new dedicated command (e.g. `mdm verify-node-parity`)
-  was researched and explicitly ruled out — it fragments the one gate every caller already
-  depends on, for no benefit over extending the existing check list.
-
 ### Idempotency proof depth (GVER-03)
 
 - **D-04:** Satisfy GVER-03 with an automated regression test, not a one-time documented
@@ -60,29 +56,40 @@ NODE-01..06, EDGE-01..04, GVER-03.
 
 ### Environment scope
 
-- **D-06:** Prove and fix NODE-01..06 / EDGE-01..04 / GVER-03 in dev (AWS account
-  `690839588395`, Snowflake `EDGARTOOLS_DEV`) first. Once dev is green, add an explicit step
-  that replicates the same fix/config into `EDGARTOOLS_PRODB` (same AWS account boundary,
-  `690839588395`) spanning AWS (ECS task defs / Step Functions), the Snowflake-hosted Neo4j
-  Graph Analytics Native App, the Snowflake-native MDM Postgres instance, and the Snowflake
-  gold/graph schema — using the existing, already-documented deploy tooling
-  (`infra/scripts/deploy-aws-application.sh`, `infra/scripts/deploy-snowflake-stack.sh`,
-  the `mirror-mdm-to-snowflake.sh` pattern from this session, and
-  `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`'s activation calls). This is NOT
-  new deployment tooling — it's applying tooling that already exists and was already used
-  earlier this session to bootstrap prodb.
-- **D-07 (safety-critical, explicitly confirmed with the user):** "Prod" in this phase's scope
-  means `EDGARTOOLS_PRODB` only. Real production — AWS account `077127448006` and Snowflake
-  `EDGARTOOLS_PROD` — must NEVER be touched by this phase's work. This is a standing hard
-  constraint from CLAUDE.md/session context, re-confirmed directly for this phase because the
-  word "prod" is ambiguous and safety-critical in this repo.
+**D-06 and D-07 are environment-scope constraints that govern HOW plans are written and executed
+— they are not features any single plan implements, so no plan cites them directly. Both are
+satisfied structurally: every plan in this phase is dev-only (no plan issues an AWS/Snowflake
+command against any environment), which is D-06/D-07's actual requirement for Phase 5's plan
+set.**
+
+- **D-06 [informational]:** Prove and fix NODE-01..06 / EDGE-01..04 / GVER-03 in dev (AWS account
+  `690839588395`, Snowflake `EDGARTOOLS_DEV`) first — satisfied structurally, see above. Once
+  dev is green, replicate the same fix/config into `EDGARTOOLS_PRODB` using the existing deploy
+  tooling (`deploy-aws-application.sh`, `deploy-snowflake-stack.sh`,
+  `neo4j_graph_analytics_app_grants.sql`'s activation calls). **Resolved 2026-07-08:** this
+  replication is a follow-on operator deploy+verify action, not a 4th PLAN.md — see the D-06
+  scope note in `.planning/workstreams/fix-pipelines/ROADMAP.md`'s Phase 5 section. Discretion
+  on ordering has been exercised: prodb replication happens after 05-01/02/03 execute and verify
+  green in dev, as a separate operator step outside this phase's plan set.
+- **D-07 [informational, safety-critical, explicitly confirmed with the user]:** "Prod" in this
+  phase's scope means `EDGARTOOLS_PRODB` only. Real production — AWS account `077127448006` and
+  Snowflake `EDGARTOOLS_PROD` — must NEVER be touched by this phase's work. Standing hard
+  constraint from CLAUDE.md/session context; satisfied structurally by all 3 plans being
+  dev-only, local-test-only (no live Snowflake connection in any plan's tests).
 
 ### Claude's Discretion
 
 - Exact SQL/test file layout for the new per-type assertions and idempotency test extensions
   (which functions to add, how to structure fixture data) — the decisions above lock the
   *approach*, not the literal diffs.
-- Ordering of the dev-fix-then-prodb-replicate work within Phase 5's plan waves.
+- Ordering of the dev-fix-then-prodb-replicate work within Phase 5's plan waves — **exercised**:
+  prodb replication is a follow-on operator action after Phase 5's 3 dev-side plans, not part of
+  the plan set itself (see D-06 above).
+- **D-03 [informational, considered and rejected]:** A new dedicated verification command (e.g.
+  `mdm verify-node-parity`) was researched and explicitly ruled out during discuss-phase — it
+  would fragment the one gate every caller (Step Functions, `go-live.sh`) already depends on,
+  for no benefit over extending the existing `mdm verify-graph` check list (the approach 05-03
+  actually implements). Recorded here as a rejected alternative, not a build target.
 
 </decisions>
 
