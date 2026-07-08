@@ -42,10 +42,10 @@ reference library.
   4. Running MDM relationship derivation twice against unchanged silver data produces zero new/duplicate active rows for the 4 populated types.
   5. Running `mdm sync-graph` twice against unchanged MDM data produces stable node and edge counts.
 
-**Plans**: 3 plans
+**Plans**: 1/3 plans executed
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — Emit GRAPH_NODE_AUDITFIRM view + graph-sync full-rebuild idempotency test (NODE-06, GVER-03)
+- [x] 05-01-PLAN.md — Emit GRAPH_NODE_AUDITFIRM view + graph-sync full-rebuild idempotency test (NODE-06, GVER-03)
 - [ ] 05-02-PLAN.md — Real-DB node-derivation idempotency test for all 6 entity types (GVER-03)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -124,7 +124,7 @@ dropped.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 5. Node And Populated-Relationship Graph Parity | v2.0 fix-pipelines | 0/TBD | Not started | - |
+| 5. Node And Populated-Relationship Graph Parity | v2.0 fix-pipelines | 1/3 | In Progress|  |
 | 6. Relationship Investigation And Population | v2.0 fix-pipelines | 0/TBD | Not started | - |
 | 7. Source-Coverage Exclusions And Artifact Hygiene | v2.0 fix-pipelines | 0/TBD | Not started | - |
 | 8. Neo4j Native App Verification Gaps | v2.0 fix-pipelines | 0/TBD | Not started | - |

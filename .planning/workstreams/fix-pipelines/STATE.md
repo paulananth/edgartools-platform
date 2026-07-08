@@ -4,30 +4,30 @@ milestone: v2.0
 milestone_name: fix-pipelines — Pipeline Data-Source Completeness & Verification
 current_phase: 5
 current_phase_name: Node And Populated-Relationship Graph Parity
-current_plan: none yet — next step is `/gsd-discuss-phase 5` or `/gsd-plan-phase 5`
-status: planning
-stopped_at: Phase 5 context gathered
-last_updated: "2026-07-08T05:34:48.223Z"
+current_plan: 2 of 3 in current phase
+status: in_progress
+stopped_at: Phase 5 Plan 01 complete
+last_updated: "2026-07-08T06:30:00.000Z"
 last_activity: 2026-07-08
-last_activity_desc: v2.0 requirements + roadmap committed
+last_activity_desc: 05-01 complete — GRAPH_NODE_AUDITFIRM view emitted, graph-sync idempotency regression test committed
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 3
+  completed_plans: 1
+  percent: 7
 ---
 
 # Project State — fix-pipelines
 
 ## Current Position
 
-Phase: 5 (Node And Populated-Relationship Graph Parity) — not started
-Plan: none yet
-Status: Roadmap approved; ready to plan Phase 5
-Last activity: 2026-07-08 -- v2.0 requirements + roadmap committed
+Phase: 5 (Node And Populated-Relationship Graph Parity) — in progress
+Plan: 2 of 3 in current phase
+Status: 05-01 complete; ready to plan/execute 05-02
+Last activity: 2026-07-08 -- 05-01 complete (GRAPH_NODE_AUDITFIRM view + graph-sync idempotency test)
 
-[                              ] 0% (0/5 phases complete)
+[=                             ] 7% (0/5 phases complete, 1/3 plans in phase 5)
 
 ## Milestone Context
 
@@ -54,13 +54,15 @@ REQUIREMENTS.md)
 ## Progress
 
 **Phases Complete:** 0/5
-**Current Plan:** none yet — next step is `/gsd-discuss-phase 5` or `/gsd-plan-phase 5`
+**Current Plan:** 2 of 3 in current phase (05-01 complete)
 
 ## Session Continuity
 
-**Stopped At:** Phase 5 context gathered (CONTEXT.md + DISCUSSION-LOG.md committed on
-`claude/fix-pipelines-v2`). Not yet planned or executed.
-**Resume File:** .planning/workstreams/fix-pipelines/phases/05-node-and-populated-relationship-graph-parity/05-CONTEXT.md
+**Stopped At:** Phase 5 Plan 01 complete — `GRAPH_NODE_AUDITFIRM` view emitted in
+`render_graph_tables()` (closes NODE-06 gap) and graph-sync full-rebuild idempotency regression
+test committed (partial GVER-03, sync side only — MDM relationship-derivation side is 05-02's
+scope). Committed on `claude/fix-pipelines-v2`. Not yet planned: 05-02, 05-03.
+**Resume File:** .planning/workstreams/fix-pipelines/phases/05-node-and-populated-relationship-graph-parity/05-01-SUMMARY.md
 
 ## Accumulated Context
 
@@ -80,6 +82,19 @@ REQUIREMENTS.md)
 
 - This workstream continues phase numbering from v1.0 (ended at Phase 4) — v2.0 starts at
   Phase 5, per default (non-reset) numbering behavior.
+
+- 05-01: `GRAPH_NODE_AUDITFIRM` identifier (not the CONTEXT.md prose spelling
+  `GRAPH_NODE_AUDIT_FIRM`) is authoritative — matches the pre-existing `NODE_TABLES` tuple entry
+  and the `result.node_tables` test assertion already in `test_snowflake_graph_migration.py`.
+
+- 05-01: GVER-03 is only partially satisfied by this plan (graph-sync/full-rebuild side only,
+  via `test_graph_sync_is_idempotent_full_rebuild`). REQUIREMENTS.md keeps GVER-03 marked
+  Pending until 05-02 adds the MDM relationship-derivation idempotency side for all 6 node
+  types — do not mark GVER-03 complete again until both halves are proven.
+
+- 05-01: `uv sync`/`uv run` for `tests/mdm/*` requires the `mdm` extra (for `sqlalchemy` via
+  `tests/mdm/conftest.py`), not just `s3`+`snowflake` — future 05-02/05-03 plan verify commands
+  should include `--extra mdm`.
 
 ### Blockers
 

@@ -15,7 +15,7 @@ updated: 2026-07-08
 - [ ] **NODE-03**: MDM active `person` entity count matches `GRAPH_NODE_PERSON` view count.
 - [ ] **NODE-04**: MDM active `security` entity count matches `GRAPH_NODE_SECURITY` view count.
 - [ ] **NODE-05**: MDM active `fund` entity count matches `GRAPH_NODE_FUND` view count.
-- [ ] **NODE-06**: A `GRAPH_NODE_AUDIT_FIRM` view exists (currently missing) and its count matches MDM active `audit_firm` entity count (10 seeded Big4/Next6 firms).
+- [x] **NODE-06**: A `GRAPH_NODE_AUDIT_FIRM` view exists (currently missing) and its count matches MDM active `audit_firm` entity count (10 seeded Big4/Next6 firms).
 
 ### Relationship Verification — MDM ↔ Graph
 
@@ -35,7 +35,7 @@ updated: 2026-07-08
 
 - [ ] **GVER-01**: `mdm verify-graph` output distinguishes Native App readiness failures (e.g. no compute pool available) from actual MDM↔graph parity failures.
 - [ ] **GVER-02**: Any Neo4j Graph Analytics Native App capability still broken app-side (GRAPH_INFO, BFS, LIST_GRAPHS per PR #122 findings) is fixed or documented with exact reproducing commands/dates, distinct from MDM-side issues.
-- [ ] **GVER-03**: Repeated MDM relationship derivation AND repeated graph sync against unchanged data produce zero drift (idempotent) across all 6 node types and 11 relationship types.
+- [ ] **GVER-03**: Repeated MDM relationship derivation AND repeated graph sync against unchanged data produce zero drift (idempotent) across all 6 node types and 11 relationship types. (Graph-sync/full-rebuild side proven by 05-01's `test_graph_sync_is_idempotent_full_rebuild`; MDM relationship-derivation side is 05-02's scope — not yet complete.)
 
 ### Missing Source Artifacts
 
@@ -76,7 +76,7 @@ mechanisms that aren't tied to any single relationship type.
 | NODE-03 | Phase 5 | Pending |
 | NODE-04 | Phase 5 | Pending |
 | NODE-05 | Phase 5 | Pending |
-| NODE-06 | Phase 5 | Pending |
+| NODE-06 | Phase 5 | Complete |
 | EDGE-01 | Phase 5 | Pending |
 | EDGE-02 | Phase 5 | Pending |
 | EDGE-03 | Phase 5 | Pending |
