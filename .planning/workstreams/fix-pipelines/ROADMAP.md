@@ -124,7 +124,7 @@ dropped.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 5. Node And Populated-Relationship Graph Parity | v2.0 fix-pipelines | 3/3 | Complete   | 2026-07-08 |
+| 5. Node And Populated-Relationship Graph Parity | v2.0 fix-pipelines | 3/3 | Complete    | 2026-07-08 |
 | 6. Relationship Investigation And Population | v2.0 fix-pipelines | 0/TBD | Not started | - |
 | 7. Source-Coverage Exclusions And Artifact Hygiene | v2.0 fix-pipelines | 0/TBD | Not started | - |
 | 8. Neo4j Native App Verification Gaps | v2.0 fix-pipelines | 0/TBD | Not started | - |
