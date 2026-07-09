@@ -1585,13 +1585,24 @@ compute_windows = ecs_state(wh_medium_arn,
 # tasks against the same S3-backed DuckDB artifact would race the hydrate/publish
 # round trip and could drop whichever task published second.
 #
-# (4a) Branch A — WindowedBootstrap INLINE Map.
+# (4a) Branch A — WindowedBootstrap DISTRIBUTED Map.
 # Per-window command: bootstrap-next --cik-limit M --cik-offset N --run-id <execution-name>.
 # --tracking-status-filter is explicit here (bootstrap-next's own CLI default is
 # 'bootstrap_pending' alone, for its OTHER standalone/ad-hoc use — process the pending backlog).
 # Within load_history it must match ComputeWindows' filter exactly, or window offsets computed
 # against one CIK list get applied to a different list bootstrap-next resolves independently.
 # Terminal within Branch A's sub-state-machine (End=True), strict failure policy (ToleratedFailurePercentage=0).
+#
+# Mode is DISTRIBUTED, not INLINE (fix-pipelines 06-03): AWS Step Functions rejects
+# ItemReader on an INLINE Map ("The ItemReader, ItemBatcher and ResultWriter fields are
+# not supported for INLINE maps", States.Runtime) — ItemReader (reading cik_windows.jsonl
+# from S3) requires Mode=DISTRIBUTED. This was undiscovered until 06-03's first-ever dev
+# load_history execution (06-02: "zero prior dev executions") failed with exactly that
+# error at WindowedBootstrap. MaxConcurrency=1 still enforces one window at a time under
+# DISTRIBUTED mode (each item runs as its own STANDARD child execution, at most 1
+# concurrently). Matches the already-working DISTRIBUTED pattern used by
+# write_ownership_mdm_gold_definition's batch_map (Mode: DISTRIBUTED, ExecutionType:
+# STANDARD) elsewhere in this script.
 per_window = ecs_state(wh_medium_arn,
     "States.Array('bootstrap-next', '--cik-limit', States.Format('{}', $.window_limit), '--cik-offset', States.Format('{}', $.window_offset), '--tracking-status-filter', 'active,bootstrap_pending', '--run-id', $$.Execution.Name)",
     is_end=True)
@@ -1611,7 +1622,8 @@ windowed_bootstrap = {
     },
     "ItemProcessor": {
         "ProcessorConfig": {
-            "Mode": "INLINE",
+            "Mode": "DISTRIBUTED",
+            "ExecutionType": "STANDARD",
         },
         "StartAt": "RunWindow",
         "States": {"RunWindow": per_window},
@@ -1653,7 +1665,9 @@ fundamentals_entity_facts = {
         },
     },
     "ItemProcessor": {
-        "ProcessorConfig": {"Mode": "INLINE"},
+        # DISTRIBUTED, not INLINE — see the WindowedBootstrap comment above (fix-pipelines
+        # 06-03): ItemReader requires Mode=DISTRIBUTED, not INLINE.
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
         "StartAt": "RunFundamentalsEntityFacts",
         "States": {"RunFundamentalsEntityFacts": per_window_fundamentals_entity_facts},
     },
@@ -1714,7 +1728,9 @@ fundamentals_per_filing = {
         },
     },
     "ItemProcessor": {
-        "ProcessorConfig": {"Mode": "INLINE"},
+        # DISTRIBUTED, not INLINE — see the WindowedBootstrap comment above (fix-pipelines
+        # 06-03): ItemReader requires Mode=DISTRIBUTED, not INLINE.
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
         "StartAt": "RunFundamentalsPerFiling",
         "States": {"RunFundamentalsPerFiling": per_window_fundamentals_per_filing},
     },
@@ -1741,7 +1757,9 @@ fundamentals_thirteenf = {
         },
     },
     "ItemProcessor": {
-        "ProcessorConfig": {"Mode": "INLINE"},
+        # DISTRIBUTED, not INLINE — see the WindowedBootstrap comment above (fix-pipelines
+        # 06-03): ItemReader requires Mode=DISTRIBUTED, not INLINE.
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
         "StartAt": "RunFundamentalsThirteenF",
         "States": {"RunFundamentalsThirteenF": per_window_fundamentals_thirteenf},
     },

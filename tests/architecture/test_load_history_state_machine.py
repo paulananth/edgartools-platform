@@ -247,3 +247,87 @@ def test_mdm_export_precedes_mdm_sync_graph(definition: dict) -> None:
 
 def test_mdm_backfill_chains_to_export_not_directly_to_sync(definition: dict) -> None:
     assert definition["States"]["MdmBackfill"]["Next"] == "MdmExport"
+
+
+# -- fix-pipelines 06-03: DISTRIBUTED Map mode + total_cik_limit CIK-scoping ---------------
+
+
+def test_windowed_bootstrap_and_stage1b_maps_use_distributed_mode(definition: dict) -> None:
+    """Regression guard: AWS Step Functions rejects ItemReader on an INLINE Map
+    ("The ItemReader, ItemBatcher and ResultWriter fields are not supported for INLINE
+    maps", States.Runtime). This was undetected until 06-03's first-ever dev load_history
+    execution failed at WindowedBootstrap with exactly that error — load_history had zero
+    prior dev executions (06-02 findings), so the INLINE+ItemReader combination in these
+    four Map states was never actually exercised. All four Map states that read
+    cik_windows.jsonl via ItemReader must use Mode=DISTRIBUTED (matching the already-working
+    pattern in write_ownership_mdm_gold_definition's batch_map elsewhere in this script)."""
+    branch_a_states = definition["States"]["Stage1Parallel"]["Branches"][0]["States"]
+    windowed_bootstrap = branch_a_states["WindowedBootstrap"]
+    assert windowed_bootstrap["ItemProcessor"]["ProcessorConfig"]["Mode"] == "DISTRIBUTED"
+    assert windowed_bootstrap["ItemProcessor"]["ProcessorConfig"]["ExecutionType"] == "STANDARD"
+
+    for state_name in ("Stage1BEntityFacts", "Stage1BPerFiling", "Stage1BThirteenF"):
+        state = definition["States"][state_name]
+        assert state["Type"] == "Map", f"{state_name} should still be a Map state"
+        processor_config = state["ItemProcessor"]["ProcessorConfig"]
+        assert processor_config["Mode"] == "DISTRIBUTED", (
+            f"{state_name} ItemProcessor.ProcessorConfig.Mode must be DISTRIBUTED "
+            f"(ItemReader is incompatible with INLINE), got {processor_config.get('Mode')!r}"
+        )
+        assert processor_config["ExecutionType"] == "STANDARD"
+
+
+def test_all_item_reader_maps_use_distributed_mode(definition: dict) -> None:
+    """Broader structural guard: ANY Map state anywhere in this definition (including
+    nested inside Parallel branches) that declares an ItemReader must use
+    Mode=DISTRIBUTED — INLINE Maps cannot read from S3 via ItemReader at all."""
+
+    def walk(states: dict, label: str) -> None:
+        for name, state in states.items():
+            if state.get("Type") == "Map":
+                if "ItemReader" in state:
+                    mode = state["ItemProcessor"]["ProcessorConfig"].get("Mode")
+                    assert mode == "DISTRIBUTED", (
+                        f"{label}.{name} has ItemReader but ProcessorConfig.Mode={mode!r} "
+                        "(must be DISTRIBUTED)"
+                    )
+                proc = state["ItemProcessor"]
+                walk(proc["States"], f"{label}.{name}(Map)")
+            if state.get("Type") == "Parallel":
+                for i, branch in enumerate(state["Branches"]):
+                    walk(branch["States"], f"{label}.{name}(Parallel[{i}])")
+
+    walk(definition["States"], "top")
+
+
+def test_compute_windows_command_includes_total_cik_limit(definition: dict) -> None:
+    """ComputeWindows always passes an explicit --total-cik-limit (0 = no limit sentinel
+    when the caller omits $.total_cik_limit) so operators can bound a load_history run to
+    a small company sample (D-02) without mutating shared MDM tracking_status."""
+    cmd = _command_of(definition, "ComputeWindows")
+    assert "'--total-cik-limit'" in cmd
+    assert "$.total_cik_limit" in cmd
+
+
+def test_total_cik_limit_check_defaults_to_no_limit_sentinel(definition: dict) -> None:
+    """TotalCikLimitCheck routes straight to ComputeWindows when the caller supplied
+    total_cik_limit; otherwise TotalCikLimitDefault injects the sentinel 0 (no limit),
+    preserving backward compatibility for every existing --input '{}' caller."""
+    states = definition["States"]
+    check = states["TotalCikLimitCheck"]
+    assert check["Type"] == "Choice"
+    assert check["Choices"][0]["Variable"] == "$.total_cik_limit"
+    assert check["Choices"][0]["IsPresent"] is True
+    assert check["Choices"][0]["Next"] == "ComputeWindows"
+    assert check["Default"] == "TotalCikLimitDefault"
+
+    default_state = states["TotalCikLimitDefault"]
+    assert default_state["Type"] == "Pass"
+    assert default_state["Result"] == 0
+    assert default_state["ResultPath"] == "$.total_cik_limit"
+    assert default_state["Next"] == "ComputeWindows"
+
+
+def test_window_size_and_total_cik_limit_checks_precede_compute_windows(definition: dict) -> None:
+    order = _linear_order(definition)
+    assert order.index("WindowSizeCheck") < order.index("TotalCikLimitCheck") < order.index("ComputeWindows")
