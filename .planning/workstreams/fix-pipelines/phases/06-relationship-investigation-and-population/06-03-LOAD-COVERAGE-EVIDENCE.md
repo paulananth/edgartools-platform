@@ -1,13 +1,13 @@
 # 06-03 Load Coverage Evidence
 
 **Plan:** 06-03 (Wave 2, fix-pipelines)
-**Status:** Task 1 (coordination + readiness gate) complete — operator typed "approved". Task 2
-(trigger + monitor the bounded `load_history` run) was **NOT triggered** — a pre-flight
-investigation (below) found the ~100-200 company bound (D-02) cannot be achieved through
-`load_history`'s exposed interface given current dev MDM state, which is a Rule 4
-(architectural) blocker, not a Rule 1-3 auto-fixable issue. Returning to operator for a
-decision before any execution starts or any AWS spend is incurred. Task 3 depends on Task 2 and
-has also not started.
+**Status:** Task 1 complete (operator approved). Task 2's original Rule-4 blocker (no
+CIK-scoping bound) was resolved via operator-selected Option B (`--total-cik-limit`, commits
+`603fae3`/`e3c5fcb`). Two subsequent bounded executions ran: #1 failed fast on an
+INLINE-vs-DISTRIBUTED Map bug (fixed, `e3c5fcb`); #2 ran Stage 1/1B + MdmRun/MdmBackfill to
+success (~10.6h) but failed at `MdmExport` on a missing-target-table provisioning gap (fixed via
+DDL, commit `caa9964`). Execution #3 (`load-history-06-1783726338`) is in flight after the fix —
+see "Execution #3" below for status. Task 3 depends on Task 2's completed run.
 
 ---
 
@@ -195,6 +195,129 @@ of pre-existing shared MDM state or a code+redeploy change — both out of Task 
 deviation-rules priority (Rule 4: architectural change — ask), rather than either silently
 running the full-universe load or silently mutating thousands of rows of shared dev MDM state.
 
-## Task 3 (Per-type artifact-coverage evidence for EDGE-09/10/11) — NOT STARTED
+## Task 2 (continued) — Option B resolution, executions #1 and #2, and the MdmExport provisioning fix
 
-Depends on Task 2's completed run. Not started.
+Operator selected **Option B** (add a real CIK-scoping input to `load_history`) from the
+Rule-4 options table above, rather than Option A (mutate ~17,800+ rows of shared dev MDM
+state) or Option C (run unbounded against the full 18,034-company universe).
+
+### Option B implementation
+
+- Commit `d0f20c0` — documents the Rule-4 blocker (this doc's prior section) and the operator's
+  Option B decision.
+- Commit `603fae3` — `feat(06-03): add --total-cik-limit CIK-scoping bound to load_history`.
+  Adds `--total-cik-limit` to the `compute-windows` CLI subcommand (`edgar_warehouse/cli.py`) and
+  `warehouse_orchestrator.py`, plus a new `$.total_cik_limit` Step Functions input field wired
+  through `write_load_history_definition` in `infra/scripts/deploy-aws-application.sh`. Covered
+  by `tests/unit/test_windowing.py`. Redeployed to dev (task-def revision bump reflected in
+  `infra/aws-dev-application.json`).
+
+### Execution #1 — `load-history-06-1783542242` — FAILED (~10 min)
+
+Input: `{"total_cik_limit": 150}`. Failed fast (~10 min) with an INLINE-Map-cannot-use-ItemReader
+error: the `WindowedBootstrap`/Stage1B `Map` states were declared `Mode: INLINE`, but
+`ItemReader` (used to stream `cik_windows.jsonl` from S3) is only valid on `Mode: DISTRIBUTED`
+Maps.
+
+- **5-whys and fix:** commit `e3c5fcb` — `fix(06-03): load_history WindowedBootstrap/Stage1B
+  Maps must use DISTRIBUTED mode`. All 4 affected `Map` states (`WindowedBootstrap`,
+  `Stage1BEntityFacts`, `Stage1BPerFiling`, `Stage1BThirteenF`) switched from `INLINE` to
+  `DISTRIBUTED`/`STANDARD` execution type in `write_load_history_definition`. Covered by
+  `tests/architecture/test_load_history_state_machine.py`. Redeployed to dev (second task-def
+  revision bump, also reflected in the committed `infra/aws-dev-application.json`).
+
+### Execution #2 — `load-history-06-1783560365` — FAILED at MdmExport (after ~10.6h)
+
+Input: `{"total_cik_limit": 150}`. **The `--total-cik-limit` bound worked as designed** — Stage 1
+(bronze/silver bootstrap) and Stage 1B (fundamentals) ran to completion against the scoped
+150-company subset, taking ~10.6 hours wall-clock (DISTRIBUTED Map concurrency, not the
+sequential MaxConcurrency:1 shape flagged in the original Rule-4 blocker). `MdmRun` and
+`MdmBackfill` both SUCCEEDED. The state machine then FAILED at `MdmExport`.
+
+**Failure details** (CloudWatch, log group `/aws/ecs/edgartools-dev-warehouse`, stream
+`mdm-mdm-medium/edgar-warehouse/54f1e894495542bc831f3037598b376d`):
+
+```
+snowflake.connector.errors.ProgrammingError: 002003 (42S02): Object
+'EDGARTOOLS_DEV.EDGARTOOLS_GOLD.MDM_COMPANY' does not exist or not authorized.
+```
+Raised in `edgar_warehouse/mdm/export.py:252` (`cursor.execute(merge_sql)`, inside
+`export_pending`). ECS task `edgartools-dev-mdm-medium:19` — `mdm export` — exit 1, 3 attempts,
+all failed identically.
+
+**5-whys:**
+1. `MdmExport`'s ECS task exits 1 running `mdm export`.
+2. The Snowflake `MERGE INTO MDM_COMPANY ...` statement fails because the target table doesn't
+   exist in `EDGARTOOLS_DEV.EDGARTOOLS_GOLD`.
+3. `edgar_warehouse/mdm/export.py`'s `DOMAIN_TO_TABLE` maps 5 domains (company/adviser/person/
+   security/fund) to 5 Snowflake tables (`MDM_COMPANY`/`MDM_ADVISER`/`MDM_PERSON`/
+   `MDM_SECURITY`/`MDM_FUND`) and `SnowflakeConnectorWriter.upsert()` assumes all 5 pre-exist —
+   the only `CREATE` it issues is for a per-batch `TEMPORARY` staging table.
+4. No DDL anywhere in `infra/snowflake/sql/` (grep-confirmed against all of
+   `infra/snowflake/sql/bootstrap/`) ever created these 5 tables.
+5. `MdmExport` was added to `load_history` to resolve a data-architecture ordering issue
+   (export must precede `mdm-sync-graph`; see `deploy-aws-application.sh` comments ~L1772,
+   ~L1915) but had **zero prior dev executions** before this plan — the missing-target gap was
+   never exercised until this run reached it, ~10.6h in.
+
+**Root cause:** a provisioning gap — target-table DDL was never written for the MDM Snowflake
+export path, distinct from (and downstream of) the earlier INLINE/DISTRIBUTED Map bug.
+
+### Fix — idempotent DDL for the 5 MDM_* export targets
+
+Commit `caa9964` — `fix(06-03): provision missing MDM_* Snowflake export targets`.
+
+- New file `infra/snowflake/sql/bootstrap/07_mdm_export_targets.sql`: `CREATE TABLE IF NOT
+  EXISTS` for `MDM_COMPANY`, `MDM_ADVISER`, `MDM_PERSON`, `MDM_SECURITY`, `MDM_FUND`. Column
+  shapes derived from the SQLAlchemy models in `edgar_warehouse/mdm/database.py` (`MdmCompany`,
+  `MdmAdviser`, `MdmPerson`, `MdmSecurity`, `MdmFund`) — the same models `export.py`'s
+  `MDMExporter._serialize()` reads rows from.
+- **Type choices validated live** against dev Snowflake before finalizing the DDL (not assumed
+  from memory): built a smoke-test MERGE reproducing `SnowflakeConnectorWriter.upsert()`'s exact
+  shape — a temp table with all columns `VARIANT`, populated via `SELECT PARSE_JSON(column1),
+  ... FROM VALUES (%s, ...)`, then `MERGE ... WHEN MATCHED / WHEN NOT MATCHED` referencing bare
+  `source.<col>`. Confirmed Snowflake implicitly coerces `VARIANT` source values into `VARCHAR`,
+  `NUMBER`, `BOOLEAN`, and `TIMESTAMP_TZ` target columns with no explicit cast required, and that
+  `PARSE_JSON('null')` (export.py's JSON encoding of a Python `None`) coerces to a real SQL
+  `NULL` on the target column rather than a JSON-null literal. JSON-typed SQLAlchemy columns
+  (`MdmPerson.name_variants`/`role_titles`) are kept as Snowflake `VARIANT`. This means **no
+  export.py changes or Docker image rebuild were needed** — this is a pure Rule 1-3
+  provisioning fix, not a Rule 4 architectural change.
+- Applied directly to `EDGARTOOLS_DEV.EDGARTOOLS_GOLD` via `snow sql --connection snowconn`.
+  Verified: `SHOW TABLES LIKE 'MDM_%' IN SCHEMA EDGARTOOLS_DEV.EDGARTOOLS_GOLD` → `MDM_ADVISER`,
+  `MDM_COMPANY`, `MDM_FUND`, `MDM_PERSON`, `MDM_SECURITY` (all 5 present).
+- Sanity-checked the exporter's actual dev identity against the connection used to apply the
+  DDL: `aws secretsmanager get-secret-value --secret-id edgartools-dev/mdm/snowflake` →
+  `MDM_SNOWFLAKE_ACCOUNT=xcpclkf-kb19989`, `MDM_SNOWFLAKE_USER=ANANP11`,
+  `MDM_SNOWFLAKE_ROLE=ACCOUNTADMIN`, `MDM_SNOWFLAKE_DATABASE=EDGARTOOLS_DEV`,
+  `MDM_SNOWFLAKE_SCHEMA=EDGARTOOLS_GOLD` — identical to the `snowconn` SnowCLI connection used
+  to apply the DDL (same account/user/role). No role/ownership mismatch risk for this run.
+- **Follow-up (not built now, out of this plan's Rule 1-3 scope):** an exporter-side
+  auto-ensure (`CREATE TABLE IF NOT EXISTS` issued by `export.py` itself before the first
+  `MERGE`) would make this self-healing for future environments/schemas instead of relying on
+  bootstrap DDL being applied out-of-band. Recorded here for a future phase, not implemented in
+  06-03.
+
+### Execution #3 — re-trigger after the fix
+
+Command:
+```
+aws stepfunctions start-execution --region us-east-1 \
+  --state-machine-arn arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-load-history \
+  --name load-history-06-1783726338 \
+  --input '{"total_cik_limit": 150}'
+```
+- **Execution ARN:** `arn:aws:states:us-east-1:690839588395:execution:edgartools-dev-load-history:load-history-06-1783726338`
+- **Start:** 2026-07-10T19:32:19.894000-04:00
+- **Input:** `{"total_cik_limit": 150}` — same bound as executions #1/#2 (D-02, ~100-200
+  companies). No `--force` anywhere (DEC-009).
+- Stage 1/1B bronze/silver artifacts from execution #2 were already captured for this 150-CIK
+  scope before that run failed downstream at MdmExport; SEC idempotency (DEC-009: loaders skip
+  already-captured files by default) means this re-run is expected to skip re-fetching those
+  artifacts and move materially faster through Stage 1/1B than the ~10.6h observed in execution
+  #2. Observed behavior recorded in the monitoring section below.
+
+## Task 3 (Per-type artifact-coverage evidence for EDGE-09/10/11) — pending execution #3 outcome
+
+Depends on Task 2's completed run (execution #3, still in flight as of this doc update). Not
+started.
