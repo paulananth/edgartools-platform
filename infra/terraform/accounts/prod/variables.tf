@@ -4,6 +4,17 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "expected_aws_account_id" {
+  description = "Canonical production AWS account. This guard is intentionally not overrideable to another account."
+  type        = string
+  default     = "690839588395"
+
+  validation {
+    condition     = var.expected_aws_account_id == "690839588395"
+    error_message = "expected_aws_account_id must remain the canonical production account 690839588395."
+  }
+}
+
 variable "bronze_bucket_name" {
   description = "Optional override for the bronze bucket name."
   type        = string

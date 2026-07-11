@@ -43,6 +43,8 @@ SNOW_CONNECTION=""
 WORKSPACE=""
 REPORT_FILE=""
 APPLY=false
+CANONICAL_PROD_AWS_ACCOUNT_ID="690839588395"
+CANONICAL_PROD_DATABASE="EDGARTOOLS_PROD"
 
 COMMAND="wizard"
 if [[ $# -gt 0 ]]; then
@@ -110,6 +112,21 @@ refresh_config() {
   WORKSPACE="${WORKSPACE:-${REPO_ROOT}/.edgartools-go-live}"
   STATE_FILE="${WORKSPACE}/state.json"
   ENV_UPPER="$(printf '%s' "$ENVIRONMENT" | tr '[:lower:]' '[:upper:]')"
+  RESOURCE_PREFIX="edgartools-${ENVIRONMENT}"
+  SNOWFLAKE_DATABASE="EDGARTOOLS_${ENV_UPPER}"
+}
+
+selected_aws_account_id() {
+  aws --profile "$AWS_PROFILE_NAME" --region "$AWS_REGION_NAME" sts get-caller-identity --query Account --output text
+}
+
+require_canonical_prod_target() {
+  local account_id
+  [[ "$ENVIRONMENT" == "prod" ]] || return 0
+  [[ "$AWS_REGION_NAME" == "us-east-1" ]] || fail "prod must target us-east-1"
+  account_id="$(selected_aws_account_id 2>/dev/null)" || fail "unable to resolve AWS account for production profile ${AWS_PROFILE_NAME}"
+  [[ "$account_id" == "$CANONICAL_PROD_AWS_ACCOUNT_ID" ]] || fail "production account mismatch: expected ${CANONICAL_PROD_AWS_ACCOUNT_ID}, got ${account_id}"
+  [[ "$SNOWFLAKE_DATABASE" == "$CANONICAL_PROD_DATABASE" ]] || fail "production Snowflake target must be ${CANONICAL_PROD_DATABASE}"
 }
 
 use_gum() {
@@ -415,7 +432,7 @@ check_command_available() {
 }
 
 run_checks() {
-  local rel missing_templates missing_configs dirty
+  local rel missing_templates missing_configs dirty account_id identity_value expected_bucket bucket image_ref
   CHECK_NAMES=()
   CHECK_STATUSES=()
   CHECK_DETAILS=()
@@ -435,6 +452,26 @@ run_checks() {
     else
       add_check "aws identity" "fail" "AWS CLI identity check failed for selected profile and region"
     fi
+    if [[ "$ENVIRONMENT" == "prod" ]]; then
+      account_id="$(selected_aws_account_id 2>/dev/null || true)"
+      if [[ "$account_id" == "$CANONICAL_PROD_AWS_ACCOUNT_ID" ]]; then
+        add_check "canonical prod account" "pass" "AWS caller matches the canonical production account"
+      else
+        add_check "canonical prod account" "fail" "production account mismatch; expected ${CANONICAL_PROD_AWS_ACCOUNT_ID}"
+      fi
+    fi
+  fi
+
+  if [[ "$ENVIRONMENT" == "prod" && "$AWS_REGION_NAME" != "us-east-1" ]]; then
+    add_check "canonical prod region" "fail" "production region must be us-east-1"
+  fi
+
+  if [[ "$ENVIRONMENT" == "prod" && -n "${EDGAR_IDENTITY:-}" && ! "${EDGAR_IDENTITY}" =~ [^[:space:]@]+@[^[:space:]@]+ ]]; then
+    add_check "EDGAR identity" "fail" "EDGAR_IDENTITY is set but does not contain a contact email"
+  elif [[ -n "${EDGAR_IDENTITY:-}" ]]; then
+    add_check "EDGAR identity" "pass" "EDGAR_IDENTITY contains a contact email"
+  else
+    add_check "EDGAR identity" "warn" "EDGAR_IDENTITY is not set; bounded SEC smoke stages cannot run"
   fi
 
   if command -v snow >/dev/null 2>&1; then
@@ -508,8 +545,32 @@ run_checks() {
     else
       add_check "first-load shard manifest" "warn" "warehouse/silver/sec/shard-manifest.json is missing or not readable; bronze_seed_silver_gold will use sequential monolith fallback on first-time loads"
     fi
+    if [[ "$ENVIRONMENT" == "prod" ]]; then
+      for bucket in bronze_bucket_name warehouse_bucket_name snowflake_export_bucket_name; do
+        expected_bucket="edgartools-prod-${bucket%_bucket_name}-690839588395"
+        [[ "$bucket" == "snowflake_export_bucket_name" ]] && expected_bucket="edgartools-prod-snowflake-export-690839588395"
+        if [[ "$(application_manifest_value "$bucket" 2>/dev/null || true)" == "$expected_bucket" ]]; then
+          add_check "canonical ${bucket}" "pass" "manifest uses canonical production bucket"
+        else
+          add_check "canonical ${bucket}" "fail" "manifest does not use ${expected_bucket}"
+        fi
+      done
+    fi
   else
     add_check "prod application summary" "warn" "infra/aws-${ENVIRONMENT}-application.json missing; regenerate via the 'AWS: ECS task definitions and Step Functions' stage before running the AWS MDM E2E stage"
+  fi
+
+
+  for image_ref in "${REPO_ROOT}/infra/aws-${ENVIRONMENT}-warehouse-image-ref.txt" "${REPO_ROOT}/infra/aws-${ENVIRONMENT}-mdm-image-ref.txt"; do
+    if [[ -s "$image_ref" ]]; then
+      add_check "image:$(basename "$image_ref")" "pass" "resolved image reference is available"
+    else
+      add_check "image:$(basename "$image_ref")" "warn" "image reference missing; publish stage is required before application deployment"
+    fi
+  done
+
+  if [[ "$ENVIRONMENT" == "prod" && -x "${REPO_ROOT}/infra/scripts/preflight-prod-promotion.sh" ]]; then
+    add_check "promotion preflight" "pass" "read-only canonical production preflight is available"
   fi
 }
 
@@ -544,7 +605,7 @@ build_stages() {
   deployer_q="$(shell_quote "$DEPLOYER_PROFILE")"
   env_q="$(shell_quote "$ENVIRONMENT")"
   snow_q="$(shell_quote "$SNOW_CONNECTION")"
-  db_name="EDGARTOOLS_${ENV_UPPER}"
+  db_name="$SNOWFLAKE_DATABASE"
   image_tag="sha-$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD 2>/dev/null || echo HEAD)"
   mdm_instance_name="${db_name}_MDM"
   mdm_network_policy_name="edgartools_${ENVIRONMENT}_mdm_postgres_policy"
@@ -623,16 +684,9 @@ uv run --with dbt-snowflake dbt test --target ${ENVIRONMENT}"
 
   add_stage \
     "Snowflake Postgres / graph prerequisites" \
-    "Prepares Snowflake Postgres and hosted graph prerequisites before MDM runtime use." \
-    "snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --filename infra/snowflake/postgres/mdm_create_network_policy.sql -D schema=${mdm_schema_name_q} -D network_rule_name=${mdm_network_rule_name_q} -D network_policy_name=${mdm_network_policy_name_q}
-snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --format JSON --filename infra/snowflake/postgres/mdm_create_instance.sql -D instance_name=${mdm_instance_name_q} -D network_policy=${mdm_network_policy_name_q} -D comment_env=${mdm_comment_env_q}
-snow sql --connection ${SNOW_CONNECTION} --filename infra/snowflake/postgres/mdm_post_restore.sql
-snow sql --connection ${SNOW_CONNECTION} --filename infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql"
-
-  add_stage \
-    "MDM + graph: secret bootstrap" \
-    "Writes the Snowflake Postgres application DSN to the AWS Secrets Manager container without putting the value in Terraform." \
-    "printf '%s' \"\${SNOWFLAKE_APPLICATION_MDM_DSN:?set SNOWFLAKE_APPLICATION_MDM_DSN}\" | bash infra/scripts/bootstrap-aws-mdm-secrets.sh --env ${ENVIRONMENT} --aws-profile ${AWS_PROFILE_NAME} --aws-region ${AWS_REGION_NAME} --dsn-stdin"
+    "Delegates Snowflake Postgres credential rotation, migration, and AWS secret bootstrap to the maintained bootstrap script, then grants the hosted graph app against the selected database." \
+    "bash infra/scripts/bootstrap-prod-mdm.sh --env ${ENVIRONMENT} --snow-connection ${SNOW_CONNECTION} --instance-name ${mdm_instance_name_q} --aws-profile ${AWS_PROFILE_NAME} --aws-region ${AWS_REGION_NAME} --name-prefix edgartools-${ENVIRONMENT}
+snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --filename infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql -D database=${db_name}"
 
   add_stage \
     "AWS: bronze_seed_silver_gold (one-click data refresh)" \
@@ -796,6 +850,8 @@ run_deploy() {
     echo "Preview complete. No real commands were run because --apply was not provided."
     return 0
   fi
+
+  require_canonical_prod_target
 
   build_stages
   for i in "${!STAGE_NAMES[@]}"; do

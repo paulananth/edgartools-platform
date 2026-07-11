@@ -61,7 +61,7 @@ def test_snowflake_connector_writer_multi_row_upsert_keeps_parse_json_out_of_val
     pattern is INSERT ... SELECT PARSE_JSON(columnN) ... FROM VALUES (...).
     """
     connection = FakeConnection()
-    writer = SnowflakeConnectorWriter(connection, database="EDGARTOOLS_PRODB", schema="MDM")
+    writer = SnowflakeConnectorWriter(connection, database="EDGARTOOLS_PROD", schema="MDM")
 
     count = writer.upsert(
         "MDM_COMPANY",

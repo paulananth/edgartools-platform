@@ -73,6 +73,9 @@ Thumbs.db
 
 # Local go-live wizard state and sanitized reports
 .edgartools-go-live/
+infra/aws-*-application.json
+infra/aws-*-image-ref.txt
+infra/snowflake/sql/*_native_pull_handshake.json
 .gstack/
 
 # Agent worktrees

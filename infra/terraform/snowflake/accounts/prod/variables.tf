@@ -91,3 +91,13 @@ variable "parent_admin_role_name" {
   type        = string
   default     = "SYSADMIN"
 }
+variable "expected_database_name" {
+  description = "Canonical production Snowflake database guard."
+  type        = string
+  default     = "EDGARTOOLS_PROD"
+
+  validation {
+    condition     = var.expected_database_name == "EDGARTOOLS_PROD"
+    error_message = "Production Snowflake Terraform may target only EDGARTOOLS_PROD."
+  }
+}

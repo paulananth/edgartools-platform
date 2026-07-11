@@ -62,3 +62,13 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+variable "expected_aws_account_id" {
+  description = "Canonical production AWS account guard."
+  type        = string
+  default     = "690839588395"
+
+  validation {
+    condition     = var.expected_aws_account_id == "690839588395"
+    error_message = "expected_aws_account_id must remain 690839588395."
+  }
+}
