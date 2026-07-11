@@ -1,0 +1,44 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-07-11T16:31:18.762Z",
+  "workstream": "fix-pipelines",
+  "phase": "06",
+  "phase_name": "relationship-investigation-and-population",
+  "phase_dir": ".planning/workstreams/fix-pipelines/phases/06-relationship-investigation-and-population",
+  "plan": 3,
+  "task": 2,
+  "total_tasks": 3,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": "06-01", "name": "INSTITUTIONAL_HOLDS CIK-range batching", "status": "done", "commit": "b303fad (SUMMARY committed)"},
+    {"id": "06-02", "name": "Bootstrap SFN failure 5-whys + GO verdict", "status": "done", "commit": "5524ea1 (SUMMARY committed)"},
+    {"id": "06-03/T1", "name": "Coordination + readiness gate", "status": "done", "commit": "e62ed3e"},
+    {"id": "06-03/T2", "name": "Bounded load_history run", "status": "in_progress", "progress": "3 latent bugs fixed (603fae3 CIK bound, e3c5fcb DISTRIBUTED maps, caa9964 MDM_* DDL); exec #3 load-history-06-1783726338 RUNNING ~17h, suspect stall in WindowedBootstrap"}
+  ],
+  "remaining_tasks": [
+    {"id": "06-03/T2", "name": "Resolve exec #3 (stall check -> SUCCEEDED or 5-whys)", "status": "in_progress"},
+    {"id": "06-03/T3", "name": "Per-type EDGE-09/10/11 coverage evidence (READ-ONLY) + SUMMARY.md + STATE/ROADMAP", "status": "not_started"},
+    {"id": "06-04", "name": "Wave 3: EDGE-09/EDGE-11 disposition (autonomous)", "status": "not_started"},
+    {"id": "06-05", "name": "Wave 3: EDGE-10 disposition (BLOCKING human checkpoint: Codex coordination)", "status": "not_started"},
+    {"id": "06-06", "name": "Wave 4: EDGE-05/06 closure + phase ledger (autonomous)", "status": "not_started"},
+    {"id": "verify", "name": "gsd-verifier phase goal verification + phase completion", "status": "not_started"}
+  ],
+  "blockers": [
+    {"description": "exec #3 possibly stalled: ~17h in WindowedBootstrap single window (exec #2 did all of Stage 1+1B in ~10.6h); newest warehouse-medium log activity ~47 min old at pause time", "type": "external", "workaround": "Stall policy: identify child ECS task, tail logs, then continue-waiting / stop+re-trigger / root-cause. Re-trigger input: {\"total_cik_limit\": 150}, no --force"}
+  ],
+  "async_jobs": [
+    {"manifest": ".planning/async-jobs/load-history-06-1783726338.json", "job_id": "load-history-06-1783726338", "backend": "aws-stepfunctions", "status": "running", "submitted_at": "2026-07-10T23:32:19Z", "verification_command": "aws stepfunctions describe-execution --region us-east-1 --execution-arn arn:aws:states:us-east-1:690839588395:execution:edgartools-dev-load-history:load-history-06-1783726338 --query status --output text", "resume_command": "/gsd-execute-phase 6 --ws fix-pipelines"}
+  ],
+  "human_actions_pending": [
+    {"action": "06-05 has a blocking checkpoint (fundamental-factors-v2/Codex coordination) when Wave 3 reaches it", "context": "plan frontmatter autonomous: false", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "Option B for CIK scoping: real --total-cik-limit input + redeploy (user-selected over MDM state mutation or unbounded run)", "rationale": "clean, reusable, no shared-state mutation", "phase": "06"},
+    {"decision": "Retry-after-root-caused-fix does not need fresh approval; blind retries are forbidden", "rationale": "user approved the bounded run once; each of 3 failures got a 5-whys fix before re-trigger", "phase": "06"},
+    {"decision": "prodb/prod infra files (aws-prodb-application.json, prod_native_pull_handshake.json, aws-prod-application.json) stay uncommitted - other-runtime work", "rationale": "user: 'commit config.json, and codex leave the rest'", "phase": "06"},
+    {"decision": "PR #125 merged mid-phase at user request (merge commit 2eaa650); remaining phase-6 work continues on claude/fix-pipelines-v2 toward a follow-up PR", "rationale": "user said merge; repo pattern reuses branch across PRs (like #124)", "phase": "06"}
+  ],
+  "uncommitted_files": ["infra/aws-prodb-application.json (leave)", "infra/snowflake/sql/prod_native_pull_handshake.json (leave)", "infra/aws-prod-application.json (leave, untracked)"],
+  "next_action": "Check exec #3 status via the async-job manifest's verification_command. RUNNING -> stall investigation (child ECS task logs). SUCCEEDED -> continuation executor for 06-03 Task 3 + SUMMARY. FAILED -> 5-whys before any retry.",
+  "context_notes": "Orchestrating /gsd-execute-phase 6 --ws fix-pipelines, Wave 2 of 4. Worktrees auto-degraded to sequential (unpushed-branch divergence, normal). load_history had never run in dev; this plan is flushing out its latent bugs one stage at a time - MdmSync/MdmVerify/gold stages after MdmExport have ALSO never executed, expect possible further latent failures there. Prior executor agent IDs from the old session are dead; spawn fresh continuation agents with state from disk/git/AWS."
+}

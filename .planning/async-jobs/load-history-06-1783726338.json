@@ -1,0 +1,26 @@
+{
+  "manifest_version": "1.0",
+  "job_id": "load-history-06-1783726338",
+  "backend": "aws-stepfunctions",
+  "status": "running",
+  "workstream": "fix-pipelines",
+  "phase": "06",
+  "plan": "06-03",
+  "plan_task": 2,
+  "execution_arn": "arn:aws:states:us-east-1:690839588395:execution:edgartools-dev-load-history:load-history-06-1783726338",
+  "state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-load-history",
+  "input": {"total_cik_limit": 150},
+  "submitted_at": "2026-07-10T23:32:19Z",
+  "submit_command": "aws stepfunctions start-execution --region us-east-1 --state-machine-arn arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-load-history --name load-history-06-1783726338 --input '{\"total_cik_limit\": 150}'",
+  "verification_command": "aws stepfunctions describe-execution --region us-east-1 --execution-arn arn:aws:states:us-east-1:690839588395:execution:edgartools-dev-load-history:load-history-06-1783726338 --query status --output text",
+  "expected_artifacts": [
+    "Execution status SUCCEEDED",
+    "DEF 14A / companyfacts / 13F-HR silver rows for the 150-CIK sample (evidence for 06-03 Task 3)"
+  ],
+  "resume_command": "/gsd-execute-phase 6 --ws fix-pipelines",
+  "stall_note": "As of 2026-07-11T16:35Z the execution had been in WindowedBootstrap's single window for ~17h (exec #2 finished ALL of Stage 1+1B in ~10.6h with full fetches). Suspect stall or SEC-throttle backoff. Before anything else: identify the WindowedBootstrap child's ECS task among RUNNING tasks on cluster edgartools-dev-warehouse, tail its warehouse-medium log stream, and apply the stall policy (continue waiting / stop + re-trigger / root-cause). Do NOT blind-retry; two prior executions already failed for distinct root-caused reasons (see 06-03-LOAD-COVERAGE-EVIDENCE.md).",
+  "prior_attempts": [
+    {"name": "load-history-06-1783542242", "status": "FAILED", "cause": "INLINE Maps with ItemReader (fixed in e3c5fcb)"},
+    {"name": "load-history-06-1783560365", "status": "FAILED", "cause": "MdmExport MERGE targets unprovisioned (fixed in caa9964)"}
+  ]
+}
