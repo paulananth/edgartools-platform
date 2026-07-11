@@ -301,7 +301,9 @@ def test_plan_prints_preview_only_aws_ordered_commands(tmp_path: Path) -> None:
     assert "dbt gold" in out
     assert "Streamlit dashboard" in out
     assert "Snowflake Postgres / graph prerequisites" in out
-    assert "MDM + graph: secret bootstrap" in out
+    assert "bootstrap-prod-mdm.sh" in out
+    assert "mdm_post_restore.sql" not in out
+    assert "-D database=EDGARTOOLS_DEV" in out
     assert "Data: bounded smoke only" in out
     assert "bootstrap-next --limit 100" in out
     assert "Current go-live notes and issues:" in out
@@ -311,6 +313,45 @@ def test_plan_prints_preview_only_aws_ordered_commands(tmp_path: Path) -> None:
     assert "bootstrap-full" not in out
     assert "full bootstrap" not in out.lower()
     assert not workspace.exists()
+
+
+def test_prod_plan_uses_canonical_names_and_maintained_delegates(tmp_path: Path) -> None:
+    result = run_wizard("plan", "--env", "prod", "--workspace", str(tmp_path / "workspace"))
+
+    out = result.stdout
+    assert "EDGARTOOLS_PROD" in out
+    assert "edgartools-prod" in out
+    assert "infra/aws-prod-application.json" in out
+    assert "deploy-aws-application.sh" in out
+    assert "deploy-snowflake-stack.sh" in out
+    assert "bootstrap-prod-mdm.sh" in out
+    assert "infra/snowflake/streamlit/deploy.sh" in out
+    assert "PRODB" not in out
+
+
+def test_prod_apply_rejects_wrong_aws_account_before_any_stage(tmp_path: Path) -> None:
+    fakebin, call_log = make_fake_tools(tmp_path)
+    env = {
+        "PATH": f"{fakebin}{os.pathsep}{os.environ['PATH']}",
+        "GO_LIVE_CALL_LOG": str(call_log),
+    }
+
+    result = run_wizard(
+        "deploy",
+        "--apply",
+        "--env",
+        "prod",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        input_text="y\n",
+        env=env,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "production account mismatch" in result.stderr
+    calls = call_log.read_text(encoding="utf-8")
+    assert "terraform apply" not in calls
 
 
 def test_bronze_seed_stage_uses_pr95_batchsilver_progress_contract(tmp_path: Path) -> None:

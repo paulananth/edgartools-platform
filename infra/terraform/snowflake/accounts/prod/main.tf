@@ -1,21 +1,13 @@
 locals {
-  # NOTE: this root targets EDGARTOOLS_PRODB, not EDGARTOOLS_PROD. The real
-  # production Snowflake database (EDGARTOOLS_PROD, EDGARTOOLS_PROD_DEPLOYER,
-  # etc.) already exists in this same Snowflake account (confirmed via
-  # `SHOW DATABASES LIKE 'EDGARTOOLS%'` -- created 2026-06-19, "Baseline
-  # database for the EdgarTools prod gold mirror"). Applying this root with
-  # the original EDGARTOOLS_PROD naming would have targeted those live
-  # objects. environment stays "prod" (used for tags/behavior in the modules
-  # below, not identity) -- only the resource *names* are prodb-scoped.
   environment            = "prod"
-  database_name          = "EDGARTOOLS_PRODB"
+  database_name          = var.expected_database_name
   source_schema_name     = "EDGARTOOLS_SOURCE"
   gold_schema_name       = "EDGARTOOLS_GOLD"
-  deployer_role_name     = "EDGARTOOLS_PRODB_DEPLOYER"
-  refresher_role_name    = "EDGARTOOLS_PRODB_REFRESHER"
-  reader_role_name       = "EDGARTOOLS_PRODB_READER"
-  refresh_warehouse_name = "EDGARTOOLS_PRODB_REFRESH_WH"
-  reader_warehouse_name  = "EDGARTOOLS_PRODB_READER_WH"
+  deployer_role_name     = "EDGARTOOLS_PROD_DEPLOYER"
+  refresher_role_name    = "EDGARTOOLS_PROD_REFRESHER"
+  reader_role_name       = "EDGARTOOLS_PROD_READER"
+  refresh_warehouse_name = "EDGARTOOLS_PROD_REFRESH_WH"
+  reader_warehouse_name  = "EDGARTOOLS_PROD_READER_WH"
   native_pull_enabled    = var.snowflake_storage_role_arn != null && var.snowflake_export_root_url != null && var.snowflake_manifest_sns_topic_arn != null
   storage_external_id    = coalesce(var.snowflake_storage_external_id, "edgartools-${local.environment}-snowflake-native-pull")
 }

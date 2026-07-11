@@ -1,11 +1,20 @@
 locals {
   environment           = "prod"
-  bronze_bucket_name    = coalesce(var.bronze_bucket_name, "edgartools-prod-bronze")
-  warehouse_bucket_name = coalesce(var.warehouse_bucket_name, "edgartools-prod-warehouse")
+  bronze_bucket_name    = coalesce(var.bronze_bucket_name, "edgartools-prod-bronze-690839588395")
+  warehouse_bucket_name = coalesce(var.warehouse_bucket_name, "edgartools-prod-warehouse-690839588395")
   snowflake_export_bucket_name = coalesce(
     var.snowflake_export_bucket_name,
-    "edgartools-prod-snowflake-export",
+    "edgartools-prod-snowflake-export-690839588395",
   )
+}
+
+data "aws_caller_identity" "current" {}
+
+check "canonical_prod_account" {
+  assert {
+    condition     = data.aws_caller_identity.current.account_id == var.expected_aws_account_id
+    error_message = "Production Terraform must run in canonical AWS account ${var.expected_aws_account_id}."
+  }
 }
 
 module "network" {

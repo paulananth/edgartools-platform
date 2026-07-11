@@ -113,7 +113,7 @@ terraform init
 terraform apply
 ```
 
-Note the bucket name printed in the output (e.g. `edgartools-prod-tfstate`). You will use
+Note the bucket name printed in the output (e.g. `edgartools-prod-tfstate-690839588395`). You will use
 this in every subsequent backend configuration.
 
 ---
@@ -133,7 +133,7 @@ cd infra/terraform/accounts/prod
 cp backend.hcl.example backend.hcl
 # Edit backend.hcl — set bucket to the name from Step 1
 # Default contents:
-#   bucket  = "edgartools-prod-tfstate"
+#   bucket  = "edgartools-prod-tfstate-690839588395"
 #   key     = "accounts/prod/terraform.tfstate"
 #   region  = "us-east-1"
 #   encrypt = true
@@ -354,7 +354,7 @@ cd infra/terraform/snowflake/accounts/prod
 cp backend.hcl.example backend.hcl
 # Edit backend.hcl — set bucket to the name from Step 1
 # Default contents:
-#   bucket = "edgartools-prod-tfstate"
+#   bucket = "edgartools-prod-tfstate-690839588395"
 #   key    = "snowflake/prod/terraform.tfstate"
 #   region = "us-east-1"
 
