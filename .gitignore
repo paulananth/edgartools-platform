@@ -77,3 +77,6 @@ Thumbs.db
 
 # Agent worktrees
 .worktrees/
+
+# Local Terraform state backups (may contain secrets) — never commit
+infra/.aws-tfstate-backups/

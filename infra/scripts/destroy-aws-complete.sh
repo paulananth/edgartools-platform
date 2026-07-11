@@ -451,8 +451,8 @@ empty_bucket() {
   fi
 
   while true; do
-    list_file="$(mktemp "${TMP_DIR}/s3-versions-XXXXXX.json")"
-    payload_file="$(mktemp "${TMP_DIR}/s3-delete-XXXXXX.json")"
+    list_file="$(mktemp "${TMP_DIR}/s3-versions-XXXXXX")"
+    payload_file="$(mktemp "${TMP_DIR}/s3-delete-XXXXXX")"
     aws_cli s3api list-object-versions --bucket "$bucket" --max-items 1000 --output json > "$list_file"
     count="$(
       python3 - "$list_file" "$payload_file" <<'PY'
@@ -470,6 +470,11 @@ for group in ("Versions", "DeleteMarkers"):
         version_id = item.get("VersionId")
         if key is not None and version_id is not None:
             objects.append({"Key": key, "VersionId": version_id})
+# S3 DeleteObjects accepts at most 1000 keys per request. A single
+# list-object-versions page can return up to 1000 Versions AND 1000
+# DeleteMarkers (combined > 1000), so cap the batch. The outer bash loop
+# re-lists from the start each pass, so remaining keys are cleared next iteration.
+objects = objects[:1000]
 target.write_text(json.dumps({"Objects": objects, "Quiet": True}), encoding="utf-8")
 print(len(objects))
 PY
@@ -509,8 +514,8 @@ delete_ecr_images() {
   fi
 
   while true; do
-    details_file="$(mktemp "${TMP_DIR}/ecr-images-XXXXXX.json")"
-    payload_file="$(mktemp "${TMP_DIR}/ecr-delete-XXXXXX.json")"
+    details_file="$(mktemp "${TMP_DIR}/ecr-images-XXXXXX")"
+    payload_file="$(mktemp "${TMP_DIR}/ecr-delete-XXXXXX")"
     aws_cli ecr describe-images --repository-name "$repo" --max-items 100 --output json > "$details_file"
     count="$(
       python3 - "$details_file" "$payload_file" <<'PY'
