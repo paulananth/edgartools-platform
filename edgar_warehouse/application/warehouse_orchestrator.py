@@ -1493,7 +1493,21 @@ def _capture_bronze_raw(
             raise WarehouseRuntimeError(
                 f"--window-size must be a positive integer, got {window_size}"
             )
+        total_cik_limit_raw = arguments.get("total_cik_limit")
+        total_cik_limit = int(total_cik_limit_raw) if total_cik_limit_raw not in (None, "", 0, "0") else None
+        if total_cik_limit is not None and total_cik_limit <= 0:
+            raise WarehouseRuntimeError(
+                f"--total-cik-limit must be a positive integer, got {total_cik_limit}"
+            )
         ciks = db.get_tracked_ciks(LOAD_HISTORY_TRACKING_STATUS_FILTER)
+        if total_cik_limit is not None:
+            # Bound the CIK universe BEFORE window slicing so every downstream stage
+            # (WindowedBootstrap, Stage1B*) — which independently re-query the same
+            # ordered tracked-CIK list by offset/limit against cik_windows.jsonl's
+            # window descriptors — only ever sees windows within the capped set.
+            # This scopes a whole load_history run to ~N companies (e.g. an
+            # investigative sample) without mutating shared MDM tracking_status.
+            ciks = ciks[:total_cik_limit]
         # Build window descriptors: {window_offset, window_limit} for each slice
         window_descs = [
             {"window_offset": i, "window_limit": min(window_size, len(ciks) - i)}
@@ -1514,6 +1528,7 @@ def _capture_bronze_raw(
             cik_count=len(ciks),
             window_count=len(window_descs),
             window_size=window_size,
+            total_cik_limit=total_cik_limit,
         )
         metrics["cik_count"] = len(ciks)
         metrics["window_count"] = len(window_descs)
@@ -3523,6 +3538,7 @@ def _resolve_scope(
     if command_name == "compute-windows":
         return {
             "window_size": arguments.get("window_size", 500),
+            "total_cik_limit": arguments.get("total_cik_limit"),
         }
 
     if command_name == "write-run-summary":

@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: fix-pipelines — Pipeline Data-Source Completeness & Verification
-current_phase: 6
-current_phase_name: Relationship Investigation And Population
-current_plan: Not started
-status: planning
-stopped_at: Phase 5 Plan 03 complete -- NODE-01..06/EDGE-01..04 named per-type parity checks; Phase 5 fully done
-last_updated: "2026-07-08T07:38:50.943Z"
+current_phase: 06
+current_phase_name: relationship-investigation-and-population
+current_plan: 1
+status: executing
+stopped_at: "06-01 complete: INSTITUTIONAL_HOLDS CIK-range batching implemented and tested (EDGE-11). Ready for 06-02."
+last_updated: "2026-07-08T16:49:03.977Z"
 last_activity: 2026-07-08
-last_activity_desc: Phase 05 complete, transitioned to Phase 6
+last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 9
+  completed_plans: 5
   percent: 20
 ---
 
@@ -22,12 +22,12 @@ progress:
 
 ## Current Position
 
-Phase: 6 — Relationship Investigation And Population
-Plan: 3 of 3 in current phase
-Status: 05-02 complete; ready to plan/execute 05-03
-Last activity: 2026-07-08 — Phase 05 complete, transitioned to Phase 6
+Phase: 06 (relationship-investigation-and-population) — EXECUTING
+Plan: 3 of 6
+Status: Ready to execute
+Last activity: 2026-07-08 — Phase 06 execution started
 
-[███████░░░] 67% (0/5 phases complete, 2/3 plans in phase 5)
+[██░░░░░░░░] 20% (1/5 phases complete; phase 6 planned, 0/6 plans executed)
 
 ## Milestone Context
 
@@ -45,27 +45,29 @@ REQUIREMENTS.md)
 
 | Phase | Goal | Requirements | Status |
 |-------|------|--------------|--------|
-| 5 — Node And Populated-Relationship Graph Parity | All 6 node types + 4 populated relationship types verified, idempotency established | NODE-01..06, EDGE-01..04, GVER-03 | Not started |
-| 6 — Relationship Investigation And Population | Root-cause + populate the 5 ambiguous zero relationship types against their actual artifacts | EDGE-05, 06, 09, 10, 11 | Not started |
+| 5 — Node And Populated-Relationship Graph Parity | All 6 node types + 4 populated relationship types verified, idempotency established | NODE-01..06, EDGE-01..04, GVER-03 | Complete |
+| 6 — Relationship Investigation And Population | Root-cause + populate the 5 ambiguous zero relationship types against their actual artifacts | EDGE-05, 06, 09, 10, 11 | Planned (6 plans, 4 waves) |
 | 7 — Source-Coverage Exclusions And Artifact Hygiene | Document the 2 artifact-confirmed exclusions; fix silver-clobber + fetch-idempotency | EDGE-07, 08, ARTF-01, 02 | Not started |
 | 8 — Neo4j Native App Verification Gaps | verify-graph separates readiness vs parity; GRAPH_INFO/BFS/LIST_GRAPHS resolved or documented | GVER-01, 02 | Not started |
 | 9 — edgartools Crosscheck | Validate platform parsing vs edgartools; replace parsers where it's a clear win; audit API usage | EDGX-01..03 | Not started |
 
 ## Progress
 
-**Phases Complete:** 0/5
-**Current Plan:** Not started
+**Phases Complete:** 1/5
+**Current Plan:** 1
 
 ## Session Continuity
 
-**Last session:** 2026-07-08T07:02:19.144Z
+**Last session:** 2026-07-08T16:45:35.733Z
 
-**Stopped At:** Phase 5 Plan 03 complete -- NODE-01..06/EDGE-01..04 named per-type parity checks; Phase 5 fully done
-committed for all 6 MDM entity types (5 silver-resolved via `test_node_resolution_is_idempotent_across_entity_types`,
-plus the seeded `audit_firm` type via `test_audit_firm_seed_is_idempotent`). GVER-03 is now fully
-satisfied (node/relationship-derivation side here + graph-sync/full-rebuild side from 05-01).
-Committed on `claude/fix-pipelines-v2`. Not yet planned: 05-03.
+**Stopped At:** 06-01 complete: INSTITUTIONAL_HOLDS CIK-range batching implemented and tested (EDGE-11). Ready for 06-02.
+(0 errors, 0 warnings), all 5 requirement IDs (EDGE-05/06/09/10/11) and all 5 CONTEXT.md
+decisions (D-01..D-05) covered. Committed on `claude/fix-pipelines-v2` (`c8e804a`). Research was
+explicitly skipped this run (rich CONTEXT.md already had file:line-level detail); no VALIDATION.md
+exists as a result — Nyquist Dimension 8 was skipped in the plan-checker, not failed.
 **Resume File:** None
+autonomously; Wave 2 (06-03) and one plan in Wave 3 (06-05) each have a blocking human-verify
+checkpoint (fundamentals/Codex coordination, and the real bounded `load_history` AWS run).
 
 ## Accumulated Context
 
@@ -145,6 +147,8 @@ redesigned.
 |-------|------|----------|-------|
 | Phase 05 P02 | 25min | 2 tasks | 1 files |
 | Phase 05 P03 | 25min | 2 tasks | 2 files |
+| Phase 06 P01 | 25min | 2 tasks | 2 files |
+| Phase 06 P02 | 16min | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -152,3 +156,7 @@ redesigned.
 - [Phase ?]: 05-02: GVER-03 is now fully satisfied -- both node/relationship-derivation idempotency (this plan) and graph-sync/full-rebuild idempotency (05-01) have committed real-DB regression tests.
 - [Phase ?]: 05-03: Named per-type parity checks in verify-graph fail closed when a type is entirely absent from parity rows, closing the FULL-OUTER-JOIN silent-omission gap -- POPULATED_RELATIONSHIP_TYPES scopes edge checks to only the 4 already-populated types (COMPANY_HOLDS, HOLDS, ISSUED_BY, IS_INSIDER).
 - [Phase ?]: 05-03: Phase 5 is now fully complete -- NODE-01..06, EDGE-01..04, and GVER-03 (05-01/05-02) all satisfied.
+- [Phase 06]: CIK-range bounds are always passed as bound params (fetch(sql, params=[lo, hi])), never interpolated into the SQL string -- directly enforced by a test assertion (T-06-01).
+- [Phase 06]: 06-01: batch-equivalence tests must compare edges by (adviser CIK, security CUSIP), not raw entity_id -- entity_ids are freshly-generated UUIDs per independent test session and never match across separate single-batch/multi-batch sessions.
+- [Phase ?]: 06-02: Root cause of the 2026-07-06 bootstrap failure is an external/operational timing gap (non-atomic go-live.sh Postgres-provision -> secret-bootstrap sequencing), not a code/config bug -- already self-resolved by an operator secret rotation on 2026-07-06T12:30:44 ET.
+- [Phase ?]: 06-02: load_history readiness verdict is GO, with pre-flight condition 1 (mdm-check-connectivity) satisfied live during this investigation (preflight-06-02-1783525375, SUCCEEDED) rather than deferred to 06-03.

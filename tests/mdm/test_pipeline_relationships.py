@@ -51,14 +51,41 @@ from edgar_warehouse.mdm.pipeline import MDMPipeline, _derive_role
 # ---------------------------------------------------------------------------
 
 class StubSilver:
-    """Returns canned rows keyed by a substring of the SQL."""
+    """Returns canned rows keyed by a substring of the SQL.
+
+    Also emulates the two SQL shapes used by INSTITUTIONAL_HOLDS CIK-range
+    batching (06-01, D-03):
+      * an aggregate ``SELECT MIN(cik) AS min_cik, MAX(cik) AS max_cik ...``
+        bounds query -- answered by scanning the substring-matched fixture
+        rows for their CIK range;
+      * a parameterized ``... AND cik BETWEEN ? AND ? ...`` batch query --
+        answered by filtering the substring-matched rows to the CIK range
+        supplied via ``params`` (never parsed out of the SQL text itself,
+        so tests can assert bound-param usage per T-06-01).
+    """
 
     def __init__(self, fixtures: dict[str, list[dict]]):
         self._fixtures = fixtures
         self.queries: list[str] = []
+        # (sql, params) for every fetch() call -- lets batching tests assert
+        # CIK bounds arrive via bound params rather than interpolated SQL.
+        self.calls: list[tuple[str, Optional[list[Any]]]] = []
 
     def fetch(self, sql: str, params: Optional[list[Any]] = None) -> list[dict]:
         self.queries.append(sql)
+        self.calls.append((sql, params))
+        matched = self._matched_rows(sql)
+        if "MIN(cik)" in sql and "MAX(cik)" in sql:
+            ciks = [r["cik"] for r in matched if r.get("cik") is not None]
+            if not ciks:
+                return [{"min_cik": None, "max_cik": None}]
+            return [{"min_cik": min(ciks), "max_cik": max(ciks)}]
+        if params and "BETWEEN" in sql.upper():
+            lo, hi = params[0], params[1]
+            matched = [r for r in matched if r.get("cik") is not None and lo <= r["cik"] <= hi]
+        return matched
+
+    def _matched_rows(self, sql: str) -> list[dict]:
         matched: list[dict] = []
         transaction_query = (
             "sec_ownership_non_derivative_txn" in sql
@@ -1085,6 +1112,178 @@ class TestRunRelationships:
         assert second_summary["skipped"] == len(PCAOB_SEED)
         assert second_firm_count == first_firm_count == len(PCAOB_SEED)
         assert second_entity_count == first_entity_count == len(PCAOB_SEED)
+
+
+# ---------------------------------------------------------------------------
+# INSTITUTIONAL_HOLDS CIK-range batching (06-01, D-03, EDGE-11)
+#
+# _derive_institutional_holds reads sec_thirteenf_holding -- the largest
+# silver table -- in bounded CIK-range chunks (`WHERE cik BETWEEN ? AND ?`)
+# instead of one unbounded silver.fetch() that loads every row into memory.
+# These tests use their own isolated session-per-run helper (rather than the
+# shared `session`/`fixture_world` fixtures) because equivalence/idempotency
+# assertions need independent before/after state across multiple full
+# derive_relationships() runs.
+# ---------------------------------------------------------------------------
+
+_BATCH_THIRTEENF_ROWS: list[dict] = [
+    {
+        "cik": 910002, "accession_number": "acc-a",
+        "period_of_report": "2023-12-31", "cusip": "037833100",
+        "issuer_name": "Apple Inc", "security_title": "Common Stock",
+        "shares_held": 1000, "market_value": 15000000,
+        "put_call": None, "discretion_type": "SOLE", "security_class": None,
+    },
+    {
+        "cik": 910003, "accession_number": "acc-b",
+        "period_of_report": "2023-12-31", "cusip": "594918104",
+        "issuer_name": "Microsoft Corp", "security_title": "Common Stock",
+        "shares_held": 500, "market_value": 7000000,
+        "put_call": None, "discretion_type": "SOLE", "security_class": None,
+    },
+    {
+        "cik": 910004, "accession_number": "acc-c",
+        "period_of_report": "2023-12-31", "cusip": "023135106",
+        "issuer_name": "Amazon.com Inc", "security_title": "Common Stock",
+        "shares_held": 200, "market_value": 3000000,
+        "put_call": None, "discretion_type": "SOLE", "security_class": None,
+    },
+]
+
+
+def _fresh_batching_session() -> Session:
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    sess = Session(engine)
+    _seed_registry(sess)
+    return sess
+
+
+def _seed_batching_advisers(session: Session, ciks: list[int]) -> dict[int, str]:
+    adviser_ids: dict[int, str] = {}
+    for cik in ciks:
+        eid = _add_entity(session, "adviser")
+        session.add(MdmAdviser(entity_id=eid, cik=cik, canonical_name=f"Batch Adviser {cik}"))
+        adviser_ids[cik] = eid
+    session.commit()
+    return adviser_ids
+
+
+class TestInstitutionalHoldsBatching:
+    """CIK-range batching regression tests for _derive_institutional_holds."""
+
+    def _run(
+        self,
+        monkeypatch,
+        batch_size: int,
+        rows: Optional[list[dict]] = None,
+        target_per_type: Optional[int] = None,
+    ) -> tuple[dict, set, StubSilver]:
+        rows = rows if rows is not None else _BATCH_THIRTEENF_ROWS
+        session = _fresh_batching_session()
+        _seed_batching_advisers(session, sorted({r["cik"] for r in rows}))
+        monkeypatch.setattr(
+            "edgar_warehouse.mdm.pipeline._INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", batch_size
+        )
+        silver = StubSilver({"sec_thirteenf_holding": rows})
+        pipe = MDMPipeline(session=session, silver=silver)
+        summary = pipe.derive_relationships(
+            target_per_type=target_per_type, relationship_types=["INSTITUTIONAL_HOLDS"]
+        )
+        # Compare edges by (adviser CIK, security CUSIP) rather than raw
+        # entity_id -- entity_ids are freshly-generated UUIDs per independent
+        # session, so single-batch and multi-batch runs (each its own session)
+        # never share entity_id values even when they represent the same
+        # logical edge.
+        adviser_cik_by_id = dict(session.execute(select(MdmAdviser.entity_id, MdmAdviser.cik)).all())
+        security_cusip_by_id = dict(session.execute(select(MdmSecurity.entity_id, MdmSecurity.cusip)).all())
+        edges = {
+            (adviser_cik_by_id.get(r.source_entity_id), security_cusip_by_id.get(r.target_entity_id))
+            for r in session.scalars(
+                select(MdmRelationshipInstance)
+                .join(MdmRelationshipType)
+                .where(MdmRelationshipType.rel_type_name == "INSTITUTIONAL_HOLDS")
+            )
+        }
+        session.close()
+        return summary["INSTITUTIONAL_HOLDS"], edges, silver
+
+    def test_batch_equivalence_single_vs_multi_batch(self, monkeypatch):
+        """Test A: batched output equals single-query output for identical source
+        data, and CIK bounds are supplied via bound params, not interpolated into
+        the SQL text (T-06-01)."""
+        single_summary, single_edges, _ = self._run(monkeypatch, batch_size=100_000)
+        multi_summary, multi_edges, silver = self._run(monkeypatch, batch_size=1)
+
+        assert single_summary["inserted"] == multi_summary["inserted"] == 3
+        assert single_edges == multi_edges
+
+        between_calls = [c for c in silver.calls if c[1] is not None and len(c[1]) == 2]
+        assert between_calls, "expected at least one CIK-range BETWEEN batch call"
+        for sql, params in between_calls:
+            assert "BETWEEN ? AND ?" in sql, "CIK bounds must be bound placeholders, not literals"
+            assert isinstance(params[0], int) and isinstance(params[1], int)
+
+    def test_accumulation_across_batches(self, monkeypatch):
+        """Test B: inserted/skipped counters accumulate across batches, not reset
+        per batch -- assert inserted == sum of per-batch new rows."""
+        summary, edges, silver = self._run(monkeypatch, batch_size=1)
+        between_calls = [c for c in silver.calls if c[1] is not None and len(c[1]) == 2]
+        # 3 distinct CIKs with batch_size=1 -> one BETWEEN-bounded call per CIK.
+        assert len(between_calls) == 3
+        # If counters reset per batch, `inserted` would reflect only the final
+        # batch's own contribution (1); accumulation must sum all 3 batches.
+        assert summary["inserted"] == 3 == len(edges)
+
+    def test_cross_batch_early_exit(self, monkeypatch):
+        """Test C: with target_per_type/remaining set below the total available,
+        derivation stops at the target and does not over-insert across batch
+        boundaries."""
+        summary, edges, _ = self._run(monkeypatch, batch_size=1, target_per_type=2)
+        assert summary["inserted"] == 2
+        assert len(edges) == 2
+
+    def test_missing_source_table_single_skip(self, monkeypatch, session):
+        """Test D: missing sec_thirteenf_holding -> (0,0,0,0,0), raises no
+        exception, and the missing-table skip path is exercised exactly once
+        (not once per CIK batch)."""
+        monkeypatch.setattr(
+            "edgar_warehouse.mdm.pipeline._INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", 1
+        )
+        silver = MissingTableSilver("sec_thirteenf_holding")
+        pipe = MDMPipeline(session=session, silver=silver)
+        summary = pipe.derive_relationships(
+            target_per_type=1, relationship_types=["INSTITUTIONAL_HOLDS"]
+        )
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 0
+        assert summary["INSTITUTIONAL_HOLDS"]["skipped"] == 0
+        # Exactly one query attempted (the CIK-bounds lookup) -- not one skip
+        # event per would-be CIK batch.
+        assert len(silver.queries) == 1
+        assert "sec_thirteenf_holding" in silver.queries[0]
+
+    def test_batching_idempotent_on_rerun(self, monkeypatch):
+        """Test E: running derive twice over the same batched fixture inserts 0
+        rows on the second run."""
+        session = _fresh_batching_session()
+        ciks = sorted({r["cik"] for r in _BATCH_THIRTEENF_ROWS})
+        _seed_batching_advisers(session, ciks)
+        monkeypatch.setattr(
+            "edgar_warehouse.mdm.pipeline._INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", 1
+        )
+        silver = StubSilver({"sec_thirteenf_holding": _BATCH_THIRTEENF_ROWS})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        first = pipe.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+        second = pipe.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+
+        assert first["INSTITUTIONAL_HOLDS"]["inserted"] == 3
+        assert second["INSTITUTIONAL_HOLDS"]["inserted"] == 0
+        session.close()
 
 
 # ---------------------------------------------------------------------------

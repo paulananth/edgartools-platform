@@ -53,6 +53,11 @@ RELATIONSHIP_TYPES = (
 _RELATIONSHIP_SOURCE_LIMIT_MULTIPLIER = 50
 _RELATIONSHIP_SOURCE_LIMIT_MINIMUM = 100
 
+# INSTITUTIONAL_HOLDS reads sec_thirteenf_holding -- the largest silver table
+# (large fund managers report tens of thousands of positions per quarter) --
+# in CIK-range chunks rather than one unbounded silver.fetch() (D-03, TODOS.md).
+_INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE = 1000
+
 
 @dataclass
 class PipelineStats:
@@ -1343,95 +1348,127 @@ class MDMPipeline:
         Rows without a CUSIP are skipped — security identity cannot be established.
         Rows whose filing CIK cannot be resolved to an mdm_adviser are skipped;
         the 13F filer list bootstrap must complete before INSTITUTIONAL_HOLDS derivation.
+
+        CIK-range batching (D-03, EDGE-11, T-06-01, T-06-02): sec_thirteenf_holding
+        is the largest silver table — a single unbounded silver.fetch() risks OOM
+        on ECS at full-universe scale. A cheap MIN(cik)/MAX(cik) bounds query
+        (still governed by the standard missing-source-table graceful skip) is
+        issued once, then rows are read in `_INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE`
+        CIK-wide chunks via a parameterized `WHERE ... AND cik BETWEEN ? AND ?`
+        query — CIK bounds are always bound params, never string-formatted into
+        the SQL. Adviser-entity resolution is per-CIK, so batch ordering carries
+        no correctness risk (TODOS.md). Counters and the `remaining` early-exit
+        accumulate across all batches, not per batch.
         """
-        sql = """
+        base_sql = """
             SELECT cik, accession_number, period_of_report, cusip,
                    issuer_name, security_title, shares_held, market_value,
                    put_call, discretion_type, security_class
             FROM sec_thirteenf_holding
             WHERE cusip IS NOT NULL
-            ORDER BY cik, accession_number, cusip
         """
-        existing = self._relationship_count("INSTITUTIONAL_HOLDS")
+        bounds_sql = """
+            SELECT MIN(cik) AS min_cik, MAX(cik) AS max_cik
+            FROM sec_thirteenf_holding
+            WHERE cusip IS NOT NULL
+        """
         inserted = 0
         skipped_corporate = 0
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
 
-        for row in self._fetch_optional_relationship_rows(
-            sql,
-            remaining,
+        # Single cheap bounds lookup — the missing-source-table graceful skip
+        # (one mdm_relationship_skip event) fires here if sec_thirteenf_holding
+        # is absent, before any batch loop is entered.
+        bounds_rows = self._fetch_optional_relationship_rows(
+            bounds_sql,
+            None,
             rel_type_name="INSTITUTIONAL_HOLDS",
             source_table="sec_thirteenf_holding",
-            existing=existing,
-        ):
-            cik = row.get("cik")
-            cusip = row.get("cusip") or ""
-            accession_number = row.get("accession_number") or ""
-            period_of_report = row.get("period_of_report")
-            security_class = row.get("security_class")
-            issuer_name = row.get("issuer_name")
+        )
+        if not bounds_rows or bounds_rows[0].get("min_cik") is None:
+            return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
-            if not cusip:
-                skipped_unresolved_target += 1
-                continue
+        min_cik = int(bounds_rows[0]["min_cik"])
+        max_cik = int(bounds_rows[0]["max_cik"])
+        batch_sql = f"{base_sql.rstrip()} AND cik BETWEEN ? AND ? ORDER BY cik, accession_number, cusip"
 
-            adviser_id = self._adviser_entity_id_by_cik(cik)
-            if adviser_id is None:
-                skipped_unresolved_source += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "INSTITUTIONAL_HOLDS",
-                    "reason": "unresolved_source",
-                    "cik": cik,
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-                continue
+        cik_lo = min_cik
+        while cik_lo <= max_cik:
+            cik_hi = min(cik_lo + _INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE - 1, max_cik)
 
-            security_id = self._ensure_security_by_cusip(cusip, issuer_name, security_class)
-            if security_id is None:
-                skipped_unresolved_target += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "INSTITUTIONAL_HOLDS",
-                    "reason": "unresolved_target",
-                    "cusip": cusip,
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-                continue
+            for row in self.silver.fetch(batch_sql, params=[cik_lo, cik_hi]):
+                cik = row.get("cik")
+                cusip = row.get("cusip") or ""
+                accession_number = row.get("accession_number") or ""
+                period_of_report = row.get("period_of_report")
+                security_class = row.get("security_class")
+                issuer_name = row.get("issuer_name")
 
-            _rel, created = sync_engine.ensure_relationship(
-                rel_type_name="INSTITUTIONAL_HOLDS",
-                source_entity_id=adviser_id,
-                target_entity_id=security_id,
-                properties={
-                    "quarter_end":      str(period_of_report) if period_of_report else None,
-                    "shares_held":      row.get("shares_held"),
-                    "market_value":     row.get("market_value"),
-                    "ownership_pct":    None,   # computed by gold layer (shares / shares_outstanding)
-                    "put_call":         row.get("put_call"),
-                    "discretion_type":  row.get("discretion_type"),
-                    "source_accession": accession_number,
-                },
-                effective_from=date.fromisoformat(str(period_of_report)) if period_of_report else None,
-                source_system="thirteenf_filing",
-                source_accession=accession_number,
-            )
-            if created:
-                inserted += 1
-            else:
-                skipped_existing += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "INSTITUTIONAL_HOLDS",
-                    "reason": "existing",
-                    "source_entity_id": adviser_id,
-                    "target_entity_id": security_id,
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-            if remaining is not None and inserted >= remaining:
-                break
+                if not cusip:
+                    skipped_unresolved_target += 1
+                    continue
+
+                adviser_id = self._adviser_entity_id_by_cik(cik)
+                if adviser_id is None:
+                    skipped_unresolved_source += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "INSTITUTIONAL_HOLDS",
+                        "reason": "unresolved_source",
+                        "cik": cik,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
+
+                security_id = self._ensure_security_by_cusip(cusip, issuer_name, security_class)
+                if security_id is None:
+                    skipped_unresolved_target += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "INSTITUTIONAL_HOLDS",
+                        "reason": "unresolved_target",
+                        "cusip": cusip,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
+
+                _rel, created = sync_engine.ensure_relationship(
+                    rel_type_name="INSTITUTIONAL_HOLDS",
+                    source_entity_id=adviser_id,
+                    target_entity_id=security_id,
+                    properties={
+                        "quarter_end":      str(period_of_report) if period_of_report else None,
+                        "shares_held":      row.get("shares_held"),
+                        "market_value":     row.get("market_value"),
+                        "ownership_pct":    None,   # computed by gold layer (shares / shares_outstanding)
+                        "put_call":         row.get("put_call"),
+                        "discretion_type":  row.get("discretion_type"),
+                        "source_accession": accession_number,
+                    },
+                    effective_from=date.fromisoformat(str(period_of_report)) if period_of_report else None,
+                    source_system="thirteenf_filing",
+                    source_accession=accession_number,
+                )
+                if created:
+                    inserted += 1
+                else:
+                    skipped_existing += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "INSTITUTIONAL_HOLDS",
+                        "reason": "existing",
+                        "source_entity_id": adviser_id,
+                        "target_entity_id": security_id,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                if remaining is not None and inserted >= remaining:
+                    # Early exit across both the inner row loop and the outer
+                    # CIK-range batch loop — counters accumulated so far are final.
+                    return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
+
+            cik_lo = cik_hi + 1
 
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 

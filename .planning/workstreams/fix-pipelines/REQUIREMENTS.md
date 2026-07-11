@@ -27,9 +27,9 @@ updated: 2026-07-08
 - [ ] **EDGE-06**: `IS_PERSON_OF` (adviser→person) — **no bronze/silver artifact dependency**: pairing comes from an adviser↔person CIK crosswalk (`MdmAdviser.cik == MdmPerson.owner_cik`), not from a source document. Currently zero; investigate whether any individual-adviser CIKs in-universe also have Form 3/4/5-derived `MdmPerson` records, and either populate or document why no crosswalk matches exist.
 - [ ] **EDGE-07**: `MANAGES_FUND` (adviser→fund) — **source artifact: ADV primary attachment documents** (feed `sec_adv_private_fund`). Confirmed unobtainable: all 30 ADV filings in the active universe are EDGAR paper filings with no electronic document (see `.planning/workstreams/claude-mdm-source-recovery/FINDINGS.md`). Document as a source-coverage exclusion — no further artifact action is possible from EDGAR.
 - [ ] **EDGE-08**: `HAS_PARENT_COMPANY` (company→company) — **no artifact captured or parsed at all** for parent/subsidiary structure (would require 10-K Exhibit 21 or similar, which is not in the current parser surface). This is a missing-parser gap, not a missing-artifact gap — distinct from EDGE-07. Document as a source-coverage exclusion.
-- [ ] **EDGE-09**: `EMPLOYED_BY` (person→company) — **source artifact: DEF 14A proxy filing documents** (feed `sec_executive_record`). Verify DEF 14A bronze artifacts are actually captured for the active universe. If artifacts are present but `sec_executive_record` is still empty, root-cause the parser/pipeline gap; if artifacts themselves are missing, triage fetchability before concluding a coverage exclusion.
-- [ ] **EDGE-10**: `AUDITED_BY` (company→audit_firm) — **source artifact: SEC companyfacts (XBRL entity-facts) API responses** (feed `sec_accounting_flag.auditor_pcaob_id`). Artifact is confirmed fetchable (not a paper-filing-style dead end) — populate once a fundamentals entity-facts run publishes to the unified `silver/sec/silver.duckdb` (coordinate with the `fundamental-factors-v2` workstream — do not run fundamentals in dev without checking for overlap).
-- [ ] **EDGE-11**: `INSTITUTIONAL_HOLDS` (adviser→security) — **source artifact: 13F-HR INFORMATION TABLE XML documents** (feed `sec_thirteenf_holding`). Verify 13F bronze artifacts are actually captured for institutional advisers in the active universe. If artifacts are present but the table is still empty, root-cause the parser/pipeline gap; if artifacts themselves are missing, triage fetchability before concluding a coverage exclusion.
+- [x] **EDGE-09**: `EMPLOYED_BY` (person→company) — **source artifact: DEF 14A proxy filing documents** (feed `sec_executive_record`). Verify DEF 14A bronze artifacts are actually captured for the active universe. If artifacts are present but `sec_executive_record` is still empty, root-cause the parser/pipeline gap; if artifacts themselves are missing, triage fetchability before concluding a coverage exclusion.
+- [x] **EDGE-10**: `AUDITED_BY` (company→audit_firm) — **source artifact: SEC companyfacts (XBRL entity-facts) API responses** (feed `sec_accounting_flag.auditor_pcaob_id`). Artifact is confirmed fetchable (not a paper-filing-style dead end) — populate once a fundamentals entity-facts run publishes to the unified `silver/sec/silver.duckdb` (coordinate with the `fundamental-factors-v2` workstream — do not run fundamentals in dev without checking for overlap).
+- [x] **EDGE-11**: `INSTITUTIONAL_HOLDS` (adviser→security) — **source artifact: 13F-HR INFORMATION TABLE XML documents** (feed `sec_thirteenf_holding`). Verify 13F bronze artifacts are actually captured for institutional advisers in the active universe. If artifacts are present but the table is still empty, root-cause the parser/pipeline gap; if artifacts themselves are missing, triage fetchability before concluding a coverage exclusion.
 
 ### Cross-Cutting Graph Verification
 
@@ -84,9 +84,9 @@ mechanisms that aren't tied to any single relationship type.
 | GVER-03 | Phase 5 | Complete |
 | EDGE-05 | Phase 6 | Pending |
 | EDGE-06 | Phase 6 | Pending |
-| EDGE-09 | Phase 6 | Pending |
-| EDGE-10 | Phase 6 | Pending |
-| EDGE-11 | Phase 6 | Pending |
+| EDGE-09 | Phase 6 | Complete |
+| EDGE-10 | Phase 6 | Complete |
+| EDGE-11 | Phase 6 | Complete |
 | EDGE-07 | Phase 7 | Pending |
 | EDGE-08 | Phase 7 | Pending |
 | ARTF-01 | Phase 7 | Pending |
