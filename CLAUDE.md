@@ -2,6 +2,27 @@
 
 This repo is the full data platform built on top of the `edgartools` PyPI package. It extracts SEC EDGAR filings data via an ETL runtime, stages Parquet files in S3, loads them into Snowflake, and transforms them into production-ready dynamic tables consumed by a Streamlit dashboard. The platform is designed to track a universe of public companies and investment advisers across all major SEC form types.
 
+## AWS account map (READ THIS before running any AWS command)
+
+**The platform lives in AWS account `690839588395` (current/active).** All `edgartools-*`
+resources, ECR images, ECS clusters, and Terraform state should target `690839588395`.
+
+**Account `077127448006` is DECOMMISSIONED (emptied 2026-07-11, `claude/destroy-old-account`).**
+Everything was migrated to `690839588395` first, then the old account was torn down with
+`infra/scripts/destroy-aws-complete.sh --env all` plus an all-regions + tagging-API sweep:
+all S3 buckets (incl. the 198 GB warehouse and both `*-tfstate` buckets), 45 Step Functions,
+ECS, ECR, 13 secrets, all IAM roles, dev+prod VPCs, 17 default VPCs, and 280 ECS task
+definitions. Verified zero billable resources remaining.
+- **Final closure is a ROOT action.** The `cli-access` IAM user in `077127448006` *cannot*
+  close the account — closure/suspension must be done via root sign-in or the AWS
+  Organizations management account. `cli-access`, 2 `PendingDeletion` KMS keys (auto-delete
+  2026-07-18), INACTIVE ECS cluster tombstones, and the payment-instrument were left in place
+  and are reaped automatically when the account is closed.
+- **State backups** (the only surviving record of the destroyed account) live at
+  `~/edgartools-077-tfstate-backups-FINAL` and `infra/.aws-tfstate-backups/`.
+- Do NOT reprovision anything into `077127448006`. If an old ARN/bucket/`aws-prod-application.json`
+  still references `077127448006`, it is stale — the live target is `690839588395`.
+
 ## Parallel Agent Workstreams
 
 Claude and Codex may work on this repository independently, but they must not share an uncoordinated edit surface.
@@ -124,6 +145,37 @@ follow that format for new entries.
 
 **Resolution:** `bootstrap-batch` removed from `GOLD_AFFECTING_COMMANDS`. New `gold-refresh`
 command builds gold once. New `load_history` Step Function chains all four phases correctly.
+
+## AWS teardown 5-whys (resolved 2026-07-11)
+
+`destroy-aws-complete.sh` is authored/tested for Linux/CI and failed three times on macOS
+(Colima host, default bash 3.2, GNU-vs-BSD tool differences) during the `077127448006`
+decommission. Fixes are in the script; re-record here if they regress.
+
+**Problem 1 — `mktemp: mkstemp failed ... File exists`, aborted at the first S3 bucket.**
+1. `mktemp "${TMP_DIR}/s3-versions-XXXXXX.json"` failed. 2. BSD/macOS `mktemp` only substitutes
+*trailing* `X`s; the `.json` suffix after the X's makes the template literal. 3. Written for GNU
+`mktemp` (substitutes X's anywhere). 4. `set -e` aborts the whole run. **Root cause:** GNU-vs-BSD
+`mktemp`. **Fix:** drop the `.json` suffix so X's are trailing (portable; `aws … file://` ignores
+the extension).
+
+**Problem 2 — `DeleteObjects MalformedXML`, aborted emptying a small bucket.**
+1. `delete-objects` rejected the payload on `snowflake-export` (only ~75 live objects). 2. A single
+`list-object-versions --max-items 1000` page returned 537 Versions + 473 DeleteMarkers = **1010**
+combined; the Python summed both into one request. 3. S3 `delete-objects` accepts at most **1000
+keys** per call. **Root cause:** versioned buckets can return >1000 combined versions+markers per
+page. **Fix:** cap each delete batch to `objects[:1000]`; the outer loop re-lists from the start and
+converges.
+
+**Problem 3 — `mapfile: command not found`, task-def cleanup silently no-op'd.**
+1. Ad-hoc cleanup used `mapfile -t`. 2. macOS ships bash 3.2, which lacks `mapfile` (bash 4+).
+**Root cause:** bash-3.2 host. **Fix:** build arrays with `while IFS= read -r … do ARR+=("$line"); done < <(cmd)`.
+
+**Also:** prod `infra/terraform/accounts/prod/backend.hcl` pointed at the stale
+`edgartools-dev-tfstate-077127448006/accounts/prod` state (6 resources: leftover notifications
+module) instead of the real `edgartools-prod-tfstate/accounts/prod` (44 resources). A naive
+`terraform destroy` would have orphaned the entire prod VPC/ECS/KMS stack. **Lesson:** verify a
+teardown's backend resolves to the *current* state (`terraform state list` count) before trusting it.
 
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
