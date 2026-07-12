@@ -4,9 +4,12 @@ milestone: v1.0
 milestone_name: Fundamental Factors V2 (Growth, Profitability, Returns)
 current_phase: 03
 current_phase_name: cash-conversion-cycle
-status: executing
+status: merged-into-fix-pipelines
+merged_into: fix-pipelines
+merged_date: "2026-07-11"
+merged_note: "TOMBSTONE — consolidated into fix-pipelines on 2026-07-11 (Codex->Claude hand-off, user-authorized). Completed Phases 1-2 remain here as history. Outstanding Phase 3 (cash-conversion-cycle) was grafted to fix-pipelines as unified Phase 10. Do NOT resume this workstream separately — see .planning/workstreams/fix-pipelines/ROADMAP.md."
 stopped_at: Phase 3 plans created (03-01 DSO, 03-02 DIO/DPO) and plan-checker verified.
-  Ready for /gsd-execute-phase 3.
+  MERGED to fix-pipelines Phase 10 before execution.
 last_updated: "2026-07-01T18:45:00.000Z"
 progress:
   total_phases: 3

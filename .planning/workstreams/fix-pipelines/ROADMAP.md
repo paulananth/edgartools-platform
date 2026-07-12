@@ -1,8 +1,28 @@
-# Roadmap: fix-pipelines v2.0 — Pipeline Data-Source Completeness & Verification
+# Roadmap: fix-pipelines v2.0 — Pipeline Data-Source Completeness & Verification (CONSOLIDATED)
 
 status: active
-milestone: v2.0 fix-pipelines
-updated: 2026-07-08
+milestone: v2.0 fix-pipelines (consolidated active workstream)
+updated: 2026-07-11
+
+---
+
+## ⚠️ Consolidation note (2026-07-11)
+
+On 2026-07-11 this workstream became the **single active workstream** ("combine all active
+workstreams", in-progress-only). It is the spine; the outstanding phases of two other
+workstreams were grafted onto the end of its roadmap:
+
+| Unified phase | Origin | Notes |
+|---------------|--------|-------|
+| 06–09 | fix-pipelines (native) | Phases 5–9 are this workstream's own; 5 done, 6 paused, 7–9 unbuilt |
+| **10** Cash Conversion Cycle | `fundamental-factors-v2` Phase 3 | grafted (Codex→Claude hand-off); files renumbered `03-*`→`10-*`; see `phases/10-cash-conversion-cycle/10-MERGE-NOTE.md` |
+| **11–15** Model Builder contract | `model-builder-contract-gaps` Phases 1–6 | not yet built; charter in `merged-sources/model-builder-contract-gaps/`; 14–15 remain charter-held |
+
+Source workstreams `fundamental-factors-v2` and `model-builder-contract-gaps` are **tombstoned**
+(their `STATE.md` marked `merged-into-fix-pipelines`) — do not resume them separately. Their
+completed phases stay in place as history. Excluded from the merge (already complete): `go-live`,
+`mdm-neo4j-dashboard`, `neo4j-snowflake`, `neo4j-pipe`. Rollback snapshot: scratchpad
+`planning-pre-merge-*.tgz`.
 
 ---
 
@@ -15,6 +35,10 @@ evidenced source-coverage exclusion — with each exclusion traced to its actual
 parsing is cross-checked against, and where it's a clear win replaced by, the `edgartools`
 reference library.
 
+**Consolidated scope (added 2026-07-11):** additionally deliver the Cash Conversion Cycle gold
+factors (Phase 10, ex-`fundamental-factors-v2`) and the Model Builder source-contract expansion
+(Phases 11–15, ex-`model-builder-contract-gaps`).
+
 ---
 
 ## Phases
@@ -24,6 +48,15 @@ reference library.
 - [ ] **Phase 7: Source-Coverage Exclusions And Artifact Hygiene** - formally document the two artifact-confirmed-unsatisfiable relationship types, and close the two cross-cutting artifact-integrity gaps found during this milestone's investigation.
 - [ ] **Phase 8: Neo4j Native App Verification Gaps** - `mdm verify-graph` cleanly separates environment/readiness problems from real parity problems, and app-side capability gaps are resolved or conclusively documented.
 - [ ] **Phase 9: edgartools Crosscheck** - platform parsing is validated against edgartools, hand-built parsers are replaced where edgartools already covers the same ground well, and API usage is confirmed current.
+
+### Consolidated phases (grafted 2026-07-11)
+
+- [ ] **Phase 10: Cash Conversion Cycle** *(ex fundamental-factors-v2 Phase 3)* - expose DSO/DIO/DPO gold factors from already-fetched companyfacts, or formally declare out of scope if `cost_of_revenue` XBRL coverage is too poor. Plans built (`10-01`, `10-02`), not executed.
+- [ ] **Phase 11: Model Builder — Contract Governance & Compatibility Boundary** *(ex model-builder Phase 1)* - lock the source-of-truth boundary and classify each Model Builder gap as in-scope / out-of-scope / charter-blocked. **Must complete before Phases 12–15.** Not yet planned.
+- [ ] **Phase 12: Model Builder — Statement Metadata + Data-Quality Signals** *(ex model-builder Phases 2+3, paired)* - enrich gold with statement display metadata/lineage and expose source data-quality signals. Not yet planned.
+- [ ] **Phase 13: Model Builder — Citation Source Reference Contract** *(ex model-builder Phase 4)* - expose citation-ready source references and fact-to-source lineage. Not yet planned.
+- [ ] **Phase 14: Model Builder — Market Data Contract** *(ex model-builder Phase 5)* - **HELD (charter decision required)** before activation.
+- [ ] **Phase 15: Model Builder — Peer & Estimate Contract** *(ex model-builder Phase 6)* - **HELD (charter decision required)** before activation.
 
 ---
 
@@ -136,14 +169,39 @@ dropped.
 
 **Plans**: TBD
 
+### Phase 10: Cash Conversion Cycle  *(grafted — ex `fundamental-factors-v2` Phase 3)*
+
+**Goal**: Consumers can query Days Sales Outstanding, Days Inventory Outstanding, and Days Payable Outstanding — or CCC is explicitly declared out of scope if `cost_of_revenue` XBRL-tag coverage is too poor to be useful.
+**Depends on**: Nothing in this workstream (research-gated; coverage resolved acceptable per its D-01).
+**Requirements**: CCC-01, CCC-02 (see `merged-sources`/original `fundamental-factors-v2/REQUIREMENTS.md`).
+**Plans**: 2/2 built, 0 executed — `phases/10-cash-conversion-cycle/10-01-PLAN.md` (DSO macro + tests), `10-02-PLAN.md` (cost_of_revenue/accounts_payable silver fields + DIO/DPO). Full detail (goal, success criteria, waves) in that dir; **internal prose still says "Phase 3"** — see `10-MERGE-NOTE.md`.
+
+### Phases 11–15: Model Builder Source Contract Expansion  *(grafted — ex `model-builder-contract-gaps`)*
+
+**Not yet planned** (source workstream was at charter/planning stage, zero phases built). Full
+charter, requirements, and phase definitions: `merged-sources/model-builder-contract-gaps/`
+(`ROADMAP.md`, `REQUIREMENTS.md`, `INTAKE.md`, `PROJECT.md`).
+
+- **Phase 11 — Contract Governance & Compatibility Boundary** *(model-builder P1)*: lock source-of-truth boundary; classify each gap in/out/charter-blocked. Requirements GOV-01/02/03. **Gates 12–15.**
+- **Phase 12 — Statement Metadata + Data-Quality Signals** *(model-builder P2+P3, paired)*: gold statement display metadata/lineage + source data-quality signals.
+- **Phase 13 — Citation Source Reference Contract** *(model-builder P4)*: citation-ready source references + fact-to-source lineage.
+- **Phase 14 — Market Data Contract** *(model-builder P5)*: **HELD** — activates only after a platform charter decision (own vs external-provider vs out-of-scope).
+- **Phase 15 — Peer & Estimate Contract** *(model-builder P6)*: **HELD** — same charter deferral (SIC-based peer clusters already exist via `COMPANY.sic_code`; only advanced peer-suggestion contracts are held).
+
 ---
 
 ## Progress
 
-| Phase | Milestone | Plans Complete | Status | Completed |
+| Phase | Origin | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 5. Node And Populated-Relationship Graph Parity | v2.0 fix-pipelines | 3/3 | Complete    | 2026-07-08 |
-| 6. Relationship Investigation And Population | v2.0 fix-pipelines | 2/6 | In Progress|  |
-| 7. Source-Coverage Exclusions And Artifact Hygiene | v2.0 fix-pipelines | 0/TBD | Not started | - |
-| 8. Neo4j Native App Verification Gaps | v2.0 fix-pipelines | 0/TBD | Not started | - |
-| 9. edgartools Crosscheck | v2.0 fix-pipelines | 0/TBD | Not started | - |
+| 5. Node And Populated-Relationship Graph Parity | fix-pipelines | 3/3 | Complete    | 2026-07-08 |
+| 6. Relationship Investigation And Population | fix-pipelines | 2/6 | In Progress (paused — exec #3 unverified) |  |
+| 7. Source-Coverage Exclusions And Artifact Hygiene | fix-pipelines | 0/TBD | Not started | - |
+| 8. Neo4j Native App Verification Gaps | fix-pipelines | 0/TBD | Not started | - |
+| 9. edgartools Crosscheck | fix-pipelines | 0/TBD | Not started | - |
+| 10. Cash Conversion Cycle | ex fundamental-factors-v2 | 0/2 | Not started (planned) | - |
+| 11. Model Builder — Contract Governance | ex model-builder | 0/TBD | Not started (unplanned) | - |
+| 12. Model Builder — Statement Metadata + Quality | ex model-builder | 0/TBD | Not started (unplanned) | - |
+| 13. Model Builder — Citation Contract | ex model-builder | 0/TBD | Not started (unplanned) | - |
+| 14. Model Builder — Market Data | ex model-builder | 0/TBD | HELD (charter) | - |
+| 15. Model Builder — Peer & Estimate | ex model-builder | 0/TBD | HELD (charter) | - |

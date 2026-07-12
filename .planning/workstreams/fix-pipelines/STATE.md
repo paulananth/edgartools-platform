@@ -4,18 +4,21 @@ milestone: v2.0
 milestone_name: fix-pipelines — Pipeline Data-Source Completeness & Verification
 current_phase: 06
 current_phase_name: relationship-investigation-and-population
-current_plan: 1
+current_plan: 3
 status: executing
-stopped_at: "06-01 complete: INSTITUTIONAL_HOLDS CIK-range batching implemented and tested (EDGE-11). Ready for 06-02."
-last_updated: "2026-07-08T16:49:03.977Z"
-last_activity: 2026-07-08
-last_activity_desc: Phase 06 execution started
+stopped_at: "06-03 Task 2/3 PAUSED — load_history exec #3 (load-history-06-1783726338) status UNVERIFIED (needs live 690 creds). 06-01/06-02 done. See .planning/HANDOFF.json + top-level STATE 'Resume Reconciliation (2026-07-11)'."
+last_updated: "2026-07-11"
+last_activity: 2026-07-11
+last_activity_desc: "Consolidated all active workstreams into fix-pipelines (spine). Grafted Phase 10 (ex fundamental-factors-v2) + Phases 11-15 (ex model-builder). See ROADMAP consolidation note."
+consolidation:
+  date: "2026-07-11"
+  note: "This is now the single active workstream. Grafted: Phase 10 <- fundamental-factors-v2 P3; Phases 11-15 <- model-builder-contract-gaps P1-6. Sources tombstoned. Excluded (complete): go-live, mdm-neo4j-dashboard, neo4j-snowflake, neo4j-pipe."
 progress:
-  total_phases: 5
+  total_phases: 11
   completed_phases: 1
-  total_plans: 9
-  completed_plans: 5
-  percent: 20
+  native_fix_pipelines_phases: "5-9 (5 done, 6 paused, 7-9 unbuilt)"
+  grafted_phases: "10 (planned), 11-13 (unplanned), 14-15 (charter-held)"
+  percent: 9
 ---
 
 # Project State — fix-pipelines
