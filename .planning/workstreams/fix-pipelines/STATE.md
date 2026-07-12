@@ -4,12 +4,12 @@ milestone: v2.0
 milestone_name: fix-pipelines — Pipeline Data-Source Completeness & Verification
 current_phase: 06
 current_phase_name: relationship-investigation-and-population
-current_plan: 3
+current_plan: 4
 status: executing
-stopped_at: "06-03 Task 2/3 PAUSED — load_history exec #3 (load-history-06-1783726338) status UNVERIFIED (needs live 690 creds). 06-01/06-02 done. See .planning/HANDOFF.json + top-level STATE 'Resume Reconciliation (2026-07-11)'."
-last_updated: "2026-07-11"
-last_activity: 2026-07-11
-last_activity_desc: "Consolidated all active workstreams into fix-pipelines (spine). Grafted Phase 10 (ex fundamental-factors-v2) + Phases 11-15 (ex model-builder). See ROADMAP consolidation note."
+stopped_at: "06-04 IN PROGRESS (2026-07-12): OOM gold-stage memory fix (2->4GB) deployed to edgartools-dev AND CONFIRMED via live load-history-oomtest execution -- WindowedBootstrap (the exec #3 OOM stage) succeeded, peak 1163/4096 MiB. Also found+fixed a real regression: PR #129 never merged the memory fix to main, so CI's auto-deploy-on-push-to-main silently reverted medium task-def to 2048MB after PR #130 merged; fixed via merge origin/main -> claude/consolidate-workstreams (21796ad), verified 4096MB survives. Bonus: root-caused + fixed unrelated artifact-throttle bug found during the verification run (5,583 cached accessions x 1s unconditional sleep = ~93min dead time on re-runs) -- fix #1 (throttle only on real network fetches, bb74e37), #2 (opt-in load_history artifact_policy input, default preserves new-CIK loading), #3 (lower redundant throttle default 1.0->0.2s), all in 5b49f7c. All pushed to origin/claude/consolidate-workstreams. 06-04's actual required artifact (06-04-EDGE09-EDGE11-DISPOSITION.md, disposing EMPLOYED_BY/INSTITUTIONAL_HOLDS) not yet started -- only skip-vs-miss investigation groundwork (3df6fe4) exists. Next: resume 06-04 Task 1 (EDGE-09) using the now-reliable/fast load_history."
+last_updated: "2026-07-12"
+last_activity: 2026-07-12
+last_activity_desc: "Deployed+verified OOM memory fix live on edgartools-dev; found and fixed a CI-deploy-revert regression (main was missing the fix); root-caused and fixed an unrelated artifact-throttle bug (3 fixes) discovered during verification. All committed and pushed to claude/consolidate-workstreams. Phase 6's actual EDGE-09/EDGE-11 disposition work (06-04) still ahead."
 consolidation:
   date: "2026-07-11"
   note: "This is now the single active workstream. Grafted: Phase 10 <- fundamental-factors-v2 P3; Phases 11-15 <- model-builder-contract-gaps P1-6. Sources tombstoned. Excluded (complete): go-live, mdm-neo4j-dashboard, neo4j-snowflake, neo4j-pipe."
@@ -61,16 +61,28 @@ REQUIREMENTS.md)
 
 ## Session Continuity
 
-**Last session:** 2026-07-08T16:45:35.733Z
+**Last session:** 2026-07-12 (this session)
 
-**Stopped At:** 06-01 complete: INSTITUTIONAL_HOLDS CIK-range batching implemented and tested (EDGE-11). Ready for 06-02.
-(0 errors, 0 warnings), all 5 requirement IDs (EDGE-05/06/09/10/11) and all 5 CONTEXT.md
-decisions (D-01..D-05) covered. Committed on `claude/fix-pipelines-v2` (`c8e804a`). Research was
-explicitly skipped this run (rich CONTEXT.md already had file:line-level detail); no VALIDATION.md
-exists as a result — Nyquist Dimension 8 was skipped in the plan-checker, not failed.
-**Resume File:** None
-autonomously; Wave 2 (06-03) and one plan in Wave 3 (06-05) each have a blocking human-verify
-checkpoint (fundamentals/Codex coordination, and the real bounded `load_history` AWS run).
+**Stopped At:** 06-04 in progress. This session: deployed the 06-03 OOM memory fix (medium
+task 2GB→4GB) to edgartools-dev and confirmed it live via `load-history-oomtest-1783868231` —
+`WindowedBootstrap` (the exact stage that OOM-killed exec #3) succeeded, peak 1163/4096 MiB.
+Along the way, found that PR #129 never merged the memory fix into `main`, so CI's
+push-to-main auto-deploy had silently reverted the medium task def back to 2048MB after PR
+#130 merged — fixed by merging `origin/main` into `claude/consolidate-workstreams` (`21796ad`),
+confirmed 4096MB survives post-merge. Also root-caused and fixed an unrelated artifact-throttle
+bug surfaced by the verification run (per-accession 1s sleep firing even on cache hits — 5,583
+cached accessions × 1s ≈ 93 min dead time on re-runs): fix #1 (throttle only on real network
+fetches), #2 (opt-in `artifact_policy` SM input for `load_history`, default preserves new-CIK
+artifact capture), #3 (lower redundant throttle default 1.0→0.2s). All committed (`bb74e37`,
+`365190e`, `21796ad`, `5b49f7c`) and pushed to `origin/claude/consolidate-workstreams`.
+06-04's actual required artifact (`06-04-EDGE09-EDGE11-DISPOSITION.md`) has not been started —
+only skip-vs-miss investigation groundwork exists (`3df6fe4`). A PR from
+`claude/consolidate-workstreams` → `main` is still needed to land these fixes where CI reads
+from, or the next `main` deploy will revert the memory bump again.
+
+**Resume File:** None — proceed directly to 06-04 Task 1 (EDGE-09 EMPLOYED_BY disposition)
+using `06-04-PLAN.md`. Wave 2 (06-03, complete) and one plan in Wave 3 (06-05) each have a
+blocking human-verify checkpoint (fundamentals/Codex coordination for 06-05).
 
 ## Accumulated Context
 
@@ -120,6 +132,14 @@ checkpoint (fundamentals/Codex coordination, and the real bounded `load_history`
 
 - Phase 6 EDGE-10 (AUDITED_BY) is blocked on a fundamentals entity-facts run landing in the
   unified `silver/sec/silver.duckdb` — external dependency on `fundamental-factors-v2` timing.
+
+- **`main` is missing this branch's OOM memory fix + artifact-throttle fixes** (2026-07-12).
+  PR #129 only merged the earlier consolidation commit into `main`, not the later work on the
+  same branch. CI auto-deploys from `main` on every push, so any future `main`-triggered deploy
+  will silently re-revert the medium task def's memory 4096→2048 until a new PR lands
+  `claude/consolidate-workstreams` (currently at `5b49f7c`) into `main`. Not blocking 06-04
+  execution (dev is currently correct after the manual merge+redeploy), but must be resolved
+  before this branch's work is considered durably shipped.
 
 ### Roadmap Evolution
 

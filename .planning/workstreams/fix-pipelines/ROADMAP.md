@@ -195,7 +195,7 @@ charter, requirements, and phase definitions: `merged-sources/model-builder-cont
 | Phase | Origin | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 5. Node And Populated-Relationship Graph Parity | fix-pipelines | 3/3 | Complete    | 2026-07-08 |
-| 6. Relationship Investigation And Population | fix-pipelines | 2/6 | In Progress (paused — exec #3 unverified) |  |
+| 6. Relationship Investigation And Population | fix-pipelines | 3/6 | In Progress (06-03 done; next 06-04) |  |
 | 7. Source-Coverage Exclusions And Artifact Hygiene | fix-pipelines | 0/TBD | Not started | - |
 | 8. Neo4j Native App Verification Gaps | fix-pipelines | 0/TBD | Not started | - |
 | 9. edgartools Crosscheck | fix-pipelines | 0/TBD | Not started | - |

@@ -21,11 +21,11 @@
   "step_functions_role_arn": "arn:aws:iam::690839588395:role/sec_platform_runner_step_functions",
   "edgar_identity_secret_arn": "arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-dev-edgar-identity-uD5HdN",
   "task_definitions": {
-    "small": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-small:42",
-    "medium": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-medium:39",
-    "large": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-large:39",
-    "mdm_small": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-mdm-small:19",
-    "mdm_medium": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-mdm-medium:19"
+    "small": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-small:43",
+    "medium": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-medium:40",
+    "large": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-large:40",
+    "mdm_small": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-mdm-small:20",
+    "mdm_medium": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-dev-mdm-medium:20"
   },
   "state_machines": {
     "bootstrap_full": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-bootstrap-full",

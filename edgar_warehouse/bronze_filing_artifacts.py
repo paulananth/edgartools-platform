@@ -29,6 +29,10 @@ def fetch_filing_artifacts(
 
     cik = int(filing["cik"])
     capture_specs = default_capture_spec_factory()
+    # Count real SEC network fetches so the orchestrator can skip its per-accession
+    # rate-limit sleep on the idempotent cache-hit path (immutable, already-captured
+    # artifacts). See CLAUDE.md artifact-throttle 5-whys.
+    network_fetches = 0
     existing_rows = db.get_filing_attachments(accession_number)
     if existing_rows and not force:
         hydrated_rows, cached_records, missing_rows = _split_existing_attachment_rows(db, existing_rows)
@@ -37,6 +41,7 @@ def fetch_filing_artifacts(
                 "accession_number": accession_number,
                 "attachment_count": len(hydrated_rows),
                 "raw_writes": cached_records,
+                "network_fetches": 0,
             }
         attachment_rows = hydrated_rows + missing_rows
         index_record = None
@@ -74,6 +79,7 @@ def fetch_filing_artifacts(
             # retry budget survives the 503s that sec_client.py's fixed 3-attempt
             # retry does not — see docs/runbook.md smoke-test 503 investigation.
             filing_obj = get_filing(accession_number)
+            network_fetches += 1
             if filing_obj is None:
                 raise ValueError(f"edgartools could not resolve filing for accession {accession_number}")
             attachment_rows = _map_edgartools_attachments(filing_obj, accession_number)
@@ -104,6 +110,7 @@ def fetch_filing_artifacts(
         payload = row.get("content_bytes")
         if payload is None:
             payload = download_bytes(document_url, context.identity)
+            network_fetches += 1
         raw_record = _write_raw_artifact(
             context=context,
             db=db,
@@ -125,6 +132,7 @@ def fetch_filing_artifacts(
         "accession_number": accession_number,
         "attachment_count": len(hydrated_rows),
         "raw_writes": raw_writes,
+        "network_fetches": network_fetches,
     }
 
 
