@@ -7,12 +7,15 @@
 #   - SnowCLI installed with a configured connection
 #
 # Usage:
-#   SNOW_CONNECTION=snowconn bash scripts/test/ownership-neo4j-e2e-quick.sh
+#   AWS_ACCOUNT_ID=<12-digit-id> SNOW_CONNECTION=snowconn bash scripts/test/ownership-neo4j-e2e-quick.sh
 
 set -euo pipefail
 
 REGION="us-east-1"
-ACCOUNT_ID="690839588395"
+ACCOUNT_ID="${AWS_ACCOUNT_ID:?set AWS_ACCOUNT_ID to the expected 12-digit AWS account ID}"
+[[ "$ACCOUNT_ID" =~ ^[0-9]{12}$ ]] || { echo "ERROR: AWS_ACCOUNT_ID must be a 12-digit AWS account ID" >&2; exit 2; }
+ACTUAL_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+[[ "$ACTUAL_ACCOUNT_ID" == "$ACCOUNT_ID" ]] || { echo "ERROR: AWS account mismatch: expected ${ACCOUNT_ID}, got ${ACTUAL_ACCOUNT_ID}" >&2; exit 1; }
 NAME_PREFIX="edgartools-dev"
 SNOW_CONNECTION="${SNOW_CONNECTION:-snowconn}"
 DB="EDGARTOOLS_DEV"

@@ -17,6 +17,7 @@ Commands:
 Options:
   --env <dev|prod>                Environment. Default: dev.
   --aws-profile <profile>         AWS admin/provisioning profile. Default: AWS_PROFILE or aws-admin-<env>.
+  --aws-account-id <id>           Expected 12-digit AWS account ID. Required (or GO_LIVE_AWS_ACCOUNT_ID).
   --deployer-profile <profile>    AWS application deployer profile. Default: sec_platform_deployer.
   --aws-region <region>           AWS region. Default: AWS_REGION, AWS_DEFAULT_REGION, or us-east-1.
   --snow-connection <name>        SnowCLI connection. Default: snowconn for dev, edgartools-prod for prod.
@@ -43,7 +44,7 @@ SNOW_CONNECTION=""
 WORKSPACE=""
 REPORT_FILE=""
 APPLY=false
-CANONICAL_PROD_AWS_ACCOUNT_ID="690839588395"
+EXPECTED_AWS_ACCOUNT_ID="${GO_LIVE_AWS_ACCOUNT_ID:-}"
 CANONICAL_PROD_DATABASE="EDGARTOOLS_PROD"
 
 COMMAND="wizard"
@@ -71,6 +72,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --env) ENVIRONMENT="${2:?}"; shift 2 ;;
     --aws-profile) AWS_PROFILE_NAME="${2:?}"; shift 2 ;;
+    --aws-account-id) EXPECTED_AWS_ACCOUNT_ID="${2:?}"; shift 2 ;;
     --deployer-profile) DEPLOYER_PROFILE="${2:?}"; shift 2 ;;
     --aws-region) AWS_REGION_NAME="${2:?}"; shift 2 ;;
     --snow-connection) SNOW_CONNECTION="${2:?}"; shift 2 ;;
@@ -120,13 +122,14 @@ selected_aws_account_id() {
   aws --profile "$AWS_PROFILE_NAME" --region "$AWS_REGION_NAME" sts get-caller-identity --query Account --output text
 }
 
-require_canonical_prod_target() {
+require_expected_aws_target() {
   local account_id
-  [[ "$ENVIRONMENT" == "prod" ]] || return 0
-  [[ "$AWS_REGION_NAME" == "us-east-1" ]] || fail "prod must target us-east-1"
-  account_id="$(selected_aws_account_id 2>/dev/null)" || fail "unable to resolve AWS account for production profile ${AWS_PROFILE_NAME}"
-  [[ "$account_id" == "$CANONICAL_PROD_AWS_ACCOUNT_ID" ]] || fail "production account mismatch: expected ${CANONICAL_PROD_AWS_ACCOUNT_ID}, got ${account_id}"
-  [[ "$SNOWFLAKE_DATABASE" == "$CANONICAL_PROD_DATABASE" ]] || fail "production Snowflake target must be ${CANONICAL_PROD_DATABASE}"
+  account_id="$(selected_aws_account_id 2>/dev/null)" || fail "unable to resolve AWS account for profile ${AWS_PROFILE_NAME}"
+  [[ "$account_id" == "$EXPECTED_AWS_ACCOUNT_ID" ]] || fail "AWS account mismatch: expected ${EXPECTED_AWS_ACCOUNT_ID}, got ${account_id}"
+  if [[ "$ENVIRONMENT" == "prod" ]]; then
+    [[ "$AWS_REGION_NAME" == "us-east-1" ]] || fail "prod must target us-east-1"
+    [[ "$SNOWFLAKE_DATABASE" == "$CANONICAL_PROD_DATABASE" ]] || fail "production Snowflake target must be ${CANONICAL_PROD_DATABASE}"
+  fi
 }
 
 use_gum() {
@@ -240,6 +243,7 @@ Go-live wizard
 selected environment: ${ENVIRONMENT}
 AWS profile: ${AWS_PROFILE_NAME}
 AWS deployer profile: ${DEPLOYER_PROFILE}
+Expected AWS account: ${EXPECTED_AWS_ACCOUNT_ID}
 AWS region: ${AWS_REGION_NAME}
 Snowflake connection: ${SNOW_CONNECTION}
 Mode: preview-first, non-deploying by default
@@ -282,6 +286,7 @@ run_tui_wizard() {
 
   AWS_PROFILE_NAME="$(prompt_value "AWS admin/provisioning profile" "$AWS_PROFILE_NAME")"
   DEPLOYER_PROFILE="$(prompt_value "AWS application deployer profile" "$DEPLOYER_PROFILE")"
+  EXPECTED_AWS_ACCOUNT_ID="$(prompt_value "Expected 12-digit AWS account ID" "$EXPECTED_AWS_ACCOUNT_ID")"
   AWS_REGION_NAME="$(prompt_value "AWS region" "$AWS_REGION_NAME")"
   SNOW_CONNECTION="$(prompt_value "Snowflake connection" "$SNOW_CONNECTION")"
   WORKSPACE="$(prompt_value "Local wizard workspace" "$WORKSPACE")"
@@ -452,13 +457,11 @@ run_checks() {
     else
       add_check "aws identity" "fail" "AWS CLI identity check failed for selected profile and region"
     fi
-    if [[ "$ENVIRONMENT" == "prod" ]]; then
-      account_id="$(selected_aws_account_id 2>/dev/null || true)"
-      if [[ "$account_id" == "$CANONICAL_PROD_AWS_ACCOUNT_ID" ]]; then
-        add_check "canonical prod account" "pass" "AWS caller matches the canonical production account"
-      else
-        add_check "canonical prod account" "fail" "production account mismatch; expected ${CANONICAL_PROD_AWS_ACCOUNT_ID}"
-      fi
+    account_id="$(selected_aws_account_id 2>/dev/null || true)"
+    if [[ "$account_id" == "$EXPECTED_AWS_ACCOUNT_ID" ]]; then
+      add_check "expected AWS account" "pass" "AWS caller matches the requested account"
+    else
+      add_check "expected AWS account" "fail" "AWS account mismatch; expected ${EXPECTED_AWS_ACCOUNT_ID}"
     fi
   fi
 
@@ -547,8 +550,8 @@ run_checks() {
     fi
     if [[ "$ENVIRONMENT" == "prod" ]]; then
       for bucket in bronze_bucket_name warehouse_bucket_name snowflake_export_bucket_name; do
-        expected_bucket="edgartools-prod-${bucket%_bucket_name}-690839588395"
-        [[ "$bucket" == "snowflake_export_bucket_name" ]] && expected_bucket="edgartools-prod-snowflake-export-690839588395"
+        expected_bucket="edgartools-prod-${bucket%_bucket_name}-${EXPECTED_AWS_ACCOUNT_ID}"
+        [[ "$bucket" == "snowflake_export_bucket_name" ]] && expected_bucket="edgartools-prod-snowflake-export-${EXPECTED_AWS_ACCOUNT_ID}"
         if [[ "$(application_manifest_value "$bucket" 2>/dev/null || true)" == "$expected_bucket" ]]; then
           add_check "canonical ${bucket}" "pass" "manifest uses canonical production bucket"
         else
@@ -594,7 +597,7 @@ add_stage() {
 }
 
 build_stages() {
-  local aws_profile_q region_q deployer_q env_q snow_q image_tag db_name
+  local aws_profile_q region_q deployer_q expected_account_q env_q snow_q image_tag db_name
   local mdm_instance_name mdm_network_policy_name mdm_network_rule_name mdm_schema_name
   local mdm_instance_name_q mdm_network_policy_name_q mdm_network_rule_name_q mdm_schema_name_q mdm_comment_env_q
   STAGE_NAMES=()
@@ -603,6 +606,7 @@ build_stages() {
   aws_profile_q="$(shell_quote "$AWS_PROFILE_NAME")"
   region_q="$(shell_quote "$AWS_REGION_NAME")"
   deployer_q="$(shell_quote "$DEPLOYER_PROFILE")"
+  expected_account_q="$(shell_quote "$EXPECTED_AWS_ACCOUNT_ID")"
   env_q="$(shell_quote "$ENVIRONMENT")"
   snow_q="$(shell_quote "$SNOW_CONNECTION")"
   db_name="$SNOWFLAKE_DATABASE"
@@ -662,7 +666,7 @@ if [[ -s \"\${mdm_image_ref_file}\" ]]; then
 else
   resolved_mdm_image_ref=\"\${MDM_IMAGE_REF:?set MDM_IMAGE_REF, or run the ECR image publish stage first so \${mdm_image_ref_file} is created}\"
 fi
-AWS_PROFILE=${deployer_q} bash infra/scripts/deploy-aws-application.sh --env ${ENVIRONMENT} --aws-profile ${DEPLOYER_PROFILE} --aws-region ${AWS_REGION_NAME} --skip-build --image-ref \"\${resolved_warehouse_image_ref}\" --mdm-image-ref \"\${resolved_mdm_image_ref}\" --enable-mdm --output-file infra/aws-${ENVIRONMENT}-application.json"
+AWS_PROFILE=${deployer_q} bash infra/scripts/deploy-aws-application.sh --env ${ENVIRONMENT} --aws-profile ${DEPLOYER_PROFILE} --aws-account-id ${expected_account_q} --aws-region ${AWS_REGION_NAME} --skip-build --image-ref \"\${resolved_warehouse_image_ref}\" --mdm-image-ref \"\${resolved_mdm_image_ref}\" --enable-mdm --output-file infra/aws-${ENVIRONMENT}-application.json"
 
   add_stage \
     "Snowflake: native-pull foundation" \
@@ -851,7 +855,7 @@ run_deploy() {
     return 0
   fi
 
-  require_canonical_prod_target
+  require_expected_aws_target
 
   build_stages
   for i in "${!STAGE_NAMES[@]}"; do
@@ -976,6 +980,8 @@ refresh_config
 if [[ "$COMMAND" == "wizard" ]]; then
   run_tui_wizard
 fi
+
+[[ "$EXPECTED_AWS_ACCOUNT_ID" =~ ^[0-9]{12}$ ]] || fail "--aws-account-id (or GO_LIVE_AWS_ACCOUNT_ID) must provide a 12-digit AWS account ID"
 
 show_startup
 confirm_environment

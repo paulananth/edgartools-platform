@@ -79,6 +79,7 @@ Deploy with the Snowflake Postgres database source so the deploy script does not
 bash infra/scripts/deploy-aws-application.sh \
   --env dev \
   --aws-profile sec_platform_deployer \
+  --aws-account-id <12-digit-id> \
   --aws-region us-east-1 \
   --skip-build \
   --image-ref <warehouse-image-digest-ref> \
@@ -128,7 +129,8 @@ LIVE_EDGAR_IDENTITY_ARN=$(aws secretsmanager describe-secret \
   --query ARN --output text)
 
 bash infra/scripts/deploy-aws-application.sh \
-  --env dev --aws-profile sec_platform_deployer --aws-region us-east-1 \
+  --env dev --aws-profile sec_platform_deployer \
+  --aws-account-id <12-digit-id> --aws-region us-east-1 \
   --skip-build \
   --image-ref <warehouse-image-digest-ref> \
   --mdm-image-ref <mdm-image-digest-ref> \
