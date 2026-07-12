@@ -286,7 +286,9 @@ run_tui_wizard() {
 
   AWS_PROFILE_NAME="$(prompt_value "AWS admin/provisioning profile" "$AWS_PROFILE_NAME")"
   DEPLOYER_PROFILE="$(prompt_value "AWS application deployer profile" "$DEPLOYER_PROFILE")"
-  EXPECTED_AWS_ACCOUNT_ID="$(prompt_value "Expected 12-digit AWS account ID" "$EXPECTED_AWS_ACCOUNT_ID")"
+  if [[ -z "$EXPECTED_AWS_ACCOUNT_ID" ]]; then
+    EXPECTED_AWS_ACCOUNT_ID="$(prompt_value "Expected 12-digit AWS account ID" "")"
+  fi
   AWS_REGION_NAME="$(prompt_value "AWS region" "$AWS_REGION_NAME")"
   SNOW_CONNECTION="$(prompt_value "Snowflake connection" "$SNOW_CONNECTION")"
   WORKSPACE="$(prompt_value "Local wizard workspace" "$WORKSPACE")"

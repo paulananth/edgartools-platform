@@ -14,6 +14,7 @@ SCRIPT = REPO_ROOT / "infra" / "scripts" / "go-live.sh"
 # (forward-slash) form. A relative path sidesteps the drive-letter/path-mapping
 # ambiguity entirely and behaves identically on Linux, macOS, and Windows Git Bash.
 SCRIPT_ARG = SCRIPT.relative_to(REPO_ROOT).as_posix()
+TEST_ACCOUNT_ID = "123456789012"
 
 
 def _resolve_bash() -> str:
@@ -55,6 +56,8 @@ def run_wizard(
 ) -> subprocess.CompletedProcess[str]:
     proc_env = os.environ.copy()
     proc_env.setdefault("GO_LIVE_NO_GUM", "1")
+    proc_env.setdefault("GO_LIVE_AWS_ACCOUNT_ID", TEST_ACCOUNT_ID)
+    proc_env.setdefault("FAKE_AWS_ACCOUNT_ID", TEST_ACCOUNT_ID)
     if env:
         proc_env.update(env)
     # Deliberately NOT text=True for the subprocess call itself: on Windows,
@@ -96,7 +99,12 @@ set -euo pipefail
 echo "$(basename "$0") $*" >> "${GO_LIVE_CALL_LOG}"
 case "$(basename "$0")" in
   aws)
-    echo '{"Account":"123456789012","Arn":"arn:aws:iam::123456789012:user/test","UserId":"test"}'
+    if [[ "$*" == *"get-caller-identity"* && "$*" == *"--query Account"* ]]; then
+      printf '%s\n' "${FAKE_AWS_ACCOUNT_ID}"
+    else
+      printf '{"Account":"%s","Arn":"arn:aws:iam::%s:user/test","UserId":"test"}\n' \
+        "${FAKE_AWS_ACCOUNT_ID}" "${FAKE_AWS_ACCOUNT_ID}"
+    fi
     ;;
   snow)
     echo "snow ok"
@@ -344,12 +352,12 @@ def test_prod_apply_rejects_wrong_aws_account_before_any_stage(tmp_path: Path) -
         "--workspace",
         str(tmp_path / "workspace"),
         input_text="y\n",
-        env=env,
+        env={**env, "GO_LIVE_AWS_ACCOUNT_ID": "210987654321"},
         check=False,
     )
 
     assert result.returncode != 0
-    assert "production account mismatch" in result.stderr
+    assert "AWS account mismatch" in result.stderr
     calls = call_log.read_text(encoding="utf-8")
     assert "terraform apply" not in calls
 
@@ -415,7 +423,10 @@ def test_deploy_preview_and_declined_apply_do_not_execute_stages(tmp_path: Path)
     assert "Skipped stage: AWS: Terraform state bucket" in declined.stdout
     assert {event["status"] for event in state["events"]} == {"skipped"}
     calls = call_log.read_text(encoding="utf-8")
-    assert calls == ""
+    assert "sts get-caller-identity --query Account --output text" in calls
+    assert "terraform apply" not in calls
+    assert "deploy-aws-application" not in calls
+    assert "publish-warehouse-image" not in calls
 
 
 def test_report_redacts_sensitive_values_from_state_and_commands(tmp_path: Path) -> None:
