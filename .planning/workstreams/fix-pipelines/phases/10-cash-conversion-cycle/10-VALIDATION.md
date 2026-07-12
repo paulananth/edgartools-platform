@@ -1,5 +1,5 @@
 ---
-phase: 3
+phase: 10
 slug: cash-conversion-cycle
 status: draft
 nyquist_compliant: false

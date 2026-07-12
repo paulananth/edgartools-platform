@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: fix-pipelines
-status: planning
-last_updated: "2026-07-07"
-last_activity: 2026-07-07 -- Milestone fix-pipelines v2.0 started (neo4j verify, MDM completeness, missing artifacts, edgartools crosscheck); defining requirements
+status: paused
+last_updated: "2026-07-11"
+last_activity: 2026-07-11 -- Session resumed; reconciled planning state after phase-6 branch merge (#126) + AWS account cutover (077->690). Phase 06 paused mid-plan (06-03 Task 2/3); exec #3 status UNVERIFIED.
 ---
 
 # Project State
@@ -18,7 +18,60 @@ publishing to Snowflake gold tables.
 
 ---
 
+## Resume Reconciliation (2026-07-11)
+
+> Written during `/gsd-resume-work`. Reconciles STATE with what actually happened since the
+> 2026-07-11T16:31Z HANDOFF. Scope: fix-pipelines phase-6 + account cutover only (facts with
+> ground truth). Multi-milestone table below was NOT re-verified this session.
+
+**⚠️ HEADLINE — exec #3 status UNKNOWN, verify before anything else.**
+Step Functions execution `load-history-06-1783726338` (account `690839588395`,
+`edgartools-dev-load-history`, input `{"total_cik_limit":150}`) was RUNNING and *suspected
+stalled* (~17h in `WindowedBootstrap`, 2 RUNNING ECS tasks on `edgartools-dev-warehouse`) at
+pause. **It has NOT been verified since.** If genuinely hung, compute may be accruing cost in
+`690` right now. First action on any resume:
+`aws stepfunctions describe-execution --region us-east-1 --execution-arn arn:aws:states:us-east-1:690839588395:execution:edgartools-dev-load-history:load-history-06-1783726338 --query status`.
+→ RUNNING: stall investigation (identify child ECS task, tail `warehouse-medium` logs for SEC
+429/backoff) → continue-wait / stop+re-trigger `{"total_cik_limit":150}` (NO --force) / 5-whys.
+→ SUCCEEDED: continuation executor for 06-03 Task 3 + SUMMARY. → FAILED: CloudWatch traceback +
+5-whys before any retry (two prior execs failed for distinct root causes — NEVER blind-retry).
+
+**Blocker at resume: local AWS creds.** All four profiles (`default`, `aws-admin-dev`,
+`aws-admin-prod`, `sec_platform_deployer`) resolve to the DECOMMISSIONED account
+`077127448006`, not the live `690839588395`. Any live-account check must run with corrected
+creds (user reported fixing them in their interactive shell; not visible to the agent tool shell).
+
+**Phase 06 (fix-pipelines) — genuinely INCOMPLETE (2 of 6 plans done):**
+- 06-01 ✓ (SUMMARY, `b303fad`) · 06-02 ✓ (SUMMARY, `5524ea1`)
+- 06-03 ⏸ paused mid Task 2/3 (no SUMMARY) — the exec #3 evidence run
+- 06-04 / 06-05 / 06-06 — not started (PLANs exist, no SUMMARYs). 06-05 has a BLOCKING human
+  checkpoint (Codex / fundamental-factors-v2 coordination).
+- Phase-level checkpoint (freshest): `.planning/workstreams/fix-pipelines/phases/06-relationship-investigation-and-population/.continue-here.md`
+
+**Branch merged mid-flight.** `claude/fix-pipelines-v2` landed via PR #126 (`7312898`) — the
+phase-6 code is on `main` but the phase itself is not complete. Branch no longer exists locally.
+Working tree clean on `main`.
+
+**AWS account cutover complete (post-pause).** `077127448006` decommissioned (#127,
+`9f8c933`); canonical prod promoted to `690839588395` (#128, `af3af5a`). CLAUDE.md is the
+authoritative account map. This supersedes any 077 ARN in older planning notes.
+
+**Open item — `active-workstream` pointer mismatch (UNRESOLVED).** File says
+`fundamental-factors-v2` (a separate, possibly Codex-owned workstream, last touched 2026-06-30);
+the paused work + HANDOFF are all `fix-pipelines`. Left unchanged pending user decision — do not
+assume which is primary.
+
+---
+
 ## Active Milestones
+
+> **Consolidation (2026-07-11):** all in-progress workstreams were merged into a single active
+> workstream, **`fix-pipelines`** (`active-workstream` repointed there). `fundamental-factors-v2`
+> (→ unified Phase 10) and `model-builder-contract-gaps` (→ unified Phases 11–15) are
+> **tombstoned** (`merged-into-fix-pipelines`). `go-live`, `mdm-neo4j-dashboard`,
+> `neo4j-snowflake`, `neo4j-pipe` were excluded as already-complete. The table below is
+> pre-consolidation history; the authoritative active roadmap is
+> `.planning/workstreams/fix-pipelines/ROADMAP.md` (Phases 06–15).
 
 | Milestone | Workstream | Progress | Status | Resumption Point |
 |-----------|-----------|----------|--------|-----------------|

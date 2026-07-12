@@ -1,8 +1,21 @@
 # Requirements: fix-pipelines v2.0 — Pipeline Data-Source Completeness & Verification
 
 status: active
-milestone: v2.0 fix-pipelines
-updated: 2026-07-08
+milestone: v2.0 fix-pipelines (consolidated)
+updated: 2026-07-11
+
+---
+
+## Grafted requirements (consolidation 2026-07-11)
+
+The requirements below are this workstream's native set (NODE/EDGE/ARTF/GVER/EDGX). The
+2026-07-11 consolidation also brought in outstanding requirements from two merged workstreams —
+these are authoritative in their source files (not re-transcribed here to avoid drift):
+
+- **Phase 10 (Cash Conversion Cycle):** `CCC-01`, `CCC-02` — see the tombstoned
+  `.planning/workstreams/fundamental-factors-v2/REQUIREMENTS.md`.
+- **Phases 11–15 (Model Builder):** `GOV-01/02/03` and the rest — see
+  `.planning/workstreams/fix-pipelines/merged-sources/model-builder-contract-gaps/REQUIREMENTS.md`.
 
 ---
 

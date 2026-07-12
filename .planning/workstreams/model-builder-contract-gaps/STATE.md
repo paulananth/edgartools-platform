@@ -3,8 +3,11 @@ gsd_state_version: 1.0
 workstream: model-builder-contract-gaps
 milestone: active
 milestone_name: Model Builder Source Contract Expansion (SEC-derivable subset)
-status: planning
-last_updated: "2026-05-30T17:30:00-04:00"
+status: merged-into-fix-pipelines
+merged_into: fix-pipelines
+merged_date: "2026-07-11"
+merged_note: "TOMBSTONE — consolidated into fix-pipelines on 2026-07-11. Charter docs (INTAKE/PROJECT/REQUIREMENTS/ROADMAP) moved to .planning/workstreams/fix-pipelines/merged-sources/model-builder-contract-gaps/. Phases 1-4 (active) map to unified Phases 11-13; held Phases 5-6 map to unified Phases 14-15 (still charter-blocked). No phases were built yet — plan them under fix-pipelines. Do NOT resume this workstream separately."
+last_updated: "2026-07-11"
 last_activity: 2026-05-30 -- Charter-deferral decision (Q1-D) and phase concurrency (Q2-C) locked
 progress:
   total_phases: 6

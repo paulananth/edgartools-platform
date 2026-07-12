@@ -1,6 +1,7 @@
 {
   "version": "1.0",
   "timestamp": "2026-07-11T16:31:18.762Z",
+  "resumed_at": "2026-07-11 (/gsd-resume-work reconcile): exec #3 still UNVERIFIED (creds blocker); phase-6 branch merged via PR #126; AWS cutover 077->690 complete. See .planning/STATE.md 'Resume Reconciliation (2026-07-11)'. Kept (not deleted) because execution was not actually resumed.",
   "workstream": "fix-pipelines",
   "phase": "06",
   "phase_name": "relationship-investigation-and-population",
@@ -39,6 +40,6 @@
     {"decision": "PR #125 merged mid-phase at user request (merge commit 2eaa650); remaining phase-6 work continues on claude/fix-pipelines-v2 toward a follow-up PR", "rationale": "user said merge; repo pattern reuses branch across PRs (like #124)", "phase": "06"}
   ],
   "uncommitted_files": ["infra/aws-prodb-application.json (leave)", "infra/snowflake/sql/prod_native_pull_handshake.json (leave)", "infra/aws-prod-application.json (leave, untracked)"],
-  "next_action": "Check exec #3 status via the async-job manifest's verification_command. RUNNING -> stall investigation (child ECS task logs). SUCCEEDED -> continuation executor for 06-03 Task 3 + SUMMARY. FAILED -> 5-whys before any retry.",
+  "next_action": "PREREQ: ensure AWS creds reach live account 690839588395 (all four local profiles resolved to decommissioned 077127448006 at resume). THEN check exec #3 via the async-job manifest's verification_command. RUNNING -> stall investigation (child ECS task logs) + consider stopping to halt cost. SUCCEEDED -> continuation executor for 06-03 Task 3 + SUMMARY. FAILED -> 5-whys before any retry.",
   "context_notes": "Orchestrating /gsd-execute-phase 6 --ws fix-pipelines, Wave 2 of 4. Worktrees auto-degraded to sequential (unpushed-branch divergence, normal). load_history had never run in dev; this plan is flushing out its latent bugs one stage at a time - MdmSync/MdmVerify/gold stages after MdmExport have ALSO never executed, expect possible further latent failures there. Prior executor agent IDs from the old session are dead; spawn fresh continuation agents with state from disk/git/AWS."
 }
