@@ -317,7 +317,64 @@ aws stepfunctions start-execution --region us-east-1 \
   artifacts and move materially faster through Stage 1/1B than the ~10.6h observed in execution
   #2. Observed behavior recorded in the monitoring section below.
 
-## Task 3 (Per-type artifact-coverage evidence for EDGE-09/10/11) — pending execution #3 outcome
+## Execution #3 outcome — FAILED (OOM in gold build), 2026-07-12
 
-Depends on Task 2's completed run (execution #3, still in flight as of this doc update). Not
-started.
+Execution #3 ran ~29h then FAILED at **2026-07-12T05:10:09Z** with
+`States.ExceedToleratedFailureThreshold`. Root cause (5-whys):
+
+1. Execution FAILED → `States.ExceedToleratedFailureThreshold`.
+2. Its single WindowedBootstrap map child (`a497f830…`, cmd `bootstrap-next --cik-limit 150
+   --cik-offset 0 --tracking-status-filter active,bootstrap_pending`) FAILED → `States.TaskFailed`.
+3. The ECS container (task `a82ced…`, `edgartools-dev-medium:39`) exited **137**, reason
+   **`OutOfMemoryError: container killed due to memory usage`**.
+4. It OOM'd while building the **`sec_financial_fact`** gold table (`gold_table_started`
+   05:09:37Z, killed ~3s later; many prior gold tables completed OK — e.g.
+   `fact_ownership_transaction` 32,317 rows).
+5. **Root cause:** the `edgartools-dev-medium` task def is **2 GB** and the in-memory gold build
+   of `sec_financial_fact` at 150-CIK scale exceeds it. This gold stage had never executed
+   before exec #3 — first run, first OOM (the exact "never-run stage harbors latent bugs"
+   prediction from `.continue-here.md`).
+
+No orphaned tasks/cost remained (task reaped). **The load did not complete green**, but Stage-1
+silver was fully captured before the gold OOM — sufficient for Task 3 evidence per the plan's own
+"load run is instrumental, not the deliverable" note. The OOM is tracked as a separate hardening
+fix (bump gold-stage task memory).
+
+## Task 3 (Per-type artifact-coverage evidence for EDGE-09/10/11) — COMPLETE 2026-07-12
+
+**Method (READ-ONLY, no silver publish):** pulled the canonical dev silver
+`s3://edgartools-dev-warehouse/warehouse/silver/sec/silver.duckdb` (635 MiB, last modified
+2026-07-10T23:39Z) to a scratch copy and queried it read-only (`duckdb 1.5.2`,
+`read_only=True`). Bronze-artifact presence read from the silver filing feed / attachment tables
+(captured-filing form-type counts), not an S3 bronze crawl. No `edgartools-dev-mdm-counts` run
+needed. No write/publish command executed.
+
+**Per-type coverage:**
+
+| EDGE type | Relationship | Silver table | Bronze artifact present? | Silver rows | Classification |
+|-----------|-------------|--------------|--------------------------|-------------|----------------|
+| EDGE-09 | EMPLOYED_BY | `sec_executive_record` (from DEF 14A) | **YES** — 11 `DEF 14A` + 12 `DEFA14A` in `sec_filing_attachment` | **0** | **ARTIFACT PRESENT, SILVER EMPTY** (parser gap) |
+| EDGE-10 | AUDITED_BY | `sec_accounting_flag.auditor_pcaob_id` (from companyfacts entity-facts) | **YES** — companyfacts loaded (`sec_financial_fact` = 2,729,147 rows from the same source) | **0** | **ARTIFACT PRESENT, SILVER EMPTY** (parser gap) |
+| EDGE-11 | INSTITUTIONAL_HOLDS | `sec_thirteenf_holding` (from 13F-HR) | **YES** — 61 `13F-HR` in the captured filing feed | **0** | **ARTIFACT PRESENT, SILVER EMPTY** (parser gap) |
+
+**Headline for Wave 3:** all three are the *same* class — the bronze artifact class is present
+for the loaded universe, but the fundamentals silver parser did not populate the target table.
+None is "ARTIFACT MISSING" (no fetchability triage needed); none is "ARTIFACT+SILVER PRESENT"
+(none ready to populate as-is). Wave 3 (06-04/05/06) is therefore a **parser/pipeline
+root-cause** effort for each, not an exclusion or a fetch problem. Corroborating signal: the
+companyfacts source parses successfully into `sec_financial_fact` (2.7M) and
+`sec_financial_derived` (28,552) but not into `sec_accounting_flag` — so the gap is per-parser,
+not a wholesale source-ingestion failure.
+
+**EDGE-10 Codex / `fundamental-factors-v2` coordination note (carried from 06-CONTEXT.md):**
+`sec_accounting_flag`/`auditor_pcaob_id` derives from the same companyfacts entity-facts fetch
+that the fundamentals workstream owns. As of the 2026-07-11 consolidation, `fundamental-factors-v2`
+was merged into this workstream (unified Phase 10; Codex→Claude hand-off), so the earlier
+"coordinate to avoid overlap" constraint is now an intra-workstream sequencing concern rather
+than a cross-runtime one — but the accounting-flag parser still shares
+`bootstrap_fundamentals.py`/`accounting_flags.py` surface and should be touched with that in mind.
+
+**Provenance caveat:** counts are from the current canonical dev silver (accumulated across prior
+loads incl. exec #2/#3 Stage-1), not a single isolated 150-CIK run. That does not change the
+classifications — a present artifact with a zero silver table is a parser gap regardless of which
+run captured the artifact.

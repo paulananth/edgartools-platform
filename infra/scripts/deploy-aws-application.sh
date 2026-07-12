@@ -930,7 +930,16 @@ register_mdm_task_definition() {
 }
 
 TASK_DEF_SMALL_ARN="$(register_task_definition small 512 1024)"
-TASK_DEF_MEDIUM_ARN="$(register_task_definition medium 1024 2048)"
+# medium memory raised 2048 -> 4096 (2026-07-12, fix-pipelines 06-03): the WindowedBootstrap
+# per-window `bootstrap-next` runs on `medium` and builds gold from the canonical silver.duckdb
+# (full accumulated universe, multi-GB — e.g. 2.7M sec_financial_fact rows), not just its window.
+# At 2048 MB it OOM-killed (exit 137) building the sec_financial_fact gold table, failing
+# load_history exec #3. 4096 matches the memory the dedicated gold-refresh (`large`) already uses
+# for the same full-universe gold build. cpu 1024 supports 4096 on Fargate.
+# DEEPER FOLLOW-UP: per-window bootstrap-next rebuilding the FULL gold every window is redundant
+# with the Stage-3 gold-refresh — consider making WindowedBootstrap skip the inline gold build
+# (phased-pipeline invariant: no gold per batch) rather than only widening memory.
+TASK_DEF_MEDIUM_ARN="$(register_task_definition medium 1024 4096)"
 TASK_DEF_LARGE_ARN="$(register_task_definition large 2048 4096)"
 TASK_DEF_MDM_SMALL_ARN=""
 TASK_DEF_MDM_MEDIUM_ARN=""

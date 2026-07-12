@@ -4,9 +4,9 @@ milestone: v2.0
 milestone_name: fix-pipelines — Pipeline Data-Source Completeness & Verification
 current_phase: 06
 current_phase_name: relationship-investigation-and-population
-current_plan: 3
+current_plan: 4
 status: executing
-stopped_at: "06-03 Task 2/3 PAUSED — load_history exec #3 (load-history-06-1783726338) status UNVERIFIED (needs live 690 creds). 06-01/06-02 done. See .planning/HANDOFF.json + top-level STATE 'Resume Reconciliation (2026-07-11)'."
+stopped_at: "06-03 COMPLETE (2026-07-12): exec #3 FAILED via OOM building sec_financial_fact gold (root-caused); Task 3 coverage evidence captured read-only from canonical silver. All 3 EDGE types (09/10/11) = ARTIFACT PRESENT, SILVER EMPTY (parser gaps). Next: 06-04. Open follow-up: OOM gold-stage memory hardening."
 last_updated: "2026-07-11"
 last_activity: 2026-07-11
 last_activity_desc: "Consolidated all active workstreams into fix-pipelines (spine). Grafted Phase 10 (ex fundamental-factors-v2) + Phases 11-15 (ex model-builder). See ROADMAP consolidation note."
