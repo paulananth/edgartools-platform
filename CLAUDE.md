@@ -146,6 +146,33 @@ follow that format for new entries.
 **Resolution:** `bootstrap-batch` removed from `GOLD_AFFECTING_COMMANDS`. New `gold-refresh`
 command builds gold once. New `load_history` Step Function chains all four phases correctly.
 
+## Artifact-throttle 5-whys (resolved 2026-07-12)
+
+**Problem:** A 20-CIK `load_history` re-run spent ~20+ min (est. ~93 min floor) in
+`filing_artifact_pipeline` over 5,583 accessions with flat ~416 MiB memory, looking like it
+was re-loading immutable, already-captured SEC data.
+
+1. Why iterate 5,583 accessions? Per-window `bootstrap-next` runs with the default
+   `--artifact-policy all_attachments`; `_configured_parser_accessions` selects every
+   ownership/ADV-form accession in the window (heavy insiders → 5,583 Form 3/4/5).
+2. Why revisit immutable data? Idempotency lives at the **download** layer, not the
+   **iteration** layer — `fetch_filing_artifacts` returns cached artifacts with no SEC call
+   when `existing_rows and not force`, but the orchestrator loop still visits every accession
+   to check the cache. No "universe already captured → skip the pass" short-circuit.
+3. Why does checking cached accessions cost ~93 min? The loop ran
+   `time.sleep(WAREHOUSE_ARTIFACT_REQUEST_DELAY)` (default **1.0s**) after **every**
+   accession, **unconditionally, even on a pure cache hit**. 5,583 × 1s ≈ 93 min of no-op
+   throttle. **Root cause:** the SEC rate-limit sleep was paid on the idempotent no-op path,
+   not just on real network fetches.
+
+**Resolution (root-cause fix):** `fetch_filing_artifacts` now returns `network_fetches`
+(count of real SEC round-trips: edgartools `get_filing` + each `download_bytes`); the
+orchestrator loop throttles only when `network_fetches > 0`. Cache hits (immutable,
+already-captured artifacts) return `network_fetches=0` and skip the sleep, so re-runs against
+loaded bronze no longer pay the ~93-min dead-time throttle while new filings are still fully
+rate-limited. Locked in by `tests/unit/test_loader_idempotency.py` (`network_fetches` = 0 on
+cache hit, 1 on fetch). NOTE: takes effect only after a warehouse image rebuild + deploy.
+
 ## AWS teardown 5-whys (resolved 2026-07-11)
 
 `destroy-aws-complete.sh` is authored/tested for Linux/CI and failed three times on macOS

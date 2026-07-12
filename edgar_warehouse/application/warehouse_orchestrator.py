@@ -1804,7 +1804,14 @@ def _run_configured_form_artifact_pipeline(
                 )
                 raw_writes.extend(artifact_result["raw_writes"])
                 rows_written += int(artifact_result["attachment_count"])
-                _time.sleep(float(os.environ.get("WAREHOUSE_ARTIFACT_REQUEST_DELAY", "1.0")))
+                # Throttle only when a real SEC network fetch occurred. On the
+                # idempotent cache-hit path (immutable, already-captured artifacts)
+                # no request was made, so the SEC rate-limit sleep is pure dead time
+                # — e.g. 5,583 cached accessions x 1s = ~93 min of no-op throttle on a
+                # re-run. Default to throttling if the flag is absent (conservative).
+                # See CLAUDE.md artifact-throttle 5-whys.
+                if int(artifact_result.get("network_fetches", 1)) > 0:
+                    _time.sleep(float(os.environ.get("WAREHOUSE_ARTIFACT_REQUEST_DELAY", "1.0")))
             if run_parsers:
                 rows_written += _run_parse_pipeline(
                     db=db,

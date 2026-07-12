@@ -237,6 +237,8 @@ class LoaderIdempotencyTests(unittest.TestCase):
         self.assertEqual(result["attachment_count"], 1)
         self.assertEqual(result["raw_writes"][0]["cached"], True)
         self.assertEqual(db.merged_rows, [])
+        # Cache hit: no SEC request was made, so the orchestrator must not throttle.
+        self.assertEqual(result["network_fetches"], 0)
 
     def test_force_filing_artifact_uses_edgartools_fallback_when_primary_document_unknown(self) -> None:
         """When primary_document is unknown (fast path unavailable) or force=True, the
@@ -272,6 +274,8 @@ class LoaderIdempotencyTests(unittest.TestCase):
 
         get_filing.assert_called_once_with(accession)
         self.assertEqual(result["attachment_count"], 1)
+        # A real SEC fetch occurred (edgartools get_filing) → orchestrator must throttle.
+        self.assertEqual(result["network_fetches"], 1)
         # One raw_writes entry (the document) — no separate index-page artifact anymore.
         self.assertEqual(len(result["raw_writes"]), 1)
         self.assertEqual(len(db.merged_rows), 1)
