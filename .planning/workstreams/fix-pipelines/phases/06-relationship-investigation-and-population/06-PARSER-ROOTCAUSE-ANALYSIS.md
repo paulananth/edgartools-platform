@@ -26,17 +26,23 @@ exec #3's gold build), an OOM/failure in a fundamentals mode is a live, invisibl
 
 ## Per-type root cause
 
-### EDGE-10 — `sec_accounting_flag` (AUDITED_BY) — HIGHEST CONFIDENCE, parser-logic gap
+### EDGE-10 — `sec_accounting_flag` (AUDITED_BY) — most isolated lead (UNCONFIRMED)
 - **Writer:** `silver_store.py:3220` INSERT; forensic/DEI fields per schema `silver_store.py:563-575`
   (`auditor_pcaob_id` ← `dei_AuditorFirmId`; forensic scores ← `accounting_flags.backfill_accounting_flags`, cross-period).
-- **Evidence:** the entity-facts stage comment (`deploy…:1665`) claims it writes
-  `sec_financial_fact, sec_financial_derived, sec_accounting_flag`. In canonical silver:
-  `sec_financial_fact`=2,729,147, `sec_financial_derived`=28,552, **`sec_accounting_flag`=0**.
-  So entity-facts **succeeded** (two sibling tables full) yet wrote **zero** accounting_flags — this
-  is **not** an AD-13 skip; it's a logic gap in the entity-facts→accounting_flag path.
-- **Hypothesis:** the DEI auditor-fact extraction (`dei_AuditorFirmId` → `auditor_pcaob_id`) and/or
-  the cross-period `accounting_flags.backfill_accounting_flags` step is not actually invoked within
-  entity-facts mode (or extracts nothing from the companyfacts payload).
+- **Evidence (soft — do not treat as settled):** the entity-facts stage *comment* (`deploy…:1665`)
+  *claims* it writes `sec_financial_fact, sec_financial_derived, sec_accounting_flag`. In canonical
+  silver: `sec_financial_fact`=2,729,147, `sec_financial_derived`=28,552, **`sec_accounting_flag`=0**.
+- **Caveat (why this is a lead, not a conclusion):** these counts are from the **accumulated**
+  canonical silver (many prior loads, last-modified 2026-07-10), so they **cannot** prove that a
+  *single* entity-facts run wrote financial_fact-but-not-accounting_flag — the 2.7M could predate
+  accounting_flag being wired, or come from a different code version. And "entity-facts writes
+  accounting_flag" rests on a state-machine **comment**, not the verified entity-facts code path.
+  So this is **not** confirmed to be a logic-gap-vs-AD-13-skip; it is the most *isolated* lead
+  because its source (companyfacts) is demonstrably present and parseable.
+- **Leading hypothesis (unconfirmed):** the DEI auditor-fact extraction (`dei_AuditorFirmId` →
+  `auditor_pcaob_id`) and/or the cross-period `accounting_flags.backfill_accounting_flags` step is
+  not actually invoked within entity-facts mode (or extracts nothing) — but a plain stage failure /
+  never-invoked backfill is not yet ruled out. The 06-05 diagnostic below is the discriminator.
 - **Next diagnostic (06-05):** trace the entity-facts code path in `bootstrap_fundamentals.py` →
   `accounting_flags.py`; confirm whether `backfill_accounting_flags` is called during entity-facts
   and whether `dei_AuditorFirmId` is present in the fetched companyfacts for a known 10-K filer.
@@ -87,7 +93,7 @@ exec #3's gold build), an OOM/failure in a fundamentals mode is a live, invisibl
 
 | EDGE | Table | Root-cause class | Wave-3 disposition (likely) |
 |------|-------|------------------|-----------------------------|
-| EDGE-10 | `sec_accounting_flag` | Parser-logic gap (confirmed not a skip) | **Populate** — fix entity-facts→accounting_flag extraction (06-05) |
+| EDGE-10 | `sec_accounting_flag` | Leading (unconfirmed): parser-logic gap vs. never-invoked backfill vs. skip — accumulated counts can't prove same-run; write asserted by a comment, not verified in code | **Diagnose first** (06-05), then likely populate — confirm the entity-facts→accounting_flag path before committing a fix |
 | EDGE-09 | `sec_executive_record` | Stage skip **or** parser miss (disambiguate) | Populate if fixable; exclude only if SCT genuinely absent (06-04) |
 | EDGE-11 | `sec_thirteenf_holding` | Stage skip **or** parser miss (disambiguate) | Populate if fixable; exclude only if info-table genuinely absent (06-04) |
 
