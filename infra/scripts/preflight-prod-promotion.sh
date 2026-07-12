@@ -6,6 +6,7 @@ usage() {
   cat <<'EOF'
 Usage: preflight-prod-promotion.sh [options]
   --aws-profile <name>       Default: aws-admin-prod
+  --aws-account-id <id>      Expected 12-digit AWS account ID. Required.
   --aws-region <region>      Must be us-east-1
   --snow-connection <name>   Default: edgartools-prod
   --source-bucket <name>     Former environment bucket to compare
@@ -23,11 +24,12 @@ SNOW_CONNECTION="edgartools-prod"
 SOURCE_BUCKET=""
 EXPECTED_SOURCE_COUNT=""
 ALLOW_EXISTING=false
-ACCOUNT_ID="690839588395"
+ACCOUNT_ID=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --aws-profile) AWS_PROFILE_NAME="${2:?}"; shift 2 ;;
+    --aws-account-id) ACCOUNT_ID="${2:?}"; shift 2 ;;
     --aws-region) AWS_REGION_NAME="${2:?}"; shift 2 ;;
     --snow-connection) SNOW_CONNECTION="${2:?}"; shift 2 ;;
     --source-bucket) SOURCE_BUCKET="${2:?}"; shift 2 ;;
@@ -37,6 +39,8 @@ while [[ $# -gt 0 ]]; do
     *) echo "ERROR: unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+[[ "$ACCOUNT_ID" =~ ^[0-9]{12}$ ]] || { echo "ERROR: --aws-account-id must be a 12-digit AWS account ID" >&2; exit 2; }
 
 failures=0
 pass() { printf 'PASS: %s\n' "$*"; }

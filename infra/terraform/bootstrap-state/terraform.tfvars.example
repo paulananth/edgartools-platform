@@ -1,3 +1,6 @@
 environment = "dev"
 aws_region  = "us-east-1"
 
+# Normally omit this: the bootstrap root derives the globally unique bucket
+# name as edgartools-<environment>-tfstate-<authenticated-account-id>.
+# terraform_state_bucket_name = "edgartools-dev-tfstate-123456789012"

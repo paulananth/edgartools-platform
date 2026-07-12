@@ -61,12 +61,14 @@ fi
 # ── 3. Run the function with placeholder inputs (writes JSON only) ─────
 cat > "${WORKDIR}/run.sh" <<RUN
 set -euo pipefail
-CLUSTER_ARN="arn:aws:ecs:us-east-1:000000000000:cluster/verify-pr3"
+PLACEHOLDER_ACCOUNT_ID="\$(printf '%012d' 0)"
+CLUSTER_ARN="arn:aws:ecs:us-east-1:\${PLACEHOLDER_ACCOUNT_ID}:cluster/verify-pr3"
 BRONZE_BUCKET_NAME="verify-pr3-bronze"
 PUBLIC_SUBNET_IDS_JSON='["subnet-aaaa","subnet-bbbb"]'
 SECURITY_GROUP_IDS_JSON='["sg-aaaa"]'
 MDM_RUN_LIMIT="1000"
 MDM_GRAPH_LIMIT="1000"
+MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"
 source "$FN_FILE"
 write_load_history_definition "$OUT_JSON" \
   "arn:wh-small" "arn:wh-medium" "arn:mdm-small" "arn:mdm-medium" "arn:wh-large"

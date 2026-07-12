@@ -20,6 +20,8 @@ Terraform is only needed for initial provisioning (infra/terraform/); never for 
 Options:
   --env <dev|prod>                  Environment name. Required.
   --aws-profile <profile>           AWS CLI profile.
+  --aws-account-id <12-digit-id>    Expected AWS account. Required. Deployment stops if STS
+                                    resolves the selected profile to a different account.
   --aws-region <region>             AWS region. Default: AWS_REGION, AWS_DEFAULT_REGION, or us-east-1.
   --name-prefix <prefix>            Resource prefix. Default: edgartools-<env>.
   --cluster-name <name>             ECS cluster name.
@@ -115,6 +117,7 @@ first_nonempty() {
 
 ENVIRONMENT=""
 AWS_PROFILE_NAME=""
+EXPECTED_AWS_ACCOUNT_ID=""
 AWS_REGION_NAME="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
 NAME_PREFIX=""
 CLUSTER_NAME=""
@@ -165,6 +168,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --env) ENVIRONMENT="${2:?}"; shift 2 ;;
     --aws-profile) AWS_PROFILE_NAME="${2:?}"; shift 2 ;;
+    --aws-account-id) EXPECTED_AWS_ACCOUNT_ID="${2:?}"; shift 2 ;;
     --aws-region) AWS_REGION_NAME="${2:?}"; shift 2 ;;
     --name-prefix) NAME_PREFIX="${2:?}"; shift 2 ;;
     --cluster-name) CLUSTER_NAME="${2:?}"; shift 2 ;;
@@ -217,6 +221,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ "$ENVIRONMENT" == "dev" || "$ENVIRONMENT" == "prod" ]] || { usage >&2; exit 2; }
+[[ -n "$EXPECTED_AWS_ACCOUNT_ID" ]] || fail "--aws-account-id is required"
+if [[ ! "$EXPECTED_AWS_ACCOUNT_ID" =~ ^[0-9]{12}$ ]]; then
+  fail "--aws-account-id must be a 12-digit AWS account ID"
+fi
 [[ "$WAREHOUSE_RUNTIME_MODE" == "bronze_capture" || "$WAREHOUSE_RUNTIME_MODE" == "infrastructure_validation" ]] || fail "--warehouse-runtime-mode must be bronze_capture or infrastructure_validation"
 [[ "$PUSH_ATTEMPTS" =~ ^[1-9][0-9]*$ ]] || fail "--push-attempts must be a positive integer"
 [[ "$BOOTSTRAP_BATCH_CONCURRENCY" =~ ^[1-9][0-9]*$ ]] || fail "--bootstrap-batch-concurrency must be a positive integer"
@@ -371,6 +379,9 @@ PY
 
 # Resolve account ID first — bucket naming convention depends on it.
 ACCOUNT_ID="$(aws_cli sts get-caller-identity --query Account --output text)"
+if [[ "$ACCOUNT_ID" != "$EXPECTED_AWS_ACCOUNT_ID" ]]; then
+  fail "AWS account mismatch: --aws-account-id requested ${EXPECTED_AWS_ACCOUNT_ID}, but profile ${AWS_PROFILE_NAME:-<default>} resolved to ${ACCOUNT_ID}."
+fi
 
 # Parameter resolution order (no Terraform):
 #   1. CLI flag (already set above)

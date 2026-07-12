@@ -5,7 +5,7 @@
 #
 # Usage:
 #   ./scripts/ops/preflight.sh
-#   ./scripts/ops/preflight.sh --env dev --skip-snowflake
+#   ./scripts/ops/preflight.sh --env dev --aws-account-id <12-digit-id> --skip-snowflake
 #   ./scripts/ops/preflight.sh --fix    # auto-fix what can be fixed
 
 set -euo pipefail
@@ -13,6 +13,7 @@ set -euo pipefail
 ENVIRONMENT="dev"
 AWS_REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
 AWS_PROFILE_ARG=""
+EXPECTED_AWS_ACCOUNT_ID=""
 SNOW_CONN=""
 SKIP_SNOWFLAKE=false
 AUTO_FIX=false
@@ -22,6 +23,7 @@ while [[ $# -gt 0 ]]; do
     --env)             ENVIRONMENT="${2:?}"; shift 2 ;;
     --region)          AWS_REGION="${2:?}"; shift 2 ;;
     --profile)         AWS_PROFILE_ARG="--profile ${2:?}"; shift 2 ;;
+    --aws-account-id)  EXPECTED_AWS_ACCOUNT_ID="${2:?}"; shift 2 ;;
     --snow-connection) SNOW_CONN="${2:?}"; shift 2 ;;
     --skip-snowflake)  SKIP_SNOWFLAKE=true; shift ;;
     --fix)             AUTO_FIX=true; shift ;;
@@ -29,9 +31,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+[[ "$EXPECTED_AWS_ACCOUNT_ID" =~ ^[0-9]{12}$ ]] || { echo "ERROR: --aws-account-id must be a 12-digit AWS account ID" >&2; exit 2; }
+
 NAME_PREFIX="edgartools-${ENVIRONMENT}"
 SNOW_CONN="${SNOW_CONN:-${NAME_PREFIX}}"
 ACCOUNT_ID="$(aws ${AWS_PROFILE_ARG} --region "$AWS_REGION" sts get-caller-identity --query Account --output text 2>/dev/null)"
+[[ "$ACCOUNT_ID" == "$EXPECTED_AWS_ACCOUNT_ID" ]] || { echo "ERROR: AWS account mismatch: expected ${EXPECTED_AWS_ACCOUNT_ID}, got ${ACCOUNT_ID}" >&2; exit 1; }
 
 aws_() { aws ${AWS_PROFILE_ARG} --region "$AWS_REGION" "$@"; }
 hr()   { printf '%.0s─' $(seq 1 65); echo; }
@@ -123,7 +128,7 @@ NOTIF_SNS=$(aws_ s3api get-bucket-notification-configuration \
 NOTIF_OK="$([[ "$NOTIF_SNS" == "$SNS_ARN" ]] && echo PASS || echo FAIL)"
 if [[ "$NOTIF_OK" == "FAIL" && "$AUTO_FIX" == "true" ]]; then
   bash "$(dirname "${BASH_SOURCE[0]}")/../../infra/scripts/deploy-aws-application.sh" \
-    --env "$ENVIRONMENT" --skip-build \
+    --env "$ENVIRONMENT" --aws-account-id "$EXPECTED_AWS_ACCOUNT_ID" --skip-build \
     --image-ref "dummy" --skip-mdm 2>/dev/null || true
   NOTIF_SNS=$(aws_ s3api get-bucket-notification-configuration \
     --bucket "$EXPORT_BUCKET" \
