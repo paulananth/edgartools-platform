@@ -419,7 +419,7 @@ Named profile:
 
 Use for application rollout only:
 
-  bash infra/scripts/deploy-aws-application.sh --env $ENV --aws-profile ${DEPLOYER_NAME}
+  bash infra/scripts/deploy-aws-application.sh --env $ENV --aws-profile ${DEPLOYER_NAME} --aws-account-id ${ACCOUNT_ID}
 
 Do not use this key for Terraform admin applies. Store it immediately and rotate
 or delete it when you move to IAM Identity Center or CI OIDC.

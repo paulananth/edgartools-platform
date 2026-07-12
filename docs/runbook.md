@@ -97,6 +97,27 @@ AWS uses a split-principal model:
   graph-sync settings under `edgartools-<env>/mdm/*` with
   `infra/scripts/bootstrap-aws-mdm-secrets.sh`.
 
+### Select and verify the admin profile
+
+Dev and prod currently share canonical AWS account `690839588395`; their resources and Terraform state keys are environment-scoped. Account `077127448006` is retired. Profile names are not proof of account identity, so verify the selected profile before every Terraform operation:
+
+```bash
+# Choose exactly one:
+export AWS_PROFILE=aws-admin-dev   # infra/terraform/**/dev roots
+# export AWS_PROFILE=aws-admin-prod  # infra/terraform/**/prod roots
+
+export AWS_DEFAULT_REGION=us-east-1
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+test "$ACCOUNT_ID" = "690839588395" || {
+  echo "Refusing AWS operation: $AWS_PROFILE resolved to $ACCOUNT_ID" >&2
+  exit 1
+}
+```
+
+Use the same verified profile for the environment's state bootstrap, passive-infrastructure root, and AWS-access root. See [AWS account and profile selection](aws-authentication.md) for SSO configuration, dev/prod examples, troubleshooting, and the mandatory retired-account guard.
+
 ---
 
 ## Step 1 — Terraform: Bootstrap State Bucket
@@ -105,7 +126,8 @@ The state bucket must exist before any other Terraform root can initialise its b
 Run this with an AWS admin profile in the target account.
 
 ```bash
-export AWS_PROFILE=aws-admin-prod
+# Dev:  export AWS_PROFILE=aws-admin-dev; set environment = "dev"
+# Prod: export AWS_PROFILE=aws-admin-prod; set environment = "prod"
 cd infra/terraform/bootstrap-state
 cp terraform.tfvars.example terraform.tfvars
 # Edit terraform.tfvars — set environment ("dev" or "prod") and aws_region
@@ -301,6 +323,7 @@ Functions state machines.
 bash infra/scripts/deploy-aws-application.sh \
   --env prod \
   --aws-profile sec_platform_deployer \
+  --aws-account-id 690839588395 \
   --aws-region us-east-1 \
   --build-image \
   --publish-mode linux \
@@ -321,6 +344,7 @@ bash infra/scripts/publish-warehouse-image-via-wsl.sh \
 bash infra/scripts/deploy-aws-application.sh \
   --env prod \
   --aws-profile sec_platform_deployer \
+  --aws-account-id 690839588395 \
   --aws-region us-east-1 \
   --skip-build \
   --image-ref "$(cat "$IMAGE_REF_FILE")" \

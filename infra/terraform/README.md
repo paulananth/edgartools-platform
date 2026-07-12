@@ -64,7 +64,7 @@ modules/
      container for non-runtime operator credentials
    - `edgartools-<env>/mdm/*` for MDM runtime DSNs and graph/export settings
 7. Deploy active AWS application components from the operator script:
-   `bash infra/scripts/deploy-aws-application.sh --env dev --aws-profile sec_platform_deployer --build-image`.
+   `bash infra/scripts/deploy-aws-application.sh --env dev --aws-profile sec_platform_deployer --aws-account-id 690839588395 --build-image`.
 
 AWS Terraform no longer accepts warehouse image, workflow schedule, app command,
 Snowflake trust principal, IAM role, or EDGAR identity value inputs.
@@ -103,7 +103,7 @@ buckets, databases, or Snowflake database objects.
 Run workload actions explicitly after infra has been applied:
 
 - Deploy AWS application components with
-  `infra/scripts/deploy-aws-application.sh --aws-profile sec_platform_deployer`.
+  `infra/scripts/deploy-aws-application.sh --aws-profile sec_platform_deployer --aws-account-id 690839588395`.
   This script can build/push the
   warehouse image, registers ECS task definitions, and creates or updates Step
   Functions state machines using AWS CLI calls. When MDM secret ARNs are present
@@ -121,8 +121,9 @@ Run workload actions explicitly after infra has been applied:
 
 ## Notes
 
-- Terraform CLI is pinned to `1.14.7` for AWS roots.
+- Terraform CLI `1.14.7` or newer is required for AWS roots.
 - AWS provider is pinned to `6.39.0`.
+- State bootstrap derives the bucket suffix from the authenticated AWS account and refuses retired accounts or stale account-ID overrides.
 - S3 backend state locking uses `use_lockfile = true`.
 - Bronze and warehouse data use separate buckets.
 - Snowflake Terraform uses separate state keys and is not part of the AWS

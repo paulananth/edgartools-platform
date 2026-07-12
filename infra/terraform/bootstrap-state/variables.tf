@@ -10,9 +10,15 @@ variable "aws_region" {
 }
 
 variable "terraform_state_bucket_name" {
-  description = "Override for the Terraform state bucket name."
+  description = "Optional state bucket override. It must match edgartools-<environment>-tfstate-<authenticated-account-id>."
   type        = string
   default     = null
+}
+
+variable "retired_aws_account_ids" {
+  description = "AWS accounts in which bootstrap is forbidden."
+  type        = set(string)
+  default     = ["077127448006"]
 }
 
 variable "tags" {
@@ -20,4 +26,3 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
-

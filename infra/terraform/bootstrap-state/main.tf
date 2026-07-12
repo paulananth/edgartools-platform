@@ -1,8 +1,8 @@
+data "aws_caller_identity" "current" {}
+
 locals {
-  terraform_state_bucket_name = coalesce(
-    var.terraform_state_bucket_name,
-    "edgartools-${var.environment}-tfstate",
-  )
+  expected_terraform_state_bucket_name = "edgartools-${var.environment}-tfstate-${data.aws_caller_identity.current.account_id}"
+  terraform_state_bucket_name          = coalesce(var.terraform_state_bucket_name, local.expected_terraform_state_bucket_name)
 }
 
 resource "aws_s3_bucket" "terraform_state" {
@@ -10,6 +10,16 @@ resource "aws_s3_bucket" "terraform_state" {
 
   lifecycle {
     prevent_destroy = true
+
+    precondition {
+      condition     = !contains(var.retired_aws_account_ids, data.aws_caller_identity.current.account_id)
+      error_message = "Refusing to bootstrap Terraform state in retired AWS account ${data.aws_caller_identity.current.account_id}. Fix the selected AWS profile before retrying."
+    }
+
+    precondition {
+      condition     = local.terraform_state_bucket_name == local.expected_terraform_state_bucket_name
+      error_message = "Terraform state bucket must be ${local.expected_terraform_state_bucket_name}; got ${local.terraform_state_bucket_name}. Remove the stale override or select the correct AWS profile."
+    }
   }
 }
 
@@ -43,4 +53,3 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" 
     }
   }
 }
-

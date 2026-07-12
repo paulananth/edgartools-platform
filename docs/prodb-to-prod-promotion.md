@@ -4,7 +4,7 @@ This runbook promotes AWS account `690839588395` in `us-east-1` to the only prod
 
 ## 1. Inventory and collision gate
 
-Run `bash infra/scripts/preflight-prod-promotion.sh --aws-profile aws-admin-prod --snow-connection edgartools-prod`. Save the output with the change record. Inventory VPC, ECS, ECR, S3, KMS, SNS, Secrets Manager, IAM roles, Step Functions, CloudWatch logs, Snowflake databases, schemas, warehouses, roles, integrations, tasks, pipes, Streamlit objects, Postgres instances, and installed Native Apps. Do not use `--allow-existing-targets` until each occupied canonical name is proven to be part of this migration.
+Run `bash infra/scripts/preflight-prod-promotion.sh --aws-profile aws-admin-prod --aws-account-id <12-digit-id> --snow-connection edgartools-prod`. Save the output with the change record. Inventory VPC, ECS, ECR, S3, KMS, SNS, Secrets Manager, IAM roles, Step Functions, CloudWatch logs, Snowflake databases, schemas, warehouses, roles, integrations, tasks, pipes, Streamlit objects, Postgres instances, and installed Native Apps. Do not use `--allow-existing-targets` until each occupied canonical name is proven to be part of this migration.
 
 Checkpoint A: record Terraform state backups and Snowflake object DDL; confirm no workload is writing. Roll back by making no changes and retaining the former resources.
 

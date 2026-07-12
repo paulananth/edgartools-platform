@@ -7,6 +7,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "infra" / "scripts" / "preflight-prod-promotion.sh"
+TEST_ACCOUNT_ID = "690839588395"
 
 
 def _fake_tools(tmp_path: Path) -> Path:
@@ -52,7 +53,16 @@ def _run(tmp_path: Path, **overrides: str) -> subprocess.CompletedProcess[str]:
     env.update(overrides)
     env["PATH"] = f"{fakebin}{os.pathsep}{env['PATH']}"
     return subprocess.run(
-        ["bash", str(SCRIPT), "--source-bucket", "former-bronze", "--expected-source-count", "10"],
+        [
+            "bash",
+            str(SCRIPT),
+            "--aws-account-id",
+            TEST_ACCOUNT_ID,
+            "--source-bucket",
+            "former-bronze",
+            "--expected-source-count",
+            "10",
+        ],
         cwd=REPO_ROOT,
         text=True,
         capture_output=True,
