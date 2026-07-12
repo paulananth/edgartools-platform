@@ -1562,12 +1562,12 @@ window_size_default = {
 # pre-existing default behavior every caller of `--input '{}'` already relies on).
 total_cik_limit_check = {
     "Type": "Choice",
-    "Comment": "Route to ComputeWindows directly when caller supplied total_cik_limit; otherwise inject the no-limit default.",
+    "Comment": "Route to ArtifactPolicyCheck directly when caller supplied total_cik_limit; otherwise inject the no-limit default.",
     "Choices": [
         {
             "Variable": "$.total_cik_limit",
             "IsPresent": True,
-            "Next": "ComputeWindows",
+            "Next": "ArtifactPolicyCheck",
         }
     ],
     "Default": "TotalCikLimitDefault",
@@ -1582,6 +1582,40 @@ total_cik_limit_default = {
                "opt into CIK-scoping.",
     "Result": 0,
     "ResultPath": "$.total_cik_limit",
+    "Next": "ArtifactPolicyCheck",
+}
+
+# (2c) ArtifactPolicyCheck → ArtifactPolicyDefault → ComputeWindows
+# Same backward-compat pattern as WindowSizeCheck/Default above, for an optional
+# $.artifact_policy SM input field passed through to per-window bootstrap-next
+# (see `per_window` below). Default is 'all_attachments' — load_history is the
+# canonical pipeline for loading BRAND-NEW company universes (CLAUDE.md "Load 10+
+# companies"), so it must keep fetching ownership/ADV artifacts for genuinely new
+# CIKs by default. A caller re-running load_history over an already-loaded universe
+# purely to pick up new filings/backfill can opt in to '--artifact-policy skip' by
+# passing {"artifact_policy": "skip"} explicitly — this must be an explicit choice,
+# not the default, or first-time loads would silently stop capturing artifacts.
+# (artifact-throttle 5-whys, see CLAUDE.md: fix #1 already makes cache-hit re-runs
+# fast without this flag; this is only for callers who want to skip fetch entirely.)
+artifact_policy_check = {
+    "Type": "Choice",
+    "Comment": "Route to ComputeWindows directly when caller supplied artifact_policy; otherwise inject the all_attachments default.",
+    "Choices": [
+        {
+            "Variable": "$.artifact_policy",
+            "IsPresent": True,
+            "Next": "ComputeWindows",
+        }
+    ],
+    "Default": "ArtifactPolicyDefault",
+}
+
+artifact_policy_default = {
+    "Type": "Pass",
+    "Comment": "Inject default artifact_policy='all_attachments' when caller passed {} or omitted "
+               "the key, preserving artifact capture for brand-new CIKs loaded via load_history.",
+    "Result": "all_attachments",
+    "ResultPath": "$.artifact_policy",
     "Next": "ComputeWindows",
 }
 
@@ -1624,7 +1658,7 @@ compute_windows = ecs_state(wh_medium_arn,
 # write_ownership_mdm_gold_definition's batch_map (Mode: DISTRIBUTED, ExecutionType:
 # STANDARD) elsewhere in this script.
 per_window = ecs_state(wh_medium_arn,
-    "States.Array('bootstrap-next', '--cik-limit', States.Format('{}', $.window_limit), '--cik-offset', States.Format('{}', $.window_offset), '--tracking-status-filter', 'active,bootstrap_pending', '--run-id', $$.Execution.Name)",
+    "States.Array('bootstrap-next', '--cik-limit', States.Format('{}', $.window_limit), '--cik-offset', States.Format('{}', $.window_offset), '--tracking-status-filter', 'active,bootstrap_pending', '--artifact-policy', States.Format('{}', $.artifact_policy), '--run-id', $$.Execution.Name)",
     is_end=True)
 
 windowed_bootstrap = {
@@ -1847,6 +1881,8 @@ definition = {
         "WindowSizeDefault": window_size_default,
         "TotalCikLimitCheck":   total_cik_limit_check,
         "TotalCikLimitDefault": total_cik_limit_default,
+        "ArtifactPolicyCheck":   artifact_policy_check,
+        "ArtifactPolicyDefault": artifact_policy_default,
         "ComputeWindows":    compute_windows,
         "Stage1Parallel":    stage1_parallel,
         "Stage1BEntityFacts": fundamentals_entity_facts,

@@ -165,13 +165,33 @@ was re-loading immutable, already-captured SEC data.
    throttle. **Root cause:** the SEC rate-limit sleep was paid on the idempotent no-op path,
    not just on real network fetches.
 
-**Resolution (root-cause fix):** `fetch_filing_artifacts` now returns `network_fetches`
+**Resolution (root-cause fix, #1):** `fetch_filing_artifacts` now returns `network_fetches`
 (count of real SEC round-trips: edgartools `get_filing` + each `download_bytes`); the
 orchestrator loop throttles only when `network_fetches > 0`. Cache hits (immutable,
 already-captured artifacts) return `network_fetches=0` and skip the sleep, so re-runs against
 loaded bronze no longer pay the ~93-min dead-time throttle while new filings are still fully
 rate-limited. Locked in by `tests/unit/test_loader_idempotency.py` (`network_fetches` = 0 on
-cache hit, 1 on fetch). NOTE: takes effect only after a warehouse image rebuild + deploy.
+cache hit, 1 on fetch).
+
+**Additional mitigations:**
+- **#2 — opt-in artifact skip:** `load_history`'s SM input now accepts an optional
+  `artifact_policy` field (`ArtifactPolicyCheck`/`ArtifactPolicyDefault` states in
+  `deploy-aws-application.sh`, mirroring `WindowSizeCheck`/`TotalCikLimitCheck`), threaded
+  through to per-window `bootstrap-next --artifact-policy`. Default stays
+  `all_attachments` — `load_history` is the canonical loader for **brand-new** company
+  universes (see Phased Pipeline below), so it must keep fetching artifacts for genuinely
+  new CIKs by default. Pass `{"artifact_policy": "skip"}` explicitly only when re-running
+  over an already-loaded universe purely to skip fetch entirely; do not make this the
+  default, or first-time loads would silently stop capturing ownership/ADV artifacts.
+- **#3 — lower redundant throttle default:** `WAREHOUSE_ARTIFACT_REQUEST_DELAY` default
+  lowered `1.0s → 0.2s`. `sec_client.py`'s `pyrate_limiter` bucket (9 req/sec, matching
+  `EDGAR_RATE_LIMIT_PER_SEC`) already throttles every individual SEC request; the
+  orchestrator's per-accession sleep is a second, more conservative layer on top of that,
+  not the primary rate-limit safety net.
+
+NOTE: fix #1 (code) and #3 (default) take effect only after a warehouse image rebuild +
+deploy. Fix #2 (SM input plumbing) takes effect after the next `deploy-aws-application.sh`
+run that re-registers the `load_history` state machine — no image rebuild required.
 
 ## AWS teardown 5-whys (resolved 2026-07-11)
 
