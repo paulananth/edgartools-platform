@@ -12,6 +12,20 @@ import edgar
 from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory
 from edgar_warehouse.infrastructure.object_storage import read_bytes
 
+# Forms whose substantive data lives in a SEPARATE (non-primary) attachment
+# rather than the primary/cover document itself. The primary_document fast
+# path below (EDGE-11 5-whys, 06-04) only ever registers the primary
+# document — it never discovers secondary attachments. For 13F-HR/13F-HR-A,
+# the primary document is just the cover page XML; holdings live in a
+# distinct "INFORMATION TABLE" attachment that the fast path silently drops,
+# so `run_bootstrap_thirteenf` never finds an infotable attachment to parse
+# and every 13F-HR filing was skipped (sec_thirteenf_holding stayed empty
+# despite the bronze filing record and cover-page document being present).
+# These forms must always take the full edgartools attachment-discovery
+# fallback path so every attachment (not just the primary one) is fetched
+# and registered in sec_filing_attachment.
+_MULTI_ATTACHMENT_FORMS = frozenset({"13F-HR", "13F-HR/A"})
+
 
 def fetch_filing_artifacts(
     *,
@@ -50,8 +64,14 @@ def fetch_filing_artifacts(
         primary_doc = filing.get("primary_document") or ""
         raw_doc_name = _resolve_raw_document_name(primary_doc)
         index_record = None
+        form_type = filing.get("form")
 
-        if raw_doc_name and not force and not _read_cached_index(db, accession_number):
+        if (
+            raw_doc_name
+            and not force
+            and not _read_cached_index(db, accession_number)
+            and form_type not in _MULTI_ATTACHMENT_FORMS
+        ):
             doc_spec = capture_specs.filing_document(
                 cik=cik,
                 accession_number=accession_number,

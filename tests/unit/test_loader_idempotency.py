@@ -322,6 +322,115 @@ class LoaderIdempotencyTests(unittest.TestCase):
         self.assertFalse(rows_by_name["exhibit99.htm"]["is_primary"])
         self.assertTrue(rows_by_name["primary.xml"]["is_primary"])
 
+    def test_13f_hr_bypasses_fast_path_to_discover_information_table(self) -> None:
+        """EDGE-11 5-whys (06-04): the primary_document fast path only ever registers
+        the primary/cover document. For 13F-HR, the holdings live in a separate
+        INFORMATION TABLE attachment that the fast path never discovers or fetches —
+        `run_bootstrap_thirteenf`'s attachment lookup then always misses and every
+        13F-HR filing is skipped (sec_thirteenf_holding stays empty even though the
+        bronze filing record and cover-page document are present). 13F-HR/13F-HR-A
+        must always take the full edgartools attachment-discovery fallback so the
+        INFORMATION TABLE attachment is fetched and registered alongside the cover
+        page, even when primary_document is known and force=False."""
+        accession = "0001067983-26-000123"
+        cover_page = _FakeAttachment(
+            sequence_number="1",
+            document="primary_doc.xml",
+            document_type="13F-HR",
+            description="",
+            url="https://www.sec.gov/Archives/edgar/data/1067983/primary_doc.xml",
+            content="<edgarSubmission />",
+        )
+        infotable = _FakeAttachment(
+            sequence_number="2",
+            document="53405.xml",
+            document_type="INFORMATION TABLE",
+            description="INFORMATION TABLE FOR FORM 13F",
+            url="https://www.sec.gov/Archives/edgar/data/1067983/53405.xml",
+            content="<informationTable />",
+        )
+        fake_filing = _FakeFiling(
+            attachments=_FakeAttachments([cover_page, infotable], primary_documents=[cover_page])
+        )
+        get_filing = Mock(return_value=fake_filing)
+        downloads = Mock(side_effect=AssertionError(
+            "download_bytes should not be called — edgartools already fetched content"
+        ))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _ArtifactDb()
+            db.filing = {
+                "cik": 1067983,
+                "form": "13F-HR",
+                "primary_document": "xslForm13F_X02/primary_doc.xml",
+            }
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+
+            result = bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context,
+                db=db,
+                accession_number=accession,
+                sync_run_id="run-1",
+                download_bytes=downloads,
+                get_filing=get_filing,
+                force=False,
+            )
+
+        get_filing.assert_called_once_with(accession)
+        self.assertEqual(result["attachment_count"], 2)
+        rows_by_name = {row["document_name"]: row for row in db.merged_rows}
+        self.assertIn("53405.xml", rows_by_name)
+        self.assertEqual(rows_by_name["53405.xml"]["document_type"], "INFORMATION TABLE")
+        self.assertTrue(rows_by_name["primary_doc.xml"]["is_primary"])
+        self.assertFalse(rows_by_name["53405.xml"]["is_primary"])
+
+    def test_13f_hr_amendment_also_bypasses_fast_path(self) -> None:
+        """13F-HR/A must get the same treatment as 13F-HR (EDGE-11, 06-04)."""
+        accession = "0001067983-26-000456"
+        cover_page = _FakeAttachment(
+            sequence_number="1",
+            document="primary_doc.xml",
+            document_type="13F-HR/A",
+            description="",
+            url="https://www.sec.gov/Archives/edgar/data/1067983/primary_doc.xml",
+            content="<edgarSubmission />",
+        )
+        infotable = _FakeAttachment(
+            sequence_number="2",
+            document="99999.xml",
+            document_type="INFORMATION TABLE",
+            description="INFORMATION TABLE FOR FORM 13F",
+            url="https://www.sec.gov/Archives/edgar/data/1067983/99999.xml",
+            content="<informationTable />",
+        )
+        fake_filing = _FakeFiling(
+            attachments=_FakeAttachments([cover_page, infotable], primary_documents=[cover_page])
+        )
+        get_filing = Mock(return_value=fake_filing)
+        downloads = Mock(side_effect=AssertionError("download_bytes should not be called"))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _ArtifactDb()
+            db.filing = {
+                "cik": 1067983,
+                "form": "13F-HR/A",
+                "primary_document": "xslForm13F_X02/primary_doc.xml",
+            }
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+
+            result = bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context,
+                db=db,
+                accession_number=accession,
+                sync_run_id="run-1",
+                download_bytes=downloads,
+                get_filing=get_filing,
+                force=False,
+            )
+
+        get_filing.assert_called_once_with(accession)
+        self.assertEqual(result["attachment_count"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()
