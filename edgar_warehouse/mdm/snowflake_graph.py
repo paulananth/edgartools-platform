@@ -36,6 +36,17 @@ ALLOWED_RELATIONSHIP_TYPES = (
 # MANAGES_FUND) are intentionally excluded from named parity checks until
 # Phases 6-7 populate them -- named-checking a legitimately-zero type this
 # milestone does not yet cover would false-fail verify-graph (T-05-05).
+#
+# Phase 6 (fix-pipelines) investigated 5 of these 7 (EDGE-05 IS_ENTITY_OF,
+# EDGE-06 IS_PERSON_OF, EDGE-09 EMPLOYED_BY, EDGE-10 AUDITED_BY, EDGE-11
+# INSTITUTIONAL_HOLDS) and confirmed NONE reached graph-populated status --
+# see 06-PHASE-CLOSURE-LEDGER.md for the evidenced disposition of each (two
+# source-coverage exclusions, one structural-API exclusion, two confirmed
+# bugs with an identified but deferred fix). None is added here: per D-05,
+# a type must not enter this tuple before its own mdm sync-graph has
+# produced rows -- adding any of the 5 now would false-fail verify-graph
+# for a type this environment has never actually populated. HAS_PARENT_COMPANY
+# and MANAGES_FUND remain out of Phase 6's scope entirely.
 POPULATED_RELATIONSHIP_TYPES = ("COMPANY_HOLDS", "HOLDS", "ISSUED_BY", "IS_INSIDER")
 NODE_TABLES = (
     "MDM_GRAPH_NODES",
