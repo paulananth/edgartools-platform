@@ -7,6 +7,13 @@ constraints" below). EDGE-09 does not have a confirmed code-level root cause; it
 documented as an unresolved parser-quality investigation, explicitly NOT a source-coverage
 exclusion (see EDGE-09 conclusion).
 
+> **SUPERSEDED 2026-07-13 (06-06 follow-up investigation, dev AWS access available in this
+> session — see "2026-07-13 update" sections below for both EDGE-09 and EDGE-11).** EDGE-09's
+> "open item" status below is resolved: a live root cause was found and confirmed against real
+> dev bronze/silver data and live CloudWatch execution logs. It shares its root cause with
+> EDGE-11 — read the update sections before relying on anything in this document's original
+> body.
+
 **Re-execution note:** This plan was re-executed from scratch per explicit user direction,
 independent of an earlier partial investigation (`06-04-PROGRESS.md`, a leaning hypothesis
 about EDGE-09/EDGE-11 that was not read or relied upon while producing this document). The
@@ -115,6 +122,84 @@ ledger as an open item, not a false "exclusion" or false "populated" claim.
 **No code was fetched or modified for EDGE-09** — no fetch was performed (nothing to fetch
 under DEC-009, the artifact is already captured), and no parser change was made without
 confirming evidence.
+
+### 2026-07-13 update: root cause found (live dev access, 06-06 follow-up)
+
+With live dev (`690839588395`) AWS access available in a later session, the "open item" above
+is now resolved. Findings, in order:
+
+1. **Re-ran `parse_proxy_fundamentals` against the actual bronze-captured bytes** (not a fresh
+   live fetch) for CIK 320193's (Apple) most recent DEF 14A, accession
+   `0001308179-25-000008` — downloaded directly from
+   `s3://edgartools-dev-bronze/warehouse/bronze/filings/sec/cik=320193/accession=0001308179-25-000008/primary/aapl4359751-def14a.htm`,
+   decoded exactly as `fundamentals_ingest.py` does (`.decode("utf-8", errors="replace")`).
+   Result: **5 executive-compensation rows**, matching the earlier live-fetch test exactly.
+   **The parser is not the problem for the filings that do reach it.**
+2. Also discovered, correcting 06-04's premise: **all 23 DEF14A/DEFA14A attachments in the
+   loaded dev universe belong to a single company, CIK 320193 (Apple)** — not a spread of
+   issuers. This invalidates 06-04's "Smaller Reporting Company scaled disclosure" hypothesis
+   (explanation (b) above); Apple is not remotely an SRC filer.
+3. **`sec_executive_record` and `sec_earnings_release` are both 0 rows platform-wide** — not
+   just for these 23 filings, across the *entire* silver database (266,634 8-K filings, 52,200
+   DEF14A-family filings, zero rows written to either table, ever).
+4. **Confirmed via live Step Functions execution history + CloudWatch logs**
+   (`edgartools-dev-load-history`, execution `load-history-oomtest-1783868231`,
+   `Stage1BPerFiling` MapRun): the per-filing fundamentals stage *does* run, and does *not*
+   error. Its own completion metrics for a real 20-CIK window:
+   `{"filings_scanned": 1822, "filings_parsed": 0, "filings_skipped": 1822, "rows_earnings_release": 0, "rows_executive_record": 0}`.
+   **100% of candidate filings are silently skipped** — no `fundamentals_artifact_error` or
+   `fundamentals_parse_error` events were emitted, which rules out an exception path in
+   `run_bootstrap_fundamentals_per_filing` (`fundamentals_ingest.py:137-152`) and points at the
+   earlier, silent skip: `primary is None or not primary.get("raw_object_id")`
+   (`fundamentals_ingest.py:122-125`).
+5. **Confirmed directly against silver**: for a sample of these skipped accessions (e.g. CIK
+   1750's 8-Ks), `SELECT * FROM sec_filing_attachment WHERE accession_number = ?` returns
+   **zero rows** — no attachment record exists at all, so `primary` is always `None`.
+6. **Root cause, generalized**: `_is_configured_parser_form`
+   (`edgar_warehouse/application/warehouse_orchestrator.py:1859-1861`) — the gate used by
+   `_configured_parser_accessions` (line 1848) to decide which accessions get their
+   `sec_filing_attachment`/`sec_raw_object` rows populated by the standard bulk artifact-fetch
+   pipeline (`_run_configured_form_artifact_pipeline`, the only Branch-A-integrated caller of
+   `refresh_filing_artifacts`/`fetch_filing_artifacts`) — **only matches `OWNERSHIP_FORMS`
+   (3/4/5) and `ADV_FORMS`.** DEF 14A, DEFA14A, PRE 14A, 8-K, 6-K, NPORT-P, and 13F-HR are
+   **never selected** for artifact fetch by the bulk pipeline. Confirmed platform-wide via
+   live silver query — attachment coverage by form:
+
+   | Form | Filings | With attachment row |
+   |---|---|---|
+   | 8-K/8-K-A | 266,634 | 104 (0.04%) |
+   | DEF 14A/DEFA14A/PRE 14A | 52,200 | 23 (0.04%) |
+   | 13F-HR | 48,877 | 0 |
+   | 6-K | 108,863 | 0 |
+   | NPORT-P | 104,787 | 0 |
+   | Form 4 (in-gate) | 990,243 | 20,024 (2%, partial/ongoing) |
+   | Form 3 (in-gate) | 67,945 | 863 (1.3%, partial/ongoing) |
+
+   The tiny non-zero counts for out-of-gate forms (e.g. Apple's 23 DEF14A attachments) come
+   from a **different, ungated code path**: `_run_accession_resync`
+   (`warehouse_orchestrator.py:2849-2887`, backing the `targeted_resync` single-accession
+   command) calls `refresh_filing_artifacts` directly with **no form-type gate** — an operator
+   explicitly resyncing one named accession bypasses `_is_configured_parser_form` entirely.
+   That is how Apple's DEF14A and (very likely) EDGE-11's originally-tested 13F-HR filing each
+   got their one-off attachment row, while the bulk `load_history`/`bootstrap-batch` pipeline
+   that would need to cover the full universe never reaches these form types at all.
+
+**Revised disposition:** EDGE-09 is **not** a parser bug, **not** a source-coverage exclusion,
+and **not** an unresolved parser-quality question — it is the same class of finding as EDGE-11
+(see EDGE-11's own 2026-07-13 update below): a confirmed structural gap in the bulk
+artifact-fetch selection gate, with the exact fix location identified
+(`_is_configured_parser_form`, `warehouse_orchestrator.py:1859-1861`) but **not applied**,
+per advisor guidance during this follow-up: extending the gate to Branch B's form families
+(8-K, DEF 14A/DEFA14A/PRE 14A, 13F-HR, and by the same logic 6-K/NPORT-P if those are ever
+prioritized) would multiply bulk SEC artifact-fetch volume by roughly the size of those form
+populations (roughly +266k 8-K, +52k proxy, +49k 13F-HR fetches) — a real, user-scoped
+capacity/cost decision interacting directly with the artifact-throttle tuning from this same
+session, not a same-day inline fix. Applying the gate change would not by itself advance
+EDGE-09 to "graph-verified populated" either way: reaching that would still require deploy →
+bulk re-fetch → re-derive → sync-graph → graph-count, none of which is inline-executable work.
+**Recorded for the 06-06 closure ledger as: confirmed root cause, common with EDGE-11, fix
+deferred (requires a scoped gate-widening decision + universe-scale re-fetch, both explicitly
+out of this session's inline scope).**
 
 ---
 
@@ -231,9 +316,43 @@ ledger as: fix committed and unit-tested; live re-fetch (`--force`, DEC-009-comp
 derive + sync + graph-count verification remain as the concrete outstanding step for an
 operator/agent with dev (`690839588395`) access.
 
+### 2026-07-13 update: fix is real but unreachable via the standard bulk pipeline
+
+Follow-up investigation for EDGE-09 (see that section's 2026-07-13 update) surfaced a second,
+upstream gap that also affects EDGE-11 and **must be corrected in this disposition**:
+`fetch_filing_artifacts` — the function this plan's fix modifies
+(`bronze_filing_artifacts.py`, the `_MULTI_ATTACHMENT_FORMS` gate) — is only reachable through
+`refresh_filing_artifacts`, which has exactly two callers platform-wide (confirmed via
+`grep -rn "refresh_filing_artifacts\|fetch_filing_artifacts" edgar_warehouse/`):
+
+1. `_run_configured_form_artifact_pipeline` (the standard bulk pipeline used by
+   `bootstrap-next`/`bootstrap-batch`/`load_history`) — gated by `_is_configured_parser_form`
+   (`warehouse_orchestrator.py:1859-1861`), which matches **only** `OWNERSHIP_FORMS` (3/4/5)
+   and `ADV_FORMS`. **13F-HR is not in this gate.**
+2. `_run_accession_resync` (backing the `targeted_resync` single-accession command) — no
+   form-type gate, but requires an operator to explicitly name one accession.
+
+Live evidence confirms this is not theoretical: platform-wide, **0 of 48,877 `13F-HR` filings**
+in dev silver have any `sec_filing_attachment` row at all (checked directly via
+`silver.sec_filing_attachment` join). This means this plan's fast-path fix — while correct and
+unit-tested for the code path it modifies — **will never execute during a standard bulk
+`load_history`/`bootstrap-batch` run**, because the bulk pipeline never selects 13F-HR
+accessions for artifact fetch in the first place; the fixed code is only reachable via a
+one-off `targeted_resync` of a single, explicitly-named accession.
+
+**Revised disposition:** EDGE-11's fix is real, committed, and unit-tested, but it is
+**necessary and not sufficient**. The concrete outstanding step recorded in the original
+conclusion above ("live re-fetch + derive + sync + graph-count") is now known to also require
+first widening `_is_configured_parser_form` to include 13F-HR (and, by the same root cause,
+EDGE-09's DEF 14A/DEFA14A/8-K forms) — otherwise a bulk re-fetch attempt would still silently
+select zero 13F-HR accessions and produce no change. This gate-widening is the same deferred
+decision described in EDGE-09's update (real fetch-volume increase, a user-scoped capacity
+decision, not applied in this session). **EDGE-09 and EDGE-11 share one root cause and one
+deferred fix location** — recorded together in the 06-06 closure ledger.
+
 ---
 
-## Summary table
+## Summary table (superseded — see 2026-07-13 updates in each section)
 
 | Type | 06-03 classification | Root cause found? | Fix applied? | Graph-verified? |
 |------|----------------------|--------------------|--------------|------------------|
@@ -245,3 +364,15 @@ the ideal case — this execution had no reachable dev AWS access (see "Environm
 provenance note"). EDGE-11 is fix-committed and unit-verified; EDGE-09 is an honestly
 documented open investigation. Neither is mischaracterized as a source-coverage exclusion,
 per the deviation-rules priority (do not dress up an unresolved gap as a false disposition).
+
+**2026-07-13 revised summary** (see each section's update for full detail):
+
+| Type | Root cause | Fix location identified? | Fix applied? | Reachable via bulk pipeline? |
+|------|-----------|---------------------------|---------------|-------------------------------|
+| EDGE-09 EMPLOYED_BY | `_is_configured_parser_form` never selects DEF14A/DEFA14A/8-K for bulk artifact fetch (`warehouse_orchestrator.py:1859-1861`) | Yes | No (deferred — fetch-volume decision) | No |
+| EDGE-11 INSTITUTIONAL_HOLDS | Same gate never selects 13F-HR; `bronze_filing_artifacts.py` fast-path fix (this plan's Task) is downstream of that gate and therefore unreachable in bulk runs | Yes (both the fast-path fix, already committed, and the upstream gate) | Partial — fast-path fix applied and unit-tested; upstream gate fix not applied | No |
+
+Both types share **one** root cause (`_is_configured_parser_form`) and **one** deferred fix
+(widen that gate to Branch B's form families). Neither is a source-coverage exclusion —
+the artifacts are present, fetchable, and the parsers work; the gap is purely in what the bulk
+pipeline selects for artifact fetch.
