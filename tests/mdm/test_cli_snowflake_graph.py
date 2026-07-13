@@ -355,6 +355,9 @@ def _native_app_success_results() -> dict[str, list[dict[str, object]]]:
                 "JOB_STATUS": "SUCCESS",
             }
         ],
+        "verify_graph:native_app_graph_info": [{"JOB_STATUS": "SUCCESS"}],
+        "verify_graph:native_app_bfs": [{"JOB_STATUS": "SUCCESS"}],
+        "verify_graph:native_app_list_graphs": [{"GRAPHNAME": "phase8-smoke"}],
     }
 
 
@@ -453,8 +456,17 @@ def test_verify_graph_reports_strict_snowflake_parity(monkeypatch, capsys):
         "database_role_privileges",
         "compute_pool",
         "graph_schema_sample",
+        "graph_info",
+        "bfs",
         "wcc",
+        "list_graphs",
     ]
+    assert payload["failure_domains"] == []
+    assert payload["failure_summary"] == {
+        "parity": "ok",
+        "readiness": "ok",
+        "capability": "ok",
+    }
     assert payload["node_parity"]["by_entity_type"] == _all_6_node_rows_at_parity_payload()
     assert payload["diagnostics"] == {
         "missing_graph_nodes": [],
@@ -477,6 +489,8 @@ def test_verify_graph_fails_hard_when_native_app_grant_missing(monkeypatch, caps
         monkeypatch,
         FakeSnowflakeConnection(
             result_sets=_strict_parity_results(
+                node_rows=_all_6_node_rows_at_parity(),
+                relationship_rows=_all_4_populated_relationship_rows_at_parity(),
                 native_app_rows={
                     "verify_graph:native_app_application_database_role": [],
                 }
@@ -500,6 +514,70 @@ def test_verify_graph_fails_hard_when_native_app_grant_missing(monkeypatch, caps
     ][0]
     assert grant_check["status"] == "failed"
     assert "infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql" in grant_check["remediation"]
+    assert payload["failure_domains"] == ["readiness"]
+    assert payload["failure_summary"] == {
+        "parity": "ok",
+        "readiness": "failed",
+        "capability": "ok",
+    }
+
+
+def test_verify_graph_reports_capability_failure_separately(monkeypatch, capsys):
+    _clear_graph_env(monkeypatch)
+    _patch_verify_settings(
+        monkeypatch,
+        FakeSnowflakeConnection(
+            result_sets=_strict_parity_results(
+                node_rows=_all_6_node_rows_at_parity(),
+                relationship_rows=_all_4_populated_relationship_rows_at_parity(),
+                native_app_rows={
+                    "verify_graph:native_app_bfs": [
+                        {"JOB_STATUS": "ERROR", "JOB_RESULT": "bad BFS config"}
+                    ],
+                },
+            )
+        ),
+    )
+
+    args = build_parser().parse_args(["mdm", "verify-graph"])
+    assert args.handler(args) == 1
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["failure_domains"] == ["capability"]
+    assert payload["failure_summary"] == {
+        "parity": "ok",
+        "readiness": "ok",
+        "capability": "failed",
+    }
+
+
+def test_verify_graph_list_graphs_external_blocker_is_nonblocking(monkeypatch, capsys):
+    _clear_graph_env(monkeypatch)
+    _patch_verify_settings(
+        monkeypatch,
+        FakeSnowflakeConnection(
+            result_sets=_strict_parity_results(
+                node_rows=_all_6_node_rows_at_parity(),
+                relationship_rows=_all_4_populated_relationship_rows_at_parity(),
+                native_app_rows={
+                    "verify_graph:native_app_list_graphs": [
+                        {"JOB_STATUS": "ERROR", "JOB_RESULT": "LIST_FILES child job"}
+                    ],
+                },
+            )
+        ),
+    )
+
+    args = build_parser().parse_args(["mdm", "verify-graph"])
+    assert args.handler(args) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["failure_domains"] == []
+    assert payload["native_app"]["domains"]["capability"] == {
+        "status": "ok",
+        "failed_checks": [],
+        "external_blockers": ["list_graphs"],
+    }
 
 
 def test_verify_graph_skip_native_app_is_explicit_offline_only(monkeypatch, capsys):
@@ -527,6 +605,10 @@ def test_verify_graph_skip_native_app_is_explicit_offline_only(monkeypatch, caps
         "phase3_acceptance": False,
         "remediation": "Run without --skip-native-app for live Phase 3 acceptance.",
         "checks": [],
+        "domains": {
+            "readiness": {"status": "skipped", "failed_checks": []},
+            "capability": {"status": "skipped", "failed_checks": []},
+        },
     }
     assert "native_app_" not in "\n".join(connection.cursor_instance.executed)
 

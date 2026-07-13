@@ -46,8 +46,8 @@ these are authoritative in their source files (not re-transcribed here to avoid 
 
 ### Cross-Cutting Graph Verification
 
-- [ ] **GVER-01**: `mdm verify-graph` output distinguishes Native App readiness failures (e.g. no compute pool available) from actual MDM↔graph parity failures.
-- [ ] **GVER-02**: Any Neo4j Graph Analytics Native App capability still broken app-side (GRAPH_INFO, BFS, LIST_GRAPHS per PR #122 findings) is fixed or documented with exact reproducing commands/dates, distinct from MDM-side issues.
+- [x] **GVER-01**: `mdm verify-graph` output distinguishes Native App readiness failures (e.g. no compute pool available) from actual MDM↔graph parity failures.
+- [x] **GVER-02**: Any Neo4j Graph Analytics Native App capability still broken app-side (GRAPH_INFO, BFS, LIST_GRAPHS per PR #122 findings) is fixed or documented with exact reproducing commands/dates, distinct from MDM-side issues. Stable documented operations define required capability health; experimental `LIST_GRAPHS` remains an informational external diagnostic.
 - [x] **GVER-03**: Repeated MDM relationship derivation AND repeated graph sync against unchanged data produce zero drift (idempotent) across all 6 node types and 11 relationship types. (Graph-sync/full-rebuild side proven by 05-01's `test_graph_sync_is_idempotent_full_rebuild`; node/relationship-derivation side proven by 05-02's `test_node_resolution_is_idempotent_across_entity_types` and `test_audit_firm_seed_is_idempotent` — both halves complete.)
 
 ### Missing Source Artifacts
@@ -60,6 +60,22 @@ mechanisms that aren't tied to any single relationship type.
 
 - [ ] **ARTF-01**: Silver-publishing warehouse commands (`parse-adv-bronze` and peers) never overwrite a healthier canonical `silver.duckdb` with a smaller/incomplete local copy — publish is skipped or guarded when the local copy would regress the canonical.
 - [ ] **ARTF-02**: Any newly-captured artifact fetch (from EDGE-09/EDGE-11 triage or elsewhere) honors SEC idempotency (DEC-009) — already-captured filings are not re-fetched without an explicit `--force`.
+
+### Verified MDM → Neo4j Relationship Generations
+
+- [x] **RPRE-01**: Before Phase 7 schema implementation, a live dev preflight using `SNOW_CONNECTION=snowconn` proves the Snowflake-hosted Neo4j Native App can load the contract views, expose typed date edge properties, execute supported graph metadata and BFS/multi-hop operations, and observe a stable-view test-generation switch. Required health uses documented stable operations plus semantic MDM↔graph parity; graph discovery uses the platform-owned generation registry. Experimental `LIST_GRAPHS` is informational and cannot independently block implementation. Verified GO on 2026-07-12 and human-approved.
+- [ ] **RSYNC-01**: PostgreSQL MDM is the relationship derivation/staging authority, while both MDM serving reads and Snowflake-hosted Neo4j reads expose the same verified active generation.
+- [ ] **RSYNC-02**: Each generation contains a complete node-and-edge snapshot and activates through one guarded Snowflake pointer only after identity-, property-, temporal-, endpoint-, and coverage-level verification passes for every registered type.
+- [ ] **RSYNC-03**: MDM commits graph-publication requests transactionally; a centralized publisher targets activation within five minutes, alerts after fifteen minutes, and never requires individual ingestion commands to implement graph synchronization.
+- [ ] **RSYNC-04**: Generation assembly fans out immutable type-first partitions in parallel, selectively hash-shards high-volume types, reuses content-addressed unchanged partitions, and independently retries failed partitions before fan-in.
+- [ ] **RSYNC-05**: Failed/incomplete generations never become visible; the prior verified generation remains active, and rollback can select a retained verified generation. Retention keeps at least three generations and all generations from the prior 30 days.
+- [ ] **RTEMP-01**: Relationships have stable logical and version identifiers plus date-only `[valid_from_date, valid_to_date)` validity, explicit date provenance, and synchronized typed temporal properties in MDM and Neo4j.
+- [ ] **RTEMP-02**: Active graph generations retain complete non-quarantined relationship history; strict `as_of_date` traversal excludes temporally unproven edges unless uncertainty is explicitly requested and labeled.
+- [ ] **RTEMP-03**: Direct relationships remain authoritative in MDM; multi-hop paths are queried in Neo4j, while materialized derived edges require deterministic rules, provenance, freshness policy, and an explicit derived label.
+- [ ] **RTEMP-04**: Conflicting temporal overlaps follow relationship-specific source-priority/tie-break policies; unresolved conflicts are quarantined and block activation. Ordinary workflows never physically delete relationship history.
+- [ ] **RCOV-01**: Every registered relationship type has exactly one per-generation coverage status: `populated`, freshly-proven `valid_zero`, or current-evidence `excluded`; any missing, stale, contradictory, or undocumented status blocks activation.
+- [ ] **RCOV-02**: EDGE-07 is machine-readably classified `source_unavailable` and EDGE-08 `capability_not_implemented`, each with relationship-specific evidence fingerprints and no synthetic graph edges.
+- [ ] **RLINE-01**: Entity merges remap graph traversal to the surviving canonical entity while preserving original source identity and merge lineage; edge IDs and relationship-version IDs remain stable across generations.
 
 ### edgartools Crosscheck
 
@@ -104,8 +120,21 @@ mechanisms that aren't tied to any single relationship type.
 | EDGE-08 | Phase 7 | Pending |
 | ARTF-01 | Phase 7 | Pending |
 | ARTF-02 | Phase 7 | Pending |
-| GVER-01 | Phase 8 | Pending |
-| GVER-02 | Phase 8 | Pending |
+| RPRE-01 | Phase 7 | Complete |
+| RSYNC-01 | Phase 7 | Pending |
+| RSYNC-02 | Phase 7 | Pending |
+| RSYNC-03 | Phase 7 | Pending |
+| RSYNC-04 | Phase 7 | Pending |
+| RSYNC-05 | Phase 7 | Pending |
+| RTEMP-01 | Phase 7 | Pending |
+| RTEMP-02 | Phase 7 | Pending |
+| RTEMP-03 | Phase 7 | Pending |
+| RTEMP-04 | Phase 7 | Pending |
+| RCOV-01 | Phase 7 | Pending |
+| RCOV-02 | Phase 7 | Pending |
+| RLINE-01 | Phase 7 | Pending |
+| GVER-01 | Phase 8 | Complete |
+| GVER-02 | Phase 8 | Complete |
 | EDGX-01 | Phase 9 | Pending |
 | EDGX-02 | Phase 9 | Pending |
 | EDGX-03 | Phase 9 | Pending |
