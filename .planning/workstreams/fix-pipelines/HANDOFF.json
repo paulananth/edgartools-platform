@@ -1,0 +1,76 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-07-13T00:17:37.349Z",
+  "phase": "07",
+  "phase_name": "source-coverage-exclusions-and-artifact-hygiene",
+  "phase_dir": ".planning/workstreams/fix-pipelines/phases/07-source-coverage-exclusions-and-artifact-hygiene",
+  "plan": 1,
+  "task": 0,
+  "total_tasks": 2,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": 1,
+      "name": "07-00 Task 1: Build a bounded Native App capability preflight",
+      "status": "done",
+      "commit": null
+    },
+    {
+      "id": 2,
+      "name": "07-00 Task 2: Run live dev preflight and issue GO or NO-GO",
+      "status": "done",
+      "commit": null
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 1,
+      "name": "07-01: Stable temporal relationship identity and provenance contract",
+      "status": "not_started"
+    },
+    {
+      "id": 2,
+      "name": "07-02 through 07-07",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [
+    {
+      "description": "Phase 7 depends on the final Phase 6 relationship population/zero-state ledger; Claude is actively working on Phase 6 in this checkout.",
+      "type": "external",
+      "workaround": "Wait for Claude to finish the relevant Phase 6 work, then verify ownership and dependency status before starting 07-01."
+    }
+  ],
+  "human_actions_pending": [],
+  "decisions": [
+    {
+      "decision": "Stable supported Neo4j operations plus semantic MDM-to-graph parity define health.",
+      "rationale": "This directly proves projection correctness and traversal without coupling health to an experimental inventory endpoint.",
+      "phase": "07"
+    },
+    {
+      "decision": "The platform-owned generation registry defines graph discovery and lifecycle state.",
+      "rationale": "It is governed, queryable, and independent of experimental Native App behavior.",
+      "phase": "07"
+    },
+    {
+      "decision": "Experimental LIST_GRAPHS is informational and non-blocking.",
+      "rationale": "Patch 32 fails inside the Marketplace app handler, while stable metadata, parity, and BFS all pass.",
+      "phase": "07"
+    }
+  ],
+  "uncommitted_files": [
+    ".planning/workstreams/fix-pipelines/REQUIREMENTS.md",
+    ".planning/workstreams/fix-pipelines/ROADMAP.md",
+    ".planning/workstreams/fix-pipelines/phases/07-source-coverage-exclusions-and-artifact-hygiene/",
+    ".planning/workstreams/fix-pipelines/phases/08-neo4j-native-app-verification-gaps/",
+    "edgar_warehouse/mdm/snowflake_graph.py",
+    "scripts/ops/verify-neo4j-phase7-capabilities.sh",
+    "scripts/ops/verify-neo4j-phase8-capabilities.sh",
+    "tests/integration/",
+    "tests/mdm/test_cli_snowflake_graph.py",
+    "tests/mdm/test_snowflake_graph_migration.py"
+  ],
+  "next_action": "Confirm Claude has completed the relevant Phase 6 dependency and inspect git ownership before executing 07-01.",
+  "context_notes": "07-00 is complete, live GO, human-approved, and RPRE-01 is complete. Phase 8 is also complete. Do not edit or commit Claude-owned STATE.md or staged Phase 6 artifacts."
+}
