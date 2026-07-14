@@ -71,6 +71,7 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
         "006_relationship_temporal_contract.sql",
         "007_relationship_coverage.sql",
         "008_publication_queue.sql",
+        "009_graph_generation_builder.sql",
     ]
 
 

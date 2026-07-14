@@ -993,3 +993,110 @@ class MdmPublicationRequest(Base):
         ),
         Index("idx_pub_request_lifecycle_state", "lifecycle_state"),
     )
+
+
+class MdmGraphGeneration(Base):
+    """One requested graph generation build (07-04, RSYNC-04).
+
+    Coalesces one or more ``MdmPublicationRequest`` rows (via their
+    ``generation_id`` FK-by-value) behind a single frozen
+    ``committed_watermark``. Partitions (``MdmGraphPartition``) fan out per
+    node/relationship type against this watermark; fan-in verifies them and
+    flips ``status`` to ``verified``, then (07-05's activation pointer)
+    ``activated``.
+    """
+
+    __tablename__ = "mdm_graph_generation"
+
+    generation_id: Mapped[str] = mapped_column(
+        GUID(), primary_key=True, default=_uuid_string
+    )
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'building'")
+    )
+    committed_watermark: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+    rule_version: Mapped[str] = mapped_column(Text, nullable=False)
+    schema_version: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+    verified_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    activated_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    failure_reasons: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('building','verified','activated','failed')",
+            name="ck_graph_generation_status",
+        ),
+    )
+
+
+class MdmGraphPartition(Base):
+    """One immutable content-addressed partition within a generation (07-04, RSYNC-04).
+
+    Content address = (kind, type_name, shard_index, mdm_watermark,
+    rule_version, schema_version, input_fingerprint) -> ``content_hash``. A
+    partition with a ``content_hash`` matching a prior ``built`` partition
+    (from any generation) is reused (``status='reused'``,
+    ``reused_from_partition_id`` set) instead of rebuilt.
+    """
+
+    __tablename__ = "mdm_graph_partition"
+
+    partition_id: Mapped[str] = mapped_column(
+        GUID(), primary_key=True, default=_uuid_string
+    )
+    generation_id: Mapped[str] = mapped_column(
+        GUID(),
+        ForeignKey("mdm_graph_generation.generation_id"),
+        nullable=False,
+    )
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    type_name: Mapped[str] = mapped_column(Text, nullable=False)
+    shard_index: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    shard_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    mdm_watermark: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False
+    )
+    rule_version: Mapped[str] = mapped_column(Text, nullable=False)
+    schema_version: Mapped[str] = mapped_column(Text, nullable=False)
+    input_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    stable_key_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    property_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'pending'")
+    )
+    reused_from_partition_id: Mapped[Optional[str]] = mapped_column(
+        GUID(),
+        ForeignKey("mdm_graph_partition.partition_id"),
+        nullable=True,
+    )
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+    updated_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "generation_id", "kind", "type_name", "shard_index",
+            name="uq_graph_partition_generation_shard",
+        ),
+        Index("idx_graph_partition_content_hash", "content_hash"),
+        CheckConstraint("kind IN ('node','edge')", name="ck_graph_partition_kind"),
+        CheckConstraint(
+            "status IN ('pending','building','built','reused','failed')",
+            name="ck_graph_partition_status",
+        ),
+    )
