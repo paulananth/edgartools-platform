@@ -69,6 +69,7 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
         "004_company_ticker_parent.sql",
         "005_fundamentals_relationships.sql",
         "006_relationship_temporal_contract.sql",
+        "007_relationship_coverage.sql",
     ]
 
 

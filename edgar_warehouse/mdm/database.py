@@ -883,3 +883,52 @@ class MdmRelationshipSourcePriority(Base):
     __table_args__ = (
         UniqueConstraint("rel_type_id", "source_system", name="uq_rel_source_priority"),
     )
+
+
+class MdmRelationshipCoverage(Base):
+    """One coverage record per (generation, relationship type) -- 07-02 (RCOV-01/02).
+
+    ``status`` is exhaustive and mutually exclusive: every active
+    ``MdmRelationshipType`` must have exactly one row per generation.
+    ``populated`` means nonzero graph-verified edges; ``valid_zero`` means
+    proven-zero-for-now but re-evaluated every generation (not a permanent
+    exclusion); ``excluded`` means a permanent, evidenced source-coverage or
+    capability gap. ``population_fingerprint`` is a deterministic hash of the
+    exact evaluated population -- a changed fingerprint means the underlying
+    evidence has moved and the row is stale until recomputed.
+    """
+
+    __tablename__ = "mdm_relationship_coverage"
+
+    coverage_id: Mapped[str] = mapped_column(
+        GUID(), primary_key=True, default=_uuid_string
+    )
+    generation_id: Mapped[str] = mapped_column(Text, nullable=False)
+    rel_type_id: Mapped[str] = mapped_column(
+        GUID(),
+        ForeignKey("mdm_relationship_type.rel_type_id"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_edge_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence_category: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    evidence_query_version: Mapped[str] = mapped_column(Text, nullable=False)
+    evaluated_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+    population_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    review_trigger: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("generation_id", "rel_type_id", name="uq_rel_coverage_generation_type"),
+        CheckConstraint(
+            "status IN ('populated','valid_zero','excluded')",
+            name="ck_rel_coverage_status",
+        ),
+        CheckConstraint(
+            "evidence_category IS NULL OR evidence_category IN "
+            "('source_unavailable','capability_not_implemented','scoped_zero_overlap',"
+            "'structural_api_limitation','root_caused_fix_deferred')",
+            name="ck_rel_coverage_evidence_category",
+        ),
+    )

@@ -30,9 +30,24 @@ key-decisions:
   - Conflict resolution added a new mdm_relationship_source_priority table (keyed by
     rel_type_id, not entity_type like the pre-existing mdm_source_priority) since relationship
     conflict tie-breaks are a different axis from entity-resolution survivorship.
-requirements-completed: [RTEMP-01, RTEMP-03, RTEMP-04, RLINE-01]
+requirements-completed: [RTEMP-03, RTEMP-04]
+requirements-partially-addressed: [RTEMP-01, RLINE-01]
 completed: 2026-07-13
 ---
+
+> **Correction (2026-07-14, during 07-02):** this summary originally listed RTEMP-01 and
+> RLINE-01 as fully complete. Both were overclaims, caught while updating
+> `REQUIREMENTS.md`'s traceability table for 07-02:
+> - **RTEMP-01** ("synchronized typed temporal properties in MDM **and Neo4j**"): only the
+>   MDM/Postgres side was done. `snowflake_graph.py`'s edge-property export still maps only
+>   the legacy `effective_from`/`effective_to`; the new `valid_from_date`/`valid_to_date`/
+>   `date_provenance` columns were never wired into the Snowflake/Neo4j sync.
+> - **RLINE-01** ("entity merges remap graph traversal..."): only the "relationship-version
+>   IDs remain stable" half was built (`relationship_id`/`instance_id`). No entity-merge
+>   remapping logic (`source_entity_id`/`target_entity_id` reassignment on merge) exists
+>   anywhere in `graph.py`/`database.py`.
+>
+> Both are downgraded to partial above; `REQUIREMENTS.md` reflects the same correction.
 
 # Phase 7 Plan 01: Relationship Identity, Temporal Contract, Conflict Policy
 
@@ -104,7 +119,10 @@ uv run pytest tests/ -q -x --ignore=tests/architecture/test_load_history_state_m
 609 passed
 ```
 
-## Self-Check: PASSED
+## Self-Check: PASSED (with correction)
 
-RTEMP-01, RTEMP-03, RTEMP-04, RLINE-01 complete. Plan 07-02 (exhaustive generation coverage
-manifest, `valid_zero`, EDGE-07/08 exclusions) may begin.
+RTEMP-03, RTEMP-04 complete. RTEMP-01 and RLINE-01 partially addressed only (see correction
+note above) -- the MDM/Postgres-side schema work is done, but Neo4j/Snowflake sync of the new
+temporal columns and entity-merge remapping are not, and remain open. Plan 07-02 (exhaustive
+generation coverage manifest, `valid_zero`, EDGE-07/08 exclusions) may begin regardless --
+07-02 does not depend on either open item.

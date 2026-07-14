@@ -143,6 +143,12 @@ class SnowflakeGraphVerificationConfig:
     native_app_compute_pool: str = DEFAULT_NATIVE_APP_COMPUTE_POOL
     native_app_user_role: str = DEFAULT_NATIVE_APP_USER_ROLE
     native_app_admin_role: str = DEFAULT_NATIVE_APP_ADMIN_ROLE
+    # Optional rel_type_name -> status ("populated"|"valid_zero"|"excluded") map
+    # from edgar_warehouse.mdm.coverage.compute_relationship_coverage_manifest.
+    # When supplied, named relationship checks evaluate exhaustively over every
+    # type in this map instead of only POPULATED_RELATIONSHIP_TYPES (07-02,
+    # RCOV-01/02). When None, behavior is unchanged from before 07-02.
+    relationship_coverage: dict[str, str] | None = None
 
     def resolved_target_database(self, default_database: str | None = None) -> str:
         database = self.target_database or default_database
@@ -322,7 +328,9 @@ class SnowflakeGraphVerifier:
         # the parity rows is a hard failure here even when it contributed no row to
         # the aggregate node_parity/relationship_parity status (silent-omission gap).
         node_named_checks = _named_node_parity_checks(node_parity)
-        relationship_named_checks = _named_relationship_parity_checks(relationship_parity)
+        relationship_named_checks = _named_relationship_parity_checks(
+            relationship_parity, config.relationship_coverage
+        )
         named_checks_ok = all(
             check["status"] == "ok" for check in node_named_checks
         ) and all(check["status"] == "ok" for check in relationship_named_checks)
@@ -1344,32 +1352,65 @@ def _named_node_parity_checks(node_parity: dict[str, Any]) -> list[dict[str, Any
 
 def _named_relationship_parity_checks(
     relationship_parity: dict[str, Any],
+    relationship_coverage: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
-    """EDGE-01..04 (D-01): one named parity check per already-populated relationship type.
+    """EDGE-01..04 (D-01) / RCOV-01..02 (07-02): one named parity check per relationship type.
 
     Reads only the already-computed relationship_parity["by_relationship_type"] rows --
-    no new SQL. Scoped to POPULATED_RELATIONSHIP_TYPES only; the 7 not-yet-populated
-    relationship types are intentionally excluded (T-05-05).
+    no new SQL.
+
+    ``relationship_coverage`` (rel_type_name -> status in
+    {"populated","valid_zero","excluded"}), when supplied, replaces the old
+    POPULATED_RELATIONSHIP_TYPES-only scoping with exhaustive evaluation over
+    every type in the coverage manifest (edgar_warehouse.mdm.coverage):
+    populated types must be at parity as before; valid_zero/excluded types
+    must additionally have zero live MDM/graph rows -- a nonzero count for a
+    type expected to be zero is now a hard failure (synthetic or unexpected
+    edges), not silence.
+
+    When omitted (the default), behavior is unchanged from before 07-02:
+    only POPULATED_RELATIONSHIP_TYPES get a named check, and the other
+    (not-yet-classified) types are skipped (T-05-05).
     """
     by_type = {
         row["relationship_type"]: row for row in relationship_parity["by_relationship_type"]
     }
+
+    if relationship_coverage is None:
+        scoped_types = {name: "populated" for name in POPULATED_RELATIONSHIP_TYPES}
+    else:
+        scoped_types = relationship_coverage
+
     checks = []
-    for relationship_type in POPULATED_RELATIONSHIP_TYPES:
+    for relationship_type, status in scoped_types.items():
         row = by_type.get(relationship_type)
         present = row is not None
         mdm_active_count = row["mdm_active_count"] if present else 0
         snowflake_graph_edge_count = row["snowflake_graph_edge_count"] if present else 0
         at_parity = present and row["mdm_minus_graph"] == 0 and row["graph_minus_mdm"] == 0
+        is_zero_expected = status in ("valid_zero", "excluded")
+        if is_zero_expected:
+            ok = mdm_active_count == 0 and snowflake_graph_edge_count == 0
+        else:
+            ok = at_parity
         check = {
             "name": f"relationship_parity_{relationship_type.lower()}",
             "relationship_type": relationship_type,
+            "coverage_status": status,
             "present": present,
             "mdm_active_count": mdm_active_count,
             "snowflake_graph_edge_count": snowflake_graph_edge_count,
-            "status": "ok" if at_parity else "failed",
+            "status": "ok" if ok else "failed",
         }
-        if not present:
+        if not ok and is_zero_expected:
+            check["remediation"] = (
+                f"relationship_type={relationship_type!r} is classified {status!r} "
+                f"(expected zero rows) but has mdm_active_count={mdm_active_count}, "
+                f"snowflake_graph_edge_count={snowflake_graph_edge_count}: re-review its "
+                "coverage exclusion/valid-zero record -- this may be a stale exclusion "
+                "or synthetic/unexpected data."
+            )
+        elif not present:
             check["remediation"] = (
                 f"No parity row for relationship_type={relationship_type!r}: confirm "
                 "mdm load-relationships has populated this type and re-run mdm sync-graph."
