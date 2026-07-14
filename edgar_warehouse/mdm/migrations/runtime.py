@@ -356,6 +356,7 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
             _seed_entity_types(pre_session)
             pre_session.commit()
         _apply_sql_file(engine, "005_fundamentals_relationships.sql")
+        _apply_sql_file(engine, "006_relationship_temporal_contract.sql")
 
     if seed:
         with Session(engine) as session:

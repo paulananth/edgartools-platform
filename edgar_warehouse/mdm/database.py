@@ -1,6 +1,7 @@
 """SQLAlchemy models for the MDM relational layer."""
 from __future__ import annotations
 
+import hashlib
 import os
 import uuid
 from typing import Optional
@@ -68,6 +69,42 @@ class GUID(TypeDecorator):
 
 def _uuid_string() -> str:
     return str(uuid.uuid4())
+
+
+def relationship_logical_id(rel_type_id: str, source_entity_id: str, target_entity_id: str) -> str:
+    """Deterministic immutable logical relationship ID.
+
+    Stable across re-derivation and generations: identical (rel_type,
+    source, target) always yields the same ID, so backfills and reruns
+    never mint a second logical ID for the same relationship.
+
+    Uses md5 (not uuid.uuid5) so the value is byte-for-byte reproducible by
+    the Postgres migration's SQL-only backfill (006_relationship_temporal_
+    contract.sql), which has no uuid5/SHA-1 primitive available without an
+    extra extension. A row backfilled by the migration and a row later
+    written by this function for the same triple MUST resolve to the same
+    relationship_id -- if the two algorithms diverged, every pre-migration
+    relationship would silently get a second, mismatched logical ID the
+    first time this code path touched it.
+    """
+    digest = hashlib.md5(
+        f"{rel_type_id}:{source_entity_id}:{target_entity_id}".encode("utf-8")
+    ).hexdigest()
+    return f"{digest[0:8]}-{digest[8:12]}-{digest[12:16]}-{digest[16:20]}-{digest[20:32]}"
+
+
+def _default_relationship_id(context) -> str:
+    """Column default: auto-derive relationship_id from sibling columns on INSERT.
+
+    Any code path that constructs ``MdmRelationshipInstance`` without
+    explicitly setting ``relationship_id`` (e.g. direct ORM inserts outside
+    ``graph.py``'s ``ensure_relationship``) still gets the correct
+    deterministic logical ID rather than a NULL/missing value.
+    """
+    params = context.get_current_parameters()
+    return relationship_logical_id(
+        params["rel_type_id"], params["source_entity_id"], params["target_entity_id"]
+    )
 
 
 def get_engine(url: str | None = None) -> Engine:
@@ -711,10 +748,23 @@ class MdmRelationshipSourceMapping(Base):
 
 
 class MdmRelationshipInstance(Base):
+    """A relationship-version row.
+
+    ``instance_id`` is this version's immutable ID (never reassigned).
+    ``relationship_id`` is the immutable *logical* relationship ID shared by
+    every version of the same (rel_type, source, target) triple -- it is
+    deterministic (see ``relationship_logical_id``), not a separate lookup
+    table, so backfill and reruns never mint a second logical ID for the
+    same relationship.
+    """
+
     __tablename__ = "mdm_relationship_instance"
 
     instance_id: Mapped[str] = mapped_column(
         GUID(), primary_key=True, default=_uuid_string
+    )
+    relationship_id: Mapped[str] = mapped_column(
+        GUID(), nullable=False, default=_default_relationship_id
     )
     rel_type_id: Mapped[str] = mapped_column(
         GUID(),
@@ -734,8 +784,26 @@ class MdmRelationshipInstance(Base):
     properties: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
     effective_from: Mapped[Optional[object]] = mapped_column(Date, nullable=True)
     effective_to: Mapped[Optional[object]] = mapped_column(Date, nullable=True)
+    valid_from_date: Mapped[Optional[object]] = mapped_column(Date, nullable=True)
+    valid_to_date: Mapped[Optional[object]] = mapped_column(Date, nullable=True)
+    date_provenance: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'unknown'")
+    )
+    relationship_kind: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'direct'")
+    )
     source_system: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_accession: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_evidence: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
+    superseded_by_version_id: Mapped[Optional[str]] = mapped_column(
+        GUID(),
+        ForeignKey("mdm_relationship_instance.instance_id"),
+        nullable=True,
+    )
+    quarantined: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("FALSE")
+    )
+    quarantine_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     graph_synced_at: Mapped[Optional[object]] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
@@ -761,8 +829,57 @@ class MdmRelationshipInstance(Base):
             "graph_synced_at",
             postgresql_where=text("graph_synced_at IS NULL"),
         ),
+        Index("idx_rel_instance_relationship_id", "relationship_id"),
+        CheckConstraint(
+            "valid_from_date IS NULL OR valid_to_date IS NULL OR valid_to_date > valid_from_date",
+            name="ck_rel_instance_valid_interval",
+        ),
+        CheckConstraint(
+            "date_provenance IN ('reported','filing_date_proxy','unknown')",
+            name="ck_rel_instance_date_provenance",
+        ),
+        CheckConstraint(
+            "relationship_kind IN ('direct','derived')",
+            name="ck_rel_instance_relationship_kind",
+        ),
     )
 
     rel_type: Mapped["MdmRelationshipType"] = relationship(
         "MdmRelationshipType", back_populates="instances"
+    )
+
+
+class MdmRelationshipSourcePriority(Base):
+    """Per-relationship-type source priority for conflict tie-breaks.
+
+    Lower ``priority`` wins (same convention as ``MdmSourcePriority`` /
+    ``survivorship.py``'s "lowest-numbered is highest-authority" rule).
+    Overlapping, differing-property versions of the same logical
+    relationship are resolved by this table; a triple with no configured
+    row for either side's source is quarantined rather than silently
+    picking a winner.
+    """
+
+    __tablename__ = "mdm_relationship_source_priority"
+
+    rule_id: Mapped[str] = mapped_column(
+        GUID(), primary_key=True, default=_uuid_string
+    )
+    rel_type_id: Mapped[str] = mapped_column(
+        GUID(),
+        ForeignKey("mdm_relationship_type.rel_type_id"),
+        nullable=False,
+    )
+    source_system: Mapped[str] = mapped_column(Text, nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("TRUE")
+    )
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+
+    __table_args__ = (
+        UniqueConstraint("rel_type_id", "source_system", name="uq_rel_source_priority"),
     )
