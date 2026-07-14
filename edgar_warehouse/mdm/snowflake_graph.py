@@ -36,6 +36,17 @@ ALLOWED_RELATIONSHIP_TYPES = (
 # MANAGES_FUND) are intentionally excluded from named parity checks until
 # Phases 6-7 populate them -- named-checking a legitimately-zero type this
 # milestone does not yet cover would false-fail verify-graph (T-05-05).
+#
+# Phase 6 (fix-pipelines) investigated 5 of these 7 (EDGE-05 IS_ENTITY_OF,
+# EDGE-06 IS_PERSON_OF, EDGE-09 EMPLOYED_BY, EDGE-10 AUDITED_BY, EDGE-11
+# INSTITUTIONAL_HOLDS) and confirmed NONE reached graph-populated status --
+# see 06-PHASE-CLOSURE-LEDGER.md for the evidenced disposition of each (two
+# source-coverage exclusions, one structural-API exclusion, two confirmed
+# bugs with an identified but deferred fix). None is added here: per D-05,
+# a type must not enter this tuple before its own mdm sync-graph has
+# produced rows -- adding any of the 5 now would false-fail verify-graph
+# for a type this environment has never actually populated. HAS_PARENT_COMPANY
+# and MANAGES_FUND remain out of Phase 6's scope entirely.
 POPULATED_RELATIONSHIP_TYPES = ("COMPANY_HOLDS", "HOLDS", "ISSUED_BY", "IS_INSIDER")
 NODE_TABLES = (
     "MDM_GRAPH_NODES",
@@ -322,6 +333,19 @@ class SnowflakeGraphVerifier:
             and native_app_ok
             and named_checks_ok
         )
+        parity_ok = (
+            node_parity["status"] == "ok"
+            and relationship_parity["status"] == "ok"
+            and diagnostics_clean
+            and named_checks_ok
+        )
+        native_domains = native_app.get("domains", {})
+        failure_domains: list[str] = []
+        if not parity_ok:
+            failure_domains.append("parity")
+        for domain in ("readiness", "capability"):
+            if native_domains.get(domain, {}).get("status") == "failed":
+                failure_domains.append(domain)
         payload = {
             "status": "ok" if passed else "failed",
             "snowflake_graph_nodes": node_parity["total_snowflake_graph"],
@@ -338,6 +362,12 @@ class SnowflakeGraphVerifier:
             },
             "diagnostics": diagnostics,
             "native_app": native_app,
+            "failure_domains": failure_domains,
+            "failure_summary": {
+                "parity": "ok" if parity_ok else "failed",
+                "readiness": native_domains.get("readiness", {}).get("status", "skipped"),
+                "capability": native_domains.get("capability", {}).get("status", "skipped"),
+            },
         }
         return SnowflakeGraphVerificationResult(passed=passed, payload=payload)
 
@@ -354,6 +384,10 @@ def _verify_native_app(
             "phase3_acceptance": False,
             "remediation": "Run without --skip-native-app for live Phase 3 acceptance.",
             "checks": [],
+            "domains": {
+                "readiness": {"status": "skipped", "failed_checks": []},
+                "capability": {"status": "skipped", "failed_checks": []},
+            },
         }
 
     app_name = _ident(config.native_app_name)
@@ -439,16 +473,29 @@ def _verify_native_app(
         )
     )
 
-    sample_check, _sample_node_id = _native_sample_node_check(cursor, context)
+    sample_check, sample_node_id = _native_sample_node_check(cursor, context)
     checks.append(sample_check)
     if all(check["status"] == "ok" for check in checks):
-        # WCC is the single algorithm smoke: it exercises the app end to end
-        # (projection of the ID-only GRAPH_APP_* views, compute-pool job,
-        # write-back). GRAPH_INFO/BFS/LIST_GRAPHS are omitted deliberately —
-        # in the current Marketplace app release all three fail inside the
-        # app's own procedures even with validator-clean config, while WCC
-        # succeeds against the same projection.
-        checks.append(
+        checks.extend(
+            [
+            _native_execute_check(
+                cursor,
+                name="graph_info",
+                sql=_render_native_app_graph_info(context, app_name, compute_pool),
+                remediation=(
+                    f"Retry {app_name}.GRAPH.GRAPH_INFO with the current project/compute API "
+                    "against GRAPH_APP_NODES/GRAPH_APP_EDGES."
+                ),
+            ),
+            _native_execute_check(
+                cursor,
+                name="bfs",
+                sql=_render_native_app_bfs(context, app_name, compute_pool, sample_node_id),
+                remediation=(
+                    f"Retry {app_name}.GRAPH.BFS with sourceNodeTable/sourceNode and clean "
+                    "the governed MDM_GRAPH_VERIFY_BFS_SMOKE output table."
+                ),
+            ),
             _native_execute_check(
                 cursor,
                 name="wcc",
@@ -458,10 +505,26 @@ def _verify_native_app(
                     "against the hosted MDM graph (projects the GRAPH_APP_NODES/"
                     "GRAPH_APP_EDGES ID-only views created by `mdm sync-graph`)."
                 ),
-            )
+            ),
+            _native_execute_check(
+                cursor,
+                name="list_graphs",
+                sql=_render_native_app_list_graphs(app_name),
+                remediation=(
+                    "The installed EXPERIMENTAL.LIST_GRAPHS procedure is an optional diagnostic. "
+                    "If it fails inside the Marketplace app, capture the app version and exact "
+                    "error as an external blocker."
+                ),
+                blocking=False,
+            ),
+            ]
         )
 
-    status = "ok" if all(check["status"] == "ok" for check in checks) else "failed"
+    domains = _native_domain_payload(checks)
+    status = "ok" if all(
+        check["status"] == "ok" or not check.get("blocking", True)
+        for check in checks
+    ) else "failed"
     return {
         "status": status,
         "required": True,
@@ -470,6 +533,7 @@ def _verify_native_app(
         "database_role": database_role,
         "compute_pool": compute_pool,
         "checks": checks,
+        "domains": domains,
     }
 
 
@@ -480,18 +544,20 @@ def _native_rows_check(
     sql: str,
     ok: Callable[[list[Any]], bool],
     remediation: str,
+    domain: str = "readiness",
 ) -> dict[str, Any]:
     try:
         rows = _fetch_raw_rows(cursor, sql)
     except Exception as exc:  # pragma: no cover - exercised by live connector failures
-        return _native_failed_check(name, remediation, exc)
+        return _native_failed_check(name, remediation, exc, domain=domain)
     if ok(rows):
-        return {"name": name, "status": "ok", "row_count": len(rows)}
+        return {"name": name, "status": "ok", "row_count": len(rows), "domain": domain}
     return {
         "name": name,
         "status": "failed",
         "row_count": len(rows),
         "remediation": remediation,
+        "domain": domain,
     }
 
 
@@ -501,20 +567,39 @@ def _native_execute_check(
     name: str,
     sql: str,
     remediation: str,
+    blocking: bool = True,
 ) -> dict[str, Any]:
     try:
         rows = _fetch_raw_rows(cursor, sql)
     except Exception as exc:  # pragma: no cover - exercised by live connector failures
-        return _native_failed_check(name, remediation, exc)
+        return _native_failed_check(name, remediation, exc, domain="capability", blocking=blocking)
     # The app's job procedures report failures as result rows (JOB_STATUS
     # 'ERROR' with detail in JOB_RESULT) while the SELECT itself succeeds,
     # so a successful fetch alone does not mean the job ran.
     for row in rows:
-        values = [str(v) for v in (row if isinstance(row, (list, tuple)) else [row])]
+        if isinstance(row, dict):
+            raw_values = row.values()
+        elif isinstance(row, (list, tuple)):
+            raw_values = row
+        else:
+            raw_values = [row]
+        values = [str(v) for v in raw_values]
         if any(v == "ERROR" for v in values):
             detail = " | ".join(v[:200] for v in values if v and v != "ERROR")
-            return _native_failed_check(name, remediation, RuntimeError(f"job reported ERROR: {detail}"))
-    return {"name": name, "status": "ok", "row_count": len(rows)}
+            return _native_failed_check(
+                name,
+                remediation,
+                RuntimeError(f"job reported ERROR: {detail}"),
+                domain="capability",
+                blocking=blocking,
+            )
+    return {
+        "name": name,
+        "status": "ok",
+        "row_count": len(rows),
+        "domain": "capability",
+        "blocking": blocking,
+    }
 
 
 def _native_sample_node_check(
@@ -540,22 +625,55 @@ def _native_sample_node_check(
             "status": "ok",
             "row_count": len(rows),
             "sample_nodeid": sample_node_id,
+            "domain": "readiness",
         }, sample_node_id
     return {
         "name": "graph_schema_sample",
         "status": "failed",
         "row_count": len(rows),
         "remediation": remediation,
+        "domain": "readiness",
     }, ""
 
 
-def _native_failed_check(name: str, remediation: str, exc: Exception) -> dict[str, Any]:
+def _native_failed_check(
+    name: str,
+    remediation: str,
+    exc: Exception,
+    *,
+    domain: str = "readiness",
+    blocking: bool = True,
+) -> dict[str, Any]:
     return {
         "name": name,
         "status": "failed",
         "remediation": remediation,
         "error": f"{exc.__class__.__name__}: {exc}",
+        "domain": domain,
+        "blocking": blocking,
     }
+
+
+def _native_domain_payload(checks: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    payload: dict[str, dict[str, Any]] = {}
+    for domain in ("readiness", "capability"):
+        domain_checks = [check for check in checks if check.get("domain") == domain]
+        failed = [
+            check["name"]
+            for check in domain_checks
+            if check["status"] != "ok" and check.get("blocking", True)
+        ]
+        external = [
+            check["name"]
+            for check in domain_checks
+            if check["status"] != "ok" and not check.get("blocking", True)
+        ]
+        payload[domain] = {
+            "status": "failed" if failed else "ok",
+            "failed_checks": failed,
+            "external_blockers": external,
+        }
+    return payload
 
 
 def _fetch_raw_rows(cursor: Any, sql: str) -> list[Any]:
@@ -1274,13 +1392,13 @@ def _as_int(value: Any) -> int:
 def _render_verify_node_counts(context: dict[str, Any]) -> str:
     return f"""-- verify_graph:node_counts
 WITH expected AS (
-  SELECT E.ENTITY_TYPE, COUNT(*) AS MDM_ACTIVE_COUNT
-  FROM {_mdm_fq(context, "MDM_ENTITY")} E
-  JOIN {_mdm_fq(context, "MDM_ENTITY_TYPE_DEFINITION")} ETD
-    ON ETD.ENTITY_TYPE = E.ENTITY_TYPE
-   AND ETD.IS_ACTIVE = TRUE
-  WHERE E.IS_QUARANTINED = FALSE
-  GROUP BY E.ENTITY_TYPE
+  SELECT ETD.ENTITY_TYPE, COUNT(E.ENTITY_ID) AS MDM_ACTIVE_COUNT
+  FROM {_mdm_fq(context, "MDM_ENTITY_TYPE_DEFINITION")} ETD
+  LEFT JOIN {_mdm_fq(context, "MDM_ENTITY")} E
+    ON E.ENTITY_TYPE = ETD.ENTITY_TYPE
+   AND E.IS_QUARANTINED = FALSE
+  WHERE ETD.IS_ACTIVE = TRUE
+  GROUP BY ETD.ENTITY_TYPE
 ),
 actual AS (
   SELECT ENTITY_TYPE, COUNT(*) AS SNOWFLAKE_GRAPH_NODE_COUNT
@@ -1496,6 +1614,69 @@ CALL {app_name}.GRAPH.WCC(
     }}]
   }}
 )
+"""
+
+
+def _render_native_app_project(context: dict[str, Any]) -> str:
+    nodes = _fq(context, "GRAPH_APP_NODES")
+    edges = _fq(context, "GRAPH_APP_EDGES")
+    return f"""'project': {{
+      'nodeTables': [{_sql_literal(nodes)}],
+      'relationshipTables': {{
+        {_sql_literal(edges)}: {{
+          'sourceTable': {_sql_literal(nodes)},
+          'targetTable': {_sql_literal(nodes)},
+          'orientation': 'NATURAL'
+        }}
+      }}
+    }}"""
+
+
+def _render_native_app_graph_info(
+    context: dict[str, Any],
+    app_name: str,
+    compute_pool: str,
+) -> str:
+    return f"""-- verify_graph:native_app_graph_info
+CALL {app_name}.GRAPH.GRAPH_INFO(
+  {_sql_literal(compute_pool)},
+  {{
+    {_render_native_app_project(context)},
+    'compute': {{}}
+  }}
+)
+"""
+
+
+def _render_native_app_bfs(
+    context: dict[str, Any],
+    app_name: str,
+    compute_pool: str,
+    sample_node_id: str,
+) -> str:
+    nodes = _fq(context, "GRAPH_APP_NODES")
+    output = _fq(context, "MDM_GRAPH_VERIFY_BFS_SMOKE")
+    return f"""-- verify_graph:native_app_bfs
+CALL {app_name}.GRAPH.BFS(
+  {_sql_literal(compute_pool)},
+  {{
+    {_render_native_app_project(context)},
+    'compute': {{
+      'sourceNodeTable': {_sql_literal(nodes)},
+      'sourceNode': {_sql_literal(sample_node_id)},
+      'targetNodesTable': {_sql_literal(nodes)},
+      'targetNodes': [],
+      'maxDepth': 2
+    }},
+    'write': [{{'outputTable': {_sql_literal(output)}}}]
+  }}
+)
+"""
+
+
+def _render_native_app_list_graphs(app_name: str) -> str:
+    return f"""-- verify_graph:native_app_list_graphs
+SELECT * FROM TABLE({app_name}.EXPERIMENTAL.LIST_GRAPHS())
 """
 
 

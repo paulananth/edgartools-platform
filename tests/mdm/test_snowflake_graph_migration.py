@@ -9,6 +9,10 @@ from edgar_warehouse.mdm.snowflake_graph import (
     generate_snowflake_graph_migration,
     run_hosted_neo4j_e2e,
     run_snowflake_graph_sql,
+    _render_native_app_bfs,
+    _render_native_app_graph_info,
+    _render_native_app_list_graphs,
+    _render_verify_node_counts,
 )
 
 
@@ -71,6 +75,21 @@ def test_generates_snowflake_graph_migration_sql(tmp_path):
     assert "MDM_RELATIONSHIP_INSTANCE" in validation_sql
     assert "GRAPH_NODE_COMPANY_PAGERANK" in hosted_sql
     assert "Snowflake-Hosted" in (output_dir / "README.md").read_text(encoding="utf-8")
+
+
+def test_node_parity_preserves_active_zero_count_entity_types():
+    validation_sql = _render_verify_node_counts(
+        {
+            "target_database": "EDGARTOOLS_DEV",
+            "target_schema": "NEO4J_GRAPH_MIGRATION",
+            "mdm_database": "EDGARTOOLS_DEV",
+            "mdm_schema": "MDM",
+        }
+    )
+
+    assert "SELECT ETD.ENTITY_TYPE, COUNT(E.ENTITY_ID) AS MDM_ACTIVE_COUNT" in validation_sql
+    assert "FROM EDGARTOOLS_DEV.MDM.MDM_ENTITY_TYPE_DEFINITION ETD" in validation_sql
+    assert "LEFT JOIN EDGARTOOLS_DEV.MDM.MDM_ENTITY E" in validation_sql
 
 
 def test_generated_sql_exposes_phase_2_graph_projection_contract(tmp_path):
@@ -353,6 +372,40 @@ def test_graph_sync_is_idempotent_full_rebuild():
         assert not any(upper.startswith(verb) for verb in forbidden_verbs), (
             f"row-level accumulation verb found in graph-sync statement: {stripped[:80]!r}"
         )
+
+
+def test_native_app_current_graph_info_bfs_and_list_graphs_sql():
+    context = {
+        "target_database": "EDGARTOOLS_DEV",
+        "target_schema": "NEO4J_GRAPH_MIGRATION",
+    }
+    graph_info = _render_native_app_graph_info(
+        context, "NEO4J_GRAPH_ANALYTICS", "CPU_X64_XS"
+    )
+    bfs = _render_native_app_bfs(
+        context, "NEO4J_GRAPH_ANALYTICS", "CPU_X64_XS", "company:1"
+    )
+    list_graphs = _render_native_app_list_graphs("NEO4J_GRAPH_ANALYTICS")
+
+    for sql in (graph_info, bfs):
+        assert "'CPU_X64_XS'" in sql
+        assert "'project':" in sql
+        assert "'nodeTables':" in sql
+        assert "'relationshipTables':" in sql
+        assert "GRAPH_APP_NODES" in sql
+        assert "GRAPH_APP_EDGES" in sql
+        assert "project_name" not in sql
+        assert "compute_pool" not in sql
+        assert "node_tables" not in sql
+        assert "relationship_tables" not in sql
+
+    assert "'sourceNodeTable':" in bfs
+    assert "'sourceNode': 'company:1'" in bfs
+    assert "'targetNodesTable':" in bfs
+    assert "'targetNodes': []" in bfs
+    assert "'maxDepth': 2" in bfs
+    assert "'outputTable':" in bfs
+    assert "EXPERIMENTAL.LIST_GRAPHS()" in list_graphs
 
 
 def test_split_sql_statements_preserves_semicolon_inside_string_literal():

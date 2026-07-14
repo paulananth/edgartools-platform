@@ -36,18 +36,18 @@ these are authoritative in their source files (not re-transcribed here to avoid 
 - [x] **EDGE-02**: `HOLDS` (person→security) — populated; graph parity holds.
 - [x] **EDGE-03**: `COMPANY_HOLDS` (company→security) — populated; graph parity holds.
 - [x] **EDGE-04**: `ISSUED_BY` (security→company) — populated; graph parity holds.
-- [ ] **EDGE-05**: `IS_ENTITY_OF` (adviser→company) — **no bronze/silver artifact dependency**: pairing comes from MDM's own `mdm_adviser.linked_company_entity_id` resolver field, not from a source document. Currently zero; investigate whether the resolver step that populates this field has ever run, and either populate or document why linkage can't be established (e.g. no adviser CIK in-universe also files as a company).
-- [ ] **EDGE-06**: `IS_PERSON_OF` (adviser→person) — **no bronze/silver artifact dependency**: pairing comes from an adviser↔person CIK crosswalk (`MdmAdviser.cik == MdmPerson.owner_cik`), not from a source document. Currently zero; investigate whether any individual-adviser CIKs in-universe also have Form 3/4/5-derived `MdmPerson` records, and either populate or document why no crosswalk matches exist.
+- [x] **EDGE-05**: `IS_ENTITY_OF` (adviser→company) — **no bronze/silver artifact dependency**: pairing comes from MDM's own `mdm_adviser.linked_company_entity_id` resolver field, not from a source document. **Disposed 2026-07-13 (Phase 6, 06-06): EXCLUDED — source-coverage exclusion scoped to the current tracking-list universe.** D-04 SQL-confirmed zero-overlap: 0 of 1 adviser's CIK matches any company CIK. See `06-PHASE-CLOSURE-LEDGER.md`. Re-check required if the adviser universe grows.
+- [x] **EDGE-06**: `IS_PERSON_OF` (adviser→person) — **no bronze/silver artifact dependency**: pairing comes from an adviser↔person CIK crosswalk (`MdmAdviser.cik == MdmPerson.owner_cik`), not from a source document. **Disposed 2026-07-13 (Phase 6, 06-06): EXCLUDED — source-coverage exclusion scoped to the current tracking-list universe.** D-04 SQL-confirmed zero-overlap: 0 of 1 adviser's CIK matches any of 45 persons' `owner_cik`. See `06-PHASE-CLOSURE-LEDGER.md`. Re-check required if the adviser universe grows.
 - [ ] **EDGE-07**: `MANAGES_FUND` (adviser→fund) — **source artifact: ADV primary attachment documents** (feed `sec_adv_private_fund`). Confirmed unobtainable: all 30 ADV filings in the active universe are EDGAR paper filings with no electronic document (see `.planning/workstreams/claude-mdm-source-recovery/FINDINGS.md`). Document as a source-coverage exclusion — no further artifact action is possible from EDGAR.
 - [ ] **EDGE-08**: `HAS_PARENT_COMPANY` (company→company) — **no artifact captured or parsed at all** for parent/subsidiary structure (would require 10-K Exhibit 21 or similar, which is not in the current parser surface). This is a missing-parser gap, not a missing-artifact gap — distinct from EDGE-07. Document as a source-coverage exclusion.
-- [x] **EDGE-09**: `EMPLOYED_BY` (person→company) — **source artifact: DEF 14A proxy filing documents** (feed `sec_executive_record`). Verify DEF 14A bronze artifacts are actually captured for the active universe. If artifacts are present but `sec_executive_record` is still empty, root-cause the parser/pipeline gap; if artifacts themselves are missing, triage fetchability before concluding a coverage exclusion.
-- [x] **EDGE-10**: `AUDITED_BY` (company→audit_firm) — **source artifact: SEC companyfacts (XBRL entity-facts) API responses** (feed `sec_accounting_flag.auditor_pcaob_id`). Artifact is confirmed fetchable (not a paper-filing-style dead end) — populate once a fundamentals entity-facts run publishes to the unified `silver/sec/silver.duckdb` (coordinate with the `fundamental-factors-v2` workstream — do not run fundamentals in dev without checking for overlap).
-- [x] **EDGE-11**: `INSTITUTIONAL_HOLDS` (adviser→security) — **source artifact: 13F-HR INFORMATION TABLE XML documents** (feed `sec_thirteenf_holding`). Verify 13F bronze artifacts are actually captured for institutional advisers in the active universe. If artifacts are present but the table is still empty, root-cause the parser/pipeline gap; if artifacts themselves are missing, triage fetchability before concluding a coverage exclusion.
+- [ ] **EDGE-09**: `EMPLOYED_BY` (person→company) — **source artifact: DEF 14A proxy filing documents** (feed `sec_executive_record`). **Root-caused 2026-07-13 (Phase 6, 06-06): ROOT-CAUSED / FIX DEFERRED, not populated.** Parser confirmed correct against real bronze content; the gap is that `_is_configured_parser_form` (`warehouse_orchestrator.py:1859`) never selects DEF14A/DEFA14A/8-K for the bulk artifact-fetch pipeline, so `sec_filing_attachment` is never populated for these forms at scale. Fix identified, not applied (fetch-volume/cost decision deferred). See `06-PHASE-CLOSURE-LEDGER.md`. **Not marked Complete** — the underlying relationship is still zero, only the zero state is now fully explained and documented, not silently unresolved.
+- [x] **EDGE-10**: `AUDITED_BY` (company→audit_firm) — **source artifact: SEC companyfacts (XBRL entity-facts) API responses** (feed `sec_accounting_flag.auditor_pcaob_id`). **Disposed 2026-07-13 (Phase 6, 06-05): EXCLUDED — source-coverage exclusion (structural SEC API limitation).** The companyfacts aggregate API never surfaces `ix:nonNumeric` DEI facts for any company (confirmed across 3 unrelated filers + a control fact); `_derive_audited_by` is correct as-is. See `06-PHASE-CLOSURE-LEDGER.md`.
+- [ ] **EDGE-11**: `INSTITUTIONAL_HOLDS` (adviser→security) — **source artifact: 13F-HR INFORMATION TABLE XML documents** (feed `sec_thirteenf_holding`). **Root-caused 2026-07-13 (Phase 6, 06-04/06-06): ROOT-CAUSED / FIX DEFERRED, not populated.** Shares its root cause with EDGE-09 (`_is_configured_parser_form` never selects 13F-HR for bulk artifact fetch: 0 of 48,877 filings have an attachment row). A real bronze-fetch fast-path bug was also found and fixed (`bronze_filing_artifacts.py`, committed + unit-tested), but that fix is downstream of the gate above and unreachable via the standard bulk pipeline. See `06-PHASE-CLOSURE-LEDGER.md`. **Not marked Complete** — fix committed but not deployed/graph-verified, and not yet reachable in bulk without the upstream gate fix.
 
 ### Cross-Cutting Graph Verification
 
-- [ ] **GVER-01**: `mdm verify-graph` output distinguishes Native App readiness failures (e.g. no compute pool available) from actual MDM↔graph parity failures.
-- [ ] **GVER-02**: Any Neo4j Graph Analytics Native App capability still broken app-side (GRAPH_INFO, BFS, LIST_GRAPHS per PR #122 findings) is fixed or documented with exact reproducing commands/dates, distinct from MDM-side issues.
+- [x] **GVER-01**: `mdm verify-graph` output distinguishes Native App readiness failures (e.g. no compute pool available) from actual MDM↔graph parity failures.
+- [x] **GVER-02**: Any Neo4j Graph Analytics Native App capability still broken app-side (GRAPH_INFO, BFS, LIST_GRAPHS per PR #122 findings) is fixed or documented with exact reproducing commands/dates, distinct from MDM-side issues. Stable documented operations define required capability health; experimental `LIST_GRAPHS` remains an informational external diagnostic.
 - [x] **GVER-03**: Repeated MDM relationship derivation AND repeated graph sync against unchanged data produce zero drift (idempotent) across all 6 node types and 11 relationship types. (Graph-sync/full-rebuild side proven by 05-01's `test_graph_sync_is_idempotent_full_rebuild`; node/relationship-derivation side proven by 05-02's `test_node_resolution_is_idempotent_across_entity_types` and `test_audit_firm_seed_is_idempotent` — both halves complete.)
 
 ### Missing Source Artifacts
@@ -60,6 +60,22 @@ mechanisms that aren't tied to any single relationship type.
 
 - [ ] **ARTF-01**: Silver-publishing warehouse commands (`parse-adv-bronze` and peers) never overwrite a healthier canonical `silver.duckdb` with a smaller/incomplete local copy — publish is skipped or guarded when the local copy would regress the canonical.
 - [ ] **ARTF-02**: Any newly-captured artifact fetch (from EDGE-09/EDGE-11 triage or elsewhere) honors SEC idempotency (DEC-009) — already-captured filings are not re-fetched without an explicit `--force`.
+
+### Verified MDM → Neo4j Relationship Generations
+
+- [x] **RPRE-01**: Before Phase 7 schema implementation, a live dev preflight using `SNOW_CONNECTION=snowconn` proves the Snowflake-hosted Neo4j Native App can load the contract views, expose typed date edge properties, execute supported graph metadata and BFS/multi-hop operations, and observe a stable-view test-generation switch. Required health uses documented stable operations plus semantic MDM↔graph parity; graph discovery uses the platform-owned generation registry. Experimental `LIST_GRAPHS` is informational and cannot independently block implementation. Verified GO on 2026-07-12 and human-approved.
+- [ ] **RSYNC-01**: PostgreSQL MDM is the relationship derivation/staging authority, while both MDM serving reads and Snowflake-hosted Neo4j reads expose the same verified active generation.
+- [ ] **RSYNC-02**: Each generation contains a complete node-and-edge snapshot and activates through one guarded Snowflake pointer only after identity-, property-, temporal-, endpoint-, and coverage-level verification passes for every registered type.
+- [ ] **RSYNC-03**: MDM commits graph-publication requests transactionally; a centralized publisher targets activation within five minutes, alerts after fifteen minutes, and never requires individual ingestion commands to implement graph synchronization.
+- [ ] **RSYNC-04**: Generation assembly fans out immutable type-first partitions in parallel, selectively hash-shards high-volume types, reuses content-addressed unchanged partitions, and independently retries failed partitions before fan-in.
+- [ ] **RSYNC-05**: Failed/incomplete generations never become visible; the prior verified generation remains active, and rollback can select a retained verified generation. Retention keeps at least three generations and all generations from the prior 30 days.
+- [ ] **RTEMP-01**: Relationships have stable logical and version identifiers plus date-only `[valid_from_date, valid_to_date)` validity, explicit date provenance, and synchronized typed temporal properties in MDM and Neo4j.
+- [ ] **RTEMP-02**: Active graph generations retain complete non-quarantined relationship history; strict `as_of_date` traversal excludes temporally unproven edges unless uncertainty is explicitly requested and labeled.
+- [ ] **RTEMP-03**: Direct relationships remain authoritative in MDM; multi-hop paths are queried in Neo4j, while materialized derived edges require deterministic rules, provenance, freshness policy, and an explicit derived label.
+- [ ] **RTEMP-04**: Conflicting temporal overlaps follow relationship-specific source-priority/tie-break policies; unresolved conflicts are quarantined and block activation. Ordinary workflows never physically delete relationship history.
+- [ ] **RCOV-01**: Every registered relationship type has exactly one per-generation coverage status: `populated`, freshly-proven `valid_zero`, or current-evidence `excluded`; any missing, stale, contradictory, or undocumented status blocks activation.
+- [ ] **RCOV-02**: EDGE-07 is machine-readably classified `source_unavailable` and EDGE-08 `capability_not_implemented`, each with relationship-specific evidence fingerprints and no synthetic graph edges.
+- [ ] **RLINE-01**: Entity merges remap graph traversal to the surviving canonical entity while preserving original source identity and merge lineage; edge IDs and relationship-version IDs remain stable across generations.
 
 ### edgartools Crosscheck
 
@@ -95,17 +111,30 @@ mechanisms that aren't tied to any single relationship type.
 | EDGE-03 | Phase 5 | Complete |
 | EDGE-04 | Phase 5 | Complete |
 | GVER-03 | Phase 5 | Complete |
-| EDGE-05 | Phase 6 | Pending |
-| EDGE-06 | Phase 6 | Pending |
-| EDGE-09 | Phase 6 | Complete |
-| EDGE-10 | Phase 6 | Complete |
-| EDGE-11 | Phase 6 | Complete |
+| EDGE-05 | Phase 6 | Complete (excluded — see 06-PHASE-CLOSURE-LEDGER.md) |
+| EDGE-06 | Phase 6 | Complete (excluded — see 06-PHASE-CLOSURE-LEDGER.md) |
+| EDGE-09 | Phase 6 | Root-caused; fix deferred (see 06-PHASE-CLOSURE-LEDGER.md) |
+| EDGE-10 | Phase 6 | Complete (excluded — see 06-PHASE-CLOSURE-LEDGER.md) |
+| EDGE-11 | Phase 6 | Root-caused; fix deferred (see 06-PHASE-CLOSURE-LEDGER.md) |
 | EDGE-07 | Phase 7 | Pending |
 | EDGE-08 | Phase 7 | Pending |
 | ARTF-01 | Phase 7 | Pending |
 | ARTF-02 | Phase 7 | Pending |
-| GVER-01 | Phase 8 | Pending |
-| GVER-02 | Phase 8 | Pending |
+| RPRE-01 | Phase 7 | Complete |
+| RSYNC-01 | Phase 7 | Pending |
+| RSYNC-02 | Phase 7 | Pending |
+| RSYNC-03 | Phase 7 | Pending |
+| RSYNC-04 | Phase 7 | Pending |
+| RSYNC-05 | Phase 7 | Pending |
+| RTEMP-01 | Phase 7 | Pending |
+| RTEMP-02 | Phase 7 | Pending |
+| RTEMP-03 | Phase 7 | Pending |
+| RTEMP-04 | Phase 7 | Pending |
+| RCOV-01 | Phase 7 | Pending |
+| RCOV-02 | Phase 7 | Pending |
+| RLINE-01 | Phase 7 | Pending |
+| GVER-01 | Phase 8 | Complete |
+| GVER-02 | Phase 8 | Complete |
 | EDGX-01 | Phase 9 | Pending |
 | EDGX-02 | Phase 9 | Pending |
 | EDGX-03 | Phase 9 | Pending |

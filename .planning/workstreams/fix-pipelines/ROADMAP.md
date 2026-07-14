@@ -46,7 +46,7 @@ factors (Phase 10, ex-`fundamental-factors-v2`) and the Model Builder source-con
 - [x] **Phase 5: Node And Populated-Relationship Graph Parity** - every MDM node type syncs to a verifiable per-type graph view, the 4 already-populated relationship types have proven MDM↔graph parity, and derivation/sync idempotency is established as a repeatable check. (completed 2026-07-08)
 - [ ] **Phase 6: Relationship Investigation And Population** - root-cause each still-ambiguous zero relationship type against its actual source artifact (or confirm it has none), and populate whichever ones the investigation shows are unblocked.
 - [ ] **Phase 7: Source-Coverage Exclusions And Artifact Hygiene** - formally document the two artifact-confirmed-unsatisfiable relationship types, and close the two cross-cutting artifact-integrity gaps found during this milestone's investigation.
-- [ ] **Phase 8: Neo4j Native App Verification Gaps** - `mdm verify-graph` cleanly separates environment/readiness problems from real parity problems, and app-side capability gaps are resolved or conclusively documented.
+- [x] **Phase 8: Neo4j Native App Verification Gaps** - `mdm verify-graph` cleanly separates environment/readiness problems from real parity problems, and app-side capability gaps are resolved or conclusively documented.
 - [ ] **Phase 9: edgartools Crosscheck** - platform parsing is validated against edgartools, hand-built parsers are replaced where edgartools already covers the same ground well, and API usage is confirmed current.
 
 ### Consolidated phases (grafted 2026-07-11)
@@ -129,19 +129,36 @@ dropped.
 
 - [ ] 06-06-PLAN.md — EDGE-05/06 SQL-confirmed closure (D-04) + POPULATED_RELATIONSHIP_TYPES extension (D-05) + phase closure ledger
 
-### Phase 7: Source-Coverage Exclusions And Artifact Hygiene
+### Phase 7: Relationship Graph Consistency, Temporal Lineage, And Artifact Hygiene
 
-**Goal**: Formally document the two artifact-confirmed-unsatisfiable relationship types, and close the two cross-cutting artifact-integrity gaps found during this milestone's investigation.
-**Depends on**: Nothing new — MANAGES_FUND/HAS_PARENT_COMPANY root causes are already confirmed; the two ARTF items are infra-level and independent of Phase 6's outcomes.
-**Requirements**: EDGE-07, EDGE-08, ARTF-01, ARTF-02
+**Goal**: Make MDM relationship truth and the Snowflake-hosted Neo4j query projection consumer-visible as one verified, temporal, rollback-safe generation, with exhaustive source-coverage evidence and semantic guards on every relationship input.
+**Depends on**: Phase 6 for the final relationship population/zero-state ledger; Phase 5 for graph identity/parity foundations.
+**Requirements**: EDGE-07, EDGE-08, ARTF-01, ARTF-02, RPRE-01, RSYNC-01, RSYNC-02, RSYNC-03, RSYNC-04, RSYNC-05, RTEMP-01, RTEMP-02, RTEMP-03, RTEMP-04, RCOV-01, RCOV-02, RLINE-01
 **Success Criteria** (what must be TRUE):
 
-  1. MANAGES_FUND has a written source-coverage exclusion naming its exact blocked artifact (ADV primary attachment documents — confirmed paper filings, `claude-mdm-source-recovery/FINDINGS.md`), cross-referenced from REQUIREMENTS.md and PROJECT.md.
-  2. HAS_PARENT_COMPANY has a written source-coverage exclusion distinguishing it from EDGE-07: no artifact is missing, no parser exists at all for parent/subsidiary structure (e.g. 10-K Exhibit 21).
-  3. Silver-publishing commands (`parse-adv-bronze` and peers) skip republishing the canonical `silver.duckdb` when the local copy would be smaller/incomplete relative to the current canonical, verified by a regression test.
-  4. Any artifact newly fetched during Phase 6's EDGE-09/EDGE-11 triage is verified to skip already-captured filings by default (idempotency, DEC-009).
+  1. A live dev Native App preflight proves contract-view loading, typed date edge properties, supported graph metadata and BFS/multi-hop operations, and stable-view generation switching before schema implementation begins. Semantic MDM↔graph parity defines health; the platform-owned generation registry defines discovery; experimental Native App inventory endpoints are informational only.
+  2. Every registered relationship type is `populated`, freshly-proven `valid_zero`, or current-evidence `excluded`; stale or undocumented coverage blocks generation activation.
+  2. MANAGES_FUND is `source_unavailable` and HAS_PARENT_COMPANY is `capability_not_implemented`, each with exact evidence fingerprints and no synthetic graph edges.
+  3. Relationships retain stable logical/version IDs, date-only half-open validity, date provenance, source lineage, non-destructive history, and typed temporal properties in both MDM and graph edges.
+  4. PostgreSQL MDM commits publication requests transactionally; immutable node/relationship partitions build in parallel, retry/reuse independently, and fan in to a complete generation.
+  5. Both MDM serving and Neo4j views select through one Snowflake active-generation pointer; identity, property, endpoint, temporal, and coverage verification all pass before atomic activation.
+  6. Current and historical multi-hop queries return only edges provably valid for the requested date by default; uncertain dates require explicit opt-in and labeling.
+  7. Entity merges restore canonical graph connectivity while preserving original source identities and merge lineage.
+  8. Failed builds leave the prior generation active; verified generations can roll back within the locked three-generation/30-day retention floor.
+  9. Silver publication merges partial candidates semantically without losing protected keys, rejects ambiguous row conflicts, and aborts optimistic promotion when canonical S3 state changes.
+  10. Intact bronze artifacts cause zero SEC network calls; explicit bronze repair remains audited and cannot bypass silver monotonicity.
+  12. Normal publication meets the five-minute target and emits a hard operational alert after fifteen minutes; bounded backfills declare their publication window.
 
-**Plans**: TBD
+**Plans**: 1/8 plans executed
+
+- [x] 07-00-PLAN.md — Live Snowflake-hosted Neo4j Native App capability preflight and dated GO evidence
+- [ ] 07-01-PLAN.md — Stable relationship/version identity, date-only temporal contract, provenance, direct/derived rules, source priority, and non-destructive conflict handling
+- [ ] 07-02-PLAN.md — Exhaustive generation coverage manifest, per-generation valid-zero evidence, and EDGE-07/08 machine-readable exclusions
+- [ ] 07-03-PLAN.md — Transactional MDM publication queue, watermarks, lifecycle states, five/fifteen-minute freshness health, and alerts
+- [ ] 07-04-PLAN.md — Parallel type-first generation partitions, selective hash sharding, content-addressed reuse, independent retry, and fan-in manifests
+- [ ] 07-05-PLAN.md — Snowflake active-generation serving boundary, complete node/edge parity, temporal graph queries, canonical entity remap, atomic activation, rollback, and retention
+- [ ] 07-06-PLAN.md — Semantic silver merge/promotion, protected-table/conflict policies, optimistic S3 concurrency, global bronze idempotency, and audited repair
+- [ ] 07-07-PLAN.md — Bounded dev rehearsal proving exclusions, temporal/multi-hop behavior, concurrency, retry/reuse, activation safety, and rollback
 
 ### Phase 8: Neo4j Native App Verification Gaps
 
@@ -154,7 +171,10 @@ dropped.
   2. GRAPH_INFO, BFS, and LIST_GRAPHS are each individually re-tested against the current Native App release; each either passes, or has a dated reproduction command and error captured as an external blocker.
   3. verify-graph's overall exit code and summary output make it unambiguous to an operator whether a failure is "fix your Snowflake environment" or "fix your MDM/graph data."
 
-**Plans**: TBD
+**Plans**: 2/2 plans complete
+
+- [x] 08-01-PLAN.md — Current GRAPH_INFO/BFS/LIST_GRAPHS API compatibility and readiness/parity/capability classification
+- [x] 08-02-PLAN.md — Live dev capability evidence and external-blocker verification
 
 ### Phase 9: edgartools Crosscheck
 
