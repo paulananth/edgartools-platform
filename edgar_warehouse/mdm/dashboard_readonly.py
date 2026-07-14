@@ -213,6 +213,11 @@ class MdmDashboardMetrics:
     registry: dict[str, Any] = field(default_factory=dict)
     last_refreshed: str | None = None
     error_env_var: str | None = None
+    # 07-03 (RSYNC-01/03): the primary publication-freshness signal, from the
+    # transactional mdm_publication_request queue (edgar_warehouse.mdm.publication).
+    # relationship_counts.pending_graph_sync_count / pending_sync_samples above
+    # remain as secondary, per-row diagnostics -- not replaced.
+    publication_health: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -231,6 +236,7 @@ class MdmDashboardMetrics:
             "registry": dict(self.registry),
             "last_refreshed": self.last_refreshed,
             "error_env_var": self.error_env_var,
+            "publication_health": dict(self.publication_health),
         }
 
 
@@ -286,7 +292,8 @@ def get_mdm_dashboard_metrics(
             per_type_sample_limit=sample_limit,
             global_sample_limit=total_limit,
         )
-        warnings = _build_mdm_warnings(entity_counts, relationship_counts)
+        publication_health = _get_publication_health(active_session)
+        warnings = _build_mdm_warnings(entity_counts, relationship_counts, publication_health)
         registry = _get_registry_details(active_session)
         return MdmDashboardMetrics(
             available=True,
@@ -297,6 +304,7 @@ def get_mdm_dashboard_metrics(
             warnings=warnings,
             registry=registry,
             last_refreshed=_utc_now_iso(),
+            publication_health=publication_health,
         )
     except Exception:
         return _unavailable_metrics()
@@ -628,9 +636,33 @@ def _get_registry_details(session: Session) -> dict[str, Any]:
     }
 
 
+def _get_publication_health(session: Session) -> dict[str, Any]:
+    """07-03: primary publication-freshness signal.
+
+    Degrades to an "unknown" status (rather than raising) when the
+    mdm_publication_request table is absent -- e.g. an environment that
+    hasn't run `mdm migrate` since this plan landed -- so a missing new
+    table doesn't take down the rest of the dashboard's existing metrics.
+    """
+    try:
+        from edgar_warehouse.mdm.publication import compute_publication_freshness
+
+        return compute_publication_freshness(session).as_dict()
+    except Exception:
+        return {
+            "status": "unknown",
+            "oldest_pending_age_seconds": None,
+            "oldest_pending_request_id": None,
+            "is_backfill_exempt": False,
+            "backfill_deadline_expired": False,
+            "lifecycle_counts": {},
+        }
+
+
 def _build_mdm_warnings(
     entity_counts: Mapping[str, MdmEntityMetric],
     relationship_counts: Mapping[str, MdmRelationshipMetric],
+    publication_health: Mapping[str, Any] | None = None,
 ) -> list[MdmMetricWarning]:
     warnings: list[MdmMetricWarning] = []
     zero_domains = [
@@ -664,6 +696,32 @@ def _build_mdm_warnings(
                 action="Check MDM relationship registry migrations and seed data.",
             )
         )
+    warnings.extend(_publication_health_warnings(publication_health or {}))
+    return warnings
+
+
+def _publication_health_warnings(publication_health: Mapping[str, Any]) -> list[MdmMetricWarning]:
+    status = publication_health.get("status")
+    age = publication_health.get("oldest_pending_age_seconds")
+    if status == "warning":
+        warnings = [MdmMetricWarning(
+            severity="warning",
+            message=f"Publication queue freshness warning: oldest pending request is {age:.0f}s old (>=5min).",
+            action="Confirm the publication coordinator is running (mdm publication-claim).",
+            group="publication_freshness",
+        )]
+    elif status == "hard_alert":
+        if publication_health.get("backfill_deadline_expired"):
+            message = "Publication queue hard alert: a declared backfill window's deadline has passed."
+            action = "Investigate the overdue backfill request or extend/replace its deadline."
+        else:
+            message = f"Publication queue hard alert: oldest pending request is {age:.0f}s old (>=15min)."
+            action = "Investigate the publication coordinator/worker immediately -- graph data is stale."
+        warnings = [MdmMetricWarning(
+            severity="error", message=message, action=action, group="publication_freshness",
+        )]
+    else:
+        warnings = []
     return warnings
 
 

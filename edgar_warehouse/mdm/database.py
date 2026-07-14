@@ -932,3 +932,64 @@ class MdmRelationshipCoverage(Base):
             name="ck_rel_coverage_evidence_category",
         ),
     )
+
+
+class MdmPublicationRequest(Base):
+    """Transactional MDM -> graph publication outbox (07-03, RSYNC-01/03).
+
+    Created in the SAME session/transaction as the relationship-changing
+    write it accompanies (see publication.request_publication) -- a
+    session.rollback() removes both the MDM changes and this request
+    atomically. A separate coordinator claims (lease-based), builds,
+    verifies, and activates generations through ``lifecycle_state``;
+    writers never call Snowflake/Neo4j orchestration code directly.
+    """
+
+    __tablename__ = "mdm_publication_request"
+
+    request_id: Mapped[str] = mapped_column(
+        GUID(), primary_key=True, default=_uuid_string
+    )
+    lifecycle_state: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'mdm_committed'")
+    )
+    committed_watermark: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+    created_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+    updated_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+    claimed_by: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    claimed_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    lease_expires_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    retry_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_backfill: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("FALSE")
+    )
+    backfill_deadline: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    generation_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_summary: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
+    activated_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "lifecycle_state IN ('mdm_committed','graph_pending','graph_building',"
+            "'graph_verified','graph_active','failed')",
+            name="ck_pub_request_lifecycle_state",
+        ),
+        Index("idx_pub_request_lifecycle_state", "lifecycle_state"),
+    )

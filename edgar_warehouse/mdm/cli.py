@@ -194,6 +194,31 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     ex.add_argument("--batch-size", type=int, default=500)
     ex.set_defaults(handler=_logged_handler("export", _handle_export))
 
+    # publication-claim (07-03 RSYNC-01/03: transactional publication queue coordinator)
+    pc = mdm_sub.add_parser(
+        "publication-claim",
+        help="Claim one pending mdm_publication_request for this worker (lease-based)",
+    )
+    pc.add_argument("--owner", required=True, help="Worker/owner identifier recorded on the claimed lease")
+    pc.add_argument("--lease-seconds", type=int, default=None, help="Lease duration (default: 300s)")
+    pc.set_defaults(handler=_logged_handler("publication-claim", _handle_publication_claim))
+
+    # publication-release-expired
+    pre = mdm_sub.add_parser(
+        "publication-release-expired",
+        help="Reset expired publication-request leases back to mdm_committed (retryable)",
+    )
+    pre.set_defaults(
+        handler=_logged_handler("publication-release-expired", _handle_publication_release_expired)
+    )
+
+    # publication-status
+    ps = mdm_sub.add_parser(
+        "publication-status",
+        help="Report publication-queue freshness/health (RSYNC-03 SLO: 5min warning, 15min hard alert)",
+    )
+    ps.set_defaults(handler=_logged_handler("publication-status", _handle_publication_status))
+
 
 # -- shared helpers ---------------------------------------------------------
 
@@ -551,6 +576,57 @@ def _handle_coverage_report(args) -> int:
             f"{row['gap']:>{col_w['gap']}}  {row['reason']}"
         )
     return 0  # D-19: reporting tool, always exits 0
+
+
+def _handle_publication_claim(args) -> int:
+    from edgar_warehouse.mdm.publication import DEFAULT_LEASE_SECONDS, claim_next_publication_request
+
+    session = _session()
+    try:
+        request = claim_next_publication_request(
+            session,
+            owner=args.owner,
+            lease_seconds=args.lease_seconds or DEFAULT_LEASE_SECONDS,
+        )
+        session.commit()
+        if request is None:
+            print("publication-claim: no eligible request to claim")
+            return 0
+        print(json.dumps({
+            "request_id": request.request_id,
+            "lifecycle_state": request.lifecycle_state,
+            "claimed_by": request.claimed_by,
+            "lease_expires_at": str(request.lease_expires_at),
+            "committed_watermark": str(request.committed_watermark),
+        }, indent=2))
+        return 0
+    finally:
+        session.close()
+
+
+def _handle_publication_release_expired(args) -> int:
+    from edgar_warehouse.mdm.publication import release_expired_claims
+
+    session = _session()
+    try:
+        released = release_expired_claims(session)
+        session.commit()
+        print(json.dumps({"released": released}, indent=2))
+        return 0
+    finally:
+        session.close()
+
+
+def _handle_publication_status(args) -> int:
+    from edgar_warehouse.mdm.publication import compute_publication_freshness
+
+    session = _session()
+    try:
+        status = compute_publication_freshness(session)
+    finally:
+        session.close()
+    print(json.dumps(status.as_dict(), indent=2))
+    return 1 if status.status == "hard_alert" else 0
 
 
 def _handle_seed_universe(args) -> int:
