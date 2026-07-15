@@ -82,6 +82,10 @@ Options:
                                     tracking_status baked into mdm_seed_universe state machine. Default: bootstrap_pending.
   --mdm-seed-from-silver-tracking-status <status>
                                     tracking_status filter for mdm_seed_from_silver (migrate silver→MDM). Default: bootstrap_pending.
+  --mdm-graph-rule-version <v>      Default rule_version baked into generation_build state machine. Default: v1.
+  --mdm-graph-schema-version <v>    Default schema_version baked into generation_build state machine. Default: v1.
+  --mdm-generation-partition-concurrency <n>
+                                    MaxConcurrency for generation_build's BuildPartitions Distributed Map. Default: 8.
   --output-file <path>              Write deployment summary JSON.
   -h, --help                        Show this help.
 USAGE
@@ -161,6 +165,9 @@ MDM_RUN_LIMIT=100
 MDM_GRAPH_LIMIT=200
 MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"
 MDM_SEED_FROM_SILVER_TRACKING_STATUS="bootstrap_pending"
+MDM_GRAPH_RULE_VERSION="v1"
+MDM_GRAPH_SCHEMA_VERSION="v1"
+MDM_GENERATION_PARTITION_CONCURRENCY=8
 RUNNER_ROLE_NAME_PREFIX="sec_platform"
 OUTPUT_FILE=""
 
@@ -213,6 +220,9 @@ while [[ $# -gt 0 ]]; do
     --mdm-graph-limit) MDM_GRAPH_LIMIT="${2:?}"; shift 2 ;;
     --mdm-seed-universe-tracking-status) MDM_SEED_UNIVERSE_TRACKING_STATUS="${2:?}"; shift 2 ;;
     --mdm-seed-from-silver-tracking-status) MDM_SEED_FROM_SILVER_TRACKING_STATUS="${2:?}"; shift 2 ;;
+    --mdm-graph-rule-version) MDM_GRAPH_RULE_VERSION="${2:?}"; shift 2 ;;
+    --mdm-graph-schema-version) MDM_GRAPH_SCHEMA_VERSION="${2:?}"; shift 2 ;;
+    --mdm-generation-partition-concurrency) MDM_GENERATION_PARTITION_CONCURRENCY="${2:?}"; shift 2 ;;
     --runner-role-name-prefix) RUNNER_ROLE_NAME_PREFIX="${2:?}"; shift 2 ;;
     --output-file) OUTPUT_FILE="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -230,6 +240,7 @@ fi
 [[ "$BOOTSTRAP_BATCH_CONCURRENCY" =~ ^[1-9][0-9]*$ ]] || fail "--bootstrap-batch-concurrency must be a positive integer"
 [[ "$MDM_RUN_LIMIT" =~ ^[0-9]+$ ]] || fail "--mdm-run-limit must be a non-negative integer"
 [[ "$MDM_GRAPH_LIMIT" =~ ^[0-9]+$ ]] || fail "--mdm-graph-limit must be a non-negative integer"
+[[ "$MDM_GENERATION_PARTITION_CONCURRENCY" =~ ^[1-9][0-9]*$ ]] || fail "--mdm-generation-partition-concurrency must be a positive integer"
 if ! is_empty "$MDM_DATABASE_SOURCE"; then
   case "$MDM_DATABASE_SOURCE" in
     rds|snowflake-postgres) ;;
@@ -2326,6 +2337,190 @@ pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", en
 PY
 }
 
+write_generation_build_definition() {
+  local output_file="$1"
+  local mdm_task_small_arn="$2"   # mdm small  (generation-fan-in, generation-retry-failed-partitions, generation-activate: bookkeeping only)
+  local mdm_task_medium_arn="$3"  # mdm medium (generation-plan, per-partition generation-build-partition: reads mdm_entity/mdm_relationship_instance)
+
+  python3 - "$output_file" "$CLUSTER_ARN" \
+    "$mdm_task_small_arn" "$mdm_task_medium_arn" \
+    "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
+    "$MDM_GRAPH_RULE_VERSION" "$MDM_GRAPH_SCHEMA_VERSION" "$MDM_GENERATION_PARTITION_CONCURRENCY" <<'PY'
+import json, pathlib, sys
+
+(output_file, cluster_arn,
+ mdm_small_arn, mdm_medium_arn,
+ container_name, bronze_bucket_name, subnet_json, security_group_json,
+ default_rule_version, default_schema_version, partition_concurrency) = sys.argv[1:]
+
+subnets = json.loads(subnet_json)
+security_groups = json.loads(security_group_json)
+
+def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=60, max_attempts=2):
+    s = {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::ecs:runTask.sync",
+        "Parameters": {
+            "LaunchType": "FARGATE",
+            "Cluster": cluster_arn,
+            "TaskDefinition": task_def_arn,
+            "PropagateTags": "TASK_DEFINITION",
+            "NetworkConfiguration": {"AwsvpcConfiguration": {
+                "AssignPublicIp": "ENABLED",
+                "SecurityGroups": security_groups,
+                "Subnets": subnets,
+            }},
+            "Overrides": {"ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}]},
+        },
+        "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": retry_secs,
+                   "BackoffRate": 2.0, "MaxAttempts": max_attempts}],
+    }
+    if is_end:
+        s["End"] = True
+    else:
+        s["Next"] = next_state
+    return s
+
+# (0) RuleVersionCheck/Default, SchemaVersionCheck/Default: same D-15 backward-compat
+# pattern as load_history's WindowSizeCheck/Default -- {} is a valid trigger input.
+rule_version_check = {
+    "Type": "Choice",
+    "Comment": "Route to SchemaVersionCheck directly when caller supplied rule_version; otherwise inject the default.",
+    "Choices": [{"Variable": "$.rule_version", "IsPresent": True, "Next": "SchemaVersionCheck"}],
+    "Default": "RuleVersionDefault",
+}
+rule_version_default = {
+    "Type": "Pass",
+    "Comment": "Inject default rule_version when caller passed {} or omitted the key.",
+    "Result": default_rule_version,
+    "ResultPath": "$.rule_version",
+    "Next": "SchemaVersionCheck",
+}
+schema_version_check = {
+    "Type": "Choice",
+    "Comment": "Route to GenerationPlan directly when caller supplied schema_version; otherwise inject the default.",
+    "Choices": [{"Variable": "$.schema_version", "IsPresent": True, "Next": "GenerationPlan"}],
+    "Default": "SchemaVersionDefault",
+}
+schema_version_default = {
+    "Type": "Pass",
+    "Comment": "Inject default schema_version when caller passed {} or omitted the key.",
+    "Result": default_schema_version,
+    "ResultPath": "$.schema_version",
+    "Next": "GenerationPlan",
+}
+
+# (1) GenerationPlan: freezes a committed MDM watermark, plans one partition per
+# active node/relationship type (07-04 generation.py), and writes
+# reference/mdm_generation/runs/<execution-name>/{generation.json,partitions.jsonl}
+# to S3 bronze (same ItemReader side-channel convention as load_history's
+# cik_windows.jsonl) so BuildPartitions' Distributed Map below can fan out
+# without Step Functions ever needing to thread the generation_id through task
+# output -- ecs:runTask.sync does not surface container stdout as state output.
+generation_plan = ecs_state(mdm_medium_arn,
+    "States.Array('mdm', 'generation-plan', '--run-id', $$.Execution.Name, '--rule-version', $.rule_version, '--schema-version', $.schema_version)",
+    next_state="BuildPartitions", retry_secs=60)
+generation_plan["ResultPath"] = None
+
+# (2) BuildPartitions: bounded-concurrency DISTRIBUTED Map, one ECS task per
+# partition. Mode is DISTRIBUTED, not INLINE, for the same reason as
+# load_history's WindowedBootstrap: ItemReader (reading partitions.jsonl from
+# S3) requires Mode=DISTRIBUTED. MaxConcurrency bounds parallel partition
+# builds (default 8, see --mdm-generation-partition-concurrency) so this fans
+# out without unbounded Fargate task creation. Each item carries only
+# partition_id -- build_partition() is self-sufficient from that alone (07-04
+# generation.py). ToleratedFailurePercentage=100: a partition build failure is
+# not fatal to the whole Map (the per-partition CLI command marks its own row
+# 'failed' before re-raising, see generation-build-partition), so the Map
+# always finishes and FanIn -- not this Map -- is the single authority on
+# pass/fail for the generation as a whole.
+per_partition = ecs_state(mdm_medium_arn,
+    "States.Array('mdm', 'generation-build-partition', '--partition-id', $.partition_id)",
+    is_end=True, retry_secs=60)
+
+build_partitions = {
+    "Type": "Map",
+    "Comment": "Fan out one ECS task per generation partition (node/relationship type, or shard). Bounded concurrency, partial-failure tolerant -- FanIn is the sole authority on pass/fail, not this Map.",
+    "MaxConcurrency": int(partition_concurrency),
+    "ToleratedFailurePercentage": 100,
+    "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
+        "Parameters": {
+            "Bucket": bronze_bucket_name,
+            "Key.$": "States.Format('warehouse/bronze/reference/mdm_generation/runs/{}/partitions.jsonl', $$.Execution.Name)",
+        },
+    },
+    "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
+        "StartAt": "BuildPartition",
+        "States": {"BuildPartition": per_partition},
+    },
+    "ResultPath": None,
+    "Next": "FanIn",
+}
+
+# (3) FanIn: verifies the complete partition set (no missing/duplicate shards,
+# no mixed watermark/rule/schema version, no endpoint gaps, everything
+# built/reused) and marks the generation verified or failed (07-04
+# fan_in_generation). Exits non-zero on failure so Catch routes to
+# RetryFailedPartitions instead of Activate -- Activate must never run on an
+# unverified generation.
+fan_in = ecs_state(mdm_small_arn,
+    "States.Array('mdm', 'generation-fan-in', '--run-id', $$.Execution.Name)",
+    next_state="Activate", retry_secs=30, max_attempts=1)
+fan_in["Catch"] = [{
+    "ErrorEquals": ["States.ALL"],
+    "ResultPath": None,
+    "Next": "RetryFailedPartitions",
+}]
+
+# (4) RetryFailedPartitions: resets only 'failed' partitions back to 'pending'
+# (built/reused partitions are untouched -- content-addressed reuse means a
+# retry never redoes finished work, 07-04 retry_failed_partitions) and
+# terminates this execution. Operators re-trigger generation_build with the
+# same rule_version/schema_version; GenerationPlan's content-hash reuse means
+# partitions already built by this failed attempt are inherited for free by
+# the next run instead of being rebuilt.
+retry_failed_partitions_state = ecs_state(mdm_small_arn,
+    "States.Array('mdm', 'generation-retry-failed-partitions', '--run-id', $$.Execution.Name)",
+    is_end=True, retry_secs=30, max_attempts=1)
+
+# (5) Activate: only reachable via FanIn's Next (never via its Catch), so a
+# generation can only be activated after fan-in verification passes.
+activate = ecs_state(mdm_small_arn,
+    "States.Array('mdm', 'generation-activate', '--run-id', $$.Execution.Name)",
+    is_end=True, retry_secs=30, max_attempts=1)
+
+definition = {
+    "Comment": (
+        "Parallel immutable graph generation build (07-04, RSYNC-04): plan one "
+        "partition per active node/relationship type, build partitions "
+        "independently with bounded concurrency and per-partition retry, "
+        "fan-in verify the complete set, then activate -- only after "
+        "verification passes. New MDM writes queue independently via the "
+        "publication outbox (07-03) the whole time; they are never blocked by "
+        "an in-flight build, and are picked up by the NEXT generation, not "
+        "this one. Trigger with: {} or "
+        "{\"rule_version\": \"v2\", \"schema_version\": \"v1\"}"
+    ),
+    "StartAt": "RuleVersionCheck",
+    "States": {
+        "RuleVersionCheck": rule_version_check,
+        "RuleVersionDefault": rule_version_default,
+        "SchemaVersionCheck": schema_version_check,
+        "SchemaVersionDefault": schema_version_default,
+        "GenerationPlan": generation_plan,
+        "BuildPartitions": build_partitions,
+        "FanIn": fan_in,
+        "RetryFailedPartitions": retry_failed_partitions_state,
+        "Activate": activate,
+    },
+}
+pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
 upsert_state_machine() {
   local workflow="$1" definition_file="$2" role_arn="$3" logging_file="$4" name arn existing_arn
   name="${NAME_PREFIX}-${workflow//_/-}"
@@ -2583,6 +2778,20 @@ PY
   bronze_seed_silver_gold_arn="$(upsert_state_machine bronze_seed_silver_gold "$bronze_seed_silver_gold_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
   python3 - "bronze_seed_silver_gold" "$bronze_seed_silver_gold_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+import json, sys
+print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
+PY
+
+  # generation_build: parallel immutable graph generation build (07-04, RSYNC-04).
+  # Plan -> bounded-concurrency partition fan-out -> fan-in verify -> activate.
+  # Standalone (not chained into load_history/bootstrap/daily_incremental yet --
+  # 07-05 owns wiring the shared Snowflake activation pointer those pipelines read).
+  generation_build_file="$(json_file sfn-generation-build)"
+  write_generation_build_definition "$generation_build_file" \
+    "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN"
+  generation_build_arn="$(upsert_state_machine generation_build "$generation_build_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
+  python3 - "generation_build" "$generation_build_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
 import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY

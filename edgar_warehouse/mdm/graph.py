@@ -19,8 +19,10 @@ from edgar_warehouse.mdm.database import (
     MdmEntityTypeDefinition,
     MdmFund,
     MdmRelationshipInstance,
+    MdmRelationshipSourcePriority,
     MdmRelationshipType,
     MdmSecurity,
+    relationship_logical_id,
 )
 
 
@@ -111,54 +113,114 @@ class GraphSyncEngine:
         effective_to=None,
         source_system: Optional[str] = None,
         source_accession: Optional[str] = None,
+        valid_from_date=None,
+        valid_to_date=None,
+        date_provenance: str = "unknown",
+        relationship_kind: str = "direct",
     ) -> tuple[MdmRelationshipInstance, bool]:
-        """Write to mdm_relationship_instance (PG mirror).
+        """Write a relationship-version row to mdm_relationship_instance (PG mirror).
 
-        Returns (row, created). Existing active rows with the same source,
-        target, relationship type, temporal bounds, source accession, and
-        properties are reused so reruns do not create duplicate MDM edges.
+        Returns (row, created). ``relationship_id`` (the immutable logical
+        ID for this rel_type/source/target triple) is deterministic, so
+        every version of the same logical relationship shares it.
+
+        Conflict policy against the triple's current versions (active,
+        non-quarantined, not superseded):
+          * Identical evidence (same properties + validity window) from a
+            new source/accession merges provenance into the existing
+            version's ``source_evidence`` instead of inserting a duplicate.
+          * Overlapping validity windows with *different* properties are a
+            real conflict, resolved via ``mdm_relationship_source_priority``
+            (lower priority number wins): the losing version is superseded
+            (never deleted). With no configured priority for either source,
+            the new version is inserted quarantined and the existing
+            version stays authoritative -- no silent last-writer-wins.
+          * Non-overlapping windows (e.g. two distinct employment stints)
+            are not a conflict; both remain current.
         """
         rec = self.registry.rel_type_by_name.get(rel_type_name)
         if rec is None:
             raise KeyError(f"Unknown relationship type '{rel_type_name}'")
         clean_properties = properties or {}
-        candidates = self.session.scalars(
-            select(MdmRelationshipInstance).where(
-                MdmRelationshipInstance.rel_type_id == rec["rel_type_id"],
-                MdmRelationshipInstance.source_entity_id == source_entity_id,
-                MdmRelationshipInstance.target_entity_id == target_entity_id,
-                MdmRelationshipInstance.is_active == True,
+        resolved_valid_from = valid_from_date if valid_from_date is not None else effective_from
+        resolved_valid_to = valid_to_date if valid_to_date is not None else effective_to
+        rel_type_id = rec["rel_type_id"]
+        rel_id = relationship_logical_id(rel_type_id, source_entity_id, target_entity_id)
+
+        current = list(
+            self.session.scalars(
+                select(MdmRelationshipInstance).where(
+                    MdmRelationshipInstance.relationship_id == rel_id,
+                    MdmRelationshipInstance.is_active == True,
+                    MdmRelationshipInstance.quarantined == False,
+                    MdmRelationshipInstance.superseded_by_version_id.is_(None),
+                )
             )
         )
-        for existing in candidates:
+
+        for existing in current:
             if (
                 (existing.properties or {}) == clean_properties
-                and existing.effective_from == effective_from
-                and existing.effective_to == effective_to
-                and existing.source_accession == source_accession
+                and existing.valid_from_date == resolved_valid_from
+                and existing.valid_to_date == resolved_valid_to
             ):
+                _merge_source_evidence(existing, source_system, source_accession)
                 return existing, False
 
+        conflict = None
+        for existing in current:
+            if _intervals_overlap(
+                existing.valid_from_date, existing.valid_to_date, resolved_valid_from, resolved_valid_to
+            ) and (existing.properties or {}) != clean_properties:
+                conflict = existing
+                break
+
         row = MdmRelationshipInstance(
-            rel_type_id=rec["rel_type_id"],
+            relationship_id=rel_id,
+            rel_type_id=rel_type_id,
             source_entity_id=source_entity_id,
             target_entity_id=target_entity_id,
             properties=clean_properties,
             effective_from=effective_from,
             effective_to=effective_to,
+            valid_from_date=resolved_valid_from,
+            valid_to_date=resolved_valid_to,
+            date_provenance=date_provenance,
+            relationship_kind=relationship_kind,
             source_system=source_system,
             source_accession=source_accession,
+            source_evidence=[_evidence_entry(source_system, source_accession)],
         )
         self.session.add(row)
+        self.session.flush()
+
+        if conflict is not None:
+            winner = _resolve_source_priority(
+                self.session, rel_type_id, conflict.source_system, source_system
+            )
+            if winner == "new":
+                conflict.superseded_by_version_id = row.instance_id
+            elif winner == "existing":
+                row.superseded_by_version_id = conflict.instance_id
+            else:
+                row.quarantined = True
+                row.quarantine_reason = (
+                    "conflicting overlapping evidence with no configured "
+                    f"mdm_relationship_source_priority winner between "
+                    f"'{conflict.source_system}' and '{source_system}'"
+                )
+
         _emit_graph_event(
             "mdm_relationship_created",
             rel_type_name=rel_type_name,
+            relationship_id=rel_id,
             source_entity_id=source_entity_id,
             target_entity_id=target_entity_id,
             source_system=source_system,
             source_accession=source_accession,
             effective_from=effective_from.isoformat() if hasattr(effective_from, "isoformat") else effective_from,
             effective_to=effective_to.isoformat() if hasattr(effective_to, "isoformat") else effective_to,
+            quarantined=row.quarantined,
             property_keys=sorted(clean_properties),
         )
         return row, True
@@ -305,6 +367,105 @@ def backfill_relationship_instances(
     session.commit()
 
     return {"backfilled": backfilled, "synced": 0}
+
+
+# ---------------------------------------------------------------------------
+# Temporal conflict/lifecycle helpers (07-01)
+# ---------------------------------------------------------------------------
+
+def _intervals_overlap(a_from, a_to, b_from, b_to) -> bool:
+    """Half-open interval overlap; None means unbounded on that side."""
+    starts_before_b_ends = b_to is None or a_from is None or a_from < b_to
+    starts_before_a_ends = a_to is None or b_from is None or b_from < a_to
+    return starts_before_b_ends and starts_before_a_ends
+
+
+def _evidence_entry(source_system: Optional[str], source_accession: Optional[str]) -> dict:
+    return {
+        "source_system": source_system,
+        "source_accession": source_accession,
+        "observed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def _merge_source_evidence(
+    existing: MdmRelationshipInstance,
+    source_system: Optional[str],
+    source_accession: Optional[str],
+) -> None:
+    """Append a new source's confirmation of identical evidence, without a duplicate row."""
+    evidence = list(existing.source_evidence or [])
+    already_recorded = any(
+        e.get("source_system") == source_system and e.get("source_accession") == source_accession
+        for e in evidence
+    )
+    if not already_recorded:
+        evidence.append(_evidence_entry(source_system, source_accession))
+        existing.source_evidence = evidence
+
+
+def _resolve_source_priority(
+    session: Session,
+    rel_type_id: str,
+    existing_source: Optional[str],
+    new_source: Optional[str],
+) -> str:
+    """Return 'existing', 'new', or 'none' (no configured, deterministic winner).
+
+    Lower ``priority`` wins (matches mdm_source_priority's convention).
+    """
+    rows = {
+        row.source_system: row.priority
+        for row in session.scalars(
+            select(MdmRelationshipSourcePriority).where(
+                MdmRelationshipSourcePriority.rel_type_id == rel_type_id,
+                MdmRelationshipSourcePriority.is_active == True,
+                MdmRelationshipSourcePriority.source_system.in_(
+                    [s for s in (existing_source, new_source) if s is not None]
+                ),
+            )
+        )
+    }
+    existing_priority = rows.get(existing_source) if existing_source else None
+    new_priority = rows.get(new_source) if new_source else None
+    if existing_priority is None or new_priority is None or existing_priority == new_priority:
+        return "none"
+    return "existing" if existing_priority < new_priority else "new"
+
+
+def close_relationship_version(
+    session: Session, instance_id: str, valid_to_date
+) -> MdmRelationshipInstance:
+    """Business-close a version (set its end date). Never deletes the row."""
+    row = session.get(MdmRelationshipInstance, instance_id)
+    if row is None:
+        raise KeyError(f"No mdm_relationship_instance with instance_id={instance_id}")
+    row.valid_to_date = valid_to_date
+    row.effective_to = valid_to_date
+    return row
+
+
+def supersede_relationship_version(
+    session: Session, old_instance_id: str, new_instance_id: str
+) -> MdmRelationshipInstance:
+    """Mark ``old_instance_id`` as superseded by ``new_instance_id``. Never deletes the row."""
+    row = session.get(MdmRelationshipInstance, old_instance_id)
+    if row is None:
+        raise KeyError(f"No mdm_relationship_instance with instance_id={old_instance_id}")
+    row.superseded_by_version_id = new_instance_id
+    return row
+
+
+def quarantine_relationship_version(
+    session: Session, instance_id: str, reason: str
+) -> MdmRelationshipInstance:
+    """Quarantine a version so it is excluded from 'current' reads. Never deletes the row."""
+    row = session.get(MdmRelationshipInstance, instance_id)
+    if row is None:
+        raise KeyError(f"No mdm_relationship_instance with instance_id={instance_id}")
+    row.quarantined = True
+    row.quarantine_reason = reason
+    return row
 
 
 def _emit_graph_event(event: str, **payload: object) -> None:

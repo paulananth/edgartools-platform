@@ -608,3 +608,65 @@ def test_helpers_return_plain_structures_without_stdout_parsing(db_session, caps
     assert captured.out == ""
     assert isinstance(status.as_dict(), dict)
     assert isinstance(smoke.as_dict(), dict)
+
+
+# ---------------------------------------------------------------------------
+# 07-03: publication-queue freshness surfaced on the dashboard
+# ---------------------------------------------------------------------------
+
+def test_dashboard_metrics_include_publication_health_field(db_session):
+    from edgar_warehouse.mdm.dashboard_readonly import get_mdm_dashboard_metrics
+
+    metrics = get_mdm_dashboard_metrics(session=db_session)
+    assert "status" in metrics.publication_health
+    assert metrics.publication_health["status"] == "normal"
+    assert "lifecycle_counts" in metrics.as_dict()["publication_health"]
+
+
+def test_dashboard_metrics_distinguish_lifecycle_states(db_session):
+    from edgar_warehouse.mdm import publication
+    from edgar_warehouse.mdm.dashboard_readonly import get_mdm_dashboard_metrics
+
+    active = publication.request_publication(db_session)
+    db_session.commit()
+    publication.advance_publication_lifecycle(db_session, active.request_id, "graph_building")
+    publication.advance_publication_lifecycle(db_session, active.request_id, "graph_verified")
+    publication.advance_publication_lifecycle(db_session, active.request_id, "graph_active")
+
+    publication.request_publication(db_session)
+    db_session.commit()
+
+    metrics = get_mdm_dashboard_metrics(session=db_session)
+    counts = metrics.publication_health["lifecycle_counts"]
+    assert counts["graph_active"] == 1
+    assert counts["mdm_committed"] == 1
+
+
+def test_dashboard_warns_on_publication_freshness_hard_alert(db_session):
+    from edgar_warehouse.mdm import publication
+    from edgar_warehouse.mdm.dashboard_readonly import get_mdm_dashboard_metrics
+
+    request = publication.request_publication(db_session)
+    request.committed_watermark = datetime.now(timezone.utc) - timedelta(seconds=1000)
+    db_session.commit()
+
+    metrics = get_mdm_dashboard_metrics(session=db_session)
+    assert metrics.publication_health["status"] == "hard_alert"
+    publication_warnings = [w for w in metrics.warnings if w.group == "publication_freshness"]
+    assert len(publication_warnings) == 1
+    assert publication_warnings[0].severity == "error"
+
+
+def test_dashboard_warns_on_publication_freshness_warning_boundary(db_session):
+    from edgar_warehouse.mdm import publication
+    from edgar_warehouse.mdm.dashboard_readonly import get_mdm_dashboard_metrics
+
+    request = publication.request_publication(db_session)
+    request.committed_watermark = datetime.now(timezone.utc) - timedelta(seconds=301)
+    db_session.commit()
+
+    metrics = get_mdm_dashboard_metrics(session=db_session)
+    assert metrics.publication_health["status"] == "warning"
+    publication_warnings = [w for w in metrics.warnings if w.group == "publication_freshness"]
+    assert len(publication_warnings) == 1
+    assert publication_warnings[0].severity == "warning"

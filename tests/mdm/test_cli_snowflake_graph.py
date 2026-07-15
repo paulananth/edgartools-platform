@@ -279,6 +279,29 @@ def _strict_parity_results(
         "verify_graph:missing_edges": missing_edges or [],
         "verify_graph:extra_edges": extra_edges or [],
         "verify_graph:missing_edge_endpoints": endpoint_rows or [],
+        # 07-05 Task 2: exact identity/property parity -- defaults to a
+        # passing (matching-hash, no leaks) result so pre-existing tests that
+        # exercise OTHER failure modes (count mismatches, native app, etc.)
+        # aren't also tripped up by this unrelated new check.
+        "verify_graph:exact_node_parity": [
+            {
+                "MDM_CONTENT_HASH": "NODE_HASH",
+                "GRAPH_CONTENT_HASH": "NODE_HASH",
+                "MDM_ROW_COUNT": 3,
+                "GRAPH_ROW_COUNT": 3,
+                "IDENTITY_PROPERTY_MATCH": True,
+            }
+        ],
+        "verify_graph:exact_relationship_parity": [
+            {
+                "MDM_CONTENT_HASH": "EDGE_HASH",
+                "GRAPH_CONTENT_HASH": "EDGE_HASH",
+                "MDM_ROW_COUNT": 3,
+                "GRAPH_ROW_COUNT": 3,
+                "IDENTITY_PROPERTY_MATCH": True,
+            }
+        ],
+        "verify_graph:canonical_remap_leaks": [],
     }
     if include_native_app:
         results.update(_native_app_success_results())

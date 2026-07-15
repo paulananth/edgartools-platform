@@ -119,6 +119,14 @@ def _rel_instance(session, rel_type_name: str, src_eid: str, tgt_eid: str,
         target_entity_id=tgt_eid,
         effective_from=effective_from,
         effective_to=effective_to,
+        # 07-05 Task 3: strict as_of_date traversal filters on valid_from_date/
+        # valid_to_date/date_provenance (RTEMP-02), not the legacy effective_
+        # from/to pair -- bridge them the same way the real migration backfill
+        # does, so this fixture helper's callers get correct strict-filter
+        # behavior without every call site needing to change.
+        valid_from_date=effective_from,
+        valid_to_date=effective_to,
+        date_provenance="reported" if effective_from is not None else "unknown",
     )
     session.add(row)
     session.flush()

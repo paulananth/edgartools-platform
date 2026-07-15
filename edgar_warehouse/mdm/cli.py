@@ -60,6 +60,15 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     sync.add_argument("--target-schema", default=None, help="Snowflake target schema for graph-ready tables")
     sync.add_argument("--mdm-database", default=None, help="Snowflake database containing MDM source tables")
     sync.add_argument("--mdm-schema", default=None, help="Snowflake schema containing MDM source tables")
+    sync.add_argument(
+        "--generation-id",
+        default=None,
+        help=(
+            "Generation to publish into (07-05 additive publish). Default: a fresh "
+            "UUID for this standalone run -- publishing alone never activates it; "
+            "run 'mdm graph-activate --generation-id <id>' once verified."
+        ),
+    )
     sync.set_defaults(handler=_logged_handler("sync-graph", _handle_sync_graph))
 
     derive = mdm_sub.add_parser(
@@ -174,6 +183,37 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     vg.add_argument("--native-app-compute-pool", default=None, help="Native App compute pool selector")
     vg.set_defaults(handler=_logged_handler("verify-graph", _handle_verify_graph))
 
+    # graph-activate (07-05 RSYNC-02: guarded single-pointer activation)
+    ga = mdm_sub.add_parser(
+        "graph-activate",
+        help="Activate a verified Snowflake graph generation (refuses unless status='verified')",
+    )
+    ga.add_argument("--generation-id", required=True)
+    ga.add_argument("--target-database", default=None)
+    ga.add_argument("--target-schema", default=None)
+    ga.set_defaults(handler=_logged_handler("graph-activate", _handle_graph_activate))
+
+    # graph-rollback
+    gr = mdm_sub.add_parser(
+        "graph-rollback",
+        help="Roll back to a retained, previously verified+activated Snowflake graph generation",
+    )
+    gr.add_argument("--generation-id", required=True)
+    gr.add_argument("--target-database", default=None)
+    gr.add_argument("--target-schema", default=None)
+    gr.set_defaults(handler=_logged_handler("graph-rollback", _handle_graph_rollback))
+
+    # graph-cleanup-generations (07-05 RSYNC-05: retention)
+    gc = mdm_sub.add_parser(
+        "graph-cleanup-generations",
+        help="Delete retired Snowflake graph generations outside the retention window",
+    )
+    gc.add_argument("--target-database", default=None)
+    gc.add_argument("--target-schema", default=None)
+    gc.add_argument("--min-generations", type=int, default=None)
+    gc.add_argument("--retention-days", type=int, default=None)
+    gc.set_defaults(handler=_logged_handler("graph-cleanup-generations", _handle_graph_cleanup_generations))
+
     # backfill-relationships
     br = mdm_sub.add_parser(
         "backfill-relationships",
@@ -193,6 +233,82 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     ex.add_argument("--entity-type", default=None)
     ex.add_argument("--batch-size", type=int, default=500)
     ex.set_defaults(handler=_logged_handler("export", _handle_export))
+
+    # publication-claim (07-03 RSYNC-01/03: transactional publication queue coordinator)
+    pc = mdm_sub.add_parser(
+        "publication-claim",
+        help="Claim one pending mdm_publication_request for this worker (lease-based)",
+    )
+    pc.add_argument("--owner", required=True, help="Worker/owner identifier recorded on the claimed lease")
+    pc.add_argument("--lease-seconds", type=int, default=None, help="Lease duration (default: 300s)")
+    pc.set_defaults(handler=_logged_handler("publication-claim", _handle_publication_claim))
+
+    # publication-release-expired
+    pre = mdm_sub.add_parser(
+        "publication-release-expired",
+        help="Reset expired publication-request leases back to mdm_committed (retryable)",
+    )
+    pre.set_defaults(
+        handler=_logged_handler("publication-release-expired", _handle_publication_release_expired)
+    )
+
+    # publication-status
+    ps = mdm_sub.add_parser(
+        "publication-status",
+        help="Report publication-queue freshness/health (RSYNC-03 SLO: 5min warning, 15min hard alert)",
+    )
+    ps.set_defaults(handler=_logged_handler("publication-status", _handle_publication_status))
+
+    # generation-plan (07-04 RSYNC-04: parallel generation builder, AWS fan-out orchestration)
+    gp = mdm_sub.add_parser(
+        "generation-plan",
+        help="Open a graph generation and plan one partition per active node/relationship type",
+    )
+    gp.add_argument("--run-id", required=True, help="Step Functions execution name; correlates the S3-side partition manifest")
+    gp.add_argument("--rule-version", required=True)
+    gp.add_argument("--schema-version", required=True)
+    gp.add_argument("--committed-watermark", default=None, help="ISO timestamp; default is now()")
+    gp.add_argument(
+        "--shard",
+        action="append",
+        default=None,
+        help="TYPE_NAME:SHARD_COUNT for a high-volume type; repeat for multiple types",
+    )
+    gp.set_defaults(handler=_logged_handler("generation-plan", _handle_generation_plan))
+
+    # generation-build-partition
+    gbp = mdm_sub.add_parser(
+        "generation-build-partition",
+        help="Build (or confirm reuse of) one generation partition",
+    )
+    gbp.add_argument("--partition-id", required=True)
+    gbp.set_defaults(handler=_logged_handler("generation-build-partition", _handle_generation_build_partition))
+
+    # generation-fan-in
+    gfi = mdm_sub.add_parser(
+        "generation-fan-in",
+        help="Verify a generation's partitions are complete/consistent/built and mark verified or failed",
+    )
+    gfi.add_argument("--run-id", required=True)
+    gfi.set_defaults(handler=_logged_handler("generation-fan-in", _handle_generation_fan_in))
+
+    # generation-retry-failed-partitions
+    grfp = mdm_sub.add_parser(
+        "generation-retry-failed-partitions",
+        help="Reset only 'failed' partitions of a generation back to 'pending' for a rebuild",
+    )
+    grfp.add_argument("--run-id", required=True)
+    grfp.set_defaults(
+        handler=_logged_handler("generation-retry-failed-partitions", _handle_generation_retry_failed_partitions)
+    )
+
+    # generation-activate
+    ga = mdm_sub.add_parser(
+        "generation-activate",
+        help="Mark a verified generation activated (refuses if fan-in has not passed)",
+    )
+    ga.add_argument("--run-id", required=True)
+    ga.set_defaults(handler=_logged_handler("generation-activate", _handle_generation_activate))
 
 
 # -- shared helpers ---------------------------------------------------------
@@ -553,6 +669,219 @@ def _handle_coverage_report(args) -> int:
     return 0  # D-19: reporting tool, always exits 0
 
 
+def _handle_publication_claim(args) -> int:
+    from edgar_warehouse.mdm.publication import DEFAULT_LEASE_SECONDS, claim_next_publication_request
+
+    session = _session()
+    try:
+        request = claim_next_publication_request(
+            session,
+            owner=args.owner,
+            lease_seconds=args.lease_seconds or DEFAULT_LEASE_SECONDS,
+        )
+        session.commit()
+        if request is None:
+            print("publication-claim: no eligible request to claim")
+            return 0
+        print(json.dumps({
+            "request_id": request.request_id,
+            "lifecycle_state": request.lifecycle_state,
+            "claimed_by": request.claimed_by,
+            "lease_expires_at": str(request.lease_expires_at),
+            "committed_watermark": str(request.committed_watermark),
+        }, indent=2))
+        return 0
+    finally:
+        session.close()
+
+
+def _handle_publication_release_expired(args) -> int:
+    from edgar_warehouse.mdm.publication import release_expired_claims
+
+    session = _session()
+    try:
+        released = release_expired_claims(session)
+        session.commit()
+        print(json.dumps({"released": released}, indent=2))
+        return 0
+    finally:
+        session.close()
+
+
+def _handle_publication_status(args) -> int:
+    from edgar_warehouse.mdm.publication import compute_publication_freshness
+
+    session = _session()
+    try:
+        status = compute_publication_freshness(session)
+    finally:
+        session.close()
+    print(json.dumps(status.as_dict(), indent=2))
+    return 1 if status.status == "hard_alert" else 0
+
+
+# -- generation builder (07-04 RSYNC-04) ------------------------------------
+#
+# The generation_build Step Functions workflow (infra/scripts/deploy-aws-
+# application.sh) cannot thread generation_id through ecs:runTask.sync task
+# output (that integration surfaces the ECS task description, not container
+# stdout), so GenerationPlan writes a small side-channel manifest to S3 bronze
+# keyed by --run-id (the execution name), mirroring the existing cik_windows
+# .jsonl convention used elsewhere in this codebase. Downstream commands that
+# only need a single partition_id (already unique and self-sufficient) don't
+# need the manifest at all.
+
+def _bronze_storage_root() -> str:
+    root = os.environ.get("WAREHOUSE_BRONZE_ROOT")
+    if not root:
+        raise RuntimeError(
+            "WAREHOUSE_BRONZE_ROOT must be set to resolve the generation manifest location"
+        )
+    return root
+
+
+def _generation_manifest_relative_path(run_id: str) -> str:
+    return f"reference/mdm_generation/runs/{run_id}/generation.json"
+
+
+def _generation_partitions_relative_path(run_id: str) -> str:
+    return f"reference/mdm_generation/runs/{run_id}/partitions.jsonl"
+
+
+def _write_generation_manifest(run_id: str, generation_id: str, partitions) -> None:
+    from edgar_warehouse.infrastructure.object_storage import StorageLocation
+
+    location = StorageLocation(root=_bronze_storage_root())
+    location.write_json(_generation_manifest_relative_path(run_id), {"generation_id": generation_id})
+    lines = "".join(
+        json.dumps({
+            "partition_id": partition.partition_id,
+            "kind": partition.kind,
+            "type_name": partition.type_name,
+            "shard_index": partition.shard_index,
+        }) + "\n"
+        for partition in partitions
+    )
+    location.write_text(_generation_partitions_relative_path(run_id), lines)
+
+
+def _read_generation_id_for_run(run_id: str) -> str:
+    from edgar_warehouse.infrastructure.object_storage import StorageLocation, read_bytes
+
+    location = StorageLocation(root=_bronze_storage_root())
+    manifest_path = location.join(_generation_manifest_relative_path(run_id))
+    payload = json.loads(read_bytes(manifest_path).decode("utf-8"))
+    return payload["generation_id"]
+
+
+def _handle_generation_plan(args) -> int:
+    from datetime import datetime
+
+    from edgar_warehouse.mdm.generation import create_generation, plan_generation_partitions
+
+    sharding: dict[str, int] | None = None
+    if args.shard:
+        sharding = {}
+        for entry in args.shard:
+            type_name, _, count = entry.partition(":")
+            sharding[type_name] = int(count)
+
+    committed_watermark = None
+    if args.committed_watermark:
+        committed_watermark = datetime.fromisoformat(args.committed_watermark)
+
+    session = _session()
+    try:
+        generation = create_generation(
+            session,
+            rule_version=args.rule_version,
+            schema_version=args.schema_version,
+            committed_watermark=committed_watermark,
+        )
+        partitions = plan_generation_partitions(session, generation.generation_id, sharding=sharding)
+        session.commit()
+        _write_generation_manifest(args.run_id, generation.generation_id, partitions)
+        print(json.dumps({
+            "generation_id": generation.generation_id,
+            "partition_count": len(partitions),
+        }, indent=2))
+        return 0
+    finally:
+        session.close()
+
+
+def _handle_generation_build_partition(args) -> int:
+    from edgar_warehouse.mdm.generation import build_partition, mark_partition_failed
+
+    session = _session()
+    try:
+        try:
+            partition = build_partition(session, args.partition_id)
+        except Exception as exc:
+            session.rollback()
+            mark_partition_failed(session, args.partition_id, str(exc))
+            session.commit()
+            raise
+        session.commit()
+        print(json.dumps({"partition_id": partition.partition_id, "status": partition.status}, indent=2))
+        return 0
+    finally:
+        session.close()
+
+
+def _handle_generation_fan_in(args) -> int:
+    from edgar_warehouse.mdm.generation import fan_in_generation
+
+    generation_id = _read_generation_id_for_run(args.run_id)
+    session = _session()
+    try:
+        result = fan_in_generation(session, generation_id)
+        session.commit()
+        print(json.dumps(result.as_dict(), indent=2))
+        return 0 if result.passed else 1
+    finally:
+        session.close()
+
+
+def _handle_generation_retry_failed_partitions(args) -> int:
+    from edgar_warehouse.mdm.generation import retry_failed_partitions
+
+    generation_id = _read_generation_id_for_run(args.run_id)
+    session = _session()
+    try:
+        retried = retry_failed_partitions(session, generation_id)
+        session.commit()
+        print(json.dumps({"retried": len(retried)}, indent=2))
+        return 0
+    finally:
+        session.close()
+
+
+def _handle_generation_activate(args) -> int:
+    from datetime import datetime, timezone
+
+    from edgar_warehouse.mdm.database import MdmGraphGeneration
+
+    generation_id = _read_generation_id_for_run(args.run_id)
+    session = _session()
+    try:
+        generation = session.get(MdmGraphGeneration, generation_id)
+        if generation is None:
+            raise KeyError(f"No mdm_graph_generation with generation_id={generation_id}")
+        if generation.status != "verified":
+            raise RuntimeError(
+                f"generation {generation_id} is not verified (status={generation.status!r}); "
+                "refusing to activate"
+            )
+        generation.status = "activated"
+        generation.activated_at = datetime.now(timezone.utc)
+        session.commit()
+        print(json.dumps({"generation_id": generation_id, "status": generation.status}, indent=2))
+        return 0
+    finally:
+        session.close()
+
+
 def _handle_seed_universe(args) -> int:
     from edgar_warehouse.loaders import seed_universe_loader
     from edgar_warehouse.mdm.universe import bulk_upsert_universe
@@ -717,8 +1046,11 @@ def _handle_check_connectivity(args) -> int:
 
 
 def _handle_sync_graph(args) -> int:
+    import uuid
+
     from edgar_warehouse.mdm.snowflake_graph import SnowflakeGraphSyncExecutor
 
+    generation_id = args.generation_id or str(uuid.uuid4())
     try:
         result = SnowflakeGraphSyncExecutor.from_env().sync(
             _snowflake_graph_sync_config(
@@ -728,6 +1060,7 @@ def _handle_sync_graph(args) -> int:
                 limit_per_type=args.limit_per_type,
                 target_database=args.target_database,
                 target_schema=args.target_schema,
+                generation_id=generation_id,
                 mdm_database=args.mdm_database,
                 mdm_schema=args.mdm_schema,
             )
@@ -749,6 +1082,7 @@ def _snowflake_graph_sync_config(
     target_schema: str | None = None,
     mdm_database: str | None = None,
     mdm_schema: str | None = None,
+    generation_id: str = "",
 ):
     from edgar_warehouse.mdm.snowflake_graph import (
         DEFAULT_MDM_SCHEMA,
@@ -765,12 +1099,14 @@ def _snowflake_graph_sync_config(
         relationship_types=tuple(relationship_types or ()),
         limit=limit,
         limit_per_type=limit_per_type,
+        generation_id=generation_id,
     )
 
 
 def _snowflake_graph_sync_payload(result) -> dict[str, object]:
     return {
         "status": "ok",
+        "generation_id": result.applied_filters.get("generation_id"),
         "graph_nodes_materialized": result.node_count,
         "graph_edges_materialized": result.edge_count,
         "graph_nodes_synced": result.node_count,
@@ -917,6 +1253,89 @@ def _handle_verify_graph(args) -> int:
     if not result.passed:
         print("verify-graph: Snowflake graph verification checks failed", file=sys.stderr)
         return 1
+    return 0
+
+
+def _handle_graph_activate(args) -> int:
+    from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
+    from edgar_warehouse.mdm.snowflake_graph import (
+        DEFAULT_TARGET_SCHEMA,
+        SnowflakeGraphActivationError,
+        activate_graph_generation,
+    )
+
+    settings = SnowflakeConnectionSettings.from_env()
+    connection = settings.connect()
+    try:
+        result = activate_graph_generation(
+            connection,
+            target_database=args.target_database or settings.database,
+            target_schema=args.target_schema or DEFAULT_TARGET_SCHEMA,
+            generation_id=args.generation_id,
+        )
+    except SnowflakeGraphActivationError as exc:
+        print(f"graph-activate: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        connection.close()
+    print(json.dumps({
+        "generation_id": result.generation_id,
+        "previous_generation_id": result.previous_generation_id,
+    }, indent=2))
+    return 0
+
+
+def _handle_graph_rollback(args) -> int:
+    from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
+    from edgar_warehouse.mdm.snowflake_graph import (
+        DEFAULT_TARGET_SCHEMA,
+        SnowflakeGraphActivationError,
+        rollback_graph_generation,
+    )
+
+    settings = SnowflakeConnectionSettings.from_env()
+    connection = settings.connect()
+    try:
+        result = rollback_graph_generation(
+            connection,
+            target_database=args.target_database or settings.database,
+            target_schema=args.target_schema or DEFAULT_TARGET_SCHEMA,
+            generation_id=args.generation_id,
+        )
+    except SnowflakeGraphActivationError as exc:
+        print(f"graph-rollback: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        connection.close()
+    print(json.dumps({
+        "generation_id": result.generation_id,
+        "previous_generation_id": result.previous_generation_id,
+    }, indent=2))
+    return 0
+
+
+def _handle_graph_cleanup_generations(args) -> int:
+    from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
+    from edgar_warehouse.mdm.snowflake_graph import (
+        DEFAULT_RETENTION_DAYS,
+        DEFAULT_RETENTION_MIN_GENERATIONS,
+        DEFAULT_TARGET_SCHEMA,
+        cleanup_retired_generations,
+    )
+
+    settings = SnowflakeConnectionSettings.from_env()
+    connection = settings.connect()
+    try:
+        deleted = cleanup_retired_generations(
+            connection,
+            target_database=args.target_database or settings.database,
+            target_schema=args.target_schema or DEFAULT_TARGET_SCHEMA,
+            min_generations=args.min_generations or DEFAULT_RETENTION_MIN_GENERATIONS,
+            retention_days=args.retention_days or DEFAULT_RETENTION_DAYS,
+        )
+    finally:
+        connection.close()
+    print(json.dumps({"deleted_generation_ids": deleted}, indent=2))
     return 0
 
 

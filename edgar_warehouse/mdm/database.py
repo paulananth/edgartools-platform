@@ -1,6 +1,7 @@
 """SQLAlchemy models for the MDM relational layer."""
 from __future__ import annotations
 
+import hashlib
 import os
 import uuid
 from typing import Optional
@@ -68,6 +69,42 @@ class GUID(TypeDecorator):
 
 def _uuid_string() -> str:
     return str(uuid.uuid4())
+
+
+def relationship_logical_id(rel_type_id: str, source_entity_id: str, target_entity_id: str) -> str:
+    """Deterministic immutable logical relationship ID.
+
+    Stable across re-derivation and generations: identical (rel_type,
+    source, target) always yields the same ID, so backfills and reruns
+    never mint a second logical ID for the same relationship.
+
+    Uses md5 (not uuid.uuid5) so the value is byte-for-byte reproducible by
+    the Postgres migration's SQL-only backfill (006_relationship_temporal_
+    contract.sql), which has no uuid5/SHA-1 primitive available without an
+    extra extension. A row backfilled by the migration and a row later
+    written by this function for the same triple MUST resolve to the same
+    relationship_id -- if the two algorithms diverged, every pre-migration
+    relationship would silently get a second, mismatched logical ID the
+    first time this code path touched it.
+    """
+    digest = hashlib.md5(
+        f"{rel_type_id}:{source_entity_id}:{target_entity_id}".encode("utf-8")
+    ).hexdigest()
+    return f"{digest[0:8]}-{digest[8:12]}-{digest[12:16]}-{digest[16:20]}-{digest[20:32]}"
+
+
+def _default_relationship_id(context) -> str:
+    """Column default: auto-derive relationship_id from sibling columns on INSERT.
+
+    Any code path that constructs ``MdmRelationshipInstance`` without
+    explicitly setting ``relationship_id`` (e.g. direct ORM inserts outside
+    ``graph.py``'s ``ensure_relationship``) still gets the correct
+    deterministic logical ID rather than a NULL/missing value.
+    """
+    params = context.get_current_parameters()
+    return relationship_logical_id(
+        params["rel_type_id"], params["source_entity_id"], params["target_entity_id"]
+    )
 
 
 def get_engine(url: str | None = None) -> Engine:
@@ -711,10 +748,23 @@ class MdmRelationshipSourceMapping(Base):
 
 
 class MdmRelationshipInstance(Base):
+    """A relationship-version row.
+
+    ``instance_id`` is this version's immutable ID (never reassigned).
+    ``relationship_id`` is the immutable *logical* relationship ID shared by
+    every version of the same (rel_type, source, target) triple -- it is
+    deterministic (see ``relationship_logical_id``), not a separate lookup
+    table, so backfill and reruns never mint a second logical ID for the
+    same relationship.
+    """
+
     __tablename__ = "mdm_relationship_instance"
 
     instance_id: Mapped[str] = mapped_column(
         GUID(), primary_key=True, default=_uuid_string
+    )
+    relationship_id: Mapped[str] = mapped_column(
+        GUID(), nullable=False, default=_default_relationship_id
     )
     rel_type_id: Mapped[str] = mapped_column(
         GUID(),
@@ -734,8 +784,26 @@ class MdmRelationshipInstance(Base):
     properties: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
     effective_from: Mapped[Optional[object]] = mapped_column(Date, nullable=True)
     effective_to: Mapped[Optional[object]] = mapped_column(Date, nullable=True)
+    valid_from_date: Mapped[Optional[object]] = mapped_column(Date, nullable=True)
+    valid_to_date: Mapped[Optional[object]] = mapped_column(Date, nullable=True)
+    date_provenance: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'unknown'")
+    )
+    relationship_kind: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'direct'")
+    )
     source_system: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_accession: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_evidence: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
+    superseded_by_version_id: Mapped[Optional[str]] = mapped_column(
+        GUID(),
+        ForeignKey("mdm_relationship_instance.instance_id"),
+        nullable=True,
+    )
+    quarantined: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("FALSE")
+    )
+    quarantine_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     graph_synced_at: Mapped[Optional[object]] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
@@ -761,8 +829,274 @@ class MdmRelationshipInstance(Base):
             "graph_synced_at",
             postgresql_where=text("graph_synced_at IS NULL"),
         ),
+        Index("idx_rel_instance_relationship_id", "relationship_id"),
+        CheckConstraint(
+            "valid_from_date IS NULL OR valid_to_date IS NULL OR valid_to_date > valid_from_date",
+            name="ck_rel_instance_valid_interval",
+        ),
+        CheckConstraint(
+            "date_provenance IN ('reported','filing_date_proxy','unknown')",
+            name="ck_rel_instance_date_provenance",
+        ),
+        CheckConstraint(
+            "relationship_kind IN ('direct','derived')",
+            name="ck_rel_instance_relationship_kind",
+        ),
     )
 
     rel_type: Mapped["MdmRelationshipType"] = relationship(
         "MdmRelationshipType", back_populates="instances"
+    )
+
+
+class MdmRelationshipSourcePriority(Base):
+    """Per-relationship-type source priority for conflict tie-breaks.
+
+    Lower ``priority`` wins (same convention as ``MdmSourcePriority`` /
+    ``survivorship.py``'s "lowest-numbered is highest-authority" rule).
+    Overlapping, differing-property versions of the same logical
+    relationship are resolved by this table; a triple with no configured
+    row for either side's source is quarantined rather than silently
+    picking a winner.
+    """
+
+    __tablename__ = "mdm_relationship_source_priority"
+
+    rule_id: Mapped[str] = mapped_column(
+        GUID(), primary_key=True, default=_uuid_string
+    )
+    rel_type_id: Mapped[str] = mapped_column(
+        GUID(),
+        ForeignKey("mdm_relationship_type.rel_type_id"),
+        nullable=False,
+    )
+    source_system: Mapped[str] = mapped_column(Text, nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("TRUE")
+    )
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+
+    __table_args__ = (
+        UniqueConstraint("rel_type_id", "source_system", name="uq_rel_source_priority"),
+    )
+
+
+class MdmRelationshipCoverage(Base):
+    """One coverage record per (generation, relationship type) -- 07-02 (RCOV-01/02).
+
+    ``status`` is exhaustive and mutually exclusive: every active
+    ``MdmRelationshipType`` must have exactly one row per generation.
+    ``populated`` means nonzero graph-verified edges; ``valid_zero`` means
+    proven-zero-for-now but re-evaluated every generation (not a permanent
+    exclusion); ``excluded`` means a permanent, evidenced source-coverage or
+    capability gap. ``population_fingerprint`` is a deterministic hash of the
+    exact evaluated population -- a changed fingerprint means the underlying
+    evidence has moved and the row is stale until recomputed.
+    """
+
+    __tablename__ = "mdm_relationship_coverage"
+
+    coverage_id: Mapped[str] = mapped_column(
+        GUID(), primary_key=True, default=_uuid_string
+    )
+    generation_id: Mapped[str] = mapped_column(Text, nullable=False)
+    rel_type_id: Mapped[str] = mapped_column(
+        GUID(),
+        ForeignKey("mdm_relationship_type.rel_type_id"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_edge_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence_category: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    evidence_query_version: Mapped[str] = mapped_column(Text, nullable=False)
+    evaluated_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+    population_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    review_trigger: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("generation_id", "rel_type_id", name="uq_rel_coverage_generation_type"),
+        CheckConstraint(
+            "status IN ('populated','valid_zero','excluded')",
+            name="ck_rel_coverage_status",
+        ),
+        CheckConstraint(
+            "evidence_category IS NULL OR evidence_category IN "
+            "('source_unavailable','capability_not_implemented','scoped_zero_overlap',"
+            "'structural_api_limitation','root_caused_fix_deferred')",
+            name="ck_rel_coverage_evidence_category",
+        ),
+    )
+
+
+class MdmPublicationRequest(Base):
+    """Transactional MDM -> graph publication outbox (07-03, RSYNC-01/03).
+
+    Created in the SAME session/transaction as the relationship-changing
+    write it accompanies (see publication.request_publication) -- a
+    session.rollback() removes both the MDM changes and this request
+    atomically. A separate coordinator claims (lease-based), builds,
+    verifies, and activates generations through ``lifecycle_state``;
+    writers never call Snowflake/Neo4j orchestration code directly.
+    """
+
+    __tablename__ = "mdm_publication_request"
+
+    request_id: Mapped[str] = mapped_column(
+        GUID(), primary_key=True, default=_uuid_string
+    )
+    lifecycle_state: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'mdm_committed'")
+    )
+    committed_watermark: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+    created_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+    updated_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+    claimed_by: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    claimed_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    lease_expires_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    retry_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_backfill: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("FALSE")
+    )
+    backfill_deadline: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    generation_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_summary: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
+    activated_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "lifecycle_state IN ('mdm_committed','graph_pending','graph_building',"
+            "'graph_verified','graph_active','failed')",
+            name="ck_pub_request_lifecycle_state",
+        ),
+        Index("idx_pub_request_lifecycle_state", "lifecycle_state"),
+    )
+
+
+class MdmGraphGeneration(Base):
+    """One requested graph generation build (07-04, RSYNC-04).
+
+    Coalesces one or more ``MdmPublicationRequest`` rows (via their
+    ``generation_id`` FK-by-value) behind a single frozen
+    ``committed_watermark``. Partitions (``MdmGraphPartition``) fan out per
+    node/relationship type against this watermark; fan-in verifies them and
+    flips ``status`` to ``verified``, then (07-05's activation pointer)
+    ``activated``.
+    """
+
+    __tablename__ = "mdm_graph_generation"
+
+    generation_id: Mapped[str] = mapped_column(
+        GUID(), primary_key=True, default=_uuid_string
+    )
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'building'")
+    )
+    committed_watermark: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+    rule_version: Mapped[str] = mapped_column(Text, nullable=False)
+    schema_version: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+    verified_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    activated_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    failure_reasons: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('building','verified','activated','failed')",
+            name="ck_graph_generation_status",
+        ),
+    )
+
+
+class MdmGraphPartition(Base):
+    """One immutable content-addressed partition within a generation (07-04, RSYNC-04).
+
+    Content address = (kind, type_name, shard_index, mdm_watermark,
+    rule_version, schema_version, input_fingerprint) -> ``content_hash``. A
+    partition with a ``content_hash`` matching a prior ``built`` partition
+    (from any generation) is reused (``status='reused'``,
+    ``reused_from_partition_id`` set) instead of rebuilt.
+    """
+
+    __tablename__ = "mdm_graph_partition"
+
+    partition_id: Mapped[str] = mapped_column(
+        GUID(), primary_key=True, default=_uuid_string
+    )
+    generation_id: Mapped[str] = mapped_column(
+        GUID(),
+        ForeignKey("mdm_graph_generation.generation_id"),
+        nullable=False,
+    )
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    type_name: Mapped[str] = mapped_column(Text, nullable=False)
+    shard_index: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    shard_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    mdm_watermark: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False
+    )
+    rule_version: Mapped[str] = mapped_column(Text, nullable=False)
+    schema_version: Mapped[str] = mapped_column(Text, nullable=False)
+    input_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    stable_key_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    property_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'pending'")
+    )
+    reused_from_partition_id: Mapped[Optional[str]] = mapped_column(
+        GUID(),
+        ForeignKey("mdm_graph_partition.partition_id"),
+        nullable=True,
+    )
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+    updated_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "generation_id", "kind", "type_name", "shard_index",
+            name="uq_graph_partition_generation_shard",
+        ),
+        Index("idx_graph_partition_content_hash", "content_hash"),
+        CheckConstraint("kind IN ('node','edge')", name="ck_graph_partition_kind"),
+        CheckConstraint(
+            "status IN ('pending','building','built','reused','failed')",
+            name="ck_graph_partition_status",
+        ),
     )
