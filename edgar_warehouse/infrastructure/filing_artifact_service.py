@@ -8,7 +8,17 @@ from edgar_warehouse.bronze_filing_artifacts import fetch_filing_artifacts
 from edgar_warehouse.filing_text_projection import extract_text_for_accession
 
 
-def refresh_filing_artifacts(*, context: Any, db: Any, accession_number: str, sync_run_id: str, download_bytes, force: bool) -> dict[str, Any]:
+def refresh_filing_artifacts(
+    *,
+    context: Any,
+    db: Any,
+    accession_number: str,
+    sync_run_id: str,
+    download_bytes,
+    force: bool,
+    operator: str | None = None,
+    reason: str | None = None,
+) -> dict[str, Any]:
     return fetch_filing_artifacts(
         context=context,
         db=db,
@@ -16,6 +26,8 @@ def refresh_filing_artifacts(*, context: Any, db: Any, accession_number: str, sy
         sync_run_id=sync_run_id,
         download_bytes=download_bytes,
         force=force,
+        operator=operator,
+        reason=reason,
     )
 
 

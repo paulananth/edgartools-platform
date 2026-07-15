@@ -58,8 +58,8 @@ separate generic audit — each relationship's artifact dependency (or explicit 
 is stated where it's actionable. This section covers only the two cross-cutting artifact-integrity
 mechanisms that aren't tied to any single relationship type.
 
-- [ ] **ARTF-01**: Silver-publishing warehouse commands (`parse-adv-bronze` and peers) never overwrite a healthier canonical `silver.duckdb` with a smaller/incomplete local copy — publish is skipped or guarded when the local copy would regress the canonical.
-- [ ] **ARTF-02**: Any newly-captured artifact fetch (from EDGE-09/EDGE-11 triage or elsewhere) honors SEC idempotency (DEC-009) — already-captured filings are not re-fetched without an explicit `--force`.
+- [x] **ARTF-01**: Silver-publishing warehouse commands (`parse-adv-bronze` and peers) never overwrite a healthier canonical `silver.duckdb` with a smaller/incomplete local copy — publish is skipped or guarded when the local copy would regress the canonical. **07-06**: `edgar_warehouse/silver_protection.py`'s fail-closed `PROTECTED_TABLE_REGISTRY` classifies every canonical domain table (business keys + provenance authority column) and explicitly excludes operational/checkpoint tables; `merge_candidate_into_canonical` never deletes a canonical-only row (a partial local candidate never regresses coverage), resolves same-key conflicts only via a table's declared authority column, and raises `SemanticMergeConflictError`/`SilverPublicationError` (row-level report) on ambiguous conflicts, unclassified tables, dropped columns, or column-type changes. `_publish_silver_database_if_remote` now merges into canonical (never overwrites it directly) before staged/promoted upload; there is no `--force` parameter anywhere on this path.
+- [x] **ARTF-02**: Any newly-captured artifact fetch (from EDGE-09/EDGE-11 triage or elsewhere) honors SEC idempotency (DEC-009) — already-captured filings are not re-fetched without an explicit `--force`. **07-06**: added DEF 14A and 13F-HR cache-hit regression tests to `tests/unit/test_loader_idempotency.py` asserting `network_fetches == 0` and no download/get_filing calls (previously only ownership forms and 13F-HR *cold-start* were covered); `fetch_filing_artifacts`'s `force=True` path now emits a `repair_audit` entry (accession, prior/replacement object hash + storage version, operator, reason) whenever a real prior raw object is being replaced, threaded through `filing_artifact_service.refresh_filing_artifacts` via new optional `operator`/`reason` kwargs. **Caveat**: `operator`/`reason` are optional at the service boundary (not yet a required, validated CLI flag) so existing `warehouse_orchestrator.py`/`cli.py` `--force` call sites (outside this plan's declared file scope) keep working unchanged; they still get an honest audit record with `operator`/`reason` left `None` rather than a fabricated value. Wiring an explicit `--operator`/`--reason` CLI flag is a follow-up, not done here.
 
 ### Verified MDM → Neo4j Relationship Generations
 
@@ -118,8 +118,8 @@ mechanisms that aren't tied to any single relationship type.
 | EDGE-11 | Phase 6 | Root-caused; fix deferred (see 06-PHASE-CLOSURE-LEDGER.md) |
 | EDGE-07 | Phase 7 | Complete (excluded — see 07-02-SUMMARY.md) |
 | EDGE-08 | Phase 7 | Complete (excluded — see 07-02-SUMMARY.md) |
-| ARTF-01 | Phase 7 | Pending |
-| ARTF-02 | Phase 7 | Pending |
+| ARTF-01 | Phase 7 | Complete (07-06) |
+| ARTF-02 | Phase 7 | Complete (07-06, CLI-flag wiring caveated) |
 | RPRE-01 | Phase 7 | Complete |
 | RSYNC-01 | Phase 7 | Partial (07-03, 07-05 — Snowflake single-pointer activation is real; MDM serving reads remain live/current, not generation-pinned) |
 | RSYNC-02 | Phase 7 | Complete (07-05 — exact identity/property/temporal/endpoint verification + guarded activation; coverage-exhaustiveness needs an explicit manifest, not yet CLI-default) |

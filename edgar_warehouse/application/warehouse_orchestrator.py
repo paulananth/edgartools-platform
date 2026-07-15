@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import uuid
 import warnings
 from datetime import UTC, date, datetime, timedelta
@@ -71,6 +72,7 @@ from edgar_warehouse.infrastructure.sec_client import (
     download_sec_bytes,
 )
 from edgar_warehouse.infrastructure.object_storage import StorageLocation, read_bytes
+from edgar_warehouse.silver_protection import merge_candidate_into_canonical
 from edgar_warehouse.silver_support.session import open_silver_database, open_silver_shard
 
 if TYPE_CHECKING:
@@ -760,19 +762,55 @@ def _hydrate_silver_database_from_storage(context: WarehouseCommandContext) -> N
 
 
 def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict[str, Any] | None:
+    """Merge the local silver candidate into canonical and publish it, safely.
+
+    Ordinary publication is monotonic and concurrency-safe (ARTF-01/ARTF-02):
+    the candidate is merged into a fresh local copy of canonical (never
+    overwriting it directly) via ``merge_candidate_into_canonical`` --
+    unclassified tables, dropped/retyped columns, and ambiguous same-key
+    conflicts all fail closed -- then the merged result is uploaded to an
+    immutable staging key and promoted onto the canonical key only if
+    canonical's version/ETag has not changed since it was read at the start
+    of this call. A concurrent writer between those two points raises
+    ``PromotionConflictError`` (retryable; the staged object is preserved)
+    instead of silently last-writer-wins. There is no ``--force`` parameter
+    on this path -- it cannot bypass the merge or the concurrency check.
+    """
     if not context.storage_root.is_remote:
         return None
     source_path = Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
     if not source_path.exists():
         raise WarehouseRuntimeError(f"Silver DuckDB file was not found: {source_path}")
     relative_path = "silver/sec/silver.duckdb"
-    size_bytes = source_path.stat().st_size
-    destination = context.storage_root.upload_file(relative_path, source_path)
+
+    baseline = context.storage_root.read_object_version(relative_path)
+    tables_merged: tuple[str, ...] = ()
+
+    if baseline.exists:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            canonical_local = Path(tmp_dir) / "canonical.duckdb"
+            canonical_local.write_bytes(read_bytes(context.storage_root.join(relative_path)))
+            merged_local = Path(tmp_dir) / "merged.duckdb"
+            merge_result = merge_candidate_into_canonical(source_path, canonical_local, merged_local)
+            tables_merged = merge_result.tables_merged
+            payload = merged_local.read_bytes()
+    else:
+        payload = source_path.read_bytes()
+
+    size_bytes = len(payload)
+    staged_relative = context.storage_root.write_staged_bytes(relative_path, payload)
+    promotion = context.storage_root.promote_staged(
+        staged_relative, relative_path, expected_etag=baseline.etag
+    )
     return {
         "layer": "silver_database",
-        "path": destination,
+        "path": promotion.canonical_path,
         "relative_path": relative_path,
         "size_bytes": size_bytes,
+        "source_version": baseline.etag,
+        "staged_checksum": hashlib.md5(payload).hexdigest(),
+        "canonical_version": promotion.new_version.etag,
+        "tables_merged": list(tables_merged),
     }
 
 

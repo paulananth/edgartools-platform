@@ -36,6 +36,8 @@ def fetch_filing_artifacts(
     download_bytes,
     get_filing=edgar.get_by_accession_number,
     force: bool = False,
+    operator: str | None = None,
+    reason: str | None = None,
 ) -> dict[str, Any]:
     filing = db.get_filing(accession_number)
     if filing is None:
@@ -48,6 +50,20 @@ def fetch_filing_artifacts(
     # artifacts). See CLAUDE.md artifact-throttle 5-whys.
     network_fetches = 0
     existing_rows = db.get_filing_attachments(accession_number)
+    # Snapshot prior raw-object state per document *before* any force-driven
+    # refetch, so a repair overwrite can be audited (prior vs. replacement
+    # hash/version) even though force bypasses the ordinary cache-hit lookup
+    # below (freshly-discovered attachment_rows carry no raw_object_id yet).
+    prior_raw_by_document: dict[str, dict[str, Any]] = {}
+    for row in existing_rows:
+        raw_object_id = row.get("raw_object_id")
+        if not raw_object_id:
+            continue
+        raw_object = db.get_raw_object(str(raw_object_id))
+        if raw_object is not None:
+            prior_raw_by_document[row["document_name"]] = raw_object
+    repair_audit: list[dict[str, Any]] = []
+
     if existing_rows and not force:
         hydrated_rows, cached_records, missing_rows = _split_existing_attachment_rows(db, existing_rows)
         if not missing_rows:
@@ -147,13 +163,31 @@ def fetch_filing_artifacts(
         hydrated["raw_object_id"] = raw_record["raw_object_id"]
         hydrated_rows.append(hydrated)
 
+        prior_raw = prior_raw_by_document.get(document_name)
+        if force and prior_raw is not None:
+            repair_audit.append(
+                {
+                    "accession_number": accession_number,
+                    "document_name": document_name,
+                    "prior_object_hash": prior_raw.get("sha256"),
+                    "prior_object_version": prior_raw.get("storage_path"),
+                    "replacement_object_hash": raw_record["raw_object_id"],
+                    "replacement_object_version": raw_record["path"],
+                    "operator": operator,
+                    "reason": reason,
+                }
+            )
+
     db.merge_filing_attachments(hydrated_rows, sync_run_id)
-    return {
+    result: dict[str, Any] = {
         "accession_number": accession_number,
         "attachment_count": len(hydrated_rows),
         "raw_writes": raw_writes,
         "network_fetches": network_fetches,
     }
+    if repair_audit:
+        result["repair_audit"] = repair_audit
+    return result
 
 
 def _resolve_raw_document_name(primary_document: str) -> str:
