@@ -24,6 +24,12 @@ class GraphNode(BaseModel):
     entity_id: str
     label: str
     properties: dict[str, Any]
+    # RLINE-01: entity_id is always the CANONICAL (post-merge) id -- traversal
+    # converges a merged-away entity's edges onto the entity it was kept as.
+    # merged_from lists every raw entity_id that canonically resolves here
+    # (empty when this node was never a merge target), so callers can still
+    # see the original identities behind a canonical node.
+    merged_from: list[str] = []
 
 
 class GraphEdge(BaseModel):
@@ -33,6 +39,18 @@ class GraphEdge(BaseModel):
     properties: dict[str, Any]
     effective_from: Optional[date] = None
     effective_to: Optional[date] = None
+    # RLINE-01: canonical (post-merge) endpoints above; the raw MDM-stored
+    # endpoints are preserved here for provenance even when unchanged.
+    source_entity_id_original: Optional[str] = None
+    target_entity_id_original: Optional[str] = None
+    # RTEMP-02: strict typed temporal fields backing as_of_date filtering.
+    valid_from_date: Optional[date] = None
+    valid_to_date: Optional[date] = None
+    date_provenance: Optional[str] = None
+    # True when this edge was only returned because the caller passed
+    # include_unknown_dates=True -- its validity at the requested as_of_date
+    # could not be proven (date_provenance == 'unknown').
+    date_uncertain: bool = False
 
 
 class Neighborhood(BaseModel):
@@ -46,6 +64,7 @@ class TraversalRequest(BaseModel):
     direction: str = "both"
     max_depth: int = 2
     as_of_date: Optional[date] = None
+    include_unknown_dates: bool = False
     filters: Optional[dict[str, Any]] = None
 
 

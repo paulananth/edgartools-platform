@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 import subprocess
 from typing import Any, Callable
@@ -73,6 +74,18 @@ EDGE_TABLES = (
     "GRAPH_EDGE_ISSUED_BY",
     "GRAPH_EDGE_MANAGES_FUND",
 )
+# 07-05 (RSYNC-01/02/05): the platform-owned generation registry and single
+# guarded activation pointer. GRAPH_GENERATION is the authoritative graph
+# discovery/lifecycle surface; GRAPH_ACTIVE_POINTER is the one row every
+# stable GRAPH_APP_*/GRAPH_NODE_*/GRAPH_EDGE_* view joins against, so node and
+# edge rows can never resolve to two different generations.
+GENERATION_TABLES = ("GRAPH_GENERATION", "GRAPH_ACTIVE_POINTER")
+GENERATION_STATUSES = ("building", "verified", "activated", "retired", "failed")
+# Statuses a generation must have been in to be a legal rollback/retention target
+# -- it passed verification and went live at some point (never 'building'/'failed').
+RETAINABLE_GENERATION_STATUSES = ("activated", "retired")
+DEFAULT_RETENTION_MIN_GENERATIONS = 3
+DEFAULT_RETENTION_DAYS = 30
 
 
 @dataclass(frozen=True)
@@ -84,6 +97,11 @@ class SnowflakeGraphMigrationConfig:
     mdm_database: str | None = None
     mdm_schema: str = DEFAULT_MDM_SCHEMA
     silver_path: Path | None = None
+    # 07-05: this static/manual bootstrap script needs a real generation_id to
+    # publish into (staged rows are additive, never a blanket replace). A
+    # fixed, documented sentinel is fine here -- an operator running this
+    # by hand activates it explicitly afterward (see README's activation step).
+    generation_id: str = "bootstrap"
 
     def resolved_target_database(self) -> str:
         return self.target_database or f"EDGARTOOLS_{self.env.upper()}"
@@ -106,6 +124,15 @@ class SnowflakeGraphSyncConfig:
     relationship_types: tuple[str, ...] = ()
     limit: int | None = None
     limit_per_type: int | None = None
+    # 07-05: the generation this sync publishes into. Required -- staged rows
+    # are tagged GENERATION_ID and never blanket-replaced, so a sync without a
+    # generation_id would have no way to scope its own DELETE+INSERT rebuild
+    # (see render_graph_tables' additive publish, RSYNC-01/RSYNC-02). Should be
+    # the same generation_id MDM's own mdm_graph_generation assigned (07-04),
+    # so the Snowflake pointer and MDM serving reads agree on one generation.
+    generation_id: str = ""
+    rule_version: str = "v1"
+    schema_version: str = "v1"
 
     def resolved_target_database(self, default_database: str | None = None) -> str:
         database = self.target_database or default_database
@@ -149,6 +176,11 @@ class SnowflakeGraphVerificationConfig:
     # type in this map instead of only POPULATED_RELATIONSHIP_TYPES (07-02,
     # RCOV-01/02). When None, behavior is unchanged from before 07-02.
     relationship_coverage: dict[str, str] | None = None
+    # 07-05: verify a specific candidate generation before it is activated.
+    # None (default) verifies the currently-active generation, preserving
+    # pre-07-05 verify-graph behavior for callers that don't yet participate
+    # in the generation lifecycle.
+    generation_id: str | None = None
 
     def resolved_target_database(self, default_database: str | None = None) -> str:
         database = self.target_database or default_database
@@ -166,6 +198,19 @@ class SnowflakeGraphVerificationConfig:
 class SnowflakeGraphVerificationResult:
     passed: bool
     payload: dict[str, Any]
+
+
+class SnowflakeGraphActivationError(ValueError):
+    """Raised when activation/rollback is attempted against a generation that
+    is not in a legal state for that operation. Raising here happens strictly
+    BEFORE any pointer-mutating SQL runs, so a rejected activation/rollback
+    leaves the previous active pointer completely untouched (RSYNC-02)."""
+
+
+@dataclass(frozen=True)
+class SnowflakeGraphActivationResult:
+    generation_id: str
+    previous_generation_id: str | None
 
 
 class SnowflakeGraphSyncExecutor:
@@ -187,6 +232,11 @@ class SnowflakeGraphSyncExecutor:
         relationship_types = _normalize_relationship_types(config.relationship_types)
         limit = _validate_limit(config.limit, "limit")
         limit_per_type = _validate_limit(config.limit_per_type, "limit_per_type")
+        if not config.generation_id:
+            raise SnowflakeGraphValidationError(
+                "generation_id is required -- staged rows are tagged per-generation "
+                "and never blanket-replaced (07-05 additive publish)"
+            )
         context = _graph_context(
             target_database=target_database,
             target_schema=config.target_schema,
@@ -196,17 +246,27 @@ class SnowflakeGraphSyncExecutor:
             relationship_types=relationship_types,
             limit=limit,
             limit_per_type=limit_per_type,
+            generation_id=config.generation_id,
+            rule_version=config.rule_version,
+            schema_version=config.schema_version,
         )
         cursor = self.connection.cursor()
         try:
             _execute_sql_script(cursor, render_graph_tables(context))
             node_count = _fetch_scalar(
                 cursor,
-                f"SELECT COUNT(*) FROM {_fq(context, 'MDM_GRAPH_NODES')}",
+                f"SELECT COUNT(*) FROM {_fq(context, 'MDM_GRAPH_NODES')} "
+                f"WHERE GENERATION_ID = {context['generation_id_literal']}",
             )
             edge_count = _fetch_scalar(
                 cursor,
-                f"SELECT COUNT(*) FROM {_fq(context, 'MDM_GRAPH_EDGES')}",
+                f"SELECT COUNT(*) FROM {_fq(context, 'MDM_GRAPH_EDGES')} "
+                f"WHERE GENERATION_ID = {context['generation_id_literal']}",
+            )
+            cursor.execute(
+                f"UPDATE {_fq(context, 'GRAPH_GENERATION')} "
+                f"SET NODE_COUNT = {node_count}, EDGE_COUNT = {edge_count} "
+                f"WHERE GENERATION_ID = {context['generation_id_literal']}"
             )
         finally:
             cursor.close()
@@ -223,6 +283,7 @@ class SnowflakeGraphSyncExecutor:
                 "relationship_types": relationship_types,
                 "limit": limit,
                 "limit_per_type": limit_per_type,
+                "generation_id": config.generation_id,
             },
         )
 
@@ -248,11 +309,12 @@ class SnowflakeGraphVerifier:
             "mdm_schema": _ident(config.mdm_schema),
             "sample_limit": sample_limit,
         }
+        generation_id = config.generation_id
         cursor = self.connection.cursor()
         try:
             node_rows = _fetch_rows(
                 cursor,
-                _render_verify_node_counts(context),
+                _render_verify_node_counts(context, generation_id),
                 (
                     "ENTITY_TYPE",
                     "MDM_ACTIVE_COUNT",
@@ -263,7 +325,7 @@ class SnowflakeGraphVerifier:
             )
             relationship_rows = _fetch_rows(
                 cursor,
-                _render_verify_relationship_counts(context),
+                _render_verify_relationship_counts(context, generation_id),
                 (
                     "RELATIONSHIP_TYPE",
                     "MDM_ACTIVE_COUNT",
@@ -274,25 +336,25 @@ class SnowflakeGraphVerifier:
             )
             diagnostics = {
                 "missing_graph_nodes": _format_sample_rows(
-                    _fetch_rows(cursor, _render_missing_nodes(context), ("ENTITY_TYPE", "NODEID")),
+                    _fetch_rows(cursor, _render_missing_nodes(context, generation_id), ("ENTITY_TYPE", "NODEID")),
                     ("ENTITY_TYPE", "NODEID"),
                 ),
                 "extra_graph_nodes": _format_sample_rows(
-                    _fetch_rows(cursor, _render_extra_nodes(context), ("ENTITY_TYPE", "NODEID")),
+                    _fetch_rows(cursor, _render_extra_nodes(context, generation_id), ("ENTITY_TYPE", "NODEID")),
                     ("ENTITY_TYPE", "NODEID"),
                 ),
                 "missing_graph_edges": _format_sample_rows(
-                    _fetch_rows(cursor, _render_missing_edges(context), ("RELATIONSHIP_TYPE", "EDGEID")),
+                    _fetch_rows(cursor, _render_missing_edges(context, generation_id), ("RELATIONSHIP_TYPE", "EDGEID")),
                     ("RELATIONSHIP_TYPE", "EDGEID"),
                 ),
                 "extra_graph_edges": _format_sample_rows(
-                    _fetch_rows(cursor, _render_extra_edges(context), ("RELATIONSHIP_TYPE", "EDGEID")),
+                    _fetch_rows(cursor, _render_extra_edges(context, generation_id), ("RELATIONSHIP_TYPE", "EDGEID")),
                     ("RELATIONSHIP_TYPE", "EDGEID"),
                 ),
                 "missing_graph_edge_endpoints": _format_sample_rows(
                     _fetch_rows(
                         cursor,
-                        _render_missing_edge_endpoints(context),
+                        _render_missing_edge_endpoints(context, generation_id),
                         (
                             "RELATIONSHIP_TYPE",
                             "EDGEID",
@@ -312,6 +374,27 @@ class SnowflakeGraphVerifier:
                     ),
                 ),
             }
+            # 07-05 Task 2: identity/property-exact parity, not count-only --
+            # a matching count with a different edge identity or property
+            # must fail verification (RSYNC-02 acceptance criterion).
+            exact_node_rows = _fetch_rows(
+                cursor,
+                _render_exact_node_parity(context, generation_id),
+                ("MDM_CONTENT_HASH", "GRAPH_CONTENT_HASH", "MDM_ROW_COUNT", "GRAPH_ROW_COUNT", "IDENTITY_PROPERTY_MATCH"),
+            )
+            exact_relationship_rows = _fetch_rows(
+                cursor,
+                _render_exact_relationship_parity(context, generation_id),
+                ("MDM_CONTENT_HASH", "GRAPH_CONTENT_HASH", "MDM_ROW_COUNT", "GRAPH_ROW_COUNT", "IDENTITY_PROPERTY_MATCH"),
+            )
+            canonical_remap_leaks = _format_sample_rows(
+                _fetch_rows(
+                    cursor,
+                    _render_canonical_remap_leaks(context, generation_id),
+                    ("EDGEID", "RELATIONSHIP_TYPE", "SOURCENODEID", "TARGETNODEID"),
+                ),
+                ("EDGEID", "RELATIONSHIP_TYPE", "SOURCENODEID", "TARGETNODEID"),
+            )
             native_app = _verify_native_app(cursor, context, config)
         finally:
             cursor.close()
@@ -319,6 +402,11 @@ class SnowflakeGraphVerifier:
         node_parity = _node_parity_payload(node_rows)
         relationship_parity = _relationship_parity_payload(relationship_rows)
         diagnostics_clean = all(not rows for rows in diagnostics.values())
+        exact_node_match = bool(exact_node_rows) and bool(exact_node_rows[0].get("IDENTITY_PROPERTY_MATCH"))
+        exact_relationship_match = bool(exact_relationship_rows) and bool(
+            exact_relationship_rows[0].get("IDENTITY_PROPERTY_MATCH")
+        )
+        exact_parity_ok = exact_node_match and exact_relationship_match and not canonical_remap_leaks
         native_app_ok = (
             not native_app["required"]
             or native_app["status"] == "ok"
@@ -340,12 +428,14 @@ class SnowflakeGraphVerifier:
             and diagnostics_clean
             and native_app_ok
             and named_checks_ok
+            and exact_parity_ok
         )
         parity_ok = (
             node_parity["status"] == "ok"
             and relationship_parity["status"] == "ok"
             and diagnostics_clean
             and named_checks_ok
+            and exact_parity_ok
         )
         native_domains = native_app.get("domains", {})
         failure_domains: list[str] = []
@@ -368,6 +458,12 @@ class SnowflakeGraphVerifier:
                 "node_parity": node_named_checks,
                 "relationship_parity": relationship_named_checks,
             },
+            "exact_parity": {
+                "status": "ok" if exact_parity_ok else "failed",
+                "node_identity_property_match": exact_node_match,
+                "relationship_identity_property_match": exact_relationship_match,
+                "canonical_remap_leaks": canonical_remap_leaks,
+            },
             "diagnostics": diagnostics,
             "native_app": native_app,
             "failure_domains": failure_domains,
@@ -377,6 +473,28 @@ class SnowflakeGraphVerifier:
                 "capability": native_domains.get("capability", {}).get("status", "skipped"),
             },
         }
+        # RSYNC-02: verifying an explicit candidate generation (not the
+        # default "verify the active one") is what promotes it from
+        # 'building' to 'verified' -- the only status activate_graph_
+        # generation() accepts -- or demotes it to 'failed' with the reasons
+        # recorded, mirroring 07-04's fan_in_generation on the MDM side.
+        if generation_id:
+            status_cursor = self.connection.cursor()
+            try:
+                if passed:
+                    status_cursor.execute(
+                        f"UPDATE {_fq(context, 'GRAPH_GENERATION')} "
+                        f"SET STATUS = 'verified', VERIFIED_AT = CURRENT_TIMESTAMP() "
+                        f"WHERE GENERATION_ID = {_sql_literal(generation_id)} AND STATUS = 'building'"
+                    )
+                else:
+                    status_cursor.execute(
+                        f"UPDATE {_fq(context, 'GRAPH_GENERATION')} "
+                        f"SET STATUS = 'failed', FAILURE_REASONS = PARSE_JSON({_sql_literal(json.dumps(failure_domains))}) "
+                        f"WHERE GENERATION_ID = {_sql_literal(generation_id)} AND STATUS = 'building'"
+                    )
+            finally:
+                status_cursor.close()
         return SnowflakeGraphVerificationResult(passed=passed, payload=payload)
 
 
@@ -752,6 +870,201 @@ def _split_sql_statements(sql: str) -> list[str]:
     return statements
 
 
+def render_activate_generation(context: dict[str, Any], generation_id: str) -> str:
+    """Atomically flip the single active-generation pointer (RSYNC-02).
+
+    BEGIN/COMMIT wraps the pointer MERGE and both GRAPH_GENERATION status
+    UPDATEs so a crash mid-flip can never leave the pointer referencing a
+    generation whose status wasn't also updated to 'activated'.
+    """
+    literal = _sql_literal(generation_id)
+    return f"""-- Activate generation {generation_id} as the single guarded pointer target.
+BEGIN;
+
+MERGE INTO {_fq(context, "GRAPH_ACTIVE_POINTER")} AS T
+USING (SELECT 'active' AS POINTER_ID, {literal} AS GENERATION_ID) AS S
+ON T.POINTER_ID = S.POINTER_ID
+WHEN MATCHED THEN UPDATE SET ACTIVE_GENERATION_ID = S.GENERATION_ID, ACTIVATED_AT = CURRENT_TIMESTAMP()
+WHEN NOT MATCHED THEN INSERT (POINTER_ID, ACTIVE_GENERATION_ID, ACTIVATED_AT)
+VALUES (S.POINTER_ID, S.GENERATION_ID, CURRENT_TIMESTAMP());
+
+UPDATE {_fq(context, "GRAPH_GENERATION")}
+SET STATUS = 'retired', RETIRED_AT = CURRENT_TIMESTAMP()
+WHERE STATUS = 'activated' AND GENERATION_ID != {literal};
+
+UPDATE {_fq(context, "GRAPH_GENERATION")}
+SET STATUS = 'activated', ACTIVATED_AT = CURRENT_TIMESTAMP()
+WHERE GENERATION_ID = {literal};
+
+COMMIT;
+"""
+
+
+def render_cleanup_candidates(
+    context: dict[str, Any],
+    *,
+    min_generations: int = DEFAULT_RETENTION_MIN_GENERATIONS,
+    retention_days: int = DEFAULT_RETENTION_DAYS,
+) -> str:
+    """Retired generations eligible for deletion (RSYNC-05): retains at least
+    the newest `min_generations` retired generations (which always includes
+    the immediate predecessor of the current active one, since it retires
+    most recently) and every generation created within `retention_days`.
+    Never considers 'activated'/'building'/'verified'/'failed' rows -- only
+    'retired' generations are ever cleanup candidates."""
+    return f"""-- verify_graph:cleanup_candidates
+WITH ranked AS (
+  SELECT
+    GENERATION_ID,
+    RETIRED_AT,
+    CREATED_AT,
+    ROW_NUMBER() OVER (ORDER BY RETIRED_AT DESC NULLS LAST) AS RECENCY_RANK
+  FROM {_fq(context, "GRAPH_GENERATION")}
+  WHERE STATUS = 'retired'
+)
+SELECT GENERATION_ID
+FROM ranked
+WHERE RECENCY_RANK > {int(min_generations)}
+  AND CREATED_AT < DATEADD('day', -{int(retention_days)}, CURRENT_TIMESTAMP())
+"""
+
+
+def _activation_context(target_database: str, target_schema: str) -> dict[str, Any]:
+    return {"target_database": _ident(target_database), "target_schema": _ident(target_schema)}
+
+
+def _generation_status(cursor: Any, context: dict[str, Any], generation_id: str) -> str | None:
+    rows = _fetch_rows(
+        cursor,
+        f"SELECT STATUS FROM {_fq(context, 'GRAPH_GENERATION')} "
+        f"WHERE GENERATION_ID = {_sql_literal(generation_id)}",
+        ("STATUS",),
+    )
+    return rows[0]["STATUS"] if rows else None
+
+
+def _active_generation_id(cursor: Any, context: dict[str, Any]) -> str | None:
+    rows = _fetch_rows(
+        cursor,
+        f"SELECT ACTIVE_GENERATION_ID FROM {_fq(context, 'GRAPH_ACTIVE_POINTER')} WHERE POINTER_ID = 'active'",
+        ("ACTIVE_GENERATION_ID",),
+    )
+    return rows[0]["ACTIVE_GENERATION_ID"] if rows else None
+
+
+def _flip_active_pointer(
+    connection: Any,
+    *,
+    target_database: str,
+    target_schema: str,
+    generation_id: str,
+    required_statuses: tuple[str, ...],
+    operation_name: str,
+) -> SnowflakeGraphActivationResult:
+    context = _activation_context(target_database, target_schema)
+    cursor = connection.cursor()
+    try:
+        # Guarded strictly BEFORE any pointer-mutating SQL runs: a rejected
+        # activation/rollback therefore leaves the previous active pointer
+        # completely untouched (RSYNC-02).
+        status = _generation_status(cursor, context, generation_id)
+        if status is None:
+            raise SnowflakeGraphActivationError(
+                f"no generation {generation_id!r} found; refusing to {operation_name}"
+            )
+        if status not in required_statuses:
+            raise SnowflakeGraphActivationError(
+                f"generation {generation_id!r} has status {status!r}, not one of "
+                f"{required_statuses!r}; refusing to {operation_name}"
+            )
+        previous_generation_id = _active_generation_id(cursor, context)
+        _execute_sql_script(cursor, render_activate_generation(context, generation_id))
+    finally:
+        cursor.close()
+    return SnowflakeGraphActivationResult(
+        generation_id=generation_id, previous_generation_id=previous_generation_id
+    )
+
+
+def activate_graph_generation(
+    connection: Any,
+    *,
+    target_database: str,
+    target_schema: str = DEFAULT_TARGET_SCHEMA,
+    generation_id: str,
+) -> SnowflakeGraphActivationResult:
+    """Activate a verified generation. Refuses (no SQL executed) unless the
+    generation's status is exactly 'verified' -- activation must never
+    promote a generation that hasn't passed fan-in + exact-parity
+    verification."""
+    return _flip_active_pointer(
+        connection,
+        target_database=target_database,
+        target_schema=target_schema,
+        generation_id=generation_id,
+        required_statuses=("verified",),
+        operation_name="activate",
+    )
+
+
+def rollback_graph_generation(
+    connection: Any,
+    *,
+    target_database: str,
+    target_schema: str = DEFAULT_TARGET_SCHEMA,
+    generation_id: str,
+) -> SnowflakeGraphActivationResult:
+    """Roll back to a retained, previously verified+activated generation.
+    Refuses (no SQL executed) unless the target's status is 'activated' or
+    'retired' -- rollback can only select a generation that was itself
+    legitimately verified and went live at some point, never a 'building'/
+    'failed' one."""
+    return _flip_active_pointer(
+        connection,
+        target_database=target_database,
+        target_schema=target_schema,
+        generation_id=generation_id,
+        required_statuses=RETAINABLE_GENERATION_STATUSES,
+        operation_name="roll back",
+    )
+
+
+def cleanup_retired_generations(
+    connection: Any,
+    *,
+    target_database: str,
+    target_schema: str = DEFAULT_TARGET_SCHEMA,
+    min_generations: int = DEFAULT_RETENTION_MIN_GENERATIONS,
+    retention_days: int = DEFAULT_RETENTION_DAYS,
+) -> list[str]:
+    """Delete retired generations outside the retention window (RSYNC-05).
+
+    Retains the newest `min_generations` retired generations (which always
+    includes the immediate predecessor of the current active generation)
+    plus every generation created within `retention_days`, regardless of
+    count. Never touches 'building'/'verified'/'activated'/'failed' rows.
+    """
+    context = _activation_context(target_database, target_schema)
+    cursor = connection.cursor()
+    try:
+        candidate_rows = _fetch_rows(
+            cursor,
+            render_cleanup_candidates(
+                context, min_generations=min_generations, retention_days=retention_days
+            ),
+            ("GENERATION_ID",),
+        )
+        candidate_ids = [row["GENERATION_ID"] for row in candidate_rows if row.get("GENERATION_ID")]
+        if candidate_ids:
+            id_list = ", ".join(_sql_literal(gid) for gid in candidate_ids)
+            cursor.execute(f"DELETE FROM {_fq(context, 'MDM_GRAPH_NODES')} WHERE GENERATION_ID IN ({id_list})")
+            cursor.execute(f"DELETE FROM {_fq(context, 'MDM_GRAPH_EDGES')} WHERE GENERATION_ID IN ({id_list})")
+            cursor.execute(f"DELETE FROM {_fq(context, 'GRAPH_GENERATION')} WHERE GENERATION_ID IN ({id_list})")
+    finally:
+        cursor.close()
+    return candidate_ids
+
+
 def generate_snowflake_graph_migration(config: SnowflakeGraphMigrationConfig) -> dict[str, Path]:
     """Write SQL files that build graph-ready tables inside Snowflake.
 
@@ -765,6 +1078,7 @@ def generate_snowflake_graph_migration(config: SnowflakeGraphMigrationConfig) ->
         mdm_database=config.resolved_mdm_database(),
         mdm_schema=config.mdm_schema,
         silver_path=config.silver_path,
+        generation_id=config.generation_id,
     )
 
     files = {
@@ -807,13 +1121,92 @@ def run_hosted_neo4j_e2e(files: dict[str, Path], *, snow_connection: str) -> lis
     return ["02_hosted_neo4j_e2e.sql"]
 
 
+def _active_generation_filter(context: dict[str, Any]) -> str:
+    """SQL expression resolving to the single currently-active generation_id.
+
+    Only needs target_database/target_schema, so it works against any context
+    dict -- including the minimal ones existing tests build by hand -- not
+    just ones produced by _graph_context().
+    """
+    return f"""(SELECT ACTIVE_GENERATION_ID FROM {_fq(context, "GRAPH_ACTIVE_POINTER")} WHERE POINTER_ID = 'active')"""
+
+
+def _generation_scope_filter(context: dict[str, Any], generation_id: str | None) -> str:
+    """SQL expression scoping a query to one generation.
+
+    None (default) resolves to the active generation (preserves pre-07-05
+    verify_graph behavior); an explicit generation_id verifies a candidate
+    generation that has not been activated yet (07-05 Task 2's pre-activation
+    verification gate).
+    """
+    if generation_id:
+        return _sql_literal(generation_id)
+    return _active_generation_filter(context)
+
+
 def render_graph_tables(context: dict[str, Any]) -> str:
+    active_filter = _active_generation_filter(context)
     return f"""-- Build graph-ready node and edge tables for Snowflake-hosted Neo4j Graph Analytics.
 -- Neo4j is not external in this flow. Source data comes from Snowflake MDM mirror tables.
+--
+-- 07-05 (RSYNC-01/RSYNC-02/RSYNC-05): publication is additive, not in-place
+-- replace. MDM_GRAPH_NODES/MDM_GRAPH_EDGES accumulate one immutable,
+-- GENERATION_ID-tagged copy of the graph per sync (never CREATE OR REPLACE);
+-- GRAPH_GENERATION is the platform-owned discovery/lifecycle registry;
+-- GRAPH_ACTIVE_POINTER is the single guarded pointer every stable
+-- GRAPH_APP_*/GRAPH_NODE_*/GRAPH_EDGE_* view joins against, so node and edge
+-- rows can never resolve to two different generations. Activation/rollback
+-- (see activate_graph_generation/rollback_graph_generation) only ever flips
+-- this one pointer row -- it never touches MDM_GRAPH_NODES/MDM_GRAPH_EDGES.
 
 CREATE SCHEMA IF NOT EXISTS {context["target_database"]}.{context["target_schema"]};
 
-CREATE OR REPLACE TABLE {_fq(context, "MDM_GRAPH_NODES")} AS
+CREATE TABLE IF NOT EXISTS {_fq(context, "GRAPH_GENERATION")} (
+  GENERATION_ID STRING NOT NULL,
+  STATUS STRING NOT NULL DEFAULT 'building',
+  RULE_VERSION STRING,
+  SCHEMA_VERSION STRING,
+  NODE_COUNT NUMBER,
+  EDGE_COUNT NUMBER,
+  CREATED_AT TIMESTAMP_TZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+  VERIFIED_AT TIMESTAMP_TZ,
+  ACTIVATED_AT TIMESTAMP_TZ,
+  RETIRED_AT TIMESTAMP_TZ,
+  FAILURE_REASONS VARIANT
+);
+
+CREATE TABLE IF NOT EXISTS {_fq(context, "GRAPH_ACTIVE_POINTER")} (
+  POINTER_ID STRING NOT NULL,
+  ACTIVE_GENERATION_ID STRING,
+  ACTIVATED_AT TIMESTAMP_TZ
+);
+
+MERGE INTO {_fq(context, "GRAPH_GENERATION")} AS T
+USING (SELECT {context["generation_id_literal"]} AS GENERATION_ID) AS S
+ON T.GENERATION_ID = S.GENERATION_ID
+WHEN NOT MATCHED THEN INSERT (GENERATION_ID, STATUS, RULE_VERSION, SCHEMA_VERSION)
+VALUES (S.GENERATION_ID, 'building', {context["rule_version_literal"]}, {context["schema_version_literal"]});
+
+CREATE TABLE IF NOT EXISTS {_fq(context, "MDM_GRAPH_NODES")} (
+  NODEID STRING,
+  LABEL STRING,
+  ENTITY_TYPE STRING,
+  SOURCE_SYSTEM STRING,
+  SOURCE_UPDATED_AT TIMESTAMP_TZ,
+  CREATED_AT TIMESTAMP_TZ,
+  UPDATED_AT TIMESTAMP_TZ,
+  PROPERTIES VARIANT,
+  GENERATION_ID STRING
+);
+
+-- Scoped to this generation only -- other generations' rows are never
+-- touched, so this DELETE+INSERT is a safe retry of the SAME generation_id,
+-- not a blanket rebuild (07-04's content-addressed partitions mean a given
+-- generation's underlying source data is fixed for the life of the build).
+DELETE FROM {_fq(context, "MDM_GRAPH_NODES")} WHERE GENERATION_ID = {context["generation_id_literal"]};
+
+INSERT INTO {_fq(context, "MDM_GRAPH_NODES")}
+  (NODEID, LABEL, ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_UPDATED_AT, CREATED_AT, UPDATED_AT, PROPERTIES, GENERATION_ID)
 SELECT
   E.ENTITY_ID::STRING AS NODEID,
   ETD.NEO4J_LABEL::STRING AS LABEL,
@@ -847,7 +1240,8 @@ SELECT
     'security_type', S.SECURITY_TYPE,
     'fund_type', F.FUND_TYPE,
     'primary_role', P.PRIMARY_ROLE
-  ) AS PROPERTIES
+  ) AS PROPERTIES,
+  {context["generation_id_literal"]} AS GENERATION_ID
 FROM {_mdm_fq(context, "MDM_ENTITY")} E
 JOIN {_mdm_fq(context, "MDM_ENTITY_TYPE_DEFINITION")} ETD
   ON ETD.ENTITY_TYPE = E.ENTITY_TYPE
@@ -870,18 +1264,73 @@ LEFT JOIN {_mdm_fq(context, "MDM_FUND")} F
 WHERE E.IS_QUARANTINED = FALSE{context["entity_type_filter"]}
 {context["entity_per_type_limit"]}{context["entity_limit"]};
 
-CREATE OR REPLACE TABLE {_fq(context, "MDM_GRAPH_EDGES")} AS
+-- Bounded (5-hop) canonical-entity resolution for merged entities (RLINE-01):
+-- MDM's merge_entities() tombstones the discarded entity and records
+-- {{"merged_from": discard}} on the KEPT entity's mdm_change_log row, but never
+-- rewrites mdm_relationship_instance.source_entity_id/target_entity_id -- so
+-- edges still point at the discarded id. This view walks that lineage
+-- forward so staged edges can carry both the ORIGINAL endpoint (as MDM
+-- stored it) and the CANONICAL endpoint (after merge chains resolve).
+CREATE OR REPLACE VIEW {_fq(context, "GRAPH_ENTITY_MERGE_LINEAGE")} AS
+SELECT
+  CHANGED_FIELDS:merged_from::STRING AS DISCARDED_ENTITY_ID,
+  ENTITY_ID::STRING AS KEPT_ENTITY_ID
+FROM {_mdm_fq(context, "MDM_CHANGE_LOG")}
+WHERE CHANGED_FIELDS:merged_from IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS {_fq(context, "MDM_GRAPH_EDGES")} (
+  EDGEID STRING,
+  RELATIONSHIP_TYPE STRING,
+  SOURCENODEID STRING,
+  TARGETNODEID STRING,
+  SOURCE_ENTITY_TYPE STRING,
+  TARGET_ENTITY_TYPE STRING,
+  SOURCE_SYSTEM STRING,
+  SOURCE_ACCESSION STRING,
+  EFFECTIVE_FROM TIMESTAMP_TZ,
+  EFFECTIVE_TO TIMESTAMP_TZ,
+  RELATIONSHIP_ID STRING,
+  VALID_FROM_DATE DATE,
+  VALID_TO_DATE DATE,
+  DATE_PROVENANCE STRING,
+  RELATIONSHIP_KIND STRING,
+  SOURCENODEID_ORIGINAL STRING,
+  TARGETNODEID_ORIGINAL STRING,
+  MERGE_STRATEGY STRING,
+  GRAPH_SYNC_STATUS STRING,
+  GRAPH_SYNCED_AT TIMESTAMP_TZ,
+  CREATED_AT TIMESTAMP_TZ,
+  UPDATED_AT TIMESTAMP_TZ,
+  PROPERTIES VARIANT,
+  GENERATION_ID STRING
+);
+
+DELETE FROM {_fq(context, "MDM_GRAPH_EDGES")} WHERE GENERATION_ID = {context["generation_id_literal"]};
+
+INSERT INTO {_fq(context, "MDM_GRAPH_EDGES")}
+  (EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE,
+   SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO,
+   RELATIONSHIP_ID, VALID_FROM_DATE, VALID_TO_DATE, DATE_PROVENANCE, RELATIONSHIP_KIND,
+   SOURCENODEID_ORIGINAL, TARGETNODEID_ORIGINAL,
+   MERGE_STRATEGY, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES, GENERATION_ID)
 SELECT
   RI.INSTANCE_ID::STRING AS EDGEID,
   RT.REL_TYPE_NAME::STRING AS RELATIONSHIP_TYPE,
-  RI.SOURCE_ENTITY_ID::STRING AS SOURCENODEID,
-  RI.TARGET_ENTITY_ID::STRING AS TARGETNODEID,
+  COALESCE(SRC_ML2.KEPT_ENTITY_ID, SRC_ML1.KEPT_ENTITY_ID, RI.SOURCE_ENTITY_ID)::STRING AS SOURCENODEID,
+  COALESCE(TGT_ML2.KEPT_ENTITY_ID, TGT_ML1.KEPT_ENTITY_ID, RI.TARGET_ENTITY_ID)::STRING AS TARGETNODEID,
   RT.SOURCE_NODE_TYPE::STRING AS SOURCE_ENTITY_TYPE,
   RT.TARGET_NODE_TYPE::STRING AS TARGET_ENTITY_TYPE,
   RI.SOURCE_SYSTEM::STRING AS SOURCE_SYSTEM,
   RI.SOURCE_ACCESSION::STRING AS SOURCE_ACCESSION,
   RI.EFFECTIVE_FROM AS EFFECTIVE_FROM,
   RI.EFFECTIVE_TO AS EFFECTIVE_TO,
+  RI.RELATIONSHIP_ID::STRING AS RELATIONSHIP_ID,
+  RI.VALID_FROM_DATE::DATE AS VALID_FROM_DATE,
+  RI.VALID_TO_DATE::DATE AS VALID_TO_DATE,
+  RI.DATE_PROVENANCE::STRING AS DATE_PROVENANCE,
+  RI.RELATIONSHIP_KIND::STRING AS RELATIONSHIP_KIND,
+  RI.SOURCE_ENTITY_ID::STRING AS SOURCENODEID_ORIGINAL,
+  RI.TARGET_ENTITY_ID::STRING AS TARGETNODEID_ORIGINAL,
   RT.MERGE_STRATEGY::STRING AS MERGE_STRATEGY,
   CASE
     WHEN RI.GRAPH_SYNCED_AT IS NULL THEN 'PENDING'
@@ -892,10 +1341,17 @@ SELECT
   RI.UPDATED_AT AS UPDATED_AT,
   OBJECT_CONSTRUCT_KEEP_NULL(
     'instance_id', RI.INSTANCE_ID,
+    'relationship_id', RI.RELATIONSHIP_ID,
     'source_system', RI.SOURCE_SYSTEM,
     'source_accession', RI.SOURCE_ACCESSION,
     'effective_from', RI.EFFECTIVE_FROM,
     'effective_to', RI.EFFECTIVE_TO,
+    'valid_from_date', RI.VALID_FROM_DATE,
+    'valid_to_date', RI.VALID_TO_DATE,
+    'date_provenance', RI.DATE_PROVENANCE,
+    'relationship_kind', RI.RELATIONSHIP_KIND,
+    'source_entity_id_original', RI.SOURCE_ENTITY_ID,
+    'target_entity_id_original', RI.TARGET_ENTITY_ID,
     'properties', TRY_PARSE_JSON(RI.PROPERTIES),
     'merge_strategy', RT.MERGE_STRATEGY,
     'source_node_type', RT.SOURCE_NODE_TYPE,
@@ -904,135 +1360,156 @@ SELECT
       WHEN RI.GRAPH_SYNCED_AT IS NULL THEN 'PENDING'
       ELSE 'SYNCED'
     END
-  ) AS PROPERTIES
+  ) AS PROPERTIES,
+  {context["generation_id_literal"]} AS GENERATION_ID
 FROM {_mdm_fq(context, "MDM_RELATIONSHIP_INSTANCE")} RI
 JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_TYPE")} RT
   ON RT.REL_TYPE_ID = RI.REL_TYPE_ID
+LEFT JOIN {_fq(context, "GRAPH_ENTITY_MERGE_LINEAGE")} SRC_ML1
+  ON SRC_ML1.DISCARDED_ENTITY_ID = RI.SOURCE_ENTITY_ID
+LEFT JOIN {_fq(context, "GRAPH_ENTITY_MERGE_LINEAGE")} SRC_ML2
+  ON SRC_ML2.DISCARDED_ENTITY_ID = SRC_ML1.KEPT_ENTITY_ID
+LEFT JOIN {_fq(context, "GRAPH_ENTITY_MERGE_LINEAGE")} TGT_ML1
+  ON TGT_ML1.DISCARDED_ENTITY_ID = RI.TARGET_ENTITY_ID
+LEFT JOIN {_fq(context, "GRAPH_ENTITY_MERGE_LINEAGE")} TGT_ML2
+  ON TGT_ML2.DISCARDED_ENTITY_ID = TGT_ML1.KEPT_ENTITY_ID
 WHERE RI.IS_ACTIVE = TRUE
   AND RT.IS_ACTIVE = TRUE{context["relationship_type_filter"]}
 {context["relationship_per_type_limit"]}{context["relationship_limit"]};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_APP_NODES")} AS
 SELECT NODEID
-FROM {_fq(context, "MDM_GRAPH_NODES")};
+FROM {_fq(context, "MDM_GRAPH_NODES")}
+WHERE GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_APP_EDGES")} AS
 SELECT SOURCENODEID, TARGETNODEID
-FROM {_fq(context, "MDM_GRAPH_EDGES")};
+FROM {_fq(context, "MDM_GRAPH_EDGES")}
+WHERE GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODES")} AS
 SELECT NODEID, LABEL, PROPERTIES
-FROM {_fq(context, "MDM_GRAPH_NODES")};
+FROM {_fq(context, "MDM_GRAPH_NODES")}
+WHERE GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGES")} AS
 SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, PROPERTIES
-FROM {_fq(context, "MDM_GRAPH_EDGES")};
+FROM {_fq(context, "MDM_GRAPH_EDGES")}
+WHERE GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODE_COMPANY")} AS
 SELECT NODEID, LABEL, ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_UPDATED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_NODES")}
-WHERE ENTITY_TYPE = 'company';
+WHERE ENTITY_TYPE = 'company' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODE_PERSON")} AS
 SELECT NODEID, LABEL, ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_UPDATED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_NODES")}
-WHERE ENTITY_TYPE = 'person';
+WHERE ENTITY_TYPE = 'person' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODE_SECURITY")} AS
 SELECT NODEID, LABEL, ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_UPDATED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_NODES")}
-WHERE ENTITY_TYPE = 'security';
+WHERE ENTITY_TYPE = 'security' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODE_ADVISER")} AS
 SELECT NODEID, LABEL, ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_UPDATED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_NODES")}
-WHERE ENTITY_TYPE = 'adviser';
+WHERE ENTITY_TYPE = 'adviser' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODE_FUND")} AS
 SELECT NODEID, LABEL, ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_UPDATED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_NODES")}
-WHERE ENTITY_TYPE = 'fund';
+WHERE ENTITY_TYPE = 'fund' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODE_AUDITFIRM")} AS
 SELECT NODEID, LABEL, ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_UPDATED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_NODES")}
-WHERE ENTITY_TYPE = 'audit_firm';
+WHERE ENTITY_TYPE = 'audit_firm' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_IS_INSIDER")} AS
-SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, RELATIONSHIP_ID, VALID_FROM_DATE, VALID_TO_DATE, DATE_PROVENANCE, RELATIONSHIP_KIND, SOURCENODEID_ORIGINAL, TARGETNODEID_ORIGINAL, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_EDGES")}
-WHERE RELATIONSHIP_TYPE = 'IS_INSIDER';
+WHERE RELATIONSHIP_TYPE = 'IS_INSIDER' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_HOLDS")} AS
-SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, RELATIONSHIP_ID, VALID_FROM_DATE, VALID_TO_DATE, DATE_PROVENANCE, RELATIONSHIP_KIND, SOURCENODEID_ORIGINAL, TARGETNODEID_ORIGINAL, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_EDGES")}
-WHERE RELATIONSHIP_TYPE = 'HOLDS';
+WHERE RELATIONSHIP_TYPE = 'HOLDS' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_COMPANY_HOLDS")} AS
-SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, RELATIONSHIP_ID, VALID_FROM_DATE, VALID_TO_DATE, DATE_PROVENANCE, RELATIONSHIP_KIND, SOURCENODEID_ORIGINAL, TARGETNODEID_ORIGINAL, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_EDGES")}
-WHERE RELATIONSHIP_TYPE = 'COMPANY_HOLDS';
+WHERE RELATIONSHIP_TYPE = 'COMPANY_HOLDS' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_ISSUED_BY")} AS
-SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, RELATIONSHIP_ID, VALID_FROM_DATE, VALID_TO_DATE, DATE_PROVENANCE, RELATIONSHIP_KIND, SOURCENODEID_ORIGINAL, TARGETNODEID_ORIGINAL, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_EDGES")}
-WHERE RELATIONSHIP_TYPE = 'ISSUED_BY';
+WHERE RELATIONSHIP_TYPE = 'ISSUED_BY' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_IS_ENTITY_OF")} AS
-SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, RELATIONSHIP_ID, VALID_FROM_DATE, VALID_TO_DATE, DATE_PROVENANCE, RELATIONSHIP_KIND, SOURCENODEID_ORIGINAL, TARGETNODEID_ORIGINAL, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_EDGES")}
-WHERE RELATIONSHIP_TYPE = 'IS_ENTITY_OF';
+WHERE RELATIONSHIP_TYPE = 'IS_ENTITY_OF' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_HAS_PARENT_COMPANY")} AS
-SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, RELATIONSHIP_ID, VALID_FROM_DATE, VALID_TO_DATE, DATE_PROVENANCE, RELATIONSHIP_KIND, SOURCENODEID_ORIGINAL, TARGETNODEID_ORIGINAL, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_EDGES")}
-WHERE RELATIONSHIP_TYPE = 'HAS_PARENT_COMPANY';
+WHERE RELATIONSHIP_TYPE = 'HAS_PARENT_COMPANY' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_MANAGES_FUND")} AS
-SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, RELATIONSHIP_ID, VALID_FROM_DATE, VALID_TO_DATE, DATE_PROVENANCE, RELATIONSHIP_KIND, SOURCENODEID_ORIGINAL, TARGETNODEID_ORIGINAL, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_EDGES")}
-WHERE RELATIONSHIP_TYPE = 'MANAGES_FUND';
+WHERE RELATIONSHIP_TYPE = 'MANAGES_FUND' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_IS_PERSON_OF")} AS
-SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, RELATIONSHIP_ID, VALID_FROM_DATE, VALID_TO_DATE, DATE_PROVENANCE, RELATIONSHIP_KIND, SOURCENODEID_ORIGINAL, TARGETNODEID_ORIGINAL, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_EDGES")}
-WHERE RELATIONSHIP_TYPE = 'IS_PERSON_OF';
+WHERE RELATIONSHIP_TYPE = 'IS_PERSON_OF' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_EMPLOYED_BY")} AS
-SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, RELATIONSHIP_ID, VALID_FROM_DATE, VALID_TO_DATE, DATE_PROVENANCE, RELATIONSHIP_KIND, SOURCENODEID_ORIGINAL, TARGETNODEID_ORIGINAL, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_EDGES")}
-WHERE RELATIONSHIP_TYPE = 'EMPLOYED_BY';
+WHERE RELATIONSHIP_TYPE = 'EMPLOYED_BY' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_AUDITED_BY")} AS
-SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, RELATIONSHIP_ID, VALID_FROM_DATE, VALID_TO_DATE, DATE_PROVENANCE, RELATIONSHIP_KIND, SOURCENODEID_ORIGINAL, TARGETNODEID_ORIGINAL, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_EDGES")}
-WHERE RELATIONSHIP_TYPE = 'AUDITED_BY';
+WHERE RELATIONSHIP_TYPE = 'AUDITED_BY' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_INSTITUTIONAL_HOLDS")} AS
-SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, SOURCE_SYSTEM, SOURCE_ACCESSION, EFFECTIVE_FROM, EFFECTIVE_TO, RELATIONSHIP_ID, VALID_FROM_DATE, VALID_TO_DATE, DATE_PROVENANCE, RELATIONSHIP_KIND, SOURCENODEID_ORIGINAL, TARGETNODEID_ORIGINAL, GRAPH_SYNC_STATUS, GRAPH_SYNCED_AT, CREATED_AT, UPDATED_AT, PROPERTIES
 FROM {_fq(context, "MDM_GRAPH_EDGES")}
-WHERE RELATIONSHIP_TYPE = 'INSTITUTIONAL_HOLDS';
+WHERE RELATIONSHIP_TYPE = 'INSTITUTIONAL_HOLDS' AND GENERATION_ID = {active_filter};
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_NODE_COUNTS")} AS
 SELECT LABEL, COUNT(*) AS NODE_COUNT
 FROM {_fq(context, "MDM_GRAPH_NODES")}
+WHERE GENERATION_ID = {active_filter}
 GROUP BY LABEL;
 
 CREATE OR REPLACE VIEW {_fq(context, "GRAPH_EDGE_COUNTS")} AS
 SELECT RELATIONSHIP_TYPE, COUNT(*) AS EDGE_COUNT
 FROM {_fq(context, "MDM_GRAPH_EDGES")}
+WHERE GENERATION_ID = {active_filter}
 GROUP BY RELATIONSHIP_TYPE;
 """
 
 
 def render_validation(context: dict[str, Any]) -> str:
+    active_filter = _active_generation_filter(context)
     return f"""-- Validation for Snowflake-hosted Neo4j Graph Analytics tables.
+-- Scoped to the currently-active generation (07-05) -- MDM_GRAPH_NODES/EDGES
+-- accumulate every generation ever synced, so an unscoped COUNT(*) here would
+-- silently sum across generation history instead of reporting live graph size.
 
 SELECT 'snowflake_graph_nodes' AS METRIC, COUNT(*) AS VALUE
 FROM {_fq(context, "MDM_GRAPH_NODES")}
+WHERE GENERATION_ID = {active_filter}
 UNION ALL
 SELECT 'snowflake_graph_edges' AS METRIC, COUNT(*) AS VALUE
 FROM {_fq(context, "MDM_GRAPH_EDGES")}
+WHERE GENERATION_ID = {active_filter}
 UNION ALL
 SELECT 'active_mdm_entities' AS METRIC, COUNT(*) AS VALUE
 FROM {_mdm_fq(context, "MDM_ENTITY")} E
@@ -1079,10 +1556,11 @@ SELECT
   IFF(T.NODEID IS NULL, TRUE, FALSE) AS MISSING_TARGET_NODE
 FROM {_fq(context, "MDM_GRAPH_EDGES")} E
 LEFT JOIN {_fq(context, "MDM_GRAPH_NODES")} S
-  ON S.NODEID = E.SOURCENODEID
+  ON S.NODEID = E.SOURCENODEID AND S.GENERATION_ID = {active_filter}
 LEFT JOIN {_fq(context, "MDM_GRAPH_NODES")} T
-  ON T.NODEID = E.TARGETNODEID
-WHERE S.NODEID IS NULL OR T.NODEID IS NULL
+  ON T.NODEID = E.TARGETNODEID AND T.GENERATION_ID = {active_filter}
+WHERE E.GENERATION_ID = {active_filter}
+  AND (S.NODEID IS NULL OR T.NODEID IS NULL)
 LIMIT 100;
 """
 
@@ -1130,8 +1608,11 @@ data is hosted in Snowflake and sourced from the Snowflake MDM mirror tables.
 Run order:
 
 1. `snow sql -c <connection> -f 00_graph_tables.sql`
-2. `snow sql -c <connection> -f 01_validation.sql`
-3. `snow sql -c <connection> -f 02_hosted_neo4j_e2e.sql`
+2. Activate the `{context["generation_id"] or "bootstrap"}` generation this script staged --
+   `GRAPH_APP_*`/`GRAPH_NODE_*`/`GRAPH_EDGE_*` views resolve zero rows until a generation
+   is active (see `activate_graph_generation` / `mdm graph-activate`).
+3. `snow sql -c <connection> -f 01_validation.sql`
+4. `snow sql -c <connection> -f 02_hosted_neo4j_e2e.sql`
 
 Target schema: `{context["target_database"]}.{context["target_schema"]}`
 MDM source schema: `{context["mdm_database"]}.{context["mdm_schema"]}`
@@ -1172,6 +1653,9 @@ def _graph_context(
     relationship_types: tuple[str, ...] = (),
     limit: int | None = None,
     limit_per_type: int | None = None,
+    generation_id: str = "",
+    rule_version: str = "v1",
+    schema_version: str = "v1",
 ) -> dict[str, Any]:
     return {
         "target_database": _ident(target_database),
@@ -1189,6 +1673,10 @@ def _graph_context(
         ),
         "entity_limit": _limit_clause(limit),
         "relationship_limit": _limit_clause(limit),
+        "generation_id": generation_id,
+        "generation_id_literal": _sql_literal(generation_id) if generation_id else "NULL",
+        "rule_version_literal": _sql_literal(rule_version),
+        "schema_version_literal": _sql_literal(schema_version),
     }
 
 
@@ -1430,7 +1918,8 @@ def _as_int(value: Any) -> int:
     return int(value or 0)
 
 
-def _render_verify_node_counts(context: dict[str, Any]) -> str:
+def _render_verify_node_counts(context: dict[str, Any], generation_id: str | None = None) -> str:
+    scope = _generation_scope_filter(context, generation_id)
     return f"""-- verify_graph:node_counts
 WITH expected AS (
   SELECT ETD.ENTITY_TYPE, COUNT(E.ENTITY_ID) AS MDM_ACTIVE_COUNT
@@ -1444,6 +1933,7 @@ WITH expected AS (
 actual AS (
   SELECT ENTITY_TYPE, COUNT(*) AS SNOWFLAKE_GRAPH_NODE_COUNT
   FROM {_fq(context, "MDM_GRAPH_NODES")}
+  WHERE GENERATION_ID = {scope}
   GROUP BY ENTITY_TYPE
 )
 SELECT
@@ -1459,7 +1949,8 @@ ORDER BY ENTITY_TYPE
 """
 
 
-def _render_verify_relationship_counts(context: dict[str, Any]) -> str:
+def _render_verify_relationship_counts(context: dict[str, Any], generation_id: str | None = None) -> str:
+    scope = _generation_scope_filter(context, generation_id)
     return f"""-- verify_graph:relationship_counts
 WITH expected AS (
   SELECT RT.REL_TYPE_NAME AS RELATIONSHIP_TYPE, COUNT(RI.INSTANCE_ID) AS MDM_ACTIVE_COUNT
@@ -1473,6 +1964,7 @@ WITH expected AS (
 actual AS (
   SELECT RELATIONSHIP_TYPE, COUNT(*) AS SNOWFLAKE_GRAPH_EDGE_COUNT
   FROM {_fq(context, "MDM_GRAPH_EDGES")}
+  WHERE GENERATION_ID = {scope}
   GROUP BY RELATIONSHIP_TYPE
 )
 SELECT
@@ -1488,7 +1980,107 @@ ORDER BY RELATIONSHIP_TYPE
 """
 
 
-def _render_missing_nodes(context: dict[str, Any]) -> str:
+def _render_exact_node_parity(context: dict[str, Any], generation_id: str | None = None) -> str:
+    """07-05 Task 2: identity + property exact parity (not count-only).
+
+    HASH_AGG is order-independent, so a matching row COUNT with even one
+    different NODEID/LABEL/ENTITY_TYPE flips the hash and fails this check --
+    unlike the count-only checks above, which cannot detect that case.
+    """
+    scope = _generation_scope_filter(context, generation_id)
+    return f"""-- verify_graph:exact_node_parity
+WITH mdm_side AS (
+  SELECT
+    HASH_AGG(E.ENTITY_ID::STRING, E.ENTITY_TYPE::STRING, ETD.NEO4J_LABEL::STRING) AS CONTENT_HASH,
+    COUNT(*) AS ROW_COUNT
+  FROM {_mdm_fq(context, "MDM_ENTITY")} E
+  JOIN {_mdm_fq(context, "MDM_ENTITY_TYPE_DEFINITION")} ETD
+    ON ETD.ENTITY_TYPE = E.ENTITY_TYPE
+   AND ETD.IS_ACTIVE = TRUE
+  WHERE E.IS_QUARANTINED = FALSE
+),
+graph_side AS (
+  SELECT
+    HASH_AGG(NODEID::STRING, ENTITY_TYPE::STRING, LABEL::STRING) AS CONTENT_HASH,
+    COUNT(*) AS ROW_COUNT
+  FROM {_fq(context, "MDM_GRAPH_NODES")}
+  WHERE GENERATION_ID = {scope}
+)
+SELECT
+  mdm_side.CONTENT_HASH AS MDM_CONTENT_HASH,
+  graph_side.CONTENT_HASH AS GRAPH_CONTENT_HASH,
+  mdm_side.ROW_COUNT AS MDM_ROW_COUNT,
+  graph_side.ROW_COUNT AS GRAPH_ROW_COUNT,
+  IFF(mdm_side.CONTENT_HASH = graph_side.CONTENT_HASH, TRUE, FALSE) AS IDENTITY_PROPERTY_MATCH
+FROM mdm_side, graph_side
+"""
+
+
+def _render_exact_relationship_parity(context: dict[str, Any], generation_id: str | None = None) -> str:
+    """07-05 Task 2: identity + property + typed-temporal exact parity for
+    edges. Compares against the ORIGINAL (pre-merge-remap) endpoints -- the
+    canonical remap is an intentional transformation on top of raw MDM data,
+    not something MDM itself has, so the faithful-mirror check must use the
+    same endpoints MDM stores."""
+    scope = _generation_scope_filter(context, generation_id)
+    return f"""-- verify_graph:exact_relationship_parity
+WITH mdm_side AS (
+  SELECT
+    HASH_AGG(
+      RI.INSTANCE_ID::STRING, RI.RELATIONSHIP_ID::STRING,
+      RI.SOURCE_ENTITY_ID::STRING, RI.TARGET_ENTITY_ID::STRING,
+      RT.REL_TYPE_NAME::STRING,
+      RI.VALID_FROM_DATE::STRING, RI.VALID_TO_DATE::STRING, RI.DATE_PROVENANCE::STRING
+    ) AS CONTENT_HASH,
+    COUNT(*) AS ROW_COUNT
+  FROM {_mdm_fq(context, "MDM_RELATIONSHIP_INSTANCE")} RI
+  JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_TYPE")} RT
+    ON RT.REL_TYPE_ID = RI.REL_TYPE_ID
+   AND RT.IS_ACTIVE = TRUE
+  WHERE RI.IS_ACTIVE = TRUE
+),
+graph_side AS (
+  SELECT
+    HASH_AGG(
+      EDGEID::STRING, RELATIONSHIP_ID::STRING,
+      SOURCENODEID_ORIGINAL::STRING, TARGETNODEID_ORIGINAL::STRING,
+      RELATIONSHIP_TYPE::STRING,
+      VALID_FROM_DATE::STRING, VALID_TO_DATE::STRING, DATE_PROVENANCE::STRING
+    ) AS CONTENT_HASH,
+    COUNT(*) AS ROW_COUNT
+  FROM {_fq(context, "MDM_GRAPH_EDGES")}
+  WHERE GENERATION_ID = {scope}
+)
+SELECT
+  mdm_side.CONTENT_HASH AS MDM_CONTENT_HASH,
+  graph_side.CONTENT_HASH AS GRAPH_CONTENT_HASH,
+  mdm_side.ROW_COUNT AS MDM_ROW_COUNT,
+  graph_side.ROW_COUNT AS GRAPH_ROW_COUNT,
+  IFF(mdm_side.CONTENT_HASH = graph_side.CONTENT_HASH, TRUE, FALSE) AS IDENTITY_PROPERTY_MATCH
+FROM mdm_side, graph_side
+"""
+
+
+def _render_canonical_remap_leaks(context: dict[str, Any], generation_id: str | None = None) -> str:
+    """07-05 Task 2: a discarded (merged-away) entity_id must never appear as
+    a staged edge's canonical endpoint -- proves the merge-lineage remap in
+    render_graph_tables actually took effect, not just that the lineage view
+    exists syntactically. Non-empty result = remap correctness failure."""
+    scope = _generation_scope_filter(context, generation_id)
+    return f"""-- verify_graph:canonical_remap_leaks
+SELECT EDGEID, RELATIONSHIP_TYPE, SOURCENODEID, TARGETNODEID
+FROM {_fq(context, "MDM_GRAPH_EDGES")} E
+WHERE E.GENERATION_ID = {scope}
+  AND (
+    E.SOURCENODEID IN (SELECT DISCARDED_ENTITY_ID FROM {_fq(context, "GRAPH_ENTITY_MERGE_LINEAGE")})
+    OR E.TARGETNODEID IN (SELECT DISCARDED_ENTITY_ID FROM {_fq(context, "GRAPH_ENTITY_MERGE_LINEAGE")})
+  )
+LIMIT {context.get("sample_limit", 20)}
+"""
+
+
+def _render_missing_nodes(context: dict[str, Any], generation_id: str | None = None) -> str:
+    scope = _generation_scope_filter(context, generation_id)
     return f"""-- verify_graph:missing_nodes
 SELECT E.ENTITY_TYPE, E.ENTITY_ID::STRING AS NODEID
 FROM {_mdm_fq(context, "MDM_ENTITY")} E
@@ -1496,7 +2088,7 @@ JOIN {_mdm_fq(context, "MDM_ENTITY_TYPE_DEFINITION")} ETD
   ON ETD.ENTITY_TYPE = E.ENTITY_TYPE
  AND ETD.IS_ACTIVE = TRUE
 LEFT JOIN {_fq(context, "MDM_GRAPH_NODES")} G
-  ON G.NODEID = E.ENTITY_ID::STRING
+  ON G.NODEID = E.ENTITY_ID::STRING AND G.GENERATION_ID = {scope}
 WHERE E.IS_QUARANTINED = FALSE
   AND G.NODEID IS NULL
 ORDER BY E.ENTITY_TYPE, E.ENTITY_ID
@@ -1504,7 +2096,8 @@ LIMIT {context["sample_limit"]}
 """
 
 
-def _render_extra_nodes(context: dict[str, Any]) -> str:
+def _render_extra_nodes(context: dict[str, Any], generation_id: str | None = None) -> str:
+    scope = _generation_scope_filter(context, generation_id)
     return f"""-- verify_graph:extra_nodes
 SELECT G.ENTITY_TYPE, G.NODEID
 FROM {_fq(context, "MDM_GRAPH_NODES")} G
@@ -1513,15 +2106,17 @@ LEFT JOIN {_mdm_fq(context, "MDM_ENTITY")} E
 LEFT JOIN {_mdm_fq(context, "MDM_ENTITY_TYPE_DEFINITION")} ETD
   ON ETD.ENTITY_TYPE = E.ENTITY_TYPE
  AND ETD.IS_ACTIVE = TRUE
-WHERE E.ENTITY_ID IS NULL
+WHERE G.GENERATION_ID = {scope}
+  AND (E.ENTITY_ID IS NULL
    OR E.IS_QUARANTINED = TRUE
-   OR ETD.ENTITY_TYPE IS NULL
+   OR ETD.ENTITY_TYPE IS NULL)
 ORDER BY G.ENTITY_TYPE, G.NODEID
 LIMIT {context["sample_limit"]}
 """
 
 
-def _render_missing_edges(context: dict[str, Any]) -> str:
+def _render_missing_edges(context: dict[str, Any], generation_id: str | None = None) -> str:
+    scope = _generation_scope_filter(context, generation_id)
     return f"""-- verify_graph:missing_edges
 SELECT RT.REL_TYPE_NAME AS RELATIONSHIP_TYPE, RI.INSTANCE_ID::STRING AS EDGEID
 FROM {_mdm_fq(context, "MDM_RELATIONSHIP_INSTANCE")} RI
@@ -1529,7 +2124,7 @@ JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_TYPE")} RT
   ON RT.REL_TYPE_ID = RI.REL_TYPE_ID
  AND RT.IS_ACTIVE = TRUE
 LEFT JOIN {_fq(context, "MDM_GRAPH_EDGES")} G
-  ON G.EDGEID = RI.INSTANCE_ID::STRING
+  ON G.EDGEID = RI.INSTANCE_ID::STRING AND G.GENERATION_ID = {scope}
 WHERE RI.IS_ACTIVE = TRUE
   AND G.EDGEID IS NULL
 ORDER BY RT.REL_TYPE_NAME, RI.INSTANCE_ID
@@ -1537,7 +2132,8 @@ LIMIT {context["sample_limit"]}
 """
 
 
-def _render_extra_edges(context: dict[str, Any]) -> str:
+def _render_extra_edges(context: dict[str, Any], generation_id: str | None = None) -> str:
+    scope = _generation_scope_filter(context, generation_id)
     return f"""-- verify_graph:extra_edges
 SELECT G.RELATIONSHIP_TYPE, G.EDGEID
 FROM {_fq(context, "MDM_GRAPH_EDGES")} G
@@ -1546,15 +2142,17 @@ LEFT JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_INSTANCE")} RI
 LEFT JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_TYPE")} RT
   ON RT.REL_TYPE_ID = RI.REL_TYPE_ID
  AND RT.IS_ACTIVE = TRUE
-WHERE RI.INSTANCE_ID IS NULL
+WHERE G.GENERATION_ID = {scope}
+  AND (RI.INSTANCE_ID IS NULL
    OR RI.IS_ACTIVE = FALSE
-   OR RT.REL_TYPE_ID IS NULL
+   OR RT.REL_TYPE_ID IS NULL)
 ORDER BY G.RELATIONSHIP_TYPE, G.EDGEID
 LIMIT {context["sample_limit"]}
 """
 
 
-def _render_missing_edge_endpoints(context: dict[str, Any]) -> str:
+def _render_missing_edge_endpoints(context: dict[str, Any], generation_id: str | None = None) -> str:
+    scope = _generation_scope_filter(context, generation_id)
     return f"""-- verify_graph:missing_edge_endpoints
 SELECT
   E.RELATIONSHIP_TYPE,
@@ -1565,10 +2163,11 @@ SELECT
   IFF(T.NODEID IS NULL, TRUE, FALSE) AS MISSING_TARGET_NODE
 FROM {_fq(context, "MDM_GRAPH_EDGES")} E
 LEFT JOIN {_fq(context, "MDM_GRAPH_NODES")} S
-  ON S.NODEID = E.SOURCENODEID
+  ON S.NODEID = E.SOURCENODEID AND S.GENERATION_ID = {scope}
 LEFT JOIN {_fq(context, "MDM_GRAPH_NODES")} T
-  ON T.NODEID = E.TARGETNODEID
-WHERE S.NODEID IS NULL OR T.NODEID IS NULL
+  ON T.NODEID = E.TARGETNODEID AND T.GENERATION_ID = {scope}
+WHERE E.GENERATION_ID = {scope}
+  AND (S.NODEID IS NULL OR T.NODEID IS NULL)
 ORDER BY E.RELATIONSHIP_TYPE, E.EDGEID
 LIMIT {context["sample_limit"]}
 """

@@ -60,6 +60,15 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     sync.add_argument("--target-schema", default=None, help="Snowflake target schema for graph-ready tables")
     sync.add_argument("--mdm-database", default=None, help="Snowflake database containing MDM source tables")
     sync.add_argument("--mdm-schema", default=None, help="Snowflake schema containing MDM source tables")
+    sync.add_argument(
+        "--generation-id",
+        default=None,
+        help=(
+            "Generation to publish into (07-05 additive publish). Default: a fresh "
+            "UUID for this standalone run -- publishing alone never activates it; "
+            "run 'mdm graph-activate --generation-id <id>' once verified."
+        ),
+    )
     sync.set_defaults(handler=_logged_handler("sync-graph", _handle_sync_graph))
 
     derive = mdm_sub.add_parser(
@@ -173,6 +182,37 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     vg.add_argument("--native-app-database-role", default=None, help="Database role granted to the Native App")
     vg.add_argument("--native-app-compute-pool", default=None, help="Native App compute pool selector")
     vg.set_defaults(handler=_logged_handler("verify-graph", _handle_verify_graph))
+
+    # graph-activate (07-05 RSYNC-02: guarded single-pointer activation)
+    ga = mdm_sub.add_parser(
+        "graph-activate",
+        help="Activate a verified Snowflake graph generation (refuses unless status='verified')",
+    )
+    ga.add_argument("--generation-id", required=True)
+    ga.add_argument("--target-database", default=None)
+    ga.add_argument("--target-schema", default=None)
+    ga.set_defaults(handler=_logged_handler("graph-activate", _handle_graph_activate))
+
+    # graph-rollback
+    gr = mdm_sub.add_parser(
+        "graph-rollback",
+        help="Roll back to a retained, previously verified+activated Snowflake graph generation",
+    )
+    gr.add_argument("--generation-id", required=True)
+    gr.add_argument("--target-database", default=None)
+    gr.add_argument("--target-schema", default=None)
+    gr.set_defaults(handler=_logged_handler("graph-rollback", _handle_graph_rollback))
+
+    # graph-cleanup-generations (07-05 RSYNC-05: retention)
+    gc = mdm_sub.add_parser(
+        "graph-cleanup-generations",
+        help="Delete retired Snowflake graph generations outside the retention window",
+    )
+    gc.add_argument("--target-database", default=None)
+    gc.add_argument("--target-schema", default=None)
+    gc.add_argument("--min-generations", type=int, default=None)
+    gc.add_argument("--retention-days", type=int, default=None)
+    gc.set_defaults(handler=_logged_handler("graph-cleanup-generations", _handle_graph_cleanup_generations))
 
     # backfill-relationships
     br = mdm_sub.add_parser(
@@ -1006,8 +1046,11 @@ def _handle_check_connectivity(args) -> int:
 
 
 def _handle_sync_graph(args) -> int:
+    import uuid
+
     from edgar_warehouse.mdm.snowflake_graph import SnowflakeGraphSyncExecutor
 
+    generation_id = args.generation_id or str(uuid.uuid4())
     try:
         result = SnowflakeGraphSyncExecutor.from_env().sync(
             _snowflake_graph_sync_config(
@@ -1017,6 +1060,7 @@ def _handle_sync_graph(args) -> int:
                 limit_per_type=args.limit_per_type,
                 target_database=args.target_database,
                 target_schema=args.target_schema,
+                generation_id=generation_id,
                 mdm_database=args.mdm_database,
                 mdm_schema=args.mdm_schema,
             )
@@ -1038,6 +1082,7 @@ def _snowflake_graph_sync_config(
     target_schema: str | None = None,
     mdm_database: str | None = None,
     mdm_schema: str | None = None,
+    generation_id: str = "",
 ):
     from edgar_warehouse.mdm.snowflake_graph import (
         DEFAULT_MDM_SCHEMA,
@@ -1054,12 +1099,14 @@ def _snowflake_graph_sync_config(
         relationship_types=tuple(relationship_types or ()),
         limit=limit,
         limit_per_type=limit_per_type,
+        generation_id=generation_id,
     )
 
 
 def _snowflake_graph_sync_payload(result) -> dict[str, object]:
     return {
         "status": "ok",
+        "generation_id": result.applied_filters.get("generation_id"),
         "graph_nodes_materialized": result.node_count,
         "graph_edges_materialized": result.edge_count,
         "graph_nodes_synced": result.node_count,
@@ -1206,6 +1253,89 @@ def _handle_verify_graph(args) -> int:
     if not result.passed:
         print("verify-graph: Snowflake graph verification checks failed", file=sys.stderr)
         return 1
+    return 0
+
+
+def _handle_graph_activate(args) -> int:
+    from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
+    from edgar_warehouse.mdm.snowflake_graph import (
+        DEFAULT_TARGET_SCHEMA,
+        SnowflakeGraphActivationError,
+        activate_graph_generation,
+    )
+
+    settings = SnowflakeConnectionSettings.from_env()
+    connection = settings.connect()
+    try:
+        result = activate_graph_generation(
+            connection,
+            target_database=args.target_database or settings.database,
+            target_schema=args.target_schema or DEFAULT_TARGET_SCHEMA,
+            generation_id=args.generation_id,
+        )
+    except SnowflakeGraphActivationError as exc:
+        print(f"graph-activate: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        connection.close()
+    print(json.dumps({
+        "generation_id": result.generation_id,
+        "previous_generation_id": result.previous_generation_id,
+    }, indent=2))
+    return 0
+
+
+def _handle_graph_rollback(args) -> int:
+    from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
+    from edgar_warehouse.mdm.snowflake_graph import (
+        DEFAULT_TARGET_SCHEMA,
+        SnowflakeGraphActivationError,
+        rollback_graph_generation,
+    )
+
+    settings = SnowflakeConnectionSettings.from_env()
+    connection = settings.connect()
+    try:
+        result = rollback_graph_generation(
+            connection,
+            target_database=args.target_database or settings.database,
+            target_schema=args.target_schema or DEFAULT_TARGET_SCHEMA,
+            generation_id=args.generation_id,
+        )
+    except SnowflakeGraphActivationError as exc:
+        print(f"graph-rollback: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        connection.close()
+    print(json.dumps({
+        "generation_id": result.generation_id,
+        "previous_generation_id": result.previous_generation_id,
+    }, indent=2))
+    return 0
+
+
+def _handle_graph_cleanup_generations(args) -> int:
+    from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
+    from edgar_warehouse.mdm.snowflake_graph import (
+        DEFAULT_RETENTION_DAYS,
+        DEFAULT_RETENTION_MIN_GENERATIONS,
+        DEFAULT_TARGET_SCHEMA,
+        cleanup_retired_generations,
+    )
+
+    settings = SnowflakeConnectionSettings.from_env()
+    connection = settings.connect()
+    try:
+        deleted = cleanup_retired_generations(
+            connection,
+            target_database=args.target_database or settings.database,
+            target_schema=args.target_schema or DEFAULT_TARGET_SCHEMA,
+            min_generations=args.min_generations or DEFAULT_RETENTION_MIN_GENERATIONS,
+            retention_days=args.retention_days or DEFAULT_RETENTION_DAYS,
+        )
+    finally:
+        connection.close()
+    print(json.dumps({"deleted_generation_ids": deleted}, indent=2))
     return 0
 
 
