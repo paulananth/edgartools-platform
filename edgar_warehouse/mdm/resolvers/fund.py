@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from typing import Optional
+import uuid
 
 from sqlalchemy import select
 
@@ -43,22 +44,34 @@ class FundResolver(BaseResolver):
         effective_date=None,
     ) -> ResolveOutcome:
         name = ctx.engine.normalize_name(fund_row.get("fund_name"))
-        existing = self._existing_candidates(ctx, adviser_entity_id, name)
-        source_id = f"{fund_row['accession_number']}:{fund_row.get('fund_index')}"
+        private_fund_id = str(fund_row.get("private_fund_id") or "").strip() or None
+        existing = self._existing_candidates(ctx, adviser_entity_id, name, private_fund_id)
+        source_id = private_fund_id or f"{fund_row['accession_number']}:{fund_row.get('fund_index')}"
 
         if existing:
             entity_id = existing[0]["entity_id"]
             is_new = False
         else:
-            ent = self._create_entity(
-                ctx, resolution_method="adviser_name_dedup", confidence=1.0
-            )
+            if private_fund_id:
+                ent = MdmEntity(
+                    entity_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"iapd:pfid:{private_fund_id}")),
+                    entity_type=self.entity_type,
+                    resolution_method="iapd_pfid_exact",
+                    confidence=1.0,
+                )
+                ctx.session.add(ent)
+                ctx.session.flush()
+            else:
+                ent = self._create_entity(
+                    ctx, resolution_method="adviser_name_dedup", confidence=1.0
+                )
             entity_id = ent.entity_id
             is_new = True
             ctx.session.add(
                 MdmFund(
                     entity_id=entity_id,
                     adviser_entity_id=adviser_entity_id,
+                    private_fund_id=private_fund_id,
                     canonical_name=name or "Unknown Fund",
                     fund_type=fund_row.get("fund_type"),
                     jurisdiction=fund_row.get("jurisdiction"),
@@ -106,8 +119,17 @@ class FundResolver(BaseResolver):
 
     @staticmethod
     def _existing_candidates(
-        ctx: ResolverContext, adviser_entity_id: Optional[str], name: Optional[str]
+        ctx: ResolverContext,
+        adviser_entity_id: Optional[str],
+        name: Optional[str],
+        private_fund_id: Optional[str] = None,
     ) -> list[dict]:
+        if private_fund_id:
+            row = ctx.session.scalar(
+                select(MdmFund).where(MdmFund.private_fund_id == private_fund_id)
+            )
+            return ([{"entity_id": row.entity_id, "canonical_name": row.canonical_name}]
+                    if row is not None else [])
         if not name:
             return []
         stmt = (

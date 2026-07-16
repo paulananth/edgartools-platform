@@ -1501,6 +1501,38 @@ def _capture_bronze_raw(
     if command_name == "bootstrap-batch":
         cik_list = list(arguments.get("cik_list") or [])
         include_pagination = bool(arguments.get("include_pagination", True))
+        release_mode = bool(arguments.get("release_mode", False))
+        candidate_manifest_path = str(arguments.get("candidate_manifest") or "").strip()
+        repair_manifest_path = str(arguments.get("repair_manifest") or "").strip()
+        required_accessions: set[str] | None = None
+        repair_accessions: set[str] | None = None
+        if release_mode:
+            if not candidate_manifest_path:
+                raise WarehouseRuntimeError(
+                    "bootstrap-batch --release-mode requires --candidate-manifest"
+                )
+            from edgar_warehouse.application.relationship_bulk_load import (
+                select_required_accessions,
+            )
+
+            try:
+                candidate_payload = json.loads(
+                    read_bytes(candidate_manifest_path).decode("utf-8")
+                )
+                required_accessions = select_required_accessions(
+                    candidate_payload, ciks={int(cik) for cik in cik_list}
+                )
+                if repair_manifest_path:
+                    repair_payload = json.loads(
+                        read_bytes(repair_manifest_path).decode("utf-8")
+                    )
+                    repair_accessions = select_required_accessions(
+                        repair_payload, ciks={int(cik) for cik in cik_list}
+                    )
+            except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+                raise WarehouseRuntimeError(
+                    f"bootstrap-batch could not read bounded release manifest: {exc}"
+                ) from exc
         result = _run_submissions_bronze_then_silver(
             context=context,
             db=db,
@@ -1512,10 +1544,97 @@ def _capture_bronze_raw(
             load_mode="bootstrap_batch",
             artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
             parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
+            release_mode=release_mode,
+            required_accessions=required_accessions,
+            repair_manifest_accessions=repair_accessions,
         )
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
         metrics["rows_skipped"] += result["rows_skipped"]
+        return raw_writes, metrics
+
+    if command_name == "ingest-relationship-sources":
+        manifest_path = str(arguments.get("source_manifest") or "").strip()
+        if not manifest_path:
+            raise WarehouseRuntimeError("--source-manifest is required")
+        try:
+            manifest = json.loads(read_bytes(manifest_path).decode("utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise WarehouseRuntimeError(f"could not read relationship source manifest: {exc}") from exc
+        sources = manifest.get("sources") if isinstance(manifest, dict) else None
+        if not isinstance(sources, list) or not sources:
+            raise WarehouseRuntimeError("relationship source manifest requires a nonempty sources list")
+        rows_written = 0
+        for source in sources:
+            if not isinstance(source, dict):
+                raise WarehouseRuntimeError("relationship source manifest rows must be objects")
+            kind = str(source.get("kind") or "")
+            storage_path = str(source.get("storage_path") or "")
+            expected_sha = str(source.get("sha256") or "").lower()
+            if not storage_path or not re.fullmatch(r"[0-9a-f]{64}", expected_sha):
+                raise WarehouseRuntimeError(f"{kind or 'source'} requires storage_path and SHA-256")
+            payload = read_bytes(storage_path)
+            actual_sha = hashlib.sha256(payload).hexdigest()
+            if actual_sha != expected_sha:
+                raise WarehouseRuntimeError(
+                    f"relationship source hash mismatch for {storage_path}: {actual_sha}"
+                )
+            if kind == "iapd_adv_bulk":
+                from edgar_warehouse.application.adv_bulk_ingest import ingest_adv_bulk_archive
+                counts = ingest_adv_bulk_archive(
+                    db, payload, dataset_period=str(source.get("dataset_period") or ""),
+                    source_sha256=actual_sha, sync_run_id=sync_run_id,
+                )
+                rows_written += sum(counts.values())
+            elif kind == "sec_subsidiary_exhibit":
+                from edgar_warehouse.application.subsidiary_exhibits import (
+                    ingest_subsidiary_parse_result, parse_subsidiary_exhibit,
+                )
+                parsed = parse_subsidiary_exhibit(
+                    accession_number=str(source.get("accession_number") or ""),
+                    registrant_cik=int(source.get("registrant_cik") or 0),
+                    document_name=str(source.get("document_name") or ""),
+                    document_type=str(source.get("document_type") or ""), content=payload,
+                    report_date=date.fromisoformat(str(source.get("report_date") or "")),
+                    source_sha256=actual_sha,
+                )
+                if parsed.outcome == "unresolved":
+                    raise WarehouseRuntimeError(
+                        f"unresolved subsidiary artifact {storage_path}: {parsed.reason}"
+                    )
+                rows_written += ingest_subsidiary_parse_result(db, parsed, sync_run_id=sync_run_id)
+            elif kind == "sec_auditor_filing":
+                from edgar_warehouse.application.auditor_evidence import (
+                    ingest_auditor_parse_result, parse_auditor_evidence,
+                )
+                parsed = parse_auditor_evidence(
+                    accession_number=str(source.get("accession_number") or ""),
+                    registrant_cik=int(source.get("registrant_cik") or 0),
+                    form_type=str(source.get("form_type") or ""),
+                    document_name=str(source.get("document_name") or ""), content=payload,
+                    audited_period_end=date.fromisoformat(
+                        str(source.get("audited_period_end") or "")
+                    ),
+                    filing_date=date.fromisoformat(str(source.get("filing_date") or "")),
+                    source_sha256=actual_sha,
+                )
+                if parsed.outcome != "applicable_loaded":
+                    raise WarehouseRuntimeError(
+                        f"unresolved auditor artifact {storage_path}: {parsed.reason}"
+                    )
+                rows_written += ingest_auditor_parse_result(db, parsed, sync_run_id=sync_run_id)
+            elif kind == "pcaob_firm_registry":
+                from edgar_warehouse.application.auditor_evidence import parse_pcaob_firm_registry
+                identities = parse_pcaob_firm_registry(
+                    payload, snapshot_uri=str(source.get("source_uri") or storage_path),
+                    snapshot_sha256=actual_sha,
+                )
+                if not identities:
+                    raise WarehouseRuntimeError("PCAOB firm registry is empty")
+            else:
+                raise WarehouseRuntimeError(f"unsupported relationship source kind: {kind!r}")
+        metrics["rows_inserted"] += rows_written
+        metrics["relationship_source_count"] = len(sources)
         return raw_writes, metrics
 
     if command_name == "gold-refresh":
@@ -1678,6 +1797,9 @@ def _run_submissions_bronze_then_silver(
     recent_limit: int | None = None,
     artifact_policy: str = "none",
     parser_policy: str = "none",
+    release_mode: bool = False,
+    required_accessions: set[str] | None = None,
+    repair_manifest_accessions: set[str] | None = None,
 ) -> dict[str, Any]:
     """Capture every selected SEC submission into bronze before applying silver."""
     bronze_snapshots = []
@@ -1765,14 +1887,28 @@ def _run_submissions_bronze_then_silver(
         run_id=sync_run_id,
     )
 
+    observed_accessions = _dedupe_strings([*recent_accessions, *pagination_accessions])
+    if release_mode:
+        required = set(required_accessions or ())
+        missing = sorted(required - set(observed_accessions))
+        if missing:
+            raise WarehouseRuntimeError(
+                f"required relationship candidates missing from submissions: {missing}"
+            )
+        artifact_accessions = [accession for accession in observed_accessions if accession in required]
+    else:
+        artifact_accessions = observed_accessions
+
     artifact_result = _run_configured_form_artifact_pipeline(
         context=context,
         db=db,
         sync_run_id=sync_run_id,
-        accession_numbers=_dedupe_strings([*recent_accessions, *pagination_accessions]),
+        accession_numbers=artifact_accessions,
         artifact_policy=artifact_policy,
         parser_policy=parser_policy,
         force=force,
+        release_mode=release_mode,
+        repair_manifest_accessions=repair_manifest_accessions,
     )
     raw_writes.extend(artifact_result["raw_writes"])
     rows_written += int(artifact_result["rows_written"])

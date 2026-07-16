@@ -10,6 +10,7 @@ from edgar_warehouse.application.relationship_bulk_load import (
     LedgerError,
     build_candidate_inventory,
     reconcile_completion_ledger,
+    select_required_accessions,
 )
 
 
@@ -107,4 +108,22 @@ def test_ledger_requires_exactly_one_current_terminal_outcome() -> None:
             inventory,
             [CandidateOutcome("generation-1", "proxy", "old", "not_applicable", "evidence")],
             generation_id="generation-1",
+        )
+
+
+def test_release_manifest_selects_only_required_candidates_for_the_batch() -> None:
+    payload = {
+        "candidates": [
+            {"accession_number": "proxy", "cik": 1, "artifact_required": True},
+            {"accession_number": "unrelated", "cik": 1, "artifact_required": False},
+            {"accession_number": "other-batch", "cik": 2, "artifact_required": True},
+        ]
+    }
+
+    assert select_required_accessions(payload, ciks={1}) == {"proxy"}
+
+    with pytest.raises(InventoryError, match="duplicate"):
+        select_required_accessions(
+            {"candidates": [payload["candidates"][0], payload["candidates"][0]]},
+            ciks={1},
         )

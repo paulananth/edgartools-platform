@@ -209,7 +209,7 @@ class MdmCompany(Base):
         ForeignKey("mdm_entity.entity_id"),
         primary_key=True,
     )
-    cik: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False)
+    cik: Mapped[Optional[int]] = mapped_column(BigInteger, unique=True, nullable=True)
     canonical_name: Mapped[str] = mapped_column(Text, nullable=False)
     ein: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     sic_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -328,6 +328,7 @@ class MdmFund(Base):
         ForeignKey("mdm_entity.entity_id"),
         nullable=True,
     )
+    private_fund_id: Mapped[Optional[str]] = mapped_column(Text, unique=True, nullable=True)
     canonical_name: Mapped[str] = mapped_column(Text, nullable=False)
     fund_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     jurisdiction: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

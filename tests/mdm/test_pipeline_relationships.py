@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from datetime import date
 from typing import Any, Optional
 
 import pytest
@@ -726,6 +727,33 @@ class TestRunRelationships:
             + summary["AUDITED_BY"]["skipped_unresolved_target"]
             + summary["AUDITED_BY"]["skipped_existing"]
         )
+
+    def test_direct_auditor_evidence_creates_long_tail_firm_at_report_date(
+        self, session, fixture_world
+    ):
+        silver = StubSilver({
+            "sec_auditor_report_evidence": [{
+                "cik": 910001, "accession_number": "annual-2024",
+                "fiscal_year": 2024, "period_end": date(2024, 12, 31),
+                "report_date": date(2025, 2, 14), "auditor_pcaob_id": "1042",
+                "auditor_name": "Long Tail CPAs", "icfr_attestation": None,
+                "evidence_source": "sec_ixbrl", "evidence_fingerprint": "fp-1",
+                "form_ap_filing_id": "ap-9",
+            }],
+        })
+        summary = MDMPipeline(session=session, silver=silver).derive_relationships(
+            relationship_types=["AUDITED_BY"]
+        )
+        assert summary["AUDITED_BY"]["inserted"] == 1
+        firm = session.scalar(
+            select(MdmAuditFirm).where(MdmAuditFirm.pcaob_firm_id == "1042")
+        )
+        assert firm is not None
+        relationship = session.scalar(select(MdmRelationshipInstance).where(
+            MdmRelationshipInstance.target_entity_id == firm.entity_id
+        ))
+        assert relationship.effective_from == date(2025, 2, 14)
+        assert relationship.properties["evidence_fingerprint"] == "fp-1"
 
     def test_audited_by_change_detection(self, session, fixture_world):
         """AUDITED_BY: auditor_changed=True when fiscal_year N+1 has a different auditor. (06-02)"""

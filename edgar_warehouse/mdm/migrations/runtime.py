@@ -68,7 +68,7 @@ _MSSQL_SCHEMA_STATEMENTS = [
     IF OBJECT_ID('mdm_company', 'U') IS NULL
     CREATE TABLE mdm_company (
         entity_id NVARCHAR(36) NOT NULL CONSTRAINT pk_mdm_company PRIMARY KEY REFERENCES mdm_entity(entity_id),
-        cik BIGINT NOT NULL CONSTRAINT uq_mdm_company_cik UNIQUE,
+        cik BIGINT NULL CONSTRAINT uq_mdm_company_cik UNIQUE,
         canonical_name NVARCHAR(512) NOT NULL,
         ein NVARCHAR(64) NULL,
         sic_code NVARCHAR(32) NULL,
@@ -137,6 +137,7 @@ _MSSQL_SCHEMA_STATEMENTS = [
     CREATE TABLE mdm_fund (
         entity_id NVARCHAR(36) NOT NULL CONSTRAINT pk_mdm_fund PRIMARY KEY REFERENCES mdm_entity(entity_id),
         adviser_entity_id NVARCHAR(36) NULL REFERENCES mdm_entity(entity_id),
+        private_fund_id NVARCHAR(64) NULL CONSTRAINT uq_mdm_fund_pfid UNIQUE,
         canonical_name NVARCHAR(512) NOT NULL,
         fund_type NVARCHAR(128) NULL,
         jurisdiction NVARCHAR(128) NULL,
@@ -146,6 +147,7 @@ _MSSQL_SCHEMA_STATEMENTS = [
         valid_to DATETIMEOFFSET NULL
     )
     """,
+    "IF COL_LENGTH('mdm_fund', 'private_fund_id') IS NULL ALTER TABLE mdm_fund ADD private_fund_id NVARCHAR(64) NULL",
     """
     IF OBJECT_ID('mdm_source_priority', 'U') IS NULL
     CREATE TABLE mdm_source_priority (
@@ -360,6 +362,7 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
         _apply_sql_file(engine, "007_relationship_coverage.sql")
         _apply_sql_file(engine, "008_publication_queue.sql")
         _apply_sql_file(engine, "009_graph_generation_builder.sql")
+        _apply_sql_file(engine, "010_release_relationship_sources.sql")
 
     if seed:
         with Session(engine) as session:

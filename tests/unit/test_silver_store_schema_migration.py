@@ -25,6 +25,7 @@ _EXPECTED_SCHEMA_MIGRATIONS = [
     "003_parse_run_rows_written",
     "004_source_checkpoint_bronze_path",
     "005_financial_derived_factor_columns",
+    "006_adv_pfid_lineage",
 ]
 
 # Pre-PR-#57 DDL (PK omits period_end) for sec_financial_fact / sec_financial_derived.

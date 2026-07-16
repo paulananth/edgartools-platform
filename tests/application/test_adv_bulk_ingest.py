@@ -1,0 +1,54 @@
+from __future__ import annotations
+
+import io
+import zipfile
+
+from edgar_warehouse.application.adv_bulk_ingest import parse_adv_bulk_archive
+
+
+def _archive(files: dict[str, str]) -> bytes:
+    payload = io.BytesIO()
+    with zipfile.ZipFile(payload, "w") as bundle:
+        for name, content in files.items():
+            bundle.writestr(name, content)
+    return payload.getvalue()
+
+
+def test_adv_bulk_archive_uses_crd_and_pfid_for_both_schedule_sections() -> None:
+    archive = _archive({
+        "IA_ADV_Base_A_20260601_20260630.csv": (
+            '"FilingID","DateSubmitted","1A","1D","1E1","7B"\n'
+            '2115188,"06/24/2026 10:37:17 AM","PNC WEALTH","801-66195",129052,"Y"\n'
+        ),
+        "IA_Schedule_D_7B1_20260601_20260630.csv": (
+            '"FilingID","Fund Name","Fund ID","ReferenceID","State","Country",'
+            '"Fund Type","Gross Asset Value"\n'
+            '2115188,"ALPHA FUND",805-123,518607,"Delaware","United States",'
+            '"Private Equity Fund",321687148\n'
+        ),
+        "IA_Schedule_D_7B2_20260601_20260630.csv": (
+            '"FilingID","Fund Name","Fund ID","Adviser Name","Adviser SEC Number",'
+            '"Clients Solicited?"\n'
+            '2115188,"BETA FUND",805-456,"REPORTING ADVISER","801-99999","N"\n'
+        ),
+        "ADV_Filing_Types_20260601_20260630.csv": (
+            'FilingID,Annual Updating Amendment for Registered Adviser,Final SEC ERA Report\n'
+            '2115188,Y,\n'
+        ),
+    })
+
+    parsed = parse_adv_bulk_archive(
+        archive,
+        dataset_period="2026-06",
+        source_sha256="abc123",
+    )
+
+    assert parsed.filings[0].accession_number == "iapd-adv:2115188"
+    assert parsed.filings[0].adviser_crd_number == "129052"
+    assert parsed.filings[0].filing_action == "annual_updating_amendment_for_registered_adviser"
+    assert [(row.private_fund_id, row.schedule_section) for row in parsed.funds] == [
+        ("805-123", "7B1"),
+        ("805-456", "7B2"),
+    ]
+    assert {row.adviser_crd_number for row in parsed.funds} == {"129052"}
+    assert all(row.source_sha256 == "abc123" for row in parsed.funds)

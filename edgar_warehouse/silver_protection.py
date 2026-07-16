@@ -92,6 +92,12 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
     "sec_adv_private_fund": ProtectedTablePolicy(
         "sec_adv_private_fund", ("accession_number", "fund_index")
     ),
+    "sec_subsidiary_evidence": ProtectedTablePolicy(
+        "sec_subsidiary_evidence", ("accession_number", "document_name", "row_ordinal")
+    ),
+    "sec_auditor_report_evidence": ProtectedTablePolicy(
+        "sec_auditor_report_evidence", ("accession_number", "evidence_fingerprint")
+    ),
     "sec_raw_object": ProtectedTablePolicy(
         "sec_raw_object", ("raw_object_id",), authority_column="fetched_at"
     ),

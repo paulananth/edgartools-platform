@@ -30,6 +30,34 @@ class LedgerError(ValueError):
     pass
 
 
+def select_required_accessions(
+    manifest: object,
+    *,
+    ciks: set[int] | None = None,
+) -> set[str]:
+    """Return the bounded artifact-required accessions for one CIK batch."""
+    rows = manifest.get("candidates") if isinstance(manifest, Mapping) else manifest
+    if not isinstance(rows, list) or not rows:
+        raise InventoryError("candidate manifest must contain a non-empty candidates list")
+    selected: set[str] = set()
+    seen: set[str] = set()
+    for row in rows:
+        if not isinstance(row, Mapping):
+            raise InventoryError("candidate manifest rows must be objects")
+        accession = str(row.get("accession_number") or "").strip()
+        if not accession:
+            raise InventoryError("candidate manifest row is missing accession_number")
+        if accession in seen:
+            raise InventoryError(f"duplicate candidate accession: {accession}")
+        seen.add(accession)
+        cik = int(row.get("cik") or 0)
+        if ciks is not None and cik not in ciks:
+            continue
+        if bool(row.get("artifact_required", True)):
+            selected.add(accession)
+    return selected
+
+
 def _sha256(value: object) -> str:
     payload = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
