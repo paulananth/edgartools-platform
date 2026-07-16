@@ -310,22 +310,26 @@ def test_compute_windows_command_includes_total_cik_limit(definition: dict) -> N
 
 
 def test_total_cik_limit_check_defaults_to_no_limit_sentinel(definition: dict) -> None:
-    """TotalCikLimitCheck routes straight to ComputeWindows when the caller supplied
+    """TotalCikLimitCheck routes straight to ArtifactPolicyCheck when the caller supplied
     total_cik_limit; otherwise TotalCikLimitDefault injects the sentinel 0 (no limit),
-    preserving backward compatibility for every existing --input '{}' caller."""
+    preserving backward compatibility for every existing --input '{}' caller.
+    ArtifactPolicyCheck/Default (added for the opt-in artifact-policy skip flag, see
+    CLAUDE.md's artifact-throttle 5-whys mitigation #2) sit between this check and
+    ComputeWindows -- both checks' Next targets were updated together, this test now
+    reflects that intermediate hop rather than the pre-ArtifactPolicyCheck routing."""
     states = definition["States"]
     check = states["TotalCikLimitCheck"]
     assert check["Type"] == "Choice"
     assert check["Choices"][0]["Variable"] == "$.total_cik_limit"
     assert check["Choices"][0]["IsPresent"] is True
-    assert check["Choices"][0]["Next"] == "ComputeWindows"
+    assert check["Choices"][0]["Next"] == "ArtifactPolicyCheck"
     assert check["Default"] == "TotalCikLimitDefault"
 
     default_state = states["TotalCikLimitDefault"]
     assert default_state["Type"] == "Pass"
     assert default_state["Result"] == 0
     assert default_state["ResultPath"] == "$.total_cik_limit"
-    assert default_state["Next"] == "ComputeWindows"
+    assert default_state["Next"] == "ArtifactPolicyCheck"
 
 
 def test_window_size_and_total_cik_limit_checks_precede_compute_windows(definition: dict) -> None:

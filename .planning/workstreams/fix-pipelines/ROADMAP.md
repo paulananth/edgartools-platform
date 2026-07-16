@@ -149,16 +149,16 @@ dropped.
   10. Intact bronze artifacts cause zero SEC network calls; explicit bronze repair remains audited and cannot bypass silver monotonicity.
   12. Normal publication meets the five-minute target and emits a hard operational alert after fifteen minutes; bounded backfills declare their publication window.
 
-**Plans**: 1/8 plans executed
+**Plans**: 6/8 plans executed; 07-07 Task 1 (repeatable rehearsal script + test) executed, Tasks 2-3 blocked on a required human-verify checkpoint (see 07-07-PLAN.md; not autonomous)
 
 - [x] 07-00-PLAN.md — Live Snowflake-hosted Neo4j Native App capability preflight and dated GO evidence
-- [ ] 07-01-PLAN.md — Stable relationship/version identity, date-only temporal contract, provenance, direct/derived rules, source priority, and non-destructive conflict handling
-- [ ] 07-02-PLAN.md — Exhaustive generation coverage manifest, per-generation valid-zero evidence, and EDGE-07/08 machine-readable exclusions
-- [ ] 07-03-PLAN.md — Transactional MDM publication queue, watermarks, lifecycle states, five/fifteen-minute freshness health, and alerts
-- [ ] 07-04-PLAN.md — Parallel type-first generation partitions, selective hash sharding, content-addressed reuse, independent retry, and fan-in manifests
-- [ ] 07-05-PLAN.md — Snowflake active-generation serving boundary, complete node/edge parity, temporal graph queries, canonical entity remap, atomic activation, rollback, and retention
-- [ ] 07-06-PLAN.md — Semantic silver merge/promotion, protected-table/conflict policies, optimistic S3 concurrency, global bronze idempotency, and audited repair
-- [ ] 07-07-PLAN.md — Bounded dev rehearsal proving exclusions, temporal/multi-hop behavior, concurrency, retry/reuse, activation safety, and rollback
+- [x] 07-01-PLAN.md — Stable relationship/version identity, date-only temporal contract, provenance, direct/derived rules, source priority, and non-destructive conflict handling
+- [x] 07-02-PLAN.md — Exhaustive generation coverage manifest, per-generation valid-zero evidence, and EDGE-07/08 machine-readable exclusions
+- [x] 07-03-PLAN.md — Transactional MDM publication queue, watermarks, lifecycle states, five/fifteen-minute freshness health, and alerts
+- [x] 07-04-PLAN.md — Parallel type-first generation partitions, selective hash sharding, content-addressed reuse, independent retry, and fan-in manifests (partial: per-partition Snowflake row write and pipeline chaining deferred; see RSYNC-04)
+- [x] 07-05-PLAN.md — Snowflake active-generation serving boundary, complete node/edge parity, temporal graph queries, canonical entity remap, atomic activation, rollback, and retention
+- [x] 07-06-PLAN.md — Semantic silver merge/promotion, protected-table/conflict policies, optimistic S3 concurrency, global bronze idempotency, and audited repair
+- [ ] 07-07-PLAN.md — Bounded dev rehearsal proving exclusions, temporal/multi-hop behavior, concurrency, retry/reuse, activation safety, and rollback (Task 1 done; Task 2 requires a human operator to run the rehearsal against AWS/Snowflake dev and type `approved`; Task 3's `07-VERIFICATION.md` cannot be marked `passed` until then)
 
 ### Phase 8: Neo4j Native App Verification Gaps
 

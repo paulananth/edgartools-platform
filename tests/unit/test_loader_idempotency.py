@@ -435,6 +435,272 @@ class LoaderIdempotencyTests(unittest.TestCase):
         get_filing.assert_called_once_with(accession)
         self.assertEqual(result["attachment_count"], 2)
 
+    def test_def14a_existing_filing_attachment_skips_index_and_document_downloads(self) -> None:
+        """DEF 14A cache hit must be as network-free as every other form type
+        (07-06 Task 3: idempotency is asserted at the shared service boundary
+        for every filing type, not just ownership forms)."""
+        accession = "0000320193-26-000777"
+        raw_object_id = "raw-def14a-primary"
+        attachments = [
+            {
+                "accession_number": accession,
+                "document_name": "def14a.htm",
+                "document_type": "DEF 14A",
+                "document_url": "https://www.sec.gov/Archives/edgar/data/320193/def14a.htm",
+                "is_primary": True,
+                "raw_object_id": raw_object_id,
+            }
+        ]
+        raw_objects = {
+            raw_object_id: {
+                "raw_object_id": raw_object_id,
+                "accession_number": accession,
+                "source_type": "filing_document",
+                "source_url": attachments[0]["document_url"],
+                "storage_path": "s3://bucket/def14a.htm",
+                "sha256": raw_object_id,
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _ArtifactDb(attachments=attachments, raw_objects=raw_objects)
+            db.filing = {"cik": 320193, "form": "DEF 14A", "primary_document": "def14a.htm"}
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+
+            result = bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context,
+                db=db,
+                accession_number=accession,
+                sync_run_id="run-1",
+                download_bytes=Mock(side_effect=AssertionError("SEC download")),
+                get_filing=Mock(side_effect=AssertionError("edgartools fetch")),
+                force=False,
+            )
+
+        self.assertEqual(result["attachment_count"], 1)
+        self.assertEqual(result["raw_writes"][0]["cached"], True)
+        self.assertEqual(db.merged_rows, [])
+        self.assertEqual(result["network_fetches"], 0)
+
+    def test_13f_hr_cached_attachments_skip_downloads_and_report_zero_network_fetches(self) -> None:
+        """13F-HR must also honor the cache-hit path once its attachments (cover
+        page + INFORMATION TABLE) are already captured -- the EDGE-11 fallback
+        only applies to the first, cold-start fetch."""
+        accession = "0001067983-26-000999"
+        cover_raw_id = "raw-13f-cover"
+        infotable_raw_id = "raw-13f-infotable"
+        attachments = [
+            {
+                "accession_number": accession,
+                "document_name": "primary_doc.xml",
+                "document_type": "13F-HR",
+                "document_url": "https://www.sec.gov/Archives/edgar/data/1067983/primary_doc.xml",
+                "is_primary": True,
+                "raw_object_id": cover_raw_id,
+            },
+            {
+                "accession_number": accession,
+                "document_name": "53405.xml",
+                "document_type": "INFORMATION TABLE",
+                "document_url": "https://www.sec.gov/Archives/edgar/data/1067983/53405.xml",
+                "is_primary": False,
+                "raw_object_id": infotable_raw_id,
+            },
+        ]
+        raw_objects = {
+            cover_raw_id: {
+                "raw_object_id": cover_raw_id,
+                "accession_number": accession,
+                "source_type": "filing_document",
+                "source_url": attachments[0]["document_url"],
+                "storage_path": "s3://bucket/primary_doc.xml",
+                "sha256": cover_raw_id,
+            },
+            infotable_raw_id: {
+                "raw_object_id": infotable_raw_id,
+                "accession_number": accession,
+                "source_type": "attachment",
+                "source_url": attachments[1]["document_url"],
+                "storage_path": "s3://bucket/53405.xml",
+                "sha256": infotable_raw_id,
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _ArtifactDb(attachments=attachments, raw_objects=raw_objects)
+            db.filing = {
+                "cik": 1067983,
+                "form": "13F-HR",
+                "primary_document": "xslForm13F_X02/primary_doc.xml",
+            }
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+
+            result = bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context,
+                db=db,
+                accession_number=accession,
+                sync_run_id="run-1",
+                download_bytes=Mock(side_effect=AssertionError("SEC download")),
+                get_filing=Mock(side_effect=AssertionError("edgartools fetch")),
+                force=False,
+            )
+
+        self.assertEqual(result["attachment_count"], 2)
+        self.assertEqual(db.merged_rows, [])
+        self.assertEqual(result["network_fetches"], 0)
+
+    def test_force_repair_emits_audit_record_with_prior_and_replacement_versions(self) -> None:
+        """A force refetch that replaces an already-captured document must emit a
+        repair audit entry: accession, prior object hash/version, replacement
+        hash/version, operator context, and reason (07-06 Task 3)."""
+        accession = "0000320193-26-000001"
+        prior_raw_id = "raw-old-primary"
+        attachments = [
+            {
+                "accession_number": accession,
+                "document_name": "primary.xml",
+                "document_type": "4",
+                "document_url": "https://www.sec.gov/Archives/edgar/data/320193/primary.xml",
+                "is_primary": True,
+                "raw_object_id": prior_raw_id,
+            }
+        ]
+        raw_objects = {
+            prior_raw_id: {
+                "raw_object_id": prior_raw_id,
+                "accession_number": accession,
+                "source_type": "filing_document",
+                "source_url": attachments[0]["document_url"],
+                "storage_path": "s3://bucket/primary-old.xml",
+                "sha256": "old-sha256",
+            }
+        }
+        new_payload = b"<ownershipDocument>replacement</ownershipDocument>"
+        primary_attachment = _FakeAttachment(
+            sequence_number="1",
+            document="primary.xml",
+            document_type="4",
+            description="Primary document",
+            url="https://www.sec.gov/Archives/edgar/data/320193/primary.xml",
+            content=new_payload,
+        )
+        fake_filing = _FakeFiling(attachments=_FakeAttachments([primary_attachment]))
+        get_filing = Mock(return_value=fake_filing)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _ArtifactDb(attachments=attachments, raw_objects=raw_objects)
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+
+            result = bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context,
+                db=db,
+                accession_number=accession,
+                sync_run_id="run-1",
+                download_bytes=Mock(side_effect=AssertionError("should use edgartools content")),
+                get_filing=get_filing,
+                force=True,
+                operator="ops@example.com",
+                reason="corrupted bronze object detected during audit",
+            )
+
+        get_filing.assert_called_once_with(accession)
+        self.assertIn("repair_audit", result)
+        self.assertEqual(len(result["repair_audit"]), 1)
+        entry = result["repair_audit"][0]
+        self.assertEqual(entry["accession_number"], accession)
+        self.assertEqual(entry["document_name"], "primary.xml")
+        self.assertEqual(entry["prior_object_hash"], "old-sha256")
+        self.assertEqual(entry["prior_object_version"], "s3://bucket/primary-old.xml")
+        self.assertEqual(entry["replacement_object_hash"], hashlib.sha256(new_payload).hexdigest())
+        self.assertNotEqual(entry["replacement_object_hash"], entry["prior_object_hash"])
+        self.assertEqual(entry["operator"], "ops@example.com")
+        self.assertEqual(entry["reason"], "corrupted bronze object detected during audit")
+
+    def test_force_without_prior_state_emits_no_repair_audit(self) -> None:
+        """force=True against a genuinely first-time fetch (no prior raw object for
+        this document) is not a repair -- no audit entry should be fabricated."""
+        accession = "0000320193-26-000002"
+        primary_attachment = _FakeAttachment(
+            sequence_number="1",
+            document="primary.xml",
+            document_type="4",
+            description="Primary document",
+            url="https://www.sec.gov/Archives/edgar/data/320193/primary.xml",
+            content="<ownershipDocument />",
+        )
+        fake_filing = _FakeFiling(attachments=_FakeAttachments([primary_attachment]))
+        get_filing = Mock(return_value=fake_filing)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _ArtifactDb()
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+
+            result = bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context,
+                db=db,
+                accession_number=accession,
+                sync_run_id="run-1",
+                download_bytes=Mock(side_effect=AssertionError("should use edgartools content")),
+                get_filing=get_filing,
+                force=True,
+            )
+
+        self.assertNotIn("repair_audit", result)
+
+    def test_force_repair_without_operator_or_reason_still_audits_but_leaves_them_blank(self) -> None:
+        """Existing callers that don't yet pass operator/reason (07-06 Task 3
+        threads them only as far as filing_artifact_service.py/
+        bronze_filing_artifacts.py) still get a truthful audit record rather than
+        a fabricated operator/reason."""
+        accession = "0000320193-26-000003"
+        prior_raw_id = "raw-old-primary-2"
+        attachments = [
+            {
+                "accession_number": accession,
+                "document_name": "primary.xml",
+                "document_type": "4",
+                "document_url": "https://www.sec.gov/Archives/edgar/data/320193/primary.xml",
+                "is_primary": True,
+                "raw_object_id": prior_raw_id,
+            }
+        ]
+        raw_objects = {
+            prior_raw_id: {
+                "raw_object_id": prior_raw_id,
+                "accession_number": accession,
+                "source_type": "filing_document",
+                "source_url": attachments[0]["document_url"],
+                "storage_path": "s3://bucket/primary-old.xml",
+                "sha256": "old-sha256",
+            }
+        }
+        primary_attachment = _FakeAttachment(
+            sequence_number="1",
+            document="primary.xml",
+            document_type="4",
+            description="Primary document",
+            url="https://www.sec.gov/Archives/edgar/data/320193/primary.xml",
+            content=b"<ownershipDocument>x</ownershipDocument>",
+        )
+        fake_filing = _FakeFiling(attachments=_FakeAttachments([primary_attachment]))
+        get_filing = Mock(return_value=fake_filing)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _ArtifactDb(attachments=attachments, raw_objects=raw_objects)
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+
+            result = bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context,
+                db=db,
+                accession_number=accession,
+                sync_run_id="run-1",
+                download_bytes=Mock(side_effect=AssertionError("should use edgartools content")),
+                get_filing=get_filing,
+                force=True,
+            )
+
+        self.assertIn("repair_audit", result)
+        self.assertIsNone(result["repair_audit"][0]["operator"])
+        self.assertIsNone(result["repair_audit"][0]["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()

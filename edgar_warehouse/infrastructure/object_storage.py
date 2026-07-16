@@ -12,6 +12,46 @@ from edgar_warehouse.application.errors import WarehouseRuntimeError
 ALLOWED_REMOTE_PROTOCOLS = frozenset({"s3"})
 
 
+class PromotionConflictError(WarehouseRuntimeError):
+    """Raised when the canonical object changed since its version/ETag baseline was read.
+
+    Retryable: the staged object is left in place (never deleted on conflict)
+    so a caller can re-read canonical, re-merge, and retry promotion.
+    """
+
+    def __init__(
+        self,
+        canonical_relative_path: str,
+        expected_etag: str | None,
+        actual_etag: str | None,
+        staged_relative_path: str,
+    ) -> None:
+        self.canonical_relative_path = canonical_relative_path
+        self.expected_etag = expected_etag
+        self.actual_etag = actual_etag
+        self.staged_relative_path = staged_relative_path
+        super().__init__(
+            f"canonical object {canonical_relative_path!r} changed during publication "
+            f"(expected ETag {expected_etag!r}, found {actual_etag!r}); staged candidate "
+            f"preserved at {staged_relative_path!r} for retry"
+        )
+
+
+@dataclass(frozen=True)
+class ObjectVersion:
+    exists: bool
+    etag: str | None
+    version_id: str | None
+
+
+@dataclass(frozen=True)
+class PromotionResult:
+    canonical_path: str
+    staged_relative_path: str
+    previous_version: "ObjectVersion"
+    new_version: "ObjectVersion"
+
+
 def sanitize_relative_path(relative_path: str) -> str:
     candidate = str(relative_path or "").strip().replace("\\", "/")
     if not candidate:
@@ -152,6 +192,86 @@ class StorageLocation:
         import glob as glob_module
 
         return sorted(glob_module.glob(pattern))
+
+    def read_object_version(self, relative_path: str) -> "ObjectVersion":
+        """Current version/ETag of an object.
+
+        Used as the optimistic-concurrency baseline: a caller reads this
+        before staging a merge candidate, then ``promote_staged`` reads it
+        again immediately before committing and refuses to promote if it
+        changed. Local (non-remote) storage has no real object versioning;
+        an MD5 content digest (matching S3's own default single-part ETag
+        scheme) stands in as a deterministic equivalent so the same
+        compare-before-promote logic is exercisable in local/dev/test runs.
+        """
+        relative = sanitize_relative_path(relative_path)
+        destination = self.join(relative)
+        if self.is_remote:
+            protocol = _protocol_for_uri(self.root)
+            _assert_protocol_allowed(protocol)
+            import fsspec
+
+            fs = fsspec.filesystem(protocol, **_remote_storage_options(destination))
+            if not fs.exists(destination):
+                return ObjectVersion(exists=False, etag=None, version_id=None)
+            info = fs.info(destination)
+            raw_etag = info.get("ETag") or info.get("etag")
+            etag = str(raw_etag).strip('"') if raw_etag else None
+            version_id = info.get("VersionId") or info.get("version_id")
+            return ObjectVersion(exists=True, etag=etag, version_id=version_id)
+
+        destination_path = Path(destination)
+        if not destination_path.exists():
+            return ObjectVersion(exists=False, etag=None, version_id=None)
+        import hashlib
+
+        digest = hashlib.md5(destination_path.read_bytes()).hexdigest()
+        return ObjectVersion(exists=True, etag=digest, version_id=None)
+
+    def write_staged_bytes(self, canonical_relative_path: str, payload: bytes) -> str:
+        """Write payload under a fresh, immutable staging key.
+
+        The staging key embeds a random token so it never collides with the
+        canonical key or with any other concurrent staged write. Returns the
+        relative staging path (pass it to ``promote_staged``).
+        """
+        import uuid
+
+        canonical_relative = sanitize_relative_path(canonical_relative_path)
+        staged_relative = f"_staging/{uuid.uuid4().hex}/{canonical_relative}"
+        self.write_bytes(staged_relative, payload)
+        return staged_relative
+
+    def promote_staged(
+        self,
+        staged_relative_path: str,
+        canonical_relative_path: str,
+        *,
+        expected_etag: str | None,
+    ) -> "PromotionResult":
+        """Promote a staged object onto the canonical key -- but only if
+        canonical's current version/ETag still equals ``expected_etag``.
+
+        Raises ``PromotionConflictError`` (leaving the staged object in place
+        for inspection/retry) if canonical changed since ``expected_etag`` was
+        read. Never silently last-writer-wins.
+        """
+        canonical_relative = sanitize_relative_path(canonical_relative_path)
+        previous = self.read_object_version(canonical_relative)
+        if previous.etag != expected_etag:
+            raise PromotionConflictError(
+                canonical_relative, expected_etag, previous.etag, staged_relative_path
+            )
+
+        staged_bytes = read_bytes(self.join(sanitize_relative_path(staged_relative_path)))
+        canonical_path_str = self.write_bytes(canonical_relative, staged_bytes)
+        new_version = self.read_object_version(canonical_relative)
+        return PromotionResult(
+            canonical_path=canonical_path_str,
+            staged_relative_path=staged_relative_path,
+            previous_version=previous,
+            new_version=new_version,
+        )
 
     def write_bytes(self, relative_path: str, payload: bytes) -> str:
         relative = sanitize_relative_path(relative_path)
