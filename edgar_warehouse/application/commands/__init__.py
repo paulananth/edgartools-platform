@@ -18,6 +18,7 @@ from edgar_warehouse.application.commands import (
     migrate_silver_shards,
     parse_adv_bronze,
     parse_ownership_bronze,
+    reconcile_relationship_release,
     seed_bronze_batches,
     seed_silver_batches,
     seed_universe,
@@ -46,6 +47,7 @@ COMMAND_REGISTRY = {
     "bootstrap-fundamentals": bootstrap_fundamentals.execute,   # Branch B (AD-05)
     "gold-refresh": gold_refresh.execute,
     "ingest-relationship-sources": ingest_relationship_sources.execute,
+    "reconcile-relationship-release": reconcile_relationship_release.execute,
     "migrate-silver-shards": migrate_silver_shards.execute,
     "validate-data-quality": validate_data_quality.execute,
     "verify-pipeline-run": verify_pipeline_run.execute,

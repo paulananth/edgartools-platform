@@ -48,6 +48,12 @@ class _ConfiguredFormDb:
     def get_filing(self, accession_number: str):
         return self.filings.get(accession_number)
 
+    def get_filing_attachments(self, accession_number: str):
+        return [{"raw_object_id": f"raw-{accession_number}"}]
+
+    def get_raw_object(self, raw_object_id: str):
+        return {"sha256": f"sha-{raw_object_id}"}
+
 
 class SubmissionPhaseOrderTests(unittest.TestCase):
     def test_bulk_submission_flow_captures_all_bronze_before_silver(self) -> None:
@@ -336,6 +342,31 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                         release_mode=True,
                     )
 
+    def test_release_artifact_pipeline_can_defer_branch_b_parser_after_hash_capture(self) -> None:
+        with (
+            patch(
+                "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
+                return_value={"raw_writes": [], "attachment_count": 1, "network_fetches": 0},
+            ),
+            patch.object(
+                warehouse_orchestrator,
+                "_run_parse_pipeline",
+                side_effect=AssertionError("generic parser must not handle Branch B release forms"),
+            ),
+        ):
+            result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
+                context=SimpleNamespace(identity="tester@example.com"),
+                db=_ConfiguredFormDb(),
+                sync_run_id="release",
+                accession_numbers=["proxy-1"],
+                artifact_policy="all_attachments",
+                parser_policy="branch_b_deferred",
+                force=False,
+                release_mode=True,
+            )
+
+        self.assertEqual(result["candidate_outcomes"][0]["status"], "artifacts_loaded")
+
     def test_release_parse_pipeline_rejects_generic_skip(self) -> None:
         db = SimpleNamespace(
             get_filing=lambda accession: {
@@ -352,6 +383,36 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 sync_run_id="release",
                 fail_closed=True,
             )
+
+    def test_release_batch_routes_branch_b_forms_to_their_strict_parsers(self) -> None:
+        candidates = [
+            SimpleNamespace(accession_number="proxy", form="DEF 14A", artifact_required=True),
+            SimpleNamespace(accession_number="13f", form="13F-HR", artifact_required=True),
+        ]
+        with (
+            patch(
+                "edgar_warehouse.application.workflows.fundamentals_ingest."
+                "run_bootstrap_fundamentals_per_filing",
+                return_value={"candidate_outcomes": [{
+                    "accession_number": "proxy", "status": "not_applicable",
+                    "reason": "no_relationship_rows",
+                }]},
+            ),
+            patch(
+                "edgar_warehouse.application.workflows.fundamentals_ingest."
+                "run_bootstrap_thirteenf",
+                return_value={"candidate_outcomes": [{
+                    "accession_number": "13f", "status": "applicable_loaded",
+                    "reason": "effective_holdings_loaded",
+                }]},
+            ),
+        ):
+            outcomes = warehouse_orchestrator._run_release_branch_b_parsers(
+                db=object(), ciks=[1, 9], candidates=candidates, sync_run_id="release",
+            )
+
+        self.assertEqual(outcomes["proxy"]["status"], "not_applicable")
+        self.assertEqual(outcomes["13f"]["status"], "applicable_loaded")
 
     def test_release_force_requires_explicit_repair_manifest(self) -> None:
         with self.assertRaisesRegex(Exception, "repair manifest"):

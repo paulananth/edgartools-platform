@@ -2253,6 +2253,41 @@ batch_size_check = {
     "Default": "BatchSizeDefault",
 }
 
+release_mode_check = {
+    "Type": "Choice",
+    "Comment": "Route an explicitly requested Ticket 20 execution to the immutable manifest path.",
+    "Choices": [{
+        "Variable": "$.release_mode",
+        "BooleanEquals": True,
+        "Next": "StrictManifestCheck",
+    }],
+    "Default": "BatchSizeCheck",
+}
+
+strict_manifest_check = {
+    "Type": "Choice",
+    "Comment": "Strict release requires both immutable S3 keys before any workload starts.",
+    "Choices": [{
+        "And": [
+            {"Variable": "$.candidate_manifest_key", "StringMatches": "?*"},
+            {"Variable": "$.candidate_batches_key", "StringMatches": "?*"},
+            {"Variable": "$.attestations.warehouse", "StringMatches": "?*"},
+            {"Variable": "$.attestations.mdm", "StringMatches": "?*"},
+            {"Variable": "$.attestations.graph", "StringMatches": "?*"},
+            {"Variable": "$.attestations.release_data_operator", "StringMatches": "?*"},
+            {"Variable": "$.attestations.release_owner", "StringMatches": "?*"},
+        ],
+        "Next": "StrictBatchSilver",
+    }],
+    "Default": "StrictInputMissing",
+}
+
+strict_input_missing = {
+    "Type": "Fail",
+    "Error": "StrictReleaseInputMissing",
+    "Cause": "release_mode requires immutable manifest keys and five named attestations",
+}
+
 batch_size_default = {
     "Type": "Pass",
     "Comment": "Inject default batch_size=100 when caller passed {} or omitted the key.",
@@ -2296,6 +2331,40 @@ batch_map = {
     "Next": "MdmRun",
 }
 
+strict_batch = ecs_state(wh_medium_arn,
+    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'all_attachments', '--parser-policy', 'branch_b_deferred', '--release-mode', '--candidate-manifest', States.Format('s3://" + bronze_bucket_name + "/{}', $.candidate_manifest_key), '--run-id', $$.Execution.Name)",
+    is_end=True)
+# Generic States.TaskFailed retries cannot distinguish a transient SEC/network
+# failure from a deterministic parser or manifest failure. Strict mode therefore
+# fails once and requires an explicit repair/replay decision.
+strict_batch.pop("Retry", None)
+
+strict_batch_map = {
+    "Type": "Map",
+    "MaxConcurrency": 4,
+    "Comment": "Ticket 20 strict candidate execution. Every batch is manifest-bounded and fail-closed.",
+    "ToleratedFailurePercentage": 0,
+    "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
+        "Parameters": {
+            "Bucket": bronze_bucket_name,
+            "Key.$": "$.candidate_batches_key",
+        },
+    },
+    "ItemSelector": {
+        "cik_list.$": "$$.Map.Item.Value.cik_list",
+        "candidate_manifest_key.$": "$.candidate_manifest_key",
+    },
+    "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
+        "StartAt": "RunStrictBatch",
+        "States": {"RunStrictBatch": strict_batch},
+    },
+    "ResultPath": None,
+    "Next": "ReconcileRelationshipRelease",
+}
+
 # INVARIANT: No --limit on MDM commands here. bronze_seed_silver_gold is always a full
 # bulk run (all CIKs found in bronze), not an incremental daily update.
 mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="MdmBackfill")
@@ -2309,6 +2378,18 @@ mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next
 # parity but must never block gold-refresh, so a verify failure falls through.
 gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
 
+strict_reconcile = ecs_state(wh_medium_arn,
+    "States.Array('reconcile-relationship-release', '--candidate-manifest', States.Format('s3://" + bronze_bucket_name + "/{}', $.candidate_manifest_key), '--run-id', $$.Execution.Name)",
+    next_state="StrictMdmRun", retry_secs=60)
+strict_mdm_run = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="StrictMdmBackfill")
+strict_mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="StrictMdmIdempotency")
+strict_mdm_idempotency = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="StrictMdmExport")
+strict_mdm_export = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="StrictMdmSync")
+strict_mdm_sync = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="StrictMdmSyncIdempotency")
+strict_mdm_sync_idempotency = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="StrictMdmVerify")
+strict_mdm_verify = ecs_state(mdm_small_arn, "States.Array('mdm', 'verify-graph')", next_state="StrictGoldRefresh")
+strict_gold = ecs_state(wh_large_arn, "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
+
 definition = {
     "Comment": (
         "One-click cold-start/recovery from an existing bronze snapshot: "
@@ -2319,8 +2400,21 @@ definition = {
         "(4) gold build + Snowflake export manifest. "
         "Trigger with: {} or {\"batch_size\": 100}"
     ),
-    "StartAt": "BatchSizeCheck",
+    "StartAt": "ReleaseModeCheck",
     "States": {
+        "ReleaseModeCheck": release_mode_check,
+        "StrictManifestCheck": strict_manifest_check,
+        "StrictInputMissing": strict_input_missing,
+        "StrictBatchSilver": strict_batch_map,
+        "ReconcileRelationshipRelease": strict_reconcile,
+        "StrictMdmRun": strict_mdm_run,
+        "StrictMdmBackfill": strict_mdm_backfill,
+        "StrictMdmIdempotency": strict_mdm_idempotency,
+        "StrictMdmExport": strict_mdm_export,
+        "StrictMdmSync": strict_mdm_sync,
+        "StrictMdmSyncIdempotency": strict_mdm_sync_idempotency,
+        "StrictMdmVerify": strict_mdm_verify,
+        "StrictGoldRefresh": strict_gold,
         "BatchSizeCheck": batch_size_check,
         "BatchSizeDefault": batch_size_default,
         "SeedFromBronze": seed_from_bronze,
