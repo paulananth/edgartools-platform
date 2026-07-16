@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal
 import json
 import os
 import uuid
@@ -327,6 +328,8 @@ def _quote_identifier(value: str) -> str:
 
 
 def _json_text(value: Any) -> str:
-    import json
-
+    if isinstance(value, Decimal):
+        if not value.is_finite():
+            raise ValueError("Snowflake export cannot serialize a non-finite Decimal")
+        return str(value)
     return json.dumps(value)

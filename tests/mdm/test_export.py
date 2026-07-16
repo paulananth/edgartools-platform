@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from decimal import Decimal
 
 from edgar_warehouse.mdm.export import SnowflakeConnectorWriter
 from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
@@ -81,6 +82,22 @@ def test_snowflake_connector_writer_multi_row_upsert_keeps_parse_json_out_of_val
     assert "FROM VALUES (%s, %s)" in insert_sql
     assert len(values) == 2
     assert all(len(row) == 2 for row in values)
+
+
+def test_snowflake_connector_writer_serializes_decimal_values_as_json_numbers():
+    connection = FakeConnection()
+    writer = SnowflakeConnectorWriter(connection, database="EDGARTOOLS_PROD", schema="MDM")
+
+    count = writer.upsert(
+        "MDM_FUND",
+        [{"entity_id": "fund-1", "aum_amount": Decimal("1234.50")}],
+    )
+
+    assert count == 1
+    _, values = connection.fake_cursor.batches[0]
+    encoded_values = values[0]
+    assert json.loads(encoded_values[0]) == 1234.5
+    assert json.loads(encoded_values[1]) == "fund-1"
 
 
 def test_snowflake_connection_settings_read_mdm_env(monkeypatch):
