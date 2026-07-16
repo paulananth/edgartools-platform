@@ -57,20 +57,21 @@ every scenario Task 2 covers, not silently assumed passing.
 - **RSYNC-02's coverage-manifest CLI-default wiring gap** (the live `mdm verify-graph`
   invocation does not yet default to passing an explicit coverage manifest) is unchanged
   by this plan.
-- **Pre-existing, unrelated test failure discovered while running this plan's own verify
-  command** (`uv run pytest tests/mdm tests/application tests/unit tests/architecture
-  tests/integration/test_relationship_generation_e2e.py`):
+- **Pre-existing, unrelated test failure, discovered while running this plan's own
+  verify command and fixed before merge** (it was blocking the PR's required CI checks,
+  not just this plan's own verify command):
   `tests/architecture/test_load_history_state_machine.py::test_total_cik_limit_check_defaults_to_no_limit_sentinel`
-  fails (`expected Next == "ComputeWindows", got "ArtifactPolicyCheck"`). Confirmed via
-  `git stash` that this fails identically on the pre-07-07 base commit (`571e691`) —
-  it predates this plan and is unrelated to any file this plan touches. Root cause: the
-  `ArtifactPolicyCheck`/`ArtifactPolicyDefault` states (CLAUDE.md's artifact-throttle
-  5-whys mitigation #2, `deploy-aws-application.sh`) were inserted between
-  `TotalCikLimitCheck` and `ComputeWindows`, but this specific architecture test's
-  `Next` assertion was never updated to expect the new intermediate state. Out of
-  07-07's declared file scope (`deploy-aws-application.sh` is not in `files_modified`);
-  left unfixed here and flagged for a separate follow-up rather than silently
-  re-excluding the file or fixing it under this plan's authority.
+  failed (`expected Next == "ComputeWindows", got "ArtifactPolicyCheck"`). Confirmed via
+  `git stash` that this failed identically on the pre-07-07 base commit (`571e691`) —
+  it predates this plan. Root cause: the `ArtifactPolicyCheck`/`ArtifactPolicyDefault`
+  states (CLAUDE.md's artifact-throttle 5-whys mitigation #2, `deploy-aws-application.sh`)
+  were inserted between `TotalCikLimitCheck` and `ComputeWindows`, but this architecture
+  test's `Next` assertions were never updated to expect the new intermediate hop. Fixed
+  by updating the test's two `Next` assertions (`TotalCikLimitCheck`'s `IsPresent` branch
+  and `TotalCikLimitDefault`) from `"ComputeWindows"` to `"ArtifactPolicyCheck"`,
+  matching `deploy-aws-application.sh`'s actual, already-shipped routing — no production
+  code changed, only the stale test expectation. Full suite (`tests/`, no exclusions):
+  785 passed.
 
 ## Retained generation IDs
 

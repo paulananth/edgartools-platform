@@ -128,9 +128,8 @@ live AWS/Snowflake). Key coverage:
 - The script contains no `NEO4J_URI`/`NEO4J_PASSWORD`/`bolt://`/`neo4j+s://` tokens.
 
 **Verify**: `uv run pytest tests/integration/test_relationship_generation_e2e.py` — 9
-passed. Full regression suite (`tests/mdm tests/application tests/unit
-tests/architecture tests/integration/test_relationship_generation_e2e.py`) — 778 passed,
-1 deselected (a pre-existing, unrelated failure — see Deviations).
+passed. Full suite (`tests/`, no exclusions) — 785 passed (see Deviations for a
+pre-existing, unrelated failure that was fixed along the way).
 
 ## Task 2: Execute bounded dev failure and recovery rehearsal
 
@@ -162,18 +161,20 @@ plans executed` (07-01 through 07-06 all showed `[ ]` despite completed summarie
 
 ## Deviations
 
-- **Pre-existing, unrelated test failure surfaced by this plan's own verify command**:
+- **Pre-existing, unrelated test failure, discovered while running this plan's own
+  verify command and fixed before merge** (it was blocking the PR's required CI checks):
   `tests/architecture/test_load_history_state_machine.py::
-  test_total_cik_limit_check_defaults_to_no_limit_sentinel` fails
+  test_total_cik_limit_check_defaults_to_no_limit_sentinel` failed
   (`expected Next == "ComputeWindows"`, got `"ArtifactPolicyCheck"`). Confirmed via
-  `git stash` that this fails identically on the pre-07-07 base commit (`571e691`) —
+  `git stash` that this failed identically on the pre-07-07 base commit (`571e691`) —
   it predates this plan. Root cause: the `ArtifactPolicyCheck`/`ArtifactPolicyDefault`
   states (CLAUDE.md's artifact-throttle 5-whys mitigation #2, in
   `deploy-aws-application.sh`) were inserted between `TotalCikLimitCheck` and
-  `ComputeWindows`, but this architecture test's `Next` assertion was never updated.
-  `deploy-aws-application.sh` is outside 07-07's declared `files_modified`; left
-  unfixed and documented in `07-VERIFICATION.md`'s Residual risks rather than fixed
-  under this plan's authority or silently re-excluded without comment.
+  `ComputeWindows`, but this architecture test's `Next` assertions were never updated
+  to expect the new intermediate hop. Fixed by updating the two stale `Next`
+  assertions to `"ArtifactPolicyCheck"`, matching `deploy-aws-application.sh`'s actual,
+  already-shipped routing — no production code changed, only the stale test
+  expectation.
 - **Task 2 and part of Task 3 not executed**, as designed — both require a human
   operator with live AWS-dev/Snowflake-dev credentials and explicit approval, which
   this session does not have and the plan does not authorize an assistant to bypass.
@@ -184,10 +185,8 @@ plans executed` (07-01 through 07-06 all showed `[ ]` despite completed summarie
 uv run pytest tests/integration/test_relationship_generation_e2e.py
 # 9 passed
 
-uv run pytest tests/mdm tests/application tests/unit tests/architecture \
-  tests/integration/test_relationship_generation_e2e.py \
-  --deselect tests/architecture/test_load_history_state_machine.py::test_total_cik_limit_check_defaults_to_no_limit_sentinel
-# 778 passed, 1 deselected
+uv run pytest tests/
+# 785 passed (no exclusions needed after fixing the pre-existing state-machine test)
 ```
 
 ## Self-Check: PASSED
