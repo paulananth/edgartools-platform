@@ -9,8 +9,10 @@ from edgar_warehouse.application.relationship_bulk_load import (
     InventoryError,
     LedgerError,
     build_candidate_inventory,
+    build_frozen_candidate_manifest,
     candidate_inventory_from_manifest,
     reconcile_completion_ledger,
+    reconcile_completion_ledger_batches,
     select_required_accessions,
 )
 
@@ -168,3 +170,109 @@ def test_frozen_manifest_batch_reconciles_through_completion_ledger() -> None:
 
     assert result.inventory_fingerprint == inventory.fingerprint
     assert result.terminal_counts == {"applicable_loaded": 1}
+
+
+def test_operator_freezes_complete_quarter_indexes_into_a_bounded_manifest() -> None:
+    quarter_indexes = {
+        "2024Q1": [
+            _filing("proxy", "DEF 14A", cik=1, filing_date="2024-02-01"),
+            _filing("outside-universe", "DEF 14A", cik=2, filing_date="2024-02-02"),
+            _filing("13f", "13F-HR", cik=9, filing_date="2024-02-14"),
+        ],
+        "2024Q2": [
+            _filing("employment", "8-K", cik=1, filing_date="2024-05-01"),
+            _filing("unrelated", "8-K", cik=1, filing_date="2024-05-02"),
+            _filing("13f-a", "13F-HR/A", cik=9, filing_date="2024-05-15"),
+        ],
+    }
+    silver_filings = [
+        _filing("proxy", "DEF 14A", cik=1, filing_date="2024-02-01"),
+        _filing("employment", "8-K", cik=1, items="5.02", filing_date="2024-05-01"),
+        _filing("unrelated", "8-K", cik=1, items="2.02", filing_date="2024-05-02"),
+    ]
+
+    manifest = build_frozen_candidate_manifest(
+        quarter_indexes,
+        silver_filings=silver_filings,
+        release_ciks={1},
+        coverage_start=date(2024, 1, 1),
+        watermark=date(2024, 6, 30),
+        batch_size=100,
+    )
+
+    assert manifest["coverage_start"] == "2024-01-01"
+    assert manifest["watermark"] == "2024-06-30"
+    assert [row[0] for row in manifest["quarter_index_fingerprints"]] == ["2024Q1", "2024Q2"]
+    assert [row["accession_number"] for row in manifest["candidates"]] == [
+        "13f", "13f-a", "employment", "proxy", "unrelated",
+    ]
+    assert next(row for row in manifest["candidates"] if row["accession_number"] == "unrelated")[
+        "artifact_required"
+    ] is False
+    assert manifest["cik_batches"] == [{"cik_list": "1,9"}]
+    assert manifest["candidate_count"] == 5
+    assert manifest["index_only_candidate_count"] == 2
+    assert manifest["index_only_required_count"] == 2
+
+
+def test_operator_keeps_index_only_company_candidate_for_strict_backfill() -> None:
+    manifest = build_frozen_candidate_manifest(
+        {"2024Q1": [_filing("missing-8k", "8-K", cik=1, filing_date="2024-02-01")]},
+        silver_filings=[],
+        release_ciks={1},
+        coverage_start=date(2024, 1, 1),
+        watermark=date(2024, 3, 31),
+    )
+
+    assert manifest["candidates"][0]["accession_number"] == "missing-8k"
+    assert manifest["candidates"][0]["candidate_reason"] == "ambiguous_8k_metadata"
+    assert manifest["candidates"][0]["artifact_required"] is True
+
+
+def test_operator_canonicalizes_multi_registrant_accession_without_hiding_ciks() -> None:
+    shared = "0001104659-13-044273"
+    manifest = build_frozen_candidate_manifest(
+        {"2013Q2": [
+            _filing(shared, "DEFA14A", cik=20, filing_date="2013-05-23"),
+            _filing(shared, "DEFA14A", cik=10, filing_date="2013-05-23"),
+        ]},
+        silver_filings=[_filing(shared, "DEFA14A", cik=20, filing_date="2013-05-23")],
+        release_ciks={10, 20},
+        coverage_start=date(2013, 5, 20),
+        watermark=date(2013, 6, 30),
+    )
+
+    assert [(row["accession_number"], row["cik"]) for row in manifest["candidates"]] == [
+        (shared, 20),
+    ]
+    assert manifest["multi_registrant_accessions"] == [{
+        "accession_number": shared,
+        "canonical_cik": 20,
+        "indexed_ciks": [10, 20],
+    }]
+
+
+def test_global_fan_in_reconciles_every_batch_outcome_once() -> None:
+    inventory = build_candidate_inventory(
+        [
+            _filing("proxy-a", "DEF 14A", cik=1, filing_date="2024-02-01"),
+            _filing("proxy-b", "DEF 14A", cik=2, filing_date="2024-02-02"),
+        ],
+        coverage_start=date(2024, 1, 1),
+        watermark=date(2024, 3, 31),
+        source_manifest_fingerprints={"company:1": "c1", "company:2": "c2"},
+        quarter_index_fingerprints={"2024Q1": "q1"},
+    )
+    outcomes = [
+        CandidateOutcome("release", candidate.accession_number, candidate.fingerprint,
+                         "applicable_loaded", f"evidence-{candidate.cik}")
+        for candidate in inventory.candidates
+    ]
+
+    result = reconcile_completion_ledger_batches(
+        inventory,
+        [{"outcomes": [outcomes[0].__dict__]}, {"outcomes": [outcomes[1].__dict__]}],
+        generation_id="release",
+    )
+
+    assert result.terminal_counts == {"applicable_loaded": 2}

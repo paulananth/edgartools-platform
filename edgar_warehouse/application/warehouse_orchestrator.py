@@ -13,7 +13,7 @@ import uuid
 import warnings
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Iterable
 
 from edgar_warehouse.application.command_context_factory import build_warehouse_context
 from edgar_warehouse.application.errors import WarehouseRuntimeError
@@ -1543,7 +1543,11 @@ def _capture_bronze_raw(
             force=bool(arguments.get("force", False)),
             load_mode="bootstrap_batch",
             artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
-            parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
+            parser_policy=(
+                "branch_b_deferred"
+                if release_mode
+                else str(arguments.get("parser_policy") or "configured_forms")
+            ),
             release_mode=release_mode,
             required_accessions=required_accessions,
             repair_manifest_accessions=repair_accessions,
@@ -1561,6 +1565,12 @@ def _capture_bronze_raw(
             inventory = candidate_inventory_from_manifest(
                 candidate_payload, ciks={int(cik) for cik in cik_list}
             )
+            parser_outcomes = _run_release_branch_b_parsers(
+                db=db,
+                ciks=[int(cik) for cik in cik_list],
+                candidates=inventory.candidates,
+                sync_run_id=sync_run_id,
+            )
             artifact_outcomes = {
                 row["accession_number"]: row
                 for row in result.get("candidate_outcomes", [])
@@ -1572,15 +1582,33 @@ def _capture_bronze_raw(
                     raise WarehouseRuntimeError(
                         f"missing terminal outcome for required candidate {candidate.accession_number}"
                     )
+                parser_outcome = parser_outcomes.get(candidate.accession_number)
+                if candidate.artifact_required and parser_outcome is None:
+                    raise WarehouseRuntimeError(
+                        f"missing parser outcome for required candidate {candidate.accession_number}"
+                    )
+                status = (
+                    str(parser_outcome["status"])
+                    if parser_outcome is not None
+                    else "not_applicable"
+                )
+                evidence_fingerprint = (
+                    hashlib.sha256(
+                        "|".join((
+                            str(artifact["evidence_fingerprint"]),
+                            status,
+                            str(parser_outcome.get("reason") or ""),
+                        )).encode("utf-8")
+                    ).hexdigest()
+                    if artifact is not None and parser_outcome is not None
+                    else candidate.fingerprint
+                )
                 outcomes.append(CandidateOutcome(
                     generation_id=sync_run_id,
                     accession_number=candidate.accession_number,
                     candidate_fingerprint=candidate.fingerprint,
-                    status=(artifact["status"] if artifact else "not_applicable"),
-                    evidence_fingerprint=(
-                        artifact["evidence_fingerprint"]
-                        if artifact else candidate.fingerprint
-                    ),
+                    status=status,
+                    evidence_fingerprint=evidence_fingerprint,
                 ))
             reconciliation = reconcile_completion_ledger(
                 inventory, outcomes, generation_id=sync_run_id
@@ -1688,6 +1716,48 @@ def _capture_bronze_raw(
                 raise WarehouseRuntimeError(f"unsupported relationship source kind: {kind!r}")
         metrics["rows_inserted"] += rows_written
         metrics["relationship_source_count"] = len(sources)
+        return raw_writes, metrics
+
+    if command_name == "reconcile-relationship-release":
+        manifest_path = str(arguments.get("candidate_manifest") or "").strip()
+        if not manifest_path:
+            raise WarehouseRuntimeError("--candidate-manifest is required")
+        try:
+            candidate_payload = json.loads(read_bytes(manifest_path).decode("utf-8"))
+            from edgar_warehouse.application.relationship_bulk_load import (
+                candidate_inventory_from_manifest,
+                reconcile_completion_ledger_batches,
+            )
+            inventory = candidate_inventory_from_manifest(candidate_payload)
+            ledger_paths = context.storage_root.find_existing(
+                f"release-evidence/{sync_run_id}/bulk-load-ledger-batches/*.json"
+            )
+            if not ledger_paths:
+                raise WarehouseRuntimeError("no distributed bulk-load batch ledgers found")
+            batch_ledgers = [
+                json.loads(read_bytes(path).decode("utf-8")) for path in ledger_paths
+            ]
+            reconciliation = reconcile_completion_ledger_batches(
+                inventory, batch_ledgers, generation_id=sync_run_id
+            )
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+            if isinstance(exc, WarehouseRuntimeError):
+                raise
+            raise WarehouseRuntimeError(f"relationship release reconciliation failed: {exc}") from exc
+        output_path = context.storage_root.write_json(
+            f"release-evidence/{sync_run_id}/bulk-load-completion-ledger.json",
+            {
+                "generation_id": reconciliation.generation_id,
+                "inventory_fingerprint": reconciliation.inventory_fingerprint,
+                "candidate_count": len(inventory.candidates),
+                "batch_ledger_count": len(batch_ledgers),
+                "terminal_counts": reconciliation.terminal_counts,
+                "fingerprint": reconciliation.fingerprint,
+                "status": "pass",
+            },
+        )
+        metrics["bulk_load_completion_ledger_path"] = output_path
+        metrics["bulk_load_completion_ledger_fingerprint"] = reconciliation.fingerprint
         return raw_writes, metrics
 
     if command_name == "gold-refresh":
@@ -1992,8 +2062,9 @@ def _run_configured_form_artifact_pipeline(
     if release_mode and force and not repair_manifest_accessions:
         raise WarehouseRuntimeError("release --force requires an explicit bounded repair manifest")
     fetch_artifacts = _artifact_policy_fetches(artifact_policy)
+    branch_b_deferred = _normalize_policy(parser_policy) == "branch_b_deferred"
     run_parsers = _parser_policy_runs(parser_policy)
-    if release_mode and (not fetch_artifacts or not run_parsers):
+    if release_mode and (not fetch_artifacts or not (run_parsers or branch_b_deferred)):
         raise WarehouseRuntimeError(
             "release mode requires artifact fetch and parser policies"
         )
@@ -2084,7 +2155,7 @@ def _run_configured_form_artifact_pipeline(
                     )
                 candidate_outcomes.append({
                     "accession_number": accession_number,
-                    "status": "applicable_loaded",
+                    "status": "artifacts_loaded" if branch_b_deferred else "applicable_loaded",
                     "evidence_fingerprint": hashlib.sha256(
                         "|".join(sorted(evidence_parts)).encode("utf-8")
                     ).hexdigest(),
@@ -2117,6 +2188,74 @@ def _run_configured_form_artifact_pipeline(
         "rows_skipped": errors,
         "candidate_outcomes": candidate_outcomes,
     }
+
+
+def _run_release_branch_b_parsers(
+    *,
+    db: SilverDatabase,
+    ciks: list[int],
+    candidates: Iterable[Any],
+    sync_run_id: str,
+) -> dict[str, dict[str, str]]:
+    """Run strict Branch B parsers and return one terminal outcome per required accession."""
+    from edgar_warehouse.application.workflows.fundamentals_ingest import (
+        BRANCH_B_13F_FORMS,
+        BRANCH_B_FILING_FORMS,
+        run_bootstrap_fundamentals_per_filing,
+        run_bootstrap_thirteenf,
+    )
+
+    required = [candidate for candidate in candidates if candidate.artifact_required]
+    per_filing = {
+        candidate.accession_number
+        for candidate in required
+        if candidate.form in BRANCH_B_FILING_FORMS
+    }
+    thirteenf = {
+        candidate.accession_number
+        for candidate in required
+        if candidate.form in BRANCH_B_13F_FORMS
+    }
+    unsupported = sorted(
+        candidate.accession_number
+        for candidate in required
+        if candidate.form not in BRANCH_B_FILING_FORMS | BRANCH_B_13F_FORMS
+    )
+    if unsupported:
+        raise WarehouseRuntimeError(f"unsupported release relationship candidates: {unsupported}")
+
+    rows: list[dict[str, str]] = []
+    if per_filing:
+        metrics = run_bootstrap_fundamentals_per_filing(
+            cik_list=ciks,
+            source=db,
+            db=db,
+            sync_run_id=sync_run_id,
+            release_mode=True,
+            candidate_accessions=per_filing,
+        )
+        rows.extend(metrics.get("candidate_outcomes", []))
+    if thirteenf:
+        metrics = run_bootstrap_thirteenf(
+            cik_list=ciks,
+            source=db,
+            db=db,
+            sync_run_id=sync_run_id,
+            release_mode=True,
+            candidate_accessions=thirteenf,
+        )
+        rows.extend(metrics.get("candidate_outcomes", []))
+
+    outcomes: dict[str, dict[str, str]] = {}
+    for row in rows:
+        accession = str(row.get("accession_number") or "")
+        if not accession or accession in outcomes:
+            raise WarehouseRuntimeError(f"duplicate or invalid Branch B outcome: {accession}")
+        outcomes[accession] = row
+    missing = sorted((per_filing | thirteenf) - set(outcomes))
+    if missing:
+        raise WarehouseRuntimeError(f"missing Branch B terminal outcomes: {missing}")
+    return outcomes
 
 
 def _configured_parser_accessions(db: SilverDatabase, accession_numbers: list[str]) -> list[str]:
@@ -2422,7 +2561,7 @@ def _artifact_policy_fetches(policy: str) -> bool:
 
 def _parser_policy_runs(policy: str) -> bool:
     normalized = _normalize_policy(policy)
-    if normalized in {"none", "skip", "disabled", "off"}:
+    if normalized in {"none", "skip", "disabled", "off", "branch_b_deferred"}:
         return False
     if normalized == "configured_forms":
         return True
@@ -3804,6 +3943,9 @@ def _resolve_scope(
             "cik_list": arguments.get("cik_list") or [],
             "include_pagination": arguments.get("include_pagination", True),
         }
+
+    if command_name == "reconcile-relationship-release":
+        return {"candidate_manifest": arguments.get("candidate_manifest")}
 
     if command_name == "bootstrap-fundamentals":
         # Branch B counterpart of bootstrap-batch. CIK list + mode dispatch.

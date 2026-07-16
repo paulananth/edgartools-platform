@@ -62,7 +62,7 @@ def run_bootstrap_fundamentals_per_filing(
     sync_run_id: str,
     release_mode: bool = False,
     candidate_accessions: set[str] | None = None,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     """Process 8-K earnings + DEF 14A proxy filings from bronze for the given CIKs.
 
     Filing/attachment/raw-object metadata is read from ``source`` — Branch A's
@@ -76,13 +76,14 @@ def run_bootstrap_fundamentals_per_filing(
     from edgar_warehouse.parsers import get_parser
     from edgar_warehouse.infrastructure.object_storage import read_bytes
 
-    metrics: dict[str, int] = {
+    metrics: dict[str, Any] = {
         "filings_scanned": 0,
         "filings_parsed": 0,
         "filings_skipped": 0,
         "rows_earnings_release": 0,
         "rows_executive_record": 0,
         "rows_employment_event": 0,
+        "candidate_outcomes": [],
     }
 
     if source is None:
@@ -191,6 +192,11 @@ def run_bootstrap_fundamentals_per_filing(
         metrics["rows_executive_record"] += db.merge_executive_records(
             parsed.get("sec_executive_record", []), sync_run_id
         )
+        terminal_status = "not_applicable"
+        terminal_reason = "no_relationship_rows"
+        if parsed.get("sec_executive_record"):
+            terminal_status = "applicable_loaded"
+            terminal_reason = "executive_records_loaded"
         if form_type in ("8-K", "8-K/A") and (
             "5.02" in str(filing.get("items") or "") or not str(filing.get("items") or "").strip()
         ):
@@ -226,6 +232,18 @@ def run_bootstrap_fundamentals_per_filing(
             metrics["rows_employment_event"] += db.merge_employment_events(
                 event_rows, sync_run_id
             )
+            if event_rows:
+                terminal_status = "applicable_loaded"
+                terminal_reason = "employment_events_loaded"
+            else:
+                terminal_status = "not_applicable"
+                terminal_reason = f"item_502_{result.applicability}"
+        if release_mode:
+            metrics["candidate_outcomes"].append({
+                "accession_number": accession_number,
+                "status": terminal_status,
+                "reason": terminal_reason,
+            })
         metrics["filings_parsed"] += 1
 
     return metrics
@@ -322,7 +340,7 @@ def run_bootstrap_thirteenf(
     sync_run_id: str,
     release_mode: bool = False,
     candidate_accessions: set[str] | None = None,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     """Parse 13F-HR INFORMATION TABLE XML attachments for the given CIKs.
 
     The infotable XML lives in a filing attachment with document_type matching
@@ -337,12 +355,13 @@ def run_bootstrap_thirteenf(
     from edgar_warehouse.infrastructure.object_storage import read_bytes
     from edgar_warehouse.parsers.thirteenf import parse_thirteenf
 
-    metrics: dict[str, int] = {
+    metrics: dict[str, Any] = {
         "filings_scanned": 0,
         "filings_parsed": 0,
         "filings_skipped": 0,
         "rows_thirteenf_holding": 0,
         "rows_thirteenf_filing": 0,
+        "candidate_outcomes": [],
     }
 
     if source is None:
@@ -504,6 +523,12 @@ def run_bootstrap_thirteenf(
         metrics["rows_thirteenf_holding"] += db.merge_thirteenf_holdings(
             parsed.get("sec_thirteenf_holding", []), sync_run_id
         )
+        if release_mode:
+            metrics["candidate_outcomes"].append({
+                "accession_number": accession_number,
+                "status": "applicable_loaded",
+                "reason": "effective_holdings_loaded",
+            })
         metrics["filings_parsed"] += 1
 
     return metrics

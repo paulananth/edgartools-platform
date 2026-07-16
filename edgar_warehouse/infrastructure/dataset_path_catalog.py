@@ -300,6 +300,7 @@ class WarehousePathResolver:
             "parse-ownership-bronze",
             "parse-adv-bronze",
             "ingest-relationship-sources",
+            "reconcile-relationship-release",
         ):
             return {
                 "bronze": self._render("manifest.default.bronze.path", **default_tokens),

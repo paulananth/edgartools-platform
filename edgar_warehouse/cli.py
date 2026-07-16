@@ -147,6 +147,10 @@ def _handle_ingest_relationship_sources(args: argparse.Namespace) -> int:
     return run_command("ingest-relationship-sources", args)
 
 
+def _handle_reconcile_relationship_release(args: argparse.Namespace) -> int:
+    return run_command("reconcile-relationship-release", args)
+
+
 def _handle_bootstrap_next(args: argparse.Namespace) -> int:
     return run_command("bootstrap-next", args)
 
@@ -583,6 +587,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(ingest_relationship_sources)
     ingest_relationship_sources.set_defaults(handler=_handle_ingest_relationship_sources)
+
+    reconcile_relationship_release = subparsers.add_parser(
+        "reconcile-relationship-release",
+        help="Fan in strict distributed batch ledgers and prove exact candidate completion.",
+    )
+    reconcile_relationship_release.add_argument(
+        "--candidate-manifest", required=True,
+        help="Local or S3 frozen relationship candidate manifest",
+    )
+    _add_run_id_arg(reconcile_relationship_release)
+    reconcile_relationship_release.set_defaults(handler=_handle_reconcile_relationship_release)
 
     bootstrap_next = subparsers.add_parser(
         "bootstrap-next",

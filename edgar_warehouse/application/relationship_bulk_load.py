@@ -263,6 +263,144 @@ def build_candidate_inventory(
                               _sha256(inventory_payload))
 
 
+def build_frozen_candidate_manifest(
+    quarter_indexes: Mapping[str, Iterable[Mapping[str, object]]],
+    *,
+    silver_filings: Iterable[Mapping[str, object]],
+    release_ciks: set[int],
+    source_manifest_fingerprints: Mapping[int, str] | None = None,
+    watermark: date,
+    coverage_start: date = DEFAULT_COVERAGE_START,
+    batch_size: int = 100,
+) -> dict[str, object]:
+    """Freeze complete SEC quarter indexes into the release candidate manifest.
+
+    Quarterly indexes are the authority for 13F coverage and for proving that
+    every proxy/8-K accession in the bounded company universe was considered.
+    Silver contributes submissions-only metadata such as 8-K item numbers.
+    """
+    if batch_size <= 0:
+        raise InventoryError("batch_size must be positive")
+    expected = expected_quarters(coverage_start, watermark)
+    missing = sorted(set(expected) - set(quarter_indexes))
+    if missing:
+        raise InventoryError(f"missing SEC quarter indexes: {', '.join(missing)}")
+
+    silver_by_accession = {
+        str(row.get("accession_number") or "").strip(): dict(row)
+        for row in silver_filings
+        if str(row.get("accession_number") or "").strip()
+    }
+    quarter_fingerprints: dict[str, str] = {}
+    selected: list[dict[str, object]] = []
+    source_rows_by_cik: dict[int, list[dict[str, object]]] = {}
+
+    for quarter in expected:
+        normalized_rows: list[dict[str, object]] = []
+        for raw_row in quarter_indexes[quarter]:
+            accession = str(raw_row.get("accession_number") or "").strip()
+            filing_date = _as_date(raw_row.get("filing_date"))
+            if not accession or filing_date is None:
+                raise InventoryError(f"{quarter} index row is missing accession identity")
+            if not coverage_start <= filing_date <= watermark:
+                continue
+            normalized = {
+                "accession_number": accession,
+                "cik": int(raw_row.get("cik") or 0),
+                "form": str(raw_row.get("form") or "").strip().upper(),
+                "filing_date": filing_date.isoformat(),
+            }
+            normalized_rows.append(normalized)
+
+        normalized_rows.sort(key=lambda row: str(row["accession_number"]))
+        quarter_fingerprints[quarter] = _sha256(normalized_rows)
+        for row in normalized_rows:
+            form = str(row["form"])
+            cik = int(row["cik"])
+            in_company_scope = cik in release_ciks and form in PROXY_FORMS | EIGHT_K_FORMS
+            if form not in THIRTEENF_FORMS and not in_company_scope:
+                continue
+            enriched = {**row, **silver_by_accession.get(str(row["accession_number"]), {})}
+            enriched.update({
+                "accession_number": row["accession_number"],
+                "cik": cik,
+                "form": form,
+                "filing_date": row["filing_date"],
+            })
+            selected.append(enriched)
+            source_rows_by_cik.setdefault(cik, []).append(row)
+
+    grouped: dict[str, list[dict[str, object]]] = {}
+    for row in selected:
+        grouped.setdefault(str(row["accession_number"]), []).append(row)
+    canonical_rows: list[dict[str, object]] = []
+    multi_registrant_accessions: list[dict[str, object]] = []
+    for accession, rows in sorted(grouped.items()):
+        identities = {(str(row["form"]), str(row["filing_date"])) for row in rows}
+        if len(identities) != 1:
+            raise InventoryError(f"conflicting SEC index identities for accession {accession}")
+        indexed_ciks = sorted({int(row["cik"]) for row in rows})
+        silver_cik = int(silver_by_accession.get(accession, {}).get("cik") or 0)
+        canonical_cik = silver_cik if silver_cik in indexed_ciks else indexed_ciks[0]
+        canonical_rows.append(next(row for row in rows if int(row["cik"]) == canonical_cik))
+        if len(indexed_ciks) > 1:
+            multi_registrant_accessions.append({
+                "accession_number": accession,
+                "canonical_cik": canonical_cik,
+                "indexed_ciks": indexed_ciks,
+            })
+
+    computed_source_fingerprints = {
+        f"company:{cik}": _sha256(sorted(rows, key=lambda row: str(row["accession_number"])))
+        for cik, rows in source_rows_by_cik.items()
+    }
+    source_fingerprints = {
+        key: str((source_manifest_fingerprints or {}).get(int(key.split(":", 1)[1])) or value)
+        for key, value in computed_source_fingerprints.items()
+    }
+    inventory = build_candidate_inventory(
+        canonical_rows,
+        coverage_start=coverage_start,
+        watermark=watermark,
+        source_manifest_fingerprints=source_fingerprints,
+        quarter_index_fingerprints=quarter_fingerprints,
+    )
+    candidate_rows = [
+        {
+            **asdict(candidate),
+            "filing_date": candidate.filing_date.isoformat(),
+            "report_date": candidate.report_date.isoformat() if candidate.report_date else None,
+        }
+        for candidate in inventory.candidates
+    ]
+    candidate_ciks = sorted({candidate.cik for candidate in inventory.candidates})
+    index_only_candidates = [
+        candidate
+        for candidate in inventory.candidates
+        if candidate.accession_number not in silver_by_accession
+    ]
+    cik_batches = [
+        {"cik_list": ",".join(str(cik) for cik in candidate_ciks[offset:offset + batch_size])}
+        for offset in range(0, len(candidate_ciks), batch_size)
+    ]
+    return {
+        "schema_version": 1,
+        "coverage_start": inventory.coverage_start.isoformat(),
+        "watermark": inventory.watermark.isoformat(),
+        "fingerprint": inventory.fingerprint,
+        "quarter_index_fingerprints": [list(row) for row in inventory.quarter_index_fingerprints],
+        "candidate_count": len(candidate_rows),
+        "candidate_cik_count": len(candidate_ciks),
+        "index_only_candidate_count": len(index_only_candidates),
+        "index_only_required_count": sum(
+            candidate.artifact_required for candidate in index_only_candidates
+        ),
+        "candidates": candidate_rows,
+        "cik_batches": cik_batches,
+        "multi_registrant_accessions": multi_registrant_accessions,
+    }
+
+
 @dataclass(frozen=True)
 class CandidateOutcome:
     generation_id: str
@@ -309,3 +447,28 @@ def reconcile_completion_ledger(
         counts[outcome.status] = counts.get(outcome.status, 0) + 1
     payload = [asdict(actual[key]) for key in sorted(actual)]
     return LedgerReconciliation(generation_id, inventory.fingerprint, counts, _sha256(payload))
+
+
+def reconcile_completion_ledger_batches(
+    inventory: CandidateInventory,
+    batch_ledgers: Iterable[Mapping[str, object]],
+    *,
+    generation_id: str,
+) -> LedgerReconciliation:
+    """Fan in distributed batch ledgers and apply the exact global reconciliation."""
+    outcomes: list[CandidateOutcome] = []
+    for ledger in batch_ledgers:
+        rows = ledger.get("outcomes")
+        if not isinstance(rows, list):
+            raise LedgerError("batch ledger is missing outcomes")
+        for row in rows:
+            if not isinstance(row, Mapping):
+                raise LedgerError("batch ledger outcome must be an object")
+            outcomes.append(CandidateOutcome(
+                generation_id=str(row.get("generation_id") or ""),
+                accession_number=str(row.get("accession_number") or ""),
+                candidate_fingerprint=str(row.get("candidate_fingerprint") or ""),
+                status=str(row.get("status") or ""),
+                evidence_fingerprint=str(row.get("evidence_fingerprint") or ""),
+            ))
+    return reconcile_completion_ledger(inventory, outcomes, generation_id=generation_id)
