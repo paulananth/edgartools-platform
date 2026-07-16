@@ -316,6 +316,43 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                     force=False, release_mode=True,
                 )
 
+    def test_release_artifact_pipeline_rejects_disabled_fetch_or_parser_policy(self) -> None:
+        for artifact_policy, parser_policy in (
+            ("none", "configured_forms"),
+            ("all_attachments", "none"),
+        ):
+            with self.subTest(
+                artifact_policy=artifact_policy, parser_policy=parser_policy
+            ):
+                with self.assertRaisesRegex(Exception, "requires artifact fetch and parser"):
+                    warehouse_orchestrator._run_configured_form_artifact_pipeline(
+                        context=SimpleNamespace(identity="tester@example.com"),
+                        db=_ConfiguredFormDb(),
+                        sync_run_id="release",
+                        accession_numbers=["ownership-1"],
+                        artifact_policy=artifact_policy,
+                        parser_policy=parser_policy,
+                        force=False,
+                        release_mode=True,
+                    )
+
+    def test_release_parse_pipeline_rejects_generic_skip(self) -> None:
+        db = SimpleNamespace(
+            get_filing=lambda accession: {
+                "accession_number": accession, "form": "DEF 14A", "cik": 1001
+            },
+            start_parse_run=lambda row: None,
+            complete_parse_run=lambda *args, **kwargs: None,
+        )
+
+        with self.assertRaisesRegex(Exception, "no release parser"):
+            warehouse_orchestrator._run_parse_pipeline(
+                db=db,
+                accession_number="proxy-1",
+                sync_run_id="release",
+                fail_closed=True,
+            )
+
     def test_release_force_requires_explicit_repair_manifest(self) -> None:
         with self.assertRaisesRegex(Exception, "repair manifest"):
             warehouse_orchestrator._run_configured_form_artifact_pipeline(

@@ -73,14 +73,39 @@ def parse_subsidiary_exhibit(
     soup = BeautifulSoup(text, "html.parser")
     candidates: list[tuple[str, str | None, str]] = []
     for table_index, table in enumerate(soup.find_all("table"), start=1):
-        for row_index, tr in enumerate(table.find_all("tr"), start=1):
-            cells = [_clean(cell.get_text(" ", strip=True)) for cell in tr.find_all(["td", "th"])]
-            if not cells or not cells[0]:
+        table_rows = [
+            [_clean(cell.get_text(" ", strip=True)) for cell in tr.find_all(["td", "th"])]
+            for tr in table.find_all("tr")
+        ]
+        header_index = next(
+            (
+                index for index, cells in enumerate(table_rows)
+                if any("subsidiar" in cell.casefold() for cell in cells)
+            ),
+            None,
+        )
+        if header_index is None:
+            continue
+        header = [cell.casefold() for cell in table_rows[header_index]]
+        name_index = next(
+            index for index, cell in enumerate(header) if "subsidiar" in cell
+        )
+        jurisdiction_index = next(
+            (
+                index for index, cell in enumerate(header)
+                if any(marker in cell for marker in ("jurisdiction", "organized", "country", "state"))
+            ),
+            None,
+        )
+        for row_index, cells in enumerate(table_rows[header_index + 1:], start=header_index + 2):
+            if name_index >= len(cells) or not cells[name_index]:
                 continue
-            lowered = " ".join(cells).lower()
-            if "subsidiary" in lowered and ("jurisdiction" in lowered or "organized" in lowered):
-                continue
-            candidates.append((cells[0], cells[1] if len(cells) > 1 else None,
+            jurisdiction = (
+                cells[jurisdiction_index]
+                if jurisdiction_index is not None and jurisdiction_index < len(cells)
+                else None
+            )
+            candidates.append((cells[name_index], jurisdiction,
                                f"table[{table_index}]/row[{row_index}]"))
 
     if not candidates and "<" not in text:

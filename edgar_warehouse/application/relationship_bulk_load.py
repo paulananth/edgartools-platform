@@ -58,6 +58,59 @@ def select_required_accessions(
     return selected
 
 
+def candidate_inventory_from_manifest(
+    manifest: object, *, ciks: set[int] | None = None
+) -> CandidateInventory:
+    """Restore a frozen inventory (or one CIK batch) from its release manifest."""
+    if not isinstance(manifest, Mapping):
+        raise InventoryError("candidate manifest must be an object")
+    rows = manifest.get("candidates")
+    if not isinstance(rows, list) or not rows:
+        raise InventoryError("candidate manifest must contain a non-empty candidates list")
+    coverage_start = _as_date(manifest.get("coverage_start"))
+    watermark = _as_date(manifest.get("watermark"))
+    inventory_fingerprint = str(manifest.get("fingerprint") or "").strip()
+    if coverage_start is None or watermark is None or not inventory_fingerprint:
+        raise InventoryError("candidate manifest is missing inventory identity")
+    candidates: list[RelationshipSourceCandidate] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            raise InventoryError("candidate manifest rows must be objects")
+        cik = int(row.get("cik") or 0)
+        if ciks is not None and cik not in ciks:
+            continue
+        filing_date = _as_date(row.get("filing_date"))
+        if filing_date is None:
+            raise InventoryError("candidate manifest row is missing filing_date")
+        fingerprint = str(row.get("fingerprint") or "").strip()
+        if not fingerprint:
+            raise InventoryError("candidate manifest row is missing fingerprint")
+        candidates.append(RelationshipSourceCandidate(
+            accession_number=str(row.get("accession_number") or ""),
+            cik=cik,
+            form=str(row.get("form") or ""),
+            filing_date=filing_date,
+            report_date=_as_date(row.get("report_date")),
+            relationship_type=str(row.get("relationship_type") or ""),
+            candidate_reason=str(row.get("candidate_reason") or ""),
+            artifact_required=bool(row.get("artifact_required", True)),
+            source_index_identity=str(row.get("source_index_identity") or ""),
+            source_manifest_fingerprint=str(row.get("source_manifest_fingerprint") or ""),
+            fingerprint=fingerprint,
+        ))
+    if not candidates:
+        raise InventoryError("candidate manifest has no candidates for this batch")
+    quarters_raw = manifest.get("quarter_index_fingerprints") or manifest.get("quarters") or []
+    quarters = tuple((str(row[0]), str(row[1])) for row in quarters_raw)
+    return CandidateInventory(
+        coverage_start,
+        watermark,
+        tuple(candidates),
+        quarters,
+        inventory_fingerprint,
+    )
+
+
 def _sha256(value: object) -> str:
     payload = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()

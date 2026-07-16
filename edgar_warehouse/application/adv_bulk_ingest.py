@@ -109,7 +109,7 @@ def parse_adv_bulk_archive(
         actions = [
             re.sub(r"[^a-z0-9]+", "_", key.lower()).strip("_")
             for key, value in row.items()
-            if key != "FilingID" and value.strip()
+            if key != "FilingID" and value.strip().upper() in {"Y", "YES", "TRUE", "1"}
         ]
         if filing_id and actions:
             filing_actions[filing_id] = "+".join(actions)

@@ -726,7 +726,7 @@ class MDMPipeline:
                 effective_from=row.get("effective_date"),
                 source_system="sec_exhibit_subsidiaries",
                 source_accession=row.get("accession_number"),
-                date_provenance="inferred_annual_period",
+                date_provenance="reported",
             )
             inserted += 1 if created else 0
             skipped_existing += 0 if created else 1
@@ -816,11 +816,23 @@ class MDMPipeline:
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
+        filing_rows = self._fetch_optional_relationship_rows(
+            """
+            SELECT accession_number, crd_number, effective_date, filing_action
+            FROM sec_adv_filing
+            WHERE crd_number IS NOT NULL
+            ORDER BY crd_number, effective_date, accession_number
+            """,
+            None,
+            rel_type_name="MANAGES_FUND",
+            source_table="sec_adv_filing",
+            existing=self._relationship_count("MANAGES_FUND"),
+        )
         source_rows = self._fetch_optional_relationship_rows(
             """
             SELECT accession_number, adviser_crd_number, private_fund_id,
                    filing_id, schedule_section, reporting_role, effective_date,
-                   source_sha256
+                   filing_action, source_sha256
             FROM sec_adv_private_fund
             WHERE adviser_crd_number IS NOT NULL AND private_fund_id IS NOT NULL
             ORDER BY filing_id, private_fund_id, schedule_section
@@ -830,6 +842,65 @@ class MDMPipeline:
             source_table="sec_adv_private_fund",
             existing=self._relationship_count("MANAGES_FUND"),
         )
+        latest_by_crd: dict[str, dict] = {}
+        if filing_rows:
+            for filing in filing_rows:
+                crd = str(filing.get("crd_number") or "")
+                effective = filing.get("effective_date")
+                if effective and not isinstance(effective, date):
+                    effective = date.fromisoformat(str(effective)[:10])
+                accession = str(filing.get("accession_number") or "")
+                filing_id = accession.rsplit(":", 1)[-1]
+                key = (effective or date.min, int(filing_id) if filing_id.isdecimal() else 0,
+                       accession)
+                prior = latest_by_crd.get(crd)
+                if prior is None or key > prior["_key"]:
+                    latest_by_crd[crd] = {**filing, "_key": key}
+            active_accessions = {
+                str(filing.get("accession_number"))
+                for filing in latest_by_crd.values()
+                if not any(
+                    marker in str(filing.get("filing_action") or "").lower()
+                    for marker in ("final", "withdraw")
+                )
+            }
+            source_rows = [
+                row for row in source_rows
+                if str(row.get("accession_number")) in active_accessions
+            ]
+            from edgar_warehouse.mdm.database import (
+                MdmRelationshipInstance,
+                MdmRelationshipType,
+            )
+            from edgar_warehouse.mdm.graph import close_relationship_version
+
+            expected_targets_by_adviser: dict[str, set[str]] = {}
+            for row in source_rows:
+                adviser_id = self._adviser_entity_id_by_crd(row.get("adviser_crd_number"))
+                fund_id = self._fund_entity_id_by_pfid(row.get("private_fund_id"))
+                if adviser_id and fund_id:
+                    expected_targets_by_adviser.setdefault(adviser_id, set()).add(fund_id)
+            for crd, filing in latest_by_crd.items():
+                adviser_id = self._adviser_entity_id_by_crd(crd)
+                if adviser_id is None:
+                    continue
+                effective = filing["_key"][0]
+                expected_targets = expected_targets_by_adviser.get(adviser_id, set())
+                current_versions = self.session.scalars(
+                    select(MdmRelationshipInstance)
+                    .join(MdmRelationshipType)
+                    .where(MdmRelationshipType.rel_type_name == "MANAGES_FUND")
+                    .where(MdmRelationshipInstance.source_entity_id == adviser_id)
+                    .where(MdmRelationshipInstance.is_active.is_(True))
+                    .where(MdmRelationshipInstance.quarantined.is_(False))
+                    .where(MdmRelationshipInstance.superseded_by_version_id.is_(None))
+                    .where(MdmRelationshipInstance.valid_to_date.is_(None))
+                ).all()
+                for current in current_versions:
+                    if current.target_entity_id not in expected_targets:
+                        close_relationship_version(
+                            self.session, current.instance_id, effective
+                        )
         for row in source_rows:
             adviser_id = self._adviser_entity_id_by_crd(row.get("adviser_crd_number"))
             fund_id = self._fund_entity_id_by_pfid(row.get("private_fund_id"))
@@ -853,13 +924,13 @@ class MDMPipeline:
                 effective_from=row.get("effective_date"),
                 source_system="iapd_adv_bulk",
                 source_accession=row.get("accession_number"),
-                date_provenance="sec_reported",
+                date_provenance="reported",
             )
             inserted += 1 if created else 0
             skipped_existing += 0 if created else 1
             if remaining is not None and inserted >= remaining:
                 break
-        if not source_rows:
+        if not source_rows and not filing_rows:
             for fund in self.session.scalars(
                 select(MdmFund).where(MdmFund.adviser_entity_id.isnot(None))
             ):
@@ -1492,7 +1563,7 @@ class MDMPipeline:
                 effective_from=effective_date,
                 source_system="item_502_filing",
                 source_accession=accession_number,
-                date_provenance="sec_reported",
+                date_provenance="reported",
             )
             if created:
                 inserted += 1
@@ -1508,7 +1579,7 @@ class MDMPipeline:
             select(MdmRelationshipInstance)
             .join(MdmRelationshipType,
                   MdmRelationshipType.rel_type_id == MdmRelationshipInstance.rel_type_id)
-            .where(MdmRelationshipType.name == "EMPLOYED_BY")
+            .where(MdmRelationshipType.rel_type_name == "EMPLOYED_BY")
             .where(MdmRelationshipInstance.source_entity_id == person_id)
             .where(MdmRelationshipInstance.target_entity_id == company_id)
             .where(MdmRelationshipInstance.is_active.is_(True))
@@ -1614,6 +1685,28 @@ class MDMPipeline:
             effective_from = row.get("report_date") or (
                 date(int(fiscal_year), 1, 1) if fiscal_year else None
             )
+            if auditor_changed and effective_from is not None:
+                from edgar_warehouse.mdm.database import (
+                    MdmRelationshipInstance,
+                    MdmRelationshipType,
+                )
+                from edgar_warehouse.mdm.graph import close_relationship_version
+
+                prior_versions = self.session.scalars(
+                    select(MdmRelationshipInstance)
+                    .join(MdmRelationshipType)
+                    .where(MdmRelationshipType.rel_type_name == "AUDITED_BY")
+                    .where(MdmRelationshipInstance.source_entity_id == company_id)
+                    .where(MdmRelationshipInstance.target_entity_id != audit_firm_id)
+                    .where(MdmRelationshipInstance.is_active.is_(True))
+                    .where(MdmRelationshipInstance.quarantined.is_(False))
+                    .where(MdmRelationshipInstance.superseded_by_version_id.is_(None))
+                    .where(MdmRelationshipInstance.valid_to_date.is_(None))
+                ).all()
+                for prior_version in prior_versions:
+                    close_relationship_version(
+                        self.session, prior_version.instance_id, effective_from
+                    )
             _rel, created = sync_engine.ensure_relationship(
                 rel_type_name="AUDITED_BY",
                 source_entity_id=company_id,

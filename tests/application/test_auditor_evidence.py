@@ -13,9 +13,11 @@ def test_parse_complete_direct_ixbrl_triplet_for_audited_period():
     html = """
     <html><body>
       <xbrli:context id="D2024"><xbrli:period><xbrli:endDate>2024-09-28</xbrli:endDate></xbrli:period></xbrli:context>
+      <h2>Report of Independent Registered Public Accounting Firm</h2>
       <dei:AuditorName contextRef="D2024">Ernst &amp; Young LLP</dei:AuditorName>
       <dei:AuditorFirmId contextRef="D2024">00042</dei:AuditorFirmId>
       <dei:AuditorLocation contextRef="D2024">San Jose, California</dei:AuditorLocation>
+      <p>October 25, 2024</p>
     </body></html>
     """
     result = parse_auditor_evidence(
@@ -28,7 +30,7 @@ def test_parse_complete_direct_ixbrl_triplet_for_audited_period():
     assert result.row is not None
     assert result.row.pcaob_firm_id == "42"
     assert result.row.evidence_source == "sec_ixbrl"
-    assert result.row.report_date == date(2024, 11, 1)
+    assert result.row.report_date == date(2024, 10, 25)
     assert result.row.raw_locator == "context:D2024"
 
 
@@ -63,6 +65,34 @@ def test_bounded_independent_auditor_report_signature_fallback():
     )
     assert result.row is not None
     assert result.row.evidence_source == "sec_auditor_report"
+
+
+def test_real_inline_xbrl_triplet_uses_name_attribute_and_report_date():
+    content = """
+    <html><body>
+      <h2>Report of Independent Registered Public Accounting Firm</h2>
+      <ix:nonNumeric name="dei:AuditorName" contextRef="D2024">Long Tail CPAs</ix:nonNumeric>
+      <ix:nonNumeric name="dei:AuditorFirmId" contextRef="D2024">1042</ix:nonNumeric>
+      <ix:nonNumeric name="dei:AuditorLocation" contextRef="D2024">Boston, MA</ix:nonNumeric>
+      <p>February 14, 2025</p>
+    </body></html>
+    """
+
+    result = parse_auditor_evidence(
+        accession_number="annual-2024",
+        registrant_cik=1001,
+        form_type="10-KT",
+        document_name="annual.htm",
+        content=content,
+        audited_period_end=date(2024, 12, 31),
+        filing_date=date(2025, 2, 20),
+        source_sha256="abc123",
+    )
+
+    assert result.outcome == "applicable_loaded"
+    assert result.row is not None
+    assert result.row.pcaob_firm_id == "1042"
+    assert result.row.report_date == date(2025, 2, 14)
     assert result.row.report_date == date(2025, 2, 14)
 
 

@@ -70,3 +70,22 @@ def test_adv_bulk_archive_uses_crd_and_pfid_for_both_schedule_sections() -> None
     ])
     assert [row.filing_id for row in effective.filings] == ["2116000"]
     assert [row.private_fund_id for row in effective.funds] == ["805-999"]
+
+
+def test_filing_type_columns_only_treat_yes_as_selected_action() -> None:
+    parsed = parse_adv_bulk_archive(
+        _archive({
+            "IA_ADV_Base_A_20260601_20260630.csv": (
+                '"FilingID","DateSubmitted","1A","1D","1E1","7B"\n'
+                '2115188,"06/24/2026","PNC WEALTH","801-66195",129052,"N"\n'
+            ),
+            "ADV_Filing_Types_20260601_20260630.csv": (
+                "FilingID,Annual Updating Amendment for Registered Adviser,Final SEC ERA Report\n"
+                "2115188,N,Y\n"
+            ),
+        }),
+        dataset_period="2026-06",
+        source_sha256="abc123",
+    )
+
+    assert parsed.filings[0].filing_action == "final_sec_era_report"

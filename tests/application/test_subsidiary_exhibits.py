@@ -45,3 +45,25 @@ def test_exhibit_explicit_no_disclosable_subsidiaries_is_terminal_zero() -> None
     assert result.outcome == "not_applicable"
     assert result.reason == "explicit_no_disclosable_subsidiaries_601_b21_ii"
     assert result.rows == ()
+
+
+def test_html_parser_ignores_unrelated_tables_and_requires_subsidiary_header() -> None:
+    result = parse_subsidiary_exhibit(
+        accession_number="0001-26-000003",
+        registrant_cik=1001,
+        document_name="ex21.htm",
+        document_type="EX-21.1",
+        content="""
+        <html>
+          <table><tr><td>Exhibit 21</td><td>Page 1</td></tr></table>
+          <table>
+            <tr><th>Subsidiary Name</th><th>Jurisdiction of Organization</th></tr>
+            <tr><td>Only Real Subsidiary LLC</td><td>Delaware</td></tr>
+          </table>
+        </html>
+        """,
+        report_date=date(2025, 12, 31),
+        source_sha256="sha-filtered",
+    )
+
+    assert [row.legal_name for row in result.rows] == ["Only Real Subsidiary LLC"]

@@ -9,6 +9,7 @@ from edgar_warehouse.application.relationship_bulk_load import (
     InventoryError,
     LedgerError,
     build_candidate_inventory,
+    candidate_inventory_from_manifest,
     reconcile_completion_ledger,
     select_required_accessions,
 )
@@ -127,3 +128,43 @@ def test_release_manifest_selects_only_required_candidates_for_the_batch() -> No
             {"candidates": [payload["candidates"][0], payload["candidates"][0]]},
             ciks={1},
         )
+
+
+def test_frozen_manifest_batch_reconciles_through_completion_ledger() -> None:
+    inventory = build_candidate_inventory(
+        [_filing("proxy", "DEF 14A", filing_date="2024-02-01")],
+        coverage_start=date(2024, 1, 1),
+        watermark=date(2024, 3, 31),
+        source_manifest_fingerprints={"company:1": "company-sha"},
+        quarter_index_fingerprints={"2024Q1": "quarter-sha"},
+    )
+    payload = {
+        "coverage_start": inventory.coverage_start.isoformat(),
+        "watermark": inventory.watermark.isoformat(),
+        "fingerprint": inventory.fingerprint,
+        "quarter_index_fingerprints": list(inventory.quarter_index_fingerprints),
+        "candidates": [
+            {
+                **candidate.__dict__,
+                "filing_date": candidate.filing_date.isoformat(),
+                "report_date": None,
+            }
+            for candidate in inventory.candidates
+        ],
+    }
+
+    restored = candidate_inventory_from_manifest(payload, ciks={1})
+    result = reconcile_completion_ledger(
+        restored,
+        [CandidateOutcome(
+            generation_id="release-run",
+            accession_number="proxy",
+            candidate_fingerprint=restored.candidates[0].fingerprint,
+            status="applicable_loaded",
+            evidence_fingerprint="artifact-sha",
+        )],
+        generation_id="release-run",
+    )
+
+    assert result.inventory_fingerprint == inventory.fingerprint
+    assert result.terminal_counts == {"applicable_loaded": 1}
