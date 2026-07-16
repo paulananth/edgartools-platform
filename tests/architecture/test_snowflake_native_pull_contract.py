@@ -19,6 +19,9 @@ NATIVE_PULL_PROC = (
 )
 BOOTSTRAP_LOAD_PROC = REPO_ROOT / "infra" / "snowflake" / "sql" / "bootstrap" / "03_source_load_wrapper.sql"
 SOURCE_STAGE_SQL = REPO_ROOT / "infra" / "snowflake" / "sql" / "bootstrap" / "01_source_stage.sql"
+MDM_EXPORT_TARGETS_SQL = (
+    REPO_ROOT / "infra" / "snowflake" / "sql" / "bootstrap" / "07_mdm_export_targets.sql"
+)
 
 
 class SnowflakeNativePullContractTests(unittest.TestCase):
@@ -72,6 +75,18 @@ class SnowflakeNativePullContractTests(unittest.TestCase):
         self.assertNotIn(
             "ALTER TABLE SEC_FINANCIAL_FACT ADD COLUMN IF NOT EXISTS period_start DATE NOT NULL DEFAULT",
             source_stage,
+        )
+
+    def test_mdm_fund_export_target_contains_private_fund_id(self) -> None:
+        export_targets = MDM_EXPORT_TARGETS_SQL.read_text(encoding="utf-8")
+
+        self.assertRegex(
+            export_targets,
+            r"(?s)CREATE TABLE IF NOT EXISTS MDM_FUND \(.*?private_fund_id\s+VARCHAR",
+        )
+        self.assertIn(
+            "ALTER TABLE MDM_FUND ADD COLUMN IF NOT EXISTS private_fund_id VARCHAR;",
+            export_targets,
         )
 
 
