@@ -3,7 +3,7 @@
   "generated_at": "2026-07-16T01:17:31Z",
   "disposition": "NO_GO",
   "release_candidate": {
-    "commit": "1841e2f",
+    "commit": "1841e2fe3122de5d547be7aa9a9645c803a6ff8a",
     "branch": "codex/release-readiness",
     "warehouse_image_digest": null,
     "mdm_image_digest": null
