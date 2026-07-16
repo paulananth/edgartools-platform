@@ -71,6 +71,7 @@ class ShardedSilverReader:
         "sec_adv_private_fund",
         "sec_subsidiary_evidence",
         "sec_auditor_report_evidence",
+        "sec_pcaob_firm_identity",
         "stg_daily_index_filing",
         "sec_daily_index_checkpoint",
         "sec_raw_object",

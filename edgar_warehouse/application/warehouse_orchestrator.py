@@ -1631,6 +1631,10 @@ def _capture_bronze_raw(
                 )
                 if not identities:
                     raise WarehouseRuntimeError("PCAOB firm registry is empty")
+                from dataclasses import asdict
+                rows_written += db.merge_pcaob_firm_identities(
+                    [asdict(identity) for identity in identities], sync_run_id
+                )
             else:
                 raise WarehouseRuntimeError(f"unsupported relationship source kind: {kind!r}")
         metrics["rows_inserted"] += rows_written

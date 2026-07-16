@@ -134,7 +134,7 @@ def parse_auditor_evidence(
         return AuditorParseResult("unresolved", "auditor_report_not_found", None)
     bounded = plain[heading.start():heading.start() + 30000]
     signature = re.search(
-        r"/s/\s*([^\n]{3,200})\n([^\n]{2,160})\n(?:[A-Za-z]+\s+\d{1,2},\s+\d{4})",
+        r"/s/\s*([^\n]{3,200})\n\s*([^\n]{2,160})\n\s*(?:[A-Za-z]+\s+\d{1,2},\s+\d{4})",
         bounded,
     )
     firm_id = re.search(r"PCAOB(?:\s+Firm)?(?:\s+ID|\s+No\.)?\s*[:#]?\s*(\d+)", bounded, re.I)

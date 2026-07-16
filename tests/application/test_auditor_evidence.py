@@ -46,6 +46,26 @@ def test_incomplete_ixbrl_triplet_fails_closed():
         )
 
 
+def test_bounded_independent_auditor_report_signature_fallback():
+    text = """
+    REPORT OF INDEPENDENT REGISTERED PUBLIC ACCOUNTING FIRM
+    We have audited the accompanying financial statements.
+    PCAOB Firm ID: 1042
+    /s/ Long Tail CPAs
+    Boise, Idaho
+    February 14, 2025
+    """
+    result = parse_auditor_evidence(
+        accession_number="annual", registrant_cik=1, form_type="10-K",
+        document_name="annual.htm", content=text,
+        audited_period_end=date(2024, 12, 31), filing_date=date(2025, 2, 15),
+        source_sha256="hash",
+    )
+    assert result.row is not None
+    assert result.row.evidence_source == "sec_auditor_report"
+    assert result.row.report_date == date(2025, 2, 14)
+
+
 def test_pcaob_registry_parser_keeps_full_identity_set_and_aliases():
     csv_data = b"Firm ID,Firm Name,City,State,Country,Status\n42,Ernst & Young LLP,New York,NY,US,Active\n1042,Long Tail CPAs,Boise,ID,US,Active\n"
     rows = parse_pcaob_firm_registry(

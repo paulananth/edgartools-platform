@@ -291,6 +291,19 @@ CREATE TABLE IF NOT EXISTS sec_auditor_report_evidence (
     PRIMARY KEY (accession_number, evidence_fingerprint)
 );
 
+CREATE TABLE IF NOT EXISTS sec_pcaob_firm_identity (
+    pcaob_firm_id    TEXT,
+    canonical_name   TEXT,
+    city             TEXT,
+    state            TEXT,
+    country          TEXT,
+    status           TEXT,
+    snapshot_uri     TEXT,
+    snapshot_sha256  TEXT,
+    last_sync_run_id TEXT,
+    PRIMARY KEY (pcaob_firm_id, snapshot_sha256)
+);
+
 CREATE TABLE IF NOT EXISTS stg_daily_index_filing (
     sync_run_id         TEXT,
     raw_object_id       TEXT,
@@ -2050,6 +2063,29 @@ class SilverDatabase:
             ],
         )
 
+    def merge_pcaob_firm_identities(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        return self._merge_rows(
+            """
+            INSERT INTO sec_pcaob_firm_identity
+                (pcaob_firm_id, canonical_name, city, state, country, status,
+                 snapshot_uri, snapshot_sha256, last_sync_run_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (pcaob_firm_id, snapshot_sha256) DO UPDATE SET
+                canonical_name = excluded.canonical_name,
+                city = excluded.city,
+                state = excluded.state,
+                country = excluded.country,
+                status = excluded.status,
+                last_sync_run_id = excluded.last_sync_run_id
+            """,
+            rows,
+            lambda row: [
+                row["pcaob_firm_id"], row["canonical_name"], row.get("city"),
+                row.get("state"), row.get("country"), row.get("status"),
+                row["snapshot_uri"], row["snapshot_sha256"], sync_run_id,
+            ],
+        )
+
     # ------------------------------------------------------------------
     # stg_daily_index_filing
     # ------------------------------------------------------------------
@@ -3127,6 +3163,7 @@ class SilverDatabase:
             "sec_adv_private_fund",
             "sec_subsidiary_evidence",
             "sec_auditor_report_evidence",
+            "sec_pcaob_firm_identity",
             "sec_sync_run",
             "pipeline_run",
             "gold_manifest",

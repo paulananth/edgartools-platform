@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import io
 import zipfile
+from dataclasses import replace
 
-from edgar_warehouse.application.adv_bulk_ingest import parse_adv_bulk_archive
+from edgar_warehouse.application.adv_bulk_ingest import (
+    AdvBulkParseResult,
+    parse_adv_bulk_archive,
+    reconstruct_effective_adv_set,
+)
 
 
 def _archive(files: dict[str, str]) -> bytes:
@@ -52,3 +57,16 @@ def test_adv_bulk_archive_uses_crd_and_pfid_for_both_schedule_sections() -> None
     ]
     assert {row.adviser_crd_number for row in parsed.funds} == {"129052"}
     assert all(row.source_sha256 == "abc123" for row in parsed.funds)
+
+    newer_filing = replace(
+        parsed.filings[0], filing_id="2116000", accession_number="iapd-adv:2116000"
+    )
+    newer_fund = replace(
+        parsed.funds[0], filing_id="2116000", accession_number="iapd-adv:2116000",
+        private_fund_id="805-999",
+    )
+    effective = reconstruct_effective_adv_set([
+        parsed, AdvBulkParseResult((newer_filing,), (newer_fund,)),
+    ])
+    assert [row.filing_id for row in effective.filings] == ["2116000"]
+    assert [row.private_fund_id for row in effective.funds] == ["805-999"]

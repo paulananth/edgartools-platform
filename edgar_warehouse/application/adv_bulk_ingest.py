@@ -239,3 +239,34 @@ def ingest_adv_bulk_archive(
         "filings": db.merge_adv_filings(filing_rows, sync_run_id),
         "funds": db.merge_adv_private_funds(fund_rows, sync_run_id),
     }
+
+
+def reconstruct_effective_adv_set(
+    snapshots: list[AdvBulkParseResult] | tuple[AdvBulkParseResult, ...],
+) -> AdvBulkParseResult:
+    """Select the latest filing per CRD and its exact linked 7.B assertions."""
+    latest: dict[str, AdvBulkFiling] = {}
+    funds_by_filing: dict[str, list[AdvBulkFund]] = {}
+    for snapshot in snapshots:
+        for fund in snapshot.funds:
+            funds_by_filing.setdefault(fund.filing_id, []).append(fund)
+        for filing in snapshot.filings:
+            prior = latest.get(filing.adviser_crd_number)
+            key = (filing.effective_date, int(filing.filing_id))
+            prior_key = (prior.effective_date, int(prior.filing_id)) if prior else None
+            if prior_key is None or key > prior_key:
+                latest[filing.adviser_crd_number] = filing
+    effective_filings = tuple(
+        latest[crd] for crd in sorted(latest, key=lambda value: (int(value), value))
+    )
+    effective_funds: list[AdvBulkFund] = []
+    for filing in effective_filings:
+        terminal = any(word in filing.filing_action for word in ("final", "withdraw"))
+        if not terminal:
+            effective_funds.extend(funds_by_filing.get(filing.filing_id, ()))
+    return AdvBulkParseResult(
+        effective_filings,
+        tuple(sorted(effective_funds, key=lambda row: (
+            int(row.filing_id), row.private_fund_id, row.schedule_section,
+        ))),
+    )

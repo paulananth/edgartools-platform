@@ -98,6 +98,9 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
     "sec_auditor_report_evidence": ProtectedTablePolicy(
         "sec_auditor_report_evidence", ("accession_number", "evidence_fingerprint")
     ),
+    "sec_pcaob_firm_identity": ProtectedTablePolicy(
+        "sec_pcaob_firm_identity", ("pcaob_firm_id", "snapshot_sha256")
+    ),
     "sec_raw_object": ProtectedTablePolicy(
         "sec_raw_object", ("raw_object_id",), authority_column="fetched_at"
     ),
