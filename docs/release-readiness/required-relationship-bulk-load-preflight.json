@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-16T01:43:23Z",
+  "generated_at": "2026-07-16T01:57:41Z",
   "disposition": "NO_GO",
   "release_candidate": {
-    "commit": "1841e2fe3122de5d547be7aa9a9645c803a6ff8a",
+    "commit": "2d3bd7427444fdbf166febccf31637f679db72b4",
     "branch": "codex/release-readiness",
     "warehouse_image_digest": null,
     "mdm_image_digest": null
@@ -11,7 +11,7 @@
   "implementation_verification": {
     "status": "pass",
     "pytest": {
-      "passed": 801,
+      "passed": 804,
       "warnings": 3,
       "subtests_passed": 33
     },
@@ -34,9 +34,9 @@
   },
   "hard_blockers": [
     {
-      "ticket": 11,
-      "code": "publication_boundary_unresolved",
-      "detail": "BatchSilver contention-safe publication proof is still open."
+      "ticket": 17,
+      "code": "strict_relationship_artifact_bulk_load_incomplete",
+      "detail": "The fail-closed manifest-driven relationship artifact bulk-load task is still open."
     },
     {
       "ticket": 21,
