@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-16T01:17:31Z",
+  "disposition": "NO_GO",
+  "release_candidate": {
+    "commit": "1841e2f",
+    "branch": "codex/release-readiness",
+    "warehouse_image_digest": null,
+    "mdm_image_digest": null
+  },
+  "implementation_verification": {
+    "status": "pass",
+    "pytest": {
+      "passed": 801,
+      "warnings": 3,
+      "subtests_passed": 33
+    },
+    "diff_check": "pass",
+    "focused_lint": "pass"
+  },
+  "live_aws_read_only_preflight": {
+    "account": "690839588395",
+    "region": "us-east-1",
+    "state_machine": "edgartools-prod-bronze-seed-silver-gold",
+    "revision_id": "6a9909ed-5f2b-4971-8534-d5b777783721",
+    "batch_silver_max_concurrency": 4,
+    "latest_execution_statuses": [
+      "FAILED",
+      "FAILED",
+      "ABORTED"
+    ],
+    "latest_failed_stage": "MdmExport",
+    "execution_started": false
+  },
+  "hard_blockers": [
+    {
+      "ticket": 11,
+      "code": "publication_boundary_unresolved",
+      "detail": "BatchSilver contention-safe publication proof is still open."
+    },
+    {
+      "ticket": 13,
+      "code": "manages_fund_source_contract_missing",
+      "detail": "The authoritative adviser-fund source and entitlement contract is not approved."
+    },
+    {
+      "ticket": 14,
+      "code": "parent_company_parser_contract_missing",
+      "detail": "The complete Exhibit 21 candidate and parser contract is not approved."
+    },
+    {
+      "ticket": 15,
+      "code": "auditor_evidence_contract_missing",
+      "detail": "The authoritative auditor evidence ingestion contract is not approved."
+    },
+    {
+      "ticket": 20,
+      "code": "production_candidate_ledger_missing",
+      "detail": "No frozen production candidate manifest or reconciled completion ledger exists."
+    },
+    {
+      "ticket": 20,
+      "code": "candidate_images_not_deployed",
+      "detail": "The implementation commit has no bound warehouse or MDM production image digests."
+    },
+    {
+      "ticket": 20,
+      "code": "named_attestations_missing",
+      "detail": "Warehouse, MDM, Graph, Release Data Operator, and Release Owner attestations are unassigned."
+    }
+  ],
+  "launch_decision": {
+    "eligible": false,
+    "action": "do_not_start_full_chain",
+    "reason": "Starting the current deployed workflow cannot produce a Full-Chain Launch Pass."
+  }
+}

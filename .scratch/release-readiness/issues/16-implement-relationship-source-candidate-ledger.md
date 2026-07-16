@@ -1,7 +1,7 @@
 # Implement Relationship Source Candidate Ledger
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: none
 Blocks: 17, 18, 19
 
@@ -16,3 +16,6 @@ Implement the frozen proxy, Item 5.02, ambiguous-8-K, and 13F accession inventor
 - Ledger reconciliation detects missing, duplicate, unresolved, quarantined, or stale rows.
 - Unit and architecture tests cover deterministic inventory and terminal-state rules.
 
+## Resolution
+
+Implemented by commit `1841e2f` in `edgar_warehouse.application.relationship_bulk_load`, with deterministic inventory fingerprints, missing-quarter/submission-manifest failure, duplicate detection, generation binding, terminal-state enforcement, and stale-evidence rejection.

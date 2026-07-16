@@ -16,3 +16,7 @@ Run the strict production bulk load at the frozen Release Data Watermark, repair
 - A no-change rerun makes no SEC requests and produces identical silver/MDM semantic digests with zero new relationship identities.
 - `EMPLOYED_BY` and `INSTITUTIONAL_HOLDS` pass exact MDM-to-hosted-graph parity and current-at-watermark checks.
 - Named Warehouse, MDM, Graph, Release Data Operator, and Release Owner attestations are bound to the evidence artifact.
+
+## Current disposition
+
+`NO_GO`; no production execution was started. See `docs/release-readiness/required-relationship-bulk-load-preflight.json`. Tickets 11, 13, 14, and 15, the frozen production candidate ledger, bound candidate image digests, and named attestations remain hard blockers.

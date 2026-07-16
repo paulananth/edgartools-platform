@@ -1,7 +1,7 @@
 # Implement Item 5.02 Employment Events
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 16
 Blocks: 20
 
@@ -17,3 +17,6 @@ Parse Form 8-K Item 5.02 appointment, departure, role-change, and covered compen
 - Ambiguous names, companies, dates, and contradictory events remain unresolved and block release.
 - Current-at-watermark and historical tests cover appointment/departure sequences.
 
+## Resolution
+
+Implemented by commit `1841e2f`: Item 5.02 appointments, departures, role changes, and covered salary changes persist as typed silver events and apply temporal effects during `EMPLOYED_BY` derivation. Conservative ambiguous outcomes remain unresolved.

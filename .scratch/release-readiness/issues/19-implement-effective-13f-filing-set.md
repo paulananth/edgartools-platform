@@ -1,7 +1,7 @@
 # Implement Effective 13F Filing Set
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 16
 Blocks: 20
 
@@ -17,3 +17,6 @@ Implement complete 13F manager enumeration, required information-table validatio
 - Confidentially omitted positions are not falsely asserted.
 - Full no-cap batched derivation and idempotency tests pass at representative scale.
 
+## Resolution
+
+Implemented by commit `1841e2f`: strict quarter enumeration, cover-page amendment parsing, restatement/addition effective-set rules, deterministic CIK-backed manager identities, and effective-set-only batched derivation.
