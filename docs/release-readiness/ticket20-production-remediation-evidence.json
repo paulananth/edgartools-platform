@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-16T17:30:34Z",
+  "disposition": "PARTIAL_PASS_NO_GO",
+  "release_candidate": {
+    "repository_commit": "7da4bf281c1a6845a9086efe15e75df4add724da",
+    "warehouse_image_digest": "sha256:37ec4e43788abd40f0f26a0615137fd73c8b26d74bec8605f05b69422baf1550",
+    "mdm_image_digest": "sha256:f97963824fbfa54a41151f37c548788c84add07e31c62e252b25d59457cbe118"
+  },
+  "deployment": {
+    "environment": "prod",
+    "region": "us-east-1",
+    "mdm_task_definition_revision": 9,
+    "full_chain_state_machine": "edgartools-prod-bronze-seed-silver-gold",
+    "full_chain_revision_id": "74a9eb4d-3e9f-44b0-9d0e-537cd4fddc85",
+    "batch_silver_max_concurrency": 4,
+    "immutable_image_binding_verified": true
+  },
+  "mdm_export_remediation": {
+    "status": "pass",
+    "same_runtime_connectivity_preflight": "pass",
+    "snowflake_export_targets_provisioned": true,
+    "snowflake_postgres_migration_010_applied": true,
+    "decimal_serialization_hotfix_pr": 136,
+    "snowflake_fund_contract_hotfix_pr": 137,
+    "replay_task_id": "6d103ecd1c69433ea41120e92b621347",
+    "replay_exit_code": 0,
+    "exported_change_rows": 2,
+    "snowflake_row_counts": {
+      "MDM_ADVISER": 1,
+      "MDM_FUND": 1
+    }
+  },
+  "strict_bulk_load_gate": {
+    "status": "blocked",
+    "execution_started": false,
+    "ordinary_workflow_is_release_evidence": false,
+    "ordinary_batch_policy": {
+      "artifact_policy": "skip",
+      "parser_policy": "skip"
+    },
+    "blockers": [
+      {
+        "code": "frozen_candidate_manifest_missing",
+        "detail": "No production candidate manifest or reconciled completion ledger exists for the 2013-05-20 through release-watermark relationship window."
+      },
+      {
+        "code": "quarter_index_coverage_incomplete",
+        "detail": "The production bronze quarterly-index prefix currently exposes only 2026 coverage, so the required historical index fingerprint set cannot be reconciled."
+      },
+      {
+        "code": "named_attestations_missing",
+        "detail": "Warehouse, MDM, Graph, Release Data Operator, and Release Owner attestations remain unassigned."
+      }
+    ]
+  },
+  "launch_decision": {
+    "eligible": false,
+    "action": "do_not_start_ordinary_full_chain",
+    "reason": "MdmExport is repaired, but the current ordinary workflow cannot produce the strict Ticket 20 candidate-ledger proof."
+  }
+}
