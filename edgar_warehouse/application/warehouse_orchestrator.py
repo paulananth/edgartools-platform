@@ -1796,13 +1796,21 @@ def _run_configured_form_artifact_pipeline(
     artifact_policy: str,
     parser_policy: str,
     force: bool,
+    release_mode: bool = False,
+    repair_manifest_accessions: set[str] | None = None,
 ) -> dict[str, Any]:
+    if release_mode and force and not repair_manifest_accessions:
+        raise WarehouseRuntimeError("release --force requires an explicit bounded repair manifest")
     fetch_artifacts = _artifact_policy_fetches(artifact_policy)
     run_parsers = _parser_policy_runs(parser_policy)
     if not fetch_artifacts and not run_parsers:
         return {"raw_writes": [], "rows_written": 0, "rows_skipped": 0}
 
     selected_accessions = _configured_parser_accessions(db, accession_numbers)
+    if release_mode and force:
+        unapproved = sorted(set(selected_accessions) - set(repair_manifest_accessions or ()))
+        if unapproved:
+            raise WarehouseRuntimeError(f"release force includes accessions outside repair manifest: {unapproved}")
     if not selected_accessions:
         return {"raw_writes": [], "rows_written": 0, "rows_skipped": 0}
 
@@ -1827,6 +1835,11 @@ def _run_configured_form_artifact_pipeline(
                 remaining_accessions=len(selected_accessions) - errors - rows_written,
                 run_id=sync_run_id,
             )
+            if release_mode:
+                remaining = selected_accessions[errors + rows_written:]
+                raise WarehouseRuntimeError(
+                    f"artifact circuit breaker left unresolved candidates: {remaining}"
+                )
             break
         try:
             if fetch_artifacts:
@@ -1872,6 +1885,10 @@ def _run_configured_form_artifact_pipeline(
                 error=str(exc),
                 run_id=sync_run_id,
             )
+            if release_mode:
+                raise WarehouseRuntimeError(
+                    f"required artifact candidate {accession_number} failed"
+                ) from exc
     _emit_pipeline_event(
         "filing_artifact_pipeline_completed",
         accession_count=len(selected_accessions),
@@ -1889,14 +1906,23 @@ def _configured_parser_accessions(db: SilverDatabase, accession_numbers: list[st
         filing = db.get_filing(accession_number)
         if filing is None:
             continue
-        if _is_configured_parser_form(filing.get("form")):
+        if _is_configured_parser_form(filing.get("form"), filing.get("items")):
             selected.append(accession_number)
     return selected
 
 
-def _is_configured_parser_form(form_type: Any) -> bool:
+def _is_configured_parser_form(form_type: Any, items: Any = None) -> bool:
     normalized = str(form_type or "").strip().upper()
-    return normalized in OWNERSHIP_FORMS or normalized in ADV_FORMS
+    if normalized in OWNERSHIP_FORMS or normalized in ADV_FORMS:
+        return True
+    if normalized in {"DEF 14A", "DEF 14A/A", "DEFA14A", "PRE 14A", "13F-HR", "13F-HR/A"}:
+        return True
+    if normalized in {"8-K", "8-K/A"}:
+        normalized_items = str(items or "").strip()
+        return not normalized_items or bool(
+            re.search(r"(?:^|[^0-9])5\s*\.\s*02(?:[^0-9]|$)", normalized_items, re.I)
+        )
+    return False
 
 
 def _run_parse_ownership_bronze(

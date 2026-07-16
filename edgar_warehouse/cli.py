@@ -736,6 +736,16 @@ def build_parser() -> argparse.ArgumentParser:
             "/tmp/edgar-warehouse-silver for remote storage."
         ),
     )
+    bootstrap_fundamentals.add_argument(
+        "--release-mode",
+        action="store_true",
+        help="Fail closed on every required candidate failure; requires --candidate-manifest",
+    )
+    bootstrap_fundamentals.add_argument(
+        "--candidate-manifest",
+        default=None,
+        help="Local or S3 JSON manifest containing the bounded release candidate accessions",
+    )
     _add_run_id_arg(bootstrap_fundamentals)
     bootstrap_fundamentals.set_defaults(handler=_handle_bootstrap_fundamentals)
 

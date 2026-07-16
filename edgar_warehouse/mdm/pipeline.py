@@ -786,7 +786,7 @@ class MDMPipeline:
 
         Returns the number of rows updated.
         """
-        from edgar_warehouse.mdm.database import MdmCompany, MdmSecurity
+        from edgar_warehouse.mdm.database import MdmSecurity
 
         # canonical_title normalisation must match run_securities()
         def _canonical(raw: str) -> str:
@@ -859,7 +859,7 @@ class MDMPipeline:
                 .join(MdmRelationshipType)
                 .where(
                     MdmRelationshipType.rel_type_name == rel_type_name,
-                    MdmRelationshipInstance.is_active == True,
+                    MdmRelationshipInstance.is_active.is_(True),
                 )
             )
             or 0
@@ -945,6 +945,47 @@ class MDMPipeline:
         return self.session.scalar(
             select(MdmAdviser.entity_id).where(MdmAdviser.cik == int(cik))
         )
+
+    def _ensure_thirteenf_manager(self, cik) -> Optional[str]:
+        """Resolve or deterministically create the adviser source entity for a 13F manager."""
+        existing = self._adviser_entity_id_by_cik(cik)
+        if existing or cik is None:
+            return existing
+        import uuid as _uuid
+        from edgar_warehouse.mdm.database import MdmAdviser, MdmEntity, MdmSourceRef
+
+        normalized_cik = int(cik)
+        entity_id = str(_uuid.uuid5(_uuid.NAMESPACE_URL, f"sec:13f-manager:{normalized_cik}"))
+        company_rows = self.silver.fetch(
+            "SELECT company_name FROM sec_company WHERE cik = ? LIMIT 1",
+            [normalized_cik],
+        )
+        canonical_name = (
+            str(company_rows[0].get("company_name") or "").strip()
+            if company_rows else ""
+        ) or f"13F Manager CIK {normalized_cik}"
+        if self.session.get(MdmEntity, entity_id) is None:
+            self.session.add(MdmEntity(
+                entity_id=entity_id,
+                entity_type="adviser",
+                resolution_method="sec_13f_manager_cik",
+                confidence=1.0,
+            ))
+            self.session.add(MdmAdviser(
+                entity_id=entity_id,
+                cik=normalized_cik,
+                canonical_name=canonical_name,
+                adviser_type="13f_manager",
+            ))
+            self.session.add(MdmSourceRef(
+                entity_id=entity_id,
+                source_system="thirteenf_manager",
+                source_id=str(normalized_cik),
+                source_priority=20,
+                confidence=1.0,
+            ))
+            self.session.flush()
+        return entity_id
 
     def _audit_firm_entity_id(
         self, pcaob_id: Optional[str], firm_name: Optional[str]
@@ -1214,7 +1255,100 @@ class MDMPipeline:
             if remaining is not None and inserted >= remaining:
                 break
 
+        # Item 5.02 events are applied after proxy baselines in effective-date
+        # order. Appointments open a version; role changes close the prior open
+        # version before opening the replacement; departures only close.
+        event_sql = """
+            SELECT accession_number, cik, event_type, person_name, exec_role,
+                   previous_role, compensation_amount, effective_date
+            FROM sec_employment_event
+            ORDER BY effective_date, accession_number, event_index
+        """
+        for event in self._fetch_optional_relationship_rows(
+            event_sql,
+            None,
+            rel_type_name="EMPLOYED_BY",
+            source_table="sec_employment_event",
+        ):
+            cik = event.get("cik")
+            accession_number = event.get("accession_number") or ""
+            person_name = event.get("person_name") or ""
+            effective_date = event.get("effective_date")
+            if effective_date and not isinstance(effective_date, date):
+                effective_date = date.fromisoformat(str(effective_date)[:10])
+            company_id = self._company_entity_id(cik)
+            if company_id is None:
+                skipped_unresolved_target += 1
+                continue
+            person_id = self._person_entity_id(None, person_name)
+            if person_id is None and event.get("event_type") == "appointment":
+                person_id = self._ensure_proxy_person(person_name, int(cik), accession_number)
+            if person_id is None:
+                skipped_unresolved_source += 1
+                continue
+
+            current = self._current_employment_versions(person_id, company_id)
+            if event.get("event_type") == "departure":
+                if len(current) != 1:
+                    skipped_unresolved_source += 1
+                    continue
+                from edgar_warehouse.mdm.graph import close_relationship_version
+                close_relationship_version(self.session, current[0].instance_id, effective_date)
+                continue
+            if event.get("event_type") not in {
+                "appointment", "role_change", "compensation_change"
+            }:
+                skipped_unresolved_source += 1
+                continue
+            if len(current) > 1:
+                skipped_unresolved_source += 1
+                continue
+            if current:
+                from edgar_warehouse.mdm.graph import close_relationship_version
+                close_relationship_version(self.session, current[0].instance_id, effective_date)
+            _rel, created = sync_engine.ensure_relationship(
+                rel_type_name="EMPLOYED_BY",
+                source_entity_id=person_id,
+                target_entity_id=company_id,
+                properties={
+                    "role": event.get("exec_role") or (
+                        (current[0].properties or {}).get("role") if current else None
+                    ),
+                    "title": event.get("exec_role") or (
+                        (current[0].properties or {}).get("title") if current else None
+                    ),
+                    "previous_role": event.get("previous_role"),
+                    "compensation_amount": event.get("compensation_amount"),
+                    "source_accession": accession_number,
+                    "event_type": event.get("event_type"),
+                },
+                effective_from=effective_date,
+                source_system="item_502_filing",
+                source_accession=accession_number,
+                date_provenance="sec_reported",
+            )
+            if created:
+                inserted += 1
+            else:
+                skipped_existing += 1
+
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
+
+    def _current_employment_versions(self, person_id: str, company_id: str):
+        from edgar_warehouse.mdm.database import MdmRelationshipInstance, MdmRelationshipType
+
+        return list(self.session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType,
+                  MdmRelationshipType.rel_type_id == MdmRelationshipInstance.rel_type_id)
+            .where(MdmRelationshipType.name == "EMPLOYED_BY")
+            .where(MdmRelationshipInstance.source_entity_id == person_id)
+            .where(MdmRelationshipInstance.target_entity_id == company_id)
+            .where(MdmRelationshipInstance.is_active.is_(True))
+            .where(MdmRelationshipInstance.quarantined.is_(False))
+            .where(MdmRelationshipInstance.superseded_by_version_id.is_(None))
+            .where(MdmRelationshipInstance.valid_to_date.is_(None))
+        ))
 
     def _derive_audited_by(
         self, sync_engine: GraphSyncEngine, remaining: Optional[int]
@@ -1346,8 +1480,9 @@ class MDMPipeline:
         The UUID5 key (f"cusip:{cusip}") guarantees idempotency across runs.
 
         Rows without a CUSIP are skipped — security identity cannot be established.
-        Rows whose filing CIK cannot be resolved to an mdm_adviser are skipped;
-        the 13F filer list bootstrap must complete before INSTITUTIONAL_HOLDS derivation.
+        Filing managers resolve by SEC CIK. If the CIK is not already represented
+        by an ADV-derived adviser, a deterministic 13F-manager adviser source entity
+        is created so the complete manager universe is not restricted to IARD filers.
 
         CIK-range batching (D-03, EDGE-11, T-06-01, T-06-02): sec_thirteenf_holding
         is the largest silver table — a single unbounded silver.fetch() risks OOM
@@ -1361,16 +1496,37 @@ class MDMPipeline:
         accumulate across all batches, not per batch.
         """
         base_sql = """
-            SELECT cik, accession_number, period_of_report, cusip,
-                   issuer_name, security_title, shares_held, market_value,
-                   put_call, discretion_type, security_class
-            FROM sec_thirteenf_holding
-            WHERE cusip IS NOT NULL
+            SELECT h.cik, h.accession_number, h.period_of_report, h.cusip,
+                   h.issuer_name, h.security_title, h.shares_held, h.market_value,
+                   h.put_call, h.discretion_type, h.security_class
+            FROM sec_thirteenf_holding h
+            JOIN sec_thirteenf_filing f ON f.accession_number = h.accession_number
+            WHERE h.cusip IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM sec_thirteenf_filing later
+                  WHERE later.cik = f.cik
+                    AND later.period_of_report = f.period_of_report
+                    AND later.amendment_type = 'restatement'
+                    AND (later.filing_date, later.accession_number) >
+                        (f.filing_date, f.accession_number)
+              )
         """
         bounds_sql = """
             SELECT MIN(cik) AS min_cik, MAX(cik) AS max_cik
-            FROM sec_thirteenf_holding
-            WHERE cusip IS NOT NULL
+            FROM (
+                SELECT h.cik
+                FROM sec_thirteenf_holding h
+                JOIN sec_thirteenf_filing f ON f.accession_number = h.accession_number
+                WHERE h.cusip IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM sec_thirteenf_filing later
+                      WHERE later.cik = f.cik
+                        AND later.period_of_report = f.period_of_report
+                        AND later.amendment_type = 'restatement'
+                        AND (later.filing_date, later.accession_number) >
+                            (f.filing_date, f.accession_number)
+                  )
+            ) effective_holdings
         """
         inserted = 0
         skipped_corporate = 0
@@ -1392,7 +1548,7 @@ class MDMPipeline:
 
         min_cik = int(bounds_rows[0]["min_cik"])
         max_cik = int(bounds_rows[0]["max_cik"])
-        batch_sql = f"{base_sql.rstrip()} AND cik BETWEEN ? AND ? ORDER BY cik, accession_number, cusip"
+        batch_sql = f"{base_sql.rstrip()} AND h.cik BETWEEN ? AND ? ORDER BY h.cik, h.accession_number, h.cusip"
 
         cik_lo = min_cik
         while cik_lo <= max_cik:
@@ -1410,7 +1566,7 @@ class MDMPipeline:
                     skipped_unresolved_target += 1
                     continue
 
-                adviser_id = self._adviser_entity_id_by_cik(cik)
+                adviser_id = self._ensure_thirteenf_manager(cik)
                 if adviser_id is None:
                     skipped_unresolved_source += 1
                     print(json.dumps({

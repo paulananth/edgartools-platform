@@ -810,6 +810,26 @@ class TestRunRelationships:
             + summary["INSTITUTIONAL_HOLDS"]["skipped_existing"]
         )
 
+    def test_thirteenf_manager_outside_adv_universe_is_created(self, session):
+        silver = StubSilver({
+            "sec_thirteenf_holding": [{
+                "cik": 999001, "accession_number": "manager-only",
+                "period_of_report": "2024-03-31", "cusip": "037833100",
+                "issuer_name": "Apple Inc", "security_title": "Common Stock",
+                "shares_held": 1, "market_value": 100, "put_call": None,
+                "discretion_type": "SOLE", "security_class": "equity",
+            }],
+            "FROM sec_company WHERE cik": [{"company_name": "Manager Only LLC"}],
+        })
+        summary = MDMPipeline(session=session, silver=silver).derive_relationships(
+            relationship_types=["INSTITUTIONAL_HOLDS"]
+        )
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 1
+        from edgar_warehouse.mdm.database import MdmAdviser
+        manager = session.scalar(select(MdmAdviser).where(MdmAdviser.cik == 999001))
+        assert manager is not None
+        assert manager.canonical_name == "Manager Only LLC"
+
     def test_optional_fundamentals_source_table_missing_institutional_holds(self, session):
         """INSTITUTIONAL_HOLDS: missing sec_thirteenf_holding → 0 rows, no exception. (06-02)"""
         silver = MissingTableSilver("sec_thirteenf_holding")

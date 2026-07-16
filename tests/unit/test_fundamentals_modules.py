@@ -753,6 +753,36 @@ class BranchBSourceReaderTests(unittest.TestCase):
         self.assertEqual(metrics["filings_scanned"], 0)
         self.assertEqual(metrics["filings_parsed"], 0)
 
+    def test_release_mode_fails_when_primary_artifact_is_missing(self) -> None:
+        from edgar_warehouse.application.workflows.fundamentals_ingest import (
+            run_bootstrap_fundamentals_per_filing,
+        )
+        fake_source = MagicMock()
+        fake_source.fetch.side_effect = [
+            [{"accession_number": "required", "cik": 1, "form": "DEF 14A",
+              "filing_date": "2024-01-01"}],
+            [],
+        ]
+        with self.assertRaisesRegex(Exception, "required.*primary artifact"):
+            run_bootstrap_fundamentals_per_filing(
+                cik_list=[1], source=fake_source, db=MagicMock(), sync_run_id="release",
+                release_mode=True, candidate_accessions={"required"},
+            )
+
+    def test_release_mode_fails_when_13f_information_table_is_missing(self) -> None:
+        from edgar_warehouse.application.workflows.fundamentals_ingest import run_bootstrap_thirteenf
+        fake_source = MagicMock()
+        fake_source.fetch.side_effect = [
+            [{"accession_number": "required", "cik": 1, "report_date": "2024-03-31",
+              "filing_date": "2024-05-01"}],
+            [],
+        ]
+        with self.assertRaisesRegex(Exception, "required.*information table"):
+            run_bootstrap_thirteenf(
+                cik_list=[1], source=fake_source, db=MagicMock(), sync_run_id="release",
+                release_mode=True, candidate_accessions={"required"},
+            )
+
     def test_per_filing_reads_filings_from_source_never_db(self) -> None:
         from edgar_warehouse.application.workflows.fundamentals_ingest import (
             run_bootstrap_fundamentals_per_filing,

@@ -616,6 +616,21 @@ CREATE TABLE IF NOT EXISTS sec_executive_record (
     PRIMARY KEY (cik, accession_number, exec_name)
 );
 
+CREATE TABLE IF NOT EXISTS sec_employment_event (
+    accession_number    TEXT NOT NULL,
+    event_index         BIGINT NOT NULL,
+    cik                 BIGINT NOT NULL,
+    event_type          TEXT NOT NULL,
+    person_name         TEXT NOT NULL,
+    exec_role           TEXT,
+    previous_role       TEXT,
+    compensation_amount DOUBLE,
+    effective_date      DATE NOT NULL,
+    parser_version      TEXT NOT NULL,
+    ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (accession_number, event_index)
+);
+
 CREATE TABLE IF NOT EXISTS sec_thirteenf_holding (
     cik                 BIGINT NOT NULL,     -- 13F filing manager CIK
     accession_number    TEXT NOT NULL,
@@ -639,6 +654,20 @@ CREATE TABLE IF NOT EXISTS sec_thirteenf_holding (
     parser_version      TEXT,
     ingested_at         TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (cik, accession_number, holding_index)
+);
+
+CREATE TABLE IF NOT EXISTS sec_thirteenf_filing (
+    accession_number         TEXT PRIMARY KEY,
+    cik                      BIGINT NOT NULL,
+    period_of_report         DATE NOT NULL,
+    filing_date              DATE NOT NULL,
+    form                     TEXT NOT NULL,
+    amendment_type           TEXT,
+    confidential_omission    BOOLEAN NOT NULL DEFAULT FALSE,
+    effective_status         TEXT NOT NULL DEFAULT 'effective',
+    superseded_by_accession  TEXT,
+    parser_version           TEXT NOT NULL,
+    ingested_at              TIMESTAMPTZ DEFAULT NOW()
 );
 """
 
@@ -3297,6 +3326,31 @@ class SilverDatabase:
             ],
         )
 
+    def merge_employment_events(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        return self._merge_rows(
+            """
+            INSERT INTO sec_employment_event
+                (accession_number, event_index, cik, event_type, person_name,
+                 exec_role, previous_role, compensation_amount, effective_date, parser_version)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT (accession_number, event_index) DO UPDATE SET
+                event_type = excluded.event_type,
+                person_name = excluded.person_name,
+                exec_role = excluded.exec_role,
+                previous_role = excluded.previous_role,
+                compensation_amount = excluded.compensation_amount,
+                effective_date = excluded.effective_date,
+                parser_version = excluded.parser_version
+            """,
+            rows,
+            lambda r: [
+                r["accession_number"], r["event_index"], r["cik"], r["event_type"],
+                r["person_name"], r.get("exec_role"), r.get("previous_role"),
+                r.get("compensation_amount"),
+                r["effective_date"], r["parser_version"],
+            ],
+        )
+
     def merge_thirteenf_holdings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
@@ -3321,6 +3375,31 @@ class SilverDatabase:
                 r.get("security_class"), r.get("put_call"), r.get("discretion_type"),
                 r.get("voting_auth_sole"), r.get("voting_auth_shared"),
                 r.get("voting_auth_none"), r.get("parser_version"),
+            ],
+        )
+
+    def merge_thirteenf_filings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        return self._merge_rows(
+            """
+            INSERT INTO sec_thirteenf_filing
+                (accession_number, cik, period_of_report, filing_date, form,
+                 amendment_type, confidential_omission, effective_status,
+                 superseded_by_accession, parser_version)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT (accession_number) DO UPDATE SET
+                amendment_type = excluded.amendment_type,
+                confidential_omission = excluded.confidential_omission,
+                effective_status = excluded.effective_status,
+                superseded_by_accession = excluded.superseded_by_accession,
+                parser_version = excluded.parser_version
+            """,
+            rows,
+            lambda r: [
+                r["accession_number"], r["cik"], r["period_of_report"],
+                r["filing_date"], r["form"], r.get("amendment_type"),
+                bool(r.get("confidential_omission", False)),
+                r.get("effective_status", "effective"),
+                r.get("superseded_by_accession"), r.get("parser_version", "1"),
             ],
         )
 
