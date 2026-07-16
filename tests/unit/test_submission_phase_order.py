@@ -38,6 +38,11 @@ class _ConfiguredFormDb:
             "ownership-1": {"accession_number": "ownership-1", "form": "4"},
             "generic-1": {"accession_number": "generic-1", "form": "10-K"},
             "adv-1": {"accession_number": "adv-1", "form": "ADV"},
+            "proxy-1": {"accession_number": "proxy-1", "form": "DEF 14A"},
+            "item-502": {"accession_number": "item-502", "form": "8-K", "items": "5.02"},
+            "ambiguous-8k": {"accession_number": "ambiguous-8k", "form": "8-K", "items": None},
+            "earnings-8k": {"accession_number": "earnings-8k", "form": "8-K", "items": "2.02"},
+            "13f-1": {"accession_number": "13f-1", "form": "13F-HR"},
         }
 
     def get_filing(self, accession_number: str):
@@ -156,6 +161,41 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         self.assertEqual(result["rows_written"], 3)
         self.assertEqual(len(result["raw_writes"]), 2)
 
+    def test_release_submission_flow_sends_only_manifest_required_accessions(self) -> None:
+        def capture(**kwargs):
+            return {"cik": kwargs["cik"], "raw_writes": []}
+
+        def apply(**kwargs):
+            return {
+                "rows_written": 0,
+                "rows_skipped": 0,
+                "recent_accessions": ["required-proxy", "unrelated-8k"],
+                "pagination_accessions": ["required-13f"],
+            }
+
+        with (
+            patch.object(warehouse_orchestrator, "_capture_submission_bronze_snapshot", side_effect=capture),
+            patch.object(warehouse_orchestrator, "_apply_submission_snapshot_to_silver", side_effect=apply),
+            patch.object(
+                warehouse_orchestrator,
+                "_run_configured_form_artifact_pipeline",
+                return_value={"raw_writes": [], "rows_written": 0, "rows_skipped": 0},
+            ) as artifact_pipeline,
+        ):
+            warehouse_orchestrator._run_submissions_bronze_then_silver(
+                context=object(), db=object(), sync_run_id="release", ciks=[1001],
+                include_pagination=True, fetch_date=date(2026, 4, 25), force=False,
+                load_mode="bootstrap_batch", artifact_policy="all_attachments",
+                parser_policy="configured_forms", release_mode=True,
+                required_accessions={"required-proxy", "required-13f"},
+            )
+
+        self.assertEqual(
+            artifact_pipeline.call_args.kwargs["accession_numbers"],
+            ["required-proxy", "required-13f"],
+        )
+        self.assertTrue(artifact_pipeline.call_args.kwargs["release_mode"])
+
     def test_cached_submission_still_returns_pagination_accessions(self) -> None:
         db = _CachedSubmissionDb()
         snapshot = {
@@ -234,7 +274,9 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
                 sync_run_id="run-1",
-                accession_numbers=["ownership-1", "generic-1", "adv-1", "ownership-1"],
+                accession_numbers=["ownership-1", "generic-1", "adv-1", "proxy-1",
+                                   "item-502", "ambiguous-8k", "earnings-8k", "13f-1",
+                                   "ownership-1"],
                 artifact_policy="all_attachments",
                 parser_policy="configured_forms",
                 force=False,
@@ -247,16 +289,107 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 ("parser", "ownership-1"),
                 ("artifact", "adv-1"),
                 ("parser", "adv-1"),
+                ("artifact", "proxy-1"),
+                ("parser", "proxy-1"),
+                ("artifact", "item-502"),
+                ("parser", "item-502"),
+                ("artifact", "ambiguous-8k"),
+                ("parser", "ambiguous-8k"),
+                ("artifact", "13f-1"),
+                ("parser", "13f-1"),
             ],
         )
-        self.assertEqual(result["rows_written"], 8)
-        self.assertEqual(len(result["raw_writes"]), 2)
+        self.assertEqual(result["rows_written"], 24)
+        self.assertEqual(len(result["raw_writes"]), 6)
+
+    def test_release_artifact_pipeline_fails_closed(self) -> None:
+        with patch(
+            "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
+            side_effect=RuntimeError("missing artifact"),
+        ):
+            with self.assertRaisesRegex(Exception, "ownership-1"):
+                warehouse_orchestrator._run_configured_form_artifact_pipeline(
+                    context=SimpleNamespace(identity="tester@example.com"),
+                    db=_ConfiguredFormDb(), sync_run_id="release",
+                    accession_numbers=["ownership-1"],
+                    artifact_policy="all_attachments", parser_policy="configured_forms",
+                    force=False, release_mode=True,
+                )
+
+    def test_release_artifact_pipeline_rejects_disabled_fetch_or_parser_policy(self) -> None:
+        for artifact_policy, parser_policy in (
+            ("none", "configured_forms"),
+            ("all_attachments", "none"),
+        ):
+            with self.subTest(
+                artifact_policy=artifact_policy, parser_policy=parser_policy
+            ):
+                with self.assertRaisesRegex(Exception, "requires artifact fetch and parser"):
+                    warehouse_orchestrator._run_configured_form_artifact_pipeline(
+                        context=SimpleNamespace(identity="tester@example.com"),
+                        db=_ConfiguredFormDb(),
+                        sync_run_id="release",
+                        accession_numbers=["ownership-1"],
+                        artifact_policy=artifact_policy,
+                        parser_policy=parser_policy,
+                        force=False,
+                        release_mode=True,
+                    )
+
+    def test_release_parse_pipeline_rejects_generic_skip(self) -> None:
+        db = SimpleNamespace(
+            get_filing=lambda accession: {
+                "accession_number": accession, "form": "DEF 14A", "cik": 1001
+            },
+            start_parse_run=lambda row: None,
+            complete_parse_run=lambda *args, **kwargs: None,
+        )
+
+        with self.assertRaisesRegex(Exception, "no release parser"):
+            warehouse_orchestrator._run_parse_pipeline(
+                db=db,
+                accession_number="proxy-1",
+                sync_run_id="release",
+                fail_closed=True,
+            )
+
+    def test_release_force_requires_explicit_repair_manifest(self) -> None:
+        with self.assertRaisesRegex(Exception, "repair manifest"):
+            warehouse_orchestrator._run_configured_form_artifact_pipeline(
+                context=SimpleNamespace(identity="tester@example.com"),
+                db=_ConfiguredFormDb(), sync_run_id="release",
+                accession_numbers=["ownership-1"],
+                artifact_policy="all_attachments", parser_policy="configured_forms",
+                force=True, release_mode=True,
+            )
 
     def test_bootstrap_batch_cli_defaults_to_artifact_and_parser_policies(self) -> None:
         args = cli.build_parser().parse_args(["bootstrap-batch", "--cik-list", "1001"])
 
         self.assertEqual(args.artifact_policy, "all_attachments")
         self.assertEqual(args.parser_policy, "configured_forms")
+
+    def test_bootstrap_batch_cli_accepts_bounded_release_manifests(self) -> None:
+        args = cli.build_parser().parse_args([
+            "bootstrap-batch",
+            "--cik-list", "1001",
+            "--release-mode",
+            "--candidate-manifest", "s3://bucket/candidates.json",
+            "--repair-manifest", "s3://bucket/repairs.json",
+        ])
+
+        self.assertTrue(args.release_mode)
+        self.assertEqual(args.candidate_manifest, "s3://bucket/candidates.json")
+        self.assertEqual(args.repair_manifest, "s3://bucket/repairs.json")
+
+    def test_release_relationship_source_import_is_a_deployed_cli_command(self) -> None:
+        args = cli.build_parser().parse_args([
+            "ingest-relationship-sources",
+            "--source-manifest", "s3://bucket/sources.json",
+            "--run-id", "release-1",
+        ])
+        self.assertEqual(args.source_manifest, "s3://bucket/sources.json")
+        self.assertEqual(args.run_id, "release-1")
 
 
 if __name__ == "__main__":

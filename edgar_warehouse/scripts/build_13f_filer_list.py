@@ -28,7 +28,13 @@ log = logging.getLogger(__name__)
 _QUARTERS = (1, 2, 3, 4)
 
 
-def collect_13f_ciks(start_year: int, end_year: int, *, get_filings=edgar.get_filings) -> list[int]:
+def collect_13f_ciks(
+    start_year: int,
+    end_year: int,
+    *,
+    get_filings=edgar.get_filings,
+    strict: bool = False,
+) -> list[int]:
     """Return sorted unique CIKs that filed 13F-HR in [start_year, end_year].
 
     form="13F-HR" matches both "13F-HR" and "13F-HR/A" (amendments) -- same
@@ -43,6 +49,8 @@ def collect_13f_ciks(start_year: int, end_year: int, *, get_filings=edgar.get_fi
             try:
                 filings = get_filings(year=year, quarter=quarter, form="13F-HR")
             except Exception as exc:
+                if strict:
+                    raise RuntimeError(f"failed to fetch required SEC index {year} Q{quarter}") from exc
                 log.error("Failed to fetch %d Q%d: %s — skipping quarter", year, quarter, exc)
                 continue
 
@@ -115,12 +123,16 @@ def _main(argv: list[str] | None = None) -> None:
         "--end-year", type=int, default=2024,
         help="Last year to include in scan (default: 2024)",
     )
+    parser.add_argument(
+        "--release-mode", action="store_true",
+        help="Fail closed when any required SEC quarter cannot be read",
+    )
     args = parser.parse_args(argv)
 
     if args.start_year > args.end_year:
         parser.error(f"--start-year ({args.start_year}) must be <= --end-year ({args.end_year})")
 
-    ciks = collect_13f_ciks(args.start_year, args.end_year)
+    ciks = collect_13f_ciks(args.start_year, args.end_year, strict=args.release_mode)
     _write_json(ciks, args.output_path)
 
 

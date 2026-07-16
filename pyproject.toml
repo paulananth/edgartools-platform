@@ -25,6 +25,7 @@ dependencies = [
 
 [project.optional-dependencies]
 s3 = [
+    "boto3>=1.42.91",
     "fsspec>=2023.1.0",
     "s3fs>=2023.1.0",
 ]

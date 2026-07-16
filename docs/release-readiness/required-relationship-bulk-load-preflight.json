@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-16T10:22:45Z",
+  "disposition": "NO_GO",
+  "release_candidate": {
+    "commit": "059447960f79f696f2c8d28c8ce61cf933250e3b",
+    "branch": "codex/release-readiness",
+    "warehouse_image_digest": null,
+    "mdm_image_digest": null
+  },
+  "implementation_verification": {
+    "status": "pass",
+    "pytest": {
+      "passed": 824,
+      "warnings": 3,
+      "subtests_passed": 35
+    },
+    "diff_check": "pass",
+    "focused_lint": "pass"
+  },
+  "live_aws_read_only_preflight": {
+    "account": "690839588395",
+    "region": "us-east-1",
+    "state_machine": "edgartools-prod-bronze-seed-silver-gold",
+    "revision_id": "6a9909ed-5f2b-4971-8534-d5b777783721",
+    "batch_silver_max_concurrency": 4,
+    "latest_execution_statuses": [
+      "FAILED",
+      "FAILED",
+      "ABORTED"
+    ],
+    "latest_failed_stage": "MdmExport",
+    "execution_started": false
+  },
+  "hard_blockers": [
+    {
+      "ticket": 20,
+      "code": "production_candidate_ledger_missing",
+      "detail": "No frozen production candidate manifest or reconciled completion ledger exists."
+    },
+    {
+      "ticket": 20,
+      "code": "candidate_images_not_deployed",
+      "detail": "The implementation commit has no bound warehouse or MDM production image digests."
+    },
+    {
+      "ticket": 20,
+      "code": "named_attestations_missing",
+      "detail": "Warehouse, MDM, Graph, Release Data Operator, and Release Owner attestations are unassigned."
+    }
+  ],
+  "launch_decision": {
+    "eligible": false,
+    "action": "do_not_start_full_chain",
+    "reason": "Starting the current deployed workflow cannot produce a Full-Chain Launch Pass."
+  }
+}

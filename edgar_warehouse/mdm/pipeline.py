@@ -691,6 +691,50 @@ class MDMPipeline:
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
+        source_rows = self._fetch_optional_relationship_rows(
+            """
+            SELECT accession_number, registrant_cik, document_name, row_ordinal,
+                   legal_name, jurisdiction, parent_scope, immediate_parent_known,
+                   effective_date, source_sha256
+            FROM sec_subsidiary_evidence
+            ORDER BY registrant_cik, accession_number, document_name, row_ordinal
+            """,
+            remaining,
+            rel_type_name="HAS_PARENT_COMPANY",
+            source_table="sec_subsidiary_evidence",
+            existing=self._relationship_count("HAS_PARENT_COMPANY"),
+        )
+        for row in source_rows:
+            parent_id = self._company_entity_id(row.get("registrant_cik"))
+            child_id = self._ensure_disclosed_subsidiary(row)
+            if child_id is None:
+                skipped_unresolved_source += 1
+                continue
+            if parent_id is None or child_id == parent_id:
+                skipped_unresolved_target += 1
+                continue
+            _rel, created = sync_engine.ensure_relationship(
+                rel_type_name="HAS_PARENT_COMPANY",
+                source_entity_id=child_id,
+                target_entity_id=parent_id,
+                properties={
+                    "parent_scope": row.get("parent_scope") or "registrant_disclosed",
+                    "immediate_parent_known": bool(row.get("immediate_parent_known")),
+                    "jurisdiction": row.get("jurisdiction"),
+                    "evidence_fingerprint": row.get("source_sha256"),
+                },
+                effective_from=row.get("effective_date"),
+                source_system="sec_exhibit_subsidiaries",
+                source_accession=row.get("accession_number"),
+                date_provenance="reported",
+            )
+            inserted += 1 if created else 0
+            skipped_existing += 0 if created else 1
+            if remaining is not None and inserted >= remaining:
+                break
+        if source_rows:
+            return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
+
         for company in self.session.scalars(
             select(MdmCompany)
             .where(MdmCompany.parent_company_entity_id.isnot(None))
@@ -710,6 +754,40 @@ class MDMPipeline:
             if remaining is not None and inserted >= remaining:
                 break
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
+
+    def _ensure_disclosed_subsidiary(self, row: dict) -> Optional[str]:
+        import uuid as _uuid
+        from edgar_warehouse.mdm.database import MdmCompany, MdmEntity, MdmSourceRef
+
+        legal_name = " ".join(str(row.get("legal_name") or "").split())
+        registrant_cik = row.get("registrant_cik")
+        jurisdiction = " ".join(str(row.get("jurisdiction") or "").split())
+        if not legal_name or registrant_cik is None:
+            return None
+        source_key = f"{int(registrant_cik)}:{legal_name.casefold()}:{jurisdiction.casefold()}"
+        entity_id = str(_uuid.uuid5(_uuid.NAMESPACE_URL, f"sec:subsidiary:{source_key}"))
+        if self.session.get(MdmEntity, entity_id) is None:
+            self.session.add(MdmEntity(
+                entity_id=entity_id,
+                entity_type="company",
+                resolution_method="sec_exhibit_name_jurisdiction",
+                confidence=1.0,
+            ))
+            self.session.add(MdmCompany(
+                entity_id=entity_id,
+                cik=None,
+                canonical_name=legal_name,
+                state_of_incorporation=jurisdiction or None,
+            ))
+            self.session.add(MdmSourceRef(
+                entity_id=entity_id,
+                source_system="sec_exhibit_subsidiaries",
+                source_id=source_key,
+                source_priority=10,
+                confidence=1.0,
+            ))
+            self.session.flush()
+        return entity_id
 
     def _derive_is_person_of(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
         inserted = 0
@@ -738,19 +816,134 @@ class MDMPipeline:
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
-        for fund in self.session.scalars(
-            select(MdmFund).where(MdmFund.adviser_entity_id.isnot(None))
-        ):
+        filing_rows = self._fetch_optional_relationship_rows(
+            """
+            SELECT accession_number, crd_number, effective_date, filing_action
+            FROM sec_adv_filing
+            WHERE crd_number IS NOT NULL
+            ORDER BY crd_number, effective_date, accession_number
+            """,
+            None,
+            rel_type_name="MANAGES_FUND",
+            source_table="sec_adv_filing",
+            existing=self._relationship_count("MANAGES_FUND"),
+        )
+        source_rows = self._fetch_optional_relationship_rows(
+            """
+            SELECT accession_number, adviser_crd_number, private_fund_id,
+                   filing_id, schedule_section, reporting_role, effective_date,
+                   filing_action, source_sha256
+            FROM sec_adv_private_fund
+            WHERE adviser_crd_number IS NOT NULL AND private_fund_id IS NOT NULL
+            ORDER BY filing_id, private_fund_id, schedule_section
+            """,
+            remaining,
+            rel_type_name="MANAGES_FUND",
+            source_table="sec_adv_private_fund",
+            existing=self._relationship_count("MANAGES_FUND"),
+        )
+        latest_by_crd: dict[str, dict] = {}
+        if filing_rows:
+            for filing in filing_rows:
+                crd = str(filing.get("crd_number") or "")
+                effective = filing.get("effective_date")
+                if effective and not isinstance(effective, date):
+                    effective = date.fromisoformat(str(effective)[:10])
+                accession = str(filing.get("accession_number") or "")
+                filing_id = accession.rsplit(":", 1)[-1]
+                key = (effective or date.min, int(filing_id) if filing_id.isdecimal() else 0,
+                       accession)
+                prior = latest_by_crd.get(crd)
+                if prior is None or key > prior["_key"]:
+                    latest_by_crd[crd] = {**filing, "_key": key}
+            active_accessions = {
+                str(filing.get("accession_number"))
+                for filing in latest_by_crd.values()
+                if not any(
+                    marker in str(filing.get("filing_action") or "").lower()
+                    for marker in ("final", "withdraw")
+                )
+            }
+            source_rows = [
+                row for row in source_rows
+                if str(row.get("accession_number")) in active_accessions
+            ]
+            from edgar_warehouse.mdm.database import (
+                MdmRelationshipInstance,
+                MdmRelationshipType,
+            )
+            from edgar_warehouse.mdm.graph import close_relationship_version
+
+            expected_targets_by_adviser: dict[str, set[str]] = {}
+            for row in source_rows:
+                adviser_id = self._adviser_entity_id_by_crd(row.get("adviser_crd_number"))
+                fund_id = self._fund_entity_id_by_pfid(row.get("private_fund_id"))
+                if adviser_id and fund_id:
+                    expected_targets_by_adviser.setdefault(adviser_id, set()).add(fund_id)
+            for crd, filing in latest_by_crd.items():
+                adviser_id = self._adviser_entity_id_by_crd(crd)
+                if adviser_id is None:
+                    continue
+                effective = filing["_key"][0]
+                expected_targets = expected_targets_by_adviser.get(adviser_id, set())
+                current_versions = self.session.scalars(
+                    select(MdmRelationshipInstance)
+                    .join(MdmRelationshipType)
+                    .where(MdmRelationshipType.rel_type_name == "MANAGES_FUND")
+                    .where(MdmRelationshipInstance.source_entity_id == adviser_id)
+                    .where(MdmRelationshipInstance.is_active.is_(True))
+                    .where(MdmRelationshipInstance.quarantined.is_(False))
+                    .where(MdmRelationshipInstance.superseded_by_version_id.is_(None))
+                    .where(MdmRelationshipInstance.valid_to_date.is_(None))
+                ).all()
+                for current in current_versions:
+                    if current.target_entity_id not in expected_targets:
+                        close_relationship_version(
+                            self.session, current.instance_id, effective
+                        )
+        for row in source_rows:
+            adviser_id = self._adviser_entity_id_by_crd(row.get("adviser_crd_number"))
+            fund_id = self._fund_entity_id_by_pfid(row.get("private_fund_id"))
+            if adviser_id is None:
+                skipped_unresolved_source += 1
+                continue
+            if fund_id is None:
+                skipped_unresolved_target += 1
+                continue
             _rel, created = sync_engine.ensure_relationship(
                 rel_type_name="MANAGES_FUND",
-                source_entity_id=fund.adviser_entity_id,
-                target_entity_id=fund.entity_id,
-                source_system="mdm_backfill",
+                source_entity_id=adviser_id,
+                target_entity_id=fund_id,
+                properties={
+                    "private_fund_id": row.get("private_fund_id"),
+                    "source_filing_id": row.get("filing_id"),
+                    "source_section": row.get("schedule_section"),
+                    "reporting_role": row.get("reporting_role"),
+                    "evidence_fingerprint": row.get("source_sha256"),
+                },
+                effective_from=row.get("effective_date"),
+                source_system="iapd_adv_bulk",
+                source_accession=row.get("accession_number"),
+                date_provenance="reported",
             )
             inserted += 1 if created else 0
             skipped_existing += 0 if created else 1
             if remaining is not None and inserted >= remaining:
                 break
+        if not source_rows and not filing_rows:
+            for fund in self.session.scalars(
+                select(MdmFund).where(MdmFund.adviser_entity_id.isnot(None))
+            ):
+                _rel, created = sync_engine.ensure_relationship(
+                    rel_type_name="MANAGES_FUND",
+                    source_entity_id=fund.adviser_entity_id,
+                    target_entity_id=fund.entity_id,
+                    source_system="mdm_backfill",
+                )
+                inserted += 1 if created else 0
+                skipped_existing += 0 if created else 1
+                if remaining is not None and inserted >= remaining:
+                    break
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_issued_by(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
@@ -786,7 +979,7 @@ class MDMPipeline:
 
         Returns the number of rows updated.
         """
-        from edgar_warehouse.mdm.database import MdmCompany, MdmSecurity
+        from edgar_warehouse.mdm.database import MdmSecurity
 
         # canonical_title normalisation must match run_securities()
         def _canonical(raw: str) -> str:
@@ -859,7 +1052,7 @@ class MDMPipeline:
                 .join(MdmRelationshipType)
                 .where(
                     MdmRelationshipType.rel_type_name == rel_type_name,
-                    MdmRelationshipInstance.is_active == True,
+                    MdmRelationshipInstance.is_active.is_(True),
                 )
             )
             or 0
@@ -932,6 +1125,24 @@ class MDMPipeline:
             .where(MdmEntity.entity_type == "adviser")
         )
 
+    def _adviser_entity_id_by_crd(self, crd_number) -> Optional[str]:
+        if crd_number is None:
+            return None
+        from edgar_warehouse.mdm.database import MdmAdviser
+        return self.session.scalar(
+            select(MdmAdviser.entity_id).where(MdmAdviser.crd_number == str(crd_number))
+        )
+
+    def _fund_entity_id_by_pfid(self, private_fund_id) -> Optional[str]:
+        if private_fund_id is None:
+            return None
+        from edgar_warehouse.mdm.database import MdmFund
+        return self.session.scalar(
+            select(MdmFund.entity_id).where(
+                MdmFund.private_fund_id == str(private_fund_id)
+            )
+        )
+
     def _adviser_entity_id_by_cik(self, cik) -> Optional[str]:
         """Look up an adviser entity_id by CIK.
 
@@ -946,16 +1157,56 @@ class MDMPipeline:
             select(MdmAdviser.entity_id).where(MdmAdviser.cik == int(cik))
         )
 
+    def _ensure_thirteenf_manager(self, cik) -> Optional[str]:
+        """Resolve or deterministically create the adviser source entity for a 13F manager."""
+        existing = self._adviser_entity_id_by_cik(cik)
+        if existing or cik is None:
+            return existing
+        import uuid as _uuid
+        from edgar_warehouse.mdm.database import MdmAdviser, MdmEntity, MdmSourceRef
+
+        normalized_cik = int(cik)
+        entity_id = str(_uuid.uuid5(_uuid.NAMESPACE_URL, f"sec:13f-manager:{normalized_cik}"))
+        company_rows = self.silver.fetch(
+            "SELECT company_name FROM sec_company WHERE cik = ? LIMIT 1",
+            [normalized_cik],
+        )
+        canonical_name = (
+            str(company_rows[0].get("company_name") or "").strip()
+            if company_rows else ""
+        ) or f"13F Manager CIK {normalized_cik}"
+        if self.session.get(MdmEntity, entity_id) is None:
+            self.session.add(MdmEntity(
+                entity_id=entity_id,
+                entity_type="adviser",
+                resolution_method="sec_13f_manager_cik",
+                confidence=1.0,
+            ))
+            self.session.add(MdmAdviser(
+                entity_id=entity_id,
+                cik=normalized_cik,
+                canonical_name=canonical_name,
+                adviser_type="13f_manager",
+            ))
+            self.session.add(MdmSourceRef(
+                entity_id=entity_id,
+                source_system="thirteenf_manager",
+                source_id=str(normalized_cik),
+                source_priority=20,
+                confidence=1.0,
+            ))
+            self.session.flush()
+        return entity_id
+
     def _audit_firm_entity_id(
         self, pcaob_id: Optional[str], firm_name: Optional[str]
     ) -> Optional[str]:
-        """Look up an audit firm entity_id by PCAOB ID (primary) or firm name (fallback).
+        """Resolve an audit firm, creating valid long-tail PCAOB identities."""
+        import uuid as _uuid
 
-        Lookup-only — AUDITED_BY is seeded from the Big 4 + Next 6 roster (AD-09),
-        which covers ~99.5% of exchange-listed audits.  Unknown firms are skipped
-        and logged; they do not auto-create new mdm_audit_firm rows.
-        """
-        from edgar_warehouse.mdm.database import MdmAuditFirm
+        from edgar_warehouse.mdm.database import (
+            MdmAuditFirm, MdmEntity, MdmSourceRef,
+        )
         from sqlalchemy import select
         # Primary: match on PCAOB registration number (authoritative identifier)
         if pcaob_id:
@@ -974,6 +1225,34 @@ class MDMPipeline:
             )
             if result:
                 return result
+        normalized_id = str(pcaob_id or "").strip()
+        canonical_name = " ".join(str(firm_name or "").split())
+        if normalized_id.isdecimal() and canonical_name:
+            normalized_id = str(int(normalized_id))
+            entity_id = str(_uuid.uuid5(_uuid.NAMESPACE_URL, f"pcaob:firm:{normalized_id}"))
+            if self.session.get(MdmEntity, entity_id) is None:
+                self.session.add(MdmEntity(
+                    entity_id=entity_id,
+                    entity_type="audit_firm",
+                    resolution_method="pcaob_firm_id",
+                    confidence=1.0,
+                ))
+                self.session.add(MdmAuditFirm(
+                    entity_id=entity_id,
+                    firm_name=canonical_name,
+                    canonical_name=canonical_name,
+                    pcaob_firm_id=normalized_id,
+                    big4=False,
+                ))
+                self.session.add(MdmSourceRef(
+                    entity_id=entity_id,
+                    source_system="pcaob_firm_registry",
+                    source_id=normalized_id,
+                    source_priority=5,
+                    confidence=1.0,
+                ))
+                self.session.flush()
+            return entity_id
         return None
 
     def _ensure_proxy_person(
@@ -1214,34 +1493,144 @@ class MDMPipeline:
             if remaining is not None and inserted >= remaining:
                 break
 
+        # Item 5.02 events are applied after proxy baselines in effective-date
+        # order. Appointments open a version; role changes close the prior open
+        # version before opening the replacement; departures only close.
+        event_sql = """
+            SELECT accession_number, cik, event_type, person_name, exec_role,
+                   previous_role, compensation_amount, effective_date
+            FROM sec_employment_event
+            ORDER BY effective_date, accession_number, event_index
+        """
+        for event in self._fetch_optional_relationship_rows(
+            event_sql,
+            None,
+            rel_type_name="EMPLOYED_BY",
+            source_table="sec_employment_event",
+        ):
+            cik = event.get("cik")
+            accession_number = event.get("accession_number") or ""
+            person_name = event.get("person_name") or ""
+            effective_date = event.get("effective_date")
+            if effective_date and not isinstance(effective_date, date):
+                effective_date = date.fromisoformat(str(effective_date)[:10])
+            company_id = self._company_entity_id(cik)
+            if company_id is None:
+                skipped_unresolved_target += 1
+                continue
+            person_id = self._person_entity_id(None, person_name)
+            if person_id is None and event.get("event_type") == "appointment":
+                person_id = self._ensure_proxy_person(person_name, int(cik), accession_number)
+            if person_id is None:
+                skipped_unresolved_source += 1
+                continue
+
+            current = self._current_employment_versions(person_id, company_id)
+            if event.get("event_type") == "departure":
+                if len(current) != 1:
+                    skipped_unresolved_source += 1
+                    continue
+                from edgar_warehouse.mdm.graph import close_relationship_version
+                close_relationship_version(self.session, current[0].instance_id, effective_date)
+                continue
+            if event.get("event_type") not in {
+                "appointment", "role_change", "compensation_change"
+            }:
+                skipped_unresolved_source += 1
+                continue
+            if len(current) > 1:
+                skipped_unresolved_source += 1
+                continue
+            if current:
+                from edgar_warehouse.mdm.graph import close_relationship_version
+                close_relationship_version(self.session, current[0].instance_id, effective_date)
+            _rel, created = sync_engine.ensure_relationship(
+                rel_type_name="EMPLOYED_BY",
+                source_entity_id=person_id,
+                target_entity_id=company_id,
+                properties={
+                    "role": event.get("exec_role") or (
+                        (current[0].properties or {}).get("role") if current else None
+                    ),
+                    "title": event.get("exec_role") or (
+                        (current[0].properties or {}).get("title") if current else None
+                    ),
+                    "previous_role": event.get("previous_role"),
+                    "compensation_amount": event.get("compensation_amount"),
+                    "source_accession": accession_number,
+                    "event_type": event.get("event_type"),
+                },
+                effective_from=effective_date,
+                source_system="item_502_filing",
+                source_accession=accession_number,
+                date_provenance="reported",
+            )
+            if created:
+                inserted += 1
+            else:
+                skipped_existing += 1
+
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
+
+    def _current_employment_versions(self, person_id: str, company_id: str):
+        from edgar_warehouse.mdm.database import MdmRelationshipInstance, MdmRelationshipType
+
+        return list(self.session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType,
+                  MdmRelationshipType.rel_type_id == MdmRelationshipInstance.rel_type_id)
+            .where(MdmRelationshipType.rel_type_name == "EMPLOYED_BY")
+            .where(MdmRelationshipInstance.source_entity_id == person_id)
+            .where(MdmRelationshipInstance.target_entity_id == company_id)
+            .where(MdmRelationshipInstance.is_active.is_(True))
+            .where(MdmRelationshipInstance.quarantined.is_(False))
+            .where(MdmRelationshipInstance.superseded_by_version_id.is_(None))
+            .where(MdmRelationshipInstance.valid_to_date.is_(None))
+        ))
 
     def _derive_audited_by(
         self, sync_engine: GraphSyncEngine, remaining: Optional[int]
     ) -> tuple[int, int, int, int, int]:
-        """Derive AUDITED_BY edges from sec_accounting_flag (10-K XBRL DEI facts).
+        """Derive report-date AUDITED_BY edges from direct annual-filing evidence.
 
         Audit firm resolution (AD-08):
         1. PCAOB firm ID — authoritative (dei_AuditorFirmId XBRL concept)
         2. Firm name fuzzy match — fallback for FY2020 filings predating mandatory DEI
 
-        Lookup-only: if neither PCAOB ID nor name resolves to a seeded audit_firm
-        entity, the row is skipped.  The Big 4 + Next 6 seed (AD-09) covers ~99.5%
-        of exchange-listed audits; long-tail firms are acceptable gaps in v1.
-
         auditor_changed is computed as TRUE when the firm_name differs from the
         immediately prior fiscal year's row for the same CIK.
         """
-        # Fetch all accounting flag rows ordered by cik, fiscal_year so we can
-        # detect auditor changes with a simple prev-row comparison.
-        sql = """
+        direct_sql = """
+            SELECT registrant_cik AS cik, accession_number,
+                   EXTRACT(YEAR FROM audited_period_end) AS fiscal_year,
+                   audited_period_end AS period_end, report_date,
+                   pcaob_firm_id AS auditor_pcaob_id,
+                   principal_firm_name AS auditor_name,
+                   evidence_source, evidence_fingerprint,
+                   form_ap_filing_id, NULL AS icfr_attestation
+            FROM sec_auditor_report_evidence
+            ORDER BY registrant_cik, audited_period_end, report_date, accession_number
+        """
+        rows = self._fetch_optional_relationship_rows(
+            direct_sql, remaining, rel_type_name="AUDITED_BY",
+            source_table="sec_auditor_report_evidence",
+            existing=self._relationship_count("AUDITED_BY"),
+        )
+        if not rows:
+            legacy_sql = """
             SELECT cik, accession_number, fiscal_year, period_end,
-                   auditor_pcaob_id, auditor_name, icfr_attestation
+                   NULL AS report_date, auditor_pcaob_id, auditor_name,
+                   NULL AS evidence_source, NULL AS evidence_fingerprint,
+                   NULL AS form_ap_filing_id, icfr_attestation
             FROM sec_accounting_flag
             WHERE auditor_name IS NOT NULL OR auditor_pcaob_id IS NOT NULL
             ORDER BY cik, fiscal_year
-        """
-        existing = self._relationship_count("AUDITED_BY")
+            """
+            rows = self._fetch_optional_relationship_rows(
+                legacy_sql, remaining, rel_type_name="AUDITED_BY",
+                source_table="sec_accounting_flag",
+                existing=self._relationship_count("AUDITED_BY"),
+            )
         inserted = 0
         skipped_corporate = 0
         skipped_unresolved_source = 0
@@ -1251,13 +1640,7 @@ class MDMPipeline:
         prev_cik: Optional[int] = None
         prev_auditor_name: Optional[str] = None
 
-        for row in self._fetch_optional_relationship_rows(
-            sql,
-            remaining,
-            rel_type_name="AUDITED_BY",
-            source_table="sec_accounting_flag",
-            existing=existing,
-        ):
+        for row in rows:
             cik = row.get("cik")
             pcaob_id = row.get("auditor_pcaob_id")
             auditor_name = row.get("auditor_name")
@@ -1299,7 +1682,31 @@ class MDMPipeline:
                 }), file=sys.stderr, flush=True)
                 continue
 
-            effective_from = date(int(fiscal_year), 1, 1) if fiscal_year else None
+            effective_from = row.get("report_date") or (
+                date(int(fiscal_year), 1, 1) if fiscal_year else None
+            )
+            if auditor_changed and effective_from is not None:
+                from edgar_warehouse.mdm.database import (
+                    MdmRelationshipInstance,
+                    MdmRelationshipType,
+                )
+                from edgar_warehouse.mdm.graph import close_relationship_version
+
+                prior_versions = self.session.scalars(
+                    select(MdmRelationshipInstance)
+                    .join(MdmRelationshipType)
+                    .where(MdmRelationshipType.rel_type_name == "AUDITED_BY")
+                    .where(MdmRelationshipInstance.source_entity_id == company_id)
+                    .where(MdmRelationshipInstance.target_entity_id != audit_firm_id)
+                    .where(MdmRelationshipInstance.is_active.is_(True))
+                    .where(MdmRelationshipInstance.quarantined.is_(False))
+                    .where(MdmRelationshipInstance.superseded_by_version_id.is_(None))
+                    .where(MdmRelationshipInstance.valid_to_date.is_(None))
+                ).all()
+                for prior_version in prior_versions:
+                    close_relationship_version(
+                        self.session, prior_version.instance_id, effective_from
+                    )
             _rel, created = sync_engine.ensure_relationship(
                 rel_type_name="AUDITED_BY",
                 source_entity_id=company_id,
@@ -1310,10 +1717,24 @@ class MDMPipeline:
                     "icfr_attestation": icfr_attestation,
                     "auditor_changed":  auditor_changed,
                     "source_accession": accession_number,
+                    "audited_period_end": (
+                        row.get("period_end").isoformat()
+                        if hasattr(row.get("period_end"), "isoformat")
+                        else row.get("period_end")
+                    ),
+                    "report_date": (
+                        row.get("report_date").isoformat()
+                        if hasattr(row.get("report_date"), "isoformat")
+                        else row.get("report_date")
+                    ),
+                    "evidence_source": row.get("evidence_source") or "legacy_companyfacts",
+                    "evidence_fingerprint": row.get("evidence_fingerprint"),
+                    "form_ap_filing_id": row.get("form_ap_filing_id"),
                 },
                 effective_from=effective_from,
-                source_system="tenk_filing",
+                source_system=row.get("evidence_source") or "tenk_filing",
                 source_accession=accession_number,
+                date_provenance="reported" if row.get("report_date") else "filing_date_proxy",
             )
             if created:
                 inserted += 1
@@ -1346,8 +1767,9 @@ class MDMPipeline:
         The UUID5 key (f"cusip:{cusip}") guarantees idempotency across runs.
 
         Rows without a CUSIP are skipped — security identity cannot be established.
-        Rows whose filing CIK cannot be resolved to an mdm_adviser are skipped;
-        the 13F filer list bootstrap must complete before INSTITUTIONAL_HOLDS derivation.
+        Filing managers resolve by SEC CIK. If the CIK is not already represented
+        by an ADV-derived adviser, a deterministic 13F-manager adviser source entity
+        is created so the complete manager universe is not restricted to IARD filers.
 
         CIK-range batching (D-03, EDGE-11, T-06-01, T-06-02): sec_thirteenf_holding
         is the largest silver table — a single unbounded silver.fetch() risks OOM
@@ -1361,16 +1783,37 @@ class MDMPipeline:
         accumulate across all batches, not per batch.
         """
         base_sql = """
-            SELECT cik, accession_number, period_of_report, cusip,
-                   issuer_name, security_title, shares_held, market_value,
-                   put_call, discretion_type, security_class
-            FROM sec_thirteenf_holding
-            WHERE cusip IS NOT NULL
+            SELECT h.cik, h.accession_number, h.period_of_report, h.cusip,
+                   h.issuer_name, h.security_title, h.shares_held, h.market_value,
+                   h.put_call, h.discretion_type, h.security_class
+            FROM sec_thirteenf_holding h
+            JOIN sec_thirteenf_filing f ON f.accession_number = h.accession_number
+            WHERE h.cusip IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM sec_thirteenf_filing later
+                  WHERE later.cik = f.cik
+                    AND later.period_of_report = f.period_of_report
+                    AND later.amendment_type = 'restatement'
+                    AND (later.filing_date, later.accession_number) >
+                        (f.filing_date, f.accession_number)
+              )
         """
         bounds_sql = """
             SELECT MIN(cik) AS min_cik, MAX(cik) AS max_cik
-            FROM sec_thirteenf_holding
-            WHERE cusip IS NOT NULL
+            FROM (
+                SELECT h.cik
+                FROM sec_thirteenf_holding h
+                JOIN sec_thirteenf_filing f ON f.accession_number = h.accession_number
+                WHERE h.cusip IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM sec_thirteenf_filing later
+                      WHERE later.cik = f.cik
+                        AND later.period_of_report = f.period_of_report
+                        AND later.amendment_type = 'restatement'
+                        AND (later.filing_date, later.accession_number) >
+                            (f.filing_date, f.accession_number)
+                  )
+            ) effective_holdings
         """
         inserted = 0
         skipped_corporate = 0
@@ -1392,7 +1835,7 @@ class MDMPipeline:
 
         min_cik = int(bounds_rows[0]["min_cik"])
         max_cik = int(bounds_rows[0]["max_cik"])
-        batch_sql = f"{base_sql.rstrip()} AND cik BETWEEN ? AND ? ORDER BY cik, accession_number, cusip"
+        batch_sql = f"{base_sql.rstrip()} AND h.cik BETWEEN ? AND ? ORDER BY h.cik, h.accession_number, h.cusip"
 
         cik_lo = min_cik
         while cik_lo <= max_cik:
@@ -1410,7 +1853,7 @@ class MDMPipeline:
                     skipped_unresolved_target += 1
                     continue
 
-                adviser_id = self._adviser_entity_id_by_cik(cik)
+                adviser_id = self._ensure_thirteenf_manager(cik)
                 if adviser_id is None:
                     skipped_unresolved_source += 1
                     print(json.dumps({

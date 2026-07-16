@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from datetime import date
 from typing import Any, Optional
 
 import pytest
@@ -203,6 +204,7 @@ def fixture_world(session: Session) -> dict:
                    canonical_name="Individual Adviser (RIA)",
                    linked_company_entity_id=None),
         MdmAdviser(entity_id=firm_adviser_id, cik=910002,
+                   crd_number="129052",
                    canonical_name="Linked Asset Mgmt",
                    linked_company_entity_id=linked_company_id),
     ])
@@ -225,6 +227,7 @@ def fixture_world(session: Session) -> dict:
     session.add(MdmFund(
         entity_id=fund_entity_id,
         adviser_entity_id=firm_adviser_id,
+        private_fund_id="805-123",
         canonical_name="Linked Growth Fund",
     ))
     security_entity_id = _add_entity(session, "security")
@@ -460,6 +463,35 @@ class TestRunRelationships:
         assert len(rows) == 1
         assert rows[0].source_entity_id == child_id
         assert rows[0].target_entity_id == fixture_world["linked_company_id"]
+
+    def test_source_backed_parent_relationship_uses_valid_reported_date(self, session, fixture_world):
+        silver = StubSilver({
+            "sec_subsidiary_evidence": [{
+                "accession_number": "annual-2024",
+                "registrant_cik": 910001,
+                "document_name": "ex21.htm",
+                "row_ordinal": 1,
+                "legal_name": "Reported Subsidiary LLC",
+                "jurisdiction": "Delaware",
+                "parent_scope": "registrant_disclosed",
+                "immediate_parent_known": False,
+                "effective_date": date(2024, 12, 31),
+                "source_sha256": "ex21-sha",
+            }],
+        })
+
+        summary = MDMPipeline(session=session, silver=silver).derive_relationships(
+            relationship_types=["HAS_PARENT_COMPANY"]
+        )
+
+        assert summary["HAS_PARENT_COMPANY"]["inserted"] == 1
+        relationship = session.scalar(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "HAS_PARENT_COMPANY")
+        )
+        assert relationship is not None
+        assert relationship.date_provenance == "reported"
 
     def test_returned_count_matches_inserts(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=self._stub())
@@ -700,6 +732,34 @@ class TestRunRelationships:
             + summary["EMPLOYED_BY"]["skipped_existing"]
         )
 
+    def test_item_502_appointment_opens_employment_version(self, session, fixture_world):
+        silver = StubSilver({
+            "sec_employment_event": [{
+                "accession_number": "item-502-appointment",
+                "cik": 910001,
+                "event_type": "appointment",
+                "person_name": "New Executive",
+                "exec_role": "Chief Operating Officer",
+                "previous_role": None,
+                "compensation_amount": None,
+                "effective_date": date(2025, 3, 1),
+            }],
+        })
+
+        summary = MDMPipeline(session=session, silver=silver).derive_relationships(
+            relationship_types=["EMPLOYED_BY"]
+        )
+
+        assert summary["EMPLOYED_BY"]["inserted"] == 1
+        relationship = session.scalar(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "EMPLOYED_BY")
+        )
+        assert relationship is not None
+        assert relationship.effective_from == date(2025, 3, 1)
+        assert relationship.properties["role"] == "Chief Operating Officer"
+
     # ------------------------------------------------------------------
     # AUDITED_BY tests (T3 — 06-02)
     # ------------------------------------------------------------------
@@ -726,6 +786,33 @@ class TestRunRelationships:
             + summary["AUDITED_BY"]["skipped_unresolved_target"]
             + summary["AUDITED_BY"]["skipped_existing"]
         )
+
+    def test_direct_auditor_evidence_creates_long_tail_firm_at_report_date(
+        self, session, fixture_world
+    ):
+        silver = StubSilver({
+            "sec_auditor_report_evidence": [{
+                "cik": 910001, "accession_number": "annual-2024",
+                "fiscal_year": 2024, "period_end": date(2024, 12, 31),
+                "report_date": date(2025, 2, 14), "auditor_pcaob_id": "1042",
+                "auditor_name": "Long Tail CPAs", "icfr_attestation": None,
+                "evidence_source": "sec_ixbrl", "evidence_fingerprint": "fp-1",
+                "form_ap_filing_id": "ap-9",
+            }],
+        })
+        summary = MDMPipeline(session=session, silver=silver).derive_relationships(
+            relationship_types=["AUDITED_BY"]
+        )
+        assert summary["AUDITED_BY"]["inserted"] == 1
+        firm = session.scalar(
+            select(MdmAuditFirm).where(MdmAuditFirm.pcaob_firm_id == "1042")
+        )
+        assert firm is not None
+        relationship = session.scalar(select(MdmRelationshipInstance).where(
+            MdmRelationshipInstance.target_entity_id == firm.entity_id
+        ))
+        assert relationship.effective_from == date(2025, 2, 14)
+        assert relationship.properties["evidence_fingerprint"] == "fp-1"
 
     def test_audited_by_change_detection(self, session, fixture_world):
         """AUDITED_BY: auditor_changed=True when fiscal_year N+1 has a different auditor. (06-02)"""
@@ -770,6 +857,9 @@ class TestRunRelationships:
         fy2023 = next(i for i in instances if i.properties.get("fiscal_year") == 2023)
         assert fy2022.properties["auditor_changed"] is False
         assert fy2023.properties["auditor_changed"] is True
+        assert fy2022.valid_to_date == date(2023, 1, 1)
+        assert fy2023.valid_to_date is None
+        assert fy2023.is_active is True
 
     def test_optional_fundamentals_source_table_missing_audited_by(self, session):
         """AUDITED_BY: missing sec_accounting_flag → 0 rows, no exception. (06-02)"""
@@ -810,6 +900,26 @@ class TestRunRelationships:
             + summary["INSTITUTIONAL_HOLDS"]["skipped_existing"]
         )
 
+    def test_thirteenf_manager_outside_adv_universe_is_created(self, session):
+        silver = StubSilver({
+            "sec_thirteenf_holding": [{
+                "cik": 999001, "accession_number": "manager-only",
+                "period_of_report": "2024-03-31", "cusip": "037833100",
+                "issuer_name": "Apple Inc", "security_title": "Common Stock",
+                "shares_held": 1, "market_value": 100, "put_call": None,
+                "discretion_type": "SOLE", "security_class": "equity",
+            }],
+            "FROM sec_company WHERE cik": [{"company_name": "Manager Only LLC"}],
+        })
+        summary = MDMPipeline(session=session, silver=silver).derive_relationships(
+            relationship_types=["INSTITUTIONAL_HOLDS"]
+        )
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 1
+        from edgar_warehouse.mdm.database import MdmAdviser
+        manager = session.scalar(select(MdmAdviser).where(MdmAdviser.cik == 999001))
+        assert manager is not None
+        assert manager.canonical_name == "Manager Only LLC"
+
     def test_optional_fundamentals_source_table_missing_institutional_holds(self, session):
         """INSTITUTIONAL_HOLDS: missing sec_thirteenf_holding → 0 rows, no exception. (06-02)"""
         silver = MissingTableSilver("sec_thirteenf_holding")
@@ -833,6 +943,101 @@ class TestRunRelationships:
             + summary["MANAGES_FUND"]["skipped_unresolved_target"]
             + summary["MANAGES_FUND"]["skipped_existing"]
         )
+
+    def test_manages_fund_uses_latest_effective_adv_filing_only(self, session, fixture_world):
+        second_fund_id = _add_entity(session, "fund")
+        session.add(MdmFund(
+            entity_id=second_fund_id,
+            adviser_entity_id=fixture_world["firm_adviser_id"],
+            private_fund_id="805-999",
+            canonical_name="Current Fund",
+        ))
+        session.commit()
+        silver = StubSilver({
+            "sec_adv_filing": [
+                {
+                    "accession_number": "iapd-adv:100",
+                    "crd_number": "129052",
+                    "effective_date": date(2024, 1, 1),
+                    "filing_action": "annual_amendment",
+                },
+                {
+                    "accession_number": "iapd-adv:200",
+                    "crd_number": "129052",
+                    "effective_date": date(2025, 1, 1),
+                    "filing_action": "annual_amendment",
+                },
+            ],
+            "sec_adv_private_fund": [
+                {
+                    "accession_number": "iapd-adv:100",
+                    "adviser_crd_number": "129052",
+                    "private_fund_id": "805-123",
+                    "filing_id": "100",
+                    "schedule_section": "7B1",
+                    "reporting_role": "detailed_reporter",
+                    "effective_date": date(2024, 1, 1),
+                    "filing_action": "annual_amendment",
+                    "source_sha256": "old",
+                },
+                {
+                    "accession_number": "iapd-adv:200",
+                    "adviser_crd_number": "129052",
+                    "private_fund_id": "805-999",
+                    "filing_id": "200",
+                    "schedule_section": "7B1",
+                    "reporting_role": "detailed_reporter",
+                    "effective_date": date(2025, 1, 1),
+                    "filing_action": "annual_amendment",
+                    "source_sha256": "current",
+                },
+            ],
+        })
+
+        summary = MDMPipeline(session=session, silver=silver).derive_relationships(
+            relationship_types=["MANAGES_FUND"]
+        )
+
+        assert summary["MANAGES_FUND"]["inserted"] == 1
+        relationships = session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "MANAGES_FUND")
+        ).all()
+        assert [row.target_entity_id for row in relationships] == [second_fund_id]
+
+    def test_final_adv_filing_closes_prior_manages_fund_relationship(self, session, fixture_world):
+        old_filing = {
+            "accession_number": "iapd-adv:100", "crd_number": "129052",
+            "effective_date": date(2024, 1, 1), "filing_action": "annual_amendment",
+        }
+        old_fund = {
+            "accession_number": "iapd-adv:100", "adviser_crd_number": "129052",
+            "private_fund_id": "805-123", "filing_id": "100",
+            "schedule_section": "7B1", "reporting_role": "detailed_reporter",
+            "effective_date": date(2024, 1, 1), "filing_action": "annual_amendment",
+            "source_sha256": "old",
+        }
+        MDMPipeline(session=session, silver=StubSilver({
+            "sec_adv_filing": [old_filing], "sec_adv_private_fund": [old_fund],
+        })).derive_relationships(relationship_types=["MANAGES_FUND"])
+
+        final_filing = {
+            "accession_number": "iapd-adv:200", "crd_number": "129052",
+            "effective_date": date(2025, 1, 1), "filing_action": "final_sec_era_report",
+        }
+        MDMPipeline(session=session, silver=StubSilver({
+            "sec_adv_filing": [old_filing, final_filing],
+            "sec_adv_private_fund": [old_fund],
+        })).derive_relationships(relationship_types=["MANAGES_FUND"])
+
+        relationship = session.scalar(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "MANAGES_FUND")
+        )
+        assert relationship is not None
+        assert relationship.valid_to_date == date(2025, 1, 1)
 
     def test_writes_issued_by_relationship(self, session, fixture_world):
         """ISSUED_BY deriver inserts exactly 1 row when fixture_world has 1 qualifying MdmSecurity. (D-01, D-02, REL-02)"""

@@ -5,6 +5,7 @@ Pure compute core — no side effects, no CLI concerns.
 from __future__ import annotations
 
 import hashlib
+import json
 from typing import Any, Iterable, Optional
 
 from sqlalchemy.orm import Session
@@ -233,92 +234,59 @@ def compute_edge06_is_person_of_coverage(session: Session) -> dict:
     }
 
 
-def compute_edge07_manages_fund_coverage(silver_reader: Any, session: Session) -> dict:
-    """EDGE-07 MANAGES_FUND (adviser->fund): source_unavailable exclusion.
-
-    Evidence: every tracked adviser CIK's EDGAR submission-index accession
-    history for ADV-family forms. Form ADV Part 1A / Schedule D (the
-    document that would carry private-fund management data) is filed
-    through IARD, not EDGAR -- confirmed live for a representative sample
-    (SEC submissions.json for 3 tracked adviser CIKs showed only ADV-E/
-    13F-HR/N-PX, never a primary ADV/ADV-A entry). Fingerprinted on the
-    adviser CIK population and their actual ADV-family accessions, so
-    growth of the universe or a new primary ADV filing invalidates staleness.
-    """
-    from edgar_warehouse.mdm.database import MdmAdviser
-    from sqlalchemy import select
-
-    adviser_ciks = sorted(str(c) for c in session.scalars(select(MdmAdviser.cik)) if c is not None)
-    rows = silver_reader.fetch(
-        "SELECT cik, form, accession_number FROM sec_company_filing WHERE form LIKE 'ADV%'"
-    )
-    evidence_keys = sorted(f"{r['cik']}:{r['form']}:{r['accession_number']}" for r in rows)
-    return {
-        "status": "excluded",
-        "evidence_category": "source_unavailable",
-        "expected_edge_count": 0,
-        "evidence_query_version": "edge07-v1",
-        "population_fingerprint": _fingerprint(adviser_ciks, evidence_keys),
-        "review_trigger": (
-            "Re-evaluate if any tracked adviser CIK's sec_company_filing history "
-            "gains a primary 'ADV' or 'ADV-A' form entry (current EDGAR history for "
-            "every ADV-family filer in the tracked universe contains only notice "
-            "sub-forms such as ADV-E/ADV-NR; Form ADV Part 1A/Schedule D private-fund "
-            "registration is an IARD artifact, not an EDGAR one)."
-        ),
-    }
-
-
-def compute_edge08_has_parent_company_coverage(session: Session) -> dict:
-    """EDGE-08 HAS_PARENT_COMPANY (company->company): capability_not_implemented.
-
-    Confirmed via code reading: resolvers/company.py's
-    _parent_company_entity_id always returns None because no
-    _PARENT_CIK_KEYS source column exists on sec_company (would require an
-    Exhibit 21 or equivalent parser this platform does not have). Fingerprint
-    is on the company population size plus the parser-capability version --
-    bump EDGE08_PARSER_CAPABILITY_VERSION when that parser is added.
-    """
-    from edgar_warehouse.mdm.database import MdmCompany
+def _supported_relationship_coverage(
+    silver_reader: Any, session: Session, rel_type_name: str, source_sql: str,
+    *, evidence_query_version: str,
+) -> dict:
+    from edgar_warehouse.mdm.database import MdmRelationshipInstance, MdmRelationshipType
     from sqlalchemy import func, select
 
-    company_count = session.scalar(select(func.count()).select_from(MdmCompany)) or 0
+    source_rows = silver_reader.fetch(source_sql)
+    active_count = session.scalar(
+        select(func.count()).select_from(MdmRelationshipInstance)
+        .join(MdmRelationshipType)
+        .where(MdmRelationshipType.rel_type_name == rel_type_name)
+        .where(MdmRelationshipInstance.is_active.is_(True))
+        .where(MdmRelationshipInstance.quarantined.is_(False))
+        .where(MdmRelationshipInstance.superseded_by_version_id.is_(None))
+    ) or 0
+    evidence_keys = [json.dumps(row, sort_keys=True, default=str) for row in source_rows]
+    if source_rows and active_count == 0:
+        raise RuntimeError(
+            f"{rel_type_name} has {len(source_rows)} supported source rows but zero active MDM edges"
+        )
     return {
-        "status": "excluded",
-        "evidence_category": "capability_not_implemented",
-        "expected_edge_count": 0,
-        "evidence_query_version": "edge08-v1",
-        "population_fingerprint": _fingerprint([str(company_count)], [EDGE08_PARSER_CAPABILITY_VERSION]),
-        "review_trigger": (
-            "Re-evaluate when an Exhibit 21 (or equivalent parent/subsidiary) parser "
-            "is added and _PARENT_CIK_KEYS gains a real source column -- bump "
-            "EDGE08_PARSER_CAPABILITY_VERSION alongside that change."
-        ),
+        "status": "populated" if active_count else "valid_zero",
+        "evidence_category": "supported_source_population",
+        "expected_edge_count": active_count,
+        "evidence_query_version": evidence_query_version,
+        "population_fingerprint": _fingerprint(evidence_keys, [str(active_count)]),
+        "review_trigger": None,
     }
 
 
-def compute_edge10_audited_by_coverage() -> dict:
-    """EDGE-10 AUDITED_BY (company->audit_firm): structural_api_limitation exclusion.
+def compute_edge07_manages_fund_coverage(silver_reader: Any, session: Session) -> dict:
+    return _supported_relationship_coverage(
+        silver_reader, session, "MANAGES_FUND",
+        "SELECT adviser_crd_number, private_fund_id, filing_id FROM sec_adv_private_fund",
+        evidence_query_version="edge07-v2-iapd-adv",
+    )
 
-    Confirmed (06-05) that the SEC companyfacts aggregate API never surfaces
-    ix:nonNumeric DEI facts (AuditorFirmId/AuditorName/AuditorLocation) for
-    any company -- an upstream endpoint-selection gap, not a parser bug. No
-    live population evidence needed (the limitation is endpoint-structural,
-    not population-dependent); fingerprint is a fixed evidence-version tag,
-    stale only when the API's behavior is re-verified under a new version.
-    """
-    return {
-        "status": "excluded",
-        "evidence_category": "structural_api_limitation",
-        "expected_edge_count": 0,
-        "evidence_query_version": "edge10-v1-companyfacts-no-nonnumeric-dei",
-        "population_fingerprint": _fingerprint(["edge10-v1-companyfacts-no-nonnumeric-dei"]),
-        "review_trigger": (
-            "Re-evaluate if SEC's companyfacts API begins surfacing ix:nonNumeric "
-            "DEI facts, or if a per-filing inline-XBRL ingestion path is added "
-            "(see 06-05-EDGE10-DISPOSITION.md)."
-        ),
-    }
+
+def compute_edge08_has_parent_company_coverage(silver_reader: Any, session: Session) -> dict:
+    return _supported_relationship_coverage(
+        silver_reader, session, "HAS_PARENT_COMPANY",
+        "SELECT accession_number, registrant_cik, legal_name, jurisdiction FROM sec_subsidiary_evidence",
+        evidence_query_version="edge08-v2-sec-exhibits",
+    )
+
+
+def compute_edge10_audited_by_coverage(silver_reader: Any, session: Session) -> dict:
+    return _supported_relationship_coverage(
+        silver_reader, session, "AUDITED_BY",
+        "SELECT accession_number, registrant_cik, pcaob_firm_id, report_date FROM sec_auditor_report_evidence",
+        evidence_query_version="edge10-v2-direct-filing",
+    )
 
 
 def compute_deferred_fix_coverage(rel_type_name: str, *, evidence_query_version: str) -> dict:
@@ -371,7 +339,7 @@ def compute_relationship_coverage_manifest(
     active_counts = relationship_active_counts or {}
     manifest: list[dict] = []
     for rel_type in session.scalars(
-        select(MdmRelationshipType).where(MdmRelationshipType.is_active == True)
+        select(MdmRelationshipType).where(MdmRelationshipType.is_active.is_(True))
     ):
         name = rel_type.rel_type_name
         if name in POPULATED_RELATIONSHIP_TYPES:
@@ -391,13 +359,21 @@ def compute_relationship_coverage_manifest(
         elif name == "MANAGES_FUND":
             record = compute_edge07_manages_fund_coverage(silver_reader, session)
         elif name == "HAS_PARENT_COMPANY":
-            record = compute_edge08_has_parent_company_coverage(session)
+            record = compute_edge08_has_parent_company_coverage(silver_reader, session)
         elif name == "AUDITED_BY":
-            record = compute_edge10_audited_by_coverage()
+            record = compute_edge10_audited_by_coverage(silver_reader, session)
         elif name == "EMPLOYED_BY":
-            record = compute_deferred_fix_coverage(name, evidence_query_version="edge09-v1-gate-form-set")
+            record = _supported_relationship_coverage(
+                silver_reader, session, name,
+                "SELECT accession_number, cik, exec_name FROM sec_executive_record",
+                evidence_query_version="edge09-v2-proxy-item502",
+            )
         elif name == "INSTITUTIONAL_HOLDS":
-            record = compute_deferred_fix_coverage(name, evidence_query_version="edge11-v1-gate-form-set")
+            record = _supported_relationship_coverage(
+                silver_reader, session, name,
+                "SELECT accession_number, cik, cusip, period_of_report FROM sec_thirteenf_holding",
+                evidence_query_version="edge11-v2-effective13f",
+            )
         else:
             raise KeyError(
                 f"No coverage classification registered for relationship type {name!r}; "

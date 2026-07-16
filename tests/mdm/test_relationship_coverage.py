@@ -19,11 +19,8 @@ from sqlalchemy.pool import StaticPool
 from edgar_warehouse.mdm import coverage
 from edgar_warehouse.mdm.database import (
     Base,
-    MdmAdviser,
-    MdmCompany,
     MdmEntity,
     MdmEntityTypeDefinition,
-    MdmPerson,
     MdmRelationshipType,
 )
 
@@ -126,56 +123,27 @@ class TestFingerprint:
         assert first == second
 
 
-class TestEdge07ManagesFundExclusion:
-    def test_classified_source_unavailable_with_zero_expected_edges(self, world, session):
-        _add_entity(session, "adviser")
-        session.add(MdmAdviser(
-            entity_id=session.scalars(select(MdmEntity.entity_id)).first(),
-            cik=105958, crd_number="801-11953", canonical_name="THE VANGUARD GROUP, INC.",
-        ))
-        session.commit()
-        silver = StubSilver([
-            {"cik": 749044, "form": "ADV-E", "accession_number": "0001-24-000001"},
-        ])
-        record = coverage.compute_edge07_manages_fund_coverage(silver, session)
-        assert record["status"] == "excluded"
-        assert record["evidence_category"] == "source_unavailable"
+class TestEdge07ManagesFundCoverage:
+    def test_supported_empty_source_is_valid_zero(self, world, session):
+        record = coverage.compute_edge07_manages_fund_coverage(StubSilver([]), session)
+        assert record["status"] == "valid_zero"
+        assert record["evidence_category"] == "supported_source_population"
         assert record["expected_edge_count"] == 0
-        assert record["review_trigger"]
 
-    def test_fingerprint_reflects_evidence_population(self, world, session):
-        silver_a = StubSilver([{"cik": 1, "form": "ADV-E", "accession_number": "a"}])
-        silver_b = StubSilver([{"cik": 1, "form": "ADV-E", "accession_number": "a"},
-                                {"cik": 2, "form": "ADV-NR", "accession_number": "b"}])
-        record_a = coverage.compute_edge07_manages_fund_coverage(silver_a, session)
-        record_b = coverage.compute_edge07_manages_fund_coverage(silver_b, session)
-        assert record_a["population_fingerprint"] != record_b["population_fingerprint"]
+    def test_source_rows_without_mdm_edges_fail_closed(self, world, session):
+        silver = StubSilver([{
+            "adviser_crd_number": "129052", "private_fund_id": "805-1", "filing_id": "1"
+        }])
+        with pytest.raises(RuntimeError, match="zero active MDM edges"):
+            coverage.compute_edge07_manages_fund_coverage(silver, session)
 
 
-class TestEdge08HasParentCompanyExclusion:
-    def test_classified_capability_not_implemented_with_zero_expected_edges(self, world, session):
-        record = coverage.compute_edge08_has_parent_company_coverage(session)
-        assert record["status"] == "excluded"
-        assert record["evidence_category"] == "capability_not_implemented"
+class TestEdge08HasParentCompanyCoverage:
+    def test_supported_empty_source_is_valid_zero(self, world, session):
+        record = coverage.compute_edge08_has_parent_company_coverage(StubSilver([]), session)
+        assert record["status"] == "valid_zero"
+        assert record["evidence_category"] == "supported_source_population"
         assert record["expected_edge_count"] == 0
-        assert record["review_trigger"]
-
-    def test_edge07_and_edge08_have_distinct_categories(self, world, session):
-        silver = StubSilver([])
-        edge07 = coverage.compute_edge07_manages_fund_coverage(silver, session)
-        edge08 = coverage.compute_edge08_has_parent_company_coverage(session)
-        assert edge07["evidence_category"] != edge08["evidence_category"]
-
-    def test_fingerprint_changes_with_company_population(self, world, session):
-        before = coverage.compute_edge08_has_parent_company_coverage(session)
-        _add_entity(session, "company")
-        session.add(MdmCompany(
-            entity_id=session.scalars(select(MdmEntity.entity_id)).first(),
-            cik=320193, canonical_name="Apple Inc.",
-        ))
-        session.commit()
-        after = coverage.compute_edge08_has_parent_company_coverage(session)
-        assert before["population_fingerprint"] != after["population_fingerprint"]
 
 
 class TestNoExclusionWritesGraphData:
@@ -186,8 +154,8 @@ class TestNoExclusionWritesGraphData:
         coverage.compute_edge05_is_entity_of_coverage(session)
         coverage.compute_edge06_is_person_of_coverage(session)
         coverage.compute_edge07_manages_fund_coverage(silver, session)
-        coverage.compute_edge08_has_parent_company_coverage(session)
-        coverage.compute_edge10_audited_by_coverage()
+        coverage.compute_edge08_has_parent_company_coverage(silver, session)
+        coverage.compute_edge10_audited_by_coverage(silver, session)
         coverage.compute_deferred_fix_coverage("EMPLOYED_BY", evidence_query_version="v1")
         session.flush()
         count = session.scalar(select(MdmRelationshipInstance).limit(1))

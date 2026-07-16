@@ -13,6 +13,7 @@ from edgar_warehouse.application.commands import (
     daily_incremental,
     full_reconcile,
     gold_refresh,
+    ingest_relationship_sources,
     load_daily_form_index_for_date,
     migrate_silver_shards,
     parse_adv_bronze,
@@ -44,6 +45,7 @@ COMMAND_REGISTRY = {
     "bootstrap-next": bootstrap_next.execute,
     "bootstrap-fundamentals": bootstrap_fundamentals.execute,   # Branch B (AD-05)
     "gold-refresh": gold_refresh.execute,
+    "ingest-relationship-sources": ingest_relationship_sources.execute,
     "migrate-silver-shards": migrate_silver_shards.execute,
     "validate-data-quality": validate_data_quality.execute,
     "verify-pipeline-run": verify_pipeline_run.execute,

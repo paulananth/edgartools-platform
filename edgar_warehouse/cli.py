@@ -143,6 +143,10 @@ def _handle_bootstrap_batch(args: argparse.Namespace) -> int:
     return run_command("bootstrap-batch", args)
 
 
+def _handle_ingest_relationship_sources(args: argparse.Namespace) -> int:
+    return run_command("ingest-relationship-sources", args)
+
+
 def _handle_bootstrap_next(args: argparse.Namespace) -> int:
     return run_command("bootstrap-next", args)
 
@@ -546,8 +550,39 @@ def build_parser() -> argparse.ArgumentParser:
         default="configured_forms",
         help="Parser execution policy",
     )
+    bootstrap_batch.add_argument(
+        "--release-mode",
+        action="store_true",
+        help="Fail closed on the bounded required relationship candidate manifest",
+    )
+    bootstrap_batch.add_argument(
+        "--candidate-manifest",
+        default=None,
+        help="Local or S3 JSON manifest containing required relationship candidates",
+    )
+    bootstrap_batch.add_argument(
+        "--repair-manifest",
+        default=None,
+        help="Local or S3 JSON manifest bounding accessions allowed for --force repair",
+    )
+    bootstrap_batch.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-fetch only accessions authorized by --repair-manifest in release mode",
+    )
     _add_run_id_arg(bootstrap_batch)
     bootstrap_batch.set_defaults(handler=_handle_bootstrap_batch)
+
+    ingest_relationship_sources = subparsers.add_parser(
+        "ingest-relationship-sources",
+        help="Import immutable ADV, subsidiary, and auditor evidence from a release manifest.",
+    )
+    ingest_relationship_sources.add_argument(
+        "--source-manifest", required=True,
+        help="Local or S3 JSON manifest of immutable relationship source artifacts",
+    )
+    _add_run_id_arg(ingest_relationship_sources)
+    ingest_relationship_sources.set_defaults(handler=_handle_ingest_relationship_sources)
 
     bootstrap_next = subparsers.add_parser(
         "bootstrap-next",
@@ -735,6 +770,16 @@ def build_parser() -> argparse.ArgumentParser:
             "$WAREHOUSE_SILVER_ROOT, a local WAREHOUSE_STORAGE_ROOT, or "
             "/tmp/edgar-warehouse-silver for remote storage."
         ),
+    )
+    bootstrap_fundamentals.add_argument(
+        "--release-mode",
+        action="store_true",
+        help="Fail closed on every required candidate failure; requires --candidate-manifest",
+    )
+    bootstrap_fundamentals.add_argument(
+        "--candidate-manifest",
+        default=None,
+        help="Local or S3 JSON manifest containing the bounded release candidate accessions",
     )
     _add_run_id_arg(bootstrap_fundamentals)
     bootstrap_fundamentals.set_defaults(handler=_handle_bootstrap_fundamentals)

@@ -198,6 +198,7 @@ CREATE TABLE IF NOT EXISTS sec_adv_filing (
     crd_number          TEXT,
     effective_date      DATE,
     filing_status       TEXT,
+    filing_action       TEXT,
     source_format       TEXT,
     parser_version      TEXT,
     last_sync_run_id    TEXT
@@ -231,13 +232,76 @@ CREATE TABLE IF NOT EXISTS sec_adv_disclosure_event (
 CREATE TABLE IF NOT EXISTS sec_adv_private_fund (
     accession_number    TEXT,
     fund_index          SMALLINT,
+    filing_id           TEXT,
+    adviser_crd_number  TEXT,
+    private_fund_id     TEXT,
+    reference_id        TEXT,
+    schedule_section    TEXT,
+    reporting_role      TEXT,
+    filing_action       TEXT,
     fund_name           TEXT,
     fund_type           TEXT,
     jurisdiction        TEXT,
     aum_amount          DECIMAL(28,2),
+    effective_date      DATE,
+    source_dataset_period TEXT,
+    source_sha256       TEXT,
     parser_version      TEXT,
     last_sync_run_id    TEXT,
     PRIMARY KEY (accession_number, fund_index)
+);
+
+CREATE TABLE IF NOT EXISTS sec_subsidiary_evidence (
+    accession_number      TEXT,
+    registrant_cik        BIGINT,
+    document_name         TEXT,
+    document_type         TEXT,
+    row_ordinal           INTEGER,
+    legal_name            TEXT,
+    jurisdiction          TEXT,
+    parent_scope          TEXT,
+    immediate_parent_known BOOLEAN,
+    effective_date        DATE,
+    row_locator           TEXT,
+    source_sha256         TEXT,
+    parser_version        TEXT,
+    last_sync_run_id      TEXT,
+    PRIMARY KEY (accession_number, document_name, row_ordinal)
+);
+
+CREATE TABLE IF NOT EXISTS sec_auditor_report_evidence (
+    accession_number            TEXT,
+    registrant_cik              BIGINT,
+    form_type                   TEXT,
+    document_name               TEXT,
+    audited_period_end          DATE,
+    report_date                 DATE,
+    principal_firm_name         TEXT,
+    principal_firm_location     TEXT,
+    pcaob_firm_id               TEXT,
+    evidence_source             TEXT,
+    raw_locator                 TEXT,
+    source_sha256               TEXT,
+    evidence_fingerprint        TEXT,
+    form_ap_filing_id           TEXT,
+    original_form_ap_filing_id  TEXT,
+    latest_amendment            BOOLEAN,
+    parser_version              TEXT,
+    last_sync_run_id            TEXT,
+    PRIMARY KEY (accession_number, evidence_fingerprint)
+);
+
+CREATE TABLE IF NOT EXISTS sec_pcaob_firm_identity (
+    pcaob_firm_id    TEXT,
+    canonical_name   TEXT,
+    city             TEXT,
+    state            TEXT,
+    country          TEXT,
+    status           TEXT,
+    snapshot_uri     TEXT,
+    snapshot_sha256  TEXT,
+    last_sync_run_id TEXT,
+    PRIMARY KEY (pcaob_firm_id, snapshot_sha256)
 );
 
 CREATE TABLE IF NOT EXISTS stg_daily_index_filing (
@@ -616,6 +680,21 @@ CREATE TABLE IF NOT EXISTS sec_executive_record (
     PRIMARY KEY (cik, accession_number, exec_name)
 );
 
+CREATE TABLE IF NOT EXISTS sec_employment_event (
+    accession_number    TEXT NOT NULL,
+    event_index         BIGINT NOT NULL,
+    cik                 BIGINT NOT NULL,
+    event_type          TEXT NOT NULL,
+    person_name         TEXT NOT NULL,
+    exec_role           TEXT,
+    previous_role       TEXT,
+    compensation_amount DOUBLE,
+    effective_date      DATE NOT NULL,
+    parser_version      TEXT NOT NULL,
+    ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (accession_number, event_index)
+);
+
 CREATE TABLE IF NOT EXISTS sec_thirteenf_holding (
     cik                 BIGINT NOT NULL,     -- 13F filing manager CIK
     accession_number    TEXT NOT NULL,
@@ -639,6 +718,20 @@ CREATE TABLE IF NOT EXISTS sec_thirteenf_holding (
     parser_version      TEXT,
     ingested_at         TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (cik, accession_number, holding_index)
+);
+
+CREATE TABLE IF NOT EXISTS sec_thirteenf_filing (
+    accession_number         TEXT PRIMARY KEY,
+    cik                      BIGINT NOT NULL,
+    period_of_report         DATE NOT NULL,
+    filing_date              DATE NOT NULL,
+    form                     TEXT NOT NULL,
+    amendment_type           TEXT,
+    confidential_omission    BOOLEAN NOT NULL DEFAULT FALSE,
+    effective_status         TEXT NOT NULL DEFAULT 'effective',
+    superseded_by_accession  TEXT,
+    parser_version           TEXT NOT NULL,
+    ingested_at              TIMESTAMPTZ DEFAULT NOW()
 );
 """
 
@@ -712,6 +805,11 @@ class SilverDatabase:
                 "Add accounting factor input columns to sec_financial_derived.",
                 self._add_financial_derived_factor_columns,
             ),
+            (
+                "006_adv_pfid_lineage",
+                "Add IAPD FilingID, CRD, PFID, section, effective-date and source lineage.",
+                self._add_adv_pfid_lineage,
+            ),
         )
 
     def _schema_migration_applied(self, migration_name: str) -> bool:
@@ -755,6 +853,27 @@ class SilverDatabase:
         for column, column_type in _SEC_FINANCIAL_DERIVED_FACTOR_COLUMNS.items():
             self._conn.execute(
                 f"ALTER TABLE sec_financial_derived ADD COLUMN IF NOT EXISTS {column} {column_type}"
+            )
+
+    def _add_adv_pfid_lineage(self) -> None:
+        self._conn.execute(
+            "ALTER TABLE sec_adv_filing ADD COLUMN IF NOT EXISTS filing_action TEXT"
+        )
+        columns = {
+            "filing_id": "TEXT",
+            "adviser_crd_number": "TEXT",
+            "private_fund_id": "TEXT",
+            "reference_id": "TEXT",
+            "schedule_section": "TEXT",
+            "reporting_role": "TEXT",
+            "effective_date": "DATE",
+            "source_dataset_period": "TEXT",
+            "source_sha256": "TEXT",
+            "filing_action": "TEXT",
+        }
+        for column, column_type in columns.items():
+            self._conn.execute(
+                f"ALTER TABLE sec_adv_private_fund ADD COLUMN IF NOT EXISTS {column} {column_type}"
             )
 
     def _migrate_financial_period_end_pk(self) -> None:
@@ -1742,8 +1861,9 @@ class SilverDatabase:
             """
             INSERT INTO sec_adv_filing
                 (accession_number, cik, form, adviser_name, sec_file_number, crd_number,
-                 effective_date, filing_status, source_format, parser_version, last_sync_run_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 effective_date, filing_status, filing_action, source_format,
+                 parser_version, last_sync_run_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (accession_number) DO UPDATE SET
                 cik = excluded.cik,
                 form = excluded.form,
@@ -1752,6 +1872,7 @@ class SilverDatabase:
                 crd_number = excluded.crd_number,
                 effective_date = excluded.effective_date,
                 filing_status = excluded.filing_status,
+                filing_action = excluded.filing_action,
                 source_format = excluded.source_format,
                 parser_version = excluded.parser_version,
                 last_sync_run_id = excluded.last_sync_run_id
@@ -1766,6 +1887,7 @@ class SilverDatabase:
                 row.get("crd_number"),
                 row.get("effective_date"),
                 row.get("filing_status"),
+                row.get("filing_action"),
                 row.get("source_format"),
                 row.get("parser_version"),
                 sync_run_id,
@@ -1834,14 +1956,26 @@ class SilverDatabase:
         return self._merge_rows(
             """
             INSERT INTO sec_adv_private_fund
-                (accession_number, fund_index, fund_name, fund_type, jurisdiction,
-                 aum_amount, parser_version, last_sync_run_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (accession_number, fund_index, filing_id, adviser_crd_number,
+                 private_fund_id, reference_id, schedule_section, reporting_role,
+                 filing_action, fund_name, fund_type, jurisdiction, aum_amount, effective_date,
+                 source_dataset_period, source_sha256, parser_version, last_sync_run_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (accession_number, fund_index) DO UPDATE SET
+                filing_id = excluded.filing_id,
+                adviser_crd_number = excluded.adviser_crd_number,
+                private_fund_id = excluded.private_fund_id,
+                reference_id = excluded.reference_id,
+                schedule_section = excluded.schedule_section,
+                reporting_role = excluded.reporting_role,
+                filing_action = excluded.filing_action,
                 fund_name = excluded.fund_name,
                 fund_type = excluded.fund_type,
                 jurisdiction = excluded.jurisdiction,
                 aum_amount = excluded.aum_amount,
+                effective_date = excluded.effective_date,
+                source_dataset_period = excluded.source_dataset_period,
+                source_sha256 = excluded.source_sha256,
                 parser_version = excluded.parser_version,
                 last_sync_run_id = excluded.last_sync_run_id
             """,
@@ -1849,12 +1983,106 @@ class SilverDatabase:
             lambda row: [
                 row["accession_number"],
                 row["fund_index"],
+                row.get("filing_id"),
+                row.get("adviser_crd_number"),
+                row.get("private_fund_id"),
+                row.get("reference_id"),
+                row.get("schedule_section"),
+                row.get("reporting_role"),
+                row.get("filing_action"),
                 row.get("fund_name"),
                 row.get("fund_type"),
                 row.get("jurisdiction"),
                 row.get("aum_amount"),
+                row.get("effective_date"),
+                row.get("source_dataset_period"),
+                row.get("source_sha256"),
                 row.get("parser_version"),
                 sync_run_id,
+            ],
+        )
+
+    def merge_subsidiary_evidence(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        return self._merge_rows(
+            """
+            INSERT INTO sec_subsidiary_evidence
+                (accession_number, registrant_cik, document_name, document_type,
+                 row_ordinal, legal_name, jurisdiction, parent_scope,
+                 immediate_parent_known, effective_date, row_locator, source_sha256,
+                 parser_version, last_sync_run_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (accession_number, document_name, row_ordinal) DO UPDATE SET
+                legal_name = excluded.legal_name,
+                jurisdiction = excluded.jurisdiction,
+                parent_scope = excluded.parent_scope,
+                immediate_parent_known = excluded.immediate_parent_known,
+                effective_date = excluded.effective_date,
+                row_locator = excluded.row_locator,
+                source_sha256 = excluded.source_sha256,
+                parser_version = excluded.parser_version,
+                last_sync_run_id = excluded.last_sync_run_id
+            """,
+            rows,
+            lambda row: [
+                row["accession_number"], row["registrant_cik"], row["document_name"],
+                row["document_type"], row["row_ordinal"], row["legal_name"],
+                row.get("jurisdiction"), row["parent_scope"],
+                row.get("immediate_parent_known", False), row["effective_date"],
+                row["row_locator"], row["source_sha256"],
+                row.get("parser_version", "subsidiary_exhibit_v1"), sync_run_id,
+            ],
+        )
+
+    def merge_auditor_report_evidence(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        return self._merge_rows(
+            """
+            INSERT INTO sec_auditor_report_evidence
+                (accession_number, registrant_cik, form_type, document_name,
+                 audited_period_end, report_date, principal_firm_name,
+                 principal_firm_location, pcaob_firm_id, evidence_source,
+                 raw_locator, source_sha256, evidence_fingerprint,
+                 form_ap_filing_id, original_form_ap_filing_id, latest_amendment,
+                 parser_version, last_sync_run_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (accession_number, evidence_fingerprint) DO UPDATE SET
+                form_ap_filing_id = excluded.form_ap_filing_id,
+                original_form_ap_filing_id = excluded.original_form_ap_filing_id,
+                latest_amendment = excluded.latest_amendment,
+                last_sync_run_id = excluded.last_sync_run_id
+            """,
+            rows,
+            lambda row: [
+                row["accession_number"], row["registrant_cik"], row["form_type"],
+                row["document_name"], row["audited_period_end"], row["report_date"],
+                row["principal_firm_name"], row["principal_firm_location"],
+                row["pcaob_firm_id"], row["evidence_source"], row["raw_locator"],
+                row["source_sha256"], row["evidence_fingerprint"],
+                row.get("form_ap_filing_id"), row.get("original_form_ap_filing_id"),
+                row.get("latest_amendment"), row.get("parser_version", "auditor_evidence_v1"),
+                sync_run_id,
+            ],
+        )
+
+    def merge_pcaob_firm_identities(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        return self._merge_rows(
+            """
+            INSERT INTO sec_pcaob_firm_identity
+                (pcaob_firm_id, canonical_name, city, state, country, status,
+                 snapshot_uri, snapshot_sha256, last_sync_run_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (pcaob_firm_id, snapshot_sha256) DO UPDATE SET
+                canonical_name = excluded.canonical_name,
+                city = excluded.city,
+                state = excluded.state,
+                country = excluded.country,
+                status = excluded.status,
+                last_sync_run_id = excluded.last_sync_run_id
+            """,
+            rows,
+            lambda row: [
+                row["pcaob_firm_id"], row["canonical_name"], row.get("city"),
+                row.get("state"), row.get("country"), row.get("status"),
+                row["snapshot_uri"], row["snapshot_sha256"], sync_run_id,
             ],
         )
 
@@ -2933,6 +3161,9 @@ class SilverDatabase:
             "sec_adv_office",
             "sec_adv_disclosure_event",
             "sec_adv_private_fund",
+            "sec_subsidiary_evidence",
+            "sec_auditor_report_evidence",
+            "sec_pcaob_firm_identity",
             "sec_sync_run",
             "pipeline_run",
             "gold_manifest",
@@ -3297,6 +3528,31 @@ class SilverDatabase:
             ],
         )
 
+    def merge_employment_events(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        return self._merge_rows(
+            """
+            INSERT INTO sec_employment_event
+                (accession_number, event_index, cik, event_type, person_name,
+                 exec_role, previous_role, compensation_amount, effective_date, parser_version)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT (accession_number, event_index) DO UPDATE SET
+                event_type = excluded.event_type,
+                person_name = excluded.person_name,
+                exec_role = excluded.exec_role,
+                previous_role = excluded.previous_role,
+                compensation_amount = excluded.compensation_amount,
+                effective_date = excluded.effective_date,
+                parser_version = excluded.parser_version
+            """,
+            rows,
+            lambda r: [
+                r["accession_number"], r["event_index"], r["cik"], r["event_type"],
+                r["person_name"], r.get("exec_role"), r.get("previous_role"),
+                r.get("compensation_amount"),
+                r["effective_date"], r["parser_version"],
+            ],
+        )
+
     def merge_thirteenf_holdings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
@@ -3321,6 +3577,31 @@ class SilverDatabase:
                 r.get("security_class"), r.get("put_call"), r.get("discretion_type"),
                 r.get("voting_auth_sole"), r.get("voting_auth_shared"),
                 r.get("voting_auth_none"), r.get("parser_version"),
+            ],
+        )
+
+    def merge_thirteenf_filings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        return self._merge_rows(
+            """
+            INSERT INTO sec_thirteenf_filing
+                (accession_number, cik, period_of_report, filing_date, form,
+                 amendment_type, confidential_omission, effective_status,
+                 superseded_by_accession, parser_version)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT (accession_number) DO UPDATE SET
+                amendment_type = excluded.amendment_type,
+                confidential_omission = excluded.confidential_omission,
+                effective_status = excluded.effective_status,
+                superseded_by_accession = excluded.superseded_by_accession,
+                parser_version = excluded.parser_version
+            """,
+            rows,
+            lambda r: [
+                r["accession_number"], r["cik"], r["period_of_report"],
+                r["filing_date"], r["form"], r.get("amendment_type"),
+                bool(r.get("confidential_omission", False)),
+                r.get("effective_status", "effective"),
+                r.get("superseded_by_accession"), r.get("parser_version", "1"),
             ],
         )
 

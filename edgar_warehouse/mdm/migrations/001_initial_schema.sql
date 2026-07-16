@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS mdm_source_ref (
 
 CREATE TABLE IF NOT EXISTS mdm_company (
     entity_id              UUID PRIMARY KEY REFERENCES mdm_entity(entity_id),
-    cik                    BIGINT UNIQUE NOT NULL,
+    cik                    BIGINT UNIQUE,
     canonical_name         TEXT NOT NULL,
     ein                    TEXT,
     sic_code               TEXT,
@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS mdm_security (
 CREATE TABLE IF NOT EXISTS mdm_fund (
     entity_id              UUID PRIMARY KEY REFERENCES mdm_entity(entity_id),
     adviser_entity_id      UUID REFERENCES mdm_entity(entity_id),
+    private_fund_id        TEXT UNIQUE,
     canonical_name         TEXT NOT NULL,
     fund_type              TEXT,
     jurisdiction           TEXT,

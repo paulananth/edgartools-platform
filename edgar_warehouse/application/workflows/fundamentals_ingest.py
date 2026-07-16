@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import json
 import sys
-import uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -61,6 +60,8 @@ def run_bootstrap_fundamentals_per_filing(
     source,                # SilverDatabase | None — Branch A metadata source
     db,                    # SilverDatabase instance — write target
     sync_run_id: str,
+    release_mode: bool = False,
+    candidate_accessions: set[str] | None = None,
 ) -> dict[str, int]:
     """Process 8-K earnings + DEF 14A proxy filings from bronze for the given CIKs.
 
@@ -81,9 +82,12 @@ def run_bootstrap_fundamentals_per_filing(
         "filings_skipped": 0,
         "rows_earnings_release": 0,
         "rows_executive_record": 0,
+        "rows_employment_event": 0,
     }
 
     if source is None:
+        if release_mode:
+            raise WarehouseRuntimeError("release relationship source is unavailable")
         _emit("fundamentals_source_unavailable", cik_count=len(cik_list))
         return metrics
 
@@ -92,7 +96,7 @@ def run_bootstrap_fundamentals_per_filing(
 
     filings = source.fetch(
         f"""
-        SELECT f.accession_number, f.cik, f.form, f.filing_date
+        SELECT f.accession_number, f.cik, f.form, f.filing_date, f.items
         FROM sec_company_filing f
         WHERE f.cik IN ({cik_placeholder})
           AND f.form IN ({form_list})
@@ -101,6 +105,14 @@ def run_bootstrap_fundamentals_per_filing(
         [int(c) for c in cik_list],
     )
     metrics["filings_scanned"] = len(filings)
+
+    if candidate_accessions is not None:
+        filings = [row for row in filings if row["accession_number"] in candidate_accessions]
+        observed = {row["accession_number"] for row in filings}
+        missing = sorted(candidate_accessions - observed)
+        if release_mode and missing:
+            raise WarehouseRuntimeError(f"required candidates missing from filing manifest: {missing}")
+        metrics["filings_scanned"] = len(filings)
 
     for filing in filings:
         accession_number = filing["accession_number"]
@@ -111,6 +123,10 @@ def run_bootstrap_fundamentals_per_filing(
         try:
             parser = get_parser(form_type)
         except ValueError:
+            if release_mode:
+                raise WarehouseRuntimeError(
+                    f"required candidate {accession_number} has no configured parser"
+                )
             metrics["filings_skipped"] += 1
             continue
 
@@ -121,6 +137,10 @@ def run_bootstrap_fundamentals_per_filing(
             )
             primary = next((r for r in attachments if r.get("is_primary")), None)
             if primary is None or not primary.get("raw_object_id"):
+                if release_mode:
+                    raise WarehouseRuntimeError(
+                        f"required candidate {accession_number} is missing its primary artifact"
+                    )
                 metrics["filings_skipped"] += 1
                 continue
             raw_rows = source.fetch(
@@ -129,12 +149,22 @@ def run_bootstrap_fundamentals_per_filing(
             )
             raw_object = raw_rows[0] if raw_rows else None
             if raw_object is None:
+                if release_mode:
+                    raise WarehouseRuntimeError(
+                        f"required candidate {accession_number} primary raw object is missing"
+                    )
                 metrics["filings_skipped"] += 1
                 continue
             content = read_bytes(str(raw_object["storage_path"])).decode(
                 "utf-8", errors="replace"
             )
         except Exception as exc:
+            if release_mode:
+                if isinstance(exc, WarehouseRuntimeError):
+                    raise
+                raise WarehouseRuntimeError(
+                    f"required candidate {accession_number} artifact read failed"
+                ) from exc
             _emit("fundamentals_artifact_error", accession=accession_number, error=str(exc))
             metrics["filings_skipped"] += 1
             continue
@@ -146,6 +176,10 @@ def run_bootstrap_fundamentals_per_filing(
             else:
                 parsed = parser(accession_number, content, form_type, cik)
         except Exception as exc:
+            if release_mode:
+                raise WarehouseRuntimeError(
+                    f"required candidate {accession_number} parse failed"
+                ) from exc
             _emit("fundamentals_parse_error", accession=accession_number,
                   form=form_type, error=str(exc))
             metrics["filings_skipped"] += 1
@@ -157,6 +191,41 @@ def run_bootstrap_fundamentals_per_filing(
         metrics["rows_executive_record"] += db.merge_executive_records(
             parsed.get("sec_executive_record", []), sync_run_id
         )
+        if form_type in ("8-K", "8-K/A") and (
+            "5.02" in str(filing.get("items") or "") or not str(filing.get("items") or "").strip()
+        ):
+            from datetime import date as _date
+            from edgar_warehouse.parsers.item_502 import PARSER_VERSION, parse_item_502
+
+            result = parse_item_502(
+                accession_number=accession_number,
+                cik=int(cik),
+                filing_date=(filing_date if isinstance(filing_date, _date)
+                             else _date.fromisoformat(str(filing_date)[:10])),
+                content=content,
+            )
+            if release_mode and result.applicability == "unresolved":
+                raise WarehouseRuntimeError(
+                    f"required candidate {accession_number} has an unresolved Item 5.02 event"
+                )
+            event_rows = [
+                {
+                    "accession_number": event.accession_number,
+                    "event_index": index,
+                    "cik": event.cik,
+                    "event_type": event.event_type,
+                    "person_name": event.person_name,
+                    "exec_role": event.role,
+                    "previous_role": event.previous_role,
+                    "compensation_amount": event.compensation_amount,
+                    "effective_date": event.effective_date,
+                    "parser_version": PARSER_VERSION,
+                }
+                for index, event in enumerate(result.events, start=1)
+            ]
+            metrics["rows_employment_event"] += db.merge_employment_events(
+                event_rows, sync_run_id
+            )
         metrics["filings_parsed"] += 1
 
     return metrics
@@ -251,6 +320,8 @@ def run_bootstrap_thirteenf(
     source,                 # SilverDatabase | None — Branch A metadata source
     db,                      # SilverDatabase instance — write target
     sync_run_id: str,
+    release_mode: bool = False,
+    candidate_accessions: set[str] | None = None,
 ) -> dict[str, int]:
     """Parse 13F-HR INFORMATION TABLE XML attachments for the given CIKs.
 
@@ -271,16 +342,19 @@ def run_bootstrap_thirteenf(
         "filings_parsed": 0,
         "filings_skipped": 0,
         "rows_thirteenf_holding": 0,
+        "rows_thirteenf_filing": 0,
     }
 
     if source is None:
+        if release_mode:
+            raise WarehouseRuntimeError("release 13F source is unavailable")
         _emit("fundamentals_source_unavailable", cik_count=len(cik_list))
         return metrics
 
     cik_placeholder = ", ".join("?" * len(cik_list))
     filings = source.fetch(
         f"""
-        SELECT f.accession_number, f.cik, f.report_date, f.filing_date
+        SELECT f.accession_number, f.cik, f.report_date, f.filing_date, f.form
         FROM sec_company_filing f
         WHERE f.cik IN ({cik_placeholder})
           AND f.form IN ('13F-HR', '13F-HR/A')
@@ -289,6 +363,14 @@ def run_bootstrap_thirteenf(
         [int(c) for c in cik_list],
     )
     metrics["filings_scanned"] = len(filings)
+
+    if candidate_accessions is not None:
+        filings = [row for row in filings if row["accession_number"] in candidate_accessions]
+        observed = {row["accession_number"] for row in filings}
+        missing = sorted(candidate_accessions - observed)
+        if release_mode and missing:
+            raise WarehouseRuntimeError(f"required 13F candidates missing from filing manifest: {missing}")
+        metrics["filings_scanned"] = len(filings)
 
     for filing in filings:
         accession_number = filing["accession_number"]
@@ -302,10 +384,15 @@ def run_bootstrap_thirteenf(
                 [accession_number],
             )
         except Exception:
+            if release_mode:
+                raise WarehouseRuntimeError(
+                    f"required 13F candidate {accession_number} attachment lookup failed"
+                )
             metrics["filings_skipped"] += 1
             continue
 
         infotable_attachment = None
+        primary_attachment = next((att for att in attachments if att.get("is_primary")), None)
         for att in attachments:
             desc = str(att.get("description") or att.get("document_type") or "").upper()
             filename = str(att.get("filename") or "").upper()
@@ -314,7 +401,19 @@ def run_bootstrap_thirteenf(
                 break
 
         if infotable_attachment is None:
+            if release_mode:
+                raise WarehouseRuntimeError(
+                    f"required 13F candidate {accession_number} is missing its information table"
+                )
             _emit("thirteenf_no_infotable", accession=accession_number, cik=cik)
+            metrics["filings_skipped"] += 1
+            continue
+
+        if primary_attachment is None or not primary_attachment.get("raw_object_id"):
+            if release_mode:
+                raise WarehouseRuntimeError(
+                    f"required 13F candidate {accession_number} is missing its cover page"
+                )
             metrics["filings_skipped"] += 1
             continue
 
@@ -325,12 +424,34 @@ def run_bootstrap_thirteenf(
             )
             raw_object = raw_rows[0] if raw_rows else None
             if raw_object is None:
+                if release_mode:
+                    raise WarehouseRuntimeError(
+                        f"required 13F candidate {accession_number} information-table raw object is missing"
+                    )
                 metrics["filings_skipped"] += 1
                 continue
             infotable_xml = read_bytes(str(raw_object["storage_path"])).decode(
                 "utf-8", errors="replace"
             )
+            cover_rows = source.fetch(
+                "SELECT * FROM sec_raw_object WHERE raw_object_id = ?",
+                [str(primary_attachment["raw_object_id"])],
+            )
+            cover_object = cover_rows[0] if cover_rows else None
+            if cover_object is None:
+                raise WarehouseRuntimeError(
+                    f"required 13F candidate {accession_number} cover raw object is missing"
+                )
+            cover_xml = read_bytes(str(cover_object["storage_path"])).decode(
+                "utf-8", errors="replace"
+            )
         except Exception as exc:
+            if release_mode:
+                if isinstance(exc, WarehouseRuntimeError):
+                    raise
+                raise WarehouseRuntimeError(
+                    f"required 13F candidate {accession_number} artifact read failed"
+                ) from exc
             _emit("thirteenf_artifact_error", accession=accession_number,
                   cik=cik, error=str(exc))
             metrics["filings_skipped"] += 1
@@ -344,10 +465,41 @@ def run_bootstrap_thirteenf(
                 period_of_report=str(period_of_report) if period_of_report else "",
             )
         except Exception as exc:
+            if release_mode:
+                raise WarehouseRuntimeError(
+                    f"required 13F candidate {accession_number} parse failed"
+                ) from exc
             _emit("thirteenf_parse_error", accession=accession_number,
                   cik=cik, error=str(exc))
             metrics["filings_skipped"] += 1
             continue
+
+        if release_mode and not parsed.get("sec_thirteenf_holding"):
+            raise WarehouseRuntimeError(
+                f"required 13F candidate {accession_number} produced zero holding rows"
+            )
+
+        from edgar_warehouse.parsers.thirteenf_cover import parse_thirteenf_cover
+        try:
+            cover = parse_thirteenf_cover(cover_xml)
+        except Exception as exc:
+            if release_mode:
+                raise WarehouseRuntimeError(
+                    f"required 13F candidate {accession_number} cover parse failed"
+                ) from exc
+            metrics["filings_skipped"] += 1
+            continue
+
+        metrics["rows_thirteenf_filing"] += db.merge_thirteenf_filings([{
+            "accession_number": accession_number,
+            "cik": int(cik),
+            "period_of_report": str(period_of_report) if period_of_report else "",
+            "filing_date": str(filing.get("filing_date"))[:10],
+            "form": str(filing.get("form") or "13F-HR"),
+            "amendment_type": cover["amendment_type"],
+            "confidential_omission": cover["confidential_omission"],
+            "parser_version": "1",
+        }], sync_run_id)
 
         metrics["rows_thirteenf_holding"] += db.merge_thirteenf_holdings(
             parsed.get("sec_thirteenf_holding", []), sync_run_id

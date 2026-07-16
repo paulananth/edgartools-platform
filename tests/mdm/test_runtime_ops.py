@@ -72,6 +72,7 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
         "007_relationship_coverage.sql",
         "008_publication_queue.sql",
         "009_graph_generation_builder.sql",
+        "010_release_relationship_sources.sql",
     ]
 
 
@@ -95,5 +96,4 @@ def test_mdm_sql_logging_emits_each_database_call() -> None:
     assert "mdm_sql_completed" in [event["event"] for event in events]
     completed = next(event for event in events if event["event"] == "mdm_sql_completed")
     assert completed["operation"] == "select"
-
 

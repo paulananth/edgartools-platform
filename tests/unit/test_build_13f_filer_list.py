@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from edgar_warehouse.scripts.build_13f_filer_list import collect_13f_ciks
 
@@ -59,6 +60,16 @@ def test_collect_13f_ciks_skips_quarter_on_fetch_failure() -> None:
 
     # 2020 Q1, Q3, Q4 succeed (CIK 100); Q2 fails and is skipped, not raised.
     assert result == [100]
+
+
+def test_collect_13f_ciks_release_mode_fails_on_fetch_failure() -> None:
+    def fake_get_filings(*, year: int, quarter: int, form: str):
+        if quarter == 2:
+            raise RuntimeError("simulated SEC fetch failure")
+        return _FakeFilings([100])
+
+    with pytest.raises(RuntimeError, match="2020 Q2"):
+        collect_13f_ciks(2020, 2020, get_filings=fake_get_filings, strict=True)
 
 
 def test_collect_13f_ciks_handles_empty_quarter() -> None:

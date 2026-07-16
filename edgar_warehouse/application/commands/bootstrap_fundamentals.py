@@ -58,6 +58,29 @@ def execute(args: Any) -> int:
     mode: str = str(getattr(args, "mode", "per-filing") or "per-filing")
     run_id: str = str(getattr(args, "run_id", None) or str(uuid.uuid4()))
     silver_root_override: str = getattr(args, "silver_root", None) or ""
+    release_mode = bool(getattr(args, "release_mode", False))
+    candidate_manifest = getattr(args, "candidate_manifest", None)
+    if release_mode and not candidate_manifest:
+        _err("bootstrap-fundamentals --release-mode requires --candidate-manifest")
+        return 2
+    if release_mode and mode == "entity-facts":
+        _err("bootstrap-fundamentals --release-mode is only valid for per-filing or thirteenf")
+        return 2
+
+    candidate_manifest_rows: list[Any] | None = None
+    if candidate_manifest:
+        try:
+            from edgar_warehouse.infrastructure.object_storage import read_bytes
+            manifest_payload = json.loads(read_bytes(str(candidate_manifest)).decode("utf-8"))
+            candidate_manifest_rows = (
+                manifest_payload.get("candidates", [])
+                if isinstance(manifest_payload, dict) else manifest_payload
+            )
+            if not candidate_manifest_rows:
+                raise ValueError("candidate manifest is empty")
+        except Exception as exc:
+            _err(f"could not read candidate manifest: {exc}")
+            return 2
 
     cik_offset = int(getattr(args, "cik_offset", 0) or 0)
     _cik_limit_raw = getattr(args, "cik_limit", None)
@@ -107,6 +130,25 @@ def execute(args: Any) -> int:
         )
         return 2
 
+    candidate_accessions: set[str] | None = None
+    if candidate_manifest_rows is not None:
+        allowed_ciks = set(cik_list)
+        per_filing_forms = {"8-K", "8-K/A", "DEF 14A", "DEF 14A/A", "DEFA14A", "PRE 14A"}
+        thirteenf_forms = {"13F-HR", "13F-HR/A"}
+        allowed_forms = per_filing_forms if mode == "per-filing" else thirteenf_forms
+        candidate_accessions = set()
+        for row in candidate_manifest_rows:
+            if isinstance(row, dict):
+                row_cik = int(row.get("cik") or 0)
+                row_form = str(row.get("form") or "").strip().upper()
+                if row_cik not in allowed_ciks or row_form not in allowed_forms:
+                    continue
+                accession = row.get("accession_number")
+            else:
+                accession = row
+            if accession:
+                candidate_accessions.add(str(accession))
+
     metrics: dict[str, Any] = {"mode": mode, "cik_count": len(cik_list)}
     _log("bootstrap_fundamentals_started", run_id=run_id, mode=mode,
          cik_count=len(cik_list), cik_offset=cik_offset,
@@ -129,6 +171,8 @@ def execute(args: Any) -> int:
                 source=source,
                 db=db,
                 sync_run_id=run_id,
+                release_mode=release_mode,
+                candidate_accessions=candidate_accessions,
             )
             metrics.update(run_metrics)
 
@@ -163,6 +207,8 @@ def execute(args: Any) -> int:
                 source=source,
                 db=db,
                 sync_run_id=run_id,
+                release_mode=release_mode,
+                candidate_accessions=candidate_accessions,
             )
             metrics.update(run_metrics)
 
