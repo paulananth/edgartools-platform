@@ -2,7 +2,7 @@
 
 Type: task
 Status: open
-Blocked by: 17, 18, 19
+Blocked by: 17, 21, 22, 23
 Blocks: 06
 
 ## Task
@@ -19,4 +19,4 @@ Run the strict production bulk load at the frozen Release Data Watermark, repair
 
 ## Current disposition
 
-`NO_GO`; no production execution was started. See `docs/release-readiness/required-relationship-bulk-load-preflight.json`. Tickets 11, 13, 14, and 15, the frozen production candidate ledger, bound candidate image digests, and named attestations remain hard blockers.
+`NO_GO`; no production execution was started. See `docs/release-readiness/required-relationship-bulk-load-preflight.json`. Tickets 17 and 21–23, the frozen production candidate ledger, bound candidate image digests, and named attestations remain hard blockers.

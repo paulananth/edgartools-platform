@@ -99,9 +99,9 @@ Hosted verification must read through the same active-generation pointer that pr
 The existing capability gaps are release blockers, not allowable exclusions:
 
 - `EMPLOYED_BY` and `INSTITUTIONAL_HOLDS` require completion of the applicable bulk-source load, derivation, publication, and parity proof, including the currently gated DEF 14A, 8-K, and 13F-HR inputs.
-- `MANAGES_FUND` requires an approved adviser/fund source contract and ingestion path for IARD/IAPD or an equivalent authoritative source.
-- `HAS_PARENT_COMPANY` requires the parent-company source and Exhibit 21 parsing capability.
-- `AUDITED_BY` requires an authoritative auditor-evidence ingestion contract because the existing company-facts path does not supply the required evidence.
+- `MANAGES_FUND` has an approved [adviser-fund source contract](adviser-fund-source-contract.md), but ticket 21 must implement native IAPD bulk ingestion, PFID identity, effective filings, derivation, and exact parity.
+- `HAS_PARENT_COMPANY` has an approved [parent-company source/parser contract](parent-company-source-parser-contract.md), but ticket 22 must implement complete Exhibit 21/8 inventory, parsing, non-CIK identities, derivation, and exact parity.
+- `AUDITED_BY` has an approved [auditor-evidence ingestion contract](auditor-evidence-ingestion-contract.md), but ticket 23 must implement direct filing/PCAOB evidence, full firm identity, report-date derivation, and exact parity.
 - Every other required type must also demonstrate complete candidate coverage and exact parity at the release watermark; prior populated or zero labels are not sufficient by themselves.
 
 ## Ownership and Gate

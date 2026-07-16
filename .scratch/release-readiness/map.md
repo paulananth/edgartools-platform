@@ -25,6 +25,9 @@ Produce a decision-complete validation plan for production operator readiness, b
 - [Design the MaxConcurrency=4 Data Integrity Proof](issues/03-design-maxconcurrency4-data-integrity-proof.md) — Require one execution-bound artifact with table-specific reconciliation, guarded publication, zero refetch, exact shard coverage, and a deterministic 16-batch idempotency rerun; historical reconstruction cannot satisfy current GO.
 - [Define the MdmExport Entitlement Preflight and Retry Policy](issues/10-define-mdm-export-entitlement-preflight-and-retry-policy.md) — Require a same-runtime, marker-bound, non-mutating export capability gate with secret-safe evidence, command-owned transient retry, fail-fast prerequisite errors, and fresh full-chain revalidation after operator correction.
 - [Define Required Relationship Bulk-Load Completion Gate](issues/12-define-required-relationship-bulk-load-completion-gate.md) — Require a fail-closed accession ledger over proxy, Item 5.02, and 13F candidates, with verified artifacts, terminal parser outcomes, temporal/amendment semantics, no release caps, idempotent replay, and exact graph parity.
+- [Define Adviser-Fund Source Contract](issues/13-define-adviser-fund-source-contract.md) — Use public SEC/IAPD historical Form ADV Part 1 bulk filing data plus the current compilation control, with CRD/PFID identity, latest-effective filing reconstruction, and exact `MANAGES_FUND` parity.
+- [Define Parent-Company Source and Parser Contract](issues/14-define-parent-company-source-parser-contract.md) — Use complete SEC annual-filing attachment inventories and Exhibit 21/8 evidence; model disclosed subsidiary-to-registrant relationships without inferring an immediate legal-parent hierarchy.
+- [Define Auditor Evidence Ingestion Contract](issues/15-define-auditor-evidence-ingestion-contract.md) — Use direct annual-filing iXBRL or bounded audit-report evidence as primary and PCAOB AuditorSearch/Form AP for canonical firm identity, amendments, and corroboration.
 
 ## Not yet specified
 
@@ -42,11 +45,11 @@ All eleven relationship types are required for initial GO. Optionality is record
 ## Newly exposed relationship-data blockers
 
 - [12 — Define Required Relationship Bulk-Load Completion Gate](issues/12-define-required-relationship-bulk-load-completion-gate.md)
-- [13 — Define Adviser-Fund Source Contract](issues/13-define-adviser-fund-source-contract.md)
-- [14 — Define Parent-Company Source and Parser Contract](issues/14-define-parent-company-source-parser-contract.md)
-- [15 — Define Auditor Evidence Ingestion Contract](issues/15-define-auditor-evidence-ingestion-contract.md)
 - [16 — Implement Relationship Source Candidate Ledger](issues/16-implement-relationship-source-candidate-ledger.md)
 - [17 — Implement Strict Relationship Artifact Bulk Load](issues/17-implement-strict-relationship-artifact-bulk-load.md)
 - [18 — Implement Item 5.02 Employment Events](issues/18-implement-item-502-employment-events.md)
 - [19 — Implement Effective 13F Filing Set](issues/19-implement-effective-13f-filing-set.md)
 - [20 — Execute Required Relationship Production Bulk Load](issues/20-execute-required-relationship-production-bulk-load.md)
+- [21 — Implement Authoritative Form ADV Private-Fund Ingestion](issues/21-implement-authoritative-form-adv-private-fund-ingestion.md)
+- [22 — Implement SEC Subsidiary Exhibit Ingestion](issues/22-implement-sec-subsidiary-exhibit-ingestion.md)
+- [23 — Implement Auditor-Report Evidence Ingestion](issues/23-implement-auditor-report-evidence-ingestion.md)

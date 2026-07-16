@@ -1,9 +1,9 @@
 # Define Parent-Company Source and Parser Contract
 
 - Type: research
-- Status: open
+- Status: resolved
 - Blocked by: none
-- Blocks: 06
+- Blocks: 22
 
 ## Question
 
@@ -17,3 +17,10 @@ What Exhibit 21 source inventory, parser behavior, normalization rules, and evid
 - Bind derivation to applicability and per-type parity evidence.
 - Assign implementation and release-acceptance owners.
 
+## Resolution
+
+Approved SEC annual-filing attachment indexes plus Exhibit 21 for domestic filers and Exhibit 8 for Form 20-F filers. The relationship is deliberately scoped as a disclosed subsidiary pointing to the filing registrant, not an inferred immediate legal-parent hierarchy. The contract defines full candidate inventory, deterministic parsing, non-CIK company identity, temporal semantics, terminal outcomes, and exact MDM/graph parity.
+
+Decision artifact: [`docs/release-readiness/parent-company-source-parser-contract.md`](../../../docs/release-readiness/parent-company-source-parser-contract.md)
+
+Implementation remains required under ticket 22; resolving this research ticket does not make `HAS_PARENT_COMPANY` launch-ready.

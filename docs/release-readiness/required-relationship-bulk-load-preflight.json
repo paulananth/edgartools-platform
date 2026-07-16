@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-16T01:17:31Z",
+  "generated_at": "2026-07-16T01:43:23Z",
   "disposition": "NO_GO",
   "release_candidate": {
     "commit": "1841e2fe3122de5d547be7aa9a9645c803a6ff8a",
@@ -39,19 +39,19 @@
       "detail": "BatchSilver contention-safe publication proof is still open."
     },
     {
-      "ticket": 13,
-      "code": "manages_fund_source_contract_missing",
-      "detail": "The authoritative adviser-fund source and entitlement contract is not approved."
+      "ticket": 21,
+      "code": "manages_fund_ingestion_not_implemented",
+      "detail": "The approved IAPD/PFID source contract has not been implemented or proven against the release watermark."
     },
     {
-      "ticket": 14,
-      "code": "parent_company_parser_contract_missing",
-      "detail": "The complete Exhibit 21 candidate and parser contract is not approved."
+      "ticket": 22,
+      "code": "parent_company_ingestion_not_implemented",
+      "detail": "The approved Exhibit 21/8 subsidiary inventory, parser, identity, and derivation contract has not been implemented or proven."
     },
     {
-      "ticket": 15,
-      "code": "auditor_evidence_contract_missing",
-      "detail": "The authoritative auditor evidence ingestion contract is not approved."
+      "ticket": 23,
+      "code": "auditor_evidence_ingestion_not_implemented",
+      "detail": "The approved direct-filing/PCAOB auditor evidence contract has not been implemented or proven."
     },
     {
       "ticket": 20,
