@@ -113,6 +113,7 @@ COMMENT = 'MDM golden-record security export target. MERGEd by MDMExporter.expor
 CREATE TABLE IF NOT EXISTS MDM_FUND (
   entity_id            VARCHAR(36)   NOT NULL,
   adviser_entity_id    VARCHAR(36),
+  private_fund_id      VARCHAR,
   canonical_name       VARCHAR,
   fund_type            VARCHAR,
   jurisdiction         VARCHAR,
@@ -123,3 +124,7 @@ CREATE TABLE IF NOT EXISTS MDM_FUND (
   PRIMARY KEY (entity_id)
 )
 COMMENT = 'MDM golden-record fund export target. MERGEd by MDMExporter.export_pending() (edgar_warehouse/mdm/export.py) keyed on entity_id. Mirrors edgar_warehouse/mdm/database.py::MdmFund.';
+
+-- Existing targets created before Snowflake Postgres migration 010 need the
+-- newly exported ADV identifier as an additive, live-safe migration.
+ALTER TABLE MDM_FUND ADD COLUMN IF NOT EXISTS private_fund_id VARCHAR;
