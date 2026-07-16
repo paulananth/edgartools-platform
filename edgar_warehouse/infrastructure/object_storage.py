@@ -250,7 +250,9 @@ class StorageLocation:
         expected_etag: str | None,
     ) -> "PromotionResult":
         """Promote a staged object onto the canonical key -- but only if
-        canonical's current version/ETag still equals ``expected_etag``.
+        canonical's current version/ETag still equals ``expected_etag``. For
+        S3, the precondition is attached to the PutObject request itself; a
+        separate check followed by an ordinary write is not concurrency-safe.
 
         Raises ``PromotionConflictError`` (leaving the staged object in place
         for inspection/retry) if canonical changed since ``expected_etag`` was
@@ -264,8 +266,45 @@ class StorageLocation:
             )
 
         staged_bytes = read_bytes(self.join(sanitize_relative_path(staged_relative_path)))
-        canonical_path_str = self.write_bytes(canonical_relative, staged_bytes)
-        new_version = self.read_object_version(canonical_relative)
+        canonical_path_str = self.join(canonical_relative)
+        if self.is_remote:
+            from urllib.parse import urlsplit
+
+            import boto3
+            from botocore.exceptions import ClientError
+
+            destination = urlsplit(canonical_path_str)
+            request: dict[str, Any] = {
+                "Bucket": destination.netloc,
+                "Key": destination.path.lstrip("/"),
+                "Body": staged_bytes,
+            }
+            if expected_etag is None:
+                request["IfNoneMatch"] = "*"
+            else:
+                request["IfMatch"] = expected_etag
+            try:
+                response = boto3.client("s3").put_object(**request)
+            except ClientError as exc:
+                status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+                if status in {404, 409, 412}:
+                    actual = self.read_object_version(canonical_relative)
+                    raise PromotionConflictError(
+                        canonical_relative,
+                        expected_etag,
+                        actual.etag,
+                        staged_relative_path,
+                    ) from exc
+                raise
+            raw_etag = response.get("ETag")
+            new_version = ObjectVersion(
+                exists=True,
+                etag=str(raw_etag).strip('"') if raw_etag else None,
+                version_id=response.get("VersionId"),
+            )
+        else:
+            canonical_path_str = self.write_bytes(canonical_relative, staged_bytes)
+            new_version = self.read_object_version(canonical_relative)
         return PromotionResult(
             canonical_path=canonical_path_str,
             staged_relative_path=staged_relative_path,

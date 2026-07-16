@@ -142,12 +142,17 @@ Release Candidate gate or the Live-Evidence Window.
 
 ## Current implementation implication
 
-The current BatchSilver publisher uploads a complete local monolith or shard
-object without an observed conditional/versioned merge protocol. The inspected
-July 5 execution also recorded 500 monolith-fallback events at
-`MaxConcurrency=4`. The current implementation therefore cannot claim Publish
-Contention Safety wherever concurrently active tasks can publish the same
-logical object. The required publication architecture is a separate decision.
+The release-readiness implementation now uses the publication architecture in
+[`batchsilver-contention-safe-publication-boundary.md`](batchsilver-contention-safe-publication-boundary.md):
+protected-table semantic rehydrate-and-merge, a unique staging object, and an
+atomic S3 conditional write on the canonical key. The prior read-check followed
+by an ordinary overwrite was not atomic and cannot establish Publish
+Contention Safety.
+
+Implementation tests make ticket 11 decision-complete. A current-candidate live
+execution must still capture conditional-publication lineage and satisfy every
+reconciliation and bounded-rerun check in this document before the Data
+Integrity Gate can pass.
 
 ## Ownership
 

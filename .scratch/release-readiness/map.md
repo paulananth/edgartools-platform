@@ -28,6 +28,7 @@ Produce a decision-complete validation plan for production operator readiness, b
 - [Define Adviser-Fund Source Contract](issues/13-define-adviser-fund-source-contract.md) — Use public SEC/IAPD historical Form ADV Part 1 bulk filing data plus the current compilation control, with CRD/PFID identity, latest-effective filing reconstruction, and exact `MANAGES_FUND` parity.
 - [Define Parent-Company Source and Parser Contract](issues/14-define-parent-company-source-parser-contract.md) — Use complete SEC annual-filing attachment inventories and Exhibit 21/8 evidence; model disclosed subsidiary-to-registrant relationships without inferring an immediate legal-parent hierarchy.
 - [Define Auditor Evidence Ingestion Contract](issues/15-define-auditor-evidence-ingestion-contract.md) — Use direct annual-filing iXBRL or bounded audit-report evidence as primary and PCAOB AuditorSearch/Form AP for canonical firm identity, amendments, and corroboration.
+- [Define the BatchSilver Contention-Safe Publication Boundary](issues/11-define-batchsilver-contention-safe-publication-boundary.md) — Preserve the canonical silver monolith but publish only through semantic rehydrate-and-merge plus an atomic S3 `If-Match`/`If-None-Match` write; conflicts rerun the complete batch and downstream stages wait for a zero-tolerance Map pass.
 
 ## Not yet specified
 
