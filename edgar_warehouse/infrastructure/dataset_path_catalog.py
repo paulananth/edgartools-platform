@@ -299,6 +299,7 @@ class WarehousePathResolver:
             "seed-bronze-batches",
             "parse-ownership-bronze",
             "parse-adv-bronze",
+            "ingest-relationship-sources",
         ):
             return {
                 "bronze": self._render("manifest.default.bronze.path", **default_tokens),
