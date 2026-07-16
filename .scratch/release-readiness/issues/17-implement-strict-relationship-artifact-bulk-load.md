@@ -1,7 +1,7 @@
 # Implement Strict Relationship Artifact Bulk Load
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 16
 Blocks: 20
 
@@ -17,3 +17,9 @@ Implement manifest-driven artifact capture for required proxy, Item 5.02/ambiguo
 - Cache-hit reruns make zero SEC requests; `--force` requires a bounded repair manifest.
 - Circuit-breaker leftovers remain unresolved and fail the run.
 
+## Resolution
+
+Implemented by commit `ddc24d3`: `bootstrap-batch --release-mode` accepts a
+generation-bound candidate manifest, sends only required accessions to the artifact
+pipeline, fails on missing candidates/artifacts, and requires a bounded repair
+manifest for `--force`. Production execution and ledger reconciliation remain ticket 20.

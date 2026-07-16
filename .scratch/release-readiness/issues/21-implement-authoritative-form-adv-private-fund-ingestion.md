@@ -1,7 +1,7 @@
 # Implement Authoritative Form ADV Private-Fund Ingestion
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 13, 16
 Blocks: 20, 06
 
@@ -21,3 +21,13 @@ Implement the approved adviser-fund source contract: capture official IAPD Part 
 ## Contract
 
 [`docs/release-readiness/adviser-fund-source-contract.md`](../../../docs/release-readiness/adviser-fund-source-contract.md)
+
+## Resolution
+
+Implemented by commits `ddc24d3`, `846d648`, and `4f4e1a9`: the deployed manifest importer
+validates immutable official IAPD bulk archives, imports IA/ERA base plus Schedule D
+7.B.(1)/(2) without a fund cap, preserves FilingID/CRD/PFID/action/cross-reference
+lineage, reconstructs the latest effective filing per CRD, resolves funds by PFID,
+and derives evidence-bound temporal `MANAGES_FUND` relationships. Production
+watermark acquisition, zero-unresolved reconciliation, and hosted-graph parity are
+the execution evidence owned by ticket 20.

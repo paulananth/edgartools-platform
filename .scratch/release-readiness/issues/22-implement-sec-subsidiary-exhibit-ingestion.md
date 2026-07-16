@@ -1,7 +1,7 @@
 # Implement SEC Subsidiary Exhibit Ingestion
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 14, 16
 Blocks: 20, 06
 
@@ -22,3 +22,13 @@ Implement the approved parent-company contract: enumerate complete annual-filing
 ## Contract
 
 [`docs/release-readiness/parent-company-source-parser-contract.md`](../../../docs/release-readiness/parent-company-source-parser-contract.md)
+
+## Resolution
+
+Implemented by commits `ddc24d3` and `4f4e1a9`: the deployed manifest importer validates immutable
+EX-21/EX-8 artifacts, deterministically parses HTML/text evidence with row locators,
+distinguishes explicit-zero from unresolved output, supports non-CIK company entities,
+and derives evidence-bound `HAS_PARENT_COMPANY` with
+`parent_scope=registrant_disclosed` and no inferred immediate hierarchy. Unsupported
+artifacts remain fail-closed. Production inventory closure and hosted-graph parity
+remain ticket 20 execution evidence.

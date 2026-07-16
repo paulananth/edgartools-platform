@@ -2,12 +2,12 @@
 
 Type: task
 Status: open
-Blocked by: 17, 21, 22, 23
+Blocked by: none
 Blocks: 06
 
 ## Task
 
-Run the strict production bulk load at the frozen Release Data Watermark, repair every unresolved candidate, derive both relationship types without caps, publish the graph generation, and commit the passing evidence artifact.
+Run the strict production bulk load at the frozen Release Data Watermark, repair every unresolved candidate, derive all required relationship types without caps, publish the graph generation, and commit the passing evidence artifact.
 
 ## Done when
 
@@ -19,4 +19,4 @@ Run the strict production bulk load at the frozen Release Data Watermark, repair
 
 ## Current disposition
 
-`NO_GO`; no production execution was started. See `docs/release-readiness/required-relationship-bulk-load-preflight.json`. Tickets 17 and 21–23, the frozen production candidate ledger, bound candidate image digests, and named attestations remain hard blockers.
+`NO_GO`; no production execution was started. See `docs/release-readiness/required-relationship-bulk-load-preflight.json`. The implementation prerequisites are resolved; the frozen production candidate ledger, bound candidate image digests, live execution/parity evidence, and named attestations remain hard blockers owned by this ticket.

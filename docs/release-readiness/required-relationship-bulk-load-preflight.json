@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-16T01:57:41Z",
+  "generated_at": "2026-07-16T02:41:43Z",
   "disposition": "NO_GO",
   "release_candidate": {
-    "commit": "2d3bd7427444fdbf166febccf31637f679db72b4",
+    "commit": "4f4e1a9fee3a388adc4854898cf526138a5c5364",
     "branch": "codex/release-readiness",
     "warehouse_image_digest": null,
     "mdm_image_digest": null
@@ -11,7 +11,7 @@
   "implementation_verification": {
     "status": "pass",
     "pytest": {
-      "passed": 804,
+      "passed": 816,
       "warnings": 3,
       "subtests_passed": 33
     },
@@ -33,26 +33,6 @@
     "execution_started": false
   },
   "hard_blockers": [
-    {
-      "ticket": 17,
-      "code": "strict_relationship_artifact_bulk_load_incomplete",
-      "detail": "The fail-closed manifest-driven relationship artifact bulk-load task is still open."
-    },
-    {
-      "ticket": 21,
-      "code": "manages_fund_ingestion_not_implemented",
-      "detail": "The approved IAPD/PFID source contract has not been implemented or proven against the release watermark."
-    },
-    {
-      "ticket": 22,
-      "code": "parent_company_ingestion_not_implemented",
-      "detail": "The approved Exhibit 21/8 subsidiary inventory, parser, identity, and derivation contract has not been implemented or proven."
-    },
-    {
-      "ticket": 23,
-      "code": "auditor_evidence_ingestion_not_implemented",
-      "detail": "The approved direct-filing/PCAOB auditor evidence contract has not been implemented or proven."
-    },
     {
       "ticket": 20,
       "code": "production_candidate_ledger_missing",

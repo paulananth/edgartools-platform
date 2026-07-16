@@ -1,7 +1,7 @@
 # Implement Auditor-Report Evidence Ingestion
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 15, 16
 Blocks: 20, 06
 
@@ -22,3 +22,13 @@ Implement the approved auditor-evidence contract: inventory every annual filing 
 ## Contract
 
 [`docs/release-readiness/auditor-evidence-ingestion-contract.md`](../../../docs/release-readiness/auditor-evidence-ingestion-contract.md)
+
+## Resolution
+
+Implemented by commits `ddc24d3`, `846d648`, and `4f4e1a9`: direct annual-filing iXBRL triplets
+are validated fail-closed, the fallback is bounded to the independent-auditor report
+and signature, append-only evidence and the full PCAOB snapshot are stored with
+hashes, and valid long-tail PCAOB IDs create deterministic audit-firm entities.
+`AUDITED_BY` now uses the report date and evidence fingerprint. Production candidate
+closure, Form AP corroboration timing, and hosted-graph parity remain ticket 20
+execution evidence.
