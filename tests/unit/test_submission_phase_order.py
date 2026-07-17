@@ -453,6 +453,49 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         sleep.assert_called_once_with(1.0)
         self.assertEqual(result["candidate_outcomes"][0]["accession_number"], "13f-1")
 
+    def test_release_artifact_pipeline_busts_edgartools_filing_cache_on_content_error(self) -> None:
+        """Production regression: accession 0000009631-13-000012.
+
+        `edgar.get_by_accession_number` resolves via `get_filing_by_accession`, which
+        is `@cache_except_none`-wrapped -- once it returns a Filing whose SGML fetch
+        degraded to the homepage fallback (TransientFilingContentError), that *same*
+        cached Filing instance is replayed on every retry within the process, so all
+        3 attempts failed identically in production even though a fresh process
+        fetching the same accession moments later succeeded cleanly. The retry loop
+        must evict this cache (`get_filing_by_accession.cache_clear()`) before
+        retrying, not just sleep and hope for a different result from the same object.
+        """
+        from edgar_warehouse.bronze_filing_artifacts import TransientFilingContentError
+
+        refresh_result = {
+            "raw_writes": [{"source_name": "filing_document"}],
+            "attachment_count": 1,
+            "network_fetches": 0,
+        }
+        with (
+            patch(
+                "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
+                side_effect=[TransientFilingContentError("no document_type"), refresh_result],
+            ) as refresh,
+            patch("edgar._filings.get_filing_by_accession.cache_clear") as cache_clear,
+            patch("time.sleep") as sleep,
+        ):
+            result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
+                context=SimpleNamespace(identity="tester@example.com"),
+                db=_ConfiguredFormDb(),
+                sync_run_id="release",
+                accession_numbers=["13f-1"],
+                artifact_policy="all_attachments",
+                parser_policy="branch_b_deferred",
+                force=False,
+                release_mode=True,
+            )
+
+        self.assertEqual(refresh.call_count, 2)
+        cache_clear.assert_called_once_with()
+        sleep.assert_called_once_with(1.0)
+        self.assertEqual(result["candidate_outcomes"][0]["accession_number"], "13f-1")
+
     def test_release_artifact_pipeline_retries_transient_filing_content_error(self) -> None:
         """Production regression: accession 0000950123-19-003980.
 

@@ -2170,6 +2170,45 @@ def _reset_edgartools_client_after_pool_timeout(exc: BaseException) -> bool:
     return False
 
 
+def _reset_edgartools_filing_cache_after_transient_content_error(exc: BaseException) -> bool:
+    """Evict edgartools' cached Filing after a transient SEC content-degradation error.
+
+    `edgar.get_by_accession_number` resolves through `get_filing_by_accession`, which
+    is wrapped in `@cache_except_none(maxsize=16)` (edgar/core.py) -- once it returns a
+    Filing object for an accession, that *same instance* is replayed on every later
+    call in-process, including our own retry attempts. `Filing.sgml()` then also
+    caches on `self._sgml`, so a Filing whose SGML fetch degraded to the homepage
+    fallback (see TransientFilingContentError) keeps returning that identical
+    degraded result forever within this process -- retrying without busting this
+    cache is a no-op that always replays the same bad response. Mirrors
+    `_reset_edgartools_client_after_pool_timeout`'s HTTP-client-reuse fix for the
+    same "edgartools reuses internal state across calls" class of issue.
+    """
+    pending: list[BaseException] = [exc]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if any(
+            error_type.__name__.lower() == "transientfilingcontenterror"
+            for error_type in type(current).__mro__
+        ):
+            from edgar._filings import get_filing_by_accession
+
+            get_filing_by_accession.cache_clear()
+            return True
+        for nested in (
+            getattr(current, "__cause__", None),
+            getattr(current, "__context__", None),
+            getattr(current, "reason", None),
+        ):
+            if isinstance(nested, BaseException):
+                pending.append(nested)
+    return False
+
+
 def _run_configured_form_artifact_pipeline(
     *,
     context: WarehouseCommandContext,
@@ -2261,6 +2300,7 @@ def _run_configured_form_artifact_pipeline(
                             raise
                         retry_delay = artifact_retry_base_seconds * (2 ** (artifact_attempt - 1))
                         client_reset = _reset_edgartools_client_after_pool_timeout(exc)
+                        filing_cache_reset = _reset_edgartools_filing_cache_after_transient_content_error(exc)
                         _emit_pipeline_event(
                             "filing_artifact_retry",
                             accession_number=accession_number,
@@ -2270,6 +2310,7 @@ def _run_configured_form_artifact_pipeline(
                             error_type=type(exc).__name__,
                             error=repr(exc),
                             edgartools_client_reset=client_reset,
+                            edgartools_filing_cache_reset=filing_cache_reset,
                             run_id=sync_run_id,
                         )
                         _time.sleep(retry_delay)
