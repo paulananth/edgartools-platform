@@ -48,7 +48,19 @@ Filing documents and attachments use an **edgartools-only** network path
 - Missing edgartools content fails closed (`ParallelSecDownloadForbidden`); it does
   not fall back to raw HTTP.
 - Bronze evidence writes remain available for `strict_release` / repair paths.
-- Catalogs and companyfacts may still use `sec_client` until ticket 07.
+
+## Catalog + companyfacts gateway (ticket 07)
+
+Tickers, submissions, daily index, and companyfacts SEC network I/O goes through
+`edgar_warehouse.infrastructure.edgartools_sec_gateway` (edgartools HTTP), not
+the parallel `sec_client` stack. Inventory:
+`EDGARTOOLS_GATEWAY_OBJECT_CLASSES` (includes ticket 06 filing classes).
+
+- Novelty-only catalog skips (ticket 05) and companyfacts version skip (ticket 04)
+  still short-circuit before the gateway is called.
+- Non-edgartools sources (`NON_EDGARTOOLS_OBJECT_CLASSES`: IAPD ADV bulk, PCAOB
+  bulk, operator FOIA) remain mandatory-archive and are **not** claimed as
+  edgartools-covered.
 
 ## Ticket references
 

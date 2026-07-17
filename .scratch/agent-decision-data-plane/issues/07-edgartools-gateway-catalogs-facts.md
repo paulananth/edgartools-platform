@@ -4,9 +4,9 @@
 
 **Blocked by:** 04 — Silver-once companyfacts; 05 — Catalog novelty-only refresh; 06 — edgartools-only filing capture.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Catalog and companyfacts network for migrated classes go through edgartools-backed adapters
-- [ ] Novelty-only and versioned skip behaviors from 04–05 still hold
-- [ ] Non-edgartools sources (e.g. IAPD ADV bulk) remain on mandatory archive path and are not falsely claimed as edgartools-covered
-- [ ] Architecture/regression coverage documents which object classes are cut over
+- [x] Catalog and companyfacts network for migrated classes go through edgartools-backed adapters
+- [x] Novelty-only and versioned skip behaviors from 04–05 still hold
+- [x] Non-edgartools sources (e.g. IAPD ADV bulk) remain on mandatory archive path and are not falsely claimed as edgartools-covered
+- [x] Architecture/regression coverage documents which object classes are cut over

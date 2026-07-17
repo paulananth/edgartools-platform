@@ -68,8 +68,8 @@ from edgar_warehouse.infrastructure.run_manifest_builder import (
     warehouse_success_message,
 )
 from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory, default_path_resolver
-from edgar_warehouse.infrastructure.sec_client import (
-    download_sec_bytes,
+from edgar_warehouse.infrastructure.edgartools_sec_gateway import (
+    download_bytes as _gateway_download_bytes,
 )
 from edgar_warehouse.infrastructure.object_storage import StorageLocation, read_bytes
 from edgar_warehouse.silver_protection import merge_candidate_into_canonical
@@ -3882,7 +3882,8 @@ def _write_bronze_object(
 
 
 def _download_sec_bytes(url: str, identity: str) -> bytes:
-    return download_sec_bytes(url, identity)
+    """Ticket 07: catalog SEC network goes through the edgartools gateway."""
+    return _gateway_download_bytes(url, identity)
 
 
 def _require_cik_list(raw_ciks: Any, command_name: str) -> list[int]:
