@@ -202,6 +202,76 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         )
         self.assertTrue(artifact_pipeline.call_args.kwargs["release_mode"])
 
+    def test_release_submission_flow_seeds_index_only_candidate_for_direct_accession_fetch(self) -> None:
+        class IndexOnlyDb:
+            def __init__(self) -> None:
+                self.filings: dict[str, dict] = {}
+                self.merged: list[dict] = []
+
+            def get_filing(self, accession_number: str):
+                return self.filings.get(accession_number)
+
+            def merge_filings(self, rows: list[dict], sync_run_id: str) -> int:
+                self.merged.extend(rows)
+                self.filings.update({row["accession_number"]: row for row in rows})
+                return len(rows)
+
+        db = IndexOnlyDb()
+
+        with (
+            patch.object(
+                warehouse_orchestrator,
+                "_capture_submission_bronze_snapshot",
+                return_value={"cik": 1001, "raw_writes": []},
+            ),
+            patch.object(
+                warehouse_orchestrator,
+                "_apply_submission_snapshot_to_silver",
+                return_value={
+                    "rows_written": 0,
+                    "rows_skipped": 0,
+                    "recent_accessions": [],
+                    "pagination_accessions": [],
+                },
+            ),
+            patch.object(
+                warehouse_orchestrator,
+                "_run_configured_form_artifact_pipeline",
+                return_value={"raw_writes": [], "rows_written": 0, "rows_skipped": 0},
+            ) as artifact_pipeline,
+        ):
+            warehouse_orchestrator._run_submissions_bronze_then_silver(
+                context=object(),
+                db=db,
+                sync_run_id="release",
+                ciks=[1001],
+                include_pagination=True,
+                fetch_date=date(2026, 4, 25),
+                force=False,
+                load_mode="bootstrap_batch",
+                artifact_policy="all_attachments",
+                parser_policy="branch_b_deferred",
+                release_mode=True,
+                required_accessions={"index-only-13f"},
+                required_candidate_rows={
+                    "index-only-13f": {
+                        "accession_number": "index-only-13f",
+                        "cik": 1001,
+                        "form": "13F-HR",
+                        "filing_date": date(2013, 8, 14),
+                        "report_date": None,
+                        "items": None,
+                    }
+                },
+            )
+
+        self.assertEqual(db.merged[0]["accession_number"], "index-only-13f")
+        self.assertEqual(db.merged[0]["form"], "13F-HR")
+        self.assertEqual(
+            artifact_pipeline.call_args.kwargs["accession_numbers"],
+            ["index-only-13f"],
+        )
+
     def test_cached_submission_still_returns_pagination_accessions(self) -> None:
         db = _CachedSubmissionDb()
         snapshot = {
