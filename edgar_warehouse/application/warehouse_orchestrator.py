@@ -996,6 +996,7 @@ def _capture_bronze_raw(
             raw_writes.extend(result["raw_writes"])
             metrics["rows_inserted"] += result["rows_written"]
             metrics["rows_skipped"] += result["rows_skipped"]
+            _merge_capture_network_metrics(metrics, result)
             impacted_ciks.extend(result["impacted_ciks"])
             if result["status"] in {"waiting_for_publish", "failed_retryable"}:
                 metrics["sync_status"] = "partial"
@@ -1048,6 +1049,7 @@ def _capture_bronze_raw(
             raw_writes.extend(result["raw_writes"])
             metrics["rows_inserted"] += result["rows_written"]
             metrics["rows_skipped"] += result["rows_skipped"]
+            _merge_capture_network_metrics(metrics, result)
         return raw_writes, metrics
 
     if command_name == "load-daily-form-index-for-date":
@@ -1062,6 +1064,7 @@ def _capture_bronze_raw(
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
         metrics["rows_skipped"] += result["rows_skipped"]
+        _merge_capture_network_metrics(metrics, result)
         if result["status"] in {"waiting_for_publish", "failed_retryable"}:
             metrics["sync_status"] = "partial"
         return raw_writes, metrics
@@ -1091,6 +1094,7 @@ def _capture_bronze_raw(
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
         metrics["rows_skipped"] += result["rows_skipped"]
+        _merge_capture_network_metrics(metrics, result)
         return raw_writes, metrics
 
     if command_name == "bootstrap-full":
@@ -1117,6 +1121,7 @@ def _capture_bronze_raw(
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
         metrics["rows_skipped"] += result["rows_skipped"]
+        _merge_capture_network_metrics(metrics, result)
         return raw_writes, metrics
 
     if command_name == "bootstrap-next":
@@ -1170,6 +1175,7 @@ def _capture_bronze_raw(
             raw_writes.extend(result["raw_writes"])
             metrics["rows_inserted"] += result["rows_written"]
             metrics["rows_skipped"] += result["rows_skipped"]
+        _merge_capture_network_metrics(metrics, result)
         return raw_writes, metrics
 
     if command_name == "targeted-resync":
@@ -1201,6 +1207,7 @@ def _capture_bronze_raw(
             raw_writes.extend(result["raw_writes"])
             metrics["rows_inserted"] += result["rows_written"]
             metrics["rows_skipped"] += result["rows_skipped"]
+            _merge_capture_network_metrics(metrics, result)
             if arguments.get("include_artifacts") or arguments.get("include_text") or arguments.get("include_parsers"):
                 accessions = result["recent_accessions"]
                 total_accessions = len(accessions)
@@ -1328,6 +1335,7 @@ def _capture_bronze_raw(
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
         metrics["rows_skipped"] += result["rows_skipped"]
+        _merge_capture_network_metrics(metrics, result)
         if result["status"] == "partial":
             metrics["sync_status"] = "partial"
         return raw_writes, metrics
@@ -1581,6 +1589,7 @@ def _capture_bronze_raw(
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
         metrics["rows_skipped"] += result["rows_skipped"]
+        _merge_capture_network_metrics(metrics, result)
         if release_mode:
             from edgar_warehouse.application.relationship_bulk_load import (
                 CandidateOutcome,
@@ -1930,6 +1939,10 @@ def submissions_orchestrator(
         "rows_skipped": result["rows_skipped"],
         "recent_accessions": result["recent_accessions"],
         "pagination_accessions": result["pagination_accessions"],
+        "network_fetches": int(result.get("network_fetches", 0) or 0),
+        "silver_skips": int(result.get("silver_skips", 0) or 0),
+        "accessions_with_network": int(result.get("accessions_with_network", 0) or 0),
+        "accessions_silver_skip": int(result.get("accessions_silver_skip", 0) or 0),
     }
 
 
@@ -2095,6 +2108,10 @@ def _run_submissions_bronze_then_silver(
         "recent_accessions": _dedupe_strings(recent_accessions),
         "pagination_accessions": _dedupe_strings(pagination_accessions),
         "candidate_outcomes": artifact_result.get("candidate_outcomes", []),
+        "network_fetches": int(artifact_result.get("network_fetches", 0) or 0),
+        "silver_skips": int(artifact_result.get("silver_skips", 0) or 0),
+        "accessions_with_network": int(artifact_result.get("accessions_with_network", 0) or 0),
+        "accessions_silver_skip": int(artifact_result.get("accessions_silver_skip", 0) or 0),
     }
 
 
@@ -2209,6 +2226,19 @@ def _reset_edgartools_filing_cache_after_transient_content_error(exc: BaseExcept
     return False
 
 
+
+def _merge_capture_network_metrics(metrics: dict[str, Any], result: dict[str, Any]) -> None:
+    """Fold network_fetches / silver_skips from a pipeline result into command metrics."""
+    for key in (
+        "network_fetches",
+        "silver_skips",
+        "accessions_with_network",
+        "accessions_silver_skip",
+    ):
+        if key in result:
+            metrics[key] = int(metrics.get(key, 0) or 0) + int(result.get(key, 0) or 0)
+
+
 def _run_configured_form_artifact_pipeline(
     *,
     context: WarehouseCommandContext,
@@ -2230,8 +2260,14 @@ def _run_configured_form_artifact_pipeline(
         raise WarehouseRuntimeError(
             "release mode requires artifact fetch and parser policies"
         )
+    _empty_network = {
+        "network_fetches": 0,
+        "silver_skips": 0,
+        "accessions_with_network": 0,
+        "accessions_silver_skip": 0,
+    }
     if not fetch_artifacts and not run_parsers:
-        return {"raw_writes": [], "rows_written": 0, "rows_skipped": 0}
+        return {"raw_writes": [], "rows_written": 0, "rows_skipped": 0, **_empty_network}
 
     selected_accessions = _configured_parser_accessions(db, accession_numbers)
     if release_mode and force:
@@ -2239,7 +2275,7 @@ def _run_configured_form_artifact_pipeline(
         if unapproved:
             raise WarehouseRuntimeError(f"release force includes accessions outside repair manifest: {unapproved}")
     if not selected_accessions:
-        return {"raw_writes": [], "rows_written": 0, "rows_skipped": 0}
+        return {"raw_writes": [], "rows_written": 0, "rows_skipped": 0, **_empty_network}
 
     _emit_pipeline_event(
         "filing_artifact_pipeline_started",
@@ -2255,6 +2291,9 @@ def _run_configured_form_artifact_pipeline(
     rows_written = 0
     errors = 0
     consecutive_errors = 0
+    from edgar_warehouse.infrastructure.capture_metrics import CaptureNetworkMetrics
+
+    capture_network = CaptureNetworkMetrics()
     for accession_number in selected_accessions:
         if consecutive_errors >= _CONSECUTIVE_ERROR_LIMIT:
             _emit_pipeline_event(
@@ -2316,6 +2355,7 @@ def _run_configured_form_artifact_pipeline(
                         _time.sleep(retry_delay)
                 raw_writes.extend(artifact_result["raw_writes"])
                 rows_written += int(artifact_result["attachment_count"])
+                capture_network.record_artifact_result(artifact_result)
                 # Throttle only when a real SEC network fetch occurred. On the
                 # idempotent cache-hit path (immutable, already-captured artifacts)
                 # no request was made, so the SEC rate-limit sleep is pure dead time
@@ -2370,6 +2410,7 @@ def _run_configured_form_artifact_pipeline(
                 raise WarehouseRuntimeError(
                     f"required artifact candidate {accession_number} failed"
                 ) from exc
+    network_metrics = capture_network.as_dict()
     _emit_pipeline_event(
         "filing_artifact_pipeline_completed",
         accession_count=len(selected_accessions),
@@ -2377,12 +2418,14 @@ def _run_configured_form_artifact_pipeline(
         rows_written=rows_written,
         errors=errors,
         run_id=sync_run_id,
+        **network_metrics,
     )
     return {
         "raw_writes": raw_writes,
         "rows_written": rows_written,
         "rows_skipped": errors,
         "candidate_outcomes": candidate_outcomes,
+        **network_metrics,
     }
 
 

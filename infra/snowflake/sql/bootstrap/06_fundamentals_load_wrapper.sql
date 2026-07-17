@@ -42,7 +42,11 @@ const parquetFileFormat = `${databaseName}.${sourceSchema}.EDGARTOOLS_SOURCE_EXP
 const targetTables = {
   SEC_FINANCIAL_FACT:     `${databaseName}.${sourceSchema}.SEC_FINANCIAL_FACT`,
   SEC_THIRTEENF_HOLDING:  `${databaseName}.${sourceSchema}.SEC_THIRTEENF_HOLDING`,
-  SEC_FINANCIAL_DERIVED:  `${databaseName}.${sourceSchema}.SEC_FINANCIAL_DERIVED`
+  SEC_FINANCIAL_DERIVED:  `${databaseName}.${sourceSchema}.SEC_FINANCIAL_DERIVED`,
+  // Agent neighborhood evidence (ticket 08)
+  SEC_SUBSIDIARY_EVIDENCE: `${databaseName}.${sourceSchema}.SEC_SUBSIDIARY_EVIDENCE`,
+  SEC_AUDITOR_REPORT_EVIDENCE: `${databaseName}.${sourceSchema}.SEC_AUDITOR_REPORT_EVIDENCE`,
+  SEC_EMPLOYMENT_EVENT: `${databaseName}.${sourceSchema}.SEC_EMPLOYMENT_EVENT`
 };
 
 // Q4-A: hardcoded composite merge keys.  Each array lists the column names
@@ -50,7 +54,10 @@ const targetTables = {
 const mergeKeys = {
   SEC_FINANCIAL_FACT:     ["CIK", "ACCESSION_NUMBER", "CONCEPT", "FISCAL_PERIOD", "SEGMENT", "PERIOD_END", "PERIOD_START"],
   SEC_THIRTEENF_HOLDING:  ["CIK", "ACCESSION_NUMBER", "HOLDING_INDEX"],
-  SEC_FINANCIAL_DERIVED:  ["CIK", "ACCESSION_NUMBER", "FISCAL_PERIOD", "PERIOD_END"]
+  SEC_FINANCIAL_DERIVED:  ["CIK", "ACCESSION_NUMBER", "FISCAL_PERIOD", "PERIOD_END"],
+  SEC_SUBSIDIARY_EVIDENCE: ["ACCESSION_NUMBER", "DOCUMENT_NAME", "ROW_ORDINAL"],
+  SEC_AUDITOR_REPORT_EVIDENCE: ["ACCESSION_NUMBER", "EVIDENCE_FINGERPRINT"],
+  SEC_EMPLOYMENT_EVENT: ["ACCESSION_NUMBER", "EVENT_INDEX"]
 };
 
 function q(value) {

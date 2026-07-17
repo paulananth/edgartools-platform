@@ -28,6 +28,10 @@ SNOWFLAKE_EXPORT_TABLES = {
     "EARNINGS_RELEASE": "earnings_release",
     "EXECUTIVE_RECORD": "executive_record",
     "ACCOUNTING_FLAG": "accounting_flag",
+    # Agent neighborhood evidence (ticket 08) — passthrough from silver
+    "SEC_SUBSIDIARY_EVIDENCE": "sec_subsidiary_evidence",
+    "SEC_AUDITOR_REPORT_EVIDENCE": "sec_auditor_report_evidence",
+    "SEC_EMPLOYMENT_EVENT": "sec_employment_event",
 }
 
 

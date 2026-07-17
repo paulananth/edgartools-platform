@@ -105,6 +105,10 @@ def write_gold_to_serving_export(
         "earnings_release": "fact_earnings_release",
         "executive_record": "fact_executive_record",
         "accounting_flag": "fact_accounting_flag",
+        # Agent neighborhood evidence (ticket 08)
+        "sec_subsidiary_evidence": "sec_subsidiary_evidence",
+        "sec_auditor_report_evidence": "sec_auditor_report_evidence",
+        "sec_employment_event": "sec_employment_event",
     }
     counts: dict[str, int] = {}
     capture_specs = default_capture_spec_factory()

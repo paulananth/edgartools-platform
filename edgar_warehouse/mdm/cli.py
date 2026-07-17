@@ -98,14 +98,31 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
 
     seed_u = mdm_sub.add_parser(
         "seed-universe",
-        help="Seed tracked-universe CIKs from SEC company_tickers_exchange.json into MDM",
+        help=(
+            "Seed tracked-universe CIKs into MDM. Default source is silver "
+            "(warehouse single-writer); use --source edgartools only when silver is empty."
+        ),
     )
     seed_u.add_argument("--limit", type=int, default=None, help="Cap rows upserted (for testing)")
     seed_u.add_argument(
         "--tracking-status",
         default="active",
         choices=["active", "bootstrap_pending", "paused"],
-        help="tracking_status assigned to new companies (default: active)",
+        help="tracking_status assigned to new companies when source=edgartools (default: active)",
+    )
+    seed_u.add_argument(
+        "--source",
+        choices=["silver", "edgartools"],
+        default="silver",
+        help=(
+            "silver (default): import from warehouse silver tracked universe / tickers. "
+            "edgartools: live SEC ticker pull via edgartools (not system of engagement)."
+        ),
+    )
+    seed_u.add_argument(
+        "--silver-path",
+        default=None,
+        help="Local silver DuckDB path when --source silver (default: shard-0 from WAREHOUSE_STORAGE_ROOT)",
     )
     seed_u.set_defaults(handler=_logged_handler("seed-universe", _handle_seed_universe))
 
@@ -883,8 +900,47 @@ def _handle_generation_activate(args) -> int:
 
 
 def _handle_seed_universe(args) -> int:
-    from edgar_warehouse.loaders import seed_universe_loader
+    """Seed MDM universe; silver is the default source of truth (ticket 14).
+
+    Warehouse ``seed-universe`` remains the single writer of ticker/sync state.
+    MDM imports that state from silver rather than a second independent live
+    edgartools ticker client (unless ``--source edgartools`` is explicit).
+    """
     from edgar_warehouse.mdm.universe import bulk_upsert_universe
+
+    source = getattr(args, "source", "silver") or "silver"
+    if source == "silver":
+        # Prefer dedicated migration path semantics; preserve per-row tracking_status.
+        class _SilverArgs:
+            silver_path = getattr(args, "silver_path", None)
+            tracking_status = None  # all statuses from silver
+            dry_run = False
+
+        # Reuse seed-from-silver but allow --limit and report source=silver.
+        silver_path = getattr(args, "silver_path", None)
+        result = _seed_mdm_from_silver(
+            silver_path=silver_path,
+            tracking_status_filter=None,
+            dry_run=False,
+            limit=getattr(args, "limit", None),
+        )
+        result["source"] = "silver"
+        print(json.dumps(result, indent=2, sort_keys=True))
+        if result.get("rows_found", 0) == 0 and result.get("rows_migrated", 0) == 0:
+            print(
+                json.dumps(
+                    {
+                        "warning": (
+                            "silver universe empty; warehouse seed-universe must run first, "
+                            "or pass --source edgartools for a live SEC ticker pull"
+                        )
+                    }
+                ),
+                flush=True,
+            )
+        return 0
+
+    from edgar_warehouse.loaders import seed_universe_loader
 
     payload = _company_tickers_payload()
     rows = seed_universe_loader(
@@ -898,8 +954,144 @@ def _handle_seed_universe(args) -> int:
 
     engine = _get_mdm_engine()
     count = bulk_upsert_universe(engine, rows, default_status=args.tracking_status)
-    print(json.dumps({"rows_seeded": count, "status": "ok"}, indent=2))
+    print(
+        json.dumps(
+            {
+                "rows_seeded": count,
+                "status": "ok",
+                "source": "edgartools",
+                "warning": (
+                    "edgartools live ticker pull is not the Decision Subject Universe "
+                    "system of engagement; prefer --source silver after warehouse seed"
+                ),
+            },
+            indent=2,
+        )
+    )
     return 0
+
+
+def _seed_mdm_from_silver(
+    *,
+    silver_path: str | None,
+    tracking_status_filter: str | None,
+    dry_run: bool,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """Shared silver→MDM universe import used by seed-universe and seed-from-silver."""
+    import os
+
+    from edgar_warehouse.mdm.universe import bulk_upsert_universe
+
+    if not silver_path:
+        storage_root = os.environ.get("WAREHOUSE_STORAGE_ROOT", "").strip()
+        if not storage_root:
+            raise SystemExit("--silver-path or WAREHOUSE_STORAGE_ROOT is required for --source silver")
+
+    if silver_path:
+        from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
+
+        reader = ShardedSilverReader([silver_path])
+        try:
+            query = (
+                "SELECT cik, current_ticker, NULL as exchange, tracking_status "
+                "FROM sec_tracked_universe"
+            )
+            params: list = []
+            if tracking_status_filter:
+                query += " WHERE tracking_status = ?"
+                params.append(tracking_status_filter)
+            # Prefer sec_company_ticker join when tracked universe missing ticker
+            try:
+                silver_rows = reader._conn.execute(query, params).fetchall()
+            except Exception:
+                # Fallback: tickers + sync state
+                query = """
+                    SELECT t.cik, t.ticker AS current_ticker, t.exchange,
+                           COALESCE(s.tracking_status, 'active') AS tracking_status
+                    FROM sec_company_ticker t
+                    LEFT JOIN sec_company_sync_state s ON s.cik = t.cik
+                """
+                if tracking_status_filter:
+                    query += " WHERE COALESCE(s.tracking_status, 'active') = ?"
+                    silver_rows = reader._conn.execute(query, [tracking_status_filter]).fetchall()
+                else:
+                    silver_rows = reader._conn.execute(query).fetchall()
+        finally:
+            reader.close()
+    else:
+        from edgar_warehouse.application.command_context_factory import build_warehouse_context
+        from edgar_warehouse.application.warehouse_orchestrator import _hydrate_shard_for_window
+
+        context = build_warehouse_context("seed-from-silver")
+        local_shard_path = _hydrate_shard_for_window(context, shard_index=0)
+        if not local_shard_path:
+            return {
+                "status": "ok",
+                "rows_found": 0,
+                "rows_migrated": 0,
+                "note": "shard-0 not found in remote storage",
+            }
+        from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
+
+        reader = ShardedSilverReader([local_shard_path])
+        try:
+            query = (
+                "SELECT cik, current_ticker, NULL as exchange, tracking_status "
+                "FROM sec_tracked_universe"
+            )
+            params = []
+            if tracking_status_filter:
+                query += " WHERE tracking_status = ?"
+                params.append(tracking_status_filter)
+            try:
+                silver_rows = reader._conn.execute(query, params).fetchall()
+            except Exception:
+                query = """
+                    SELECT t.cik, t.ticker AS current_ticker, t.exchange,
+                           COALESCE(s.tracking_status, 'active') AS tracking_status
+                    FROM sec_company_ticker t
+                    LEFT JOIN sec_company_sync_state s ON s.cik = t.cik
+                """
+                if tracking_status_filter:
+                    query += " WHERE COALESCE(s.tracking_status, 'active') = ?"
+                    silver_rows = reader._conn.execute(query, [tracking_status_filter]).fetchall()
+                else:
+                    silver_rows = reader._conn.execute(query).fetchall()
+        finally:
+            reader.close()
+
+    if limit is not None:
+        silver_rows = list(silver_rows)[: int(limit)]
+
+    if not silver_rows:
+        return {"status": "ok", "rows_found": 0, "rows_migrated": 0}
+
+    status_groups: dict[str, int] = {}
+    for r in silver_rows:
+        status_groups[r[3] or "active"] = status_groups.get(r[3] or "active", 0) + 1
+
+    if dry_run:
+        return {
+            "status": "dry_run",
+            "rows_found": len(silver_rows),
+            "by_status": status_groups,
+        }
+
+    engine = _get_mdm_engine()
+    total = 0
+    for status, rows_for_status in _group_by_status(list(silver_rows)):
+        upsert_rows = [
+            {"cik": r[0], "ticker": r[1] or str(r[0]), "exchange": r[2]} for r in rows_for_status
+        ]
+        total += bulk_upsert_universe(engine, upsert_rows, default_status=status)
+
+    return {
+        "status": "ok",
+        "rows_found": len(silver_rows),
+        "rows_migrated": total,
+        "by_status": status_groups,
+    }
 
 
 def _handle_seed_audit_firms(args) -> int:
@@ -923,87 +1115,17 @@ def _handle_seed_audit_firms(args) -> int:
 def _handle_seed_from_silver(args) -> int:
     """Migrate company tracking universe from silver DuckDB into MDM Postgres.
 
-    Reads sec_tracked_universe rows from a silver DuckDB file (local path or
-    downloaded from S3 via WAREHOUSE_STORAGE_ROOT) and upserts them into
-    mdm_company, preserving existing tracking_status values in MDM.
+    Prefer ``mdm seed-universe --source silver`` (default) for ongoing ops;
+    this command remains as an explicit migration alias.
     """
-    import os
-
-    from edgar_warehouse.mdm.universe import bulk_upsert_universe
-
-    silver_path = getattr(args, "silver_path", None)
-    if not silver_path:
-        storage_root = os.environ.get("WAREHOUSE_STORAGE_ROOT", "").strip()
-        if not storage_root:
-            raise SystemExit("--silver-path or WAREHOUSE_STORAGE_ROOT is required")
-
-    tracking_status_filter = getattr(args, "tracking_status", None)
-    dry_run = bool(getattr(args, "dry_run", False))
-
-    # Shard-aware read: sec_tracked_universe is a global table replicated to all shards.
-    # Use shard-0 (or the explicit --silver-path) for this point-in-time query.
-    # This avoids the hardcoded silver.duckdb monolith path.
-    if silver_path:
-        # Explicit local path provided: may be a single shard file or legacy monolith.
-        from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
-        reader = ShardedSilverReader([silver_path])
-        try:
-            query = "SELECT cik, current_ticker, NULL as exchange, tracking_status FROM sec_tracked_universe"
-            params: list = []
-            if tracking_status_filter:
-                query += " WHERE tracking_status = ?"
-                params.append(tracking_status_filter)
-            silver_rows = reader._conn.execute(query, params).fetchall()
-        finally:
-            reader.close()
-    else:
-        # Remote: download shard-0 via the orchestrator and open it.
-        # sec_tracked_universe is replicated to all shards; shard-0 is sufficient.
-        from edgar_warehouse.application.command_context_factory import build_warehouse_context
-        from edgar_warehouse.application.warehouse_orchestrator import _hydrate_shard_for_window
-
-        context = build_warehouse_context("seed-from-silver")
-        print(json.dumps({"status": "downloading_shard", "shard_index": 0}))
-        local_shard_path = _hydrate_shard_for_window(context, shard_index=0)
-        if not local_shard_path:
-            print(json.dumps({"status": "ok", "rows_found": 0, "rows_migrated": 0,
-                              "note": "shard-0 not found in remote storage"}))
-            return 0
-        from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
-        reader = ShardedSilverReader([local_shard_path])
-        try:
-            query = "SELECT cik, current_ticker, NULL as exchange, tracking_status FROM sec_tracked_universe"
-            params = []
-            if tracking_status_filter:
-                query += " WHERE tracking_status = ?"
-                params.append(tracking_status_filter)
-            silver_rows = reader._conn.execute(query, params).fetchall()
-        finally:
-            reader.close()
-
-    if not silver_rows:
-        print(json.dumps({"status": "ok", "rows_found": 0, "rows_migrated": 0}))
-        return 0
-
-    migrate_rows = [
-        {"cik": r[0], "ticker": r[1] or str(r[0]), "exchange": r[2]}
-        for r in silver_rows
-    ]
-    status_groups: dict[str, int] = {}
-    for r in silver_rows:
-        status_groups[r[3]] = status_groups.get(r[3], 0) + 1
-
-    if dry_run:
-        print(json.dumps({"status": "dry_run", "rows_found": len(migrate_rows), "by_status": status_groups}, indent=2))
-        return 0
-
-    engine = _get_mdm_engine()
-    total = 0
-    for status, rows_for_status in _group_by_status(silver_rows):
-        upsert_rows = [{"cik": r[0], "ticker": r[1] or str(r[0]), "exchange": r[2]} for r in rows_for_status]
-        total += bulk_upsert_universe(engine, upsert_rows, default_status=status)
-
-    print(json.dumps({"status": "ok", "rows_found": len(migrate_rows), "rows_migrated": total, "by_status": status_groups}, indent=2))
+    result = _seed_mdm_from_silver(
+        silver_path=getattr(args, "silver_path", None),
+        tracking_status_filter=getattr(args, "tracking_status", None),
+        dry_run=bool(getattr(args, "dry_run", False)),
+        limit=None,
+    )
+    result["source"] = "silver"
+    print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
 
