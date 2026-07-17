@@ -1,0 +1,11 @@
+flowchart LR
+  SEC["SEC EDGAR"] --> CLI["edgar-warehouse<br/>CLI + ECS"]
+  ET["edgartools<br/>parsers"] --> CLI
+  CLI --> B["S3 Bronze<br/>raw filings"]
+  CLI --> S["S3 Silver<br/>DuckDB tables"]
+  CLI --> X["S3 Export<br/>Parquet + manifests"]
+  S --> MDM["MDM<br/>entities + graph"]
+  X --> SRC["Snowflake<br/>SOURCE"]
+  SRC --> GOLD["dbt Gold<br/>dynamic tables"]
+  GOLD --> DASH["Streamlit<br/>dashboards"]
+  MDM --> DASH

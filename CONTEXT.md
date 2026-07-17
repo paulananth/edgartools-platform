@@ -1,8 +1,138 @@
 # EdgarTools Platform
 
-The shared language for operating the AWS-first SEC EDGAR data platform and deciding whether a production release is ready for operators.
+The shared language for the AWS-first SEC EDGAR data platform: production operator readiness, and the decision-support facts consumed by trading agents (and humans auditing those facts).
 
 ## Language
+
+### Data plane (ingest and engagement)
+
+**Runtime System of Engagement**:
+Silver warehouse state (typed tables after parse) is where ingest jobs decide whether work is already done and what to mutate next.
+_Avoid_: Bronze as default SoE, edgartools local disk cache as shared SoE, agent queries against DuckDB silver
+
+**Agent System of Engagement**:
+Snowflake Decision Contract objects only; agents never read silver or bronze directly.
+_Avoid_: Runtime silver as agent API, ad-hoc SEC calls from the agent
+
+**Human Explore System of Engagement**:
+Labeled Explore Mode over Snowflake gold (and related analytics tables), not valid as Trading Decision input.
+_Avoid_: Unlabeled explore as agent view
+
+**SecGateway**:
+The exclusive warehouse path for SEC network I/O, implemented with edgartools; on miss it loads into silver (and bronze only under Bronze Persist rules).
+_Avoid_: Parallel sec_client downloads for the same objects after cutover, parse paths that call SEC
+
+**Silver-Once Idempotency**:
+Skip SEC network when silver already holds successful work for the skip key (for filings: accession + form-family + parser_version; for facts: CIK + facts_parser_version; catalogs: checkpoint completeness), unless force or version bump requires refresh.
+_Avoid_: Always re-fetch, skip only by bronze presence, accession-only forever skip that blocks parser upgrades
+
+**Bronze Persist**:
+Optional raw archive of SEC (or other) payloads written only when an operator explicitly requests it, or when the source cannot be obtained via edgartools; not the default hot path.
+_Avoid_: Always bronze first, treating bronze absence as agent-grade failure by default
+
+### Agent decision support
+
+**Agent Decision Surface**:
+The versioned, machine-readable set of SEC-derived facts and features an automated trading agent may read when forming a trading decision; humans may audit the same surface, but charts and dashboards are not the contract.
+_Avoid_: Streamlit app as source of truth, research notebook export, ad-hoc SQL without a published contract, trading execution API
+
+**Decision Feature**:
+A named, typed field on the Agent Decision Surface with documented meaning, null semantics (unknown vs zero), and identity keys (for example CIK and fiscal period).
+_Avoid_: Chart series, dashboard metric, unexplained column
+
+**Trading Decision**:
+An action choice formed by an agent *outside* this platform’s execution boundary (for example buy, sell, hold, size, or abstain); this platform supplies decision inputs, not order placement or portfolio management.
+_Avoid_: Broker order, fill, portfolio rebalance inside the warehouse
+
+**Human Audit View**:
+A read-only UI (for example Streamlit-in-Snowflake) that shows the same facts available on the Agent Decision Surface so a person can verify what an agent would have seen.
+_Avoid_: Primary product surface, customer research portal, operator release console
+
+**Agent View Mode**:
+A Human Audit View mode that renders only Decision Graph Bundle / Snowflake Decision Contract projections so a person can see what the agent is allowed to read at a Decision Watermark.
+_Avoid_: Mixing unlabeled explore queries into agent view, calling free gold joins "what the agent saw"
+
+**Explore Mode**:
+A Human Audit View mode that may query gold (and related) tables beyond the Decision Contract for human investigation; it is not an input to Trading Decisions and must be visually and labeled distinct from Agent View Mode.
+_Avoid_: Using explore as the agent source of truth, silent mode switching, explore without "not agent contract" labeling
+
+**Decision Graph Bundle**:
+The Agent Decision Surface unit of read: a multi-entity payload rooted at one subject (usually an issuer) that includes related entities and relationship edges the agent may use, bound to one Relationship Generation Snapshot / data watermark.
+_Avoid_: Single-table company row, ad-hoc multi-query join by the agent, unbounded "whole graph" dump, Streamlit ego-network screenshot
+
+**Bundle Subject**:
+The primary entity the Decision Graph Bundle is built for (typically a company identified by CIK); related persons, advisers, funds, securities, and edges are included only as they attach to that subject under declared relationship types and applicability rules.
+_Avoid_: Portfolio of tickers as one bundle, anonymous search result set
+
+**Trading-Relevant Neighborhood**:
+The v1 Decision Graph Bundle scope around a Bundle Subject: person edges that establish insider or reported executive employment, security/holding edges that establish ownership or institutional position when present, auditor edges when present, plus subject-level accounting Decision Features; adviser/private-fund structure is out of v1 unless it attaches through an already-included edge type.
+_Avoid_: Full MDM type registry dump, ADV-first bundle, every historical edge without currency rules
+
+**Current Neighborhood (default)**:
+The Decision Graph Bundle edge set limited to Current-at-Watermark Relationships for the declared business date; ended or not-yet-current edges are omitted unless the consumer explicitly requests history.
+_Avoid_: All generation-eligible edges as default, silent inclusion of former insiders as current
+
+**Neighborhood History (optional)**:
+Generation-Eligible Relationship Versions that are not current at the watermark, returned only when requested, each carrying temporal fields and an explicit not-current marker so agents cannot treat them as live.
+_Avoid_: Default payload, history without valid_from/valid_to, mixing current and historical without flags
+
+**As-Of Decision Features**:
+Subject-level Decision Features published for the Bundle Subject at the bundle watermark: values must be the latest complete computation available for that as-of (not a stale prior export). Inputs may be multi-period history (for example 3y/5y CAGR, YoY growth); the *published* feature row is still a single current as-of view, with nulls when history is insufficient under declared rules.
+_Avoid_: Shipping last week's factor file, treating null CAGR as zero, requiring the agent to recompute CAGR from raw facts for v1, conflating "uses historic inputs" with "may be stale"
+
+**Primary Annual Feature Vector**:
+The As-Of Decision Features taken from the most recent complete fiscal-year (FY) factor row available for the Bundle Subject at the watermark.
+_Avoid_: Mixing FY and quarter metrics without labels, oldest FY, average of all years
+
+**Latest Interim Feature Vector**:
+When a non-FY fiscal period exists with period_end after the Primary Annual Feature Vector's period_end, its factor row is included alongside the annual vector and explicitly labeled as interim; otherwise it is omitted.
+_Avoid_: Replacing FY with Q silently, inventing interim when none is newer than FY
+
+**Snowflake Decision Contract**:
+The v1 delivery of the Agent Decision Surface: published Snowflake objects (views, tables, or procedures) that return Decision Graph Bundles or their relational equivalent under a declared schema version; the Human Audit View queries these same objects.
+_Avoid_: Streamlit-only data path, agent-private tables that diverge from audit UI, S3 file dump as the primary contract, undocumented ad-hoc gold joins
+
+**Decision Watermark**:
+The composite identity bound into every Decision Graph Bundle: silver-derived parse/completeness claims (versions and section coverage), Relationship Generation Snapshot (or equivalent graph generation id), gold/feature as-of (run_id), and business date; bronze content hashes only when Bronze Persist was used; a bundle is invalid for agent use if any required component is missing or the components are known to disagree.
+_Avoid_: Wall-clock now, best-effort multi-table join without pins, requiring bronze sha for every agent-grade read, gold-only or graph-only as sole identity
+
+**Pure-SEC Decision Features**:
+Decision Features derived only from SEC (and approved operator-supplied SEC-family) filings and platform calculations on those filings; market prices, market cap, and price-derived multiples are outside the Agent Decision Surface.
+_Avoid_: PE, EV/EBITDA from prices, yfinance fields inside the bundle, silent nulls that look like "no market data loaded" mixed with accounting nulls without a separate market contract
+
+**Decision Subject Universe**:
+The set of Bundle Subjects eligible for agent consumption: entities in the platform tracked/active universe (MDM or company sync tracking status that marks the name as maintained), not every CIK that ever appears in raw gold rows.
+_Avoid_: All COMPANY rows, ad-hoc one-off CIKs without tracking, investable cohort unless explicitly adopted later
+
+**Bundle Coverage Flags**:
+Structured present / empty / unavailable markers on each section of a Decision Graph Bundle (features, insiders, holdings, auditor, etc.) so partial data is explicit; empty means complete derivation with zero members, unavailable means the platform could not assert completeness for that section at the Decision Watermark.
+_Avoid_: Omitting sections silently, zeros that mean "unknown", hard-failing the whole bundle for one missing optional section
+
+**Decision Contract Version**:
+An explicit integer (or major.minor) schema identity carried on every Decision Graph Bundle and Snowflake Decision Contract response; agents pin a supported version; breaking shape or semantics changes require a version bump.
+_Avoid_: Docs-only changelog, watermark-only identity for shape, silent column renames
+
+**Latest Complete Holdings Period**:
+For institutional/13F-style holdings in a Decision Graph Bundle, the most recent report period that is fully loaded for the relevant managers/subject at the Decision Watermark; the section is still "current" under Current Neighborhood rules only relative to that lagged source period, and coverage metadata must expose the period and known reporting lag—not same-day market positions.
+_Avoid_: Intraday holdings, treating missing 13F as zero position without unavailable, shipping all historical 13F periods in the default neighborhood
+
+**Subject Feature Screen**:
+A flat, Decision Watermark–aligned relation over the Decision Subject Universe of As-Of Decision Features (Primary Annual and optional Latest Interim labels) used to rank or filter many subjects without loading full Decision Graph Bundles.
+_Avoid_: Full neighborhood in the screen, free gold joins labeled as the screen, screen without Decision Contract Version / watermark
+
+**Subject Bundle Read**:
+The single-subject retrieval of a Decision Graph Bundle (Trading-Relevant Neighborhood + features + coverage + watermark + contract version) for deep agent inspection before a Trading Decision.
+_Avoid_: Requiring full-universe dump to inspect one CIK
+
+**Deferred Access Control**:
+v1 of the Agent Decision Surface does not implement product-level authentication (for example OAuth); access is whatever the operator's Snowflake (or equivalent) session already allows. The contract must remain callable behind a later pluggable access layer without changing Decision Feature semantics or bundle shape.
+_Avoid_: Baking a one-off auth scheme into the bundle schema, blocking go-live on OAuth, assuming public internet exposure of Snowflake
+
+**Agent-Grade Read**:
+A Subject Bundle Read or Subject Feature Screen result whose Decision Watermark components are present and aligned; only Agent-Grade Reads are valid inputs to a Trading Decision. Misaligned or incomplete watermark components fail closed (no agent-grade payload), rather than best-effort join.
+_Avoid_: Best-effort mismatched graph and features, silent degraded data for trading, "prefer gold" or "prefer graph" without invalidation
+
+### Production release readiness
 
 **Current-Head Production Launch Readiness**:
 The decision-complete evidence state for deploying an identified current release candidate through the production operator path.
