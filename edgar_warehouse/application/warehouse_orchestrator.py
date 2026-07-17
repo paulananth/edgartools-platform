@@ -2098,6 +2098,46 @@ def _run_submissions_bronze_then_silver(
     }
 
 
+def _is_transient_artifact_error(exc: BaseException) -> bool:
+    """Return whether an artifact failure is safe to retry without changing inputs."""
+    pending: list[BaseException] = [exc]
+    seen: set[int] = set()
+    transient_names = {
+        "connecterror",
+        "connectionerror",
+        "connecttimeout",
+        "gaierror",
+        "networkerror",
+        "protocolerror",
+        "readtimeout",
+        "remotedisconnected",
+        "timeouterror",
+    }
+    transient_statuses = {408, 429, 500, 502, 503, 504}
+
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, (TimeoutError, ConnectionError)):
+            return True
+        if type(current).__name__.lower() in transient_names:
+            return True
+
+        response = getattr(current, "response", None)
+        if getattr(response, "status_code", None) in transient_statuses:
+            return True
+        for nested in (
+            getattr(current, "__cause__", None),
+            getattr(current, "__context__", None),
+            getattr(current, "reason", None),
+        ):
+            if isinstance(nested, BaseException):
+                pending.append(nested)
+    return False
+
+
 def _run_configured_form_artifact_pipeline(
     *,
     context: WarehouseCommandContext,
@@ -2162,14 +2202,43 @@ def _run_configured_form_artifact_pipeline(
             if fetch_artifacts:
                 from edgar_warehouse.infrastructure.filing_artifact_service import refresh_filing_artifacts
 
-                artifact_result = refresh_filing_artifacts(
-                    context=context,
-                    db=db,
-                    accession_number=accession_number,
-                    sync_run_id=sync_run_id,
-                    download_bytes=_download_sec_bytes,
-                    force=force,
+                artifact_attempts = (
+                    max(1, int(os.environ.get("WAREHOUSE_RELEASE_ARTIFACT_ATTEMPTS", "3")))
+                    if release_mode
+                    else 1
                 )
+                artifact_retry_base_seconds = float(
+                    os.environ.get("WAREHOUSE_RELEASE_ARTIFACT_RETRY_BASE_SECONDS", "1.0")
+                )
+                for artifact_attempt in range(1, artifact_attempts + 1):
+                    try:
+                        artifact_result = refresh_filing_artifacts(
+                            context=context,
+                            db=db,
+                            accession_number=accession_number,
+                            sync_run_id=sync_run_id,
+                            download_bytes=_download_sec_bytes,
+                            force=force,
+                        )
+                        break
+                    except Exception as exc:
+                        if (
+                            artifact_attempt >= artifact_attempts
+                            or not _is_transient_artifact_error(exc)
+                        ):
+                            raise
+                        retry_delay = artifact_retry_base_seconds * (2 ** (artifact_attempt - 1))
+                        _emit_pipeline_event(
+                            "filing_artifact_retry",
+                            accession_number=accession_number,
+                            attempt=artifact_attempt,
+                            max_attempts=artifact_attempts,
+                            retry_delay_seconds=retry_delay,
+                            error_type=type(exc).__name__,
+                            error=repr(exc),
+                            run_id=sync_run_id,
+                        )
+                        _time.sleep(retry_delay)
                 raw_writes.extend(artifact_result["raw_writes"])
                 rows_written += int(artifact_result["attachment_count"])
                 # Throttle only when a real SEC network fetch occurred. On the
@@ -2218,7 +2287,8 @@ def _run_configured_form_artifact_pipeline(
             _emit_pipeline_event(
                 "filing_artifact_failed",
                 accession_number=accession_number,
-                error=str(exc),
+                error_type=type(exc).__name__,
+                error=repr(exc),
                 run_id=sync_run_id,
             )
             if release_mode:
