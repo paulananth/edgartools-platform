@@ -2112,6 +2112,7 @@ def _is_transient_artifact_error(exc: BaseException) -> bool:
         "readtimeout",
         "remotedisconnected",
         "timeouterror",
+        "transientfilingcontenterror",
     }
     transient_statuses = {408, 429, 500, 502, 503, 504}
 
