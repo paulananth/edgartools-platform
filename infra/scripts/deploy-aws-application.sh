@@ -2264,19 +2264,29 @@ release_mode_check = {
     "Default": "BatchSizeCheck",
 }
 
+def non_empty_string_clauses(variable):
+    return [
+        {"Variable": variable, "IsPresent": True},
+        {"Variable": variable, "IsString": True},
+        {"Not": {"Variable": variable, "StringEquals": ""}},
+    ]
+
 strict_manifest_check = {
     "Type": "Choice",
     "Comment": "Strict release requires both immutable S3 keys before any workload starts.",
     "Choices": [{
-        "And": [
-            {"Variable": "$.candidate_manifest_key", "StringMatches": "?*"},
-            {"Variable": "$.candidate_batches_key", "StringMatches": "?*"},
-            {"Variable": "$.attestations.warehouse", "StringMatches": "?*"},
-            {"Variable": "$.attestations.mdm", "StringMatches": "?*"},
-            {"Variable": "$.attestations.graph", "StringMatches": "?*"},
-            {"Variable": "$.attestations.release_data_operator", "StringMatches": "?*"},
-            {"Variable": "$.attestations.release_owner", "StringMatches": "?*"},
-        ],
+        "And": sum((
+            non_empty_string_clauses(variable)
+            for variable in (
+                "$.candidate_manifest_key",
+                "$.candidate_batches_key",
+                "$.attestations.warehouse",
+                "$.attestations.mdm",
+                "$.attestations.graph",
+                "$.attestations.release_data_operator",
+                "$.attestations.release_owner",
+            )
+        ), []),
         "Next": "StrictBatchSilver",
     }],
     "Default": "StrictInputMissing",
