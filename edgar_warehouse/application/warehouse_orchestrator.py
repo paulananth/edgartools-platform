@@ -2122,7 +2122,11 @@ def _is_transient_artifact_error(exc: BaseException) -> bool:
         seen.add(id(current))
         if isinstance(current, (TimeoutError, ConnectionError)):
             return True
-        if type(current).__name__.lower() in transient_names:
+        error_names = {error_type.__name__.lower() for error_type in type(current).__mro__}
+        if any(
+            error_name in transient_names or error_name.endswith("timeout")
+            for error_name in error_names
+        ):
             return True
 
         response = getattr(current, "response", None)
