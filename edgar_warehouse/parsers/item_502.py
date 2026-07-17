@@ -43,8 +43,11 @@ class EmploymentVersion:
 
 
 _DATE = r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}"
-_NAME = r"[A-Z][A-Za-z'.-]+(?:\s+(?:[A-Z]\.?|[A-Z][A-Za-z'.-]+)){1,4}"
+_NAME = r"[A-Z][A-Za-z'.-]+(?:\s+(?:[A-Z][A-Za-z'.-]+|[A-Z]\.?)){1,4}"
 _ROLE = r"[A-Z][A-Za-z/& -]{2,80}?"
+_NAME_LIST = rf"{_NAME}(?:\s*,\s*{_NAME})*(?:\s*,?\s+and\s+{_NAME})?"
+# Passive voice: "[Name] was/has been/will be appointed as [Role]". Historically the
+# only shape this parser recognized.
 _APPOINTMENT = re.compile(
     rf"(?P<name>{_NAME})\s+(?:was|has been|will be)\s+(?:elected|appointed|named)\s+(?:to serve\s+)?as\s+(?P<role>{_ROLE})(?:,|\s+effective).*?(?:effective\s+)?(?P<date>{_DATE})",
     re.I,
@@ -65,7 +68,30 @@ _COMPENSATION = re.compile(
     rf"(?:effective\s+)?(?P<date>{_DATE})",
     re.I,
 )
+# Active voice: "the Board/Company ... appointed/elected/named [Name(s)] as [Role]".
+# This is the dominant real-world 8-K phrasing (company/board as grammatical
+# subject) — see item_502 active-voice-coverage 5-whys. Supports Oxford-comma
+# multi-person lists ("appointed A, B, and C as directors").
+_ACTIVE_APPOINTMENT = re.compile(
+    rf"(?:appointed|elected|named)\s+(?P<names>{_NAME_LIST})\s+as\s+(?P<role>{_ROLE})(?=[,.\s])",
+    re.I,
+)
+# "[Committee] elected [Name(s)] to fill [a/the] vacancy [on the Board]" — no
+# explicit role stated; filling a board vacancy is a director appointment.
+_ACTIVE_APPOINTMENT_VACANCY = re.compile(
+    rf"elected\s+(?P<names>{_NAME_LIST})\s+to\s+fill\s+(?:a|the)\s+vacancy",
+    re.I,
+)
+# "[Company] terminated the employment of [Name]" — active-voice termination.
+_ACTIVE_TERMINATION = re.compile(
+    rf"terminated\s+the\s+employment\s+of\s+(?P<name>{_NAME})",
+    re.I,
+)
+_LEADING_DATE = re.compile(rf"(?:On|Effective)\s+(?P<date>{_DATE}),", re.I)
+_TRAILING_DATE = re.compile(rf"effective\s+(?:as of\s+)?(?P<date>{_DATE})", re.I)
+_TRAILING_IMMEDIATE = re.compile(r"effective\s+immediately", re.I)
 _ITEM_HEADER = re.compile(r"item\s+(\d{1,2})\s*\.\s*(\d{2})\b", re.I)
+_DATE_WINDOW = 160
 
 
 def _text(content: str) -> str:
@@ -99,6 +125,39 @@ def _parse_date(value: str) -> date:
     return datetime.strptime(value, "%B %d, %Y").date()
 
 
+def _clean_name(name: str) -> str:
+    """Normalize whitespace and drop a trailing sentence period the greedy
+    `_NAME` pattern swallows when a name sits at the end of a sentence."""
+    return re.sub(r"\s+", " ", name).strip().rstrip(".")
+
+
+def _split_names(names_text: str) -> list[str]:
+    """Split an Oxford-comma-joined name list ("A, B, and C") into individual names."""
+    return [_clean_name(name) for name in re.findall(_NAME, names_text)]
+
+
+def _resolve_active_voice_date(section: str, match: re.Match, filing_date: date) -> date | None:
+    """Find the effective date for an active-voice event match.
+
+    Active-voice 8-K sentences put the date in one of three places: right after
+    the clause ("... as director, effective March 1, 2026" / "effective
+    immediately"), or as a lead-in before the whole sentence ("On March 1, 2026,
+    the Board appointed ..."). Returns None (fail closed, no guessing) if no date
+    can be confidently located in either position.
+    """
+    trailing_window = section[match.end():match.end() + _DATE_WINDOW]
+    trailing_match = _TRAILING_DATE.search(trailing_window)
+    if trailing_match:
+        return _parse_date(trailing_match.group("date"))
+    if _TRAILING_IMMEDIATE.search(trailing_window[:40]):
+        return filing_date
+    leading_window = section[max(0, match.start() - _DATE_WINDOW):match.start()]
+    leading_matches = list(_LEADING_DATE.finditer(leading_window))
+    if leading_matches:
+        return _parse_date(leading_matches[-1].group("date"))
+    return None
+
+
 def parse_item_502(*, accession_number: str, cik: int, filing_date: date,
                    content: str) -> Item502Result:
     text = _text(content)
@@ -125,6 +184,31 @@ def parse_item_502(*, accession_number: str, cik: int, filing_date: date,
             accession_number, int(cik), "compensation_change", match.group("name").strip(),
             None, _parse_date(match.group("date")),
             compensation_amount=float(match.group("amount").replace(",", "")),
+        ))
+    for match in _ACTIVE_APPOINTMENT.finditer(section):
+        effective_date = _resolve_active_voice_date(section, match, filing_date)
+        if effective_date is None:
+            continue
+        role = re.sub(r"\s+", " ", match.group("role")).strip(" ,.")
+        for name in _split_names(match.group("names")):
+            events.append(EmploymentEvent(
+                accession_number, int(cik), "appointment", name, role, effective_date,
+            ))
+    for match in _ACTIVE_APPOINTMENT_VACANCY.finditer(section):
+        effective_date = _resolve_active_voice_date(section, match, filing_date)
+        if effective_date is None:
+            continue
+        for name in _split_names(match.group("names")):
+            events.append(EmploymentEvent(
+                accession_number, int(cik), "appointment", name, "Director", effective_date,
+            ))
+    for match in _ACTIVE_TERMINATION.finditer(section):
+        effective_date = _resolve_active_voice_date(section, match, filing_date)
+        if effective_date is None:
+            continue
+        events.append(EmploymentEvent(
+            accession_number, int(cik), "departure",
+            _clean_name(match.group("name")), None, effective_date,
         ))
     if events:
         events.sort(key=lambda row: (row.effective_date, row.person_name, row.event_type))
