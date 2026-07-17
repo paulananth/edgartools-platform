@@ -2342,7 +2342,7 @@ batch_map = {
 }
 
 strict_batch = ecs_state(wh_medium_arn,
-    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'all_attachments', '--parser-policy', 'branch_b_deferred', '--release-mode', '--candidate-manifest', States.Format('s3://" + bronze_bucket_name + "/{}', $.candidate_manifest_key), '--run-id', $$.Execution.Name)",
+    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'all_attachments', '--parser-policy', 'branch_b_deferred', '--release-mode', '--candidate-manifest', States.Format('s3://" + bronze_bucket_name + "/{}', $.candidate_manifest_key), '--run-id', $.release_run_id)",
     is_end=True)
 # Generic States.TaskFailed retries cannot distinguish a transient SEC/network
 # failure from a deterministic parser or manifest failure. Strict mode therefore
@@ -2365,6 +2365,7 @@ strict_batch_map = {
     "ItemSelector": {
         "cik_list.$": "$$.Map.Item.Value.cik_list",
         "candidate_manifest_key.$": "$.candidate_manifest_key",
+        "release_run_id.$": "$$.Execution.Name",
     },
     "ItemProcessor": {
         "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
