@@ -2142,6 +2142,33 @@ def _is_transient_artifact_error(exc: BaseException) -> bool:
     return False
 
 
+def _reset_edgartools_client_after_pool_timeout(exc: BaseException) -> bool:
+    """Discard edgartools' process-wide client when its connection pool is exhausted."""
+    pending: list[BaseException] = [exc]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if any(
+            error_type.__name__.lower() == "pooltimeout"
+            for error_type in type(current).__mro__
+        ):
+            from edgar.httpclient import close_clients
+
+            close_clients()
+            return True
+        for nested in (
+            getattr(current, "__cause__", None),
+            getattr(current, "__context__", None),
+            getattr(current, "reason", None),
+        ):
+            if isinstance(nested, BaseException):
+                pending.append(nested)
+    return False
+
+
 def _run_configured_form_artifact_pipeline(
     *,
     context: WarehouseCommandContext,
@@ -2232,6 +2259,7 @@ def _run_configured_form_artifact_pipeline(
                         ):
                             raise
                         retry_delay = artifact_retry_base_seconds * (2 ** (artifact_attempt - 1))
+                        client_reset = _reset_edgartools_client_after_pool_timeout(exc)
                         _emit_pipeline_event(
                             "filing_artifact_retry",
                             accession_number=accession_number,
@@ -2240,6 +2268,7 @@ def _run_configured_form_artifact_pipeline(
                             retry_delay_seconds=retry_delay,
                             error_type=type(exc).__name__,
                             error=repr(exc),
+                            edgartools_client_reset=client_reset,
                             run_id=sync_run_id,
                         )
                         _time.sleep(retry_delay)

@@ -434,6 +434,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
                 side_effect=[PoolTimeout(), refresh_result],
             ) as refresh,
+            patch("edgar.httpclient.close_clients") as close_clients,
             patch("time.sleep") as sleep,
         ):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
@@ -448,6 +449,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             )
 
         self.assertEqual(refresh.call_count, 2)
+        close_clients.assert_called_once_with()
         sleep.assert_called_once_with(1.0)
         self.assertEqual(result["candidate_outcomes"][0]["accession_number"], "13f-1")
 
