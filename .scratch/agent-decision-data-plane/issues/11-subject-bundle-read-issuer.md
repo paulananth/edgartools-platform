@@ -4,12 +4,12 @@
 
 **Blocked by:** 09 — Decision Watermark and Agent-Grade gate; 14 — Universe single-writer.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Bundle root is Bundle Subject (CIK) with Decision Watermark and contract version
-- [ ] Coverage flags distinguish present / empty / unavailable / not_applicable
-- [ ] Insider section uses graph edges plus gold ownership rows for source accessions (not gold-only unresolved strings as agent-grade)
-- [ ] 13F sections are separately named; lag metadata on Latest Complete Holdings Period
-- [ ] EMPLOYED_BY sources distinguished; executive pay from gold proxy records
-- [ ] AUDITED_BY prefers auditor evidence identity rules; HAS_PARENT optional with honest scope
-- [ ] Pure issuer bundles do not require ADV
+- [x] Bundle root is Bundle Subject (CIK) with Decision Watermark and contract version
+- [x] Coverage flags distinguish present / empty / unavailable / not_applicable
+- [x] Insider section uses graph edges plus gold ownership rows for source accessions (not gold-only unresolved strings as agent-grade)
+- [x] 13F sections are separately named; lag metadata on Latest Complete Holdings Period
+- [x] EMPLOYED_BY sources distinguished; executive pay from gold proxy records
+- [x] AUDITED_BY prefers auditor evidence identity rules; HAS_PARENT optional with honest scope
+- [x] Pure issuer bundles do not require ADV

@@ -940,11 +940,14 @@ class EntityFactsSecClientTests(unittest.TestCase):
         fake_db = MagicMock()
         fake_db.merge_financial_facts.return_value = 0
         fake_db.merge_accounting_flags.return_value = 0
+        # Ticket 04 silver-once: empty probe results so network path is taken
+        # (MagicMock.fetch() would otherwise look like existing companyfacts).
+        fake_db.fetch.return_value = []
 
         with patch(
-            "edgar_warehouse.infrastructure.sec_client.download_sec_bytes",
-            return_value=b'{"cik": 320193}',
-        ) as mock_download, patch(
+            "edgar_warehouse.infrastructure.edgartools_sec_gateway.fetch_companyfacts_json",
+            return_value={"cik": 320193},
+        ) as mock_fetch, patch(
             "edgar_warehouse.parsers.financials.parse_entity_facts",
             return_value={"sec_financial_fact": [], "sec_accounting_flag": []},
         ):
@@ -955,10 +958,10 @@ class EntityFactsSecClientTests(unittest.TestCase):
                 sync_run_id="run-1",
             )
 
-        mock_download.assert_called_once()
-        url, identity = mock_download.call_args[0]
-        self.assertIn("data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json", url)
-        self.assertEqual(identity, "EdgarTools Platform test@example.com")
+        # Ticket 07: entity-facts uses edgartools gateway, not parallel sec_client.
+        mock_fetch.assert_called_once_with(
+            320193, "EdgarTools Platform test@example.com"
+        )
 
     def test_no_raw_urllib_import_remains(self) -> None:
         import inspect

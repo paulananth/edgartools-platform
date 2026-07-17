@@ -99,21 +99,17 @@ class EntityFactsSkipTests(unittest.TestCase):
             def merge_financial_derived(self, *a, **k):
                 raise AssertionError("should not merge on skip")
 
-        with unittest.mock.patch.object(
-            fi, "download_sec_bytes", create=True
-        ) as download:
-            # download is imported inside the function — patch sec_client
-            with unittest.mock.patch(
-                "edgar_warehouse.infrastructure.sec_client.download_sec_bytes"
-            ) as dl:
-                metrics = fi.run_bootstrap_entity_facts(
-                    cik_list=[320193],
-                    db=_Db(),
-                    identity="Test test@example.com",
-                    sync_run_id="run1",
-                    force=False,
-                )
-                dl.assert_not_called()
+        with unittest.mock.patch(
+            "edgar_warehouse.infrastructure.edgartools_sec_gateway.fetch_companyfacts_json",
+            side_effect=AssertionError("gateway must not run on silver skip"),
+        ):
+            metrics = fi.run_bootstrap_entity_facts(
+                cik_list=[320193],
+                db=_Db(),
+                identity="Test test@example.com",
+                sync_run_id="run1",
+                force=False,
+            )
         self.assertEqual(metrics["silver_skips"], 1)
         self.assertEqual(metrics["network_fetches"], 0)
         self.assertEqual(metrics["ciks_skipped"], 1)
@@ -134,11 +130,11 @@ class EntityFactsSkipTests(unittest.TestCase):
             def merge_financial_derived(self, rows, sync_run_id):
                 return len(rows)
 
-        payload = b'{"cik": 320193, "facts": {}}'
+        facts = {"cik": 320193, "facts": {}}
         with unittest.mock.patch(
-            "edgar_warehouse.infrastructure.sec_client.download_sec_bytes",
-            return_value=payload,
-        ) as dl:
+            "edgar_warehouse.infrastructure.edgartools_sec_gateway.fetch_companyfacts_json",
+            return_value=facts,
+        ) as gw:
             with unittest.mock.patch(
                 "edgar_warehouse.parsers.financials.parse_entity_facts",
                 return_value={
@@ -153,7 +149,7 @@ class EntityFactsSkipTests(unittest.TestCase):
                     sync_run_id="run1",
                     force=True,
                 )
-                dl.assert_called_once()
+                gw.assert_called_once()
         self.assertEqual(metrics["network_fetches"], 1)
         self.assertEqual(metrics["silver_skips"], 0)
 

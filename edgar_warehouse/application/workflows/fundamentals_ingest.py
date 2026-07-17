@@ -259,16 +259,15 @@ def run_bootstrap_entity_facts(
 ) -> dict[str, int]:
     """Fetch SEC companyfacts JSON for each CIK and write to silver.
 
-    Uses the shared SEC client (edgar_warehouse.infrastructure.sec_client) so this
-    direct SEC traffic follows the same host allowlist, rate limit, retry, and
-    response-size-limit contract as the rest of the warehouse runtime.
+    Ticket 07: companyfacts network uses the edgartools-backed gateway (not the
+    parallel ``sec_client`` HTTP stack).
 
     Ticket 04: when ``force`` is false and silver already has financial facts for
     the CIK at the current facts parser_version, skip the companyfacts network call.
 
     Returns row counts per table written plus network_fetches / silver_skips.
     """
-    from edgar_warehouse.infrastructure.sec_client import build_companyfacts_url, download_sec_bytes
+    from edgar_warehouse.infrastructure.edgartools_sec_gateway import fetch_companyfacts_json
     from edgar_warehouse.infrastructure.silver_once import has_companyfacts_at_version
     from edgar_warehouse.parsers.financials import PARSER_VERSION as FACTS_PARSER_VERSION
     from edgar_warehouse.parsers.financials import parse_entity_facts
@@ -298,11 +297,9 @@ def run_bootstrap_entity_facts(
             )
             continue
 
-        url = build_companyfacts_url(int(cik))
         try:
-            payload = download_sec_bytes(url, identity)
+            facts_json = fetch_companyfacts_json(int(cik), identity)
             metrics["network_fetches"] += 1
-            facts_json = json.loads(payload.decode("utf-8"))
         except Exception as exc:
             _emit("entity_facts_fetch_error", cik=cik, error=str(exc))
             metrics["ciks_failed"] += 1

@@ -1,4 +1,9 @@
-"""Infrastructure service wrappers for artifact and text workflows."""
+"""Infrastructure service wrappers for artifact and text workflows.
+
+Ticket 06: filing document network I/O is edgartools-only inside
+`fetch_filing_artifacts`. ``download_bytes`` remains on the signature for
+orchestrator call-site compatibility but is not used for this object class.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +19,7 @@ def refresh_filing_artifacts(
     db: Any,
     accession_number: str,
     sync_run_id: str,
-    download_bytes,
+    download_bytes=None,
     force: bool,
     operator: str | None = None,
     reason: str | None = None,
