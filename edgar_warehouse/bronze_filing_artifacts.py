@@ -1,30 +1,23 @@
-"""Filing artifact fetch and attachment registration helpers."""
+"""Filing artifact fetch and attachment registration helpers.
+
+Ticket 06 (phase 1): filing documents/attachments use an edgartools-only
+network gateway. Silver/cache skip still wins before network. Parallel
+sec_client download_bytes is not used for this object class.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import mimetypes
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Final
 
 import edgar
 
 from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory
-from edgar_warehouse.infrastructure.object_storage import read_bytes
 
-# Forms whose substantive data lives in a SEPARATE (non-primary) attachment
-# rather than the primary/cover document itself. The primary_document fast
-# path below (EDGE-11 5-whys, 06-04) only ever registers the primary
-# document — it never discovers secondary attachments. For 13F-HR/13F-HR-A,
-# the primary document is just the cover page XML; holdings live in a
-# distinct "INFORMATION TABLE" attachment that the fast path silently drops,
-# so `run_bootstrap_thirteenf` never finds an infotable attachment to parse
-# and every 13F-HR filing was skipped (sec_thirteenf_holding stayed empty
-# despite the bronze filing record and cover-page document being present).
-# These forms must always take the full edgartools attachment-discovery
-# fallback path so every attachment (not just the primary one) is fetched
-# and registered in sec_filing_attachment.
-_MULTI_ATTACHMENT_FORMS = frozenset({"13F-HR", "13F-HR/A"})
+# Ticket 06 architecture marker — architecture tests assert this contract.
+FILING_DOCUMENT_NETWORK_GATEWAY: Final = "edgartools"
 
 
 class TransientFilingContentError(RuntimeError):
@@ -41,18 +34,35 @@ class TransientFilingContentError(RuntimeError):
     """
 
 
+class ParallelSecDownloadForbidden(RuntimeError):
+    """Raised if filing-document capture would fall back to a non-edgartools client.
+
+    Ticket 06: filing documents/attachments must not use a parallel raw SEC
+    download path. Missing edgartools content is a hard failure, not a silent
+    sec_client fallback.
+    """
+
+
 def fetch_filing_artifacts(
     *,
     context: Any,
     db: Any,
     accession_number: str,
     sync_run_id: str,
-    download_bytes,
+    download_bytes=None,
     get_filing=edgar.get_by_accession_number,
     force: bool = False,
     operator: str | None = None,
     reason: str | None = None,
 ) -> dict[str, Any]:
+    """Fetch and register filing documents/attachments for one accession.
+
+    ``download_bytes`` is accepted for call-site compatibility (orchestrator /
+    service still pass it) but must not be used for this object class. Network
+    content comes only from edgartools ``get_filing`` + attachment.content.
+    """
+    del download_bytes  # ticket 06: unused; kept for signature compatibility
+
     filing = db.get_filing(accession_number)
     if filing is None:
         raise ValueError(f"Unknown accession_number {accession_number}")
@@ -79,88 +89,63 @@ def fetch_filing_artifacts(
     repair_audit: list[dict[str, Any]] = []
 
     if existing_rows and not force:
-        hydrated_rows, cached_records, missing_rows = _split_existing_attachment_rows(db, existing_rows)
+        hydrated_rows, cached_records, missing_rows = _split_existing_attachment_rows(
+            db, existing_rows
+        )
         if not missing_rows:
             return {
                 "accession_number": accession_number,
                 "attachment_count": len(hydrated_rows),
                 "raw_writes": cached_records,
                 "network_fetches": 0,
+                "network_gateway": FILING_DOCUMENT_NETWORK_GATEWAY,
             }
-        attachment_rows = hydrated_rows + missing_rows
-        index_record = None
-    else:
-        # Fast path: if primary_document is known, skip the -index.html fetch.
-        # The index page (www.sec.gov/Archives/.../{acc}-index.html) is rate-limited
-        # and returns 503 under load, while direct document URLs return 200.
-        # For SEC ownership filings the primary_document is often stored as
-        # "xslXXX/filename.xml" — strip the XSLT subdirectory prefix to get the
-        # raw XML that contains <ownershipDocument>.
-        primary_doc = filing.get("primary_document") or ""
-        raw_doc_name = _resolve_raw_document_name(primary_doc)
-        index_record = None
-        form_type = filing.get("form")
 
-        if (
-            raw_doc_name
-            and not force
-            and not _read_cached_index(db, accession_number)
-            and form_type not in _MULTI_ATTACHMENT_FORMS
-        ):
-            doc_spec = capture_specs.filing_document(
-                cik=cik,
-                accession_number=accession_number,
-                document_name=raw_doc_name,
-                is_primary=True,
-            )
-            attachment_rows = [
-                {
-                    "accession_number": accession_number,
-                    "document_name": raw_doc_name,
-                    "document_type": filing.get("form"),
-                    "document_url": doc_spec.source_url,
-                    "is_primary": True,
-                }
-            ]
-        else:
-            # Fall back to edgartools when primary_document is unknown. edgartools
-            # fetches the full SGML submission bundle in one request (rather than a
-            # separate -index.html fetch plus N per-document fetches), and its own
-            # retry budget survives the 503s that sec_client.py's fixed 3-attempt
-            # retry does not — see docs/runbook.md smoke-test 503 investigation.
-            filing_obj = get_filing(accession_number)
-            network_fetches += 1
-            if filing_obj is None:
-                raise ValueError(f"edgartools could not resolve filing for accession {accession_number}")
-            attachment_rows = _map_edgartools_attachments(filing_obj, accession_number)
-            if not attachment_rows:
-                raise ValueError(f"edgartools found no attachments for accession {accession_number}")
+    # Ticket 06: cold / partial / force always discover via edgartools — no
+    # primary_document URL + sec_client download_bytes fast path.
+    filing_obj = get_filing(accession_number)
+    network_fetches += 1
+    if filing_obj is None:
+        raise ValueError(f"edgartools could not resolve filing for accession {accession_number}")
+    attachment_rows = _map_edgartools_attachments(filing_obj, accession_number)
+    if not attachment_rows:
+        raise ValueError(f"edgartools found no attachments for accession {accession_number}")
 
-    raw_writes = [index_record] if index_record is not None else []
+    raw_writes: list[dict[str, Any]] = []
     hydrated_rows: list[dict[str, Any]] = []
     for row in attachment_rows:
-        existing_raw = db.get_raw_object(str(row["raw_object_id"])) if row.get("raw_object_id") else None
+        document_name = row["document_name"]
+        document_url = row["document_url"]
+        prior_raw = prior_raw_by_document.get(document_name)
+        existing_raw = None
+        if row.get("raw_object_id"):
+            existing_raw = db.get_raw_object(str(row["raw_object_id"]))
+        if existing_raw is None and prior_raw is not None:
+            existing_raw = prior_raw
         already_downloaded = (not force) and existing_raw is not None
         if already_downloaded:
-            hydrated_rows.append(row)
+            hydrated = {key: value for key, value in row.items() if key != "content_bytes"}
+            hydrated["raw_object_id"] = existing_raw.get("raw_object_id")
+            hydrated_rows.append(hydrated)
             raw_writes.append(_cached_raw_record(existing_raw))
             continue
-        document_url = row["document_url"]
-        document_name = row["document_name"]
+
+        payload = row.get("content_bytes")
+        if payload is None:
+            raise ParallelSecDownloadForbidden(
+                f"accession {accession_number} document {document_name!r} has no "
+                f"edgartools content; {FILING_DOCUMENT_NETWORK_GATEWAY}-only gateway "
+                "refuses parallel sec_client download for filing documents"
+            )
+        if isinstance(payload, str):
+            payload = payload.encode("utf-8")
+
         artifact_spec = capture_specs.filing_document(
             cik=cik,
             accession_number=accession_number,
             document_name=document_name,
             is_primary=bool(row.get("is_primary")),
         )
-        # edgartools fetches attachment content as part of resolving the filing
-        # (see _map_edgartools_attachments); reuse it instead of a second HTTP
-        # round-trip. The fast path (raw_doc_name known) has no pre-fetched
-        # content and still fetches via download_bytes.
-        payload = row.get("content_bytes")
-        if payload is None:
-            payload = download_bytes(document_url, context.identity)
-            network_fetches += 1
         raw_record = _write_raw_artifact(
             context=context,
             db=db,
@@ -177,7 +162,6 @@ def fetch_filing_artifacts(
         hydrated["raw_object_id"] = raw_record["raw_object_id"]
         hydrated_rows.append(hydrated)
 
-        prior_raw = prior_raw_by_document.get(document_name)
         if force and prior_raw is not None:
             repair_audit.append(
                 {
@@ -198,33 +182,16 @@ def fetch_filing_artifacts(
         "attachment_count": len(hydrated_rows),
         "raw_writes": raw_writes,
         "network_fetches": network_fetches,
+        "network_gateway": FILING_DOCUMENT_NETWORK_GATEWAY,
     }
     if repair_audit:
         result["repair_audit"] = repair_audit
     return result
 
 
-def _resolve_raw_document_name(primary_document: str) -> str:
-    """Strip XSLT renderer subdirectory to get the raw filing XML name.
-
-    SEC submissions list ownership docs as 'xslF345X06/primary_doc.xml'.
-    The XSLT prefix is a rendering stylesheet; the actual <ownershipDocument>
-    XML is the filename part at the root of the accession directory.
-    Stripping the prefix lets us skip the -index.html fetch (which 503s under
-    load) and go directly to the document URL.
-
-    Returns the raw filename, or empty string if the pattern doesn't apply.
-    """
-    if not primary_document:
-        return ""
-    parts = primary_document.replace("\\", "/").split("/")
-    if len(parts) >= 2 and parts[0].lower().startswith("xsl"):
-        return "/".join(parts[1:])
-    # No XSLT prefix — use as-is (already a raw document name)
-    return primary_document
-
-
-def _split_existing_attachment_rows(db: Any, rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+def _split_existing_attachment_rows(
+    db: Any, rows: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     hydrated_rows: list[dict[str, Any]] = []
     cached_records: list[dict[str, Any]] = []
     missing_rows: list[dict[str, Any]] = []
@@ -237,22 +204,6 @@ def _split_existing_attachment_rows(db: Any, rows: list[dict[str, Any]]) -> tupl
         hydrated_rows.append(row)
         cached_records.append(_cached_raw_record(raw_object))
     return hydrated_rows, cached_records, missing_rows
-
-
-def _read_cached_index(db: Any, accession_number: str) -> dict[str, Any] | None:
-    for raw_object in db.get_raw_objects_for_accession(accession_number, "filing_index"):
-        storage_path = raw_object.get("storage_path")
-        if not storage_path:
-            continue
-        try:
-            payload = read_bytes(str(storage_path))
-        except Exception:
-            continue
-        return {
-            "payload": payload,
-            "write_record": _cached_raw_record(raw_object),
-        }
-    return None
 
 
 def _cached_raw_record(raw_object: dict[str, Any]) -> dict[str, Any]:

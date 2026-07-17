@@ -88,3 +88,36 @@ class BoundaryTests(unittest.TestCase):
             if "def write_gold_to_snowflake_export" in text or "def write_ticker_reference_to_snowflake_export" in text:
                 offenders.append(path)
         self.assertEqual(offenders, [])
+
+    def test_filing_document_capture_does_not_import_parallel_sec_client(self) -> None:
+        """Ticket 06: filing document/attachment network gateway is edgartools-only.
+
+        bronze_filing_artifacts + filing_artifact_service must not reintroduce a
+        parallel raw SEC client for this object class (download_sec_bytes / httpx).
+        Catalogs and companyfacts may still use sec_client until ticket 07.
+        """
+        targets = [
+            PACKAGE_ROOT / "bronze_filing_artifacts.py",
+            PACKAGE_ROOT / "infrastructure" / "filing_artifact_service.py",
+        ]
+        forbidden = (
+            "download_sec_bytes",
+            "from edgar_warehouse.infrastructure.sec_client",
+            "import httpx",
+            "sec_client.download",
+        )
+        offenders: list[str] = []
+        for path in targets:
+            text = path.read_text(encoding="utf-8")
+            for fragment in forbidden:
+                if fragment in text:
+                    offenders.append(f"{path.name}:{fragment}")
+        self.assertEqual(offenders, [])
+
+    def test_filing_document_gateway_marker_declares_edgartools_exclusive(self) -> None:
+        """Ticket 06 regression: module must declare exclusive gateway identity so
+        future reintroductions of a dual stack cannot silently drop the contract.
+        """
+        text = (PACKAGE_ROOT / "bronze_filing_artifacts.py").read_text(encoding="utf-8")
+        self.assertIn("FILING_DOCUMENT_NETWORK_GATEWAY", text)
+        self.assertIn('"edgartools"', text)

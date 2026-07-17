@@ -22,11 +22,17 @@ def has_successful_ownership_parse(
 
     Falls back to ownership reporting-owner rows with matching parser_version when
     parse_run history is missing (older silver).
+
+    Returns False (do not skip) when the db cannot answer SQL probes — prefer
+    network over a hard crash on incomplete test/adapter surfaces.
     """
     accession = str(accession_number or "").strip()
     if not accession:
         return False
-    rows = db.fetch(
+    fetch = getattr(db, "fetch", None)
+    if fetch is None:
+        return False
+    rows = fetch(
         """
         SELECT 1 AS ok
         FROM sec_parse_run
@@ -41,7 +47,7 @@ def has_successful_ownership_parse(
     if rows:
         return True
     # Fallback for silver populated before parse_run was consistently written
-    owners = db.fetch(
+    owners = fetch(
         """
         SELECT 1 AS ok
         FROM sec_ownership_reporting_owner
@@ -56,7 +62,10 @@ def has_successful_ownership_parse(
 
 def has_companyfacts_at_version(db: Any, *, cik: int, facts_parser_version: str) -> bool:
     """True when sec_financial_fact has rows for CIK at facts_parser_version."""
-    rows = db.fetch(
+    fetch = getattr(db, "fetch", None)
+    if fetch is None:
+        return False
+    rows = fetch(
         """
         SELECT 1 AS ok
         FROM sec_financial_fact

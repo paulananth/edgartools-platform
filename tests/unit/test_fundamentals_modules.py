@@ -940,6 +940,9 @@ class EntityFactsSecClientTests(unittest.TestCase):
         fake_db = MagicMock()
         fake_db.merge_financial_facts.return_value = 0
         fake_db.merge_accounting_flags.return_value = 0
+        # Ticket 04 silver-once: empty probe results so network path is taken
+        # (MagicMock.fetch() would otherwise look like existing companyfacts).
+        fake_db.fetch.return_value = []
 
         with patch(
             "edgar_warehouse.infrastructure.sec_client.download_sec_bytes",
