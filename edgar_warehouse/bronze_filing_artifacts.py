@@ -27,6 +27,20 @@ from edgar_warehouse.infrastructure.object_storage import read_bytes
 _MULTI_ATTACHMENT_FORMS = frozenset({"13F-HR", "13F-HR/A"})
 
 
+class TransientFilingContentError(RuntimeError):
+    """SEC returned unexpected content in place of a filing's structured attachments.
+
+    edgartools degrades to a single "complete submission text file" pseudo-attachment
+    (no document_type) when its SGML fetch gets back HTML/XML instead of the expected
+    SGML bundle, without raising -- so this is only detectable after the fact, not as
+    a network exception. Observed to be a transient SEC-side hiccup (a retry moments
+    later returns the properly parsed per-document attachments), so it is raised here
+    to be picked up by the artifact-fetch retry loop's transient-error classifier
+    rather than reaching `merge_filing_attachments`'s required-field check as a fatal,
+    non-retryable ValueError.
+    """
+
+
 def fetch_filing_artifacts(
     *,
     context: Any,
@@ -306,6 +320,12 @@ def _map_edgartools_attachments(filing_obj: Any, accession_number: str) -> list[
     for attachment in filing_obj.attachments:
         content = attachment.content
         content_bytes = content.encode("utf-8") if isinstance(content, str) else content
+        if not attachment.document_type:
+            raise TransientFilingContentError(
+                f"accession {accession_number} document {attachment.document!r} has no "
+                "document_type -- SEC likely returned unexpected content in place of the "
+                "expected SGML filing data"
+            )
         rows.append(
             {
                 "accession_number": accession_number,

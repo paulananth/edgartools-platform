@@ -326,6 +326,43 @@ class LoaderIdempotencyTests(unittest.TestCase):
         self.assertFalse(rows_by_name["exhibit99.htm"]["is_primary"])
         self.assertTrue(rows_by_name["primary.xml"]["is_primary"])
 
+    def test_edgartools_homepage_fallback_with_missing_document_type_is_transient(self) -> None:
+        """Production regression: accession 0000950123-19-003980.
+
+        When SEC returns HTML/XML instead of the expected SGML bundle, edgartools
+        silently degrades to a single "complete submission text file" pseudo-attachment
+        with an empty document_type rather than raising. Letting that row through would
+        later fail `merge_filing_attachments`'s required-field check as a fatal,
+        non-retryable ValueError -- instead it must raise TransientFilingContentError
+        right here, where the actual signal (missing document_type) is visible."""
+        accession = "0000950123-19-003980"
+        degraded = _FakeAttachment(
+            sequence_number="",
+            document="0000950123-19-003980.txt",
+            document_type="",
+            description="Complete submission text file",
+            url="https://www.sec.gov/Archives/edgar/data/98758/000095012319003980/0000950123-19-003980.txt",
+            content="<SEC-DOCUMENT>...</SEC-DOCUMENT>",
+        )
+        fake_filing = _FakeFiling(attachments=_FakeAttachments([degraded]))
+        get_filing = Mock(return_value=fake_filing)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _ArtifactDb()
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+
+            with self.assertRaises(bronze_filing_artifacts.TransientFilingContentError):
+                bronze_filing_artifacts.fetch_filing_artifacts(
+                    context=context,
+                    db=db,
+                    accession_number=accession,
+                    sync_run_id="run-1",
+                    download_bytes=Mock(side_effect=AssertionError("download_bytes should not be called")),
+                    get_filing=get_filing,
+                    force=True,
+                )
+        self.assertEqual(db.merged_rows, [])
+
     def test_13f_hr_bypasses_fast_path_to_discover_information_table(self) -> None:
         """EDGE-11 5-whys (06-04): the primary_document fast path only ever registers
         the primary/cover document. For 13F-HR, the holdings live in a separate
