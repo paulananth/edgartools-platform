@@ -15,12 +15,12 @@ All tickets: `Status: ready-for-agent` unless noted. Work the **frontier** (bloc
 | 07 | edgartools gateway catalogs+facts | 04, 05, 06 | **resolved** |
 | 08 | Snowflake export issuer evidence | — | **resolved** |
 | 09 | Decision Watermark agent-grade | 08 | **resolved** |
-| 10 | Subject Feature Screen | 09, 14 | ready-for-agent |
+| 10 | Subject Feature Screen | 09, 14 | **resolved** |
 | 11 | Subject Bundle Read issuer | 09, 14 | ready-for-agent |
 | 12 | Manager bundle ADV sections | 11 | ready-for-agent |
 | 13 | SiS Agent View / Explore | 10, 11 | ready-for-agent |
 | 14 | Universe single-writer | — | **resolved** |
 
-**Frontier now:** 10 and 11 (unblocked by 09+14). Capture gateway 06–07 done.
+**Frontier now:** 11 (unblocked by 09+14). Then 12 (needs 11), 13 (needs 10+11).
 
 Do not start Ticket 20 bulk-load / strict ledger work from this index — separate workstream.

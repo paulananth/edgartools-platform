@@ -47,5 +47,7 @@ if not result.agent_grade:
     ...
 ```
 
-Snowflake views (tickets 10–11) should project these fields; this module is the
+Snowflake / contract builders project these fields. Subject Feature Screen
+(ticket 10) attaches watermark identity via
+`edgar_warehouse.serving.subject_feature_screen`. This module remains the
 fail-closed validator for those projections.
