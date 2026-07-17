@@ -13,7 +13,7 @@ import uuid
 import warnings
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable, Mapping
 
 from edgar_warehouse.application.command_context_factory import build_warehouse_context
 from edgar_warehouse.application.errors import WarehouseRuntimeError
@@ -1505,6 +1505,7 @@ def _capture_bronze_raw(
         candidate_manifest_path = str(arguments.get("candidate_manifest") or "").strip()
         repair_manifest_path = str(arguments.get("repair_manifest") or "").strip()
         required_accessions: set[str] | None = None
+        required_candidate_rows: dict[str, dict[str, Any]] | None = None
         repair_accessions: set[str] | None = None
         if release_mode:
             if not candidate_manifest_path:
@@ -1512,6 +1513,7 @@ def _capture_bronze_raw(
                     "bootstrap-batch --release-mode requires --candidate-manifest"
                 )
             from edgar_warehouse.application.relationship_bulk_load import (
+                candidate_inventory_from_manifest,
                 select_required_accessions,
             )
 
@@ -1519,9 +1521,32 @@ def _capture_bronze_raw(
                 candidate_payload = json.loads(
                     read_bytes(candidate_manifest_path).decode("utf-8")
                 )
-                required_accessions = select_required_accessions(
+                candidate_inventory = candidate_inventory_from_manifest(
                     candidate_payload, ciks={int(cik) for cik in cik_list}
                 )
+                required_candidates = [
+                    candidate
+                    for candidate in candidate_inventory.candidates
+                    if candidate.artifact_required
+                ]
+                required_accessions = {
+                    candidate.accession_number for candidate in required_candidates
+                }
+                required_candidate_rows = {
+                    candidate.accession_number: {
+                        "accession_number": candidate.accession_number,
+                        "cik": candidate.cik,
+                        "form": candidate.form,
+                        "filing_date": candidate.filing_date,
+                        "report_date": candidate.report_date,
+                        "items": (
+                            "5.02"
+                            if candidate.candidate_reason == "item_5_02_metadata"
+                            else None
+                        ),
+                    }
+                    for candidate in required_candidates
+                }
                 if repair_manifest_path:
                     repair_payload = json.loads(
                         read_bytes(repair_manifest_path).decode("utf-8")
@@ -1550,6 +1575,7 @@ def _capture_bronze_raw(
             ),
             release_mode=release_mode,
             required_accessions=required_accessions,
+            required_candidate_rows=required_candidate_rows,
             repair_manifest_accessions=repair_accessions,
         )
         raw_writes.extend(result["raw_writes"])
@@ -1922,6 +1948,7 @@ def _run_submissions_bronze_then_silver(
     parser_policy: str = "none",
     release_mode: bool = False,
     required_accessions: set[str] | None = None,
+    required_candidate_rows: Mapping[str, Mapping[str, Any]] | None = None,
     repair_manifest_accessions: set[str] | None = None,
 ) -> dict[str, Any]:
     """Capture every selected SEC submission into bronze before applying silver."""
@@ -2015,10 +2042,34 @@ def _run_submissions_bronze_then_silver(
         required = set(required_accessions or ())
         missing = sorted(required - set(observed_accessions))
         if missing:
-            raise WarehouseRuntimeError(
-                f"required relationship candidates missing from submissions: {missing}"
-            )
-        artifact_accessions = [accession for accession in observed_accessions if accession in required]
+            seed_rows: list[dict[str, Any]] = []
+            unavailable_metadata: list[str] = []
+            for accession in missing:
+                if db.get_filing(accession) is not None:
+                    continue
+                candidate_row = (required_candidate_rows or {}).get(accession)
+                if candidate_row is None:
+                    unavailable_metadata.append(accession)
+                    continue
+                seed_rows.append(dict(candidate_row))
+            if unavailable_metadata:
+                raise WarehouseRuntimeError(
+                    "required relationship candidates missing frozen index metadata: "
+                    f"{unavailable_metadata}"
+                )
+            if seed_rows:
+                rows_written += int(db.merge_filings(seed_rows, sync_run_id))
+            unresolved = [accession for accession in missing if db.get_filing(accession) is None]
+            if unresolved:
+                raise WarehouseRuntimeError(
+                    f"required relationship candidates could not be staged: {unresolved}"
+                )
+        artifact_accessions = [
+            accession for accession in observed_accessions if accession in required
+        ]
+        artifact_accessions.extend(
+            accession for accession in missing if accession not in artifact_accessions
+        )
     else:
         artifact_accessions = observed_accessions
 
