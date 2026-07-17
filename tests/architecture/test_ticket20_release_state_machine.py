@@ -63,12 +63,15 @@ def test_strict_ticket20_path_generates_valid_fail_closed_definition(tmp_path: P
     assert strict_map["MaxConcurrency"] == 4
     assert strict_map["ToleratedFailurePercentage"] == 0
     assert strict_map["Next"] == "ReconcileRelationshipRelease"
+    assert strict_map["ItemSelector"]["release_run_id.$"] == "$$.Execution.Name"
     command = strict_map["ItemProcessor"]["States"]["RunStrictBatch"]["Parameters"][
         "Overrides"
     ]["ContainerOverrides"][0]["Command.$"]
     assert "'--release-mode'" in command
     assert "'--candidate-manifest'" in command
     assert "branch_b_deferred" in command
+    assert "$.release_run_id" in command
+    assert "$$.Execution.Name" not in command
     assert "Retry" not in strict_map["ItemProcessor"]["States"]["RunStrictBatch"]
     assert "Catch" not in states["StrictMdmVerify"]
     assert states["StrictMdmBackfill"]["Next"] == "StrictMdmIdempotency"
