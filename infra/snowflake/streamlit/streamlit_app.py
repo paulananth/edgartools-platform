@@ -1,6 +1,10 @@
 """EdgarTools warehouse dashboard (Streamlit-in-Snowflake).
 
 Reads gold tables from EDGARTOOLS_GOLD via the active Snowpark session.
+
+Ticket 13: Agent View vs Explore mode toggle. Mode semantics are defined in
+``edgar_warehouse.serving.dashboard_modes`` (unit-tested). This file mirrors
+the allowlist for SiS deploy (only this module is staged).
 """
 
 from __future__ import annotations
@@ -13,6 +17,79 @@ st.set_page_config(page_title="EdgarTools Warehouse", layout="wide")
 
 GOLD_SCHEMA = "EDGARTOOLS_GOLD"
 SOURCE_SCHEMA = "EDGARTOOLS_SOURCE"
+DECISION_SCHEMA = "EDGARTOOLS_DECISION"
+
+# --- Ticket 13 mode contract (mirror edgar_warehouse.serving.dashboard_modes) ---
+MODE_AGENT_VIEW = "agent_view"
+MODE_EXPLORE = "explore"
+SESSION_MODE_KEY = "edgartools_dashboard_mode"
+SESSION_CIK_KEY = "edgartools_inspected_cik"
+AGENT_VIEW_ALLOWED_OBJECTS = frozenset(
+    {
+        "SUBJECT_FEATURE_SCREEN",
+        "SUBJECT_BUNDLE_READ",
+        "SUBJECT_BUNDLE_READ_ISSUER",
+        "SUBJECT_BUNDLE_READ_MANAGER",
+        "DECISION_WATERMARK",
+        "DECISION_CONTRACT_STATUS",
+        "BUNDLE_HOLDERS_OF_SUBJECT",
+        "BUNDLE_AUDITOR",
+        "EDGARTOOLS_GOLD_STATUS",
+    }
+)
+EXPLORE_BANNER = (
+    "Explore Mode — free gold / SOURCE queries for research. "
+    "**Not** the agent Decision Contract and **not** Trading Decision input."
+)
+AGENT_VIEW_BANNER = (
+    "Agent View — Decision Contract objects only "
+    "(Subject Feature Screen / Subject Bundle Read / watermark). "
+    "Same surface a trading agent would pin."
+)
+
+
+def _normalize_mode(value: str | None) -> str:
+    raw = (value or "").strip().lower().replace(" ", "_").replace("-", "_")
+    if raw in {"explore", "explore_mode", "research"}:
+        return MODE_EXPLORE
+    return MODE_AGENT_VIEW
+
+
+def _is_object_allowed(mode: str, object_name: str) -> bool:
+    if _normalize_mode(mode) == MODE_EXPLORE:
+        return True
+    bare = str(object_name or "").strip().upper().split(".")[-1]
+    return bare in AGENT_VIEW_ALLOWED_OBJECTS
+
+
+def _render_mode_chrome() -> str:
+    """Visible sticky mode toggle + banner. Returns resolved mode."""
+    session = getattr(st, "session_state", None)
+    if session is None:
+        # Import/load under unit fakes without full Streamlit runtime
+        return MODE_AGENT_VIEW
+    prior = session.get(SESSION_MODE_KEY, MODE_AGENT_VIEW)
+    labels = {
+        MODE_AGENT_VIEW: "Agent View (Decision Contract)",
+        MODE_EXPLORE: "Explore (labeled not-for-agent)",
+    }
+    sidebar = getattr(st, "sidebar", None)
+    if sidebar is None:
+        return _normalize_mode(str(prior))
+    choice = sidebar.radio(
+        "Dashboard mode",
+        options=[MODE_AGENT_VIEW, MODE_EXPLORE],
+        format_func=lambda m: labels[m],
+        index=0 if prior == MODE_AGENT_VIEW else 1,
+        key="dashboard_mode_radio",
+    )
+    mode = _normalize_mode(choice)
+    session[SESSION_MODE_KEY] = mode
+    if mode == MODE_EXPLORE:
+        st.warning(EXPLORE_BANNER)
+    else:
+        st.info(AGENT_VIEW_BANNER)
+    return mode
 
 
 @st.cache_resource
@@ -150,8 +227,51 @@ def _two_year_timeline():
     st.plotly_chart(fig, use_container_width=True)
 
 
-def render_summary():
+def _render_agent_view_company(cik: int) -> None:
+    """Agent View: contract objects only (no free gold FINANCIAL_FACTORS joins)."""
+    st.subheader("Agent View — Decision Contract")
+    st.write(
+        {
+            "cik": cik,
+            "allowed_objects": sorted(AGENT_VIEW_ALLOWED_OBJECTS),
+            "note": (
+                "Free gold joins (e.g. FINANCIAL_FACTORS, FILING_ACTIVITY charts) "
+                "are Explore-only. Switch mode to Explore for research SQL."
+            ),
+        }
+    )
+    if not _is_object_allowed(MODE_AGENT_VIEW, "SUBJECT_FEATURE_SCREEN"):
+        st.error("Contract screen object not allowed — misconfigured mode.")
+        return
+    screen = _safe_df(
+        "Subject Feature Screen",
+        f"""
+        select *
+        from {DECISION_SCHEMA}.SUBJECT_FEATURE_SCREEN
+        where cik = ?
+        limit 5
+        """,
+        params=[int(cik)],
+    )
+    if screen is not None:
+        st.caption("EDGARTOOLS_DECISION.SUBJECT_FEATURE_SCREEN (ticket 10)")
+        _show_dataframe(screen)
+    st.caption(
+        "Subject Bundle Read sections are built by the Python contract layer "
+        "(tickets 11–12); publish SQL views when ready for SiS."
+    )
+
+
+def render_summary(mode: str = MODE_EXPLORE):
     st.header("Summary")
+    if mode == MODE_AGENT_VIEW:
+        st.caption("Agent View summary is limited to contract/status surfaces.")
+        status = _safe_df(
+            "Gold status",
+            f"select * from {GOLD_SCHEMA}.EDGARTOOLS_GOLD_STATUS limit 20",
+        )
+        _show_dataframe(status)
+        return
     _kpi_row()
     st.divider()
     _two_year_timeline()
@@ -272,8 +392,11 @@ def _company_timeline(company_key: int):
     )
 
 
-def render_details():
+def render_details(mode: str = MODE_EXPLORE):
     st.header("Company Details")
+    st.caption(
+        f"Mode: **{mode}** — same CIK can be inspected in Agent View and Explore for audit comparison."
+    )
     query = st.text_input("Search by ticker or company name", placeholder="e.g. AAPL or Apple")
 
     if not query:
@@ -299,6 +422,7 @@ def render_details():
         return
     row = meta.iloc[0]
     cik = int(row["CIK"])
+    st.session_state[SESSION_CIK_KEY] = cik
 
     st.subheader(row["ENTITY_NAME"])
     col1, col2, col3 = st.columns(3)
@@ -316,7 +440,15 @@ def render_details():
             }
         )
 
+    if mode == MODE_AGENT_VIEW:
+        _render_agent_view_company(cik)
+        return
+
     st.subheader("Financial factors")
+    # Explore only — free gold FINANCIAL_FACTORS is blocked in Agent View.
+    if not _is_object_allowed(mode, "FINANCIAL_FACTORS"):
+        st.error("Agent View cannot query free gold FINANCIAL_FACTORS.")
+        return
     factors = _company_financial_factors(cik)
     if factors is not None:
         if factors.empty:
@@ -564,10 +696,27 @@ def render_pipeline():
     )
 
 
-summary_tab, details_tab, pipeline_tab = st.tabs(["Summary", "Company Details", "Pipeline"])
-with summary_tab:
-    render_summary()
-with details_tab:
-    render_details()
-with pipeline_tab:
-    render_pipeline()
+def main() -> None:
+    """App entry — only run under Streamlit (not when imported by unit tests)."""
+    mode = _render_mode_chrome()
+    summary_tab, details_tab, pipeline_tab = st.tabs(
+        ["Summary", "Company Details", "Pipeline"]
+    )
+    with summary_tab:
+        render_summary(mode=mode)
+    with details_tab:
+        render_details(mode=mode)
+    with pipeline_tab:
+        if mode == MODE_AGENT_VIEW:
+            st.header("Pipeline")
+            st.info(
+                "Pipeline ops views use free SOURCE/information_schema joins — "
+                "switch to **Explore** mode (labeled not-for-agent)."
+            )
+        else:
+            render_pipeline()
+
+
+# Streamlit / SiS provide session_state; unit tests inject a FakeStreamlit without it.
+if hasattr(st, "session_state"):
+    main()

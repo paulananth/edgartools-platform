@@ -17,10 +17,8 @@ All tickets: `Status: ready-for-agent` unless noted. Work the **frontier** (bloc
 | 09 | Decision Watermark agent-grade | 08 | **resolved** |
 | 10 | Subject Feature Screen | 09, 14 | **resolved** |
 | 11 | Subject Bundle Read issuer | 09, 14 | **resolved** |
-| 12 | Manager bundle ADV sections | 11 | ready-for-agent |
-| 13 | SiS Agent View / Explore | 10, 11 | ready-for-agent |
+| 12 | Manager bundle ADV sections | 11 | **resolved** |
+| 13 | SiS Agent View / Explore | 10, 11 | **resolved** |
 | 14 | Universe single-writer | — | **resolved** |
 
-**Frontier now:** 12 (unblocked by 11), 13 (unblocked by 10+11).
-
-Do not start Ticket 20 bulk-load / strict ledger work from this index — separate workstream.
+**Frontier now:** none for this index — tickets 01–14 complete (Ticket 20 is a separate workstream).
