@@ -41,6 +41,18 @@ flowchart LR
     Gold --> Dashboard["Streamlit dashboard"]
 ```
 
+## Project overview
+
+For a plain-language walkthrough of what this platform does, how it uses
+`edgartools`, and how the data layers fit together, see
+[docs/project-overview.md](docs/project-overview.md).
+
+For product questions the warehouse can answer and proposed dashboard designs,
+see [docs/product-questions-and-dashboards.md](docs/product-questions-and-dashboards.md).
+
+For current ingest/agent data-plane doctrine (silver SoE, edgartools-exclusive SEC I/O, optional bronze),
+see [docs/doctrine-data-plane.md](docs/doctrine-data-plane.md).
+
 ## Quick Start
 
 See [docs/runbook.md](docs/runbook.md) for complete end-to-end setup.
