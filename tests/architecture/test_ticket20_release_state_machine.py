@@ -42,17 +42,23 @@ def test_strict_ticket20_path_generates_valid_fail_closed_definition(tmp_path: P
 
     assert definition["StartAt"] == "ReleaseModeCheck"
     assert states["ReleaseModeCheck"]["Default"] == "BatchSizeCheck"
+    clauses = states["StrictManifestCheck"]["Choices"][0]["And"]
     required_inputs = {
-        clause["Variable"]
-        for clause in states["StrictManifestCheck"]["Choices"][0]["And"]
-    }
-    assert {
         "$.attestations.warehouse",
         "$.attestations.mdm",
         "$.attestations.graph",
         "$.attestations.release_data_operator",
         "$.attestations.release_owner",
-    } <= required_inputs
+    }
+    for variable in {
+        "$.candidate_manifest_key",
+        "$.candidate_batches_key",
+        *required_inputs,
+    }:
+        assert {"Variable": variable, "IsPresent": True} in clauses
+        assert {"Variable": variable, "IsString": True} in clauses
+        assert {"Not": {"Variable": variable, "StringEquals": ""}} in clauses
+    assert not any(clause.get("StringMatches") == "?*" for clause in clauses)
     strict_map = states["StrictBatchSilver"]
     assert strict_map["MaxConcurrency"] == 4
     assert strict_map["ToleratedFailurePercentage"] == 0
