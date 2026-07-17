@@ -65,11 +65,34 @@ _COMPENSATION = re.compile(
     rf"(?:effective\s+)?(?P<date>{_DATE})",
     re.I,
 )
+_ITEM_HEADER = re.compile(r"item\s+(\d{1,2})\s*\.\s*(\d{2})\b", re.I)
 
 
 def _text(content: str) -> str:
     without_tags = re.sub(r"<[^>]+>", " ", content)
     return re.sub(r"\s+", " ", html.unescape(without_tags)).strip()
+
+
+def _item_502_section(text: str) -> str:
+    """Scope matching to the Item 5.02 section only.
+
+    Multi-item 8-Ks (e.g. 5.02 + 5.07 annual-meeting filings) repeat action verbs
+    like "named"/"elected" in unrelated sections (Item 5.07 vote tallies). Matching
+    the whole document lets that unrelated text falsely trip the unresolved-event
+    fallback below, so bound the search to the last "Item 5.02" heading (skipping
+    earlier cover-page item enumerations) through the next differing item header.
+    """
+    headers = list(_ITEM_HEADER.finditer(text))
+    section_starts = [m for m in headers if m.group(1) == "5" and m.group(2) == "02"]
+    if not section_starts:
+        return text
+    start = section_starts[-1].start()
+    end = len(text)
+    for match in headers:
+        if match.start() > start and (match.group(1), match.group(2)) != ("5", "02"):
+            end = match.start()
+            break
+    return text[start:end]
 
 
 def _parse_date(value: str) -> date:
@@ -81,22 +104,23 @@ def parse_item_502(*, accession_number: str, cik: int, filing_date: date,
     text = _text(content)
     if not re.search(r"item\s+5\s*\.\s*02", text, re.I):
         return Item502Result("not_applicable", "item_5_02_absent", ())
+    section = _item_502_section(text)
     events: list[EmploymentEvent] = []
     for event_type, pattern in (("appointment", _APPOINTMENT), ("departure", _DEPARTURE)):
-        for match in pattern.finditer(text):
+        for match in pattern.finditer(section):
             role = re.sub(r"\s+", " ", (match.group("role") or "")).strip(" ,.") or None
             events.append(EmploymentEvent(
                 accession_number, int(cik), event_type,
                 re.sub(r"\s+", " ", match.group("name")).strip(), role,
                 _parse_date(match.group("date")),
             ))
-    for match in _ROLE_CHANGE.finditer(text):
+    for match in _ROLE_CHANGE.finditer(section):
         events.append(EmploymentEvent(
             accession_number, int(cik), "role_change", match.group("name").strip(),
             match.group("role").strip(" ,."), _parse_date(match.group("date")),
             previous_role=match.group("previous").strip(" ,."),
         ))
-    for match in _COMPENSATION.finditer(text):
+    for match in _COMPENSATION.finditer(section):
         events.append(EmploymentEvent(
             accession_number, int(cik), "compensation_change", match.group("name").strip(),
             None, _parse_date(match.group("date")),
@@ -105,7 +129,7 @@ def parse_item_502(*, accession_number: str, cik: int, filing_date: date,
     if events:
         events.sort(key=lambda row: (row.effective_date, row.person_name, row.event_type))
         return Item502Result("applicable", "named_employment_event", tuple(events))
-    if re.search(r"\b(appointed|elected|named|resigned|retired|departed|terminated|ceased to serve)\b", text, re.I):
+    if re.search(r"\b(appointed|elected|named|resigned|retired|departed|terminated|ceased to serve)\b", section, re.I):
         return Item502Result("unresolved", "unclassified_named_event", ())
     return Item502Result("not_applicable", "no_named_employment_event", ())
 

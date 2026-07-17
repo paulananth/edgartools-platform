@@ -67,3 +67,29 @@ def test_parse_item_502_role_and_compensation_changes() -> None:
     )
     assert compensation.events[0].event_type == "compensation_change"
     assert compensation.events[0].compensation_amount == 750000
+
+
+def test_item_502_not_poisoned_by_later_item_507_vote_tally() -> None:
+    """Production regression: CIK 315213, accession 0000315213-26-000029.
+
+    A combined 5.02+5.07 annual-meeting 8-K where Item 5.02 is pure boilerplate
+    (cross-referencing the plan-approval vote) and Item 5.07's routine director
+    vote tally uses "named" — an ambiguity keyword the unscoped fallback used to
+    match anywhere in the document, wrongly marking the filing "unresolved".
+    """
+    result = parse_item_502(
+        accession_number="0000315213-26-000029", cik=315213, filing_date=date(2026, 5, 14),
+        content=(
+            "Item 5.02 Departure of Directors or Certain Officers; Election of Directors; "
+            "Appointment of Certain Officers; Compensatory Arrangements of Certain Officers. "
+            "At the Annual Meeting, stockholders approved the amended and restated Stock "
+            "Incentive Plan, as described in Item 5.07 below. "
+            "Item 5.07 Submission of Matters to a Vote of Security Holders. "
+            "At the Annual Meeting held on May 14, 2026, stockholders voted on the election "
+            "of the eight directors named below, each of whom was elected. "
+            "Item 9.01 Financial Statements and Exhibits."
+        ),
+    )
+    assert result.applicability == "not_applicable"
+    assert result.reason_code == "no_named_employment_event"
+    assert result.events == ()
