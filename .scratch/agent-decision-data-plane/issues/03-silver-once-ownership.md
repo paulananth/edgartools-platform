@@ -4,10 +4,11 @@
 
 **Blocked by:** 01 — Dual-mode capture contract; 02 — Skip and network metrics.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Second run over already-parsed ownership accessions at same parser_version performs no network fetch for those accessions
-- [ ] Force (or equivalent) re-invokes network and updates silver
-- [ ] Parser_version bump allows re-fetch without manual force of the entire universe (or documents the supported upgrade path)
-- [ ] Metrics from ticket 02 reflect ownership skips vs fetches
-- [ ] Strict_release mode still satisfies Ticket 20 evidence persistence expectations for ownership artifacts when that mode is on
+- [x] Second run over already-parsed ownership accessions at same parser_version performs no network fetch for those accessions
+- [x] Force (or equivalent) re-invokes network and updates silver
+- [x] Parser_version bump allows re-fetch without manual force of the entire universe (or documents the supported upgrade path)
+- [x] Metrics from ticket 02 reflect ownership skips vs fetches
+- [x] Strict_release mode still satisfies Ticket 20 evidence persistence expectations for ownership artifacts when that mode is on
+

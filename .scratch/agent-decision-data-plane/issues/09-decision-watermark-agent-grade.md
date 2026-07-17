@@ -4,10 +4,11 @@
 
 **Blocked by:** 08 — Snowflake export expansion for issuer neighborhood evidence.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Contract exposes Decision Contract Version on agent-facing results
-- [ ] Decision Watermark identity is queryable and bound into agent-grade results
-- [ ] Misaligned or incomplete watermark components yield non-agent-grade (fail closed), not best-effort joins
-- [ ] Graph parity / verify-graph (or equivalent published flag) is required for agent-grade
-- [ ] Open high-severity reconcile findings block agent-grade unless explicitly waived in watermark metadata
+- [x] Contract exposes Decision Contract Version on agent-facing results
+- [x] Decision Watermark identity is queryable and bound into agent-grade results
+- [x] Misaligned or incomplete watermark components yield non-agent-grade (fail closed), not best-effort joins
+- [x] Graph parity / verify-graph (or equivalent published flag) is required for agent-grade
+- [x] Open high-severity reconcile findings block agent-grade unless explicitly waived in watermark metadata
+

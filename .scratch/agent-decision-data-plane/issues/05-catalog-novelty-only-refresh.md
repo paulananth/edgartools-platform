@@ -4,9 +4,10 @@
 
 **Blocked by:** 01 — Dual-mode capture contract; 02 — Skip and network metrics.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Finalized daily index dates do not re-download on no-op catch-up re-runs
-- [ ] Submissions refresh for a fully synced CIK prefers novelty detection over full history re-pull unless force
-- [ ] New filings/dates still get discovered on subsequent runs
-- [ ] Metrics show catalog skips vs network where applicable
+- [x] Finalized daily index dates do not re-download on no-op catch-up re-runs
+- [x] Submissions refresh for a fully synced CIK prefers novelty detection over full history re-pull unless force
+- [x] New filings/dates still get discovered on subsequent runs
+- [x] Metrics show catalog skips vs network where applicable
+

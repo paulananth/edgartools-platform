@@ -1998,11 +1998,21 @@ def _run_submissions_bronze_then_silver(
         for snapshot in bronze_snapshots
         for write_record in snapshot["raw_writes"]
     ]
+    # Ticket 05: count catalog network vs cache hits from write_record.cached
+    catalog_network = 0
+    catalog_skips = 0
+    for write_record in raw_writes:
+        if write_record.get("cached"):
+            catalog_skips += 1
+        else:
+            catalog_network += 1
     _emit_pipeline_event(
         "bronze_capture_completed",
         cik_count=total_ciks,
         duration_seconds=(datetime.now(UTC) - bronze_started_at).total_seconds(),
         raw_object_count=len(raw_writes),
+        catalog_network_fetches=catalog_network,
+        catalog_silver_skips=catalog_skips,
         run_id=sync_run_id,
     )
 
@@ -2112,6 +2122,8 @@ def _run_submissions_bronze_then_silver(
         "silver_skips": int(artifact_result.get("silver_skips", 0) or 0),
         "accessions_with_network": int(artifact_result.get("accessions_with_network", 0) or 0),
         "accessions_silver_skip": int(artifact_result.get("accessions_silver_skip", 0) or 0),
+        "catalog_network_fetches": catalog_network,
+        "catalog_silver_skips": catalog_skips,
     }
 
 
@@ -2234,6 +2246,8 @@ def _merge_capture_network_metrics(metrics: dict[str, Any], result: dict[str, An
         "silver_skips",
         "accessions_with_network",
         "accessions_silver_skip",
+        "catalog_network_fetches",
+        "catalog_silver_skips",
     ):
         if key in result:
             metrics[key] = int(metrics.get(key, 0) or 0) + int(result.get(key, 0) or 0)
@@ -2309,6 +2323,61 @@ def _run_configured_form_artifact_pipeline(
                 )
             break
         try:
+            # Ticket 03: silver-once ownership skip (accession + parser_version).
+            # When silver already has a successful ownership parse at the current
+            # parser_version and force is false, skip network + re-parse.
+            # strict_release still requires hashed evidence if raw objects missing.
+            ownership_skip = False
+            if not force:
+                filing_meta = db.get_filing(accession_number) or {}
+                form_type = str(filing_meta.get("form") or "")
+                parser_name, parser_version, form_family = _parser_metadata(form_type)
+                if form_family == "ownership":
+                    from edgar_warehouse.infrastructure.silver_once import (
+                        has_successful_ownership_parse,
+                    )
+
+                    if has_successful_ownership_parse(
+                        db,
+                        accession_number=accession_number,
+                        parser_name=parser_name,
+                        parser_version=parser_version,
+                    ):
+                        needs_evidence = False
+                        if release_mode:
+                            attachments = db.get_filing_attachments(accession_number)
+                            needs_evidence = not any(
+                                (db.get_raw_object(str(a.get("raw_object_id"))) or {}).get("sha256")
+                                for a in attachments
+                                if a.get("raw_object_id")
+                            )
+                        if not needs_evidence:
+                            ownership_skip = True
+                            capture_network.record_artifact_result({"network_fetches": 0})
+                            consecutive_errors = 0
+                            if release_mode:
+                                evidence_parts: list[str] = []
+                                for attachment in db.get_filing_attachments(accession_number):
+                                    raw_object_id = attachment.get("raw_object_id")
+                                    raw_object = (
+                                        db.get_raw_object(str(raw_object_id)) if raw_object_id else None
+                                    )
+                                    if raw_object and raw_object.get("sha256"):
+                                        evidence_parts.append(str(raw_object["sha256"]))
+                                if evidence_parts:
+                                    candidate_outcomes.append({
+                                        "accession_number": accession_number,
+                                        "status": (
+                                            "artifacts_loaded"
+                                            if branch_b_deferred
+                                            else "applicable_loaded"
+                                        ),
+                                        "evidence_fingerprint": hashlib.sha256(
+                                            "|".join(sorted(evidence_parts)).encode("utf-8")
+                                        ).hexdigest(),
+                                    })
+                            continue
+
             if fetch_artifacts:
                 from edgar_warehouse.infrastructure.filing_artifact_service import refresh_filing_artifacts
 
@@ -2378,7 +2447,7 @@ def _run_configured_form_artifact_pipeline(
                     fail_closed=release_mode,
                 )
             if release_mode:
-                evidence_parts: list[str] = []
+                evidence_parts = []
                 for attachment in db.get_filing_attachments(accession_number):
                     raw_object_id = attachment.get("raw_object_id")
                     raw_object = db.get_raw_object(str(raw_object_id)) if raw_object_id else None
@@ -3407,6 +3476,11 @@ def _load_daily_index_for_date(
             "rows_skipped": 1,
             "impacted_ciks": _dedupe_ints([int(row["cik"]) for row in rows if row.get("cik") is not None]),
             "status": "succeeded",
+            # Ticket 05: finalized dates are catalog silver-skips (no network)
+            "network_fetches": 0,
+            "silver_skips": 1,
+            "catalog_silver_skips": 1,
+            "catalog_network_fetches": 0,
         }
 
     if now < expected_available_at:
@@ -3484,6 +3558,10 @@ def _load_daily_index_for_date(
             "rows_skipped": 0,
             "impacted_ciks": _dedupe_ints([int(row["cik"]) for row in rows if row.get("cik") is not None]),
             "status": "succeeded",
+            "network_fetches": 1,
+            "silver_skips": 0,
+            "catalog_network_fetches": 1,
+            "catalog_silver_skips": 0,
         }
     except WarehouseRuntimeError as exc:
         db.upsert_daily_index_checkpoint(

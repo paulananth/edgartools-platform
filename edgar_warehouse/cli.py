@@ -796,6 +796,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Local or S3 JSON manifest containing the bounded release candidate accessions",
     )
+    bootstrap_fundamentals.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help=(
+            "Force re-fetch of companyfacts (entity-facts mode) even when silver "
+            "already has facts at the current facts_parser_version"
+        ),
+    )
     _add_run_id_arg(bootstrap_fundamentals)
     bootstrap_fundamentals.set_defaults(handler=_handle_bootstrap_fundamentals)
 

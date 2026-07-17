@@ -4,9 +4,10 @@
 
 **Blocked by:** 01 — Dual-mode capture contract; 02 — Skip and network metrics.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Re-run entity-facts for a CIK with existing silver facts at current version skips network
-- [ ] Force or facts_parser_version bump re-fetches and updates silver
-- [ ] Metrics distinguish companyfacts network vs skip
-- [ ] Agent-grade financial readiness no longer depends on mandatory companyfacts bronze by default (aligns ADR 0002)
+- [x] Re-run entity-facts for a CIK with existing silver facts at current version skips network
+- [x] Force or facts_parser_version bump re-fetches and updates silver
+- [x] Metrics distinguish companyfacts network vs skip
+- [x] Agent-grade financial readiness no longer depends on mandatory companyfacts bronze by default (aligns ADR 0002)
+
