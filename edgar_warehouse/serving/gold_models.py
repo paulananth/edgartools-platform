@@ -81,6 +81,9 @@ _SEC_FINANCIAL_DERIVED_SCHEMA = GOLD_SCHEMAS['_SEC_FINANCIAL_DERIVED_SCHEMA']
 _FACT_EARNINGS_RELEASE_SCHEMA = GOLD_SCHEMAS['_FACT_EARNINGS_RELEASE_SCHEMA']
 _FACT_EXECUTIVE_RECORD_SCHEMA = GOLD_SCHEMAS['_FACT_EXECUTIVE_RECORD_SCHEMA']
 _FACT_ACCOUNTING_FLAG_SCHEMA = GOLD_SCHEMAS['_FACT_ACCOUNTING_FLAG_SCHEMA']
+_SEC_SUBSIDIARY_EVIDENCE_SCHEMA = GOLD_SCHEMAS['_SEC_SUBSIDIARY_EVIDENCE_SCHEMA']
+_SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA = GOLD_SCHEMAS['_SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA']
+_SEC_EMPLOYMENT_EVENT_SCHEMA = GOLD_SCHEMAS['_SEC_EMPLOYMENT_EVENT_SCHEMA']
 
 
 def _empty(schema: pa.Schema) -> pa.Table:
@@ -916,6 +919,97 @@ def _build_sec_financial_derived(conn: Any) -> pa.Table:
 # pattern matches _build_fact_filing_activity (line 452-474) — DuckDB hash()
 # is deterministic, so MERGE is idempotent across re-runs.
 
+def _build_sec_subsidiary_evidence(conn: Any) -> pa.Table:
+    table = _arrow(
+        conn.execute(
+            """
+            SELECT
+                accession_number,
+                registrant_cik::BIGINT AS registrant_cik,
+                document_name,
+                document_type,
+                row_ordinal::INTEGER AS row_ordinal,
+                legal_name,
+                jurisdiction,
+                parent_scope,
+                immediate_parent_known,
+                effective_date,
+                row_locator,
+                source_sha256,
+                parser_version
+            FROM sec_subsidiary_evidence
+            ORDER BY registrant_cik, accession_number, document_name, row_ordinal
+            """
+        )
+    )
+    return (
+        _empty(_SEC_SUBSIDIARY_EVIDENCE_SCHEMA)
+        if table.num_rows == 0
+        else table.cast(_SEC_SUBSIDIARY_EVIDENCE_SCHEMA)
+    )
+
+
+def _build_sec_auditor_report_evidence(conn: Any) -> pa.Table:
+    table = _arrow(
+        conn.execute(
+            """
+            SELECT
+                accession_number,
+                registrant_cik::BIGINT AS registrant_cik,
+                form_type,
+                document_name,
+                audited_period_end,
+                report_date,
+                principal_firm_name,
+                principal_firm_location,
+                pcaob_firm_id,
+                evidence_source,
+                raw_locator,
+                source_sha256,
+                evidence_fingerprint,
+                form_ap_filing_id,
+                original_form_ap_filing_id,
+                latest_amendment,
+                parser_version
+            FROM sec_auditor_report_evidence
+            ORDER BY registrant_cik, accession_number, evidence_fingerprint
+            """
+        )
+    )
+    return (
+        _empty(_SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA)
+        if table.num_rows == 0
+        else table.cast(_SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA)
+    )
+
+
+def _build_sec_employment_event(conn: Any) -> pa.Table:
+    table = _arrow(
+        conn.execute(
+            """
+            SELECT
+                accession_number,
+                event_index::BIGINT AS event_index,
+                cik::BIGINT AS cik,
+                event_type,
+                person_name,
+                exec_role,
+                previous_role,
+                compensation_amount,
+                effective_date,
+                parser_version
+            FROM sec_employment_event
+            ORDER BY cik, accession_number, event_index
+            """
+        )
+    )
+    return (
+        _empty(_SEC_EMPLOYMENT_EVENT_SCHEMA)
+        if table.num_rows == 0
+        else table.cast(_SEC_EMPLOYMENT_EVENT_SCHEMA)
+    )
+
+
 def _build_fact_earnings_release(conn: Any) -> pa.Table:
     table = _arrow(
         conn.execute(
@@ -1063,6 +1157,10 @@ def build_gold(db: Any) -> dict[str, pa.Table]:
         "fact_earnings_release":          _timed("fact_earnings_release",          lambda: _build_fact_earnings_release(conn)),
         "fact_executive_record":          _timed("fact_executive_record",          lambda: _build_fact_executive_record(conn)),
         "fact_accounting_flag":           _timed("fact_accounting_flag",           lambda: _build_fact_accounting_flag(conn)),
+        # Agent neighborhood evidence (ticket 08)
+        "sec_subsidiary_evidence":        _timed("sec_subsidiary_evidence",        lambda: _build_sec_subsidiary_evidence(conn)),
+        "sec_auditor_report_evidence":    _timed("sec_auditor_report_evidence",    lambda: _build_sec_auditor_report_evidence(conn)),
+        "sec_employment_event":           _timed("sec_employment_event",           lambda: _build_sec_employment_event(conn)),
     }
 
 

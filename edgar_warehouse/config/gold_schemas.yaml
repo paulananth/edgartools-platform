@@ -508,3 +508,95 @@ schemas:
       type: string
     - name: ingested_at
       type: timestamp_us_utc
+  # Agent neighborhood evidence (ticket 08) — passthrough from silver
+  _SEC_SUBSIDIARY_EVIDENCE_SCHEMA:
+    - name: accession_number
+      type: string
+      nullable: false
+    - name: registrant_cik
+      type: int64
+    - name: document_name
+      type: string
+      nullable: false
+    - name: document_type
+      type: string
+    - name: row_ordinal
+      type: int32
+      nullable: false
+    - name: legal_name
+      type: string
+    - name: jurisdiction
+      type: string
+    - name: parent_scope
+      type: string
+    - name: immediate_parent_known
+      type: bool_
+    - name: effective_date
+      type: date32
+    - name: row_locator
+      type: string
+    - name: source_sha256
+      type: string
+    - name: parser_version
+      type: string
+  _SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA:
+    - name: accession_number
+      type: string
+      nullable: false
+    - name: registrant_cik
+      type: int64
+    - name: form_type
+      type: string
+    - name: document_name
+      type: string
+    - name: audited_period_end
+      type: date32
+    - name: report_date
+      type: date32
+    - name: principal_firm_name
+      type: string
+    - name: principal_firm_location
+      type: string
+    - name: pcaob_firm_id
+      type: string
+    - name: evidence_source
+      type: string
+    - name: raw_locator
+      type: string
+    - name: source_sha256
+      type: string
+    - name: evidence_fingerprint
+      type: string
+      nullable: false
+    - name: form_ap_filing_id
+      type: string
+    - name: original_form_ap_filing_id
+      type: string
+    - name: latest_amendment
+      type: bool_
+    - name: parser_version
+      type: string
+  _SEC_EMPLOYMENT_EVENT_SCHEMA:
+    - name: accession_number
+      type: string
+      nullable: false
+    - name: event_index
+      type: int64
+      nullable: false
+    - name: cik
+      type: int64
+      nullable: false
+    - name: event_type
+      type: string
+    - name: person_name
+      type: string
+    - name: exec_role
+      type: string
+    - name: previous_role
+      type: string
+    - name: compensation_amount
+      type: float64
+    - name: effective_date
+      type: date32
+    - name: parser_version
+      type: string

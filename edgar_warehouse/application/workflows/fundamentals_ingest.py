@@ -255,6 +255,7 @@ def run_bootstrap_entity_facts(
     db,                     # SilverDatabase instance
     identity: str,          # SEC User-Agent string
     sync_run_id: str,
+    force: bool = False,
 ) -> dict[str, int]:
     """Fetch SEC companyfacts JSON for each CIK and write to silver.
 
@@ -262,24 +263,45 @@ def run_bootstrap_entity_facts(
     direct SEC traffic follows the same host allowlist, rate limit, retry, and
     response-size-limit contract as the rest of the warehouse runtime.
 
-    Returns row counts per table written.
+    Ticket 04: when ``force`` is false and silver already has financial facts for
+    the CIK at the current facts parser_version, skip the companyfacts network call.
+
+    Returns row counts per table written plus network_fetches / silver_skips.
     """
     from edgar_warehouse.infrastructure.sec_client import build_companyfacts_url, download_sec_bytes
+    from edgar_warehouse.infrastructure.silver_once import has_companyfacts_at_version
+    from edgar_warehouse.parsers.financials import PARSER_VERSION as FACTS_PARSER_VERSION
     from edgar_warehouse.parsers.financials import parse_entity_facts
     from edgar_warehouse.parsers.financials_derived import compute_derived_for_accession
 
     metrics: dict[str, int] = {
         "ciks_processed": 0,
         "ciks_failed": 0,
+        "ciks_skipped": 0,
+        "network_fetches": 0,
+        "silver_skips": 0,
         "rows_financial_fact": 0,
         "rows_financial_derived": 0,
         "rows_accounting_flag": 0,
     }
 
     for cik in cik_list:
+        if not force and has_companyfacts_at_version(
+            db, cik=int(cik), facts_parser_version=str(FACTS_PARSER_VERSION)
+        ):
+            metrics["ciks_skipped"] += 1
+            metrics["silver_skips"] += 1
+            _emit(
+                "entity_facts_silver_skip",
+                cik=cik,
+                facts_parser_version=str(FACTS_PARSER_VERSION),
+            )
+            continue
+
         url = build_companyfacts_url(int(cik))
         try:
             payload = download_sec_bytes(url, identity)
+            metrics["network_fetches"] += 1
             facts_json = json.loads(payload.decode("utf-8"))
         except Exception as exc:
             _emit("entity_facts_fetch_error", cik=cik, error=str(exc))

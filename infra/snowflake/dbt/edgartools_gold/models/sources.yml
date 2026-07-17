@@ -42,3 +42,10 @@ sources:
         description: DEF 14A executive compensation fact per (cik, accession, exec_name). Dimensional — COMPANY+DATE joins.
       - name: ACCOUNTING_FLAG
         description: 10-K accounting-flag fact per (cik, accession). Dimensional — COMPANY+DATE+FORM joins; auditor identity retained as natural-key columns (AUDIT_FIRM dim deferred).
+      # Agent neighborhood evidence (ticket 08) — passthrough from silver
+      - name: SEC_SUBSIDIARY_EVIDENCE
+        description: Exhibit 21 / EX-8 subsidiary rows for HAS_PARENT_COMPANY (parent_scope=registrant_disclosed).
+      - name: SEC_AUDITOR_REPORT_EVIDENCE
+        description: Principal auditor evidence per annual filing for AUDITED_BY derivation.
+      - name: SEC_EMPLOYMENT_EVENT
+        description: Item 5.02 / employment events for EMPLOYED_BY temporal updates.

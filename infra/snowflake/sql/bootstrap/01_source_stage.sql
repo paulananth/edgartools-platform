@@ -400,3 +400,59 @@ BEGIN
        FILE_FORMAT = (FORMAT_NAME = $$ || $manifest_file_format_name || $$)
        PATTERN = '.*run_manifest\\.json'$$;
 END;
+
+-- =====================================================================
+-- Agent neighborhood evidence (ticket 08) — passthrough from silver
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS SEC_SUBSIDIARY_EVIDENCE (
+  accession_number       STRING NOT NULL,
+  registrant_cik         NUMBER(38, 0),
+  document_name          STRING NOT NULL,
+  document_type          STRING,
+  row_ordinal            NUMBER(38, 0) NOT NULL,
+  legal_name             STRING,
+  jurisdiction           STRING,
+  parent_scope           STRING,
+  immediate_parent_known BOOLEAN,
+  effective_date         DATE,
+  row_locator            STRING,
+  source_sha256          STRING,
+  parser_version         STRING
+)
+COMMENT = 'Subsidiary exhibit evidence for HAS_PARENT_COMPANY. Passthrough from silver sec_subsidiary_evidence.';
+
+CREATE TABLE IF NOT EXISTS SEC_AUDITOR_REPORT_EVIDENCE (
+  accession_number           STRING NOT NULL,
+  registrant_cik             NUMBER(38, 0),
+  form_type                  STRING,
+  document_name              STRING,
+  audited_period_end         DATE,
+  report_date                DATE,
+  principal_firm_name        STRING,
+  principal_firm_location    STRING,
+  pcaob_firm_id              STRING,
+  evidence_source            STRING,
+  raw_locator                STRING,
+  source_sha256              STRING,
+  evidence_fingerprint       STRING NOT NULL,
+  form_ap_filing_id          STRING,
+  original_form_ap_filing_id STRING,
+  latest_amendment           BOOLEAN,
+  parser_version             STRING
+)
+COMMENT = 'Auditor report evidence for AUDITED_BY. Passthrough from silver sec_auditor_report_evidence.';
+
+CREATE TABLE IF NOT EXISTS SEC_EMPLOYMENT_EVENT (
+  accession_number    STRING NOT NULL,
+  event_index         NUMBER(38, 0) NOT NULL,
+  cik                 NUMBER(38, 0) NOT NULL,
+  event_type          STRING,
+  person_name         STRING,
+  exec_role           STRING,
+  previous_role       STRING,
+  compensation_amount FLOAT,
+  effective_date      DATE,
+  parser_version      STRING
+)
+COMMENT = 'Employment / Item 5.02 events for EMPLOYED_BY. Passthrough from silver sec_employment_event.';

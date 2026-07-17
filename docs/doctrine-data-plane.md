@@ -68,6 +68,10 @@ See the “Needs clarity” list from the doctrine review session (cutover phasi
 
 ---
 
+## Capture modes
+
+See [capture-modes.md](capture-modes.md) for `normal` vs `strict_release`, env vars, and Ticket 20 coexistence.
+
 ## Next engineering step
 
-**`/to-spec`** — SecGateway, silver skip keys, bronze flags, Snowflake export delta, Decision Contract objects aligned with ADR 0001 + 0002.
+Implement tickets under `.scratch/agent-decision-data-plane/issues/` (frontier: 01–02, 08, 14 completed in phase 0).

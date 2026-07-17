@@ -43,7 +43,10 @@ const targetTables = new Map([
   ["SEC_FINANCIAL_DERIVED", `${databaseName}.${sourceSchema}.SEC_FINANCIAL_DERIVED`],
   ["EARNINGS_RELEASE", `${databaseName}.${sourceSchema}.EARNINGS_RELEASE`],
   ["EXECUTIVE_RECORD", `${databaseName}.${sourceSchema}.EXECUTIVE_RECORD`],
-  ["ACCOUNTING_FLAG", `${databaseName}.${sourceSchema}.ACCOUNTING_FLAG`]
+  ["ACCOUNTING_FLAG", `${databaseName}.${sourceSchema}.ACCOUNTING_FLAG`],
+  ["SEC_SUBSIDIARY_EVIDENCE", `${databaseName}.${sourceSchema}.SEC_SUBSIDIARY_EVIDENCE`],
+  ["SEC_AUDITOR_REPORT_EVIDENCE", `${databaseName}.${sourceSchema}.SEC_AUDITOR_REPORT_EVIDENCE`],
+  ["SEC_EMPLOYMENT_EVENT", `${databaseName}.${sourceSchema}.SEC_EMPLOYMENT_EVENT`]
 ]);
 
 const mergeKeys = new Map([
@@ -61,7 +64,10 @@ const mergeKeys = new Map([
   ["SEC_FINANCIAL_DERIVED", ["CIK", "ACCESSION_NUMBER", "FISCAL_PERIOD", "PERIOD_END"]],
   ["EARNINGS_RELEASE", ["FACT_KEY"]],
   ["EXECUTIVE_RECORD", ["FACT_KEY"]],
-  ["ACCOUNTING_FLAG", ["FACT_KEY"]]
+  ["ACCOUNTING_FLAG", ["FACT_KEY"]],
+  ["SEC_SUBSIDIARY_EVIDENCE", ["ACCESSION_NUMBER", "DOCUMENT_NAME", "ROW_ORDINAL"]],
+  ["SEC_AUDITOR_REPORT_EVIDENCE", ["ACCESSION_NUMBER", "EVIDENCE_FINGERPRINT"]],
+  ["SEC_EMPLOYMENT_EVENT", ["ACCESSION_NUMBER", "EVENT_INDEX"]]
 ]);
 
 function q(value) {
