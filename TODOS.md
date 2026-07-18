@@ -1379,3 +1379,99 @@ entry, Windows path with spaces); worked around, not fixed, in
 build via `AWS_PROFILE=default`.
 
 **Surfaced:** `prodb` environment build session, 2026-07-03.
+
+## FLAG FOR NEXT SESSION / OTHER RUNTIME: prodb→prod promotion is half-applied — do not deploy `module.runtime` changes until Snowflake is repointed too (2026-07-17)
+
+**What:** `infra/terraform/accounts/prod/main.tf` and `outputs.tf` have an
+**uncommitted** working-tree diff (present since before this session started,
+still uncommitted as of 2026-07-17 ~10:30pm) that adds a `module.storage_canonical`
+block, creating new `edgartools-prod-{bronze,warehouse,snowflake-export}-690839588395`
+S3 buckets alongside the existing `edgartools-prodb-*` ones, and repoints
+`module.runtime.snowflake_export_bucket_name` from `module.storage` to
+`module.storage_canonical`. This is Stage 2 ("S3 preservation") of
+`docs/prodb-to-prod-promotion.md` — the runbook that promotes the `prodb`
+environment (built in account `690839588395` on 2026-07-05/06 as a stand-in
+for real prod, which then lived in the now-decommissioned account
+`077127448006`) into becoming the one canonical production environment.
+
+**Live-state verification done this session (2026-07-17), do not re-derive —
+trust this over any doc/comment that says otherwise:**
+- AWS: the new canonical S3 buckets **already exist** in account
+  `690839588395` (`aws s3api head-bucket` succeeded on all three). The old
+  `edgartools-prodb-*` buckets also still exist, untouched, with real data.
+- Snowflake: **`EDGARTOOLS_PROD` database does not exist at all** —
+  `SHOW DATABASES LIKE 'EDGARTOOLS%'` only returns `EDGARTOOLS_DEV` and
+  `EDGARTOOLS_PRODB`; `SHOW SCHEMAS IN DATABASE EDGARTOOLS_PROD` errors
+  "Object does not exist." All real gold/source/MDM/graph schemas live in
+  `EDGARTOOLS_PRODB`. Whatever "real prod" Snowflake launch the older
+  go-live workstream evidence files (`.planning/workstreams/go-live/phases/...`)
+  describe as verified/READY no longer exists today — it is gone, not just
+  renamed (no `EDGARTOOLS_PROD_MDM` Postgres instance exists either; only
+  `EDGARTOOLS_DEV_MDM` and `EDGARTOOLS_PRODB_MDM`).
+- Snowflake native-pull: `EDGARTOOLS_PRODB.EDGARTOOLS_SOURCE.EDGARTOOLS_SOURCE_EXPORT_STAGE`
+  and its storage integration (`EDGARTOOLS_PRODB_EXPORT_INTEGRATION`,
+  `STORAGE_ALLOWED_LOCATIONS`) are still hard-pointed at the **old**
+  `s3://edgartools-prodb-snowflake-export/...` path only. Nothing on the
+  Snowflake side has been repointed at the new canonical bucket.
+- MDM: the `edgartools-prod/mdm/snowflake` secret is internally consistent —
+  despite its "prod"-named path, its contents correctly target
+  `MDM_SNOWFLAKE_DATABASE=EDGARTOOLS_PRODB` /
+  `MDM_SNOWFLAKE_WAREHOUSE=EDGARTOOLS_PRODB_REFRESH_WH`. MDM itself is not
+  currently broken by the naming split — only the S3↔Snowflake native-pull
+  layer is.
+- Bottom line: **everything this platform currently treats as "production"
+  (ticket 20's Step Functions runs, `sec_platform_prodb` IAM roles, the
+  `load_history`/`gold-refresh` pipeline) is actually running against
+  `EDGARTOOLS_PRODB`.** There is no working `EDGARTOOLS_PROD` today; prodb
+  is de facto prod.
+
+**The concrete risk:** if the uncommitted Terraform diff above gets applied
+and deployed (i.e. `deploy-aws-application.sh` picks up the new
+`module.runtime.snowflake_export_bucket_name` and redeploys the
+warehouse/MDM task defs), the `gold-refresh` step starts writing Snowflake
+export manifests to the **new** canonical bucket — but Snowflake's only real
+external stage still reads from the **old** bucket. `SNOWFLAKE_RUN_MANIFEST_TASK`
+would silently stop seeing new manifests. No error anywhere: ECS succeeds,
+the S3 write succeeds, the Snowflake task runs on schedule and finds
+nothing new. `EDGARTOOLS_GOLD` just quietly stops refreshing — exactly the
+kind of silent data-freshness regression this platform's bronze→source→gold
+automation exists to prevent, and it would land in the middle of whatever
+`fix-pipelines`/ticket-20 work is using that same gold data.
+
+**Do not apply this Terraform diff or run any deploy touching `module.runtime`
+until Stage 3 of `docs/prodb-to-prod-promotion.md` (Snowflake stage/storage-
+integration repoint, or a full `EDGARTOOLS_PRODB`→`EDGARTOOLS_PROD` rename)
+happens in the same change.** Partial application across just the AWS layer
+is the dangerous state, not either endpoint.
+
+**Also note:** `infra/terraform/snowflake/accounts/prod/variables.tf`'s
+`expected_database_name` variable hard-validates to only accept the literal
+string `"EDGARTOOLS_PROD"` — so this Terraform root currently cannot manage
+or track the database that actually has data (`EDGARTOOLS_PRODB`) at all.
+None of the real live Snowflake objects (roles, warehouses, grants, MDM
+Postgres, Neo4j graph grants) are Terraform-tracked/reproducible from code
+today; they were all created by hand per
+`.planning/workstreams/prodb-environment/README.md`.
+
+**Repeat instance of the secret-exposure pattern (see the AWS-access-key
+entry directly above and "Password leak via Python quoting bug" elsewhere
+in this file):** while checking `edgartools-prod/mdm/snowflake` during this
+investigation, a Python dict-key filter meant to exclude `password`/`private_key`
+used a lowercase exact-match check (`k.lower() not in ('password', ...)`)
+against a key actually named `MDM_SNOWFLAKE_PASSWORD` — `'mdm_snowflake_password'
+!= 'password'`, so the filter silently failed to exclude it and the live
+Snowflake password was printed in cleartext to the tool output. Disclosed to
+the user immediately; rotation of that Snowflake password
+(`ANANP11`@`xcpclkf-kb19989`) was recommended. **Going forward: when
+filtering secret dict keys for safe display, match by substring
+(`"password" in k.lower()` / `"secret" in k.lower()` / `"private_key" in
+k.lower()`), never by exact key name** — real secret env vars are almost
+always prefixed/namespaced (`MDM_SNOWFLAKE_PASSWORD`, `DBT_SNOWFLAKE_PASSWORD`),
+not the bare word.
+
+**Surfaced:** `/investigate impact of prodb to prod all the way to mdm,
+neo4j and snowflake` session, 2026-07-17. Investigating LLM: Claude
+(session continuing ticket-20/item_502 work). Ticket 20 / `fix-pipelines`
+was being actively worked by the other runtime (Codex) at the time this was
+found — flagging here rather than editing their active workstream files
+directly, per this repo's Claude/Codex non-overlap rule.
