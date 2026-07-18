@@ -1532,7 +1532,9 @@ def _capture_bronze_raw(
                     read_bytes(candidate_manifest_path).decode("utf-8")
                 )
                 candidate_inventory = candidate_inventory_from_manifest(
-                    candidate_payload, ciks={int(cik) for cik in cik_list}
+                    candidate_payload,
+                    ciks={int(cik) for cik in cik_list},
+                    require_strict_agent_windows=True,
                 )
                 required_candidates = [
                     candidate
@@ -1641,7 +1643,9 @@ def _capture_bronze_raw(
             from edgar_warehouse.infrastructure.object_storage import write_uri_text
 
             inventory = candidate_inventory_from_manifest(
-                candidate_payload, ciks={int(cik) for cik in cik_list}
+                candidate_payload,
+                ciks={int(cik) for cik in cik_list},
+                require_strict_agent_windows=True,
             )
             pending_candidates = [
                 candidate
@@ -1874,7 +1878,9 @@ def _capture_bronze_raw(
                 candidate_inventory_from_manifest,
                 reconcile_completion_ledger_batches,
             )
-            inventory = candidate_inventory_from_manifest(candidate_payload)
+            inventory = candidate_inventory_from_manifest(
+                candidate_payload, require_strict_agent_windows=True
+            )
             ledger_paths = context.storage_root.find_existing(
                 f"release-evidence/{sync_run_id}/bulk-load-ledger-batches/*.json"
             )

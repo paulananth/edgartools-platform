@@ -63,10 +63,76 @@ def select_required_accessions(
     return selected
 
 
+def validate_strict_release_manifest(manifest: Mapping[str, object]) -> dict[str, dict[str, str]]:
+    """Fail closed for Ticket 20 ``release_mode`` loads.
+
+    Requires ``coverage_by_document_type`` (post-rebuild freezes only). A legacy
+    single-``coverage_start`` freeze without the type map is **not** agent GO —
+    operators must rebuild under agent lookbacks.
+    """
+    raw_windows = manifest.get("coverage_by_document_type")
+    if not isinstance(raw_windows, Mapping) or not raw_windows:
+        raise InventoryError(
+            "release candidate manifest is missing coverage_by_document_type; "
+            "rebuild the freeze under locked agent lookbacks "
+            "(post-filter of a 2013-era full-window freeze is not GO)"
+        )
+    windows = _normalize_coverage_by_document_type(raw_windows)
+    watermark = _as_date(manifest.get("watermark"))
+    if watermark is None:
+        raise InventoryError("candidate manifest is missing watermark")
+    expected = agent_coverage_by_document_type(watermark)
+    for key in ("thirteenf", "proxy", "item_502_8k"):
+        if windows[key]["start"] != expected[key]["start"] or windows[key]["end"] != expected[key]["end"]:
+            raise InventoryError(
+                f"coverage_by_document_type.{key} "
+                f"({windows[key]['start']}..{windows[key]['end']}) does not match "
+                f"locked agent window ({expected[key]['start']}..{expected[key]['end']}) "
+                f"for watermark {watermark.isoformat()}; rebuild the freeze"
+            )
+    if windows["proxy"].get("baseline") != "latest_in_band_only":
+        raise InventoryError(
+            "coverage_by_document_type.proxy.baseline must be latest_in_band_only"
+        )
+    # Membership audit: no candidate may sit outside its form family's window.
+    rows = manifest.get("candidates")
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, Mapping):
+                continue
+            form = str(row.get("form") or "").strip().upper()
+            filing_date = _as_date(row.get("filing_date"))
+            if filing_date is None or form not in PROXY_FORMS | EIGHT_K_FORMS | THIRTEENF_FORMS:
+                continue
+            if not filing_in_document_type_window(
+                form, filing_date, windows, watermark=watermark
+            ):
+                accession = str(row.get("accession_number") or "")
+                raise InventoryError(
+                    f"release candidate {accession} ({form} {filing_date.isoformat()}) "
+                    f"is outside locked agent windows; rebuild the freeze"
+                )
+            reason = str(row.get("candidate_reason") or "")
+            if reason == "unrelated_8k_metadata":
+                raise InventoryError(
+                    f"release candidate {accession} is an unrelated 8-K; "
+                    "unrelated 8-Ks must not appear in agent freezes"
+                )
+    return windows
+
+
 def candidate_inventory_from_manifest(
-    manifest: object, *, ciks: set[int] | None = None
+    manifest: object,
+    *,
+    ciks: set[int] | None = None,
+    require_strict_agent_windows: bool = False,
 ) -> CandidateInventory:
-    """Restore a frozen inventory (or one CIK batch) from its release manifest."""
+    """Restore a frozen inventory (or one CIK batch) from its release manifest.
+
+    When ``require_strict_agent_windows`` is true (Ticket 20 release_mode), the
+    manifest must carry locked ``coverage_by_document_type`` matching agent
+    lookbacks for its watermark. Legacy freezes without that map are rejected.
+    """
     if not isinstance(manifest, Mapping):
         raise InventoryError("candidate manifest must be an object")
     rows = manifest.get("candidates")
@@ -77,12 +143,15 @@ def candidate_inventory_from_manifest(
     inventory_fingerprint = str(manifest.get("fingerprint") or "").strip()
     if coverage_start is None or watermark is None or not inventory_fingerprint:
         raise InventoryError("candidate manifest is missing inventory identity")
-    raw_windows = manifest.get("coverage_by_document_type")
-    if isinstance(raw_windows, Mapping) and raw_windows:
-        windows = _normalize_coverage_by_document_type(raw_windows)
+    if require_strict_agent_windows:
+        windows = validate_strict_release_manifest(manifest)
     else:
-        # Legacy freezes: treat top-level coverage_start as uniform for all forms.
-        windows = uniform_coverage_by_document_type(coverage_start, watermark)
+        raw_windows = manifest.get("coverage_by_document_type")
+        if isinstance(raw_windows, Mapping) and raw_windows:
+            windows = _normalize_coverage_by_document_type(raw_windows)
+        else:
+            # Legacy freezes (non-strict read): uniform windows from coverage_start.
+            windows = uniform_coverage_by_document_type(coverage_start, watermark)
     candidates: list[RelationshipSourceCandidate] = []
     for row in rows:
         if not isinstance(row, Mapping):
