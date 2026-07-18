@@ -254,6 +254,66 @@ def test_operator_canonicalizes_multi_registrant_accession_without_hiding_ciks()
     }]
 
 
+def test_preflight_strict_release_manifest_ready_report() -> None:
+    from edgar_warehouse.application.relationship_bulk_load import (
+        preflight_strict_release_manifest,
+        summarize_release_manifest,
+    )
+
+    watermark = date(2026, 7, 2)
+    windows = agent_coverage_by_document_type(watermark)
+    payload = {
+        "schema_version": 1,
+        "coverage_start": index_floor_coverage_start(windows).isoformat(),
+        "coverage_by_document_type": windows,
+        "watermark": watermark.isoformat(),
+        "fingerprint": "agent-fp",
+        "candidates": [
+            {
+                "accession_number": "new-13f",
+                "cik": 9,
+                "form": "13F-HR",
+                "filing_date": "2024-08-14",
+                "fingerprint": "c-fp",
+                "candidate_reason": "thirteenf_filing",
+                "artifact_required": True,
+            }
+        ],
+        "cik_batches": [{"cik_list": "9"}],
+    }
+    summary = summarize_release_manifest(payload)
+    assert summary["candidate_count"] == 1
+    assert summary["counts_by_form"]["13F-HR"] == 1
+    report = preflight_strict_release_manifest(payload)
+    assert report["strict_release_eligible"] is True
+    assert report["disposition"] == "READY_FOR_STRICT_LOAD"
+    assert report["coverage_by_document_type"]["thirteenf"]["start"] == "2023-07-02"
+
+
+def test_preflight_rejects_legacy_full_window_freeze() -> None:
+    from edgar_warehouse.application.relationship_bulk_load import (
+        preflight_strict_release_manifest,
+    )
+
+    payload = {
+        "coverage_start": "2013-05-20",
+        "watermark": "2026-07-02",
+        "fingerprint": "legacy",
+        "candidates": [
+            {
+                "accession_number": "x",
+                "cik": 1,
+                "form": "13F-HR",
+                "filing_date": "2014-01-01",
+                "fingerprint": "c",
+                "artifact_required": True,
+            }
+        ],
+    }
+    with pytest.raises(InventoryError, match="coverage_by_document_type"):
+        preflight_strict_release_manifest(payload)
+
+
 def test_ticket20_pass_claim_binds_fingerprint_watermark_and_windows() -> None:
     from edgar_warehouse.application.relationship_bulk_load import (
         build_required_relationship_bulk_load_evidence,

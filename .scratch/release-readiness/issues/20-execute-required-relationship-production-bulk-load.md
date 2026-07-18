@@ -59,21 +59,21 @@ resume notes.
 | click pin + resume P0/P1 | **Landed** — PR #168 |
 | Per-form agent freeze builder | **Landed** — PR #170 |
 | Fail-closed strict freeze gate | **Landed** — PR #171 |
-| PASS evidence artifact on reconcile | **On branch** `grok/ticket20-bulk-load-evidence` (merge before image if desired) |
-| Warehouse image with #168–#171 | **Not yet** rebuilt after those merges |
+| PASS evidence + attestations on reconcile | **Landed** — PR #173 |
+| Freeze preflight CLI | **Landed** — `validate_relationship_release_manifest` |
+| Warehouse image with #168–#173 | **Not yet** rebuilt after those merges |
 | Agent-window freeze rebuild | **Not done** (required; old freeze fails gate) |
 | Strict SF PASS | **Not done** |
 
 ### Still required for GO (do not mark resolved until all pass)
 
-1. Merge any remaining image-bound code (evidence PR if wanted).
-2. Build + deploy **new** warehouse image; register new task defs (**P3**: no redrive).
-3. **Rebuild freeze** under agent windows (new fingerprint + `coverage_by_document_type`).
-4. New strict SF execution; all batches succeed fail-closed.
+1. Build + deploy **new** warehouse image from current `main`; register new task defs (**P3**: no redrive).
+2. **Rebuild freeze** under agent windows (new fingerprint + `coverage_by_document_type`).
+3. Preflight: `validate_relationship_release_manifest` → `READY_FOR_STRICT_LOAD`.
+4. New strict SF execution (attestations in input); all batches succeed fail-closed.
 5. Reconcile ledger + `required_relationship_bulk_load_evidence.json` PASS.
 6. MDM run/backfill/export/sync/verify; exact `EMPLOYED_BY` + `INSTITUTIONAL_HOLDS` parity.
 7. No-change rerun: zero SEC network, identical semantic digests.
-8. Five named attestations bound on the evidence artifact.
 
 Until those produce PASS evidence, leave status **open** / disposition
 **NO_GO**. Do **not** treat ordinary skip-policy full-chain as Ticket 20 proof.

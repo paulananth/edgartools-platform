@@ -63,6 +63,68 @@ def select_required_accessions(
     return selected
 
 
+def summarize_release_manifest(manifest: Mapping[str, object]) -> dict[str, object]:
+    """Secret-safe inventory summary for operator preflight (no candidate dump)."""
+    if not isinstance(manifest, Mapping):
+        raise InventoryError("candidate manifest must be an object")
+    watermark = _as_date(manifest.get("watermark"))
+    coverage_start = _as_date(manifest.get("coverage_start"))
+    fingerprint = str(manifest.get("fingerprint") or "").strip()
+    rows = manifest.get("candidates")
+    if not isinstance(rows, list):
+        raise InventoryError("candidate manifest must contain candidates list")
+    by_form: dict[str, int] = {}
+    by_reason: dict[str, int] = {}
+    required = 0
+    ciks: set[int] = set()
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        form = str(row.get("form") or "").strip().upper() or "?"
+        reason = str(row.get("candidate_reason") or "").strip() or "?"
+        by_form[form] = by_form.get(form, 0) + 1
+        by_reason[reason] = by_reason.get(reason, 0) + 1
+        if bool(row.get("artifact_required", True)):
+            required += 1
+        cik = int(row.get("cik") or 0)
+        if cik > 0:
+            ciks.add(cik)
+    batches = manifest.get("cik_batches")
+    batch_count = len(batches) if isinstance(batches, list) else None
+    return {
+        "schema_version": int(manifest.get("schema_version") or 0) or None,
+        "watermark": watermark.isoformat() if watermark else None,
+        "coverage_start": coverage_start.isoformat() if coverage_start else None,
+        "fingerprint": fingerprint or None,
+        "has_coverage_by_document_type": isinstance(
+            manifest.get("coverage_by_document_type"), Mapping
+        )
+        and bool(manifest.get("coverage_by_document_type")),
+        "candidate_count": len(rows),
+        "artifact_required_count": required,
+        "candidate_cik_count": len(ciks),
+        "batch_count": batch_count,
+        "counts_by_form": dict(sorted(by_form.items())),
+        "counts_by_reason": dict(sorted(by_reason.items())),
+    }
+
+
+def preflight_strict_release_manifest(manifest: object) -> dict[str, object]:
+    """Validate agent-window freeze and return operator preflight report.
+
+    Raises ``InventoryError`` when the freeze is not eligible for Ticket 20
+    ``release_mode`` (missing type map, wrong windows, out-of-band candidates).
+    """
+    if not isinstance(manifest, Mapping):
+        raise InventoryError("candidate manifest must be an object")
+    windows = validate_strict_release_manifest(manifest)
+    summary = summarize_release_manifest(manifest)
+    summary["coverage_by_document_type"] = windows
+    summary["strict_release_eligible"] = True
+    summary["disposition"] = "READY_FOR_STRICT_LOAD"
+    return summary
+
+
 def validate_strict_release_manifest(manifest: Mapping[str, object]) -> dict[str, dict[str, str]]:
     """Fail closed for Ticket 20 ``release_mode`` loads.
 
