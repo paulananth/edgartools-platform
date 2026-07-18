@@ -1,62 +1,77 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-16T17:30:34Z",
-  "disposition": "PARTIAL_PASS_NO_GO",
+  "generated_at": "2026-07-18T10:48:00Z",
+  "disposition": "IN_PROGRESS_STRICT_EXECUTION_NO_GO",
   "release_candidate": {
-    "repository_commit": "7da4bf281c1a6845a9086efe15e75df4add724da",
-    "warehouse_image_digest": "sha256:37ec4e43788abd40f0f26a0615137fd73c8b26d74bec8605f05b69422baf1550",
-    "mdm_image_digest": "sha256:f97963824fbfa54a41151f37c548788c84add07e31c62e252b25d59457cbe118"
+    "repository_commit": "374fa1b8518f",
+    "repository_branch": "fix/ticket20-spacy-click-dep",
+    "warehouse_image_digest": "sha256:85b36882ff81f9be3ee0300d6140370dcac0a6908322a00ff636f7a742b451fe",
+    "warehouse_image_tag": "sha-374fa1b8518f",
+    "mdm_image_digest": "sha256:f97963824fbfa54a41151f37c548788c84add07e31c62e252b25d59457cbe118",
+    "mdm_image_tag": "sha-6eba58ecbc4b"
+  },
+  "prior_failure": {
+    "execution": "ticket20-strict-20260718T013201Z",
+    "status": "FAILED",
+    "error": "States.ExceedToleratedFailureThreshold",
+    "root_cause": "ModuleNotFoundError: No module named 'click' when importing spaCy for Item 5.02 (spacy.cli imports click; typer no longer pulls click transitively)",
+    "fix_commit": "374fa1b8518f",
+    "fix_summary": "Pin click>=8.1 in project dependencies so warehouse --extra s3 images include it"
   },
   "deployment": {
     "environment": "prod",
     "region": "us-east-1",
-    "mdm_task_definition_revision": 9,
+    "account": "690839588395",
+    "data_plane": {
+      "bronze_bucket": "edgartools-prodb-bronze",
+      "warehouse_bucket": "edgartools-prodb-warehouse",
+      "snowflake_export_bucket": "edgartools-prodb-snowflake-export"
+    },
+    "runner_roles": {
+      "execution": "sec_platform_prodb_runner_execution",
+      "task": "sec_platform_prodb_runner_task",
+      "step_functions": "sec_platform_prodb_runner_step_functions"
+    },
+    "task_definitions": {
+      "medium": "edgartools-prod-medium:24"
+    },
     "full_chain_state_machine": "edgartools-prod-bronze-seed-silver-gold",
-    "full_chain_revision_id": "74a9eb4d-3e9f-44b0-9d0e-537cd4fddc85",
-    "batch_silver_max_concurrency": 4,
-    "immutable_image_binding_verified": true
+    "immutable_image_binding_verified": true,
+    "image_smoke": "docker run verified: import click + item_502 PARSER_VERSION=3"
   },
-  "mdm_export_remediation": {
-    "status": "pass",
-    "same_runtime_connectivity_preflight": "pass",
-    "snowflake_export_targets_provisioned": true,
-    "snowflake_postgres_migration_010_applied": true,
-    "decimal_serialization_hotfix_pr": 136,
-    "snowflake_fund_contract_hotfix_pr": 137,
-    "replay_task_id": "6d103ecd1c69433ea41120e92b621347",
-    "replay_exit_code": 0,
-    "exported_change_rows": 2,
-    "snowflake_row_counts": {
-      "MDM_ADVISER": 1,
-      "MDM_FUND": 1
-    }
+  "frozen_candidate_manifest": {
+    "status": "reused_from_prior_freeze",
+    "original_run_id": "ticket20-strict-20260718T013201Z",
+    "coverage_start": "2013-05-20",
+    "watermark": "2026-07-02",
+    "candidate_count": 528829,
+    "candidate_cik_count": 15941,
+    "batch_count": 160,
+    "fingerprint": "ded1b9a2c3e14c3b1c30fd01e30924acac158014c4e9a114e18b76f47fbbf746",
+    "candidate_manifest_key": "warehouse/bronze/reference/relationship_release/ticket20-strict-20260718T013201Z/candidate_manifest.json",
+    "candidate_batches_key": "warehouse/bronze/reference/relationship_release/ticket20-strict-20260718T013201Z/candidate_batches.jsonl"
   },
   "strict_bulk_load_gate": {
-    "status": "blocked",
-    "execution_started": false,
-    "ordinary_workflow_is_release_evidence": false,
-    "ordinary_batch_policy": {
-      "artifact_policy": "skip",
-      "parser_policy": "skip"
-    },
-    "blockers": [
-      {
-        "code": "frozen_candidate_manifest_missing",
-        "detail": "No production candidate manifest or reconciled completion ledger exists for the 2013-05-20 through release-watermark relationship window."
-      },
-      {
-        "code": "quarter_index_coverage_incomplete",
-        "detail": "The production bronze quarterly-index prefix currently exposes only 2026 coverage, so the required historical index fingerprint set cannot be reconciled."
-      },
-      {
-        "code": "named_attestations_missing",
-        "detail": "Warehouse, MDM, Graph, Release Data Operator, and Release Owner attestations remain unassigned."
-      }
-    ]
+    "status": "in_progress",
+    "execution_started": true,
+    "execution_name": "ticket20-strict-resume-20260718T104737Z",
+    "execution_arn": "arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bronze-seed-silver-gold:ticket20-strict-resume-20260718T104737Z",
+    "path": "release_mode=true → StrictManifestCheck → StrictBatchSilver",
+    "artifact_policy": "all_attachments",
+    "parser_policy": "branch_b_deferred",
+    "note": "Idempotent cache hits from prior partial artifact work reduce re-fetch cost; remaining missing Branch B docs still network-fetch."
+  },
+  "attestations": {
+    "warehouse": "Paul Ananth (Warehouse Ingestion / Release Data Operator)",
+    "mdm": "Paul Ananth (MDM Builder)",
+    "graph": "Paul Ananth (Graph Operator)",
+    "release_data_operator": "Paul Ananth (Release Data Operator)",
+    "release_owner": "Paul Ananth (Release Owner)",
+    "bound_in_execution_input": true
   },
   "launch_decision": {
     "eligible": false,
-    "action": "do_not_start_ordinary_full_chain",
-    "reason": "MdmExport is repaired, but the current ordinary workflow cannot produce the strict Ticket 20 candidate-ledger proof."
+    "action": "monitor_strict_resume_execution",
+    "reason": "Resumed after click dependency fix. Still NO_GO until completion ledger, parity, and no-change rerun PASS."
   }
 }

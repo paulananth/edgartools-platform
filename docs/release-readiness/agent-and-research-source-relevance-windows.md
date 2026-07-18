@@ -34,9 +34,9 @@ filings.
 
 | Source | Forms | Relevant from (filing date) | Agent purpose |
 | --- | --- | --- | --- |
-| **13F** | `13F-HR`, `13F-HR/A` | **`W − 3 years`**, never before **`2013-05-20`** | `INSTITUTIONAL_HOLDS` current + ~12 quarters context (**confirmed**) |
-| **Proxy** | `DEF 14A`, `DEF 14A/A`, `DEFA14A`, `PRE 14A` | **Latest definitive proxy ≤ `W` always** + proxies ≥ **`W − 5 years`** | `EMPLOYED_BY` baseline + multi-year officer set (**confirmed**) |
-| **Item 5.02 8-K** | `8-K`, `8-K/A` (5.02 or ambiguous items) | **`W − 1 year`** | Recent appointment/departure events (**confirmed**) |
+| **13F** | `13F-HR`, `13F-HR/A` | **`[max(W − 3 years, 2013-05-20), W]`** | `INSTITUTIONAL_HOLDS` current + ~12 quarters context. Wayfinder ticket **Lock 13F agent lookback window** locked 2026-07-18; full XML-era archive not first agent GO. |
+| **Proxy** | `DEF 14A`, `DEF 14A/A`, `DEFA14A`, `PRE 14A` | **`[W − 5 years, W]`** only; baseline = latest in band | Wayfinder **Lock proxy agent lookback window** (2026-07-18): **no** load of proxies older than W−5y even as baseline. |
+| **Item 5.02 8-K** | `8-K`, `8-K/A` (5.02 or ambiguous items) | **`[W − 2 years, W]`** | Recent appointment/departure events. Wayfinder ticket **Lock Item 5.02 8-K agent lookback window** locked 2026-07-18 (2y, not 1y). Older 5.02 Explore-only. |
 | **Unrelated 8-K** | items prove no 5.02 | **Out of scope** | Do not bulk-download |
 
 ### Financial / quant features (not Ticket 20 document freeze)
@@ -46,14 +46,14 @@ filings.
 | CAGR, growth, earnings-potential style factors | **3y / 5y FY inputs** under declared feature rules; published as **one as-of feature row** at `W` | Companyfacts / gold Subject Feature Screen |
 | Latest Complete Holdings Period lag | Exposed in coverage metadata | 13F derivation, not extra 8-K years |
 
-### Other relationship types (defaults until grilled)
+### Other relationship types
 
-| Source | Default for agent v1 | Notes |
+| Source | Agent window | Notes |
 | --- | --- | --- |
-| Form 3/4/5 insider | **`W − 2 years`** activity + current derived holds | Adjust if product wants 1y |
-| ADV / MANAGES_FUND | Current ADV + **`W − 2 years`** material changes if published | |
-| Auditor | Latest as-of `W` | |
-| Parent / EX-21 | Latest 10-K exhibit set as-of `W` | |
+| Form 3/4/5 insider | **`[W − 2 years, W]`** activity + **current derived holds** always | Wayfinder **Lock Form 3/4/5 agent lookback window** locked 2026-07-18. **Not** Ticket 20 freeze path (silver-once ownership). Deeper Form 4 tape Explore-only. |
+| ADV / MANAGES_FUND | Current ADV + **`W − 2 years`** material changes if published | Default until grilled |
+| Auditor | Latest as-of `W` | Default until grilled |
+| Parent / EX-21 | Latest 10-K exhibit set as-of `W` | Default until grilled |
 
 ## What Ticket 20 must load for agent-aligned GO
 
@@ -74,7 +74,7 @@ Relative to a single 2013→`W` freeze (~529k candidates):
 
 | Cut | Rough effect |
 | --- | --- |
-| 8-K → 1y only | Large drop in 8-K artifact work |
+| 8-K → 2y only | Large drop in 8-K artifact work vs full history |
 | 13F → 3y only | Dominant volume cut vs full XML-era 13F |
 | Proxy → baseline + 5y | Already modest vs 13F |
 
@@ -82,20 +82,43 @@ Exact counts require a **new freeze** under per-form filters.
 
 ## Implementation checklist
 
-1. Inventory builder: per-form lookbacks (13F 3y/floor, proxy 5y+baseline, 8-K 1y).
-2. Freeze metadata `coverage_by_document_type` on evidence + Decision Contract.
-3. Financial feature pipeline remains separate (companyfacts/gold).
-4. Deploy resume (P0–P2) so partial loads compound.
+1. Inventory builder: per-form lookbacks (13F 3y/floor, proxy 5y in-band only, 8-K 2y);
+   candidates only inside each family’s window (wayfinder ticket 12).
+2. Freeze metadata: top-level `coverage_start` = min-of-types **index floor**;
+   `coverage_by_document_type` = product truth on freeze + evidence + Decision Contract;
+   SiS Agent View required human labels (no universal “complete since 2013”).
+3. **Full freeze rebuild** before Ticket 20 agent GO under new windows (no post-filter-only GO).
+4. Financial feature pipeline remains separate (companyfacts/gold).
+5. Deploy resume (P0–P2) so partial loads compound.
+
+## Ticket 20 PASS / GO claim language (locked 2026-07-18)
+
+PASS = **agent-window bulk-load complete** only (frozen candidates terminal).
+Bind every PASS to **fingerprint + watermark W + `coverage_by_document_type`**.
+
+```text
+Required relationship sources for EMPLOYED_BY and INSTITUTIONAL_HOLDS are
+bulk-load complete for agent windows at watermark W (fingerprint F):
+  13F [max(W−3y, 2013-05-20), W];
+  proxy [W−5y, W] (latest-in-band baseline only);
+  Item 5.02 / ambiguous 8-K [W−2y, W].
+```
+
+**Forbidden:** “complete since 2013” for all forms; full-history / all-8-K /
+all-proxy-since-IPO claims; 13F full-XML-era when freeze is 3y; Form 3/4/5 or
+CAGR as Ticket 20 PASS; top-level `coverage_start` as all-forms agent coverage;
+Explore archive = agent GO.
 
 ## Grill log
 
 | # | Question | Decision |
 | --- | --- | --- |
 | 1 | 13F depth for first agent GO | **`W − 3 years`** (floor 2013-05-20) |
-| 2 | EMPLOYED_BY sources | **Proxy baseline + 5y proxies + 8-K 5.02 last 1 year** |
+| 2 | EMPLOYED_BY sources | **Proxy `[W−5y, W]` in-band only + 8-K 5.02 last 2 years** (locked) |
 | 3 | CAGR vs relationship load | **CAGR/growth from companyfacts/gold features, not from deep 13F/8-K bulk-load** (platform doctrine; treat as locked) |
-| 4 | Insider Form 4 window | Default **`W − 2 years`** until overridden |
+| 4 | Insider Form 4 window | **Locked** **`W − 2 years`** activity + current derived holds (2026-07-18); not Ticket 20 freeze |
 | 5 | Deep 13F-to-2013 archive | **Not in first agent GO**; optional later Explore backfill |
+| 6 | Freeze encoding + GO phrases | Tickets 12–13: `coverage_by_document_type` truth; rebuild freeze; approved PASS phrases + ban list |
 
 ## Related
 
