@@ -779,6 +779,62 @@ REQUIRED_GATE_ATTESTATION_ROLES = (
 )
 
 
+def normalize_s3_object_key(value: str, *, field_name: str = "key") -> str:
+    """Accept an s3:// URI or bare key; return bucket-relative object key."""
+    raw = str(value or "").strip()
+    if not raw:
+        raise InventoryError(f"{field_name} is empty")
+    if raw.startswith("s3://"):
+        without_scheme = raw[len("s3://") :]
+        slash = without_scheme.find("/")
+        if slash < 0 or slash == len(without_scheme) - 1:
+            raise InventoryError(f"{field_name} is not a valid s3 object URI: {value!r}")
+        return without_scheme[slash + 1 :]
+    return raw.lstrip("/")
+
+
+def build_ticket20_strict_execution_input(
+    *,
+    candidate_manifest_key: str,
+    candidate_batches_key: str,
+    attestations: Mapping[str, str] | object,
+    batch_size: int = 100,
+    watermark: str | date | None = None,
+    fingerprint: str | None = None,
+    ticket: int = 20,
+) -> dict[str, object]:
+    """Build Step Functions input for bronze_seed_silver_gold release_mode.
+
+    Keys are bucket-relative (as required by the state machine ItemReader /
+    StrictManifestCheck). Attestations must include all five named roles.
+    """
+    if int(batch_size) <= 0:
+        raise InventoryError("batch_size must be positive")
+    bound = normalize_gate_attestations(attestations)
+    manifest_key = normalize_s3_object_key(
+        candidate_manifest_key, field_name="candidate_manifest_key"
+    )
+    batches_key = normalize_s3_object_key(
+        candidate_batches_key, field_name="candidate_batches_key"
+    )
+    payload: dict[str, object] = {
+        "release_mode": True,
+        "candidate_manifest_key": manifest_key,
+        "candidate_batches_key": batches_key,
+        "batch_size": int(batch_size),
+        "attestations": bound,
+        "ticket": int(ticket),
+        "trigger": "operator",
+        "workflow": "bronze_seed_silver_gold",
+    }
+    if watermark is not None:
+        wm = watermark.isoformat() if isinstance(watermark, date) else str(watermark)
+        payload["watermark"] = wm
+    if fingerprint:
+        payload["candidate_fingerprint"] = str(fingerprint).strip()
+    return payload
+
+
 def normalize_gate_attestations(attestations: object) -> dict[str, str]:
     """Require the five named Ticket 20 gate attestation roles (non-empty strings)."""
     if not isinstance(attestations, Mapping):

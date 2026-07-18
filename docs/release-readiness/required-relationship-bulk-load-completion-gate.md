@@ -143,7 +143,12 @@ The current load-history definition catches Branch B failures and continues to M
 - Restated 13F filings supersede the prior quarter set; added-holdings amendments supplement it without duplicating unchanged holdings.
 - A no-limit idempotency rerun produces zero new relationship identities and identical semantic digests.
 
-Current `EMPLOYED_BY` derivation reads only proxy compensation rows and creates one person-company-year edge ([pipeline.py](../../edgar_warehouse/mdm/pipeline.py#L1119)); it does not process Item 5.02 departures or appointments. Current `INSTITUTIONAL_HOLDS` derivation requires an existing adviser CIK and otherwise skips the row ([pipeline.py](../../edgar_warehouse/mdm/pipeline.py#L1335)). Both are implementation blockers.
+`EMPLOYED_BY` derivation applies proxy compensation baselines and then Item 5.02
+employment events (appointments / departures / role changes) from
+`sec_employment_event` ([pipeline.py](../../edgar_warehouse/mdm/pipeline.py)
+`_derive_employed_by`). `INSTITUTIONAL_HOLDS` derivation still requires a
+resolvable manager entity; unresolved managers remain fail-closed ledger
+blockers rather than silent graph edges.
 
 ### 6. Graph proof
 

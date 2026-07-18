@@ -60,8 +60,9 @@ resume notes.
 | Per-form agent freeze builder | **Landed** — PR #170 |
 | Fail-closed strict freeze gate | **Landed** — PR #171 |
 | PASS evidence + attestations on reconcile | **Landed** — PR #173 |
-| Freeze preflight CLI | **Landed** — `validate_relationship_release_manifest` |
-| Warehouse image with #168–#173 | **Not yet** rebuilt after those merges |
+| Freeze preflight CLI | **Landed** — `validate_relationship_release_manifest` (PR #174) |
+| Strict SF execution input builder | **Landed** — `build_ticket20_strict_execution_input` |
+| Warehouse image with #168–#174+ | **Not yet** rebuilt after those merges |
 | Agent-window freeze rebuild | **Not done** (required; old freeze fails gate) |
 | Strict SF PASS | **Not done** |
 
