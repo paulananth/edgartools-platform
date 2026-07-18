@@ -1894,9 +1894,13 @@ def _capture_bronze_raw(
             reconciliation = reconcile_completion_ledger_batches(
                 inventory, batch_ledgers, generation_id=sync_run_id
             )
-            attestations = arguments.get("attestations")
-            if not isinstance(attestations, dict):
-                attestations = None
+            from edgar_warehouse.application.relationship_bulk_load import (
+                parse_attestations_json,
+            )
+
+            attestations_raw = arguments.get("attestations")
+            if attestations_raw is None:
+                attestations_raw = arguments.get("attestations_json")
             evidence = build_required_relationship_bulk_load_evidence(
                 generation_id=sync_run_id,
                 inventory_fingerprint=reconciliation.inventory_fingerprint,
@@ -1907,7 +1911,7 @@ def _capture_bronze_raw(
                 terminal_counts=reconciliation.terminal_counts,
                 ledger_fingerprint=reconciliation.fingerprint,
                 batch_ledger_count=len(batch_ledgers),
-                attestations=attestations,
+                attestations=parse_attestations_json(attestations_raw),
                 image_digest=str(arguments.get("image_digest") or "").strip() or None,
                 execution_arn=str(arguments.get("execution_arn") or "").strip() or None,
             )

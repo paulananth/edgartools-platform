@@ -2390,7 +2390,7 @@ mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next
 gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
 
 strict_reconcile = ecs_state(wh_medium_arn,
-    "States.Array('reconcile-relationship-release', '--candidate-manifest', States.Format('s3://" + bronze_bucket_name + "/{}', $.candidate_manifest_key), '--run-id', $$.Execution.Name)",
+    "States.Array('reconcile-relationship-release', '--candidate-manifest', States.Format('s3://" + bronze_bucket_name + "/{}', $.candidate_manifest_key), '--run-id', $$.Execution.Name, '--attestations-json', States.JsonToString($.attestations), '--execution-arn', $$.Execution.Id)",
     next_state="StrictMdmRun", retry_secs=60)
 strict_mdm_run = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="StrictMdmBackfill")
 strict_mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="StrictMdmIdempotency")

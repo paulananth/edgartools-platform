@@ -94,6 +94,8 @@ def test_bronze_seed_exposes_fail_closed_ticket20_release_path() -> None:
     assert '"MaxConcurrency": 4' in text
     assert "'--release-mode', '--candidate-manifest'" in text
     assert "'reconcile-relationship-release', '--candidate-manifest'" in text
+    assert "'--attestations-json'" in text
+    assert "States.JsonToString($.attestations)" in text
     assert '"StrictMdmVerify": strict_mdm_verify' in text
     assert 'strict_mdm_verify["Catch"]' not in text
 

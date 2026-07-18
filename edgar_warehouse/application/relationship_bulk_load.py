@@ -708,6 +708,49 @@ def format_ticket20_pass_claim(
     )
 
 
+REQUIRED_GATE_ATTESTATION_ROLES = (
+    "warehouse",
+    "mdm",
+    "graph",
+    "release_data_operator",
+    "release_owner",
+)
+
+
+def normalize_gate_attestations(attestations: object) -> dict[str, str]:
+    """Require the five named Ticket 20 gate attestation roles (non-empty strings)."""
+    if not isinstance(attestations, Mapping):
+        raise InventoryError(
+            "Ticket 20 evidence requires attestations object with five named roles"
+        )
+    normalized: dict[str, str] = {}
+    missing: list[str] = []
+    for role in REQUIRED_GATE_ATTESTATION_ROLES:
+        value = str(attestations.get(role) or "").strip()
+        if not value:
+            missing.append(role)
+        else:
+            normalized[role] = value
+    if missing:
+        raise InventoryError(
+            "Ticket 20 evidence missing attestations: " + ", ".join(missing)
+        )
+    return normalized
+
+
+def parse_attestations_json(raw: object) -> dict[str, str]:
+    """Parse CLI/SF ``--attestations-json`` payload into normalized role map."""
+    if raw is None or raw == "":
+        raise InventoryError("attestations-json is required for Ticket 20 evidence")
+    if isinstance(raw, Mapping):
+        return normalize_gate_attestations(raw)
+    try:
+        payload = json.loads(str(raw))
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise InventoryError("attestations-json must be valid JSON object") from exc
+    return normalize_gate_attestations(payload)
+
+
 def build_required_relationship_bulk_load_evidence(
     *,
     generation_id: str,
@@ -719,15 +762,17 @@ def build_required_relationship_bulk_load_evidence(
     terminal_counts: Mapping[str, int],
     ledger_fingerprint: str,
     batch_ledger_count: int,
-    attestations: Mapping[str, str] | None = None,
+    attestations: Mapping[str, str] | object | None = None,
     image_digest: str | None = None,
     execution_arn: str | None = None,
     extra_checks: Mapping[str, object] | None = None,
+    require_attestations: bool = True,
 ) -> dict[str, object]:
     """Secret-safe Ticket 20 gate evidence payload (completion gate shape).
 
-    Disposition is PASS only when terminal counts sum to candidate_count and
-    every status is a known terminal status. Nonterminal leftovers fail closed.
+    Disposition is PASS only when terminal counts sum to candidate_count,
+    every status is a known terminal status, and (by default) all five named
+    attestations are present. Nonterminal leftovers fail closed.
     """
     windows = _normalize_coverage_by_document_type(coverage_by_document_type)
     counts = {str(key): int(value) for key, value in terminal_counts.items()}
@@ -741,6 +786,12 @@ def build_required_relationship_bulk_load_evidence(
         raise InventoryError(
             f"terminal_counts sum {total_terminal} != candidate_count {candidate_count}"
         )
+    if require_attestations:
+        bound_attestations = normalize_gate_attestations(attestations)
+    elif attestations is None:
+        bound_attestations = {}
+    else:
+        bound_attestations = normalize_gate_attestations(attestations)
     pass_claim = format_ticket20_pass_claim(
         watermark=watermark,
         fingerprint=inventory_fingerprint,
@@ -768,10 +819,8 @@ def build_required_relationship_bulk_load_evidence(
             "Explore archive complete equals agent GO",
         ],
     }
-    if attestations:
-        evidence["attestations"] = {
-            str(key): str(value) for key, value in attestations.items()
-        }
+    if bound_attestations:
+        evidence["attestations"] = bound_attestations
     if image_digest:
         evidence["image_digest"] = str(image_digest)
     if execution_arn:

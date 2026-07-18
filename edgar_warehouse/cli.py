@@ -596,6 +596,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--candidate-manifest", required=True,
         help="Local or S3 frozen relationship candidate manifest",
     )
+    reconcile_relationship_release.add_argument(
+        "--attestations-json",
+        required=True,
+        help=(
+            "JSON object with five named Ticket 20 gate attestations: "
+            "warehouse, mdm, graph, release_data_operator, release_owner"
+        ),
+    )
+    reconcile_relationship_release.add_argument(
+        "--execution-arn",
+        default=None,
+        help="Optional Step Functions execution ARN bound into the evidence artifact",
+    )
+    reconcile_relationship_release.add_argument(
+        "--image-digest",
+        default=None,
+        help="Optional warehouse image digest bound into the evidence artifact",
+    )
     _add_run_id_arg(reconcile_relationship_release)
     reconcile_relationship_release.set_defaults(handler=_handle_reconcile_relationship_release)
 
