@@ -1524,3 +1524,34 @@ neo4j and snowflake` session, 2026-07-17. Investigating LLM: Claude
 was being actively worked by the other runtime (Codex) at the time this was
 found — flagging here rather than editing their active workstream files
 directly, per this repo's Claude/Codex non-overlap rule.
+
+**2026-07-18 addendum — confirms this is live, not dormant risk:**
+Ticket 01 of `.scratch/prodb-prod-cutover/issues/` (read-only bucket
+verification) found both `edgartools-prodb-snowflake-export` and the new
+canonical `edgartools-prod-snowflake-export-690839588395` bucket at 0
+objects, and every `edgartools-prod-*` Step Function
+(`gold-refresh`/`load-history`/`daily-incremental`/`bootstrap`/
+`silver-mdm-gold`) at 0 executions ever. Mid-session this was
+misread as "nothing is live, so cutover urgency is low" — that
+conclusion was wrong and is corrected here. A live check of the
+`edgartools-prod-warehouse` ECS cluster the same day found **4 tasks
+actively RUNNING** (`bootstrap-batch --release-mode`,
+`--run-id ticket20-strict-resume-20260718T104737Z`), writing directly to
+`s3://edgartools-prodb-bronze/...` — Codex's Ticket 20 strict-release
+relationship bulk-load, in flight via direct `ecs run-task` invocations
+that bypass the named Step Functions entirely (which is why those show 0
+executions — wrong signal, not evidence of idleness).
+`edgartools-prodb-bronze` CloudWatch `BucketSizeBytes` was ~41GB with
+objects timestamped that same morning; `edgartools-prod-bronze-690839588395`
+(canonical) and both prodb/canonical `snowflake-export` buckets remain at
+0 objects. **Corrected bottom line:** bronze/silver ingestion into
+`prodb` is live and actively used by Ticket 20 right now; only the
+gold-refresh → Snowflake-export stage specifically has never been
+exercised (0 executions, 0 objects). This does not lower the caution
+around the uncommitted Terraform diff above — if anything it confirms
+`prodb-bronze`/`prodb-warehouse` are real, actively-written production
+data that any bucket-repoint work must not disrupt, on top of the
+already-documented gold-refresh/Snowflake-export risk. Read-only AWS API
+checks only (`s3 ls`, `cloudwatch get-metric-statistics`, `ecs
+list-tasks`/`describe-tasks`) — nothing was modified, and nothing
+touching Codex's in-flight run was touched.
