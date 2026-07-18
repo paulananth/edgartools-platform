@@ -8,9 +8,11 @@ from edgar_warehouse.application.relationship_bulk_load import (
     CandidateOutcome,
     InventoryError,
     LedgerError,
+    agent_coverage_by_document_type,
     build_candidate_inventory,
     build_frozen_candidate_manifest,
     candidate_inventory_from_manifest,
+    index_floor_coverage_start,
     reconcile_completion_ledger,
     reconcile_completion_ledger_batches,
     select_required_accessions,
@@ -52,8 +54,8 @@ def test_inventory_is_deterministic_and_classifies_required_sources() -> None:
     assert by_accession["proxy"].candidate_reason == "proxy_filing"
     assert by_accession["employment"].candidate_reason == "item_5_02_metadata"
     assert by_accession["ambiguous"].candidate_reason == "ambiguous_8k_metadata"
-    assert by_accession["unrelated"].candidate_reason == "unrelated_8k_metadata"
-    assert by_accession["unrelated"].artifact_required is False
+    # Unrelated 8-Ks (items prove no 5.02) are out of Ticket 20 freeze membership.
+    assert "unrelated" not in by_accession
     assert by_accession["13f"].relationship_type == "INSTITUTIONAL_HOLDS"
 
 
@@ -202,15 +204,14 @@ def test_operator_freezes_complete_quarter_indexes_into_a_bounded_manifest() -> 
 
     assert manifest["coverage_start"] == "2024-01-01"
     assert manifest["watermark"] == "2024-06-30"
+    assert manifest["coverage_by_document_type"]["thirteenf"]["start"] == "2024-01-01"
+    assert manifest["coverage_by_document_type"]["proxy"]["baseline"] == "latest_in_band_only"
     assert [row[0] for row in manifest["quarter_index_fingerprints"]] == ["2024Q1", "2024Q2"]
     assert [row["accession_number"] for row in manifest["candidates"]] == [
-        "13f", "13f-a", "employment", "proxy", "unrelated",
+        "13f", "13f-a", "employment", "proxy",
     ]
-    assert next(row for row in manifest["candidates"] if row["accession_number"] == "unrelated")[
-        "artifact_required"
-    ] is False
     assert manifest["cik_batches"] == [{"cik_list": "1,9"}]
-    assert manifest["candidate_count"] == 5
+    assert manifest["candidate_count"] == 4
     assert manifest["index_only_candidate_count"] == 2
     assert manifest["index_only_required_count"] == 2
 
@@ -250,6 +251,89 @@ def test_operator_canonicalizes_multi_registrant_accession_without_hiding_ciks()
         "canonical_cik": 20,
         "indexed_ciks": [10, 20],
     }]
+
+
+def test_agent_coverage_windows_use_per_form_lookbacks() -> None:
+    watermark = date(2026, 7, 2)
+    windows = agent_coverage_by_document_type(watermark)
+    assert windows["thirteenf"]["start"] == "2023-07-02"
+    assert windows["thirteenf"]["end"] == "2026-07-02"
+    assert windows["proxy"]["start"] == "2021-07-02"
+    assert windows["proxy"]["baseline"] == "latest_in_band_only"
+    assert windows["item_502_8k"]["start"] == "2024-07-02"
+    assert index_floor_coverage_start(windows) == date(2021, 7, 2)
+
+
+def test_agent_thirteenf_respects_xml_floor() -> None:
+    watermark = date(2015, 6, 1)
+    windows = agent_coverage_by_document_type(watermark)
+    # W−3y = 2012-06-01 would predate XML floor
+    assert windows["thirteenf"]["start"] == "2013-05-20"
+    assert index_floor_coverage_start(windows) == date(2010, 6, 1)  # proxy W−5y
+
+
+def test_inventory_applies_agent_windows_and_emits_coverage_metadata() -> None:
+    watermark = date(2026, 7, 2)
+    filings = [
+        _filing("old-13f", "13F-HR", cik=9, filing_date="2020-08-14"),  # before W−3y
+        _filing("new-13f", "13F-HR", cik=9, filing_date="2024-08-14"),
+        _filing("old-proxy", "DEF 14A", cik=1, filing_date="2019-05-01"),  # before W−5y
+        _filing("new-proxy", "DEF 14A", cik=1, filing_date="2023-05-01"),
+        _filing("old-502", "8-K", cik=1, items="5.02", filing_date="2023-01-01"),  # before W−2y
+        _filing("new-502", "8-K", cik=1, items="5.02", filing_date="2025-01-01"),
+        _filing("unrelated", "8-K", cik=1, items="2.02", filing_date="2025-06-01"),
+    ]
+    # Quarters from index floor (proxy W−5y = 2021-07-02) through watermark
+    from edgar_warehouse.application.relationship_bulk_load import expected_quarters
+
+    floor = index_floor_coverage_start(agent_coverage_by_document_type(watermark))
+    quarters = {key: f"fp-{key}" for key in expected_quarters(floor, watermark)}
+    inventory = build_candidate_inventory(
+        filings,
+        watermark=watermark,
+        source_manifest_fingerprints={"company:1": "c1", "company:9": "c9"},
+        quarter_index_fingerprints=quarters,
+        # agent windows: omit coverage_start → product defaults
+    )
+    accessions = {row.accession_number for row in inventory.candidates}
+    assert accessions == {"new-13f", "new-proxy", "new-502"}
+    assert inventory.coverage_start == floor
+    assert inventory.coverage_by_document_type["thirteenf"]["start"] == "2023-07-02"
+
+
+def test_frozen_manifest_agent_windows_drop_out_of_band_forms() -> None:
+    watermark = date(2026, 7, 2)
+    windows = agent_coverage_by_document_type(watermark)
+    floor = index_floor_coverage_start(windows)
+    from edgar_warehouse.application.relationship_bulk_load import expected_quarters
+
+    quarter_indexes = {key: [] for key in expected_quarters(floor, watermark)}
+    # Inside index floor (proxy W−5y) but before 13F agent start (W−3y)
+    quarter_indexes["2021Q4"] = [
+        _filing("old-13f", "13F-HR", cik=9, filing_date="2021-11-14"),
+    ]
+    quarter_indexes["2024Q3"] = [
+        _filing("new-13f", "13F-HR", cik=9, filing_date="2024-08-14"),
+        _filing("new-proxy", "DEF 14A", cik=1, filing_date="2024-08-01"),
+        _filing("new-502", "8-K", cik=1, filing_date="2024-08-15"),
+    ]
+    silver = [
+        _filing("new-proxy", "DEF 14A", cik=1, filing_date="2024-08-01"),
+        _filing("new-502", "8-K", cik=1, items="5.02", filing_date="2024-08-15"),
+    ]
+    manifest = build_frozen_candidate_manifest(
+        quarter_indexes,
+        silver_filings=silver,
+        release_ciks={1},
+        watermark=watermark,
+        batch_size=50,
+    )
+    accessions = [row["accession_number"] for row in manifest["candidates"]]
+    assert "old-13f" not in accessions
+    assert set(accessions) == {"new-13f", "new-proxy", "new-502"}
+    assert manifest["coverage_start"] == floor.isoformat()
+    assert manifest["coverage_by_document_type"] == windows
+    assert manifest["fingerprint"]
 
 
 def test_global_fan_in_reconciles_every_batch_outcome_once() -> None:

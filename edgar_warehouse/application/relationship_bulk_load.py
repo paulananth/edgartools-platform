@@ -19,7 +19,12 @@ PROXY_FORMS = frozenset({"DEF 14A", "DEF 14A/A", "DEFA14A", "PRE 14A"})
 THIRTEENF_FORMS = frozenset({"13F-HR", "13F-HR/A"})
 EIGHT_K_FORMS = frozenset({"8-K", "8-K/A"})
 TERMINAL_STATUSES = frozenset({"applicable_loaded", "not_applicable", "superseded"})
+# 13F XML information-table era floor (format correctness, not universal load start).
 DEFAULT_COVERAGE_START = date(2013, 5, 20)
+THIRTEENF_XML_FLOOR = DEFAULT_COVERAGE_START
+THIRTEENF_AGENT_LOOKBACK_YEARS = 3
+PROXY_AGENT_LOOKBACK_YEARS = 5
+ITEM_502_AGENT_LOOKBACK_YEARS = 2
 
 
 class InventoryError(ValueError):
@@ -72,6 +77,12 @@ def candidate_inventory_from_manifest(
     inventory_fingerprint = str(manifest.get("fingerprint") or "").strip()
     if coverage_start is None or watermark is None or not inventory_fingerprint:
         raise InventoryError("candidate manifest is missing inventory identity")
+    raw_windows = manifest.get("coverage_by_document_type")
+    if isinstance(raw_windows, Mapping) and raw_windows:
+        windows = _normalize_coverage_by_document_type(raw_windows)
+    else:
+        # Legacy freezes: treat top-level coverage_start as uniform for all forms.
+        windows = uniform_coverage_by_document_type(coverage_start, watermark)
     candidates: list[RelationshipSourceCandidate] = []
     for row in rows:
         if not isinstance(row, Mapping):
@@ -108,6 +119,7 @@ def candidate_inventory_from_manifest(
         tuple(candidates),
         quarters,
         inventory_fingerprint,
+        windows,
     )
 
 
@@ -122,6 +134,143 @@ def _as_date(value: object) -> date | None:
     if isinstance(value, date):
         return value
     return date.fromisoformat(str(value)[:10])
+
+
+def years_before(value: date, years: int) -> date:
+    """Calendar lookback preserving month/day when possible (Feb 29 → Feb 28)."""
+    if years < 0:
+        raise InventoryError("lookback years must be non-negative")
+    try:
+        return value.replace(year=value.year - years)
+    except ValueError:
+        return value.replace(year=value.year - years, day=28)
+
+
+def agent_coverage_by_document_type(watermark: date) -> dict[str, dict[str, str]]:
+    """Locked Ticket 20 agent windows (product truth for freeze membership)."""
+    end = watermark.isoformat()
+    thirteenf_start = max(
+        years_before(watermark, THIRTEENF_AGENT_LOOKBACK_YEARS),
+        THIRTEENF_XML_FLOOR,
+    )
+    proxy_start = years_before(watermark, PROXY_AGENT_LOOKBACK_YEARS)
+    item_502_start = years_before(watermark, ITEM_502_AGENT_LOOKBACK_YEARS)
+    return {
+        "thirteenf": {"start": thirteenf_start.isoformat(), "end": end},
+        "proxy": {
+            "start": proxy_start.isoformat(),
+            "end": end,
+            "baseline": "latest_in_band_only",
+        },
+        "item_502_8k": {"start": item_502_start.isoformat(), "end": end},
+    }
+
+
+def uniform_coverage_by_document_type(
+    coverage_start: date, watermark: date
+) -> dict[str, dict[str, str]]:
+    """Legacy/test path: one start date applied to every Ticket 20 form family."""
+    end = watermark.isoformat()
+    start = coverage_start.isoformat()
+    return {
+        "thirteenf": {"start": start, "end": end},
+        "proxy": {"start": start, "end": end, "baseline": "latest_in_band_only"},
+        "item_502_8k": {"start": start, "end": end},
+    }
+
+
+def index_floor_coverage_start(
+    coverage_by_document_type: Mapping[str, Mapping[str, object]],
+) -> date:
+    """Top-level inventory floor = min of per-type absolute starts (index identity)."""
+    starts: list[date] = []
+    for key in ("thirteenf", "proxy", "item_502_8k"):
+        block = coverage_by_document_type.get(key)
+        if not isinstance(block, Mapping):
+            raise InventoryError(f"coverage_by_document_type missing {key}")
+        start = _as_date(block.get("start"))
+        if start is None:
+            raise InventoryError(f"coverage_by_document_type.{key}.start is required")
+        starts.append(start)
+    return min(starts)
+
+
+def _normalize_coverage_by_document_type(
+    value: Mapping[str, object],
+) -> dict[str, dict[str, str]]:
+    normalized: dict[str, dict[str, str]] = {}
+    for key in ("thirteenf", "proxy", "item_502_8k"):
+        block = value.get(key)
+        if not isinstance(block, Mapping):
+            raise InventoryError(f"coverage_by_document_type missing {key}")
+        start = _as_date(block.get("start"))
+        end = _as_date(block.get("end"))
+        if start is None or end is None:
+            raise InventoryError(f"coverage_by_document_type.{key} needs start and end")
+        if start > end:
+            raise InventoryError(f"coverage_by_document_type.{key} start is after end")
+        entry: dict[str, str] = {
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+        }
+        if key == "proxy":
+            entry["baseline"] = str(block.get("baseline") or "latest_in_band_only")
+        normalized[key] = entry
+    return normalized
+
+
+def resolve_coverage_policy(
+    watermark: date,
+    *,
+    coverage_start: date | None = None,
+    coverage_by_document_type: Mapping[str, object] | None = None,
+) -> tuple[date, dict[str, dict[str, str]]]:
+    """Return (index floor, per-type windows).
+
+    - Explicit ``coverage_by_document_type`` is product truth; floor defaults to min start.
+    - Explicit ``coverage_start`` without type map → uniform windows (tests / overrides).
+    - Neither → locked agent lookbacks from watermark.
+    """
+    if coverage_by_document_type is not None:
+        windows = _normalize_coverage_by_document_type(coverage_by_document_type)
+        floor = coverage_start if coverage_start is not None else index_floor_coverage_start(windows)
+        return floor, windows
+    if coverage_start is not None:
+        windows = uniform_coverage_by_document_type(coverage_start, watermark)
+        return coverage_start, windows
+    windows = agent_coverage_by_document_type(watermark)
+    return index_floor_coverage_start(windows), windows
+
+
+def _form_family_key(form: str) -> str | None:
+    if form in THIRTEENF_FORMS:
+        return "thirteenf"
+    if form in PROXY_FORMS:
+        return "proxy"
+    if form in EIGHT_K_FORMS:
+        return "item_502_8k"
+    return None
+
+
+def filing_in_document_type_window(
+    form: str,
+    filing_date: date,
+    coverage_by_document_type: Mapping[str, Mapping[str, object]],
+    *,
+    watermark: date,
+) -> bool:
+    """True when filing_date is inside the agent window for this form family."""
+    family = _form_family_key(form)
+    if family is None:
+        return False
+    block = coverage_by_document_type.get(family)
+    if not isinstance(block, Mapping):
+        return False
+    start = _as_date(block.get("start"))
+    end = _as_date(block.get("end")) or watermark
+    if start is None:
+        return False
+    return start <= filing_date <= end
 
 
 def _quarter_key(value: date) -> str:
@@ -166,6 +315,7 @@ class CandidateInventory:
     candidates: tuple[RelationshipSourceCandidate, ...]
     quarter_index_fingerprints: tuple[tuple[str, str], ...]
     fingerprint: str
+    coverage_by_document_type: dict[str, dict[str, str]]
 
 
 def build_candidate_inventory(
@@ -174,10 +324,21 @@ def build_candidate_inventory(
     watermark: date,
     source_manifest_fingerprints: Mapping[str, str],
     quarter_index_fingerprints: Mapping[str, str],
-    coverage_start: date = DEFAULT_COVERAGE_START,
+    coverage_start: date | None = None,
+    coverage_by_document_type: Mapping[str, object] | None = None,
 ) -> CandidateInventory:
-    """Build a deterministic accession inventory and fail on source gaps."""
-    expected = expected_quarters(coverage_start, watermark)
+    """Build a deterministic accession inventory and fail on source gaps.
+
+    Membership is form-family specific: a filing is a candidate only when its
+    filing_date falls in that family's window (Ticket 20 agent lookbacks by
+    default). Unrelated 8-Ks (items prove no 5.02) never enter the freeze.
+    """
+    floor, windows = resolve_coverage_policy(
+        watermark,
+        coverage_start=coverage_start,
+        coverage_by_document_type=coverage_by_document_type,
+    )
+    expected = expected_quarters(floor, watermark)
     missing_quarters = sorted(set(expected) - set(quarter_index_fingerprints))
     if missing_quarters:
         raise InventoryError(f"missing SEC quarter index fingerprints: {', '.join(missing_quarters)}")
@@ -193,9 +354,13 @@ def build_candidate_inventory(
         seen.add(accession)
         form = str(filing.get("form") or "").strip().upper()
         filing_date = _as_date(filing.get("filing_date"))
-        if filing_date is None or not coverage_start <= filing_date <= watermark:
+        if filing_date is None:
             continue
         if form not in PROXY_FORMS | EIGHT_K_FORMS | THIRTEENF_FORMS:
+            continue
+        if not filing_in_document_type_window(
+            form, filing_date, windows, watermark=watermark
+        ):
             continue
         normalized.append({**filing, "accession_number": accession, "form": form,
                            "filing_date": filing_date})
@@ -212,7 +377,8 @@ def build_candidate_inventory(
             raise InventoryError(f"missing submission manifest fingerprint: {manifest_key}")
         form = str(filing["form"])
         filing_date = filing["filing_date"]
-        assert isinstance(filing_date, date)
+        if not isinstance(filing_date, date):
+            raise InventoryError(f"candidate {accession} has invalid filing_date")
         report_date = _as_date(filing.get("report_date"))
         if form in PROXY_FORMS:
             relationship_type, reason, artifact_required = "EMPLOYED_BY", "proxy_filing", True
@@ -223,8 +389,13 @@ def build_candidate_inventory(
         elif not str(filing.get("items") or "").strip():
             relationship_type, reason, artifact_required = "EMPLOYED_BY", "ambiguous_8k_metadata", True
         else:
-            relationship_type, reason, artifact_required = "EMPLOYED_BY", "unrelated_8k_metadata", False
+            # Items prove no Item 5.02 — out of Ticket 20 bulk-load membership.
+            continue
         source_index_identity = _quarter_key(filing_date)
+        if source_index_identity not in quarter_index_fingerprints:
+            raise InventoryError(
+                f"missing SEC quarter index fingerprint for {source_index_identity}"
+            )
         raw = {
             "accession_number": accession,
             "cik": cik,
@@ -254,13 +425,20 @@ def build_candidate_inventory(
 
     quarters = tuple((key, quarter_index_fingerprints[key]) for key in expected)
     inventory_payload = {
-        "coverage_start": coverage_start.isoformat(),
+        "coverage_start": floor.isoformat(),
+        "coverage_by_document_type": windows,
         "watermark": watermark.isoformat(),
         "quarters": quarters,
         "candidates": [asdict(candidate) for candidate in candidates],
     }
-    return CandidateInventory(coverage_start, watermark, tuple(candidates), quarters,
-                              _sha256(inventory_payload))
+    return CandidateInventory(
+        floor,
+        watermark,
+        tuple(candidates),
+        quarters,
+        _sha256(inventory_payload),
+        windows,
+    )
 
 
 def build_frozen_candidate_manifest(
@@ -270,7 +448,8 @@ def build_frozen_candidate_manifest(
     release_ciks: set[int],
     source_manifest_fingerprints: Mapping[int, str] | None = None,
     watermark: date,
-    coverage_start: date = DEFAULT_COVERAGE_START,
+    coverage_start: date | None = None,
+    coverage_by_document_type: Mapping[str, object] | None = None,
     batch_size: int = 100,
 ) -> dict[str, object]:
     """Freeze complete SEC quarter indexes into the release candidate manifest.
@@ -278,10 +457,18 @@ def build_frozen_candidate_manifest(
     Quarterly indexes are the authority for 13F coverage and for proving that
     every proxy/8-K accession in the bounded company universe was considered.
     Silver contributes submissions-only metadata such as 8-K item numbers.
+
+    Default coverage is locked agent lookbacks (13F 3y/XML floor, proxy 5y,
+    Item 5.02 8-K 2y). Top-level ``coverage_start`` is the index floor only.
     """
     if batch_size <= 0:
         raise InventoryError("batch_size must be positive")
-    expected = expected_quarters(coverage_start, watermark)
+    floor, windows = resolve_coverage_policy(
+        watermark,
+        coverage_start=coverage_start,
+        coverage_by_document_type=coverage_by_document_type,
+    )
+    expected = expected_quarters(floor, watermark)
     missing = sorted(set(expected) - set(quarter_indexes))
     if missing:
         raise InventoryError(f"missing SEC quarter indexes: {', '.join(missing)}")
@@ -302,7 +489,9 @@ def build_frozen_candidate_manifest(
             filing_date = _as_date(raw_row.get("filing_date"))
             if not accession or filing_date is None:
                 raise InventoryError(f"{quarter} index row is missing accession identity")
-            if not coverage_start <= filing_date <= watermark:
+            # Index fingerprint includes all rows in the floor→W band; form
+            # membership is applied below via per-type agent windows.
+            if not floor <= filing_date <= watermark:
                 continue
             normalized = {
                 "accession_number": accession,
@@ -317,6 +506,15 @@ def build_frozen_candidate_manifest(
         for row in normalized_rows:
             form = str(row["form"])
             cik = int(row["cik"])
+            filing_date = _as_date(row["filing_date"])
+            if filing_date is None:
+                raise InventoryError(
+                    f"quarter index row missing filing_date for {row.get('accession_number')}"
+                )
+            if not filing_in_document_type_window(
+                form, filing_date, windows, watermark=watermark
+            ):
+                continue
             in_company_scope = cik in release_ciks and form in PROXY_FORMS | EIGHT_K_FORMS
             if form not in THIRTEENF_FORMS and not in_company_scope:
                 continue
@@ -360,7 +558,8 @@ def build_frozen_candidate_manifest(
     }
     inventory = build_candidate_inventory(
         canonical_rows,
-        coverage_start=coverage_start,
+        coverage_start=floor,
+        coverage_by_document_type=windows,
         watermark=watermark,
         source_manifest_fingerprints=source_fingerprints,
         quarter_index_fingerprints=quarter_fingerprints,
@@ -386,6 +585,7 @@ def build_frozen_candidate_manifest(
     return {
         "schema_version": 1,
         "coverage_start": inventory.coverage_start.isoformat(),
+        "coverage_by_document_type": inventory.coverage_by_document_type,
         "watermark": inventory.watermark.isoformat(),
         "fingerprint": inventory.fingerprint,
         "quarter_index_fingerprints": [list(row) for row in inventory.quarter_index_fingerprints],
