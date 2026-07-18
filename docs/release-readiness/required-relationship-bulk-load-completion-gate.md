@@ -14,14 +14,40 @@ The gate is decision-complete, but the current implementation does **not** pass 
 
 ## Source coverage boundary
 
-The initial **Relationship Source Coverage Window** begins on `2013-05-20`, when the SEC replaced the old text Form 13F path with the XML information-table system, and ends at the Release Data Watermark. The generation and dashboard must not imply relationship history before that boundary. The SEC confirms this transition date and requires XML for filings and later amendments under the new system ([SEC Form 13F FAQ](https://www.sec.gov/rules-regulations/staff-guidance/division-investment-management-frequently-asked-questions/frequently-asked-questions-about-form-13f)).
+Coverage is **document-type specific**. Do **not** apply one global start date to
+every form. The authoritative lookback table and rationale live in
+[relationship-source-coverage-by-document-type.md](./relationship-source-coverage-by-document-type.md).
 
-Current-at-watermark proof adds a per-entity baseline:
+Summary (ends at Release Data Watermark `W` unless noted):
 
-- For each company to which Reported Executive Employment applies, load the latest applicable definitive proxy on or before the watermark and every relevant Item 5.02 `8-K`/`8-K/A` after that proxy through the watermark. All proxy and relevant 8-K candidates inside the coverage window are also loaded for declared history.
-- For each Form 13F manager, load every `13F-HR` and `13F-HR/A` in every complete SEC quarterly index inside the coverage window, including all amendments through the watermark.
+| Family | Forms | Start (initial GO) |
+| --- | --- | --- |
+| **13F / institutional holdings** | `13F-HR`, `13F-HR/A` | Hard floor **`2013-05-20`** (SEC XML information-table era; [SEC Form 13F FAQ](https://www.sec.gov/rules-regulations/staff-guidance/division-investment-management-frequently-asked-questions/frequently-asked-questions-about-form-13f)). Product history may be longer only if it still respects this floor. |
+| **Proxy / employment baseline** | `DEF 14A`, `DEF 14A/A`, `DEFA14A`, `PRE 14A` | Latest definitive proxy on or before `W` (always), plus proxies with filing date ≥ **`W − 5 years`** for declared history. |
+| **Item 5.02 8-K** | `8-K`, `8-K/A` (Item 5.02 or ambiguous items) | Filing date ≥ **`W − 1 year`**. Older 8-Ks are out of scope for this gate’s bulk-load denominator. |
 
-An 8-K is a source candidate when its item metadata contains Item 5.02. If item metadata is missing or ambiguous, it remains a candidate and its primary document must be fetched and classified. An 8-K conclusively identified as unrelated is not downloaded for this gate and receives a metadata-backed `not_applicable` outcome. This avoids treating all historical 8-K earnings filings as employment evidence.
+**Historical note:** An earlier draft treated `2013-05-20` as a single window for
+all relationship sources. That date remains correct for **13F XML** only. It is
+**not** a requirement to bulk-load every 8-K since 2013.
+
+Current-at-watermark proof:
+
+- For each company to which Reported Executive Employment applies, load the
+  latest applicable definitive proxy on or before the watermark (baseline may
+  predate the five-year proxy history band) and every relevant Item 5.02
+  `8-K`/`8-K/A` with filing date in **`[W−1y, W]`** after that baseline through
+  the watermark.
+- For each Form 13F manager, load every `13F-HR` and `13F-HR/A` in every complete
+  SEC quarterly index from the **13F window start** through the watermark,
+  including amendments.
+
+An 8-K is a source candidate when its item metadata contains Item 5.02 **and**
+its filing date is inside the **1-year 8-K window**. If item metadata is missing
+or ambiguous, it remains a candidate **only inside that same 1-year window** and
+its primary document must be fetched and classified. An 8-K conclusively
+identified as unrelated is not downloaded for this gate and receives a
+metadata-backed `not_applicable` outcome. This avoids treating all historical
+8-K earnings filings as employment evidence.
 
 ## Authoritative candidate inventories
 
@@ -29,18 +55,24 @@ The gate freezes two accession-level inventories into the Relationship Generatio
 
 ### Reported Executive Employment inventory
 
-The inventory contains:
+The inventory contains (each row filtered by **that form’s** lookback):
 
-- `DEF 14A`, `DEF 14A/A`, `DEFA14A`, and `PRE 14A` accessions for every in-scope company in the coverage window;
-- `8-K` and `8-K/A` accessions declaring Item 5.02;
-- `8-K` and `8-K/A` accessions whose item metadata is absent or ambiguous;
+- `DEF 14A`, `DEF 14A/A`, `DEFA14A`, and `PRE 14A` accessions for in-scope companies
+  with filing date ≥ **`W − 5 years`**, plus the selected current-state proxy
+  baseline even if older;
+- `8-K` and `8-K/A` accessions declaring Item 5.02 with filing date ≥ **`W − 1 year`**;
+- `8-K` and `8-K/A` accessions whose item metadata is absent or ambiguous with
+  filing date ≥ **`W − 1 year`**;
 - the selected current-state proxy baseline for each applicable company.
 
 The inventory is derived from the complete `sec_company_filing` population for the release entity universe, reconciled to the frozen SEC index/submissions manifests. Accession number is the candidate identity.
 
 ### Institutional Holdings inventory
 
-The inventory contains every `13F-HR` and `13F-HR/A` accession found in every SEC quarterly index in the coverage window, not only filings belonging to the existing company universe. It includes a per-quarter index fingerprint and manager-CIK list.
+The inventory contains every `13F-HR` and `13F-HR/A` accession found in every SEC
+quarterly index from the **13F window start** (default hard floor `2013-05-20`)
+through the watermark, not only filings belonging to the existing company
+universe. It includes a per-quarter index fingerprint and manager-CIK list.
 
 The current helper is not sufficient for release evidence because it catches an index error, logs it, skips the quarter, and still returns a list ([build_13f_filer_list.py](../../edgar_warehouse/scripts/build_13f_filer_list.py#L31)). Release mode must fail closed when any expected quarter is missing.
 
