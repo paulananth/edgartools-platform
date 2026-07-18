@@ -1446,6 +1446,19 @@ build via `AWS_PROFILE=default`.
 
 ## FLAG FOR NEXT SESSION / OTHER RUNTIME: prodb→prod promotion is half-applied — do not deploy `module.runtime` changes until Snowflake is repointed too (2026-07-17)
 
+**2026-07-18 — explicit user decision: DEFERRED until Ticket 20 resolves.**
+The entire prodb-prod-cutover ticket set
+(`.scratch/prodb-prod-cutover/issues/`) is on hold until Ticket 20 (required
+relationship production bulk-load,
+`.scratch/release-readiness/issues/20-...md`) reaches a terminal PASS/GO
+disposition — Ticket 20 is actively writing to `prodb-bronze`/
+`prodb-warehouse` right now, so starting the Stage 2 data copy or any
+Terraform work before it finishes would be premature (see Ticket 02's
+Status line for the same note). This uncommitted Terraform diff should
+continue to sit untouched, uncommitted, for the same reason it always
+has — nothing below changes as a result of this decision, it just confirms
+the timeline: not now, revisit once Ticket 20 closes.
+
 **What:** `infra/terraform/accounts/prod/main.tf` and `outputs.tf` have an
 **uncommitted** working-tree diff (present since before this session started,
 still uncommitted as of 2026-07-17 ~10:30pm) that adds a `module.storage_canonical`

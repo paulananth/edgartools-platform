@@ -12,7 +12,16 @@ data-movement work everything after it depends on.
 **Blocked by:** 01 — Verify canonical S3 bucket is populated and
 cutover-ready (done; established this ticket is needed)
 
-**Status:** ready-for-agent
+**Status:** DEFERRED (2026-07-18) — user decision: hold the entire
+prodb-prod-cutover set until Ticket 20 (required relationship production
+bulk-load) reaches a terminal PASS/GO disposition. Rationale: Ticket 20 is
+actively writing to `prodb-bronze`/`prodb-warehouse` right now, so any data
+copy started before it finishes would immediately need a repeat pass, and
+committing to a cutover mechanism while the live write volume is still
+changing is premature. Do not start this ticket (or 03-06, which are
+transitively blocked by it) until Ticket 20 closes. Re-check Ticket 20's
+disposition in `.scratch/release-readiness/issues/20-...md` before
+resuming.
 
 - [ ] Copy mechanism is chosen deliberately (`aws s3 sync`/`cp --recursive`
       for a one-time snapshot vs. S3 Batch Replication for an ongoing mirror)
