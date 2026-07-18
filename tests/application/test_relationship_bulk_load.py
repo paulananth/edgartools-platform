@@ -16,6 +16,7 @@ from edgar_warehouse.application.relationship_bulk_load import (
     reconcile_completion_ledger,
     reconcile_completion_ledger_batches,
     select_required_accessions,
+    validate_strict_release_manifest,
 )
 
 
@@ -251,6 +252,84 @@ def test_operator_canonicalizes_multi_registrant_accession_without_hiding_ciks()
         "canonical_cik": 20,
         "indexed_ciks": [10, 20],
     }]
+
+
+def test_strict_release_rejects_legacy_manifest_without_coverage_map() -> None:
+    payload = {
+        "coverage_start": "2013-05-20",
+        "watermark": "2026-07-02",
+        "fingerprint": "legacy-fp",
+        "candidates": [
+            {
+                "accession_number": "old-13f",
+                "cik": 9,
+                "form": "13F-HR",
+                "filing_date": "2014-02-14",
+                "fingerprint": "c-fp",
+                "artifact_required": True,
+            }
+        ],
+        "quarter_index_fingerprints": [["2013Q2", "q"]],
+    }
+    with pytest.raises(InventoryError, match="coverage_by_document_type"):
+        validate_strict_release_manifest(payload)
+    with pytest.raises(InventoryError, match="coverage_by_document_type"):
+        candidate_inventory_from_manifest(payload, require_strict_agent_windows=True)
+    # Non-strict restore still allowed for tooling that inspects old freezes.
+    restored = candidate_inventory_from_manifest(payload, ciks={9})
+    assert restored.fingerprint == "legacy-fp"
+
+
+def test_strict_release_accepts_agent_window_manifest() -> None:
+    watermark = date(2026, 7, 2)
+    windows = agent_coverage_by_document_type(watermark)
+    payload = {
+        "coverage_start": index_floor_coverage_start(windows).isoformat(),
+        "coverage_by_document_type": windows,
+        "watermark": watermark.isoformat(),
+        "fingerprint": "agent-fp",
+        "candidates": [
+            {
+                "accession_number": "new-13f",
+                "cik": 9,
+                "form": "13F-HR",
+                "filing_date": "2024-08-14",
+                "fingerprint": "c-fp",
+                "candidate_reason": "thirteenf_filing",
+                "artifact_required": True,
+            }
+        ],
+        "quarter_index_fingerprints": [["2024Q3", "q"]],
+    }
+    assert validate_strict_release_manifest(payload) == windows
+    inventory = candidate_inventory_from_manifest(
+        payload, ciks={9}, require_strict_agent_windows=True
+    )
+    assert inventory.candidates[0].accession_number == "new-13f"
+
+
+def test_strict_release_rejects_out_of_window_candidate() -> None:
+    watermark = date(2026, 7, 2)
+    windows = agent_coverage_by_document_type(watermark)
+    payload = {
+        "coverage_start": index_floor_coverage_start(windows).isoformat(),
+        "coverage_by_document_type": windows,
+        "watermark": watermark.isoformat(),
+        "fingerprint": "bad-fp",
+        "candidates": [
+            {
+                "accession_number": "old-13f",
+                "cik": 9,
+                "form": "13F-HR",
+                "filing_date": "2020-08-14",
+                "fingerprint": "c-fp",
+                "candidate_reason": "thirteenf_filing",
+                "artifact_required": True,
+            }
+        ],
+    }
+    with pytest.raises(InventoryError, match="outside locked agent windows"):
+        validate_strict_release_manifest(payload)
 
 
 def test_agent_coverage_windows_use_per_form_lookbacks() -> None:
