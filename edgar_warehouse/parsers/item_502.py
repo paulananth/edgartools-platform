@@ -14,10 +14,14 @@ language ("as if the participant retired...") without guessing semantically.
 `_ROLE_CHANGE`/`_COMPENSATION` stay regex-based: narrower, well-defined shapes
 that were not the source of the coverage gap.
 
-Residual gaps addressed after PR #155:
-- possessive/nominalised departures (\"Jane Doe's resignation as CFO\")
-- participle modifiers (\"newly appointed CFO\") no longer invent events or
-  trip the unresolved-ambiguity path
+Coverage evolution:
+- PR #146: section-scope ambiguity to Item 5.02 only
+- PR #154: active-voice regex
+- PR #155: spaCy rewrite
+- PR #157: possessive departures + modifier participles
+- This revision: board appointments without "as", expanded verbs
+  (join/hire/leave/step-down), filing-date fallback when person+role resolved,
+  particle "step down", and title-boilerplate verbs ignored for unresolved
 """
 
 from __future__ import annotations
@@ -31,7 +35,7 @@ from typing import Iterable
 import spacy
 
 PARSER_NAME = "item_502"
-PARSER_VERSION = "2"
+PARSER_VERSION = "3"
 
 
 @dataclass(frozen=True)
@@ -79,13 +83,36 @@ _COMPENSATION = re.compile(
 )
 _ITEM_HEADER = re.compile(r"item\s+(\d{1,2})\s*\.\s*(\d{2})\b", re.I)
 _TRAILING_IMMEDIATE = re.compile(r"effective\s+immediately", re.I)
+_BOARD_DIRECTOR = re.compile(
+    r"\b(?:board of directors|as (?:a )?directors?|to the board|on the board)\b",
+    re.I,
+)
+# Statutory Item 5.02 title line only (not the body sentence after a bare "Item 5.02").
+_SECTION_TITLE_SPAN = re.compile(
+    r"^item\s+5\s*\.\s*02\s+"
+    r"(?:departure|election|appointment|compensatory)[^.]{0,200}?\.",
+    re.I,
+)
 
-_APPOINTMENT_VERBS = {"appoint", "elect", "name"}
-_DEPARTURE_VERBS = {"resign", "retire", "depart", "terminate"}
+_APPOINTMENT_VERBS = {"appoint", "elect", "name", "join", "hire", "promote"}
+_DEPARTURE_VERBS = {
+    "resign",
+    "retire",
+    "depart",
+    "terminate",
+    "leave",
+    "separate",
+    "dismiss",
+    "step",  # "stepped down" with particle
+}
 _TENURE_NOUNS = {"employment", "service", "tenure", "position", "role"}
-# Possessive / nominalised departures: "Jane Doe's resignation as CFO"
-_DEPARTURE_NOUNS = {"resignation", "retirement", "departure"}
-# Verb dependencies that are modifiers (not finite event clauses)
+_DEPARTURE_NOUNS = {
+    "resignation",
+    "retirement",
+    "departure",
+    "separation",
+    "termination",
+}
 _MODIFIER_DEPS = frozenset({"amod", "acl", "advcl", "relcl", "xcomp", "ccomp"})
 _CONDITIONAL_MARKS = {"if", "unless", "whether"}
 _MONTHS = (
@@ -179,7 +206,7 @@ def _expand_conjuncts(token) -> list:
     return [token] + list(token.conjuncts)
 
 
-def _find_role(verb) -> str | None:
+def _find_role(verb, sent) -> str | None:
     """"appointed X as [Role]" or "appointed X to the position/role of [Role]"."""
     for child in verb.children:
         if child.dep_ == "prep" and child.lower_ == "as":
@@ -188,21 +215,29 @@ def _find_role(verb) -> str | None:
                 return _clean_span(pobj)
         if child.dep_ == "prep" and child.lower_ == "to":
             noun = next((c for c in child.children if c.dep_ == "pobj"), None)
-            if noun is not None and noun.lemma_ in ("position", "role"):
-                of_prep = next((c for c in noun.children if c.dep_ == "prep" and c.lower_ == "of"), None)
+            if noun is not None and noun.lemma_ in ("position", "role", "office"):
+                of_prep = next(
+                    (c for c in noun.children if c.dep_ == "prep" and c.lower_ == "of"),
+                    None,
+                )
                 if of_prep is not None:
                     of_pobj = next((c for c in of_prep.children if c.dep_ == "pobj"), None)
                     if of_pobj is not None:
                         return _clean_span(of_pobj)
+            # "elected X to the Board of Directors"
+            if noun is not None and noun.lemma_ == "board":
+                return "Director"
+    if _BOARD_DIRECTOR.search(sent.text):
+        return "Director"
     return None
 
 
 def _clean_span(token) -> str:
-    span = token.doc[token.left_edge.i:token.i + 1]
+    span = token.doc[token.left_edge.i : token.i + 1]
     return re.sub(r"\s+", " ", span.text).strip(" ,.")
 
 
-def _find_date(sent, verb, filing_date: date) -> date | None:
+def _find_date(sent, verb, filing_date: date, *, allow_filing_fallback: bool = False) -> date | None:
     dates = [ent for ent in sent.ents if ent.label_ == "DATE"]
     parsed: list[tuple[int, date]] = []
     for ent in dates:
@@ -218,22 +253,48 @@ def _find_date(sent, verb, filing_date: date) -> date | None:
         return parsed[0][1]
     if _TRAILING_IMMEDIATE.search(sent.text):
         return filing_date
+    # Explicit calendar date anywhere in the sentence (NER sometimes misses)
+    for month in _MONTHS:
+        m = re.search(rf"{month}\s+\d{{1,2}},\s+\d{{4}}", sent.text)
+        if m:
+            return _parse_date(m.group(0))
+    if allow_filing_fallback:
+        return filing_date
     return None
+
+
+def _is_step_down(token) -> bool:
+    """True for "stepped down" / "will step down" (lemma step + particle down)."""
+    if token.lemma_.lower() != "step":
+        return False
+    return any(c.dep_ == "prt" and c.lower_ == "down" for c in token.children) or bool(
+        re.search(r"\bstep(?:ped|s|ping)?\s+down\b", token.sent.text, re.I)
+    )
 
 
 def _extract_appointment_events(
     sent, verb, accession_number: str, cik: int, filing_date: date,
 ) -> list[EmploymentEvent]:
-    role = _find_role(verb)
-    vacancy = role is None and re.search(r"\bvacancy\b|\bnewly[\s-]created\b", sent.text, re.I)
+    role = _find_role(verb, sent)
+    vacancy = role is None and re.search(
+        r"\bvacancy\b|\bnewly[\s-]created\b|\bboard\b", sent.text, re.I
+    )
+    if role is None and vacancy and _BOARD_DIRECTOR.search(sent.text):
+        role = "Director"
     if role is None and not vacancy:
         return []
     effective_date = _find_date(sent, verb, filing_date)
+    if effective_date is None:
+        # Person+role already resolved — use filing date rather than fail closed
+        effective_date = _find_date(sent, verb, filing_date, allow_filing_fallback=True)
     if effective_date is None:
         return []
     people_tokens: list = []
     for child in verb.children:
         if child.dep_ in ("dobj", "nsubjpass", "oprd"):
+            people_tokens.extend(_expand_conjuncts(child))
+        # "joined the Company as CFO" — person is nsubj of join
+        if verb.lemma_.lower() in {"join", "hire"} and child.dep_ in ("nsubj",):
             people_tokens.extend(_expand_conjuncts(child))
     events: list[EmploymentEvent] = []
     for token in people_tokens:
@@ -250,7 +311,11 @@ def _extract_appointment_events(
 def _extract_departure_events(
     sent, verb, accession_number: str, cik: int, filing_date: date,
 ) -> list[EmploymentEvent]:
+    if verb.lemma_.lower() == "step" and not _is_step_down(verb):
+        return []
     effective_date = _find_date(sent, verb, filing_date)
+    if effective_date is None:
+        effective_date = _find_date(sent, verb, filing_date, allow_filing_fallback=True)
     if effective_date is None:
         return []
     people_tokens: list = []
@@ -277,8 +342,11 @@ def _extract_departure_events(
         name = _person_name(token)
         if name is None:
             continue
+        role = None
+        if _BOARD_DIRECTOR.search(sent.text):
+            role = "Director"
         events.append(EmploymentEvent(
-            accession_number, int(cik), "departure", name, None, effective_date,
+            accession_number, int(cik), "departure", name, role, effective_date,
         ))
     return events
 
@@ -290,13 +358,10 @@ def _possessive_owner_name(noun_token) -> str | None:
             name = _person_name(child)
             if name is not None:
                 return name
-            # spaCy sometimes attaches only the last PROPN of a multi-token name
-            # as poss; walk compounds on that token.
             if child.pos_ == "PROPN":
                 name = _person_name(child)
                 if name is not None:
                     return name
-    # Leftward PROPN span immediately before "'s" / "’s" + noun (robust fallback)
     text_before = noun_token.doc[max(0, noun_token.i - 6) : noun_token.i].text
     m = re.search(
         r"([A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){1,3})(?:'s|’s)\s*$",
@@ -332,6 +397,10 @@ def _extract_possessive_departure_events(
             continue
         effective_date = _find_date(sent, token, filing_date)
         if effective_date is None:
+            effective_date = _find_date(
+                sent, token, filing_date, allow_filing_fallback=True
+            )
+        if effective_date is None:
             continue
         events.append(
             EmploymentEvent(
@@ -347,17 +416,21 @@ def _extract_possessive_departure_events(
 
 
 def _is_modifier_not_event_clause(token) -> bool:
-    """True for \"newly appointed CFO\" style modifiers, not finite event clauses.
-
-    Residual gap from PR #155: participle appointment verbs used as noun modifiers
-    must not invent events or trip the unresolved ambiguity path.
-    """
+    """True for \"newly appointed CFO\" style modifiers, not finite event clauses."""
     if token.dep_ in _MODIFIER_DEPS:
         return True
-    # "newly appointed Chief Financial Officer" — appointed as amod is the common case
     if token.tag_ in ("VBN", "VBG") and token.dep_ in ("amod", "acl", "oprd"):
         return True
     return False
+
+
+def _in_section_title_boilerplate(token, section: str) -> bool:
+    """Ignore verbs that only appear in the Item 5.02 statutory title line."""
+    title = _SECTION_TITLE_SPAN.match(section)
+    if not title:
+        return False
+    # Map character offset approximately via token character span
+    return token.idx < title.end()
 
 
 def parse_item_502(*, accession_number: str, cik: int, filing_date: date,
@@ -383,7 +456,6 @@ def parse_item_502(*, accession_number: str, cik: int, filing_date: date,
     doc = _nlp()(section)
     ambiguous_verb_seen = False
     for sent in doc.sents:
-        # Possessive / nominalised departures (no finite resign/retire verb required)
         events.extend(
             _extract_possessive_departure_events(
                 sent, accession_number, cik, filing_date
@@ -393,24 +465,42 @@ def parse_item_502(*, accession_number: str, cik: int, filing_date: date,
             if token.pos_ != "VERB":
                 continue
             lemma = token.lemma_.lower()
-            if lemma not in _APPOINTMENT_VERBS and lemma not in _DEPARTURE_VERBS:
+            is_step_down = lemma == "step" and _is_step_down(token)
+            is_appointment = lemma in _APPOINTMENT_VERBS
+            is_departure = (lemma in _DEPARTURE_VERBS and lemma != "step") or is_step_down
+            if not is_appointment and not is_departure:
                 continue
             if _is_hypothetical(token):
                 continue
-            # Skip pure modifiers ("newly appointed CFO") — not a disclosed event clause
             if _is_modifier_not_event_clause(token):
                 continue
-            if lemma in _APPOINTMENT_VERBS:
-                found = _extract_appointment_events(sent, token, accession_number, cik, filing_date)
+            if _in_section_title_boilerplate(token, section):
+                continue
+            if is_departure and not is_appointment:
+                found = _extract_departure_events(
+                    sent, token, accession_number, cik, filing_date
+                )
+            elif is_appointment and not is_departure:
+                found = _extract_appointment_events(
+                    sent, token, accession_number, cik, filing_date
+                )
+            elif is_step_down:
+                found = _extract_departure_events(
+                    sent, token, accession_number, cik, filing_date
+                )
             else:
-                found = _extract_departure_events(sent, token, accession_number, cik, filing_date)
+                # Overlap (should be rare) — try appointment then departure
+                found = _extract_appointment_events(
+                    sent, token, accession_number, cik, filing_date
+                ) or _extract_departure_events(
+                    sent, token, accession_number, cik, filing_date
+                )
             if found:
                 events.extend(found)
             else:
                 ambiguous_verb_seen = True
 
     if events:
-        # Dedupe (possessive + verb paths can double-hit the same disclosure)
         deduped: dict[tuple, EmploymentEvent] = {}
         for event in events:
             key = (
