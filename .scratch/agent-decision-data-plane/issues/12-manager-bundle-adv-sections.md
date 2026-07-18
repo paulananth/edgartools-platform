@@ -4,10 +4,10 @@
 
 **Blocked by:** 11 — Subject Bundle Read (issuer).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Manager subjects can receive ADV/fund neighborhood sections only from bulk-IAPD-backed data
-- [ ] Heuristic ADV parse cannot mark agent-grade fund edges
-- [ ] IS_ENTITY_OF included when both sides resolve; valid sparse/zero cases do not hard-fail issuers
-- [ ] Separate ADV watermark/lag metadata when ADV sections are agent-grade
-- [ ] Issuer Subject Bundle Read behavior from 11 remains ADV not_applicable
+- [x] Manager subjects can receive ADV/fund neighborhood sections only from bulk-IAPD-backed data
+- [x] Heuristic ADV parse cannot mark agent-grade fund edges
+- [x] IS_ENTITY_OF included when both sides resolve; valid sparse/zero cases do not hard-fail issuers
+- [x] Separate ADV watermark/lag metadata when ADV sections are agent-grade
+- [x] Issuer Subject Bundle Read behavior from 11 remains ADV not_applicable
