@@ -1,12 +1,12 @@
-# 05 — Decommission old prodb S3 bucket + Snowflake objects
+# 06 — Decommission old prodb S3 bucket + Snowflake objects
 
 **What to build:** After a bake period confirming the canonical path
-(Ticket 04) is stable, tear down the now-unused
+(Ticket 05) is stable, tear down the now-unused
 `edgartools-prodb-snowflake-export` bucket and any orphaned Snowflake
 objects that still reference it, closing out Stage 5 (cleanup) of
 `docs/prodb-to-prod-promotion.md`.
 
-**Blocked by:** 04 — Execute the live cutover in an approved operator window + verify
+**Blocked by:** 05 — Execute the live cutover in an approved operator window + verify
 
 **Status:** ready-for-agent
 

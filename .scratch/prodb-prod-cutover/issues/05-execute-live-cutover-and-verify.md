@@ -1,15 +1,15 @@
-# 04 — Execute the live cutover in an approved operator window + verify
+# 05 — Execute the live cutover in an approved operator window + verify
 
 **What to build:** In a single approved operator window, apply the reviewed
-plans from Ticket 03 back-to-back across both Terraform roots, so the ECS
+plans from Ticket 04 back-to-back across both Terraform roots, so the ECS
 write path and the Snowflake read path never disagree about which bucket is
 current. Immediately after apply, write a real test manifest to the
 canonical bucket and confirm `SNOWFLAKE_RUN_MANIFEST_TASK` (stream/task
 chain) picks it up and `EDGARTOOLS_GOLD` refreshes. This is the actual
-bucket-and-database cutover moment — de-risked by Tickets 02 and 03 so this
+bucket-and-database cutover moment — de-risked by Tickets 03 and 04 so this
 ticket is just "flip config + confirm," not discovery work.
 
-**Blocked by:** 03 — Prepare and review the coordinated Terraform diff
+**Blocked by:** 04 — Prepare and review the coordinated Terraform diff
 
 **Status:** ready-for-agent
 

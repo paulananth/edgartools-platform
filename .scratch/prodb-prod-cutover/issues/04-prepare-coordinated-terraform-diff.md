@@ -1,4 +1,4 @@
-# 03 — Prepare and review the coordinated Terraform diff (plan only, no apply)
+# 04 — Prepare and review the coordinated Terraform diff (plan only, no apply)
 
 **What to build:** A reviewed, approved `terraform plan` spanning **both**
 Terraform roots that must change together — AWS
@@ -8,10 +8,10 @@ Terraform roots that must change together — AWS
 `export_root_url`/`storage_role_arn` → canonical bucket, which forces the
 pipe to be replaced via its `replace_triggered_by` lifecycle rule). No
 `terraform apply` runs in this ticket. The output is the sign-off artifact
-the operator window in Ticket 04 is approved against — the reviewer must be
+the operator window in Ticket 05 is approved against — the reviewer must be
 able to see the exact combined diff before anyone touches live state.
 
-**Blocked by:** 02 — Grant Snowflake IAM role read access to the canonical bucket
+**Blocked by:** 03 — Grant Snowflake IAM role read access to the canonical bucket
 
 **Status:** ready-for-agent
 

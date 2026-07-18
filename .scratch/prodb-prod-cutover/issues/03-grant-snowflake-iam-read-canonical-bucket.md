@@ -1,4 +1,4 @@
-# 02 — Grant Snowflake IAM role read access to the canonical bucket
+# 03 — Grant Snowflake IAM role read access to the canonical bucket
 
 **What to build:** The `edgartools-prod-snowflake-s3` IAM role gains
 read access (`s3:GetObject`/`s3:ListBucket` on the relevant prefixes) to
@@ -6,9 +6,9 @@ read access (`s3:GetObject`/`s3:ListBucket` on the relevant prefixes) to
 object depends on it. This is purely additive — nothing reads from the
 canonical bucket yet, so granting access changes no current production
 behavior. Doing this ahead of the cutover window removes IAM propagation
-delay from the live cutover in Ticket 04.
+delay from the live cutover in Ticket 05.
 
-**Blocked by:** 01 — Verify canonical S3 bucket is populated and cutover-ready
+**Blocked by:** 02 — Perform Stage 2 S3 data copy: prodb → canonical buckets
 
 **Status:** ready-for-agent
 
