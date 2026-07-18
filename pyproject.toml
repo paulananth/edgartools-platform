@@ -21,6 +21,11 @@ dependencies = [
     "zstandard>=0.20.0",
     "httpx>=0.25.0",
     "PyYAML>=6.0.2",
+    # spaCy 3.8 imports click from spacy.cli even for `import spacy` (not only CLI
+    # entrypoints). Newer typer vendors click and no longer pulls it transitively,
+    # so warehouse images that install only --extra s3 (no streamlit) were missing
+    # click and crashed Item 5.02 parse with ModuleNotFoundError. Pin explicitly.
+    "click>=8.1",
     "spacy>=3.8.14",
     "en-core-web-sm",
 ]

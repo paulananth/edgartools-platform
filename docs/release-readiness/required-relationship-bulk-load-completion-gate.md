@@ -14,14 +14,39 @@ The gate is decision-complete, but the current implementation does **not** pass 
 
 ## Source coverage boundary
 
-The initial **Relationship Source Coverage Window** begins on `2013-05-20`, when the SEC replaced the old text Form 13F path with the XML information-table system, and ends at the Release Data Watermark. The generation and dashboard must not imply relationship history before that boundary. The SEC confirms this transition date and requires XML for filings and later amendments under the new system ([SEC Form 13F FAQ](https://www.sec.gov/rules-regulations/staff-guidance/division-investment-management-frequently-asked-questions/frequently-asked-questions-about-form-13f)).
+Coverage is **document-type specific**. Do **not** apply one global start date to
+every form. The authoritative lookback table and rationale live in
+[relationship-source-coverage-by-document-type.md](./relationship-source-coverage-by-document-type.md).
 
-Current-at-watermark proof adds a per-entity baseline:
+Summary (ends at Release Data Watermark `W` unless noted):
 
-- For each company to which Reported Executive Employment applies, load the latest applicable definitive proxy on or before the watermark and every relevant Item 5.02 `8-K`/`8-K/A` after that proxy through the watermark. All proxy and relevant 8-K candidates inside the coverage window are also loaded for declared history.
-- For each Form 13F manager, load every `13F-HR` and `13F-HR/A` in every complete SEC quarterly index inside the coverage window, including all amendments through the watermark.
+| Family | Forms | Start (initial agent GO) |
+| --- | --- | --- |
+| **13F / institutional holdings** | `13F-HR`, `13F-HR/A` | **`max(W − 3 years, 2013-05-20)`**. Hard floor **`2013-05-20`** is XML-era only ([SEC Form 13F FAQ](https://www.sec.gov/rules-regulations/staff-guidance/division-investment-management-frequently-asked-questions/frequently-asked-questions-about-form-13f)); full XML-era archive is Explore backfill, not first agent GO. |
+| **Proxy / employment baseline** | `DEF 14A`, `DEF 14A/A`, `DEFA14A`, `PRE 14A` | Filing date ≥ **`W − 5 years`** only; baseline = latest definitive proxy **in band**. **No** pre–W−5y baseline exception. |
+| **Item 5.02 8-K** | `8-K`, `8-K/A` (Item 5.02 or ambiguous items) | Filing date ≥ **`W − 2 years`**. Older 8-Ks are out of scope for this gate’s bulk-load denominator (Explore-only). |
 
-An 8-K is a source candidate when its item metadata contains Item 5.02. If item metadata is missing or ambiguous, it remains a candidate and its primary document must be fetched and classified. An 8-K conclusively identified as unrelated is not downloaded for this gate and receives a metadata-backed `not_applicable` outcome. This avoids treating all historical 8-K earnings filings as employment evidence.
+**Historical note:** An earlier draft treated `2013-05-20` as a single window for
+all relationship sources. That date remains correct for **13F XML** only. It is
+**not** a requirement to bulk-load every 8-K since 2013.
+
+Current-at-watermark proof:
+
+- For each company to which Reported Executive Employment applies, load
+  definitive proxies with filing date in **`[W−5y, W]`** (baseline = latest in
+  band if any; if none, baseline is missing — not filled by older proxies) and
+  every relevant Item 5.02 `8-K`/`8-K/A` with filing date in **`[W−2y, W]`**.
+- For each Form 13F manager, load every `13F-HR` and `13F-HR/A` in every complete
+  SEC quarterly index from the **13F agent window start**
+  (`max(W−3y, 2013-05-20)`) through the watermark, including amendments.
+
+An 8-K is a source candidate when its item metadata contains Item 5.02 **and**
+its filing date is inside the **2-year 8-K window**. If item metadata is missing
+or ambiguous, it remains a candidate **only inside that same 2-year window** and
+its primary document must be fetched and classified. An 8-K conclusively
+identified as unrelated is not downloaded for this gate and receives a
+metadata-backed `not_applicable` outcome. This avoids treating all historical
+8-K earnings filings as employment evidence.
 
 ## Authoritative candidate inventories
 
@@ -29,18 +54,24 @@ The gate freezes two accession-level inventories into the Relationship Generatio
 
 ### Reported Executive Employment inventory
 
-The inventory contains:
+The inventory contains (each row filtered by **that form’s** lookback):
 
-- `DEF 14A`, `DEF 14A/A`, `DEFA14A`, and `PRE 14A` accessions for every in-scope company in the coverage window;
-- `8-K` and `8-K/A` accessions declaring Item 5.02;
-- `8-K` and `8-K/A` accessions whose item metadata is absent or ambiguous;
-- the selected current-state proxy baseline for each applicable company.
+- `DEF 14A`, `DEF 14A/A`, `DEFA14A`, and `PRE 14A` accessions for in-scope companies
+  with filing date ≥ **`W − 5 years`** (baseline = latest in band only; no older
+  baseline exception);
+- `8-K` and `8-K/A` accessions declaring Item 5.02 with filing date ≥ **`W − 2 years`**;
+- `8-K` and `8-K/A` accessions whose item metadata is absent or ambiguous with
+  filing date ≥ **`W − 2 years`**.
 
 The inventory is derived from the complete `sec_company_filing` population for the release entity universe, reconciled to the frozen SEC index/submissions manifests. Accession number is the candidate identity.
 
 ### Institutional Holdings inventory
 
-The inventory contains every `13F-HR` and `13F-HR/A` accession found in every SEC quarterly index in the coverage window, not only filings belonging to the existing company universe. It includes a per-quarter index fingerprint and manager-CIK list.
+The inventory contains every `13F-HR` and `13F-HR/A` accession found in every SEC
+quarterly index from the **13F agent window start**
+(`max(W − 3 years, 2013-05-20)`) through the watermark, not only filings
+belonging to the existing company universe. It includes a per-quarter index
+fingerprint and manager-CIK list.
 
 The current helper is not sufficient for release evidence because it catches an index error, logs it, skips the quarter, and still returns a list ([build_13f_filer_list.py](../../edgar_warehouse/scripts/build_13f_filer_list.py#L31)). Release mode must fail closed when any expected quarter is missing.
 
@@ -126,6 +157,15 @@ For both relationship types, the frozen MDM set and hosted graph must pass the a
 - `--force` is permitted only for an explicit repair manifest naming accessions and reason codes. Evidence records the prior hashes, replacement hashes, operator, and approval. It is never the default bulk-load behavior.
 - After any repair, rerun the affected candidate slice, its full relationship derivation, exact graph parity, and the final complete-ledger reconciliation at the unchanged watermark.
 
+### Strict bulk-load resume (Ticket 20)
+
+See [ticket20-strict-bulk-load-resume.md](./ticket20-strict-bulk-load-resume.md) for the operator path:
+
+- **P0** batch_done markers + remaining CIK batches JSONL
+- **P1** accession_done markers + skip terminal candidates on the same freeze
+- **P2** mid-batch artifact progress logs
+- **P3** never redrive after image/task-definition deploy; always a new execution
+
 ## Required evidence artifact
 
 The run emits one secret-safe `required_relationship_bulk_load_evidence.json` containing:
@@ -138,6 +178,38 @@ The run emits one secret-safe `required_relationship_bulk_load_evidence.json` co
 - execution identifiers and named Gate Attestations.
 
 PASS requires every hard check to be present and successful, with no skipped check and all failure/unresolved counts equal to zero.
+
+## PASS / GO claim language (wayfinder ticket 13)
+
+PASS means **agent-window bulk-load complete** for frozen Ticket 20 candidates
+only — not full SEC history, not Form 3/4/5, not CAGR/financial features.
+
+Every PASS evidence statement must bind:
+
+1. inventory **fingerprint**
+2. Release Data **watermark** `W`
+3. **`coverage_by_document_type`** (13F / proxy / Item 5.02 8-K windows)
+
+**Approved Ticket 20 PASS phrase:**
+
+```text
+Required relationship sources for EMPLOYED_BY and INSTITUTIONAL_HOLDS are
+bulk-load complete for agent windows at watermark W (fingerprint F):
+  13F [max(W−3y, 2013-05-20), W];
+  proxy [W−5y, W] (latest-in-band baseline only);
+  Item 5.02 / ambiguous 8-K [W−2y, W].
+```
+
+**Forbidden overclaims** (never on PASS/GO, Agent View, or evidence headers):
+“complete since 2013” / “full history” for all relationship forms; “all 8-Ks
+loaded”; “all proxies since IPO/2013”; “13F complete for full XML era” when the
+freeze is only the agent 3y window; “EMPLOYED_BY enumerates every employee”;
+Form 3/4/5 or CAGR completeness as Ticket 20; treating top-level
+`coverage_start` as agent coverage for every form; Explore archive complete =
+agent GO.
+
+Full phrase pack: [agent-and-research-source-relevance-windows.md](./agent-and-research-source-relevance-windows.md)
+and `.scratch/artifact-usefulness-timelines/issues/13-go-claim-language-for-partial-history.md`.
 
 ## Ownership
 
