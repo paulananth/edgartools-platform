@@ -1,47 +1,44 @@
 {
   "version": "1.0",
-  "timestamp": "2026-07-18T21:15:00Z",
+  "timestamp": "2026-07-18T22:58:00Z",
   "phase": null,
   "phase_name": "ticket-20-production-bulk-load-go",
-  "status": "paused",
+  "status": "blocked_on_human_attestations",
   "workstream": "fix-pipelines",
   "ticket": 20,
-  "owning_runtime_handoff_to": "claude",
+  "owning_runtime_handoff_to": "user",
   "branch": "claude/ticket20-go-handoff",
-  "main_head": "b9e926e",
+  "main_head": "3814e4a",
   "completed_tasks": [
     {"id": 1, "name": "Wayfinder windows + tickets 16-19 closed", "status": "done"},
     {"id": 2, "name": "PRs 168-175 code on main", "status": "done"},
     {"id": 3, "name": "Warehouse image sha-b9e926e2d2b0 @sha256:01656d3b deployed medium:27", "status": "done"},
     {"id": 4, "name": "MDM image corrected to mdm@sha256:f9796382 medium:26", "status": "done"},
-    {"id": 5, "name": "Deploy script fail-closed MDM vs warehouse image guard (local uncommitted or branch)", "status": "done"}
+    {"id": 5, "name": "Deploy script fail-closed MDM vs warehouse image guard", "status": "done", "note": "landed on main in ef30fbe (PR #176)"},
+    {"id": 6, "name": "Free host disk then rebuild agent-window freeze", "status": "done", "note": "Colima fully reinstalled (8.4GB reclaimed); freeze rebuilt: 125,819 candidates / 12,444 CIKs"},
+    {"id": 7, "name": "Upload freeze to prodb bronze ticket20-agent-*", "status": "done", "note": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-agent-20260718T225510Z/"},
+    {"id": 8, "name": "Preflight READY_FOR_STRICT_LOAD", "status": "done", "note": "strict_release_eligible=true, fingerprint abecbde87ce3d71d2cbbe6be9fc4a0679e46d28629c95ff2ff977bd93f3160b2"}
   ],
   "remaining_tasks": [
-    {"id": 6, "name": "Free host disk then rebuild agent-window freeze", "status": "blocked"},
-    {"id": 7, "name": "Upload freeze to prodb bronze ticket20-agent-*", "status": "not_started"},
-    {"id": 8, "name": "Preflight READY_FOR_STRICT_LOAD", "status": "not_started"},
-    {"id": 9, "name": "build_ticket20_strict_execution_input + start-execution", "status": "not_started"},
+    {"id": 9, "name": "build_ticket20_strict_execution_input + start-execution", "status": "blocked", "blocker": "five human attestations required as hard input"},
     {"id": 10, "name": "Evidence PASS + MDM/graph parity", "status": "not_started"}
   ],
   "blockers": [
     {
-      "description": "Mac host disk near full (was ~30Mi; free space before freeze)",
-      "type": "technical",
-      "workaround": "Free 10-15Gi; use Colima volume for silver/cache/tmp"
-    },
-    {
-      "description": "Only S3 freeze is 2013-era ticket20-strict-20260718T013201Z (NO_GO preflight)",
-      "type": "technical",
-      "workaround": "Rebuild with agent lookbacks"
+      "description": "build_ticket20_strict_execution_input --attestations-json requires warehouse/mdm/graph/release_data_operator/release_owner values as a hard required input, confirmed by reading the script source. These are named human sign-offs (release-readiness ticket 01: agent must never manufacture human approval).",
+      "type": "human_approval_required",
+      "workaround": "User must supply attestation values or name who holds each role before start-execution can be built/triggered"
     }
   ],
   "human_actions_pending": [
-    {"action": "Free disk on Mac host", "context": "Freeze rebuild needs space", "blocking": true}
+    {"action": "Provide the five gate attestations (warehouse, mdm, graph, release_data_operator, release_owner)", "context": "Required input to build_ticket20_strict_execution_input", "blocking": true},
+    {"action": "Explicit go-ahead to fire start-execution against the production state machine", "context": "First irreversible/costly production action in this chain", "blocking": true}
   ],
   "decisions": [
     {"decision": "Never default MDM image to warehouse", "rationale": "Wrong deploy put warehouse on MDM tasks"},
     {"decision": "EDGAR_IDENTITY from env is fine", "rationale": "User said identity already provided"},
-    {"decision": "No SF redrive after image change", "rationale": "P3 pins old task def"}
+    {"decision": "No SF redrive after image change", "rationale": "P3 pins old task def"},
+    {"decision": "Agent will not generate the five attestations itself", "rationale": "They are named human sign-offs; fabricating them defeats the strict-release integrity guarantee"}
   ],
   "infrastructure": {
     "account": "690839588395",
@@ -50,10 +47,11 @@
     "state_machine": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-bronze-seed-silver-gold",
     "buckets": "edgartools-prodb-bronze|warehouse|snowflake-export",
     "roles": "sec_platform_prodb_runner_*",
-    "legacy_freeze": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-strict-20260718T013201Z/",
+    "legacy_freeze": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-strict-20260718T013201Z/ (NO_GO, do not use)",
+    "agent_freeze": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-agent-20260718T225510Z/ (READY_FOR_STRICT_LOAD)",
     "watermark": "2026-07-02",
-    "docker_volume_note": "t20-work may have been pruned; re-download silver if missing"
+    "docker_volume_note": "t20-work was destroyed by a full Colima reinstall this session; rebuilt fresh, silver.duckdb re-downloaded and verified byte-identical (339,226,624 bytes)"
   },
-  "next_action": "Free disk; rebuild agent freeze; preflight; new SF start-execution with attestations; never redrive; never omit --mdm-image-ref",
-  "context_notes": "Grok hands Ticket 20 GO to Claude. Code+image ready. GO blocked on freeze rebuild."
+  "next_action": "Obtain five attestations from user; build strict execution input with new execution name; get explicit go-ahead; start-execution; monitor Map; reconcile evidence PASS; MDM/graph parity.",
+  "context_notes": "Grok handed Ticket 20 GO prep to Claude. All prep work (freeze rebuild, upload, preflight) is done and PASSED. The only remaining blocker is obtaining human attestations -- there is no more code/infra work to do before that."
 }
