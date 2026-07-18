@@ -233,3 +233,61 @@ def test_item_502_newly_appointed_modifier_is_not_a_new_event() -> None:
     assert result.applicability == "not_applicable"
     assert result.reason_code == "no_named_employment_event"
     assert result.events == ()
+
+
+def test_item_502_board_appointment_without_as_role() -> None:
+    """Appointed to the Board without explicit 'as Director'."""
+    result = parse_item_502(
+        accession_number="board-1",
+        cik=1,
+        filing_date=date(2024, 2, 1),
+        content=(
+            "Item 5.02 Election of Directors. "
+            "On February 1, 2024, the Board of Directors of the Company appointed "
+            "Mary Q. Public to the Board of Directors."
+        ),
+    )
+    assert result.applicability == "applicable"
+    assert result.events[0].person_name == "Mary Q. Public"
+    assert result.events[0].role == "Director"
+    assert result.events[0].effective_date == date(2024, 2, 1)
+
+
+def test_item_502_stepped_down() -> None:
+    result = parse_item_502(
+        accession_number="step-1",
+        cik=1,
+        filing_date=date(2024, 8, 1),
+        content=(
+            "Item 5.02 Departure of Certain Officers. "
+            "Effective August 1, 2024, Robert A. King stepped down as Chief "
+            "Operating Officer of the Company."
+        ),
+    )
+    assert result.applicability == "applicable"
+    assert result.events[0].event_type == "departure"
+    assert result.events[0].person_name == "Robert A. King"
+    assert result.events[0].effective_date == date(2024, 8, 1)
+
+
+def test_item_502_joined_as_role() -> None:
+    result = parse_item_502(
+        accession_number="join-1",
+        cik=1,
+        filing_date=date(2024, 9, 15),
+        content=(
+            "Item 5.02 Appointment of Certain Officers. "
+            "On September 15, 2024, Alice B. Cooper joined the Company as "
+            "Chief Technology Officer."
+        ),
+    )
+    assert result.applicability == "applicable"
+    assert result.events[0].event_type == "appointment"
+    assert result.events[0].person_name == "Alice B. Cooper"
+    assert "Technology" in (result.events[0].role or "")
+    assert result.events[0].effective_date == date(2024, 9, 15)
+
+
+def test_parser_version_is_3() -> None:
+    from edgar_warehouse.parsers.item_502 import PARSER_VERSION
+    assert PARSER_VERSION == "3"
