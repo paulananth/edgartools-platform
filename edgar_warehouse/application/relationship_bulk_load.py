@@ -603,3 +603,122 @@ def build_batch_done_marker(
         "terminal_counts": {str(key): int(value) for key, value in terminal_counts.items()},
         "completed_at": str(completed_at),
     }
+
+
+def sanitize_accession_for_path(accession_number: str) -> str:
+    """Filesystem/S3-safe accession segment (keeps digits, letters, . _ -)."""
+    raw = str(accession_number or "").strip()
+    if not raw:
+        raise InventoryError("accession_number is empty")
+    safe = re.sub(r"[^0-9A-Za-z._-]", "_", raw)
+    if not safe or safe in {".", ".."}:
+        raise InventoryError(f"invalid accession_number for path: {accession_number!r}")
+    return safe
+
+
+def accession_done_marker_path(freeze_prefix: str, accession_number: str) -> str:
+    """Absolute URI/path for a per-accession terminal marker under the freeze prefix."""
+    prefix = freeze_prefix if freeze_prefix.endswith("/") else f"{freeze_prefix}/"
+    return f"{prefix}accession_done/{sanitize_accession_for_path(accession_number)}.json"
+
+
+def build_accession_done_marker(
+    *,
+    accession_number: str,
+    candidate_fingerprint: str,
+    inventory_fingerprint: str,
+    status: str,
+    evidence_fingerprint: str,
+    generation_id: str,
+    completed_at: str,
+) -> dict[str, object]:
+    """Secret-safe terminal marker for one release candidate (Ticket 20 P1)."""
+    status_value = str(status or "").strip()
+    if status_value not in TERMINAL_STATUSES:
+        raise InventoryError(f"nonterminal accession marker status: {status_value}")
+    if not str(candidate_fingerprint or "").strip():
+        raise InventoryError("accession marker missing candidate_fingerprint")
+    if not str(inventory_fingerprint or "").strip():
+        raise InventoryError("accession marker missing inventory_fingerprint")
+    if not str(evidence_fingerprint or "").strip():
+        raise InventoryError("accession marker missing evidence_fingerprint")
+    return {
+        "schema_version": 1,
+        "accession_number": str(accession_number),
+        "candidate_fingerprint": str(candidate_fingerprint),
+        "inventory_fingerprint": str(inventory_fingerprint),
+        "status": status_value,
+        "evidence_fingerprint": str(evidence_fingerprint),
+        "generation_id": str(generation_id),
+        "completed_at": str(completed_at),
+    }
+
+
+def terminal_outcome_from_accession_marker(
+    payload: Mapping[str, object],
+    *,
+    candidate: RelationshipSourceCandidate,
+    inventory_fingerprint: str,
+    generation_id: str,
+) -> CandidateOutcome | None:
+    """Return a reusable CandidateOutcome when the marker is still valid for this freeze."""
+    if int(payload.get("schema_version") or 0) < 1:
+        return None
+    if str(payload.get("accession_number") or "") != candidate.accession_number:
+        return None
+    if str(payload.get("candidate_fingerprint") or "") != candidate.fingerprint:
+        return None
+    if str(payload.get("inventory_fingerprint") or "") != str(inventory_fingerprint):
+        return None
+    status = str(payload.get("status") or "").strip()
+    evidence = str(payload.get("evidence_fingerprint") or "").strip()
+    if status not in TERMINAL_STATUSES or not evidence:
+        return None
+    return CandidateOutcome(
+        generation_id=str(generation_id),
+        accession_number=candidate.accession_number,
+        candidate_fingerprint=candidate.fingerprint,
+        status=status,
+        evidence_fingerprint=evidence,
+    )
+
+
+def load_terminal_accession_outcomes(
+    *,
+    freeze_prefix: str,
+    candidates: Iterable[RelationshipSourceCandidate],
+    inventory_fingerprint: str,
+    generation_id: str,
+    read_text,
+) -> dict[str, CandidateOutcome]:
+    """Load durable per-accession terminal markers for resume (Ticket 20 P1).
+
+    ``read_text`` is injected (typically ``lambda path: read_bytes(path).decode()``)
+    so unit tests do not need real S3.
+    """
+    outcomes: dict[str, CandidateOutcome] = {}
+    for candidate in candidates:
+        path = accession_done_marker_path(freeze_prefix, candidate.accession_number)
+        try:
+            raw = read_text(path)
+        except (FileNotFoundError, OSError, ValueError, KeyError):
+            continue
+        except Exception:
+            # Remote FS may raise provider-specific not-found errors.
+            continue
+        try:
+            payload = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, Mapping):
+            continue
+        outcome = terminal_outcome_from_accession_marker(
+            payload,
+            candidate=candidate,
+            inventory_fingerprint=inventory_fingerprint,
+            generation_id=generation_id,
+        )
+        if outcome is not None:
+            outcomes[candidate.accession_number] = outcome
+    return outcomes
+

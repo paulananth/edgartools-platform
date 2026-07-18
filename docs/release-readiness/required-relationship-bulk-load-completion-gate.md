@@ -126,6 +126,15 @@ For both relationship types, the frozen MDM set and hosted graph must pass the a
 - `--force` is permitted only for an explicit repair manifest naming accessions and reason codes. Evidence records the prior hashes, replacement hashes, operator, and approval. It is never the default bulk-load behavior.
 - After any repair, rerun the affected candidate slice, its full relationship derivation, exact graph parity, and the final complete-ledger reconciliation at the unchanged watermark.
 
+### Strict bulk-load resume (Ticket 20)
+
+See [ticket20-strict-bulk-load-resume.md](./ticket20-strict-bulk-load-resume.md) for the operator path:
+
+- **P0** batch_done markers + remaining CIK batches JSONL
+- **P1** accession_done markers + skip terminal candidates on the same freeze
+- **P2** mid-batch artifact progress logs
+- **P3** never redrive after image/task-definition deploy; always a new execution
+
 ## Required evidence artifact
 
 The run emits one secret-safe `required_relationship_bulk_load_evidence.json` containing:

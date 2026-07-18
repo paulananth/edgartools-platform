@@ -1525,6 +1525,8 @@ def _capture_bronze_raw(
                 select_required_accessions,
             )
 
+            prefilled_accession_outcomes: dict[str, Any] = {}
+            freeze_prefix = ""
             try:
                 candidate_payload = json.loads(
                     read_bytes(candidate_manifest_path).decode("utf-8")
@@ -1562,6 +1564,40 @@ def _capture_bronze_raw(
                     repair_accessions = select_required_accessions(
                         repair_payload, ciks={int(cik) for cik in cik_list}
                     )
+                # P1: load durable per-accession terminals from prior runs of this freeze.
+                from edgar_warehouse.application.relationship_bulk_load import (
+                    load_terminal_accession_outcomes,
+                    release_freeze_prefix_from_path,
+                )
+
+                freeze_prefix = release_freeze_prefix_from_path(candidate_manifest_path)
+                prefilled_accession_outcomes = load_terminal_accession_outcomes(
+                    freeze_prefix=freeze_prefix,
+                    candidates=candidate_inventory.candidates,
+                    inventory_fingerprint=candidate_inventory.fingerprint,
+                    generation_id=sync_run_id,
+                    read_text=lambda path: read_bytes(path).decode("utf-8"),
+                )
+                # Explicit --force repair must re-process named accessions even if
+                # a prior terminal marker exists under this freeze.
+                if repair_accessions:
+                    for accession in repair_accessions:
+                        prefilled_accession_outcomes.pop(accession, None)
+                if prefilled_accession_outcomes:
+                    # Do not re-fetch artifacts or re-parse when a valid freeze
+                    # marker already proves a terminal outcome.
+                    required_accessions = {
+                        accession
+                        for accession in required_accessions
+                        if accession not in prefilled_accession_outcomes
+                    }
+                    _emit_pipeline_event(
+                        "release_accession_resume_loaded",
+                        resumed_count=len(prefilled_accession_outcomes),
+                        pending_required_count=len(required_accessions),
+                        freeze_prefix=freeze_prefix,
+                        run_id=sync_run_id,
+                    )
             except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
                 raise WarehouseRuntimeError(
                     f"bootstrap-batch could not read bounded release manifest: {exc}"
@@ -1593,17 +1629,29 @@ def _capture_bronze_raw(
         if release_mode:
             from edgar_warehouse.application.relationship_bulk_load import (
                 CandidateOutcome,
+                accession_done_marker_path,
+                batch_done_marker_path,
+                batch_identity_for_ciks,
+                build_accession_done_marker,
+                build_batch_done_marker,
                 candidate_inventory_from_manifest,
                 reconcile_completion_ledger,
+                release_freeze_prefix_from_path,
             )
+            from edgar_warehouse.infrastructure.object_storage import write_uri_text
 
             inventory = candidate_inventory_from_manifest(
                 candidate_payload, ciks={int(cik) for cik in cik_list}
             )
+            pending_candidates = [
+                candidate
+                for candidate in inventory.candidates
+                if candidate.accession_number not in prefilled_accession_outcomes
+            ]
             parser_outcomes = _run_release_branch_b_parsers(
                 db=db,
                 ciks=[int(cik) for cik in cik_list],
-                candidates=inventory.candidates,
+                candidates=pending_candidates,
                 sync_run_id=sync_run_id,
             )
             artifact_outcomes = {
@@ -1611,7 +1659,12 @@ def _capture_bronze_raw(
                 for row in result.get("candidate_outcomes", [])
             }
             outcomes: list[CandidateOutcome] = []
+            newly_completed: list[CandidateOutcome] = []
             for candidate in inventory.candidates:
+                resumed = prefilled_accession_outcomes.get(candidate.accession_number)
+                if resumed is not None:
+                    outcomes.append(resumed)
+                    continue
                 artifact = artifact_outcomes.get(candidate.accession_number)
                 if candidate.artifact_required and artifact is None:
                     raise WarehouseRuntimeError(
@@ -1638,24 +1691,18 @@ def _capture_bronze_raw(
                     if artifact is not None and parser_outcome is not None
                     else candidate.fingerprint
                 )
-                outcomes.append(CandidateOutcome(
+                outcome = CandidateOutcome(
                     generation_id=sync_run_id,
                     accession_number=candidate.accession_number,
                     candidate_fingerprint=candidate.fingerprint,
                     status=status,
                     evidence_fingerprint=evidence_fingerprint,
-                ))
+                )
+                outcomes.append(outcome)
+                newly_completed.append(outcome)
             reconciliation = reconcile_completion_ledger(
                 inventory, outcomes, generation_id=sync_run_id
             )
-            from edgar_warehouse.application.relationship_bulk_load import (
-                batch_done_marker_path,
-                batch_identity_for_ciks,
-                build_batch_done_marker,
-                release_freeze_prefix_from_path,
-            )
-            from edgar_warehouse.infrastructure.object_storage import write_uri_text
-
             batch_identity = batch_identity_for_ciks(cik_list)
             ledger_path = context.storage_root.write_json(
                 f"release-evidence/{sync_run_id}/bulk-load-ledger-batches/{batch_identity}.json",
@@ -1669,9 +1716,36 @@ def _capture_bronze_raw(
             )
             metrics["bulk_load_ledger_path"] = ledger_path
             metrics["bulk_load_ledger_fingerprint"] = reconciliation.fingerprint
+            metrics["release_accession_resumed_count"] = len(prefilled_accession_outcomes)
+            metrics["release_accession_newly_completed_count"] = len(newly_completed)
             # P0: durable done marker under the freeze prefix so a later SF
             # execution can feed only remaining batches (same freeze, new run_id).
-            freeze_prefix = release_freeze_prefix_from_path(candidate_manifest_path)
+            freeze_prefix = freeze_prefix or release_freeze_prefix_from_path(
+                candidate_manifest_path
+            )
+            completed_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+            # P1: persist per-accession terminals for mid-batch resume next run.
+            for outcome in newly_completed:
+                marker_path = accession_done_marker_path(
+                    freeze_prefix, outcome.accession_number
+                )
+                write_uri_text(
+                    marker_path,
+                    json.dumps(
+                        build_accession_done_marker(
+                            accession_number=outcome.accession_number,
+                            candidate_fingerprint=outcome.candidate_fingerprint,
+                            inventory_fingerprint=reconciliation.inventory_fingerprint,
+                            status=outcome.status,
+                            evidence_fingerprint=outcome.evidence_fingerprint,
+                            generation_id=sync_run_id,
+                            completed_at=completed_at,
+                        ),
+                        indent=2,
+                        sort_keys=True,
+                    )
+                    + "\n",
+                )
             marker_path = batch_done_marker_path(freeze_prefix, batch_identity)
             marker_payload = build_batch_done_marker(
                 batch_identity=batch_identity,
@@ -1682,7 +1756,7 @@ def _capture_bronze_raw(
                 ledger_fingerprint=reconciliation.fingerprint,
                 terminal_counts=reconciliation.terminal_counts,
                 candidate_count=len(inventory.candidates),
-                completed_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                completed_at=completed_at,
             )
             write_uri_text(
                 marker_path,
@@ -1696,6 +1770,8 @@ def _capture_bronze_raw(
                 marker_path=marker_path,
                 ledger_path=ledger_path,
                 candidate_count=len(inventory.candidates),
+                resumed_count=len(prefilled_accession_outcomes),
+                newly_completed_count=len(newly_completed),
                 run_id=sync_run_id,
             )
         return raw_writes, metrics

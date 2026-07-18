@@ -10,6 +10,10 @@ markers and writes a new JSONL containing only unfinished batches. Point the
 next ``bronze_seed_silver_gold`` strict execution's ``candidate_batches_key``
 at that remaining file (keep the same ``candidate_manifest_key``).
 
+**P3:** do not redrive a failed Step Functions execution after deploying a new
+image/task definition. Always start a **new** execution with remaining batches.
+See ``docs/release-readiness/ticket20-strict-bulk-load-resume.md``.
+
 Example::
 
     uv run python -m edgar_warehouse.scripts.build_remaining_release_batches \\

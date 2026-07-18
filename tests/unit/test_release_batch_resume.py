@@ -119,3 +119,63 @@ def test_write_uri_text_roundtrip(tmp_path: Path) -> None:
 def test_invalid_batch_identity_rejected() -> None:
     with pytest.raises(InventoryError, match="invalid batch identity"):
         batch_done_marker_path("s3://b/f/", "not-hex")
+
+
+def test_accession_done_marker_roundtrip_and_skip(tmp_path: Path) -> None:
+    from datetime import date
+
+    from edgar_warehouse.application.relationship_bulk_load import (
+        RelationshipSourceCandidate,
+        accession_done_marker_path,
+        build_accession_done_marker,
+        load_terminal_accession_outcomes,
+        terminal_outcome_from_accession_marker,
+    )
+
+    candidate = RelationshipSourceCandidate(
+        accession_number="0000320193-24-000001",
+        cik=320193,
+        form="8-K",
+        filing_date=date(2024, 5, 1),
+        report_date=None,
+        relationship_type="EMPLOYED_BY",
+        candidate_reason="item_5_02_metadata",
+        artifact_required=True,
+        source_index_identity="2024Q2",
+        source_manifest_fingerprint="src",
+        fingerprint="cand-fp-1",
+    )
+    freeze = str(tmp_path) + "/"
+    marker = build_accession_done_marker(
+        accession_number=candidate.accession_number,
+        candidate_fingerprint=candidate.fingerprint,
+        inventory_fingerprint="inv-fp",
+        status="applicable_loaded",
+        evidence_fingerprint="ev-fp",
+        generation_id="run-old",
+        completed_at="2026-07-18T00:00:00Z",
+    )
+    path = accession_done_marker_path(freeze, candidate.accession_number)
+    write_uri_text(path, json.dumps(marker) + "\n")
+
+    loaded = load_terminal_accession_outcomes(
+        freeze_prefix=freeze,
+        candidates=[candidate],
+        inventory_fingerprint="inv-fp",
+        generation_id="run-new",
+        read_text=lambda p: Path(p).read_text(encoding="utf-8"),
+    )
+    assert candidate.accession_number in loaded
+    assert loaded[candidate.accession_number].status == "applicable_loaded"
+    assert loaded[candidate.accession_number].generation_id == "run-new"
+
+    # Stale candidate fingerprint must not resume.
+    stale = terminal_outcome_from_accession_marker(
+        marker,
+        candidate=RelationshipSourceCandidate(
+            **{**candidate.__dict__, "fingerprint": "other"},
+        ),
+        inventory_fingerprint="inv-fp",
+        generation_id="run-new",
+    )
+    assert stale is None
