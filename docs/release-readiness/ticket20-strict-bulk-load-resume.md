@@ -42,6 +42,14 @@ uv run python -m edgar_warehouse.scripts.build_relationship_release_manifest \
 
 (omit `--coverage-start` so agent lookbacks apply).
 
+**Preflight before SF start** (fails closed on legacy freezes):
+
+```bash
+uv run python -m edgar_warehouse.scripts.validate_relationship_release_manifest \
+  --candidate-manifest s3://…/relationship_release/ticket20-agent-…/candidate_manifest.json
+# exit 0 + disposition READY_FOR_STRICT_LOAD required
+```
+
 ## Freeze layout
 
 Under the freeze prefix (parent of `candidate_manifest.json`):
