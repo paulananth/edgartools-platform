@@ -28,9 +28,9 @@ row is superseded earlier by amendment semantics.
 
 | Document family | Forms | Lookback start | Why this window |
 | --- | --- | --- | --- |
-| **Institutional holdings (13F)** | `13F-HR`, `13F-HR/A` | **`max(W − product_history, 2013-05-20)`** — default product history may be multi-year; **hard floor `2013-05-20`** | SEC XML information-table era; platform parsers and GO copy for `INSTITUTIONAL_HOLDS` must not claim pre-XML text 13F history. See completion gate 13F boundary. |
-| **Proxy compensation / employment baseline** | `DEF 14A`, `DEF 14A/A`, `DEFA14A`, `PRE 14A` | **Latest definitive proxy on or before `W` is always in scope**, plus proxies with filing date ≥ **`W − 5 years`** for declared employment history (unless Release Owner tightens) | Current-at-watermark employment needs a proxy baseline; multi-year proxy history is useful but not the same burden as full 13F+8-K since 2013. |
-| **Item 5.02 employment events (8-K)** | `8-K`, `8-K/A` with Item 5.02 **or** missing/ambiguous items | Filing date ≥ **`W − 1 year`** | Event-driven; older 8-Ks add little to current employment state once proxy baseline + recent 5.02 are loaded. **One year is the initial GO default.** |
+| **Institutional holdings (13F)** | `13F-HR`, `13F-HR/A` | **`max(W − 3 years, 2013-05-20)`** for **agent-useful first GO**; hard floor **`2013-05-20`** (cannot claim pre-XML 13F). Full XML-era archive is optional Explore backfill, not first agent GO. | Agent needs current holdings + short change context; 3y confirmed in product grill. XML floor is format, not “load everything since 2013 for agents.” See [agent-and-research-source-relevance-windows.md](./agent-and-research-source-relevance-windows.md). |
+| **Proxy compensation / employment baseline** | `DEF 14A`, `DEF 14A/A`, `DEFA14A`, `PRE 14A` | **Latest definitive proxy on or before `W` is always in scope**, plus proxies with filing date ≥ **`W − 5 years`** | Confirmed: baseline + 5y history for `EMPLOYED_BY`. |
+| **Item 5.02 employment events (8-K)** | `8-K`, `8-K/A` with Item 5.02 **or** missing/ambiguous items | Filing date ≥ **`W − 1 year`** | Confirmed: one year is enough for agent employment events. |
 | **Unrelated 8-K** (items prove no 5.02) | `8-K`, `8-K/A` | **Out of scope** for bulk download | Metadata `not_applicable`; do not treat earnings 8-Ks as employment candidates. |
 
 Notes:
