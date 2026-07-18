@@ -1057,6 +1057,20 @@ error.
 
 ## runtime_access module: shared, non-namespaced IAM roles across dev/prod
 
+**Status:** RESOLVED as a side effect of the account migration + `prodb` build
+(confirmed live 2026-07-17). `edgartools-dev-large`'s task def uses
+`sec_platform_runner_execution`/`_task`; `edgartools-prod-large`'s uses the
+namespaced `sec_platform_prodb_runner_execution`/`_task` — dev and prod (which
+today runs on the `prodb`-prefixed role set) no longer share role ARNs. This
+entry originally described both environments living in the now-decommissioned
+account `077127448006`; the sharing it warned about does not carry over to the
+current account `690839588395`. Leaving the rest of this entry below for
+historical context (the underlying `runtime_access` module still hardcodes
+non-namespaced names — only namespaced by accident of the separate `prodb`
+naming scheme, not by a real fix to the module itself — so re-verify if the
+`prodb`→`prod` promotion (see "FLAG FOR NEXT SESSION" entry near the end of
+this file) ever consolidates role naming back down to one shared set).
+
 **What:** `infra/terraform/access/aws/modules/runtime_access/main.tf` hardcodes
 3 role names (`sec_platform_runner_execution`, `sec_platform_runner_task`,
 `sec_platform_runner_step_functions`) without `${var.name_prefix}` env
@@ -1202,6 +1216,13 @@ PR #111, 2026-07-02.
 
 ## MDM Postgres secret still points at a live RDS instance, not Snowflake — contradicts documented cutover
 
+**Status:** RESOLVED (confirmed live 2026-07-17). `aws rds describe-db-instances
+--db-instance-identifier edgartools-dev-mdm` now returns `DBInstanceNotFound` — the
+RDS instance is gone. `edgartools-dev/mdm/postgres_dsn`'s current value is a
+Snowflake Postgres DSN (`*.aws.postgres.snowflake.app:5432/mdm`), matching
+`CLAUDE.md`'s documented cutover. Whatever caused the regression described below
+was fixed by a later pass; leaving the original 5-whys below for history.
+
 **What:** `edgartools-dev/mdm/postgres_dsn` (Secrets Manager, account
 `690839588395`, the ARN referenced by every ECS task definition's
 `MDM_DATABASE_URL`) currently holds a DSN for
@@ -1269,6 +1290,13 @@ stream `warehouse-large/edgar-warehouse/16d6a46d868047b186bf8bf4518b89e5`).
 ---
 
 ## MDM Snowflake secret missing from new AWS account — cross-account access denied
+
+**Status:** RESOLVED (confirmed live 2026-07-17). `edgartools-dev/mdm/snowflake`
+now exists in account `690839588395`, and `edgartools-dev-mdm-small`'s task def
+`secrets` block points `MDM_SNOWFLAKE_SECRET_JSON` at
+`arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-dev/mdm/snowflake-d7X99N`
+— same account, no cross-account call. Leaving the original 5-whys below for
+history.
 
 **What:** The MDM ECS task definitions' `secrets` block still points
 `edgartools-dev/mdm/snowflake` at
