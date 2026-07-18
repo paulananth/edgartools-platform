@@ -254,6 +254,103 @@ def test_operator_canonicalizes_multi_registrant_accession_without_hiding_ciks()
     }]
 
 
+def test_ticket20_pass_claim_binds_fingerprint_watermark_and_windows() -> None:
+    from edgar_warehouse.application.relationship_bulk_load import (
+        build_required_relationship_bulk_load_evidence,
+        format_ticket20_pass_claim,
+    )
+
+    watermark = date(2026, 7, 2)
+    windows = agent_coverage_by_document_type(watermark)
+    claim = format_ticket20_pass_claim(
+        watermark=watermark,
+        fingerprint="abc123",
+        coverage_by_document_type=windows,
+    )
+    assert "fingerprint abc123" in claim
+    assert "watermark 2026-07-02" in claim
+    assert "13F [2023-07-02, 2026-07-02]" in claim
+    assert "proxy [2021-07-02, 2026-07-02]" in claim
+    assert "Item 5.02 / ambiguous 8-K [2024-07-02, 2026-07-02]" in claim
+    assert "complete since 2013" not in claim.lower()
+
+    attestations = {
+        "warehouse": "W",
+        "mdm": "M",
+        "graph": "G",
+        "release_data_operator": "O",
+        "release_owner": "R",
+    }
+    evidence = build_required_relationship_bulk_load_evidence(
+        generation_id="run-1",
+        inventory_fingerprint="abc123",
+        watermark=watermark,
+        coverage_start=index_floor_coverage_start(windows),
+        coverage_by_document_type=windows,
+        candidate_count=100,
+        terminal_counts={"applicable_loaded": 90, "not_applicable": 10},
+        ledger_fingerprint="ledger-fp",
+        batch_ledger_count=2,
+        attestations=attestations,
+        image_digest="sha256:deadbeef",
+        execution_arn="arn:aws:states:…:execution:…",
+    )
+    assert evidence["disposition"] == "PASS"
+    assert evidence["coverage_by_document_type"] == windows
+    assert evidence["pass_claim"] == claim
+    assert evidence["attestations"]["release_owner"] == "R"
+
+
+def test_ticket20_evidence_fail_closed_when_counts_do_not_balance() -> None:
+    from edgar_warehouse.application.relationship_bulk_load import (
+        build_required_relationship_bulk_load_evidence,
+    )
+
+    watermark = date(2026, 7, 2)
+    windows = agent_coverage_by_document_type(watermark)
+    with pytest.raises(InventoryError, match="terminal_counts"):
+        build_required_relationship_bulk_load_evidence(
+            generation_id="run-1",
+            inventory_fingerprint="fp",
+            watermark=watermark,
+            coverage_start=index_floor_coverage_start(windows),
+            coverage_by_document_type=windows,
+            candidate_count=10,
+            terminal_counts={"applicable_loaded": 5},
+            ledger_fingerprint="ledger-fp",
+            batch_ledger_count=1,
+            require_attestations=False,
+        )
+
+
+def test_ticket20_evidence_requires_five_attestations() -> None:
+    from edgar_warehouse.application.relationship_bulk_load import (
+        build_required_relationship_bulk_load_evidence,
+        parse_attestations_json,
+    )
+
+    watermark = date(2026, 7, 2)
+    windows = agent_coverage_by_document_type(watermark)
+    with pytest.raises(InventoryError, match="missing attestations"):
+        build_required_relationship_bulk_load_evidence(
+            generation_id="run-1",
+            inventory_fingerprint="fp",
+            watermark=watermark,
+            coverage_start=index_floor_coverage_start(windows),
+            coverage_by_document_type=windows,
+            candidate_count=1,
+            terminal_counts={"applicable_loaded": 1},
+            ledger_fingerprint="ledger-fp",
+            batch_ledger_count=1,
+            attestations={"warehouse": "only-one"},
+        )
+    parsed = parse_attestations_json(
+        '{"warehouse":"W","mdm":"M","graph":"G",'
+        '"release_data_operator":"O","release_owner":"R"}'
+    )
+    assert parsed["graph"] == "G"
+
+
 def test_strict_release_rejects_legacy_manifest_without_coverage_map() -> None:
     payload = {
         "coverage_start": "2013-05-20",

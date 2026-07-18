@@ -10,11 +10,10 @@ Blocks: 06
 Run the strict production bulk load at the frozen Release Data Watermark, repair every unresolved candidate, derive all required relationship types without caps, publish the graph generation, and commit the passing evidence artifact.
 
 **Coverage policy (document-type specific):** do not freeze a single global
-2013 start for every form. Per-type windows are defined in
-`docs/release-readiness/relationship-source-coverage-by-document-type.md`
-(e.g. Item 5.02 **8-K = 1 year** before watermark; 13F keeps XML floor
-`2013-05-20`; proxy baseline + 5y history). Rebuild the candidate freeze under
-those windows before GO.
+2013 start for every form. Locked agent windows (wayfinder + PR #170/#171):
+13F `max(W−3y, 2013-05-20)`, proxy `[W−5y, W]` latest-in-band only, Item 5.02 /
+ambiguous 8-K `[W−2y, W]`. Rebuild freeze with `coverage_by_document_type`
+before GO. Live 2013-era freeze is **rejected** under `release_mode`.
 
 ## Done when
 
@@ -24,49 +23,57 @@ those windows before GO.
 - `EMPLOYED_BY` and `INSTITUTIONAL_HOLDS` pass exact MDM-to-hosted-graph parity and current-at-watermark checks.
 - Named Warehouse, MDM, Graph, Release Data Operator, and Release Owner attestations are bound to the evidence artifact.
 
+## Pre-image ticket hygiene (2026-07-18)
+
+| Ticket | Status | Close before image? |
+| --- | --- | --- |
+| 16 ledger | **resolved** | Already closed |
+| 17 strict bulk-load | **resolved** | Already closed |
+| 18 Item 5.02 | **resolved** | Already closed |
+| 19 13F effective set | **resolved** | Already closed |
+| Usefulness windows 01–13 | **resolved** (map complete) | Already closed |
+| **20 this ticket** | **open** | **No** — keep open until production PASS |
+
 ## Current disposition
 
-`IN_PROGRESS` / **NO_GO until terminal PASS** (as of 2026-07-18). Strict
-production bulk-load is **running**. See
-`docs/release-readiness/ticket20-production-remediation-evidence.json`.
+**NO_GO** (as of 2026-07-18). Prior strict runs **FAILED**. Do not claim GO.
+See `docs/release-readiness/ticket20-production-remediation-evidence.json` and
+resume notes.
 
-### Live execution (started 2026-07-18)
+### Latest failed executions (2026-07-18)
 
 | Field | Value |
 | --- | --- |
-| Execution | `ticket20-strict-20260718T013201Z` |
-| ARN | `arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bronze-seed-silver-gold:ticket20-strict-20260718T013201Z` |
-| Path | `release_mode=true` → StrictManifestCheck → **StrictBatchSilver** |
-| Watermark | `2026-07-02` (coverage start `2013-05-20`) |
-| Candidates | **528,829** across **15,941** CIKs (160 batches of 100) |
+| First fail | `ticket20-strict-20260718T013201Z` (click / map threshold) |
+| Resume fail | `ticket20-strict-resume-20260718T104737Z` — **0/160** batches; map 1 fail / 4 aborted / 155 pending |
+| Freeze used | `ticket20-strict-20260718T013201Z` — **528,829** candidates, `coverage_start=2013-05-20`, **no** `coverage_by_document_type` |
 | Fingerprint | `ded1b9a2c3e14c3b1c30fd01e30924acac158014c4e9a114e18b76f47fbbf746` |
-| Warehouse image | `sha256:1b654302ef7fbec4fcad90aa711c9ac6b211f8051252ef1d01c18c2db0b3a1d1` (`sha-8db4abf9868b`) |
-| MDM image | `sha256:f97963824fbfa54a41151f37c548788c84add07e31c62e252b25d59457cbe118` |
-| Data plane | `edgartools-prodb-bronze` / `edgartools-prodb-warehouse` (prodb runner roles) |
-| Early signal | bronze catalog network fetches **0**; artifact pipeline started with `all_attachments` + `branch_b_deferred` |
+| Data plane | `edgartools-prodb-*` + `sec_platform_prodb_runner_*` |
 
 ### Implementation path status (code / unit)
 
 | Prerequisite | Status |
 | --- | --- |
-| Item 5.02 employment events (ticket 18) | **Landed** — parse + temporal `EMPLOYED_BY` application |
-| Active-voice + spaCy extraction | **Landed** — PRs #154, #155 |
-| Residual possessive / modifier gaps | **Landed** — PR #157 |
-| Strict bulk-load + completion ledger code | **Landed** (tickets 16–17) |
-| ADV / subsidiary / auditor ingestion | **Landed** (tickets 21–23) |
-| Warehouse image promote + prod deploy | **Done** (crane copy + deploy rev 23) |
-| Frozen candidate manifest | **Done** (uploaded to prodb bronze) |
-| Strict SF execution started | **Done** (in progress) |
+| Tickets 16–19 | **Closed / resolved** |
+| Agent windows + freeze encoding (usefulness 01–13) | **Closed / resolved** |
+| click pin + resume P0/P1 | **Landed** — PR #168 |
+| Per-form agent freeze builder | **Landed** — PR #170 |
+| Fail-closed strict freeze gate | **Landed** — PR #171 |
+| PASS evidence artifact on reconcile | **On branch** `grok/ticket20-bulk-load-evidence` (merge before image if desired) |
+| Warehouse image with #168–#171 | **Not yet** rebuilt after those merges |
+| Agent-window freeze rebuild | **Not done** (required; old freeze fails gate) |
+| Strict SF PASS | **Not done** |
 
 ### Still required for GO (do not mark resolved until all pass)
 
-1. All 160 StrictBatchSilver batches succeed fail-closed.
-2. ReconcileRelationshipRelease ledger reconciles with zero nonterminal outcomes.
-3. MDM run/backfill/export/sync/verify without caps; exact `EMPLOYED_BY` +
-   `INSTITUTIONAL_HOLDS` MDM↔graph parity.
-4. No-change rerun: zero SEC network, identical semantic digests.
-5. Commit `required_relationship_bulk_load_evidence.json` with terminal PASS
-   counts and bound attestations.
+1. Merge any remaining image-bound code (evidence PR if wanted).
+2. Build + deploy **new** warehouse image; register new task defs (**P3**: no redrive).
+3. **Rebuild freeze** under agent windows (new fingerprint + `coverage_by_document_type`).
+4. New strict SF execution; all batches succeed fail-closed.
+5. Reconcile ledger + `required_relationship_bulk_load_evidence.json` PASS.
+6. MDM run/backfill/export/sync/verify; exact `EMPLOYED_BY` + `INSTITUTIONAL_HOLDS` parity.
+7. No-change rerun: zero SEC network, identical semantic digests.
+8. Five named attestations bound on the evidence artifact.
 
 Until those produce PASS evidence, leave status **open** / disposition
 **NO_GO**. Do **not** treat ordinary skip-policy full-chain as Ticket 20 proof.

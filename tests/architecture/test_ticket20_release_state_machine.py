@@ -79,3 +79,11 @@ def test_strict_ticket20_path_generates_valid_fail_closed_definition(tmp_path: P
     assert states["StrictMdmSync"]["Next"] == "StrictMdmSyncIdempotency"
     assert states["StrictMdmSyncIdempotency"]["Next"] == "StrictMdmVerify"
     assert states["StrictMdmVerify"]["Next"] == "StrictGoldRefresh"
+    reconcile_cmd = states["ReconcileRelationshipRelease"]["Parameters"][
+        "Overrides"
+    ]["ContainerOverrides"][0]["Command.$"]
+    assert "'reconcile-relationship-release'" in reconcile_cmd
+    assert "'--attestations-json'" in reconcile_cmd
+    assert "States.JsonToString($.attestations)" in reconcile_cmd
+    assert "'--execution-arn'" in reconcile_cmd
+    assert "$$.Execution.Id" in reconcile_cmd

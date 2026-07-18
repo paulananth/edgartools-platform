@@ -687,6 +687,152 @@ class LedgerReconciliation:
     fingerprint: str
 
 
+def format_ticket20_pass_claim(
+    *,
+    watermark: date,
+    fingerprint: str,
+    coverage_by_document_type: Mapping[str, Mapping[str, object]],
+) -> str:
+    """Approved Ticket 20 PASS phrase (binds fingerprint, watermark, windows)."""
+    windows = _normalize_coverage_by_document_type(coverage_by_document_type)
+    thirteenf = windows["thirteenf"]
+    proxy = windows["proxy"]
+    item_502 = windows["item_502_8k"]
+    return (
+        "Required relationship sources for EMPLOYED_BY and INSTITUTIONAL_HOLDS are "
+        f"bulk-load complete for agent windows at watermark {watermark.isoformat()} "
+        f"(fingerprint {fingerprint}):\n"
+        f"  13F [{thirteenf['start']}, {thirteenf['end']}];\n"
+        f"  proxy [{proxy['start']}, {proxy['end']}] (latest-in-band baseline only);\n"
+        f"  Item 5.02 / ambiguous 8-K [{item_502['start']}, {item_502['end']}]."
+    )
+
+
+REQUIRED_GATE_ATTESTATION_ROLES = (
+    "warehouse",
+    "mdm",
+    "graph",
+    "release_data_operator",
+    "release_owner",
+)
+
+
+def normalize_gate_attestations(attestations: object) -> dict[str, str]:
+    """Require the five named Ticket 20 gate attestation roles (non-empty strings)."""
+    if not isinstance(attestations, Mapping):
+        raise InventoryError(
+            "Ticket 20 evidence requires attestations object with five named roles"
+        )
+    normalized: dict[str, str] = {}
+    missing: list[str] = []
+    for role in REQUIRED_GATE_ATTESTATION_ROLES:
+        value = str(attestations.get(role) or "").strip()
+        if not value:
+            missing.append(role)
+        else:
+            normalized[role] = value
+    if missing:
+        raise InventoryError(
+            "Ticket 20 evidence missing attestations: " + ", ".join(missing)
+        )
+    return normalized
+
+
+def parse_attestations_json(raw: object) -> dict[str, str]:
+    """Parse CLI/SF ``--attestations-json`` payload into normalized role map."""
+    if raw is None or raw == "":
+        raise InventoryError("attestations-json is required for Ticket 20 evidence")
+    if isinstance(raw, Mapping):
+        return normalize_gate_attestations(raw)
+    try:
+        payload = json.loads(str(raw))
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise InventoryError("attestations-json must be valid JSON object") from exc
+    return normalize_gate_attestations(payload)
+
+
+def build_required_relationship_bulk_load_evidence(
+    *,
+    generation_id: str,
+    inventory_fingerprint: str,
+    watermark: date,
+    coverage_start: date,
+    coverage_by_document_type: Mapping[str, Mapping[str, object]],
+    candidate_count: int,
+    terminal_counts: Mapping[str, int],
+    ledger_fingerprint: str,
+    batch_ledger_count: int,
+    attestations: Mapping[str, str] | object | None = None,
+    image_digest: str | None = None,
+    execution_arn: str | None = None,
+    extra_checks: Mapping[str, object] | None = None,
+    require_attestations: bool = True,
+) -> dict[str, object]:
+    """Secret-safe Ticket 20 gate evidence payload (completion gate shape).
+
+    Disposition is PASS only when terminal counts sum to candidate_count,
+    every status is a known terminal status, and (by default) all five named
+    attestations are present. Nonterminal leftovers fail closed.
+    """
+    windows = _normalize_coverage_by_document_type(coverage_by_document_type)
+    counts = {str(key): int(value) for key, value in terminal_counts.items()}
+    unknown = sorted(set(counts) - TERMINAL_STATUSES)
+    if unknown:
+        raise InventoryError(
+            f"terminal_counts contain nonterminal statuses: {', '.join(unknown)}"
+        )
+    total_terminal = sum(counts.values())
+    if total_terminal != int(candidate_count):
+        raise InventoryError(
+            f"terminal_counts sum {total_terminal} != candidate_count {candidate_count}"
+        )
+    if require_attestations:
+        bound_attestations = normalize_gate_attestations(attestations)
+    elif attestations is None:
+        bound_attestations = {}
+    else:
+        bound_attestations = normalize_gate_attestations(attestations)
+    pass_claim = format_ticket20_pass_claim(
+        watermark=watermark,
+        fingerprint=inventory_fingerprint,
+        coverage_by_document_type=windows,
+    )
+    evidence: dict[str, object] = {
+        "schema_version": 1,
+        "artifact": "required_relationship_bulk_load_evidence",
+        "disposition": "PASS",
+        "generation_id": str(generation_id),
+        "inventory_fingerprint": str(inventory_fingerprint),
+        "ledger_fingerprint": str(ledger_fingerprint),
+        "watermark": watermark.isoformat(),
+        "coverage_start": coverage_start.isoformat(),
+        "coverage_by_document_type": windows,
+        "candidate_count": int(candidate_count),
+        "batch_ledger_count": int(batch_ledger_count),
+        "terminal_counts": counts,
+        "pass_claim": pass_claim,
+        "forbidden_overclaims": [
+            "complete since 2013 for all relationship forms",
+            "full history bulk-load for all forms",
+            "Form 3/4/5 complete as Ticket 20",
+            "CAGR/financials complete as Ticket 20",
+            "Explore archive complete equals agent GO",
+        ],
+    }
+    if bound_attestations:
+        evidence["attestations"] = bound_attestations
+    if image_digest:
+        evidence["image_digest"] = str(image_digest)
+    if execution_arn:
+        evidence["execution_arn"] = str(execution_arn)
+    if extra_checks:
+        evidence["checks"] = dict(extra_checks)
+    evidence["evidence_fingerprint"] = _sha256(
+        {key: value for key, value in evidence.items() if key != "evidence_fingerprint"}
+    )
+    return evidence
+
+
 def reconcile_completion_ledger(
     inventory: CandidateInventory,
     outcomes: Iterable[CandidateOutcome],

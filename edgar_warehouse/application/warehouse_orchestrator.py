@@ -1875,9 +1875,11 @@ def _capture_bronze_raw(
         try:
             candidate_payload = json.loads(read_bytes(manifest_path).decode("utf-8"))
             from edgar_warehouse.application.relationship_bulk_load import (
+                build_required_relationship_bulk_load_evidence,
                 candidate_inventory_from_manifest,
                 reconcile_completion_ledger_batches,
             )
+
             inventory = candidate_inventory_from_manifest(
                 candidate_payload, require_strict_agent_windows=True
             )
@@ -1892,6 +1894,27 @@ def _capture_bronze_raw(
             reconciliation = reconcile_completion_ledger_batches(
                 inventory, batch_ledgers, generation_id=sync_run_id
             )
+            from edgar_warehouse.application.relationship_bulk_load import (
+                parse_attestations_json,
+            )
+
+            attestations_raw = arguments.get("attestations")
+            if attestations_raw is None:
+                attestations_raw = arguments.get("attestations_json")
+            evidence = build_required_relationship_bulk_load_evidence(
+                generation_id=sync_run_id,
+                inventory_fingerprint=reconciliation.inventory_fingerprint,
+                watermark=inventory.watermark,
+                coverage_start=inventory.coverage_start,
+                coverage_by_document_type=inventory.coverage_by_document_type,
+                candidate_count=len(inventory.candidates),
+                terminal_counts=reconciliation.terminal_counts,
+                ledger_fingerprint=reconciliation.fingerprint,
+                batch_ledger_count=len(batch_ledgers),
+                attestations=parse_attestations_json(attestations_raw),
+                image_digest=str(arguments.get("image_digest") or "").strip() or None,
+                execution_arn=str(arguments.get("execution_arn") or "").strip() or None,
+            )
         except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
             if isinstance(exc, WarehouseRuntimeError):
                 raise
@@ -1905,11 +1928,22 @@ def _capture_bronze_raw(
                 "batch_ledger_count": len(batch_ledgers),
                 "terminal_counts": reconciliation.terminal_counts,
                 "fingerprint": reconciliation.fingerprint,
+                "coverage_by_document_type": inventory.coverage_by_document_type,
+                "watermark": inventory.watermark.isoformat(),
                 "status": "pass",
             },
         )
+        evidence_path = context.storage_root.write_json(
+            f"release-evidence/{sync_run_id}/required_relationship_bulk_load_evidence.json",
+            evidence,
+        )
         metrics["bulk_load_completion_ledger_path"] = output_path
         metrics["bulk_load_completion_ledger_fingerprint"] = reconciliation.fingerprint
+        metrics["required_relationship_bulk_load_evidence_path"] = evidence_path
+        metrics["required_relationship_bulk_load_evidence_fingerprint"] = evidence[
+            "evidence_fingerprint"
+        ]
+        metrics["ticket20_pass_claim"] = evidence["pass_claim"]
         return raw_writes, metrics
 
     if command_name == "gold-refresh":
