@@ -13,6 +13,11 @@ language ("as if the participant retired...") without guessing semantically.
 
 `_ROLE_CHANGE`/`_COMPENSATION` stay regex-based: narrower, well-defined shapes
 that were not the source of the coverage gap.
+
+Residual gaps addressed after PR #155:
+- possessive/nominalised departures (\"Jane Doe's resignation as CFO\")
+- participle modifiers (\"newly appointed CFO\") no longer invent events or
+  trip the unresolved-ambiguity path
 """
 
 from __future__ import annotations
@@ -78,6 +83,10 @@ _TRAILING_IMMEDIATE = re.compile(r"effective\s+immediately", re.I)
 _APPOINTMENT_VERBS = {"appoint", "elect", "name"}
 _DEPARTURE_VERBS = {"resign", "retire", "depart", "terminate"}
 _TENURE_NOUNS = {"employment", "service", "tenure", "position", "role"}
+# Possessive / nominalised departures: "Jane Doe's resignation as CFO"
+_DEPARTURE_NOUNS = {"resignation", "retirement", "departure"}
+# Verb dependencies that are modifiers (not finite event clauses)
+_MODIFIER_DEPS = frozenset({"amod", "acl", "advcl", "relcl", "xcomp", "ccomp"})
 _CONDITIONAL_MARKS = {"if", "unless", "whether"}
 _MONTHS = (
     "January", "February", "March", "April", "May", "June", "July",
@@ -274,6 +283,83 @@ def _extract_departure_events(
     return events
 
 
+def _possessive_owner_name(noun_token) -> str | None:
+    """Name of the person who possesses a departure noun (Jane Doe's resignation)."""
+    for child in noun_token.children:
+        if child.dep_ in ("poss", "nmod"):
+            name = _person_name(child)
+            if name is not None:
+                return name
+            # spaCy sometimes attaches only the last PROPN of a multi-token name
+            # as poss; walk compounds on that token.
+            if child.pos_ == "PROPN":
+                name = _person_name(child)
+                if name is not None:
+                    return name
+    # Leftward PROPN span immediately before "'s" / "’s" + noun (robust fallback)
+    text_before = noun_token.doc[max(0, noun_token.i - 6) : noun_token.i].text
+    m = re.search(
+        r"([A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){1,3})(?:'s|’s)\s*$",
+        text_before,
+    )
+    if m:
+        return m.group(1).strip()
+    return None
+
+
+def _role_from_departure_noun(noun_token) -> str | None:
+    """"resignation as Chief Financial Officer"."""
+    for child in noun_token.children:
+        if child.dep_ == "prep" and child.lower_ == "as":
+            pobj = next((c for c in child.children if c.dep_ == "pobj"), None)
+            if pobj is not None:
+                return _clean_span(pobj)
+    return None
+
+
+def _extract_possessive_departure_events(
+    sent, accession_number: str, cik: int, filing_date: date,
+) -> list[EmploymentEvent]:
+    """Nominalised departures: \"Jane Doe's resignation as CFO effective [Date]\"."""
+    events: list[EmploymentEvent] = []
+    for token in sent:
+        if token.pos_ not in ("NOUN", "PROPN"):
+            continue
+        if token.lemma_.lower() not in _DEPARTURE_NOUNS:
+            continue
+        name = _possessive_owner_name(token)
+        if name is None:
+            continue
+        effective_date = _find_date(sent, token, filing_date)
+        if effective_date is None:
+            continue
+        events.append(
+            EmploymentEvent(
+                accession_number,
+                int(cik),
+                "departure",
+                name,
+                _role_from_departure_noun(token),
+                effective_date,
+            )
+        )
+    return events
+
+
+def _is_modifier_not_event_clause(token) -> bool:
+    """True for \"newly appointed CFO\" style modifiers, not finite event clauses.
+
+    Residual gap from PR #155: participle appointment verbs used as noun modifiers
+    must not invent events or trip the unresolved ambiguity path.
+    """
+    if token.dep_ in _MODIFIER_DEPS:
+        return True
+    # "newly appointed Chief Financial Officer" — appointed as amod is the common case
+    if token.tag_ in ("VBN", "VBG") and token.dep_ in ("amod", "acl", "oprd"):
+        return True
+    return False
+
+
 def parse_item_502(*, accession_number: str, cik: int, filing_date: date,
                    content: str) -> Item502Result:
     text = _text(content)
@@ -297,6 +383,12 @@ def parse_item_502(*, accession_number: str, cik: int, filing_date: date,
     doc = _nlp()(section)
     ambiguous_verb_seen = False
     for sent in doc.sents:
+        # Possessive / nominalised departures (no finite resign/retire verb required)
+        events.extend(
+            _extract_possessive_departure_events(
+                sent, accession_number, cik, filing_date
+            )
+        )
         for token in sent:
             if token.pos_ != "VERB":
                 continue
@@ -304,6 +396,9 @@ def parse_item_502(*, accession_number: str, cik: int, filing_date: date,
             if lemma not in _APPOINTMENT_VERBS and lemma not in _DEPARTURE_VERBS:
                 continue
             if _is_hypothetical(token):
+                continue
+            # Skip pure modifiers ("newly appointed CFO") — not a disclosed event clause
+            if _is_modifier_not_event_clause(token):
                 continue
             if lemma in _APPOINTMENT_VERBS:
                 found = _extract_appointment_events(sent, token, accession_number, cik, filing_date)
@@ -315,7 +410,20 @@ def parse_item_502(*, accession_number: str, cik: int, filing_date: date,
                 ambiguous_verb_seen = True
 
     if events:
-        events.sort(key=lambda row: (row.effective_date, row.person_name, row.event_type))
+        # Dedupe (possessive + verb paths can double-hit the same disclosure)
+        deduped: dict[tuple, EmploymentEvent] = {}
+        for event in events:
+            key = (
+                event.event_type,
+                event.person_name.casefold(),
+                event.effective_date,
+                (event.role or "").casefold(),
+            )
+            deduped[key] = event
+        events = sorted(
+            deduped.values(),
+            key=lambda row: (row.effective_date, row.person_name, row.event_type),
+        )
         return Item502Result("applicable", "named_employment_event", tuple(events))
     if ambiguous_verb_seen:
         return Item502Result("unresolved", "unclassified_named_event", ())

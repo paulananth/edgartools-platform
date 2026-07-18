@@ -170,3 +170,66 @@ def test_item_502_active_voice_termination() -> None:
     assert result.events[0].event_type == "departure"
     assert result.events[0].person_name == "Tad M. McMahon"
     assert result.events[0].effective_date == date(2025, 1, 2)
+
+
+def test_item_502_possessive_resignation_with_date() -> None:
+    """Residual gap from PR #155: gerund/possessive constructions.
+
+    Real 8-Ks often write "the Company announced Jane Doe's resignation as CFO
+    effective [Date]" rather than "Jane Doe resigned as CFO".
+    """
+    result = parse_item_502(
+        accession_number="poss-1",
+        cik=1,
+        filing_date=date(2024, 3, 15),
+        content=(
+            "Item 5.02 Departure of Certain Officers. "
+            "On March 15, 2024, the Company announced Jane Doe's resignation as "
+            "Chief Financial Officer, effective March 31, 2024."
+        ),
+    )
+    assert result.applicability == "applicable"
+    assert len(result.events) == 1
+    assert result.events[0].event_type == "departure"
+    assert result.events[0].person_name == "Jane Doe"
+    assert result.events[0].role == "Chief Financial Officer"
+    assert result.events[0].effective_date == date(2024, 3, 31)
+
+
+def test_item_502_possessive_retirement() -> None:
+    result = parse_item_502(
+        accession_number="poss-2",
+        cik=1,
+        filing_date=date(2023, 6, 1),
+        content=(
+            "Item 5.02. Following John A. Smith's retirement from the Board of "
+            "Directors effective June 1, 2023, the Board reduced its size."
+        ),
+    )
+    assert result.applicability == "applicable"
+    assert result.events[0].event_type == "departure"
+    assert result.events[0].person_name == "John A. Smith"
+    assert result.events[0].effective_date == date(2023, 6, 1)
+
+
+def test_item_502_newly_appointed_modifier_is_not_a_new_event() -> None:
+    """Residual gap from PR #155: 'newly-appointed [Role]' is a backward-reference
+    noun phrase describing someone already appointed, not a new appointment event.
+
+    Must not invent an appointment, and must not fail closed as unresolved solely
+    because the participle 'appointed' appears as a modifier.
+    """
+    result = parse_item_502(
+        accession_number="mod-1",
+        cik=1,
+        filing_date=date(2024, 5, 1),
+        content=(
+            "Item 5.02 Compensatory Arrangements of Certain Officers. "
+            "The Compensation Committee approved a retention award for the "
+            "newly appointed Chief Financial Officer under the Company's "
+            "incentive plan, as described in the proxy statement."
+        ),
+    )
+    assert result.applicability == "not_applicable"
+    assert result.reason_code == "no_named_employment_event"
+    assert result.events == ()
