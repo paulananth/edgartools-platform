@@ -66,7 +66,9 @@ Options:
   --bootstrap-batch-concurrency <n> Distributed Map bootstrap concurrency. Default: 10.
   --enable-mdm                      Deploy MDM ECS task definitions and state machines; fail if MDM secret ARNs are missing.
   --skip-mdm                        Do not deploy MDM ECS task definitions or state machines.
-  --mdm-image-ref <ref>             Existing MDM image ref. Defaults to warehouse image ref when not building MDM separately.
+  --mdm-image-ref <ref>             Existing MDM image ref. Required when MDM is
+                                    deployed and --build-mdm-image is not set.
+                                    Never silently defaults to the warehouse image.
   --mdm-ecr-repository-url <url>    ECR repository URL for built MDM image. Default: <account>.dkr.ecr.<region>.amazonaws.com/<prefix>-mdm.
   --build-mdm-image                 Build and push a separate MDM image when MDM is deployed.
   --mdm-database-source <rds|snowflake-postgres>
@@ -767,8 +769,20 @@ if [[ "$BUILD_MDM_IMAGE" == "true" ]]; then
   MDM_IMAGE_REF="$(tr -d '\r\n' < "$mdm_image_output_file")"
 fi
 
-if [[ "$DEPLOY_MDM" == "true" ]] && is_empty "$MDM_IMAGE_REF"; then
-  MDM_IMAGE_REF="$IMAGE_REF"
+if [[ "$DEPLOY_MDM" == "true" ]]; then
+  if is_empty "$MDM_IMAGE_REF"; then
+    fail "MDM deploy requires a distinct MDM image. Pass --mdm-image-ref <mdm-digest> or --build-mdm-image. Refusing to reuse the warehouse image (warehouse and MDM have different dependency sets)."
+  fi
+  if [[ "$MDM_IMAGE_REF" == "$IMAGE_REF" ]]; then
+    fail "MDM image_ref equals warehouse image_ref (${IMAGE_REF}). Pass a distinct --mdm-image-ref from the edgartools-*-mdm repository. Mixing roles breaks Ticket 20 / MDM runtimes."
+  fi
+  # Repository name guard: warehouse vs mdm repos must differ when digests are present.
+  if [[ "$IMAGE_REF" == *"/edgartools-"*"-warehouse"* ]] && [[ "$MDM_IMAGE_REF" == *"/edgartools-"*"-warehouse"* ]]; then
+    fail "MDM image_ref still points at a warehouse ECR repository (${MDM_IMAGE_REF}). Use edgartools-<env>-mdm@sha256:…"
+  fi
+  if [[ "$MDM_IMAGE_REF" == *"/edgartools-"*"-mdm"* ]] && [[ "$IMAGE_REF" == *"/edgartools-"*"-mdm"* ]]; then
+    fail "Warehouse image_ref points at an MDM ECR repository (${IMAGE_REF}). Use edgartools-<env>-warehouse@sha256:…"
+  fi
 fi
 
 log "Deploying warehouse image reference ${IMAGE_REF}"
