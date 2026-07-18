@@ -1,4 +1,19 @@
-"""Conservative Form 8-K Item 5.02 employment-event parser."""
+"""Conservative Form 8-K Item 5.02 employment-event parser.
+
+Uses spaCy dependency parsing + NER for appointment/departure extraction
+instead of hand-written regex. Regex could only be taught one surface phrasing
+at a time (passive voice, then active voice, then vacancy-filling, ...) and a
+528k-candidate production survey showed real 8-Ks vary far more than any
+regex list could keep up with. Dependency parsing captures the underlying
+grammatical relation (who is the subject/object of "appointed") regardless of
+voice or word order, so active and passive phrasing fall out of the same
+extraction code path, and it also gives a structural signal (conditional
+`mark` children on the event verb) to reject hypothetical/plan-boilerplate
+language ("as if the participant retired...") without guessing semantically.
+
+`_ROLE_CHANGE`/`_COMPENSATION` stay regex-based: narrower, well-defined shapes
+that were not the source of the coverage gap.
+"""
 
 from __future__ import annotations
 
@@ -8,9 +23,10 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Iterable
 
+import spacy
 
 PARSER_NAME = "item_502"
-PARSER_VERSION = "1"
+PARSER_VERSION = "2"
 
 
 @dataclass(frozen=True)
@@ -43,55 +59,39 @@ class EmploymentVersion:
 
 
 _DATE = r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}"
-_NAME = r"[A-Z][A-Za-z'.-]+(?:\s+(?:[A-Z][A-Za-z'.-]+|[A-Z]\.?)){1,4}"
 _ROLE = r"[A-Z][A-Za-z/& -]{2,80}?"
-_NAME_LIST = rf"{_NAME}(?:\s*,\s*{_NAME})*(?:\s*,?\s+and\s+{_NAME})?"
-# Passive voice: "[Name] was/has been/will be appointed as [Role]". Historically the
-# only shape this parser recognized.
-_APPOINTMENT = re.compile(
-    rf"(?P<name>{_NAME})\s+(?:was|has been|will be)\s+(?:elected|appointed|named)\s+(?:to serve\s+)?as\s+(?P<role>{_ROLE})(?:,|\s+effective).*?(?:effective\s+)?(?P<date>{_DATE})",
-    re.I,
-)
-_DEPARTURE = re.compile(
-    rf"(?P<name>{_NAME})\s+(?:resigned|retired|departed|was terminated|ceased to serve)\s+(?:from (?:the )?(?:position|role) of|as)?\s*(?P<role>{_ROLE})?(?:,|\s+effective).*?(?:effective\s+)?(?P<date>{_DATE})",
-    re.I,
-)
 _ROLE_CHANGE = re.compile(
-    rf"(?P<name>{_NAME})\s+(?:was|has been|will be)\s+(?:promoted|transitioned|moved)\s+"
+    rf"(?P<name>[A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){{1,3}})\s+(?:was|has been|will be)\s+(?:promoted|transitioned|moved)\s+"
     rf"from\s+(?P<previous>{_ROLE})\s+to\s+(?P<role>{_ROLE})(?:,|\s+effective).*?"
     rf"(?:effective\s+)?(?P<date>{_DATE})",
     re.I,
 )
 _COMPENSATION = re.compile(
     rf"(?:approved|set|increased)\s+(?:an?\s+)?(?:annual\s+)?(?:base\s+)?salary\s+of\s+"
-    rf"\$(?P<amount>[\d,]+(?:\.\d{{2}})?)\s+for\s+(?P<name>{_NAME}).*?"
+    rf"\$(?P<amount>[\d,]+(?:\.\d{{2}})?)\s+for\s+(?P<name>[A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){{1,3}}).*?"
     rf"(?:effective\s+)?(?P<date>{_DATE})",
     re.I,
 )
-# Active voice: "the Board/Company ... appointed/elected/named [Name(s)] as [Role]".
-# This is the dominant real-world 8-K phrasing (company/board as grammatical
-# subject) — see item_502 active-voice-coverage 5-whys. Supports Oxford-comma
-# multi-person lists ("appointed A, B, and C as directors").
-_ACTIVE_APPOINTMENT = re.compile(
-    rf"(?:appointed|elected|named)\s+(?P<names>{_NAME_LIST})\s+as\s+(?P<role>{_ROLE})(?=[,.\s])",
-    re.I,
-)
-# "[Committee] elected [Name(s)] to fill [a/the] vacancy [on the Board]" — no
-# explicit role stated; filling a board vacancy is a director appointment.
-_ACTIVE_APPOINTMENT_VACANCY = re.compile(
-    rf"elected\s+(?P<names>{_NAME_LIST})\s+to\s+fill\s+(?:a|the)\s+vacancy",
-    re.I,
-)
-# "[Company] terminated the employment of [Name]" — active-voice termination.
-_ACTIVE_TERMINATION = re.compile(
-    rf"terminated\s+the\s+employment\s+of\s+(?P<name>{_NAME})",
-    re.I,
-)
-_LEADING_DATE = re.compile(rf"(?:On|Effective)\s+(?P<date>{_DATE}),", re.I)
-_TRAILING_DATE = re.compile(rf"effective\s+(?:as of\s+)?(?P<date>{_DATE})", re.I)
-_TRAILING_IMMEDIATE = re.compile(r"effective\s+immediately", re.I)
 _ITEM_HEADER = re.compile(r"item\s+(\d{1,2})\s*\.\s*(\d{2})\b", re.I)
-_DATE_WINDOW = 160
+_TRAILING_IMMEDIATE = re.compile(r"effective\s+immediately", re.I)
+
+_APPOINTMENT_VERBS = {"appoint", "elect", "name"}
+_DEPARTURE_VERBS = {"resign", "retire", "depart", "terminate"}
+_TENURE_NOUNS = {"employment", "service", "tenure", "position", "role"}
+_CONDITIONAL_MARKS = {"if", "unless", "whether"}
+_MONTHS = (
+    "January", "February", "March", "April", "May", "June", "July",
+    "August", "September", "October", "November", "December",
+)
+
+_NLP: spacy.language.Language | None = None
+
+
+def _nlp() -> spacy.language.Language:
+    global _NLP
+    if _NLP is None:
+        _NLP = spacy.load("en_core_web_sm")
+    return _NLP
 
 
 def _text(content: str) -> str:
@@ -125,37 +125,153 @@ def _parse_date(value: str) -> date:
     return datetime.strptime(value, "%B %d, %Y").date()
 
 
-def _clean_name(name: str) -> str:
-    """Normalize whitespace and drop a trailing sentence period the greedy
-    `_NAME` pattern swallows when a name sits at the end of a sentence."""
-    return re.sub(r"\s+", " ", name).strip().rstrip(".")
+def _is_hypothetical(verb) -> bool:
+    """True if `verb` sits inside a conditional clause ("as if the participant
+    retired...", describing a hypothetical plan provision) rather than a real
+    disclosed event -- a structural signal from the dependency parse, not a
+    semantic guess."""
+    node = verb
+    seen: set[int] = set()
+    while node is not None and id(node) not in seen:
+        seen.add(id(node))
+        if node.dep_ in ("advcl", "relcl"):
+            for child in node.children:
+                if child.dep_ == "mark" and child.lower_ in _CONDITIONAL_MARKS:
+                    return True
+        if node.head is node:
+            break
+        node = node.head
+    return False
 
 
-def _split_names(names_text: str) -> list[str]:
-    """Split an Oxford-comma-joined name list ("A, B, and C") into individual names."""
-    return [_clean_name(name) for name in re.findall(_NAME, names_text)]
+def _person_name(token) -> str | None:
+    """Reconstruct a full person name from a head noun token (e.g. the "Gutmann"
+    token of "Kathleen M. Gutmann") by collecting its direct `compound`
+    children (restricted to PROPN, so an unrelated preceding NOUN can't leak
+    in) in document order. More robust than relying on NER span boundaries,
+    which the small English model sometimes mis-tags (e.g. classifying a name
+    as ORG in a multi-person list)."""
+    if token.pos_ != "PROPN":
+        return None
+    parts = sorted(
+        [c for c in token.children if c.dep_ == "compound" and c.pos_ == "PROPN"] + [token],
+        key=lambda t: t.i,
+    )
+    name = " ".join(t.text for t in parts)
+    name = re.sub(r"\s+", " ", name).strip().rstrip(".")
+    # Require at least two capitalized components (first + last name) to avoid
+    # false positives on bare common nouns.
+    if len(re.findall(r"[A-Z][a-z]", name)) < 2:
+        return None
+    return name
 
 
-def _resolve_active_voice_date(section: str, match: re.Match, filing_date: date) -> date | None:
-    """Find the effective date for an active-voice event match.
+def _expand_conjuncts(token) -> list:
+    return [token] + list(token.conjuncts)
 
-    Active-voice 8-K sentences put the date in one of three places: right after
-    the clause ("... as director, effective March 1, 2026" / "effective
-    immediately"), or as a lead-in before the whole sentence ("On March 1, 2026,
-    the Board appointed ..."). Returns None (fail closed, no guessing) if no date
-    can be confidently located in either position.
-    """
-    trailing_window = section[match.end():match.end() + _DATE_WINDOW]
-    trailing_match = _TRAILING_DATE.search(trailing_window)
-    if trailing_match:
-        return _parse_date(trailing_match.group("date"))
-    if _TRAILING_IMMEDIATE.search(trailing_window[:40]):
-        return filing_date
-    leading_window = section[max(0, match.start() - _DATE_WINDOW):match.start()]
-    leading_matches = list(_LEADING_DATE.finditer(leading_window))
-    if leading_matches:
-        return _parse_date(leading_matches[-1].group("date"))
+
+def _find_role(verb) -> str | None:
+    """"appointed X as [Role]" or "appointed X to the position/role of [Role]"."""
+    for child in verb.children:
+        if child.dep_ == "prep" and child.lower_ == "as":
+            pobj = next((c for c in child.children if c.dep_ == "pobj"), None)
+            if pobj is not None:
+                return _clean_span(pobj)
+        if child.dep_ == "prep" and child.lower_ == "to":
+            noun = next((c for c in child.children if c.dep_ == "pobj"), None)
+            if noun is not None and noun.lemma_ in ("position", "role"):
+                of_prep = next((c for c in noun.children if c.dep_ == "prep" and c.lower_ == "of"), None)
+                if of_prep is not None:
+                    of_pobj = next((c for c in of_prep.children if c.dep_ == "pobj"), None)
+                    if of_pobj is not None:
+                        return _clean_span(of_pobj)
     return None
+
+
+def _clean_span(token) -> str:
+    span = token.doc[token.left_edge.i:token.i + 1]
+    return re.sub(r"\s+", " ", span.text).strip(" ,.")
+
+
+def _find_date(sent, verb, filing_date: date) -> date | None:
+    dates = [ent for ent in sent.ents if ent.label_ == "DATE"]
+    parsed: list[tuple[int, date]] = []
+    for ent in dates:
+        for month in _MONTHS:
+            m = re.search(rf"{month}\s+\d{{1,2}},\s+\d{{4}}", ent.text)
+            if m:
+                parsed.append((abs(ent.start - verb.i), _parse_date(m.group(0))))
+                break
+    if len(parsed) == 1:
+        return parsed[0][1]
+    if len(parsed) > 1:
+        parsed.sort(key=lambda row: row[0])
+        return parsed[0][1]
+    if _TRAILING_IMMEDIATE.search(sent.text):
+        return filing_date
+    return None
+
+
+def _extract_appointment_events(
+    sent, verb, accession_number: str, cik: int, filing_date: date,
+) -> list[EmploymentEvent]:
+    role = _find_role(verb)
+    vacancy = role is None and re.search(r"\bvacancy\b|\bnewly[\s-]created\b", sent.text, re.I)
+    if role is None and not vacancy:
+        return []
+    effective_date = _find_date(sent, verb, filing_date)
+    if effective_date is None:
+        return []
+    people_tokens: list = []
+    for child in verb.children:
+        if child.dep_ in ("dobj", "nsubjpass", "oprd"):
+            people_tokens.extend(_expand_conjuncts(child))
+    events: list[EmploymentEvent] = []
+    for token in people_tokens:
+        name = _person_name(token)
+        if name is None:
+            continue
+        events.append(EmploymentEvent(
+            accession_number, int(cik), "appointment", name,
+            role or "Director", effective_date,
+        ))
+    return events
+
+
+def _extract_departure_events(
+    sent, verb, accession_number: str, cik: int, filing_date: date,
+) -> list[EmploymentEvent]:
+    effective_date = _find_date(sent, verb, filing_date)
+    if effective_date is None:
+        return []
+    people_tokens: list = []
+    # "[Company] terminated the employment of [Name]" (active voice) -- the
+    # departing person is nested inside the object, not the grammatical
+    # subject (which is the company/actor doing the terminating). Check this
+    # shape first so it doesn't fall through to treating the actor as the
+    # person who departed.
+    for child in verb.children:
+        if child.dep_ == "dobj" and child.lemma_ in _TENURE_NOUNS:
+            for grandchild in child.children:
+                if grandchild.dep_ == "prep" and grandchild.lower_ == "of":
+                    pobj = next((c for c in grandchild.children if c.dep_ == "pobj"), None)
+                    if pobj is not None:
+                        people_tokens.extend(_expand_conjuncts(pobj))
+    if not people_tokens:
+        # Passive/intransitive shape: "[Name] resigned/retired/was terminated" --
+        # the subject (patient in passive voice) is the departing person.
+        for child in verb.children:
+            if child.dep_ in ("nsubj", "nsubjpass"):
+                people_tokens.extend(_expand_conjuncts(child))
+    events: list[EmploymentEvent] = []
+    for token in people_tokens:
+        name = _person_name(token)
+        if name is None:
+            continue
+        events.append(EmploymentEvent(
+            accession_number, int(cik), "departure", name, None, effective_date,
+        ))
+    return events
 
 
 def parse_item_502(*, accession_number: str, cik: int, filing_date: date,
@@ -165,14 +281,6 @@ def parse_item_502(*, accession_number: str, cik: int, filing_date: date,
         return Item502Result("not_applicable", "item_5_02_absent", ())
     section = _item_502_section(text)
     events: list[EmploymentEvent] = []
-    for event_type, pattern in (("appointment", _APPOINTMENT), ("departure", _DEPARTURE)):
-        for match in pattern.finditer(section):
-            role = re.sub(r"\s+", " ", (match.group("role") or "")).strip(" ,.") or None
-            events.append(EmploymentEvent(
-                accession_number, int(cik), event_type,
-                re.sub(r"\s+", " ", match.group("name")).strip(), role,
-                _parse_date(match.group("date")),
-            ))
     for match in _ROLE_CHANGE.finditer(section):
         events.append(EmploymentEvent(
             accession_number, int(cik), "role_change", match.group("name").strip(),
@@ -185,35 +293,31 @@ def parse_item_502(*, accession_number: str, cik: int, filing_date: date,
             None, _parse_date(match.group("date")),
             compensation_amount=float(match.group("amount").replace(",", "")),
         ))
-    for match in _ACTIVE_APPOINTMENT.finditer(section):
-        effective_date = _resolve_active_voice_date(section, match, filing_date)
-        if effective_date is None:
-            continue
-        role = re.sub(r"\s+", " ", match.group("role")).strip(" ,.")
-        for name in _split_names(match.group("names")):
-            events.append(EmploymentEvent(
-                accession_number, int(cik), "appointment", name, role, effective_date,
-            ))
-    for match in _ACTIVE_APPOINTMENT_VACANCY.finditer(section):
-        effective_date = _resolve_active_voice_date(section, match, filing_date)
-        if effective_date is None:
-            continue
-        for name in _split_names(match.group("names")):
-            events.append(EmploymentEvent(
-                accession_number, int(cik), "appointment", name, "Director", effective_date,
-            ))
-    for match in _ACTIVE_TERMINATION.finditer(section):
-        effective_date = _resolve_active_voice_date(section, match, filing_date)
-        if effective_date is None:
-            continue
-        events.append(EmploymentEvent(
-            accession_number, int(cik), "departure",
-            _clean_name(match.group("name")), None, effective_date,
-        ))
+
+    doc = _nlp()(section)
+    ambiguous_verb_seen = False
+    for sent in doc.sents:
+        for token in sent:
+            if token.pos_ != "VERB":
+                continue
+            lemma = token.lemma_.lower()
+            if lemma not in _APPOINTMENT_VERBS and lemma not in _DEPARTURE_VERBS:
+                continue
+            if _is_hypothetical(token):
+                continue
+            if lemma in _APPOINTMENT_VERBS:
+                found = _extract_appointment_events(sent, token, accession_number, cik, filing_date)
+            else:
+                found = _extract_departure_events(sent, token, accession_number, cik, filing_date)
+            if found:
+                events.extend(found)
+            else:
+                ambiguous_verb_seen = True
+
     if events:
         events.sort(key=lambda row: (row.effective_date, row.person_name, row.event_type))
         return Item502Result("applicable", "named_employment_event", tuple(events))
-    if re.search(r"\b(appointed|elected|named|resigned|retired|departed|terminated|ceased to serve)\b", section, re.I):
+    if ambiguous_verb_seen:
         return Item502Result("unresolved", "unclassified_named_event", ())
     return Item502Result("not_applicable", "no_named_employment_event", ())
 
