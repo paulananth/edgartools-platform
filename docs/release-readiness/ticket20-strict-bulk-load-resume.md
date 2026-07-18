@@ -109,7 +109,11 @@ Artifact loops emit `filing_artifact_pipeline_progress` every N accessions
    - `release_accession_resume_loaded` (P1 skips)
    - `filing_artifact_pipeline_progress` (P2)
    - `release_batch_done_marker_written` (P0 batch complete)
-5. After map success: `reconcile-relationship-release` continues as today.
+5. After map success: `reconcile-relationship-release` writes:
+   - `release-evidence/{run}/bulk-load-completion-ledger.json`
+   - `release-evidence/{run}/required_relationship_bulk_load_evidence.json`
+     (PASS disposition, approved claim binding fingerprint + watermark +
+     `coverage_by_document_type`, terminal counts).
 
 ## What resume is *not*
 

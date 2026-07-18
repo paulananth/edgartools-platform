@@ -687,6 +687,103 @@ class LedgerReconciliation:
     fingerprint: str
 
 
+def format_ticket20_pass_claim(
+    *,
+    watermark: date,
+    fingerprint: str,
+    coverage_by_document_type: Mapping[str, Mapping[str, object]],
+) -> str:
+    """Approved Ticket 20 PASS phrase (binds fingerprint, watermark, windows)."""
+    windows = _normalize_coverage_by_document_type(coverage_by_document_type)
+    thirteenf = windows["thirteenf"]
+    proxy = windows["proxy"]
+    item_502 = windows["item_502_8k"]
+    return (
+        "Required relationship sources for EMPLOYED_BY and INSTITUTIONAL_HOLDS are "
+        f"bulk-load complete for agent windows at watermark {watermark.isoformat()} "
+        f"(fingerprint {fingerprint}):\n"
+        f"  13F [{thirteenf['start']}, {thirteenf['end']}];\n"
+        f"  proxy [{proxy['start']}, {proxy['end']}] (latest-in-band baseline only);\n"
+        f"  Item 5.02 / ambiguous 8-K [{item_502['start']}, {item_502['end']}]."
+    )
+
+
+def build_required_relationship_bulk_load_evidence(
+    *,
+    generation_id: str,
+    inventory_fingerprint: str,
+    watermark: date,
+    coverage_start: date,
+    coverage_by_document_type: Mapping[str, Mapping[str, object]],
+    candidate_count: int,
+    terminal_counts: Mapping[str, int],
+    ledger_fingerprint: str,
+    batch_ledger_count: int,
+    attestations: Mapping[str, str] | None = None,
+    image_digest: str | None = None,
+    execution_arn: str | None = None,
+    extra_checks: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    """Secret-safe Ticket 20 gate evidence payload (completion gate shape).
+
+    Disposition is PASS only when terminal counts sum to candidate_count and
+    every status is a known terminal status. Nonterminal leftovers fail closed.
+    """
+    windows = _normalize_coverage_by_document_type(coverage_by_document_type)
+    counts = {str(key): int(value) for key, value in terminal_counts.items()}
+    unknown = sorted(set(counts) - TERMINAL_STATUSES)
+    if unknown:
+        raise InventoryError(
+            f"terminal_counts contain nonterminal statuses: {', '.join(unknown)}"
+        )
+    total_terminal = sum(counts.values())
+    if total_terminal != int(candidate_count):
+        raise InventoryError(
+            f"terminal_counts sum {total_terminal} != candidate_count {candidate_count}"
+        )
+    pass_claim = format_ticket20_pass_claim(
+        watermark=watermark,
+        fingerprint=inventory_fingerprint,
+        coverage_by_document_type=windows,
+    )
+    evidence: dict[str, object] = {
+        "schema_version": 1,
+        "artifact": "required_relationship_bulk_load_evidence",
+        "disposition": "PASS",
+        "generation_id": str(generation_id),
+        "inventory_fingerprint": str(inventory_fingerprint),
+        "ledger_fingerprint": str(ledger_fingerprint),
+        "watermark": watermark.isoformat(),
+        "coverage_start": coverage_start.isoformat(),
+        "coverage_by_document_type": windows,
+        "candidate_count": int(candidate_count),
+        "batch_ledger_count": int(batch_ledger_count),
+        "terminal_counts": counts,
+        "pass_claim": pass_claim,
+        "forbidden_overclaims": [
+            "complete since 2013 for all relationship forms",
+            "full history bulk-load for all forms",
+            "Form 3/4/5 complete as Ticket 20",
+            "CAGR/financials complete as Ticket 20",
+            "Explore archive complete equals agent GO",
+        ],
+    }
+    if attestations:
+        evidence["attestations"] = {
+            str(key): str(value) for key, value in attestations.items()
+        }
+    if image_digest:
+        evidence["image_digest"] = str(image_digest)
+    if execution_arn:
+        evidence["execution_arn"] = str(execution_arn)
+    if extra_checks:
+        evidence["checks"] = dict(extra_checks)
+    evidence["evidence_fingerprint"] = _sha256(
+        {key: value for key, value in evidence.items() if key != "evidence_fingerprint"}
+    )
+    return evidence
+
+
 def reconcile_completion_ledger(
     inventory: CandidateInventory,
     outcomes: Iterable[CandidateOutcome],
