@@ -17,10 +17,12 @@ import duckdb
 import edgar
 
 from edgar_warehouse.application.relationship_bulk_load import (
-    DEFAULT_COVERAGE_START,
     InventoryError,
+    agent_coverage_by_document_type,
     build_frozen_candidate_manifest,
     expected_quarters,
+    index_floor_coverage_start,
+    resolve_coverage_policy,
 )
 
 
@@ -122,7 +124,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Local or S3 JSONL path for strict Distributed Map CIK batches",
     )
     parser.add_argument(
-        "--coverage-start", type=date.fromisoformat, default=DEFAULT_COVERAGE_START,
+        "--coverage-start",
+        type=date.fromisoformat,
+        default=None,
+        help=(
+            "Optional uniform index/window start. When omitted, uses locked agent "
+            "lookbacks (13F 3y/XML floor, proxy 5y, Item 5.02 8-K 2y) and sets "
+            "coverage_start to the min-of-types index floor."
+        ),
+    )
+    parser.add_argument(
+        "--uniform-coverage",
+        action="store_true",
+        help=(
+            "When set with --coverage-start, apply that start uniformly to all form "
+            "families (legacy). Default is per-form agent lookbacks."
+        ),
     )
     parser.add_argument("--watermark", type=date.fromisoformat, required=True)
     parser.add_argument("--batch-size", type=int, default=100)
@@ -133,14 +150,37 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.uniform_coverage:
+            if args.coverage_start is None:
+                raise InventoryError("--uniform-coverage requires --coverage-start")
+            coverage_start = args.coverage_start
+            coverage_by_document_type = None
+        elif args.coverage_start is not None:
+            # Explicit start without --uniform-coverage: still agent windows, but
+            # operators may pass a floor override only if it matches min(starts).
+            windows = agent_coverage_by_document_type(args.watermark)
+            floor = index_floor_coverage_start(windows)
+            if args.coverage_start != floor:
+                raise InventoryError(
+                    f"--coverage-start {args.coverage_start.isoformat()} does not match "
+                    f"agent index floor {floor.isoformat()}; omit the flag or pass "
+                    f"--uniform-coverage for a single global start"
+                )
+            coverage_start = floor
+            coverage_by_document_type = windows
+        else:
+            coverage_start, coverage_by_document_type = resolve_coverage_policy(
+                args.watermark
+            )
+
         release_ciks, source_manifest_fingerprints, silver_filings = _load_silver_inputs(
             args.silver_db,
-            coverage_start=args.coverage_start,
+            coverage_start=coverage_start,
             watermark=args.watermark,
             tracking_status_filter=args.tracking_status_filter,
         )
         quarter_indexes = fetch_quarter_indexes(
-            coverage_start=args.coverage_start,
+            coverage_start=coverage_start,
             watermark=args.watermark,
         )
         manifest = build_frozen_candidate_manifest(
@@ -148,7 +188,8 @@ def main(argv: list[str] | None = None) -> int:
             silver_filings=silver_filings,
             release_ciks=release_ciks,
             source_manifest_fingerprints=source_manifest_fingerprints,
-            coverage_start=args.coverage_start,
+            coverage_start=coverage_start,
+            coverage_by_document_type=coverage_by_document_type,
             watermark=args.watermark,
             batch_size=args.batch_size,
         )
@@ -168,6 +209,8 @@ def main(argv: list[str] | None = None) -> int:
         "candidate_count": manifest["candidate_count"],
         "candidate_cik_count": manifest["candidate_cik_count"],
         "fingerprint": manifest["fingerprint"],
+        "coverage_start": manifest["coverage_start"],
+        "coverage_by_document_type": manifest.get("coverage_by_document_type"),
     }, sort_keys=True))
     return 0
 

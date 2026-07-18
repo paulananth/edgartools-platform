@@ -44,6 +44,7 @@ def test_cli_writes_manifest_and_distributed_map_batches(tmp_path: Path, monkeyp
     assert command.main([
         "--silver-db", str(silver_path),
         "--coverage-start", "2024-01-01",
+        "--uniform-coverage",
         "--watermark", "2024-03-31",
         "--output-path", str(manifest_path),
         "--batches-output-path", str(batches_path),
@@ -52,5 +53,7 @@ def test_cli_writes_manifest_and_distributed_map_batches(tmp_path: Path, monkeyp
     manifest = json.loads(manifest_path.read_text())
     assert manifest["candidate_count"] == 1
     assert manifest["release_cik_count"] == 1
+    assert manifest["coverage_start"] == "2024-01-01"
+    assert manifest["coverage_by_document_type"]["proxy"]["start"] == "2024-01-01"
     assert manifest["candidates"][0]["source_manifest_fingerprint"] == "submission-sha"
     assert json.loads(batches_path.read_text()) == {"cik_list": "1"}

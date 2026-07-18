@@ -38,7 +38,7 @@ Notes:
 1. **Document-by-document** means: a filing’s eligibility is decided from its
    **form family + filing_date (+ items for 8-K)**, not from “any document for
    this CIK since 2013.”
-2. **8-K one year** applies to **artifact-required** Item 5.02 / ambiguous
+2. **8-K two years** applies to **artifact-required** Item 5.02 / ambiguous
    8-Ks. It does **not** shorten 13F or proxy windows.
 3. **Current-at-watermark** for `EMPLOYED_BY` requires:
    - latest applicable definitive proxy with filing date in **`[W−5y, W]`**
