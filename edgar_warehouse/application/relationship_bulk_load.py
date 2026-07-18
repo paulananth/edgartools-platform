@@ -472,3 +472,134 @@ def reconcile_completion_ledger_batches(
                 evidence_fingerprint=str(row.get("evidence_fingerprint") or ""),
             ))
     return reconcile_completion_ledger(inventory, outcomes, generation_id=generation_id)
+
+
+def batch_identity_for_ciks(ciks: Iterable[int | str]) -> str:
+    """Stable 16-hex identity for one StrictBatchSilver CIK batch."""
+    normalized = sorted(str(int(cik)) for cik in ciks)
+    return hashlib.sha256(",".join(normalized).encode("utf-8")).hexdigest()[:16]
+
+
+def release_freeze_prefix_from_path(path: str) -> str:
+    """Directory containing the frozen candidate_manifest / batches JSONL."""
+    cleaned = str(path or "").strip().rstrip("/")
+    if not cleaned:
+        raise InventoryError("release freeze path is empty")
+    if "://" in cleaned:
+        parent = cleaned.rsplit("/", 1)[0]
+        return parent + "/"
+    from pathlib import Path
+
+    return str(Path(cleaned).resolve().parent) + "/"
+
+
+def batch_done_marker_path(freeze_prefix: str, batch_identity: str) -> str:
+    """Absolute URI/path for a completed-batch marker under the freeze prefix."""
+    prefix = freeze_prefix if freeze_prefix.endswith("/") else f"{freeze_prefix}/"
+    identity = str(batch_identity or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{16}", identity):
+        raise InventoryError(f"invalid batch identity: {batch_identity!r}")
+    return f"{prefix}batch_done/{identity}.json"
+
+
+def batch_identity_from_done_marker_name(name: str) -> str | None:
+    """Parse ``{batch_identity}.json`` child names under batch_done/."""
+    raw = str(name or "").strip()
+    if not raw.endswith(".json"):
+        return None
+    identity = raw[: -len(".json")].lower()
+    if not re.fullmatch(r"[0-9a-f]{16}", identity):
+        return None
+    return identity
+
+
+def list_done_batch_identities(child_names: Iterable[str]) -> set[str]:
+    """Extract completed batch identities from batch_done directory child names."""
+    done: set[str] = set()
+    for name in child_names:
+        identity = batch_identity_from_done_marker_name(name)
+        if identity is not None:
+            done.add(identity)
+    return done
+
+
+def _ciks_from_batch_row(batch: Mapping[str, object]) -> list[int]:
+    cik_list = batch.get("cik_list")
+    if isinstance(cik_list, str):
+        parts = [part.strip() for part in cik_list.split(",") if part.strip()]
+        if not parts:
+            raise InventoryError("cik_batches row has empty cik_list")
+        return [int(part) for part in parts]
+    if isinstance(cik_list, list):
+        if not cik_list:
+            raise InventoryError("cik_batches row has empty cik_list")
+        return [int(part) for part in cik_list]
+    raise InventoryError("cik_batches row is missing cik_list")
+
+
+def parse_cik_batches_jsonl(text: str) -> list[dict[str, object]]:
+    """Parse Distributed Map CIK batch JSONL into row objects."""
+    rows: list[dict[str, object]] = []
+    for line_no, raw_line in enumerate(str(text or "").splitlines(), start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise InventoryError(f"invalid cik_batches JSONL on line {line_no}") from exc
+        if not isinstance(payload, dict):
+            raise InventoryError(f"cik_batches JSONL line {line_no} must be an object")
+        _ciks_from_batch_row(payload)  # validate
+        rows.append(payload)
+    return rows
+
+
+def build_remaining_cik_batches(
+    batches: Iterable[Mapping[str, object]],
+    done_batch_identities: set[str],
+) -> list[dict[str, object]]:
+    """Drop batches whose identity already has a done marker (Ticket 20 P0 resume)."""
+    remaining: list[dict[str, object]] = []
+    done = {str(item).lower() for item in done_batch_identities}
+    for batch in batches:
+        identity = batch_identity_for_ciks(_ciks_from_batch_row(batch))
+        if identity in done:
+            continue
+        remaining.append(dict(batch))
+    return remaining
+
+
+def build_batch_done_marker(
+    *,
+    batch_identity: str,
+    ciks: Iterable[int | str],
+    generation_id: str,
+    inventory_fingerprint: str,
+    ledger_path: str,
+    ledger_fingerprint: str,
+    terminal_counts: Mapping[str, int],
+    candidate_count: int,
+    completed_at: str,
+) -> dict[str, object]:
+    """Secret-safe done-marker payload written after a successful strict batch."""
+    cik_values = [int(cik) for cik in ciks]
+    computed = batch_identity_for_ciks(cik_values)
+    expected = str(batch_identity or "").strip().lower()
+    if expected and expected != computed:
+        raise InventoryError(
+            f"batch identity mismatch: expected {expected}, computed {computed}"
+        )
+    return {
+        "schema_version": 1,
+        "batch_identity": computed,
+        "cik_list": ",".join(str(cik) for cik in sorted(cik_values)),
+        "cik_count": len(cik_values),
+        "candidate_count": int(candidate_count),
+        "generation_id": str(generation_id),
+        "inventory_fingerprint": str(inventory_fingerprint),
+        "ledger_path": str(ledger_path),
+        "ledger_fingerprint": str(ledger_fingerprint),
+        "terminal_counts": {str(key): int(value) for key, value in terminal_counts.items()},
+        "completed_at": str(completed_at),
+    }

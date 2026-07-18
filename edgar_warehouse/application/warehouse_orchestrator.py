@@ -1648,9 +1648,15 @@ def _capture_bronze_raw(
             reconciliation = reconcile_completion_ledger(
                 inventory, outcomes, generation_id=sync_run_id
             )
-            batch_identity = hashlib.sha256(
-                ",".join(str(cik) for cik in sorted(cik_list)).encode("utf-8")
-            ).hexdigest()[:16]
+            from edgar_warehouse.application.relationship_bulk_load import (
+                batch_done_marker_path,
+                batch_identity_for_ciks,
+                build_batch_done_marker,
+                release_freeze_prefix_from_path,
+            )
+            from edgar_warehouse.infrastructure.object_storage import write_uri_text
+
+            batch_identity = batch_identity_for_ciks(cik_list)
             ledger_path = context.storage_root.write_json(
                 f"release-evidence/{sync_run_id}/bulk-load-ledger-batches/{batch_identity}.json",
                 {
@@ -1663,6 +1669,35 @@ def _capture_bronze_raw(
             )
             metrics["bulk_load_ledger_path"] = ledger_path
             metrics["bulk_load_ledger_fingerprint"] = reconciliation.fingerprint
+            # P0: durable done marker under the freeze prefix so a later SF
+            # execution can feed only remaining batches (same freeze, new run_id).
+            freeze_prefix = release_freeze_prefix_from_path(candidate_manifest_path)
+            marker_path = batch_done_marker_path(freeze_prefix, batch_identity)
+            marker_payload = build_batch_done_marker(
+                batch_identity=batch_identity,
+                ciks=cik_list,
+                generation_id=sync_run_id,
+                inventory_fingerprint=reconciliation.inventory_fingerprint,
+                ledger_path=ledger_path,
+                ledger_fingerprint=reconciliation.fingerprint,
+                terminal_counts=reconciliation.terminal_counts,
+                candidate_count=len(inventory.candidates),
+                completed_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            )
+            write_uri_text(
+                marker_path,
+                json.dumps(marker_payload, indent=2, sort_keys=True) + "\n",
+            )
+            metrics["release_batch_done_marker_path"] = marker_path
+            metrics["release_batch_identity"] = batch_identity
+            _emit_pipeline_event(
+                "release_batch_done_marker_written",
+                batch_identity=batch_identity,
+                marker_path=marker_path,
+                ledger_path=ledger_path,
+                candidate_count=len(inventory.candidates),
+                run_id=sync_run_id,
+            )
         return raw_writes, metrics
 
     if command_name == "ingest-relationship-sources":
@@ -2308,7 +2343,8 @@ def _run_configured_form_artifact_pipeline(
     from edgar_warehouse.infrastructure.capture_metrics import CaptureNetworkMetrics
 
     capture_network = CaptureNetworkMetrics()
-    for accession_number in selected_accessions:
+    progress_every = max(1, int(os.environ.get("WAREHOUSE_ARTIFACT_PROGRESS_EVERY", "100")))
+    for accession_index, accession_number in enumerate(selected_accessions, start=1):
         if consecutive_errors >= _CONSECUTIVE_ERROR_LIMIT:
             _emit_pipeline_event(
                 "filing_artifact_circuit_open",
@@ -2479,6 +2515,20 @@ def _run_configured_form_artifact_pipeline(
                 raise WarehouseRuntimeError(
                     f"required artifact candidate {accession_number} failed"
                 ) from exc
+        # P2: mid-pass progress so operators can see resume/cache work without
+        # waiting for the whole batch to finish (start/complete-only was silent
+        # for multi-hour StrictBatchSilver loops).
+        if accession_index % progress_every == 0 or accession_index == len(selected_accessions):
+            _emit_pipeline_event(
+                "filing_artifact_pipeline_progress",
+                processed=accession_index,
+                accession_count=len(selected_accessions),
+                rows_written=rows_written,
+                errors=errors,
+                progress_every=progress_every,
+                run_id=sync_run_id,
+                **capture_network.as_dict(),
+            )
     network_metrics = capture_network.as_dict()
     _emit_pipeline_event(
         "filing_artifact_pipeline_completed",

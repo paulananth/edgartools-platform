@@ -341,3 +341,53 @@ def read_bytes(storage_path: str) -> bytes:
     fs = fsspec.filesystem(protocol, **_remote_storage_options(storage_path))
     with fs.open(storage_path, "rb") as handle:
         return handle.read()
+
+
+def write_uri_bytes(storage_path: str, payload: bytes) -> str:
+    """Write bytes to an absolute local path or remote URI (e.g. s3://bucket/key)."""
+    protocol = _protocol_for_uri(storage_path)
+    if protocol is None:
+        destination = Path(storage_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(payload)
+        return str(destination)
+    _assert_protocol_allowed(protocol)
+    import fsspec
+
+    fs = fsspec.filesystem(protocol, **_remote_storage_options(storage_path))
+    parent = storage_path.rsplit("/", 1)[0]
+    if parent and parent != storage_path:
+        try:
+            fs.makedirs(parent, exist_ok=True)
+        except Exception:
+            # S3 fs often does not need explicit makedirs; ignore best-effort failures.
+            pass
+    with fs.open(storage_path, "wb") as handle:
+        handle.write(payload)
+    return storage_path
+
+
+def write_uri_text(storage_path: str, payload: str) -> str:
+    return write_uri_bytes(storage_path, payload.encode("utf-8"))
+
+
+def list_uri_child_names(storage_prefix: str) -> list[str]:
+    """List immediate child names under an absolute local path or remote URI prefix."""
+    prefix = storage_prefix if storage_prefix.endswith("/") else f"{storage_prefix}/"
+    protocol = _protocol_for_uri(prefix)
+    if protocol is None:
+        base = Path(prefix)
+        if not base.is_dir():
+            return []
+        return sorted(child.name for child in base.iterdir())
+    _assert_protocol_allowed(protocol)
+    import fsspec
+
+    fs = fsspec.filesystem(protocol, **_remote_storage_options(prefix))
+    if not fs.exists(prefix.rstrip("/")) and not fs.exists(prefix):
+        return []
+    try:
+        entries = fs.ls(prefix, detail=False)
+    except FileNotFoundError:
+        return []
+    return sorted({entry.rstrip("/").rsplit("/", 1)[-1] for entry in entries})
