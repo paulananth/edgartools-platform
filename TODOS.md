@@ -684,10 +684,19 @@ multiple `dbt run`s).
 
 ## parent_company_entity_id_always_none: HAS_PARENT_COMPANY always derives 0 relationships
 
-**Status:** MITIGATED (2026-06-29) — observability fix landed; the underlying data-source
-gap is NOT resolved and still requires a product decision (see Fix approach (a) below)
-before `HAS_PARENT_COMPANY` can ever be populated. Do not read this as closed — only the
-"silent" half of the bug is fixed.
+**Status:** MITIGATED (2026-06-29) — observability fix landed. Product decision made
+2026-07-17: **do not build `HAS_PARENT_COMPANY` from SIC-code grouping.** SIC
+classifies industry (e.g. "7372: Prepackaged Software"), not corporate ownership —
+two companies sharing a SIC code are industry peers, not parent/subsidiary, and SIC
+grouping gives no way to pick which company is the "parent" in a pair. Approximating
+ownership with it would inject false relationships into the graph at scale (every
+company would appear "related" to every other company in its industry) rather than
+merely leaving the relationship type empty, which is worse than the current
+zero-edges state for anything doing subsidiary detection or ultimate-parent
+roll-ups. Decision: leave `HAS_PARENT_COMPANY` unpopulated and the per-run warning
+in place; revisit only if a real parent/subsidiary CIK source appears (a curated
+mapping or a paid data feed — see Fix approach (a) below, SIC-based grouping option
+removed). Do not read this as closed — it is intentionally deferred, not fixed.
 
 **What changed:** `CompanyResolver._parent_company_entity_id` now logs one `WARNING` per
 pipeline run (deduplicated via `ResolverContext.warned`, not per-row) the first time it
@@ -711,7 +720,7 @@ visible in production logs instead of silently producing zero edges. See
 - `edgar_warehouse/silver_store.py:24` — the authoritative `sec_company` DDL (no parent columns).
 - `edgar_warehouse/mdm/pipeline.py:681-707` — `_derive_has_parent_company` silently produces 0 edges.
 
-**Fix approach:** Two steps required. (a) Identify a data source for parent/subsidiary CIK relationships — SEC `submissions.json` does not carry a parent CIK field, so either a supplemental mapping (e.g. SEC EDGAR company search, SIC-based grouping, or a manually curated mapping) is needed, or the `HAS_PARENT_COMPANY` feature should be explicitly documented as not-yet-sourced. (b) Once a source is identified, add the parent CIK to the `sec_company` silver DDL and the runtime that writes those rows, then correct the three column names in `_parent_company_entity_id`. Until step (a) is resolved, the resolver should at minimum log a warning rather than silently returning `None`, to make the gap observable in production logs.
+**Fix approach:** Two steps required. (a) Identify a data source for parent/subsidiary CIK relationships — SEC `submissions.json` does not carry a parent CIK field. **SIC-based grouping was evaluated 2026-07-17 and rejected** (industry classification, not ownership; see Status above) — remaining candidates are a curated parent/subsidiary CIK mapping or a paid data feed; until one exists, the feature stays explicitly documented as not-yet-sourced. (b) Once a real source is identified, add the parent CIK to the `sec_company` silver DDL and the runtime that writes those rows, then correct the three column names in `_parent_company_entity_id`. Until step (a) is resolved, the resolver should at minimum log a warning rather than silently returning `None`, to make the gap observable in production logs (already done).
 
 **Impact:** `HAS_PARENT_COMPANY` relationships are never written to the graph for any company. Downstream features relying on corporate ownership graph traversals (subsidiary detection, ultimate-parent roll-ups) silently produce empty results with no error signal.
 
