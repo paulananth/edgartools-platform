@@ -7,6 +7,13 @@ context to act without re-reading the source session.
 
 ## INSTITUTIONAL_HOLDS full-universe sync: batch-by-CIK-range to avoid OOM
 
+**Status:** RESOLVED. Implemented in commit `decf6c9` ("feat(06-01): implement
+CIK-range batched read in _derive_institutional_holds"). Verified live in
+`edgar_warehouse/mdm/pipeline.py:1756` (`_derive_institutional_holds`): the
+fetch now runs a parameterized `WHERE ... AND h.cik BETWEEN ? AND ?` batch
+loop (`pipeline.py:1838`) instead of a single unbounded `silver.fetch()`,
+matching the fix approach below exactly. Verified 2026-07-18.
+
 **What:** Before writing the Phase 6 full-universe sync plan (06-03), design a
 batched-read strategy for `INSTITUTIONAL_HOLDS` that reads `sec_thirteenf_holding`
 in CIK-range chunks instead of a single `silver.fetch()` call.
@@ -35,6 +42,11 @@ batchable.
 ---
 
 ## COMPANY_HOLDS `skipped_corporate` counter: clarify semantic inversion
+
+**Status:** RESOLVED. Verified live in `edgar_warehouse/mdm/pipeline.py:619-620`
+inside `_derive_company_holds`: the exact inline comment requested below
+(`# skipped_corporate here means non-corporate owner (inverse of ...`) is
+already present. Verified 2026-07-18.
 
 **What:** Add an inline comment to `_derive_company_holds` in `pipeline.py`
 explaining that `skipped_corporate` means "skipped because owner is NOT a
