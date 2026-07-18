@@ -50,6 +50,21 @@ uv run python -m edgar_warehouse.scripts.validate_relationship_release_manifest 
 # exit 0 + disposition READY_FOR_STRICT_LOAD required
 ```
 
+**Build SF execution input** (bucket-relative keys + five attestations):
+
+```bash
+uv run python -m edgar_warehouse.scripts.build_ticket20_strict_execution_input \
+  --candidate-manifest s3://…/relationship_release/ticket20-agent-…/candidate_manifest.json \
+  --attestations-json '{"warehouse":"…","mdm":"…","graph":"…","release_data_operator":"…","release_owner":"…"}' \
+  --preflight \
+  --output /tmp/ticket20-strict-input.json
+
+aws stepfunctions start-execution \
+  --state-machine-arn arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-bronze-seed-silver-gold \
+  --name "ticket20-strict-$(date -u +%Y%m%dT%H%M%SZ)" \
+  --input file:///tmp/ticket20-strict-input.json
+```
+
 ## Freeze layout
 
 Under the freeze prefix (parent of `candidate_manifest.json`):
