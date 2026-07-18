@@ -1,0 +1,59 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-07-18T21:15:00Z",
+  "phase": null,
+  "phase_name": "ticket-20-production-bulk-load-go",
+  "status": "paused",
+  "workstream": "fix-pipelines",
+  "ticket": 20,
+  "owning_runtime_handoff_to": "claude",
+  "branch": "claude/ticket20-go-handoff",
+  "main_head": "b9e926e",
+  "completed_tasks": [
+    {"id": 1, "name": "Wayfinder windows + tickets 16-19 closed", "status": "done"},
+    {"id": 2, "name": "PRs 168-175 code on main", "status": "done"},
+    {"id": 3, "name": "Warehouse image sha-b9e926e2d2b0 @sha256:01656d3b deployed medium:27", "status": "done"},
+    {"id": 4, "name": "MDM image corrected to mdm@sha256:f9796382 medium:26", "status": "done"},
+    {"id": 5, "name": "Deploy script fail-closed MDM vs warehouse image guard (local uncommitted or branch)", "status": "done"}
+  ],
+  "remaining_tasks": [
+    {"id": 6, "name": "Free host disk then rebuild agent-window freeze", "status": "blocked"},
+    {"id": 7, "name": "Upload freeze to prodb bronze ticket20-agent-*", "status": "not_started"},
+    {"id": 8, "name": "Preflight READY_FOR_STRICT_LOAD", "status": "not_started"},
+    {"id": 9, "name": "build_ticket20_strict_execution_input + start-execution", "status": "not_started"},
+    {"id": 10, "name": "Evidence PASS + MDM/graph parity", "status": "not_started"}
+  ],
+  "blockers": [
+    {
+      "description": "Mac host disk near full (was ~30Mi; free space before freeze)",
+      "type": "technical",
+      "workaround": "Free 10-15Gi; use Colima volume for silver/cache/tmp"
+    },
+    {
+      "description": "Only S3 freeze is 2013-era ticket20-strict-20260718T013201Z (NO_GO preflight)",
+      "type": "technical",
+      "workaround": "Rebuild with agent lookbacks"
+    }
+  ],
+  "human_actions_pending": [
+    {"action": "Free disk on Mac host", "context": "Freeze rebuild needs space", "blocking": true}
+  ],
+  "decisions": [
+    {"decision": "Never default MDM image to warehouse", "rationale": "Wrong deploy put warehouse on MDM tasks"},
+    {"decision": "EDGAR_IDENTITY from env is fine", "rationale": "User said identity already provided"},
+    {"decision": "No SF redrive after image change", "rationale": "P3 pins old task def"}
+  ],
+  "infrastructure": {
+    "account": "690839588395",
+    "warehouse_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse@sha256:01656d3b30e6ddcf0596955d154fdb7aa8fd183cd04d6d4ea466879e7b1bd73d",
+    "mdm_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-mdm@sha256:f97963824fbfa54a41151f37c548788c84add07e31c62e252b25d59457cbe118",
+    "state_machine": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-bronze-seed-silver-gold",
+    "buckets": "edgartools-prodb-bronze|warehouse|snowflake-export",
+    "roles": "sec_platform_prodb_runner_*",
+    "legacy_freeze": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-strict-20260718T013201Z/",
+    "watermark": "2026-07-02",
+    "docker_volume_note": "t20-work may have been pruned; re-download silver if missing"
+  },
+  "next_action": "Free disk; rebuild agent freeze; preflight; new SF start-execution with attestations; never redrive; never omit --mdm-image-ref",
+  "context_notes": "Grok hands Ticket 20 GO to Claude. Code+image ready. GO blocked on freeze rebuild."
+}
