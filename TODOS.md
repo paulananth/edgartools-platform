@@ -526,6 +526,21 @@ data (see T6's validation against Apple, CIK 320193).
 
 **Surfaced by:** plan-eng-review of PR #66 (Issue 3B), 2026-06-12.
 
+**2026-07-18 re-evaluation (`/grill-me CAGR/financial features`):** re-checked
+this deferral against the newly-locked Ticket 20 anti-overclaim doctrine
+(`.scratch/artifact-usefulness-timelines/issues/13-go-claim-language-for-partial-history.md`)
+that forbids overclaiming *coverage completeness* to agents. Conclusion:
+**stays deferred, decision unchanged.** The two concerns are different in
+kind — Ticket 20's doctrine guards against claiming more relationship-source
+*coverage* than was actually loaded; this issue is about picking the
+*numerically correct* prior-FY row for an already-guarded CAGR calculation
+(the `cagr()` macro already nulls on non-positive endpoints; this is about
+which row feeds it). `accession_number desc` remains a low-risk proxy for
+`filed_date` per the original assessment below; no new evidence changes
+that. The real fix (capture `filed_date` in silver/gold, migrate the
+tiebreaker) stays scoped as-is for whenever that migration happens —- not
+elevated in priority by this re-check.
+
 ---
 
 ## CI does not run dbt against live Snowflake (Issue 2B, deferred per T4)
