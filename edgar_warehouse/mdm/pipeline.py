@@ -1953,3 +1953,47 @@ def _ownership_security_source_id(txn_row: dict) -> str:
     if txn_row.get("is_derivative"):
         return f"{accession}:derivative:{owner_index}:{txn_index}"
     return f"{accession}:{owner_index}:{txn_index}"
+
+
+def verify_insider_coverage(pipeline: "MDMPipeline", ciks=None) -> dict:
+    """Ticket 21 slice 3: the concrete insider-coverage check.
+
+    Builds the insider inventory from silver ownership rows and partitions it
+    against MDM using the pipeline's own resolution (same person/company
+    resolution _derive_is_insider uses) plus an IS_INSIDER pair-existence
+    check. Fail-closed consumers require insider_unresolved == 0.
+    """
+    from sqlalchemy import func, select
+
+    from edgar_warehouse.application.relationship_bulk_load import (
+        insider_inventory,
+        partition_insider_coverage,
+    )
+    from edgar_warehouse.mdm.database import (
+        MdmRelationshipInstance,
+        MdmRelationshipType,
+    )
+
+    inventory = insider_inventory(
+        pipeline.silver, ciks,
+        exclude_owner_ciks=pipeline._company_cik_set(),
+    )
+
+    def _has_insider_version(person_id: str, issuer_id: str) -> bool:
+        return bool(pipeline.session.scalar(
+            select(func.count(MdmRelationshipInstance.instance_id))
+            .join(MdmRelationshipType)
+            .where(
+                MdmRelationshipType.rel_type_name == "IS_INSIDER",
+                MdmRelationshipInstance.source_entity_id == person_id,
+                MdmRelationshipInstance.target_entity_id == issuer_id,
+                MdmRelationshipInstance.is_active.is_(True),
+            )
+        ))
+
+    return partition_insider_coverage(
+        inventory,
+        resolve_person=pipeline._person_entity_id,
+        resolve_issuer=pipeline._company_entity_id,
+        has_insider_version=_has_insider_version,
+    )

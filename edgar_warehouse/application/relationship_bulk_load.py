@@ -923,6 +923,7 @@ def build_required_relationship_bulk_load_evidence(
     accepted_unresolved_accessions: Iterable[str] | None = None,
     item502_candidate_count: int | None = None,
     accepted_unresolved_max_rate: float = ITEM502_ACCEPTED_UNRESOLVED_MAX_RATE,
+    insider_coverage: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Secret-safe Ticket 20 gate evidence payload (completion gate shape).
 
@@ -1017,6 +1018,18 @@ def build_required_relationship_bulk_load_evidence(
             "max_rate": float(accepted_unresolved_max_rate),
             "accessions": accepted_list,
         }
+    if insider_coverage is not None:
+        # Ticket 21: insider-scoped EMPLOYED_BY completeness. PASS requires
+        # zero unresolved insiders — an unidentified Form 3/4/5 reporting
+        # owner is a hard gate failure regardless of Item 5.02 acceptance.
+        unresolved_insiders = int(insider_coverage.get("insider_unresolved") or 0)
+        if unresolved_insiders > 0:
+            raise InventoryError(
+                f"insider coverage has {unresolved_insiders} unresolved "
+                "insiders — every observed Form 3/4/5 reporting owner must "
+                "be identified in MDM (NO_GO)"
+            )
+        evidence["insider_coverage"] = dict(insider_coverage)
     if bound_attestations:
         evidence["attestations"] = bound_attestations
     if image_digest:

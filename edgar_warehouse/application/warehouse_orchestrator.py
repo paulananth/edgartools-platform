@@ -1914,6 +1914,17 @@ def _capture_bronze_raw(
             item502_candidate_count = sum(
                 1 for c in inventory.candidates if c.form in ("8-K", "8-K/A")
             )
+            # Ticket 21: optional insider-coverage artifact (produced by
+            # `mdm verify-insider-coverage --output ...`). When supplied,
+            # the evidence builder fail-closes on any unresolved insider.
+            insider_coverage_path = str(
+                arguments.get("insider_coverage") or ""
+            ).strip()
+            insider_coverage = (
+                json.loads(read_bytes(insider_coverage_path).decode("utf-8"))
+                if insider_coverage_path
+                else None
+            )
             evidence = build_required_relationship_bulk_load_evidence(
                 generation_id=sync_run_id,
                 inventory_fingerprint=reconciliation.inventory_fingerprint,
@@ -1929,6 +1940,7 @@ def _capture_bronze_raw(
                 execution_arn=str(arguments.get("execution_arn") or "").strip() or None,
                 accepted_unresolved_accessions=accepted_unresolved,
                 item502_candidate_count=item502_candidate_count,
+                insider_coverage=insider_coverage,
             )
         except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
             if isinstance(exc, WarehouseRuntimeError):

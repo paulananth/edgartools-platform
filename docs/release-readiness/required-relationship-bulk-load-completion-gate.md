@@ -209,6 +209,18 @@ loudly, so they were not rushed through. Confirmed concretely on a real
 accession (GridAI Technologies, `0001104659-25-124213`) that the unresolved
 bucket contains at least one genuine, currently-unextracted appointment.
 
+**Insider-scoping decision (2026-07-19, Ticket 21):** the Release Owner
+subsequently scoped EMPLOYED_BY completeness to **insiders** — people
+appearing as reporting owners in Form 3/4/5 filings
+(`sec_ownership_reporting_owner`). PASS additionally requires an
+`insider_coverage` evidence block with **zero unresolved insiders** (every
+observed insider resolves to one MDM person carrying an `IS_INSIDER`
+version; `mdm verify-insider-coverage`, fail-closed). Unresolved Item 5.02
+events cannot conceal an unidentified insider because insiders
+self-identify through their own ownership filings. 13F/INSTITUTIONAL_HOLDS
+checks are verified and reported but are non-blocking for the launch
+decision per the same decision.
+
 **Decision:** the Release Owner accepted this as a known, bounded gap
 rather than requiring either full per-accession manual review (~570–750
 filings, not practical) or further indefinite parser patching before GO.

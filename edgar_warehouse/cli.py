@@ -614,6 +614,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional warehouse image digest bound into the evidence artifact",
     )
+    reconcile_relationship_release.add_argument(
+        "--insider-coverage",
+        default=None,
+        help=(
+            "Optional path/URI to the insider_coverage JSON produced by "
+            "'mdm verify-insider-coverage --output ...' (Ticket 21). When "
+            "provided, evidence fail-closes on any unresolved insider."
+        ),
+    )
     _add_run_id_arg(reconcile_relationship_release)
     reconcile_relationship_release.set_defaults(handler=_handle_reconcile_relationship_release)
 
