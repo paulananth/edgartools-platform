@@ -511,12 +511,42 @@ def run_bootstrap_thirteenf(
             metrics["filings_skipped"] += 1
             continue
 
+        from edgar_warehouse.parsers.thirteenf_cover import parse_thirteenf_cover
+        try:
+            cover = parse_thirteenf_cover(cover_xml)
+        except Exception as exc:
+            if release_mode:
+                raise WarehouseRuntimeError(
+                    f"required 13F candidate {accession_number} cover parse failed"
+                ) from exc
+            metrics["filings_skipped"] += 1
+            continue
+
+        # The quarterly-index-derived freeze carries NO reportDate for 13F
+        # candidates (silver report_date is NULL for all of them), so the
+        # cover page's periodOfReport is the primary period source. An empty
+        # period must never reach the DATE columns downstream ("" crashes
+        # DuckDB with a ConversionException and kills the whole batch) and a
+        # NULL period would poison the quarter-keyed effective-set semantics
+        # — so fail closed, per accession, when neither source has it.
+        if not period_of_report:
+            period_of_report = cover.get("period_of_report")
+        if not period_of_report:
+            if release_mode:
+                raise WarehouseRuntimeError(
+                    f"required 13F candidate {accession_number} has no "
+                    "period_of_report in silver metadata or its cover page"
+                )
+            _emit("thirteenf_missing_period", accession=accession_number, cik=cik)
+            metrics["filings_skipped"] += 1
+            continue
+
         try:
             parsed = parse_thirteenf(
                 infotable_xml=infotable_xml,
                 cik=int(cik),
                 accession_number=accession_number,
-                period_of_report=str(period_of_report) if period_of_report else "",
+                period_of_report=str(period_of_report),
             )
         except Exception as exc:
             if release_mode:
@@ -533,21 +563,10 @@ def run_bootstrap_thirteenf(
                 f"required 13F candidate {accession_number} produced zero holding rows"
             )
 
-        from edgar_warehouse.parsers.thirteenf_cover import parse_thirteenf_cover
-        try:
-            cover = parse_thirteenf_cover(cover_xml)
-        except Exception as exc:
-            if release_mode:
-                raise WarehouseRuntimeError(
-                    f"required 13F candidate {accession_number} cover parse failed"
-                ) from exc
-            metrics["filings_skipped"] += 1
-            continue
-
         metrics["rows_thirteenf_filing"] += db.merge_thirteenf_filings([{
             "accession_number": accession_number,
             "cik": int(cik),
-            "period_of_report": str(period_of_report) if period_of_report else "",
+            "period_of_report": str(period_of_report),
             "filing_date": str(filing.get("filing_date"))[:10],
             "form": str(filing.get("form") or "13F-HR"),
             "amendment_type": cover["amendment_type"],
