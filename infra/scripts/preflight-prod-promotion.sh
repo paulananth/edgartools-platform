@@ -80,18 +80,37 @@ for repository in edgartools-prod-warehouse edgartools-prod-mdm; do
 done
 
 if [[ -n "$SOURCE_BUCKET" ]]; then
-  source_count="$(aws_read s3api list-objects-v2 --bucket "$SOURCE_BUCKET" --prefix warehouse/ --query KeyCount --output text 2>/dev/null || true)"
-  target_count="$(aws_read s3api list-objects-v2 --bucket "edgartools-prod-bronze-${ACCOUNT_ID}" --prefix warehouse/bronze/ --query KeyCount --output text 2>/dev/null || true)"
-  [[ "$source_count" =~ ^[0-9]+$ ]] || fail "unable to count source objects"
-  [[ "$target_count" =~ ^[0-9]+$ ]] || fail "unable to count target objects"
-  if [[ -n "$EXPECTED_SOURCE_COUNT" ]]; then
-    [[ "$source_count" == "$EXPECTED_SOURCE_COUNT" ]] || fail "source count ${source_count} does not equal expected ${EXPECTED_SOURCE_COUNT}"
+  # NOTE: KeyCount is per-page metadata and does NOT aggregate across the CLI's
+  # automatic pagination; length(Contents) is applied after page merging and
+  # counts the full listing.
+  source_count="$(aws_read s3api list-objects-v2 --bucket "$SOURCE_BUCKET" --prefix warehouse/ --query 'length(Contents || `[]`)' --output text 2>/dev/null || true)"
+  target_count="$(aws_read s3api list-objects-v2 --bucket "edgartools-prod-bronze-${ACCOUNT_ID}" --prefix warehouse/bronze/ --query 'length(Contents || `[]`)' --output text 2>/dev/null || true)"
+  [[ "$source_count" =~ ^[0-9]+$ ]] || { fail "unable to count source objects"; source_count=""; }
+  [[ "$target_count" =~ ^[0-9]+$ ]] || { fail "unable to count target objects"; target_count=""; }
+  if [[ -n "$source_count" && -n "$target_count" ]]; then
+    if [[ -n "$EXPECTED_SOURCE_COUNT" ]]; then
+      [[ "$source_count" == "$EXPECTED_SOURCE_COUNT" ]] || fail "source count ${source_count} does not equal expected ${EXPECTED_SOURCE_COUNT}"
+    fi
+    [[ "$source_count" == "$target_count" ]] && pass "source and target object counts match (${source_count})" || fail "copy incomplete: source=${source_count}, target=${target_count}"
   fi
-  [[ "$source_count" == "$target_count" ]] && pass "source and target object counts match (${source_count})" || fail "copy incomplete: source=${source_count}, target=${target_count}"
 fi
 
-snow_rows="$(snow sql --connection "$SNOW_CONNECTION" --format TSV -q "SHOW DATABASES LIKE 'EDGARTOOLS_PROD%'; SHOW WAREHOUSES LIKE 'EDGARTOOLS_PROD%'; SHOW INTEGRATIONS LIKE 'EDGARTOOLS_PROD%';" 2>/dev/null || true)"
-if grep -q 'EDGARTOOLS_PRODB' <<<"$snow_rows"; then
+# Single statements per invocation (multi-statement output is not reliably
+# parseable across snow CLI versions), and empty output fails closed — an
+# empty result must never satisfy the "no PRODB remnants" check.
+snow_rows=""
+snow_ok=true
+for stmt in \
+  "SHOW DATABASES LIKE 'EDGARTOOLS_PROD%'" \
+  "SHOW WAREHOUSES LIKE 'EDGARTOOLS_PROD%'" \
+  "SHOW INTEGRATIONS LIKE 'EDGARTOOLS_PROD%'"; do
+  rows="$(snow sql --connection "$SNOW_CONNECTION" --format TSV -q "$stmt" 2>/dev/null || true)"
+  [[ -n "$rows" ]] || { [[ "$stmt" == *DATABASES* ]] && snow_ok=false; }
+  snow_rows+="$rows"$'\n'
+done
+if [[ "$snow_ok" != true ]]; then
+  fail "Snowflake inventory query returned no databases (connection failure or empty account) — cannot verify"
+elif grep -q 'EDGARTOOLS_PRODB' <<<"$snow_rows"; then
   fail "legacy EDGARTOOLS_PRODB resources still present (decommission incomplete)"
 else
   pass "no legacy EDGARTOOLS_PRODB resources remain"
