@@ -1,9 +1,9 @@
 {
   "version": "1.0",
-  "timestamp": "2026-07-19T00:56:27Z",
+  "timestamp": "2026-07-19T01:55:00Z",
   "phase": null,
   "phase_name": "ticket-20-production-bulk-load-go",
-  "status": "strict_sf_execution_running",
+  "status": "strict_sf_execution_failed_unresolved_item502_candidate",
   "workstream": "fix-pipelines",
   "ticket": 20,
   "owning_runtime_handoff_to": "claude",
@@ -19,16 +19,19 @@
     {"id": 7, "name": "Upload freeze to prodb bronze ticket20-agent-*", "status": "done", "note": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-agent-20260718T225510Z/"},
     {"id": 8, "name": "Preflight READY_FOR_STRICT_LOAD", "status": "done", "note": "strict_release_eligible=true, fingerprint abecbde87ce3d71d2cbbe6be9fc4a0679e46d28629c95ff2ff977bd93f3160b2"},
     {"id": 9, "name": "Obtain five attestations from user", "status": "done", "note": "User approved all five at 2026-07-18T23:42:59Z, attributed to thepaulananth@gmail.com"},
-    {"id": 10, "name": "build_ticket20_strict_execution_input + start-execution", "status": "done", "note": "Execution ARN arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bronze-seed-silver-gold:ticket20-strict-agent-20260718T225510Z, started 2026-07-19T00:56:27Z, status RUNNING at last check"}
+    {"id": 10, "name": "build_ticket20_strict_execution_input + start-execution", "status": "done", "note": "Execution ARN arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bronze-seed-silver-gold:ticket20-strict-agent-20260718T225510Z, started 2026-07-19T00:56:27Z"}
   ],
   "remaining_tasks": [
-    {"id": 11, "name": "Monitor Map state (125 batches) to completion", "status": "in_progress"},
+    {"id": 11, "name": "Monitor Map state (125 batches) to completion", "status": "failed", "note": "FAILED at 2026-07-19T01:46:51Z, States.ExceedToleratedFailureThreshold: 1 failed / 4 aborted / 120 pending / 0 succeeded of 125. Root cause: fundamentals_ingest.py:213 hard-raise on parse_item_502() returning unresolved for required candidate 0000950170-24-098502 (item_502.py:519, ambiguous_verb_seen). No sanctioned bypass exists -- repair_manifest only gates force re-fetch, not this raise."},
+    {"id": "11a", "name": "Root-cause/fix (or attested override for) the Item 5.02 unresolved-event gap", "status": "in_progress", "note": "BLOCKING -- a bare retry with a new execution name will hit the same candidate and fail identically. Next step: pull filing text for 0000950170-24-098502 to see which sentence tripped ambiguous_verb_seen."},
     {"id": 12, "name": "Reconcile ledger; zero failure/unresolved/quarantine/circuit-breaker-leftover/unapproved-force counts", "status": "not_started"},
     {"id": 13, "name": "MDM run/backfill/export/sync/verify; exact EMPLOYED_BY + INSTITUTIONAL_HOLDS parity", "status": "not_started"},
     {"id": 14, "name": "No-change rerun: zero SEC network, identical semantic digests", "status": "not_started"},
     {"id": 15, "name": "Final GO disposition", "status": "not_started", "note": "Separate Release Owner action (signed evidence tag) -- agent must report PASS evidence, not self-declare GO"}
   ],
-  "blockers": [],
+  "blockers": [
+    {"id": "item502-unresolved", "name": "Item 5.02 parser cannot resolve required candidate 0000950170-24-098502", "severity": "blocking", "detail": "edgar_warehouse/parsers/item_502.py:519 returns Item502Result('unresolved', 'unclassified_named_event', ()) when an appointment/departure verb is found in a non-boilerplate sentence but no structured event can be extracted. fundamentals_ingest.py:213 hard-raises on this under release_mode. No repair/override path exists today."}
+  ],
   "human_actions_pending": [
     {"action": "Final GO/no-go call on signed evidence tag once ledger reconciles", "context": "Release Owner action, not self-servable by agent", "blocking": false}
   ],
@@ -53,6 +56,6 @@
     "watermark": "2026-07-02",
     "docker_volume_note": "t20-work was destroyed by a full Colima reinstall this session; rebuilt fresh, silver.duckdb re-downloaded and verified byte-identical (339,226,624 bytes)"
   },
-  "next_action": "Monitor execution ARN above via describe-execution / get-execution-history until terminal state. On success: reconcile ledger, MDM/graph parity, no-change rerun, then report PASS evidence to user for final Release Owner GO call. On failure: do not redrive this execution name -- diagnose via execution history, decide new attempt with a fresh name.",
-  "context_notes": "Grok handed Ticket 20 GO prep to Claude. Claude completed all prep, obtained attestations, and fired the strict production execution with explicit user go-ahead. Currently monitoring to completion."
+  "next_action": "Execution FAILED (see blockers). Do NOT redrive ticket20-strict-agent-20260718T225510Z (P3). Do NOT fire a new execution until the Item 5.02 unresolved-event gap is either fixed in the parser or handled via a deliberate, attested override -- a bare retry hits the same candidate and fails identically. Next: pull filing text for accession 0000950170-24-098502 to find the ambiguous sentence, decide fix vs. override, ship it, then start a brand-new execution name.",
+  "context_notes": "Grok handed Ticket 20 GO prep to Claude. Claude completed all prep, obtained attestations, and fired the strict production execution with explicit user go-ahead. Execution ran ~50 min then failed on a genuine data-quality gate (unresolved Item 5.02 candidate), not an infra issue. This is real backlog, not a flake."
 }
