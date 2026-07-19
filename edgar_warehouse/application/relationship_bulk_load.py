@@ -18,7 +18,20 @@ from typing import Iterable, Mapping
 PROXY_FORMS = frozenset({"DEF 14A", "DEF 14A/A", "DEFA14A", "PRE 14A"})
 THIRTEENF_FORMS = frozenset({"13F-HR", "13F-HR/A"})
 EIGHT_K_FORMS = frozenset({"8-K", "8-K/A"})
-TERMINAL_STATUSES = frozenset({"applicable_loaded", "not_applicable", "superseded"})
+TERMINAL_STATUSES = frozenset(
+    {"applicable_loaded", "not_applicable", "superseded", "unresolved_accepted"}
+)
+# Release-Owner-accepted Item 5.02 unresolved exception (2026-07-19 decision,
+# docs/release-readiness/required-relationship-bulk-load-completion-gate.md,
+# "Accepted Item 5.02 unresolved exception"). "unresolved_accepted" is terminal
+# ONLY for Item 5.02 8-K candidates whose parse returned applicability
+# "unresolved" (event verb found but no structured person/role/date). It is
+# not a general escape hatch: artifact failures, missing manifests, and
+# 13F/proxy candidates still fail closed, and the evidence builder rejects
+# PASS when the accepted-unresolved rate exceeds the bounded threshold below
+# (the parser's measured capability at the time the exception was accepted).
+ITEM502_ACCEPTED_UNRESOLVED_STATUS = "unresolved_accepted"
+ITEM502_ACCEPTED_UNRESOLVED_MAX_RATE = 0.095
 # 13F XML information-table era floor (format correctness, not universal load start).
 DEFAULT_COVERAGE_START = date(2013, 5, 20)
 THIRTEENF_XML_FLOOR = DEFAULT_COVERAGE_START
@@ -754,19 +767,41 @@ def format_ticket20_pass_claim(
     watermark: date,
     fingerprint: str,
     coverage_by_document_type: Mapping[str, Mapping[str, object]],
+    accepted_unresolved_count: int = 0,
+    item502_candidate_count: int | None = None,
 ) -> str:
-    """Approved Ticket 20 PASS phrase (binds fingerprint, watermark, windows)."""
+    """Approved Ticket 20 PASS phrase (binds fingerprint, watermark, windows,
+    and the accepted Item 5.02 unresolved count — never claims Item 5.02
+    completeness without naming that count, per the revised gate doctrine)."""
     windows = _normalize_coverage_by_document_type(coverage_by_document_type)
     thirteenf = windows["thirteenf"]
     proxy = windows["proxy"]
     item_502 = windows["item_502_8k"]
+    accepted = int(accepted_unresolved_count)
+    if accepted > 0:
+        if not item502_candidate_count or int(item502_candidate_count) <= 0:
+            raise InventoryError(
+                "item502_candidate_count is required to state the accepted "
+                "unresolved rate in the PASS claim"
+            )
+        rate_pct = 100.0 * accepted / int(item502_candidate_count)
+        item502_clause = (
+            f"  Item 5.02 / ambiguous 8-K [{item_502['start']}, {item_502['end']}] "
+            f"complete EXCEPT for {accepted} enumerated unresolved candidates "
+            f"({rate_pct:.2f}% of the Item 5.02 8-K candidate inventory), accepted "
+            "by the Release Owner as a known, bounded gap — not claimed complete."
+        )
+    else:
+        item502_clause = (
+            f"  Item 5.02 / ambiguous 8-K [{item_502['start']}, {item_502['end']}]."
+        )
     return (
         "Required relationship sources for EMPLOYED_BY and INSTITUTIONAL_HOLDS are "
         f"bulk-load complete for agent windows at watermark {watermark.isoformat()} "
         f"(fingerprint {fingerprint}):\n"
         f"  13F [{thirteenf['start']}, {thirteenf['end']}];\n"
         f"  proxy [{proxy['start']}, {proxy['end']}] (latest-in-band baseline only);\n"
-        f"  Item 5.02 / ambiguous 8-K [{item_502['start']}, {item_502['end']}]."
+        f"{item502_clause}"
     )
 
 
@@ -885,12 +920,21 @@ def build_required_relationship_bulk_load_evidence(
     execution_arn: str | None = None,
     extra_checks: Mapping[str, object] | None = None,
     require_attestations: bool = True,
+    accepted_unresolved_accessions: Iterable[str] | None = None,
+    item502_candidate_count: int | None = None,
+    accepted_unresolved_max_rate: float = ITEM502_ACCEPTED_UNRESOLVED_MAX_RATE,
 ) -> dict[str, object]:
     """Secret-safe Ticket 20 gate evidence payload (completion gate shape).
 
     Disposition is PASS only when terminal counts sum to candidate_count,
     every status is a known terminal status, and (by default) all five named
     attestations are present. Nonterminal leftovers fail closed.
+
+    ``unresolved_accepted`` (the Release-Owner-accepted Item 5.02 unresolved
+    exception) is terminal but bounded: its count must exactly match the
+    enumerated ``accepted_unresolved_accessions`` list, and the rate against
+    ``item502_candidate_count`` must not exceed ``accepted_unresolved_max_rate``
+    — otherwise this raises (fail closed) instead of emitting PASS evidence.
     """
     windows = _normalize_coverage_by_document_type(coverage_by_document_type)
     counts = {str(key): int(value) for key, value in terminal_counts.items()}
@@ -904,6 +948,30 @@ def build_required_relationship_bulk_load_evidence(
         raise InventoryError(
             f"terminal_counts sum {total_terminal} != candidate_count {candidate_count}"
         )
+    accepted_list = sorted(
+        {str(a) for a in (accepted_unresolved_accessions or ()) if str(a).strip()}
+    )
+    accepted_count = counts.get(ITEM502_ACCEPTED_UNRESOLVED_STATUS, 0)
+    if accepted_count != len(accepted_list):
+        raise InventoryError(
+            f"unresolved_accepted count {accepted_count} != enumerated accepted "
+            f"accession list length {len(accepted_list)} — every accepted "
+            "candidate must be enumerated in evidence, none silently"
+        )
+    accepted_rate = 0.0
+    if accepted_count > 0:
+        if not item502_candidate_count or int(item502_candidate_count) <= 0:
+            raise InventoryError(
+                "item502_candidate_count is required when any unresolved_accepted "
+                "candidates exist"
+            )
+        accepted_rate = accepted_count / int(item502_candidate_count)
+        if accepted_rate > float(accepted_unresolved_max_rate):
+            raise InventoryError(
+                f"accepted Item 5.02 unresolved rate {accepted_rate:.4f} exceeds "
+                f"bounded threshold {float(accepted_unresolved_max_rate):.4f} "
+                f"({accepted_count} of {int(item502_candidate_count)}) — NO_GO"
+            )
     if require_attestations:
         bound_attestations = normalize_gate_attestations(attestations)
     elif attestations is None:
@@ -914,6 +982,8 @@ def build_required_relationship_bulk_load_evidence(
         watermark=watermark,
         fingerprint=inventory_fingerprint,
         coverage_by_document_type=windows,
+        accepted_unresolved_count=accepted_count,
+        item502_candidate_count=item502_candidate_count,
     )
     evidence: dict[str, object] = {
         "schema_version": 1,
@@ -935,8 +1005,18 @@ def build_required_relationship_bulk_load_evidence(
             "Form 3/4/5 complete as Ticket 20",
             "CAGR/financials complete as Ticket 20",
             "Explore archive complete equals agent GO",
+            "Item 5.02 / EMPLOYED_BY bulk-load complete without naming the accepted unresolved count",
         ],
     }
+    if accepted_count > 0:
+        evidence["accepted_unresolved"] = {
+            "status": ITEM502_ACCEPTED_UNRESOLVED_STATUS,
+            "count": accepted_count,
+            "item502_candidate_count": int(item502_candidate_count or 0),
+            "rate": round(accepted_rate, 6),
+            "max_rate": float(accepted_unresolved_max_rate),
+            "accessions": accepted_list,
+        }
     if bound_attestations:
         evidence["attestations"] = bound_attestations
     if image_digest:

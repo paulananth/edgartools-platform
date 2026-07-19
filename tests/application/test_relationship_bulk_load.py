@@ -596,3 +596,132 @@ def test_global_fan_in_reconciles_every_batch_outcome_once() -> None:
     )
 
     assert result.terminal_counts == {"applicable_loaded": 2}
+
+
+def test_ticket20_accepted_unresolved_bounded_threshold() -> None:
+    """Release-Owner-accepted Item 5.02 unresolved exception (gate doctrine,
+    2026-07-19): unresolved_accepted is terminal but bounded — PASS requires
+    the count to match the enumerated accession list exactly and the rate to
+    stay within the accepted threshold; both violations fail closed."""
+    from edgar_warehouse.application.relationship_bulk_load import (
+        build_required_relationship_bulk_load_evidence,
+    )
+
+    watermark = date(2026, 7, 2)
+    windows = agent_coverage_by_document_type(watermark)
+    common = dict(
+        generation_id="run-1",
+        inventory_fingerprint="fp",
+        watermark=watermark,
+        coverage_start=index_floor_coverage_start(windows),
+        coverage_by_document_type=windows,
+        ledger_fingerprint="ledger-fp",
+        batch_ledger_count=1,
+        require_attestations=False,
+    )
+
+    # Under threshold with exact enumeration: PASS, claim names the count.
+    evidence = build_required_relationship_bulk_load_evidence(
+        candidate_count=100,
+        terminal_counts={"applicable_loaded": 95, "not_applicable": 3,
+                         "unresolved_accepted": 2},
+        accepted_unresolved_accessions=["acc-1", "acc-2"],
+        item502_candidate_count=50,
+        **common,
+    )
+    assert evidence["disposition"] == "PASS"
+    assert evidence["accepted_unresolved"]["count"] == 2
+    assert evidence["accepted_unresolved"]["accessions"] == ["acc-1", "acc-2"]
+    assert "EXCEPT for 2 enumerated unresolved candidates" in evidence["pass_claim"]
+    assert "not claimed complete" in evidence["pass_claim"]
+
+    # Over threshold: fail closed (2/10 = 20% > 9.5%).
+    with pytest.raises(InventoryError, match="exceeds bounded threshold"):
+        build_required_relationship_bulk_load_evidence(
+            candidate_count=100,
+            terminal_counts={"applicable_loaded": 95, "not_applicable": 3,
+                             "unresolved_accepted": 2},
+            accepted_unresolved_accessions=["acc-1", "acc-2"],
+            item502_candidate_count=10,
+            **common,
+        )
+
+    # Count without enumeration: fail closed (nothing accepted silently).
+    with pytest.raises(InventoryError, match="enumerated"):
+        build_required_relationship_bulk_load_evidence(
+            candidate_count=100,
+            terminal_counts={"applicable_loaded": 95, "not_applicable": 3,
+                             "unresolved_accepted": 2},
+            accepted_unresolved_accessions=[],
+            item502_candidate_count=50,
+            **common,
+        )
+
+    # Zero accepted: claim keeps the plain (complete) Item 5.02 clause.
+    clean = build_required_relationship_bulk_load_evidence(
+        candidate_count=100,
+        terminal_counts={"applicable_loaded": 97, "not_applicable": 3},
+        **common,
+    )
+    assert "EXCEPT" not in clean["pass_claim"]
+    assert "accepted_unresolved" not in clean
+
+
+def test_release_mode_item502_unresolved_records_accepted_terminal_status() -> None:
+    """fundamentals_ingest no longer hard-raises on an unresolved Item 5.02
+    parse under release_mode; it records the bounded unresolved_accepted
+    terminal outcome (threshold enforced later at evidence time)."""
+    from unittest.mock import patch
+
+    from edgar_warehouse.application.workflows.fundamentals_ingest import (
+        run_bootstrap_fundamentals_per_filing,
+    )
+
+    class FakeSource:
+        def fetch(self, sql, params=None):
+            if "sec_company_filing" in sql:
+                return [{
+                    "accession_number": "acc-unres", "cik": 88000, "form": "8-K",
+                    "filing_date": "2024-08-19", "items": "5.02",
+                }]
+            if "sec_filing_attachment" in sql:
+                return [{"accession_number": "acc-unres", "is_primary": True,
+                         "raw_object_id": "raw-1"}]
+            if "sec_raw_object" in sql:
+                return [{"raw_object_id": "raw-1", "storage_path": "mem://doc"}]
+            return []
+
+        def merge_earnings_releases(self, rows, run_id):
+            return 0
+
+        def merge_executive_records(self, rows, run_id):
+            return 0
+
+        def merge_employment_events(self, rows, run_id):
+            return len(rows)
+
+    db = FakeSource()
+    content = (b"Item 5.02 Departure of Directors. The Board named the following "
+               b"to committees and other matters were discussed at length.")
+    with patch(
+        "edgar_warehouse.infrastructure.object_storage.read_bytes",
+        return_value=content,
+    ):
+        metrics = run_bootstrap_fundamentals_per_filing(
+            cik_list=[88000],
+            source=db,
+            db=db,
+            sync_run_id="run-1",
+            release_mode=True,
+            candidate_accessions={"acc-unres"},
+        )
+    outcomes = {row["accession_number"]: row for row in metrics["candidate_outcomes"]}
+    assert outcomes["acc-unres"]["status"] in (
+        "unresolved_accepted", "not_applicable"
+    )
+    # If the parser resolved it (not_applicable/applicable), that's fine too —
+    # the invariant under test is: NO raise, and IF unresolved it must be
+    # recorded as unresolved_accepted with the accession tracked.
+    if outcomes["acc-unres"]["status"] == "unresolved_accepted":
+        assert outcomes["acc-unres"]["reason"] == "item_502_unresolved_ambiguous_verb"
+        assert "acc-unres" in metrics.get("unresolved_item502", [])

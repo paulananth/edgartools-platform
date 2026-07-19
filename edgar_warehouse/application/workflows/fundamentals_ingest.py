@@ -210,9 +210,22 @@ def run_bootstrap_fundamentals_per_filing(
                              else _date.fromisoformat(str(filing_date)[:10])),
                 content=content,
             )
-            if release_mode and result.applicability == "unresolved":
-                raise WarehouseRuntimeError(
-                    f"required candidate {accession_number} has an unresolved Item 5.02 event"
+            # Release-Owner-accepted Item 5.02 unresolved exception (see
+            # docs/release-readiness/required-relationship-bulk-load-completion-gate.md).
+            # An unresolved parse is recorded as the bounded "unresolved_accepted"
+            # terminal status instead of hard-failing the whole batch; the
+            # aggregate rate is enforced fail-closed at evidence time
+            # (build_required_relationship_bulk_load_evidence), where exceeding
+            # the accepted threshold still yields NO_GO. Only this specific
+            # parse-ambiguity path is accepted — artifact/manifest failures
+            # above still raise.
+            unresolved_item502 = release_mode and result.applicability == "unresolved"
+            if unresolved_item502:
+                metrics.setdefault("unresolved_item502", []).append(accession_number)
+                _emit(
+                    "item_502_unresolved_accepted",
+                    accession=accession_number,
+                    cik=int(cik),
                 )
             event_rows = [
                 {
@@ -232,7 +245,10 @@ def run_bootstrap_fundamentals_per_filing(
             metrics["rows_employment_event"] += db.merge_employment_events(
                 event_rows, sync_run_id
             )
-            if event_rows:
+            if unresolved_item502:
+                terminal_status = "unresolved_accepted"
+                terminal_reason = "item_502_unresolved_ambiguous_verb"
+            elif event_rows:
                 terminal_status = "applicable_loaded"
                 terminal_reason = "employment_events_loaded"
             else:

@@ -1901,6 +1901,19 @@ def _capture_bronze_raw(
             attestations_raw = arguments.get("attestations")
             if attestations_raw is None:
                 attestations_raw = arguments.get("attestations_json")
+            # Enumerate the Release-Owner-accepted Item 5.02 unresolved
+            # candidates from the batch ledgers so evidence names every one
+            # (and the builder enforces the bounded rate fail-closed).
+            accepted_unresolved = sorted({
+                str(row.get("accession_number") or "")
+                for ledger in batch_ledgers
+                for row in (ledger.get("outcomes") or [])
+                if isinstance(row, dict)
+                and str(row.get("status") or "") == "unresolved_accepted"
+            } - {""})
+            item502_candidate_count = sum(
+                1 for c in inventory.candidates if c.form in ("8-K", "8-K/A")
+            )
             evidence = build_required_relationship_bulk_load_evidence(
                 generation_id=sync_run_id,
                 inventory_fingerprint=reconciliation.inventory_fingerprint,
@@ -1914,6 +1927,8 @@ def _capture_bronze_raw(
                 attestations=parse_attestations_json(attestations_raw),
                 image_digest=str(arguments.get("image_digest") or "").strip() or None,
                 execution_arn=str(arguments.get("execution_arn") or "").strip() or None,
+                accepted_unresolved_accessions=accepted_unresolved,
+                item502_candidate_count=item502_candidate_count,
             )
         except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
             if isinstance(exc, WarehouseRuntimeError):
