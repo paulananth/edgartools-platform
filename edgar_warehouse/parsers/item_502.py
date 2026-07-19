@@ -31,6 +31,27 @@ Coverage evolution:
   normalized to sentence breaks before parsing (production scope check:
   9.5% unresolved rate across a 400-sample scan of the Item 5.02 universe;
   fixture is CIK 88000 / accession 0000950170-24-098502).
+- v5: a 2,000-sample scope check after v4 found the aggregate unresolved
+  rate (~10.6%) barely moved and traced it to several distinct patterns
+  under the "appoint" trigger. The dominant one by far turned out to be the
+  bare object-predicate role shape with NO preposition at all — "[Person]
+  was appointed [Role] of [Company]" (dependency label `oprd` on the role
+  noun) — which `_find_role` never checked; it only recognized "as [Role]"
+  and "to the position/role/office of [Role]". Also added "promoted to
+  [Role]" as a direct-object-style role for "promote" specifically (kept
+  narrowly scoped to that verb — broadening the general "to [NOUN]" case
+  for every appointment verb would risk matching unrelated destinations,
+  e.g. "appointed X to the Committee"). Both are purely additive
+  under-extraction fixes: they can only turn a real, already-disclosed
+  person+role+date into a resolved event, never fabricate one, so they
+  carry no false-positive risk. Deliberately NOT fixed here: backward-
+  references to prior filings ("as previously disclosed... had appointed"),
+  bio-background prose, appositive names, and nominalized "approved the
+  appointment of X" — those are suppression-shaped fixes (would turn
+  `unresolved` into `not_applicable`, which release_mode does not
+  re-check) and can silently drop a real event if the same filing also
+  discloses one under a different construction (confirmed on a real
+  accession); left as pending backlog rather than rushed.
 """
 
 from __future__ import annotations
@@ -44,7 +65,7 @@ from typing import Iterable
 import spacy
 
 PARSER_NAME = "item_502"
-PARSER_VERSION = "4"
+PARSER_VERSION = "5"
 
 
 @dataclass(frozen=True)
@@ -227,13 +248,28 @@ def _expand_conjuncts(token) -> list:
     return [token] + list(token.conjuncts)
 
 
-def _find_role(verb, sent) -> str | None:
-    """"appointed X as [Role]" or "appointed X to the position/role of [Role]"."""
+def _find_role_and_token(verb, sent):
+    """"appointed X as [Role]", "appointed X to the position/role of [Role]",
+    the bare "appointed X [Role]" object-predicate shape (dependency label
+    `oprd` — no preposition at all, by far the most common real-8-K phrasing:
+    "Lucy To ... was appointed Chief Financial Officer of SAB Biotherapeutics"),
+    or, for "promote" specifically, "promoted X to [Role]" where [Role] is an
+    arbitrary title rather than the literal word position/role/office/board
+    (scoped to "promote" only — broadening the general "to [NOUN]" case for
+    every appointment verb would risk matching unrelated destinations, e.g.
+    "appointed X to the Committee").
+
+    Returns (role_text, role_token) — role_token is the specific child token
+    consumed as the role source so the caller can exclude it from person-
+    candidate collection (an oprd role-noun phrase can otherwise look like a
+    PROPN "name" to `_person_name`); role_token is None when role came from a
+    sentence-level fallback with no single source token.
+    """
     for child in verb.children:
         if child.dep_ == "prep" and child.lower_ == "as":
             pobj = next((c for c in child.children if c.dep_ == "pobj"), None)
             if pobj is not None:
-                return _clean_span(pobj)
+                return _clean_span(pobj), pobj
         if child.dep_ == "prep" and child.lower_ == "to":
             noun = next((c for c in child.children if c.dep_ == "pobj"), None)
             if noun is not None and noun.lemma_ in ("position", "role", "office"):
@@ -244,13 +280,35 @@ def _find_role(verb, sent) -> str | None:
                 if of_prep is not None:
                     of_pobj = next((c for c in of_prep.children if c.dep_ == "pobj"), None)
                     if of_pobj is not None:
-                        return _clean_span(of_pobj)
+                        return _clean_span(of_pobj), of_pobj
             # "elected X to the Board of Directors"
             if noun is not None and noun.lemma_ == "board":
-                return "Director"
+                return "Director", None
+            # "promoted to [Role]" — but NOT "promoted FROM [Role] to [Role]",
+            # which _ROLE_CHANGE (regex) already extracts as a role_change
+            # event; also matching it here would double-count the same
+            # transition as a second, spurious "appointment" event.
+            if (
+                noun is not None
+                and noun.pos_ in ("NOUN", "PROPN")
+                and verb.lemma_.lower() == "promote"
+                and not any(c.dep_ == "prep" and c.lower_ == "from" for c in verb.children)
+            ):
+                return _clean_span(noun), noun
+        # Bare object-predicate role, no preposition at all — by far the most
+        # common real-8-K phrasing ("was appointed Chief Financial Officer").
+        # Restricted to NOUN/PROPN because this small model also tags some
+        # unrelated adjuncts (e.g. "effective" in "...promoted ... effective
+        # June 1, 2024") as `oprd`, which are never a job title.
+        if child.dep_ == "oprd" and child.pos_ in ("NOUN", "PROPN"):
+            return _clean_span(child), child
     if _BOARD_DIRECTOR.search(sent.text):
-        return "Director"
-    return None
+        return "Director", None
+    return None, None
+
+
+def _find_role(verb, sent) -> str | None:
+    return _find_role_and_token(verb, sent)[0]
 
 
 def _clean_span(token) -> str:
@@ -296,7 +354,7 @@ def _is_step_down(token) -> bool:
 def _extract_appointment_events(
     sent, verb, accession_number: str, cik: int, filing_date: date,
 ) -> list[EmploymentEvent]:
-    role = _find_role(verb, sent)
+    role, role_token = _find_role_and_token(verb, sent)
     vacancy = role is None and re.search(
         r"\bvacancy\b|\bnewly[\s-]created\b|\bboard\b", sent.text, re.I
     )
@@ -310,8 +368,17 @@ def _extract_appointment_events(
         effective_date = _find_date(sent, verb, filing_date, allow_filing_fallback=True)
     if effective_date is None:
         return []
+    role_token_i = role_token.i if role_token is not None else None
     people_tokens: list = []
     for child in verb.children:
+        # Exclude the token already consumed as the role source (e.g. an
+        # `oprd` role-noun phrase like "Chief Financial Officer" can itself
+        # look like a PROPN "name" to _person_name — it isn't a person).
+        # Compared by index, not object identity: spaCy's `.children`
+        # yields a fresh Token proxy per access, so `is` never matches
+        # across separate calls even for the same underlying token.
+        if role_token_i is not None and child.i == role_token_i:
+            continue
         if child.dep_ in ("dobj", "nsubjpass", "oprd"):
             people_tokens.extend(_expand_conjuncts(child))
         # "joined the Company as CFO" — person is nsubj of join

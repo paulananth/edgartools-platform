@@ -288,9 +288,69 @@ def test_item_502_joined_as_role() -> None:
     assert result.events[0].effective_date == date(2024, 9, 15)
 
 
-def test_parser_version_is_4() -> None:
+def test_parser_version_is_5() -> None:
     from edgar_warehouse.parsers.item_502 import PARSER_VERSION
-    assert PARSER_VERSION == "4"
+    assert PARSER_VERSION == "5"
+
+
+def test_item_502_bare_object_predicate_role_no_preposition() -> None:
+    """Production coverage gap: dominant "appoint" sub-pattern found by a
+    2,000-sample scope check. "[Person] was appointed [Role] of [Company]"
+    has no "as"/"to the position of" preposition at all -- the role sits as
+    a bare object-predicate (dependency label `oprd`) directly on the verb,
+    which _find_role never checked before v5.
+
+    Fixture: CIK 1833214, accession 0000950170-24-088247 (real production
+    candidate from the scope check).
+    """
+    result = parse_item_502(
+        accession_number="0000950170-24-088247",
+        cik=1833214,
+        filing_date=date(2024, 7, 26),
+        content=(
+            "Item 5.02 Departure of Directors or Certain Officers; Election "
+            "of Directors; Appointment of Certain Officers; Compensatory "
+            "Arrangements of Certain Officers. "
+            "On July 26, 2024, Lucy To, 38, was appointed Chief Financial "
+            "Officer of SAB Biotherapeutics, Inc., a Delaware corporation "
+            "(“SAB BIO” or the “Company”), with a start "
+            "date of August 12, 2024."
+        ),
+    )
+    assert result.applicability == "applicable"
+    assert len(result.events) == 1
+    event = result.events[0]
+    assert event.event_type == "appointment"
+    assert event.person_name == "Lucy To"
+    assert event.role == "Chief Financial Officer"
+    assert event.effective_date == date(2024, 7, 26)
+
+
+def test_item_502_promoted_to_role_without_as_or_position_of() -> None:
+    """Production coverage gap: "was promoted to [Role]" states the role
+    directly after "to" without the literal word position/role/office, which
+    _find_role's "to" branch required before v5. Scoped narrowly to the
+    "promote" lemma to avoid matching unrelated "to [destination]" phrases
+    for other appointment verbs.
+    """
+    result = parse_item_502(
+        accession_number="promote-to-role-1",
+        cik=1,
+        filing_date=date(2025, 2, 20),
+        content=(
+            "Item 5.02 Compensatory Arrangements of Certain Officers. "
+            "On February 20, 2025, Greg Carter, the Company's Executive "
+            "Vice President, Payment Acceptance, was promoted to Executive "
+            "Vice President, Chief Revenue Officer."
+        ),
+    )
+    assert result.applicability == "applicable"
+    assert len(result.events) == 1
+    event = result.events[0]
+    assert event.event_type == "appointment"
+    assert event.person_name == "Greg Carter"
+    assert event.role == "Executive Vice President"
+    assert event.effective_date == date(2025, 2, 20)
 
 
 def test_item_502_bulleted_committee_roster_does_not_poison_preceding_appointment() -> None:
