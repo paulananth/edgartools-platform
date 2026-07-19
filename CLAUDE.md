@@ -510,8 +510,14 @@ architecture changes explicitly.
 
 **Manual AWS build and deploy — complete recipe (macOS Colima)**
 
-CI (GitHub Actions `build-images.yml`) runs this automatically on every push
-to `main`. Use the steps below only for ad-hoc builds or when CI is unavailable.
+CI (GitHub Actions `deploy.yml`, the "Deploy" workflow — `build-images.yml`
+no longer exists) builds and pushes the DEV images automatically on every push
+to `main` in ~30-45s via buildx registry cache, retagging `:dev` each time.
+It does NOT promote to the prod ECR repos or register task definitions — prod
+promotion (docker tag/push to `edgartools-prod-*` + `deploy-aws-application.sh`)
+is still manual. Use the steps below for prod promotion, ad-hoc builds, or when
+CI is unavailable; for a dev image of current `main`, prefer CI's digest
+(`gh run list --workflow deploy.yml`) over rebuilding locally.
 
 ```bash
 # 1. Start Colima and point Docker CLI at it (do once per terminal session).

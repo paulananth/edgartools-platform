@@ -47,7 +47,7 @@ def no_sec_fetch():
     with (
         patch.object(
             warehouse_orchestrator,
-            "download_sec_bytes",
+            "_download_sec_bytes",
             side_effect=AssertionError("download_sec_bytes must not be called"),
         ),
         patch(

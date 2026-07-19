@@ -482,7 +482,7 @@ class TestNoSecApiCalls:
 
         with (
             patch.object(
-                warehouse_orchestrator, "download_sec_bytes", side_effect=AssertionError(
+                warehouse_orchestrator, "_download_sec_bytes", side_effect=AssertionError(
                     "download_sec_bytes must not be called in parse-ownership-bronze"
                 )
             ),

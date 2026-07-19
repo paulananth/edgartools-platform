@@ -182,7 +182,7 @@ def test_seed_universe_cli_handler(engine, monkeypatch):
     monkeypatch.setattr(mdm_cli, "_company_tickers_payload", lambda: fake_payload)
     monkeypatch.setattr(mdm_cli, "_get_mdm_engine", lambda: engine)
 
-    args = argparse.Namespace(limit=None, tracking_status="active")
+    args = argparse.Namespace(limit=None, tracking_status="active", source="edgartools", silver_path=None)
     result = mdm_cli._handle_seed_universe(args)
 
     assert result == 0
@@ -201,7 +201,7 @@ def test_seed_universe_cli_handler_respects_limit(engine, monkeypatch):
     monkeypatch.setattr(mdm_cli, "_company_tickers_payload", lambda: payload)
     monkeypatch.setattr(mdm_cli, "_get_mdm_engine", lambda: engine)
 
-    args = argparse.Namespace(limit=1, tracking_status="active")
+    args = argparse.Namespace(limit=1, tracking_status="active", source="edgartools", silver_path=None)
     mdm_cli._handle_seed_universe(args)
 
     assert len(get_tracked_ciks(engine, "active")) == 1
@@ -216,7 +216,7 @@ def test_seed_universe_cli_handler_respects_tracking_status(engine, monkeypatch)
     monkeypatch.setattr(mdm_cli, "_company_tickers_payload", lambda: payload)
     monkeypatch.setattr(mdm_cli, "_get_mdm_engine", lambda: engine)
 
-    args = argparse.Namespace(limit=None, tracking_status="bootstrap_pending")
+    args = argparse.Namespace(limit=None, tracking_status="bootstrap_pending", source="edgartools", silver_path=None)
     mdm_cli._handle_seed_universe(args)
 
     assert get_tracked_ciks(engine, "bootstrap_pending") == [99]
