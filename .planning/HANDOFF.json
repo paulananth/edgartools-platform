@@ -1,9 +1,9 @@
 {
   "version": "1.0",
-  "timestamp": "2026-07-19T00:00:00Z",
+  "timestamp": "2026-07-19T20:30:00Z",
   "phase": null,
   "phase_name": "ticket-20-production-bulk-load-go",
-  "status": "ready_to_launch_pending_user_go",
+  "status": "staged_for_launch_ticket21_complete_holding_for_user_go",
   "workstream": "fix-pipelines",
   "ticket": 20,
   "owning_runtime_handoff_to": "claude",
@@ -157,7 +157,7 @@
   ],
   "infrastructure": {
     "account": "690839588395",
-    "warehouse_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse@sha256:0c658334d7503ae79f1187212a9801ea53c2ec19640f772c39e71aba54fdb420",
+    "warehouse_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse@sha256:d5b9c84bdd7ee685c039dd5599e21168f06771f0cb2e1516d889c0287fdd1ed8",
     "mdm_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-mdm@sha256:f97963824fbfa54a41151f37c548788c84add07e31c62e252b25d59457cbe118",
     "state_machine": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-bronze-seed-silver-gold",
     "execution_arn": "arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bronze-seed-silver-gold:ticket20-strict-agent-20260718T225510Z",
@@ -168,8 +168,8 @@
     "agent_freeze": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-agent-20260718T225510Z/ (READY_FOR_STRICT_LOAD, execution input also here as strict_execution_input.json)",
     "watermark": "2026-07-02",
     "docker_volume_note": "t20-work was destroyed by a full Colima reinstall this session; rebuilt fresh, silver.duckdb re-downloaded and verified byte-identical (339,226,624 bytes)",
-    "task_definitions": "edgartools-prod-medium:28 (warehouse, parser v5 + gate), edgartools-prod-mdm-medium:27 (mdm unchanged)"
+    "task_definitions": "edgartools-prod-medium:30 (warehouse: v5+gate+13F+insider-coverage), edgartools-prod-mdm-medium (mdm unchanged @f9796382)"
   },
-  "next_action": "READY TO LAUNCH pending explicit user go-ahead. Deployed: warehouse edgartools-prod-medium:28 @sha256:0c658334 (parser v5 + bounded unresolved_accepted gate, 0.095 threshold), MDM unchanged mdm-medium:27. Build execution input against the existing READY_FOR_STRICT_LOAD agent freeze (ticket20-agent-20260718T225510Z, fingerprint abecbde8...) with fresh attestation binding, use a brand-new execution name, confirm no concurrent execution, then start-execution ONLY after the user explicitly says go. Do not reuse consumed names ticket20-strict-agent-20260718T225510Z or earlier.",
-  "context_notes": "Grok handed Ticket 20 GO prep to Claude. Claude completed all prep, obtained attestations, and fired the strict production execution with explicit user go-ahead. Execution ran ~50 min then failed on a genuine data-quality gate (unresolved Item 5.02 candidate), not an infra issue. Landed two safe parser fixes (bullet-list PR #185, oprd/promote PR #187) but real measurement against the known-unresolved population shows only a ~1 point aggregate improvement (10.6% -> ~9.5%), far short of what's needed. The remaining patterns carry real false-positive risk if fixed carelessly (confirmed via a real accession with both a backward-reference and a genuine new event under a different construction) -- surfaced the strategic fork to the user rather than continuing to patch unilaterally."
+  "next_action": "STAGED, HOLDING FOR EXPLICIT USER GO. On go: start-execution with a brand-new name (ticket20-strict-insider-<ts>) against the unchanged freeze input. Do NOT fire without the user explicitly saying go.",
+  "context_notes": "Release Owner directive 2026-07-19: Claude owns everything -- no Codex/Grok split remains; all workstreams, branches, and planning files are Claude's to maintain. Ticket 21 (insider-scoped EMPLOYED_BY) fully implemented: slices 1-4 merged (PRs #195, #196). Image sha-3c7efc91b038 (@sha256:d5b9c84b...) = parser v5 + bounded unresolved_accepted gate + 13F cover-period fix + mdm verify-insider-coverage, smoke-tested, deployed as edgartools-prod-medium:30; SM verified referencing :30; MDM unchanged. Zero concurrent executions. Launch STAGED and HELD -- the user has NOT said go; the last launch question was answered with an ownership/sync directive instead. Consumed execution names (P3, never reuse): ticket20-strict-agent-20260718T225510Z, ticket20-strict-gatev2-20260719T135202Z, all earlier ticket20-strict-*. Post-Map sequence: mdm verify-insider-coverage --output ... then reconcile-relationship-release --insider-coverage ... (fail-closed on unresolved insiders, 13F reported non-blocking), parity, no-change rerun, PASS evidence to user for final GO."
 }

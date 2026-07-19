@@ -50,11 +50,14 @@ insiders are independently identifiable from their own Form 3/4/5 filings.
 
 **Status:** ready-for-agent
 
-- [ ] Spec the insider-scoped completeness check (cross-reference design:
-      ownership filings ↔ MDM person identification ↔ Item 5.02 events)
-- [ ] Revise the completion-gate doctrine's "Done when" + PASS claim
-- [ ] Implement the evidence-time insider-coverage check
-- [ ] Relaunch the strict execution (new name, explicit user go)
+- [x] Spec the insider-scoped completeness check — PR #194
+- [x] Revise the completion-gate doctrine's "Done when" + PASS claim — PR #196
+- [x] Implement the evidence-time insider-coverage check — PRs #195 (slices 1-2:
+      insider_inventory + partition_insider_coverage) and #196 (slice 3: mdm
+      verify-insider-coverage CLI, evidence binding via
+      reconcile-relationship-release --insider-coverage, fail-closed)
+- [ ] Relaunch the strict execution (new name, explicit user go) — STAGED on
+      edgartools-prod-medium:30, HELD awaiting the Release Owner's explicit go
 
 ---
 
