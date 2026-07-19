@@ -68,10 +68,10 @@ resume notes.
 
 ### Still required for GO (do not mark resolved until all pass)
 
-1. Build + deploy **new** warehouse image from current `main`; register new task defs (**P3**: no redrive).
-2. **Rebuild freeze** under agent windows (new fingerprint + `coverage_by_document_type`).
-3. Preflight: `validate_relationship_release_manifest` → `READY_FOR_STRICT_LOAD`.
-4. New strict SF execution (attestations in input); all batches succeed fail-closed.
+1. ~~Build + deploy **new** warehouse image from current `main`; register new task defs (**P3**: no redrive).~~ **Done** — warehouse `sha-b9e926e2d2b0`, MDM `sha256:f9796382…`, task defs `edgartools-prod-medium:27` / `edgartools-prod-mdm-medium:26`.
+2. ~~**Rebuild freeze** under agent windows (new fingerprint + `coverage_by_document_type`).~~ **Done** — fingerprint `abecbde87ce3d71d2cbbe6be9fc4a0679e46d28629c95ff2ff977bd93f3160b2`, 125,819 candidates / 12,444 CIKs, 125 batches, uploaded to `s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-agent-20260718T225510Z/`.
+3. ~~Preflight: `validate_relationship_release_manifest` → `READY_FOR_STRICT_LOAD`.~~ **Done** — `strict_release_eligible: true`.
+4. **In progress** — New strict SF execution (attestations in input); all batches succeed fail-closed. Execution `ticket20-strict-agent-20260718T225510Z`, started 2026-07-19T00:56:27Z, `RUNNING` as of last check (0/125 batches succeeded, 4 running, 121 pending).
 5. Reconcile ledger + `required_relationship_bulk_load_evidence.json` PASS.
 6. MDM run/backfill/export/sync/verify; exact `EMPLOYED_BY` + `INSTITUTIONAL_HOLDS` parity.
 7. No-change rerun: zero SEC network, identical semantic digests.
