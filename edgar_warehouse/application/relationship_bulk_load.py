@@ -1335,3 +1335,131 @@ def load_terminal_accession_outcomes(
             outcomes[candidate.accession_number] = outcome
     return outcomes
 
+
+
+# ── Ticket 21: insider-scoped EMPLOYED_BY completeness (slices 1-2) ──────────
+#
+# Release Owner decision (2026-07-19): the required identification universe
+# is insiders — people appearing as reporting owners in Form 3/4/5 filings.
+# Slice 1 builds the authoritative insider inventory from silver; slice 2
+# partitions it into identified/unresolved against MDM via injected
+# resolvers (no MDM import here — the concrete wiring lands with the
+# evidence-block slice so this stays unit-testable with fakes).
+
+@dataclass(frozen=True)
+class InsiderObservation:
+    owner_cik: int | None
+    owner_name: str
+    issuer_cik: int
+    is_director: bool
+    is_officer: bool
+    is_ten_percent_owner: bool
+
+
+def insider_inventory(db, ciks: Iterable[int] | None = None,
+                      *, exclude_owner_ciks: Iterable[int] | None = None,
+                      ) -> tuple[InsiderObservation, ...]:
+    """Distinct insiders observed in silver ownership rows (Ticket 21 slice 1).
+
+    One row per (owner identity, issuer) pair, deduped across filings: an
+    insider filing ten Form 4s for the same issuer is one observation. Owner
+    identity is owner_cik when present, else casefolded owner_name.
+    ``exclude_owner_ciks`` removes corporate reporting owners (funds filing
+    Form 4), mirroring _derive_is_insider's corporate skip.
+    """
+    cik_list = sorted({int(c) for c in (ciks or ())})
+    where = ""
+    params: list[int] = []
+    if cik_list:
+        where = f"WHERE f.cik IN ({', '.join('?' * len(cik_list))})"
+        params = cik_list
+    rows = db.fetch(
+        f"""
+        SELECT o.owner_cik, o.owner_name, f.cik AS issuer_cik,
+               MAX(CASE WHEN o.is_director THEN 1 ELSE 0 END) AS is_director,
+               MAX(CASE WHEN o.is_officer THEN 1 ELSE 0 END) AS is_officer,
+               MAX(CASE WHEN o.is_ten_percent_owner THEN 1 ELSE 0 END) AS is_ten_percent_owner
+        FROM sec_ownership_reporting_owner o
+        JOIN sec_company_filing f ON o.accession_number = f.accession_number
+        {where}
+        GROUP BY o.owner_cik, o.owner_name, f.cik
+        """,
+        params,
+    )
+    excluded = {int(c) for c in (exclude_owner_ciks or ())}
+    seen: dict[tuple, InsiderObservation] = {}
+    for row in rows:
+        raw_cik = row.get("owner_cik")
+        owner_cik = int(raw_cik) if raw_cik not in (None, "") else None
+        name = str(row.get("owner_name") or "").strip()
+        issuer = int(row.get("issuer_cik"))
+        if owner_cik is not None and owner_cik in excluded:
+            continue
+        if owner_cik is None and not name:
+            continue  # no usable identity at all
+        key = (owner_cik if owner_cik is not None else name.casefold(), issuer)
+        obs = InsiderObservation(
+            owner_cik=owner_cik,
+            owner_name=name,
+            issuer_cik=issuer,
+            is_director=bool(row.get("is_director")),
+            is_officer=bool(row.get("is_officer")),
+            is_ten_percent_owner=bool(row.get("is_ten_percent_owner")),
+        )
+        prior = seen.get(key)
+        if prior is not None:
+            obs = InsiderObservation(
+                owner_cik=obs.owner_cik if obs.owner_cik is not None else prior.owner_cik,
+                owner_name=obs.owner_name or prior.owner_name,
+                issuer_cik=issuer,
+                is_director=obs.is_director or prior.is_director,
+                is_officer=obs.is_officer or prior.is_officer,
+                is_ten_percent_owner=obs.is_ten_percent_owner or prior.is_ten_percent_owner,
+            )
+        seen[key] = obs
+    return tuple(sorted(
+        seen.values(),
+        key=lambda o: (o.issuer_cik, o.owner_cik if o.owner_cik is not None else -1,
+                       o.owner_name.casefold()),
+    ))
+
+
+def partition_insider_coverage(
+    inventory: Iterable[InsiderObservation],
+    *,
+    resolve_person,        # (owner_cik, owner_name) -> person_id | None
+    resolve_issuer,        # (issuer_cik) -> issuer_entity_id | None
+    has_insider_version,   # (person_id, issuer_entity_id) -> bool
+) -> dict[str, object]:
+    """Ticket 21 slice 2: partition observed insiders into identified vs
+    unresolved against MDM. Identified means the person resolves to exactly
+    one MDM entity AND carries an IS_INSIDER version to the resolved issuer.
+    Fail-closed consumers require unresolved == []. Resolver callables are
+    injected so this is testable without an MDM connection."""
+    identified: list[dict[str, object]] = []
+    unresolved: list[dict[str, object]] = []
+    for obs in inventory:
+        record: dict[str, object] = {
+            "owner_cik": obs.owner_cik,
+            "owner_name": obs.owner_name,
+            "issuer_cik": obs.issuer_cik,
+        }
+        person_id = resolve_person(obs.owner_cik, obs.owner_name)
+        if person_id is None:
+            unresolved.append({**record, "reason": "unresolved_person"})
+            continue
+        issuer_id = resolve_issuer(obs.issuer_cik)
+        if issuer_id is None:
+            unresolved.append({**record, "reason": "unresolved_issuer"})
+            continue
+        if not has_insider_version(person_id, issuer_id):
+            unresolved.append({**record, "reason": "missing_is_insider_version"})
+            continue
+        identified.append(record)
+    return {
+        "insider_total": len(identified) + len(unresolved),
+        "insider_identified": len(identified),
+        "insider_unresolved": len(unresolved),
+        "unresolved": unresolved,
+        "source": "sec_ownership_reporting_owner",
+    }
