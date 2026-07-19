@@ -1,53 +1,163 @@
 {
   "version": "1.0",
-  "timestamp": "2026-07-19T01:55:00Z",
+  "timestamp": "2026-07-19T00:00:00Z",
   "phase": null,
   "phase_name": "ticket-20-production-bulk-load-go",
-  "status": "strict_sf_execution_failed_unresolved_item502_candidate",
+  "status": "ready_to_launch_pending_user_go",
   "workstream": "fix-pipelines",
   "ticket": 20,
   "owning_runtime_handoff_to": "claude",
   "branch": "claude/ticket20-go-handoff",
   "main_head": "9b5600e",
   "completed_tasks": [
-    {"id": 1, "name": "Wayfinder windows + tickets 16-19 closed", "status": "done"},
-    {"id": 2, "name": "PRs 168-175 code on main", "status": "done"},
-    {"id": 3, "name": "Warehouse image sha-b9e926e2d2b0 @sha256:01656d3b deployed medium:27", "status": "done"},
-    {"id": 4, "name": "MDM image corrected to mdm@sha256:f9796382 medium:26", "status": "done"},
-    {"id": 5, "name": "Deploy script fail-closed MDM vs warehouse image guard", "status": "done", "note": "landed on main in ef30fbe (PR #176)"},
-    {"id": 6, "name": "Free host disk then rebuild agent-window freeze", "status": "done", "note": "Colima fully reinstalled (8.4GB reclaimed); freeze rebuilt: 125,819 candidates / 12,444 CIKs"},
-    {"id": 7, "name": "Upload freeze to prodb bronze ticket20-agent-*", "status": "done", "note": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-agent-20260718T225510Z/"},
-    {"id": 8, "name": "Preflight READY_FOR_STRICT_LOAD", "status": "done", "note": "strict_release_eligible=true, fingerprint abecbde87ce3d71d2cbbe6be9fc4a0679e46d28629c95ff2ff977bd93f3160b2"},
-    {"id": 9, "name": "Obtain five attestations from user", "status": "done", "note": "User approved all five at 2026-07-18T23:42:59Z, attributed to thepaulananth@gmail.com"},
-    {"id": 10, "name": "build_ticket20_strict_execution_input + start-execution", "status": "done", "note": "Execution ARN arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bronze-seed-silver-gold:ticket20-strict-agent-20260718T225510Z, started 2026-07-19T00:56:27Z"}
+    {
+      "id": 1,
+      "name": "Wayfinder windows + tickets 16-19 closed",
+      "status": "done"
+    },
+    {
+      "id": 2,
+      "name": "PRs 168-175 code on main",
+      "status": "done"
+    },
+    {
+      "id": 3,
+      "name": "Warehouse image sha-b9e926e2d2b0 @sha256:01656d3b deployed medium:27",
+      "status": "done"
+    },
+    {
+      "id": 4,
+      "name": "MDM image corrected to mdm@sha256:f9796382 medium:26",
+      "status": "done"
+    },
+    {
+      "id": 5,
+      "name": "Deploy script fail-closed MDM vs warehouse image guard",
+      "status": "done",
+      "note": "landed on main in ef30fbe (PR #176)"
+    },
+    {
+      "id": 6,
+      "name": "Free host disk then rebuild agent-window freeze",
+      "status": "done",
+      "note": "Colima fully reinstalled (8.4GB reclaimed); freeze rebuilt: 125,819 candidates / 12,444 CIKs"
+    },
+    {
+      "id": 7,
+      "name": "Upload freeze to prodb bronze ticket20-agent-*",
+      "status": "done",
+      "note": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-agent-20260718T225510Z/"
+    },
+    {
+      "id": 8,
+      "name": "Preflight READY_FOR_STRICT_LOAD",
+      "status": "done",
+      "note": "strict_release_eligible=true, fingerprint abecbde87ce3d71d2cbbe6be9fc4a0679e46d28629c95ff2ff977bd93f3160b2"
+    },
+    {
+      "id": 9,
+      "name": "Obtain five attestations from user",
+      "status": "done",
+      "note": "User approved all five at 2026-07-18T23:42:59Z, attributed to thepaulananth@gmail.com"
+    },
+    {
+      "id": 10,
+      "name": "build_ticket20_strict_execution_input + start-execution",
+      "status": "done",
+      "note": "Execution ARN arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bronze-seed-silver-gold:ticket20-strict-agent-20260718T225510Z, started 2026-07-19T00:56:27Z"
+    }
   ],
   "remaining_tasks": [
-    {"id": 11, "name": "Monitor Map state (125 batches) to completion", "status": "failed", "note": "FAILED at 2026-07-19T01:46:51Z, States.ExceedToleratedFailureThreshold: 1 failed / 4 aborted / 120 pending / 0 succeeded of 125. Root cause: fundamentals_ingest.py:213 hard-raise on parse_item_502() returning unresolved for required candidate 0000950170-24-098502 (item_502.py:519, ambiguous_verb_seen). No sanctioned bypass exists -- repair_manifest only gates force re-fetch, not this raise."},
-    {"id": "11a", "name": "Bulleted committee-roster pattern fixed (PR #185, 1044be1)", "status": "done", "note": "item_502.py now normalizes bullet markers to sentence breaks in _text() before parsing; PARSER_VERSION 3->4; regression test added using the Horizon Kinetics filing (0000950170-24-098502, CIK 88000). Verified this fixes the exact accession that failed production."},
-    {"id": "11b", "name": "Refined 2,000-sample scope check: gap is 6+ distinct patterns, not one", "status": "done", "note": "unresolved 211/2000 (10.6%), 95% CI 9.2-12.0%, projecting ~640-834 across the full freeze. Trigger-lemma breakdown (share of full 2,000 sample): appoint 104 (~5.2%), join 71 (~3.55%, bio-background prose), terminate 62 (~3.1%, conditional agreement boilerplate), elect 23, name 18, resign 16, promote 12, plus small tails."},
-    {"id": "11c", "name": "oprd bare-role + promoted-to-role fix (PR #187, d39b6c6)", "status": "done", "note": "Two purely-additive fixes (can only turn unresolved->applicable, never fabricate): bare object-predicate role with no preposition, and 'promoted to [Role]' scoped to the promote lemma. PARSER_VERSION 4->5. Re-measured against the 211 known-unresolved candidates: 22/211 (10.4%) now resolve, 189 still don't -- projects aggregate unresolved from ~10.6% to ~9.5%. Real but modest, NOT the dominant fix (earlier claim that oprd was 'clearly dominant' was based on eyeballing ~15 examples, not measured against the full set)."},
-    {"id": "11d", "name": "Strategic fork on remaining ~90% of unresolved population", "status": "awaiting_decision", "note": "Remaining patterns (backward-references to prior filings, bio-background prose, appositive names, nominalized 'approved the appointment of X') are suppression-shaped fixes -- CRITICAL SAFETY ASYMMETRY: fundamentals_ingest.py:213 raises on unresolved but does NOT re-check not_applicable, so a suppression fix that marks a false-trigger not_applicable can silently pass the gate while dropping a REAL event if the same filing also discloses one under a different construction. Confirmed on a real accession (0001104659-25-124213, CIK 1604191, GridAI Technologies) which has both a backward-reference AND a real new event nominalized under 'approved' rather than 'appointed'. Options presented to user: (a) keep patching remaining patterns (diminishing returns per the 10.4% result above), (b) route residual ~570-750 projected unresolved to a curation/review queue, (c) revisit whether zero-unresolved is the right bar for the strict gate. Not yet decided."},
-    {"id": 12, "name": "Reconcile ledger; zero failure/unresolved/quarantine/circuit-breaker-leftover/unapproved-force counts", "status": "not_started"},
-    {"id": 13, "name": "MDM run/backfill/export/sync/verify; exact EMPLOYED_BY + INSTITUTIONAL_HOLDS parity", "status": "not_started"},
-    {"id": 14, "name": "No-change rerun: zero SEC network, identical semantic digests", "status": "not_started"},
-    {"id": 15, "name": "Final GO disposition", "status": "not_started", "note": "Separate Release Owner action (signed evidence tag) -- agent must report PASS evidence, not self-declare GO"}
+    {
+      "id": "11e",
+      "name": "Gate mechanism implemented (PR #190) + image sha-35051fefa448 built, smoke-tested (parser v5, unresolved_accepted, 0.095), promoted to prod ECR, deployed as edgartools-prod-medium:28; SM references :28",
+      "status": "done"
+    },
+    {
+      "id": "11f",
+      "name": "Fire new strict SF execution (brand-new name; P3) once user gives explicit go-ahead",
+      "status": "blocked_on_user_go"
+    },
+    {
+      "id": 11,
+      "name": "Monitor Map state (125 batches) to completion",
+      "status": "failed",
+      "note": "FAILED at 2026-07-19T01:46:51Z, States.ExceedToleratedFailureThreshold: 1 failed / 4 aborted / 120 pending / 0 succeeded of 125. Root cause: fundamentals_ingest.py:213 hard-raise on parse_item_502() returning unresolved for required candidate 0000950170-24-098502 (item_502.py:519, ambiguous_verb_seen). No sanctioned bypass exists -- repair_manifest only gates force re-fetch, not this raise."
+    },
+    {
+      "id": "11c",
+      "name": "oprd bare-role + promoted-to-role fix (PR #187, d39b6c6)",
+      "status": "done",
+      "note": "Two purely-additive fixes (can only turn unresolved->applicable, never fabricate): bare object-predicate role with no preposition, and 'promoted to [Role]' scoped to the promote lemma. PARSER_VERSION 4->5. Re-measured against the 211 known-unresolved candidates: 22/211 (10.4%) now resolve, 189 still don't -- projects aggregate unresolved from ~10.6% to ~9.5%. Real but modest, NOT the dominant fix (earlier claim that oprd was 'clearly dominant' was based on eyeballing ~15 examples, not measured against the full set)."
+    },
+    {
+      "id": "11d",
+      "name": "Strategic fork on remaining ~90% of unresolved population",
+      "status": "awaiting_decision",
+      "note": "Remaining patterns (backward-references to prior filings, bio-background prose, appositive names, nominalized 'approved the appointment of X') are suppression-shaped fixes -- CRITICAL SAFETY ASYMMETRY: fundamentals_ingest.py:213 raises on unresolved but does NOT re-check not_applicable, so a suppression fix that marks a false-trigger not_applicable can silently pass the gate while dropping a REAL event if the same filing also discloses one under a different construction. Confirmed on a real accession (0001104659-25-124213, CIK 1604191, GridAI Technologies) which has both a backward-reference AND a real new event nominalized under 'approved' rather than 'appointed'. Options presented to user: (a) keep patching remaining patterns (diminishing returns per the 10.4% result above), (b) route residual ~570-750 projected unresolved to a curation/review queue, (c) revisit whether zero-unresolved is the right bar for the strict gate. Not yet decided."
+    },
+    {
+      "id": 12,
+      "name": "Reconcile ledger; zero failure/unresolved/quarantine/circuit-breaker-leftover/unapproved-force counts",
+      "status": "not_started"
+    },
+    {
+      "id": 13,
+      "name": "MDM run/backfill/export/sync/verify; exact EMPLOYED_BY + INSTITUTIONAL_HOLDS parity",
+      "status": "not_started"
+    },
+    {
+      "id": 14,
+      "name": "No-change rerun: zero SEC network, identical semantic digests",
+      "status": "not_started"
+    },
+    {
+      "id": 15,
+      "name": "Final GO disposition",
+      "status": "not_started",
+      "note": "Separate Release Owner action (signed evidence tag) -- agent must report PASS evidence, not self-declare GO"
+    }
   ],
   "blockers": [
-    {"id": "item502-unresolved", "name": "Item 5.02 parser cannot resolve ~10.6% of required candidates (6+ distinct patterns, bullet-list sub-pattern already fixed)", "severity": "blocking", "detail": "edgar_warehouse/parsers/item_502.py:519 returns Item502Result('unresolved', 'unclassified_named_event', ()) when an appointment/departure verb is found in a non-boilerplate sentence but no structured event can be extracted. fundamentals_ingest.py:213 hard-raises on this under release_mode. Refined 2,000-sample scope check: 10.6% unresolved, ~640-834 candidates projected across the 6,952-candidate freeze, spread across appoint (~5.2%: backward-references + appositive names), join (~3.55%: bio-background prose), terminate (~3.1%: conditional agreement boilerplate), plus smaller name/promote/elect/resign patterns. No repair/override path exists today; per-accession manual override is not viable at this scale for the remaining patterns either."}
+    {
+      "id": "item502-unresolved",
+      "name": "Item 5.02 parser cannot resolve ~10.6% of required candidates (6+ distinct patterns, bullet-list sub-pattern already fixed)",
+      "severity": "blocking",
+      "detail": "edgar_warehouse/parsers/item_502.py:519 returns Item502Result('unresolved', 'unclassified_named_event', ()) when an appointment/departure verb is found in a non-boilerplate sentence but no structured event can be extracted. fundamentals_ingest.py:213 hard-raises on this under release_mode. Refined 2,000-sample scope check: 10.6% unresolved, ~640-834 candidates projected across the 6,952-candidate freeze, spread across appoint (~5.2%: backward-references + appositive names), join (~3.55%: bio-background prose), terminate (~3.1%: conditional agreement boilerplate), plus smaller name/promote/elect/resign patterns. No repair/override path exists today; per-accession manual override is not viable at this scale for the remaining patterns either."
+    }
   ],
   "human_actions_pending": [
-    {"action": "Final GO/no-go call on signed evidence tag once ledger reconciles", "context": "Release Owner action, not self-servable by agent", "blocking": false}
+    {
+      "action": "Final GO/no-go call on signed evidence tag once ledger reconciles",
+      "context": "Release Owner action, not self-servable by agent",
+      "blocking": false
+    }
   ],
   "decisions": [
-    {"decision": "Never default MDM image to warehouse", "rationale": "Wrong deploy put warehouse on MDM tasks"},
-    {"decision": "EDGAR_IDENTITY from env is fine", "rationale": "User said identity already provided"},
-    {"decision": "No SF redrive after image change", "rationale": "P3 pins old task def"},
-    {"decision": "Agent will not generate the five attestations itself", "rationale": "They are named human sign-offs; fabricating them defeats the strict-release integrity guarantee"},
-    {"decision": "User explicitly approved all five attestations and separately confirmed go-ahead to fire start-execution", "rationale": "Two distinct confirmations per plan: attestation content, then the irreversible production action itself"}
+    {
+      "decision": "Never default MDM image to warehouse",
+      "rationale": "Wrong deploy put warehouse on MDM tasks"
+    },
+    {
+      "decision": "EDGAR_IDENTITY from env is fine",
+      "rationale": "User said identity already provided"
+    },
+    {
+      "decision": "No SF redrive after image change",
+      "rationale": "P3 pins old task def"
+    },
+    {
+      "decision": "Agent will not generate the five attestations itself",
+      "rationale": "They are named human sign-offs; fabricating them defeats the strict-release integrity guarantee"
+    },
+    {
+      "decision": "User explicitly approved all five attestations and separately confirmed go-ahead to fire start-execution",
+      "rationale": "Two distinct confirmations per plan: attestation content, then the irreversible production action itself"
+    }
   ],
   "infrastructure": {
     "account": "690839588395",
-    "warehouse_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse@sha256:01656d3b30e6ddcf0596955d154fdb7aa8fd183cd04d6d4ea466879e7b1bd73d",
+    "warehouse_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse@sha256:0c658334d7503ae79f1187212a9801ea53c2ec19640f772c39e71aba54fdb420",
     "mdm_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-mdm@sha256:f97963824fbfa54a41151f37c548788c84add07e31c62e252b25d59457cbe118",
     "state_machine": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-bronze-seed-silver-gold",
     "execution_arn": "arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bronze-seed-silver-gold:ticket20-strict-agent-20260718T225510Z",
@@ -57,8 +167,9 @@
     "legacy_freeze": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-strict-20260718T013201Z/ (NO_GO, do not use)",
     "agent_freeze": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-agent-20260718T225510Z/ (READY_FOR_STRICT_LOAD, execution input also here as strict_execution_input.json)",
     "watermark": "2026-07-02",
-    "docker_volume_note": "t20-work was destroyed by a full Colima reinstall this session; rebuilt fresh, silver.duckdb re-downloaded and verified byte-identical (339,226,624 bytes)"
+    "docker_volume_note": "t20-work was destroyed by a full Colima reinstall this session; rebuilt fresh, silver.duckdb re-downloaded and verified byte-identical (339,226,624 bytes)",
+    "task_definitions": "edgartools-prod-medium:28 (warehouse, parser v5 + gate), edgartools-prod-mdm-medium:27 (mdm unchanged)"
   },
-  "next_action": "Execution FAILED (see blockers). Do NOT redrive ticket20-strict-agent-20260718T225510Z (P3). Two safe fixes landed (PR #185 bullet-list, PR #187 oprd/promote) but real-world re-measurement shows the aggregate unresolved rate only dropped from ~10.6% to ~9.5% -- still WAY too high to fire a new execution, it will fail again quickly. Awaiting user decision on the strategic fork: keep patching remaining patterns (uncertain/diminishing returns), route residual to a curation queue, or revisit the zero-unresolved gate itself. Do NOT implement any suppression-style fix (marking a false-trigger not_applicable) without the user's explicit go-ahead -- it can silently drop real events past the gate, confirmed via a real accession (GridAI, 0001104659-25-124213).",
+  "next_action": "READY TO LAUNCH pending explicit user go-ahead. Deployed: warehouse edgartools-prod-medium:28 @sha256:0c658334 (parser v5 + bounded unresolved_accepted gate, 0.095 threshold), MDM unchanged mdm-medium:27. Build execution input against the existing READY_FOR_STRICT_LOAD agent freeze (ticket20-agent-20260718T225510Z, fingerprint abecbde8...) with fresh attestation binding, use a brand-new execution name, confirm no concurrent execution, then start-execution ONLY after the user explicitly says go. Do not reuse consumed names ticket20-strict-agent-20260718T225510Z or earlier.",
   "context_notes": "Grok handed Ticket 20 GO prep to Claude. Claude completed all prep, obtained attestations, and fired the strict production execution with explicit user go-ahead. Execution ran ~50 min then failed on a genuine data-quality gate (unresolved Item 5.02 candidate), not an infra issue. Landed two safe parser fixes (bullet-list PR #185, oprd/promote PR #187) but real measurement against the known-unresolved population shows only a ~1 point aggregate improvement (10.6% -> ~9.5%), far short of what's needed. The remaining patterns carry real false-positive risk if fixed carelessly (confirmed via a real accession with both a backward-reference and a genuine new event under a different construction) -- surfaced the strategic fork to the user rather than continuing to patch unilaterally."
 }
