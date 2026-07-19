@@ -2,34 +2,35 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: fix-pipelines — Pipeline Data-Source Completeness & Verification
-current_phase: 07
-current_phase_name: source-coverage-exclusions-and-artifact-hygiene
+current_phase: 09
+current_phase_name: edgartools-crosscheck
 current_plan: 0
-status: phase_6_complete_phase_7_not_started
-stopped_at: "Phase 6 (relationship-investigation-and-population) COMPLETE (2026-07-13): all 6 plans (06-01..06-06) executed, each with a SUMMARY.md. 06-06 closed the phase: EDGE-05/EDGE-06 disposed as source-coverage exclusions (D-04 SQL zero-overlap, d375964); EDGE-09's 06-04 'open item' resolved -- root cause found and shared with EDGE-11 (_is_configured_parser_form gates the bulk artifact-fetch pipeline to ownership/ADV forms only, so DEF14A/8-K/13F-HR never get sec_filing_attachment populated at scale; confirmed via live Step Functions execution history + CloudWatch logs + platform-wide silver queries, 2cd0156); EDGE-11's disposition corrected (fix committed but unreachable via bulk pipeline without the same upstream gate fix); EDGE-10 remains excluded (structural SEC companyfacts API limitation). POPULATED_RELATIONSHIP_TYPES correctly left unchanged (no type reached graph-verified-populated status this phase). 06-PHASE-CLOSURE-LEDGER.md records all 5 EDGE IDs in exactly one evidenced disposition (introducing a third 'ROOT-CAUSED / FIX DEFERRED' category for EDGE-09/EDGE-11 alongside POPULATED/EXCLUDED); REQUIREMENTS.md reconciled (removed premature Complete status on EDGE-09/EDGE-11). 3 commits (d375964, 2cd0156, 0aa65ba) ahead of origin/claude/consolidate-workstreams, NOT YET PUSHED. A deferred, concrete next step (not this phase's scope): widen _is_configured_parser_form to cover 8-K/DEF14A/13F-HR, then deploy+re-fetch+re-derive+sync+graph-count EDGE-09/EDGE-11. Phase 7 (EDGE-07/08, ARTF-01/02) not yet started."
-last_updated: "2026-07-13"
-last_activity: 2026-07-13
-last_activity_desc: "Closed out Phase 6 end-to-end: ran 06-06's 3 tasks inline (no subagents, per explicit user instruction), plus resolved EDGE-09's previously-open root cause using live dev AWS access unavailable to earlier worktree executors. Wrote the phase closure ledger and reconciled REQUIREMENTS.md. Phase 6 is now fully complete; Phase 7 has not been started."
+status: phase_8_complete_phase_9_not_started
+stopped_at: "Phase 7 (source-coverage-exclusions-and-artifact-hygiene) and Phase 8 (neo4j-native-app-verification-gaps) are COMPLETE -- this status line was stale (last written 2026-07-13, before PRs #133/#134 landed Phase 7 plans 07-01..07-07). Verified live against REQUIREMENTS.md 2026-07-19: EDGE-07 (MANAGES_FUND) disposed source_unavailable (ADV private-fund docs filed via IARD, not EDGAR); EDGE-08 (HAS_PARENT_COMPANY) disposed capability_not_implemented (no 10-K Exhibit 21 parser exists); ARTF-01 (silver-publish never regresses canonical) complete; ARTF-02 (idempotent artifact fetch + force-flag audit trail) complete, with one open follow-up (--operator/--reason not yet required CLI flags, optional at the service boundary only); GVER-01 (readiness vs parity separation in verify-graph) complete; GVER-02 (GRAPH_INFO/BFS/LIST_GRAPHS capability fixed/documented) complete. Phase 9 (EDGX-01..03, edgartools crosscheck) remains genuinely NOT STARTED -- no phase-09 directory exists, all three requirements show Pending in REQUIREMENTS.md."
+last_updated: "2026-07-19"
+last_activity: 2026-07-19
+last_activity_desc: "Corrected this file's stale status pointer (unchanged since 2026-07-13) after verifying Phase 7 and Phase 8 completion live against REQUIREMENTS.md and git history (PRs #133, #134). No new implementation work done in this pass -- documentation correction only, at explicit user request. Phase 9 confirmed as the sole remaining native phase not yet started."
 consolidation:
   date: "2026-07-11"
   note: "This is now the single active workstream. Grafted: Phase 10 <- fundamental-factors-v2 P3; Phases 11-15 <- model-builder-contract-gaps P1-6. Sources tombstoned. Excluded (complete): go-live, mdm-neo4j-dashboard, neo4j-snowflake, neo4j-pipe."
 progress:
   total_phases: 11
-  completed_phases: 2
-  native_fix_pipelines_phases: "5-9 (5 done, 6 done, 7-9 unbuilt)"
+  completed_phases: 4
+  native_fix_pipelines_phases: "5-9 (5 done, 6 done, 7 done, 8 done, 9 not started)"
   grafted_phases: "10 (planned), 11-13 (unplanned), 14-15 (charter-held)"
-  percent: 18
+  percent: 36
 ---
 
 # Project State — fix-pipelines
 
 ## Current Position
 
-Phase: 06 (relationship-investigation-and-population) — COMPLETE
-Phase: 07 (source-coverage-exclusions-and-artifact-hygiene) — NOT STARTED
-Last activity: 2026-07-13 — Phase 06 closed out (06-06, all 3 tasks + EDGE-09 root-cause follow-up)
+Phase: 07 (source-coverage-exclusions-and-artifact-hygiene) — COMPLETE
+Phase: 08 (neo4j-native-app-verification-gaps) — COMPLETE
+Phase: 09 (edgartools-crosscheck) — NOT STARTED
+Last activity: 2026-07-19 — corrected stale status (Phase 7/8 completion verified against REQUIREMENTS.md + PRs #133/#134); no new implementation this pass
 
-[████░░░░░░] 40% (2/5 native phases complete; phase 7 not started)
+[████████░░] 80% (4/5 native phases complete; phase 9 not started)
 
 ## Milestone Context
 
@@ -49,14 +50,14 @@ REQUIREMENTS.md)
 |-------|------|--------------|--------|
 | 5 — Node And Populated-Relationship Graph Parity | All 6 node types + 4 populated relationship types verified, idempotency established | NODE-01..06, EDGE-01..04, GVER-03 | Complete |
 | 6 — Relationship Investigation And Population | Root-cause + populate the 5 ambiguous zero relationship types against their actual artifacts | EDGE-05, 06, 09, 10, 11 | Complete (all 6 plans; see 06-PHASE-CLOSURE-LEDGER.md — 2 populated-path exclusions, 1 structural exclusion, 2 root-caused/fix-deferred, 0 undocumented) |
-| 7 — Source-Coverage Exclusions And Artifact Hygiene | Document the 2 artifact-confirmed exclusions; fix silver-clobber + fetch-idempotency | EDGE-07, 08, ARTF-01, 02 | Not started |
-| 8 — Neo4j Native App Verification Gaps | verify-graph separates readiness vs parity; GRAPH_INFO/BFS/LIST_GRAPHS resolved or documented | GVER-01, 02 | Not started |
+| 7 — Source-Coverage Exclusions And Artifact Hygiene | Document the 2 artifact-confirmed exclusions; fix silver-clobber + fetch-idempotency | EDGE-07, 08, ARTF-01, 02 | Complete (07-00..07-07, PRs #133/#134) |
+| 8 — Neo4j Native App Verification Gaps | verify-graph separates readiness vs parity; GRAPH_INFO/BFS/LIST_GRAPHS resolved or documented | GVER-01, 02 | Complete (08-01, 08-02) |
 | 9 — edgartools Crosscheck | Validate platform parsing vs edgartools; replace parsers where it's a clear win; audit API usage | EDGX-01..03 | Not started |
 
 ## Progress
 
-**Phases Complete:** 2/5 (5, 6)
-**Current Plan:** Phase 7 not yet planned
+**Phases Complete:** 4/5 (5, 6, 7, 8)
+**Current Plan:** Phase 9 not yet planned
 
 ## Session Continuity
 
@@ -97,6 +98,16 @@ and **not yet pushed**.
 (source-coverage-exclusions-and-artifact-hygiene: EDGE-07, EDGE-08, ARTF-01, ARTF-02) via
 `/gsd-plan-phase 7`, or landing a PR from `claude/consolidate-workstreams` → `main` (see
 Blockers — still outstanding from an earlier session, unrelated to Phase 6's own scope).
+
+**2026-07-19 correction (verified live, no new implementation this pass):** the paragraph above
+describes the state as of 2026-07-13 and was never updated after Phase 7 actually ran. Phase 7
+(plans 07-00 through 07-07) and Phase 8 (plans 08-01, 08-02) are both now **COMPLETE** —
+`REQUIREMENTS.md` shows EDGE-07/EDGE-08/ARTF-01/ARTF-02/GVER-01/GVER-02 all `[x]`, and
+`git log` confirms PRs #133 (`07-01`–`07-05`) and #134 (`07-06`–`07-07`) landed on `main`.
+The only genuinely not-started native phase is **Phase 9 (edgartools crosscheck: EDGX-01,
+EDGX-02, EDGX-03)** — no `phases/09-*` directory exists, and all three requirements show
+`[ ] Pending` in `REQUIREMENTS.md`. Next work for this workstream is planning Phase 9 via
+`/gsd-plan-phase 9`, not Phase 7.
 
 ## Accumulated Context
 
