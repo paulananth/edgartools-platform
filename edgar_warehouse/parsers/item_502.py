@@ -19,9 +19,18 @@ Coverage evolution:
 - PR #154: active-voice regex
 - PR #155: spaCy rewrite
 - PR #157: possessive departures + modifier participles
-- This revision: board appointments without "as", expanded verbs
+- v3: board appointments without "as", expanded verbs
   (join/hire/leave/step-down), filing-date fallback when person+role resolved,
   particle "step down", and title-boilerplate verbs ignored for unresolved
+- v4: bulleted committee/director rosters ("appointed X to serve as Y and
+  appointed the following directors to committees: • Audit Committee: ...")
+  carry no sentence-ending punctuation, so the intro clause and the whole
+  bulleted list read to spaCy as one run-on sentence; the resulting
+  low-confidence parse sometimes misattaches a real, preceding appointment
+  clause as subordinate to unrelated text after the list. Bullets are now
+  normalized to sentence breaks before parsing (production scope check:
+  9.5% unresolved rate across a 400-sample scan of the Item 5.02 universe;
+  fixture is CIK 88000 / accession 0000950170-24-098502).
 """
 
 from __future__ import annotations
@@ -35,7 +44,7 @@ from typing import Iterable
 import spacy
 
 PARSER_NAME = "item_502"
-PARSER_VERSION = "3"
+PARSER_VERSION = "4"
 
 
 @dataclass(frozen=True)
@@ -94,6 +103,8 @@ _SECTION_TITLE_SPAN = re.compile(
     re.I,
 )
 
+_LIST_BULLETS = re.compile(r"\s*[•◦▪●]\s*")
+
 _APPOINTMENT_VERBS = {"appoint", "elect", "name", "join", "hire", "promote"}
 _DEPARTURE_VERBS = {
     "resign",
@@ -132,7 +143,17 @@ def _nlp() -> spacy.language.Language:
 
 def _text(content: str) -> str:
     without_tags = re.sub(r"<[^>]+>", " ", content)
-    return re.sub(r"\s+", " ", html.unescape(without_tags)).strip()
+    unescaped = html.unescape(without_tags)
+    # Bulleted rosters (e.g. "appointed the following directors to committees:
+    # • Audit Committee: ... • Compensation Committee: ...") carry no
+    # sentence-ending punctuation in the source, so spaCy's segmenter reads the
+    # intro clause plus the whole bulleted list as one run-on sentence. The
+    # dependency parser then produces a low-confidence parse over that span,
+    # sometimes misattaching a real appointment clause before the list as
+    # subordinate to unrelated text after it. Force a sentence boundary at
+    # each bullet so the list segments separately from the clause that precedes it.
+    unescaped = _LIST_BULLETS.sub(". ", unescaped)
+    return re.sub(r"\s+", " ", unescaped).strip()
 
 
 def _item_502_section(text: str) -> str:
