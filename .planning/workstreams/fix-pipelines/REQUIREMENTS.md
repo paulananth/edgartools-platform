@@ -79,9 +79,9 @@ mechanisms that aren't tied to any single relationship type.
 
 ### edgartools Crosscheck
 
-- [ ] **EDGX-01**: A documented sample-filing comparison shows whether platform-parsed ownership/ADV/financials output agrees with `edgartools`-produced output for the same filings, with discrepancies explained.
-- [ ] **EDGX-02**: Each hand-built parser in the platform (ownership, ADV, financials) is evaluated against current `edgartools` coverage; parsers with equivalent, well-supported edgartools coverage are replaced or have a documented reason not to be.
-- [ ] **EDGX-03**: Platform's edgartools API usage (imports, call patterns) is audited against the pinned version's current, non-deprecated surfaces per the edgartools changelog.
+- [x] **EDGX-01**: A documented sample-filing comparison shows whether platform-parsed ownership/ADV/financials output agrees with `edgartools`-produced output for the same filings, with discrepancies explained.
+- [x] **EDGX-02**: Each hand-built parser in the platform (ownership, ADV, financials) is evaluated against current `edgartools` coverage; parsers with equivalent, well-supported edgartools coverage are replaced or have a documented reason not to be.
+- [x] **EDGX-03**: Platform's edgartools API usage (imports, call patterns) is audited against the pinned version's current, non-deprecated surfaces per the edgartools changelog.
 
 ## Future Requirements
 
@@ -135,6 +135,6 @@ mechanisms that aren't tied to any single relationship type.
 | RLINE-01 | Phase 7 | Complete (07-05 — canonical merge remap in both Snowflake staged graph and live FastAPI traversal) |
 | GVER-01 | Phase 8 | Complete |
 | GVER-02 | Phase 8 | Complete |
-| EDGX-01 | Phase 9 | Pending |
-| EDGX-02 | Phase 9 | Pending |
-| EDGX-03 | Phase 9 | Pending |
+| EDGX-01 | Phase 9 | Complete (09-DISPOSITION) |
+| EDGX-02 | Phase 9 | Complete (09-DISPOSITION) |
+| EDGX-03 | Phase 9 | Complete (09-DISPOSITION) |
