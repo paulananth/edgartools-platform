@@ -200,6 +200,18 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     vg.add_argument("--native-app-compute-pool", default=None, help="Native App compute pool selector")
     vg.set_defaults(handler=_logged_handler("verify-graph", _handle_verify_graph))
 
+    # verify-insider-coverage (Ticket 21 slice 3: insider-scoped EMPLOYED_BY gate)
+    vic = mdm_sub.add_parser(
+        "verify-insider-coverage",
+        help="Verify every observed Form 3/4/5 insider is identified in MDM (fail-closed)",
+    )
+    vic.add_argument("--cik", action="append", type=int, default=None,
+                     help="Restrict to issuer CIK(s); repeatable. Default: all in silver.")
+    vic.add_argument("--output", default=None,
+                     help="Write the insider_coverage JSON block to this path/URI")
+    vic.set_defaults(handler=_logged_handler(
+        "verify-insider-coverage", _handle_verify_insider_coverage))
+
     # graph-activate (07-05 RSYNC-02: guarded single-pointer activation)
     ga = mdm_sub.add_parser(
         "graph-activate",
@@ -1617,3 +1629,36 @@ def _build_snowflake_writer():
     from edgar_warehouse.mdm.export import SnowflakeConnectorWriter
 
     return SnowflakeConnectorWriter.from_env()
+
+
+def _handle_verify_insider_coverage(args) -> int:
+    """Ticket 21 slice 3: fail-closed insider-coverage verification.
+
+    Exit 0 only when every insider observed in silver ownership rows is
+    identified in MDM (person resolved + IS_INSIDER version to the resolved
+    issuer). Any unresolved insider exits 1 with the full enumerated list on
+    stdout so evidence never accepts a silent gap.
+    """
+    from edgar_warehouse.mdm.pipeline import MDMPipeline, verify_insider_coverage
+
+    silver, rc = _require_silver_reader(
+        _REQUIRED_TABLES_RELATIONSHIPS, "mdm verify-insider-coverage"
+    )
+    if rc != 0:
+        return rc
+    session = _session()
+    try:
+        pipeline = MDMPipeline(session=session, silver=silver)
+        result = verify_insider_coverage(pipeline, args.cik)
+    finally:
+        session.close()
+    payload = json.dumps(result, indent=2, sort_keys=True)
+    print(payload)
+    if args.output:
+        from edgar_warehouse.infrastructure.object_storage import write_uri_text
+        write_uri_text(args.output, payload + "\n")
+    if int(result.get("insider_unresolved") or 0) > 0:
+        print("verify-insider-coverage: FAIL — unresolved insiders enumerated above",
+              file=sys.stderr)
+        return 1
+    return 0

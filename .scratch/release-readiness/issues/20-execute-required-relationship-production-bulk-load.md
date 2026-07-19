@@ -15,12 +15,21 @@ Run the strict production bulk load at the frozen Release Data Watermark, repair
 ambiguous 8-K `[W−2y, W]`. Rebuild freeze with `coverage_by_document_type`
 before GO. Live 2013-era freeze is **rejected** under `release_mode`.
 
-## Done when
+## Done when (revised 2026-07-19 per Release Owner insider-scoping decision — see Ticket 21)
 
 - Candidate inventory and Bulk-Load Completion Ledger reconcile exactly.
-- Failure, unresolved, quarantine, circuit-breaker-leftover, and unapproved-force counts are zero.
+- Failure, quarantine, circuit-breaker-leftover, and unapproved-force counts are zero;
+  Item 5.02 `unresolved_accepted` stays within the bounded threshold with every
+  accepted accession enumerated in evidence (see completion-gate doctrine).
+- **Insider coverage: zero unresolved insiders** — every Form 3/4/5 reporting
+  owner observed in silver resolves to one MDM person with an `IS_INSIDER`
+  version (`mdm verify-insider-coverage`; bound into evidence via
+  `reconcile-relationship-release --insider-coverage`). This is the EMPLOYED_BY
+  completeness bar; non-insider executives are best-effort, not gating.
 - A no-change rerun makes no SEC requests and produces identical silver/MDM semantic digests with zero new relationship identities.
-- `EMPLOYED_BY` and `INSTITUTIONAL_HOLDS` pass exact MDM-to-hosted-graph parity and current-at-watermark checks.
+- `EMPLOYED_BY` passes exact MDM-to-hosted-graph parity and current-at-watermark checks.
+  `INSTITUTIONAL_HOLDS` parity is verified and reported in evidence but is
+  **non-blocking** for the launch decision (Release Owner decision, 2026-07-19).
 - Named Warehouse, MDM, Graph, Release Data Operator, and Release Owner attestations are bound to the evidence artifact.
 
 ## Pre-image ticket hygiene (2026-07-18)

@@ -786,3 +786,46 @@ def test_partition_insider_coverage_fail_closed_partition() -> None:
     reasons = {r["owner_cik"]: r["reason"] for r in result["unresolved"]}
     assert reasons == {2222: "unresolved_person", 3333: "unresolved_issuer",
                        4444: "missing_is_insider_version"}
+
+
+def test_evidence_insider_coverage_fail_closed_and_embedded() -> None:
+    """Ticket 21 slice 3: when insider_coverage is provided, PASS requires
+    zero unresolved insiders; the block is embedded in evidence on success."""
+    from edgar_warehouse.application.relationship_bulk_load import (
+        build_required_relationship_bulk_load_evidence,
+    )
+
+    watermark = date(2026, 7, 2)
+    windows = agent_coverage_by_document_type(watermark)
+    common = dict(
+        generation_id="run-1",
+        inventory_fingerprint="fp",
+        watermark=watermark,
+        coverage_start=index_floor_coverage_start(windows),
+        coverage_by_document_type=windows,
+        candidate_count=10,
+        terminal_counts={"applicable_loaded": 10},
+        ledger_fingerprint="ledger-fp",
+        batch_ledger_count=1,
+        require_attestations=False,
+    )
+    clean = build_required_relationship_bulk_load_evidence(
+        insider_coverage={"insider_total": 5, "insider_identified": 5,
+                          "insider_unresolved": 0, "unresolved": [],
+                          "source": "sec_ownership_reporting_owner"},
+        **common,
+    )
+    assert clean["insider_coverage"]["insider_identified"] == 5
+
+    with pytest.raises(InventoryError, match="unresolved insiders"):
+        build_required_relationship_bulk_load_evidence(
+            insider_coverage={"insider_total": 5, "insider_identified": 4,
+                              "insider_unresolved": 1,
+                              "unresolved": [{"owner_cik": 1, "issuer_cik": 2,
+                                              "reason": "unresolved_person"}]},
+            **common,
+        )
+
+    # Omitted entirely: evidence has no insider block (pre-Ticket-21 shape).
+    legacy = build_required_relationship_bulk_load_evidence(**common)
+    assert "insider_coverage" not in legacy
