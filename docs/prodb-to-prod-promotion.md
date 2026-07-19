@@ -1,5 +1,20 @@
 # Canonical production promotion runbook
 
+> **EXECUTED 2026-07-19 — this runbook is now a historical record.** The full
+> prodb→prod cutover completed in one operator session: tfstate migrated to
+> `edgartools-prod-tfstate-690839588395`; S3 data server-side synced into the
+> canonical `-690839588395` buckets (keys preserved); `accounts/prod` state
+> surgically reconciled to the committed config; IAM roles replaced with
+> `sec_platform_prod_runner_*`; task defs and all state machines re-registered;
+> Snowflake `EDGARTOOLS_PRODB` renamed to `EDGARTOOLS_PROD` (warehouses, roles,
+> integration/stage/pipe recreated on the canonical bucket); GOLD rebuilt via
+> `dbt --full-refresh`; Postgres instance renamed to `EDGARTOOLS_PROD_MDM`
+> (host unchanged). See `TODOS.md` "RESOLVED (2026-07-19): prodb→prod promotion
+> executed in full" and `.scratch/prodb-prod-cutover/issues/` for the evidence
+> trail. `preflight-prod-promotion.sh` now checks the *post*-cutover invariants
+> (canonical resources exist, no PRODB remnants); its `--allow-existing-targets`
+> flag referenced below no longer exists.
+
 This runbook promotes AWS account `690839588395` in `us-east-1` to the only production environment. It is deliberately split into checkpoints. The repository work and preflight are read-only; Terraform applies, Snowflake DDL, S3 Batch Operations jobs, credential rotation, and cleanup require a separately approved operator window.
 
 ## 1. Inventory and collision gate

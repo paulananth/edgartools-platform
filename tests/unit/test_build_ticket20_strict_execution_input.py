@@ -29,7 +29,7 @@ def _attestations() -> dict[str, str]:
 def test_normalize_s3_object_key() -> None:
     assert (
         normalize_s3_object_key(
-            "s3://edgartools-prodb-bronze/warehouse/bronze/reference/x/candidate_manifest.json"
+            "s3://edgartools-prod-bronze-690839588395/warehouse/bronze/reference/x/candidate_manifest.json"
         )
         == "warehouse/bronze/reference/x/candidate_manifest.json"
     )
@@ -41,11 +41,11 @@ def test_normalize_s3_object_key() -> None:
 def test_build_ticket20_strict_execution_input_shape() -> None:
     payload = build_ticket20_strict_execution_input(
         candidate_manifest_key=(
-            "s3://edgartools-prodb-bronze/warehouse/bronze/reference/"
+            "s3://edgartools-prod-bronze-690839588395/warehouse/bronze/reference/"
             "relationship_release/t20/candidate_manifest.json"
         ),
         candidate_batches_key=(
-            "s3://edgartools-prodb-bronze/warehouse/bronze/reference/"
+            "s3://edgartools-prod-bronze-690839588395/warehouse/bronze/reference/"
             "relationship_release/t20/candidate_batches.jsonl"
         ),
         attestations=_attestations(),

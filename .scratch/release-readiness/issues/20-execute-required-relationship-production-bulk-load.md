@@ -57,7 +57,7 @@ resume notes.
 | Resume fail | `ticket20-strict-resume-20260718T104737Z` — **0/160** batches; map 1 fail / 4 aborted / 155 pending |
 | Freeze used | `ticket20-strict-20260718T013201Z` — **528,829** candidates, `coverage_start=2013-05-20`, **no** `coverage_by_document_type` |
 | Fingerprint | `ded1b9a2c3e14c3b1c30fd01e30924acac158014c4e9a114e18b76f47fbbf746` |
-| Data plane | `edgartools-prodb-*` + `sec_platform_prodb_runner_*` |
+| Data plane | ~~`edgartools-prodb-*` + `sec_platform_prodb_runner_*`~~ **migrated 2026-07-19** → `edgartools-prod-*-690839588395` + `sec_platform_prod_runner_*` (task defs `medium:31`/`large:31`/`mdm-*:30`; freeze copied keys-preserved, fingerprint unchanged) |
 
 ### Implementation path status (code / unit)
 
@@ -78,7 +78,7 @@ resume notes.
 ### Still required for GO (do not mark resolved until all pass)
 
 1. ~~Build + deploy **new** warehouse image from current `main`; register new task defs (**P3**: no redrive).~~ **Done** — warehouse `sha-b9e926e2d2b0`, MDM `sha256:f9796382…`, task defs `edgartools-prod-medium:27` / `edgartools-prod-mdm-medium:26`.
-2. ~~**Rebuild freeze** under agent windows (new fingerprint + `coverage_by_document_type`).~~ **Done** — fingerprint `abecbde87ce3d71d2cbbe6be9fc4a0679e46d28629c95ff2ff977bd93f3160b2`, 125,819 candidates / 12,444 CIKs, 125 batches, uploaded to `s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-agent-20260718T225510Z/`.
+2. ~~**Rebuild freeze** under agent windows (new fingerprint + `coverage_by_document_type`).~~ **Done** — fingerprint `abecbde87ce3d71d2cbbe6be9fc4a0679e46d28629c95ff2ff977bd93f3160b2`, 125,819 candidates / 12,444 CIKs, 125 batches, uploaded to `s3://edgartools-prod-bronze-690839588395/warehouse/bronze/reference/relationship_release/ticket20-agent-20260718T225510Z/` (originally on the prodb bucket; copied keys-preserved in the 2026-07-19 prodb→prod cutover — the SM input uses bucket-relative keys, so the frozen input and fingerprint are unchanged).
 3. ~~Preflight: `validate_relationship_release_manifest` → `READY_FOR_STRICT_LOAD`.~~ **Done** — `strict_release_eligible: true`.
 4. **In progress** — New strict SF execution (attestations in input); all batches succeed fail-closed. Execution `ticket20-strict-agent-20260718T225510Z`, started 2026-07-19T00:56:27Z, `RUNNING` as of last check (0/125 batches succeeded, 4 running, 121 pending).
 5. Reconcile ledger + `required_relationship_bulk_load_evidence.json` PASS.
@@ -90,7 +90,10 @@ Until those produce PASS evidence, leave status **open** / disposition
 
 ### Operator notes from this session
 
-- Empty `edgartools-prod-*-690839588395` buckets are **not** the live store;
-  deploy must target **prodb** buckets + `sec_platform_prodb_runner_*` roles.
+- ~~Empty `edgartools-prod-*-690839588395` buckets are **not** the live store;
+  deploy must target **prodb** buckets + `sec_platform_prodb_runner_*` roles.~~
+  **Obsolete since 2026-07-19:** the prodb→prod cutover migrated all data into
+  the canonical `-690839588395` buckets and replaced the prodb IAM roles with
+  `sec_platform_prod_runner_*`; deploys now target canonical names only.
 - Docker layer push to prod ECR failed on corrupted `uv` binary; **crane copy**
   from dev→prod ECR succeeded for digest `1b654302…`.

@@ -43,3 +43,20 @@ resuming.
       involved (~300GB+ today, growing)
 - [ ] Findings/copy completion state feeds Ticket 03's "additive IAM grant"
       step with an actual populated bucket to grant access to
+
+---
+
+**2026-07-19 — DONE (deferral lifted by user directive; Ticket 20 was
+quiescent — zero running executions).** Copy mechanism: server-side
+`aws s3 sync` (one-time snapshot; justified because nothing was writing —
+all Ticket 20 executions terminal, launch held). Keys preserved exactly.
+Post-copy parity (current versions, source vs canonical — exact match):
+`edgartools-prodb-bronze` 433,681 objects / 39,362,929,987 bytes on BOTH
+sides; `edgartools-prodb-warehouse` 4,835 objects / 356,477,844 bytes on
+BOTH sides. (CloudWatch's larger figures — 906K objects / 74.5GB bronze,
+263GB warehouse — count NONCURRENT versions in these versioned buckets,
+mostly overwritten `silver.duckdb` generations; `s3 sync` copies the live
+current-version dataset, which is the platform's data contract. Version
+history remains only on the prodb buckets and is forfeited at decommission —
+regenerable, since silver rebuilds from bronze.) Source buckets untouched
+(read-only) until decommission in Ticket 06.

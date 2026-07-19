@@ -1444,7 +1444,33 @@ build via `AWS_PROFILE=default`.
 
 **Surfaced:** `prodb` environment build session, 2026-07-03.
 
-## FLAG FOR NEXT SESSION / OTHER RUNTIME: prodb→prod promotion is half-applied — do not deploy `module.runtime` changes until Snowflake is repointed too (2026-07-17)
+## RESOLVED (2026-07-19): prodb→prod promotion executed in full — no prodb resources remain in the serving path
+
+**2026-07-19 — the full cutover ran in one session (user directive: "migrate
+prodb to prod and fix all hardcoding").** What happened, in order:
+tfstate moved to `edgartools-prod-tfstate-690839588395` (all four roots
+re-inited; old states backed up in `~/edgartools-tfstate-backups-20260719`);
+S3 data server-side synced `prodb-bronze` (906K objects) and
+`prodb-warehouse` (263GB) into the canonical `-690839588395` buckets with
+keys preserved; `accounts/prod` Terraform state surgically rewritten
+(`module.storage_canonical` → `module.storage`, prodb resources untracked)
+so the committed config now plans clean; `access/aws` applied — IAM roles
+are now `sec_platform_prod_runner_*`; task defs (`medium:31`, `large:31`,
+`mdm-*:30`) and all 14 state machines re-registered against canonical
+buckets/roles; Snowflake `EDGARTOOLS_PRODB` renamed to `EDGARTOOLS_PROD`
+(warehouses/roles renamed too, safety clone `EDGARTOOLS_LEGACY_BACKUP_20260719`
+taken first), both Snowflake Terraform states rewritten and applied — new
+`EDGARTOOLS_PROD_EXPORT_INTEGRATION` + stage + pipe point at the canonical
+export bucket; GOLD dynamic tables rebuilt via `dbt --full-refresh`
+(PASS=17); `mdm/snowflake` secret now targets
+`EDGARTOOLS_PROD`/`EDGARTOOLS_PROD_REFRESH_WH`; Postgres instance renamed
+`EDGARTOOLS_PRODB_MDM` → `EDGARTOOLS_PROD_MDM` (host unchanged, DSN secret
+untouched — `ALTER POSTGRES INSTANCE <name> RENAME <new>` syntax, no `TO`).
+The "half-applied" danger state described below no longer exists; the
+historical record is kept for the 5-whys trail. The stashed Terraform diff
+is obsolete (superseded by the state surgery) and was dropped.
+
+### Historical entry (pre-cutover state, kept for the record): prodb→prod promotion is half-applied — do not deploy `module.runtime` changes until Snowflake is repointed too (2026-07-17)
 
 **2026-07-18 — moved to `git stash` at user request; no longer sitting
 uncommitted in the working tree.** With Ticket 20's strict-release Step

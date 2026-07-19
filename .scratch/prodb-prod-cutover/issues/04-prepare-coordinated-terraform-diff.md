@@ -26,3 +26,21 @@ able to see the exact combined diff before anyone touches live state.
 - [ ] The pending uncommitted `infra/terraform/accounts/prod/{main,outputs}.tf`
       diff (adding `module.storage_canonical`) is reconciled into this plan
       rather than left as a second, uncoordinated diff
+
+---
+
+**2026-07-19 — DONE.** Plans captured and reviewed in-session before applies:
+- `accounts/prod`: after state surgery (`module.storage_canonical` →
+  `module.storage`, prodb resources untracked) the plan was a pure no-op on
+  infrastructure (outputs-only change) — the dangerous force-replace this
+  ticket warned about was defused by state surgery instead of config edits.
+- `access/aws`: 7 add / 2 change / 7 destroy — the three
+  `sec_platform_prodb_runner_*` → `sec_platform_prod_runner_*` role
+  replacements plus policy repoints to canonical buckets.
+- `snowflake/prod`: 5 add / 3 change / 5 destroy — integration replaced
+  (`EDGARTOOLS_PROD_EXPORT_INTEGRATION`), pipe replaced via its
+  `replace_triggered_by` (explicitly surfaced pre-apply, as required), stage
+  updated in place to the canonical URL, procedures re-executed.
+- `access/snowflake`: no changes (renames carried grants; state rewrite match).
+The stashed `main.tf`/`outputs.tf` diff was NOT popped — it was superseded by
+the state surgery (committed config already canonical) and dropped.
