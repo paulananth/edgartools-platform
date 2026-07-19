@@ -80,11 +80,19 @@ for repository in edgartools-prod-warehouse edgartools-prod-mdm; do
 done
 
 if [[ -n "$SOURCE_BUCKET" ]]; then
-  # NOTE: KeyCount is per-page metadata and does NOT aggregate across the CLI's
-  # automatic pagination; length(Contents) is applied after page merging and
-  # counts the full listing.
-  source_count="$(aws_read s3api list-objects-v2 --bucket "$SOURCE_BUCKET" --prefix warehouse/ --query 'length(Contents || `[]`)' --output text 2>/dev/null || true)"
-  target_count="$(aws_read s3api list-objects-v2 --bucket "edgartools-prod-bronze-${ACCOUNT_ID}" --prefix warehouse/bronze/ --query 'length(Contents || `[]`)' --output text 2>/dev/null || true)"
+  # NOTE: with --output text the CLI emits the JMESPath result PER PAGE (one
+  # line per 1000 keys), so page counts must be summed client-side.
+  count_objects() {
+    aws_read s3api list-objects-v2 --bucket "$1" --prefix "$2" \
+      --query 'length(Contents || `[]`)' --output text 2>/dev/null \
+      | awk '{s+=$1} END {if (NR>0) print s+0}'
+  }
+  # Same prefix on both sides — the migration copy preserves keys exactly,
+  # so an asymmetric prefix (warehouse/ vs warehouse/bronze/) undercounts the
+  # target by any non-bronze keys (e.g. warehouse/release-evidence/) that
+  # were legitimately copied.
+  source_count="$(count_objects "$SOURCE_BUCKET" warehouse/ || true)"
+  target_count="$(count_objects "edgartools-prod-bronze-${ACCOUNT_ID}" warehouse/ || true)"
   [[ "$source_count" =~ ^[0-9]+$ ]] || { fail "unable to count source objects"; source_count=""; }
   [[ "$target_count" =~ ^[0-9]+$ ]] || { fail "unable to count target objects"; target_count=""; }
   if [[ -n "$source_count" && -n "$target_count" ]]; then
@@ -96,15 +104,17 @@ if [[ -n "$SOURCE_BUCKET" ]]; then
 fi
 
 # Single statements per invocation (multi-statement output is not reliably
-# parseable across snow CLI versions), and empty output fails closed — an
-# empty result must never satisfy the "no PRODB remnants" check.
+# parseable across snow CLI versions), CSV format (snow supports only
+# TABLE/JSON/JSON_EXT/CSV — TSV has never been valid), and empty output
+# fails closed — an empty result must never satisfy the "no PRODB
+# remnants" check.
 snow_rows=""
 snow_ok=true
 for stmt in \
   "SHOW DATABASES LIKE 'EDGARTOOLS_PROD%'" \
   "SHOW WAREHOUSES LIKE 'EDGARTOOLS_PROD%'" \
   "SHOW INTEGRATIONS LIKE 'EDGARTOOLS_PROD%'"; do
-  rows="$(snow sql --connection "$SNOW_CONNECTION" --format TSV -q "$stmt" 2>/dev/null || true)"
+  rows="$(snow sql --connection "$SNOW_CONNECTION" --format CSV -q "$stmt" 2>/dev/null || true)"
   [[ -n "$rows" ]] || { [[ "$stmt" == *DATABASES* ]] && snow_ok=false; }
   snow_rows+="$rows"$'\n'
 done
@@ -115,7 +125,7 @@ elif grep -q 'EDGARTOOLS_PRODB' <<<"$snow_rows"; then
 else
   pass "no legacy EDGARTOOLS_PRODB resources remain"
 fi
-if grep -Eq '(^|[[:space:]])EDGARTOOLS_PROD([[:space:]]|$)' <<<"$snow_rows"; then
+if grep -Eq '(^|[[:space:]"'"'"',])EDGARTOOLS_PROD([[:space:]"'"'"',]|$)' <<<"$snow_rows"; then
   pass "canonical Snowflake database exists"
 else
   fail "canonical Snowflake database is missing"
