@@ -27,8 +27,22 @@ def parse_thirteenf_cover(content: str) -> dict[str, bool | str | None]:
     else:
         raise ValueError("13F amendment cover page has no recognized amendment type")
     confidential = values.get("confidentialomitted", "false").casefold() in {"true", "1", "yes"}
+    # periodOfReport lives on the cover, usually as MM-DD-YYYY; normalize to
+    # ISO. The quarterly SEC indexes (the freeze's 13F candidate source) carry
+    # no reportDate at all, so the cover is the authoritative — and often the
+    # only — period source for a 13F.
+    period_of_report: str | None = None
+    raw_period = values.get("periodofreport", "").strip()
+    if raw_period:
+        cleaned = raw_period.replace("/", "-")
+        parts = cleaned.split("-")
+        if len(parts) == 3 and len(parts[0]) == 4:
+            period_of_report = cleaned[:10]
+        elif len(parts) == 3 and len(parts[2]) == 4:
+            period_of_report = f"{parts[2]}-{parts[0]:0>2}-{parts[1]:0>2}"
     return {
         "is_amendment": is_amendment,
         "amendment_type": amendment_type,
         "confidential_omission": confidential,
+        "period_of_report": period_of_report,
     }
