@@ -182,27 +182,74 @@ The run emits one secret-safe `required_relationship_bulk_load_evidence.json` co
 - retry, circuit-breaker, quarantine, unresolved, and force-repair counts;
 - execution identifiers and named Gate Attestations.
 
-PASS requires every hard check to be present and successful, with no skipped check and all failure/unresolved counts equal to zero.
+PASS requires every hard check to be present and successful, with no skipped
+check, and all failure/unresolved counts equal to zero — **except** the
+Item 5.02 8-K `unresolved` count specifically, which the Release Owner may
+accept up to an explicit, enumerated bounded threshold (see "Accepted Item
+5.02 unresolved exception" below). 13F and proxy/DEF 14A candidates carry
+no such exception and must still reconcile to exactly zero
+failure/unresolved/quarantine/circuit-breaker-leftover/unapproved-force —
+confirmed architecturally clean of the "unresolved" failure mode entirely
+(13F parses structured XML; the proxy parser returns empty rows rather than
+an ambiguous outcome). Only Item 5.02's NLP-based extraction produces a
+genuine `unresolved` applicability.
+
+### Accepted Item 5.02 unresolved exception (2026-07-19, Release Owner decision)
+
+The Item 5.02 parser's spaCy-based extraction cannot yet resolve every
+required candidate — a real, measured gap, not an infra defect. A
+400-then-2,000-sample scope check (0 fetch errors) found ~9.5% of Item
+5.02 8-K candidates unresolved even after landing two safe, purely-additive
+parser fixes (bulleted-roster segmentation, bare object-predicate roles,
+`promoted to [Role]`); the remaining patterns (backward-references to
+prior filings, biographical background prose, appositive names, nominalized
+appointments under a different governing verb) are suppression-shaped
+fixes that risk silently dropping real events rather than merely failing
+loudly, so they were not rushed through. Confirmed concretely on a real
+accession (GridAI Technologies, `0001104659-25-124213`) that the unresolved
+bucket contains at least one genuine, currently-unextracted appointment.
+
+**Decision:** the Release Owner accepted this as a known, bounded gap
+rather than requiring either full per-accession manual review (~570–750
+filings, not practical) or further indefinite parser patching before GO.
+**This means EMPLOYED_BY is NOT bulk-load complete** for the Item 5.02
+family — the PASS phrase below says so explicitly rather than overclaiming
+completeness. Implementation of the actual gate mechanism (evidence
+schema field enumerating the accepted-unresolved accession list, the
+specific numeric threshold, and preserving fail-closed behavior for any
+unresolved candidate outside that pre-audited set) is **pending, not yet
+built** — this section records the policy decision the mechanism must
+implement, not a shipped capability.
 
 ## PASS / GO claim language (wayfinder ticket 13)
 
-PASS means **agent-window bulk-load complete** for frozen Ticket 20 candidates
-only — not full SEC history, not Form 3/4/5, not CAGR/financial features.
+PASS means **agent-window bulk-load complete for 13F and proxy/EMPLOYED_BY
+baseline sources, and complete except for an enumerated, Release-Owner-
+accepted set of unresolved Item 5.02 candidates**, for frozen Ticket 20
+candidates only — not full SEC history, not Form 3/4/5, not CAGR/financial
+features, and explicitly **not** a claim that every Item 5.02 employment
+event has been captured.
 
 Every PASS evidence statement must bind:
 
 1. inventory **fingerprint**
 2. Release Data **watermark** `W`
 3. **`coverage_by_document_type`** (13F / proxy / Item 5.02 8-K windows)
+4. the **accepted Item 5.02 unresolved count/percentage**, if any, and a
+   pointer to the enumerated accession list in evidence
 
 **Approved Ticket 20 PASS phrase:**
 
 ```text
-Required relationship sources for EMPLOYED_BY and INSTITUTIONAL_HOLDS are
-bulk-load complete for agent windows at watermark W (fingerprint F):
+Required relationship sources for INSTITUTIONAL_HOLDS and the proxy/DEF 14A
+EMPLOYED_BY baseline are bulk-load complete for agent windows at watermark W
+(fingerprint F):
   13F [max(W−3y, 2013-05-20), W];
-  proxy [W−5y, W] (latest-in-band baseline only);
-  Item 5.02 / ambiguous 8-K [W−2y, W].
+  proxy [W−5y, W] (latest-in-band baseline only).
+Item 5.02 / ambiguous 8-K EMPLOYED_BY sources [W−2y, W] are complete except
+for N enumerated unresolved candidates (X% of the Item 5.02 8-K candidate
+inventory), accepted by the Release Owner as a known, bounded gap per
+required-relationship-bulk-load-completion-gate.md — not claimed complete.
 ```
 
 **Forbidden overclaims** (never on PASS/GO, Agent View, or evidence headers):
@@ -211,7 +258,9 @@ loaded”; “all proxies since IPO/2013”; “13F complete for full XML era”
 freeze is only the agent 3y window; “EMPLOYED_BY enumerates every employee”;
 Form 3/4/5 or CAGR completeness as Ticket 20; treating top-level
 `coverage_start` as agent coverage for every form; Explore archive complete =
-agent GO.
+agent GO; **claiming Item 5.02 / EMPLOYED_BY "bulk-load complete" without
+naming the accepted unresolved count** once the accepted-exception mechanism
+is in use.
 
 Full phrase pack: [agent-and-research-source-relevance-windows.md](./agent-and-research-source-relevance-windows.md)
 and `.scratch/artifact-usefulness-timelines/issues/13-go-claim-language-for-partial-history.md`.
