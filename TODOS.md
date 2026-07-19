@@ -1446,6 +1446,21 @@ build via `AWS_PROFILE=default`.
 
 ## FLAG FOR NEXT SESSION / OTHER RUNTIME: prodb→prod promotion is half-applied — do not deploy `module.runtime` changes until Snowflake is repointed too (2026-07-17)
 
+**2026-07-18 — moved to `git stash` at user request; no longer sitting
+uncommitted in the working tree.** With Ticket 20's strict-release Step
+Functions execution actively `RUNNING` and writing to
+`edgartools-prodb-bronze|warehouse|snowflake-export`, leaving this diff
+uncommitted in the tree was a live risk of accidental `terraform apply`
+mid-execution repointing `module.runtime.snowflake_export_bucket_name` away
+from the bucket the running execution depends on. Stashed via:
+`git stash push -u -m "prodb-prod cutover terraform, deferred until ticket 20 GO" -- infra/terraform/accounts/prod/main.tf infra/terraform/accounts/prod/outputs.tf`
+— recoverable with `git stash list` / `git stash show -p stash^{/prodb-prod cutover terraform}`.
+Ticket 04 (`.scratch/prodb-prod-cutover/issues/04-*.md`) already anticipates
+reconciling this exact diff into its coordinated plan — pull it from the
+stash rather than re-authoring it when Ticket 04 is picked up. Everything
+else below (the concrete risk, the do-not-apply guidance) still applies
+once it's popped back out.
+
 **2026-07-18 — explicit user decision: DEFERRED until Ticket 20 resolves.**
 The entire prodb-prod-cutover ticket set
 (`.scratch/prodb-prod-cutover/issues/`) is on hold until Ticket 20 (required
