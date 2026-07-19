@@ -1,14 +1,14 @@
 {
   "version": "1.0",
-  "timestamp": "2026-07-18T22:58:00Z",
+  "timestamp": "2026-07-19T00:56:27Z",
   "phase": null,
   "phase_name": "ticket-20-production-bulk-load-go",
-  "status": "blocked_on_human_attestations",
+  "status": "strict_sf_execution_running",
   "workstream": "fix-pipelines",
   "ticket": 20,
-  "owning_runtime_handoff_to": "user",
+  "owning_runtime_handoff_to": "claude",
   "branch": "claude/ticket20-go-handoff",
-  "main_head": "3814e4a",
+  "main_head": "9b5600e",
   "completed_tasks": [
     {"id": 1, "name": "Wayfinder windows + tickets 16-19 closed", "status": "done"},
     {"id": 2, "name": "PRs 168-175 code on main", "status": "done"},
@@ -17,41 +17,42 @@
     {"id": 5, "name": "Deploy script fail-closed MDM vs warehouse image guard", "status": "done", "note": "landed on main in ef30fbe (PR #176)"},
     {"id": 6, "name": "Free host disk then rebuild agent-window freeze", "status": "done", "note": "Colima fully reinstalled (8.4GB reclaimed); freeze rebuilt: 125,819 candidates / 12,444 CIKs"},
     {"id": 7, "name": "Upload freeze to prodb bronze ticket20-agent-*", "status": "done", "note": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-agent-20260718T225510Z/"},
-    {"id": 8, "name": "Preflight READY_FOR_STRICT_LOAD", "status": "done", "note": "strict_release_eligible=true, fingerprint abecbde87ce3d71d2cbbe6be9fc4a0679e46d28629c95ff2ff977bd93f3160b2"}
+    {"id": 8, "name": "Preflight READY_FOR_STRICT_LOAD", "status": "done", "note": "strict_release_eligible=true, fingerprint abecbde87ce3d71d2cbbe6be9fc4a0679e46d28629c95ff2ff977bd93f3160b2"},
+    {"id": 9, "name": "Obtain five attestations from user", "status": "done", "note": "User approved all five at 2026-07-18T23:42:59Z, attributed to thepaulananth@gmail.com"},
+    {"id": 10, "name": "build_ticket20_strict_execution_input + start-execution", "status": "done", "note": "Execution ARN arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bronze-seed-silver-gold:ticket20-strict-agent-20260718T225510Z, started 2026-07-19T00:56:27Z, status RUNNING at last check"}
   ],
   "remaining_tasks": [
-    {"id": 9, "name": "build_ticket20_strict_execution_input + start-execution", "status": "blocked", "blocker": "five human attestations required as hard input"},
-    {"id": 10, "name": "Evidence PASS + MDM/graph parity", "status": "not_started"}
+    {"id": 11, "name": "Monitor Map state (125 batches) to completion", "status": "in_progress"},
+    {"id": 12, "name": "Reconcile ledger; zero failure/unresolved/quarantine/circuit-breaker-leftover/unapproved-force counts", "status": "not_started"},
+    {"id": 13, "name": "MDM run/backfill/export/sync/verify; exact EMPLOYED_BY + INSTITUTIONAL_HOLDS parity", "status": "not_started"},
+    {"id": 14, "name": "No-change rerun: zero SEC network, identical semantic digests", "status": "not_started"},
+    {"id": 15, "name": "Final GO disposition", "status": "not_started", "note": "Separate Release Owner action (signed evidence tag) -- agent must report PASS evidence, not self-declare GO"}
   ],
-  "blockers": [
-    {
-      "description": "build_ticket20_strict_execution_input --attestations-json requires warehouse/mdm/graph/release_data_operator/release_owner values as a hard required input, confirmed by reading the script source. These are named human sign-offs (release-readiness ticket 01: agent must never manufacture human approval).",
-      "type": "human_approval_required",
-      "workaround": "User must supply attestation values or name who holds each role before start-execution can be built/triggered"
-    }
-  ],
+  "blockers": [],
   "human_actions_pending": [
-    {"action": "Provide the five gate attestations (warehouse, mdm, graph, release_data_operator, release_owner)", "context": "Required input to build_ticket20_strict_execution_input", "blocking": true},
-    {"action": "Explicit go-ahead to fire start-execution against the production state machine", "context": "First irreversible/costly production action in this chain", "blocking": true}
+    {"action": "Final GO/no-go call on signed evidence tag once ledger reconciles", "context": "Release Owner action, not self-servable by agent", "blocking": false}
   ],
   "decisions": [
     {"decision": "Never default MDM image to warehouse", "rationale": "Wrong deploy put warehouse on MDM tasks"},
     {"decision": "EDGAR_IDENTITY from env is fine", "rationale": "User said identity already provided"},
     {"decision": "No SF redrive after image change", "rationale": "P3 pins old task def"},
-    {"decision": "Agent will not generate the five attestations itself", "rationale": "They are named human sign-offs; fabricating them defeats the strict-release integrity guarantee"}
+    {"decision": "Agent will not generate the five attestations itself", "rationale": "They are named human sign-offs; fabricating them defeats the strict-release integrity guarantee"},
+    {"decision": "User explicitly approved all five attestations and separately confirmed go-ahead to fire start-execution", "rationale": "Two distinct confirmations per plan: attestation content, then the irreversible production action itself"}
   ],
   "infrastructure": {
     "account": "690839588395",
     "warehouse_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse@sha256:01656d3b30e6ddcf0596955d154fdb7aa8fd183cd04d6d4ea466879e7b1bd73d",
     "mdm_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-mdm@sha256:f97963824fbfa54a41151f37c548788c84add07e31c62e252b25d59457cbe118",
     "state_machine": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-bronze-seed-silver-gold",
+    "execution_arn": "arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bronze-seed-silver-gold:ticket20-strict-agent-20260718T225510Z",
+    "execution_name_consumed": "ticket20-strict-agent-20260718T225510Z (P3: do not reuse; any retry needs a brand-new name)",
     "buckets": "edgartools-prodb-bronze|warehouse|snowflake-export",
     "roles": "sec_platform_prodb_runner_*",
     "legacy_freeze": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-strict-20260718T013201Z/ (NO_GO, do not use)",
-    "agent_freeze": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-agent-20260718T225510Z/ (READY_FOR_STRICT_LOAD)",
+    "agent_freeze": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-agent-20260718T225510Z/ (READY_FOR_STRICT_LOAD, execution input also here as strict_execution_input.json)",
     "watermark": "2026-07-02",
     "docker_volume_note": "t20-work was destroyed by a full Colima reinstall this session; rebuilt fresh, silver.duckdb re-downloaded and verified byte-identical (339,226,624 bytes)"
   },
-  "next_action": "Obtain five attestations from user; build strict execution input with new execution name; get explicit go-ahead; start-execution; monitor Map; reconcile evidence PASS; MDM/graph parity.",
-  "context_notes": "Grok handed Ticket 20 GO prep to Claude. All prep work (freeze rebuild, upload, preflight) is done and PASSED. The only remaining blocker is obtaining human attestations -- there is no more code/infra work to do before that."
+  "next_action": "Monitor execution ARN above via describe-execution / get-execution-history until terminal state. On success: reconcile ledger, MDM/graph parity, no-change rerun, then report PASS evidence to user for final Release Owner GO call. On failure: do not redrive this execution name -- diagnose via execution history, decide new attempt with a fresh name.",
+  "context_notes": "Grok handed Ticket 20 GO prep to Claude. Claude completed all prep, obtained attestations, and fired the strict production execution with explicit user go-ahead. Currently monitoring to completion."
 }
