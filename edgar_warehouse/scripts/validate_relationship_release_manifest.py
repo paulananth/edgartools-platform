@@ -10,7 +10,7 @@ Legacy 2013-era freezes without a type map exit non-zero (not GO).
 Example::
 
     uv run python -m edgar_warehouse.scripts.validate_relationship_release_manifest \\
-      --candidate-manifest s3://edgartools-prodb-bronze/warehouse/bronze/reference/\\
+      --candidate-manifest s3://edgartools-prod-bronze-690839588395/warehouse/bronze/reference/\\
 relationship_release/ticket20-agent-…/candidate_manifest.json
 """
 

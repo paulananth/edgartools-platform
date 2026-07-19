@@ -19,7 +19,7 @@ def _fake_tools(tmp_path: Path) -> Path:
 set -euo pipefail
 case "$*" in
   *get-caller-identity*) printf '%s\\n' "${FAKE_ACCOUNT:-690839588395}" ;;
-  *head-bucket*) [[ "${FAKE_OCCUPIED:-0}" == 1 ]] ;;
+  *head-bucket*) [[ "${FAKE_MISSING_BUCKETS:-0}" != 1 ]] ;;
   *describe-secret*) [[ "${FAKE_MISSING_SECRETS:-0}" != 1 ]] ;;
   *describe-images*) exit 0 ;;
   *list-objects-v2*)
@@ -38,7 +38,7 @@ esac
     snow.write_text(
         """#!/usr/bin/env bash
 set -euo pipefail
-printf '%s\\n' "${FAKE_SNOW_ROWS:-EDGARTOOLS_PRODB}"
+printf '%s\\n' "${FAKE_SNOW_ROWS:-EDGARTOOLS_PROD}"
 """,
         encoding="utf-8",
     )
@@ -83,17 +83,17 @@ def test_preflight_rejects_wrong_account(tmp_path: Path) -> None:
     assert "wrong AWS account" in result.stderr
 
 
-def test_preflight_rejects_occupied_names_missing_secrets_and_incomplete_copy(tmp_path: Path) -> None:
+def test_preflight_rejects_missing_canonical_resources_and_legacy_remnants(tmp_path: Path) -> None:
     result = _run(
         tmp_path,
-        FAKE_OCCUPIED="1",
+        FAKE_MISSING_BUCKETS="1",
         FAKE_MISSING_SECRETS="1",
         FAKE_TARGET_COUNT="9",
         FAKE_SNOW_ROWS="EDGARTOOLS_PRODB EDGARTOOLS_PROD",
     )
     assert result.returncode == 1
     combined = result.stdout + result.stderr
-    assert "canonical bucket name is occupied" in combined
+    assert "canonical bucket missing" in combined
     assert "missing secret container" in combined
     assert "copy incomplete" in combined
-    assert "canonical Snowflake database is occupied" in combined
+    assert "legacy EDGARTOOLS_PRODB resources still present" in combined

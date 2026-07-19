@@ -50,3 +50,9 @@ get-metric-statistics`, `s3api get-bucket-lifecycle-configuration`/
   snowflake-export copy from `prodb` to canonical before any IAM/Terraform
   cutover work proceeds — this ticket set assumed Stage 2 was already
   partially done; it is not.
+
+---
+
+**2026-07-19 — superseded by execution.** The NO-GO finding above was correct
+and served its purpose: the full cutover session (user directive) performed the
+Stage 2 copy itself before any IAM/Terraform work. See Ticket 02.

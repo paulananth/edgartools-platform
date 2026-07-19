@@ -1,5 +1,5 @@
 {
-  "superseded_notice": "SUPERSEDED as of 2026-07-19T01:45:37Z — this entire document describes execution ticket20-strict-resume-20260718T104737Z against the LEGACY 2013-era freeze (coverage_start 2013-05-20, 528829 candidates, 160 batches). That execution terminated FAILED at 2026-07-18T10:04:21-04:00 (States.ExceedToleratedFailureThreshold) and the legacy freeze itself was later rejected at preflight (missing coverage_by_document_type). The ACTUAL current execution is ticket20-strict-agent-20260718T225510Z, started 2026-07-19T00:56:27Z, using the rebuilt agent-window freeze (fingerprint abecbde87ce3d71d2cbbe6be9fc4a0679e46d28629c95ff2ff977bd93f3160b2, 125819 candidates / 12444 CIKs, 125 batches). Do not use anything below to assess current Ticket 20 status; this file will be replaced with real evidence once that execution reaches a terminal state.",
+  "superseded_notice": "SUPERSEDED as of 2026-07-19T01:45:37Z \u2014 this entire document describes execution ticket20-strict-resume-20260718T104737Z against the LEGACY 2013-era freeze (coverage_start 2013-05-20, 528829 candidates, 160 batches). That execution terminated FAILED at 2026-07-18T10:04:21-04:00 (States.ExceedToleratedFailureThreshold) and the legacy freeze itself was later rejected at preflight (missing coverage_by_document_type). The ACTUAL current execution is ticket20-strict-agent-20260718T225510Z, started 2026-07-19T00:56:27Z, using the rebuilt agent-window freeze (fingerprint abecbde87ce3d71d2cbbe6be9fc4a0679e46d28629c95ff2ff977bd93f3160b2, 125819 candidates / 12444 CIKs, 125 batches). Do not use anything below to assess current Ticket 20 status; this file will be replaced with real evidence once that execution reaches a terminal state. ADDENDUM 2026-07-19: the prodb data plane this document references (edgartools-prodb-* buckets, sec_platform_prodb_runner_* roles) was migrated to the canonical edgartools-prod-*-690839588395 buckets and sec_platform_prod_runner_* roles in the prodb->prod cutover; the prodb names below are historical.",
   "schema_version": 1,
   "generated_at": "2026-07-18T10:48:00Z",
   "disposition": "IN_PROGRESS_STRICT_EXECUTION_NO_GO",
@@ -57,7 +57,7 @@
     "execution_started": true,
     "execution_name": "ticket20-strict-resume-20260718T104737Z",
     "execution_arn": "arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bronze-seed-silver-gold:ticket20-strict-resume-20260718T104737Z",
-    "path": "release_mode=true → StrictManifestCheck → StrictBatchSilver",
+    "path": "release_mode=true \u2192 StrictManifestCheck \u2192 StrictBatchSilver",
     "artifact_policy": "all_attachments",
     "parser_policy": "branch_b_deferred",
     "note": "Idempotent cache hits from prior partial artifact work reduce re-fetch cost; remaining missing Branch B docs still network-fetch."

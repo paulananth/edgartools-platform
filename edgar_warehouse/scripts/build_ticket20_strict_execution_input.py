@@ -8,7 +8,7 @@ release_mode.
 Example::
 
     uv run python -m edgar_warehouse.scripts.build_ticket20_strict_execution_input \\
-      --candidate-manifest s3://edgartools-prodb-bronze/warehouse/bronze/reference/\\
+      --candidate-manifest s3://edgartools-prod-bronze-690839588395/warehouse/bronze/reference/\\
 relationship_release/ticket20-agent-…/candidate_manifest.json \\
       --candidate-batches-key warehouse/bronze/reference/relationship_release/\\
 ticket20-agent-…/candidate_batches.jsonl \\

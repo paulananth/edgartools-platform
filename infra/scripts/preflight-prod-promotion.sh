@@ -9,12 +9,14 @@ Usage: preflight-prod-promotion.sh [options]
   --aws-account-id <id>      Expected 12-digit AWS account ID. Required.
   --aws-region <region>      Must be us-east-1
   --snow-connection <name>   Default: edgartools-prod
-  --source-bucket <name>     Former environment bucket to compare
+  --source-bucket <name>     Legacy environment bucket to compare (optional)
   --expected-source-count N  Require this many source objects
-  --allow-existing-targets   Accept canonical names already owned by this migration
 
-This command performs only STS, S3 list/head, Secrets Manager describe, ECR
-describe, and Snowflake SHOW queries. It never writes or applies changes.
+Post-cutover invariant check (the prodb->prod promotion completed 2026-07-19):
+canonical prod resources must exist, and no legacy EDGARTOOLS_PRODB Snowflake
+resources may remain. This command performs only STS, S3 list/head, Secrets
+Manager describe, ECR describe, and Snowflake SHOW queries. It never writes
+or applies changes.
 EOF
 }
 
@@ -23,7 +25,6 @@ AWS_REGION_NAME="us-east-1"
 SNOW_CONNECTION="edgartools-prod"
 SOURCE_BUCKET=""
 EXPECTED_SOURCE_COUNT=""
-ALLOW_EXISTING=false
 ACCOUNT_ID=""
 
 while [[ $# -gt 0 ]]; do
@@ -34,7 +35,6 @@ while [[ $# -gt 0 ]]; do
     --snow-connection) SNOW_CONNECTION="${2:?}"; shift 2 ;;
     --source-bucket) SOURCE_BUCKET="${2:?}"; shift 2 ;;
     --expected-source-count) EXPECTED_SOURCE_COUNT="${2:?}"; shift 2 ;;
-    --allow-existing-targets) ALLOW_EXISTING=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -58,9 +58,9 @@ targets=(
 )
 for bucket in "${targets[@]}"; do
   if aws_read s3api head-bucket --bucket "$bucket" >/dev/null 2>&1; then
-    [[ "$ALLOW_EXISTING" == true ]] && pass "canonical bucket exists: ${bucket}" || fail "canonical bucket name is occupied: ${bucket} (use --allow-existing-targets only after ownership review)"
+    pass "canonical bucket exists: ${bucket}"
   else
-    pass "canonical bucket name is available: ${bucket}"
+    fail "canonical bucket missing: ${bucket}"
   fi
 done
 
@@ -92,14 +92,14 @@ fi
 
 snow_rows="$(snow sql --connection "$SNOW_CONNECTION" --format TSV -q "SHOW DATABASES LIKE 'EDGARTOOLS_PROD%'; SHOW WAREHOUSES LIKE 'EDGARTOOLS_PROD%'; SHOW INTEGRATIONS LIKE 'EDGARTOOLS_PROD%';" 2>/dev/null || true)"
 if grep -q 'EDGARTOOLS_PRODB' <<<"$snow_rows"; then
-  pass "former EDGARTOOLS_PRODB resources detected for migration inventory"
+  fail "legacy EDGARTOOLS_PRODB resources still present (decommission incomplete)"
 else
-  fail "EDGARTOOLS_PRODB source resources were not detected"
+  pass "no legacy EDGARTOOLS_PRODB resources remain"
 fi
 if grep -Eq '(^|[[:space:]])EDGARTOOLS_PROD([[:space:]]|$)' <<<"$snow_rows"; then
-  [[ "$ALLOW_EXISTING" == true ]] && pass "canonical Snowflake database exists and was explicitly acknowledged" || fail "canonical Snowflake database is occupied"
+  pass "canonical Snowflake database exists"
 else
-  pass "canonical Snowflake database name is available"
+  fail "canonical Snowflake database is missing"
 fi
 
 if (( failures > 0 )); then
