@@ -15,5 +15,5 @@ def test_item_502_import_requires_click_and_spacy() -> None:
     from edgar_warehouse.parsers.item_502 import PARSER_NAME, PARSER_VERSION, parse_item_502
 
     assert PARSER_NAME == "item_502"
-    assert PARSER_VERSION == "3"
+    assert PARSER_VERSION == "4"
     assert callable(parse_item_502)

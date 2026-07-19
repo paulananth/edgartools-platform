@@ -288,6 +288,54 @@ def test_item_502_joined_as_role() -> None:
     assert result.events[0].effective_date == date(2024, 9, 15)
 
 
-def test_parser_version_is_3() -> None:
+def test_parser_version_is_4() -> None:
     from edgar_warehouse.parsers.item_502 import PARSER_VERSION
-    assert PARSER_VERSION == "3"
+    assert PARSER_VERSION == "4"
+
+
+def test_item_502_bulleted_committee_roster_does_not_poison_preceding_appointment() -> None:
+    """Production regression: CIK 88000 (Horizon Kinetics Holding Corp),
+    accession 0000950170-24-098502.
+
+    Real 8-K: "...appointed Daniel J. Roller to serve as lead independent
+    director and appointed the following directors to the specified Board
+    committees: • Audit Committee: ... • Compensation Committee: ...
+    • Nominating and Governance Committee: ...". The bulleted roster carries
+    no sentence-ending punctuation, so spaCy read the intro clause plus the
+    entire bulleted list as one run-on sentence and misattached the real
+    "appointed Daniel J. Roller" clause as subordinate to unrelated text
+    after the list, filtering it out as a non-event modifier and leaving the
+    filing "unresolved" even though a real, named appointment was disclosed.
+    Scope check (400-sample random scan of the Item 5.02 universe) found this
+    pattern accounts for a meaningful share of a 9.5% systemic unresolved rate.
+    """
+    result = parse_item_502(
+        accession_number="0000950170-24-098502",
+        cik=88000,
+        filing_date=date(2024, 8, 19),
+        content=(
+            "Item 5.02 Departure of Directors or Certain Officers; Election of "
+            "Directors; Appointment of Certain Officers; Compensatory "
+            "Arrangements of Certain Officers. "
+            "On August 13, 2024, the Board of Directors (the “Board”) of "
+            "the Company appointed Daniel J. Roller to serve as lead "
+            "independent director and appointed the following directors to "
+            "the specified Board committees: "
+            "• Audit Committee: Brent D. Rosenthal (Chair), Alice C. "
+            "Brennan, Allison Nagelberg, Daniel J. Roller "
+            "• Compensation Committee: Alice C. Brennan (Chair), Allison "
+            "Nagelberg, Brent D. Rosenthal, Daniel J. Roller "
+            "• Nominating and Governance Committee: Allison Nagelberg "
+            "(Chair), Alice C. Brennan, Brent D. Rosenthal, Daniel J, Roller "
+            "The Board also set the compensation for non-management directors "
+            "at $100,000 per year, inclusive of service on all committees, "
+            "paid on a quarterly basis."
+        ),
+    )
+    assert result.applicability == "applicable"
+    assert result.reason_code == "named_employment_event"
+    names = {event.person_name for event in result.events}
+    assert "Daniel J. Roller" in names
+    roller_event = next(e for e in result.events if e.person_name == "Daniel J. Roller")
+    assert roller_event.event_type == "appointment"
+    assert roller_event.effective_date == date(2024, 8, 13)
