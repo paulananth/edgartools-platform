@@ -134,6 +134,14 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
         ("cik", "accession_number", "holding_index"),
         authority_column="ingested_at",
     ),
+    "sec_thirteenf_filing": ProtectedTablePolicy(
+        "sec_thirteenf_filing", ("accession_number",), authority_column="ingested_at"
+    ),
+    "sec_employment_event": ProtectedTablePolicy(
+        "sec_employment_event",
+        ("accession_number", "event_index"),
+        authority_column="ingested_at",
+    ),
 }
 
 # Ephemeral/operational tables explicitly excluded from semantic merge
