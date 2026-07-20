@@ -1,0 +1,43 @@
+{
+    "RoleName": "sec-edgar-stepfunctions-role",
+    "PolicyName": "sec-edgar-inline-policy",
+    "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "ECSRunTask",
+                "Effect": "Allow",
+                "Action": [
+                    "ecs:RunTask",
+                    "ecs:DescribeTasks",
+                    "ecs:StopTask"
+                ],
+                "Resource": "*",
+                "Condition": {
+                    "ArnLike": {
+                        "ecs:cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/sec-edgar-cluster"
+                    }
+                }
+            },
+            {
+                "Sid": "PassRoleToECS",
+                "Effect": "Allow",
+                "Action": "iam:PassRole",
+                "Resource": [
+                    "arn:aws:iam::690839588395:role/sec-edgar-ecs-task-role",
+                    "arn:aws:iam::690839588395:role/sec-edgar-ecs-execution-role"
+                ]
+            },
+            {
+                "Sid": "EventBridgeManagedRules",
+                "Effect": "Allow",
+                "Action": [
+                    "events:PutTargets",
+                    "events:PutRule",
+                    "events:DescribeRule"
+                ],
+                "Resource": "arn:aws:events:us-east-1:690839588395:rule/StepFunctionsGetEventsForECSTaskRule"
+            }
+        ]
+    }
+}

@@ -1,0 +1,23 @@
+{
+    "ActionAfterCompletion": "NONE",
+    "Arn": "arn:aws:scheduler:us-east-1:690839588395:schedule/default/sec-edgar-daily-ingest",
+    "CreationDate": "2026-04-09T16:37:30.604000-04:00",
+    "FlexibleTimeWindow": {
+        "Mode": "OFF"
+    },
+    "GroupName": "default",
+    "LastModificationDate": "2026-04-09T16:37:30.604000-04:00",
+    "Name": "sec-edgar-daily-ingest",
+    "ScheduleExpression": "cron(0 6 * * ? *)",
+    "ScheduleExpressionTimezone": "UTC",
+    "State": "ENABLED",
+    "Target": {
+        "Arn": "arn:aws:states:us-east-1:690839588395:stateMachine:sec-edgar-bronze-ingest",
+        "Input": "{\"ingestDate\":\"<aws.events.event.time>\",\"fullRefresh\":false}",
+        "RetryPolicy": {
+            "MaximumEventAgeInSeconds": 86400,
+            "MaximumRetryAttempts": 185
+        },
+        "RoleArn": "arn:aws:iam::690839588395:role/sec-edgar-scheduler-role"
+    }
+}

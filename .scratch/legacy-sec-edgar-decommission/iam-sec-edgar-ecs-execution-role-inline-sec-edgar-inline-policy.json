@@ -1,0 +1,34 @@
+{
+    "RoleName": "sec-edgar-ecs-execution-role",
+    "PolicyName": "sec-edgar-inline-policy",
+    "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "ECRAuth",
+                "Effect": "Allow",
+                "Action": "ecr:GetAuthorizationToken",
+                "Resource": "*"
+            },
+            {
+                "Sid": "ECRPull",
+                "Effect": "Allow",
+                "Action": [
+                    "ecr:BatchGetImage",
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:BatchCheckLayerAvailability"
+                ],
+                "Resource": "arn:aws:ecr:us-east-1:690839588395:repository/sec-edgar-ingest"
+            },
+            {
+                "Sid": "CloudWatchLogs",
+                "Effect": "Allow",
+                "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                ],
+                "Resource": "arn:aws:logs:us-east-1:690839588395:log-group:/ecs/sec-edgar-ingest-*:*"
+            }
+        ]
+    }
+}
