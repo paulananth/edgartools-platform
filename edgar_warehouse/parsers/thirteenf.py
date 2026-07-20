@@ -72,6 +72,46 @@ def _parse_period(period_of_report: str) -> date:
     return date.fromisoformat(clean[:10])
 
 
+_XSI_NAMESPACE_DECL_RE = re.compile(
+    r'\s+xmlns:xsi="http://www\.w3\.org/2001/XMLSchema-instance"'
+)
+
+
+def _reparse_with_xsi_namespace_stripped(infotable_xml: str) -> "Any | None":
+    """Workaround for an edgartools namespace-selection bug (as of the version
+    pinned in pyproject.toml; no upstream fix released yet — see the 2026-07-20
+    5-whys entry in CLAUDE.md/TODOS.md for the full root-cause chain).
+
+    edgar.thirteenf.parsers.infotable_xml.parse_infotable_xml picks the content
+    namespace via ``nsmap.get(None) or list(nsmap.values())[0]``. Some real SEC
+    filings declare ``xmlns:xsi=...`` *before* the actual
+    ``.../thirteenf/informationtable`` namespace and have no default namespace,
+    so lxml's nsmap lists xsi first; the ``list(nsmap.values())[0]`` fallback
+    then picks the wrong namespace, the subsequent ``findall`` matches zero
+    ``infoTable`` elements, and the parser silently returns an empty DataFrame
+    for a filing that has real, populated holdings (verified reproduction:
+    accession 0002000324-25-002721, MANNING & NAPIER ADVISORS LLC, CIK 62039 —
+    304 real infoTable entries, all silently dropped).
+
+    Stripping the xsi namespace declaration (which nothing in the document
+    body actually references — it exists only for schema-validation metadata)
+    leaves a single namespace in nsmap, which the same fallback logic then
+    resolves correctly. This is applied only as a fallback after the
+    unmodified XML has already been tried and returned empty, so it can only
+    ever recover rows that genuinely exist in the document — it can never
+    fabricate holdings for an actually-empty filing.
+    """
+    if not _XSI_NAMESPACE_DECL_RE.search(infotable_xml):
+        return None
+    from edgar.thirteenf.parsers.infotable_xml import parse_infotable_xml
+
+    stripped = _XSI_NAMESPACE_DECL_RE.sub("", infotable_xml, count=1)
+    try:
+        return parse_infotable_xml(stripped)
+    except Exception:
+        return None
+
+
 def parse_thirteenf(
     infotable_xml: str,
     cik: int,
@@ -102,7 +142,10 @@ def parse_thirteenf(
     try:
         df = parse_infotable_xml(infotable_xml)
     except Exception:
-        return {"sec_thirteenf_holding": []}
+        df = None
+
+    if df is None or df.empty:
+        df = _reparse_with_xsi_namespace_stripped(infotable_xml)
 
     if df is None or df.empty:
         return {"sec_thirteenf_holding": []}
