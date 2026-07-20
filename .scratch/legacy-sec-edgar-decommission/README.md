@@ -25,12 +25,13 @@ it launched no longer exists. The bucket keys even contain an unresolved
 The `sec-edgar-ingest` ECR repository was already gone before this pass
 (root cause of the nightly failures).
 
-## Deliberately NOT deleted
+## S3 bucket (deleted after explicit operator approval, same day)
 
 - **S3 bucket `paulananth11-sec-edgar-bronze`** — 17 objects, ~97.6 MB, last
-  write 2026-04-14. Data deletion is irreversible, so it is held for an
-  explicit operator decision. It is the only non-`edgartools-*` bucket left
-  in the account.
+  write 2026-04-14. Held for an explicit operator decision (irreversible data
+  deletion), approved 2026-07-19: all 35 versions purged, bucket deleted.
+  The account now contains only the 8 canonical `edgartools-{dev,prod}-*`
+  buckets.
 
 ## Backups in this directory
 
