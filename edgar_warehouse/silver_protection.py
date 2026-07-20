@@ -233,6 +233,39 @@ def _key_tuple(row: dict[str, Any], business_keys: tuple[str, ...]) -> tuple[Any
     return tuple(row[k] for k in business_keys)
 
 
+def _matching_canonical_rows_as_dicts(
+    conn: duckdb.DuckDBPyConnection,
+    table_name: str,
+    business_keys: tuple[str, ...],
+    columns: list[str],
+) -> list[dict[str, Any]]:
+    """Fetch only canonical ('out') rows whose business key also exists in the
+    candidate ('cand') table -- a semi-join, not a full table scan.
+
+    A canonical row whose key is absent from the candidate can never be
+    looked up by the merge loop below (it only ever queries keys drawn from
+    candidate_rows), so loading it was always wasted work. For a table the
+    size of sec_company_filing (2M+ rows in production), unconditionally
+    loading the full table into Python dicts on every publish -- regardless
+    of how small the candidate is -- risks OOM in the bounded-memory
+    ECS/Fargate task that runs this merge (observed: a 4-CIK
+    company-identity candidate silently killed the container here). The
+    join below returns at most as many rows as the candidate has, never
+    canonical's full size.
+    """
+    quoted_table = _quote_ident(table_name)
+    cols_sql = ", ".join(f"out.{_quote_ident(c)}" for c in columns)
+    join_sql = " AND ".join(
+        f"out.{_quote_ident(k)} IS NOT DISTINCT FROM cand.{_quote_ident(k)}"
+        for k in business_keys
+    )
+    result = conn.execute(
+        f"SELECT {cols_sql} FROM out.main.{quoted_table} AS out "
+        f"JOIN cand.main.{quoted_table} AS cand ON {join_sql}"
+    )
+    return [dict(zip(columns, row)) for row in result.fetchall()]
+
+
 def merge_candidate_into_canonical(
     candidate_path: Path,
     canonical_path: Path,
@@ -334,7 +367,9 @@ def merge_candidate_into_canonical(
 
             canonical_by_key: dict[tuple[Any, ...], dict[str, Any]] = {
                 _key_tuple(row, policy.business_keys): row
-                for row in _rows_as_dicts(conn, "out", table_name, all_columns)
+                for row in _matching_canonical_rows_as_dicts(
+                    conn, table_name, policy.business_keys, all_columns
+                )
             }
 
             inserted = updated = unchanged = 0

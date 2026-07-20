@@ -518,6 +518,63 @@ def test_merge_preserves_canonical_only_rows_from_a_partial_candidate(tmp_path):
     assert result.rows_inserted["sec_company"] == 1
 
 
+def test_merge_only_reads_canonical_rows_the_candidate_touches(tmp_path):
+    """Regression (2026-07-20): merge_candidate_into_canonical unconditionally
+    loaded the FULL canonical table into Python dicts on every publish,
+    regardless of candidate size. Production sec_company_filing has 2.1M+
+    rows; a 4-CIK company-identity candidate against it silently OOM-killed
+    the ECS/Fargate task mid-merge (no error logged, canonical never updated).
+    A canonical row whose key the candidate never touches can never be
+    looked up by the merge loop, so it must never need to be read at all --
+    proven here by scaling canonical far beyond what fetching everything
+    into Python could tolerate inside a bounded-memory unit test process,
+    while the candidate stays tiny."""
+    from edgar_warehouse.silver_protection import merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+    ddl = "CREATE TABLE sec_company_filing (accession_number TEXT PRIMARY KEY, cik BIGINT, last_synced_at TIMESTAMPTZ)"
+
+    conn = duckdb.connect(str(canonical))
+    conn.execute(ddl)
+    conn.execute(
+        "INSERT INTO sec_company_filing "
+        "SELECT 'acc-' || i, i, TIMESTAMP '2026-01-01 00:00:00' "
+        "FROM range(200000) AS t(i)"
+    )
+    conn.close()
+
+    _make_duckdb(
+        candidate,
+        ddl,
+        [
+            "INSERT INTO sec_company_filing VALUES "
+            "('acc-5', 5, '2026-02-01 00:00:00')",  # existing key, updated value
+            "INSERT INTO sec_company_filing VALUES "
+            "('acc-brand-new', 999999, '2026-02-01 00:00:00')",  # new key
+        ],
+    )
+
+    result = merge_candidate_into_canonical(candidate, canonical, output)
+
+    assert result.rows_inserted["sec_company_filing"] == 1
+    assert result.rows_updated["sec_company_filing"] == 1
+
+    conn = duckdb.connect(str(output))
+    total = conn.execute("SELECT COUNT(*) FROM sec_company_filing").fetchone()[0]
+    updated_row = conn.execute(
+        "SELECT last_synced_at FROM sec_company_filing WHERE accession_number = 'acc-5'"
+    ).fetchone()
+    untouched_row = conn.execute(
+        "SELECT last_synced_at FROM sec_company_filing WHERE accession_number = 'acc-6'"
+    ).fetchone()
+    conn.close()
+    assert total == 200001
+    assert str(updated_row[0]).startswith("2026-02-01")
+    assert str(untouched_row[0]).startswith("2026-01-01")  # untouched canonical row preserved
+
+
 def test_merge_resolves_same_key_conflict_via_declared_authority_column(tmp_path):
     from edgar_warehouse.silver_protection import merge_candidate_into_canonical
 
