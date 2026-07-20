@@ -112,11 +112,6 @@ WAREHOUSE_RUNTIME_MODES = {
 OWNERSHIP_FORMS = {"3", "3/A", "4", "4/A", "5", "5/A"}
 ADV_FORMS = {"ADV", "ADV/A", "ADV-E", "ADV-E/A", "ADV-H", "ADV-H/A", "ADV-NR", "ADV-W", "ADV-W/A"}
 
-_DAILY_INDEX_LINE_PATTERN = re.compile(
-    r"^.+?\s{2,}(?P<cik>\d{4,10})\s+(?:\d{8}|\d{4}-\d{2}-\d{2})\s+edgar/data/"
-)
-
-
 def _emit_pipeline_event(event: str, **payload: Any) -> None:
     """Emit a structured progress event for ECS/CloudWatch pipeline monitoring."""
     document = {
@@ -3906,94 +3901,6 @@ def _parser_metadata(form_type: str) -> tuple[str, str, str]:
     return "generic_text_v1", "1", "generic"
 
 
-def _capture_reference_files(context: WarehouseCommandContext, fetch_date: date) -> list[dict[str, Any]]:
-    capture_specs = default_capture_spec_factory().references(fetch_date)
-    return [
-        _write_bronze_object(
-            context=context,
-            relative_path=spec.relative_path,
-            source_name=spec.source_name,
-            source_url=spec.source_url or "",
-            payload=_download_sec_bytes(url=spec.source_url or "", identity=context.identity),
-        )
-        for spec in capture_specs
-    ]
-
-
-def _capture_daily_index_file(context: WarehouseCommandContext, target_date: date) -> tuple[dict[str, Any], list[int]]:
-    capture_spec = default_capture_spec_factory().daily_index(target_date)
-    payload = _download_sec_bytes(url=capture_spec.source_url or "", identity=context.identity)
-    record = _write_bronze_object(
-        context=context,
-        relative_path=capture_spec.relative_path,
-        source_name=capture_spec.source_name,
-        source_url=capture_spec.source_url or "",
-        payload=payload,
-        business_date=target_date.isoformat(),
-    )
-    return record, _extract_impacted_ciks_from_daily_index(payload=payload, source_url=capture_spec.source_url or "")
-
-
-def _capture_submissions_scope(
-    context: WarehouseCommandContext,
-    ciks: list[int],
-    include_pagination: bool,
-    fetch_date: date,
-) -> tuple[list[dict[str, Any]], list[tuple[int, str, dict[str, Any], list[tuple[str, dict[str, Any]]]]]]:
-    """Download submissions JSON for each CIK, write to bronze, and return staging data.
-
-    Returns (write_records, silver_staging) where silver_staging is a list of
-    (cik, raw_object_id, main_payload_dict, pagination_payloads) tuples.
-    """
-    raw_writes: list[dict[str, Any]] = []
-    silver_staging: list[tuple[int, str, dict[str, Any], list[tuple[str, dict[str, Any]]]]] = []
-    capture_specs = default_capture_spec_factory()
-
-    for cik in ciks:
-        main_spec = capture_specs.submissions_main(cik, fetch_date)
-        main_payload_bytes = _download_sec_bytes(url=main_spec.source_url or "", identity=context.identity)
-        write_record = _write_bronze_object(
-            context=context,
-            relative_path=main_spec.relative_path,
-            source_name=main_spec.source_name,
-            source_url=main_spec.source_url or "",
-            payload=main_payload_bytes,
-            cik=cik,
-        )
-        raw_writes.append(write_record)
-        raw_object_id = write_record["sha256"]
-        main_document = _decode_json_bytes(main_payload_bytes, main_spec.source_url or "")
-        pagination_payloads: list[tuple[str, dict[str, Any]]] = []
-
-        if include_pagination:
-            for file_name in _pagination_file_names(main_document):
-                pagination_spec = capture_specs.submissions_pagination(cik, file_name, fetch_date)
-                pagination_payload_bytes = _download_sec_bytes(
-                    url=pagination_spec.source_url or "",
-                    identity=context.identity,
-                )
-                raw_writes.append(
-                    _write_bronze_object(
-                        context=context,
-                        relative_path=pagination_spec.relative_path,
-                        source_name=pagination_spec.source_name,
-                        source_url=pagination_spec.source_url or "",
-                        payload=pagination_payload_bytes,
-                        cik=cik,
-                    )
-                )
-                pagination_payloads.append(
-                    (
-                        file_name,
-                        _decode_json_bytes(pagination_payload_bytes, pagination_spec.source_url or ""),
-                    )
-                )
-
-        silver_staging.append((cik, raw_object_id, main_document, pagination_payloads))
-
-    return raw_writes, silver_staging
-
-
 def _capture_catch_up_daily_form_index(
     context: WarehouseCommandContext,
     db: SilverDatabase,
@@ -4277,23 +4184,6 @@ def _seed_silver_tracking_status(
                 "last_error_message": None,
             }
         )
-
-
-def _extract_impacted_ciks_from_daily_index(payload: bytes, source_url: str) -> list[int]:
-    try:
-        text = payload.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise WarehouseRuntimeError(f"Expected text daily index payload from {source_url}") from exc
-
-    ciks: list[int] = []
-    for line in text.splitlines():
-        if "edgar/data/" not in line:
-            continue
-        match = _DAILY_INDEX_LINE_PATTERN.match(line.rstrip())
-        if match is None:
-            continue
-        ciks.append(int(match.group("cik")))
-    return _dedupe_ints(ciks)
 
 
 def _apply_bronze_cik_limit(ciks: list[int]) -> list[int]:

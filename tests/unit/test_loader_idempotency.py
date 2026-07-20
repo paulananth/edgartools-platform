@@ -198,6 +198,100 @@ class LoaderIdempotencyTests(unittest.TestCase):
         self.assertFalse(result["write_record"].get("cached", False))
         self.assertEqual(downloader.call_count, 1)
 
+    def test_cached_submission_pagination_skips_sec_download(self) -> None:
+        """Pagination files (the N extra per-company SEC fetches for heavy
+        filers) must honor the same checkpoint cache as submissions main —
+        an already-captured company must never be re-downloaded."""
+        payload = b'{"filings": {"files": []}}'
+        digest = hashlib.sha256(payload).hexdigest()
+        with tempfile.TemporaryDirectory() as tmp:
+            bronze_path = Path(tmp) / "CIK0000320193-submissions-001.json"
+            bronze_path.write_bytes(payload)
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+            db = _CheckpointDb(str(bronze_path), digest)
+
+            with patch.object(warehouse_orchestrator, "_download_sec_bytes", side_effect=AssertionError("SEC download")):
+                result = warehouse_orchestrator._capture_submissions_pagination(
+                    context=context,
+                    db=db,
+                    cik=320193,
+                    file_name="CIK0000320193-submissions-001.json",
+                    fetch_date=date(2026, 5, 8),
+                    force=False,
+                )
+
+        self.assertTrue(result["write_record"]["cached"])
+        self.assertEqual(result["write_record"]["sha256"], digest)
+
+    def test_no_checkpoint_but_existing_bronze_pagination_skips_sec_download(self) -> None:
+        """Fresh silver DB + pagination bronze already in storage (e.g. synced
+        from another environment) must also skip the SEC call — same
+        cross-environment guarantee as submissions main."""
+        cik = 320193
+        file_name = "CIK0000320193-submissions-001.json"
+        payload = b'{"filings": {"files": []}}'
+        with tempfile.TemporaryDirectory() as tmp:
+            bronze_root = StorageLocation(tmp)
+            relative_path = default_path_resolver().submissions_pagination_path(
+                cik, date(2026, 1, 1), file_name
+            )
+            bronze_root.write_bytes(relative_path, payload)
+            context = SimpleNamespace(bronze_root=bronze_root, identity="tester@example.com")
+            db = _NoCheckpointDb()
+
+            with patch.object(warehouse_orchestrator, "_download_sec_bytes", side_effect=AssertionError("SEC download")):
+                result = warehouse_orchestrator._capture_submissions_pagination(
+                    context=context,
+                    db=db,
+                    cik=cik,
+                    file_name=file_name,
+                    fetch_date=date(2026, 5, 8),
+                    force=False,
+                )
+
+        self.assertTrue(result["write_record"]["cached"])
+        self.assertEqual(result["write_record"]["sha256"], hashlib.sha256(payload).hexdigest())
+
+    def test_force_submission_pagination_downloads_again(self) -> None:
+        payload = b'{"filings": {"files": []}}'
+        digest = hashlib.sha256(payload).hexdigest()
+        with tempfile.TemporaryDirectory() as tmp:
+            bronze_path = Path(tmp) / "CIK0000320193-submissions-001.json"
+            bronze_path.write_bytes(payload)
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+            db = _CheckpointDb(str(bronze_path), digest)
+
+            downloader = Mock(return_value=payload)
+            with patch.object(warehouse_orchestrator, "_download_sec_bytes", downloader):
+                result = warehouse_orchestrator._capture_submissions_pagination(
+                    context=context,
+                    db=db,
+                    cik=320193,
+                    file_name="CIK0000320193-submissions-001.json",
+                    fetch_date=date(2026, 5, 8),
+                    force=True,
+                )
+
+        self.assertFalse(result["write_record"].get("cached", False))
+        self.assertEqual(downloader.call_count, 1)
+
+    def test_no_uncached_sec_capture_paths_exist(self) -> None:
+        """Architecture lock: every module-level capture helper that downloads
+        from SEC must consult the bronze cache first. The dead uncached paths
+        (_capture_submissions_scope, _capture_reference_files,
+        _capture_daily_index_file) were removed 2026-07-19 — this guards
+        against their reintroduction."""
+        for name in (
+            "_capture_submissions_scope",
+            "_capture_reference_files",
+            "_capture_daily_index_file",
+        ):
+            self.assertFalse(
+                hasattr(warehouse_orchestrator, name),
+                f"{name} is an uncached SEC download path; use the cache-first "
+                "_capture_submissions_main/_capture_submissions_pagination helpers instead",
+            )
+
     def test_existing_filing_attachment_skips_index_and_document_downloads(self) -> None:
         accession = "0000320193-26-000001"
         raw_object_id = "raw-primary"
