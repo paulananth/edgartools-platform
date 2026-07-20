@@ -1,0 +1,37 @@
+{
+    "RoleName": "sec-edgar-ecs-task-role",
+    "PolicyName": "sec-edgar-inline-policy",
+    "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "S3WriteRead",
+                "Effect": "Allow",
+                "Action": [
+                    "s3:PutObject",
+                    "s3:GetObject"
+                ],
+                "Resource": "arn:aws:s3:::paulananth11-sec-edgar-bronze/sec-edgar/bronze/*"
+            },
+            {
+                "Sid": "S3List",
+                "Effect": "Allow",
+                "Action": "s3:ListBucket",
+                "Resource": "arn:aws:s3:::paulananth11-sec-edgar-bronze",
+                "Condition": {
+                    "StringLike": {
+                        "s3:prefix": [
+                            "sec-edgar/bronze/*"
+                        ]
+                    }
+                }
+            },
+            {
+                "Sid": "S3BucketLocation",
+                "Effect": "Allow",
+                "Action": "s3:GetBucketLocation",
+                "Resource": "arn:aws:s3:::paulananth11-sec-edgar-bronze"
+            }
+        ]
+    }
+}

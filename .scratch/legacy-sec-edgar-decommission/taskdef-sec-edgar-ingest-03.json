@@ -1,0 +1,94 @@
+{
+    "taskDefinition": {
+        "taskDefinitionArn": "arn:aws:ecs:us-east-1:690839588395:task-definition/sec-edgar-ingest-03:3",
+        "containerDefinitions": [
+            {
+                "name": "ingest",
+                "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/sec-edgar-ingest:latest",
+                "cpu": 0,
+                "portMappings": [],
+                "essential": true,
+                "command": [
+                    "python",
+                    "scripts/ingest/03_ingest_submissions.py"
+                ],
+                "environment": [
+                    {
+                        "name": "AWS_DEFAULT_REGION",
+                        "value": "us-east-1"
+                    },
+                    {
+                        "name": "AWS_BUCKET",
+                        "value": "paulananth11-sec-edgar-bronze"
+                    },
+                    {
+                        "name": "SEC_USER_AGENT",
+                        "value": "SEC EDGAR Pipeline paul.ananth@yahoo.com"
+                    },
+                    {
+                        "name": "CLOUD_PROVIDER",
+                        "value": "aws"
+                    }
+                ],
+                "mountPoints": [],
+                "volumesFrom": [],
+                "logConfiguration": {
+                    "logDriver": "awslogs",
+                    "options": {
+                        "awslogs-group": "/ecs/sec-edgar-ingest-03",
+                        "awslogs-region": "us-east-1",
+                        "awslogs-stream-prefix": "ecs"
+                    }
+                },
+                "systemControls": []
+            }
+        ],
+        "family": "sec-edgar-ingest-03",
+        "taskRoleArn": "arn:aws:iam::690839588395:role/sec-edgar-ecs-task-role",
+        "executionRoleArn": "arn:aws:iam::690839588395:role/sec-edgar-ecs-execution-role",
+        "networkMode": "awsvpc",
+        "revision": 3,
+        "volumes": [],
+        "status": "ACTIVE",
+        "requiresAttributes": [
+            {
+                "name": "com.amazonaws.ecs.capability.logging-driver.awslogs"
+            },
+            {
+                "name": "ecs.capability.execution-role-awslogs"
+            },
+            {
+                "name": "com.amazonaws.ecs.capability.ecr-auth"
+            },
+            {
+                "name": "com.amazonaws.ecs.capability.docker-remote-api.1.19"
+            },
+            {
+                "name": "com.amazonaws.ecs.capability.task-iam-role"
+            },
+            {
+                "name": "ecs.capability.execution-role-ecr-pull"
+            },
+            {
+                "name": "com.amazonaws.ecs.capability.docker-remote-api.1.18"
+            },
+            {
+                "name": "ecs.capability.task-eni"
+            }
+        ],
+        "placementConstraints": [],
+        "compatibilities": [
+            "EC2",
+            "FARGATE",
+            "MANAGED_INSTANCES"
+        ],
+        "requiresCompatibilities": [
+            "FARGATE"
+        ],
+        "cpu": "2048",
+        "memory": "4096",
+        "registeredAt": "2026-04-09T16:37:26.337000-04:00",
+        "registeredBy": "arn:aws:iam::690839588395:user/admin-user"
+    },
+    "tags": []
+}

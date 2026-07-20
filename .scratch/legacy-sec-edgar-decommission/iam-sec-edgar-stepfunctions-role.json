@@ -1,0 +1,27 @@
+{
+    "Role": {
+        "Path": "/",
+        "RoleName": "sec-edgar-stepfunctions-role",
+        "RoleId": "AROA2BWJ7RYVSBJFOJIMM",
+        "Arn": "arn:aws:iam::690839588395:role/sec-edgar-stepfunctions-role",
+        "CreateDate": "2026-04-09T18:16:27+00:00",
+        "AssumeRolePolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {
+                        "Service": "states.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole"
+                }
+            ]
+        },
+        "Description": "SEC EDGAR ingest pipeline role",
+        "MaxSessionDuration": 3600,
+        "RoleLastUsed": {
+            "LastUsedDate": "2026-07-19T06:08:22+00:00",
+            "Region": "us-east-1"
+        }
+    }
+}
