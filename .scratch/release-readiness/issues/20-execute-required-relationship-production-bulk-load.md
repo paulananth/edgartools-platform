@@ -80,7 +80,7 @@ resume notes.
 1. ~~Build + deploy **new** warehouse image from current `main`; register new task defs (**P3**: no redrive).~~ **Done** — warehouse `sha-b9e926e2d2b0`, MDM `sha256:f9796382…`, task defs `edgartools-prod-medium:27` / `edgartools-prod-mdm-medium:26`.
 2. ~~**Rebuild freeze** under agent windows (new fingerprint + `coverage_by_document_type`).~~ **Done** — fingerprint `abecbde87ce3d71d2cbbe6be9fc4a0679e46d28629c95ff2ff977bd93f3160b2`, 125,819 candidates / 12,444 CIKs, 125 batches, uploaded to `s3://edgartools-prod-bronze-690839588395/warehouse/bronze/reference/relationship_release/ticket20-agent-20260718T225510Z/` (originally on the prodb bucket; copied keys-preserved in the 2026-07-19 prodb→prod cutover — the SM input uses bucket-relative keys, so the frozen input and fingerprint are unchanged).
 3. ~~Preflight: `validate_relationship_release_manifest` → `READY_FOR_STRICT_LOAD`.~~ **Done** — `strict_release_eligible: true`.
-4. **In progress** — New strict SF execution (attestations in input); all batches succeed fail-closed. Execution `ticket20-strict-agent-20260718T225510Z`, started 2026-07-19T00:56:27Z, `RUNNING` as of last check (0/125 batches succeeded, 4 running, 121 pending).
+4. **Not done** — New strict SF execution (attestations in input); all batches succeed fail-closed. Both prior attempts FAILED and their names are consumed (**P3**: no redrive, never reuse): `ticket20-strict-agent-20260718T225510Z` and `ticket20-strict-gatev2-20260719T135202Z` (the latter died on `States.ExceedToleratedFailureThreshold` — 1 failed batch of 125 at 0% tolerance, fail-closed working as designed). Next attempt: brand-new name (`ticket20-strict-insider-<UTC-ts>`), staged on canonical `edgartools-prod-medium:31`, HELD for explicit operator go.
 5. Reconcile ledger + `required_relationship_bulk_load_evidence.json` PASS.
 6. MDM run/backfill/export/sync/verify; exact `EMPLOYED_BY` + `INSTITUTIONAL_HOLDS` parity.
 7. No-change rerun: zero SEC network, identical semantic digests.
@@ -97,3 +97,12 @@ Until those produce PASS evidence, leave status **open** / disposition
   `sec_platform_prod_runner_*`; deploys now target canonical names only.
 - Docker layer push to prod ECR failed on corrupted `uv` binary; **crane copy**
   from dev→prod ECR succeeded for digest `1b654302…`.
+- **Live monitoring (added 2026-07-19):** run
+  `uv run python scripts/ops/watch_release.py --env prod` alongside the launch.
+  It prints every state transition as it happens, Distributed Map batch counts
+  (succeeded/running/pending/failed — the strict Map's per-batch work is
+  invisible in the top-level execution history), ECS task IDs with
+  `tail-task.sh` hints, and any failed batch child with a ready-to-paste
+  `diagnose-execution.sh` command. Exit code mirrors the execution outcome.
+  Validated by replaying the `gatev2` failure end-to-end; unit-tested in
+  `tests/unit/test_watch_release.py`.
