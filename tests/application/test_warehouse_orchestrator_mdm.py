@@ -590,6 +590,63 @@ def test_merge_fails_closed_on_unclassified_table(tmp_path):
         merge_candidate_into_canonical(candidate, canonical, output)
 
 
+def test_thirteenf_filing_and_employment_event_are_classified(tmp_path):
+    """Regression (2026-07-20): sec_thirteenf_filing and sec_employment_event
+    were present in silver_store.py's DDL but missing from
+    PROTECTED_TABLE_REGISTRY, so every publish touching either table failed
+    closed with "Unclassified silver table(s) block publication" -- surfaced
+    by a real production bootstrap-fundamentals --mode company-identity run
+    against a silver.duckdb that already had 13F/employment-event data."""
+    from edgar_warehouse.silver_protection import merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+    ddl = (
+        "CREATE TABLE sec_thirteenf_filing "
+        "(accession_number TEXT PRIMARY KEY, ingested_at TIMESTAMPTZ);"
+        "CREATE TABLE sec_employment_event "
+        "(accession_number TEXT, event_index BIGINT, ingested_at TIMESTAMPTZ, "
+        "PRIMARY KEY (accession_number, event_index))"
+    )
+    _make_duckdb(canonical, ddl, [])
+    _make_duckdb(
+        candidate,
+        ddl,
+        [
+            "INSERT INTO sec_thirteenf_filing VALUES ('acc-1', '2026-01-01 00:00:00')",
+            "INSERT INTO sec_employment_event VALUES ('acc-2', 1, '2026-01-01 00:00:00')",
+        ],
+    )
+
+    result = merge_candidate_into_canonical(candidate, canonical, output)
+
+    assert result.rows_inserted["sec_thirteenf_filing"] == 1
+    assert result.rows_inserted["sec_employment_event"] == 1
+
+
+def test_every_silver_table_is_registered_or_excluded():
+    """Architecture lock: every CREATE TABLE in silver_store.py's DDL must be
+    either a ProtectedTablePolicy or an explicit operational exclusion --
+    the same gap that caused the sec_thirteenf_filing/sec_employment_event
+    regression must never silently reopen for a future table."""
+    import re
+
+    from edgar_warehouse import silver_store
+    from edgar_warehouse.silver_protection import (
+        EXCLUDED_OPERATIONAL_TABLES,
+        PROTECTED_TABLE_REGISTRY,
+    )
+
+    ddl_text = Path(silver_store.__file__).read_text(encoding="utf-8")
+    all_tables = set(re.findall(r"CREATE TABLE IF NOT EXISTS (\w+)", ddl_text))
+    assert all_tables, "expected to find silver table DDL"
+    unclassified = all_tables - set(PROTECTED_TABLE_REGISTRY) - set(EXCLUDED_OPERATIONAL_TABLES)
+    assert unclassified == set(), (
+        f"tables missing a ProtectedTablePolicy or exclusion: {sorted(unclassified)}"
+    )
+
+
 def test_merge_ignores_excluded_operational_tables(tmp_path):
     """Operational/checkpoint tables are excluded from protection, not blocked."""
     from edgar_warehouse.silver_protection import merge_candidate_into_canonical
