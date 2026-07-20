@@ -766,7 +766,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Runs after Branch A in load-history Step Functions because both "
             "paths publish the unified SEC silver database. "
             "Modes: per-filing (8-K/DEF 14A), entity-facts (XBRL companyfacts), "
-            "thirteenf (13F INFORMATION TABLE). Writes to the unified SEC silver database."
+            "thirteenf (13F INFORMATION TABLE), company-identity (master "
+            "identity, no ownership/ADV touched). Writes to the unified SEC "
+            "silver database."
         ),
     )
     bootstrap_fundamentals.add_argument(
@@ -794,14 +796,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     bootstrap_fundamentals.add_argument(
         "--mode",
-        choices=["per-filing", "entity-facts", "thirteenf"],
+        choices=["per-filing", "entity-facts", "thirteenf", "company-identity"],
         default="per-filing",
         help=(
             "Processing mode: "
             "per-filing = 8-K earnings + DEF 14A proxy (per-accession dispatch); "
             "entity-facts = SEC companyfacts API (CIK-level, writes sec_financial_fact); "
-            "thirteenf = 13F INFORMATION TABLE XML (writes sec_thirteenf_holding). "
-            "Default: per-filing"
+            "thirteenf = 13F INFORMATION TABLE XML (writes sec_thirteenf_holding); "
+            "company-identity = company master identity (reference tickers + "
+            "per-CIK submissions metadata), no ownership/ADV artifact fetch or "
+            "parse. Default: per-filing"
         ),
     )
     bootstrap_fundamentals.add_argument(

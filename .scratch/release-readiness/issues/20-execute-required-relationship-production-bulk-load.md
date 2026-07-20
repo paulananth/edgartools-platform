@@ -2,8 +2,17 @@
 
 Type: task
 Status: open
-Blocked by: none
+Blocked by: none (operator hold — see note below, not a wayfinder dependency edge)
 Blocks: 06
+
+**ON HOLD (2026-07-20, explicit operator decision):** do not relaunch until
+the "Company Identity Pipeline" wayfinder map
+(`.scratch/company-master-pipeline/map.md`) has progressed far enough to
+untangle the Company/Ownership/ADV coupling. The namespace-bug fix (13F
+holdings silently dropped by an edgartools parser bug) is merged and the
+strict release is otherwise staged and ready — this hold is a deliberate
+sequencing decision, not a blocker on Ticket 20's own readiness. See that
+map's Notes section for the full rationale.
 
 ## Task
 

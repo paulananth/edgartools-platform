@@ -22,6 +22,19 @@ thirteenf    Parse 13F INFORMATION TABLE XML attachments from bronze. Same Branc
              dependency and sequencing as per-filing.
              Output: sec_thirteenf_holding.
 
+company-identity Company master identity: global reference data
+             (company_tickers/company_tickers_exchange) plus per-CIK
+             submissions.json metadata. No Branch A dependency, and no
+             ownership/ADV artifact fetch or parse -- calls
+             _run_submissions_bronze_then_silver with its default
+             artifact_policy/parser_policy ("none"/"none"), so only the
+             form-agnostic silver staging that already happens for every
+             submission (sec_company, sec_company_filing,
+             sec_company_address, sec_company_former_name) runs; no
+             ownership/ADV accessions are touched.
+             Output: sec_company, sec_company_ticker, sec_company_filing,
+             sec_company_address, sec_company_former_name.
+
 Silver database
 ---------------
 Writes to the canonical SEC silver database under ``silver/sec/silver.duckdb``.
@@ -63,7 +76,7 @@ def execute(args: Any) -> int:
     if release_mode and not candidate_manifest:
         _err("bootstrap-fundamentals --release-mode requires --candidate-manifest")
         return 2
-    if release_mode and mode == "entity-facts":
+    if release_mode and mode in ("entity-facts", "company-identity"):
         _err("bootstrap-fundamentals --release-mode is only valid for per-filing or thirteenf")
         return 2
 
@@ -213,9 +226,45 @@ def execute(args: Any) -> int:
             )
             metrics.update(run_metrics)
 
+        elif mode == "company-identity":
+            from edgar_warehouse.application.warehouse_orchestrator import (
+                _merge_capture_network_metrics,
+                _run_submissions_bronze_then_silver,
+                _sync_reference_data,
+            )
+            fetch_date = started_at.date()
+            reference_metrics = _sync_reference_data(
+                context=context,
+                db=db,
+                sync_run_id=run_id,
+                fetch_date=fetch_date,
+            )
+            metrics["reference_rows_written"] = reference_metrics["rows_written"]
+            metrics["reference_rows_skipped"] = reference_metrics["rows_skipped"]
+            # artifact_policy/parser_policy default to "none": bronze submissions
+            # capture + form-agnostic silver staging (sec_company,
+            # sec_company_filing, sec_company_address, sec_company_former_name)
+            # only -- no ownership/ADV artifact fetch or parse.
+            run_metrics = _run_submissions_bronze_then_silver(
+                context=context,
+                db=db,
+                sync_run_id=run_id,
+                ciks=cik_list,
+                include_pagination=True,
+                fetch_date=fetch_date,
+                force=bool(getattr(args, "force", False)),
+                load_mode="company_identity",
+            )
+            metrics["rows_inserted"] = run_metrics["rows_written"]
+            metrics["rows_skipped"] = run_metrics["rows_skipped"]
+            _merge_capture_network_metrics(metrics, run_metrics)
+
         else:
             db.close()
-            _err(f"Unknown mode '{mode}'. Expected: per-filing | entity-facts | thirteenf")
+            _err(
+                "Unknown mode '{mode}'. Expected: per-filing | entity-facts | "
+                "thirteenf | company-identity".format(mode=mode)
+            )
             return 2
 
     except Exception as exc:
