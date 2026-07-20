@@ -16,6 +16,7 @@ those abort the whole merge with a row-level report instead.
 
 from __future__ import annotations
 
+import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +25,24 @@ from typing import Any
 import duckdb
 
 from edgar_warehouse.application.errors import WarehouseRuntimeError
+
+
+def _connect_bounded() -> duckdb.DuckDBPyConnection:
+    """Open an in-memory DuckDB connection with an explicit memory_limit.
+
+    Without one, DuckDB sizes its default buffer pool from what it detects as
+    total system memory, which is not guaranteed to respect an ECS/Fargate
+    task's cgroup memory limit -- the observed failure mode is a silent
+    OutOfMemoryError container kill (exit 137) with no DuckDB-level error to
+    catch or log. A conservative explicit ceiling, well under the task's
+    declared memory (4096MB for the warehouse-medium task definition as of
+    this writing), leaves headroom for the Python process's own overhead
+    (candidate row lists, etc.) and the container OS.
+    """
+    conn = duckdb.connect(":memory:")
+    limit_gb = os.environ.get("WAREHOUSE_SILVER_MERGE_MEMORY_LIMIT_GB", "2").strip()
+    conn.execute(f"SET memory_limit = '{int(limit_gb)}GB'")
+    return conn
 
 
 class SilverPublicationError(WarehouseRuntimeError):
@@ -238,9 +257,10 @@ def _matching_canonical_rows_as_dicts(
     table_name: str,
     business_keys: tuple[str, ...],
     columns: list[str],
+    candidate_rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Fetch only canonical ('out') rows whose business key also exists in the
-    candidate ('cand') table -- a semi-join, not a full table scan.
+    """Fetch only canonical ('out') rows whose business key also appears in
+    ``candidate_rows`` -- a targeted lookup, not a full table scan.
 
     A canonical row whose key is absent from the candidate can never be
     looked up by the merge loop below (it only ever queries keys drawn from
@@ -249,19 +269,33 @@ def _matching_canonical_rows_as_dicts(
     loading the full table into Python dicts on every publish -- regardless
     of how small the candidate is -- risks OOM in the bounded-memory
     ECS/Fargate task that runs this merge (observed: a 4-CIK
-    company-identity candidate silently killed the container here). The
-    join below returns at most as many rows as the candidate has, never
-    canonical's full size.
+    company-identity candidate silently killed the container with an
+    OutOfMemoryError).
+
+    Deliberately built as an explicit ``WHERE (keys) IN (VALUES ...)`` against
+    Python-side candidate keys -- already read into memory here since
+    candidate_rows is always small -- rather than a SQL JOIN against the
+    attached candidate table. An attached read-only database may not carry
+    fresh statistics for DuckDB's optimizer, and this avoids depending on it
+    picking canonical's 2M+-row table as the join's probe side rather than
+    its build side.
     """
+    if not candidate_rows:
+        return []
     quoted_table = _quote_ident(table_name)
-    cols_sql = ", ".join(f"out.{_quote_ident(c)}" for c in columns)
-    join_sql = " AND ".join(
-        f"out.{_quote_ident(k)} IS NOT DISTINCT FROM cand.{_quote_ident(k)}"
-        for k in business_keys
-    )
+    cols_sql = ", ".join(_quote_ident(c) for c in columns)
+    key_tuple_sql = "(" + ", ".join(_quote_ident(k) for k in business_keys) + ")"
+    placeholder_row = "(" + ", ".join("?" for _ in business_keys) + ")"
+    values_sql = ", ".join(placeholder_row for _ in candidate_rows)
+    params = [
+        value
+        for row in candidate_rows
+        for value in _key_tuple(row, business_keys)
+    ]
     result = conn.execute(
-        f"SELECT {cols_sql} FROM out.main.{quoted_table} AS out "
-        f"JOIN cand.main.{quoted_table} AS cand ON {join_sql}"
+        f"SELECT {cols_sql} FROM out.main.{quoted_table} "
+        f"WHERE {key_tuple_sql} IN (VALUES {values_sql})",
+        params,
     )
     return [dict(zip(columns, row)) for row in result.fetchall()]
 
@@ -297,7 +331,7 @@ def merge_candidate_into_canonical(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(canonical_path, output_path)
 
-    conn = duckdb.connect(":memory:")
+    conn = _connect_bounded()
     try:
         conn.execute(f"ATTACH '{output_path}' AS out")
         conn.execute(f"ATTACH '{candidate_path}' AS cand (READ_ONLY)")
@@ -368,7 +402,7 @@ def merge_candidate_into_canonical(
             canonical_by_key: dict[tuple[Any, ...], dict[str, Any]] = {
                 _key_tuple(row, policy.business_keys): row
                 for row in _matching_canonical_rows_as_dicts(
-                    conn, table_name, policy.business_keys, all_columns
+                    conn, table_name, policy.business_keys, all_columns, candidate_rows
                 )
             }
 
@@ -508,7 +542,7 @@ def plan_silver_repair(candidate_path: Path, canonical_path: Path, table_name: s
     This is the dry-run diff half of the repair contract -- safe to call at
     any time, never mutates either database.
     """
-    conn = duckdb.connect(":memory:")
+    conn = _connect_bounded()
     try:
         conn.execute(f"ATTACH '{candidate_path}' AS cand (READ_ONLY)")
         conn.execute(f"ATTACH '{canonical_path}' AS canon (READ_ONLY)")
@@ -568,7 +602,7 @@ def execute_silver_repair(
 
     if not output_path.exists():
         shutil.copy2(canonical_path, output_path)
-    conn = duckdb.connect(":memory:")
+    conn = _connect_bounded()
     try:
         conn.execute(f"ATTACH '{output_path}' AS out")
         conn.execute(f"ATTACH '{candidate_path}' AS cand (READ_ONLY)")
