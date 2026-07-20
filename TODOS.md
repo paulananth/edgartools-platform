@@ -5,6 +5,58 @@ context to act without re-reading the source session.
 
 ---
 
+## 13F namespace 5-whys (resolved 2026-07-20): edgartools silently dropped real holdings
+
+**Problem:** Ticket 20 strict execution `ticket20-strict-insider-20260720T020331Z`
+failed after ~2.5 hours: 1 of 125 batches exited with `States.TaskFailed`
+(exit code 2), and 0% tolerance fail-closed the whole Map/execution.
+
+1. **Why did the batch exit 2?** `fundamentals_ingest.py` raised
+   `WarehouseRuntimeError("required 13F candidate 0002000324-25-002721
+   produced zero holding rows")` — release mode's fail-closed check on
+   `parse_thirteenf`'s output.
+2. **Why zero holding rows?** `parse_thirteenf` calls edgartools'
+   `edgar.thirteenf.parsers.infotable_xml.parse_infotable_xml`, which returned
+   an empty DataFrame for this accession.
+3. **Why did edgartools return empty?** Direct reproduction against the real
+   filing (accession `0002000324-25-002721`, MANNING & NAPIER ADVISORS LLC,
+   CIK 62039) confirmed the XML has 304 real, populated `infoTable` entries —
+   not a legitimately empty/confidential-omission filing.
+4. **Why did the parser miss 304 real rows?** The filing declares
+   `xmlns:xsi="..."` *before* the real content namespace
+   (`xmlns:ns1=".../thirteenf/informationtable"`) and has no default
+   namespace. edgartools picks the content namespace via
+   `nsmap.get(None) or list(nsmap.values())[0]`; lxml's `nsmap` lists
+   declarations in document order, so `list(values())[0]` resolves to `xsi`,
+   not `ns1`. The subsequent `findall('.//infoTable', ...)` (wrong/no
+   namespace) then matches zero elements.
+5. **Why does this recur, not just once?** The accession prefix
+   `0002000324` is a filing-agent CIK used by multiple institutional
+   advisers; its software template consistently emits xsi-before-content
+   namespace XML. Counted **44 candidates in this freeze alone** sharing the
+   prefix (of 101,444 total 13F-HR/13F-HR-A candidates) — confirmed by
+   reproducing the identical bug on a second, unrelated accession from the
+   same agent (`0002000324-24-001104`, CIK 1861642, 840 holdings silently
+   dropped to 0). **Root cause: an upstream `edgartools` namespace-selection
+   bug, not a data or platform issue** — this repo depends on `edgartools`
+   from PyPI (not a local/forked path dependency; see CLAUDE.md), so the fix
+   lives in our own parser wrapper, not by patching the installed package.
+
+**Resolution:** `edgar_warehouse/parsers/thirteenf.py` adds
+`_reparse_with_xsi_namespace_stripped` — engaged only as a fallback when the
+unmodified XML already parsed to empty/None. It strips the `xmlns:xsi=...`
+declaration (referenced nowhere in the document body) so lxml's `nsmap` has
+a single entry, which the same edgartools fallback logic then resolves
+correctly. Because it only ever *retries* a parse that already returned
+empty, it can recover real holdings but can never fabricate rows for a
+genuinely empty filing (locked in by
+`tests/unit/test_thirteenf_infotable_parser.py::test_genuinely_empty_infotable_stays_empty`).
+Verified against both real production accessions (304 rows and 840 rows
+recovered, respectively) before relaunch. No upstream `edgartools` fix
+exists as of this writing — revisit removing the workaround once one ships.
+
+---
+
 ## INSTITUTIONAL_HOLDS full-universe sync: batch-by-CIK-range to avoid OOM
 
 **Status:** RESOLVED. Implemented in commit `decf6c9` ("feat(06-01): implement
