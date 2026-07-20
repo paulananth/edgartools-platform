@@ -120,3 +120,85 @@ def test_company_identity_mode_rejects_release_mode() -> None:
         force=False,
     )
     assert bootstrap_fundamentals.execute(args) == 2
+
+
+def test_company_identity_with_explicit_cik_list_skips_full_hydrate(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An explicit --cik-list never reads db.get_tracked_ciks(), so hydrating the
+    full canonical DB into the local working copy first only bloats the
+    candidate that _publish_silver_database_if_remote later merges -- a
+    full-size candidate defeats merge_candidate_into_canonical's bounded-
+    candidate assumption (observed in production: OOM against a 2M+-row
+    canonical). Skipping hydrate here keeps the candidate scoped to the CIKs
+    this run actually touches.
+    """
+    storage_root = tmp_path / "warehouse"
+    monkeypatch.setenv("EDGAR_IDENTITY", "EdgarTools Test test@example.com")
+    monkeypatch.setenv("WAREHOUSE_STORAGE_ROOT", str(storage_root))
+    monkeypatch.delenv("WAREHOUSE_BRONZE_ROOT", raising=False)
+    monkeypatch.delenv("WAREHOUSE_SILVER_ROOT", raising=False)
+
+    hydrate_calls: list[object] = []
+    monkeypatch.setattr(
+        warehouse_orchestrator,
+        "_hydrate_silver_database_from_storage",
+        lambda context: hydrate_calls.append(context),
+    )
+
+    args = SimpleNamespace(
+        cik_list=[CIK],
+        mode="company-identity",
+        run_id="test-skip-hydrate-run",
+        silver_root=None,
+        release_mode=False,
+        candidate_manifest=None,
+        cik_offset=0,
+        cik_limit=None,
+        force=False,
+    )
+
+    exit_code = bootstrap_fundamentals.execute(args)
+    assert exit_code == 0
+    assert hydrate_calls == []
+
+
+def test_company_identity_without_cik_list_still_hydrates(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without an explicit --cik-list (the windowed Step Functions Map case),
+    _resolve_fundamentals_ciks falls back to db.get_tracked_ciks() -- which
+    requires the tracked universe Branch A already wrote into canonical, so
+    hydrate must still run here.
+    """
+    storage_root = tmp_path / "warehouse"
+    monkeypatch.setenv("EDGAR_IDENTITY", "EdgarTools Test test@example.com")
+    monkeypatch.setenv("WAREHOUSE_STORAGE_ROOT", str(storage_root))
+    monkeypatch.delenv("WAREHOUSE_BRONZE_ROOT", raising=False)
+    monkeypatch.delenv("WAREHOUSE_SILVER_ROOT", raising=False)
+
+    hydrate_calls: list[object] = []
+    original_hydrate = warehouse_orchestrator._hydrate_silver_database_from_storage
+
+    def _tracking_hydrate(context):
+        hydrate_calls.append(context)
+        return original_hydrate(context)
+
+    monkeypatch.setattr(
+        warehouse_orchestrator, "_hydrate_silver_database_from_storage", _tracking_hydrate
+    )
+
+    args = SimpleNamespace(
+        cik_list=None,
+        mode="company-identity",
+        run_id="test-windowed-hydrate-run",
+        silver_root=None,
+        release_mode=False,
+        candidate_manifest=None,
+        cik_offset=0,
+        cik_limit=None,
+        force=False,
+    )
+
+    bootstrap_fundamentals.execute(args)
+    assert len(hydrate_calls) == 1
