@@ -5,6 +5,70 @@ context to act without re-reading the source session.
 
 ---
 
+## company-identity publish OOM 5-whys (resolved 2026-07-20): full-copy candidate defeats bounded merge
+
+**Problem:** A 4-CIK `bootstrap-fundamentals --mode company-identity` smoke test
+OOM-killed (exit 137) three times in a row in prod, even after two rounds of
+hardening `silver_protection.py`'s merge internals (a SQL-JOIN-based targeted
+canonical read in PR #211, then a parameterized `WHERE ... IN (VALUES ...)`
+rewrite plus an explicit DuckDB `memory_limit` in PR #212).
+
+1. **Why still OOM after two merge-side fixes?** Both fixes bounded the
+   *canonical* side of `merge_candidate_into_canonical`'s row lookup. Neither
+   touched `_rows_as_dicts(conn, "cand", table_name, all_columns)` (an
+   unconditional `SELECT *` on the candidate table), because that call's
+   docstring assumption — "the candidate is always small — a partial slice" —
+   held for every existing caller.
+2. **Why was that assumption wrong here?** `bootstrap_fundamentals.execute()`
+   unconditionally calls `_hydrate_silver_database_from_storage` before mode
+   dispatch, downloading the *entire* canonical `silver.duckdb` (2M+ rows in
+   `sec_company_filing`) into the local working DB first.
+3. **Why does that make the candidate large?** company-identity mode then
+   mutates that same full local copy in place for just 4 CIKs, and
+   `_publish_silver_database_if_remote` treats the *whole mutated file* as the
+   merge "candidate" — so `_rows_as_dicts("cand", ...)` materializes 2M+ rows
+   into Python dicts regardless of how few CIKs were actually touched.
+4. **Why did local testing pass at 200k rows and still fail at prod scale?**
+   The existing scale test (`test_merge_only_reads_canonical_rows_the_candidate_touches`)
+   put the large table on the *canonical* side — the side both prior fixes
+   targeted. Company-identity's bug puts the large table on the *candidate*
+   side, which no test exercised.
+5. **Root cause:** `bootstrap-fundamentals`'s hydrate-then-mutate-in-place
+   architecture (needed so windowed/no-`--cik-list` runs can resolve their CIK
+   batch from `db.get_tracked_ciks()`) is incompatible with
+   `merge_candidate_into_canonical`'s bounded-candidate assumption whenever a
+   mode processes a small subset of CIKs from an explicit `--cik-list`.
+
+**Resolution:** `bootstrap_fundamentals.execute()` now skips
+`_hydrate_silver_database_from_storage` specifically when
+`mode == "company-identity"` **and** an explicit `--cik-list` was given (the
+smoke-test/ad-hoc case) — `_resolve_fundamentals_ciks` never reads `db` on
+that path, so hydrate had zero benefit there, only cost. The windowed case
+(no `--cik-list`) still hydrates, since it needs the tracked universe.
+Verified locally: reproducing the bug shape (a full copy of the real 2.1M-row
+production canonical fed to `merge_candidate_into_canonical` as the
+candidate) never completed a merge that normally takes ~5 seconds even after
+3+ minutes and 500+MB of growth; the fix (hydrate skipped) is exercised end
+to end by `tests/application/test_bootstrap_company_identity.py::test_company_identity_with_explicit_cik_list_skips_full_hydrate`.
+Idempotency is preserved despite the empty local working DB: bronze-layer
+capture (`_capture_submissions_main`) falls back to
+`_read_bronze_by_glob_if_present` (a direct S3 check by CIK) when the local
+silver checkpoint is empty, so skipping hydrate does not cause redundant SEC
+downloads — confirmed by reading the code path before shipping this fix.
+
+**Known latent gap, not yet fixed:** `entity-facts` mode has the same "no
+Branch A dependency, calls SEC directly" shape as company-identity and goes
+through the identical hydrate → `_publish_silver_database_if_remote` →
+`merge_candidate_into_canonical` path. It carries the same full-copy-candidate
+OOM risk when invoked with an explicit `--cik-list` at prod canonical scale.
+Out of scope for this fix (unverified, not exercised by the current
+company-master-pipeline work) — apply the same guard
+(`mode in ("company-identity", "entity-facts") and raw_cik_list`) if/when
+`entity-facts` needs this hardening, and add a matching regression test
+first.
+
+---
+
 ## 13F namespace 5-whys (resolved 2026-07-20): edgartools silently dropped real holdings
 
 **Problem:** Ticket 20 strict execution `ticket20-strict-insider-20260720T020331Z`
