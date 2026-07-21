@@ -57,15 +57,24 @@ derivation already depends on resolved Company entities today
   — new `--mode company-identity` on the existing `bootstrap-fundamentals`
   command; reuses the unified silver DuckDB and existing idempotency, no new
   storage shape.
+- [Bulk mode state machine shape](issues/05-bulk-mode-state-machine-shape.md)
+  — woven into `load_history` as a new strict Stage 0 before Branch A
+  ownership bootstrap, `MaxConcurrency=1`, no dedicated MDM/graph or
+  gold-refresh step (feeds the existing single chains). Also surfaced and
+  fixed a prerequisite: the windowed Branch B publish path shared the same
+  full-copy-candidate OOM already fixed for company-identity's ad-hoc path
+  (see TODOS.md, PR #215) — a live landmine, since `load_history` and
+  `bootstrap` had zero prod executions ever.
+- [Daily mode state machine shape](issues/06-daily-mode-state-machine-shape.md)
+  — `daily_incremental` is restructured (not left untouched behind a
+  separate schedule) into a Company phase reusing ticket 05's exact windowed
+  capture, ahead of its existing pipeline; decisive because
+  `daily_incremental` also has zero prod executions ever.
 
 ## Not yet specified
 
 - ADV pipeline shape (own future map).
 - Ownership pipeline shape beyond what Ticket 20 already does (own future map).
-- Whether `daily_incremental`'s existing single-task, all-domains-bundled
-  shape gets restructured to match this pipeline's Company/Ownership/ADV
-  split, or whether Company Identity's daily mode runs as a wholly separate
-  schedule alongside the unmodified `daily_incremental`. Depends on ticket 06.
 
 ## Out of scope
 

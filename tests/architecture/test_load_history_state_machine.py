@@ -184,6 +184,52 @@ def test_bootstrap_next_and_compute_windows_use_the_same_tracking_status_filter(
     assert f"'--tracking-status-filter', '{LOAD_HISTORY_TRACKING_STATUS_FILTER}'" in per_window_cmd
 
 
+# -- Company Identity Pipeline wayfinder map, ticket 05: Stage0CompanyIdentity ---
+
+
+def test_stage0_company_identity_runs_after_compute_windows_before_stage1_parallel(
+    definition: dict,
+) -> None:
+    order = _linear_order(definition)
+    assert "ComputeWindows" in order
+    assert "Stage0CompanyIdentity" in order
+    assert "Stage1Parallel" in order
+    assert order.index("ComputeWindows") < order.index("Stage0CompanyIdentity")
+    assert order.index("Stage0CompanyIdentity") < order.index("Stage1Parallel")
+
+
+def test_stage0_company_identity_command_shape(definition: dict) -> None:
+    cmd = _command_of(definition, "Stage0CompanyIdentity")
+    assert "'bootstrap-fundamentals'" in cmd
+    assert "'--mode', 'company-identity'" in cmd
+    assert "'--cik-offset'" in cmd
+    assert "'--cik-limit'" in cmd
+
+
+def test_stage0_company_identity_is_strict_not_lenient(definition: dict) -> None:
+    """Unlike Branch B's lenient AD-13 pattern (Catch -> proceed anyway), a
+    company-identity failure must abort the run: IS_INSIDER derivation
+    depends on resolved Company entities, so silently proceeding with
+    unresolved company data would defeat this pipeline's purpose."""
+    state = definition["States"]["Stage0CompanyIdentity"]
+    assert state["Type"] == "Map"
+    assert state["MaxConcurrency"] == 1
+    assert state["ToleratedFailurePercentage"] == 0
+    assert "Catch" not in state
+
+
+def test_stage0_company_identity_reads_same_cik_windows_manifest(definition: dict) -> None:
+    """Reads the same cik_windows.jsonl ComputeWindows writes, so it processes
+    identical CIK windows to Branch A/B rather than an independently-resolved list."""
+    state = definition["States"]["Stage0CompanyIdentity"]
+    key_expr = state["ItemReader"]["Parameters"]["Key.$"]
+    branch_a_key_expr = (
+        definition["States"]["Stage1Parallel"]["Branches"][0]["States"]
+        ["WindowedBootstrap"]["ItemReader"]["Parameters"]["Key.$"]
+    )
+    assert key_expr == branch_a_key_expr
+
+
 # -- Issue 1 / 4: Branch B sequencing -----------------------------------------
 
 
