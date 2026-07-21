@@ -5,6 +5,56 @@ context to act without re-reading the source session.
 
 ---
 
+## former_name provenance-conflict 5-whys (resolved 2026-07-21): idempotent re-sync always aborted
+
+**Problem:** Immediately after fixing the company-identity publish OOM (below), the
+same 4-CIK smoke test failed again on the *next* deploy -- exit 1, not 137:
+`4 ambiguous same-key conflict(s) block publication: sec_company_former_name{cik,
+ordinal}: ['last_sync_run_id']`.
+
+1. **Why an ambiguous conflict?** `merge_candidate_into_canonical` flags a
+   same-key row as ambiguous whenever any non-key column differs and the
+   table has no declared `authority_column` to break the tie.
+2. **Why does `sec_company_former_name` have no authority_column?** Former
+   names are historical facts (a real correction deserves manual review, not
+   silent last-writer-wins) -- intentional, unlike every other
+   company-identity table (`sec_company`, `_address`, `_ticker`,
+   `_submission_file`, `_filing`), which all have one.
+3. **Why did a column differ when the business data (Apple's former name,
+   its change date) was identical?** `last_sync_run_id` -- a TEXT column
+   that records which run last touched the row, not business data -- gets a
+   fresh value on every run. The "differing" check compared *every*
+   non-key column, including this bookkeeping field.
+4. **Why did this never surface before?** Every prior company-identity run
+   against already-loaded CIKs was masked by the OOM (resolved just before
+   this) -- the merge never got far enough to reach former_name's
+   conflict check until that fix landed.
+5. **Root cause:** the conflict-detection comparison had no concept of
+   "write-provenance columns that are not business data" -- it conflated
+   "this row was re-touched" with "this row's content changed," so ANY
+   idempotent re-sync of an already-loaded CIK's former names aborted
+   forever, on every run, not just the smoke test.
+
+**Resolution:** `silver_protection.py` adds `_PROVENANCE_COLUMNS =
+frozenset({"last_sync_run_id"})`, excluded from the `differing` computation
+in `merge_candidate_into_canonical`'s merge loop. A same-key row whose only
+difference is `last_sync_run_id` now merges as unchanged (no-op); a real
+difference in `former_name`/`date_changed` still raises
+`SemanticMergeConflictError` -- fail-closed behavior on genuine conflicts is
+fully preserved (see
+`tests/application/test_warehouse_orchestrator_mdm.py::test_merge_still_raises_on_genuine_former_name_conflict`).
+Rejected two alternatives: declaring `authority_column="last_sync_run_id"`
+(a run_id is sometimes a UUID, sometimes timestamp-prefixed -- lexicographic
+`>` is not a reliable recency signal and could let a wrong side win on a
+real conflict); adding a `last_synced_at` timestamp column via schema
+migration (heavier, and would make former_name "latest always wins" on real
+conflicts, looser than its intentionally strict no-authority-column design).
+Verified against the real 2.1M-row production canonical, including a
+genuine two-pass re-sync (same 4 CIKs, second run with a fresh run_id) --
+both passes completed cleanly before this was deployed.
+
+---
+
 ## company-identity publish OOM 5-whys (resolved 2026-07-20): full-copy candidate defeats bounded merge
 
 **Problem:** A 4-CIK `bootstrap-fundamentals --mode company-identity` smoke test

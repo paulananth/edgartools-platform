@@ -163,6 +163,18 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
     ),
 }
 
+# Write-provenance columns (record which run last touched a row, not business
+# data) that never participate in same-key conflict detection, regardless of
+# whether a table declares an authority_column. A row whose only difference
+# is which run re-affirmed it is unchanged for every business purpose --
+# flagging that as an ambiguous conflict blocked every idempotent re-sync of
+# sec_company_former_name (the one table with no authority_column, so any
+# raw column difference -- including this bookkeeping field -- aborted the
+# merge). Tables that use last_synced_at/ingested_at/etc. as an authority
+# column are unaffected: that column is still compared, just via
+# _resolve_conflict rather than the plain-equality check here.
+_PROVENANCE_COLUMNS = frozenset({"last_sync_run_id"})
+
 # Ephemeral/operational tables explicitly excluded from semantic merge
 # protection: checkpoints, run-tracking, staging, and manifests. These are
 # operator/orchestrator bookkeeping, not canonical domain data -- a candidate
@@ -419,7 +431,9 @@ def merge_candidate_into_canonical(
                 differing = tuple(
                     c
                     for c in all_columns
-                    if c not in policy.business_keys and canon_row.get(c) != cand_row.get(c)
+                    if c not in policy.business_keys
+                    and c not in _PROVENANCE_COLUMNS
+                    and canon_row.get(c) != cand_row.get(c)
                 )
                 if not differing:
                     unchanged += 1
