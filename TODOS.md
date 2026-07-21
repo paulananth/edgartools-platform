@@ -5,6 +5,65 @@ context to act without re-reading the source session.
 
 ---
 
+## windowed publish OOM 5-whys (resolved 2026-07-21): full-copy candidate on any Branch B mode, not just company-identity
+
+**Problem:** While designing the Company Identity Pipeline bulk-mode state machine
+(wayfinder ticket 05), tracing `load_history`'s existing windowed Branch B stages
+(`entity-facts`, `per-filing`, `thirteenf`, all invoked via `--cik-offset`/
+`--cik-limit`, not `--cik-list`) revealed they go through the exact same
+hydrate-then-full-copy-as-candidate pattern already fixed for company-identity's
+ad-hoc `--cik-list` path -- but that fix (skip hydrate) only applies when
+`raw_cik_list` is present, which the windowed case never has (it needs
+`db.get_tracked_ciks()` to resolve its CIK window).
+
+1. **Why is this still a risk after the earlier fix?** The earlier fix
+   (`bootstrap_fundamentals.execute()` skipping hydrate) only covers the
+   explicit-`--cik-list` case. Windowed calls always hydrate the full 2M+-row
+   canonical DB, then `_publish_silver_database_if_remote` still hands that
+   whole file to the merge as "candidate."
+2. **Why hasn't this crashed already?** `edgartools-prod-load-history` and
+   `edgartools-prod-bootstrap` have **zero executions ever** (confirmed via
+   `aws stepfunctions list-executions`) -- the windowed Branch B path has
+   never actually run at today's canonical scale. It's a live landmine for
+   whichever pipeline runs it first, not a hypothetical.
+3. **Why not fix it the same way (skip hydrate)?** Windowed calls genuinely
+   need `db.get_tracked_ciks()` to resolve their CIK window -- hydrate can't
+   be skipped there without breaking CIK resolution.
+4. **Why not scope the candidate query by the resolved CIK window instead
+   (`WHERE cik IN (...)`, mirroring the canonical-side fix)?** Rejected:
+   `sec_company_ticker` (and any future full-universe reference sync) writes
+   rows for the *entire* ticker universe on every run, not just the current
+   CIK window -- scoping its candidate read by `cik IN (window)` would
+   silently discard legitimate new/changed reference rows for every CIK
+   outside the current window, a real data-loss regression on every run but
+   the last.
+5. **Root cause:** the candidate-side row fetch had no way to distinguish
+   "rows this run actually changed" from "rows that happen to be present in
+   a hydrated-then-mutated local file" -- and no single per-table marker
+   (CIK column, run-id column, or timestamp column) reliably captures that
+   distinction across every table's write shape (some are CIK-scoped per
+   run, some are full-universe refreshes; timestamp columns like
+   `ingested_at DEFAULT NOW()` only fire on INSERT, not UPDATE, so a
+   timestamp-based filter would have silently dropped real business-data
+   updates that didn't also bump their own timestamp).
+
+**Resolution:** Replaced the unconditional candidate fetch (`_rows_as_dicts`,
+`SELECT * FROM cand...`) with `_delta_rows_as_dicts`, which computes the
+delta via SQL `EXCEPT` (`SELECT ... FROM cand EXCEPT SELECT ... FROM out`) --
+DuckDB computes the row-level diff and only the actual delta materializes
+into Python, regardless of how large the full candidate table is. Correct
+uniformly for every table shape (CIK-scoped runs, full-universe reference
+syncs, genuinely small ad-hoc candidates) with no per-table marker-column
+logic to get right. Verified against the real 2.1M-row production canonical
+in the exact windowed shape (candidate = full copy of canonical with 2 rows
+changed): merge completed in ~11 seconds at ~34MB peak Python memory,
+versus the prior approach which never completed in 3+ minutes with 500+MB
+of growth on the same input. Locked in by
+`tests/application/test_warehouse_orchestrator_mdm.py::test_merge_only_reads_candidate_rows_that_actually_changed`
+(200K-row canonical, full-copy candidate, 2 rows changed).
+
+---
+
 ## former_name provenance-conflict 5-whys (resolved 2026-07-21): idempotent re-sync always aborted
 
 **Problem:** Immediately after fixing the company-identity publish OOM (below), the

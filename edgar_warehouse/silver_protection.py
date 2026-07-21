@@ -254,9 +254,36 @@ def _columns(conn: duckdb.DuckDBPyConnection, catalog: str, table_name: str) -> 
     return {row[0]: row[1] for row in rows}
 
 
-def _rows_as_dicts(conn: duckdb.DuckDBPyConnection, catalog: str, table_name: str, columns: list[str]) -> list[dict[str, Any]]:
+def _delta_rows_as_dicts(
+    conn: duckdb.DuckDBPyConnection, table_name: str, columns: list[str]
+) -> list[dict[str, Any]]:
+    """Candidate ('cand') rows that differ, in any column, from canonical
+    ('out') -- computed via SQL EXCEPT so only the delta materializes into
+    Python, not the full candidate table.
+
+    Some Branch B publish callers (bootstrap-fundamentals' windowed
+    --cik-offset/--cik-limit path: entity-facts, per-filing, thirteenf,
+    company-identity) hydrate the *entire* canonical DB before mutating a
+    handful of rows in place, so the "candidate" file can be as large as
+    canonical itself (2M+ rows in sec_company_filing) even when a run only
+    touches a few hundred CIKs. Fetching every candidate row unconditionally
+    (the previous approach) reads that whole table regardless of how much
+    actually changed -- the same class of OOM already fixed for the
+    canonical-side lookup below, but on the candidate side this time.
+    EXCEPT sidesteps needing to know which rows a run "should" have touched
+    (no cik-scoping, no run-id/timestamp bookkeeping to get right per table)
+    -- it just returns whatever's actually different, correct for both a
+    genuinely small candidate and a full hydrated copy alike, and correct
+    for tables like sec_company_ticker whose writes span the whole
+    reference-data universe rather than a single run's CIK window.
+    """
+    quoted_table = _quote_ident(table_name)
     cols_sql = ", ".join(_quote_ident(c) for c in columns)
-    result = conn.execute(f"SELECT {cols_sql} FROM {catalog}.main.{_quote_ident(table_name)}")
+    result = conn.execute(
+        f"SELECT {cols_sql} FROM cand.main.{quoted_table} "
+        f"EXCEPT "
+        f"SELECT {cols_sql} FROM out.main.{quoted_table}"
+    )
     return [dict(zip(columns, row)) for row in result.fetchall()]
 
 
@@ -407,7 +434,7 @@ def merge_candidate_into_canonical(
                 )
 
             all_columns = list(_columns(conn, "out", table_name).keys())
-            candidate_rows = _rows_as_dicts(conn, "cand", table_name, all_columns)
+            candidate_rows = _delta_rows_as_dicts(conn, table_name, all_columns)
             if not candidate_rows:
                 continue
 
