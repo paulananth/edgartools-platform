@@ -25,6 +25,7 @@ from typing import Any
 import duckdb
 
 from edgar_warehouse.application.errors import WarehouseRuntimeError
+from edgar_warehouse.silver_store import _DDL as _SILVER_SCHEMA_DDL
 
 
 def _connect_bounded() -> duckdb.DuckDBPyConnection:
@@ -400,37 +401,48 @@ def merge_candidate_into_canonical(
                 continue  # candidate has no data for this table; canonical copy stands.
 
             cand_columns = _columns(conn, "cand", table_name)
-            if table_name in out_tables:
-                out_columns = _columns(conn, "out", table_name)
-                missing = set(out_columns) - set(cand_columns)
-                if missing:
-                    raise SilverPublicationError(
-                        f"Candidate silver database drops canonical column(s) on "
-                        f"{table_name!r}: {sorted(missing)} (destructive schema change; "
-                        "use the explicit repair workflow instead)"
-                    )
-                type_mismatches = {
-                    c
-                    for c in out_columns
-                    if c in cand_columns and out_columns[c] != cand_columns[c]
-                }
-                if type_mismatches:
-                    raise SilverPublicationError(
-                        f"Candidate silver database changes column type(s) on "
-                        f"{table_name!r}: {sorted(type_mismatches)} (destructive schema "
-                        "change; use the explicit repair workflow instead)"
-                    )
-                # Additive: candidate may declare extra columns beyond canonical.
-                for extra_col in set(cand_columns) - set(out_columns):
-                    conn.execute(
-                        f"ALTER TABLE out.main.{_quote_ident(table_name)} "
-                        f"ADD COLUMN IF NOT EXISTS {_quote_ident(extra_col)} {cand_columns[extra_col]}"
-                    )
-            else:
+            if table_name not in out_tables:
                 # New classified domain table, first time it's being published.
+                # Create it from the canonical schema DDL (every statement is
+                # CREATE TABLE IF NOT EXISTS, so this is a no-op for tables
+                # that already exist) rather than a schema-inferring CTAS --
+                # CTAS only copies column names/types, not the PRIMARY
+                # KEY/NOT NULL constraints declared in silver_store.py's
+                # _DDL, which silently left canonical tables constraint-free
+                # and later broke any ON CONFLICT merge against them.
+                conn.execute("USE out")
+                conn.execute(_SILVER_SCHEMA_DDL)
+                conn.execute("USE memory")
+
+            # Schema reconciliation applies identically whether the table
+            # already existed or was just created above: a first-publish
+            # candidate must satisfy the same DDL-declared columns as any
+            # later publish, so an inconsistent candidate fails closed here
+            # instead of crashing deep inside the delta query below.
+            out_columns = _columns(conn, "out", table_name)
+            missing = set(out_columns) - set(cand_columns)
+            if missing:
+                raise SilverPublicationError(
+                    f"Candidate silver database drops canonical column(s) on "
+                    f"{table_name!r}: {sorted(missing)} (destructive schema change; "
+                    "use the explicit repair workflow instead)"
+                )
+            type_mismatches = {
+                c
+                for c in out_columns
+                if c in cand_columns and out_columns[c] != cand_columns[c]
+            }
+            if type_mismatches:
+                raise SilverPublicationError(
+                    f"Candidate silver database changes column type(s) on "
+                    f"{table_name!r}: {sorted(type_mismatches)} (destructive schema "
+                    "change; use the explicit repair workflow instead)"
+                )
+            # Additive: candidate may declare extra columns beyond canonical.
+            for extra_col in set(cand_columns) - set(out_columns):
                 conn.execute(
-                    f"CREATE TABLE out.main.{_quote_ident(table_name)} AS "
-                    f"SELECT * FROM cand.main.{_quote_ident(table_name)} WHERE 1=0"
+                    f"ALTER TABLE out.main.{_quote_ident(table_name)} "
+                    f"ADD COLUMN IF NOT EXISTS {_quote_ident(extra_col)} {cand_columns[extra_col]}"
                 )
 
             all_columns = list(_columns(conn, "out", table_name).keys())
