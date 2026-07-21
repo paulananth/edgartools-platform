@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -573,6 +574,68 @@ def test_merge_only_reads_canonical_rows_the_candidate_touches(tmp_path):
     assert total == 200001
     assert str(updated_row[0]).startswith("2026-02-01")
     assert str(untouched_row[0]).startswith("2026-01-01")  # untouched canonical row preserved
+
+
+def test_merge_only_reads_candidate_rows_that_actually_changed(tmp_path):
+    """Regression (2026-07-21): bootstrap-fundamentals' windowed
+    (--cik-offset/--cik-limit) publish path -- used by entity-facts,
+    per-filing, thirteenf, and now company-identity's bulk mode -- hydrates
+    the FULL canonical DB before mutating a handful of rows in place, so the
+    "candidate" file can be as large as canonical itself even when a run
+    only touches a few hundred CIKs. The previous fix
+    (test_merge_only_reads_canonical_rows_the_candidate_touches) only bounded
+    the canonical-side lookup; it assumed the candidate itself was already
+    small, which doesn't hold for this shape. Prove the delta-based fetch
+    handles a full-copy candidate (canonical-sized, mostly identical to
+    canonical) without materializing the untouched rows."""
+    from edgar_warehouse.silver_protection import merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+    ddl = "CREATE TABLE sec_company_filing (accession_number TEXT PRIMARY KEY, cik BIGINT, last_synced_at TIMESTAMPTZ)"
+
+    conn = duckdb.connect(str(canonical))
+    conn.execute(ddl)
+    conn.execute(
+        "INSERT INTO sec_company_filing "
+        "SELECT 'acc-' || i, i, TIMESTAMP '2026-01-01 00:00:00' "
+        "FROM range(200000) AS t(i)"
+    )
+    conn.close()
+
+    # Candidate = a full copy of canonical (the windowed hydrate-then-mutate
+    # shape), with just two rows changed: one existing key updated, one brand
+    # new key inserted -- everything else byte-identical to canonical.
+    shutil.copy2(canonical, candidate)
+    conn = duckdb.connect(str(candidate))
+    conn.execute(
+        "UPDATE sec_company_filing SET last_synced_at = '2026-02-01 00:00:00' "
+        "WHERE accession_number = 'acc-5'"
+    )
+    conn.execute(
+        "INSERT INTO sec_company_filing VALUES ('acc-brand-new', 999999, '2026-02-01 00:00:00')"
+    )
+    conn.close()
+
+    result = merge_candidate_into_canonical(candidate, canonical, output)
+
+    assert result.rows_inserted["sec_company_filing"] == 1
+    assert result.rows_updated["sec_company_filing"] == 1
+    assert result.rows_unchanged.get("sec_company_filing", 0) == 0
+
+    conn = duckdb.connect(str(output))
+    total = conn.execute("SELECT COUNT(*) FROM sec_company_filing").fetchone()[0]
+    updated_row = conn.execute(
+        "SELECT last_synced_at FROM sec_company_filing WHERE accession_number = 'acc-5'"
+    ).fetchone()
+    untouched_row = conn.execute(
+        "SELECT last_synced_at FROM sec_company_filing WHERE accession_number = 'acc-6'"
+    ).fetchone()
+    conn.close()
+    assert total == 200001
+    assert str(updated_row[0]).startswith("2026-02-01")
+    assert str(untouched_row[0]).startswith("2026-01-01")  # untouched row preserved
 
 
 def test_merge_resolves_same_key_conflict_via_declared_authority_column(tmp_path):
