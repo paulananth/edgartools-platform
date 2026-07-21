@@ -633,6 +633,73 @@ def test_merge_raises_row_level_conflict_report_when_ambiguous(tmp_path):
     assert conflicts[0].differing_columns == ("adviser_name",)
 
 
+def test_merge_ignores_provenance_only_difference_on_no_authority_table(tmp_path):
+    """sec_company_former_name has no authority_column: a same-key row that
+    differs only in last_sync_run_id (which run re-affirmed it, not business
+    data) must merge as unchanged, not abort as an ambiguous conflict --
+    otherwise every idempotent re-sync of an already-loaded CIK's former
+    names would fail forever.
+    """
+    from edgar_warehouse.silver_protection import merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+    ddl = (
+        "CREATE TABLE sec_company_former_name (cik BIGINT, former_name TEXT, "
+        "date_changed DATE, ordinal INTEGER, last_sync_run_id TEXT, "
+        "PRIMARY KEY (cik, ordinal))"
+    )
+    _make_duckdb(
+        canonical, ddl,
+        ["INSERT INTO sec_company_former_name VALUES (320193, 'APPLE COMPUTER INC', '1997-01-01', 1, 'old-run-id')"],
+    )
+    _make_duckdb(
+        candidate, ddl,
+        ["INSERT INTO sec_company_former_name VALUES (320193, 'APPLE COMPUTER INC', '1997-01-01', 1, 'fresh-run-id')"],
+    )
+
+    result = merge_candidate_into_canonical(candidate, canonical, output)
+
+    assert result.rows_unchanged["sec_company_former_name"] == 1
+    assert result.rows_updated.get("sec_company_former_name", 0) == 0
+
+
+def test_merge_still_raises_on_genuine_former_name_conflict(tmp_path):
+    """A real difference in business data (former_name itself) on a table
+    with no authority_column must still fail closed for manual review, even
+    though provenance-only differences (test above) no longer do -- proves
+    excluding last_sync_run_id from conflict detection didn't also mask real
+    conflicts.
+    """
+    from edgar_warehouse.silver_protection import SemanticMergeConflictError, merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+    ddl = (
+        "CREATE TABLE sec_company_former_name (cik BIGINT, former_name TEXT, "
+        "date_changed DATE, ordinal INTEGER, last_sync_run_id TEXT, "
+        "PRIMARY KEY (cik, ordinal))"
+    )
+    _make_duckdb(
+        canonical, ddl,
+        ["INSERT INTO sec_company_former_name VALUES (320193, 'APPLE COMPUTER INC', '1997-01-01', 1, 'old-run-id')"],
+    )
+    _make_duckdb(
+        candidate, ddl,
+        ["INSERT INTO sec_company_former_name VALUES (320193, 'APPLE COMPUTER INCORPORATED', '1997-01-01', 1, 'fresh-run-id')"],
+    )
+
+    with pytest.raises(SemanticMergeConflictError) as exc_info:
+        merge_candidate_into_canonical(candidate, canonical, output)
+
+    conflicts = exc_info.value.conflicts
+    assert len(conflicts) == 1
+    assert conflicts[0].table_name == "sec_company_former_name"
+    assert conflicts[0].differing_columns == ("former_name",)
+
+
 def test_merge_fails_closed_on_unclassified_table(tmp_path):
     from edgar_warehouse.silver_protection import SilverPublicationError, merge_candidate_into_canonical
 
