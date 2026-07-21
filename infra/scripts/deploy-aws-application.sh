@@ -1656,7 +1656,65 @@ artifact_policy_default = {
 # $.window_size and $.total_cik_limit are present by the time this state runs.
 compute_windows = ecs_state(wh_medium_arn,
     "States.Array('compute-windows', '--window-size', States.Format('{}', $.window_size), '--total-cik-limit', States.Format('{}', $.total_cik_limit), '--run-id', $$.Execution.Name)",
-    next_state="Stage1Parallel")
+    next_state="Stage0CompanyIdentity")
+
+# (3b) Stage0CompanyIdentity: Company Identity capture -- global reference data
+# (company_tickers/company_tickers_exchange) plus per-CIK submissions.json
+# metadata, decoupled from ownership (Form 3/4/5 + 13F) and ADV (Company
+# Identity Pipeline wayfinder map, ticket 05). Runs BEFORE Branch A/B: the
+# map's destination requires company data to land before ownership/ADV,
+# since IS_INSIDER relationship derivation already depends on resolved
+# Company entities (_derive_is_insider skips unresolved issuers). No
+# dedicated MDM/graph stage here -- the existing MdmRun(--entity-type all)
+# further down already resolves companies as part of its sweep
+# (run_all() calls run_companies()), so a separate --entity-type company
+# call would just redo that work.
+#
+# Same windowed/DISTRIBUTED Map shape as Branch A/B (per-window
+# bootstrap-fundamentals --mode company-identity, reading the same
+# cik_windows.jsonl ComputeWindows just wrote), same MaxConcurrency=1 (all
+# Branch A/B/Company-Identity stages write the same S3-backed unified silver
+# DuckDB file -- concurrent writers risk a lost publish). Unlike Branch B's
+# lenient AD-13 pattern (Stage1BEntityFacts/PerFiling/ThirteenF Catch and
+# proceed on failure), this stage is STRICT like Branch A
+# (ToleratedFailurePercentage=0, no Catch): silently proceeding past a
+# company-identity failure would let ownership/MDM run against unresolved
+# company data, the exact coupling problem this pipeline exists to untangle.
+#
+# NOTE: write_warehouse_mdm_gold_definition's daily_incremental branch below
+# builds an identical Stage0CompanyIdentity Map (ticket 06 reuses this exact
+# shape) in a separate Python heredoc -- these two functions can't share code
+# directly (each is its own `python3 -` subprocess), so a shape change here
+# (command flags, failure-handling policy, ItemReader key expression) must be
+# mirrored there too.
+per_window_company_identity = ecs_state(wh_medium_arn,
+    "States.Array('bootstrap-fundamentals', '--mode', 'company-identity', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
+    is_end=True)
+
+stage0_company_identity = {
+    "Type": "Map",
+    "Comment": "Stage 0: Company Identity capture (MaxConcurrency=1, strict) -- runs before ownership/ADV so IS_INSIDER derivation sees resolved Company entities.",
+    "MaxConcurrency": 1,
+    "ToleratedFailurePercentage": 0,
+    "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
+        "Parameters": {
+            "Bucket": bronze_bucket_name,
+            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)",
+        },
+    },
+    "ItemProcessor": {
+        "ProcessorConfig": {
+            "Mode": "DISTRIBUTED",
+            "ExecutionType": "STANDARD",
+        },
+        "StartAt": "RunCompanyIdentityWindow",
+        "States": {"RunCompanyIdentityWindow": per_window_company_identity},
+    },
+    "ResultPath": None,
+    "Next": "Stage1Parallel",
+}
 
 # (4) Stage1Parallel: Branch A ownership bootstrap. Branch B fundamentals is
 # intentionally sequenced after this state because all Branch B modes now write
@@ -1888,6 +1946,9 @@ definition = {
         "(mdm seed-universe — data-architecture Issue 2), (2) inject window_size default if "
         "absent, (3) compute CIK windows for tracking_status active-or-bootstrap_pending + write "
         "manifests to S3, "
+        "(3b) Stage0CompanyIdentity — Company Identity capture (Company Identity Pipeline "
+        "wayfinder map, ticket 05), strict, runs before ownership/ADV so IS_INSIDER derivation "
+        "sees resolved Company entities, "
         "(4) Stage1Parallel — Branch A ownership (bootstrap-next) writes unified SEC silver, "
         "(4b) Stage1BEntityFacts then (4c) Stage1BPerFiling then Stage1BThirteenF — Branch B "
         "fundamentals modes run sequentially after Branch A because they share the same silver "
@@ -1909,6 +1970,7 @@ definition = {
         "ArtifactPolicyCheck":   artifact_policy_check,
         "ArtifactPolicyDefault": artifact_policy_default,
         "ComputeWindows":    compute_windows,
+        "Stage0CompanyIdentity": stage0_company_identity,
         "Stage1Parallel":    stage1_parallel,
         "Stage1BEntityFacts": fundamentals_entity_facts,
         "Stage1BPerFiling":  fundamentals_per_filing,
@@ -1936,17 +1998,18 @@ write_warehouse_mdm_gold_definition() {
   local mdm_task_medium_arn="$4"  # mdm medium (run, backfill, sync)
   local wh_task_large_arn="$5"    # warehouse large (gold-refresh)
   local workflow_name="$6"        # e.g. bootstrap or daily_incremental
+  local bronze_bucket_name="$7"   # daily_incremental's Stage0CompanyIdentity ItemReader
 
   python3 - "$output_file" "$CLUSTER_ARN" \
     "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
-    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$workflow_name" <<'PY'
+    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$workflow_name" "$bronze_bucket_name" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
  container_name, subnet_json, security_group_json,
- mdm_run_limit, mdm_graph_limit, workflow_name) = sys.argv[1:]
+ mdm_run_limit, mdm_graph_limit, workflow_name, bronze_bucket_name) = sys.argv[1:]
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
@@ -2038,13 +2101,72 @@ if workflow_name != "daily_incremental":
         },
     }
 else:
+    # Stage0CompanyIdentity: Company Identity Pipeline wayfinder map, ticket 06.
+    # Reuses ticket 05's exact windowed capture shape (a strict, MaxConcurrency=1
+    # Map calling bootstrap-fundamentals --mode company-identity over windows
+    # ComputeWindows just wrote), ahead of the existing RunWarehouseTask/MDM
+    # chain, so company data is current before the existing
+    # mdm-run(--entity-type all) resolves companies as part of its sweep
+    # (run_all() calls run_companies()) -- no separate --entity-type company
+    # call needed. daily_incremental had zero prod executions ever (confirmed
+    # via list-executions), so this is a clean restructure, not a migration
+    # of live behavior.
+    #
+    # No SeedUniverse/MdmSeedUniverse here, matching daily_incremental's
+    # existing choice to skip seed-universe entirely -- it processes the
+    # already-tracked universe for daily updates, not newly-discovered CIKs.
+    # window_size/total_cik_limit are fixed literals (not SM-input-
+    # configurable like load_history's WindowSizeCheck/TotalCikLimitCheck):
+    # daily_incremental is a scheduled job that always runs the same shape,
+    # unlike load_history's operator-triggered, variously-scoped ad-hoc runs.
+    #
+    # NOTE: write_load_history_definition's Stage0CompanyIdentity (see its
+    # per_window_company_identity comment) builds this exact same shape in a
+    # separate Python heredoc -- keep the two in sync on any change.
+    compute_windows = ecs_state(wh_medium_arn,
+        "States.Array('compute-windows', '--window-size', '500', '--total-cik-limit', '0', "
+        "'--run-id', $$.Execution.Name)",
+        next_state="Stage0CompanyIdentity")
+
+    per_window_company_identity = ecs_state(wh_medium_arn,
+        "States.Array('bootstrap-fundamentals', '--mode', 'company-identity', "
+        "'--cik-offset', States.Format('{}', $.window_offset), "
+        "'--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
+        is_end=True)
+
+    stage0_company_identity = {
+        "Type": "Map",
+        "Comment": "Stage 0: Company Identity capture (MaxConcurrency=1, strict) -- same shape as load_history's ticket 05 stage.",
+        "MaxConcurrency": 1,
+        "ToleratedFailurePercentage": 0,
+        "ItemReader": {
+            "Resource": "arn:aws:states:::s3:getObject",
+            "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
+            "Parameters": {
+                "Bucket": bronze_bucket_name,
+                "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)",
+            },
+        },
+        "ItemProcessor": {
+            "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
+            "StartAt": "RunCompanyIdentityWindow",
+            "States": {"RunCompanyIdentityWindow": per_window_company_identity},
+        },
+        "ResultPath": None,
+        "Next": "RunWarehouseTask",
+    }
+
     definition = {
         "Comment": (
-            f"{display}: (1) bronze+silver capture, (2) MDM entity resolution + Neo4j sync, "
+            f"{display}: (0) compute CIK windows, (0b) Stage0CompanyIdentity -- Company Identity "
+            "capture, strict, runs before ownership/ADV so IS_INSIDER derivation sees resolved "
+            "Company entities, (1) bronze+silver capture, (2) MDM entity resolution + Neo4j sync, "
             "(3) gold build + Snowflake export manifest."
         ),
-        "StartAt": "RunWarehouseTask",
+        "StartAt": "ComputeWindows",
         "States": {
+            "ComputeWindows":    compute_windows,
+            "Stage0CompanyIdentity": stage0_company_identity,
             "RunWarehouseTask": run_wh,
             "MdmRun":           mdm_run,
             "MdmBackfill":      mdm_backfill,
@@ -2737,7 +2859,7 @@ PY
   recent10_definition_file="$(json_file sfn-bootstrap)"
   write_warehouse_mdm_gold_definition "$recent10_definition_file" \
     "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
-    "bootstrap"
+    "bootstrap" "$BRONZE_BUCKET_NAME"
   recent10_state_machine_arn="$(upsert_state_machine bootstrap "$recent10_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
   python3 - "bootstrap" "$recent10_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
@@ -2749,7 +2871,7 @@ PY
   daily_definition_file="$(json_file sfn-daily-incremental)"
   write_warehouse_mdm_gold_definition "$daily_definition_file" \
     "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
-    "daily_incremental"
+    "daily_incremental" "$BRONZE_BUCKET_NAME"
   daily_state_machine_arn="$(upsert_state_machine daily_incremental "$daily_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
   python3 - "daily_incremental" "$daily_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
