@@ -638,6 +638,81 @@ def test_merge_only_reads_candidate_rows_that_actually_changed(tmp_path):
     assert str(untouched_row[0]).startswith("2026-01-01")  # untouched row preserved
 
 
+def test_merge_first_publish_of_new_classified_table_preserves_primary_key(tmp_path):
+    """Regression (2026-07-21): the "new classified domain table, first time
+    it's being published" branch created the canonical-side table via
+    ``CREATE TABLE ... AS SELECT * FROM cand ... WHERE 1=0``, which copies
+    column names/types but drops PRIMARY KEY/NOT NULL constraints. Production
+    canonical silver.duckdb ended up with sec_employment_event and
+    sec_thirteenf_filing carrying zero constraints (confirmed via
+    duckdb_constraints()), so a later INSERT ... ON CONFLICT against either
+    table failed with "specified columns as conflict target are not
+    referenced by a UNIQUE/PRIMARY KEY CONSTRAINT" even on an empty table --
+    DuckDB validates the ON CONFLICT target against the schema, not the
+    data. Canonical starts here with the table entirely absent (the true
+    first-publish shape); the merged output's table must carry the same
+    PRIMARY KEY declared in silver_store.py's _DDL."""
+    from edgar_warehouse.silver_protection import merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+
+    # Canonical has no tables at all yet -- sec_employment_event has never
+    # been published, matching the actual production first-publish gap.
+    duckdb.connect(str(canonical)).close()
+
+    ddl = """
+    CREATE TABLE sec_employment_event (
+        accession_number    TEXT NOT NULL,
+        event_index         BIGINT NOT NULL,
+        cik                 BIGINT NOT NULL,
+        event_type          TEXT NOT NULL,
+        person_name         TEXT NOT NULL,
+        exec_role           TEXT,
+        previous_role       TEXT,
+        compensation_amount DOUBLE,
+        effective_date      DATE NOT NULL,
+        parser_version      TEXT NOT NULL,
+        ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (accession_number, event_index)
+    )
+    """
+    _make_duckdb(
+        candidate,
+        ddl,
+        [
+            "INSERT INTO sec_employment_event VALUES "
+            "('acc-1', 0, 1, 'appointment', 'Jane Doe', 'CEO', NULL, NULL, "
+            "'2026-01-01', 'v1', '2026-01-01 00:00:00')"
+        ],
+    )
+
+    result = merge_candidate_into_canonical(candidate, canonical, output)
+    assert result.rows_inserted["sec_employment_event"] == 1
+
+    conn = duckdb.connect(str(output))
+    pk = conn.execute(
+        "SELECT constraint_column_names FROM duckdb_constraints() "
+        "WHERE table_name = 'sec_employment_event' AND constraint_type = 'PRIMARY KEY'"
+    ).fetchall()
+    assert pk == [(["accession_number", "event_index"],)]
+
+    # The constraint must actually be enforced, not merely reported -- an
+    # INSERT ... ON CONFLICT against these exact columns must bind cleanly.
+    conn.execute(
+        "INSERT INTO sec_employment_event VALUES "
+        "('acc-1', 0, 1, 'appointment', 'Jane Doe Updated', 'CEO', NULL, NULL, "
+        "'2026-01-01', 'v2', '2026-02-01 00:00:00') "
+        "ON CONFLICT (accession_number, event_index) DO UPDATE SET person_name = EXCLUDED.person_name"
+    )
+    updated = conn.execute(
+        "SELECT person_name FROM sec_employment_event WHERE accession_number = 'acc-1' AND event_index = 0"
+    ).fetchone()
+    conn.close()
+    assert updated == ("Jane Doe Updated",)
+
+
 def test_merge_resolves_same_key_conflict_via_declared_authority_column(tmp_path):
     from edgar_warehouse.silver_protection import merge_candidate_into_canonical
 
@@ -921,7 +996,13 @@ def test_merge_fails_closed_on_column_type_change(tmp_path):
 
 
 def test_merge_publishes_a_new_classified_table_for_the_first_time(tmp_path):
-    """A classified table that simply doesn't exist in canonical yet is not 'unclassified'."""
+    """A classified table that simply doesn't exist in canonical yet is not
+    'unclassified'. The candidate here declares the real production DDL
+    columns (matching silver_store.py's sec_thirteenf_holding schema) since
+    a real candidate is always built via SilverDatabase, which uses that
+    same DDL -- the first-publish branch now enforces the same
+    dropped-column check as any later publish, so a candidate schema must
+    satisfy it."""
     from edgar_warehouse.silver_protection import merge_candidate_into_canonical
 
     canonical = tmp_path / "canonical.duckdb"
@@ -930,10 +1011,33 @@ def test_merge_publishes_a_new_classified_table_for_the_first_time(tmp_path):
     _make_duckdb(canonical, "CREATE TABLE sec_company (cik BIGINT PRIMARY KEY, entity_name TEXT)", [])
     _make_duckdb(
         candidate,
-        "CREATE TABLE sec_thirteenf_holding ("
-        "cik BIGINT, accession_number TEXT, holding_index BIGINT, issuer_name TEXT, "
-        "PRIMARY KEY (cik, accession_number, holding_index))",
-        ["INSERT INTO sec_thirteenf_holding VALUES (1, 'acc-1', 1, 'Issuer X')"],
+        """
+        CREATE TABLE sec_thirteenf_holding (
+            cik                 BIGINT NOT NULL,
+            accession_number    TEXT NOT NULL,
+            holding_index       BIGINT NOT NULL,
+            period_of_report    DATE NOT NULL,
+            cusip               TEXT,
+            issuer_name         TEXT,
+            security_title      TEXT,
+            shares_held         DOUBLE,
+            market_value        DOUBLE,
+            security_class      TEXT,
+            put_call            TEXT,
+            discretion_type     TEXT,
+            voting_auth_sole    DOUBLE,
+            voting_auth_shared  DOUBLE,
+            voting_auth_none    DOUBLE,
+            parser_version      TEXT,
+            ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+            PRIMARY KEY (cik, accession_number, holding_index)
+        )
+        """,
+        [
+            "INSERT INTO sec_thirteenf_holding "
+            "(cik, accession_number, holding_index, period_of_report, issuer_name) "
+            "VALUES (1, 'acc-1', 1, '2026-01-01', 'Issuer X')"
+        ],
     )
 
     result = merge_candidate_into_canonical(candidate, canonical, output)
@@ -941,8 +1045,13 @@ def test_merge_publishes_a_new_classified_table_for_the_first_time(tmp_path):
 
     conn = duckdb.connect(str(output))
     rows = conn.execute("SELECT issuer_name FROM sec_thirteenf_holding").fetchall()
+    pk = conn.execute(
+        "SELECT constraint_column_names FROM duckdb_constraints() "
+        "WHERE table_name = 'sec_thirteenf_holding' AND constraint_type = 'PRIMARY KEY'"
+    ).fetchall()
     conn.close()
     assert rows == [("Issuer X",)]
+    assert pk == [(["cik", "accession_number", "holding_index"],)]
 
 
 # ---------------------------------------------------------------------------
