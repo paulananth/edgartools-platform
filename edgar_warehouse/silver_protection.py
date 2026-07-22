@@ -61,6 +61,15 @@ class ProtectedTablePolicy:
     # declared tiebreak column -- any same-key value difference is always
     # ambiguous and aborts the merge for manual review.
     authority_column: str | None = None
+    # Columns that record *where this row was first/most-recently observed*
+    # rather than the row's own business data -- excluded from same-key
+    # conflict detection for this table only (unlike the global
+    # _PROVENANCE_COLUMNS, which would be wrong to apply broadly: the same
+    # column name can be load-bearing business data on one table and pure
+    # provenance on another). Declared per-table because "is this column
+    # identity or provenance" depends on the table's own key semantics, not
+    # the column name alone.
+    provenance_columns: frozenset[str] = frozenset()
 
 
 # Reviewed, fail-closed registry of every canonical domain table in the
@@ -122,7 +131,27 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
         "sec_pcaob_firm_identity", ("pcaob_firm_id", "snapshot_sha256")
     ),
     "sec_raw_object": ProtectedTablePolicy(
-        "sec_raw_object", ("raw_object_id",), authority_column="fetched_at"
+        "sec_raw_object",
+        ("raw_object_id",),
+        authority_column="fetched_at",
+        # raw_object_id is a content hash (silver_store.py: sha256 of the
+        # fetched bytes) -- identical byte content legitimately recurs across
+        # different filings (shared boilerplate/exhibit templates, common
+        # XBRL taxonomy files), so cik/accession_number/source_url/
+        # storage_path record only *where this content was first observed*,
+        # not which filing(s) it belongs to -- that real linkage lives in
+        # sec_filing_attachment (accession_number, document_name ->
+        # raw_object_id), independent of these columns. Regression
+        # (2026-07-22): Ticket 20 aborted a batch that had already fetched
+        # all 789/789 required accessions cleanly, on 10 rows where the same
+        # content hash reappeared under a different accession than
+        # canonical's first-seen record -- fetched_at authority never
+        # resolves this class of conflict (both sides carry the same
+        # original first-fetch timestamp), so without this exclusion every
+        # such recurrence is a permanent, unresolvable ambiguous conflict.
+        provenance_columns=frozenset(
+            {"cik", "accession_number", "source_url", "storage_path"}
+        ),
     ),
     "sec_filing_attachment": ProtectedTablePolicy(
         "sec_filing_attachment", ("accession_number", "document_name")
@@ -472,6 +501,7 @@ def merge_candidate_into_canonical(
                     for c in all_columns
                     if c not in policy.business_keys
                     and c not in _PROVENANCE_COLUMNS
+                    and c not in policy.provenance_columns
                     and canon_row.get(c) != cand_row.get(c)
                 )
                 if not differing:
