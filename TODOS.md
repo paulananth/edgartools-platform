@@ -48,11 +48,24 @@ still-active status, and there is no IPO-detection trigger.
   submissions.json, delisting feeds, or an existing tracking_status
   transition) and wire a status-refresh pass that demotes companies that
   are no longer active, so they stop generating future candidate work.
-- Decide the IPO-detection source (SEC's daily/current filing feed already
-  ingested via `sec_current_filing_feed` looks like the natural signal — a
-  first-ever S-1/424B4/effective registration for a CIK not yet in
-  `sec_company_sync_state`) and wire same-day addition to the universe
-  rather than waiting for the next full seed.
+- IPO-detection source: **see `docs/sec-edgar-ipo-detection.md` for the
+  researched answer** (2026-07-22) — corrects an earlier, wrong guess in
+  this entry. SEC exposes no explicit "just IPO'd" signal; it must be
+  inferred from a CIK's first S-1/S-11/F-1 registration, followed by
+  `EFFECT`, followed by `424B4`/`424B3` pricing. Contrary to what this
+  entry originally said, `sec_current_filing_feed` is **not** "already
+  ingested" — grepping the repo found zero call sites for
+  `merge_current_filing_feed()`; it's dead/unpopulated infrastructure
+  (`docs/data-architecture.md` already hedges this as "if populated").
+  Two real options: (a) new ingestion against SEC's `getcurrent` "Latest
+  Filings" feed (minutes-level latency, needs new loader code, lands in
+  the existing but currently-unused `sec_current_filing_feed` schema), or
+  (b) filter the already-working `stg_daily_index_filing` daily-index path
+  (`_load_daily_index_for_date` in `warehouse_orchestrator.py:3670`) for
+  the same form types — no new ingestion code, ~end-of-day latency, likely
+  sufficient for a "daily refresh" cadence. Also: `sec_company_sync_state`
+  is our own pipeline-bookkeeping table, not an SEC-sourced status
+  signal — keep that distinct from the "active company" question above.
 
 **Surfaced:** 2026-07-22, while investigating Ticket 20's seed universe on
 the user's question during the strict release relaunch.
