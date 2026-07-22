@@ -1002,6 +1002,62 @@ def test_merge_treats_raw_object_provenance_columns_as_non_conflicting(tmp_path)
     assert row == (1, "acc-A")
 
 
+def test_merge_treats_every_raw_object_fetch_context_column_as_non_conflicting(tmp_path):
+    """Regression (2026-07-22): the first sec_raw_object provenance fix only
+    listed cik/accession_number/source_url/storage_path by hand and missed
+    `form` -- a follow-up production run hit the identical ambiguous-conflict
+    class on 4 rows differing only on `form`. Since raw_object_id IS the
+    content hash, every column except sha256/byte_size (intrinsic to the
+    bytes) is fetch-context and must be provenance, not just the four
+    originally listed. This test walks every such column against the real
+    production DDL (silver_store.py) so a future column addition to the
+    fetch-context group can't silently regress the same way."""
+    from edgar_warehouse.silver_protection import merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+    ddl = (
+        "CREATE TABLE sec_raw_object ("
+        "raw_object_id TEXT PRIMARY KEY, source_type TEXT, cik BIGINT, "
+        "accession_number TEXT, form TEXT, source_url TEXT, storage_path TEXT, "
+        "content_type TEXT, content_encoding TEXT, byte_size BIGINT, "
+        "sha256 TEXT, fetched_at TIMESTAMPTZ, http_status INTEGER, "
+        "source_last_modified TIMESTAMPTZ, source_etag TEXT)"
+    )
+    same_hash = "cafebabe" * 8
+    _make_duckdb(
+        canonical,
+        ddl,
+        [
+            f"INSERT INTO sec_raw_object VALUES ("
+            f"'{same_hash}', 'filing_document', 1, 'acc-A', '10-K', "
+            f"'https://sec.gov/a', 's3://bucket/a', 'text/html', 'gzip', 1024, "
+            f"'{same_hash}', '2026-01-01 00:00:00', 200, "
+            f"'2026-01-01 00:00:00', 'etag-a')"
+        ],
+    )
+    # Candidate independently fetched the identical bytes referenced from a
+    # different form type/URL/etc -- everything but the content-derived
+    # columns (sha256, byte_size) and the tied authority column differs.
+    _make_duckdb(
+        candidate,
+        ddl,
+        [
+            f"INSERT INTO sec_raw_object VALUES ("
+            f"'{same_hash}', 'attachment', 2, 'acc-B', '10-K/A', "
+            f"'https://sec.gov/b', 's3://bucket/b', 'application/octet-stream', "
+            f"'identity', 1024, '{same_hash}', '2026-01-01 00:00:00', 304, "
+            f"'2026-02-01 00:00:00', 'etag-b')"
+        ],
+    )
+
+    result = merge_candidate_into_canonical(candidate, canonical, output)
+
+    assert result.rows_unchanged.get("sec_raw_object", 0) == 1
+    assert result.rows_updated.get("sec_raw_object", 0) == 0
+
+
 def test_merge_raises_row_level_conflict_report_when_ambiguous(tmp_path):
     from edgar_warehouse.silver_protection import SemanticMergeConflictError, merge_candidate_into_canonical
 
