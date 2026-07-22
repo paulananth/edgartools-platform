@@ -134,23 +134,44 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
         "sec_raw_object",
         ("raw_object_id",),
         authority_column="fetched_at",
-        # raw_object_id is a content hash (silver_store.py: sha256 of the
-        # fetched bytes) -- identical byte content legitimately recurs across
-        # different filings (shared boilerplate/exhibit templates, common
-        # XBRL taxonomy files), so cik/accession_number/source_url/
-        # storage_path record only *where this content was first observed*,
-        # not which filing(s) it belongs to -- that real linkage lives in
-        # sec_filing_attachment (accession_number, document_name ->
-        # raw_object_id), independent of these columns. Regression
-        # (2026-07-22): Ticket 20 aborted a batch that had already fetched
-        # all 789/789 required accessions cleanly, on 10 rows where the same
-        # content hash reappeared under a different accession than
-        # canonical's first-seen record -- fetched_at authority never
-        # resolves this class of conflict (both sides carry the same
-        # original first-fetch timestamp), so without this exclusion every
-        # such recurrence is a permanent, unresolvable ambiguous conflict.
+        # raw_object_id IS the sha256 of the fetched bytes (silver_store.py) --
+        # identical byte content legitimately recurs across different filings
+        # (shared boilerplate/exhibit templates, common XBRL taxonomy files),
+        # fetched under different accessions/forms/URLs. The real
+        # content<->filing linkage lives in sec_filing_attachment
+        # (accession_number, document_name -> raw_object_id), independent of
+        # this table. Because the key is content-derived, the *only* columns
+        # that can legitimately differ-and-should-halt a merge are ones
+        # intrinsic to the bytes themselves (sha256, byte_size -- and those
+        # can only differ on a genuine hash collision); every other column
+        # here just records *how/where this particular fetch observed it* and
+        # is provenance. Regression (2026-07-22, Ticket 20): first hit on
+        # cik/accession_number/source_url/storage_path (10 rows, same content
+        # refetched under a different accession than canonical's first-seen
+        # record); a follow-up run then hit the identical class on `form`
+        # alone (4 rows) because that first fix listed columns by hand instead
+        # of deriving the set structurally -- fetched_at authority never
+        # resolves either class (both sides carry the same original
+        # first-fetch timestamp), so without exclusion every such recurrence
+        # is a permanent, unresolvable ambiguous conflict. Fixed for good by
+        # whitelisting the content-derived columns as checked and treating
+        # every remaining fetch-context column (including content_type/
+        # content_encoding, which are server-declared per-fetch labels, not
+        # facts about the bytes) as provenance.
         provenance_columns=frozenset(
-            {"cik", "accession_number", "source_url", "storage_path"}
+            {
+                "cik",
+                "accession_number",
+                "form",
+                "source_url",
+                "storage_path",
+                "source_type",
+                "content_type",
+                "content_encoding",
+                "http_status",
+                "source_last_modified",
+                "source_etag",
+            }
         ),
     ),
     "sec_filing_attachment": ProtectedTablePolicy(
