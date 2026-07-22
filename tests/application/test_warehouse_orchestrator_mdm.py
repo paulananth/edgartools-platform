@@ -833,6 +833,64 @@ def test_merge_keeps_canonical_when_candidate_is_older(tmp_path):
     assert rows == [("Alpha Corporation",)]
 
 
+def test_merge_treats_raw_object_provenance_columns_as_non_conflicting(tmp_path):
+    """Regression (2026-07-22): sec_raw_object's business key is raw_object_id
+    alone -- a content hash -- so identical bytes legitimately recur under a
+    different (cik, accession_number, source_url, storage_path) than
+    canonical's first-seen record (shared boilerplate/exhibit templates,
+    common XBRL taxonomy files). fetched_at authority can never resolve this:
+    both sides carry forward the same original first-fetch timestamp, so it's
+    always an exact tie -- production hit exactly this and aborted a batch
+    that had already fetched all 789/789 required accessions cleanly, on 10
+    such rows. cik/accession_number/source_url/storage_path are declared
+    provenance for this table; a same-key row that only differs on those
+    columns must be treated as unchanged, not an ambiguous conflict."""
+    from edgar_warehouse.silver_protection import merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+    ddl = (
+        "CREATE TABLE sec_raw_object ("
+        "raw_object_id TEXT PRIMARY KEY, cik BIGINT, accession_number TEXT, "
+        "source_url TEXT, storage_path TEXT, fetched_at TIMESTAMPTZ)"
+    )
+    same_hash = "deadbeef" * 8
+    # Canonical first saw this exact content under CIK 1 / accession-A.
+    _make_duckdb(
+        canonical,
+        ddl,
+        [
+            f"INSERT INTO sec_raw_object VALUES ('{same_hash}', 1, 'acc-A', "
+            "'https://sec.gov/a', 's3://bucket/a', '2026-01-01 00:00:00')"
+        ],
+    )
+    # Candidate independently fetched the identical bytes under a different
+    # CIK/accession -- the hydrated candidate carries forward canonical's
+    # original fetched_at (an exact tie), matching the real production shape.
+    _make_duckdb(
+        candidate,
+        ddl,
+        [
+            f"INSERT INTO sec_raw_object VALUES ('{same_hash}', 2, 'acc-B', "
+            "'https://sec.gov/b', 's3://bucket/b', '2026-01-01 00:00:00')"
+        ],
+    )
+
+    result = merge_candidate_into_canonical(candidate, canonical, output)
+
+    assert result.rows_unchanged.get("sec_raw_object", 0) == 1
+    assert result.rows_updated.get("sec_raw_object", 0) == 0
+    conn = duckdb.connect(str(output))
+    row = conn.execute(
+        "SELECT cik, accession_number FROM sec_raw_object WHERE raw_object_id = ?", [same_hash]
+    ).fetchone()
+    conn.close()
+    # Canonical's first-seen association is preserved -- not overwritten by
+    # whichever accession happened to be in this candidate.
+    assert row == (1, "acc-A")
+
+
 def test_merge_raises_row_level_conflict_report_when_ambiguous(tmp_path):
     from edgar_warehouse.silver_protection import SemanticMergeConflictError, merge_candidate_into_canonical
 
