@@ -843,16 +843,42 @@ def _execute_sql_script(cursor: Any, sql: str) -> None:
 
 
 def _split_sql_statements(sql: str) -> list[str]:
+    """Split a SQL script on top-level semicolons.
+
+    Must track `--` line comments, not just single-quoted strings: a
+    semicolon used as ordinary prose punctuation inside a `--` comment
+    (e.g. "-- never CREATE OR REPLACE);") is not a statement boundary, but
+    a naive quote-only scanner treats it as one, producing a comment-only
+    fragment that Snowflake rejects as "Empty SQL statement" (see PR #133's
+    render_graph_tables header, which broke sync-graph this way).
+    """
     statements: list[str] = []
     current: list[str] = []
     in_single_quote = False
+    in_line_comment = False
     index = 0
+    length = len(sql)
 
-    while index < len(sql):
+    while index < length:
         char = sql[index]
+
+        if in_line_comment:
+            current.append(char)
+            if char == "\n":
+                in_line_comment = False
+            index += 1
+            continue
+
+        if not in_single_quote and char == "-" and index + 1 < length and sql[index + 1] == "-":
+            current.append(char)
+            current.append(sql[index + 1])
+            in_line_comment = True
+            index += 2
+            continue
+
         current.append(char)
         if char == "'":
-            if in_single_quote and index + 1 < len(sql) and sql[index + 1] == "'":
+            if in_single_quote and index + 1 < length and sql[index + 1] == "'":
                 current.append(sql[index + 1])
                 index += 2
                 continue

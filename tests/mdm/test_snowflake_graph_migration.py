@@ -474,6 +474,40 @@ def test_split_sql_statements_preserves_semicolon_inside_string_literal():
     assert statements == ["SELECT 'a;b' AS value;", "SELECT 'c'';d' AS value;"]
 
 
+def test_split_sql_statements_ignores_semicolon_inside_line_comment():
+    sql = (
+        "-- never CREATE OR REPLACE);\n"
+        "-- platform-owned discovery/lifecycle registry;\n"
+        "CREATE TABLE foo (id STRING);\n"
+        "SELECT 1;\n"
+    )
+
+    statements = _split_sql_statements(sql)
+
+    assert len(statements) == 2
+    assert statements[0].endswith("CREATE TABLE foo (id STRING);")
+    assert statements[1] == "SELECT 1;"
+
+
+def test_render_graph_tables_header_comment_does_not_produce_empty_statements():
+    context = _graph_context(
+        target_database="EDGARTOOLS_DEV",
+        target_schema="NEO4J_GRAPH_MIGRATION",
+        mdm_database="EDGARTOOLS_DEV_MDM",
+        mdm_schema="PUBLIC",
+    )
+
+    statements = _split_sql_statements(render_graph_tables(context))
+
+    for statement in statements:
+        code_lines = [
+            line
+            for line in statement.splitlines()
+            if line.strip() and not line.strip().startswith("--")
+        ]
+        assert code_lines, f"statement has no executable SQL content: {statement!r}"
+
+
 def test_graph_sync_executor_rejects_unknown_relationship_before_execute():
     connection = FakeGraphConnection()
     executor = SnowflakeGraphSyncExecutor(connection)
