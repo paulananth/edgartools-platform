@@ -94,3 +94,66 @@ class PipelineTrackingStateTests(unittest.TestCase):
                 self.assertEqual(db.get_tracked_ciks("all"), [100, 200, 300])
             finally:
                 db.close()
+
+    def test_ciks_filing_form15_matches_domestic_and_foreign_variants(self) -> None:
+        """Seed-universe ticket 03: Form 15 (deregistration) demotes a CIK out
+        of the active universe. Real EDGAR daily-index form strings confirmed
+        live (2026-07-22): 15-12B/15-12G/15-15D (domestic), 15F-12B/15F-12G/
+        15F-15D (foreign private issuer), amendments suffixed "/A"."""
+        rows = [
+            {"cik": 1, "form": "15-12G"},
+            {"cik": 2, "form": "15-12G/A"},
+            {"cik": 3, "form": "15-15D"},
+            {"cik": 4, "form": "15F-12B"},
+            {"cik": 5, "form": "10-K"},
+            {"cik": 6, "form": "S-1"},
+            {"cik": 7, "form": "25-NSE"},  # Form 25 deliberately excluded (ticket 03)
+        ]
+
+        result = warehouse_orchestrator._ciks_filing_form15(rows)
+
+        self.assertEqual(result, [1, 2, 3, 4])
+
+    def test_demote_deregistered_ciks_always_overwrites_active_status(self) -> None:
+        """Unlike _seed_silver_tracking_status, demotion must overwrite an
+        existing 'active' row -- a company filing Form 15 today was, by
+        definition, already tracked."""
+        from datetime import UTC, datetime
+        from edgar_warehouse.silver_store import SilverDatabase
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = SilverDatabase(os.path.join(tmp, "silver.duckdb"))
+            try:
+                db.upsert_company_sync_state({"cik": 500, "tracking_status": "active"})
+
+                warehouse_orchestrator._demote_deregistered_ciks(db, [500], datetime.now(UTC))
+
+                self.assertEqual(db.get_company_sync_state(500)["tracking_status"], "deregistered")
+            finally:
+                db.close()
+
+    def test_daily_incremental_demotes_form15_ciks_and_excludes_from_universe(self) -> None:
+        """End-to-end: a Form 15 filing seen in a daily-index batch demotes
+        that CIK, and _filter_ciks_to_universe (run right after, in the real
+        _capture_bronze_raw flow) then excludes it from this run's selected
+        CIKs -- no wasted bootstrap call on a company that just deregistered."""
+        from datetime import UTC, datetime
+        from edgar_warehouse.silver_store import SilverDatabase
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = SilverDatabase(os.path.join(tmp, "silver.duckdb"))
+            try:
+                db.upsert_company_sync_state({"cik": 700, "tracking_status": "active"})
+                db.upsert_company_sync_state({"cik": 800, "tracking_status": "active"})
+                impacted_ciks = [700, 800]
+                form_15_ciks = warehouse_orchestrator._ciks_filing_form15(
+                    [{"cik": 700, "form": "15-12G"}, {"cik": 800, "form": "10-K"}]
+                )
+
+                warehouse_orchestrator._seed_silver_tracking_status(db, impacted_ciks, tracking_status="active")
+                warehouse_orchestrator._demote_deregistered_ciks(db, form_15_ciks, datetime.now(UTC))
+                selected = warehouse_orchestrator._filter_ciks_to_universe(impacted_ciks, db=db)
+
+                self.assertEqual(selected, [800])
+            finally:
+                db.close()
