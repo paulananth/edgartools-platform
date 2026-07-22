@@ -60,7 +60,12 @@ def test_strict_ticket20_path_generates_valid_fail_closed_definition(tmp_path: P
         assert {"Not": {"Variable": variable, "StringEquals": ""}} in clauses
     assert not any(clause.get("StringMatches") == "?*" for clause in clauses)
     strict_map = states["StrictBatchSilver"]
-    assert strict_map["MaxConcurrency"] == 4
+    # Lowered 4->2 2026-07-22: every concurrently-finishing batch publishes to
+    # the same canonical silver.duckdb via an ETag-guarded promote, so N-way
+    # concurrency is an N-way race on that one object -- production hit this
+    # repeatedly at MaxConcurrency=4 (PromotionConflictError aborting an
+    # otherwise-complete batch).
+    assert strict_map["MaxConcurrency"] == 2
     assert strict_map["ToleratedFailurePercentage"] == 0
     assert strict_map["Next"] == "ReconcileRelationshipRelease"
     assert strict_map["ItemSelector"]["release_run_id.$"] == "$$.Execution.Name"

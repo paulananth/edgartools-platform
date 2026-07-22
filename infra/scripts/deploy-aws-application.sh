@@ -2487,8 +2487,8 @@ strict_batch.pop("Retry", None)
 
 strict_batch_map = {
     "Type": "Map",
-    "MaxConcurrency": 4,
-    "Comment": "Ticket 20 strict candidate execution. Every batch is manifest-bounded and fail-closed.",
+    "MaxConcurrency": 2,
+    "Comment": "Ticket 20 strict candidate execution. Every batch is manifest-bounded and fail-closed. Lowered 4->2 2026-07-22: every concurrently-finishing batch merges into and publishes the same canonical silver.duckdb via an ETag-guarded promote, so N-way concurrency means an N-way race on that single object -- production hit this repeatedly at MaxConcurrency=4 (PromotionConflictError aborting an otherwise-complete batch). A retry loop now exists for the conflict (_publish_silver_database_with_retry), but lower concurrency reduces how often it's needed in the first place.",
     "ToleratedFailurePercentage": 0,
     "ItemReader": {
         "Resource": "arn:aws:states:::s3:getObject",

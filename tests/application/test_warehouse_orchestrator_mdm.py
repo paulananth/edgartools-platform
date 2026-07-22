@@ -479,6 +479,117 @@ def test_publish_silver_database_propagates_ambiguous_conflict(tmp_path):
             _publish_silver_database_if_remote(context)
 
 
+def _publish_context(tmp_path: Path) -> WarehouseCommandContext:
+    context = WarehouseCommandContext(
+        bronze_root=StorageLocation(str(tmp_path / "bronze")),
+        storage_root=StorageLocation("s3://bucket/warehouse"),
+        silver_root=StorageLocation(str(tmp_path / "silver")),
+        snowflake_export_root=None,
+        environment_name="test",
+        identity="dev@example.com",
+        runtime_mode="bronze_capture",
+    )
+    silver_db = Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
+    silver_db.parent.mkdir(parents=True)
+    silver_db.write_bytes(b"duckdb-data")
+    return context
+
+
+def test_publish_silver_database_retries_on_lost_promotion_race(tmp_path, monkeypatch):
+    """Regression (2026-07-22): Ticket 20 runs concurrent Distributed Map
+    batches that all publish to the same canonical silver.duckdb.
+    PromotionConflictError's own docstring says it is retryable ("the staged
+    object is left in place ... so a caller can re-read canonical, re-merge,
+    and retry promotion"), but no caller ever did -- so the first batch to
+    publish always won and every other concurrently-finishing batch failed
+    outright, aborting the whole 0%-tolerance release even though its fetch
+    and merge work was otherwise complete. A conflict on the first attempt
+    must not be fatal if a later attempt succeeds."""
+    from edgar_warehouse.infrastructure.object_storage import (
+        ObjectVersion,
+        PromotionConflictError,
+        PromotionResult,
+    )
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _publish_silver_database_with_retry,
+    )
+
+    monkeypatch.setenv("WAREHOUSE_PUBLISH_CONFLICT_RETRY_BASE_SECONDS", "0.001")
+    context = _publish_context(tmp_path)
+
+    call_count = {"n": 0}
+
+    def flaky_promote(staged_relative, relative_path, *, expected_etag):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise PromotionConflictError(relative_path, expected_etag, "someone-else-won", staged_relative)
+        return PromotionResult(
+            canonical_path="s3://bucket/warehouse/silver/sec/silver.duckdb",
+            staged_relative_path=staged_relative,
+            previous_version=ObjectVersion(exists=False, etag=None, version_id=None),
+            new_version=ObjectVersion(exists=True, etag="new-etag", version_id=None),
+        )
+
+    with (
+        patch(
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.read_object_version",
+            return_value=ObjectVersion(exists=False, etag=None, version_id=None),
+        ),
+        patch(
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes",
+            return_value="_staging/token/silver/sec/silver.duckdb",
+        ),
+        patch(
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.promote_staged",
+            side_effect=flaky_promote,
+        ),
+    ):
+        result = _publish_silver_database_with_retry(context)
+
+    assert result is not None
+    assert result["canonical_version"] == "new-etag"
+    assert call_count["n"] == 2
+
+
+def test_publish_silver_database_retry_gives_up_after_max_attempts(tmp_path, monkeypatch):
+    from edgar_warehouse.infrastructure.object_storage import (
+        ObjectVersion,
+        PromotionConflictError,
+    )
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _publish_silver_database_with_retry,
+    )
+
+    monkeypatch.setenv("WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS", "2")
+    monkeypatch.setenv("WAREHOUSE_PUBLISH_CONFLICT_RETRY_BASE_SECONDS", "0.001")
+    context = _publish_context(tmp_path)
+
+    call_count = {"n": 0}
+
+    def always_conflicts(staged_relative, relative_path, *, expected_etag):
+        call_count["n"] += 1
+        raise PromotionConflictError(relative_path, expected_etag, "someone-else-won", staged_relative)
+
+    with (
+        patch(
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.read_object_version",
+            return_value=ObjectVersion(exists=False, etag=None, version_id=None),
+        ),
+        patch(
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes",
+            return_value="_staging/token/silver/sec/silver.duckdb",
+        ),
+        patch(
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.promote_staged",
+            side_effect=always_conflicts,
+        ),
+    ):
+        with pytest.raises(PromotionConflictError):
+            _publish_silver_database_with_retry(context)
+
+    assert call_count["n"] == 2
+
+
 # ---------------------------------------------------------------------------
 # _is_transient_artifact_error — release-mode artifact retry classifier
 # ---------------------------------------------------------------------------

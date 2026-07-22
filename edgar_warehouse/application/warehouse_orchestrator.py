@@ -555,7 +555,7 @@ def _execute_warehouse_bronze_capture(
         if _using_shard_path and _active_shard_index is not None:
             silver_database_write = _publish_shard_if_remote(context, _active_shard_index)
         else:
-            silver_database_write = _publish_silver_database_if_remote(context)
+            silver_database_write = _publish_silver_database_with_retry(context)
         _emit_pipeline_event(
             "silver_publish_completed",
             command=command_name,
@@ -807,6 +807,46 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
         "canonical_version": promotion.new_version.etag,
         "tables_merged": list(tables_merged),
     }
+
+
+def _publish_silver_database_with_retry(context: WarehouseCommandContext) -> dict[str, Any] | None:
+    """Retry _publish_silver_database_if_remote on a lost promotion race.
+
+    Regression (2026-07-22): Ticket 20's strict release runs concurrent
+    Distributed Map batches (MaxConcurrency=4) that all merge into and
+    publish the same canonical silver.duckdb. PromotionConflictError's own
+    docstring says it is "retryable: the staged object is left in place ...
+    so a caller can re-read canonical, re-merge, and retry promotion" -- but
+    no caller ever did, so the first batch to publish always won and every
+    other concurrently-finishing batch failed outright, aborting the whole
+    0%-tolerance release even though its work (fetch + merge) was otherwise
+    complete. The merge/publish cycle is pure local computation (re-download
+    canonical, re-merge, re-upload, re-attempt the ETag-guarded promote) --
+    cheap to retry, unlike the SEC fetch phase before it.
+    """
+    from edgar_warehouse.infrastructure.object_storage import PromotionConflictError
+
+    max_attempts = max(1, int(os.environ.get("WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS", "5")))
+    backoff_base_seconds = float(os.environ.get("WAREHOUSE_PUBLISH_CONFLICT_RETRY_BASE_SECONDS", "1.0"))
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return _publish_silver_database_if_remote(context)
+        except PromotionConflictError as exc:
+            if attempt >= max_attempts:
+                raise
+            import random
+            import time as _time
+
+            delay = backoff_base_seconds * (2 ** (attempt - 1)) * (1 + random.random())
+            _emit_pipeline_event(
+                "silver_publish_conflict_retry",
+                attempt=attempt,
+                max_attempts=max_attempts,
+                retry_delay_seconds=delay,
+                error=str(exc),
+            )
+            _time.sleep(delay)
+    return None
 
 
 # ---------------------------------------------------------------------------
