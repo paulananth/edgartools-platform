@@ -2316,7 +2316,14 @@ def _is_transient_artifact_error(exc: BaseException) -> bool:
         "timeouterror",
         "transientfilingcontenterror",
     }
-    transient_statuses = {408, 429, 500, 502, 503, 504}
+    # 403 included: SEC EDGAR is unauthenticated, so a 403 on a validly-built
+    # archive URL is its edge/WAF rate-limit signal, not a permission denial
+    # (Ticket 20 regression 2026-07-21 -- a single 403 fetching a quarterly
+    # full-index file aborted an entire 116-batch strict release under 0%
+    # tolerance; confirmed transient both by an immediate manual re-fetch
+    # succeeding and by three concurrent sibling batches completing the same
+    # window with zero errors, ruling out a sustained/concurrency-driven block).
+    transient_statuses = {403, 408, 429, 500, 502, 503, 504}
 
     while pending:
         current = pending.pop()
