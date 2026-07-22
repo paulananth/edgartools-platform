@@ -837,8 +837,27 @@ elevated in priority by this re-check.
 
 ## CI does not run dbt against live Snowflake (Issue 2B, deferred per T4)
 
-**Status:** Deferred, not blocking PR #66 (`claude/financial-derived-lag-tiebreaker`,
-Stage 5).
+**Status:** DECIDED 2026-07-22 (wayfinder ticket
+[04](.scratch/todos-close-out/issues/04-ci-dbt-live-snowflake-investment-decision.md)
+in `.scratch/todos-close-out/`) — **invest now**, not blocking PR #66
+(`claude/financial-derived-lag-tiebreaker`, Stage 5). Not yet implemented;
+see "Decision + next steps" below.
+
+**Decision + next steps:**
+1. Scope/cadence: `dbt run --select state:modified+ --full-refresh` plus
+   `dbt test`, triggered on PRs touching `infra/snowflake/dbt/**` (not a
+   full-graph run on every PR, not nightly-only).
+2. Credentials: dedicated CI secrets authenticating as the environment's own
+   deployer role (`EDGARTOOLS_DEV_DEPLOYER` for the dev PR job), not a reuse
+   of `smoke-test.yml`'s existing accountadmin secrets — CI should exercise
+   the real deploy-time privilege path.
+3. **Blocking prerequisite, confirmed still open 2026-07-22:** the
+   `EDGARTOOLS_DEV_DEPLOYER` grant below is still only the 2026-06-13 ad-hoc
+   fix — no `GRANT SELECT ... EDGARTOOLS_SOURCE ... TO ROLE
+   EDGARTOOLS_DEV_DEPLOYER` exists in Terraform or
+   `01_source_stage.sql`. Must be codified (plus the analogous unchecked
+   `EDGARTOOLS_PROD_DEPLOYER` grant) before wiring the CI job, or
+   `--full-refresh` fails there identically to the manual repro below.
 
 `dbt compile` only validates Jinja templating and SQL syntax — it cannot
 catch errors that only surface when Snowflake actually plans/executes the
