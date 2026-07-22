@@ -2,12 +2,24 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import unittest
 from unittest.mock import Mock, patch
 
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.infrastructure import edgartools_sec_gateway as gateway
+
+
+def _parse_debug_events(stderr_text: str) -> list[dict]:
+    events = []
+    for line in stderr_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        events.append(json.loads(line))
+    return events
 
 
 class GatewayRegistryTests(unittest.TestCase):
@@ -186,6 +198,53 @@ class EntityFactsUsesGatewayTests(unittest.TestCase):
             )
         self.assertEqual(metrics["silver_skips"], 1)
         self.assertEqual(metrics["network_fetches"], 0)
+
+
+class DebugEventLoggingTests(unittest.TestCase):
+    """Regression: this gateway had no per-call debug visibility -- callers
+    only saw the aggregate result, not which URL was actually fetched over
+    the network. Each call now emits a structured JSON-line event (matching
+    sec_client.py's _emit_sec_pull_event shape)."""
+
+    def test_download_bytes_emits_sec_call_events(self) -> None:
+        url = "https://www.sec.gov/files/company_tickers.json"
+        download_file = Mock(return_value=b'{"ok": true}')
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            gateway.download_bytes(url, "Tester test@example.com", download_file_fn=download_file)
+
+        events = _parse_debug_events(stderr.getvalue())
+        event_names = [e["event"] for e in events]
+        self.assertEqual(event_names, ["sec_call_started", "sec_call_completed"])
+        self.assertEqual(events[0]["url"], url)
+        self.assertEqual(events[1]["bytes"], len(b'{"ok": true}'))
+
+    def test_download_bytes_emits_failure_event_on_error(self) -> None:
+        url = "https://www.sec.gov/files/company_tickers.json"
+        download_file = Mock(side_effect=RuntimeError("boom"))
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            with self.assertRaises(WarehouseRuntimeError):
+                gateway.download_bytes(
+                    url, "Tester test@example.com", download_file_fn=download_file
+                )
+
+        events = _parse_debug_events(stderr.getvalue())
+        event_names = [e["event"] for e in events]
+        self.assertEqual(event_names, ["sec_call_started", "sec_call_failed"])
+        self.assertEqual(events[1]["error"], "RuntimeError")
+
+    def test_download_json_fn_path_emits_sec_call_events(self) -> None:
+        url = "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json"
+        download_json = Mock(return_value={"cik": 320193})
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            gateway.download_json(url, "Tester test@example.com", download_json_fn=download_json)
+
+        events = _parse_debug_events(stderr.getvalue())
+        event_names = [e["event"] for e in events]
+        self.assertEqual(event_names, ["sec_call_started", "sec_call_completed"])
+        self.assertEqual(events[0]["url"], url)
 
 
 if __name__ == "__main__":

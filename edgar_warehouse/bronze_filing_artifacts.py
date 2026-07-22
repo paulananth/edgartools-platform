@@ -8,7 +8,10 @@ sec_client download_bytes is not used for this object class.
 from __future__ import annotations
 
 import hashlib
+import json
 import mimetypes
+import sys
+import time
 from datetime import UTC, datetime
 from typing import Any, Final
 
@@ -18,6 +21,26 @@ from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_
 
 # Ticket 06 architecture marker — architecture tests assert this contract.
 FILING_DOCUMENT_NETWORK_GATEWAY: Final = "edgartools"
+
+
+def _emit_artifact_event(event: str, **payload: Any) -> None:
+    """Debug visibility for each individual SEC/artifact call this module makes.
+
+    Matches sec_client.py's _emit_sec_pull_event JSON-line shape. Distinct
+    from the aggregate network_fetches counter returned by
+    fetch_filing_artifacts -- that counter answers "how many", these events
+    answer "which accession/document, cache hit or real fetch, how long".
+    """
+    document = {
+        "event": event,
+        "emitted_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        **payload,
+    }
+    print(json.dumps(document, sort_keys=True), file=sys.stderr, flush=True)
+
+
+def _elapsed_ms(started_at: float) -> int:
+    return int((time.monotonic() - started_at) * 1000)
 
 
 class TransientFilingContentError(RuntimeError):
@@ -93,6 +116,11 @@ def fetch_filing_artifacts(
             db, existing_rows
         )
         if not missing_rows:
+            _emit_artifact_event(
+                "accession_cache_hit",
+                accession_number=accession_number,
+                attachment_count=len(hydrated_rows),
+            )
             return {
                 "accession_number": accession_number,
                 "attachment_count": len(hydrated_rows),
@@ -103,10 +131,37 @@ def fetch_filing_artifacts(
 
     # Ticket 06: cold / partial / force always discover via edgartools — no
     # primary_document URL + sec_client download_bytes fast path.
-    filing_obj = get_filing(accession_number)
+    _started_at = time.monotonic()
+    _emit_artifact_event(
+        "sec_call_started", accession_number=accession_number, call="get_filing"
+    )
+    try:
+        filing_obj = get_filing(accession_number)
+    except Exception as exc:
+        _emit_artifact_event(
+            "sec_call_failed",
+            accession_number=accession_number,
+            call="get_filing",
+            duration_ms=_elapsed_ms(_started_at),
+            error=exc.__class__.__name__,
+        )
+        raise
     network_fetches += 1
     if filing_obj is None:
+        _emit_artifact_event(
+            "sec_call_failed",
+            accession_number=accession_number,
+            call="get_filing",
+            duration_ms=_elapsed_ms(_started_at),
+            error="filing_not_resolved",
+        )
         raise ValueError(f"edgartools could not resolve filing for accession {accession_number}")
+    _emit_artifact_event(
+        "sec_call_completed",
+        accession_number=accession_number,
+        call="get_filing",
+        duration_ms=_elapsed_ms(_started_at),
+    )
     attachment_rows = _map_edgartools_attachments(filing_obj, accession_number)
     if not attachment_rows:
         raise ValueError(f"edgartools found no attachments for accession {accession_number}")
@@ -124,6 +179,11 @@ def fetch_filing_artifacts(
             existing_raw = prior_raw
         already_downloaded = (not force) and existing_raw is not None
         if already_downloaded:
+            _emit_artifact_event(
+                "artifact_storage_cache_hit",
+                accession_number=accession_number,
+                document_name=document_name,
+            )
             hydrated = {key: value for key, value in row.items() if key != "content_bytes"}
             hydrated["raw_object_id"] = existing_raw.get("raw_object_id")
             hydrated_rows.append(hydrated)
@@ -269,8 +329,31 @@ def _map_edgartools_attachments(filing_obj: Any, accession_number: str) -> list[
     primary_documents = list(filing_obj.attachments.primary_documents)
     rows: list[dict[str, Any]] = []
     for attachment in filing_obj.attachments:
-        content = attachment.content
+        _started_at = time.monotonic()
+        _emit_artifact_event(
+            "artifact_call_started",
+            accession_number=accession_number,
+            document_name=attachment.document,
+        )
+        try:
+            content = attachment.content
+        except Exception as exc:
+            _emit_artifact_event(
+                "artifact_call_failed",
+                accession_number=accession_number,
+                document_name=attachment.document,
+                duration_ms=_elapsed_ms(_started_at),
+                error=exc.__class__.__name__,
+            )
+            raise
         content_bytes = content.encode("utf-8") if isinstance(content, str) else content
+        _emit_artifact_event(
+            "artifact_call_completed",
+            accession_number=accession_number,
+            document_name=attachment.document,
+            bytes=len(content_bytes) if content_bytes else 0,
+            duration_ms=_elapsed_ms(_started_at),
+        )
         if not attachment.document_type:
             raise TransientFilingContentError(
                 f"accession {accession_number} document {attachment.document!r} has no "
