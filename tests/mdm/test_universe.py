@@ -228,6 +228,7 @@ def test_company_tickers_payload_uses_edgartools_not_direct_sec_call(monkeypatch
     not a direct SEC HTTP call, and must tolerate a missing (None) exchange
     without turning it into the truthy string "nan" (pandas NaN vs. None trap)."""
     import pandas as pd
+    import edgar
     import edgar_warehouse.mdm.cli as mdm_cli
 
     fake_df = pd.DataFrame(
@@ -238,10 +239,48 @@ def test_company_tickers_payload_uses_edgartools_not_direct_sec_call(monkeypatch
             "company": ["Apple Inc.", "No Exchange Co."],
         }
     )
-    monkeypatch.setattr(mdm_cli.edgar, "get_company_tickers", lambda: fake_df)
+    # edgartools is imported lazily inside _company_tickers_payload (not at
+    # mdm/cli.py module level) so every other mdm subcommand avoids pulling in
+    # pandas/pyarrow transitively -- patch the real edgar module's attribute
+    # directly rather than mdm_cli.edgar, which no longer exists as a
+    # module-level name.
+    monkeypatch.setattr(edgar, "get_company_tickers", lambda: fake_df)
 
     payload = mdm_cli._company_tickers_payload()
 
     assert payload["fields"] == ["cik", "ticker", "exchange"]
     assert [1234, "AAPL", "NASDAQ"] in payload["data"]
     assert [5678, "ZZZZ", None] in payload["data"]
+
+
+def test_importing_mdm_cli_does_not_pull_in_edgartools_pandas_pyarrow():
+    """The MDM ECS image (Dockerfile.mdm-deps, `.[s3,mdm-runtime]`) exists to
+    be leaner than the full warehouse image, but edgartools/pyarrow/spacy are
+    unconditional base package deps (pyproject.toml), so they get installed
+    regardless. The actual runtime cost this test guards against is import
+    time: mdm/cli.py used to `import edgar` at module level for one helper
+    (_company_tickers_payload, used only by the seed-universe subcommand),
+    which transitively loaded pandas+pyarrow on every mdm subcommand
+    invocation (run/sync-graph/verify-graph/backfill-relationships included).
+    Run in a subprocess so this test's own imports (e.g. pandas, imported
+    directly above for the fixture) can't contaminate the sys.modules check."""
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys\n"
+            "from edgar_warehouse.mdm import cli as mdm_cli\n"
+            "from edgar_warehouse.mdm import pipeline as mdm_pipeline\n"
+            "loaded = sorted(m for m in ('pandas', 'pyarrow', 'spacy') if m in sys.modules)\n"
+            "print(','.join(loaded))\n",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.strip() == "", (
+        f"importing mdm.cli/mdm.pipeline unexpectedly loaded: {result.stdout.strip()}"
+    )
