@@ -13,7 +13,6 @@ import sys
 import time
 from typing import Any, Callable
 
-import edgar
 from sqlalchemy.orm import Session
 
 from edgar_warehouse.mdm.observability import elapsed_ms, emit_mdm_event
@@ -352,7 +351,15 @@ def _company_tickers_payload() -> dict[str, Any]:
     edgartools instead of a direct SEC HTTP call, so seed_universe_loader's
     existing fields/data branch (which already captures exchange) needs no
     changes. edgartools' exchange column may be None for some entries (real
-    Python None, not float NaN -- confirmed, so plain truthiness is safe)."""
+    Python None, not float NaN -- confirmed, so plain truthiness is safe).
+
+    Deliberately deferred: `edgar` (edgartools) transitively pulls in pandas
+    and pyarrow, which every other `mdm` subcommand (run/sync-graph/
+    verify-graph/backfill-relationships) never touches. A module-level
+    import here would force those into every MDM container invocation.
+    """
+    import edgar
+
     df = edgar.get_company_tickers()
     return {
         "fields": ["cik", "ticker", "exchange"],
