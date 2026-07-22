@@ -12,12 +12,13 @@ from edgar_warehouse.application import warehouse_orchestrator
 
 
 class _CachedSubmissionDb:
-    def __init__(self) -> None:
+    def __init__(self, tracking_status: str = "active") -> None:
         self.source_checkpoints = []
         self.company_states = []
+        self._tracking_status = tracking_status
 
     def get_company_sync_state(self, cik: int):
-        return {"tracking_status": "active"}
+        return {"tracking_status": self._tracking_status}
 
     def get_source_checkpoint(self, source_name: str, source_key: str):
         return {"last_sha256": "sha-main" if source_name == "submissions_main" else "sha-page"}
@@ -330,6 +331,70 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
 
         self.assertEqual(result["recent_accessions"], ["recent-1"])
         self.assertEqual(result["pagination_accessions"], ["historical-1"])
+
+    def test_deregistered_tracking_status_survives_submission_reprocessing(self) -> None:
+        """A CIK demoted to 'deregistered' (Form 15 seed-universe ticket 03)
+        must stay deregistered if _apply_submission_snapshot_to_silver ever
+        touches it again (e.g. an operator ad-hoc resync). Before this fix,
+        the fallback `elif tracking_status not in {known set}: tracking_status
+        = 'active'` branch treated any unrecognized status as legacy/unknown
+        and silently promoted it back to 'active', undoing the demotion."""
+        db = _CachedSubmissionDb(tracking_status="deregistered")
+        snapshot = {
+            "cik": 1001,
+            "include_pagination": True,
+            "main_payload": {
+                "filings": {
+                    "recent": {
+                        "accessionNumber": ["recent-1"],
+                        "form": ["4"],
+                        "filingDate": ["2026-04-25"],
+                        "reportDate": ["2026-04-24"],
+                        "acceptanceDateTime": ["20260425120000"],
+                        "primaryDocument": ["recent.xml"],
+                    }
+                }
+            },
+            "main_write_record": {
+                "sha256": "sha-main",
+                "source_name": "submissions_main",
+                "relative_path": "submissions/main.json",
+            },
+            "manifest_file_names": ["CIK0000001001-submissions-001.json"],
+            "pagination_snapshots": [
+                {
+                    "file_name": "CIK0000001001-submissions-001.json",
+                    "payload": {
+                        "filings": {
+                            "accessionNumber": ["historical-1"],
+                            "form": ["4"],
+                            "filingDate": ["2025-01-02"],
+                            "reportDate": ["2025-01-01"],
+                            "acceptanceDateTime": ["20250102120000"],
+                            "primaryDocument": ["historical.xml"],
+                        }
+                    },
+                    "write_record": {
+                        "sha256": "sha-page",
+                        "source_name": "submissions_pagination",
+                        "relative_path": "submissions/001.json",
+                    },
+                }
+            ],
+        }
+
+        with patch.object(warehouse_orchestrator, "_sync_mdm_tracking_status"):
+            warehouse_orchestrator._apply_submission_snapshot_to_silver(
+                db=db,
+                sync_run_id="run-1",
+                snapshot=snapshot,
+                force=False,
+                load_mode="bootstrap_batch",
+                recent_limit=None,
+                now=date(2026, 4, 25),
+            )
+
+        self.assertEqual(db.company_states[-1]["tracking_status"], "deregistered")
 
     def test_configured_form_artifact_pipeline_filters_to_parser_forms(self) -> None:
         calls: list[tuple[str, str]] = []

@@ -1016,6 +1016,7 @@ def _capture_bronze_raw(
 
     if command_name == "daily-incremental":
         impacted_ciks: list[int] = []
+        form_15_ciks: list[int] = []
         for target_date in _date_range(
             start=date.fromisoformat(scope["business_date_start"]),
             end=date.fromisoformat(scope["business_date_end"]),
@@ -1033,11 +1034,13 @@ def _capture_bronze_raw(
             metrics["rows_skipped"] += result["rows_skipped"]
             _merge_capture_network_metrics(metrics, result)
             impacted_ciks.extend(result["impacted_ciks"])
+            form_15_ciks.extend(result.get("form_15_ciks", []))
             if result["status"] in {"waiting_for_publish", "failed_retryable"}:
                 metrics["sync_status"] = "partial"
                 break
         impacted_ciks = _dedupe_ints(impacted_ciks)
         _seed_silver_tracking_status(db, impacted_ciks, tracking_status="active")
+        _demote_deregistered_ciks(db, form_15_ciks, now)
         impacted_ciks = _filter_ciks_to_universe(impacted_ciks, db=db)
         cik_limit = arguments.get("cik_limit")
         cik_offset = int(arguments.get("cik_offset") or 0)
@@ -3284,7 +3287,7 @@ def _apply_submission_snapshot_to_silver(
         tracking_status = "active"
         bootstrap_completed_at = bootstrap_completed_at or now
         pagination_completed_at = now
-    elif tracking_status not in {"active", "paused", "historical_complete", "error"}:
+    elif tracking_status not in {"active", "paused", "historical_complete", "error", "deregistered"}:
         tracking_status = "active"
 
     db.upsert_company_sync_state(
@@ -3710,6 +3713,7 @@ def _load_daily_index_for_date(
             "rows_written": 0,
             "rows_skipped": 1,
             "impacted_ciks": _dedupe_ints([int(row["cik"]) for row in rows if row.get("cik") is not None]),
+            "form_15_ciks": _ciks_filing_form15(rows),
             "status": "succeeded",
             # Ticket 05: finalized dates are catalog silver-skips (no network)
             "network_fetches": 0,
@@ -3792,6 +3796,7 @@ def _load_daily_index_for_date(
             "rows_written": row_count,
             "rows_skipped": 0,
             "impacted_ciks": _dedupe_ints([int(row["cik"]) for row in rows if row.get("cik") is not None]),
+            "form_15_ciks": _ciks_filing_form15(rows),
             "status": "succeeded",
             "network_fetches": 1,
             "silver_skips": 0,
@@ -4227,6 +4232,42 @@ def _seed_silver_tracking_status(
             {
                 "cik": cik,
                 "tracking_status": tracking_status,
+                "last_main_sync_at": now,
+                "last_error_message": None,
+            }
+        )
+
+
+# Real EDGAR daily-index form-type strings for deregistration (confirmed live
+# against https://www.sec.gov/Archives/edgar/daily-index/2026/QTR2/form.*.idx):
+# 15-12B/15-12G/15-15D (domestic), 15F-12B/15F-12G/15F-15D (foreign private
+# issuer), amendments suffixed "/A". Form 25 (exchange delisting) is
+# deliberately NOT included -- seed-universe ticket 03 decided many Form 25
+# companies keep filing periodic reports as OTC stocks, so demoting on Form 25
+# alone risked losing tracking on companies still actually filing. Form 15 is
+# the SEC-recognized end of reporting obligations.
+def _ciks_filing_form15(rows: list[dict[str, Any]]) -> list[int]:
+    ciks: list[int] = []
+    for row in rows:
+        form = str(row.get("form") or "").upper()
+        if form.startswith("15-") or form.startswith("15F-"):
+            cik = row.get("cik")
+            if cik is not None:
+                ciks.append(int(cik))
+    return _dedupe_ints(ciks)
+
+
+def _demote_deregistered_ciks(db: SilverDatabase, ciks: list[int], now: datetime) -> None:
+    """Demote CIKs with a Form 15 deregistration filing (seed-universe ticket
+    03). Unlike _seed_silver_tracking_status, this always overwrites --
+    upsert_company_sync_state's ON CONFLICT unconditionally sets
+    tracking_status, so a company re-registering later would need an explicit
+    reactivation path (not built here; out of scope for this ticket)."""
+    for cik in _dedupe_ints(ciks):
+        db.upsert_company_sync_state(
+            {
+                "cik": cik,
+                "tracking_status": "deregistered",
                 "last_main_sync_at": now,
                 "last_error_message": None,
             }
