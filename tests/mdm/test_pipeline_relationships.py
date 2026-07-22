@@ -1471,6 +1471,27 @@ class TestInstitutionalHoldsBatching:
         assert len(silver.queries) == 1
         assert "sec_thirteenf_holding" in silver.queries[0]
 
+    def test_missing_source_table_second_joined_table_skip(self, monkeypatch, session):
+        """Regression (2026-07-22): bounds_sql/base_sql for INSTITUTIONAL_HOLDS
+        joins sec_thirteenf_holding AND sec_thirteenf_filing, but the graceful
+        missing-source-table skip only checked for sec_thirteenf_holding in the
+        error message. A real prod run where sec_thirteenf_filing (not
+        sec_thirteenf_holding) was the absent table hit an uncaught
+        CatalogException and crashed the whole `mdm run` command instead of
+        emitting the same skip. Declaring both joined table names must catch
+        either one being reported missing."""
+        monkeypatch.setattr(
+            "edgar_warehouse.mdm.pipeline._INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", 1
+        )
+        silver = MissingTableSilver("sec_thirteenf_filing")
+        pipe = MDMPipeline(session=session, silver=silver)
+        summary = pipe.derive_relationships(
+            target_per_type=1, relationship_types=["INSTITUTIONAL_HOLDS"]
+        )
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 0
+        assert summary["INSTITUTIONAL_HOLDS"]["skipped"] == 0
+        assert len(silver.queries) == 1
+
     def test_batching_idempotent_on_rerun(self, monkeypatch):
         """Test E: running derive twice over the same batched fixture inserts 0
         rows on the second run."""

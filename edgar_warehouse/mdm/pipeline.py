@@ -129,29 +129,43 @@ class MDMPipeline:
         remaining: Optional[int],
         *,
         rel_type_name: str,
-        source_table: str,
+        source_table: str | tuple[str, ...],
         existing: int = 0,
     ) -> list[dict]:
         try:
             return self.silver.fetch(self._bounded_relationship_sql(sql, remaining, existing))
         except Exception as exc:
-            if not self._is_missing_source_table(exc, source_table):
+            missing_table = self._find_missing_source_table(exc, source_table)
+            if missing_table is None:
                 raise
             print(json.dumps({
                 "event": "mdm_relationship_skip",
                 "rel_type": rel_type_name,
                 "reason": "missing_source_table",
-                "source_table": source_table,
+                "source_table": missing_table,
                 "ts": datetime.now(timezone.utc).isoformat(),
             }), file=sys.stderr, flush=True)
             return []
 
     @staticmethod
-    def _is_missing_source_table(exc: Exception, table_name: str) -> bool:
+    def _find_missing_source_table(exc: Exception, table_names: str | tuple[str, ...]) -> str | None:
+        # A relationship-derivation query can join more than one source table
+        # (e.g. sec_thirteenf_holding JOIN sec_thirteenf_filing for
+        # INSTITUTIONAL_HOLDS) -- any one of them can legitimately be absent
+        # (no filings of that type loaded yet) and should trigger the same
+        # graceful skip, not just the first-declared table. Checking only one
+        # name left a real "table not created yet" error on the second table
+        # uncaught, crashing the whole mdm run instead of skipping that
+        # relationship type.
         message = str(exc).lower()
-        table = table_name.lower()
         missing_markers = ("does not exist", "not found", "catalog error", "binder error")
-        return table in message and any(marker in message for marker in missing_markers)
+        if not any(marker in message for marker in missing_markers):
+            return None
+        names = (table_names,) if isinstance(table_names, str) else table_names
+        for name in names:
+            if name.lower() in message:
+                return name
+        return None
 
     def run_companies(self, limit: Optional[int] = None) -> int:
         ctx = self._ctx()
@@ -1822,13 +1836,15 @@ class MDMPipeline:
         skipped_existing = 0
 
         # Single cheap bounds lookup — the missing-source-table graceful skip
-        # (one mdm_relationship_skip event) fires here if sec_thirteenf_holding
-        # is absent, before any batch loop is entered.
+        # (one mdm_relationship_skip event) fires here if either
+        # sec_thirteenf_holding or sec_thirteenf_filing (both joined in
+        # bounds_sql/base_sql above) is absent, before any batch loop is
+        # entered.
         bounds_rows = self._fetch_optional_relationship_rows(
             bounds_sql,
             None,
             rel_type_name="INSTITUTIONAL_HOLDS",
-            source_table="sec_thirteenf_holding",
+            source_table=("sec_thirteenf_holding", "sec_thirteenf_filing"),
         )
         if not bounds_rows or bounds_rows[0].get("min_cik") is None:
             return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
