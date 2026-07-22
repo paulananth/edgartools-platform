@@ -1,8 +1,8 @@
 # 03 — Seed universe: what signal determines a company is no longer active?
 
 Type: grilling
-Status: open
-Blocked by: [Ticket 02 — Seed universe: which IPO-detection source to build?](02-seed-universe-ipo-detection-source.md)
+Status: resolved
+Blocked by: [Ticket 02 — Seed universe: which IPO-detection source to build?](02-seed-universe-ipo-detection-source.md) (resolved)
 
 ## Question
 
@@ -39,4 +39,30 @@ new-ingestion-vs-filter.
 
 ## Answer
 
-(resolved on close)
+**Decision: Form 15 deregistration, filtered from the same daily-index
+pipeline Ticket 02 reuses** — option (b)'s pattern, narrowed to Form 15
+only, not Form 15+25.
+
+Form 25 (exchange delisting) was deliberately excluded: it only means a
+company left an exchange, not that it stopped filing with SEC — many
+Form-25'd companies keep filing periodic reports as OTC stocks. Demoting on
+Form 25 alone risked silently dropping tracking on companies still actually
+filing. Form 15 is the SEC-recognized end of reporting obligations.
+
+**Implemented** (not just decided — code + tests, merged):
+`_ciks_filing_form15()` scans daily-index rows for domestic
+(15-12B/15-12G/15-15D) and foreign-private-issuer (15F-12B/15F-12G/
+15F-15D) variants; `_demote_deregistered_ciks()` sets
+`tracking_status = "deregistered"`, wired into `_capture_bronze_raw`'s
+daily-incremental branch right before `_filter_ciks_to_universe`, so a
+demoted CIK is excluded from that same run's bootstrap selection.
+
+Surfaced and fixed a real landmine along the way:
+`_apply_submission_snapshot_to_silver`'s fallback normalized any
+unrecognized `tracking_status` back to `"active"` — `"deregistered"` would
+have been silently un-demoted the next time any code path (ad-hoc resync,
+`targeted-resync`) reprocessed that CIK's submissions. Added to the
+allowlist.
+
+Ships once daily-incremental actually runs regularly, same as Ticket 02 —
+tracked there, not duplicated here.
