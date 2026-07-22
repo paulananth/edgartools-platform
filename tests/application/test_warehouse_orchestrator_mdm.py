@@ -480,6 +480,88 @@ def test_publish_silver_database_propagates_ambiguous_conflict(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# _is_transient_artifact_error — release-mode artifact retry classifier
+# ---------------------------------------------------------------------------
+
+
+def test_403_status_is_classified_transient(monkeypatch):
+    """Regression (2026-07-21): Ticket 20's strict release aborted an entire
+    116-batch run because a single SEC 403 (fetching a quarterly full-index
+    file) was not classified transient, so the existing retry loop gave up
+    immediately instead of retrying. SEC EDGAR is unauthenticated, so 403 on
+    a validly-built archive URL is its rate-limit/edge signal, not a real
+    permission denial -- confirmed transient by an immediate manual re-fetch
+    succeeding, and confirmed NOT concurrency-driven since three sibling
+    batches running at the same moment completed with zero errors."""
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _is_transient_artifact_error,
+    )
+
+    class _FakeResponse:
+        status_code = 403
+
+    class _FakeHTTPStatusError(Exception):
+        def __init__(self):
+            super().__init__("403 Forbidden")
+            self.response = _FakeResponse()
+
+    assert _is_transient_artifact_error(_FakeHTTPStatusError()) is True
+
+
+def test_other_retryable_statuses_remain_classified_transient(monkeypatch):
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _is_transient_artifact_error,
+    )
+
+    class _FakeResponse:
+        def __init__(self, status_code):
+            self.status_code = status_code
+
+    class _FakeHTTPStatusError(Exception):
+        def __init__(self, status_code):
+            super().__init__(f"{status_code} error")
+            self.response = _FakeResponse(status_code)
+
+    for status_code in (408, 429, 500, 502, 503, 504):
+        assert _is_transient_artifact_error(_FakeHTTPStatusError(status_code)) is True
+
+
+def test_404_status_is_not_classified_transient():
+    """A genuinely missing resource must not be retried -- retrying a 404
+    just burns three attempts on a document that will never appear."""
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _is_transient_artifact_error,
+    )
+
+    class _FakeResponse:
+        status_code = 404
+
+    class _FakeHTTPStatusError(Exception):
+        def __init__(self):
+            super().__init__("404 Not Found")
+            self.response = _FakeResponse()
+
+    assert _is_transient_artifact_error(_FakeHTTPStatusError()) is False
+
+
+def test_plain_value_error_is_not_classified_transient():
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _is_transient_artifact_error,
+    )
+
+    assert _is_transient_artifact_error(ValueError("no attachments found")) is False
+
+
+def test_connection_error_is_classified_transient():
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _is_transient_artifact_error,
+    )
+
+    assert _is_transient_artifact_error(ConnectionError("connection reset")) is True
+    assert _is_transient_artifact_error(TimeoutError("timed out")) is True
+
+
+# ---------------------------------------------------------------------------
 # silver_protection.merge_candidate_into_canonical — core merge semantics
 # (ARTF-01: protected-table registry + fail-closed publication)
 # ---------------------------------------------------------------------------
