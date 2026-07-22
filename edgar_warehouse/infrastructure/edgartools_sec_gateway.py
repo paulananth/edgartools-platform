@@ -15,6 +15,9 @@ mandatory archive paths and must never be listed as edgartools-covered.
 from __future__ import annotations
 
 import json
+import sys
+import time
+from datetime import UTC, datetime
 from typing import Any, Callable, Final
 from urllib.parse import urlparse
 
@@ -68,6 +71,27 @@ def ensure_identity(identity: str) -> None:
     edgar.set_identity(text)
 
 
+def _emit_gateway_event(event: str, **payload: object) -> None:
+    """Debug visibility for each individual SEC network call this gateway makes.
+
+    Matches sec_client.py's _emit_sec_pull_event JSON-line shape so existing
+    log tooling (diagnose-execution.sh) picks these up the same way, for the
+    edgartools-routed object classes (catalogs/submissions/companyfacts) that
+    previously only reported an aggregate network_fetches count with no
+    per-call visibility.
+    """
+    document = {
+        "event": event,
+        "emitted_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        **payload,
+    }
+    print(json.dumps(document, sort_keys=True), file=sys.stderr, flush=True)
+
+
+def _elapsed_ms(started_at: float) -> int:
+    return int((time.monotonic() - started_at) * 1000)
+
+
 def _validate_sec_url(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme != "https":
@@ -93,18 +117,48 @@ def download_bytes(
     from edgar.httprequests import download_file
 
     fetcher = download_file_fn or download_file
+    started_at = time.monotonic()
+    _emit_gateway_event("sec_call_started", url=url)
     try:
         content = fetcher(url)
-    except WarehouseRuntimeError:
+    except WarehouseRuntimeError as exc:
+        _emit_gateway_event(
+            "sec_call_failed", url=url, duration_ms=_elapsed_ms(started_at), error=str(exc)
+        )
         raise
     except Exception as exc:
+        _emit_gateway_event(
+            "sec_call_failed",
+            url=url,
+            duration_ms=_elapsed_ms(started_at),
+            error=exc.__class__.__name__,
+        )
         raise WarehouseRuntimeError(f"SEC request failed for {url}: {exc}") from exc
     if content is None:
+        _emit_gateway_event(
+            "sec_call_failed", url=url, duration_ms=_elapsed_ms(started_at), error="empty_body"
+        )
         raise WarehouseRuntimeError(f"SEC request returned empty body for {url}")
     if isinstance(content, bytes):
+        _emit_gateway_event(
+            "sec_call_completed", url=url, bytes=len(content), duration_ms=_elapsed_ms(started_at)
+        )
         return content
     if isinstance(content, str):
-        return content.encode("utf-8")
+        encoded = content.encode("utf-8")
+        _emit_gateway_event(
+            "sec_call_completed",
+            url=url,
+            bytes=len(encoded),
+            duration_ms=_elapsed_ms(started_at),
+        )
+        return encoded
+    _emit_gateway_event(
+        "sec_call_failed",
+        url=url,
+        duration_ms=_elapsed_ms(started_at),
+        error="unsupported_type",
+    )
     raise WarehouseRuntimeError(
         f"SEC request returned unsupported type {type(content)!r} for {url}"
     )
@@ -120,14 +174,34 @@ def download_json(
     _validate_sec_url(url)
     ensure_identity(identity)
     if download_json_fn is not None:
+        started_at = time.monotonic()
+        _emit_gateway_event("sec_call_started", url=url)
         try:
             payload = download_json_fn(url)
-        except WarehouseRuntimeError:
+        except WarehouseRuntimeError as exc:
+            _emit_gateway_event(
+                "sec_call_failed", url=url, duration_ms=_elapsed_ms(started_at), error=str(exc)
+            )
             raise
         except Exception as exc:
+            _emit_gateway_event(
+                "sec_call_failed",
+                url=url,
+                duration_ms=_elapsed_ms(started_at),
+                error=exc.__class__.__name__,
+            )
             raise WarehouseRuntimeError(f"SEC request failed for {url}: {exc}") from exc
         if not isinstance(payload, dict):
+            _emit_gateway_event(
+                "sec_call_failed",
+                url=url,
+                duration_ms=_elapsed_ms(started_at),
+                error="not_a_json_object",
+            )
             raise WarehouseRuntimeError(f"SEC JSON for {url} was not an object")
+        _emit_gateway_event(
+            "sec_call_completed", url=url, duration_ms=_elapsed_ms(started_at)
+        )
         return payload
     raw = download_bytes(url, identity)
     try:
