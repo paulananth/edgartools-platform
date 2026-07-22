@@ -29,6 +29,7 @@ process — the map is done once these specific open items are dispositioned.
   revisit only if `filed_date` becomes available in silver/gold for an
   unrelated reason.
 - [Does the completed prodb→prod cutover leave runtime_access roles still shared?](issues/01-runtime-access-role-sharing-check.md) — No: the 2026-07-19 cutover permanently namespaced prod's roles apart (`sec_platform_prod_runner_*` vs dev's unnamespaced `sec_platform_runner_*`), confirmed live via ECS task definitions. Separation is accidental (one account root overrides the prefix, the module itself still isn't fixed to namespace by default) but holds today — TODOS.md's re-verify flag can close.
+- [CI-runs-dbt-against-live-Snowflake (Issue 2B): invest now or keep deferring?](issues/04-ci-dbt-live-snowflake-investment-decision.md) — Invest now: `dbt run --select state:modified+ --full-refresh` + `dbt test` on PRs touching `infra/snowflake/dbt/**`, using dedicated CI creds scoped to `EDGARTOOLS_DEV_DEPLOYER` (not the existing accountadmin smoke-test secrets). Prerequisite confirmed still outstanding: the `EDGARTOOLS_DEV_DEPLOYER` SELECT grant is still ad-hoc, not codified in Terraform/bootstrap SQL — must land first, plus the analogous unchecked `EDGARTOOLS_PROD_DEPLOYER` grant. Decision only; codifying the grant and wiring the CI job are follow-up implementation work.
 
 ## Not yet specified
 
