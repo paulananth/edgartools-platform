@@ -74,3 +74,9 @@ variable "pipeline_failure_subscriber_email" {
   type        = string
   default     = null
 }
+
+variable "daily_incremental_schedule_enabled" {
+  description = "Set to true to schedule edgartools-prod-daily-incremental to run daily (seed-universe wayfinder tickets 02/03: IPO detection + Form 15 deregistration demotion). Defaults to false -- starts a recurring autonomous production Step Functions execution, so enabling requires explicit operator go, same as any other autonomous prod trigger."
+  type        = bool
+  default     = false
+}
