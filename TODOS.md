@@ -5,6 +5,60 @@ context to act without re-reading the source session.
 
 ---
 
+## Seed universe must refresh daily, scope to active companies only, and pick up new IPOs as they start trading
+
+**Status:** NOT STARTED.
+
+**What:** Three related requirements for the company seed universe (what
+`seed-universe` / `mdm seed-universe` load, and therefore what every
+downstream freeze/candidate manifest — including Ticket 20's relationship
+release — is bounded by):
+1. The seed universe must be refreshed on a **daily** schedule, not only
+   on-demand.
+2. Only **active** companies should be part of the universe (delisted/
+   deregistered companies should not keep accumulating candidate work).
+3. **IPOs must be added to the universe as soon as they start trading**, not
+   only on the next full/manual seed run.
+
+**Why:** Confirmed while tracing Ticket 20's candidate manifest
+(`ticket20-agent-1yr-20260721T114615Z`) back to its source: the universe is
+whatever companies happen to already be in `sec_company_sync_state` as of
+whenever `seed-universe` last ran (26,300 tracked CIKs at freeze time,
+narrowed to 11,523 with in-window candidate filings). If that seed is stale
+— missing recent IPOs, or still carrying companies that stopped filing —
+every downstream freeze inherits the same staleness, silently.
+
+**Where:** `edgar_warehouse/application/warehouse_orchestrator.py`
+(`run_seed_universe_command`, `seed_universe_loader`) and
+`infra/scripts/deploy-aws-application.sh` (`seed_universe` /
+`mdm_seed_universe` state machine wiring). Confirmed via
+`grep -n "ScheduleExpression\|cron(" infra/scripts/deploy-aws-application.sh`
+that `edgartools-prod-seed-universe` currently has **no** EventBridge
+schedule — it is on-demand only (started manually or as the first stage of
+`load_history`/`bootstrap` chains), not run on any cadence.
+`run_seed_universe_command` defaults `tracking_status="active"` for newly
+seeded rows, but nothing currently re-checks previously-seeded companies'
+still-active status, and there is no IPO-detection trigger.
+
+**Fix approach (not yet designed in detail):**
+- Add a daily-scheduled Step Function/EventBridge rule invoking
+  `seed-universe` (or a new incremental variant), analogous to the existing
+  `daily_incremental` state machine's cadence.
+- Decide the "active" signal source (SEC's own company-status field via
+  submissions.json, delisting feeds, or an existing tracking_status
+  transition) and wire a status-refresh pass that demotes companies that
+  are no longer active, so they stop generating future candidate work.
+- Decide the IPO-detection source (SEC's daily/current filing feed already
+  ingested via `sec_current_filing_feed` looks like the natural signal — a
+  first-ever S-1/424B4/effective registration for a CIK not yet in
+  `sec_company_sync_state`) and wire same-day addition to the universe
+  rather than waiting for the next full seed.
+
+**Surfaced:** 2026-07-22, while investigating Ticket 20's seed universe on
+the user's question during the strict release relaunch.
+
+---
+
 ## windowed publish OOM 5-whys (resolved 2026-07-21): full-copy candidate on any Branch B mode, not just company-identity
 
 **Problem:** While designing the Company Identity Pipeline bulk-mode state machine
