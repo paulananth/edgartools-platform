@@ -109,6 +109,21 @@ def test_strict_ticket20_path_generates_valid_fail_closed_definition(tmp_path: P
         cmd = states[state_name]["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
         assert "'--generation-id'" in cmd, (state_name, cmd)
         assert "$$.Execution.Name" in cmd, (state_name, cmd)
+
+    # GRAPH_APP_NODES/GRAPH_APP_EDGES (and the Native App capability checks
+    # built on them) are scoped to whatever generation is currently ACTIVE,
+    # not to --generation-id's candidate -- verified empirically 2026-07-23.
+    # StrictMdmVerifyCandidate must skip them (parity-only candidate gate) or
+    # a first-ever activation can never pass. StrictMdmVerify (post-activation,
+    # checks the now-active generation) must run them for real.
+    candidate_cmd = states["StrictMdmVerifyCandidate"]["Parameters"]["Overrides"][
+        "ContainerOverrides"
+    ][0]["Command.$"]
+    assert "'--skip-native-app'" in candidate_cmd
+    final_verify_cmd = states["StrictMdmVerify"]["Parameters"]["Overrides"][
+        "ContainerOverrides"
+    ][0]["Command.$"]
+    assert "'--skip-native-app'" not in final_verify_cmd
     reconcile_cmd = states["ReconcileRelationshipRelease"]["Parameters"][
         "Overrides"
     ]["ContainerOverrides"][0]["Command.$"]
