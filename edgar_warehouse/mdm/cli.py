@@ -197,6 +197,15 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     vg.add_argument("--native-app-name", default=None, help="Snowflake Native App name")
     vg.add_argument("--native-app-database-role", default=None, help="Database role granted to the Native App")
     vg.add_argument("--native-app-compute-pool", default=None, help="Native App compute pool selector")
+    vg.add_argument(
+        "--generation-id",
+        default=None,
+        help=(
+            "Verify this candidate generation instead of the currently-active one. "
+            "On pass, promotes it from 'building' to 'verified' (the only status "
+            "'mdm graph-activate' accepts); on fail, marks it 'failed' (07-05 RSYNC-02)."
+        ),
+    )
     vg.set_defaults(handler=_logged_handler("verify-graph", _handle_verify_graph))
 
     # verify-insider-coverage (Ticket 21 slice 3: insider-scoped EMPLOYED_BY gate)
@@ -1382,6 +1391,7 @@ def _handle_verify_graph(args) -> int:
                     native_app_compute_pool=(
                         args.native_app_compute_pool or DEFAULT_NATIVE_APP_COMPUTE_POOL
                     ),
+                    generation_id=args.generation_id,
                 )
             )
         finally:
@@ -1624,10 +1634,13 @@ def _handle_export(args) -> int:
     from edgar_warehouse.mdm.export import MDMExporter
 
     writer = _build_snowflake_writer()
-    exporter = MDMExporter(session=_session(), writer=writer)
+    mirror_writer = _build_snowflake_mirror_writer()
+    exporter = MDMExporter(session=_session(), writer=writer, mirror_writer=mirror_writer)
     since = datetime.fromisoformat(args.since) if args.since else None
     n = exporter.export_pending(since=since, entity_type=args.entity_type,
                                 batch_size=args.batch_size)
+    n += exporter.export_pending_relationships(batch_size=args.batch_size)
+    n += exporter.sync_reference_tables()
     print(f"exported {n} rows")
     return 0
 
@@ -1636,6 +1649,27 @@ def _build_snowflake_writer():
     from edgar_warehouse.mdm.export import SnowflakeConnectorWriter
 
     return SnowflakeConnectorWriter.from_env()
+
+
+def _build_snowflake_mirror_writer():
+    """Writer targeting the MDM schema mirror sync-graph actually reads from
+    (distinct from _build_snowflake_writer's EDGARTOOLS_GOLD golden-record
+    target -- see MDMExporter's docstring)."""
+    from edgar_warehouse.mdm.export import SnowflakeConnectionSettings, SnowflakeConnectorWriter
+
+    settings = SnowflakeConnectionSettings.from_env()
+    mirror_settings = SnowflakeConnectionSettings(
+        account=settings.account,
+        user=settings.user,
+        password=settings.password,
+        database=settings.database,
+        schema="MDM",
+        warehouse=settings.warehouse,
+        role=settings.role,
+    )
+    return SnowflakeConnectorWriter(
+        mirror_settings.connect(), database=mirror_settings.database, schema=mirror_settings.schema
+    )
 
 
 def _handle_verify_insider_coverage(args) -> int:

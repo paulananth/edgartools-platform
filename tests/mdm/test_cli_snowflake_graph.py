@@ -506,6 +506,55 @@ def test_verify_graph_reports_strict_snowflake_parity(monkeypatch, capsys):
     assert connection.closed is True
 
 
+def test_verify_graph_generation_id_flag_promotes_candidate_to_verified_on_pass(monkeypatch, capsys):
+    # Before this flag existed, verify-graph could only ever check the
+    # currently-active generation -- with no generation ever activated yet
+    # (first-time sync-graph run), the candidate a pipeline just synced could
+    # never be verified/promoted/activated at all (RSYNC-02 bootstrap gap).
+    _clear_graph_env(monkeypatch)
+    connection = FakeSnowflakeConnection(
+        result_sets=_strict_parity_results(
+            node_rows=_all_6_node_rows_at_parity(),
+            relationship_rows=_all_4_populated_relationship_rows_at_parity(),
+        )
+    )
+    _patch_verify_settings(monkeypatch, connection)
+
+    args = build_parser().parse_args(
+        ["mdm", "verify-graph", "--generation-id", "candidate-gen-123"]
+    )
+
+    assert args.handler(args) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "ok"
+
+    executed = connection.cursor_instance.executed
+    status_updates = [
+        sql for sql in executed
+        if "SET STATUS = 'verified'" in sql and "candidate-gen-123" in sql
+    ]
+    assert status_updates, executed
+
+
+def test_verify_graph_without_generation_id_never_touches_graph_generation_status(monkeypatch, capsys):
+    _clear_graph_env(monkeypatch)
+    connection = FakeSnowflakeConnection(
+        result_sets=_strict_parity_results(
+            node_rows=_all_6_node_rows_at_parity(),
+            relationship_rows=_all_4_populated_relationship_rows_at_parity(),
+        )
+    )
+    _patch_verify_settings(monkeypatch, connection)
+
+    args = build_parser().parse_args(["mdm", "verify-graph"])
+
+    assert args.handler(args) == 0
+
+    executed = connection.cursor_instance.executed
+    assert not any("SET STATUS" in sql for sql in executed)
+
+
 def test_verify_graph_fails_hard_when_native_app_grant_missing(monkeypatch, capsys):
     _clear_graph_env(monkeypatch)
     _patch_verify_settings(

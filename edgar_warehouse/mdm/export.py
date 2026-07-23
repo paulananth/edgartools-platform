@@ -262,8 +262,19 @@ class SnowflakeConnectorWriter(SnowflakeWriter):
 
 @dataclass
 class MDMExporter:
+    """Exports MDM domain golden records to EDGARTOOLS_GOLD, and (when
+    ``mirror_writer`` is supplied) also keeps the EDGARTOOLS_*.MDM graph-source
+    mirror fresh -- the tables sync-graph's render_graph_tables() actually
+    reads (MDM_ENTITY, MDM_CHANGE_LOG, and the domain tables). Before this,
+    nothing kept that mirror current after its one-time bootstrap load, so
+    sync-graph silently read a frozen snapshot forever (see
+    docs/prod-mdm-snowflake-graph-first-load.md and the mdm_relationship_type/
+    mdm_entity_type_definition reference-table sync below).
+    """
+
     session: Session
     writer: SnowflakeWriter
+    mirror_writer: Optional[SnowflakeWriter] = None
 
     def export_pending(self, since: Optional[datetime] = None, entity_type: Optional[str] = None,
                        batch_size: int = 500) -> int:
@@ -294,6 +305,9 @@ class MDMExporter:
             payload = [self._serialize(r) for r in domain_rows]
             total += self.writer.upsert(sf_table, payload)
 
+        if self.mirror_writer is not None:
+            self._export_mirror(pending)
+
         now = datetime.now(timezone.utc)
         change_ids = [r.change_id for r in pending]
         self.session.execute(
@@ -302,6 +316,76 @@ class MDMExporter:
             .values(exported_at=now)
         )
         self.session.commit()
+        return total
+
+    def _export_mirror(self, pending: list) -> None:
+        """Keep the sync-graph-source mirror current for this batch of changes.
+
+        Mirrors MDM_ENTITY (every entity touched by a pending change) and
+        MDM_CHANGE_LOG (the change rows themselves -- render_graph_tables'
+        GRAPH_ENTITY_MERGE_LINEAGE view reads CHANGED_FIELDS:merged_from from
+        this table) into the mirror_writer's schema. Domain tables are
+        upserted separately in export_pending's per-type loop above, using
+        the same mirror_writer target when the caller wires the domain writer
+        and mirror_writer to the same schema.
+        """
+        assert self.mirror_writer is not None
+        entity_ids = sorted({row.entity_id for row in pending})
+        entities = list(
+            self.session.scalars(select(db.MdmEntity).where(db.MdmEntity.entity_id.in_(entity_ids)))
+        )
+        self.mirror_writer.upsert("MDM_ENTITY", [self._serialize(r) for r in entities], key="entity_id")
+        self.mirror_writer.upsert(
+            "MDM_CHANGE_LOG", [self._serialize(r) for r in pending], key="change_id"
+        )
+
+    def export_pending_relationships(self, batch_size: int = 500) -> int:
+        """Mirror relationship instances sync-graph needs, using their own
+        existing graph_synced_at pending-tracking column (separate from
+        mdm_change_log, which never tracked relationships -- see graph.py).
+        """
+        if self.mirror_writer is None:
+            return 0
+        stmt = (
+            select(db.MdmRelationshipInstance)
+            .where(db.MdmRelationshipInstance.graph_synced_at.is_(None))
+            .limit(batch_size)
+        )
+        pending = list(self.session.scalars(stmt))
+        if not pending:
+            return 0
+
+        payload = [self._serialize(r) for r in pending]
+        total = self.mirror_writer.upsert("MDM_RELATIONSHIP_INSTANCE", payload, key="instance_id")
+
+        now = datetime.now(timezone.utc)
+        instance_ids = [r.instance_id for r in pending]
+        self.session.execute(
+            update(db.MdmRelationshipInstance)
+            .where(db.MdmRelationshipInstance.instance_id.in_(instance_ids))
+            .values(graph_synced_at=now)
+        )
+        self.session.commit()
+        return total
+
+    def sync_reference_tables(self) -> int:
+        """Full-refresh the small, rarely-changing graph reference tables
+        sync-graph joins against (MDM_ENTITY_TYPE_DEFINITION, MDM_RELATIONSHIP_TYPE).
+        No per-row change tracking exists for these -- they are seed/config
+        data, not operational writes -- so a full upsert-all each export run
+        is the correct (and cheap: single-digit to low-tens of rows) strategy.
+        """
+        if self.mirror_writer is None:
+            return 0
+        total = 0
+        entity_types = list(self.session.scalars(select(db.MdmEntityTypeDefinition)))
+        total += self.mirror_writer.upsert(
+            "MDM_ENTITY_TYPE_DEFINITION", [self._serialize(r) for r in entity_types], key="entity_type"
+        )
+        relationship_types = list(self.session.scalars(select(db.MdmRelationshipType)))
+        total += self.mirror_writer.upsert(
+            "MDM_RELATIONSHIP_TYPE", [self._serialize(r) for r in relationship_types], key="rel_type_id"
+        )
         return total
 
     @staticmethod
