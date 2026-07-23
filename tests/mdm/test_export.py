@@ -2,10 +2,30 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
 
-from edgar_warehouse.mdm.export import SnowflakeConnectorWriter
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
+
+from edgar_warehouse.mdm import database as db
+from edgar_warehouse.mdm.database import Base
+from edgar_warehouse.mdm.export import MDMExporter, SnowflakeConnectorWriter
 from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
+
+
+class FakeWriter:
+    """Records upsert calls without touching real Snowflake."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, list[dict], str]] = []
+
+    def upsert(self, table: str, rows: list[dict], key: str = "entity_id") -> int:
+        self.calls.append((table, rows, key))
+        return len(rows)
 
 
 class FakeCursor:
@@ -216,3 +236,139 @@ def test_snowflake_connection_settings_missing_values_preserve_error_names(monke
     assert "MDM_SNOWFLAKE_DATABASE or DBT_SNOWFLAKE_DATABASE" in message
     assert "MDM_SNOWFLAKE_WAREHOUSE or DBT_SNOWFLAKE_WAREHOUSE" in message
     assert "NEO4J_" not in message
+
+
+# ---------------------------------------------------------------------------
+# MDMExporter mirror tests: keeping the sync-graph-source MDM schema mirror
+# current. Before this, nothing refreshed EDGARTOOLS_PROD.MDM after its
+# one-time bootstrap load, so sync-graph silently read a frozen snapshot.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def session() -> Session:
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    sess = Session(engine)
+    yield sess
+    sess.close()
+
+
+def test_export_pending_mirrors_entity_and_change_log_when_mirror_writer_provided(session):
+    entity_id = str(uuid.uuid4())
+    session.add(db.MdmEntity(entity_id=entity_id, entity_type="company"))
+    session.add(db.MdmCompany(entity_id=entity_id, cik=1, canonical_name="Issuer Corp"))
+    session.commit()
+    session.add(db.MdmChangeLog(entity_id=entity_id, entity_type="company", changed_fields={"cik": 1}))
+    session.commit()
+
+    domain_writer = FakeWriter()
+    mirror_writer = FakeWriter()
+    exporter = MDMExporter(session=session, writer=domain_writer, mirror_writer=mirror_writer)
+
+    total = exporter.export_pending()
+
+    assert total == 1
+    domain_tables = {call[0] for call in domain_writer.calls}
+    assert domain_tables == {"MDM_COMPANY"}
+    mirror_tables = {call[0] for call in mirror_writer.calls}
+    assert mirror_tables == {"MDM_ENTITY", "MDM_CHANGE_LOG"}
+    entity_call = next(call for call in mirror_writer.calls if call[0] == "MDM_ENTITY")
+    assert entity_call[2] == "entity_id"
+    assert entity_call[1][0]["entity_id"] == entity_id
+    change_log_call = next(call for call in mirror_writer.calls if call[0] == "MDM_CHANGE_LOG")
+    assert change_log_call[2] == "change_id"
+
+
+def test_export_pending_skips_mirror_when_mirror_writer_is_none(session):
+    entity_id = str(uuid.uuid4())
+    session.add(db.MdmEntity(entity_id=entity_id, entity_type="company"))
+    session.add(db.MdmCompany(entity_id=entity_id, cik=1, canonical_name="Issuer Corp"))
+    session.commit()
+    session.add(db.MdmChangeLog(entity_id=entity_id, entity_type="company", changed_fields={"cik": 1}))
+    session.commit()
+
+    domain_writer = FakeWriter()
+    exporter = MDMExporter(session=session, writer=domain_writer)
+
+    total = exporter.export_pending()
+
+    assert total == 1
+    assert {call[0] for call in domain_writer.calls} == {"MDM_COMPANY"}
+
+
+def test_export_pending_relationships_mirrors_and_stamps_graph_synced_at(session):
+    rel_type_id = str(uuid.uuid4())
+    session.add(db.MdmRelationshipType(
+        rel_type_id=rel_type_id, rel_type_name="MANAGES_FUND",
+        source_node_type="adviser", target_node_type="fund",
+        direction="outbound", is_temporal=True, merge_strategy="extend_temporal", is_active=True,
+    ))
+    adviser_id = str(uuid.uuid4())
+    fund_id = str(uuid.uuid4())
+    session.add(db.MdmEntity(entity_id=adviser_id, entity_type="adviser"))
+    session.add(db.MdmEntity(entity_id=fund_id, entity_type="fund"))
+    session.commit()
+    instance_id = str(uuid.uuid4())
+    session.add(db.MdmRelationshipInstance(
+        instance_id=instance_id, rel_type_id=rel_type_id,
+        source_entity_id=adviser_id, target_entity_id=fund_id,
+        source_system="test", is_active=True,
+    ))
+    session.commit()
+
+    mirror_writer = FakeWriter()
+    exporter = MDMExporter(session=session, writer=FakeWriter(), mirror_writer=mirror_writer)
+
+    total = exporter.export_pending_relationships()
+
+    assert total == 1
+    assert mirror_writer.calls[0][0] == "MDM_RELATIONSHIP_INSTANCE"
+    assert mirror_writer.calls[0][2] == "instance_id"
+    refreshed = session.get(db.MdmRelationshipInstance, instance_id)
+    assert refreshed.graph_synced_at is not None
+
+    # A second call should find nothing pending -- graph_synced_at excludes it now.
+    mirror_writer_2 = FakeWriter()
+    exporter_2 = MDMExporter(session=session, writer=FakeWriter(), mirror_writer=mirror_writer_2)
+    assert exporter_2.export_pending_relationships() == 0
+    assert mirror_writer_2.calls == []
+
+
+def test_export_pending_relationships_returns_zero_without_mirror_writer(session):
+    exporter = MDMExporter(session=session, writer=FakeWriter())
+    assert exporter.export_pending_relationships() == 0
+
+
+def test_sync_reference_tables_upserts_entity_type_definitions_and_relationship_types(session):
+    session.add(db.MdmEntityTypeDefinition(
+        entity_type="company", neo4j_label="Company", domain_table="mdm_company",
+        api_path_prefix="/companies", primary_id_field="entity_id",
+        display_name="Company", is_active=True,
+    ))
+    session.add(db.MdmRelationshipType(
+        rel_type_id=str(uuid.uuid4()), rel_type_name="MANAGES_FUND",
+        source_node_type="adviser", target_node_type="fund",
+        direction="outbound", is_temporal=True, merge_strategy="extend_temporal", is_active=True,
+    ))
+    session.commit()
+
+    mirror_writer = FakeWriter()
+    exporter = MDMExporter(session=session, writer=FakeWriter(), mirror_writer=mirror_writer)
+
+    total = exporter.sync_reference_tables()
+
+    assert total == 2
+    tables_and_keys = {(call[0], call[2]) for call in mirror_writer.calls}
+    assert tables_and_keys == {
+        ("MDM_ENTITY_TYPE_DEFINITION", "entity_type"),
+        ("MDM_RELATIONSHIP_TYPE", "rel_type_id"),
+    }
+
+
+def test_sync_reference_tables_returns_zero_without_mirror_writer(session):
+    exporter = MDMExporter(session=session, writer=FakeWriter())
+    assert exporter.sync_reference_tables() == 0

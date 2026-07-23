@@ -2532,8 +2532,31 @@ strict_mdm_run = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity
 strict_mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="StrictMdmIdempotency")
 strict_mdm_idempotency = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="StrictMdmExport")
 strict_mdm_export = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="StrictMdmSync")
-strict_mdm_sync = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="StrictMdmSyncIdempotency")
-strict_mdm_sync_idempotency = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="StrictMdmVerify")
+# sync-graph publishes into an execution-scoped generation-id (not a fresh
+# random UUID each call, its no-flag default) so StrictMdmSyncIdempotency's
+# second sync-graph call targets the SAME generation (a real idempotency
+# check, not a second unrelated one), and so StrictMdmVerifyCandidate/
+# StrictMdmActivate below can reference it deterministically. Before this,
+# nothing in any pipeline ever activated a generation, so the graph a
+# strict run just synced could never become the one StrictMdmVerify checks
+# (RSYNC-02 bootstrap gap).
+strict_mdm_sync = ecs_state(mdm_medium_arn,
+    "States.Array('mdm', 'sync-graph', '--generation-id', $$.Execution.Name)",
+    next_state="StrictMdmSyncIdempotency")
+strict_mdm_sync_idempotency = ecs_state(mdm_medium_arn,
+    "States.Array('mdm', 'sync-graph', '--generation-id', $$.Execution.Name)",
+    next_state="StrictMdmVerifyCandidate")
+# Verifies this run's candidate generation specifically (not the
+# currently-active one) -- on pass this promotes it 'building' -> 'verified',
+# the only status StrictMdmActivate's graph-activate accepts (07-05 RSYNC-02).
+# No Catch: Ticket 20 fails closed on graph parity (PR #139), so a candidate
+# that doesn't verify must fail the whole execution, not silently skip ahead.
+strict_mdm_verify_candidate = ecs_state(mdm_small_arn,
+    "States.Array('mdm', 'verify-graph', '--generation-id', $$.Execution.Name)",
+    next_state="StrictMdmActivate")
+strict_mdm_activate = ecs_state(mdm_small_arn,
+    "States.Array('mdm', 'graph-activate', '--generation-id', $$.Execution.Name)",
+    next_state="StrictMdmVerify")
 strict_mdm_verify = ecs_state(mdm_small_arn, "States.Array('mdm', 'verify-graph')", next_state="StrictGoldRefresh")
 strict_gold = ecs_state(wh_large_arn, "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
 
@@ -2560,6 +2583,8 @@ definition = {
         "StrictMdmExport": strict_mdm_export,
         "StrictMdmSync": strict_mdm_sync,
         "StrictMdmSyncIdempotency": strict_mdm_sync_idempotency,
+        "StrictMdmVerifyCandidate": strict_mdm_verify_candidate,
+        "StrictMdmActivate": strict_mdm_activate,
         "StrictMdmVerify": strict_mdm_verify,
         "StrictGoldRefresh": strict_gold,
         "BatchSizeCheck": batch_size_check,

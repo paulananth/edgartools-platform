@@ -78,12 +78,37 @@ def test_strict_ticket20_path_generates_valid_fail_closed_definition(tmp_path: P
     assert "$.release_run_id" in command
     assert "$$.Execution.Name" not in command
     assert "Retry" not in strict_map["ItemProcessor"]["States"]["RunStrictBatch"]
+    # PR #139: strict Ticket 20 fails closed on graph parity -- none of the
+    # graph-publishing chain (sync/verify-candidate/activate/final-verify)
+    # may have a Catch, or a bad candidate/activation could silently fall
+    # through to StrictGoldRefresh instead of failing the execution.
+    assert "Catch" not in states["StrictMdmSync"]
+    assert "Catch" not in states["StrictMdmSyncIdempotency"]
+    assert "Catch" not in states["StrictMdmVerifyCandidate"]
+    assert "Catch" not in states["StrictMdmActivate"]
     assert "Catch" not in states["StrictMdmVerify"]
     assert states["StrictMdmBackfill"]["Next"] == "StrictMdmIdempotency"
     assert states["StrictMdmIdempotency"]["Next"] == "StrictMdmExport"
     assert states["StrictMdmSync"]["Next"] == "StrictMdmSyncIdempotency"
-    assert states["StrictMdmSyncIdempotency"]["Next"] == "StrictMdmVerify"
+    assert states["StrictMdmSyncIdempotency"]["Next"] == "StrictMdmVerifyCandidate"
+    assert states["StrictMdmVerifyCandidate"]["Next"] == "StrictMdmActivate"
+    assert states["StrictMdmActivate"]["Next"] == "StrictMdmVerify"
     assert states["StrictMdmVerify"]["Next"] == "StrictGoldRefresh"
+
+    # sync-graph/verify-graph/graph-activate all target the SAME
+    # execution-scoped generation-id -- StrictMdmSyncIdempotency's second
+    # sync-graph call is a real idempotency check (same generation, not a
+    # fresh random one), and the candidate verified by StrictMdmVerifyCandidate
+    # is the exact one StrictMdmActivate activates.
+    for state_name in (
+        "StrictMdmSync",
+        "StrictMdmSyncIdempotency",
+        "StrictMdmVerifyCandidate",
+        "StrictMdmActivate",
+    ):
+        cmd = states[state_name]["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+        assert "'--generation-id'" in cmd, (state_name, cmd)
+        assert "$$.Execution.Name" in cmd, (state_name, cmd)
     reconcile_cmd = states["ReconcileRelationshipRelease"]["Parameters"][
         "Overrides"
     ]["ContainerOverrides"][0]["Command.$"]
