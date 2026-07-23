@@ -25,7 +25,7 @@ def test_cli_ready_for_strict_load(tmp_path: Path, capsys) -> None:
                 "accession_number": "new-13f",
                 "cik": 9,
                 "form": "13F-HR",
-                "filing_date": "2025-08-14",
+                "filing_date": "2026-05-14",
                 "fingerprint": "c-fp",
                 "candidate_reason": "thirteenf_filing",
                 "artifact_required": True,

@@ -129,7 +129,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Optional uniform index/window start. When omitted, uses locked agent "
-            "lookbacks (13F 3y/XML floor, proxy 5y, Item 5.02 8-K 2y) and sets "
+            "lookbacks (13F 1 quarter/XML floor, proxy 5y, Item 5.02 8-K 2y) and sets "
             "coverage_start to the min-of-types index floor."
         ),
     )

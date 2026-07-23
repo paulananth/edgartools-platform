@@ -80,7 +80,7 @@ def test_cli_writes_execution_input_with_preflight(tmp_path: Path, capsys) -> No
                 "accession_number": "a",
                 "cik": 1,
                 "form": "13F-HR",
-                "filing_date": "2025-08-14",
+                "filing_date": "2026-05-14",
                 "fingerprint": "c",
                 "candidate_reason": "thirteenf_filing",
                 "artifact_required": True,

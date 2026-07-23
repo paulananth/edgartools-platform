@@ -46,3 +46,17 @@ coverage metadata.
 - Destination: agent-first + step lookbacks (ticket 02).
 - Interactive re-prompt for this ticket was declined; resolution uses the above
   already-confirmed answers (not a new override).
+
+## Amendments (this ticket's answer has since been narrowed twice — record kept for history)
+
+- **PR #217**: 3 years → 1 year. Operator decision, no rationale beyond
+  narrowing scope recorded on the ticket at the time.
+- **2026-07-23**: 1 year → **1 quarter** (`THIRTEENF_AGENT_LOOKBACK_MONTHS =
+  3` in `edgar_warehouse/application/relationship_bulk_load.py`). Operator
+  rationale: historical 13F depth has no real standalone value — holdings
+  are a point-in-time snapshot, not a time series worth backfilling years of;
+  only the current quarter's snapshot plus `daily_incremental` going forward
+  matter. XML-era floor (2013-05-20) and the proxy (5y) / Item 5.02 8-K (2y)
+  windows are unaffected — this amendment is 13F-only.
+- The locked window as of 2026-07-23 is:
+  `filing_date ∈ [max(W − 1 quarter, 2013-05-20), W]`.
