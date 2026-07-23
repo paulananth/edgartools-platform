@@ -330,7 +330,7 @@ def test_ticket20_pass_claim_binds_fingerprint_watermark_and_windows() -> None:
     assert "fingerprint abc123" in claim
     assert "watermark 2026-07-02" in claim
     assert "13F [2026-04-02, 2026-07-02]" in claim
-    assert "proxy [2021-07-02, 2026-07-02]" in claim
+    assert "proxy [2025-07-02, 2026-07-02]" in claim
     assert "Item 5.02 / ambiguous 8-K [2024-07-02, 2026-07-02]" in claim
     assert "complete since 2013" not in claim.lower()
 
@@ -494,10 +494,10 @@ def test_agent_coverage_windows_use_per_form_lookbacks() -> None:
     windows = agent_coverage_by_document_type(watermark)
     assert windows["thirteenf"]["start"] == "2026-04-02"
     assert windows["thirteenf"]["end"] == "2026-07-02"
-    assert windows["proxy"]["start"] == "2021-07-02"
+    assert windows["proxy"]["start"] == "2025-07-02"
     assert windows["proxy"]["baseline"] == "latest_in_band_only"
     assert windows["item_502_8k"]["start"] == "2024-07-02"
-    assert index_floor_coverage_start(windows) == date(2021, 7, 2)
+    assert index_floor_coverage_start(windows) == date(2024, 7, 2)  # item 502 W−2y is now earliest
 
 
 def test_agent_thirteenf_respects_xml_floor() -> None:
@@ -505,7 +505,7 @@ def test_agent_thirteenf_respects_xml_floor() -> None:
     windows = agent_coverage_by_document_type(watermark)
     # W−1q = 2013-04-01 would predate XML floor
     assert windows["thirteenf"]["start"] == "2013-05-20"
-    assert index_floor_coverage_start(windows) == date(2008, 7, 1)  # proxy W−5y
+    assert index_floor_coverage_start(windows) == date(2011, 7, 1)  # item 502 W−2y
 
 
 def test_inventory_applies_agent_windows_and_emits_coverage_metadata() -> None:
@@ -513,13 +513,13 @@ def test_inventory_applies_agent_windows_and_emits_coverage_metadata() -> None:
     filings = [
         _filing("old-13f", "13F-HR", cik=9, filing_date="2020-08-14"),  # before W−1q
         _filing("new-13f", "13F-HR", cik=9, filing_date="2026-05-14"),
-        _filing("old-proxy", "DEF 14A", cik=1, filing_date="2019-05-01"),  # before W−5y
-        _filing("new-proxy", "DEF 14A", cik=1, filing_date="2023-05-01"),
+        _filing("old-proxy", "DEF 14A", cik=1, filing_date="2019-05-01"),  # before W−1y
+        _filing("new-proxy", "DEF 14A", cik=1, filing_date="2026-01-15"),
         _filing("old-502", "8-K", cik=1, items="5.02", filing_date="2023-01-01"),  # before W−2y
         _filing("new-502", "8-K", cik=1, items="5.02", filing_date="2025-01-01"),
         _filing("unrelated", "8-K", cik=1, items="2.02", filing_date="2025-06-01"),
     ]
-    # Quarters from index floor (proxy W−5y = 2021-07-02) through watermark
+    # Quarters from index floor (item 502 W−2y = 2024-07-02) through watermark
     from edgar_warehouse.application.relationship_bulk_load import expected_quarters
 
     floor = index_floor_coverage_start(agent_coverage_by_document_type(watermark))

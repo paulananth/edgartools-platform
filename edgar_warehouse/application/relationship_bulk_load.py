@@ -41,8 +41,13 @@ THIRTEENF_XML_FLOOR = DEFAULT_COVERAGE_START
 # daily_incremental matter) -- narrowed from 1 year (PR #217, itself narrowed
 # from the original 3-year lock) to a single quarter. Proxy/Item 502 lookbacks
 # are unaffected.
+# 2026-07-23 operator decision: narrowed from 5 years to 1 -- current board/
+# executive composition is what EMPLOYED_BY needs, not a multi-year history of
+# past proxies. A company with no proxy in the last year has a genuine
+# coverage gap (fail-closed missing baseline), not one filled by an older
+# filing -- same fail-closed posture as the original 5y lock, just narrower.
 THIRTEENF_AGENT_LOOKBACK_MONTHS = 3
-PROXY_AGENT_LOOKBACK_YEARS = 5
+PROXY_AGENT_LOOKBACK_YEARS = 1
 ITEM_502_AGENT_LOOKBACK_YEARS = 2
 
 

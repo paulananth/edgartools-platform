@@ -20,10 +20,15 @@ historical 13F depth judged to have no real value on its own (holdings are a
 point-in-time snapshot; only current state + go-forward `daily_incremental`
 matter). `THIRTEENF_AGENT_LOOKBACK_YEARS = 1` (itself narrowed from the
 original 3-year lock, PR #217) replaced by `THIRTEENF_AGENT_LOOKBACK_MONTHS =
-3` in `relationship_bulk_load.py`. Proxy (5y) and Item 5.02 8-K (2y) windows
-unchanged. retry6 (running under the old 1-year window) was stopped and a
-fresh freeze/execution built under the new window — see the end of this file
-for the new fingerprint/execution name once launched.
+3` in `relationship_bulk_load.py`. Item 5.02 8-K (2y) window unchanged.
+retry6 (running under the old 1-year window) was stopped and a fresh
+freeze/execution built under the new window — see the end of this file for
+the new fingerprint/execution name once launched.
+
+**2026-07-23 — proxy lookback narrowed to one year (operator decision):**
+same rationale — current board/executive composition, not multi-year proxy
+history. `PROXY_AGENT_LOOKBACK_YEARS = 5 → 1`. This is bundled into the same
+freeze rebuild as the 13F change above.
 
 ## Task
 
@@ -31,8 +36,9 @@ Run the strict production bulk load at the frozen Release Data Watermark, repair
 
 **Coverage policy (document-type specific):** do not freeze a single global
 2013 start for every form. Locked agent windows (wayfinder + PR #170/#171,
-13F narrowed 3y→1y by PR #217, then 1y→1 quarter 2026-07-23):
-13F `max(W−1 quarter, 2013-05-20)`, proxy `[W−5y, W]` latest-in-band only,
+13F narrowed 3y→1y by PR #217 then 1y→1 quarter 2026-07-23; proxy narrowed
+5y→1y 2026-07-23):
+13F `max(W−1 quarter, 2013-05-20)`, proxy `[W−1y, W]` latest-in-band only,
 Item 5.02 / ambiguous 8-K `[W−2y, W]`. Rebuild freeze with
 `coverage_by_document_type` before GO. Live 2013-era freeze is **rejected**
 under `release_mode`.
