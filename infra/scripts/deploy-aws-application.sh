@@ -2551,8 +2551,17 @@ strict_mdm_sync_idempotency = ecs_state(mdm_medium_arn,
 # the only status StrictMdmActivate's graph-activate accepts (07-05 RSYNC-02).
 # No Catch: Ticket 20 fails closed on graph parity (PR #139), so a candidate
 # that doesn't verify must fail the whole execution, not silently skip ahead.
+# --skip-native-app: GRAPH_APP_NODES/GRAPH_APP_EDGES (and therefore the Native
+# App's GRAPH_INFO/BFS/WCC capability checks) are views scoped to whatever
+# generation is currently ACTIVE, not the candidate passed via --generation-id
+# -- confirmed empirically 2026-07-23 (candidate check against them fails with
+# "Loading from an empty nodes table" before first activation, and passes only
+# after StrictMdmActivate flips the pointer). Running them here would test the
+# OLD active graph, not this candidate, and would deadlock a first-ever
+# activation forever. Capability is still checked for real by StrictMdmVerify
+# below, once this candidate is actually the active generation.
 strict_mdm_verify_candidate = ecs_state(mdm_small_arn,
-    "States.Array('mdm', 'verify-graph', '--generation-id', $$.Execution.Name)",
+    "States.Array('mdm', 'verify-graph', '--generation-id', $$.Execution.Name, '--skip-native-app')",
     next_state="StrictMdmActivate")
 strict_mdm_activate = ecs_state(mdm_small_arn,
     "States.Array('mdm', 'graph-activate', '--generation-id', $$.Execution.Name)",
