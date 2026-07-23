@@ -46,3 +46,15 @@ GO denominator.
 | --- | --- |
 | 1 | History band **W − 5 years → W** (with latest-in-band as baseline) |
 | 2 | **No** load of proxies older than W−5y (rejects “baseline always if ancient”) |
+
+## Amendment (2026-07-23)
+
+Narrowed **5 years → 1 year** (`PROXY_AGENT_LOOKBACK_YEARS = 1` in
+`edgar_warehouse/application/relationship_bulk_load.py`). Operator rationale:
+current board/executive composition is what `EMPLOYED_BY` needs, not a
+multi-year history of past proxies. The fail-closed posture from the
+original decision is unchanged, just narrower: a company with no proxy in
+the last year still has a genuine coverage gap (missing baseline), not one
+filled by an older filing.
+
+Locked window as of 2026-07-23: `filing_date ∈ [W − 1 year, W]`.

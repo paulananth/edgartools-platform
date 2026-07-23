@@ -273,7 +273,7 @@ def test_preflight_strict_release_manifest_ready_report() -> None:
                 "accession_number": "new-13f",
                 "cik": 9,
                 "form": "13F-HR",
-                "filing_date": "2025-08-14",
+                "filing_date": "2026-05-14",
                 "fingerprint": "c-fp",
                 "candidate_reason": "thirteenf_filing",
                 "artifact_required": True,
@@ -287,7 +287,7 @@ def test_preflight_strict_release_manifest_ready_report() -> None:
     report = preflight_strict_release_manifest(payload)
     assert report["strict_release_eligible"] is True
     assert report["disposition"] == "READY_FOR_STRICT_LOAD"
-    assert report["coverage_by_document_type"]["thirteenf"]["start"] == "2025-07-02"
+    assert report["coverage_by_document_type"]["thirteenf"]["start"] == "2026-04-02"
 
 
 def test_preflight_rejects_legacy_full_window_freeze() -> None:
@@ -329,8 +329,8 @@ def test_ticket20_pass_claim_binds_fingerprint_watermark_and_windows() -> None:
     )
     assert "fingerprint abc123" in claim
     assert "watermark 2026-07-02" in claim
-    assert "13F [2025-07-02, 2026-07-02]" in claim
-    assert "proxy [2021-07-02, 2026-07-02]" in claim
+    assert "13F [2026-04-02, 2026-07-02]" in claim
+    assert "proxy [2025-07-02, 2026-07-02]" in claim
     assert "Item 5.02 / ambiguous 8-K [2024-07-02, 2026-07-02]" in claim
     assert "complete since 2013" not in claim.lower()
 
@@ -450,13 +450,13 @@ def test_strict_release_accepts_agent_window_manifest() -> None:
                 "accession_number": "new-13f",
                 "cik": 9,
                 "form": "13F-HR",
-                "filing_date": "2025-08-14",
+                "filing_date": "2026-05-14",
                 "fingerprint": "c-fp",
                 "candidate_reason": "thirteenf_filing",
                 "artifact_required": True,
             }
         ],
-        "quarter_index_fingerprints": [["2025Q3", "q"]],
+        "quarter_index_fingerprints": [["2026Q2", "q"]],
     }
     assert validate_strict_release_manifest(payload) == windows
     inventory = candidate_inventory_from_manifest(
@@ -492,34 +492,34 @@ def test_strict_release_rejects_out_of_window_candidate() -> None:
 def test_agent_coverage_windows_use_per_form_lookbacks() -> None:
     watermark = date(2026, 7, 2)
     windows = agent_coverage_by_document_type(watermark)
-    assert windows["thirteenf"]["start"] == "2025-07-02"
+    assert windows["thirteenf"]["start"] == "2026-04-02"
     assert windows["thirteenf"]["end"] == "2026-07-02"
-    assert windows["proxy"]["start"] == "2021-07-02"
+    assert windows["proxy"]["start"] == "2025-07-02"
     assert windows["proxy"]["baseline"] == "latest_in_band_only"
     assert windows["item_502_8k"]["start"] == "2024-07-02"
-    assert index_floor_coverage_start(windows) == date(2021, 7, 2)
+    assert index_floor_coverage_start(windows) == date(2024, 7, 2)  # item 502 W−2y is now earliest
 
 
 def test_agent_thirteenf_respects_xml_floor() -> None:
-    watermark = date(2014, 1, 1)
+    watermark = date(2013, 7, 1)
     windows = agent_coverage_by_document_type(watermark)
-    # W−1y = 2013-01-01 would predate XML floor
+    # W−1q = 2013-04-01 would predate XML floor
     assert windows["thirteenf"]["start"] == "2013-05-20"
-    assert index_floor_coverage_start(windows) == date(2009, 1, 1)  # proxy W−5y
+    assert index_floor_coverage_start(windows) == date(2011, 7, 1)  # item 502 W−2y
 
 
 def test_inventory_applies_agent_windows_and_emits_coverage_metadata() -> None:
     watermark = date(2026, 7, 2)
     filings = [
-        _filing("old-13f", "13F-HR", cik=9, filing_date="2020-08-14"),  # before W−1y
-        _filing("new-13f", "13F-HR", cik=9, filing_date="2025-08-14"),
-        _filing("old-proxy", "DEF 14A", cik=1, filing_date="2019-05-01"),  # before W−5y
-        _filing("new-proxy", "DEF 14A", cik=1, filing_date="2023-05-01"),
+        _filing("old-13f", "13F-HR", cik=9, filing_date="2020-08-14"),  # before W−1q
+        _filing("new-13f", "13F-HR", cik=9, filing_date="2026-05-14"),
+        _filing("old-proxy", "DEF 14A", cik=1, filing_date="2019-05-01"),  # before W−1y
+        _filing("new-proxy", "DEF 14A", cik=1, filing_date="2026-01-15"),
         _filing("old-502", "8-K", cik=1, items="5.02", filing_date="2023-01-01"),  # before W−2y
         _filing("new-502", "8-K", cik=1, items="5.02", filing_date="2025-01-01"),
         _filing("unrelated", "8-K", cik=1, items="2.02", filing_date="2025-06-01"),
     ]
-    # Quarters from index floor (proxy W−5y = 2021-07-02) through watermark
+    # Quarters from index floor (item 502 W−2y = 2024-07-02) through watermark
     from edgar_warehouse.application.relationship_bulk_load import expected_quarters
 
     floor = index_floor_coverage_start(agent_coverage_by_document_type(watermark))
@@ -534,7 +534,7 @@ def test_inventory_applies_agent_windows_and_emits_coverage_metadata() -> None:
     accessions = {row.accession_number for row in inventory.candidates}
     assert accessions == {"new-13f", "new-proxy", "new-502"}
     assert inventory.coverage_start == floor
-    assert inventory.coverage_by_document_type["thirteenf"]["start"] == "2025-07-02"
+    assert inventory.coverage_by_document_type["thirteenf"]["start"] == "2026-04-02"
 
 
 def test_frozen_manifest_agent_windows_drop_out_of_band_forms() -> None:
@@ -544,12 +544,14 @@ def test_frozen_manifest_agent_windows_drop_out_of_band_forms() -> None:
     from edgar_warehouse.application.relationship_bulk_load import expected_quarters
 
     quarter_indexes = {key: [] for key in expected_quarters(floor, watermark)}
-    # Inside index floor (proxy W−5y) but before 13F agent start (W−1y)
+    # Inside index floor (proxy W−5y) but before 13F agent start (W−1q)
     quarter_indexes["2021Q4"] = [
         _filing("old-13f", "13F-HR", cik=9, filing_date="2021-11-14"),
     ]
+    quarter_indexes["2026Q2"] = [
+        _filing("new-13f", "13F-HR", cik=9, filing_date="2026-05-14"),
+    ]
     quarter_indexes["2025Q3"] = [
-        _filing("new-13f", "13F-HR", cik=9, filing_date="2025-08-14"),
         _filing("new-proxy", "DEF 14A", cik=1, filing_date="2025-08-01"),
         _filing("new-502", "8-K", cik=1, filing_date="2025-08-15"),
     ]

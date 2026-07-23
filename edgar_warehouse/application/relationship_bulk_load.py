@@ -7,6 +7,7 @@ frozen inventory reproducible and independently auditable.
 
 from __future__ import annotations
 
+import calendar
 import hashlib
 import json
 import re
@@ -35,8 +36,18 @@ ITEM502_ACCEPTED_UNRESOLVED_MAX_RATE = 0.095
 # 13F XML information-table era floor (format correctness, not universal load start).
 DEFAULT_COVERAGE_START = date(2013, 5, 20)
 THIRTEENF_XML_FLOOR = DEFAULT_COVERAGE_START
-THIRTEENF_AGENT_LOOKBACK_YEARS = 1
-PROXY_AGENT_LOOKBACK_YEARS = 5
+# 2026-07-23 operator decision: historical 13F depth has no real value on its
+# own (holdings go stale immediately; only the current snapshot + go-forward
+# daily_incremental matter) -- narrowed from 1 year (PR #217, itself narrowed
+# from the original 3-year lock) to a single quarter. Proxy/Item 502 lookbacks
+# are unaffected.
+# 2026-07-23 operator decision: narrowed from 5 years to 1 -- current board/
+# executive composition is what EMPLOYED_BY needs, not a multi-year history of
+# past proxies. A company with no proxy in the last year has a genuine
+# coverage gap (fail-closed missing baseline), not one filled by an older
+# filing -- same fail-closed posture as the original 5y lock, just narrower.
+THIRTEENF_AGENT_LOOKBACK_MONTHS = 3
+PROXY_AGENT_LOOKBACK_YEARS = 1
 ITEM_502_AGENT_LOOKBACK_YEARS = 2
 
 
@@ -290,11 +301,22 @@ def years_before(value: date, years: int) -> date:
         return value.replace(year=value.year - years, day=28)
 
 
+def months_before(value: date, months: int) -> date:
+    """Calendar lookback by whole months, clamping the day into the target month."""
+    if months < 0:
+        raise InventoryError("lookback months must be non-negative")
+    total_months = value.year * 12 + (value.month - 1) - months
+    target_year, target_month = divmod(total_months, 12)
+    target_month += 1
+    last_day = calendar.monthrange(target_year, target_month)[1]
+    return value.replace(year=target_year, month=target_month, day=min(value.day, last_day))
+
+
 def agent_coverage_by_document_type(watermark: date) -> dict[str, dict[str, str]]:
     """Locked Ticket 20 agent windows (product truth for freeze membership)."""
     end = watermark.isoformat()
     thirteenf_start = max(
-        years_before(watermark, THIRTEENF_AGENT_LOOKBACK_YEARS),
+        months_before(watermark, THIRTEENF_AGENT_LOOKBACK_MONTHS),
         THIRTEENF_XML_FLOOR,
     )
     proxy_start = years_before(watermark, PROXY_AGENT_LOOKBACK_YEARS)

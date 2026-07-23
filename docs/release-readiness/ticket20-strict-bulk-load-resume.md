@@ -26,7 +26,8 @@ candidate manifests that:
 
 - lack `coverage_by_document_type`, or
 - declare windows that do not match locked agent lookbacks for the watermark
-  (13F `max(W−3y, 2013-05-20)`, proxy `W−5y`, Item 5.02 8-K `W−2y`), or
+  (13F `max(W−1 quarter, 2013-05-20)` — narrowed from 1y 2026-07-23, proxy
+  `W−1y` — narrowed from 5y 2026-07-23, Item 5.02 8-K `W−2y`), or
 - contain candidates outside those windows or unrelated 8-Ks.
 
 The live 2013-era freeze (`ticket20-strict-20260718T013201Z`, no type map) will

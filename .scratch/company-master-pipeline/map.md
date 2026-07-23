@@ -32,15 +32,13 @@ derivation already depends on resolved Company entities today
   Ownership (Form 3/4/5 + 13F) and ADV each get their own future decoupling
   effort. Ticket 21 (insider-scoped `EMPLOYED_BY` completeness) is a related
   but distinct effort the user has already flagged as handled separately.
-- Ticket 20 (the strict relationship-release production bulk load) is
-  **on hold, gated on this map's progress** — explicit operator decision
-  (2026-07-20), overriding this map's original "independent, standalone"
-  framing. Ticket 20 does not resume until this pipeline is far enough along
-  to untangle the Company/Ownership coupling. Note this is a *scheduling*
-  dependency, not an *architectural* one: Ticket 20's own state machine still
-  isn't being redesigned by this map (see Out of scope) — the hold is about
-  operational sequencing, not a new blocking ticket edge, since resuming
-  Ticket 20 isn't a step toward reaching this map's destination.
+- ~~Ticket 20 (the strict relationship-release production bulk load) is
+  **on hold, gated on this map's progress**~~ — **hold lifted (confirmed
+  2026-07-23):** six strict executions launched after the 2026-07-20 hold
+  date, so it was informally lifted without this note being updated at the
+  time. Ticket 20 proceeds independently of this map's progress; see
+  `.scratch/release-readiness/issues/20-execute-required-relationship-production-bulk-load.md`
+  for current status.
 
 ## Decisions so far
 

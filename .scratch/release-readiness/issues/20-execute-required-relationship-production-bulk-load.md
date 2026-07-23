@@ -5,24 +5,43 @@ Status: open
 Blocked by: none (operator hold — see note below, not a wayfinder dependency edge)
 Blocks: 06
 
-**ON HOLD (2026-07-20, explicit operator decision):** do not relaunch until
+~~**ON HOLD (2026-07-20, explicit operator decision):** do not relaunch until
 the "Company Identity Pipeline" wayfinder map
 (`.scratch/company-master-pipeline/map.md`) has progressed far enough to
-untangle the Company/Ownership/ADV coupling. The namespace-bug fix (13F
-holdings silently dropped by an edgartools parser bug) is merged and the
-strict release is otherwise staged and ready — this hold is a deliberate
-sequencing decision, not a blocker on Ticket 20's own readiness. See that
-map's Notes section for the full rationale.
+untangle the Company/Ownership/ADV coupling.~~ **Lifted (2026-07-23,
+confirmed retroactively):** six strict executions launched after the hold
+date, including the currently-active `ticket20-strict-1yr-retry6-*` — this
+doc was simply never updated when the hold was informally lifted. Treat
+Ticket 20 as unblocked; this line only exists so future readers don't trust
+stale "on hold" language over what AWS actually shows running.
+
+**2026-07-23 — 13F lookback narrowed to one quarter (operator decision):**
+historical 13F depth judged to have no real value on its own (holdings are a
+point-in-time snapshot; only current state + go-forward `daily_incremental`
+matter). `THIRTEENF_AGENT_LOOKBACK_YEARS = 1` (itself narrowed from the
+original 3-year lock, PR #217) replaced by `THIRTEENF_AGENT_LOOKBACK_MONTHS =
+3` in `relationship_bulk_load.py`. Item 5.02 8-K (2y) window unchanged.
+retry6 (running under the old 1-year window) was stopped and a fresh
+freeze/execution built under the new window — see the end of this file for
+the new fingerprint/execution name once launched.
+
+**2026-07-23 — proxy lookback narrowed to one year (operator decision):**
+same rationale — current board/executive composition, not multi-year proxy
+history. `PROXY_AGENT_LOOKBACK_YEARS = 5 → 1`. This is bundled into the same
+freeze rebuild as the 13F change above.
 
 ## Task
 
 Run the strict production bulk load at the frozen Release Data Watermark, repair every unresolved candidate, derive all required relationship types without caps, publish the graph generation, and commit the passing evidence artifact.
 
 **Coverage policy (document-type specific):** do not freeze a single global
-2013 start for every form. Locked agent windows (wayfinder + PR #170/#171):
-13F `max(W−3y, 2013-05-20)`, proxy `[W−5y, W]` latest-in-band only, Item 5.02 /
-ambiguous 8-K `[W−2y, W]`. Rebuild freeze with `coverage_by_document_type`
-before GO. Live 2013-era freeze is **rejected** under `release_mode`.
+2013 start for every form. Locked agent windows (wayfinder + PR #170/#171,
+13F narrowed 3y→1y by PR #217 then 1y→1 quarter 2026-07-23; proxy narrowed
+5y→1y 2026-07-23):
+13F `max(W−1 quarter, 2013-05-20)`, proxy `[W−1y, W]` latest-in-band only,
+Item 5.02 / ambiguous 8-K `[W−2y, W]`. Rebuild freeze with
+`coverage_by_document_type` before GO. Live 2013-era freeze is **rejected**
+under `release_mode`.
 
 ## Done when (revised 2026-07-19 per Release Owner insider-scoping decision — see Ticket 21)
 
