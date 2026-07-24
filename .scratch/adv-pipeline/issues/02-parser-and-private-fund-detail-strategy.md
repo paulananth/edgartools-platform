@@ -1,4 +1,4 @@
-# 02 — Parser Rewrite Target Format and Private-Fund-Detail Strategy
+# 02 — Fetch Target and Rolling-Window Strategy (was: Parser Rewrite)
 
 Type: grilling
 Status: open
@@ -15,28 +15,40 @@ per-fund PFID identity. See map.md Notes for the full statement.
 
 ## Question
 
-Given ticket 01's findings on what SEC actually publishes in bulk today,
-decide:
+**Superseded by ticket 01's finding (2026-07-24):** `adv_bulk_ingest.py`
+does not need a parser rewrite — its existing filename regexes already
+match the correct, currently-published source
+(`adviserinfo.sec.gov`'s monthly `advFilingData` relational feed). What
+remains open:
 
-1. What format does `adv_bulk_ingest.py` get rewritten to parse — the Firm
-   Roster CSV directly (single file, ~150 columns), a rediscovered
-   relational source (if ticket 01 finds one still exists), or both (a
-   format-detecting dual path)?
-2. What is the private-fund-detail strategy? Candidates from last session's
-   blocker doc: (a) store only aggregate counts and redefine what
-   `sec_adv_private_fund` / the `MANAGES_FUND` relationship represents under
-   the new constraint; (b) use a rediscovered real per-fund bulk source if
-   ticket 01 finds one; (c) mark private-fund detail unavailable at bulk
-   scale and rely solely on `parse-adv-bronze`'s EDGAR-native-filed ADV path
-   (which only covers advisers that also happen to be public EDGAR filers —
-   a small subset).
-3. Does the answer to (2) require revising `adviser-fund-source-contract.md`
-   (specifically the "no name-only identity," PFID-required-for-every-edge
-   language), and if so, what does the revised contract say?
-4. What happens to firm-identity, office, and disclosure-event data
-   (`sec_adv_filing`, `sec_adv_office`, `sec_adv_disclosure_event`) — do
-   these map cleanly from Firm Roster columns as the blocker doc guessed, or
-   does inspection reveal gaps there too?
+1. **Rolling-window design.** `advFilingData` is a monthly filing-activity
+   delta (~17% of the ~17,073-firm registered universe per month, verified
+   by row count), not a full snapshot. What window reconstructs full
+   current coverage — the research suggests a rolling ~13-month union
+   (dedup by CRD/FilingID, keep latest per firm), reasoned from RIAs' at
+   -least-annual reaffirmation requirement, but this ticket must explicitly
+   verify no firm can go stale longer than that before committing to a
+   window size (i.e. confirm the annual-reaffirmation rule is airtight, not
+   just a heuristic).
+2. **Does the Firm Roster CSV (`sec.gov`, true full-universe snapshot,
+   aggregate-only private-fund counts) get ingested at all?** Candidates:
+   (a) skip it entirely now that the richer `advFilingData` feed exists;
+   (b) ingest it as a parallel full-universe completeness/cross-check
+   control (e.g. flag a firm whose `advFilingData`-derived fund count
+   doesn't match its Firm-Roster aggregate count) — this is exactly the use
+   the research doc suggested for it.
+3. **Historical backfill scope for `load_history`.** SEC also publishes two
+   static pre-2025 archives (2000-2011, 2011-2024) in the same relational
+   shape — does `load_history`'s baseline need to backfill those too, or
+   just the rolling window of recent months (ties into ticket 03's answer
+   on load_history scope, which assumed no historical depth existed at all
+   — that assumption is now wrong for ADV filing history, though may still
+   be the right call on value grounds, mirroring the 13F/proxy
+   narrow-to-recent decision in CLAUDE.md)?
+4. Does firm-identity/office/disclosure-event data
+   (`sec_adv_filing`/`sec_adv_office`/`sec_adv_disclosure_event`) map
+   cleanly from the `advFilingData` feed's `IA_ADV_Base_A/B` files (the
+   parser's original, correct target), or does inspection reveal gaps?
 
 ## Answer
 

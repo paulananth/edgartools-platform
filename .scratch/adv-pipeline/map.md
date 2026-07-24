@@ -35,30 +35,35 @@ is execution needed to unblock a later decision, not the destination itself).
   [`docs/release-readiness/adv-bulk-ingest-format-change-2026-07-24.md`](../../docs/release-readiness/adv-bulk-ingest-format-change-2026-07-24.md)
   — documents the live-format discovery and a candidate ordered next-steps
   list this map formalizes into tickets.
-- Existing (now-questionable) contract:
+- Existing contract:
   [`docs/release-readiness/adviser-fund-source-contract.md`](../../docs/release-readiness/adviser-fund-source-contract.md),
   approved via `.scratch/release-readiness/issues/13-define-adviser-fund-source-contract.md`
   (resolved) and implemented per
   `.scratch/release-readiness/issues/21-implement-authoritative-form-adv-private-fund-ingestion.md`
-  (marked resolved, commits `ddc24d3`/`846d648`/`4f4e1a9`) — but that
-  implementation's `_rows()` filename regexes in
-  [`edgar_warehouse/application/adv_bulk_ingest.py`](../../edgar_warehouse/application/adv_bulk_ingest.py)
-  target the old relational archive shape (`IA_ADV_Base`,
-  `Schedule_D_7B1/7B2`, `ADV_Filing_Types`) and matched **zero rows** when
-  tested against the live July 2026 SEC bulk archive
-  (`IA_SEC_-_FIRM_ROSTER_FOIA_DOWNLOAD_-_<id>.CSV`, a single flat file with
-  aggregate-only private-fund counts). This map owns re-deciding Ticket 21,
-  not release-readiness's map (explicit user decision, 2026-07-24).
+  (marked resolved, commits `ddc24d3`/`846d648`/`4f4e1a9`). **Ticket 01
+  found the contract and parser were never actually broken** — last
+  session's "zero rows" finding came from staging the wrong SEC product
+  (the sec.gov Firm Roster CSV) instead of the correct one
+  (`adviserinfo.sec.gov`'s monthly `advFilingData` relational feed, which
+  the parser's existing regexes match exactly). This map still owns Ticket
+  21 (explicit user decision, 2026-07-24), but the reconciliation is now
+  much lighter: confirm the operational fetch target, not rewrite the
+  parser. See ticket 01's Answer/research file for full detail.
 - Every session should default to `/grilling` + `/domain-modeling` for
   design decisions; use `/research` (background subagent) for fact-finding
   that needs primary-source SEC/IAPD documentation, not code already in
   this repo.
-- IAPD bulk data is a full point-in-time **roster snapshot** (current firms
-  + their current filing state), not a historical time-windowed feed like
-  13F/proxy — there is no "N years of ADV data" to fetch the way there is
-  for filing-based relationship types. The original "run ADV for 1 year"
-  framing does not map onto how the source actually works; ticket 03
-  resolves what cadence/scope concept replaces it.
+- **Corrected by ticket 01 (2026-07-24):** the authoritative per-fund source
+  (`advFilingData`) is a **monthly delta of filing activity**, not a
+  full-universe snapshot — verified by row count (June 2026: 2,938 firm
+  rows vs. ~17,073 registered firms total, ~17% coverage). This is actually
+  closer in shape to 13F/proxy's windowed relationship types than
+  originally assumed — it needs a rolling multi-month union (deduped by
+  CRD/FilingID, latest per firm), not a single current-snapshot fetch. The
+  separate Firm Roster CSV (`sec.gov`) *is* a true full-universe
+  point-in-time snapshot, but only carries aggregate private-fund counts,
+  not per-fund identity. Ticket 03's Q1/Q2 answers need to be revisited
+  under this corrected model.
 - **Hard requirement, restated explicitly by the user (2026-07-24): ADV data
   must reach the Neo4j/Snowflake graph, end to end — not stop at silver.**
   This binds every ticket's resolution, especially ticket 02: if bulk data
@@ -74,15 +79,17 @@ is execution needed to unblock a later decision, not the destination itself).
 
 ## Decisions so far
 
-(none yet)
+- [01 — Confirm Scope of IAPD Bulk Format Change](issues/01-confirm-scope-of-iapd-format-change.md)
+  — the old relational per-fund format was never discontinued; it moved to
+  `adviserinfo.sec.gov`'s monthly `advFilingData` feed. `adv_bulk_ingest.py`'s
+  existing parser already matches this feed's real files — last session's
+  "zero rows" blocker was caused by fetching the wrong SEC product, not a
+  format change the parser needs rewriting for. New finding: the feed is a
+  monthly filing-activity delta (~17% of firms/month), not a full snapshot,
+  so full coverage needs a rolling multi-month window.
 
 ## Not yet specified
 
-- Whether `MANAGES_FUND`'s graph contract (PFID-keyed, no name-only
-  identity, per `adviser-fund-source-contract.md`) needs to change shape if
-  bulk data truly only offers firm-level aggregate counts — depends on
-  ticket 01's research answer and ticket 02's strategy decision; too coarse
-  to ticket until those land.
 - Longer-term: whether ADV data should ever get its own Stage-0-style phase
   woven into `load_history`/`daily_incremental` the way Company Identity did
   (company-master-pipeline tickets 05/06), or stays a separate
