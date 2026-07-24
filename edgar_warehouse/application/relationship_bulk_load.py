@@ -1122,6 +1122,93 @@ def reconcile_completion_ledger_batches(
     return reconcile_completion_ledger(inventory, outcomes, generation_id=generation_id)
 
 
+def validate_and_rebind_done_batch_ledger(
+    marker: Mapping[str, object],
+    ledger: Mapping[str, object],
+    *,
+    inventory_fingerprint: str,
+    generation_id: str,
+) -> dict[str, object]:
+    """Validate one P0 done marker and reuse its ledger in a new execution.
+
+    A fresh Step Functions execution has a fresh generation ID, but P0 resume
+    intentionally skips batches that already completed for the same immutable
+    freeze. The done marker is the authority that binds a prior batch ledger
+    to that freeze. Only after all marker/ledger fingerprints and counts match
+    do we rebind copied outcomes to the new evidence generation.
+    """
+    expected_inventory = str(inventory_fingerprint or "")
+    marker_inventory = str(marker.get("inventory_fingerprint") or "")
+    ledger_inventory = str(ledger.get("inventory_fingerprint") or "")
+    if not expected_inventory or marker_inventory != expected_inventory:
+        raise LedgerError("done marker inventory fingerprint mismatch")
+    if ledger_inventory != expected_inventory:
+        raise LedgerError("done-marker ledger inventory fingerprint mismatch")
+
+    marker_generation = str(marker.get("generation_id") or "")
+    ledger_generation = str(ledger.get("generation_id") or "")
+    if not marker_generation or ledger_generation != marker_generation:
+        raise LedgerError("done-marker ledger generation mismatch")
+
+    rows = ledger.get("outcomes")
+    if not isinstance(rows, list) or not rows:
+        raise LedgerError("done-marker ledger is missing outcomes")
+    normalized: list[dict[str, object]] = []
+    terminal_counts: dict[str, int] = {}
+    for row in rows:
+        if not isinstance(row, Mapping):
+            raise LedgerError("done-marker ledger outcome must be an object")
+        outcome = {
+            "generation_id": str(row.get("generation_id") or ""),
+            "accession_number": str(row.get("accession_number") or ""),
+            "candidate_fingerprint": str(row.get("candidate_fingerprint") or ""),
+            "status": str(row.get("status") or ""),
+            "evidence_fingerprint": str(row.get("evidence_fingerprint") or ""),
+        }
+        if outcome["generation_id"] != marker_generation:
+            raise LedgerError("done-marker outcome generation mismatch")
+        if not outcome["accession_number"] or not outcome["candidate_fingerprint"]:
+            raise LedgerError("done-marker outcome identity is incomplete")
+        if outcome["status"] not in TERMINAL_STATUSES:
+            raise LedgerError("done-marker outcome is nonterminal")
+        if not outcome["evidence_fingerprint"]:
+            raise LedgerError("done-marker outcome evidence fingerprint is missing")
+        normalized.append(outcome)
+        status = str(outcome["status"])
+        terminal_counts[status] = terminal_counts.get(status, 0) + 1
+
+    computed_fingerprint = _sha256(
+        sorted(normalized, key=lambda row: str(row["accession_number"]))
+    )
+    marker_fingerprint = str(marker.get("ledger_fingerprint") or "")
+    ledger_fingerprint = str(ledger.get("fingerprint") or "")
+    if (
+        not computed_fingerprint
+        or marker_fingerprint != computed_fingerprint
+        or ledger_fingerprint != computed_fingerprint
+    ):
+        raise LedgerError("done-marker ledger fingerprint mismatch")
+    if int(marker.get("candidate_count") or -1) != len(normalized):
+        raise LedgerError("done-marker candidate count mismatch")
+    if dict(marker.get("terminal_counts") or {}) != terminal_counts:
+        raise LedgerError("done-marker terminal counts mismatch")
+    if dict(ledger.get("terminal_counts") or {}) != terminal_counts:
+        raise LedgerError("done-marker ledger terminal counts mismatch")
+
+    rebound = [
+        {**row, "generation_id": str(generation_id)}
+        for row in normalized
+    ]
+    return {
+        **dict(ledger),
+        "generation_id": str(generation_id),
+        "fingerprint": _sha256(
+            sorted(rebound, key=lambda row: str(row["accession_number"]))
+        ),
+        "outcomes": rebound,
+    }
+
+
 def batch_identity_for_ciks(ciks: Iterable[int | str]) -> str:
     """Stable 16-hex identity for one StrictBatchSilver CIK batch."""
     normalized = sorted(str(int(cik)) for cik in ciks)
