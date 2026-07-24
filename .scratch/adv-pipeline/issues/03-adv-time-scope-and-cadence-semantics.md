@@ -1,7 +1,7 @@
 # 03 — ADV Time-Scope and Cadence Semantics
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: none
 Blocks: 06
 
