@@ -905,7 +905,7 @@ class SilverDatabase:
                 "Migrating sec_adv_private_fund.fund_index SMALLINT -> BIGINT: "
                 "backing up the legacy table and copying rows into the current schema."
             )
-            self._backup_and_recreate_financial_table(
+            self._backup_and_recreate_table(
                 "sec_adv_private_fund",
                 reason="fund_index_bigint",
                 missing_values={},
@@ -940,7 +940,7 @@ class SilverDatabase:
                 "backing up the legacy table and copying rows into the current schema.",
                 table,
             )
-            self._backup_and_recreate_financial_table(
+            self._backup_and_recreate_table(
                 table,
                 reason="pre_period_end_pk",
                 missing_values={
@@ -974,7 +974,7 @@ class SilverDatabase:
                 "(Stage 2 of the period_end PK fix): backing up the legacy table "
                 "and copying rows into the current schema."
             )
-            self._backup_and_recreate_financial_table(
+            self._backup_and_recreate_table(
                 "sec_financial_fact",
                 reason="pre_period_start_pk",
                 missing_values={
@@ -982,7 +982,7 @@ class SilverDatabase:
                 },
             )
 
-    def _backup_and_recreate_financial_table(
+    def _backup_and_recreate_table(
         self,
         table: str,
         *,
