@@ -25,6 +25,29 @@ retry6 (running under the old 1-year window) was stopped and a fresh
 freeze/execution built under the new window — see the end of this file for
 the new fingerprint/execution name once launched.
 
+**2026-07-23/24 — freeze rebuilt and relaunched under quarter/1y windows.**
+`retry6` (`ticket20-strict-1yr-retry6-20260722T200844Z`, 19/110 batches done)
+confirmed `ABORTED`. New freeze built via the new `mdm
+build-relationship-release-manifest` CLI subcommand (PR/commit `64031b5`) run
+as an ad-hoc ECS task against `edgartools-prod-mdm-medium:50` — the S3 pull of
+`silver.duckdb` happens inside AWS's network instead of an operator's laptop
+(the prior local-download approach failed 3x over an unreliable home
+connection; see commit `64031b5`). Freeze prefix
+`warehouse/bronze/reference/relationship_release/ticket20-agent-q1y-20260724T003912Z`,
+watermark `2026-07-02` (unchanged — the frozen Release Data Watermark, not
+advanced), fingerprint `61be5eaeebc99c7eb9bf1e5a5e2c67076619bcc28b19ece715a7c2ebb175d852`,
+**20,833 candidates / 10,792 CIKs / 108 batches** (down sharply from prior
+freezes — expected, given the narrower windows).
+`coverage_by_document_type`: 13F `[2026-04-02, 2026-07-02]`, proxy
+`[2025-07-02, 2026-07-02]`, item 5.02/ambiguous 8-K `[2024-07-02, 2026-07-02]`
+(item 502's 2y window is now the earliest/floor). Preflight:
+`READY_FOR_STRICT_LOAD`, `strict_release_eligible: true`. New execution
+**`ticket20-strict-q1y-20260724T004600Z`** started 2026-07-23T20:46:02-04:00
+(fresh name per P3 — retry6's name stays consumed, never reused). retry6's
+19 completed batches are **not** reused — the candidate universe changed
+under the new windows, so this is a from-scratch pass over the smaller,
+narrower candidate set.
+
 **2026-07-23 — proxy lookback narrowed to one year (operator decision):**
 same rationale — current board/executive composition, not multi-year proxy
 history. `PROXY_AGENT_LOOKBACK_YEARS = 5 → 1`. This is bundled into the same
