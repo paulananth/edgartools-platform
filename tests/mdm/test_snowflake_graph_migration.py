@@ -19,6 +19,7 @@ from edgar_warehouse.mdm.snowflake_graph import (
     _render_native_app_bfs,
     _render_native_app_graph_info,
     _render_native_app_list_graphs,
+    _render_native_app_sample_node,
     _render_verify_node_counts,
 )
 
@@ -466,6 +467,18 @@ def test_native_app_current_graph_info_bfs_and_list_graphs_sql():
     assert "'maxDepth': 2" in bfs
     assert "'outputTable':" in bfs
     assert "EXPERIMENTAL.LIST_GRAPHS()" in list_graphs
+
+
+def test_native_app_bfs_sample_is_scoped_to_active_graph_view():
+    context = {
+        "target_database": "EDGARTOOLS_PROD",
+        "target_schema": "NEO4J_GRAPH_MIGRATION",
+    }
+
+    sql = _render_native_app_sample_node(context)
+
+    assert "GRAPH_APP_NODES" in sql
+    assert "MDM_GRAPH_NODES" not in sql
 
 
 def test_split_sql_statements_preserves_semicolon_inside_string_literal():

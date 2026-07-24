@@ -2235,7 +2235,7 @@ CALL {app_name}.GRAPH.SHOW_AVAILABLE_COMPUTE_POOLS()
 def _render_native_app_sample_node(context: dict[str, Any]) -> str:
     return f"""-- verify_graph:native_app_sample_node
 SELECT NODEID
-FROM {_fq(context, "MDM_GRAPH_NODES")}
+FROM {_fq(context, "GRAPH_APP_NODES")}
 WHERE NODEID IS NOT NULL
 ORDER BY NODEID
 LIMIT 1
