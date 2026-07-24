@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
 
+import pyarrow as pa
+
 try:
     import duckdb
 except ImportError as exc:
@@ -1857,28 +1859,76 @@ class SilverDatabase:
         )
 
     def merge_adv_filings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_adv_filing
-                (accession_number, cik, form, adviser_name, sec_file_number, crd_number,
-                 effective_date, filing_status, filing_action, source_format,
-                 parser_version, last_sync_run_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (accession_number) DO UPDATE SET
-                cik = excluded.cik,
-                form = excluded.form,
-                adviser_name = excluded.adviser_name,
-                sec_file_number = excluded.sec_file_number,
-                crd_number = excluded.crd_number,
-                effective_date = excluded.effective_date,
-                filing_status = excluded.filing_status,
-                filing_action = excluded.filing_action,
-                source_format = excluded.source_format,
-                parser_version = excluded.parser_version,
-                last_sync_run_id = excluded.last_sync_run_id
+        """Bulk UPSERT into sec_adv_filing.
+
+        A single ingest-relationship-sources run over a multi-month
+        advFilingData rolling window stages tens of thousands of filing rows
+        at once (e.g. ~55K across a 13-month window). The prior row-by-row
+        execute() loop was the same known-slow pattern already fixed for
+        sec_company_filing in merge_filings (~93% of per-batch time,
+        measured live there) -- discovered here when a real production run
+        took many minutes with zero progress on the identical shape of
+        problem. _merge_rows_bulk stages all rows in one executemany() then
+        applies the upsert as two set-based SQL statements.
+        """
+        if not rows:
+            return 0
+        return self._merge_rows_bulk(
+            staging_table="stg_sec_adv_filing",
+            staging_ddl="""
+                CREATE TEMP TABLE IF NOT EXISTS stg_sec_adv_filing (
+                    seq              BIGINT,
+                    accession_number TEXT,
+                    cik              BIGINT,
+                    form             TEXT,
+                    adviser_name     TEXT,
+                    sec_file_number  TEXT,
+                    crd_number       TEXT,
+                    effective_date   DATE,
+                    filing_status    TEXT,
+                    filing_action    TEXT,
+                    source_format    TEXT,
+                    parser_version   TEXT,
+                    last_sync_run_id TEXT
+                )
             """,
-            rows,
-            lambda row: [
+            insert_first_sql="""
+                INSERT INTO sec_adv_filing
+                    (accession_number, cik, form, adviser_name, sec_file_number, crd_number,
+                     effective_date, filing_status, filing_action, source_format,
+                     parser_version, last_sync_run_id)
+                SELECT accession_number, cik, form, adviser_name, sec_file_number, crd_number,
+                       effective_date, filing_status, filing_action, source_format,
+                       parser_version, last_sync_run_id
+                FROM stg_sec_adv_filing
+                QUALIFY ROW_NUMBER() OVER (PARTITION BY accession_number ORDER BY seq ASC) = 1
+                ON CONFLICT (accession_number) DO NOTHING
+            """,
+            insert_last_sql="""
+                INSERT INTO sec_adv_filing
+                    (accession_number, cik, form, adviser_name, sec_file_number, crd_number,
+                     effective_date, filing_status, filing_action, source_format,
+                     parser_version, last_sync_run_id)
+                SELECT accession_number, cik, form, adviser_name, sec_file_number, crd_number,
+                       effective_date, filing_status, filing_action, source_format,
+                       parser_version, last_sync_run_id
+                FROM stg_sec_adv_filing
+                QUALIFY ROW_NUMBER() OVER (PARTITION BY accession_number ORDER BY seq DESC) = 1
+                ON CONFLICT (accession_number) DO UPDATE SET
+                    cik = excluded.cik,
+                    form = excluded.form,
+                    adviser_name = excluded.adviser_name,
+                    sec_file_number = excluded.sec_file_number,
+                    crd_number = excluded.crd_number,
+                    effective_date = excluded.effective_date,
+                    filing_status = excluded.filing_status,
+                    filing_action = excluded.filing_action,
+                    source_format = excluded.source_format,
+                    parser_version = excluded.parser_version,
+                    last_sync_run_id = excluded.last_sync_run_id
+            """,
+            rows=rows,
+            values_fn=lambda row: [
                 row["accession_number"],
                 row.get("cik"),
                 row.get("form"),
@@ -1953,34 +2003,91 @@ class SilverDatabase:
         )
 
     def merge_adv_private_funds(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_adv_private_fund
-                (accession_number, fund_index, filing_id, adviser_crd_number,
-                 private_fund_id, reference_id, schedule_section, reporting_role,
-                 filing_action, fund_name, fund_type, jurisdiction, aum_amount, effective_date,
-                 source_dataset_period, source_sha256, parser_version, last_sync_run_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (accession_number, fund_index) DO UPDATE SET
-                filing_id = excluded.filing_id,
-                adviser_crd_number = excluded.adviser_crd_number,
-                private_fund_id = excluded.private_fund_id,
-                reference_id = excluded.reference_id,
-                schedule_section = excluded.schedule_section,
-                reporting_role = excluded.reporting_role,
-                filing_action = excluded.filing_action,
-                fund_name = excluded.fund_name,
-                fund_type = excluded.fund_type,
-                jurisdiction = excluded.jurisdiction,
-                aum_amount = excluded.aum_amount,
-                effective_date = excluded.effective_date,
-                source_dataset_period = excluded.source_dataset_period,
-                source_sha256 = excluded.source_sha256,
-                parser_version = excluded.parser_version,
-                last_sync_run_id = excluded.last_sync_run_id
+        """Bulk UPSERT into sec_adv_private_fund.
+
+        Same fix as merge_adv_filings: a multi-month advFilingData rolling
+        window stages hundreds of thousands of fund rows at once (e.g.
+        ~384K across a 13-month window) -- the row-by-row execute() loop
+        was the same known-slow pattern already fixed for sec_company_filing
+        in merge_filings.
+        """
+        if not rows:
+            return 0
+        return self._merge_rows_bulk(
+            staging_table="stg_sec_adv_private_fund",
+            staging_ddl="""
+                CREATE TEMP TABLE IF NOT EXISTS stg_sec_adv_private_fund (
+                    seq                   BIGINT,
+                    accession_number      TEXT,
+                    fund_index            SMALLINT,
+                    filing_id             TEXT,
+                    adviser_crd_number    TEXT,
+                    private_fund_id       TEXT,
+                    reference_id          TEXT,
+                    schedule_section      TEXT,
+                    reporting_role        TEXT,
+                    filing_action         TEXT,
+                    fund_name             TEXT,
+                    fund_type             TEXT,
+                    jurisdiction          TEXT,
+                    aum_amount            DECIMAL(28,2),
+                    effective_date        DATE,
+                    source_dataset_period TEXT,
+                    source_sha256         TEXT,
+                    parser_version        TEXT,
+                    last_sync_run_id      TEXT
+                )
             """,
-            rows,
-            lambda row: [
+            insert_first_sql="""
+                INSERT INTO sec_adv_private_fund
+                    (accession_number, fund_index, filing_id, adviser_crd_number,
+                     private_fund_id, reference_id, schedule_section, reporting_role,
+                     filing_action, fund_name, fund_type, jurisdiction, aum_amount, effective_date,
+                     source_dataset_period, source_sha256, parser_version, last_sync_run_id)
+                SELECT accession_number, fund_index, filing_id, adviser_crd_number,
+                       private_fund_id, reference_id, schedule_section, reporting_role,
+                       filing_action, fund_name, fund_type, jurisdiction, aum_amount, effective_date,
+                       source_dataset_period, source_sha256, parser_version, last_sync_run_id
+                FROM stg_sec_adv_private_fund
+                QUALIFY ROW_NUMBER() OVER (
+                    PARTITION BY accession_number, fund_index ORDER BY seq ASC
+                ) = 1
+                ON CONFLICT (accession_number, fund_index) DO NOTHING
+            """,
+            insert_last_sql="""
+                INSERT INTO sec_adv_private_fund
+                    (accession_number, fund_index, filing_id, adviser_crd_number,
+                     private_fund_id, reference_id, schedule_section, reporting_role,
+                     filing_action, fund_name, fund_type, jurisdiction, aum_amount, effective_date,
+                     source_dataset_period, source_sha256, parser_version, last_sync_run_id)
+                SELECT accession_number, fund_index, filing_id, adviser_crd_number,
+                       private_fund_id, reference_id, schedule_section, reporting_role,
+                       filing_action, fund_name, fund_type, jurisdiction, aum_amount, effective_date,
+                       source_dataset_period, source_sha256, parser_version, last_sync_run_id
+                FROM stg_sec_adv_private_fund
+                QUALIFY ROW_NUMBER() OVER (
+                    PARTITION BY accession_number, fund_index ORDER BY seq DESC
+                ) = 1
+                ON CONFLICT (accession_number, fund_index) DO UPDATE SET
+                    filing_id = excluded.filing_id,
+                    adviser_crd_number = excluded.adviser_crd_number,
+                    private_fund_id = excluded.private_fund_id,
+                    reference_id = excluded.reference_id,
+                    schedule_section = excluded.schedule_section,
+                    reporting_role = excluded.reporting_role,
+                    filing_action = excluded.filing_action,
+                    fund_name = excluded.fund_name,
+                    fund_type = excluded.fund_type,
+                    jurisdiction = excluded.jurisdiction,
+                    aum_amount = excluded.aum_amount,
+                    effective_date = excluded.effective_date,
+                    source_dataset_period = excluded.source_dataset_period,
+                    source_sha256 = excluded.source_sha256,
+                    parser_version = excluded.parser_version,
+                    last_sync_run_id = excluded.last_sync_run_id
+            """,
+            rows=rows,
+            values_fn=lambda row: [
                 row["accession_number"],
                 row["fund_index"],
                 row.get("filing_id"),
@@ -3653,10 +3760,24 @@ class SilverDatabase:
         self._conn.execute(staging_ddl)
         try:
             staged = [[i, *values_fn(row)] for i, row in enumerate(rows)]
-            placeholders = ", ".join(["?"] * len(staged[0]))
-            self._conn.executemany(
-                f"INSERT INTO {staging_table} VALUES ({placeholders})", staged
-            )
+            col_names = [f"c{i}" for i in range(len(staged[0]))]
+            # executemany() binds and executes one INSERT per row -- fine for the
+            # hundreds-to-low-thousands volumes merge_filings was built for, but it
+            # scales linearly at ~1.5ms/row (measured: 384K rows took 577s here).
+            # Staging via a registered Arrow table lets DuckDB's vectorized Arrow
+            # scan bulk-load the rows in one shot instead of 384K round trips.
+            # Build columns directly (zip transpose) rather than a list of 384K
+            # per-row dicts -- from_pylist's dict-per-row overhead is what pushed
+            # a memory-constrained host into swap at this volume.
+            columns = list(zip(*staged))
+            arrow_table = pa.table(dict(zip(col_names, columns)))
+            self._conn.register("_bulk_stage_src", arrow_table)
+            try:
+                self._conn.execute(
+                    f"INSERT INTO {staging_table} SELECT * FROM _bulk_stage_src"
+                )
+            finally:
+                self._conn.unregister("_bulk_stage_src")
             self._conn.execute(insert_first_sql)
             self._conn.execute(insert_last_sql)
         finally:
