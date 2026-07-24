@@ -130,8 +130,12 @@ class RuntimeImportTests(unittest.TestCase):
         subparsers_action = next(
             action for action in parser._actions if action.__class__.__name__ == "_SubParsersAction"
         )
-        # Commands that legitimately bypass _resolve_scope (mdm delegates elsewhere)
-        skip = {"mdm"}
+        # Commands that legitimately bypass _resolve_scope:
+        # - mdm delegates elsewhere
+        # - migrate-silver-shards is a standalone one-time operational command whose
+        #   execute() calls run_migration() directly on local file paths, never
+        #   through execute_standard_command/_execute_warehouse/_resolve_scope
+        skip = {"mdm", "migrate-silver-shards"}
         all_commands = set(subparsers_action.choices) - skip
 
         missing = []
@@ -140,14 +144,14 @@ class RuntimeImportTests(unittest.TestCase):
                 orchestrator._resolve_scope(
                     command_name=command,
                     arguments={},
-                    db=None,
                     now=__import__("datetime").datetime(2024, 1, 1),
+                    silver_root=None,
                 )
             except errors_module.WarehouseRuntimeError as e:
                 if "Unsupported warehouse command" in str(e):
                     missing.append(command)
             except Exception:
-                pass  # other errors are fine — db=None will raise for most commands
+                pass  # other errors are fine — silver_root=None will raise for most commands
 
         self.assertEqual(
             missing,

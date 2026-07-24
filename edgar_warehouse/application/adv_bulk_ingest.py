@@ -57,14 +57,25 @@ def _rows(bundle: zipfile.ZipFile, pattern: str) -> list[dict[str, str]]:
     result: list[dict[str, str]] = []
     for name in names:
         with bundle.open(name) as source:
-            reader = csv.DictReader(io.TextIOWrapper(source, encoding="utf-8-sig", newline=""))
-            result.extend({str(k): str(v or "").strip() for k, v in row.items()} for row in reader)
+            payload = source.read()
+        # SEC/FINRA's monthly advFilingData archives are not consistently UTF-8 --
+        # older months (e.g. 2025-06, 2025-07) contain cp1252-encoded accented
+        # characters (0xC0-0xD6 range) in adviser/fund names that raise
+        # UnicodeDecodeError under utf-8-sig. cp1252 is ASCII-compatible, so this
+        # is safe for months that happen to be pure-ASCII too.
+        reader = csv.DictReader(io.StringIO(payload.decode("cp1252")))
+        result.extend({str(k): str(v or "").strip() for k, v in row.items()} for row in reader)
     return result
 
 
 def _submitted_date(value: str) -> date:
     candidate = value.strip()
-    for fmt in ("%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y", "%Y-%m-%d"):
+    # Real advFilingData archives mix at least three DateSubmitted shapes across
+    # months: 12-hour with seconds and AM/PM ("09/03/2025 09:31:51 AM"), date-only
+    # ("6/24/2025"), and 24-hour with no seconds ("6/24/2025 7:44") -- confirmed by
+    # scanning every IA_ADV_Base_A/B file across the full 2025-06..2026-06 window,
+    # not just one sample.
+    for fmt in ("%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y %H:%M", "%m/%d/%Y", "%Y-%m-%d"):
         try:
             return datetime.strptime(candidate, fmt).date()
         except ValueError:
@@ -73,10 +84,18 @@ def _submitted_date(value: str) -> date:
 
 
 def _amount(value: str) -> Decimal | None:
-    if not value.strip():
+    candidate = value.strip()
+    if not candidate:
+        return None
+    # Real Schedule D 7.B "Gross Asset Value" data occasionally contains a
+    # literal "N" instead of a number (confirmed across the full 2025-06..
+    # 2026-06 window: it is the ONLY non-numeric value ever observed in this
+    # column) -- a FINRA source-data quirk, treated as not-reported rather
+    # than a fail-closed parse error.
+    if candidate.upper() == "N":
         return None
     try:
-        return Decimal(value.replace(",", ""))
+        return Decimal(candidate.replace(",", ""))
     except InvalidOperation as exc:
         raise WarehouseRuntimeError(f"invalid IAPD amount: {value!r}") from exc
 
@@ -96,7 +115,15 @@ def parse_adv_bulk_archive(
         raise WarehouseRuntimeError("invalid IAPD ADV bulk ZIP archive") from exc
 
     with bundle:
-        base_rows = _rows(bundle, r"(?:IA|ERA)_ADV_Base(?:_A)?_[^/]*\.csv$")
+        # IA_ADV_Base_A/ERA_ADV_Base carry Item 1 identity fields (FilingID, CRD
+        # via "1E1"); IA_ADV_Base_B carries only Item 2 fields and has no CRD
+        # column at all. The prior pattern's optional "(?:_A)?" did not actually
+        # exclude "_B" -- "_[^/]*\.csv$" is permissive enough to also match
+        # IA_ADV_Base_B_*.csv, silently merging Item-2-only rows into base_rows
+        # and tripping the "missing FilingID or adviser CRD" fail-closed check
+        # on every real IA_ADV_Base_B row. Discovered running the real archive
+        # in production, not from a synthetic fixture.
+        base_rows = _rows(bundle, r"(?:IA_ADV_Base_A|ERA_ADV_Base)_[^/]*\.csv$")
         section_7b1 = _rows(bundle, r"(?:IA|ERA)_Schedule_D_7B1_[^/]*\.csv$")
         section_7b2 = _rows(bundle, r"(?:IA|ERA)_Schedule_D_7B2_[^/]*\.csv$")
         filing_type_rows = _rows(bundle, r"ADV_Filing_Types_[^/]*\.csv$")
@@ -172,10 +199,17 @@ def parse_adv_bulk_archive(
                 raise WarehouseRuntimeError(f"conflicting duplicate IAPD fund assertion: {key}")
             funds[key] = fund
 
+    # O(filings) membership checks against a precomputed set, not O(filings *
+    # funds) linear scans -- the prior any(row.filing_id == ... for row in
+    # funds.values()) re-scanned every fund for every filing. On a real
+    # March-2026 archive (19,675 filings x 130,189 funds, the annual-
+    # reaffirmation spike) that was ~2.5 billion comparisons and took 709s;
+    # every other month in the same 13-month window, with far fewer
+    # filings/funds, took 1-11s. Discovered running the real archive window
+    # locally, not from a synthetic fixture.
+    filing_ids_with_funds = {row.filing_id for row in funds.values()}
     for filing in filings_by_id.values():
-        if filing.private_funds_reported and not any(
-            row.filing_id == filing.filing_id for row in funds.values()
-        ):
+        if filing.private_funds_reported and filing.filing_id not in filing_ids_with_funds:
             raise WarehouseRuntimeError(
                 f"IAPD filing {filing.filing_id} reports Item 7.B=Y but has no fund rows"
             )
@@ -213,28 +247,38 @@ def ingest_adv_bulk_archive(
         }
         for row in parsed.filings
     ]
-    fund_rows = [
-        {
-            "accession_number": row.accession_number,
-            "fund_index": index,
-            "filing_id": row.filing_id,
-            "adviser_crd_number": row.adviser_crd_number,
-            "private_fund_id": row.private_fund_id,
-            "reference_id": row.reference_id,
-            "schedule_section": row.schedule_section,
-            "reporting_role": row.reporting_role,
-            "filing_action": row.filing_action,
-            "fund_name": row.fund_name,
-            "fund_type": row.fund_type,
-            "jurisdiction": row.jurisdiction,
-            "aum_amount": row.aum_amount,
-            "effective_date": row.effective_date,
-            "source_dataset_period": row.source_dataset_period,
-            "source_sha256": row.source_sha256,
-            "parser_version": "iapd_bulk_v1",
-        }
-        for index, row in enumerate(parsed.funds, start=1)
-    ]
+    # fund_index is the PK's second column (accession_number, fund_index) --
+    # it must count funds *within one filing*, not across the whole archive.
+    # A global enumerate() here overflowed sec_adv_private_fund.fund_index
+    # SMALLINT on a real March-2026 archive (>32767 funds in one month, the
+    # annual-reaffirmation spike) and, short of overflow, would have silently
+    # assigned an unstable synthetic key -- a re-ingest that parses funds in
+    # a different relative order would upsert into the wrong existing row.
+    fund_rows = []
+    per_accession_seen: dict[str, int] = {}
+    for row in parsed.funds:
+        per_accession_seen[row.accession_number] = per_accession_seen.get(row.accession_number, 0) + 1
+        fund_rows.append(
+            {
+                "accession_number": row.accession_number,
+                "fund_index": per_accession_seen[row.accession_number],
+                "filing_id": row.filing_id,
+                "adviser_crd_number": row.adviser_crd_number,
+                "private_fund_id": row.private_fund_id,
+                "reference_id": row.reference_id,
+                "schedule_section": row.schedule_section,
+                "reporting_role": row.reporting_role,
+                "filing_action": row.filing_action,
+                "fund_name": row.fund_name,
+                "fund_type": row.fund_type,
+                "jurisdiction": row.jurisdiction,
+                "aum_amount": row.aum_amount,
+                "effective_date": row.effective_date,
+                "source_dataset_period": row.source_dataset_period,
+                "source_sha256": row.source_sha256,
+                "parser_version": "iapd_bulk_v1",
+            }
+        )
     return {
         "filings": db.merge_adv_filings(filing_rows, sync_run_id),
         "funds": db.merge_adv_private_funds(fund_rows, sync_run_id),

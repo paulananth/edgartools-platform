@@ -164,7 +164,7 @@ def verify_mdm(env: str, region: str) -> None:
     try:
         conn = psycopg2.connect(psycopg2_dsn, connect_timeout=5)
     except Exception as e:
-        warn(f"Connection failed (RDS is VPC-private — run from a bastion or ECS task): {str(e)[:60]}")
+        warn(f"Connection failed (MDM Postgres runs on Snowflake's native Postgres service): {str(e)[:60]}")
         return
 
     cursor = conn.cursor()

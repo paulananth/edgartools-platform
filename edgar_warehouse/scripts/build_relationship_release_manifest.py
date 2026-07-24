@@ -10,9 +10,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
+import tempfile
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
+from typing import Iterator
 import duckdb
 import edgar
 
@@ -24,6 +28,32 @@ from edgar_warehouse.application.relationship_bulk_load import (
     index_floor_coverage_start,
     resolve_coverage_policy,
 )
+
+
+@contextmanager
+def _local_silver_db(path: str) -> Iterator[str]:
+    """Yield a local filesystem path for ``path``, streaming from S3 if needed.
+
+    DuckDB's ``connect()`` requires a real local path (no httpfs support in
+    this script), and this freeze routinely runs against a large, growing
+    production silver.duckdb. Streaming straight to disk avoids buffering the
+    whole file in memory; the temp copy is always removed on exit so a
+    repeated freeze never leaves a stale local silver copy behind.
+    """
+    if not path.startswith("s3://"):
+        yield path
+        return
+    import fsspec
+
+    tmp = tempfile.NamedTemporaryFile(prefix="silver-", suffix=".duckdb", delete=False)
+    tmp.close()
+    tmp_path = Path(tmp.name)
+    try:
+        with fsspec.open(path, "rb") as source, tmp_path.open("wb") as destination:
+            shutil.copyfileobj(source, destination, length=64 * 1024 * 1024)
+        yield str(tmp_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 def fetch_quarter_indexes(
@@ -117,7 +147,10 @@ def _write_text(path: str, payload: str) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--silver-db", required=True, help="Local frozen production silver DuckDB")
+    parser.add_argument(
+        "--silver-db", required=True,
+        help="Local path or s3:// URI of the frozen production silver DuckDB",
+    )
     parser.add_argument("--output-path", required=True, help="Local or S3 candidate manifest path")
     parser.add_argument(
         "--batches-output-path", required=True,
@@ -149,6 +182,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    return _run(args)
+
+
+def _run(args: argparse.Namespace) -> int:
     try:
         if args.uniform_coverage:
             if args.coverage_start is None:
@@ -173,12 +210,13 @@ def main(argv: list[str] | None = None) -> int:
                 args.watermark
             )
 
-        release_ciks, source_manifest_fingerprints, silver_filings = _load_silver_inputs(
-            args.silver_db,
-            coverage_start=coverage_start,
-            watermark=args.watermark,
-            tracking_status_filter=args.tracking_status_filter,
-        )
+        with _local_silver_db(args.silver_db) as local_silver_db:
+            release_ciks, source_manifest_fingerprints, silver_filings = _load_silver_inputs(
+                local_silver_db,
+                coverage_start=coverage_start,
+                watermark=args.watermark,
+                tracking_status_filter=args.tracking_status_filter,
+            )
         quarter_indexes = fetch_quarter_indexes(
             coverage_start=coverage_start,
             watermark=args.watermark,

@@ -152,7 +152,7 @@ def check_mdm(env: str, region: str) -> dict:
         import psycopg2
         conn = psycopg2.connect(dsn, connect_timeout=5)
     except Exception as e:
-        print(f"  ⚠  RDS unreachable (VPC-private): {str(e)[:60]}"); return {}
+        print(f"  ⚠  MDM Postgres unreachable: {str(e)[:60]}"); return {}
 
     cur = conn.cursor()
     results = {}

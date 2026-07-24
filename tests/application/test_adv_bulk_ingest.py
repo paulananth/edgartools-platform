@@ -4,11 +4,16 @@ import io
 import zipfile
 from dataclasses import replace
 
+import pytest
+
 from edgar_warehouse.application.adv_bulk_ingest import (
     AdvBulkParseResult,
+    ingest_adv_bulk_archive,
     parse_adv_bulk_archive,
     reconstruct_effective_adv_set,
 )
+from edgar_warehouse.application.errors import WarehouseRuntimeError
+from edgar_warehouse.silver_store import SilverDatabase
 
 
 def _archive(files: dict[str, str]) -> bytes:
@@ -16,6 +21,14 @@ def _archive(files: dict[str, str]) -> bytes:
     with zipfile.ZipFile(payload, "w") as bundle:
         for name, content in files.items():
             bundle.writestr(name, content)
+    return payload.getvalue()
+
+
+def _archive_with_encoding(files: dict[str, str], encoding: str) -> bytes:
+    payload = io.BytesIO()
+    with zipfile.ZipFile(payload, "w") as bundle:
+        for name, content in files.items():
+            bundle.writestr(name, content.encode(encoding))
     return payload.getvalue()
 
 
@@ -89,3 +102,204 @@ def test_filing_type_columns_only_treat_yes_as_selected_action() -> None:
     )
 
     assert parsed.filings[0].filing_action == "final_sec_era_report"
+
+
+def test_parses_cp1252_encoded_archive_without_raising() -> None:
+    """Real SEC/FINRA monthly advFilingData archives are not consistently UTF-8.
+
+    2025-06 and 2025-07's official archives contain cp1252-encoded accented
+    characters (e.g. 0xC9 'E acute') in fund names that raised
+    UnicodeDecodeError under the prior utf-8-sig-only decoding -- discovered
+    running the real archive in production, not from a synthetic fixture.
+    """
+    archive = _archive_with_encoding(
+        {
+            "IA_ADV_Base_A_20250601_20250630.csv": (
+                '"FilingID","DateSubmitted","1A","1D","1E1","7B"\n'
+                '2115188,"06/24/2025 10:37:17 AM","ÉTUDE CAPITAL","801-66195",129052,"Y"\n'
+            ),
+            "IA_Schedule_D_7B1_20250601_20250630.csv": (
+                '"FilingID","Fund Name","Fund ID","ReferenceID","State","Country",'
+                '"Fund Type","Gross Asset Value"\n'
+                '2115188,"CRÉDIT FUND",805-123,518607,"Delaware","United States",'
+                '"Private Equity Fund",321687148\n'
+            ),
+        },
+        encoding="cp1252",
+    )
+
+    parsed = parse_adv_bulk_archive(
+        archive,
+        dataset_period="2025-06",
+        source_sha256="abc123",
+    )
+
+    assert parsed.filings[0].adviser_name == "ÉTUDE CAPITAL"
+    assert parsed.funds[0].fund_name == "CRÉDIT FUND"
+
+
+def test_parses_24_hour_date_submitted_with_no_seconds_or_am_pm() -> None:
+    """Real advFilingData archives mix DateSubmitted shapes across months.
+
+    Scanning every IA_ADV_Base_A/B file across the full 2025-06..2026-06
+    rolling window found three distinct shapes; this covers the one not
+    already exercised by the other fixtures: 24-hour, no seconds, no AM/PM
+    (e.g. "6/24/2025 7:44"), discovered running the real archive in
+    production.
+    """
+    from datetime import date
+
+    parsed = parse_adv_bulk_archive(
+        _archive({
+            "IA_ADV_Base_A_20250601_20250630.csv": (
+                '"FilingID","DateSubmitted","1A","1D","1E1","7B"\n'
+                '2115188,"6/24/2025 7:44","PNC WEALTH","801-66195",129052,"N"\n'
+            ),
+        }),
+        dataset_period="2025-06",
+        source_sha256="abc123",
+    )
+
+    assert parsed.filings[0].effective_date == date(2025, 6, 24)
+
+
+def test_ignores_iaadv_base_b_item2_rows_with_no_crd_column() -> None:
+    """IA_ADV_Base_B carries only Item 2 fields and has no CRD ("1E1") column.
+
+    The prior _rows() pattern's optional "(?:_A)?" did not actually exclude
+    "_B" filenames, silently merging IA_ADV_Base_B's Item-2-only rows into
+    base_rows and tripping "IAPD base row is missing FilingID or adviser CRD"
+    on every real IA_ADV_Base_B row -- discovered running the real 13-month
+    archive window in production, not from a synthetic fixture.
+    """
+    archive = _archive({
+        "IA_ADV_Base_A_20260601_20260630.csv": (
+            '"FilingID","DateSubmitted","1A","1D","1E1","7B"\n'
+            '2115188,"06/24/2026 10:37:17 AM","PNC WEALTH","801-66195",129052,"N"\n'
+        ),
+        "IA_ADV_Base_B_20260601_20260630.csv": (
+            '"FilingID","2A1","2A2","2A3"\n'
+            '2115188,"Y","N","N"\n'
+        ),
+    })
+
+    parsed = parse_adv_bulk_archive(
+        archive,
+        dataset_period="2026-06",
+        source_sha256="abc123",
+    )
+
+    assert parsed.filings[0].adviser_crd_number == "129052"
+
+
+def test_treats_literal_n_gross_asset_value_as_not_reported() -> None:
+    """Real Schedule D 7.B "Gross Asset Value" data occasionally contains a
+    literal "N" instead of a number -- confirmed as the ONLY non-numeric
+    value ever observed in that column across the full 2025-06..2026-06
+    real archive window, not a guess. Treated as not-reported, not a
+    fail-closed parse error.
+    """
+    archive = _archive({
+        "IA_ADV_Base_A_20250801_20250831.csv": (
+            '"FilingID","DateSubmitted","1A","1D","1E1","7B"\n'
+            '2115188,"08/24/2025 10:37:17 AM","PNC WEALTH","801-66195",129052,"Y"\n'
+        ),
+        "IA_Schedule_D_7B1_20250801_20250831.csv": (
+            '"FilingID","Fund Name","Fund ID","ReferenceID","State","Country",'
+            '"Fund Type","Gross Asset Value"\n'
+            '2115188,"ALPHA FUND",805-123,518607,"Delaware","United States",'
+            '"Private Equity Fund","N"\n'
+        ),
+    })
+
+    parsed = parse_adv_bulk_archive(
+        archive,
+        dataset_period="2025-08",
+        source_sha256="abc123",
+    )
+
+    assert parsed.funds[0].aum_amount is None
+
+
+def test_ingest_scopes_fund_index_per_filing_not_per_archive(tmp_path) -> None:
+    """fund_index is the second column of sec_adv_private_fund's PK
+    (accession_number, fund_index) -- it must count funds within ONE filing.
+
+    ingest_adv_bulk_archive used to assign fund_index via a global
+    enumerate() across every fund in the whole archive. On a real
+    March-2026 archive (the annual-reaffirmation spike already seen in
+    other real-data bugs this session) that overflowed the SMALLINT column
+    once a single month's archive reported more than 32767 funds combined
+    across all filings -- discovered running the real 13-month window
+    locally, not from a synthetic fixture. Short of overflow it was also a
+    correctness bug: a synthetic key that shifts across re-ingests instead
+    of stably identifying "the Nth fund this filing reports".
+    """
+    archive = _archive({
+        "IA_ADV_Base_A_20260601_20260630.csv": (
+            '"FilingID","DateSubmitted","1A","1D","1E1","7B"\n'
+            '2115188,"06/24/2026 10:37:17 AM","FIRM ONE","801-66195",129052,"Y"\n'
+            '2115999,"06/24/2026 10:37:17 AM","FIRM TWO","801-77777",129999,"Y"\n'
+        ),
+        "IA_Schedule_D_7B1_20260601_20260630.csv": (
+            '"FilingID","Fund Name","Fund ID","ReferenceID","State","Country",'
+            '"Fund Type","Gross Asset Value"\n'
+            '2115188,"ALPHA FUND",805-1,111,"Delaware","United States",'
+            '"Private Equity Fund",1000\n'
+            '2115188,"BETA FUND",805-2,222,"Delaware","United States",'
+            '"Private Equity Fund",2000\n'
+            '2115999,"GAMMA FUND",805-3,333,"Delaware","United States",'
+            '"Private Equity Fund",3000\n'
+        ),
+    })
+
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    try:
+        result = ingest_adv_bulk_archive(
+            db,
+            archive,
+            dataset_period="2026-06",
+            source_sha256="abc123",
+            sync_run_id="run-1",
+        )
+        assert result == {"filings": 2, "funds": 3}
+
+        stored = db.fetch(
+            "SELECT accession_number, fund_index, fund_name FROM sec_adv_private_fund "
+            "ORDER BY accession_number, fund_index"
+        )
+        assert [
+            (row["accession_number"], row["fund_index"], row["fund_name"])
+            for row in stored
+        ] == [
+            ("iapd-adv:2115188", 1, "ALPHA FUND"),
+            ("iapd-adv:2115188", 2, "BETA FUND"),
+            ("iapd-adv:2115999", 1, "GAMMA FUND"),
+        ]
+    finally:
+        db.close()
+
+
+def test_filing_reporting_7b_yes_with_no_fund_rows_still_raises() -> None:
+    """Fail-closed check: a filing asserting Item 7.B=Y must have >=1 fund row.
+
+    The O(n^2) any(row.filing_id == filing.filing_id for row in
+    funds.values()) scan this check used to run was replaced with a single
+    precomputed set of filing_ids-with-funds for performance (see the
+    parse-time cliff on the real March-2026 archive). Same behaviour, new
+    implementation -- this asserts the fail-closed check itself, which had
+    no test coverage under either implementation.
+    """
+    archive = _archive({
+        "IA_ADV_Base_A_20260601_20260630.csv": (
+            '"FilingID","DateSubmitted","1A","1D","1E1","7B"\n'
+            '2115188,"06/24/2026 10:37:17 AM","PNC WEALTH","801-66195",129052,"Y"\n'
+        ),
+    })
+
+    with pytest.raises(WarehouseRuntimeError, match="has no fund rows"):
+        parse_adv_bulk_archive(
+            archive,
+            dataset_period="2026-06",
+            source_sha256="abc123",
+        )

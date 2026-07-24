@@ -26,22 +26,33 @@ def _load_audit_module():
     return module
 
 
-def test_deploy_script_defaults_mdm_database_source_to_rds() -> None:
+def test_deploy_script_defaults_mdm_database_source_to_snowflake_postgres() -> None:
+    """AWS RDS was fully decommissioned; snowflake-postgres is the only supported source.
+
+    5-why root cause: the script previously defaulted --mdm-database-source to
+    "rds" and always tried an RDS describe-db-instances call, which could never
+    succeed once the MDM Postgres cutover completed and the RDS instance was
+    torn down -- producing a confusing WARN on every deploy instead of failing
+    to register a real option.
+    """
     text = _read(DEPLOY_SCRIPT)
 
     assert 'MDM_DATABASE_SOURCE=""' in text
-    assert 'MDM_DATABASE_SOURCE="$(first_nonempty "$MDM_DATABASE_SOURCE" "$(manifest_value mdm.database_source)" "rds")"' in text
-    assert "--mdm-database-source <rds|snowflake-postgres>" in text
+    assert (
+        'MDM_DATABASE_SOURCE="$(first_nonempty "$MDM_DATABASE_SOURCE" '
+        '"$(manifest_value mdm.database_source)" "snowflake-postgres")"'
+    ) in text
+    assert "--mdm-database-source <snowflake-postgres>" in text
     assert '--mdm-database-source) MDM_DATABASE_SOURCE="${2:?}"; shift 2 ;;' in text
-    assert "--mdm-database-source must be rds or snowflake-postgres" in text
+    assert "--mdm-database-source must be snowflake-postgres" in text
 
 
-def test_deploy_script_snowflake_postgres_source_skips_rds_secret_sync() -> None:
+def test_deploy_script_has_no_rds_secret_sync_path() -> None:
     text = _read(DEPLOY_SCRIPT)
 
-    assert 'if [[ "$MDM_DATABASE_SOURCE" == "rds" ]]; then' in text
-    assert 'sync_mdm_postgres_dsn "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_RDS_INSTANCE_ID"' in text
-    assert "Skipping RDS DSN sync; using operator-managed Snowflake Postgres DSN secret" in text
+    assert "sync_mdm_postgres_dsn" not in text
+    assert "describe-db-instances" not in text
+    assert "Using operator-managed Snowflake Postgres DSN secret" in text
     assert '"database_source": mdm_database_source' in text
 
 
