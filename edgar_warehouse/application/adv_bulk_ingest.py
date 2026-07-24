@@ -199,10 +199,17 @@ def parse_adv_bulk_archive(
                 raise WarehouseRuntimeError(f"conflicting duplicate IAPD fund assertion: {key}")
             funds[key] = fund
 
+    # O(filings) membership checks against a precomputed set, not O(filings *
+    # funds) linear scans -- the prior any(row.filing_id == ... for row in
+    # funds.values()) re-scanned every fund for every filing. On a real
+    # March-2026 archive (19,675 filings x 130,189 funds, the annual-
+    # reaffirmation spike) that was ~2.5 billion comparisons and took 709s;
+    # every other month in the same 13-month window, with far fewer
+    # filings/funds, took 1-11s. Discovered running the real archive window
+    # locally, not from a synthetic fixture.
+    filing_ids_with_funds = {row.filing_id for row in funds.values()}
     for filing in filings_by_id.values():
-        if filing.private_funds_reported and not any(
-            row.filing_id == filing.filing_id for row in funds.values()
-        ):
+        if filing.private_funds_reported and filing.filing_id not in filing_ids_with_funds:
             raise WarehouseRuntimeError(
                 f"IAPD filing {filing.filing_id} reports Item 7.B=Y but has no fund rows"
             )
@@ -240,28 +247,38 @@ def ingest_adv_bulk_archive(
         }
         for row in parsed.filings
     ]
-    fund_rows = [
-        {
-            "accession_number": row.accession_number,
-            "fund_index": index,
-            "filing_id": row.filing_id,
-            "adviser_crd_number": row.adviser_crd_number,
-            "private_fund_id": row.private_fund_id,
-            "reference_id": row.reference_id,
-            "schedule_section": row.schedule_section,
-            "reporting_role": row.reporting_role,
-            "filing_action": row.filing_action,
-            "fund_name": row.fund_name,
-            "fund_type": row.fund_type,
-            "jurisdiction": row.jurisdiction,
-            "aum_amount": row.aum_amount,
-            "effective_date": row.effective_date,
-            "source_dataset_period": row.source_dataset_period,
-            "source_sha256": row.source_sha256,
-            "parser_version": "iapd_bulk_v1",
-        }
-        for index, row in enumerate(parsed.funds, start=1)
-    ]
+    # fund_index is the PK's second column (accession_number, fund_index) --
+    # it must count funds *within one filing*, not across the whole archive.
+    # A global enumerate() here overflowed sec_adv_private_fund.fund_index
+    # SMALLINT on a real March-2026 archive (>32767 funds in one month, the
+    # annual-reaffirmation spike) and, short of overflow, would have silently
+    # assigned an unstable synthetic key -- a re-ingest that parses funds in
+    # a different relative order would upsert into the wrong existing row.
+    fund_rows = []
+    per_accession_seen: dict[str, int] = {}
+    for row in parsed.funds:
+        per_accession_seen[row.accession_number] = per_accession_seen.get(row.accession_number, 0) + 1
+        fund_rows.append(
+            {
+                "accession_number": row.accession_number,
+                "fund_index": per_accession_seen[row.accession_number],
+                "filing_id": row.filing_id,
+                "adviser_crd_number": row.adviser_crd_number,
+                "private_fund_id": row.private_fund_id,
+                "reference_id": row.reference_id,
+                "schedule_section": row.schedule_section,
+                "reporting_role": row.reporting_role,
+                "filing_action": row.filing_action,
+                "fund_name": row.fund_name,
+                "fund_type": row.fund_type,
+                "jurisdiction": row.jurisdiction,
+                "aum_amount": row.aum_amount,
+                "effective_date": row.effective_date,
+                "source_dataset_period": row.source_dataset_period,
+                "source_sha256": row.source_sha256,
+                "parser_version": "iapd_bulk_v1",
+            }
+        )
     return {
         "filings": db.merge_adv_filings(filing_rows, sync_run_id),
         "funds": db.merge_adv_private_funds(fund_rows, sync_run_id),

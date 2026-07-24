@@ -6,9 +6,11 @@ from dataclasses import replace
 
 from edgar_warehouse.application.adv_bulk_ingest import (
     AdvBulkParseResult,
+    ingest_adv_bulk_archive,
     parse_adv_bulk_archive,
     reconstruct_effective_adv_set,
 )
+from edgar_warehouse.silver_store import SilverDatabase
 
 
 def _archive(files: dict[str, str]) -> bytes:
@@ -214,3 +216,62 @@ def test_treats_literal_n_gross_asset_value_as_not_reported() -> None:
     )
 
     assert parsed.funds[0].aum_amount is None
+
+
+def test_ingest_scopes_fund_index_per_filing_not_per_archive(tmp_path) -> None:
+    """fund_index is the second column of sec_adv_private_fund's PK
+    (accession_number, fund_index) -- it must count funds within ONE filing.
+
+    ingest_adv_bulk_archive used to assign fund_index via a global
+    enumerate() across every fund in the whole archive. On a real
+    March-2026 archive (the annual-reaffirmation spike already seen in
+    other real-data bugs this session) that overflowed the SMALLINT column
+    once a single month's archive reported more than 32767 funds combined
+    across all filings -- discovered running the real 13-month window
+    locally, not from a synthetic fixture. Short of overflow it was also a
+    correctness bug: a synthetic key that shifts across re-ingests instead
+    of stably identifying "the Nth fund this filing reports".
+    """
+    archive = _archive({
+        "IA_ADV_Base_A_20260601_20260630.csv": (
+            '"FilingID","DateSubmitted","1A","1D","1E1","7B"\n'
+            '2115188,"06/24/2026 10:37:17 AM","FIRM ONE","801-66195",129052,"Y"\n'
+            '2115999,"06/24/2026 10:37:17 AM","FIRM TWO","801-77777",129999,"Y"\n'
+        ),
+        "IA_Schedule_D_7B1_20260601_20260630.csv": (
+            '"FilingID","Fund Name","Fund ID","ReferenceID","State","Country",'
+            '"Fund Type","Gross Asset Value"\n'
+            '2115188,"ALPHA FUND",805-1,111,"Delaware","United States",'
+            '"Private Equity Fund",1000\n'
+            '2115188,"BETA FUND",805-2,222,"Delaware","United States",'
+            '"Private Equity Fund",2000\n'
+            '2115999,"GAMMA FUND",805-3,333,"Delaware","United States",'
+            '"Private Equity Fund",3000\n'
+        ),
+    })
+
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    try:
+        result = ingest_adv_bulk_archive(
+            db,
+            archive,
+            dataset_period="2026-06",
+            source_sha256="abc123",
+            sync_run_id="run-1",
+        )
+        assert result == {"filings": 2, "funds": 3}
+
+        stored = db.fetch(
+            "SELECT accession_number, fund_index, fund_name FROM sec_adv_private_fund "
+            "ORDER BY accession_number, fund_index"
+        )
+        assert [
+            (row["accession_number"], row["fund_index"], row["fund_name"])
+            for row in stored
+        ] == [
+            ("iapd-adv:2115188", 1, "ALPHA FUND"),
+            ("iapd-adv:2115188", 2, "BETA FUND"),
+            ("iapd-adv:2115999", 1, "GAMMA FUND"),
+        ]
+    finally:
+        db.close()
