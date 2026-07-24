@@ -33,6 +33,31 @@ resource "aws_ecr_repository" "warehouse" {
   tags = merge(local.tags, { Name = "${local.name_prefix}-warehouse" })
 }
 
+resource "aws_ecr_lifecycle_policy" "warehouse" {
+  repository = aws_ecr_repository.warehouse.name
+
+  # ECS task definitions pin image digests that are also retained under
+  # immutable sha-* tags. Expiring tagged images by repository count can make
+  # a still-registered task definition unlaunchable. Clean up only untagged
+  # manifests; tagged rollback and task-definition images remain durable.
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Expire only untagged images beyond the newest 20"
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "imageCountMoreThan"
+          countNumber = 20
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
 resource "aws_cloudwatch_log_group" "ecs" {
   name              = "/aws/ecs/${local.name_prefix}-warehouse"
   retention_in_days = 30
