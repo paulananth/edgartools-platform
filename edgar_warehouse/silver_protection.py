@@ -429,10 +429,23 @@ def merge_candidate_into_canonical(
         cand_tables = _table_names(conn, "cand")
         out_tables = _table_names(conn, "out")
 
+        # backup_<table>_<reason>_<timestamp> tables are created exclusively by
+        # SilverDatabase's schema-migration backup-and-recreate helper (see
+        # silver_store.py's period_end/period_start PK migrations and the
+        # fund_index BIGINT migration) as an audit/rollback artifact -- never
+        # canonical domain data, and their names are deliberately unpredictable
+        # (a runtime timestamp), so they can never be pre-registered by exact
+        # name the way EXCLUDED_OPERATIONAL_TABLES otherwise requires.
+        # Discovered via a real production ingest-relationship-sources run:
+        # the fund_index BIGINT migration fired against a stale pre-migration
+        # silver.duckdb, and the immediately-following publish step failed
+        # closed on its own backup table.
         unclassified = {
             t
             for t in (cand_tables | out_tables)
-            if t not in PROTECTED_TABLE_REGISTRY and t not in EXCLUDED_OPERATIONAL_TABLES
+            if t not in PROTECTED_TABLE_REGISTRY
+            and t not in EXCLUDED_OPERATIONAL_TABLES
+            and not t.startswith("backup_")
         }
         if unclassified:
             raise SilverPublicationError(

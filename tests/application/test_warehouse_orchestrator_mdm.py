@@ -1194,6 +1194,36 @@ def test_thirteenf_filing_and_employment_event_are_classified(tmp_path):
     assert result.rows_inserted["sec_employment_event"] == 1
 
 
+def test_migration_backup_tables_are_excluded_from_unclassified_check(tmp_path):
+    """Regression (2026-07-24): a real production ingest-relationship-sources
+    run hit SilverDatabase's fund_index BIGINT migration against a stale
+    pre-migration silver.duckdb; the migration ran correctly (see
+    test_silver_store_schema_migration.py), but the immediately-following
+    publish step then failed closed on the migration's own
+    backup_sec_adv_private_fund_fund_index_bigint_<timestamp> table --
+    unclassified, since a runtime-timestamped name can never be
+    pre-registered in EXCLUDED_OPERATIONAL_TABLES by exact match. Every
+    backup-and-recreate schema migration (period_end PK, period_start PK,
+    fund_index BIGINT) hits this same gap the first time it actually fires
+    in a production store immediately followed by a publish."""
+    from edgar_warehouse.silver_protection import merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+    ddl = "CREATE TABLE sec_company (cik BIGINT PRIMARY KEY, entity_name TEXT, last_synced_at TIMESTAMPTZ)"
+    _make_duckdb(canonical, ddl, [])
+    _make_duckdb(
+        candidate,
+        ddl + "; CREATE TABLE backup_sec_adv_private_fund_fund_index_bigint_20260724160622919443 (id INTEGER)",
+        ["INSERT INTO sec_company VALUES (1, 'Alpha Corp', '2026-01-01 00:00:00')"],
+    )
+
+    result = merge_candidate_into_canonical(candidate, canonical, output)
+
+    assert result.rows_inserted["sec_company"] == 1
+
+
 def test_every_silver_table_is_registered_or_excluded():
     """Architecture lock: every CREATE TABLE in silver_store.py's DDL must be
     either a ProtectedTablePolicy or an explicit operational exclusion --
