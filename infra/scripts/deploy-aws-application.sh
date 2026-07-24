@@ -43,10 +43,8 @@ Options:
                                     <runner-role-name-prefix>_runner_step_functions.
   --runner-role-name-prefix <prefix>
                                     Expected prefix for the three runner role names above.
-                                    Default: sec_platform. Override when a second environment
-                                    shares this AWS account and Terraform was applied with a
-                                    matching runner_role_name_prefix (see
-                                    infra/terraform/access/aws/modules/runtime_access).
+                                    Default: sec_platform for dev and sec_platform_prod for
+                                    prod, matching the access Terraform account roots.
   --log-group-name <name>           ECS task log group name.
   --image-tag <tag>                 Image tag for build/push. Default: git short SHA.
   --image-ref <ref>                 Existing image ref to deploy. Skips build unless --build-image is set.
@@ -171,7 +169,7 @@ MDM_SEED_FROM_SILVER_TRACKING_STATUS="bootstrap_pending"
 MDM_GRAPH_RULE_VERSION="v1"
 MDM_GRAPH_SCHEMA_VERSION="v1"
 MDM_GENERATION_PARTITION_CONCURRENCY=8
-RUNNER_ROLE_NAME_PREFIX="sec_platform"
+RUNNER_ROLE_NAME_PREFIX=""
 OUTPUT_FILE=""
 
 while [[ $# -gt 0 ]]; do
@@ -237,6 +235,13 @@ done
 [[ -n "$EXPECTED_AWS_ACCOUNT_ID" ]] || fail "--aws-account-id is required"
 if [[ ! "$EXPECTED_AWS_ACCOUNT_ID" =~ ^[0-9]{12}$ ]]; then
   fail "--aws-account-id must be a 12-digit AWS account ID"
+fi
+if is_empty "$RUNNER_ROLE_NAME_PREFIX"; then
+  if [[ "$ENVIRONMENT" == "prod" ]]; then
+    RUNNER_ROLE_NAME_PREFIX="sec_platform_prod"
+  else
+    RUNNER_ROLE_NAME_PREFIX="sec_platform"
+  fi
 fi
 [[ "$WAREHOUSE_RUNTIME_MODE" == "bronze_capture" || "$WAREHOUSE_RUNTIME_MODE" == "infrastructure_validation" ]] || fail "--warehouse-runtime-mode must be bronze_capture or infrastructure_validation"
 [[ "$PUSH_ATTEMPTS" =~ ^[1-9][0-9]*$ ]] || fail "--push-attempts must be a positive integer"
