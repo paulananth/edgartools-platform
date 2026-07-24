@@ -71,9 +71,10 @@ Options:
                                     Never silently defaults to the warehouse image.
   --mdm-ecr-repository-url <url>    ECR repository URL for built MDM image. Default: <account>.dkr.ecr.<region>.amazonaws.com/<prefix>-mdm.
   --build-mdm-image                 Build and push a separate MDM image when MDM is deployed.
-  --mdm-database-source <rds|snowflake-postgres>
-                                    Source of the MDM_DATABASE_URL secret. Default: rds.
-                                    Use snowflake-postgres after the secret contains the Snowflake Postgres application DSN.
+  --mdm-database-source <snowflake-postgres>
+                                    Source of the MDM_DATABASE_URL secret. Only snowflake-postgres
+                                    is supported (MDM Postgres runs on Snowflake's native Postgres
+                                    service; there is no AWS RDS instance to source from).
   --mdm-postgres-dsn-secret-arn <arn>
                                     Secrets Manager ARN injected as MDM_DATABASE_URL.
   --mdm-snowflake-secret-arn <arn>  Secrets Manager ARN injected as MDM_SNOWFLAKE_SECRET_JSON.
@@ -245,8 +246,8 @@ fi
 [[ "$MDM_GENERATION_PARTITION_CONCURRENCY" =~ ^[1-9][0-9]*$ ]] || fail "--mdm-generation-partition-concurrency must be a positive integer"
 if ! is_empty "$MDM_DATABASE_SOURCE"; then
   case "$MDM_DATABASE_SOURCE" in
-    rds|snowflake-postgres) ;;
-    *) fail "--mdm-database-source must be rds or snowflake-postgres" ;;
+    snowflake-postgres) ;;
+    *) fail "--mdm-database-source must be snowflake-postgres" ;;
   esac
 fi
 if ! is_empty "$WAREHOUSE_BRONZE_CIK_LIMIT"; then
@@ -353,10 +354,10 @@ resolve_bucket_name() {
   fi
 }
 
-MDM_DATABASE_SOURCE="$(first_nonempty "$MDM_DATABASE_SOURCE" "$(manifest_value mdm.database_source)" "rds")"
+MDM_DATABASE_SOURCE="$(first_nonempty "$MDM_DATABASE_SOURCE" "$(manifest_value mdm.database_source)" "snowflake-postgres")"
 case "$MDM_DATABASE_SOURCE" in
-  rds|snowflake-postgres) ;;
-  *) fail "--mdm-database-source must be rds or snowflake-postgres" ;;
+  snowflake-postgres) ;;
+  *) fail "--mdm-database-source must be snowflake-postgres" ;;
 esac
 
 require_runner_role_name() {
@@ -542,60 +543,11 @@ case "$MDM_DEPLOYMENT_MODE" in
     ;;
 esac
 
-# Pre-cutover compatibility: sync the MDM Postgres DSN secret from the
-# AWS-managed RDS credential when --mdm-database-source rds is selected.
-# Snowflake Postgres deployments must pass --mdm-database-source
-# snowflake-postgres so this block does not overwrite the application DSN.
-sync_mdm_postgres_dsn() {
-  local dsn_secret_arn="$1"
-  local rds_instance_id="$2"
-
-  log "Syncing MDM Postgres DSN from live RDS credential (instance: ${rds_instance_id})"
-
-  local rds_json master_secret_arn host port dbname cred_json username password dsn
-  rds_json="$(aws_cli rds describe-db-instances \
-    --db-instance-identifier "$rds_instance_id" \
-    --query 'DBInstances[0].{Host:Endpoint.Address,Port:Endpoint.Port,DB:DBName,SecretArn:MasterUserSecret.SecretArn}' \
-    --output json 2>/dev/null)" || { log "WARN: could not describe RDS instance ${rds_instance_id}; skipping DSN sync"; return 0; }
-
-  host="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['Host'])" <<< "$rds_json")"
-  port="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['Port'])" <<< "$rds_json")"
-  dbname="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['DB'])" <<< "$rds_json")"
-  master_secret_arn="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read())['SecretArn'])" <<< "$rds_json")"
-
-  if is_empty "$master_secret_arn"; then
-    log "WARN: RDS instance ${rds_instance_id} has no AWS-managed master secret; skipping DSN sync"
-    return 0
-  fi
-
-  cred_json="$(aws_cli secretsmanager get-secret-value \
-    --secret-id "$master_secret_arn" \
-    --query SecretString --output text 2>/dev/null)" || { log "WARN: could not read RDS master secret; skipping DSN sync"; return 0; }
-
-  dsn="$(CRED_JSON="$cred_json" python3 - "$host" "$port" "$dbname" <<'PY'
-import json, os, sys
-from urllib.parse import quote_plus
-cred = json.loads(os.environ["CRED_JSON"])
-host, port, db = sys.argv[1], sys.argv[2], sys.argv[3]
-u = quote_plus(cred["username"])
-p = quote_plus(cred["password"])
-print(f"postgresql+psycopg2://{u}:{p}@{host}:{port}/{db}?sslmode=require")
-PY
-)"
-
-  aws_cli secretsmanager put-secret-value \
-    --secret-id "$dsn_secret_arn" \
-    --secret-string "$dsn" >/dev/null
-  log "MDM Postgres DSN secret updated (host=${host} db=${dbname} sslmode=require)"
-}
-
+# MDM Postgres runs on Snowflake's native Postgres service (no AWS RDS
+# instance exists to sync a DSN from); MDM_POSTGRES_DSN_SECRET_ARN is
+# operator-managed and this script never overwrites it.
 if [[ "$DEPLOY_MDM" == "true" ]] && ! is_empty "$MDM_POSTGRES_DSN_SECRET_ARN"; then
-  MDM_RDS_INSTANCE_ID="${NAME_PREFIX}-mdm"
-  if [[ "$MDM_DATABASE_SOURCE" == "rds" ]]; then
-    sync_mdm_postgres_dsn "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_RDS_INSTANCE_ID"
-  else
-    log "Skipping RDS DSN sync; using operator-managed Snowflake Postgres DSN secret (${MDM_POSTGRES_DSN_SECRET_ARN})"
-  fi
+  log "Using operator-managed Snowflake Postgres DSN secret (${MDM_POSTGRES_DSN_SECRET_ARN})"
 fi
 
 # Wire S3 → SNS bucket notification so Snowpipe receives ObjectCreated events for manifests.

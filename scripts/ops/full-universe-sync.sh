@@ -20,13 +20,9 @@
 #   MDM_DATABASE_URL — fetch the live DSN from AWS Secrets Manager:
 #     aws secretsmanager get-secret-value --region us-east-1 \
 #       --secret-id edgartools-dev/mdm/postgres_dsn --query SecretString --output text
-#   This currently resolves to an RDS Postgres instance in a private VPC subnet —
-#   it is NOT reachable from a local machine without a bastion/VPN tunnel (see
-#   CLAUDE.md "Do NOT run bootstrap-next locally for large batches"). The
-#   Snowflake-Postgres cutover in docs/aws-mdm-snowflake-postgres-cutover.md has
-#   not been executed yet (`snow sql --connection snowconn -q "SHOW POSTGRES
-#   INSTANCES"` returns no instances as of 2026-06-07) — once it has, the DSN in
-#   the same secret will point at a Snowflake Postgres host instead.
+#   This resolves to Snowflake's native Postgres service (see
+#   docs/aws-mdm-snowflake-postgres-cutover.md) — there is no AWS RDS instance
+#   backing MDM anymore.
 #
 #   Snowflake graph-sync creds (steps 4-5) — read from ~/.snowflake/connections.toml
 #   [snowconn], the same Snowflake CLI connection used to provision MDM Postgres.
