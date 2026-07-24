@@ -4,12 +4,15 @@ import io
 import zipfile
 from dataclasses import replace
 
+import pytest
+
 from edgar_warehouse.application.adv_bulk_ingest import (
     AdvBulkParseResult,
     ingest_adv_bulk_archive,
     parse_adv_bulk_archive,
     reconstruct_effective_adv_set,
 )
+from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.silver_store import SilverDatabase
 
 
@@ -275,3 +278,28 @@ def test_ingest_scopes_fund_index_per_filing_not_per_archive(tmp_path) -> None:
         ]
     finally:
         db.close()
+
+
+def test_filing_reporting_7b_yes_with_no_fund_rows_still_raises() -> None:
+    """Fail-closed check: a filing asserting Item 7.B=Y must have >=1 fund row.
+
+    The O(n^2) any(row.filing_id == filing.filing_id for row in
+    funds.values()) scan this check used to run was replaced with a single
+    precomputed set of filing_ids-with-funds for performance (see the
+    parse-time cliff on the real March-2026 archive). Same behaviour, new
+    implementation -- this asserts the fail-closed check itself, which had
+    no test coverage under either implementation.
+    """
+    archive = _archive({
+        "IA_ADV_Base_A_20260601_20260630.csv": (
+            '"FilingID","DateSubmitted","1A","1D","1E1","7B"\n'
+            '2115188,"06/24/2026 10:37:17 AM","PNC WEALTH","801-66195",129052,"Y"\n'
+        ),
+    })
+
+    with pytest.raises(WarehouseRuntimeError, match="has no fund rows"):
+        parse_adv_bulk_archive(
+            archive,
+            dataset_period="2026-06",
+            source_sha256="abc123",
+        )
