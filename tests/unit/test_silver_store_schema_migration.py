@@ -530,3 +530,100 @@ def test_factor_input_columns_are_added_without_dropping_rows(tmp_path):
         assert stored["shares_outstanding"] == 15116786000
     finally:
         db.close()
+
+
+_OLD_ADV_PRIVATE_FUND_DDL = """
+CREATE TABLE sec_adv_private_fund (
+    accession_number    TEXT,
+    fund_index          SMALLINT,
+    filing_id           TEXT,
+    adviser_crd_number  TEXT,
+    private_fund_id     TEXT,
+    reference_id        TEXT,
+    schedule_section    TEXT,
+    reporting_role      TEXT,
+    filing_action       TEXT,
+    fund_name           TEXT,
+    fund_type           TEXT,
+    jurisdiction        TEXT,
+    aum_amount          DECIMAL(28,2),
+    effective_date      DATE,
+    source_dataset_period TEXT,
+    source_sha256       TEXT,
+    parser_version      TEXT,
+    last_sync_run_id    TEXT,
+    PRIMARY KEY (accession_number, fund_index)
+);
+"""
+
+
+def _build_old_fund_index_store(db_path: str) -> None:
+    conn = duckdb.connect(db_path)
+    try:
+        conn.execute(_OLD_ADV_PRIVATE_FUND_DDL)
+        conn.execute(
+            """
+            INSERT INTO sec_adv_private_fund
+                (accession_number, fund_index, fund_name, parser_version)
+            VALUES ('iapd-adv:1', 100, 'OLD FUND', 'old-smallint-test')
+            """
+        )
+    finally:
+        conn.close()
+
+
+def test_migration_widens_fund_index_to_bigint_and_preserves_old_rows(tmp_path, caplog):
+    """The exact regression _widen_adv_fund_index_to_bigint exists to fix:
+
+    a store created before this migration keeps fund_index SMALLINT forever
+    under CREATE TABLE IF NOT EXISTS. This builds that pre-migration shape
+    directly (not the fresh-store DDL, which is already BIGINT), so the
+    migration's `if row[0] == "SMALLINT"` branch is actually exercised --
+    without this test it never runs in the suite at all, since every other
+    test opens a fresh store.
+    """
+    db_path = str(tmp_path / "silver.duckdb")
+    _build_old_fund_index_store(db_path)
+
+    with caplog.at_level(logging.WARNING, logger="edgar_warehouse.silver_store"):
+        db = SilverDatabase(db_path)
+    try:
+        column_type = db.fetch(
+            """
+            SELECT data_type FROM information_schema.columns
+            WHERE table_name = 'sec_adv_private_fund' AND column_name = 'fund_index'
+            """
+        )[0]["data_type"]
+        assert column_type == "BIGINT"
+
+        stored = db.fetch(
+            "SELECT accession_number, fund_index, fund_name FROM sec_adv_private_fund"
+        )
+        assert stored == [
+            {"accession_number": "iapd-adv:1", "fund_index": 100, "fund_name": "OLD FUND"}
+        ]
+
+        backups = _backup_tables(db._conn, "sec_adv_private_fund")
+        assert len(backups) == 1
+
+        # A fund_index above the old SMALLINT ceiling (32767) must now succeed --
+        # this is the actual production failure the migration exists to prevent.
+        count = db.merge_adv_private_funds(
+            [
+                {
+                    "accession_number": "iapd-adv:2",
+                    "fund_index": 40000,
+                    "fund_name": "NEW FUND",
+                }
+            ],
+            sync_run_id="post-migration-test",
+        )
+        assert count == 1
+        stored_new = db.fetch(
+            "SELECT fund_index FROM sec_adv_private_fund WHERE accession_number = 'iapd-adv:2'"
+        )[0]
+        assert stored_new["fund_index"] == 40000
+    finally:
+        db.close()
+
+    assert "sec_adv_private_fund" in caplog.text
