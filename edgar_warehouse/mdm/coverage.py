@@ -89,17 +89,37 @@ def compute_coverage(silver_reader: Any, session: Session) -> list[dict]:
     security_mdm = _mdm_count(MdmSecurity)
 
     # ------------------------------------------------------------------
-    # Advisers — all ADV filers.
-    # Mirrors: run_advisers iterates all sec_adv_filing rows.
+    # Advisers — current entities keyed by authoritative CRD.
+    # Multiple amendments for one CRD are filing history, not new entities.
     # ------------------------------------------------------------------
-    adviser_silver = _silver("SELECT COUNT(*) AS n FROM sec_adv_filing")
+    adviser_silver = _silver(
+        "SELECT COUNT(DISTINCT COALESCE("
+        "CAST(crd_number AS VARCHAR), accession_number"
+        ")) AS n FROM sec_adv_filing"
+    )
     adviser_mdm = _mdm_count(MdmAdviser)
 
     # ------------------------------------------------------------------
-    # Funds — all private funds (zero acceptable exclusions per D-21).
-    # Mirrors: run_funds iterates all sec_adv_private_fund rows.
+    # Funds — current entities keyed by authoritative private_fund_id.
+    # Accession/fund_index is the deterministic fallback for missing PFIDs.
     # ------------------------------------------------------------------
-    fund_silver = _silver("SELECT COUNT(*) AS n FROM sec_adv_private_fund")
+    try:
+        fund_silver = _silver(
+            "SELECT COUNT(DISTINCT COALESCE("
+            "CAST(private_fund_id AS VARCHAR), "
+            "accession_number || ':' || CAST(fund_index AS VARCHAR)"
+            ")) AS n FROM sec_adv_private_fund"
+        )
+    except Exception as exc:
+        # Pre-PFID silver fixtures/databases remain readable during migration.
+        # The current production schema always takes the authoritative branch.
+        if "private_fund_id" not in str(exc).lower():
+            raise
+        fund_silver = _silver(
+            "SELECT COUNT(DISTINCT "
+            "accession_number || ':' || CAST(fund_index AS VARCHAR)"
+            ") AS n FROM sec_adv_private_fund"
+        )
     fund_mdm = _mdm_count(MdmFund)
 
     return [
@@ -132,14 +152,17 @@ def compute_coverage(silver_reader: Any, session: Session) -> list[dict]:
             "silver_count": adviser_silver,
             "mdm_count": adviser_mdm,
             "gap": adviser_silver - adviser_mdm,
-            "reason": "All ADV filers included (no exclusions)",
+            "reason": "Latest ADV record per CRD (accession fallback when CRD is absent)",
         },
         {
             "domain": "funds",
             "silver_count": fund_silver,
             "mdm_count": fund_mdm,
             "gap": fund_silver - fund_mdm,
-            "reason": "All private funds included (zero acceptable exclusions per D-21)",
+            "reason": (
+                "Latest ADV record per private_fund_id "
+                "(accession/fund_index fallback when PFID is absent)"
+            ),
         },
     ]
 
