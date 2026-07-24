@@ -80,8 +80,9 @@ not discontinued — it moved, and a working bulk source for it still exists tod
    `advFilingData` relational feed uses the same Form-ADV-item-numbered column convention
    the parser already targets, decodable the same way.
 
-**Follow-up for ticket 02 to account for:** the `advFilingData` feed is a *monthly delta
-of filing activity*, not a full-universe snapshot (June 2026's zip is ~9 MB vs. ~429 MB
-for the 13-year historical archive) — reconstructing full current per-fund coverage will
+**Follow-up for ticket 02 to account for:** the `advFilingData` feed is confirmed (row
+count, not just file size) to be a *monthly delta of filing activity*, not a
+full-universe snapshot — June 2026's `IA_ADV_Base_A` file has 2,938 firm rows vs. the
+~17,073-firm registered universe (Q3). Reconstructing full current per-fund coverage will
 need a rolling window of trailing months (RIAs reaffirm ADV at least annually), not a
 single month's fetch. See the research doc's "Ingestion-strategy implication" note.

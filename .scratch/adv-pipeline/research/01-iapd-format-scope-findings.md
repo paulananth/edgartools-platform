@@ -267,16 +267,17 @@ private-fund assets for this firm). Converted with `pdftotext` (required `brew i
 poppler`, not present in the environment) and confirmed a fully populated Section 7.B.(1):
 fund name "EWF PARTNERS II LLC", PFID `805-4154444394`, jurisdiction, fund type, AUM.
 
-**Ingestion-strategy implication (flagging for ticket 02, not deciding it here):** the
-`advFilingData` feed is a **monthly delta of filing activity**, not a full-universe
-snapshot — each month's zip is ~9 MB (June 2026) vs. the ~429 MB combined size of the
-13-year 2011-2024 historical archive, consistent with "only firms that filed/amended
-during this specific month" rather than "every currently-registered firm." Since RIAs
-must reaffirm/amend Form ADV at least annually, a rolling ~13-month window of monthly
-deltas should capture the full active-adviser universe at least once, but this needs
-explicit verification (e.g. checking whether a firm with no June 2026 activity still
-appears in an earlier 2025/2026 month) before ticket 02 decides how many trailing months
-to fetch/union for a "complete" private-fund picture.
+**Ingestion-strategy implication (flagging for ticket 02, not deciding it here) — now
+verified, not inferred:** the `advFilingData` feed is confirmed to be a **monthly delta of
+filing activity**, not a full-universe snapshot. Extracted and row-counted
+`IA_ADV_Base_A_20260601_20260630.csv` directly: **2,938 firm-filing rows** for June 2026,
+against the ~17,073-row registered-adviser universe counted from the July 2026 Firm
+Roster CSV (Q3) — i.e. only ~17% of registered firms filed or amended during that single
+month, ruling out "one month = full universe." Since RIAs must reaffirm/amend Form ADV at
+least annually, a rolling ~13-month window of monthly deltas (union, deduped by
+CRD/FilingID, keeping the latest per firm) should capture the full active-adviser universe
+at least once — but ticket 02 should still explicitly verify no firm goes stale for >13
+months before committing to that window size.
 
 ---
 
