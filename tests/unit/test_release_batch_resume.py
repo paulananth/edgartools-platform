@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import pytest
 
 from edgar_warehouse.application.relationship_bulk_load import (
     InventoryError,
+    LedgerError,
     batch_done_marker_path,
     batch_identity_for_ciks,
     build_batch_done_marker,
@@ -16,6 +18,7 @@ from edgar_warehouse.application.relationship_bulk_load import (
     list_done_batch_identities,
     parse_cik_batches_jsonl,
     release_freeze_prefix_from_path,
+    validate_and_rebind_done_batch_ledger,
 )
 from edgar_warehouse.infrastructure.object_storage import (
     list_uri_child_names,
@@ -101,6 +104,97 @@ def test_build_remaining_release_batches_script(tmp_path: Path) -> None:
     assert rc == 0
     remaining_rows = parse_cik_batches_jsonl(out.read_text(encoding="utf-8"))
     assert remaining_rows == [{"cik_list": "3"}, {"cik_list": "4,5"}]
+
+
+def test_done_marker_rebinds_valid_prior_ledger_to_resume_generation() -> None:
+    outcomes = [
+        {
+            "generation_id": "old-run",
+            "accession_number": "acc-1",
+            "candidate_fingerprint": "candidate-1",
+            "status": "applicable_loaded",
+            "evidence_fingerprint": "evidence-1",
+        },
+        {
+            "generation_id": "old-run",
+            "accession_number": "acc-2",
+            "candidate_fingerprint": "candidate-2",
+            "status": "not_applicable",
+            "evidence_fingerprint": "evidence-2",
+        },
+    ]
+    fingerprint_payload = sorted(outcomes, key=lambda row: row["accession_number"])
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            fingerprint_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    ledger = {
+        "generation_id": "old-run",
+        "inventory_fingerprint": "inventory-1",
+        "terminal_counts": {"applicable_loaded": 1, "not_applicable": 1},
+        "fingerprint": fingerprint,
+        "outcomes": outcomes,
+    }
+    marker = build_batch_done_marker(
+        batch_identity=batch_identity_for_ciks([1, 2]),
+        ciks=[1, 2],
+        generation_id="old-run",
+        inventory_fingerprint="inventory-1",
+        ledger_path="s3://warehouse/release-evidence/old-run/ledger.json",
+        ledger_fingerprint=fingerprint,
+        terminal_counts={"applicable_loaded": 1, "not_applicable": 1},
+        candidate_count=2,
+        completed_at="2026-07-24T00:00:00Z",
+    )
+
+    rebound = validate_and_rebind_done_batch_ledger(
+        marker,
+        ledger,
+        inventory_fingerprint="inventory-1",
+        generation_id="new-run",
+    )
+
+    assert rebound["generation_id"] == "new-run"
+    assert {row["generation_id"] for row in rebound["outcomes"]} == {"new-run"}
+    assert {row["generation_id"] for row in ledger["outcomes"]} == {"old-run"}
+
+
+def test_done_marker_rejects_tampered_prior_ledger() -> None:
+    ledger = {
+        "generation_id": "old-run",
+        "inventory_fingerprint": "inventory-1",
+        "terminal_counts": {"applicable_loaded": 1},
+        "fingerprint": "tampered",
+        "outcomes": [{
+            "generation_id": "old-run",
+            "accession_number": "acc-1",
+            "candidate_fingerprint": "candidate-1",
+            "status": "applicable_loaded",
+            "evidence_fingerprint": "evidence-1",
+        }],
+    }
+    marker = build_batch_done_marker(
+        batch_identity=batch_identity_for_ciks([1]),
+        ciks=[1],
+        generation_id="old-run",
+        inventory_fingerprint="inventory-1",
+        ledger_path="s3://warehouse/release-evidence/old-run/ledger.json",
+        ledger_fingerprint="tampered",
+        terminal_counts={"applicable_loaded": 1},
+        candidate_count=1,
+        completed_at="2026-07-24T00:00:00Z",
+    )
+
+    with pytest.raises(LedgerError, match="fingerprint"):
+        validate_and_rebind_done_batch_ledger(
+            marker,
+            ledger,
+            inventory_fingerprint="inventory-1",
+            generation_id="new-run",
+        )
 
 
 def test_list_uri_child_names_local(tmp_path: Path) -> None:

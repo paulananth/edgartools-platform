@@ -1913,9 +1913,15 @@ def _capture_bronze_raw(
         try:
             candidate_payload = json.loads(read_bytes(manifest_path).decode("utf-8"))
             from edgar_warehouse.application.relationship_bulk_load import (
+                batch_identity_from_done_marker_name,
                 build_required_relationship_bulk_load_evidence,
                 candidate_inventory_from_manifest,
                 reconcile_completion_ledger_batches,
+                release_freeze_prefix_from_path,
+                validate_and_rebind_done_batch_ledger,
+            )
+            from edgar_warehouse.infrastructure.object_storage import (
+                list_uri_child_names,
             )
 
             inventory = candidate_inventory_from_manifest(
@@ -1924,11 +1930,50 @@ def _capture_bronze_raw(
             ledger_paths = context.storage_root.find_existing(
                 f"release-evidence/{sync_run_id}/bulk-load-ledger-batches/*.json"
             )
-            if not ledger_paths:
+            batch_ledgers_by_identity = {
+                str(path).rsplit("/", 1)[-1].removesuffix(".json"):
+                    json.loads(read_bytes(path).decode("utf-8"))
+                for path in ledger_paths
+            }
+
+            # P0 resume runs only unfinished batches under a fresh execution
+            # name. Fan in prior ledgers exclusively through same-freeze done
+            # markers, validating all marker/ledger bindings before rebinding
+            # copied outcomes to this execution's evidence generation. A
+            # current-run ledger wins if an operator deliberately reran a
+            # previously completed batch.
+            freeze_prefix = release_freeze_prefix_from_path(manifest_path)
+            done_prefix = f"{freeze_prefix}batch_done/"
+            for marker_name in list_uri_child_names(done_prefix):
+                batch_identity = batch_identity_from_done_marker_name(marker_name)
+                if batch_identity is None or batch_identity in batch_ledgers_by_identity:
+                    continue
+                marker = json.loads(
+                    read_bytes(f"{done_prefix}{marker_name}").decode("utf-8")
+                )
+                if str(marker.get("batch_identity") or "") != batch_identity:
+                    raise WarehouseRuntimeError(
+                        f"batch done marker identity mismatch: {marker_name}"
+                    )
+                prior_ledger_path = str(marker.get("ledger_path") or "").strip()
+                if not prior_ledger_path:
+                    raise WarehouseRuntimeError(
+                        f"batch done marker has no ledger path: {marker_name}"
+                    )
+                prior_ledger = json.loads(
+                    read_bytes(prior_ledger_path).decode("utf-8")
+                )
+                batch_ledgers_by_identity[batch_identity] = (
+                    validate_and_rebind_done_batch_ledger(
+                        marker,
+                        prior_ledger,
+                        inventory_fingerprint=inventory.fingerprint,
+                        generation_id=sync_run_id,
+                    )
+                )
+            if not batch_ledgers_by_identity:
                 raise WarehouseRuntimeError("no distributed bulk-load batch ledgers found")
-            batch_ledgers = [
-                json.loads(read_bytes(path).decode("utf-8")) for path in ledger_paths
-            ]
+            batch_ledgers = list(batch_ledgers_by_identity.values())
             reconciliation = reconcile_completion_ledger_batches(
                 inventory, batch_ledgers, generation_id=sync_run_id
             )
