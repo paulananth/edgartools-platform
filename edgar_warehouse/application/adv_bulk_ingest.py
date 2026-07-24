@@ -107,7 +107,15 @@ def parse_adv_bulk_archive(
         raise WarehouseRuntimeError("invalid IAPD ADV bulk ZIP archive") from exc
 
     with bundle:
-        base_rows = _rows(bundle, r"(?:IA|ERA)_ADV_Base(?:_A)?_[^/]*\.csv$")
+        # IA_ADV_Base_A/ERA_ADV_Base carry Item 1 identity fields (FilingID, CRD
+        # via "1E1"); IA_ADV_Base_B carries only Item 2 fields and has no CRD
+        # column at all. The prior pattern's optional "(?:_A)?" did not actually
+        # exclude "_B" -- "_[^/]*\.csv$" is permissive enough to also match
+        # IA_ADV_Base_B_*.csv, silently merging Item-2-only rows into base_rows
+        # and tripping the "missing FilingID or adviser CRD" fail-closed check
+        # on every real IA_ADV_Base_B row. Discovered running the real archive
+        # in production, not from a synthetic fixture.
+        base_rows = _rows(bundle, r"(?:IA_ADV_Base_A|ERA_ADV_Base)_[^/]*\.csv$")
         section_7b1 = _rows(bundle, r"(?:IA|ERA)_Schedule_D_7B1_[^/]*\.csv$")
         section_7b2 = _rows(bundle, r"(?:IA|ERA)_Schedule_D_7B2_[^/]*\.csv$")
         filing_type_rows = _rows(bundle, r"ADV_Filing_Types_[^/]*\.csv$")

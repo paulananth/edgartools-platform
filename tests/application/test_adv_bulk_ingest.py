@@ -156,3 +156,32 @@ def test_parses_24_hour_date_submitted_with_no_seconds_or_am_pm() -> None:
     )
 
     assert parsed.filings[0].effective_date == date(2025, 6, 24)
+
+
+def test_ignores_iaadv_base_b_item2_rows_with_no_crd_column() -> None:
+    """IA_ADV_Base_B carries only Item 2 fields and has no CRD ("1E1") column.
+
+    The prior _rows() pattern's optional "(?:_A)?" did not actually exclude
+    "_B" filenames, silently merging IA_ADV_Base_B's Item-2-only rows into
+    base_rows and tripping "IAPD base row is missing FilingID or adviser CRD"
+    on every real IA_ADV_Base_B row -- discovered running the real 13-month
+    archive window in production, not from a synthetic fixture.
+    """
+    archive = _archive({
+        "IA_ADV_Base_A_20260601_20260630.csv": (
+            '"FilingID","DateSubmitted","1A","1D","1E1","7B"\n'
+            '2115188,"06/24/2026 10:37:17 AM","PNC WEALTH","801-66195",129052,"N"\n'
+        ),
+        "IA_ADV_Base_B_20260601_20260630.csv": (
+            '"FilingID","2A1","2A2","2A3"\n'
+            '2115188,"Y","N","N"\n'
+        ),
+    })
+
+    parsed = parse_adv_bulk_archive(
+        archive,
+        dataset_period="2026-06",
+        source_sha256="abc123",
+    )
+
+    assert parsed.filings[0].adviser_crd_number == "129052"
