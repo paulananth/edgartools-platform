@@ -185,3 +185,32 @@ def test_ignores_iaadv_base_b_item2_rows_with_no_crd_column() -> None:
     )
 
     assert parsed.filings[0].adviser_crd_number == "129052"
+
+
+def test_treats_literal_n_gross_asset_value_as_not_reported() -> None:
+    """Real Schedule D 7.B "Gross Asset Value" data occasionally contains a
+    literal "N" instead of a number -- confirmed as the ONLY non-numeric
+    value ever observed in that column across the full 2025-06..2026-06
+    real archive window, not a guess. Treated as not-reported, not a
+    fail-closed parse error.
+    """
+    archive = _archive({
+        "IA_ADV_Base_A_20250801_20250831.csv": (
+            '"FilingID","DateSubmitted","1A","1D","1E1","7B"\n'
+            '2115188,"08/24/2025 10:37:17 AM","PNC WEALTH","801-66195",129052,"Y"\n'
+        ),
+        "IA_Schedule_D_7B1_20250801_20250831.csv": (
+            '"FilingID","Fund Name","Fund ID","ReferenceID","State","Country",'
+            '"Fund Type","Gross Asset Value"\n'
+            '2115188,"ALPHA FUND",805-123,518607,"Delaware","United States",'
+            '"Private Equity Fund","N"\n'
+        ),
+    })
+
+    parsed = parse_adv_bulk_archive(
+        archive,
+        dataset_period="2025-08",
+        source_sha256="abc123",
+    )
+
+    assert parsed.funds[0].aum_amount is None

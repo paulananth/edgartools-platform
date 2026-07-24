@@ -84,10 +84,18 @@ def _submitted_date(value: str) -> date:
 
 
 def _amount(value: str) -> Decimal | None:
-    if not value.strip():
+    candidate = value.strip()
+    if not candidate:
+        return None
+    # Real Schedule D 7.B "Gross Asset Value" data occasionally contains a
+    # literal "N" instead of a number (confirmed across the full 2025-06..
+    # 2026-06 window: it is the ONLY non-numeric value ever observed in this
+    # column) -- a FINRA source-data quirk, treated as not-reported rather
+    # than a fail-closed parse error.
+    if candidate.upper() == "N":
         return None
     try:
-        return Decimal(value.replace(",", ""))
+        return Decimal(candidate.replace(",", ""))
     except InvalidOperation as exc:
         raise WarehouseRuntimeError(f"invalid IAPD amount: {value!r}") from exc
 
