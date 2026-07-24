@@ -42,38 +42,46 @@ Resolve, against SEC/IAPD primary sources only (not secondary write-ups):
 
 Full evidence, citations, and downloaded-file inspection details:
 [`research/01-iapd-format-scope-findings.md`](../research/01-iapd-format-scope-findings.md).
+**Headline correction vs. last session's premise: the old relational per-fund format was
+not discontinued — it moved, and a working bulk source for it still exists today.**
 
-1. **Yes, effectively the only current bulk product.** IAPD's own SPA
-   (`adviserinfo.sec.gov/compilation` and `/adv` — both routes resolve to the identical
-   `getCompilationReport()` call in the app bundle) serves exactly three feeds via
-   `reports.adviserinfo.sec.gov/.../CompilationReports.manifest.json`: SEC-firm, state-firm,
-   and individual XML. No private-fund/Schedule-D feed exists in that manifest. A separate
-   relational per-fund product (`IA_Schedule_D_7B1`/`7B2` CSVs, confirmed present via a ZIP
-   central-directory listing) **did** exist and is still downloadable from SEC's FOIA page
-   (`sec.gov/foia-services/.../form-adv-data`) — but it is a closed historical archive capped
-   at 2024-12-31. That same FOIA page states current (2025+) data lives at
-   `adviserinfo.sec.gov/adv`, which is the sparse 3-feed manifest above, not a richer
-   replacement. The downloaded XML feed was inspected directly and — confirmed against its
-   official XSD (`Item7BType`) — carries only a Y/N flag, not even the CSV's aggregate counts.
-2. **No bulk route exists; per-adviser lookup is the only remaining route, and it does not
-   scale to bulk ingestion.** Confirmed by downloading a real per-adviser PDF
-   (`reports.adviserinfo.sec.gov/reports/ADV/1588/PDF/1588.pdf`, Davenport & Company LLC) —
-   it contains full, populated Schedule D 7.B.(1) records (fund name "EWF PARTNERS II LLC",
-   PFID `805-4154444394`, jurisdiction, fund type, AUM). The data exists and is current, but
-   only one-firm-at-a-time via a PDF fetch per CRD — no bulk/API path found anywhere in the
-   IAPD app's own routing table.
-3. **Yes, verified against real populated data**, not just column names. Scanned ~17K rows
-   of the registered-advisers CSV: 5,970 firms flag `7B=Y`; sub-type Y/N + count columns
-   (hedge/PE/VC/liquidity/real-estate/securitized/other) and `Total Gross Assets of Private
-   Funds` are populated whenever applicable (e.g. Davenport: 3 hedge funds, $709.9M gross
-   private-fund assets). Supports firm-level "manages private funds" flags, per-type counts,
-   and aggregate AUM — not per-fund identity.
-4. **No CSV-specific data dictionary.** SEC's bulk-data page explicitly tells readers to
-   decode columns against the generic Form ADV Part 1A instructions PDF
-   (`sec.gov/files/formadv-part1a_1.pdf`) — there's no roster-CSV field-by-field document.
-   Correction to this ticket's premise: the registered-advisers CSV has **448** columns
-   (counted directly via Python `csv`), not ~150 — the exempt-advisers CSV is the one close
-   to that figure, at **171** columns (ERAs file fewer Form ADV items). Separately, FINRA/IARD
-   does publish an official XSD + PDF guide for the (different, XML) compilation feed at
-   `iard.com/firm-compilation` — useful as schema-level confirmation of Q1/Q2, not as
-   documentation of the CSV itself.
+1. **No, the Firm Roster CSV is not the only bulk product.** `adviserinfo.sec.gov` runs
+   two *different* backing services behind its `/compilation` and `/adv` routes (same
+   method name, `getCompilationReport()`, but different injected services building
+   different URLs — confirmed by reading both method bodies in the app's JS bundle, not
+   assumed from the shared name). `/compilation` → a 3-feed XML manifest (SEC/state
+   firm + individual) with only a private-fund Y/N flag, no counts. `/adv` → a *different*
+   manifest (`reports.adviserinfo.sec.gov/reports/foia/reports_metadata.json`) whose
+   `advFilingData` key lists **monthly ZIPs, current through June 2026**, each containing
+   the full ~100-file relational schema (`IA_ADV_Base_A/B`, `IA_Schedule_D_7B1`,
+   `IA_Schedule_D_7B2`, `ADV_Filing_Types`, etc.) with real per-fund rows (fund name, Fund
+   ID/PFID, AUM, fund type) — downloaded and verified directly
+   (`ADV_Filing_Data_20260601_20260630.zip`). These monthly files pick up with zero gap
+   exactly where SEC's static FOIA-page historical archive (2000-2024, also relational,
+   also per-fund, also confirmed by inspection) leaves off on 2025-01-01.
+2. **Yes — bulk per-fund detail is obtainable**, via the `advFilingData` monthly feed
+   above for 2025-01-01–present, plus the FOIA page's static zips for everything before
+   that. This reverses last session's "per-adviser lookup only" conclusion. Per-adviser
+   PDF lookup (confirmed separately, still works, still populated) remains a valid
+   fallback/single-firm cross-check but is no longer the only route.
+   **`adv_bulk_ingest.py`'s existing filename regexes were tested directly against the
+   June 2026 `advFilingData` ZIP's real file list and every one matches** — the parser
+   was not written against a discontinued format; it was tested last session against the
+   wrong SEC product (the Firm Roster CSV) instead of this one.
+3. **Yes, verified against real populated data**, unchanged from the first pass. Scanned
+   ~17K rows of the registered-advisers Firm Roster CSV: 5,970 firms flag `7B=Y`; sub-type
+   Y/N + count columns and `Total Gross Assets of Private Funds` are populated whenever
+   applicable. Given (1)/(2), read this CSV's aggregate counts as a useful cross-check
+   signal alongside the richer per-fund feed, not the primary source.
+4. **No CSV-specific data dictionary** for the Firm Roster CSV (unchanged) — SEC's bulk
+   page points to the generic Form ADV Part 1A instructions PDF. Correction to this
+   ticket's premise: the registered-advisers CSV has **448** columns (direct count), not
+   ~150 — the exempt-advisers CSV is the one near that figure, at **171**. The
+   `advFilingData` relational feed uses the same Form-ADV-item-numbered column convention
+   the parser already targets, decodable the same way.
+
+**Follow-up for ticket 02 to account for:** the `advFilingData` feed is a *monthly delta
+of filing activity*, not a full-universe snapshot (June 2026's zip is ~9 MB vs. ~429 MB
+for the 13-year historical archive) — reconstructing full current per-fund coverage will
+need a rolling window of trailing months (RIAs reaffirm ADV at least annually), not a
+single month's fetch. See the research doc's "Ingestion-strategy implication" note.
