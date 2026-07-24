@@ -24,14 +24,12 @@ from sqlalchemy.orm import Session
 
 from edgar_warehouse.mdm.graph import GraphSyncEngine
 from edgar_warehouse.mdm.observability import elapsed_ms, emit_mdm_event
-from edgar_warehouse.mdm.resolvers.base import ResolverContext, SilverReader
 from edgar_warehouse.mdm.resolvers import (
-    AdviserResolver,
     CompanyResolver,
-    FundResolver,
     PersonResolver,
     SecurityResolver,
 )
+from edgar_warehouse.mdm.resolvers.base import ResolverContext, SilverReader
 from edgar_warehouse.mdm.rules import MDMRuleEngine
 
 RELATIONSHIP_TYPES = (
@@ -194,27 +192,14 @@ class MDMPipeline:
         return processed
 
     def run_advisers(self, limit: Optional[int] = None) -> int:
-        ctx = self._ctx()
-        resolver = AdviserResolver()
-        sql = "SELECT * FROM sec_adv_filing"
-        if limit:
-            sql += f" LIMIT {int(limit)}"
-        rows = self.silver.fetch(sql)
-        processed = 0
-        started_at = time.monotonic()
-        for row in rows:
-            office = self._first(self.silver.fetch(
-                "SELECT city, state_or_country FROM sec_adv_office "
-                "WHERE accession_number = ? AND is_headquarters = TRUE LIMIT 1",
-                [row["accession_number"]],
-            ))
-            resolver.resolve_one(ctx, "adv_filing", row, office,
-                                 effective_date=row.get("effective_date"))
-            processed += 1
-            if processed % 500 == 0:
-                emit_mdm_event("mdm_progress", domain="adviser", processed=processed, elapsed_ms=elapsed_ms(started_at))
-        self.session.commit()
-        return processed
+        from edgar_warehouse.mdm.adv_bulk import resolve_advisers_bulk
+
+        return resolve_advisers_bulk(
+            self.session,
+            self.silver,
+            self.engine,
+            limit=limit,
+        )
 
     def run_securities(self, limit: Optional[int] = None) -> int:
         ctx = self._ctx()
@@ -275,23 +260,14 @@ class MDMPipeline:
         return processed
 
     def run_funds(self, limit: Optional[int] = None) -> int:
-        ctx = self._ctx()
-        resolver = FundResolver()
-        sql = "SELECT * FROM sec_adv_private_fund"
-        if limit:
-            sql += f" LIMIT {int(limit)}"
-        rows = self.silver.fetch(sql)
-        processed = 0
-        started_at = time.monotonic()
-        for row in rows:
-            adviser_entity_id = self._adviser_entity_id(row.get("accession_number"))
-            resolver.resolve_one(ctx, "adv_filing", row, adviser_entity_id,
-                                 effective_date=row.get("effective_date"))
-            processed += 1
-            if processed % 500 == 0:
-                emit_mdm_event("mdm_progress", domain="fund", processed=processed, elapsed_ms=elapsed_ms(started_at))
-        self.session.commit()
-        return processed
+        from edgar_warehouse.mdm.adv_bulk import resolve_funds_bulk
+
+        return resolve_funds_bulk(
+            self.session,
+            self.silver,
+            self.engine,
+            limit=limit,
+        )
 
     def run_relationships(self, limit: Optional[int] = None) -> int:
         summary = self.derive_relationships(target_per_type=limit)
