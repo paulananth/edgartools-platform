@@ -799,13 +799,36 @@ class MDMPipeline:
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_manages_fund(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
-        from edgar_warehouse.mdm.database import MdmFund
+        from edgar_warehouse.mdm.database import MdmAdviser, MdmFund
 
         inserted = 0
         skipped_corporate = 0
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
+        sync_engine.prime_relationship_type(
+            "MANAGES_FUND",
+            defer_flush=True,
+        )
+        adviser_ids_by_crd = {
+            str(crd_number): entity_id
+            for entity_id, crd_number in self.session.execute(
+                select(MdmAdviser.entity_id, MdmAdviser.crd_number).where(
+                    MdmAdviser.crd_number.isnot(None)
+                )
+            )
+        }
+        fund_ids_by_pfid = {
+            str(private_fund_id): entity_id
+            for entity_id, private_fund_id in self.session.execute(
+                select(MdmFund.entity_id, MdmFund.private_fund_id).where(
+                    MdmFund.private_fund_id.isnot(None)
+                )
+            )
+        }
+        current_by_adviser: dict[str, list] = {}
+        for current in sync_engine.current_relationships("MANAGES_FUND"):
+            current_by_adviser.setdefault(current.source_entity_id, []).append(current)
         filing_rows = self._fetch_optional_relationship_rows(
             """
             SELECT accession_number, crd_number, effective_date, filing_action
@@ -858,42 +881,34 @@ class MDMPipeline:
                 row for row in source_rows
                 if str(row.get("accession_number")) in active_accessions
             ]
-            from edgar_warehouse.mdm.database import (
-                MdmRelationshipInstance,
-                MdmRelationshipType,
-            )
             from edgar_warehouse.mdm.graph import close_relationship_version
 
             expected_targets_by_adviser: dict[str, set[str]] = {}
             for row in source_rows:
-                adviser_id = self._adviser_entity_id_by_crd(row.get("adviser_crd_number"))
-                fund_id = self._fund_entity_id_by_pfid(row.get("private_fund_id"))
+                adviser_id = adviser_ids_by_crd.get(
+                    str(row.get("adviser_crd_number"))
+                )
+                fund_id = fund_ids_by_pfid.get(str(row.get("private_fund_id")))
                 if adviser_id and fund_id:
                     expected_targets_by_adviser.setdefault(adviser_id, set()).add(fund_id)
             for crd, filing in latest_by_crd.items():
-                adviser_id = self._adviser_entity_id_by_crd(crd)
+                adviser_id = adviser_ids_by_crd.get(str(crd))
                 if adviser_id is None:
                     continue
                 effective = filing["_key"][0]
                 expected_targets = expected_targets_by_adviser.get(adviser_id, set())
-                current_versions = self.session.scalars(
-                    select(MdmRelationshipInstance)
-                    .join(MdmRelationshipType)
-                    .where(MdmRelationshipType.rel_type_name == "MANAGES_FUND")
-                    .where(MdmRelationshipInstance.source_entity_id == adviser_id)
-                    .where(MdmRelationshipInstance.is_active.is_(True))
-                    .where(MdmRelationshipInstance.quarantined.is_(False))
-                    .where(MdmRelationshipInstance.superseded_by_version_id.is_(None))
-                    .where(MdmRelationshipInstance.valid_to_date.is_(None))
-                ).all()
+                current_versions = current_by_adviser.get(adviser_id, [])
                 for current in current_versions:
-                    if current.target_entity_id not in expected_targets:
+                    if (
+                        current.valid_to_date is None
+                        and current.target_entity_id not in expected_targets
+                    ):
                         close_relationship_version(
                             self.session, current.instance_id, effective
                         )
         for row in source_rows:
-            adviser_id = self._adviser_entity_id_by_crd(row.get("adviser_crd_number"))
-            fund_id = self._fund_entity_id_by_pfid(row.get("private_fund_id"))
+            adviser_id = adviser_ids_by_crd.get(str(row.get("adviser_crd_number")))
+            fund_id = fund_ids_by_pfid.get(str(row.get("private_fund_id")))
             if adviser_id is None:
                 skipped_unresolved_source += 1
                 continue
@@ -934,6 +949,7 @@ class MDMPipeline:
                 skipped_existing += 0 if created else 1
                 if remaining is not None and inserted >= remaining:
                     break
+        sync_engine.flush_pending()
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_issued_by(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:

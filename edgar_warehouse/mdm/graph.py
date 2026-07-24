@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sys
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Iterable, Optional
@@ -75,10 +76,70 @@ class GraphRegistry:
 class GraphSyncEngine:
     session: Session
     registry: GraphRegistry
+    _primed_rel_type_ids: set[str] = field(default_factory=set)
+    _current_by_relationship_id: dict[str, list[MdmRelationshipInstance]] = field(
+        default_factory=dict
+    )
+    _deferred_flush_rel_type_ids: set[str] = field(default_factory=set)
+    _pending_since_flush: int = 0
+    _flush_batch_size: int = 1_000
 
     @classmethod
     def build(cls, session: Session) -> "GraphSyncEngine":
         return cls(session=session, registry=GraphRegistry.load(session))
+
+    def prime_relationship_type(
+        self,
+        rel_type_name: str,
+        *,
+        defer_flush: bool = False,
+        flush_batch_size: int = 1_000,
+    ) -> None:
+        """Load one relationship type's current versions for bounded bulk writes."""
+        rec = self.registry.rel_type_by_name.get(rel_type_name)
+        if rec is None:
+            raise KeyError(f"Unknown relationship type '{rel_type_name}'")
+        rel_type_id = rec["rel_type_id"]
+        rows = self.session.scalars(
+            select(MdmRelationshipInstance).where(
+                MdmRelationshipInstance.rel_type_id == rel_type_id,
+                MdmRelationshipInstance.is_active.is_(True),
+                MdmRelationshipInstance.quarantined.is_(False),
+                MdmRelationshipInstance.superseded_by_version_id.is_(None),
+            )
+        ).all()
+        for row in rows:
+            self._current_by_relationship_id.setdefault(
+                row.relationship_id, []
+            ).append(row)
+        self._primed_rel_type_ids.add(rel_type_id)
+        if defer_flush:
+            self._deferred_flush_rel_type_ids.add(rel_type_id)
+            self._flush_batch_size = max(int(flush_batch_size), 1)
+
+    def current_relationships(
+        self, rel_type_name: str
+    ) -> list[MdmRelationshipInstance]:
+        rec = self.registry.rel_type_by_name.get(rel_type_name)
+        if rec is None:
+            raise KeyError(f"Unknown relationship type '{rel_type_name}'")
+        rel_type_id = rec["rel_type_id"]
+        if rel_type_id not in self._primed_rel_type_ids:
+            self.prime_relationship_type(rel_type_name)
+        return [
+            row
+            for versions in self._current_by_relationship_id.values()
+            for row in versions
+            if row.rel_type_id == rel_type_id
+            and row.is_active
+            and not row.quarantined
+            and row.superseded_by_version_id is None
+        ]
+
+    def flush_pending(self) -> None:
+        if self._pending_since_flush:
+            self.session.flush()
+            self._pending_since_flush = 0
 
     def record_relationship(
         self,
@@ -147,16 +208,25 @@ class GraphSyncEngine:
         rel_type_id = rec["rel_type_id"]
         rel_id = relationship_logical_id(rel_type_id, source_entity_id, target_entity_id)
 
-        current = list(
-            self.session.scalars(
-                select(MdmRelationshipInstance).where(
-                    MdmRelationshipInstance.relationship_id == rel_id,
-                    MdmRelationshipInstance.is_active == True,
-                    MdmRelationshipInstance.quarantined == False,
-                    MdmRelationshipInstance.superseded_by_version_id.is_(None),
+        if rel_type_id in self._primed_rel_type_ids:
+            current = [
+                row
+                for row in self._current_by_relationship_id.get(rel_id, [])
+                if row.is_active
+                and not row.quarantined
+                and row.superseded_by_version_id is None
+            ]
+        else:
+            current = list(
+                self.session.scalars(
+                    select(MdmRelationshipInstance).where(
+                        MdmRelationshipInstance.relationship_id == rel_id,
+                        MdmRelationshipInstance.is_active == True,
+                        MdmRelationshipInstance.quarantined == False,
+                        MdmRelationshipInstance.superseded_by_version_id.is_(None),
+                    )
                 )
             )
-        )
 
         for existing in current:
             if (
@@ -176,6 +246,7 @@ class GraphSyncEngine:
                 break
 
         row = MdmRelationshipInstance(
+            instance_id=str(uuid.uuid4()),
             relationship_id=rel_id,
             rel_type_id=rel_type_id,
             source_entity_id=source_entity_id,
@@ -192,7 +263,13 @@ class GraphSyncEngine:
             source_evidence=[_evidence_entry(source_system, source_accession)],
         )
         self.session.add(row)
-        self.session.flush()
+        self._current_by_relationship_id.setdefault(rel_id, []).append(row)
+        if rel_type_id in self._deferred_flush_rel_type_ids:
+            self._pending_since_flush += 1
+            if self._pending_since_flush >= self._flush_batch_size:
+                self.flush_pending()
+        else:
+            self.session.flush()
 
         if conflict is not None:
             winner = _resolve_source_priority(
