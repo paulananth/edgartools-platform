@@ -71,10 +71,13 @@ def test_adviser_bulk_resolution_has_bounded_database_round_trips(db_session) ->
     pipeline = MDMPipeline(session=db_session, silver=_AdviserSilver(12))
     pipeline.engine._source_priority[("adviser", "adv_filing")] = 30
     statement_count = 0
+    stage_insert_count = 0
 
-    def _count_statement(*_args, **_kwargs) -> None:
-        nonlocal statement_count
+    def _count_statement(_conn, _cursor, statement, *_args, **_kwargs) -> None:
+        nonlocal statement_count, stage_insert_count
         statement_count += 1
+        if statement.startswith("INSERT INTO mdm_entity_attribute_stage"):
+            stage_insert_count += 1
 
     engine = db_session.get_bind()
     event.listen(engine, "before_cursor_execute", _count_statement)
@@ -86,6 +89,10 @@ def test_adviser_bulk_resolution_has_bounded_database_round_trips(db_session) ->
     assert statement_count <= 40, (
         "ADV adviser resolution exceeded the bulk round-trip budget: "
         f"{statement_count} SQL statements for 12 source rows"
+    )
+    assert stage_insert_count == 1, (
+        "mixed NULL attribute rows must retain one executemany shape; "
+        f"observed {stage_insert_count} stage INSERT statements"
     )
 
 

@@ -2,16 +2,15 @@
 # Clean up unused ECR images before a deploy.
 # Called automatically by deploy-aws-application.sh before every build/deploy.
 #
-# RETENTION POLICY (per CLAUDE.md):
+# RETENTION POLICY:
 #   Final image repos (warehouse, mdm):
-#     KEEP  :dev                       — mutable latest; used as build cache source
-#     KEEP  2 newest :sha-<hash> tags  — active image + 1 rollback anchor
-#     DELETE everything else           — old shas, debug tags, untagged images
+#     KEEP  every tagged image          — sha tags are immutable task/rollback anchors
+#     KEEP  every active ECS digest     — even if its tag was removed or moved
+#     DELETE untagged, inactive images
 #
 #   Deps repos (warehouse-deps, mdm-deps):
-#     KEEP  tags referenced by any ACTIVE ECS task definition
-#     KEEP  :dev if present
-#     DELETE everything else
+#     KEEP  every tagged image
+#     DELETE untagged images
 #
 # Usage:
 #   bash infra/scripts/cleanup-ecr-images.sh               # dry run (shows what would go)
@@ -87,7 +86,7 @@ images = set()
 for family in families:
     # Get only the latest active revision for this family
     result = aws('ecs', 'list-task-definitions',
-                 '--family-name', family, '--status', 'ACTIVE',
+                 '--family-prefix', family, '--status', 'ACTIVE',
                  '--sort', 'DESC', '--max-results', '1',
                  '--query', 'taskDefinitionArns[0]', '--output', 'json')
     if not result or result == 'None':
@@ -154,7 +153,7 @@ images.sort(key=lambda x: x.get('pushed',''), reverse=True)
 
 keep_digests = set()
 if mode == 'final':
-    # Keep the 2 newest sha-* tagged images (active + 1 rollback)
+    # Ordering remains useful for display, but every tagged image is durable.
     sha_imgs = [img for img in images
                 if img.get('tags') and any(t.startswith('sha-') for t in img.get('tags',[]))]
     for img in sha_imgs[:keep_n]:
@@ -173,7 +172,7 @@ for img in images:
     size   = img.get('size') or 0
     pushed = img.get('pushed','')[:10]
     keep   = False
-    if 'dev' in tags:
+    if tags:
         keep = True
     if digest in keep_digests:
         keep = True
@@ -191,7 +190,9 @@ for img in images:
     local size_mb
     size_mb=$(python3 -c "print(f'{int(\"${size:-0}\")/1e6:.0f}')" 2>/dev/null || echo "?")
 
-    if [[ "$keep" == "True" ]]; then
+    if image_in_use "$full_repo" "$digest"; then
+      printf "    KEEP   %5s MB  %s  %s  [active task image]\n" "$size_mb" "$pushed" "$tag_str"
+    elif [[ "$keep" == "True" ]]; then
       printf "    KEEP   %5s MB  %s  %s\n" "$size_mb" "$pushed" "$tag_str"
     else
       printf "    DELETE %5s MB  %s  %s\n" "$size_mb" "$pushed" "$tag_str"
@@ -238,7 +239,7 @@ ACCOUNT=$(aws_ sts get-caller-identity --query Account --output text 2>/dev/null
 echo ""
 printf '%.0s─' $(seq 1 62); echo
 echo "  ECR CLEANUP  ·  ${ENVIRONMENT}  ·  ${AWS_REGION}"
-echo "  Keep: :dev + ${KEEP_SHA_COUNT} newest :sha-* per final repo; active deps"
+echo "  Keep: every tagged image + every digest referenced by active ECS tasks"
 [[ "$DRY_RUN" == "true" ]] && echo "  (DRY RUN — pass --apply to delete)"
 printf '%.0s─' $(seq 1 62); echo
 

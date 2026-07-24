@@ -54,7 +54,15 @@ def _execute_insert_chunks(
     rows: list[dict[str, Any]],
 ) -> None:
     for chunk in _chunks(rows, _WRITE_BATCH_SIZE):
-        session.execute(insert(model), chunk)
+        # ORM bulk INSERT omits None-valued columns unless render_nulls is set.
+        # ADV attributes are intentionally sparse; omitting them partitions one
+        # batch into many column-shape groups and can degrade to one network
+        # round trip per row on PostgreSQL.
+        session.execute(
+            insert(model),
+            chunk,
+            execution_options={"render_nulls": True},
+        )
 
 
 def _as_date(value: Any) -> date | None:
