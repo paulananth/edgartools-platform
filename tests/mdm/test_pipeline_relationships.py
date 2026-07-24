@@ -25,7 +25,7 @@ from datetime import date
 from typing import Any, Optional
 
 import pytest
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -1038,6 +1038,89 @@ class TestRunRelationships:
         )
         assert relationship is not None
         assert relationship.valid_to_date == date(2025, 1, 1)
+
+    def test_manages_fund_uses_bounded_database_round_trips(
+        self, session, monkeypatch
+    ):
+        """ADV-scale derivation must not issue adviser/fund/edge lookups per row."""
+        filings = []
+        funds = []
+        for index in range(12):
+            adviser_id = _add_entity(session, "adviser")
+            fund_id = _add_entity(session, "fund")
+            crd_number = str(700000 + index)
+            private_fund_id = f"805-{700000 + index}"
+            accession = f"iapd-adv:{700000 + index}"
+            session.add(MdmAdviser(
+                entity_id=adviser_id,
+                crd_number=crd_number,
+                canonical_name=f"Bulk Adviser {index}",
+            ))
+            session.add(MdmFund(
+                entity_id=fund_id,
+                adviser_entity_id=adviser_id,
+                private_fund_id=private_fund_id,
+                canonical_name=f"Bulk Fund {index}",
+            ))
+            filings.append({
+                "accession_number": accession,
+                "crd_number": crd_number,
+                "effective_date": date(2025, 1, 1),
+                "filing_action": "annual_amendment",
+            })
+            funds.append({
+                "accession_number": accession,
+                "adviser_crd_number": crd_number,
+                "private_fund_id": private_fund_id,
+                "filing_id": str(700000 + index),
+                "schedule_section": "7B1",
+                "reporting_role": "detailed_reporter",
+                "effective_date": date(2025, 1, 1),
+                "filing_action": "annual_amendment",
+                "source_sha256": f"sha-{index}",
+            })
+        session.commit()
+
+        statements: list[str] = []
+
+        def capture_statement(_conn, _cursor, statement, _parameters, _context, _executemany):
+            normalized = " ".join(statement.lower().split())
+            if (
+                "mdm_adviser" in normalized
+                or "mdm_fund" in normalized
+                or "mdm_relationship_instance" in normalized
+            ):
+                statements.append(normalized)
+
+        bind = session.get_bind()
+        write_flush_calls = 0
+        original_flush = session.flush
+
+        def count_flush(*args, **kwargs):
+            nonlocal write_flush_calls
+            if session.new:
+                write_flush_calls += 1
+            return original_flush(*args, **kwargs)
+
+        monkeypatch.setattr(session, "flush", count_flush)
+        event.listen(bind, "before_cursor_execute", capture_statement)
+        try:
+            summary = MDMPipeline(
+                session=session,
+                silver=StubSilver({
+                    "sec_adv_filing": filings,
+                    "sec_adv_private_fund": funds,
+                }),
+            ).derive_relationships(relationship_types=["MANAGES_FUND"])
+        finally:
+            event.remove(bind, "before_cursor_execute", capture_statement)
+
+        assert summary["MANAGES_FUND"]["inserted"] == 12
+        lookup_selects = [
+            statement for statement in statements if statement.startswith("select ")
+        ]
+        assert len(lookup_selects) <= 6, lookup_selects
+        assert write_flush_calls <= 2
 
     def test_writes_issued_by_relationship(self, session, fixture_world):
         """ISSUED_BY deriver inserts exactly 1 row when fixture_world has 1 qualifying MdmSecurity. (D-01, D-02, REL-02)"""
