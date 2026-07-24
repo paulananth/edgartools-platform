@@ -233,7 +233,7 @@ CREATE TABLE IF NOT EXISTS sec_adv_disclosure_event (
 
 CREATE TABLE IF NOT EXISTS sec_adv_private_fund (
     accession_number    TEXT,
-    fund_index          SMALLINT,
+    fund_index          BIGINT,
     filing_id           TEXT,
     adviser_crd_number  TEXT,
     private_fund_id     TEXT,
@@ -812,6 +812,12 @@ class SilverDatabase:
                 "Add IAPD FilingID, CRD, PFID, section, effective-date and source lineage.",
                 self._add_adv_pfid_lineage,
             ),
+            (
+                "007_adv_private_fund_fund_index_bigint",
+                "Widen sec_adv_private_fund.fund_index SMALLINT -> BIGINT (a real single "
+                "March-2026 filing hit 22,277 of the 32,767 SMALLINT ceiling).",
+                self._widen_adv_fund_index_to_bigint,
+            ),
         )
 
     def _schema_migration_applied(self, migration_name: str) -> bool:
@@ -876,6 +882,33 @@ class SilverDatabase:
         for column, column_type in columns.items():
             self._conn.execute(
                 f"ALTER TABLE sec_adv_private_fund ADD COLUMN IF NOT EXISTS {column} {column_type}"
+            )
+
+    def _widen_adv_fund_index_to_bigint(self) -> None:
+        """``CREATE TABLE IF NOT EXISTS`` never widens an existing store's column type.
+
+        A store created before this migration would keep fund_index SMALLINT
+        forever -- and one real filing already used 68% of that ceiling in a
+        single month. See "Schema conventions" in CLAUDE.md. DuckDB refuses a
+        plain ALTER COLUMN TYPE on a column that is part of a PRIMARY KEY
+        (accession_number, fund_index here), so this reuses the same
+        backup-and-recreate approach as the period_end PK migrations above.
+        """
+        row = self._conn.execute(
+            """
+            SELECT data_type FROM information_schema.columns
+            WHERE table_name = 'sec_adv_private_fund' AND column_name = 'fund_index'
+            """
+        ).fetchone()
+        if row is not None and row[0] == "SMALLINT":
+            logger.warning(
+                "Migrating sec_adv_private_fund.fund_index SMALLINT -> BIGINT: "
+                "backing up the legacy table and copying rows into the current schema."
+            )
+            self._backup_and_recreate_financial_table(
+                "sec_adv_private_fund",
+                reason="fund_index_bigint",
+                missing_values={},
             )
 
     def _migrate_financial_period_end_pk(self) -> None:
@@ -2019,7 +2052,7 @@ class SilverDatabase:
                 CREATE TEMP TABLE IF NOT EXISTS stg_sec_adv_private_fund (
                     seq                   BIGINT,
                     accession_number      TEXT,
-                    fund_index            SMALLINT,
+                    fund_index            BIGINT,
                     filing_id             TEXT,
                     adviser_crd_number    TEXT,
                     private_fund_id       TEXT,
