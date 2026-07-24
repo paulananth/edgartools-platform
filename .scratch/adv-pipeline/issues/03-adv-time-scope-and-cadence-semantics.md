@@ -1,7 +1,7 @@
 # 03 — ADV Time-Scope and Cadence Semantics
 
 Type: grilling
-Status: claimed
+Status: resolved
 Blocked by: none
 Blocks: 06
 
@@ -35,4 +35,41 @@ Decide, independent of ticket 01/02's parser findings:
 
 ## Answer
 
-(pending)
+**Revised mid-resolution:** ticket 01 found the premise ("full point-in-time
+roster snapshot, no year-window concept") was wrong — the authoritative
+per-fund source (`advFilingData`) is actually a monthly filing-activity
+delta with historical archives back to 2000-10-19. Q1 and Q2 below were
+re-asked under the corrected model before being finalized.
+
+1. **`load_history` fetches a rolling ~13-month window only, not deeper
+   history.** Union the last ~13 monthly `advFilingData` deltas (dedup by
+   CRD/FilingID, keep latest per firm) to reconstruct full current
+   adviser/fund coverage — sufficient since RIAs must reaffirm Form ADV at
+   least annually. The two static pre-2025 archives (2000-2011, 2011-2024)
+   are explicitly **not** backfilled: no identified consumer for multi-year
+   ADV filing history, mirroring the exact reasoning CLAUDE.md already
+   applied narrowing 13F (3y→1y→1 quarter) and proxy (5y→1y) to
+   current-state-only. Ticket 02 owns verifying the 13-month figure is
+   airtight (not just a heuristic) before it's used as a hard window size,
+   and owns the mechanical rolling-window/dedup design itself.
+2. **`daily_incremental` runs daily, gated by a local `dataset_period`
+   already-ingested check — unchanged by the delta-vs-snapshot
+   correction.** The idempotency mechanics (check silver locally first,
+   zero network cost on a hit; only scrape/fetch when the current month
+   isn't yet ingested) don't depend on whether a period's payload is a full
+   snapshot or a partial delta — that distinction only affects what a
+   period's ingested rows *represent* (ticket 02's rolling-window concern),
+   not when to check for a new one.
+3. **Each `dataset_period` (one calendar month) is fully immutable once
+   ingested.** A published monthly delta file represents a closed window of
+   filing activity that already happened; SEC doesn't retroactively rewrite
+   it — a firm's next amendment shows up in a *later* month's delta, not a
+   mutation of an earlier one. Matches the platform's general SEC-data-is-
+   additive-and-immutable convention (CLAUDE.md). Re-running against an
+   already-ingested period is a pure no-op, same as bronze filing
+   idempotency elsewhere in the platform.
+4. **ERA and RIA get identical cadence/scope handling.** Ticket 01 found
+   both `IA_`- and `ERA_`-prefixed file variants inside the same monthly
+   `advFilingData` ZIP, published together on the same cadence. ERAs filing
+   fewer Form ADV items only affects which columns are populated, not the
+   fetch/window/idempotency mechanics.

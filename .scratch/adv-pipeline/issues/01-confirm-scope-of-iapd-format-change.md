@@ -86,3 +86,43 @@ full-universe snapshot — June 2026's `IA_ADV_Base_A` file has 2,938 firm rows 
 ~17,073-firm registered universe (Q3). Reconstructing full current per-fund coverage will
 need a rolling window of trailing months (RIAs reaffirm ADV at least annually), not a
 single month's fetch. See the research doc's "Ingestion-strategy implication" note.
+
+**Independent re-validation (2026-07-24, before finalizing ticket 03's resolution which
+depends on this ticket's findings):**
+
+- **Annual reaffirmation rule confirmed from a primary source, not inferred.** Fetched
+  `https://www.sec.gov/about/forms/formadv-instructions.pdf` directly and located the
+  exact clause: SEC/state-registered advisers "must amend Form ADV each year by filing
+  an annual updating amendment within 90 days after the end of your fiscal year,"
+  updating "all items in Part 1A, 1B, 2A and 2B ... including corresponding sections of
+  Schedules A, B, C, and D" (which includes Schedule D 7.B private-fund detail).
+  **Exempt Reporting Advisers have the identical requirement**, same 90-day/fiscal-year
+  clause, "including corresponding sections of Schedules A, B, C, and D." This
+  independently grounds both the 12-13 month rolling-window sizing and ticket 03's
+  "ERA and RIA get identical handling" answer in a real regulatory rule, not a
+  heuristic.
+- **`advFilingData` feed re-fetched and re-verified independently**
+  (`reports.adviserinfo.sec.gov/reports/foia/reports_metadata.json`, June 2026 ZIP
+  downloaded fresh): the parser's four regexes were tested directly against the live
+  ZIP's real `namelist()` (not the subagent's report) and all four matched
+  (`ERA_ADV_Base`, `IA_ADV_Base_A`, `IA_ADV_Base_B`; `ERA_Schedule_D_7B1`,
+  `IA_Schedule_D_7B1`; `ERA_Schedule_D_7B2`, `IA_Schedule_D_7B2`;
+  `ADV_Filing_Types`) — confirmed against the actual regex literals in
+  `edgar_warehouse/application/adv_bulk_ingest.py:99-102`, not a reconstruction. Row
+  counts independently reproduced: `IA_ADV_Base_A` = 2,938 rows (exact match), real
+  per-fund data in `IA_Schedule_D_7B1` confirmed (`PALM PEAK CAPITAL FUND I, L.P.`,
+  PFID `805-4964869201`, exact match to the research doc's sample).
+- **New finding the original research pass did not surface — a genuine caveat, not a
+  reversal:** inspecting `reports_metadata.json`'s `uploadedOn` timestamps shows this
+  feed's apparent "monthly" history is mostly **two bulk backfill events**, not organic
+  month-by-month publication: all 12 files for 2025 were uploaded on the *same day*
+  (2026-05-04), and January–April 2026 were uploaded on 2026-05-01. Only **May 2026**
+  (uploaded 2026-06-02) and **June 2026** (uploaded 2026-07-01) show the genuine
+  ~one-month-after-period-end cadence the research assumed. Practical implication: the
+  feed's *content* (18 months of real monthly deltas, Jan 2025–Jun 2026) is solid and
+  independently confirmed, and the regulatory annual-reaffirmation rule guarantees
+  eventual coverage regardless of exactly how SEC operates the feed — but confidence in
+  "this publishes reliably every month going forward" rests on only two real data
+  points so far, not an established long-run track record. Ticket 06 (automated fetch)
+  should treat "expected file not yet present this month" as a normal no-op-and-retry
+  case (already planned), not assume monthly publication is guaranteed reliable.

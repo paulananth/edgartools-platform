@@ -87,6 +87,13 @@ is execution needed to unblock a later decision, not the destination itself).
   format change the parser needs rewriting for. New finding: the feed is a
   monthly filing-activity delta (~17% of firms/month), not a full snapshot,
   so full coverage needs a rolling multi-month window.
+- [03 — ADV Time-Scope and Cadence Semantics](issues/03-adv-time-scope-and-cadence-semantics.md)
+  — `load_history` fetches a rolling ~13-month window of monthly deltas
+  only (no 2000-2024 historical backfill, mirroring the 13F/proxy
+  narrow-to-current-state precedent); `daily_incremental` runs daily gated
+  by a local `dataset_period`-already-ingested check (unchanged by the
+  delta-vs-snapshot correction); each `dataset_period` is fully immutable
+  once ingested; ERA and RIA get identical handling.
 
 ## Not yet specified
 
