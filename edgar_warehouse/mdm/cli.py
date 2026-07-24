@@ -321,7 +321,12 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     ex = mdm_sub.add_parser("export")
     ex.add_argument("--since", default=None, help="ISO timestamp for incremental export")
     ex.add_argument("--entity-type", default=None)
-    ex.add_argument("--batch-size", type=int, default=500)
+    ex.add_argument(
+        "--batch-size",
+        type=int,
+        default=5_000,
+        help="Rows per Snowflake upsert batch while draining all pending rows",
+    )
     ex.set_defaults(handler=_logged_handler("export", _handle_export))
 
     # publication-claim (07-03 RSYNC-01/03: transactional publication queue coordinator)
@@ -1696,9 +1701,12 @@ def _handle_export(args) -> int:
     mirror_writer = _build_snowflake_mirror_writer()
     exporter = MDMExporter(session=_session(), writer=writer, mirror_writer=mirror_writer)
     since = datetime.fromisoformat(args.since) if args.since else None
-    n = exporter.export_pending(since=since, entity_type=args.entity_type,
-                                batch_size=args.batch_size)
-    n += exporter.export_pending_relationships(batch_size=args.batch_size)
+    n = exporter.export_all_pending(
+        since=since,
+        entity_type=args.entity_type,
+        batch_size=args.batch_size,
+    )
+    n += exporter.export_all_pending_relationships(batch_size=args.batch_size)
     n += exporter.sync_reference_tables()
     print(f"exported {n} rows")
     return 0

@@ -300,6 +300,34 @@ def test_export_pending_skips_mirror_when_mirror_writer_is_none(session):
     assert {call[0] for call in domain_writer.calls} == {"MDM_COMPANY"}
 
 
+def test_export_all_pending_drains_every_entity_batch(session):
+    for index in range(5):
+        entity_id = str(uuid.uuid4())
+        session.add(db.MdmEntity(entity_id=entity_id, entity_type="company"))
+        session.add(db.MdmCompany(
+            entity_id=entity_id,
+            cik=1000 + index,
+            canonical_name=f"Issuer {index}",
+        ))
+        session.add(db.MdmChangeLog(
+            entity_id=entity_id,
+            entity_type="company",
+            changed_fields={"cik": 1000 + index},
+        ))
+    session.commit()
+
+    writer = FakeWriter()
+    exporter = MDMExporter(session=session, writer=writer)
+
+    total = exporter.export_all_pending(batch_size=2)
+
+    assert total == 5
+    assert [len(rows) for table, rows, _key in writer.calls if table == "MDM_COMPANY"] == [2, 2, 1]
+    assert session.query(db.MdmChangeLog).filter(
+        db.MdmChangeLog.exported_at.is_(None)
+    ).count() == 0
+
+
 def test_export_pending_relationships_mirrors_and_stamps_graph_synced_at(session):
     rel_type_id = str(uuid.uuid4())
     session.add(db.MdmRelationshipType(
@@ -341,6 +369,53 @@ def test_export_pending_relationships_mirrors_and_stamps_graph_synced_at(session
 def test_export_pending_relationships_returns_zero_without_mirror_writer(session):
     exporter = MDMExporter(session=session, writer=FakeWriter())
     assert exporter.export_pending_relationships() == 0
+
+
+def test_export_all_pending_relationships_drains_every_batch(session):
+    rel_type_id = str(uuid.uuid4())
+    session.add(db.MdmRelationshipType(
+        rel_type_id=rel_type_id,
+        rel_type_name="MANAGES_FUND",
+        source_node_type="adviser",
+        target_node_type="fund",
+        direction="outbound",
+        is_temporal=True,
+        merge_strategy="extend_temporal",
+        is_active=True,
+    ))
+    for _index in range(5):
+        adviser_id = str(uuid.uuid4())
+        fund_id = str(uuid.uuid4())
+        session.add(db.MdmEntity(entity_id=adviser_id, entity_type="adviser"))
+        session.add(db.MdmEntity(entity_id=fund_id, entity_type="fund"))
+        session.add(db.MdmRelationshipInstance(
+            instance_id=str(uuid.uuid4()),
+            rel_type_id=rel_type_id,
+            source_entity_id=adviser_id,
+            target_entity_id=fund_id,
+            source_system="test",
+            is_active=True,
+        ))
+    session.commit()
+
+    writer = FakeWriter()
+    exporter = MDMExporter(
+        session=session,
+        writer=FakeWriter(),
+        mirror_writer=writer,
+    )
+
+    total = exporter.export_all_pending_relationships(batch_size=2)
+
+    assert total == 5
+    assert [
+        len(rows)
+        for table, rows, _key in writer.calls
+        if table == "MDM_RELATIONSHIP_INSTANCE"
+    ] == [2, 2, 1]
+    assert session.query(db.MdmRelationshipInstance).filter(
+        db.MdmRelationshipInstance.graph_synced_at.is_(None)
+    ).count() == 0
 
 
 def test_sync_reference_tables_upserts_entity_type_definitions_and_relationship_types(session):

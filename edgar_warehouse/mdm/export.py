@@ -318,6 +318,30 @@ class MDMExporter:
         self.session.commit()
         return total
 
+    def export_all_pending(
+        self,
+        since: Optional[datetime] = None,
+        entity_type: Optional[str] = None,
+        batch_size: int = 500,
+    ) -> int:
+        """Drain every matching change-log batch in one operator command."""
+        total = 0
+        while True:
+            stmt = select(db.MdmChangeLog.change_id).where(
+                db.MdmChangeLog.exported_at.is_(None)
+            )
+            if since:
+                stmt = stmt.where(db.MdmChangeLog.changed_at >= since)
+            if entity_type:
+                stmt = stmt.where(db.MdmChangeLog.entity_type == entity_type)
+            if self.session.scalar(stmt.limit(1)) is None:
+                return total
+            total += self.export_pending(
+                since=since,
+                entity_type=entity_type,
+                batch_size=batch_size,
+            )
+
     def _export_mirror(self, pending: list) -> None:
         """Keep the sync-graph-source mirror current for this batch of changes.
 
@@ -366,6 +390,19 @@ class MDMExporter:
             .values(graph_synced_at=now)
         )
         self.session.commit()
+        return total
+
+    def export_all_pending_relationships(self, batch_size: int = 500) -> int:
+        """Drain every unsynced relationship batch into the Snowflake mirror."""
+        if self.mirror_writer is None:
+            return 0
+        total = 0
+        while self.session.scalar(
+            select(db.MdmRelationshipInstance.instance_id)
+            .where(db.MdmRelationshipInstance.graph_synced_at.is_(None))
+            .limit(1)
+        ) is not None:
+            total += self.export_pending_relationships(batch_size=batch_size)
         return total
 
     def sync_reference_tables(self) -> int:
