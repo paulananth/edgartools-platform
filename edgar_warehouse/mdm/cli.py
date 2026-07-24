@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from datetime import date
 from pathlib import Path
 import sys
 import time
@@ -141,6 +142,58 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     )
     seed_s.add_argument("--dry-run", action="store_true", default=False, help="Print rows without writing to MDM")
     seed_s.set_defaults(handler=_logged_handler("seed-from-silver", _handle_seed_from_silver))
+
+    build_relationship_release_manifest = mdm_sub.add_parser(
+        "build-relationship-release-manifest",
+        help=(
+            "Freeze the strict relationship bulk-load candidate manifest. "
+            "--silver-db accepts s3:// so this can run as an ad-hoc ECS task "
+            "and pull the production silver snapshot inside AWS's network, "
+            "instead of an operator downloading it locally."
+        ),
+    )
+    build_relationship_release_manifest.add_argument(
+        "--silver-db", required=True,
+        help="Local path or s3:// URI of the frozen production silver DuckDB",
+    )
+    build_relationship_release_manifest.add_argument(
+        "--output-path", required=True, help="Local or S3 candidate manifest path",
+    )
+    build_relationship_release_manifest.add_argument(
+        "--batches-output-path", required=True,
+        help="Local or S3 JSONL path for strict Distributed Map CIK batches",
+    )
+    build_relationship_release_manifest.add_argument(
+        "--coverage-start",
+        type=date.fromisoformat,
+        default=None,
+        help=(
+            "Optional uniform index/window start. When omitted, uses locked agent "
+            "lookbacks and sets coverage_start to the min-of-types index floor."
+        ),
+    )
+    build_relationship_release_manifest.add_argument(
+        "--uniform-coverage",
+        action="store_true",
+        help=(
+            "When set with --coverage-start, apply that start uniformly to all form "
+            "families (legacy). Default is per-form agent lookbacks."
+        ),
+    )
+    build_relationship_release_manifest.add_argument(
+        "--watermark", type=date.fromisoformat, required=True,
+    )
+    build_relationship_release_manifest.add_argument(
+        "--batch-size", type=int, default=100,
+    )
+    build_relationship_release_manifest.add_argument(
+        "--tracking-status-filter", default="all",
+    )
+    build_relationship_release_manifest.set_defaults(
+        handler=_logged_handler(
+            "build-relationship-release-manifest", _handle_build_relationship_release_manifest
+        )
+    )
 
     seed_af = mdm_sub.add_parser(
         "seed-audit-firms",
@@ -1155,6 +1208,12 @@ def _handle_seed_from_silver(args) -> int:
     result["source"] = "silver"
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
+
+
+def _handle_build_relationship_release_manifest(args) -> int:
+    from edgar_warehouse.scripts.build_relationship_release_manifest import _run
+
+    return _run(args)
 
 
 def _group_by_status(rows: list) -> list[tuple[str, list]]:
