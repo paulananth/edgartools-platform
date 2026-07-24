@@ -5,6 +5,14 @@ Status: open
 Blocked by: 01
 Blocks: 04, 05, 06
 
+## Constraint (non-negotiable, restated by the user 2026-07-24)
+
+ADV data must reach the Neo4j/Snowflake graph end to end. Whatever this
+ticket decides for private-fund detail, it must not become a reason to skip
+Adviser/Fund entity resolution or graph sync altogether — only
+`MANAGES_FUND` edge fidelity is allowed to degrade if bulk data truly lacks
+per-fund PFID identity. See map.md Notes for the full statement.
+
 ## Question
 
 Given ticket 01's findings on what SEC actually publishes in bulk today,

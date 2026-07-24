@@ -59,6 +59,18 @@ is execution needed to unblock a later decision, not the destination itself).
   for filing-based relationship types. The original "run ADV for 1 year"
   framing does not map onto how the source actually works; ticket 03
   resolves what cadence/scope concept replaces it.
+- **Hard requirement, restated explicitly by the user (2026-07-24): ADV data
+  must reach the Neo4j/Snowflake graph, end to end — not stop at silver.**
+  This binds every ticket's resolution, especially ticket 02: if bulk data
+  truly only supports firm-level aggregate private-fund counts (no PFID),
+  that may force `MANAGES_FUND` itself to degrade or drop — but it must
+  **not** become a reason to drop Adviser/Fund entity resolution or graph
+  sync altogether. At minimum, resolved Adviser and Fund entities (from
+  whatever the Firm Roster format actually supports) must resolve into MDM
+  and sync to the hosted graph; `MANAGES_FUND` edge fidelity is the part
+  that's genuinely at risk pending ticket 01/02, not the graph destination
+  itself. Ticket 04's manual validation is the checkpoint that proves this
+  actually happened (real nodes/edges, not the placeholder 112/1 counts).
 
 ## Decisions so far
 
