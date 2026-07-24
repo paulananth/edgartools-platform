@@ -4436,6 +4436,9 @@ def _resolve_scope(
     if command_name == "reconcile-relationship-release":
         return {"candidate_manifest": arguments.get("candidate_manifest")}
 
+    if command_name == "ingest-relationship-sources":
+        return {"source_manifest": arguments.get("source_manifest")}
+
     if command_name == "bootstrap-fundamentals":
         # Branch B counterpart of bootstrap-batch. CIK list + mode dispatch.
         return {
