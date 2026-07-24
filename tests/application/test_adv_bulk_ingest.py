@@ -19,6 +19,14 @@ def _archive(files: dict[str, str]) -> bytes:
     return payload.getvalue()
 
 
+def _archive_with_encoding(files: dict[str, str], encoding: str) -> bytes:
+    payload = io.BytesIO()
+    with zipfile.ZipFile(payload, "w") as bundle:
+        for name, content in files.items():
+            bundle.writestr(name, content.encode(encoding))
+    return payload.getvalue()
+
+
 def test_adv_bulk_archive_uses_crd_and_pfid_for_both_schedule_sections() -> None:
     archive = _archive({
         "IA_ADV_Base_A_20260601_20260630.csv": (
@@ -89,3 +97,37 @@ def test_filing_type_columns_only_treat_yes_as_selected_action() -> None:
     )
 
     assert parsed.filings[0].filing_action == "final_sec_era_report"
+
+
+def test_parses_cp1252_encoded_archive_without_raising() -> None:
+    """Real SEC/FINRA monthly advFilingData archives are not consistently UTF-8.
+
+    2025-06 and 2025-07's official archives contain cp1252-encoded accented
+    characters (e.g. 0xC9 'E acute') in fund names that raised
+    UnicodeDecodeError under the prior utf-8-sig-only decoding -- discovered
+    running the real archive in production, not from a synthetic fixture.
+    """
+    archive = _archive_with_encoding(
+        {
+            "IA_ADV_Base_A_20250601_20250630.csv": (
+                '"FilingID","DateSubmitted","1A","1D","1E1","7B"\n'
+                '2115188,"06/24/2025 10:37:17 AM","ÉTUDE CAPITAL","801-66195",129052,"Y"\n'
+            ),
+            "IA_Schedule_D_7B1_20250601_20250630.csv": (
+                '"FilingID","Fund Name","Fund ID","ReferenceID","State","Country",'
+                '"Fund Type","Gross Asset Value"\n'
+                '2115188,"CRÉDIT FUND",805-123,518607,"Delaware","United States",'
+                '"Private Equity Fund",321687148\n'
+            ),
+        },
+        encoding="cp1252",
+    )
+
+    parsed = parse_adv_bulk_archive(
+        archive,
+        dataset_period="2025-06",
+        source_sha256="abc123",
+    )
+
+    assert parsed.filings[0].adviser_name == "ÉTUDE CAPITAL"
+    assert parsed.funds[0].fund_name == "CRÉDIT FUND"

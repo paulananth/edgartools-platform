@@ -57,8 +57,14 @@ def _rows(bundle: zipfile.ZipFile, pattern: str) -> list[dict[str, str]]:
     result: list[dict[str, str]] = []
     for name in names:
         with bundle.open(name) as source:
-            reader = csv.DictReader(io.TextIOWrapper(source, encoding="utf-8-sig", newline=""))
-            result.extend({str(k): str(v or "").strip() for k, v in row.items()} for row in reader)
+            payload = source.read()
+        # SEC/FINRA's monthly advFilingData archives are not consistently UTF-8 --
+        # older months (e.g. 2025-06, 2025-07) contain cp1252-encoded accented
+        # characters (0xC0-0xD6 range) in adviser/fund names that raise
+        # UnicodeDecodeError under utf-8-sig. cp1252 is ASCII-compatible, so this
+        # is safe for months that happen to be pure-ASCII too.
+        reader = csv.DictReader(io.StringIO(payload.decode("cp1252")))
+        result.extend({str(k): str(v or "").strip() for k, v in row.items()} for row in reader)
     return result
 
 
