@@ -197,3 +197,40 @@ def test_merge_adv_private_funds_empty_rows_is_noop(tmp_path):
         assert count == 0
     finally:
         db.close()
+
+
+def test_merge_adv_private_funds_handles_all_null_and_mixed_null_columns(tmp_path):
+    """_merge_rows_bulk stages rows via a registered pyarrow.Table (not
+    executemany, see the bulk-merge performance fix) -- pyarrow infers each
+    column's type from the batch's Python values. A column that is None for
+    every row in one batch (all-NULL) risks inferring pyarrow's null type
+    rather than the target column's real type; a column mixing None and a
+    real value in the same batch is the more common real-world shape. Both
+    must round-trip through DuckDB's typed staging table correctly.
+    """
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    try:
+        rows = [
+            # aum_amount (DECIMAL) is None for every row in this batch.
+            _fund_row(accession_number="iapd-adv:1", fund_index=1, aum_amount=None),
+            _fund_row(accession_number="iapd-adv:1", fund_index=2, aum_amount=None),
+            # reference_id (TEXT) mixes None and a real value in the same batch.
+            _fund_row(accession_number="iapd-adv:2", fund_index=1, reference_id=None),
+            _fund_row(accession_number="iapd-adv:2", fund_index=2, reference_id="999999"),
+        ]
+        count = db.merge_adv_private_funds(rows, sync_run_id="run-1")
+        assert count == 4
+
+        stored = db.fetch(
+            "SELECT accession_number, fund_index, aum_amount, reference_id "
+            "FROM sec_adv_private_fund ORDER BY accession_number, fund_index"
+        )
+        assert [r["aum_amount"] for r in stored if r["accession_number"] == "iapd-adv:1"] == [
+            None,
+            None,
+        ]
+        assert [
+            r["reference_id"] for r in stored if r["accession_number"] == "iapd-adv:2"
+        ] == [None, "999999"]
+    finally:
+        db.close()
