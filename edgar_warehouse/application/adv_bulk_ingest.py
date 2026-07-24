@@ -70,7 +70,12 @@ def _rows(bundle: zipfile.ZipFile, pattern: str) -> list[dict[str, str]]:
 
 def _submitted_date(value: str) -> date:
     candidate = value.strip()
-    for fmt in ("%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y", "%Y-%m-%d"):
+    # Real advFilingData archives mix at least three DateSubmitted shapes across
+    # months: 12-hour with seconds and AM/PM ("09/03/2025 09:31:51 AM"), date-only
+    # ("6/24/2025"), and 24-hour with no seconds ("6/24/2025 7:44") -- confirmed by
+    # scanning every IA_ADV_Base_A/B file across the full 2025-06..2026-06 window,
+    # not just one sample.
+    for fmt in ("%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y %H:%M", "%m/%d/%Y", "%Y-%m-%d"):
         try:
             return datetime.strptime(candidate, fmt).date()
         except ValueError:

@@ -131,3 +131,28 @@ def test_parses_cp1252_encoded_archive_without_raising() -> None:
 
     assert parsed.filings[0].adviser_name == "ÉTUDE CAPITAL"
     assert parsed.funds[0].fund_name == "CRÉDIT FUND"
+
+
+def test_parses_24_hour_date_submitted_with_no_seconds_or_am_pm() -> None:
+    """Real advFilingData archives mix DateSubmitted shapes across months.
+
+    Scanning every IA_ADV_Base_A/B file across the full 2025-06..2026-06
+    rolling window found three distinct shapes; this covers the one not
+    already exercised by the other fixtures: 24-hour, no seconds, no AM/PM
+    (e.g. "6/24/2025 7:44"), discovered running the real archive in
+    production.
+    """
+    from datetime import date
+
+    parsed = parse_adv_bulk_archive(
+        _archive({
+            "IA_ADV_Base_A_20250601_20250630.csv": (
+                '"FilingID","DateSubmitted","1A","1D","1E1","7B"\n'
+                '2115188,"6/24/2025 7:44","PNC WEALTH","801-66195",129052,"N"\n'
+            ),
+        }),
+        dataset_period="2025-06",
+        source_sha256="abc123",
+    )
+
+    assert parsed.filings[0].effective_date == date(2025, 6, 24)
