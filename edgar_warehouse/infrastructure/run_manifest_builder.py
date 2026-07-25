@@ -32,6 +32,8 @@ SNOWFLAKE_EXPORT_TABLES = {
     "SEC_SUBSIDIARY_EVIDENCE": "sec_subsidiary_evidence",
     "SEC_AUDITOR_REPORT_EVIDENCE": "sec_auditor_report_evidence",
     "SEC_EMPLOYMENT_EVENT": "sec_employment_event",
+    # ERDP-03 Gold Explore (external calendar load → SOURCE → dbt)
+    "EARNINGS_CALENDAR": "earnings_calendar",
 }
 
 
