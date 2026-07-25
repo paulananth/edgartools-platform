@@ -732,6 +732,38 @@ class TestRunRelationships:
             + summary["EMPLOYED_BY"]["skipped_existing"]
         )
 
+    def test_proxy_person_stub_writes_change_log_for_export(self, session, fixture_world):
+        """Ticket 20: proxy stubs must enter mdm_change_log so export can drain them."""
+        from edgar_warehouse.mdm.database import MdmChangeLog, MdmEntity, MdmPerson
+
+        silver = StubSilver({
+            "sec_executive_record": [
+                {
+                    "cik": 910001, "accession_number": "0000-issuer-1",
+                    "fiscal_year": 2023, "exec_name": "Proxy Only Exec", "exec_role": "CFO",
+                    "total_comp": 1000000, "base_salary": 400000, "bonus": None,
+                    "stock_awards": None, "option_awards": None,
+                    "non_equity_incentive": None, "tenure_start_year": 2021,
+                },
+            ],
+        })
+        MDMPipeline(session=session, silver=silver).derive_relationships(
+            relationship_types=["EMPLOYED_BY"]
+        )
+        person = session.scalar(
+            select(MdmPerson).where(MdmPerson.canonical_name == "Proxy Only Exec")
+        )
+        assert person is not None
+        entity = session.get(MdmEntity, person.entity_id)
+        assert entity is not None
+        assert entity.resolution_method == "uuid5_proxy_stub"
+        change = session.scalar(
+            select(MdmChangeLog).where(MdmChangeLog.entity_id == person.entity_id)
+        )
+        assert change is not None
+        assert change.entity_type == "person"
+        assert change.exported_at is None
+
     def test_item_502_appointment_opens_employment_version(self, session, fixture_world):
         silver = StubSilver({
             "sec_employment_event": [{

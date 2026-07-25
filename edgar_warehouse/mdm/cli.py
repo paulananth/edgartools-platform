@@ -1707,6 +1707,11 @@ def _handle_export(args) -> int:
         batch_size=args.batch_size,
     )
     n += exporter.export_all_pending_relationships(batch_size=args.batch_size)
+    # Seal every active relationship endpoint into the MDM mirror even when
+    # relationships already have graph_synced_at (Ticket 20: proxy person
+    # stubs historically skipped mdm_change_log, so edges exported without
+    # person nodes).
+    n += exporter.export_active_relationship_endpoints(batch_size=args.batch_size)
     n += exporter.sync_reference_tables()
     print(f"exported {n} rows")
     return 0

@@ -367,6 +367,10 @@ class MDMExporter:
         """Mirror relationship instances sync-graph needs, using their own
         existing graph_synced_at pending-tracking column (separate from
         mdm_change_log, which never tracked relationships -- see graph.py).
+
+        Also seals source/target entity endpoints into the mirror before
+        stamping graph_synced_at so EMPLOYED_BY (and other) edges cannot land
+        without their person/company nodes (Ticket 20).
         """
         if self.mirror_writer is None:
             return 0
@@ -379,8 +383,16 @@ class MDMExporter:
         if not pending:
             return 0
 
+        endpoint_ids = sorted({
+            entity_id
+            for row in pending
+            for entity_id in (row.source_entity_id, row.target_entity_id)
+            if entity_id
+        })
+        total = self._mirror_entity_ids(endpoint_ids)
+
         payload = [self._serialize(r) for r in pending]
-        total = self.mirror_writer.upsert("MDM_RELATIONSHIP_INSTANCE", payload, key="instance_id")
+        total += self.mirror_writer.upsert("MDM_RELATIONSHIP_INSTANCE", payload, key="instance_id")
 
         now = datetime.now(timezone.utc)
         instance_ids = [r.instance_id for r in pending]
@@ -403,6 +415,86 @@ class MDMExporter:
             .limit(1)
         ) is not None:
             total += self.export_pending_relationships(batch_size=batch_size)
+        return total
+
+    def export_active_relationship_endpoints(self, batch_size: int = 500) -> int:
+        """Mirror entity + domain rows for every active relationship endpoint.
+
+        Relationships are tracked via ``graph_synced_at`` independently of
+        ``mdm_change_log``. Stub creators (proxy persons, CUSIP securities,
+        disclosed subsidiaries) historically created entities without a
+        change-log row, so edges could export while person/security nodes
+        never reached the Snowflake MDM mirror. That produces
+        ``missing_graph_edge_endpoints`` at StrictMdmVerifyCandidate even
+        when identity/property hashes match (Ticket 20).
+
+        Idempotent full-set seal: safe to run after pending drains, including
+        when all relationships already have ``graph_synced_at`` set.
+        """
+        if self.mirror_writer is None:
+            return 0
+        source_ids = list(
+            self.session.scalars(
+                select(db.MdmRelationshipInstance.source_entity_id)
+                .where(db.MdmRelationshipInstance.is_active.is_(True))
+                .distinct()
+            )
+        )
+        target_ids = list(
+            self.session.scalars(
+                select(db.MdmRelationshipInstance.target_entity_id)
+                .where(db.MdmRelationshipInstance.is_active.is_(True))
+                .distinct()
+            )
+        )
+        entity_ids = sorted({entity_id for entity_id in (*source_ids, *target_ids) if entity_id})
+        total = 0
+        for offset in range(0, len(entity_ids), batch_size):
+            total += self._mirror_entity_ids(entity_ids[offset : offset + batch_size])
+        return total
+
+    def _mirror_entity_ids(self, entity_ids: list[str]) -> int:
+        """Upsert MDM_ENTITY + domain golden rows for the given ids into mirror.
+
+        Domain rows also go to the GOLD writer so change-log-less stubs still
+        appear in golden tables. Returns upserted row count across writers.
+        """
+        if not entity_ids:
+            return 0
+        entities = list(
+            self.session.scalars(
+                select(db.MdmEntity).where(db.MdmEntity.entity_id.in_(entity_ids))
+            )
+        )
+        if not entities:
+            return 0
+
+        total = 0
+        if self.mirror_writer is not None:
+            total += self.mirror_writer.upsert(
+                "MDM_ENTITY",
+                [self._serialize(row) for row in entities],
+                key="entity_id",
+            )
+
+        by_type: dict[str, list[str]] = {}
+        for entity in entities:
+            by_type.setdefault(entity.entity_type, []).append(entity.entity_id)
+
+        for entity_type, type_ids in by_type.items():
+            target = DOMAIN_TO_TABLE.get(entity_type)
+            if target is None:
+                continue
+            _pg_table, sf_table, model = target
+            domain_rows = list(
+                self.session.scalars(select(model).where(model.entity_id.in_(type_ids)))
+            )
+            if not domain_rows:
+                continue
+            payload = [self._serialize(row) for row in domain_rows]
+            total += self.writer.upsert(sf_table, payload)
+            if self.mirror_writer is not None:
+                total += self.mirror_writer.upsert(sf_table, payload, key="entity_id")
         return total
 
     def sync_reference_tables(self) -> int:
