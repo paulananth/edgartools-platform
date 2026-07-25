@@ -15,6 +15,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
+import json
 import logging
 import os
 from datetime import date, datetime, timezone
@@ -397,21 +398,25 @@ def fetch_finnhub_earnings_calendar(
 
     from_s = from_date if isinstance(from_date, str) else from_date.isoformat()
     to_s = to_date if isinstance(to_date, str) else to_date.isoformat()
-    url = "https://finnhub.io/api/v1/calendar/earnings"
+    # urllib only — architecture forbids httpx outside sec_client.py.
+    from urllib.error import HTTPError, URLError
+    from urllib.parse import urlencode
+    from urllib.request import Request, urlopen
 
+    query = urlencode({"from": from_s, "to": to_s, "token": token})
+    url = f"https://finnhub.io/api/v1/calendar/earnings?{query}"
+    request = Request(url, headers={"User-Agent": "edgartools-platform/earnings-calendar"})
     try:
-        import httpx
-    except ImportError as exc:  # pragma: no cover
-        raise CalendarRowError("httpx required for finnhub fetch") from exc
-
-    resp = httpx.get(
-        url,
-        params={"from": from_s, "to": to_s, "token": token},
-        timeout=timeout_s,
-    )
-    resp.raise_for_status()
+        with urlopen(request, timeout=timeout_s) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except HTTPError as exc:
+        raise CalendarRowError(f"finnhub HTTP {exc.code}") from exc
+    except URLError as exc:
+        raise CalendarRowError(f"finnhub request failed: {exc.reason}") from exc
+    except json.JSONDecodeError as exc:
+        raise CalendarRowError("finnhub response was not valid JSON") from exc
     return parse_finnhub_earnings_calendar(
-        resp.json(),
+        payload,
         ticker_to_cik=ticker_to_cik,
         as_of=as_of,
     )

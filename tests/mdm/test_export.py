@@ -353,9 +353,16 @@ def test_export_pending_relationships_mirrors_and_stamps_graph_synced_at(session
 
     total = exporter.export_pending_relationships()
 
-    assert total == 1
-    assert mirror_writer.calls[0][0] == "MDM_RELATIONSHIP_INSTANCE"
-    assert mirror_writer.calls[0][2] == "instance_id"
+    # 2 endpoint entities + 1 relationship instance
+    assert total == 3
+    tables = [call[0] for call in mirror_writer.calls]
+    assert "MDM_ENTITY" in tables
+    assert "MDM_RELATIONSHIP_INSTANCE" in tables
+    rel_call = next(call for call in mirror_writer.calls if call[0] == "MDM_RELATIONSHIP_INSTANCE")
+    assert rel_call[2] == "instance_id"
+    entity_call = next(call for call in mirror_writer.calls if call[0] == "MDM_ENTITY")
+    mirrored_ids = {row["entity_id"] for row in entity_call[1]}
+    assert mirrored_ids == {adviser_id, fund_id}
     refreshed = session.get(db.MdmRelationshipInstance, instance_id)
     assert refreshed.graph_synced_at is not None
 
@@ -407,7 +414,8 @@ def test_export_all_pending_relationships_drains_every_batch(session):
 
     total = exporter.export_all_pending_relationships(batch_size=2)
 
-    assert total == 5
+    # 5 relationships + 10 distinct endpoint entities (2 per relationship)
+    assert total == 15
     assert [
         len(rows)
         for table, rows, _key in writer.calls
@@ -447,3 +455,64 @@ def test_sync_reference_tables_upserts_entity_type_definitions_and_relationship_
 def test_sync_reference_tables_returns_zero_without_mirror_writer(session):
     exporter = MDMExporter(session=session, writer=FakeWriter())
     assert exporter.sync_reference_tables() == 0
+
+
+def test_export_active_relationship_endpoints_seals_persons_without_change_log(session):
+    """Ticket 20: EMPLOYED_BY edges can export while person stubs never do.
+
+    Proxy person stubs historically skipped mdm_change_log, so identity/property
+    hashes still matched (mirror had the edge; MDM entity count excluded the
+    person) while missing_graph_edge_endpoints failed. Endpoint seal must push
+    person MDM_ENTITY + MDM_PERSON even with graph_synced_at already set and
+    no pending change-log row.
+    """
+    rel_type_id = str(uuid.uuid4())
+    session.add(db.MdmRelationshipType(
+        rel_type_id=rel_type_id,
+        rel_type_name="EMPLOYED_BY",
+        source_node_type="person",
+        target_node_type="company",
+        direction="outbound",
+        is_temporal=True,
+        merge_strategy="extend_temporal",
+        is_active=True,
+    ))
+    person_id = str(uuid.uuid4())
+    company_id = str(uuid.uuid4())
+    session.add(db.MdmEntity(entity_id=person_id, entity_type="person"))
+    session.add(db.MdmPerson(entity_id=person_id, canonical_name="Jane Executive"))
+    session.add(db.MdmEntity(entity_id=company_id, entity_type="company"))
+    session.add(db.MdmCompany(entity_id=company_id, cik=320193, canonical_name="Issuer Corp"))
+    session.add(db.MdmRelationshipInstance(
+        instance_id=str(uuid.uuid4()),
+        rel_type_id=rel_type_id,
+        source_entity_id=person_id,
+        target_entity_id=company_id,
+        source_system="proxy_filing",
+        is_active=True,
+        graph_synced_at=datetime.now(timezone.utc),
+    ))
+    session.commit()
+
+    domain_writer = FakeWriter()
+    mirror_writer = FakeWriter()
+    exporter = MDMExporter(session=session, writer=domain_writer, mirror_writer=mirror_writer)
+
+    total = exporter.export_active_relationship_endpoints()
+
+    assert total > 0
+    mirror_tables = {call[0] for call in mirror_writer.calls}
+    assert "MDM_ENTITY" in mirror_tables
+    assert "MDM_PERSON" in mirror_tables
+    assert "MDM_COMPANY" in mirror_tables
+    entity_call = next(call for call in mirror_writer.calls if call[0] == "MDM_ENTITY")
+    assert {row["entity_id"] for row in entity_call[1]} == {person_id, company_id}
+    person_call = next(call for call in mirror_writer.calls if call[0] == "MDM_PERSON")
+    assert person_call[1][0]["entity_id"] == person_id
+    # GOLD writer also receives domain rows for change-log-less stubs.
+    assert {call[0] for call in domain_writer.calls} == {"MDM_PERSON", "MDM_COMPANY"}
+
+
+def test_export_active_relationship_endpoints_returns_zero_without_mirror_writer(session):
+    exporter = MDMExporter(session=session, writer=FakeWriter())
+    assert exporter.export_active_relationship_endpoints() == 0

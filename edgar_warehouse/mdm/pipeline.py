@@ -776,6 +776,14 @@ class MDMPipeline:
                 source_priority=10,
                 confidence=1.0,
             ))
+            self._log_stub_entity_created(
+                entity_id,
+                "company",
+                {
+                    "resolution_method": "sec_exhibit_name_jurisdiction",
+                    "source_system": "sec_exhibit_subsidiaries",
+                },
+            )
             self.session.flush()
         return entity_id
 
@@ -1201,6 +1209,15 @@ class MDMPipeline:
                 source_priority=20,
                 confidence=1.0,
             ))
+            self._log_stub_entity_created(
+                entity_id,
+                "adviser",
+                {
+                    "resolution_method": "sec_13f_manager_cik",
+                    "source_system": "thirteenf_manager",
+                    "cik": normalized_cik,
+                },
+            )
             self.session.flush()
         return entity_id
 
@@ -1257,9 +1274,41 @@ class MDMPipeline:
                     source_priority=5,
                     confidence=1.0,
                 ))
+                self._log_stub_entity_created(
+                    entity_id,
+                    "audit_firm",
+                    {
+                        "resolution_method": "pcaob_firm_id",
+                        "source_system": "pcaob_firm_registry",
+                        "pcaob_firm_id": normalized_id,
+                    },
+                )
                 self.session.flush()
             return entity_id
         return None
+
+    def _log_stub_entity_created(
+        self,
+        entity_id: str,
+        entity_type: str,
+        changed_fields: Optional[dict] = None,
+    ) -> None:
+        """Write mdm_change_log so stub entities drain through mdm export.
+
+        Relationship instances track export via graph_synced_at independently
+        of mdm_change_log. Without a change-log row, stub persons/securities
+        never reach the Snowflake MDM mirror and graph verify fails with
+        missing_graph_edge_endpoints (Ticket 20 EMPLOYED_BY source persons).
+        """
+        from edgar_warehouse.mdm.database import MdmChangeLog
+
+        self.session.add(
+            MdmChangeLog(
+                entity_id=entity_id,
+                entity_type=entity_type,
+                changed_fields=changed_fields or {"created": True},
+            )
+        )
 
     def _ensure_proxy_person(
         self, exec_name: str, company_cik: int, accession_number: str
@@ -1304,7 +1353,7 @@ class MDMPipeline:
         if already:
             return already
 
-        # Create MdmEntity + MdmPerson + MdmSourceRef
+        # Create MdmEntity + MdmPerson + MdmSourceRef + change-log (export drain)
         entity = MdmEntity(
             entity_id=stub_id,
             entity_type="person",
@@ -1327,6 +1376,15 @@ class MDMPipeline:
             confidence=0.5,
         )
         self.session.add(source_ref)
+        self._log_stub_entity_created(
+            stub_id,
+            "person",
+            {
+                "resolution_method": "uuid5_proxy_stub",
+                "source_system": "proxy_filing",
+                "source_id": accession_number,
+            },
+        )
         self.session.flush()
         return stub_id
 
@@ -1396,6 +1454,15 @@ class MDMPipeline:
             confidence=0.7,
         )
         self.session.add(source_ref)
+        self._log_stub_entity_created(
+            stub_id,
+            "security",
+            {
+                "resolution_method": "cusip_stub",
+                "source_system": "thirteenf_filing",
+                "cusip": cusip,
+            },
+        )
         self.session.flush()
         return stub_id
 
