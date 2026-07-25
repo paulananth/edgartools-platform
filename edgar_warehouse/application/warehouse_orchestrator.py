@@ -820,33 +820,39 @@ def _publish_silver_database_with_retry(context: WarehouseCommandContext) -> dic
     no caller ever did, so the first batch to publish always won and every
     other concurrently-finishing batch failed outright, aborting the whole
     0%-tolerance release even though its work (fetch + merge) was otherwise
-    complete. The merge/publish cycle is pure local computation (re-download
-    canonical, re-merge, re-upload, re-attempt the ETag-guarded promote) --
-    cheap to retry, unlike the SEC fetch phase before it.
+    complete. The merge/publish cycle re-downloads canonical, re-merges the
+    original local candidate, re-uploads, and re-attempts the ETag-guarded
+    promote. A sequence of sibling writers may legitimately win more than five
+    times, so the default policy has no attempt ceiling. Operators may set a
+    positive ``WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS`` to impose one explicitly.
     """
     from edgar_warehouse.infrastructure.object_storage import PromotionConflictError
 
-    max_attempts = max(1, int(os.environ.get("WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS", "5")))
+    configured_attempts = int(os.environ.get("WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS", "0"))
+    max_attempts = configured_attempts if configured_attempts > 0 else None
     backoff_base_seconds = float(os.environ.get("WAREHOUSE_PUBLISH_CONFLICT_RETRY_BASE_SECONDS", "1.0"))
-    for attempt in range(1, max_attempts + 1):
+    backoff_max_seconds = float(os.environ.get("WAREHOUSE_PUBLISH_CONFLICT_RETRY_MAX_SECONDS", "30.0"))
+    attempt = 0
+    while True:
+        attempt += 1
         try:
             return _publish_silver_database_if_remote(context)
         except PromotionConflictError as exc:
-            if attempt >= max_attempts:
+            if max_attempts is not None and attempt >= max_attempts:
                 raise
             import random
             import time as _time
 
-            delay = backoff_base_seconds * (2 ** (attempt - 1)) * (1 + random.random())
+            exponential_delay = backoff_base_seconds * (2 ** min(attempt - 1, 20))
+            delay = min(backoff_max_seconds, exponential_delay) * (0.5 + random.random() / 2)
             _emit_pipeline_event(
                 "silver_publish_conflict_retry",
                 attempt=attempt,
-                max_attempts=max_attempts,
+                max_attempts=max_attempts or "unbounded",
                 retry_delay_seconds=delay,
                 error=str(exc),
             )
             _time.sleep(delay)
-    return None
 
 
 # ---------------------------------------------------------------------------

@@ -551,6 +551,50 @@ def test_publish_silver_database_retries_on_lost_promotion_race(tmp_path, monkey
     assert call_count["n"] == 2
 
 
+def test_publish_silver_database_default_policy_outlasts_sibling_publishers(
+    tmp_path, monkeypatch
+):
+    """Expected CAS losses must not fail a release batch after five attempts.
+
+    A long-running Ticket 20 batch lost publication to a sequence of sibling
+    batches five times and exited 2 even though its SEC work was complete.
+    The default policy must keep re-reading and re-merging until the batch gets
+    an uncontended promotion opportunity. Operators can still configure an
+    explicit finite attempt limit when they deliberately want one.
+    """
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _publish_silver_database_with_retry,
+    )
+    from edgar_warehouse.infrastructure.object_storage import PromotionConflictError
+
+    monkeypatch.delenv("WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS", raising=False)
+    context = _publish_context(tmp_path)
+    call_count = {"n": 0}
+
+    def publish_after_siblings_finish(_context):
+        call_count["n"] += 1
+        if call_count["n"] <= 6:
+            raise PromotionConflictError(
+                "silver/sec/silver.duckdb",
+                f"etag-{call_count['n'] - 1}",
+                f"etag-{call_count['n']}",
+                f"_staging/attempt-{call_count['n']}/silver/sec/silver.duckdb",
+            )
+        return {"canonical_version": "eventual-winner"}
+
+    with (
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_if_remote",
+            side_effect=publish_after_siblings_finish,
+        ),
+        patch("time.sleep"),
+    ):
+        result = _publish_silver_database_with_retry(context)
+
+    assert result == {"canonical_version": "eventual-winner"}
+    assert call_count["n"] == 7
+
+
 def test_publish_silver_database_retry_gives_up_after_max_attempts(tmp_path, monkeypatch):
     from edgar_warehouse.infrastructure.object_storage import (
         ObjectVersion,
