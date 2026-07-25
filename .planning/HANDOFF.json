@@ -1,175 +1,144 @@
 {
   "version": "1.0",
-  "timestamp": "2026-07-19T20:30:00Z",
+  "timestamp": "2026-07-25T12:32:33.921Z",
   "phase": null,
   "phase_name": "ticket-20-production-bulk-load-go",
-  "status": "staged_for_launch_ticket21_complete_holding_for_user_go",
-  "workstream": "fix-pipelines",
+  "phase_dir": null,
+  "plan": null,
+  "task": 6,
+  "total_tasks": 8,
+  "status": "paused_blocked",
+  "workstream": "ticket20-production",
   "ticket": 20,
-  "owning_runtime_handoff_to": "claude",
-  "branch": "claude/ticket20-go-handoff",
-  "main_head": "9b5600e",
+  "owning_runtime_handoff_to": "grok",
+  "branch": "agent/grok-ticket20-handoff",
+  "main_head": "eef3f5bc714f2a6fb4e4c043eb22f2f08d01bfc4",
   "completed_tasks": [
     {
       "id": 1,
-      "name": "Wayfinder windows + tickets 16-19 closed",
-      "status": "done"
+      "name": "Complete production ADV ingestion and MDM projection",
+      "status": "done",
+      "commit": "84808341"
     },
     {
       "id": 2,
-      "name": "PRs 168-175 code on main",
-      "status": "done"
+      "name": "Derive, export, sync, verify, and activate ADV MANAGES_FUND graph",
+      "status": "done",
+      "commit": "07efab65",
+      "note": "Active generation adv-mdm-07efab6-20260724t2348z has 154303 nodes and 138582 edges; graph_info, BFS, and WCC passed."
     },
     {
       "id": 3,
-      "name": "Warehouse image sha-b9e926e2d2b0 @sha256:01656d3b deployed medium:27",
-      "status": "done"
+      "name": "Fix Ticket 20 prior-ledger fan-in and full MDM export drain",
+      "status": "done",
+      "commit": "47128cef"
     },
     {
       "id": 4,
-      "name": "MDM image corrected to mdm@sha256:f9796382 medium:26",
-      "status": "done"
+      "name": "Make expected silver publication CAS contention nonfatal",
+      "status": "done",
+      "commit": "eef3f5bc",
+      "note": "PR #255 merged; default CAS retry is unbounded with capped jitter. Explicit positive WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS still imposes a finite ceiling."
     },
     {
       "id": 5,
-      "name": "Deploy script fail-closed MDM vs warehouse image guard",
+      "name": "Quarantine premature markers from failed publication and run corrected strict resume",
       "status": "done",
-      "note": "landed on main in ef30fbe (PR #176)"
+      "note": "Invalid batch ca800f9f06951b76 plus 107 accession markers were copied under invalidated_markers and version-deleted from active marker paths. Corrected eight-batch resume completed BatchSilver and reconciliation."
     },
     {
       "id": 6,
-      "name": "Free host disk then rebuild agent-window freeze",
-      "status": "done",
-      "note": "Colima fully reinstalled (8.4GB reclaimed); freeze rebuilt: 125,819 candidates / 12,444 CIKs"
-    },
-    {
-      "id": 7,
-      "name": "Upload freeze to prodb bronze ticket20-agent-*",
-      "status": "done",
-      "note": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-agent-20260718T225510Z/"
-    },
-    {
-      "id": 8,
-      "name": "Preflight READY_FOR_STRICT_LOAD",
-      "status": "done",
-      "note": "strict_release_eligible=true, fingerprint abecbde87ce3d71d2cbbe6be9fc4a0679e46d28629c95ff2ff977bd93f3160b2"
-    },
-    {
-      "id": 9,
-      "name": "Obtain five attestations from user",
-      "status": "done",
-      "note": "User approved all five at 2026-07-18T23:42:59Z, attributed to thepaulananth@gmail.com"
-    },
-    {
-      "id": 10,
-      "name": "build_ticket20_strict_execution_input + start-execution",
-      "status": "done",
-      "note": "Execution ARN arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bronze-seed-silver-gold:ticket20-strict-agent-20260718T225510Z, started 2026-07-19T00:56:27Z"
+      "name": "Complete downstream strict MDM and graph chain",
+      "status": "blocked",
+      "progress": "StrictMdmRun, StrictMdmBackfill, StrictMdmIdempotency, StrictMdmExport, StrictMdmSync, and StrictMdmSyncIdempotency succeeded. StrictMdmVerifyCandidate failed."
     }
   ],
   "remaining_tasks": [
     {
-      "id": "11e",
-      "name": "Gate mechanism implemented (PR #190) + image sha-35051fefa448 built, smoke-tested (parser v5, unresolved_accepted, 0.095), promoted to prod ECR, deployed as edgartools-prod-medium:28; SM references :28",
-      "status": "done"
+      "id": 6,
+      "name": "Fix candidate graph EMPLOYED_BY missing source-node endpoints",
+      "status": "blocked"
     },
     {
-      "id": "11f",
-      "name": "Fire new strict SF execution (brand-new name; P3) once user gives explicit go-ahead",
-      "status": "blocked_on_user_go"
-    },
-    {
-      "id": 11,
-      "name": "Monitor Map state (125 batches) to completion",
-      "status": "failed",
-      "note": "FAILED at 2026-07-19T01:46:51Z, States.ExceedToleratedFailureThreshold: 1 failed / 4 aborted / 120 pending / 0 succeeded of 125. Root cause: fundamentals_ingest.py:213 hard-raise on parse_item_502() returning unresolved for required candidate 0000950170-24-098502 (item_502.py:519, ambiguous_verb_seen). No sanctioned bypass exists -- repair_manifest only gates force re-fetch, not this raise."
-    },
-    {
-      "id": "11c",
-      "name": "oprd bare-role + promoted-to-role fix (PR #187, d39b6c6)",
-      "status": "done",
-      "note": "Two purely-additive fixes (can only turn unresolved->applicable, never fabricate): bare object-predicate role with no preposition, and 'promoted to [Role]' scoped to the promote lemma. PARSER_VERSION 4->5. Re-measured against the 211 known-unresolved candidates: 22/211 (10.4%) now resolve, 189 still don't -- projects aggregate unresolved from ~10.6% to ~9.5%. Real but modest, NOT the dominant fix (earlier claim that oprd was 'clearly dominant' was based on eyeballing ~15 examples, not measured against the full set)."
-    },
-    {
-      "id": "11d",
-      "name": "Strategic fork on remaining ~90% of unresolved population",
-      "status": "awaiting_decision",
-      "note": "Remaining patterns (backward-references to prior filings, bio-background prose, appositive names, nominalized 'approved the appointment of X') are suppression-shaped fixes -- CRITICAL SAFETY ASYMMETRY: fundamentals_ingest.py:213 raises on unresolved but does NOT re-check not_applicable, so a suppression fix that marks a false-trigger not_applicable can silently pass the gate while dropping a REAL event if the same filing also discloses one under a different construction. Confirmed on a real accession (0001104659-25-124213, CIK 1604191, GridAI Technologies) which has both a backward-reference AND a real new event nominalized under 'approved' rather than 'appointed'. Options presented to user: (a) keep patching remaining patterns (diminishing returns per the 10.4% result above), (b) route residual ~570-750 projected unresolved to a curation/review queue, (c) revisit whether zero-unresolved is the right bar for the strict gate. Not yet decided."
-    },
-    {
-      "id": 12,
-      "name": "Reconcile ledger; zero failure/unresolved/quarantine/circuit-breaker-leftover/unapproved-force counts",
+      "id": 7,
+      "name": "Run a new strict execution through candidate verify, activation, active verify, and gold refresh",
       "status": "not_started"
     },
     {
-      "id": 13,
-      "name": "MDM run/backfill/export/sync/verify; exact EMPLOYED_BY + INSTITUTIONAL_HOLDS parity",
+      "id": 8,
+      "name": "Run required unchanged-watermark no-change validation and assemble final Ticket 20 evidence",
       "status": "not_started"
-    },
-    {
-      "id": 14,
-      "name": "No-change rerun: zero SEC network, identical semantic digests",
-      "status": "not_started"
-    },
-    {
-      "id": 15,
-      "name": "Final GO disposition",
-      "status": "not_started",
-      "note": "Separate Release Owner action (signed evidence tag) -- agent must report PASS evidence, not self-declare GO"
     }
   ],
   "blockers": [
     {
-      "id": "item502-unresolved",
-      "name": "Item 5.02 parser cannot resolve ~10.6% of required candidates (6+ distinct patterns, bullet-list sub-pattern already fixed)",
-      "severity": "blocking",
-      "detail": "edgar_warehouse/parsers/item_502.py:519 returns Item502Result('unresolved', 'unclassified_named_event', ()) when an appointment/departure verb is found in a non-boilerplate sentence but no structured event can be extracted. fundamentals_ingest.py:213 hard-raises on this under release_mode. Refined 2,000-sample scope check: 10.6% unresolved, ~640-834 candidates projected across the 6,952-candidate freeze, spread across appoint (~5.2%: backward-references + appositive names), join (~3.55%: bio-background prose), terminate (~3.1%: conditional agreement boilerplate), plus smaller name/promote/elect/resign patterns. No repair/override path exists today; per-accession manual override is not viable at this scale for the remaining patterns either."
+      "description": "StrictMdmVerifyCandidate found EMPLOYED_BY edges whose source person nodes are absent from the candidate graph generation. Bounded diagnostics show missing_source_node=true and missing_target_node=false. Do not weaken or bypass verification.",
+      "type": "technical",
+      "workaround": "Trace active MDM person entities through export and generation-scoped node publication; fix the source-to-node projection or canonical-ID mismatch, add a regression, then deploy exact new images and start a brand-new execution."
     }
   ],
-  "human_actions_pending": [
-    {
-      "action": "Final GO/no-go call on signed evidence tag once ledger reconciles",
-      "context": "Release Owner action, not self-servable by agent",
-      "blocking": false
-    }
-  ],
+  "human_actions_pending": [],
   "decisions": [
     {
-      "decision": "Never default MDM image to warehouse",
-      "rationale": "Wrong deploy put warehouse on MDM tasks"
+      "decision": "Expected ETag compare-and-swap loss retries until eventual promotion by default",
+      "rationale": "A sibling publication is expected contention; every retry re-reads canonical and re-merges the original candidate, so failing after five wins caused false release failure.",
+      "phase": null
     },
     {
-      "decision": "EDGAR_IDENTITY from env is fine",
-      "rationale": "User said identity already provided"
+      "decision": "Premature markers from an unpublished batch are invalid evidence",
+      "rationale": "The failed task wrote batch/accession markers before canonical silver promotion. Those exact versioned objects were quarantined and invalidated so resume could not skip unpublished data.",
+      "phase": null
     },
     {
-      "decision": "No SF redrive after image change",
-      "rationale": "P3 pins old task def"
+      "decision": "Candidate graph verification remains fail-closed",
+      "rationale": "Missing EMPLOYED_BY source nodes are a real integrity failure; the failed candidate was not activated and gold refresh was not reached.",
+      "phase": null
     },
     {
-      "decision": "Agent will not generate the five attestations itself",
-      "rationale": "They are named human sign-offs; fabricating them defeats the strict-release integrity guarantee"
+      "decision": "Never redrive an execution after changing images",
+      "rationale": "Step Functions redrive preserves old task-definition bindings; use a new execution name after each deployment.",
+      "phase": null
     },
     {
-      "decision": "User explicitly approved all five attestations and separately confirmed go-ahead to fire start-execution",
-      "rationale": "Two distinct confirmations per plan: attestation content, then the irreversible production action itself"
+      "decision": "Production PASS requires the full chain plus the unchanged-watermark integrity rerun",
+      "rationale": "BatchSilver, clean logs, or candidate parity alone are not release evidence.",
+      "phase": null
     }
   ],
+  "uncommitted_files": [],
+  "background_processes": [],
   "infrastructure": {
-    "account": "690839588395",
-    "warehouse_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse@sha256:d5b9c84bdd7ee685c039dd5599e21168f06771f0cb2e1516d889c0287fdd1ed8",
-    "mdm_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-mdm@sha256:f97963824fbfa54a41151f37c548788c84add07e31c62e252b25d59457cbe118",
+    "aws_account": "690839588395",
+    "region": "us-east-1",
+    "profile": "sec_platform_deployer",
     "state_machine": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-bronze-seed-silver-gold",
-    "execution_arn": "arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bronze-seed-silver-gold:ticket20-strict-agent-20260718T225510Z",
-    "execution_name_consumed": "ticket20-strict-agent-20260718T225510Z (P3: do not reuse; any retry needs a brand-new name)",
-    "buckets": "edgartools-prodb-bronze|warehouse|snowflake-export",
-    "roles": "sec_platform_prodb_runner_*",
-    "legacy_freeze": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-strict-20260718T013201Z/ (NO_GO, do not use)",
-    "agent_freeze": "s3://edgartools-prodb-bronze/warehouse/bronze/reference/relationship_release/ticket20-agent-20260718T225510Z/ (READY_FOR_STRICT_LOAD, execution input also here as strict_execution_input.json)",
+    "failed_execution": "arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bronze-seed-silver-gold:ticket20-strict-q1y-resume-eef3f5b-20260725T0156Z",
+    "failed_stage": "StrictMdmVerifyCandidate",
+    "failed_task": "28027be0fdb8486bb7d9276ef6a2a468",
+    "warehouse_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse@sha256:650878cb25e7a99259d6e4e882c48a61b6c46c0586f63759fe17a4e1885ab371",
+    "mdm_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-mdm@sha256:e38db60bd72e5878ec045b6e9625a4be12c5f22bcf2027a1a705e195b2dfbbca",
+    "task_definitions": "small:64 medium:69 large:64 mdm-small:57 mdm-medium:57",
+    "runner_roles": "sec_platform_prod_runner_execution, sec_platform_prod_runner_task, sec_platform_prod_runner_step_functions",
+    "freeze_manifest": "s3://edgartools-prod-bronze-690839588395/warehouse/bronze/reference/relationship_release/ticket20-agent-q1y-20260724T003912Z/candidate_manifest.json",
+    "freeze_fingerprint": "61be5eaeebc99c7eb9bf1e5a5e2c67076619bcc28b19ece715a7c2ebb175d852",
     "watermark": "2026-07-02",
-    "docker_volume_note": "t20-work was destroyed by a full Colima reinstall this session; rebuilt fresh, silver.duckdb re-downloaded and verified byte-identical (339,226,624 bytes)",
-    "task_definitions": "edgartools-prod-medium:30 (warehouse: v5+gate+13F+insider-coverage), edgartools-prod-mdm-medium (mdm unchanged @f9796382)"
+    "candidate_count": 20833,
+    "cik_count": 10792,
+    "batch_count": 108,
+    "invalidated_marker_quarantine": "s3://edgartools-prod-bronze-690839588395/warehouse/bronze/reference/relationship_release/ticket20-agent-q1y-20260724T003912Z/invalidated_markers/ticket20-strict-q1y-resume-20260725T0003Z/ca800f9f06951b76/",
+    "candidate_generation": "ticket20-strict-q1y-resume-eef3f5b-20260725T0156Z",
+    "protected_active_generation": "adv-mdm-07efab6-20260724t2348z"
   },
-  "next_action": "STAGED, HOLDING FOR EXPLICIT USER GO. On go: start-execution with a brand-new name (ticket20-strict-insider-<ts>) against the unchanged freeze input. Do NOT fire without the user explicitly saying go.",
-  "context_notes": "Release Owner directive 2026-07-19: Claude owns everything -- no Codex/Grok split remains; all workstreams, branches, and planning files are Claude's to maintain. Ticket 21 (insider-scoped EMPLOYED_BY) fully implemented: slices 1-4 merged (PRs #195, #196). Image sha-3c7efc91b038 (@sha256:d5b9c84b...) = parser v5 + bounded unresolved_accepted gate + 13F cover-period fix + mdm verify-insider-coverage, smoke-tested, deployed as edgartools-prod-medium:30; SM verified referencing :30; MDM unchanged. Zero concurrent executions. Launch STAGED and HELD -- the user has NOT said go; the last launch question was answered with an ownership/sync directive instead. Consumed execution names (P3, never reuse): ticket20-strict-agent-20260718T225510Z, ticket20-strict-gatev2-20260719T135202Z, all earlier ticket20-strict-*. Post-Map sequence: mdm verify-insider-coverage --output ... then reconcile-relationship-release --insider-coverage ... (fail-closed on unresolved insiders, 13F reported non-blocking), parity, no-change rerun, PASS evidence to user for final GO."
+  "required_reading": [
+    ".planning/HANDOFF.json",
+    ".planning/.continue-here.md",
+    "docs/release-readiness/ticket20-strict-bulk-load-resume.md",
+    "docs/release-readiness/required-relationship-bulk-load-completion-gate.md",
+    "docs/release-readiness/relationship-source-coverage-by-document-type.md",
+    "edgar_warehouse/mdm/snowflake_graph.py",
+    "edgar_warehouse/mdm/export.py",
+    "edgar_warehouse/mdm/graph.py"
+  ],
+  "next_action": "Acknowledge every blocking constraint, then run read-only candidate-generation queries for missing EMPLOYED_BY source IDs to determine whether person entities were omitted during MDM export/node sync or relationship endpoints use stale canonical IDs. Reproduce with a focused test before changing code.",
+  "context_notes": "Grok now owns continuation. Work only from a clean branch/worktree based on main. The original checkout at /Users/aneenaananth/projects/edgartools-platform contains protected unrelated ER/data-plane and dashboard research changes; do not stage, revert, or overwrite them. Execution ticket20-strict-q1y-resume-eef3f5b-20260725T0156Z is consumed and must never be redriven after a fix. The candidate graph failed before activation, so the prior active ADV generation remains safe. Ticket 20 is not PASS and no GO claim is authorized."
 }
