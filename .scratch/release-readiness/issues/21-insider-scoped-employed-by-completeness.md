@@ -48,7 +48,7 @@ insiders are independently identifiable from their own Form 3/4/5 filings.
 - Launch requires: this ticket's doctrine revision, then a brand-new
   execution name, then the Release Owner's explicit go.
 
-**Status:** ready-for-agent
+**Status:** complete (IS_INSIDER health proven on 10-CIK sample 2026-07-25)
 
 - [x] Spec the insider-scoped completeness check — PR #194
 - [x] Revise the completion-gate doctrine's "Done when" + PASS claim — PR #196
@@ -59,8 +59,11 @@ insiders are independently identifiable from their own Form 3/4/5 filings.
 - [x] Wire production SM: MDM before reconcile + StrictInsiderCoverage step
       that writes insider_coverage.json and reconcile binds via
       --insider-coverage (Ticket 21 production residual after Ticket 20)
-- [ ] Relaunch the strict execution (new name, explicit user go) after deploy
-      of the SM wiring + image; requires IS_INSIDER derivation health
+- [x] IS_INSIDER derivation health (10 CIKs): person + IS_INSIDER only loaders
+      (PR #262/#263); verify-insider-coverage **146/146 identified, 0 unresolved**
+      — evidence `docs/release-readiness/ticket21-insider-coverage-10cik-2026-07-25.md`
+- [ ] Full Ticket 20 strict relaunch (new name, **explicit user go**) remains a
+      separate operator action; not blocked on IS_INSIDER sample health
 
 ---
 
