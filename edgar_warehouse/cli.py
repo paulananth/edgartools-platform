@@ -81,6 +81,29 @@ def _add_common_bootstrap_args(parser: argparse.ArgumentParser, include_recent_l
         help="Parser execution policy",
     )
     parser.add_argument(
+        "--ownership-lookback-years",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Years of Form 3/4/5 history to fetch/parse (default: 2). "
+            "Also bounds Item 5.02 8-K selection unless "
+            "--item-502-lookback-years is set. Use 0 for full history. "
+            "Also settable via WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS."
+        ),
+    )
+    parser.add_argument(
+        "--item-502-lookback-years",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Years of Item 5.02 8-K history to fetch/parse (default: 2, or "
+            "ownership lookback when that is set). Use 0 for full history. "
+            "Also settable via WAREHOUSE_ITEM_502_LOOKBACK_YEARS."
+        ),
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         default=False,
@@ -258,6 +281,29 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="Force re-fetch and rebuild of the selected date range",
+    )
+    daily_incremental.add_argument(
+        "--ownership-lookback-years",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Years of Form 3/4/5 history to fetch/parse (default: 2). "
+            "Also bounds Item 5.02 8-K selection unless "
+            "--item-502-lookback-years is set. Use 0 for full history. "
+            "Also settable via WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS."
+        ),
+    )
+    daily_incremental.add_argument(
+        "--item-502-lookback-years",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Years of Item 5.02 8-K history to fetch/parse (default: 2, or "
+            "ownership lookback when that is set). Use 0 for full history. "
+            "Also settable via WAREHOUSE_ITEM_502_LOOKBACK_YEARS."
+        ),
     )
     daily_incremental.add_argument(
         "--cik-limit",
@@ -458,7 +504,8 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Parse Form 3/4/5 ownership XMLs already in S3 bronze into silver. "
             "Uses edgartools (Ownership.from_xml). No SEC API calls. "
-            "Idempotent — skips accessions already in sec_ownership_reporting_owner."
+            "Idempotent — skips accessions already in sec_ownership_reporting_owner. "
+            "Default lookback is the past 2 years of Form 3/4/5 filings."
         ),
     )
     parse_ownership_bronze.add_argument(
@@ -476,6 +523,17 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Comma-separated accession numbers to process. "
             "When supplied, only these accessions are parsed (default: all Forms 3/4/5)."
+        ),
+    )
+    parse_ownership_bronze.add_argument(
+        "--ownership-lookback-years",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Years of Form 3/4/5 history to parse (default: 2). "
+            "Use 0 for full history. Also settable via "
+            "WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS."
         ),
     )
     _add_run_id_arg(parse_ownership_bronze)
@@ -553,6 +611,29 @@ def build_parser() -> argparse.ArgumentParser:
         "--parser-policy",
         default="configured_forms",
         help="Parser execution policy",
+    )
+    bootstrap_batch.add_argument(
+        "--ownership-lookback-years",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Years of Form 3/4/5 history to fetch/parse (default: 2). "
+            "Also bounds Item 5.02 8-K selection unless "
+            "--item-502-lookback-years is set. Use 0 for full history. "
+            "Also settable via WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS."
+        ),
+    )
+    bootstrap_batch.add_argument(
+        "--item-502-lookback-years",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Years of Item 5.02 8-K history to fetch/parse (default: 2, or "
+            "ownership lookback when that is set). Use 0 for full history. "
+            "Also settable via WAREHOUSE_ITEM_502_LOOKBACK_YEARS."
+        ),
     )
     bootstrap_batch.add_argument(
         "--release-mode",
@@ -650,6 +731,29 @@ def build_parser() -> argparse.ArgumentParser:
         "--parser-policy",
         default="configured_forms",
         help="Parser execution policy",
+    )
+    bootstrap_next.add_argument(
+        "--ownership-lookback-years",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Years of Form 3/4/5 history to fetch/parse (default: 2). "
+            "Also bounds Item 5.02 8-K selection unless "
+            "--item-502-lookback-years is set. Use 0 for full history. "
+            "Also settable via WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS."
+        ),
+    )
+    bootstrap_next.add_argument(
+        "--item-502-lookback-years",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Years of Item 5.02 8-K history to fetch/parse (default: 2, or "
+            "ownership lookback when that is set). Use 0 for full history. "
+            "Also settable via WAREHOUSE_ITEM_502_LOOKBACK_YEARS."
+        ),
     )
     bootstrap_next.add_argument(
         "--force",
