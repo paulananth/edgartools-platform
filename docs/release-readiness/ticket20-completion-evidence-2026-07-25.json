@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "artifact": "ticket20_completion_evidence",
+  "generated_at": "2026-07-25T19:00:00Z",
+  "ticket": 20,
+  "disposition": "PASS_CHAIN_COMPLETE",
+  "go_claim_authorized": false,
+  "go_claim_note": "Operator/Release Owner decides GO. This package reports secret-free technical completion of the strict chain, bulk-load evidence PASS, and in-chain no-change checks. It does not self-declare production GO.",
+  "pass_claim_from_bulk_load_evidence": "Required relationship sources for EMPLOYED_BY and INSTITUTIONAL_HOLDS are bulk-load complete for agent windows at watermark 2026-07-02 (fingerprint 61be5eaeebc99c7eb9bf1e5a5e2c67076619bcc28b19ece715a7c2ebb175d852): 13F [2026-04-02, 2026-07-02]; proxy [2025-07-02, 2026-07-02] (latest-in-band baseline only); Item 5.02 / ambiguous 8-K [2024-07-02, 2026-07-02] complete EXCEPT for 628 enumerated unresolved candidates (9.03% of the Item 5.02 8-K candidate inventory), accepted by the Release Owner as a known, bounded gap — not claimed complete.",
+  "freeze": {
+    "candidate_manifest": "s3://edgartools-prod-bronze-690839588395/warehouse/bronze/reference/relationship_release/ticket20-agent-q1y-20260724T003912Z/candidate_manifest.json",
+    "inventory_fingerprint": "61be5eaeebc99c7eb9bf1e5a5e2c67076619bcc28b19ece715a7c2ebb175d852",
+    "watermark": "2026-07-02",
+    "candidate_count": 20833,
+    "cik_count": 10792,
+    "batch_count": 108,
+    "coverage_by_document_type": {
+      "thirteenf": { "start": "2026-04-02", "end": "2026-07-02" },
+      "proxy": { "start": "2025-07-02", "end": "2026-07-02", "baseline": "latest_in_band_only" },
+      "item_502_8k": { "start": "2024-07-02", "end": "2026-07-02" }
+    }
+  },
+  "execution": {
+    "name": "ticket20-strict-endpoint-seal-850ea34-20260725T130457Z",
+    "arn": "arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bronze-seed-silver-gold:ticket20-strict-endpoint-seal-850ea34-20260725T130457Z",
+    "state_machine": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-bronze-seed-silver-gold",
+    "status": "SUCCEEDED",
+    "start_date": "2026-07-25T09:05:03.705-04:00",
+    "stop_date": "2026-07-25T14:21:35.984-04:00",
+    "elapsed_hours": 5.28,
+    "prior_failed_blocker": {
+      "execution": "ticket20-strict-q1y-resume-eef3f5b-20260725T0156Z",
+      "failed_stage": "StrictMdmVerifyCandidate",
+      "symptom": "EMPLOYED_BY missing_source_node=true with person graph node count 0",
+      "root_cause_fix": "PR #258 / commit 850ea34 — mdm_change_log on stubs + export_active_relationship_endpoints"
+    }
+  },
+  "deployment": {
+    "commit": "850ea3473c249afbb35432d391bdda9b27c4b2aa",
+    "warehouse_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse@sha256:94f3766cbf620ab048d6ba0ec03424b4e3b0472b1cd3fbd937103f71403e5339",
+    "mdm_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-mdm@sha256:c1b0f72a2a98dd81590ed4b1a7872c36898c72bbe59f89f47b3b3729f4cc00f1",
+    "task_definitions": {
+      "small": "edgartools-prod-small:65",
+      "medium": "edgartools-prod-medium:70",
+      "large": "edgartools-prod-large:65",
+      "mdm_small": "edgartools-prod-mdm-small:58",
+      "mdm_medium": "edgartools-prod-mdm-medium:58"
+    },
+    "roles": [
+      "sec_platform_prod_runner_execution",
+      "sec_platform_prod_runner_task",
+      "sec_platform_prod_runner_step_functions"
+    ],
+    "aws_account": "690839588395",
+    "region": "us-east-1"
+  },
+  "stage_timings": {
+    "StrictBatchSilver": { "duration": "~1s", "result": "SUCCEEDED", "note": "0 remaining batches; empty map" },
+    "ReconcileRelationshipRelease": { "duration": "2.8m", "result": "SUCCEEDED" },
+    "StrictMdmRun": { "duration": "4.70h", "result": "SUCCEEDED" },
+    "StrictMdmBackfill": { "duration": "1.3m", "result": "SUCCEEDED", "metrics": { "backfilled": 0, "issuers_repaired": 0, "synced": 0 } },
+    "StrictMdmIdempotency": { "duration": "1.3m", "result": "SUCCEEDED", "metrics": { "backfilled": 0, "issuers_repaired": 0, "synced": 0 }, "note": "second backfill; zero new relationships" },
+    "StrictMdmExport": { "duration": "16.4m", "result": "SUCCEEDED", "note": "includes endpoint seal for active relationship sources/targets" },
+    "StrictMdmSync": { "duration": "1.3m", "result": "SUCCEEDED", "graph_nodes": 193063, "graph_edges": 157732 },
+    "StrictMdmSyncIdempotency": { "duration": "1.2m", "result": "SUCCEEDED", "graph_nodes": 193063, "graph_edges": 157732, "note": "identical counts on second sync" },
+    "StrictMdmVerifyCandidate": { "duration": "1.4m", "result": "SUCCEEDED" },
+    "StrictMdmActivate": { "duration": "1.2m", "result": "SUCCEEDED" },
+    "StrictMdmVerify": { "duration": "4.4m", "result": "SUCCEEDED", "note": "active generation Native App GRAPH_INFO/BFS/WCC ok" },
+    "StrictGoldRefresh": { "duration": "3.1m", "result": "SUCCEEDED" }
+  },
+  "bulk_load_evidence": {
+    "s3_uri": "s3://edgartools-prod-warehouse-690839588395/warehouse/release-evidence/ticket20-strict-endpoint-seal-850ea34-20260725T130457Z/required_relationship_bulk_load_evidence.json",
+    "ledger_s3_uri": "s3://edgartools-prod-warehouse-690839588395/warehouse/release-evidence/ticket20-strict-endpoint-seal-850ea34-20260725T130457Z/bulk-load-completion-ledger.json",
+    "local_copies": [
+      "docs/release-readiness/ticket20-required-relationship-bulk-load-evidence.json",
+      "docs/release-readiness/ticket20-bulk-load-completion-ledger.json"
+    ],
+    "disposition": "PASS",
+    "evidence_fingerprint": "b9c11a7c850550d487637a394aa72e740cad270800ed85cdbdc4fe425e2b7da9",
+    "ledger_fingerprint": "6ea7c50fe425efb5f0882a2b7b80cf80c848edaa028708f520d0b543dfb5be50",
+    "terminal_counts": {
+      "applicable_loaded": 14280,
+      "not_applicable": 5925,
+      "unresolved_accepted": 628
+    },
+    "terminal_sum_matches_candidates": true,
+    "accepted_unresolved_rate": 0.0903,
+    "item502_candidate_count": 6952,
+    "failure_quarantine_force_counts": 0,
+    "attestations_bound": [
+      "warehouse",
+      "mdm",
+      "graph",
+      "release_data_operator",
+      "release_owner"
+    ]
+  },
+  "graph_proof": {
+    "generation_id": "ticket20-strict-endpoint-seal-850ea34-20260725T130457Z",
+    "activated": true,
+    "candidate_verify": {
+      "status": "ok",
+      "nodes": 193063,
+      "edges": 157732,
+      "person_nodes": 5892,
+      "employed_by_edges": 19147,
+      "missing_graph_edge_endpoints": [],
+      "missing_graph_nodes": [],
+      "extra_graph_nodes": [],
+      "missing_graph_edges": [],
+      "extra_graph_edges": [],
+      "exact_parity": "ok"
+    },
+    "active_verify": {
+      "status": "ok",
+      "nodes": 193063,
+      "edges": 157732,
+      "person_nodes": 5892,
+      "employed_by_edges": 19147,
+      "missing_graph_edge_endpoints": [],
+      "native_app": {
+        "graph_info": "ok",
+        "bfs": "ok",
+        "wcc": "ok",
+        "note": "optional LIST_GRAPHS diagnostic may report failed without failing overall status"
+      }
+    },
+    "endpoint_fix_delta": {
+      "before": { "person_nodes": 0, "employed_by_edges": 13403, "missing_source_node_samples": true },
+      "after": { "person_nodes": 5892, "employed_by_edges": 19147, "missing_source_node_samples": false }
+    }
+  },
+  "unchanged_watermark_no_change": {
+    "watermark_unchanged": "2026-07-02",
+    "silver_batch_path": {
+      "remaining_batches": 0,
+      "StrictBatchSilver_map_items": 0,
+      "sec_tasks_launched": 0,
+      "sec_network_fetches": 0,
+      "result": "PASS"
+    },
+    "mdm_relationship_idempotency": {
+      "first_backfill": { "backfilled": 0, "issuers_repaired": 0, "synced": 0 },
+      "second_backfill_StrictMdmIdempotency": { "backfilled": 0, "issuers_repaired": 0, "synced": 0 },
+      "relationship_instance_count_observed": 157732,
+      "result": "PASS",
+      "note": "Zero new relationship identities on dual backfill within the successful execution"
+    },
+    "graph_sync_idempotency": {
+      "first_sync_nodes": 193063,
+      "first_sync_edges": 157732,
+      "second_sync_nodes": 193063,
+      "second_sync_edges": 157732,
+      "result": "PASS"
+    },
+    "silver_database": {
+      "path": "s3://edgartools-prod-warehouse-690839588395/warehouse/silver/sec/silver.duckdb",
+      "size_bytes": 884748288,
+      "checksum_etag": "e409b8e71fd85d1ea227da36d467cef7",
+      "note": "Canonical silver checksum observed at reconcile; ETag matches published checksum"
+    }
+  },
+  "residual_known_gaps": [
+    {
+      "id": "insider_coverage_not_bound_in_sm",
+      "severity": "Ticket 21",
+      "detail": "reconcile SM stage does not pass --insider-coverage; bulk-load evidence PASS does not include insider_coverage block. Form 3/4/5 insider-scoped EMPLOYED_BY completeness remains Ticket 21."
+    },
+    {
+      "id": "institutional_holds_and_is_insider_empty",
+      "severity": "non-blocking for Ticket 20 launch decision (Release Owner 2026-07-19)",
+      "detail": "Graph verify reports INSTITUTIONAL_HOLDS=0, IS_INSIDER=0, security nodes=0 on this generation. Reported in parity; not fail-closed for Ticket 20 GO decision."
+    },
+    {
+      "id": "item_502_unresolved_accepted",
+      "severity": "Release Owner bounded exception",
+      "detail": "628 / 6952 Item 5.02 candidates unresolved_accepted (9.03%), enumerated in evidence accessions list."
+    }
+  ],
+  "checks": {
+    "strict_sf_execution_succeeded": true,
+    "bulk_load_evidence_disposition_pass": true,
+    "ledger_terminal_reconcile": true,
+    "five_attestations_bound": true,
+    "employed_by_graph_endpoint_integrity": true,
+    "candidate_verify_ok": true,
+    "graph_activated": true,
+    "active_verify_ok": true,
+    "gold_refresh_ok": true,
+    "in_chain_no_change_checks_ok": true,
+    "insider_coverage_bound": false
+  }
+}
