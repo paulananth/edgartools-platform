@@ -17,7 +17,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
@@ -231,9 +231,21 @@ class MDMPipeline:
         self.session.commit()
         return processed
 
-    def run_persons(self, limit: Optional[int] = None) -> int:
+    def run_persons(
+        self,
+        limit: Optional[int] = None,
+        *,
+        issuer_ciks: Optional[Iterable[int]] = None,
+    ) -> int:
+        """Resolve Form 3/4/5 reporting owners into MDM person entities.
+
+        Ticket 21: persons are the only entity load needed for IS_INSIDER —
+        companies are assumed already resolved and are never re-run here.
+        Optional ``issuer_ciks`` scopes to ownership rows for those issuers only.
+        """
         ctx = self._ctx()
         resolver = PersonResolver()
+        ciks = self._normalize_issuer_ciks(issuer_ciks)
         sql = """
             SELECT DISTINCT o.owner_cik, o.owner_name, o.officer_title,
                    o.is_director, o.is_officer, o.is_ten_percent_owner, o.is_other,
@@ -242,9 +254,14 @@ class MDMPipeline:
             JOIN sec_company_filing f ON o.accession_number = f.accession_number
             WHERE o.owner_name IS NOT NULL
         """
+        params: list[Any] = []
+        if ciks is not None:
+            placeholders = ", ".join("?" for _ in ciks)
+            sql += f" AND f.cik IN ({placeholders})"
+            params.extend(ciks)
         if limit:
             sql += f" LIMIT {int(limit)}"
-        rows = self.silver.fetch(sql)
+        rows = self.silver.fetch(sql, params or None)
         company_ciks = self._company_cik_set()
         processed = 0
         started_at = time.monotonic()
@@ -278,15 +295,21 @@ class MDMPipeline:
         *,
         target_per_type: Optional[int] = None,
         relationship_types: Optional[Iterable[str]] = None,
+        issuer_ciks: Optional[Iterable[int]] = None,
     ) -> dict[str, dict[str, int | None]]:
         """Create relationship instances until each requested type reaches target_per_type.
 
         Existing active relationships count toward the target. Returned counts
         are per type so operators can see source shortfalls without inspecting
         MDM tables directly.
+
+        ``issuer_ciks`` scopes ownership-sourced types (IS_INSIDER, HOLDS,
+        COMPANY_HOLDS) to Form 3/4/5 rows for those issuers only — Ticket 21
+        insider smoke does not re-walk the full universe.
         """
         sync_engine = GraphSyncEngine.build(self.session)
         requested_types = self._relationship_type_names(relationship_types)
+        ciks = self._normalize_issuer_ciks(issuer_ciks)
         summary: dict[str, dict[str, int | None]] = {}
         started_at = time.monotonic()
         total_inserted = 0
@@ -303,7 +326,9 @@ class MDMPipeline:
             if remaining is None or remaining > 0:
                 (inserted, skipped_corporate, skipped_unresolved_source,
                  skipped_unresolved_target, skipped_existing) = \
-                    self._derive_relationship_type(sync_engine, rel_type_name, remaining)
+                    self._derive_relationship_type(
+                        sync_engine, rel_type_name, remaining, issuer_ciks=ciks
+                    )
             total_inserted += inserted
             type_summary = {
                 "existing":                  existing,
@@ -332,14 +357,24 @@ class MDMPipeline:
         self.session.commit()
         return summary
 
+    def _normalize_issuer_ciks(
+        self, issuer_ciks: Optional[Iterable[int]]
+    ) -> Optional[list[int]]:
+        if issuer_ciks is None:
+            return None
+        normalized = sorted({int(c) for c in issuer_ciks if c is not None})
+        return normalized or None
+
     def _derive_relationship_type(
         self,
         sync_engine: GraphSyncEngine,
         rel_type_name: str,
         remaining: Optional[int],
+        *,
+        issuer_ciks: Optional[list[int]] = None,
     ) -> tuple[int, int, int, int, int]:
         if rel_type_name == "IS_INSIDER":
-            return self._derive_is_insider(sync_engine, remaining)
+            return self._derive_is_insider(sync_engine, remaining, issuer_ciks=issuer_ciks)
         if rel_type_name == "HOLDS":
             return self._derive_holds(sync_engine, remaining)
         if rel_type_name == "COMPANY_HOLDS":
@@ -362,7 +397,18 @@ class MDMPipeline:
             return self._derive_institutional_holds(sync_engine, remaining)
         raise KeyError(f"Unknown relationship type '{rel_type_name}'")
 
-    def _derive_is_insider(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
+    def _derive_is_insider(
+        self,
+        sync_engine: GraphSyncEngine,
+        remaining: Optional[int],
+        *,
+        issuer_ciks: Optional[list[int]] = None,
+    ) -> tuple[int, int, int, int, int]:
+        """Derive IS_INSIDER from Form 3/4/5 reporting owners.
+
+        Does not create or refresh company entities — issuer CIKs must already
+        resolve in MDM (Ticket 21: companies do not change on an insider load).
+        """
         sql = """
             SELECT o.accession_number, o.owner_index, o.owner_cik, o.owner_name,
                    o.is_director, o.is_officer, o.is_ten_percent_owner, o.is_other,
@@ -370,8 +416,13 @@ class MDMPipeline:
                    f.cik AS issuer_cik, f.report_date AS period_of_report
             FROM sec_ownership_reporting_owner o
             JOIN sec_company_filing f ON o.accession_number = f.accession_number
-            ORDER BY o.accession_number, o.owner_index
         """
+        params: list[Any] = []
+        if issuer_ciks is not None:
+            placeholders = ", ".join("?" for _ in issuer_ciks)
+            sql += f" WHERE f.cik IN ({placeholders})"
+            params.extend(issuer_ciks)
+        sql += " ORDER BY o.accession_number, o.owner_index"
         company_ciks = self._company_cik_set()
         existing = self._relationship_count("IS_INSIDER")
         inserted = 0
@@ -379,7 +430,15 @@ class MDMPipeline:
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
-        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining, existing)):
+        # When scoping to issuer CIKs, do not use the global existing-count LIMIT
+        # short-circuit SQL: existing universe totals are unrelated to this slice.
+        if issuer_ciks is not None:
+            fetch_sql = sql
+            fetch_params: list[Any] | None = params
+        else:
+            fetch_sql = self._bounded_relationship_sql(sql, remaining, existing)
+            fetch_params = None
+        for row in self.silver.fetch(fetch_sql, fetch_params):
             owner_cik = row.get("owner_cik")
             if owner_cik in company_ciks:
                 skipped_corporate += 1

@@ -37,6 +37,17 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     run = mdm_sub.add_parser("run", help="Run MDM pipeline for one or all domains")
     run.add_argument("--entity-type", choices=["company", "adviser", "security", "person", "fund", "all"], default="all")
     run.add_argument("--limit", type=int, default=None)
+    run.add_argument(
+        "--cik",
+        action="append",
+        type=int,
+        default=None,
+        help=(
+            "Issuer CIK filter for ownership-sourced entity loads (person). "
+            "Repeatable. Companies are not re-resolved — use only when issuers "
+            "already exist in MDM (Ticket 21 insider path)."
+        ),
+    )
     run.set_defaults(handler=_logged_handler("run", _handle_run))
 
     cov = mdm_sub.add_parser("coverage-report", help="Report silver vs MDM entity counts per domain")
@@ -77,6 +88,16 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     )
     derive.add_argument("--target-per-type", type=int, default=100, help="Active relationships to target per type")
     derive.add_argument("--relationship-type", action="append", default=None, help="Relationship type to derive; repeat for multiple types")
+    derive.add_argument(
+        "--cik",
+        action="append",
+        type=int,
+        default=None,
+        help=(
+            "Issuer CIK filter for ownership-sourced relationship types "
+            "(IS_INSIDER/HOLDS/COMPANY_HOLDS). Repeatable. Ticket 21 insider path."
+        ),
+    )
     derive.set_defaults(handler=_logged_handler("derive-relationships", _handle_derive_relationships))
 
     load_rels = mdm_sub.add_parser(
@@ -87,6 +108,13 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     load_rels.add_argument("--entity-limit", type=int, default=None, help="Optional cap for each entity resolver phase")
     load_rels.add_argument("--relationship-type", action="append", default=None, help="Relationship type to load; repeat for multiple types")
     load_rels.add_argument("--skip-entity-resolution", action="store_true", default=False, help="Only derive/sync from existing MDM entities")
+    load_rels.add_argument(
+        "--cik",
+        action="append",
+        type=int,
+        default=None,
+        help="Issuer CIK filter for ownership-sourced person/IS_INSIDER loads (repeatable)",
+    )
     load_rels.add_argument("--graph-sync", action="store_true", default=False, help="After derivation, materialize Snowflake graph-ready tables")
     load_rels.add_argument("--skip-graph-sync", action="store_true", default=False, help="Derive relationships but do not materialize graph tables")
     load_rels.set_defaults(handler=_logged_handler("load-relationships", _handle_load_relationships))
@@ -725,11 +753,17 @@ def _handle_run(args) -> int:
             n = pipeline.run_securities(limit=args.limit)
             print(f"securities: {n}")
         if args.entity_type == "person":
-            n = pipeline.run_persons(limit=args.limit)
+            n = pipeline.run_persons(limit=args.limit, issuer_ciks=args.cik)
             print(f"persons: {n}")
         if args.entity_type == "fund":
             n = pipeline.run_funds(limit=args.limit)
             print(f"funds: {n}")
+        if args.entity_type != "person" and args.cik:
+            print(
+                "mdm run: --cik only applies to --entity-type person "
+                f"(ignored for entity_type={args.entity_type})",
+                file=sys.stderr,
+            )
         return 0
     finally:
         session.close()
@@ -1353,12 +1387,22 @@ def _handle_derive_relationships(args) -> int:
         summary = pipeline.derive_relationships(
             target_per_type=args.target_per_type,
             relationship_types=args.relationship_type,
+            issuer_ciks=args.cik,
         )
         session.commit()
     finally:
         session.close()
     print(json.dumps({"relationship_counts_by_type": summary}, indent=2, sort_keys=True))
     return 0
+
+
+def _ownership_insider_only_types(relationship_types: list[str] | None) -> bool:
+    """True when every requested type is ownership-insider sourced (no company re-load)."""
+    if not relationship_types:
+        return False
+    allowed = {"IS_INSIDER", "HOLDS", "COMPANY_HOLDS"}
+    requested = {str(t).strip().upper() for t in relationship_types if t}
+    return bool(requested) and requested <= allowed
 
 
 def _handle_load_relationships(args) -> int:
@@ -1375,16 +1419,37 @@ def _handle_load_relationships(args) -> int:
         pipeline = MDMPipeline(session=session, silver=silver)
         entity_counts: dict[str, int] = {}
         if not args.skip_entity_resolution:
-            entity_counts = {
-                "companies_processed": pipeline.run_companies(limit=args.entity_limit),
-                "advisers_processed": pipeline.run_advisers(limit=args.entity_limit),
-                "securities_processed": pipeline.run_securities(limit=args.entity_limit),
-                "persons_processed": pipeline.run_persons(limit=args.entity_limit),
-                "funds_processed": pipeline.run_funds(limit=args.entity_limit),
-            }
+            # Ticket 21: IS_INSIDER-only loads must NOT re-resolve companies —
+            # issuers are assumed present; only Form 3/4/5 persons are loaded.
+            if _ownership_insider_only_types(args.relationship_type):
+                entity_counts = {
+                    "persons_processed": pipeline.run_persons(
+                        limit=args.entity_limit,
+                        issuer_ciks=args.cik,
+                    ),
+                }
+                if any(
+                    str(t).strip().upper() in {"HOLDS", "COMPANY_HOLDS"}
+                    for t in (args.relationship_type or [])
+                ):
+                    entity_counts["securities_processed"] = pipeline.run_securities(
+                        limit=args.entity_limit
+                    )
+            else:
+                entity_counts = {
+                    "companies_processed": pipeline.run_companies(limit=args.entity_limit),
+                    "advisers_processed": pipeline.run_advisers(limit=args.entity_limit),
+                    "securities_processed": pipeline.run_securities(limit=args.entity_limit),
+                    "persons_processed": pipeline.run_persons(
+                        limit=args.entity_limit,
+                        issuer_ciks=args.cik,
+                    ),
+                    "funds_processed": pipeline.run_funds(limit=args.entity_limit),
+                }
         relationship_summary = pipeline.derive_relationships(
             target_per_type=args.target_per_type,
             relationship_types=args.relationship_type,
+            issuer_ciks=args.cik,
         )
         graph_sync_payload: dict[str, object] = {"enabled": False}
         if graph_sync_enabled:
