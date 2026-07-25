@@ -2959,8 +2959,9 @@ import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
 
-  # ownership_mdm_gold: parse Form 3/4/5 XMLs already in S3 bronze → persons + IS_INSIDER in MDM → Neo4j → gold.
-  # No SEC calls. Uses edgartools to parse XMLs directly from bronze.
+  # ownership_mdm_gold: Form 3/4/5 already in silver → persons + IS_INSIDER only
+  # (Ticket 21). Companies are NOT re-resolved — they do not change on an
+  # insider load. No full mdm run --entity-type all.
   ownership_mdm_gold_file="$(json_file sfn-ownership-mdm-gold)"
   python3 - "$ownership_mdm_gold_file" "$CLUSTER_ARN" \
     "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
@@ -3001,16 +3002,25 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
 
 definition = {
     "Comment": (
-        "Parse Form 3/4/5 ownership XMLs already in S3 bronze (no SEC calls), "
-        "then run MDM to derive persons + IS_INSIDER relationships, sync to Neo4j, refresh gold."
+        "Ticket 21 insider path: optional parse-ownership-bronze, then PERSON-only "
+        "MDM resolve + IS_INSIDER derive (no company re-load), export/sync-graph, gold."
     ),
     "StartAt": "ParseOwnershipBronze",
     "States": {
         "ParseOwnershipBronze": ecs_state(wh_medium_arn,
             "States.Array('parse-ownership-bronze', '--run-id', $$.Execution.Name)",
-            next_state="MdmRun", retry_secs=60),
-        "MdmRun":      ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="MdmBackfill"),
-        "MdmBackfill": ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmExport"),
+            next_state="MdmPersons", retry_secs=60),
+        # Companies are assumed already in MDM; only Form 3/4/5 persons.
+        "MdmPersons": ecs_state(
+            mdm_medium_arn,
+            "States.Array('mdm', 'run', '--entity-type', 'person')",
+            next_state="MdmIsInsider",
+        ),
+        "MdmIsInsider": ecs_state(
+            mdm_medium_arn,
+            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'IS_INSIDER', '--target-per-type', '100000')",
+            next_state="MdmExport",
+        ),
         # MdmExport precedes MdmSync (data-architecture Issue 3) — see write_load_history_definition.
         "MdmExport":   ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="MdmSync"),
         "MdmSync":     ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="MdmVerify"),
