@@ -3037,6 +3037,129 @@ import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
 
+  # residual_holds_graph: Ticket 20 residual after EMPLOYED_BY bulk-load —
+  # populate security nodes + IS_INSIDER + HOLDS + COMPANY_HOLDS +
+  # INSTITUTIONAL_HOLDS into MDM and the graph. Does NOT re-run companies
+  # (issuers assumed present). INSTITUTIONAL_HOLDS is a separate step for
+  # OOM safety (same pattern as scripts/ops/sync-relationships.sh).
+  residual_holds_graph_file="$(json_file sfn-residual-holds-graph)"
+  python3 - "$residual_holds_graph_file" "$CLUSTER_ARN" \
+    "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" \
+    "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" <<'PY'
+import json, pathlib, sys
+
+(output_file, cluster_arn,
+ mdm_small_arn, mdm_medium_arn,
+ container_name, subnet_json, security_group_json) = sys.argv[1:]
+
+subnets = json.loads(subnet_json)
+security_groups = json.loads(security_group_json)
+
+def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=120):
+    s = {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::ecs:runTask.sync",
+        "Parameters": {
+            "LaunchType": "FARGATE",
+            "Cluster": cluster_arn,
+            "TaskDefinition": task_def_arn,
+            "PropagateTags": "TASK_DEFINITION",
+            "NetworkConfiguration": {"AwsvpcConfiguration": {
+                "AssignPublicIp": "ENABLED",
+                "SecurityGroups": security_groups,
+                "Subnets": subnets,
+            }},
+            "Overrides": {"ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}]},
+        },
+        "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": retry_secs,
+                   "BackoffRate": 2.0, "MaxAttempts": 2}],
+    }
+    if is_end:
+        s["End"] = True
+    else:
+        s["Next"] = next_state
+    return s
+
+# Shared generation id for export→sync→verify (candidate publish, then activate
+# is intentionally operator-driven for residual fills).
+definition = {
+    "Comment": (
+        "Handoff residual pipeline: security nodes + IS_INSIDER + HOLDS + "
+        "COMPANY_HOLDS + INSTITUTIONAL_HOLDS into MDM and Snowflake graph. "
+        "Does not re-resolve companies. Does not claim Ticket 20 GO."
+    ),
+    "StartAt": "MdmSecurities",
+    "States": {
+        "MdmSecurities": ecs_state(
+            mdm_medium_arn,
+            "States.Array('mdm', 'run', '--entity-type', 'security')",
+            next_state="MdmPersons",
+        ),
+        "MdmPersons": ecs_state(
+            mdm_medium_arn,
+            "States.Array('mdm', 'run', '--entity-type', 'person')",
+            next_state="MdmIsInsider",
+        ),
+        "MdmIsInsider": ecs_state(
+            mdm_medium_arn,
+            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'IS_INSIDER', '--target-per-type', '100000')",
+            next_state="MdmHolds",
+        ),
+        "MdmHolds": ecs_state(
+            mdm_medium_arn,
+            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'HOLDS', '--target-per-type', '100000')",
+            next_state="MdmCompanyHolds",
+        ),
+        "MdmCompanyHolds": ecs_state(
+            mdm_medium_arn,
+            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'COMPANY_HOLDS', '--target-per-type', '100000')",
+            next_state="MdmInstitutionalHolds",
+        ),
+        # Separate step + lower default target for OOM safety (13F holding table).
+        "MdmInstitutionalHolds": ecs_state(
+            mdm_medium_arn,
+            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'INSTITUTIONAL_HOLDS', '--target-per-type', '50000')",
+            next_state="MdmExport",
+            retry_secs=180,
+        ),
+        "MdmExport": ecs_state(
+            mdm_medium_arn,
+            "States.Array('mdm', 'export')",
+            next_state="MdmSync",
+        ),
+        "MdmSync": ecs_state(
+            mdm_medium_arn,
+            (
+                "States.Array("
+                "'mdm', 'sync-graph', "
+                "'--entity-type', 'person', '--entity-type', 'security', '--entity-type', 'company', "
+                "'--relationship-type', 'IS_INSIDER', "
+                "'--relationship-type', 'HOLDS', "
+                "'--relationship-type', 'COMPANY_HOLDS', "
+                "'--relationship-type', 'INSTITUTIONAL_HOLDS', "
+                "'--limit-per-type', '100000'"
+                ")"
+            ),
+            next_state="MdmVerify",
+            retry_secs=180,
+        ),
+        "MdmVerify": ecs_state(
+            mdm_small_arn,
+            "States.Array('mdm', 'verify-graph', '--skip-native-app')",
+            is_end=True,
+            retry_secs=60,
+        ),
+    },
+}
+pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
+PY
+  residual_holds_graph_arn="$(upsert_state_machine residual_holds_graph "$residual_holds_graph_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
+  python3 - "residual_holds_graph" "$residual_holds_graph_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+import json, sys
+print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
+PY
+
   # silver_mdm_gold: re-process already-loaded bronze through silver → MDM → Neo4j → Snowflake.
   silver_mdm_gold_file="$(json_file sfn-silver-mdm-gold)"
   write_silver_mdm_gold_definition "$silver_mdm_gold_file" \
