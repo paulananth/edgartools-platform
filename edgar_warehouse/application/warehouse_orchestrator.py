@@ -111,6 +111,15 @@ WAREHOUSE_RUNTIME_MODES = {
 
 OWNERSHIP_FORMS = {"3", "3/A", "4", "4/A", "5", "5/A"}
 ADV_FORMS = {"ADV", "ADV/A", "ADV-E", "ADV-E/A", "ADV-H", "ADV-H/A", "ADV-NR", "ADV-W", "ADV-W/A"}
+# Form 3/4/5 artifact + silver parse window. Historical deep Form 4 histories
+# (often thousands of accessions per heavy-insider issuer) are not useful for
+# IS_INSIDER / current insider identity; only the recent band matters. 0 =
+# full history (operator repair / explicit override only).
+DEFAULT_OWNERSHIP_LOOKBACK_YEARS = 2
+# Item 5.02 8-K agent window matches Ticket 20 / agent-source lock (W−2y).
+# Integrated with the ownership load: same default, same CLI/env ownership
+# lookback knob unless WAREHOUSE_ITEM_502_LOOKBACK_YEARS is set explicitly.
+DEFAULT_ITEM_502_LOOKBACK_YEARS = 2
 
 def _emit_pipeline_event(event: str, **payload: Any) -> None:
     """Emit a structured progress event for ECS/CloudWatch pipeline monitoring."""
@@ -1073,6 +1082,8 @@ def _capture_bronze_raw(
                     load_mode="daily_incremental",
                     artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
                     parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
+                    ownership_lookback_years=arguments.get("ownership_lookback_years"),
+                    item_502_lookback_years=arguments.get("item_502_lookback_years"),
                 )
             except Exception:
                 db.finish_discovery_ciks(
@@ -1134,6 +1145,8 @@ def _capture_bronze_raw(
             recent_limit=arguments.get("recent_limit"),
             artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
             parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
+            ownership_lookback_years=arguments.get("ownership_lookback_years"),
+            item_502_lookback_years=arguments.get("item_502_lookback_years"),
         )
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
@@ -1161,6 +1174,8 @@ def _capture_bronze_raw(
             load_mode="bootstrap_full",
             artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
             parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
+            ownership_lookback_years=arguments.get("ownership_lookback_years"),
+            item_502_lookback_years=arguments.get("item_502_lookback_years"),
         )
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
@@ -1199,6 +1214,8 @@ def _capture_bronze_raw(
                     load_mode="bootstrap_full",
                     artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
                     parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
+                    ownership_lookback_years=arguments.get("ownership_lookback_years"),
+                    item_502_lookback_years=arguments.get("item_502_lookback_years"),
                 )
             except Exception:
                 db.finish_discovery_ciks(
@@ -1460,6 +1477,7 @@ def _capture_bronze_raw(
             metrics=metrics,
             limit=int(arguments["limit"]) if arguments.get("limit") is not None else None,
             accession_list=arguments.get("accession_list") or None,
+            ownership_lookback_years=arguments.get("ownership_lookback_years"),
         )
 
     if command_name == "parse-adv-bronze":
@@ -1667,6 +1685,8 @@ def _capture_bronze_raw(
             required_accessions=required_accessions,
             required_candidate_rows=required_candidate_rows,
             repair_manifest_accessions=repair_accessions,
+            ownership_lookback_years=arguments.get("ownership_lookback_years"),
+            item_502_lookback_years=arguments.get("item_502_lookback_years"),
         )
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
@@ -2230,6 +2250,8 @@ def _run_submissions_bronze_then_silver(
     required_accessions: set[str] | None = None,
     required_candidate_rows: Mapping[str, Mapping[str, Any]] | None = None,
     repair_manifest_accessions: set[str] | None = None,
+    ownership_lookback_years: Any = None,
+    item_502_lookback_years: Any = None,
 ) -> dict[str, Any]:
     """Capture every selected SEC submission into bronze before applying silver."""
     bronze_snapshots = []
@@ -2373,6 +2395,8 @@ def _run_submissions_bronze_then_silver(
         force=force,
         release_mode=release_mode,
         repair_manifest_accessions=repair_manifest_accessions,
+        ownership_lookback_years=ownership_lookback_years,
+        item_502_lookback_years=item_502_lookback_years,
     )
     raw_writes.extend(artifact_result["raw_writes"])
     rows_written += int(artifact_result["rows_written"])
@@ -2538,6 +2562,8 @@ def _run_configured_form_artifact_pipeline(
     force: bool,
     release_mode: bool = False,
     repair_manifest_accessions: set[str] | None = None,
+    ownership_lookback_years: Any = None,
+    item_502_lookback_years: Any = None,
 ) -> dict[str, Any]:
     if release_mode and force and not repair_manifest_accessions:
         raise WarehouseRuntimeError("release --force requires an explicit bounded repair manifest")
@@ -2557,7 +2583,12 @@ def _run_configured_form_artifact_pipeline(
     if not fetch_artifacts and not run_parsers:
         return {"raw_writes": [], "rows_written": 0, "rows_skipped": 0, **_empty_network}
 
-    selected_accessions = _configured_parser_accessions(db, accession_numbers)
+    selected_accessions = _configured_parser_accessions(
+        db,
+        accession_numbers,
+        ownership_lookback_years=ownership_lookback_years,
+        item_502_lookback_years=item_502_lookback_years,
+    )
     if release_mode and force:
         unapproved = sorted(set(selected_accessions) - set(repair_manifest_accessions or ()))
         if unapproved:
@@ -2606,7 +2637,9 @@ def _run_configured_form_artifact_pipeline(
             if not force:
                 filing_meta = db.get_filing(accession_number) or {}
                 form_type = str(filing_meta.get("form") or "")
-                parser_name, parser_version, form_family = _parser_metadata(form_type)
+                parser_name, parser_version, form_family = _parser_metadata(
+                    form_type, items=filing_meta.get("items")
+                )
                 if form_family == "ownership":
                     from edgar_warehouse.infrastructure.silver_once import (
                         has_successful_ownership_parse,
@@ -2855,14 +2888,192 @@ def _run_release_branch_b_parsers(
     return outcomes
 
 
-def _configured_parser_accessions(db: SilverDatabase, accession_numbers: list[str]) -> list[str]:
+def _resolve_nonneg_lookback_years(
+    raw: Any,
+    *,
+    default: int,
+    env_name: str,
+    field_name: str,
+) -> int:
+    """Shared integer lookback resolver. 0 disables the window (full history)."""
+    if raw is not None and str(raw).strip() != "":
+        try:
+            years = int(raw)
+        except (TypeError, ValueError) as exc:
+            raise WarehouseRuntimeError(
+                f"{field_name} must be an integer >= 0, got {raw!r}"
+            ) from exc
+    else:
+        env = os.environ.get(env_name, "").strip()
+        if env:
+            try:
+                years = int(env)
+            except ValueError as exc:
+                raise WarehouseRuntimeError(
+                    f"{env_name} must be an integer >= 0, got {env!r}"
+                ) from exc
+        else:
+            years = default
+    if years < 0:
+        raise WarehouseRuntimeError(f"{field_name} must be >= 0")
+    return years
+
+
+def _resolve_ownership_lookback_years(raw: Any = None) -> int:
+    """Resolve Form 3/4/5 lookback years. Default 2; 0 disables the window (full history)."""
+    return _resolve_nonneg_lookback_years(
+        raw,
+        default=DEFAULT_OWNERSHIP_LOOKBACK_YEARS,
+        env_name="WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS",
+        field_name="ownership_lookback_years",
+    )
+
+
+def _resolve_item_502_lookback_years(
+    raw: Any = None,
+    *,
+    ownership_lookback_years: Any = None,
+) -> int:
+    """Resolve Item 5.02 8-K lookback years.
+
+    Precedence: explicit arg → WAREHOUSE_ITEM_502_LOOKBACK_YEARS → ownership
+    lookback (so one CLI knob bounds both sources on the integrated load) →
+    DEFAULT_ITEM_502_LOOKBACK_YEARS (2).
+    """
+    if raw is not None and str(raw).strip() != "":
+        return _resolve_nonneg_lookback_years(
+            raw,
+            default=DEFAULT_ITEM_502_LOOKBACK_YEARS,
+            env_name="WAREHOUSE_ITEM_502_LOOKBACK_YEARS",
+            field_name="item_502_lookback_years",
+        )
+    env = os.environ.get("WAREHOUSE_ITEM_502_LOOKBACK_YEARS", "").strip()
+    if env:
+        return _resolve_nonneg_lookback_years(
+            None,
+            default=DEFAULT_ITEM_502_LOOKBACK_YEARS,
+            env_name="WAREHOUSE_ITEM_502_LOOKBACK_YEARS",
+            field_name="item_502_lookback_years",
+        )
+    if ownership_lookback_years is not None and str(ownership_lookback_years).strip() != "":
+        return _resolve_ownership_lookback_years(ownership_lookback_years)
+    if os.environ.get("WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS", "").strip():
+        return _resolve_ownership_lookback_years(None)
+    return DEFAULT_ITEM_502_LOOKBACK_YEARS
+
+
+def _ownership_min_filing_date(
+    lookback_years: int,
+    *,
+    as_of: date | None = None,
+) -> date | None:
+    """Earliest filing_date included for ownership/Item 5.02 loads, or None when disabled."""
+    if lookback_years == 0:
+        return None
+    as_of = as_of or date.today()
+    try:
+        return as_of.replace(year=as_of.year - lookback_years)
+    except ValueError:
+        # Feb 29 → Feb 28 on non-leap targets
+        return as_of.replace(year=as_of.year - lookback_years, day=28)
+
+
+def _ownership_filing_date(filing: Mapping[str, Any] | dict[str, Any] | None) -> date | None:
+    """Prefer filing_date, fall back to report_date."""
+    if not filing:
+        return None
+    for key in ("filing_date", "report_date"):
+        value = filing.get(key)
+        if value in (None, ""):
+            continue
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value
+        if isinstance(value, datetime):
+            return value.date()
+        try:
+            return date.fromisoformat(str(value)[:10])
+        except ValueError:
+            continue
+    return None
+
+
+def _ownership_within_lookback(
+    filing: Mapping[str, Any] | dict[str, Any] | None,
+    *,
+    min_filing_date: date | None,
+) -> bool:
+    """True when filing is in-window (or undated / lookback disabled)."""
+    if min_filing_date is None:
+        return True
+    filing_date = _ownership_filing_date(filing)
+    if filing_date is None:
+        # Undated rows are rare; keep them so a missing date does not silently drop data.
+        return True
+    return filing_date >= min_filing_date
+
+
+def _is_item_502_candidate_form(form_type: Any, items: Any = None) -> bool:
+    """True for 8-K/8-K/A with Item 5.02 declared or missing/ambiguous items."""
+    normalized = str(form_type or "").strip().upper()
+    if normalized not in {"8-K", "8-K/A"}:
+        return False
+    normalized_items = str(items or "").strip()
+    if not normalized_items:
+        return True
+    return bool(re.search(r"(?:^|[^0-9])5\s*\.\s*02(?:[^0-9]|$)", normalized_items, re.I))
+
+
+def _configured_parser_accessions(
+    db: SilverDatabase,
+    accession_numbers: list[str],
+    *,
+    ownership_lookback_years: Any = None,
+    item_502_lookback_years: Any = None,
+    as_of: date | None = None,
+) -> list[str]:
+    ownership_years = _resolve_ownership_lookback_years(ownership_lookback_years)
+    item_502_years = _resolve_item_502_lookback_years(
+        item_502_lookback_years,
+        ownership_lookback_years=ownership_lookback_years,
+    )
+    ownership_min = _ownership_min_filing_date(ownership_years, as_of=as_of)
+    item_502_min = _ownership_min_filing_date(item_502_years, as_of=as_of)
     selected: list[str] = []
+    skipped_ownership_lookback = 0
+    skipped_item_502_lookback = 0
     for accession_number in _dedupe_strings(accession_numbers):
         filing = db.get_filing(accession_number)
         if filing is None:
             continue
-        if _is_configured_parser_form(filing.get("form"), filing.get("items")):
-            selected.append(accession_number)
+        form = filing.get("form")
+        if not _is_configured_parser_form(form, filing.get("items")):
+            continue
+        normalized = str(form or "").strip().upper()
+        if normalized in OWNERSHIP_FORMS and not _ownership_within_lookback(
+            filing, min_filing_date=ownership_min
+        ):
+            skipped_ownership_lookback += 1
+            continue
+        if _is_item_502_candidate_form(form, filing.get("items")) and not _ownership_within_lookback(
+            filing, min_filing_date=item_502_min
+        ):
+            skipped_item_502_lookback += 1
+            continue
+        selected.append(accession_number)
+    if skipped_ownership_lookback:
+        _emit_pipeline_event(
+            "ownership_lookback_filtered",
+            skipped_count=skipped_ownership_lookback,
+            lookback_years=ownership_years,
+            min_filing_date=ownership_min.isoformat() if ownership_min else None,
+        )
+    if skipped_item_502_lookback:
+        _emit_pipeline_event(
+            "item_502_lookback_filtered",
+            skipped_count=skipped_item_502_lookback,
+            lookback_years=item_502_years,
+            min_filing_date=item_502_min.isoformat() if item_502_min else None,
+        )
     return selected
 
 
@@ -2872,11 +3083,8 @@ def _is_configured_parser_form(form_type: Any, items: Any = None) -> bool:
         return True
     if normalized in {"DEF 14A", "DEF 14A/A", "DEFA14A", "PRE 14A", "13F-HR", "13F-HR/A"}:
         return True
-    if normalized in {"8-K", "8-K/A"}:
-        normalized_items = str(items or "").strip()
-        return not normalized_items or bool(
-            re.search(r"(?:^|[^0-9])5\s*\.\s*02(?:[^0-9]|$)", normalized_items, re.I)
-        )
+    if _is_item_502_candidate_form(form_type, items):
+        return True
     return False
 
 
@@ -2888,12 +3096,14 @@ def _run_parse_ownership_bronze(
     metrics: dict[str, Any],
     limit: int | None = None,
     accession_list: list[str] | None = None,
+    ownership_lookback_years: Any = None,
 ) -> tuple[list[dict], dict[str, Any]]:
     """Parse Form 3/4/5 ownership XMLs that already exist in bronze into silver.
 
     Reads primary XML through the artifact registry (sec_filing_attachment +
     sec_raw_object + read_bytes) — no S3 prefix listing, no SEC API calls.
     Idempotent: skips accessions already present in sec_ownership_reporting_owner.
+    Default lookback is past 2 years of Form 3/4/5 filings (filing_date).
 
     Args:
         context: Warehouse command context (bronze_root, silver_root, etc.)
@@ -2903,12 +3113,17 @@ def _run_parse_ownership_bronze(
         limit: Optional cap on the number of accessions to process.
         accession_list: Optional explicit list of accession numbers to process
             (filters the sec_company_filing query result to this set).
+        ownership_lookback_years: Years of Form 3/4/5 history to parse (default 2;
+            0 = full history). Env WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS also accepted.
     """
     from edgar_warehouse.parsers.ownership import parse_ownership
 
+    lookback_years = _resolve_ownership_lookback_years(ownership_lookback_years)
+    min_filing_date = _ownership_min_filing_date(lookback_years)
+
     filings = db.fetch(
         """
-        SELECT f.accession_number, f.cik, f.form
+        SELECT f.accession_number, f.cik, f.form, f.filing_date, f.report_date
         FROM sec_company_filing f
         WHERE f.form IN ('3','3/A','4','4/A','5','5/A')
         ORDER BY f.cik, f.report_date
@@ -2919,6 +3134,12 @@ def _run_parse_ownership_bronze(
     if accession_list is not None:
         allowed = set(accession_list)
         filings = [f for f in filings if f["accession_number"] in allowed]
+
+    pre_lookback = len(filings)
+    filings = [
+        f for f in filings if _ownership_within_lookback(f, min_filing_date=min_filing_date)
+    ]
+    lookback_skipped = pre_lookback - len(filings)
 
     already_parsed: set[str] = {
         row["accession_number"]
@@ -2937,6 +3158,9 @@ def _run_parse_ownership_bronze(
         "parse_ownership_bronze_started",
         total_filings=total,
         already_parsed=len(already_parsed),
+        ownership_lookback_years=lookback_years,
+        ownership_min_filing_date=min_filing_date.isoformat() if min_filing_date else None,
+        ownership_lookback_skipped=lookback_skipped,
         run_id=sync_run_id,
     )
 
@@ -3000,6 +3224,11 @@ def _run_parse_ownership_bronze(
     metrics["errors"] = error_count
     metrics["missing_artifacts"] = missing_artifact_count
     metrics["rows_written"] = rows_written
+    metrics["ownership_lookback_years"] = lookback_years
+    metrics["ownership_min_filing_date"] = (
+        min_filing_date.isoformat() if min_filing_date else None
+    )
+    metrics["ownership_lookback_skipped"] = lookback_skipped
     return [], metrics
 
 
@@ -3928,7 +4157,9 @@ def _run_parse_pipeline(
     if filing is None:
         return 0
     form_type = str(filing.get("form") or "").strip()
-    parser_name, parser_version, form_family = _parser_metadata(form_type)
+    parser_name, parser_version, form_family = _parser_metadata(
+        form_type, items=filing.get("items")
+    )
     parse_run_id = str(uuid.uuid4())
     db.start_parse_run(
         {
@@ -3941,6 +4172,17 @@ def _run_parse_pipeline(
     )
 
     try:
+        # Item 5.02 is integrated into Branch A configured-forms loads so the
+        # ownership + employment load share one artifact pass (2y agent window).
+        if form_family == "item_502":
+            rows_written = _parse_item_502_accession(
+                db=db,
+                filing=filing,
+                accession_number=accession_number,
+                sync_run_id=sync_run_id,
+            )
+            db.complete_parse_run(parse_run_id, status="succeeded", rows_written=rows_written)
+            return rows_written
         if form_family == "generic":
             db.complete_parse_run(parse_run_id, status="skipped", rows_written=0)
             if fail_closed:
@@ -3983,6 +4225,55 @@ def _run_parse_pipeline(
         return 0
 
 
+def _parse_item_502_accession(
+    *,
+    db: SilverDatabase,
+    filing: Mapping[str, Any],
+    accession_number: str,
+    sync_run_id: str,
+) -> int:
+    """Parse one Item 5.02 candidate 8-K into sec_employment_event (no SEC calls)."""
+    from edgar_warehouse.parsers.item_502 import PARSER_VERSION, parse_item_502
+
+    payload = _read_primary_artifact_bytes(db, accession_number)
+    content = payload.decode("utf-8", errors="replace")
+    cik = int(filing.get("cik") or 0)
+    filing_date = _ownership_filing_date(filing) or date.today()
+    result = parse_item_502(
+        accession_number=accession_number,
+        cik=cik,
+        filing_date=filing_date,
+        content=content,
+    )
+    event_rows = [
+        {
+            "accession_number": event.accession_number,
+            "event_index": index,
+            "cik": event.cik,
+            "event_type": event.event_type,
+            "person_name": event.person_name,
+            "exec_role": event.role,
+            "previous_role": event.previous_role,
+            "compensation_amount": event.compensation_amount,
+            "effective_date": event.effective_date,
+            "parser_version": PARSER_VERSION,
+        }
+        for index, event in enumerate(result.events, start=1)
+    ]
+    rows_written = db.merge_employment_events(event_rows, sync_run_id)
+    _emit_pipeline_event(
+        "item_502_parsed",
+        accession_number=accession_number,
+        cik=cik,
+        applicability=result.applicability,
+        reason=result.reason_code,
+        events=len(event_rows),
+        rows_written=rows_written,
+        run_id=sync_run_id,
+    )
+    return rows_written
+
+
 def _read_primary_artifact_bytes(db: SilverDatabase, accession_number: str) -> bytes:
     attachments = db.get_filing_attachments(accession_number)
     primary = next((row for row in attachments if row.get("is_primary")), None)
@@ -3994,13 +4285,16 @@ def _read_primary_artifact_bytes(db: SilverDatabase, accession_number: str) -> b
     return read_bytes(str(raw_object["storage_path"]))
 
 
-def _parser_metadata(form_type: str) -> tuple[str, str, str]:
+def _parser_metadata(form_type: str, items: Any = None) -> tuple[str, str, str]:
     if form_type in OWNERSHIP_FORMS:
         module = importlib.import_module("edgar_warehouse.parsers.ownership")
         return str(module.PARSER_NAME), str(module.PARSER_VERSION), "ownership"
     if form_type in ADV_FORMS:
         module = importlib.import_module("edgar_warehouse.parsers.adv")
         return str(module.PARSER_NAME), str(module.PARSER_VERSION), "adv"
+    if _is_item_502_candidate_form(form_type, items):
+        module = importlib.import_module("edgar_warehouse.parsers.item_502")
+        return str(module.PARSER_NAME), str(module.PARSER_VERSION), "item_502"
     return "generic_text_v1", "1", "generic"
 
 
@@ -4517,6 +4811,9 @@ def _resolve_scope(
         return {
             "limit": arguments.get("limit"),
             "accession_list": arguments.get("accession_list"),
+            "ownership_lookback_years": _resolve_ownership_lookback_years(
+                arguments.get("ownership_lookback_years")
+            ),
         }
 
     if command_name == "parse-adv-bronze":

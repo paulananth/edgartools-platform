@@ -1591,8 +1591,17 @@ class MDMPipeline:
             if company_id is None:
                 skipped_unresolved_target += 1
                 continue
+            # Prefer Form 3/4/5 ownership identity (owner_cik / canonical_name).
+            # If the person is not yet known from ownership filings, still
+            # identify them via a deterministic UUID5 stub so Item 5.02 events
+            # do not disappear when 3/4/5 has not named them yet.
             person_id = self._person_entity_id(None, person_name)
-            if person_id is None and event.get("event_type") == "appointment":
+            if person_id is None and person_name and event.get("event_type") in {
+                "appointment",
+                "role_change",
+                "compensation_change",
+                "departure",
+            }:
                 person_id = self._ensure_proxy_person(person_name, int(cik), accession_number)
             if person_id is None:
                 skipped_unresolved_source += 1

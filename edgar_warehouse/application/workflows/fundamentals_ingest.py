@@ -114,6 +114,37 @@ def run_bootstrap_fundamentals_per_filing(
         if release_mode and missing:
             raise WarehouseRuntimeError(f"required candidates missing from filing manifest: {missing}")
         metrics["filings_scanned"] = len(filings)
+    elif not release_mode:
+        # Non-release Branch B: bound Item 5.02 / ambiguous 8-Ks to the agent
+        # 2y window so ad-hoc fundamentals loads match ownership integration.
+        from edgar_warehouse.application.warehouse_orchestrator import (
+            _is_item_502_candidate_form,
+            _ownership_min_filing_date,
+            _ownership_within_lookback,
+            _resolve_item_502_lookback_years,
+        )
+
+        item_502_min = _ownership_min_filing_date(_resolve_item_502_lookback_years(None))
+        if item_502_min is not None:
+            bounded: list[dict[str, Any]] = []
+            skipped_item_502 = 0
+            for row in filings:
+                form_type = str(row.get("form") or "").strip()
+                if form_type in ("8-K", "8-K/A") and _is_item_502_candidate_form(
+                    form_type, row.get("items")
+                ):
+                    if not _ownership_within_lookback(row, min_filing_date=item_502_min):
+                        skipped_item_502 += 1
+                        continue
+                bounded.append(row)
+            filings = bounded
+            if skipped_item_502:
+                _emit(
+                    "item_502_lookback_filtered",
+                    skipped_count=skipped_item_502,
+                    min_filing_date=item_502_min.isoformat(),
+                )
+            metrics["filings_scanned"] = len(filings)
 
     for filing in filings:
         accession_number = filing["accession_number"]
