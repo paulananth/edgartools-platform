@@ -936,9 +936,18 @@ TASK_DEF_MEDIUM_ARN="$(register_task_definition medium 1024 4096)"
 TASK_DEF_LARGE_ARN="$(register_task_definition large 2048 4096)"
 TASK_DEF_MDM_SMALL_ARN=""
 TASK_DEF_MDM_MEDIUM_ARN=""
+TASK_DEF_MDM_LARGE_ARN=""
 if [[ "$DEPLOY_MDM" == "true" ]]; then
   TASK_DEF_MDM_SMALL_ARN="$(register_mdm_task_definition mdm-small 512 1024)"
-  TASK_DEF_MDM_MEDIUM_ARN="$(register_mdm_task_definition mdm-medium 1024 2048)"
+  # mdm-medium memory raised 2048 -> 4096 (2026-07-25, residual-holds OOM):
+  # full-universe `mdm run --entity-type security` loads silver.duckdb (holdings/
+  # ownership surfaces) and OOM-killed (exit 137) at 2048 MB on prod residual
+  # holds pipeline residual-holds-20260725T221723Z / MdmSecurities. Same class of
+  # failure as warehouse medium gold-from-silver (fix-pipelines 06-03).
+  TASK_DEF_MDM_MEDIUM_ARN="$(register_mdm_task_definition mdm-medium 1024 4096)"
+  # mdm-large for residual holds graph (security resolve + INSTITUTIONAL_HOLDS +
+  # multi-type sync-graph). 13F / holds tables are the memory-heavy path.
+  TASK_DEF_MDM_LARGE_ARN="$(register_mdm_task_definition mdm-large 2048 8192)"
 fi
 
 task_definition_for_profile() {
@@ -3042,14 +3051,16 @@ PY
   # INSTITUTIONAL_HOLDS into MDM and the graph. Does NOT re-run companies
   # (issuers assumed present). INSTITUTIONAL_HOLDS is a separate step for
   # OOM safety (same pattern as scripts/ops/sync-relationships.sh).
+  # Heavy stages use mdm-large (8 GiB): mdm-medium 2 GiB OOM'd on MdmSecurities
+  # (prod residual-holds-20260725T221723Z, exit 137).
   residual_holds_graph_file="$(json_file sfn-residual-holds-graph)"
   python3 - "$residual_holds_graph_file" "$CLUSTER_ARN" \
-    "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" \
+    "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_LARGE_ARN" \
     "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
- mdm_small_arn, mdm_medium_arn,
+ mdm_small_arn, mdm_large_arn,
  container_name, subnet_json, security_group_json) = sys.argv[1:]
 
 subnets = json.loads(subnet_json)
@@ -3086,49 +3097,50 @@ definition = {
     "Comment": (
         "Handoff residual pipeline: security nodes + IS_INSIDER + HOLDS + "
         "COMPANY_HOLDS + INSTITUTIONAL_HOLDS into MDM and Snowflake graph. "
-        "Does not re-resolve companies. Does not claim Ticket 20 GO."
+        "Does not re-resolve companies. Does not claim Ticket 20 GO. "
+        "Heavy stages use mdm-large (8 GiB) after prod MdmSecurities OOM on 2 GiB."
     ),
     "StartAt": "MdmSecurities",
     "States": {
         "MdmSecurities": ecs_state(
-            mdm_medium_arn,
+            mdm_large_arn,
             "States.Array('mdm', 'run', '--entity-type', 'security')",
             next_state="MdmPersons",
         ),
         "MdmPersons": ecs_state(
-            mdm_medium_arn,
+            mdm_large_arn,
             "States.Array('mdm', 'run', '--entity-type', 'person')",
             next_state="MdmIsInsider",
         ),
         "MdmIsInsider": ecs_state(
-            mdm_medium_arn,
+            mdm_large_arn,
             "States.Array('mdm', 'derive-relationships', '--relationship-type', 'IS_INSIDER', '--target-per-type', '100000')",
             next_state="MdmHolds",
         ),
         "MdmHolds": ecs_state(
-            mdm_medium_arn,
+            mdm_large_arn,
             "States.Array('mdm', 'derive-relationships', '--relationship-type', 'HOLDS', '--target-per-type', '100000')",
             next_state="MdmCompanyHolds",
         ),
         "MdmCompanyHolds": ecs_state(
-            mdm_medium_arn,
+            mdm_large_arn,
             "States.Array('mdm', 'derive-relationships', '--relationship-type', 'COMPANY_HOLDS', '--target-per-type', '100000')",
             next_state="MdmInstitutionalHolds",
         ),
         # Separate step + lower default target for OOM safety (13F holding table).
         "MdmInstitutionalHolds": ecs_state(
-            mdm_medium_arn,
+            mdm_large_arn,
             "States.Array('mdm', 'derive-relationships', '--relationship-type', 'INSTITUTIONAL_HOLDS', '--target-per-type', '50000')",
             next_state="MdmExport",
             retry_secs=180,
         ),
         "MdmExport": ecs_state(
-            mdm_medium_arn,
+            mdm_large_arn,
             "States.Array('mdm', 'export')",
             next_state="MdmSync",
         ),
         "MdmSync": ecs_state(
-            mdm_medium_arn,
+            mdm_large_arn,
             (
                 "States.Array("
                 "'mdm', 'sync-graph', "
@@ -3233,7 +3245,7 @@ MSYS_NO_PATHCONV=1 python3 - "$(win_path "$SUMMARY_FILE")" "$ENVIRONMENT" "$AWS_
   "$CLUSTER_NAME" "$CLUSTER_ARN" "$ECR_REPOSITORY_URL" "$LOG_GROUP_NAME" \
   "$STEP_FUNCTIONS_ROLE_ARN" "$STEP_FUNCTIONS_LOG_GROUP_NAME" \
   "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
-  "$DEPLOY_MDM" "$MDM_DATABASE_SOURCE" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$MDM_SILVER_DUCKDB" \
+  "$DEPLOY_MDM" "$MDM_DATABASE_SOURCE" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_MDM_LARGE_ARN" "$MDM_SILVER_DUCKDB" \
   "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_SNOWFLAKE_SECRET_ARN" \
   "$(win_path "$WORKFLOW_ARNS_FILE")" \
   "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" "$SNOWFLAKE_EXPORT_BUCKET_NAME" \
@@ -3262,6 +3274,7 @@ import sys
     mdm_database_source,
     mdm_small_task_definition,
     mdm_medium_task_definition,
+    mdm_large_task_definition,
     mdm_silver_duckdb,
     mdm_database_secret_arn,
     snowflake_secret_arn,
@@ -3282,6 +3295,7 @@ task_definitions = {
 if deploy_mdm == "true":
     task_definitions["mdm_small"] = mdm_small_task_definition
     task_definitions["mdm_medium"] = mdm_medium_task_definition
+    task_definitions["mdm_large"] = mdm_large_task_definition
 
 summary = {
     "environment": environment,

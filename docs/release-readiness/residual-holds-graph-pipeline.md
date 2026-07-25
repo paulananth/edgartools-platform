@@ -27,17 +27,27 @@ warehouse silver surface without re-resolving companies.
 
 ### Stages
 
-1. `MdmSecurities` — `mdm run --entity-type security`
-2. `MdmPersons` — `mdm run --entity-type person` (no companies)
-3. `MdmIsInsider` — `derive-relationships --relationship-type IS_INSIDER`
-4. `MdmHolds` — `HOLDS`
-5. `MdmCompanyHolds` — `COMPANY_HOLDS`
-6. `MdmInstitutionalHolds` — `INSTITUTIONAL_HOLDS` (separate step, target 50k)
-7. `MdmExport` — drain change log / endpoints
-8. `MdmSync` — `sync-graph` for person/security/company + the four hold types
-9. `MdmVerify` — `verify-graph --skip-native-app` (candidate integrity)
+1. `MdmSecurities` — `mdm run --entity-type security` (**mdm-large** 8 GiB)
+2. `MdmPersons` — `mdm run --entity-type person` (no companies; mdm-large)
+3. `MdmIsInsider` — `derive-relationships --relationship-type IS_INSIDER` (mdm-large)
+4. `MdmHolds` — `HOLDS` (mdm-large)
+5. `MdmCompanyHolds` — `COMPANY_HOLDS` (mdm-large)
+6. `MdmInstitutionalHolds` — `INSTITUTIONAL_HOLDS` (separate step, target 50k; mdm-large)
+7. `MdmExport` — drain change log / endpoints (mdm-large)
+8. `MdmSync` — `sync-graph` for person/security/company + the four hold types (mdm-large)
+9. `MdmVerify` — `verify-graph --skip-native-app` (candidate integrity; **mdm-small**)
 
 Does **not** re-run `mdm run --entity-type company|all`. Does **not** self-declare GO.
+
+### Memory / OOM note (2026-07-25)
+
+First prod execution `residual-holds-20260725T221723Z` failed on `MdmSecurities`
+with `OutOfMemoryError` / exit **137** on `edgartools-prod-mdm-medium` (**2 GiB**).
+Root cause: full-universe security resolve loads silver holdings/ownership surfaces
+beyond 2 GiB. Fix: register `mdm-large` (2048 CPU / **8192** MiB) and wire residual
+heavy stages to it; also raise default `mdm-medium` to **4096** MiB for other MDM
+workflows. **Do not redrive** the OOM execution after task-def/SM change — stop it
+and start a **new** execution name against the updated state machine.
 
 ### Start (prod example)
 

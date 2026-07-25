@@ -55,6 +55,19 @@ def test_residual_holds_graph_covers_handoff_residual_types() -> None:
     assert "sync-graph" in src
 
 
+def test_residual_holds_graph_uses_mdm_large_for_heavy_stages() -> None:
+    """Prod MdmSecurities OOM'd on mdm-medium 2 GiB; heavy stages need mdm-large."""
+    src = _extract_residual_definition_source()
+    assert "mdm_large_arn" in src or "TASK_DEF_MDM_LARGE" in DEPLOY.read_text(
+        encoding="utf-8"
+    )
+    # Residual SM block must pass large (not medium) into the definition builder.
+    assert "TASK_DEF_MDM_LARGE_ARN" in src
+    assert "mdm_large_arn" in src
+    # Verify stays small.
+    assert "mdm_small_arn" in src
+
+
 def test_residual_holds_graph_order() -> None:
     src = _extract_residual_definition_source()
     # Order by first occurrence of state name keys in the definition string
