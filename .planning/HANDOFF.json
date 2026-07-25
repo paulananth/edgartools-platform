@@ -1,13 +1,13 @@
 {
   "version": "1.0",
-  "timestamp": "2026-07-25T12:32:33.921Z",
+  "timestamp": "2026-07-25T18:58:41.136Z",
   "phase": null,
-  "phase_name": "ticket-20-production-bulk-load-go",
+  "phase_name": "ticket-20-complete",
   "phase_dir": null,
   "plan": null,
-  "task": 6,
+  "task": 8,
   "total_tasks": 8,
-  "status": "paused_blocked",
+  "status": "completed_technical_pass",
   "workstream": "ticket20-production",
   "ticket": 20,
   "owning_runtime_handoff_to": "grok",
@@ -53,30 +53,8 @@
       "progress": "StrictMdmRun, StrictMdmBackfill, StrictMdmIdempotency, StrictMdmExport, StrictMdmSync, and StrictMdmSyncIdempotency succeeded. StrictMdmVerifyCandidate failed."
     }
   ],
-  "remaining_tasks": [
-    {
-      "id": 6,
-      "name": "Fix candidate graph EMPLOYED_BY missing source-node endpoints",
-      "status": "blocked"
-    },
-    {
-      "id": 7,
-      "name": "Run a new strict execution through candidate verify, activation, active verify, and gold refresh",
-      "status": "not_started"
-    },
-    {
-      "id": 8,
-      "name": "Run required unchanged-watermark no-change validation and assemble final Ticket 20 evidence",
-      "status": "not_started"
-    }
-  ],
-  "blockers": [
-    {
-      "description": "StrictMdmVerifyCandidate found EMPLOYED_BY edges whose source person nodes are absent from the candidate graph generation. Bounded diagnostics show missing_source_node=true and missing_target_node=false. Do not weaken or bypass verification.",
-      "type": "technical",
-      "workaround": "Trace active MDM person entities through export and generation-scoped node publication; fix the source-to-node projection or canonical-ID mismatch, add a regression, then deploy exact new images and start a brand-new execution."
-    }
-  ],
+  "remaining_tasks": [],
+  "blockers": [],
   "human_actions_pending": [],
   "decisions": [
     {
@@ -139,6 +117,11 @@
     "edgar_warehouse/mdm/export.py",
     "edgar_warehouse/mdm/graph.py"
   ],
-  "next_action": "Acknowledge every blocking constraint, then run read-only candidate-generation queries for missing EMPLOYED_BY source IDs to determine whether person entities were omitted during MDM export/node sync or relationship endpoints use stale canonical IDs. Reproduce with a focused test before changing code.",
-  "context_notes": "Grok now owns continuation. Work only from a clean branch/worktree based on main. The original checkout at /Users/aneenaananth/projects/edgartools-platform contains protected unrelated ER/data-plane and dashboard research changes; do not stage, revert, or overwrite them. Execution ticket20-strict-q1y-resume-eef3f5b-20260725T0156Z is consumed and must never be redriven after a fix. The candidate graph failed before activation, so the prior active ADV generation remains safe. Ticket 20 is not PASS and no GO claim is authorized."
+  "next_action": "Release Owner reviews evidence and records GO/NO_GO. Insider coverage remains Ticket 21.",
+  "context_notes": "Grok now owns continuation. Work only from a clean branch/worktree based on main. The original checkout at /Users/aneenaananth/projects/edgartools-platform contains protected unrelated ER/data-plane and dashboard research changes; do not stage, revert, or overwrite them. Execution ticket20-strict-q1y-resume-eef3f5b-20260725T0156Z is consumed and must never be redriven after a fix. The candidate graph failed before activation, so the prior active ADV generation remains safe. Ticket 20 is not PASS and no GO claim is authorized.",
+  "successful_execution": {
+    "name": "ticket20-strict-endpoint-seal-850ea34-20260725T130457Z",
+    "status": "SUCCEEDED",
+    "evidence": "docs/release-readiness/ticket20-completion-evidence-2026-07-25.md"
+  }
 }

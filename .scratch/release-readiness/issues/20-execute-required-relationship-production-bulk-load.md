@@ -1,7 +1,7 @@
 # Execute Required Relationship Production Bulk Load
 
 Type: task
-Status: open
+Status: resolved (technical PASS 2026-07-25; GO pending Release Owner)
 Blocked by: none (operator hold — see note below, not a wayfinder dependency edge)
 Blocks: 06
 
@@ -95,6 +95,16 @@ under `release_mode`.
 | **20 this ticket** | **open** | **No** — keep open until production PASS |
 
 ## Current disposition
+
+**TECHNICAL PASS (2026-07-25)** — strict SF chain SUCCEEDED; bulk-load evidence disposition PASS;
+graph candidate verify + activate + active verify + gold refresh OK. **Production GO is not
+self-declared** — Release Owner decision. Evidence:
+`docs/release-readiness/ticket20-completion-evidence-2026-07-25.md` and
+`docs/release-readiness/ticket20-completion-evidence-2026-07-25.json`.
+
+Prior NO_GO history retained below for audit.
+
+### Historical disposition (pre-2026-07-25)
 
 **NO_GO** (as of 2026-07-18). Prior strict runs **FAILED**. Do not claim GO.
 See `docs/release-readiness/ticket20-production-remediation-evidence.json` and

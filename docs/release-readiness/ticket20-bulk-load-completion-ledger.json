@@ -1,0 +1,29 @@
+{
+  "batch_ledger_count": 108,
+  "candidate_count": 20833,
+  "coverage_by_document_type": {
+    "item_502_8k": {
+      "end": "2026-07-02",
+      "start": "2024-07-02"
+    },
+    "proxy": {
+      "baseline": "latest_in_band_only",
+      "end": "2026-07-02",
+      "start": "2025-07-02"
+    },
+    "thirteenf": {
+      "end": "2026-07-02",
+      "start": "2026-04-02"
+    }
+  },
+  "fingerprint": "6ea7c50fe425efb5f0882a2b7b80cf80c848edaa028708f520d0b543dfb5be50",
+  "generation_id": "ticket20-strict-endpoint-seal-850ea34-20260725T130457Z",
+  "inventory_fingerprint": "61be5eaeebc99c7eb9bf1e5a5e2c67076619bcc28b19ece715a7c2ebb175d852",
+  "status": "pass",
+  "terminal_counts": {
+    "applicable_loaded": 14280,
+    "not_applicable": 5925,
+    "unresolved_accepted": 628
+  },
+  "watermark": "2026-07-02"
+}
