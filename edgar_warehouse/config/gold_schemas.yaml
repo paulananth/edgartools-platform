@@ -600,3 +600,49 @@ schemas:
       type: date32
     - name: parser_version
       type: string
+  # ERDP-03 — Earnings calendar (Gold Explore; not pure-SEC Agent-Grade)
+  _FACT_EARNINGS_CALENDAR_SCHEMA:
+    - name: fact_key
+      type: int64
+      nullable: false
+    - name: cik
+      type: int64
+      nullable: false
+    - name: ticker
+      type: string
+    - name: company_key
+      type: int64
+    - name: fiscal_year
+      type: int32
+      nullable: false
+    - name: fiscal_quarter
+      type: int32
+      nullable: false
+    - name: expected_date
+      type: date32
+      nullable: false
+    - name: expected_time
+      type: string
+    - name: timezone
+      type: string
+    - name: session
+      type: string
+      nullable: false
+    - name: status
+      type: string
+      nullable: false
+    - name: period_end
+      type: date32
+    - name: accession_number
+      type: string
+    - name: source_system
+      type: string
+      nullable: false
+    - name: source_ref
+      type: string
+    - name: as_of
+      type: date32
+      nullable: false
+    - name: ingested_at
+      type: timestamp_us_utc
+      nullable: false

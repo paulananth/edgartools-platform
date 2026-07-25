@@ -84,6 +84,7 @@ _FACT_ACCOUNTING_FLAG_SCHEMA = GOLD_SCHEMAS['_FACT_ACCOUNTING_FLAG_SCHEMA']
 _SEC_SUBSIDIARY_EVIDENCE_SCHEMA = GOLD_SCHEMAS['_SEC_SUBSIDIARY_EVIDENCE_SCHEMA']
 _SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA = GOLD_SCHEMAS['_SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA']
 _SEC_EMPLOYMENT_EVENT_SCHEMA = GOLD_SCHEMAS['_SEC_EMPLOYMENT_EVENT_SCHEMA']
+_FACT_EARNINGS_CALENDAR_SCHEMA = GOLD_SCHEMAS['_FACT_EARNINGS_CALENDAR_SCHEMA']
 
 
 def _empty(schema: pa.Schema) -> pa.Table:
@@ -1226,3 +1227,20 @@ def build_ticker_reference_table(
             }
         )
     return _table_from_records(_DIM_TICKER_REFERENCE_SCHEMA, records)
+
+
+def build_earnings_calendar_table_from_rows(
+    rows: list[dict[str, Any]],
+) -> pa.Table:
+    """Build ERDP-03 gold table from normalized or raw calendar rows.
+
+    Thin wrapper so serving export paths can import from ``gold_models``
+    alongside other builders.  Implementation lives in
+    ``edgar_warehouse.explore.earnings_calendar``.
+    """
+    from edgar_warehouse.explore.earnings_calendar import build_earnings_calendar_table
+
+    table = build_earnings_calendar_table(rows)
+    if table.schema.equals(_FACT_EARNINGS_CALENDAR_SCHEMA):
+        return table
+    return table.cast(_FACT_EARNINGS_CALENDAR_SCHEMA)

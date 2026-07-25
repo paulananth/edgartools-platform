@@ -22,3 +22,4 @@ CIK can be inspected in both modes for audit comparison.
 ## Related
 
 - Tickets 10–12 — contract objects Agent View projects  
+- [er-market-eod-join.md](./er-market-eod-join.md) — ERDP-07 yfinance EOD join is **Explore-only** (prices/mcap/beta never Agent View Decision Features)

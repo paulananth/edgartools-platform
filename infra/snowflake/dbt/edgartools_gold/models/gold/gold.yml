@@ -197,6 +197,40 @@ models:
         tests:
           - not_null
 
+  - name: earnings_calendar
+    description: >
+      ERDP-03 forward-looking earnings calendar (Explore-only). Expected report
+      date/session/status per (cik, FY, FQ, source_system) with as_of revisions.
+      is_current marks latest as_of. Not pure-SEC Agent-Grade (ADR 0001).
+    columns:
+      - name: fact_key
+        tests:
+          - not_null
+      - name: cik
+        tests:
+          - not_null
+      - name: fiscal_year
+        tests:
+          - not_null
+      - name: fiscal_quarter
+        tests:
+          - not_null
+      - name: expected_date
+        tests:
+          - not_null
+      - name: session
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - not_null
+      - name: source_system
+        tests:
+          - not_null
+      - name: as_of
+        tests:
+          - not_null
+
   - name: accounting_flags
     description: Annual auditor identity and forensic score tier classifications (Beneish, Altman, Piotroski) per 10-K filing.
     columns:

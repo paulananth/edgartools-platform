@@ -49,3 +49,10 @@ sources:
         description: Principal auditor evidence per annual filing for AUDITED_BY derivation.
       - name: SEC_EMPLOYMENT_EVENT
         description: Item 5.02 / employment events for EMPLOYED_BY temporal updates.
+      # ERDP-03 — Earnings calendar (Gold Explore; external pilot sources)
+      - name: EARNINGS_CALENDAR
+        description: >
+          Forward-looking expected earnings print dates per
+          (cik, fiscal_year, fiscal_quarter, source_system, as_of).
+          Explore-only — not pure-SEC Agent-Grade. Pilot sources finnhub /
+          yahoo / firm_manual via edgar_warehouse.explore.earnings_calendar.

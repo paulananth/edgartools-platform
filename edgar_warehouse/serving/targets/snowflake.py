@@ -109,6 +109,8 @@ def write_gold_to_serving_export(
         "sec_subsidiary_evidence": "sec_subsidiary_evidence",
         "sec_auditor_report_evidence": "sec_auditor_report_evidence",
         "sec_employment_event": "sec_employment_event",
+        # ERDP-03 Explore calendar (built outside silver gold_refresh path)
+        "earnings_calendar": "fact_earnings_calendar",
     }
     counts: dict[str, int] = {}
     capture_specs = default_capture_spec_factory()
@@ -126,5 +128,22 @@ def write_gold_to_serving_export(
     return counts
 
 
+def write_earnings_calendar_to_serving_export(
+    table: pa.Table,
+    export_root: Any,
+    run_id: str,
+    business_date: str,
+) -> int:
+    """Write ERDP-03 EARNINGS_CALENDAR Explore table to serving export path."""
+    export_spec = default_capture_spec_factory().serving_export_table(
+        table_path="earnings_calendar",
+        business_date=business_date,
+        run_id=run_id,
+    )
+    _write_parquet(table, export_root, export_spec.relative_path)
+    return table.num_rows
+
+
 write_ticker_reference_to_snowflake_export = write_ticker_reference_to_serving_export
 write_gold_to_snowflake_export = write_gold_to_serving_export
+write_earnings_calendar_to_snowflake_export = write_earnings_calendar_to_serving_export
