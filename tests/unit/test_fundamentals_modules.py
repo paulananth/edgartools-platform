@@ -859,9 +859,11 @@ class BranchBSourceReaderTests(unittest.TestCase):
         )
 
         fake_source = MagicMock()
+        # filing_date must be within the Item 5.02 agent lookback (default 2y);
+        # empty/missing items mark the 8-K as an ambiguous 5.02 candidate.
         fake_source.fetch.side_effect = [
             [{"accession_number": "0001-test", "cik": 320193, "form": "8-K",
-              "filing_date": "2024-01-05"}],
+              "filing_date": "2025-06-01", "items": "2.02"}],
             [{"raw_object_id": "raw-1", "is_primary": True}],
             [{"raw_object_id": "raw-1", "storage_path": "s3://bucket/doc.htm"}],
         ]
