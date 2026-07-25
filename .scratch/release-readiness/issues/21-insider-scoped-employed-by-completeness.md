@@ -56,8 +56,11 @@ insiders are independently identifiable from their own Form 3/4/5 filings.
       insider_inventory + partition_insider_coverage) and #196 (slice 3: mdm
       verify-insider-coverage CLI, evidence binding via
       reconcile-relationship-release --insider-coverage, fail-closed)
-- [ ] Relaunch the strict execution (new name, explicit user go) — STAGED on
-      edgartools-prod-medium:30, HELD awaiting the Release Owner's explicit go
+- [x] Wire production SM: MDM before reconcile + StrictInsiderCoverage step
+      that writes insider_coverage.json and reconcile binds via
+      --insider-coverage (Ticket 21 production residual after Ticket 20)
+- [ ] Relaunch the strict execution (new name, explicit user go) after deploy
+      of the SM wiring + image; requires IS_INSIDER derivation health
 
 ---
 

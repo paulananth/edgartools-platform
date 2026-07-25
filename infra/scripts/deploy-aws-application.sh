@@ -2291,13 +2291,14 @@ write_bronze_seed_silver_gold_definition() {
 
   python3 - "$output_file" "$CLUSTER_ARN" \
     "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
-    "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
+    "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" \
+    "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
     "$BOOTSTRAP_BATCH_CONCURRENCY" "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
- container_name, bronze_bucket_name, subnet_json, security_group_json,
+ container_name, bronze_bucket_name, warehouse_bucket_name, subnet_json, security_group_json,
  batch_concurrency, mdm_run_limit, mdm_graph_limit) = sys.argv[1:]
 
 subnets = json.loads(subnet_json)
@@ -2466,7 +2467,9 @@ strict_batch_map = {
         "States": {"RunStrictBatch": strict_batch},
     },
     "ResultPath": None,
-    "Next": "ReconcileRelationshipRelease",
+    # Ticket 21: MDM must run before reconcile so IS_INSIDER versions exist for
+    # verify-insider-coverage, which reconcile binds into PASS evidence.
+    "Next": "StrictMdmRun",
 }
 
 # INVARIANT: No --limit on MDM commands here. bronze_seed_silver_gold is always a full
@@ -2482,12 +2485,46 @@ mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next
 # parity but must never block gold-refresh, so a verify failure falls through.
 gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
 
-strict_reconcile = ecs_state(wh_medium_arn,
-    "States.Array('reconcile-relationship-release', '--candidate-manifest', States.Format('s3://" + bronze_bucket_name + "/{}', $.candidate_manifest_key), '--run-id', $$.Execution.Name, '--attestations-json', States.JsonToString($.attestations), '--execution-arn', $$.Execution.Id)",
-    next_state="StrictMdmRun", retry_secs=60)
+# Ticket 21 chain (release_mode):
+#   StrictBatchSilver -> StrictMdmRun -> Backfill -> Idempotency
+#   -> StrictInsiderCoverage -> Reconcile (binds insider_coverage into PASS evidence)
+#   -> Export -> Sync -> VerifyCandidate -> Activate -> Verify -> Gold
+#
+# Insider coverage must run AFTER MDM derives persons + IS_INSIDER. Reconcile
+# must run AFTER insider coverage so bulk-load evidence cannot PASS without the
+# insider-scoped completeness block.
+insider_coverage_uri = (
+    "States.Format('s3://"
+    + warehouse_bucket_name
+    + "/warehouse/release-evidence/{}/insider_coverage.json', $$.Execution.Name)"
+)
 strict_mdm_run = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="StrictMdmBackfill")
 strict_mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="StrictMdmIdempotency")
-strict_mdm_idempotency = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="StrictMdmExport")
+strict_mdm_idempotency = ecs_state(
+    mdm_medium_arn,
+    "States.Array('mdm', 'backfill-relationships')",
+    next_state="StrictInsiderCoverage",
+)
+strict_insider_coverage = ecs_state(
+    mdm_medium_arn,
+    "States.Array('mdm', 'verify-insider-coverage', '--output', " + insider_coverage_uri + ")",
+    next_state="ReconcileRelationshipRelease",
+    retry_secs=60,
+)
+# Fail closed on unresolved insiders (exit 1). No Catch.
+strict_insider_coverage.pop("Retry", None)
+strict_reconcile = ecs_state(
+    wh_medium_arn,
+    "States.Array("
+    "'reconcile-relationship-release', "
+    "'--candidate-manifest', States.Format('s3://" + bronze_bucket_name + "/{}', $.candidate_manifest_key), "
+    "'--run-id', $$.Execution.Name, "
+    "'--attestations-json', States.JsonToString($.attestations), "
+    "'--execution-arn', $$.Execution.Id, "
+    "'--insider-coverage', " + insider_coverage_uri + ")",
+    next_state="StrictMdmExport",
+    retry_secs=60,
+)
 strict_mdm_export = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="StrictMdmSync")
 # sync-graph publishes into an execution-scoped generation-id (not a fresh
 # random UUID each call, its no-flag default) so StrictMdmSyncIdempotency's
@@ -2542,10 +2579,11 @@ definition = {
         "StrictManifestCheck": strict_manifest_check,
         "StrictInputMissing": strict_input_missing,
         "StrictBatchSilver": strict_batch_map,
-        "ReconcileRelationshipRelease": strict_reconcile,
         "StrictMdmRun": strict_mdm_run,
         "StrictMdmBackfill": strict_mdm_backfill,
         "StrictMdmIdempotency": strict_mdm_idempotency,
+        "StrictInsiderCoverage": strict_insider_coverage,
+        "ReconcileRelationshipRelease": strict_reconcile,
         "StrictMdmExport": strict_mdm_export,
         "StrictMdmSync": strict_mdm_sync,
         "StrictMdmSyncIdempotency": strict_mdm_sync_idempotency,

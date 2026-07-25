@@ -21,6 +21,7 @@ def _definition(tmp_path: Path) -> dict:
         "set -euo pipefail\n"
         'CLUSTER_ARN="arn:cluster"\n'
         'BRONZE_BUCKET_NAME="bronze-bucket"\n'
+        'WAREHOUSE_BUCKET_NAME="warehouse-bucket"\n'
         "PUBLIC_SUBNET_IDS_JSON='[\"subnet-1\"]'\n"
         "SECURITY_GROUP_IDS_JSON='[\"sg-1\"]'\n"
         "BOOTSTRAP_BATCH_CONCURRENCY=4\n"
@@ -67,7 +68,8 @@ def test_strict_ticket20_path_generates_valid_fail_closed_definition(tmp_path: P
     # otherwise-complete batch).
     assert strict_map["MaxConcurrency"] == 2
     assert strict_map["ToleratedFailurePercentage"] == 0
-    assert strict_map["Next"] == "ReconcileRelationshipRelease"
+    # Ticket 21: MDM before reconcile so IS_INSIDER exists for insider coverage.
+    assert strict_map["Next"] == "StrictMdmRun"
     assert strict_map["ItemSelector"]["release_run_id.$"] == "$$.Execution.Name"
     command = strict_map["ItemProcessor"]["States"]["RunStrictBatch"]["Parameters"][
         "Overrides"
@@ -87,13 +89,31 @@ def test_strict_ticket20_path_generates_valid_fail_closed_definition(tmp_path: P
     assert "Catch" not in states["StrictMdmVerifyCandidate"]
     assert "Catch" not in states["StrictMdmActivate"]
     assert "Catch" not in states["StrictMdmVerify"]
+    assert "Catch" not in states["StrictInsiderCoverage"]
+    assert states["StrictMdmRun"]["Next"] == "StrictMdmBackfill"
     assert states["StrictMdmBackfill"]["Next"] == "StrictMdmIdempotency"
-    assert states["StrictMdmIdempotency"]["Next"] == "StrictMdmExport"
+    assert states["StrictMdmIdempotency"]["Next"] == "StrictInsiderCoverage"
+    assert states["StrictInsiderCoverage"]["Next"] == "ReconcileRelationshipRelease"
+    assert states["ReconcileRelationshipRelease"]["Next"] == "StrictMdmExport"
+    assert states["StrictMdmExport"]["Next"] == "StrictMdmSync"
     assert states["StrictMdmSync"]["Next"] == "StrictMdmSyncIdempotency"
     assert states["StrictMdmSyncIdempotency"]["Next"] == "StrictMdmVerifyCandidate"
     assert states["StrictMdmVerifyCandidate"]["Next"] == "StrictMdmActivate"
     assert states["StrictMdmActivate"]["Next"] == "StrictMdmVerify"
     assert states["StrictMdmVerify"]["Next"] == "StrictGoldRefresh"
+
+    insider_cmd = states["StrictInsiderCoverage"]["Parameters"]["Overrides"][
+        "ContainerOverrides"
+    ][0]["Command.$"]
+    assert "'verify-insider-coverage'" in insider_cmd
+    assert "'--output'" in insider_cmd
+    assert "insider_coverage.json" in insider_cmd
+    assert "warehouse-bucket" in insider_cmd
+    reconcile_cmd = states["ReconcileRelationshipRelease"]["Parameters"]["Overrides"][
+        "ContainerOverrides"
+    ][0]["Command.$"]
+    assert "'--insider-coverage'" in reconcile_cmd
+    assert "insider_coverage.json" in reconcile_cmd
 
     # sync-graph/verify-graph/graph-activate all target the SAME
     # execution-scoped generation-id -- StrictMdmSyncIdempotency's second
