@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # sync-relationships.sh
 #
-# Derives + syncs relationships only — skips entity resolution.
-# Use this after entities are already populated (e.g. the day after a full
-# universe sync) or when iterating on a specific relationship type.
+# Derives + syncs relationships (optionally after security/person resolve).
+# Prefer production SM edgartools-<env>-residual-holds-graph for ECS residual
+# fills after Ticket 20 (handoff: empty IS_INSIDER/HOLDS/INSTITUTIONAL_HOLDS/
+# security nodes on the bulk-load generation).
 #
+#   0. (optional) Resolve securities + persons — no company re-load
 #   1. Derive 10 types  (all except INSTITUTIONAL_HOLDS)
 #   2. Derive INSTITUTIONAL_HOLDS  (separate OOM-safe cap)
 #   3. Snowflake graph sync
@@ -14,6 +16,8 @@
 #   ./scripts/ops/sync-relationships.sh
 #   ./scripts/ops/sync-relationships.sh --limit 500
 #   ./scripts/ops/sync-relationships.sh --type EMPLOYED_BY --type AUDITED_BY
+#   ./scripts/ops/sync-relationships.sh --residual-holds
+#   ./scripts/ops/sync-relationships.sh --with-entities
 #   ./scripts/ops/sync-relationships.sh --skip-graph-sync
 #   ./scripts/ops/sync-relationships.sh --limit 500 --dry-run
 
@@ -23,6 +27,7 @@ set -euo pipefail
 LIMIT=""
 SKIP_GRAPH_SYNC=false
 DRY_RUN=false
+WITH_ENTITIES=false
 TYPES=()                          # empty = all 11 types
 INSTITUTIONAL_HOLDS_CAP=5000
 
@@ -33,6 +38,12 @@ while [[ $# -gt 0 ]]; do
         --limit=*)          LIMIT="${1#*=}";                    shift   ;;
         --type)             TYPES+=("$2");                      shift 2 ;;
         --type=*)           TYPES+=("${1#*=}");                 shift   ;;
+        --residual-holds)
+            TYPES=(IS_INSIDER HOLDS COMPANY_HOLDS INSTITUTIONAL_HOLDS)
+            WITH_ENTITIES=true
+            shift
+            ;;
+        --with-entities)    WITH_ENTITIES=true;                 shift   ;;
         --skip-graph-sync)  SKIP_GRAPH_SYNC=true;               shift   ;;
         --dry-run)          DRY_RUN=true;                       shift   ;;
         *) echo "Unknown option: $1"; exit 1 ;;
@@ -174,10 +185,20 @@ info "TARGET_PER_TYPE       = $TARGET_PER_TYPE"
 info "INSTITUTIONAL_HOLDS_CAP = $INSTITUTIONAL_HOLDS_CAP"
 info "RUN_INSTITUTIONAL     = $RUN_INSTITUTIONAL"
 info "TYPES (standard)      = ${STANDARD_TYPES[*]:-none}"
+info "WITH_ENTITIES         = $WITH_ENTITIES"
 info "SKIP_GRAPH_SYNC       = $SKIP_GRAPH_SYNC"
 info "DRY_RUN               = $DRY_RUN"
 
 STARTED=$(date +%s)
+
+# ── step 0: entity resolve for residual holds (no company re-load) ────────────
+if [[ "$WITH_ENTITIES" == "true" ]]; then
+    hr "Step 0 — Entity resolve (security + person only; no companies)"
+    run "mdm run security" uv run edgar-warehouse mdm run --entity-type security
+    run "mdm run person" uv run edgar-warehouse mdm run --entity-type person
+else
+    hr "Step 0 — Entity resolve  [SKIPPED — use --with-entities / --residual-holds]"
+fi
 
 # ── step 1: derive standard relationship types ────────────────────────────────
 if [[ ${#STANDARD_TYPES[@]} -gt 0 ]]; then
