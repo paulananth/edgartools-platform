@@ -165,13 +165,30 @@ class MDMPipeline:
                 return name
         return None
 
-    def run_companies(self, limit: Optional[int] = None) -> int:
+    def run_companies(
+        self,
+        limit: Optional[int] = None,
+        *,
+        issuer_ciks: Optional[Iterable[int]] = None,
+    ) -> int:
+        """Resolve companies from silver.
+
+        Full-universe loads leave ``issuer_ciks`` unset. Ticket 21 insider path
+        only needs missing **issuer** shells for the CIKs under test — pass
+        those CIKs here; never re-walk the whole sec_company table for insiders.
+        """
         ctx = self._ctx()
         resolver = CompanyResolver()
+        ciks = self._normalize_issuer_ciks(issuer_ciks)
         sql = "SELECT * FROM sec_company"
+        params: list[Any] = []
+        if ciks is not None:
+            placeholders = ", ".join("?" for _ in ciks)
+            sql += f" WHERE cik IN ({placeholders})"
+            params.extend(ciks)
         if limit:
             sql += f" LIMIT {int(limit)}"
-        rows = self.silver.fetch(sql)
+        rows = self.silver.fetch(sql, params or None)
         processed = 0
         started_at = time.monotonic()
         for row in rows:

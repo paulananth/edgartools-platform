@@ -43,9 +43,10 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         type=int,
         default=None,
         help=(
-            "Issuer CIK filter for ownership-sourced entity loads (person). "
-            "Repeatable. Companies are not re-resolved — use only when issuers "
-            "already exist in MDM (Ticket 21 insider path)."
+            "CIK filter. For --entity-type person: Form 3/4/5 owners of these "
+            "issuers. For --entity-type company: only these issuer shells "
+            "(use when verify reports unresolved_issuer — do not full-reload "
+            "companies). Repeatable."
         ),
     )
     run.set_defaults(handler=_logged_handler("run", _handle_run))
@@ -744,7 +745,7 @@ def _handle_run(args) -> int:
             print(json.dumps(stats.__dict__, indent=2, sort_keys=True))
             return 0
         if args.entity_type == "company":
-            n = pipeline.run_companies(limit=args.limit)
+            n = pipeline.run_companies(limit=args.limit, issuer_ciks=args.cik)
             print(f"companies: {n}")
         if args.entity_type == "adviser":
             n = pipeline.run_advisers(limit=args.limit)
@@ -758,9 +759,9 @@ def _handle_run(args) -> int:
         if args.entity_type == "fund":
             n = pipeline.run_funds(limit=args.limit)
             print(f"funds: {n}")
-        if args.entity_type != "person" and args.cik:
+        if args.cik and args.entity_type not in {"person", "company"}:
             print(
-                "mdm run: --cik only applies to --entity-type person "
+                "mdm run: --cik only applies to --entity-type person|company "
                 f"(ignored for entity_type={args.entity_type})",
                 file=sys.stderr,
             )
