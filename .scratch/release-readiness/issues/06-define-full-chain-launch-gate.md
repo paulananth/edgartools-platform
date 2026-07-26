@@ -2,9 +2,17 @@
 
 Type: grilling
 Status: open
-Blocked by: 20, 21, 22, 23
+Blocked by: none
 
 ## Question
 
 What exact ordered stage set, stop conditions, correctness assertions, and evidence must all pass for one release-candidate production execution to qualify as a Full-Chain Launch Pass?
-Relationship-data execution remains transitively blocked by tasks 17 and 20–23.
+
+## Dependency note (hygiene 2026-07-26)
+
+Relationship-data **implementation** tickets 16–23 are **resolved** (including
+Ticket 20 technical PASS 2026-07-25 and ADV private-fund 21). Insider-scoped
+EMPLOYED_BY completeness engineering is **24** (resolved). This gate ticket is
+no longer blocked on those tasks; it must still **define** the ordered pass
+criteria that incorporate their evidence plus residual holds graph fill,
+dashboard acceptance, rollback rehearsal, and GO packet.

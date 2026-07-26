@@ -81,4 +81,5 @@ derivation already depends on resolved Company entities today
 - Ownership (Form 3/4/5 + 13F) pipeline redesign — separate future effort,
   named but not detailed here.
 - ADV pipeline redesign — separate future effort, named but not detailed here.
-- Insider-specific concerns (Ticket 21) — explicitly deferred by the user.
+- Insider-specific concerns (release-readiness ticket **24**, formerly dual-numbered
+  with ADV ticket 21) — tracked under release-readiness, not this map.

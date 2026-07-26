@@ -7,50 +7,79 @@ Produce a decision-complete validation plan for production operator readiness, b
 ## Notes
 
 - Domain: AWS-first SEC EDGAR data platform spanning AWS workflows, Snowflake/dbt, MDM, hosted graph, read-only dashboard, monitoring, and recovery.
-- Planning only by default. Actual deployment, production mutation, and release execution begin after this map reaches the destination.
-- Read `CONTEXT.md` and `docs/release-readiness/initial-findings.md` before working a ticket.
+- **Map charter was planning-first**; relationship bulk-load **implementation and
+  technical PASS evidence have already landed in prod** (2026-07-25 Ticket 20
+  package, residual holds pipeline, Ticket 21/24 insider sample). Remaining open
+  tickets define/close **operator GO** (rollback rehearsal, dashboard acceptance,
+  full-chain gate language, evidence automation, GO packet) — not re-do bulk-load.
+- Read `CONTEXT.md` and `docs/release-readiness/` before working a ticket.
 - Production operator readiness is the boundary; public/customer-facing launch is separate.
-- The Release Candidate is an immutable integration-branch commit plus exact warehouse and MDM image digests.
 - Full-chain success is mandatory. BatchSilver success cannot waive a downstream failure.
-- Table-level data integrity, complete in-scope hosted-graph population, release-bound dashboard approval, and a successful rollback rehearsal are hard GO gates.
 - GO fails closed. Missing direct evidence cannot become PASS through conditional or accepted-basis approval.
-- AWS/Snowflake-only architecture, passive Terraform, secret-safe evidence, named approvals, and bounded stop conditions are fixed constraints rather than decisions to reopen.
+- AWS/Snowflake-only architecture, passive Terraform, secret-safe evidence, named approvals, and bounded stop conditions remain fixed constraints.
+- **Numbering:** ADV private-fund task is **21**; insider-scoped EMPLOYED_BY is **24**
+  (renumbered 2026-07-26 — dual-21 collision fixed).
 
 ## Decisions so far
 
-<!-- Closed ticket decisions are appended here as one-line context pointers. -->
+<!-- Closed ticket decisions — one-line gist + link; detail lives in the ticket. -->
 
-- [Define the Release Evidence Manifest](issues/01-define-release-evidence-manifest.md) — Use an automatically generated, append-only, digest-bound Candidate Evidence Set with a composite watermark, 24-hour live-evidence window, structured human attestations, and signed Git Release Seal.
-- [Explain the MdmExport Failure Boundary](issues/02-explain-mdm-export-failure-boundary.md) — The July 5 failure was a pre-export Snowflake entitlement rejection; current readiness remains unverified until a dedicated deployed-runtime, read-only preflight proves the rotated secret's canonical target and runnable warehouse.
-- [Design the MaxConcurrency=4 Data Integrity Proof](issues/03-design-maxconcurrency4-data-integrity-proof.md) — Require one execution-bound artifact with table-specific reconciliation, guarded publication, zero refetch, exact shard coverage, and a deterministic 16-batch idempotency rerun; historical reconstruction cannot satisfy current GO.
-- [Define the MdmExport Entitlement Preflight and Retry Policy](issues/10-define-mdm-export-entitlement-preflight-and-retry-policy.md) — Require a same-runtime, marker-bound, non-mutating export capability gate with secret-safe evidence, command-owned transient retry, fail-fast prerequisite errors, and fresh full-chain revalidation after operator correction.
-- [Define Required Relationship Bulk-Load Completion Gate](issues/12-define-required-relationship-bulk-load-completion-gate.md) — Require a fail-closed accession ledger over proxy, Item 5.02, and 13F candidates, with verified artifacts, terminal parser outcomes, temporal/amendment semantics, no release caps, idempotent replay, and exact graph parity.
-- [Define Adviser-Fund Source Contract](issues/13-define-adviser-fund-source-contract.md) — Use public SEC/IAPD historical Form ADV Part 1 bulk filing data plus the current compilation control, with CRD/PFID identity, latest-effective filing reconstruction, and exact `MANAGES_FUND` parity.
-- [Define Parent-Company Source and Parser Contract](issues/14-define-parent-company-source-parser-contract.md) — Use complete SEC annual-filing attachment inventories and Exhibit 21/8 evidence; model disclosed subsidiary-to-registrant relationships without inferring an immediate legal-parent hierarchy.
-- [Define Auditor Evidence Ingestion Contract](issues/15-define-auditor-evidence-ingestion-contract.md) — Use direct annual-filing iXBRL or bounded audit-report evidence as primary and PCAOB AuditorSearch/Form AP for canonical firm identity, amendments, and corroboration.
-- [Define the BatchSilver Contention-Safe Publication Boundary](issues/11-define-batchsilver-contention-safe-publication-boundary.md) — Preserve the canonical silver monolith but publish only through semantic rehydrate-and-merge plus an atomic S3 `If-Match`/`If-None-Match` write; conflicts rerun the complete batch and downstream stages wait for a zero-tolerance Map pass.
+### Core readiness design
+
+- [Define the Release Evidence Manifest](issues/01-define-release-evidence-manifest.md) — Append-only, digest-bound Candidate Evidence Set with composite watermark, 24h live-evidence window, structured attestations, signed Git Release Seal.
+- [Explain the MdmExport Failure Boundary](issues/02-explain-mdm-export-failure-boundary.md) — July 5 failure was pre-export entitlement rejection; needs same-runtime preflight of rotated secret + warehouse.
+- [Design the MaxConcurrency=4 Data Integrity Proof](issues/03-design-maxconcurrency4-data-integrity-proof.md) — Execution-bound table reconciliation, guarded publication, zero refetch, exact shard coverage, 16-batch idempotency rerun.
+- [Define Relationship Eligibility at the Release Watermark](issues/04-define-relationship-eligibility-at-release-watermark.md) — All eleven relationship types required for initial GO; applicability ledger per candidate; one watermark snapshot for eligibility/coverage/graph/parity.
+- [Define the MdmExport Entitlement Preflight and Retry Policy](issues/10-define-mdm-export-entitlement-preflight-and-retry-policy.md) — Same-runtime non-mutating export capability gate; command-owned transient retry; full-chain revalidation after operator fix.
+- [Define the BatchSilver Contention-Safe Publication Boundary](issues/11-define-batchsilver-contention-safe-publication-boundary.md) — Semantic rehydrate-and-merge + atomic S3 conditional write; conflicts rerun full batch.
+
+### Relationship contracts (research)
+
+- [Define Required Relationship Bulk-Load Completion Gate](issues/12-define-required-relationship-bulk-load-completion-gate.md) — Fail-closed accession ledger over proxy, Item 5.02, 13F; terminal parser outcomes; exact graph parity.
+- [Define Adviser-Fund Source Contract](issues/13-define-adviser-fund-source-contract.md) — SEC/IAPD ADV Part 1 bulk + compilation control; CRD/PFID; `MANAGES_FUND` parity.
+- [Define Parent-Company Source and Parser Contract](issues/14-define-parent-company-source-parser-contract.md) — Exhibit 21/8 inventory; disclosed subsidiary→registrant without inventing legal parent hierarchy.
+- [Define Auditor Evidence Ingestion Contract](issues/15-define-auditor-evidence-ingestion-contract.md) — Annual-filing iXBRL/audit-report primary; PCAOB Form AP for firm identity.
+
+### Relationship implementation (execution complete — technical)
+
+- [Implement Relationship Source Candidate Ledger](issues/16-implement-relationship-source-candidate-ledger.md) — Ledger built and used by strict freezes.
+- [Implement Strict Relationship Artifact Bulk Load](issues/17-implement-strict-relationship-artifact-bulk-load.md) — Strict SM/path for relationship artifacts.
+- [Implement Item 5.02 Employment Events](issues/18-implement-item-502-employment-events.md) — Employment-event silver + bulk-load path.
+- [Implement Effective 13F Filing Set](issues/19-implement-effective-13f-filing-set.md) — Effective-set / window semantics for 13F.
+- [Execute Required Relationship Production Bulk Load](issues/20-execute-required-relationship-production-bulk-load.md) — **Technical PASS 2026-07-25** (Ticket 20 strict endpoint seal); **production GO not self-declared**.
+- [Implement Authoritative Form ADV Private-Fund Ingestion](issues/21-implement-authoritative-form-adv-private-fund-ingestion.md) — ADV bulk pipeline landed (PR #238 family); further ADV *plan* work lives under `.scratch/adv-pipeline/`.
+- [Implement SEC Subsidiary Exhibit Ingestion](issues/22-implement-sec-subsidiary-exhibit-ingestion.md) — Subsidiary evidence path for HAS_PARENT_COMPANY.
+- [Implement Auditor-Report Evidence Ingestion](issues/23-implement-auditor-report-evidence-ingestion.md) — Auditor evidence path for AUDITED_BY.
+- [Insider-scoped EMPLOYED_BY completeness](issues/24-insider-scoped-employed-by-completeness.md) — Doctrine + SM + 10-CIK IS_INSIDER verify **146/146**; full-universe GO remains operator/GO-packet.
+
+### Prod residuals (outside original ticket list, for GO context)
+
+- Residual holds graph pipeline (`residual_holds_graph`, PR #265/#266) — security / HOLDS / INSTITUTIONAL_HOLDS fill path; candidate generation not auto-activate.
+- Gold SOURCE load gap fixed (missing evidence tables + EARNINGS_CALENDAR map, PR #267) — `GOLD.COMPANY` repopulated after native-pull failure.
 
 ## Not yet specified
 
-- The final Release Candidate commit and image digests, which cannot be named until integration stabilizes.
+- Final Release Candidate commit and warehouse/MDM image digests for GO seal.
+- Whether residual holds candidate generation must be **activated** before GO, or GO binds the Ticket 20 activated generation plus enumerated residual gaps.
+- Soak criteria for any post-GO dashboard automation.
 
 ## Out of scope
 
 - Public or customer-facing launch readiness; this effort ends at production operator readiness.
 - Non-AWS deployment paths, registries, storage targets, workflow engines, or secret-management systems.
 - Replacing passive Terraform with runtime commands, image rollout, schedules, or secret values.
-- Executing the deployment or mutating production while charting this decision map.
-## Decision: Relationship Eligibility at the Release Watermark
+- Re-running Ticket 20 bulk-load from zero without a new operator decision (technical package already PASS).
 
-All eleven relationship types are required for initial GO. Optionality is recorded per candidate in a complete applicability ledger; it does not permit excluding a required type. Eligibility, coverage, graph publication, and per-type parity derive from one transaction-consistent snapshot at the Release Data Watermark. See `docs/release-readiness/relationship-eligibility-at-release-watermark.md`.
-## Newly exposed relationship-data blockers
+## Open frontier (hygiene 2026-07-26)
 
-- [12 — Define Required Relationship Bulk-Load Completion Gate](issues/12-define-required-relationship-bulk-load-completion-gate.md)
-- [16 — Implement Relationship Source Candidate Ledger](issues/16-implement-relationship-source-candidate-ledger.md)
-- [17 — Implement Strict Relationship Artifact Bulk Load](issues/17-implement-strict-relationship-artifact-bulk-load.md)
-- [18 — Implement Item 5.02 Employment Events](issues/18-implement-item-502-employment-events.md)
-- [19 — Implement Effective 13F Filing Set](issues/19-implement-effective-13f-filing-set.md)
-- [20 — Execute Required Relationship Production Bulk Load](issues/20-execute-required-relationship-production-bulk-load.md)
-- [21 — Implement Authoritative Form ADV Private-Fund Ingestion](issues/21-implement-authoritative-form-adv-private-fund-ingestion.md)
-- [22 — Implement SEC Subsidiary Exhibit Ingestion](issues/22-implement-sec-subsidiary-exhibit-ingestion.md)
-- [23 — Implement Auditor-Report Evidence Ingestion](issues/23-implement-auditor-report-evidence-ingestion.md)
+Unblocked open tickets (work through the map; claim before starting):
+
+1. [Define the Rollback Rehearsal Contract](issues/05-define-rollback-rehearsal-contract.md) — grilling  
+2. [Define Release-Bound Dashboard Acceptance](issues/07-define-release-bound-dashboard-acceptance.md) — prototype  
+3. [Design the Release Evidence Automation](issues/09-design-release-evidence-automation.md) — prototype  
+4. [Define the Full-Chain Launch Gate](issues/06-define-full-chain-launch-gate.md) — grilling (unblocked; define ordered pass using 16–24 evidence)  
+5. [Define the Direct-Evidence GO Packet](issues/08-define-direct-evidence-go-packet.md) — grilling (blocked by 05, 06, 07, 09)
+
+## Hygiene log
+
+- **2026-07-26:** Renumbered dual `21-insider-…` → **24**; cleared stale 06 blockers on 20–23; normalized Status headers on 13–15; refreshed Decisions so far for 16–24 + prod residual context.

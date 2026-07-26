@@ -1,9 +1,9 @@
 # Define Auditor Evidence Ingestion Contract
 
-- Type: research
-- Status: resolved
-- Blocked by: none
-- Blocks: 23
+Type: research
+Status: resolved
+Blocked by: none
+Blocks: 23
 
 ## Question
 
