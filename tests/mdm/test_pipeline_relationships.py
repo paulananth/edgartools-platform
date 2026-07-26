@@ -880,6 +880,64 @@ class TestRunRelationships:
         assert baseline.effective_to is None
         assert baseline.valid_to_date is None
 
+    def test_item_502_same_day_events_are_skipped_not_crashed(self, session, fixture_world):
+        """Regression: prod run edge09-employed-by-postfix2-1785105042 (2026-07-26).
+
+        The first date-ordering fix (test above) only guarded a strictly-earlier
+        event date against an already-open version's effective_from. It missed the
+        equal-date case: ck_rel_instance_valid_interval requires a *strictly*
+        positive interval (valid_to_date > valid_from_date), so closing a version
+        at the exact same date it opened on -- e.g. two Item 5.02 events for the
+        same person/company both effective on the same day, common when a single
+        accession or same-day amendment reports more than one personnel change --
+        also violates the constraint and crashed the derive with the identical
+        CheckViolation. Must now be skipped instead.
+        """
+        silver = StubSilver({
+            "sec_employment_event": [
+                {
+                    "accession_number": "item-502-a",
+                    "cik": 910001,
+                    "event_type": "appointment",
+                    "person_name": "Sam Director",
+                    "exec_role": "Director",
+                    "previous_role": None,
+                    "compensation_amount": None,
+                    "effective_date": date(2024, 8, 1),
+                },
+                {
+                    "accession_number": "item-502-b",
+                    "cik": 910001,
+                    "event_type": "role_change",
+                    "person_name": "Sam Director",
+                    "exec_role": "Lead Director",
+                    "previous_role": "Director",
+                    "compensation_amount": None,
+                    "effective_date": date(2024, 8, 1),
+                },
+            ],
+        })
+
+        summary = MDMPipeline(session=session, silver=silver).derive_relationships(
+            relationship_types=["EMPLOYED_BY"]
+        )
+
+        # Only the first same-day event opens a version; the second is skipped, not crashed.
+        assert summary["EMPLOYED_BY"]["inserted"] == 1
+        assert summary["EMPLOYED_BY"]["skipped_unresolved_source"] == 1
+
+        relationships = session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "EMPLOYED_BY")
+        ).all()
+        assert len(relationships) == 1
+        opened = relationships[0]
+        assert opened.effective_from == date(2024, 8, 1)
+        assert opened.properties["role"] == "Director"
+        assert opened.effective_to is None
+        assert opened.valid_to_date is None
+
     # ------------------------------------------------------------------
     # AUDITED_BY tests (T3 — 06-02)
     # ------------------------------------------------------------------
