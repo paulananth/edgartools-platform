@@ -287,6 +287,28 @@ is a trap — always re-verify against live state (source row counts, actual ski
 building on top of a prior investigation's conclusion, especially when a fails-closed gate (ticket
 06) depends on the conclusion being right.
 
+**Addendum (2026-07-26, second layer):** deploying the `_TABLES` fix and re-running
+`mdm-backfill-relationships --relationship-type INSTITUTIONAL_HOLDS` in prod got past the
+`missing_source_table` skip and hit a **second, previously-unreachable bug**: `_ensure_thirteenf_manager`
+(`edgar_warehouse/mdm/pipeline.py`) queried `SELECT company_name FROM sec_company WHERE cik = ?`,
+but `sec_company`'s real column is `entity_name` (`silver_store.py:41`) — `company_name` appears
+nowhere else in the codebase. `duckdb.BinderException` in prod, task exit code 1. This code path
+had **never executed** before today (always short-circuited by the `sec_thirteenf_filing`
+registration bug), so the typo was invisible. Worse: the one existing unit test for this exact path
+(`test_thirteenf_manager_outside_adv_universe_is_created`,
+`tests/mdm/test_pipeline_relationships.py`) used a `StubSilver` fixture keyed
+`"FROM sec_company WHERE cik": [{"company_name": ...}]` — the **same wrong column name** — so the
+stub silently mirrored the bug instead of the real schema and the test passed regardless. Fixed
+both (query → `entity_name`, stub fixture → `entity_name`) and added a third test,
+`test_thirteenf_manager_resolves_name_against_real_silver_schema`, that runs the same code path
+against a real `SilverDatabase`-backed DuckDB file instead of a hand-rolled stub — confirmed to
+fail with the exact prod `BinderException` before the fix. **Lesson (compounding the one above):**
+a hand-rolled stub that encodes a query's expected shape can silently drift from the real schema in
+lockstep with a bug in the code under test, since nothing ever validates either side against the
+other — for any code path that has *never actually run against real data*, prefer a schema-backed
+fixture (real `SilverDatabase`/DuckDB) over a string-matched stub, or treat passing stub-only tests
+for such paths as unproven, not verified.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. It runs in four

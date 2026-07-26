@@ -1258,11 +1258,11 @@ class MDMPipeline:
         normalized_cik = int(cik)
         entity_id = str(_uuid.uuid5(_uuid.NAMESPACE_URL, f"sec:13f-manager:{normalized_cik}"))
         company_rows = self.silver.fetch(
-            "SELECT company_name FROM sec_company WHERE cik = ? LIMIT 1",
+            "SELECT entity_name FROM sec_company WHERE cik = ? LIMIT 1",
             [normalized_cik],
         )
         canonical_name = (
-            str(company_rows[0].get("company_name") or "").strip()
+            str(company_rows[0].get("entity_name") or "").strip()
             if company_rows else ""
         ) or f"13F Manager CIK {normalized_cik}"
         if self.session.get(MdmEntity, entity_id) is None:

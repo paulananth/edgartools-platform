@@ -941,7 +941,7 @@ class TestRunRelationships:
                 "shares_held": 1, "market_value": 100, "put_call": None,
                 "discretion_type": "SOLE", "security_class": "equity",
             }],
-            "FROM sec_company WHERE cik": [{"company_name": "Manager Only LLC"}],
+            "FROM sec_company WHERE cik": [{"entity_name": "Manager Only LLC"}],
         })
         summary = MDMPipeline(session=session, silver=silver).derive_relationships(
             relationship_types=["INSTITUTIONAL_HOLDS"]
@@ -951,6 +951,53 @@ class TestRunRelationships:
         manager = session.scalar(select(MdmAdviser).where(MdmAdviser.cik == 999001))
         assert manager is not None
         assert manager.canonical_name == "Manager Only LLC"
+
+    def test_thirteenf_manager_resolves_name_against_real_silver_schema(self, session, tmp_path):
+        """Regression: _ensure_thirteenf_manager's sec_company query must match the
+        real schema (entity_name), not a StubSilver fixture that can silently drift
+        from it. A prior version of this file's StubSilver fixture used the same
+        wrong column name ("company_name") as a since-fixed production bug in
+        pipeline.py, so the stub-based test above passed while prod raised
+        duckdb.BinderException: column "company_name" not found (real column is
+        entity_name). This test runs the same code path against a real
+        SilverDatabase-backed DuckDB file instead of a stub, so a future rename of
+        either side would fail here.
+        """
+        from edgar_warehouse.silver_store import SilverDatabase
+
+        silver_path = tmp_path / "silver.duckdb"
+        db = SilverDatabase(str(silver_path))
+        db._conn.execute(
+            "INSERT INTO sec_company (cik, entity_name) VALUES (?, ?)",
+            [999002, "Real Schema Manager LLC"],
+        )
+        db.merge_thirteenf_filings([{
+            "accession_number": "real-schema-manager",
+            "cik": 999002, "period_of_report": "2024-03-31",
+            "filing_date": "2024-05-15", "form": "13F-HR",
+            "amendment_type": None, "confidential_omission": False,
+            "parser_version": "1",
+        }], "test-run")
+        db.merge_thirteenf_holdings([{
+            "cik": 999002, "accession_number": "real-schema-manager",
+            "holding_index": 1, "period_of_report": "2024-03-31",
+            "cusip": "037833100", "issuer_name": "Apple Inc",
+            "security_title": "Common Stock", "shares_held": 1,
+            "market_value": 100, "security_class": "equity",
+            "put_call": None, "discretion_type": "SOLE",
+            "voting_auth_sole": None, "voting_auth_shared": None,
+            "voting_auth_none": None, "parser_version": "1",
+        }], "test-run")
+        db.close()
+
+        summary = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path))).derive_relationships(
+            relationship_types=["INSTITUTIONAL_HOLDS"]
+        )
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 1
+        from edgar_warehouse.mdm.database import MdmAdviser
+        manager = session.scalar(select(MdmAdviser).where(MdmAdviser.cik == 999002))
+        assert manager is not None
+        assert manager.canonical_name == "Real Schema Manager LLC"
 
     def test_optional_fundamentals_source_table_missing_institutional_holds(self, session):
         """INSTITUTIONAL_HOLDS: missing sec_thirteenf_holding → 0 rows, no exception. (06-02)"""
