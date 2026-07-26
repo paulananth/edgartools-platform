@@ -32,6 +32,7 @@ Produce a decision-complete validation plan for production operator readiness, b
 - [Define Relationship Eligibility at the Release Watermark](issues/04-define-relationship-eligibility-at-release-watermark.md) — All eleven relationship types required for initial GO; applicability ledger per candidate; one watermark snapshot for eligibility/coverage/graph/parity.
 - [Define the MdmExport Entitlement Preflight and Retry Policy](issues/10-define-mdm-export-entitlement-preflight-and-retry-policy.md) — Same-runtime non-mutating export capability gate; command-owned transient retry; full-chain revalidation after operator fix.
 - [Define the BatchSilver Contention-Safe Publication Boundary](issues/11-define-batchsilver-contention-safe-publication-boundary.md) — Semantic rehydrate-and-merge + atomic S3 conditional write; conflicts rerun full batch.
+- [Define the Full-Chain Launch Gate](issues/06-define-full-chain-launch-gate.md) — Reusable per-candidate template, 9 ordered stages (identity → rollback-readiness precondition → export preflight → BatchSilver integrity → relationship source completion → MDM/graph execution → relationship eligibility & parity, strict/no exclusions → dashboard acceptance → GO packet); new execution name on any failure; `full-chain-launch-pass.json` evidence. Currently cannot Pass: INSTITUTIONAL_HOLDS = 0 — **not** EDGE-11 (that's stale; source data has 6.8M rows) but a `ShardedSilverReader._TABLES` registration gap for `sec_thirteenf_filing`, fixed 2026-07-26, no exclusion valve until re-derived.
 
 ### Relationship contracts (research)
 
@@ -74,12 +75,13 @@ Produce a decision-complete validation plan for production operator readiness, b
 
 Unblocked open tickets (work through the map; claim before starting):
 
-1. [Define the Rollback Rehearsal Contract](issues/05-define-rollback-rehearsal-contract.md) — grilling  
+1. [Define the Rollback Rehearsal Contract](issues/05-define-rollback-rehearsal-contract.md) — grilling (now also the standing precondition ticket 06's stage 2 depends on)  
 2. [Define Release-Bound Dashboard Acceptance](issues/07-define-release-bound-dashboard-acceptance.md) — prototype  
-3. [Design the Release Evidence Automation](issues/09-design-release-evidence-automation.md) — prototype  
-4. [Define the Full-Chain Launch Gate](issues/06-define-full-chain-launch-gate.md) — grilling (unblocked; define ordered pass using 16–24 evidence)  
-5. [Define the Direct-Evidence GO Packet](issues/08-define-direct-evidence-go-packet.md) — grilling (blocked by 05, 06, 07, 09)
+3. [Design the Release Evidence Automation](issues/09-design-release-evidence-automation.md) — prototype (cross-cutting per ticket 06; assembles the Candidate Evidence Set, not a numbered stage)  
+4. [Define the Direct-Evidence GO Packet](issues/08-define-direct-evidence-go-packet.md) — grilling (blocked by 05, 07, 09 — 06 resolved 2026-07-26)
 
 ## Hygiene log
 
 - **2026-07-26:** Renumbered dual `21-insider-…` → **24**; cleared stale 06 blockers on 20–23; normalized Status headers on 13–15; refreshed Decisions so far for 16–24 + prod residual context.
+- **2026-07-26:** Ticket 06 (Full-Chain Launch Gate) resolved via grilling — 9-stage ordered template, strict inheritance of ticket 04's no-exclusion rule (surfaces INSTITUTIONAL_HOLDS as a real blocker, not a design gap), new-execution-name-on-failure relying on existing per-stage idempotency. Removed from open frontier.
+- **2026-07-26 (correction):** ticket 06's INSTITUTIONAL_HOLDS note initially blamed EDGE-11 (bulk fetch never selects 13F-HR) — **stale as of this session**. Live prod check: `SEC_THIRTEENF_HOLDING` already has 6.8M rows in Snowflake SOURCE. Real cause found via CloudWatch: `ShardedSilverReader._TABLES` (`edgar_warehouse/silver_support/sharded_reader.py`) never registered `sec_thirteenf_filing` (added same commit as the holding table, d20cad8), so the derive JOIN hits a DuckDB catalog error that the graceful missing-table skip swallows as a false "not loaded yet." Same gap silently drops `sec_employment_event` (EDGE-09 sibling). Fixed by adding both names to `_TABLES`; regression test added; no SEC refetch needed. Deploy + re-derive pending operator go.

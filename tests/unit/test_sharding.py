@@ -478,6 +478,54 @@ def test_sharded_silver_reader_unions_shards(tmp_path) -> None:
         reader.close()
 
 
+def test_sharded_silver_reader_exposes_thirteenf_filing_and_employment_event(tmp_path) -> None:
+    """ShardedSilverReader._TABLES must include every table a relationship-derive
+    query joins against — sec_thirteenf_filing (INSTITUTIONAL_HOLDS) and
+    sec_employment_event (EMPLOYED_BY) were added to the schema in the same
+    commit as their sibling holding/executive tables but omitted from _TABLES,
+    so mdm derive-relationships silently treated real data as a missing table
+    (mdm_relationship_skip / missing_source_table) instead of reading it.
+    """
+    from edgar_warehouse.silver_store import SilverDatabase
+    from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
+
+    shard_path = tmp_path / "shard-0.duckdb"
+    db = SilverDatabase(str(shard_path))
+    db.merge_thirteenf_filings([{
+        "accession_number": "0001-13F",
+        "cik": 1,
+        "period_of_report": "2026-03-31",
+        "filing_date": "2026-05-15",
+        "form": "13F-HR",
+        "amendment_type": None,
+        "confidential_omission": False,
+        "parser_version": "1",
+    }], "test-run")
+    db.merge_employment_events([{
+        "accession_number": "0002-8K",
+        "event_index": 1,
+        "cik": 2,
+        "event_type": "appointment",
+        "person_name": "Jane Doe",
+        "exec_role": "CFO",
+        "previous_role": None,
+        "compensation_amount": None,
+        "effective_date": "2026-04-01",
+        "parser_version": "1",
+    }], "test-run")
+    db.close()
+
+    reader = ShardedSilverReader([str(shard_path)])
+    try:
+        filing_rows = reader.fetch("SELECT accession_number FROM sec_thirteenf_filing")
+        assert [r["accession_number"] for r in filing_rows] == ["0001-13F"]
+
+        event_rows = reader.fetch("SELECT accession_number FROM sec_employment_event")
+        assert [r["accession_number"] for r in event_rows] == ["0002-8K"]
+    finally:
+        reader.close()
+
+
 # ---------------------------------------------------------------------------
 # Issue 1: silver shard reconciliation and per-CIK write lock
 # ---------------------------------------------------------------------------

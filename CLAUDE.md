@@ -240,6 +240,53 @@ module) instead of the real `edgartools-prod-tfstate/accounts/prod` (44 resource
 `terraform destroy` would have orphaned the entire prod VPC/ECS/KMS stack. **Lesson:** verify a
 teardown's backend resolves to the *current* state (`terraform state list` count) before trusting it.
 
+## INSTITUTIONAL_HOLDS / EMPLOYED_BY 5-whys (fixed, not yet deployed, 2026-07-26)
+
+**Problem:** `INSTITUTIONAL_HOLDS` was 0 in MDM after `derive-relationships` reported "OK." A
+2026-07-13 finding (EDGE-11, `.planning/workstreams/fix-pipelines/REQUIREMENTS.md`) attributed
+this to the bulk artifact-fetch pipeline never selecting 13F-HR forms. That finding was stale and
+had already been overtaken by a later fix — re-trusting it without re-checking live state would
+have pointed at the wrong problem.
+
+1. Symptom: `INSTITUTIONAL_HOLDS` = 0 despite a derive step reporting success.
+2. Why assume the fetch pipeline is broken? Because a 13-day-old doc said so. Checking live prod
+   Snowflake instead: `EDGARTOOLS_PROD.EDGARTOOLS_SOURCE.SEC_THIRTEENF_HOLDING` has **6.8M rows**
+   — the fetch/parse pipeline works and has run at scale. The cited root cause no longer applies.
+3. Why is the relationship still 0 if the source data exists? CloudWatch on the actual derive
+   task (`mdm-mdm-large/.../7fd06878e8254bcab9cbdb4263066ab8`, 2026-07-25T23:26:52Z) shows:
+   `{"event": "mdm_relationship_skip", "rel_type": "INSTITUTIONAL_HOLDS", "reason":
+   "missing_source_table", "source_table": "sec_thirteenf_filing"}`.
+4. Why is `sec_thirteenf_filing` "missing" when it's created in the same schema and written by the
+   same ingest loop as `sec_thirteenf_holding`? MDM's derive step reads silver through
+   `ShardedSilverReader` (`edgar_warehouse/silver_support/sharded_reader.py`), which only exposes
+   tables listed in its hardcoded `_TABLES` allowlist as cross-shard UNION ALL views.
+   `sec_thirteenf_filing` was added to the schema in the same commit as `sec_thirteenf_holding`
+   (d20cad8) but never added to `_TABLES` — a registration gap, not a data gap.
+5. Why did this look like a clean "OK, zero rows" instead of an error? `_find_missing_source_table`
+   deliberately catches any DuckDB "does not exist" error to gracefully skip relationship types
+   with no source data yet (by design, so one missing type doesn't crash the whole `mdm run`). That
+   same broad catch makes a **registration bug indistinguishable from a genuinely empty universe**
+   — the derive step logs `mdm_relationship_skip` either way.
+
+**Root cause:** `ShardedSilverReader._TABLES` omitted `sec_thirteenf_filing`. The same omission
+also silently dropped `sec_employment_event` (the EDGE-09 sibling gap, Item 5.02 8-K path for
+`EMPLOYED_BY`) — added in the same commit, same allowlist, same bug.
+
+**Fix:** added both table names to `_TABLES`. Regression test added
+(`tests/unit/test_sharding.py::test_sharded_silver_reader_exposes_thirteenf_filing_and_employment_event`)
+that builds a real shard via `SilverDatabase`, writes one row to each table, and asserts
+`ShardedSilverReader` can read it back — confirmed to fail with the exact prod `CatalogException`
+before the fix and pass after. **No new SEC fetching is required** — the source data already
+exists in the shards; this is a reader fix plus a `derive-relationships` re-run, not a bulk
+reload. Not yet deployed/re-derived/graph-verified as of this entry — see
+`.scratch/release-readiness/issues/06-define-full-chain-launch-gate.md` for the full write-up and
+`.planning/workstreams/fix-pipelines/REQUIREMENTS.md` (EDGE-09/EDGE-11) for corrected status.
+
+**Lesson:** a stale root-cause doc plus a deliberately-broad "missing table → skip" error handler
+is a trap — always re-verify against live state (source row counts, actual skip-event logs) before
+building on top of a prior investigation's conclusion, especially when a fails-closed gate (ticket
+06) depends on the conclusion being right.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. It runs in four

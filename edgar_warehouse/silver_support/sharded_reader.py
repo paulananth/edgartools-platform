@@ -90,7 +90,9 @@ class ShardedSilverReader:
         "sec_earnings_release",
         "sec_accounting_flag",
         "sec_executive_record",
+        "sec_employment_event",
         "sec_thirteenf_holding",
+        "sec_thirteenf_filing",
     ]
 
     def __init__(self, shard_paths: list[str]) -> None:
