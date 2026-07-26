@@ -55,6 +55,22 @@ def test_residual_holds_graph_covers_handoff_residual_types() -> None:
     assert "sync-graph" in src
 
 
+def test_residual_holds_graph_full_sync_and_candidate_verify() -> None:
+    """Partial sync + active-scoped verify failed in prod residual-holds-20260725T222735Z."""
+    src = _extract_residual_definition_source()
+    assert "$$.Execution.Name" in src
+    assert "--generation-id" in src
+    # Full sync: no type-filtered sync-graph command for residual-only edges
+    assert re.search(
+        r"sync-graph',\s*'--entity-type',\s*'person'",
+        src,
+    ) is None
+    assert "verify-graph', '--skip-native-app'" in src or (
+        "verify-graph" in src and "--skip-native-app" in src
+    )
+    assert "limit-per-type" in src
+
+
 def test_residual_holds_graph_uses_mdm_large_for_heavy_stages() -> None:
     """Prod MdmSecurities OOM'd on mdm-medium 2 GiB; heavy stages need mdm-large."""
     src = _extract_residual_definition_source()

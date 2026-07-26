@@ -3139,17 +3139,19 @@ definition = {
             "States.Array('mdm', 'export')",
             next_state="MdmSync",
         ),
+        # Full-graph materialization (not residual types only). A type-filtered
+        # sync produced incomplete candidate gen 69e139b0… (company/person/security
+        # + HOLDS only) while verify without --generation-id checked the *active*
+        # Ticket 20 gen against full MDM — parity failed on IS_INSIDER/HOLDS
+        # (residual-holds-20260725T222735Z). Use Execution.Name as generation_id
+        # so verify scopes the candidate; empty type filters = all MDM types.
         "MdmSync": ecs_state(
             mdm_large_arn,
             (
                 "States.Array("
                 "'mdm', 'sync-graph', "
-                "'--entity-type', 'person', '--entity-type', 'security', '--entity-type', 'company', "
-                "'--relationship-type', 'IS_INSIDER', "
-                "'--relationship-type', 'HOLDS', "
-                "'--relationship-type', 'COMPANY_HOLDS', "
-                "'--relationship-type', 'INSTITUTIONAL_HOLDS', "
-                "'--limit-per-type', '100000'"
+                "'--generation-id', $$.Execution.Name, "
+                "'--limit-per-type', '200000'"
                 ")"
             ),
             next_state="MdmVerify",
@@ -3157,7 +3159,12 @@ definition = {
         ),
         "MdmVerify": ecs_state(
             mdm_small_arn,
-            "States.Array('mdm', 'verify-graph', '--skip-native-app')",
+            (
+                "States.Array("
+                "'mdm', 'verify-graph', '--skip-native-app', "
+                "'--generation-id', $$.Execution.Name"
+                ")"
+            ),
             is_end=True,
             retry_secs=60,
         ),
