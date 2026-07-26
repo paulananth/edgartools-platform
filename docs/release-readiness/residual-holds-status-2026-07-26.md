@@ -73,12 +73,42 @@
 - `MdmSync`: full `sync-graph --generation-id $$.Execution.Name --limit-per-type 200000` (no type filters).
 - `MdmVerify`: `verify-graph --skip-native-app --generation-id $$.Execution.Name`.
 
+## Full candidate repair (2026-07-26)
+
+After SM fix deploy (#270), one-off full materialization (MDM residual already present):
+
+| Step | Result |
+| --- | --- |
+| `sync-graph --generation-id residual-full-20260726T010010Z --limit-per-type 200000` | **OK** — nodes **193,323** · edges **166,067** |
+| `verify-graph --skip-native-app --generation-id residual-full-20260726T010010Z` | **PASS** (exit 0) · status **verified** |
+
+| Field | Value |
+| --- | --- |
+| Candidate generation | `residual-full-20260726T010010Z` |
+| Candidate status | **verified** |
+| Active generation (unchanged) | `ticket20-strict-endpoint-seal-850ea34-20260725T130457Z` |
+| Parity | MDM 166,067 edges = graph 166,067 (includes HOLDS / COMPANY_HOLDS / IS_INSIDER) |
+
+### Residual edge counts now on verified candidate
+
+| Type | Count |
+| --- | ---: |
+| MANAGES_FUND | 138,585 |
+| EMPLOYED_BY | 19,147 |
+| HOLDS | 5,253 |
+| COMPANY_HOLDS | 1,778 |
+| IS_INSIDER | 1,304 |
+| INSTITUTIONAL_HOLDS | **0** |
+
 ## Activation
 
-**Do not activate** `69e139b0…` (incomplete). After full-candidate PASS, operator may:
+**Not activated** (operator decision). Incomplete gen `69e139b0…` must **not** be activated.
+
+To activate the verified full candidate:
 
 ```bash
-mdm graph-activate --generation-id <Execution.Name>
+# via ECS / CLI with prod MDM image + snowflake secret
+mdm graph-activate --generation-id residual-full-20260726T010010Z
 ```
 
 ## INSTITUTIONAL_HOLDS
