@@ -1,9 +1,9 @@
 # Define Adviser-Fund Source Contract
 
-- Type: research
-- Status: resolved
-- Blocked by: none
-- Blocks: 21
+Type: research
+Status: resolved
+Blocked by: none
+Blocks: 21
 
 ## Question
 

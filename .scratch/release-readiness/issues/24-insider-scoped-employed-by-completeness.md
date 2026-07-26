@@ -1,9 +1,13 @@
-# 21 — Insider-scoped EMPLOYED_BY completeness (Release Owner scope decision, 2026-07-19)
+# 24 — Insider-scoped EMPLOYED_BY completeness (Release Owner scope decision, 2026-07-19)
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: none
-Blocks: 20 (relaunch of the strict bulk-load execution)
+Blocks: none (was dual-numbered as 21; renumbered 2026-07-26 hygiene — ADV private-fund task remains 21)
+
+Formerly tracked as `21-insider-scoped-employed-by-completeness.md`. Renumber
+avoids collision with [21 — Implement Authoritative Form ADV Private-Fund
+Ingestion](21-implement-authoritative-form-adv-private-fund-ingestion.md).
 
 ## Release Owner decisions (2026-07-19, given verbatim intent: "form 4/5 should
 ## be tied to 5.02 identification; anyone who has an insider must be identified;
@@ -48,7 +52,10 @@ insiders are independently identifiable from their own Form 3/4/5 filings.
 - Launch requires: this ticket's doctrine revision, then a brand-new
   execution name, then the Release Owner's explicit go.
 
-**Status:** complete (IS_INSIDER health proven on 10-CIK sample 2026-07-25)
+## Answer (hygiene close 2026-07-26)
+
+**Status: resolved** for engineering/doctrine delivery. IS_INSIDER health proven
+on 10-CIK sample 2026-07-25.
 
 - [x] Spec the insider-scoped completeness check — PR #194
 - [x] Revise the completion-gate doctrine's "Done when" + PASS claim — PR #196
@@ -58,12 +65,14 @@ insiders are independently identifiable from their own Form 3/4/5 filings.
       reconcile-relationship-release --insider-coverage, fail-closed)
 - [x] Wire production SM: MDM before reconcile + StrictInsiderCoverage step
       that writes insider_coverage.json and reconcile binds via
-      --insider-coverage (Ticket 21 production residual after Ticket 20)
+      --insider-coverage (insider residual after Ticket 20)
 - [x] IS_INSIDER derivation health (10 CIKs): person + IS_INSIDER only loaders
       (PR #262/#263); verify-insider-coverage **146/146 identified, 0 unresolved**
       — evidence `docs/release-readiness/ticket21-insider-coverage-10cik-2026-07-25.md`
-- [ ] Full Ticket 20 strict relaunch (new name, **explicit user go**) remains a
-      separate operator action; not blocked on IS_INSIDER sample health
+
+**Not this ticket:** full-universe Ticket 20 relaunch / production GO — operator
+action and [Define the Direct-Evidence GO Packet](08-define-direct-evidence-go-packet.md)
+/ [Define the Full-Chain Launch Gate](06-define-full-chain-launch-gate.md).
 
 ---
 

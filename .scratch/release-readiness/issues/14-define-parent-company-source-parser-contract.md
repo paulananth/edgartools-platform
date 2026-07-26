@@ -1,9 +1,9 @@
 # Define Parent-Company Source and Parser Contract
 
-- Type: research
-- Status: resolved
-- Blocked by: none
-- Blocks: 22
+Type: research
+Status: resolved
+Blocked by: none
+Blocks: 22
 
 ## Question
 
