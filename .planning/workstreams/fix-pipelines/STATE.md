@@ -2,23 +2,23 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: fix-pipelines — Pipeline Data-Source Completeness & Verification
-current_phase: 09
-current_phase_name: edgartools-crosscheck
+current_phase: 10
+current_phase_name: cash-conversion-cycle
 current_plan: 0
-status: phase_8_complete_phase_9_not_started
-stopped_at: "Phase 7 (source-coverage-exclusions-and-artifact-hygiene) and Phase 8 (neo4j-native-app-verification-gaps) are COMPLETE -- this status line was stale (last written 2026-07-13, before PRs #133/#134 landed Phase 7 plans 07-01..07-07). Verified live against REQUIREMENTS.md 2026-07-19: EDGE-07 (MANAGES_FUND) disposed source_unavailable (ADV private-fund docs filed via IARD, not EDGAR); EDGE-08 (HAS_PARENT_COMPANY) disposed capability_not_implemented (no 10-K Exhibit 21 parser exists); ARTF-01 (silver-publish never regresses canonical) complete; ARTF-02 (idempotent artifact fetch + force-flag audit trail) complete, with one open follow-up (--operator/--reason not yet required CLI flags, optional at the service boundary only); GVER-01 (readiness vs parity separation in verify-graph) complete; GVER-02 (GRAPH_INFO/BFS/LIST_GRAPHS capability fixed/documented) complete. Phase 9 (EDGX-01..03, edgartools crosscheck) remains genuinely NOT STARTED -- no phase-09 directory exists, all three requirements show Pending in REQUIREMENTS.md."
-last_updated: "2026-07-19"
-last_activity: 2026-07-19
-last_activity_desc: "Corrected this file's stale status pointer (unchanged since 2026-07-13) after verifying Phase 7 and Phase 8 completion live against REQUIREMENTS.md and git history (PRs #133, #134). No new implementation work done in this pass -- documentation correction only, at explicit user request. Phase 9 confirmed as the sole remaining native phase not yet started."
+status: phase_9_complete_phase_10_not_executed
+stopped_at: "Phase 9 (edgartools-crosscheck) is COMPLETE -- this status line was stale (last written 2026-07-18, before PR #199 landed Phase 9 the next day). Verified live against REQUIREMENTS.md 2026-07-26: EDGX-01/02/03 all [x], traceability table shows 'Complete (09-DISPOSITION)' for Phase 9. All 5 native phases (5-9) are now complete. Current native/grafted frontier is Phase 10 (Cash Conversion Cycle, grafted from fundamental-factors-v2 P3): plans 10-01/10-02 are built (phases/10-cash-conversion-cycle/) but not yet executed. Separately, EDGE-09/EDGE-11 (disposed 'root-caused; fix deferred' in Phase 6) both moved forward on 2026-07-26: a ShardedSilverReader._TABLES registration gap (sec_thirteenf_filing, sec_employment_event) was found and fixed (PR #274, merged), and a follow-on EMPLOYED_BY close_relationship_version date-ordering crash was found and fixed the same day (PR #278, open) when a forced full-universe re-derive exercised the sec_employment_event path at scale for the first time. Neither EDGE-09 nor EDGE-11 is marked Complete yet -- both fixes still need prod deploy + re-derive + graph-verify."
+last_updated: "2026-07-26"
+last_activity: 2026-07-26
+last_activity_desc: "Corrected this file's stale Phase 9 status (unchanged since 2026-07-18, one day before PR #199 completed Phase 9) after verifying live against REQUIREMENTS.md and git history. Also discarded a corrupted uncommitted STATE.md write found in the working tree this session (milestone_name literally 'milestone', total_phases=6 contradicting ROADMAP.md's 11-phase structure, and two body sentences sliced mid-clause) -- consistent with an interrupted GSD auto-update, never committed by any runtime. Kept in git stash for recovery only; see Session Continuity below for what actually happened today."
 consolidation:
   date: "2026-07-11"
   note: "This is now the single active workstream. Grafted: Phase 10 <- fundamental-factors-v2 P3; Phases 11-15 <- model-builder-contract-gaps P1-6. Sources tombstoned. Excluded (complete): go-live, mdm-neo4j-dashboard, neo4j-snowflake, neo4j-pipe."
 progress:
   total_phases: 11
-  completed_phases: 4
-  native_fix_pipelines_phases: "5-9 (5 done, 6 done, 7 done, 8 done, 9 not started)"
-  grafted_phases: "10 (planned), 11-13 (unplanned), 14-15 (charter-held)"
-  percent: 36
+  completed_phases: 5
+  native_fix_pipelines_phases: "5-9 (all 5 done)"
+  grafted_phases: "10 (plans built, not executed), 11-13 (unplanned), 14-15 (charter-held)"
+  percent: 45
 ---
 
 # Project State — fix-pipelines
@@ -27,10 +27,11 @@ progress:
 
 Phase: 07 (source-coverage-exclusions-and-artifact-hygiene) — COMPLETE
 Phase: 08 (neo4j-native-app-verification-gaps) — COMPLETE
-Phase: 09 (edgartools-crosscheck) — NOT STARTED
-Last activity: 2026-07-19 — corrected stale status (Phase 7/8 completion verified against REQUIREMENTS.md + PRs #133/#134); no new implementation this pass
+Phase: 09 (edgartools-crosscheck) — COMPLETE (PR #199, 2026-07-19)
+Phase: 10 (cash-conversion-cycle, grafted) — plans built (10-01, 10-02), not executed
+Last activity: 2026-07-26 — corrected stale Phase 9 status (verified against REQUIREMENTS.md + PR #199); EDGE-09/EDGE-11 registration-gap fix landed (PR #274); new EDGE-09 EMPLOYED_BY date-ordering bug found + fixed (PR #278, open)
 
-[████████░░] 80% (4/5 native phases complete; phase 9 not started)
+[██████████] 100% (5/5 native phases complete; phase 10 grafted, plans built not executed)
 
 ## Milestone Context
 
@@ -52,14 +53,42 @@ REQUIREMENTS.md)
 | 6 — Relationship Investigation And Population | Root-cause + populate the 5 ambiguous zero relationship types against their actual artifacts | EDGE-05, 06, 09, 10, 11 | Complete (all 6 plans; see 06-PHASE-CLOSURE-LEDGER.md — 2 populated-path exclusions, 1 structural exclusion, 2 root-caused/fix-deferred, 0 undocumented) |
 | 7 — Source-Coverage Exclusions And Artifact Hygiene | Document the 2 artifact-confirmed exclusions; fix silver-clobber + fetch-idempotency | EDGE-07, 08, ARTF-01, 02 | Complete (07-00..07-07, PRs #133/#134) |
 | 8 — Neo4j Native App Verification Gaps | verify-graph separates readiness vs parity; GRAPH_INFO/BFS/LIST_GRAPHS resolved or documented | GVER-01, 02 | Complete (08-01, 08-02) |
-| 9 — edgartools Crosscheck | Validate platform parsing vs edgartools; replace parsers where it's a clear win; audit API usage | EDGX-01..03 | Not started |
+| 9 — edgartools Crosscheck | Validate platform parsing vs edgartools; replace parsers where it's a clear win; audit API usage | EDGX-01..03 | Complete (09-DISPOSITION, PR #199, 2026-07-19) |
 
 ## Progress
 
-**Phases Complete:** 4/5 (5, 6, 7, 8)
-**Current Plan:** Phase 9 not yet planned
+**Phases Complete:** 5/5 native (5, 6, 7, 8, 9)
+**Current Plan:** Phase 10 (cash-conversion-cycle, grafted) — 10-01/10-02 built, not yet executed
 
 ## Session Continuity
+
+**2026-07-26 update (this session):** Found this file's frontmatter said Phase 9 "not started"
+while `REQUIREMENTS.md` and `phases/09-edgartools-crosscheck/09-DISPOSITION.md` show it complete
+since PR #199 (2026-07-19) — this STATE.md was last committed 2026-07-18, one day earlier, so it
+never picked up that PR. Corrected: completed_phases 4→5, current_phase 9→10 (Cash Conversion
+Cycle, grafted; plans 10-01/10-02 built but not executed).
+
+Separately, also found and discarded a **corrupted uncommitted** working-tree edit to this same
+file (not committed by any runtime): `milestone_name` was overwritten to the literal placeholder
+string `"milestone"`, `progress.total_phases` was `6` (contradicts ROADMAP.md's real 11-phase
+structure, unchanged), and two prose sentences were sliced mid-clause by a partial string
+replacement (e.g. "Stopped At: context exhaustion at 93% (2026-07-26)" spliced directly before an
+orphaned "explicit user instruction) and, along the way, resolved EDGE-09's..." fragment that used
+to follow different lead-in text). Reads like a GSD auto-update interrupted mid-write by the same
+context exhaustion it was trying to record. Kept in `git stash` for recovery only — not applied.
+
+Unrelated but relevant to this workstream: while verifying a background AWS Step Functions run
+(`edge09-employed-by-forced-1785099117`, a forced full-universe `EMPLOYED_BY` re-derive run to
+confirm the `sec_employment_event` registration fix from PR #274 actually got exercised), hit a
+**new** production bug — `_derive_employed_by`'s two-pass design (DEF 14A proxy baselines with a
+coarse `effective_from` placeholder, then Item 5.02 8-K events in true chronological order) could
+try to close a baseline at a date earlier than its own start, tripping
+`ck_rel_instance_valid_interval` and crashing the whole derive. Never surfaced before because
+every prior run short-circuited on `existing >= target_per_type`. Root-caused, fixed, and
+regression-tested (reproduces the exact CheckViolation against the unfixed code) on
+`claude/mdm-employed-by-date-ordering-fix` — **PR #278, open, not yet merged**. Neither EDGE-09
+nor EDGE-11 should be marked Complete until that merges and a clean re-derive + graph-verify runs
+against prod.
 
 **Last session:** 2026-07-13 (this session)
 
