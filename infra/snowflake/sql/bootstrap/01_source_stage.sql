@@ -456,3 +456,26 @@ CREATE TABLE IF NOT EXISTS SEC_EMPLOYMENT_EVENT (
   parser_version      STRING
 )
 COMMENT = 'Employment / Item 5.02 events for EMPLOYED_BY. Passthrough from silver sec_employment_event.';
+
+-- ERDP-03 Explore — forward earnings calendar (not pure-SEC Agent-Grade).
+-- gold-refresh may emit empty parquet; SOURCE table + load map must exist.
+CREATE TABLE IF NOT EXISTS EARNINGS_CALENDAR (
+  fact_key          NUMBER(38, 0) NOT NULL,
+  cik               NUMBER(38, 0) NOT NULL,
+  ticker            STRING,
+  company_key       NUMBER(38, 0),
+  fiscal_year       NUMBER(38, 0) NOT NULL,
+  fiscal_quarter    NUMBER(38, 0) NOT NULL,
+  expected_date     DATE NOT NULL,
+  expected_time     STRING,
+  timezone          STRING,
+  session           STRING NOT NULL,
+  status            STRING NOT NULL,
+  period_end        DATE,
+  accession_number  STRING,
+  source_system     STRING NOT NULL,
+  source_ref        STRING,
+  as_of             DATE NOT NULL,
+  ingested_at       TIMESTAMP_TZ NOT NULL
+)
+COMMENT = 'ERDP-03 forward earnings calendar (Explore). Grain fact_key; natural key cik/fy/fq/source/as_of.';
