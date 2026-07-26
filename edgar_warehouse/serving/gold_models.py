@@ -85,6 +85,7 @@ _SEC_SUBSIDIARY_EVIDENCE_SCHEMA = GOLD_SCHEMAS['_SEC_SUBSIDIARY_EVIDENCE_SCHEMA'
 _SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA = GOLD_SCHEMAS['_SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA']
 _SEC_EMPLOYMENT_EVENT_SCHEMA = GOLD_SCHEMAS['_SEC_EMPLOYMENT_EVENT_SCHEMA']
 _FACT_EARNINGS_CALENDAR_SCHEMA = GOLD_SCHEMAS['_FACT_EARNINGS_CALENDAR_SCHEMA']
+_FACT_GUIDANCE_SCHEMA = GOLD_SCHEMAS['_FACT_GUIDANCE_SCHEMA']
 
 
 def _empty(schema: pa.Schema) -> pa.Table:
@@ -1047,6 +1048,48 @@ def _build_fact_earnings_release(conn: Any) -> pa.Table:
     return _empty(_FACT_EARNINGS_RELEASE_SCHEMA) if table.num_rows == 0 else table.cast(_FACT_EARNINGS_RELEASE_SCHEMA)
 
 
+def _build_fact_guidance(conn: Any) -> pa.Table:
+    """ERDP-02: build GUIDANCE_FACTS from sec_guidance_fact silver rows.
+
+    accession_number is stored as '' (not NULL) for firm_manual rows
+    (DuckDB PRIMARY KEY constraint, see silver_store.py); translate back to
+    NULL here so gold consumers see the documented nullable column.
+    """
+    table = _arrow(
+        conn.execute(
+            """
+            SELECT
+                fact_key,
+                cik,
+                ticker,
+                company_key,
+                NULLIF(accession_number, '')  AS accession_number,
+                metric,
+                period_type,
+                fiscal_year,
+                fiscal_quarter,
+                period_end,
+                value_low,
+                value_mid,
+                value_high,
+                unit,
+                currency,
+                is_non_gaap,
+                as_of,
+                source_system,
+                source_ref,
+                excerpt,
+                confidence,
+                parser_version,
+                ingested_at
+            FROM sec_guidance_fact
+            ORDER BY cik, metric, fiscal_year, fiscal_quarter, as_of
+            """
+        )
+    )
+    return _empty(_FACT_GUIDANCE_SCHEMA) if table.num_rows == 0 else table.cast(_FACT_GUIDANCE_SCHEMA)
+
+
 def _build_fact_executive_record(conn: Any) -> pa.Table:
     table = _arrow(
         conn.execute(
@@ -1156,6 +1199,7 @@ def build_gold(db: Any) -> dict[str, pa.Table]:
         "sec_thirteenf_holding":          _timed("sec_thirteenf_holding",          lambda: _build_sec_thirteenf_holding(conn)),
         "sec_financial_derived":          _timed("sec_financial_derived",          lambda: _build_sec_financial_derived(conn)),
         "fact_earnings_release":          _timed("fact_earnings_release",          lambda: _build_fact_earnings_release(conn)),
+        "fact_guidance":                  _timed("fact_guidance",                  lambda: _build_fact_guidance(conn)),
         "fact_executive_record":          _timed("fact_executive_record",          lambda: _build_fact_executive_record(conn)),
         "fact_accounting_flag":           _timed("fact_accounting_flag",           lambda: _build_fact_accounting_flag(conn)),
         # Agent neighborhood evidence (ticket 08)

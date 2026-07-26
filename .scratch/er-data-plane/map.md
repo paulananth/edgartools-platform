@@ -7,7 +7,7 @@ Repo: **edgartools-platform** only (financial-services owns ER skills; this effo
 
 A locked **phase-1 ER data plane plan** for edgartools-platform: requirements live in [`.scratch/er-data-plane/spec.md`](./spec.md), completeness proven by [`.scratch/er-data-plane/coverage-matrix.md`](./coverage-matrix.md) (9/9 ER skills, zero unclassified required inputs). Phase-1 products: consensus, guidance values, earnings calendar, transcript MVP, existing-surface read paths, pure-SEC vs market boundary, **and ERDP-07 yfinance EOD Explore join** (scope expand). REQUIREMENTS at `.planning/workstreams/er-data-plane/REQUIREMENTS.md`. Durable product docs (`docs/…`, ADRs) are promoted **after** decisions land — not before.
 
-**Status: DESTINATION REACHED** (2026-07-24) — REQUIREMENTS published. **Implementation:** ERDP-07 + ERDP-03 landed; ERDP-01/02/04 gold products still open.
+**Status: DESTINATION REACHED** (2026-07-24) — REQUIREMENTS published. **Implementation:** ERDP-07 + ERDP-03 + ERDP-02 landed; ERDP-01/04 gold products still open.
 
 ## Notes
 
@@ -45,6 +45,7 @@ A locked **phase-1 ER data plane plan** for edgartools-platform: requirements li
 - **Pilot free sources locked:** consensus=`yahoo` (+firm_manual); calendar=`finnhub` (+yahoo/firm_manual); transcript=`ir_website`+`firm_manual` — [assets/free-sources-consensus-calendar-transcript.md](./assets/free-sources-consensus-calendar-transcript.md)
 - **ERDP-07 implemented (Explore):** `edgar_warehouse/market/eod_join.py` + `docs/er-market-eod-join.md` + `tests/unit/test_market_eod_join.py`; ERDP-06 boundary docs done; REQs ERDP-07-* checked.
 - **ERDP-03 implemented (Explore gold):** `edgar_warehouse/explore/earnings_calendar.py` + dbt `EARNINGS_CALENDAR` + `docs/er-earnings-calendar.md` + unit tests; REQs ERDP-03-* checked; Finnhub commercial license still ops gate.
+- **ERDP-02 implemented (Explore gold, 2026-07-26):** `edgar_warehouse/explore/guidance_facts.py` (SEC extractor over `EarningsRelease.guidance` + `firm_manual` CSV loader) + silver `sec_guidance_fact`/`sec_guidance_fact_reject` + dbt `GUIDANCE_FACTS` + `docs/er-guidance-facts.md` + 51 unit tests; REQs ERDP-02-01/02/04/05/06/07 checked, ERDP-02-03 (live Snowflake join) and dbt compile still open — no warehouse creds available in-session. A02.1 verified via synthetic FinancialTable fixtures, not a live curated accession set (D5 backfill also not yet run).
 
 
 

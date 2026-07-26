@@ -7,7 +7,8 @@ per-filing
 Fetches primary document for 8-K (earnings releases) and DEF 14A (proxy
 compensation) filings whose form type is in BRANCH_B_FORMS.  Dispatches through
 ``edgar_warehouse.parsers.get_parser()`` (same mechanism as bootstrap-batch).
-Writes to: sec_earnings_release, sec_executive_record.
+Writes to: sec_earnings_release, sec_executive_record, sec_guidance_fact
+(ERDP-02, plus sec_guidance_fact_reject for constraint failures).
 
 entity-facts
 ------------
@@ -83,6 +84,8 @@ def run_bootstrap_fundamentals_per_filing(
         "rows_earnings_release": 0,
         "rows_executive_record": 0,
         "rows_employment_event": 0,
+        "rows_guidance_fact": 0,
+        "rows_guidance_fact_reject": 0,
         "candidate_outcomes": [],
     }
 
@@ -222,6 +225,12 @@ def run_bootstrap_fundamentals_per_filing(
         )
         metrics["rows_executive_record"] += db.merge_executive_records(
             parsed.get("sec_executive_record", []), sync_run_id
+        )
+        metrics["rows_guidance_fact"] += db.merge_guidance_facts(
+            parsed.get("sec_guidance_fact", []), sync_run_id
+        )
+        metrics["rows_guidance_fact_reject"] += db.merge_guidance_fact_rejects(
+            parsed.get("sec_guidance_fact_reject", []), sync_run_id
         )
         terminal_status = "not_applicable"
         terminal_reason = "no_relationship_rows"

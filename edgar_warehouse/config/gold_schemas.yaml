@@ -646,3 +646,62 @@ schemas:
     - name: ingested_at
       type: timestamp_us_utc
       nullable: false
+  # ERDP-02 — Guidance facts (Gold Explore; not pure-SEC Agent-Grade)
+  _FACT_GUIDANCE_SCHEMA:
+    - name: fact_key
+      type: int64
+      nullable: false
+    - name: cik
+      type: int64
+      nullable: false
+    - name: ticker
+      type: string
+    - name: company_key
+      type: int64
+    - name: accession_number
+      type: string
+    - name: metric
+      type: string
+      nullable: false
+    - name: period_type
+      type: string
+      nullable: false
+    - name: fiscal_year
+      type: int32
+      nullable: false
+    - name: fiscal_quarter
+      type: int32
+      nullable: false
+    - name: period_end
+      type: date32
+    - name: value_low
+      type: float64
+    - name: value_mid
+      type: float64
+    - name: value_high
+      type: float64
+    - name: unit
+      type: string
+    - name: currency
+      type: string
+    - name: is_non_gaap
+      type: bool
+      nullable: false
+    - name: as_of
+      type: date32
+      nullable: false
+    - name: source_system
+      type: string
+      nullable: false
+    - name: source_ref
+      type: string
+    - name: excerpt
+      type: string
+    - name: confidence
+      type: string
+      nullable: false
+    - name: parser_version
+      type: string
+    - name: ingested_at
+      type: timestamp_us_utc
+      nullable: false

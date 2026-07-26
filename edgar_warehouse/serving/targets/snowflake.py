@@ -103,6 +103,7 @@ def write_gold_to_serving_export(
         "sec_financial_derived": "sec_financial_derived",
         # Dimensional tables drop SEC_ prefix (per PR-1 source naming).
         "earnings_release": "fact_earnings_release",
+        "guidance_facts": "fact_guidance",
         "executive_record": "fact_executive_record",
         "accounting_flag": "fact_accounting_flag",
         # Agent neighborhood evidence (ticket 08)

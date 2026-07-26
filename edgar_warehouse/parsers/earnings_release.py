@@ -7,7 +7,8 @@ because it triggers an SEC HTTP fetch via ``filing.attachments`` lookup; the
 bronze-replay architecture (artifacts already cached in S3) requires we feed
 the already-fetched HTML content directly.
 
-Writes to ``sec_earnings_release`` in the fundamentals silver namespace.
+Writes to ``sec_earnings_release`` and (ERDP-02) ``sec_guidance_fact`` /
+``sec_guidance_fact_reject`` in the fundamentals silver namespace.
 """
 
 from __future__ import annotations
@@ -20,6 +21,11 @@ logger = logging.getLogger(__name__)
 
 PARSER_NAME = "earnings_release_v2"
 PARSER_VERSION = "2"
+
+# ERDP-02 guidance extraction versioned separately from PARSER_VERSION above:
+# the guidance-table heuristics (edgar_warehouse.explore.guidance_facts) can
+# evolve independently of the earnings_release table-detection logic.
+GUIDANCE_PARSER_VERSION = "1"
 
 
 # WHY-STUB: bronze-replay architecture caches filing artifacts in S3.  Using
@@ -117,6 +123,35 @@ def parse_earnings_release(
     except Exception:
         has_guidance = False
 
+    # ERDP-02: structured guidance values, not just presence. Same cached
+    # bronze content, no re-fetch. Absence/extraction failure -> [] (not
+    # fatal to earnings_release parsing) -- has_guidance above still
+    # reflects table presence even when no numeric value was extractable.
+    guidance_rows: list[dict[str, Any]] = []
+    guidance_rejects: list[dict[str, Any]] = []
+    if has_guidance:
+        from edgar_warehouse.explore.guidance_facts import (
+            extract_guidance_from_earnings_release,
+            validate_guidance_rows,
+        )
+
+        try:
+            candidates = extract_guidance_from_earnings_release(
+                er,
+                cik=int(cik),
+                accession_number=accession_number,
+                filing_date=filing_date,
+                fiscal_year=fiscal_year,
+                fiscal_quarter=_fiscal_period_to_quarter(period_info.get("fiscal_period")),
+                source_system="sec_8k",
+                parser_version=GUIDANCE_PARSER_VERSION,
+            )
+        except Exception as exc:
+            logger.debug("guidance extraction failed for %s: %s", accession_number, exc)
+            candidates = []
+        if candidates:
+            guidance_rows, guidance_rejects = validate_guidance_rows(candidates)
+
     row = {
         "cik": int(cik),
         "accession_number": accession_number,
@@ -132,7 +167,11 @@ def parse_earnings_release(
         "parser_version": PARSER_VERSION,
     }
 
-    return {"sec_earnings_release": [row]}
+    return {
+        "sec_earnings_release": [row],
+        "sec_guidance_fact": guidance_rows,
+        "sec_guidance_fact_reject": guidance_rejects,
+    }
 
 
 def _fiscal_period_to_quarter(fp: Any) -> int | None:

@@ -231,6 +231,42 @@ models:
         tests:
           - not_null
 
+  - name: guidance_facts
+    description: >
+      ERDP-02 structured guidance values (value_low/value_mid/value_high) per
+      (cik, metric, FY, FQ, as_of, accession_number, is_non_gaap,
+      source_system). is_current marks latest as_of per base key. SEC-derived
+      rows (sec_8k/sec_10q/sec_10k) preferred; firm_manual coexists via
+      source_system. Not pure-SEC Agent-Grade (ADR 0001).
+    columns:
+      - name: fact_key
+        tests:
+          - not_null
+      - name: cik
+        tests:
+          - not_null
+      - name: metric
+        tests:
+          - not_null
+      - name: period_type
+        tests:
+          - not_null
+      - name: fiscal_year
+        tests:
+          - not_null
+      - name: fiscal_quarter
+        tests:
+          - not_null
+      - name: as_of
+        tests:
+          - not_null
+      - name: source_system
+        tests:
+          - not_null
+      - name: confidence
+        tests:
+          - not_null
+
   - name: accounting_flags
     description: Annual auditor identity and forensic score tier classifications (Beneish, Altman, Piotroski) per 10-K filing.
     columns:
