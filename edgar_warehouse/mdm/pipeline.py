@@ -1706,14 +1706,17 @@ class MDMPipeline:
                     skipped_unresolved_source += 1
                     continue
                 if current[0].effective_from is not None and effective_date is not None \
-                        and current[0].effective_from > effective_date:
+                        and current[0].effective_from >= effective_date:
                     # Item 5.02 events are walked in effective_date order, but proxy
                     # baselines (source_system="proxy_filing") are all inserted up
                     # front with effective_from = Jan 1 of the DEF 14A fiscal year --
                     # a coarse placeholder, not a true start date. When that baseline's
-                    # placeholder date lands after this event's real effective_date,
-                    # closing it here would set effective_to < effective_from and trip
-                    # ck_rel_instance_valid_interval. Skip rather than corrupt/crash.
+                    # placeholder date lands on or after this event's real
+                    # effective_date, closing it here would set effective_to <=
+                    # effective_from -- ck_rel_instance_valid_interval requires a
+                    # strictly positive interval (valid_to_date > valid_from_date), so
+                    # even an equal-date close (two same-day events) is invalid. Skip
+                    # rather than corrupt/crash.
                     skipped_unresolved_source += 1
                     print(json.dumps({
                         "event": "mdm_relationship_skip",
@@ -1736,8 +1739,8 @@ class MDMPipeline:
                 skipped_unresolved_source += 1
                 continue
             if current and current[0].effective_from is not None and effective_date is not None \
-                    and current[0].effective_from > effective_date:
-                # Same out-of-order guard as the departure branch above.
+                    and current[0].effective_from >= effective_date:
+                # Same out-of-order/same-day guard as the departure branch above.
                 skipped_unresolved_source += 1
                 print(json.dumps({
                     "event": "mdm_relationship_skip",
