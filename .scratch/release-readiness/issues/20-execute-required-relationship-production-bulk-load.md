@@ -79,8 +79,18 @@ under `release_mode`.
   completeness bar; non-insider executives are best-effort, not gating.
 - A no-change rerun makes no SEC requests and produces identical silver/MDM semantic digests with zero new relationship identities.
 - `EMPLOYED_BY` passes exact MDM-to-hosted-graph parity and current-at-watermark checks.
-  `INSTITUTIONAL_HOLDS` parity is verified and reported in evidence but is
-  **non-blocking** for the launch decision (Release Owner decision, 2026-07-19).
+  ~~`INSTITUTIONAL_HOLDS` parity is verified and reported in evidence but is
+  **non-blocking** for the launch decision (Release Owner decision, 2026-07-19).~~
+  **Superseded 2026-07-26 (same Release Owner, via Ticket 06):** Ticket 06's
+  Full-Chain Launch Gate grilling explicitly named INSTITUTIONAL_HOLDS while
+  confirming **strict inheritance of Ticket 04's rule, no exclusion valve** —
+  "INSTITUTIONAL_HOLDS is 0 ... that is intentional, not a gap in this gate's
+  design," and the gate "cannot reach Pass" while it's zero. That is a later,
+  more specific decision on the identical question and controls going
+  forward: `INSTITUTIONAL_HOLDS` parity is now **required**, not
+  non-blocking, on the same footing as `EMPLOYED_BY` and the other nine
+  relationship types. This line is struck rather than deleted so the prior
+  2026-07-19 decision remains legible, not silently erased.
 - Named Warehouse, MDM, Graph, Release Data Operator, and Release Owner attestations are bound to the evidence artifact.
 
 ## Pre-image ticket hygiene (2026-07-18)
@@ -100,7 +110,21 @@ under `release_mode`.
 graph candidate verify + activate + active verify + gold refresh OK. **Production GO is not
 self-declared** — Release Owner decision. Evidence:
 `docs/release-readiness/ticket20-completion-evidence-2026-07-25.md` and
-`docs/release-readiness/ticket20-completion-evidence-2026-07-25.json`.
+`docs/release-readiness/ticket20-completion-evidence-2026-07-25.json`
+(sealed, append-only per Ticket 01 — not edited below).
+
+**2026-07-26 — INSTITUTIONAL_HOLDS reclassified from non-blocking to required
+(see Done-when above).** The 2026-07-25 PASS was sealed under the old
+non-blocking reading, where INSTITUTIONAL_HOLDS = 0 didn't count against
+disposition. Under the superseding Ticket 06 reading it does: a fix for the
+root cause (`ShardedSilverReader._TABLES` registration gap, same day) is
+deployed and a production backfill is in flight. The 2026-07-25 PASS record
+itself is not retroactively invalidated — it accurately reflects what was
+true and required under the rules in force that day — but it is **not
+sufficient for GO** under today's rules until a new dated evidence record
+shows INSTITUTIONAL_HOLDS parity passing too. See
+`docs/release-readiness/ticket20-completion-evidence-2026-07-26.md` (to be
+written once the in-flight backfill + graph parity check complete).
 
 Prior NO_GO history retained below for audit.
 
