@@ -822,6 +822,64 @@ class TestRunRelationships:
         assert relationship.effective_from == date(2025, 3, 1)
         assert relationship.properties["role"] == "Chief Operating Officer"
 
+    def test_item_502_event_predating_proxy_baseline_is_skipped_not_crashed(
+        self, session, fixture_world
+    ):
+        """Regression: prod run edge09-employed-by-forced-1785099117 (2026-07-26).
+
+        Proxy baselines (source_system=proxy_filing) are inserted with
+        effective_from = Jan 1 of the DEF 14A fiscal_year -- a coarse
+        placeholder, not a true start date. Item 5.02 events are walked in a
+        separate pass ordered by their own real effective_date. When a
+        person/company pair has both, and the event's effective_date lands
+        *before* the baseline's placeholder effective_from, closing the
+        baseline at the event's date used to set effective_to < effective_from
+        and crash the whole derive with a Postgres/SQLite
+        ck_rel_instance_valid_interval CheckViolation. It must now be skipped
+        instead.
+        """
+        silver = StubSilver({
+            "sec_executive_record": [
+                {
+                    "cik": 910001, "accession_number": "proxy-1",
+                    "fiscal_year": 2025, "exec_name": "Pat Officer", "exec_role": "President",
+                    "total_comp": 2000000, "base_salary": 800000, "bonus": None,
+                    "stock_awards": None, "option_awards": None,
+                    "non_equity_incentive": None, "tenure_start_year": 2020,
+                },
+            ],
+            "sec_employment_event": [{
+                "accession_number": "item-502-role-change",
+                "cik": 910001,
+                "event_type": "role_change",
+                "person_name": "Pat Officer",
+                "exec_role": "Executive Chairman",
+                "previous_role": "President",
+                "compensation_amount": None,
+                "effective_date": date(2024, 7, 5),
+            }],
+        })
+
+        summary = MDMPipeline(session=session, silver=silver).derive_relationships(
+            relationship_types=["EMPLOYED_BY"]
+        )
+
+        # Only the proxy baseline lands; the out-of-order event is skipped, not crashed.
+        assert summary["EMPLOYED_BY"]["inserted"] == 1
+        assert summary["EMPLOYED_BY"]["skipped_unresolved_source"] == 1
+
+        relationships = session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "EMPLOYED_BY")
+        ).all()
+        assert len(relationships) == 1
+        baseline = relationships[0]
+        assert baseline.effective_from == date(2025, 1, 1)
+        # The skipped close must never have touched the baseline's end date.
+        assert baseline.effective_to is None
+        assert baseline.valid_to_date is None
+
     # ------------------------------------------------------------------
     # AUDITED_BY tests (T3 — 06-02)
     # ------------------------------------------------------------------
