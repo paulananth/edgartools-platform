@@ -839,6 +839,10 @@ class MDMPipeline:
                 resolution_method="sec_exhibit_name_jurisdiction",
                 confidence=1.0,
             ))
+            # See _ensure_thirteenf_manager: MdmEntity must flush before its
+            # FK-dependent rows -- no relationship() links them, so the ORM
+            # won't auto-order the inserts.
+            self.session.flush()
             self.session.add(MdmCompany(
                 entity_id=entity_id,
                 cik=None,
@@ -1272,6 +1276,15 @@ class MDMPipeline:
                 resolution_method="sec_13f_manager_cik",
                 confidence=1.0,
             ))
+            # MdmEntity must be flushed before its dependents (MdmAdviser,
+            # MdmSourceRef, MdmChangeLog) are inserted: no ORM relationship()
+            # links these tables to MdmEntity, only a plain-column
+            # ForeignKey, so SQLAlchemy's unit-of-work has no dependency
+            # edge to auto-order the inserts by and may emit the child
+            # insert before the parent's. SQLite (this file's test suite)
+            # doesn't enforce FKs by default and stayed silent; real
+            # Postgres (prod MDM) raised ForeignKeyViolation.
+            self.session.flush()
             self.session.add(MdmAdviser(
                 entity_id=entity_id,
                 cik=normalized_cik,
@@ -1336,6 +1349,10 @@ class MDMPipeline:
                     resolution_method="pcaob_firm_id",
                     confidence=1.0,
                 ))
+                # See _ensure_thirteenf_manager: MdmEntity must flush before
+                # its FK-dependent rows -- no relationship() links them, so
+                # the ORM won't auto-order the inserts.
+                self.session.flush()
                 self.session.add(MdmAuditFirm(
                     entity_id=entity_id,
                     firm_name=canonical_name,
