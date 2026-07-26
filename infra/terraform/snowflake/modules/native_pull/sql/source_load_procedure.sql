@@ -31,7 +31,9 @@ const targetTables = new Map([
   ["ACCOUNTING_FLAG", `${databaseName}.${sourceSchema}.ACCOUNTING_FLAG`],
   ["SEC_SUBSIDIARY_EVIDENCE", `${databaseName}.${sourceSchema}.SEC_SUBSIDIARY_EVIDENCE`],
   ["SEC_AUDITOR_REPORT_EVIDENCE", `${databaseName}.${sourceSchema}.SEC_AUDITOR_REPORT_EVIDENCE`],
-  ["SEC_EMPLOYMENT_EVENT", `${databaseName}.${sourceSchema}.SEC_EMPLOYMENT_EVENT`]
+  ["SEC_EMPLOYMENT_EVENT", `${databaseName}.${sourceSchema}.SEC_EMPLOYMENT_EVENT`],
+  // ERDP-03 Explore export (gold-refresh may emit empty parquet; table must still load)
+  ["EARNINGS_CALENDAR", `${databaseName}.${sourceSchema}.EARNINGS_CALENDAR`]
 ]);
 
 const mergeKeys = new Map([
@@ -52,7 +54,8 @@ const mergeKeys = new Map([
   ["ACCOUNTING_FLAG", ["FACT_KEY"]],
   ["SEC_SUBSIDIARY_EVIDENCE", ["ACCESSION_NUMBER", "DOCUMENT_NAME", "ROW_ORDINAL"]],
   ["SEC_AUDITOR_REPORT_EVIDENCE", ["ACCESSION_NUMBER", "EVIDENCE_FINGERPRINT"]],
-  ["SEC_EMPLOYMENT_EVENT", ["ACCESSION_NUMBER", "EVENT_INDEX"]]
+  ["SEC_EMPLOYMENT_EVENT", ["ACCESSION_NUMBER", "EVENT_INDEX"]],
+  ["EARNINGS_CALENDAR", ["FACT_KEY"]]
 ]);
 
 function q(value) {
