@@ -1705,6 +1705,25 @@ class MDMPipeline:
                 if len(current) != 1:
                     skipped_unresolved_source += 1
                     continue
+                if current[0].effective_from is not None and effective_date is not None \
+                        and current[0].effective_from > effective_date:
+                    # Item 5.02 events are walked in effective_date order, but proxy
+                    # baselines (source_system="proxy_filing") are all inserted up
+                    # front with effective_from = Jan 1 of the DEF 14A fiscal year --
+                    # a coarse placeholder, not a true start date. When that baseline's
+                    # placeholder date lands after this event's real effective_date,
+                    # closing it here would set effective_to < effective_from and trip
+                    # ck_rel_instance_valid_interval. Skip rather than corrupt/crash.
+                    skipped_unresolved_source += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "EMPLOYED_BY",
+                        "reason": "event_predates_open_version",
+                        "source_entity_id": person_id,
+                        "target_entity_id": company_id,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
                 from edgar_warehouse.mdm.graph import close_relationship_version
                 close_relationship_version(self.session, current[0].instance_id, effective_date)
                 continue
@@ -1715,6 +1734,19 @@ class MDMPipeline:
                 continue
             if len(current) > 1:
                 skipped_unresolved_source += 1
+                continue
+            if current and current[0].effective_from is not None and effective_date is not None \
+                    and current[0].effective_from > effective_date:
+                # Same out-of-order guard as the departure branch above.
+                skipped_unresolved_source += 1
+                print(json.dumps({
+                    "event": "mdm_relationship_skip",
+                    "rel_type": "EMPLOYED_BY",
+                    "reason": "event_predates_open_version",
+                    "source_entity_id": person_id,
+                    "target_entity_id": company_id,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }), file=sys.stderr, flush=True)
                 continue
             if current:
                 from edgar_warehouse.mdm.graph import close_relationship_version
