@@ -34,10 +34,15 @@ warehouse silver surface without re-resolving companies.
 5. `MdmCompanyHolds` — `COMPANY_HOLDS` (mdm-large)
 6. `MdmInstitutionalHolds` — `INSTITUTIONAL_HOLDS` (separate step, target 50k; mdm-large)
 7. `MdmExport` — drain change log / endpoints (mdm-large)
-8. `MdmSync` — `sync-graph` for person/security/company + the four hold types (mdm-large)
-9. `MdmVerify` — `verify-graph --skip-native-app` (candidate integrity; **mdm-small**)
+8. `MdmSync` — **full** `sync-graph` (all entity/relationship types) tagged
+   `--generation-id $$.Execution.Name` (mdm-large). Partial type filters are
+   **forbidden**: they leave Fund/Adviser/EMPLOYED_BY off the candidate gen.
+9. `MdmVerify` — `verify-graph --skip-native-app --generation-id $$.Execution.Name`
+   (candidate integrity; **mdm-small**). Verifying without generation_id checks
+   the **active** pointer vs full MDM and fails after residual MDM fills.
 
 Does **not** re-run `mdm run --entity-type company|all`. Does **not** self-declare GO.
+Does **not** auto-activate — operator runs `mdm graph-activate` after PASS.
 
 ### Memory / OOM note (2026-07-25)
 
