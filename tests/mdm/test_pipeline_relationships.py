@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Optional
 
 import pytest
@@ -174,6 +174,36 @@ def session() -> Session:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    Base.metadata.create_all(engine)
+    sess = Session(engine)
+    _seed_registry(sess)
+    yield sess
+    sess.close()
+
+
+@pytest.fixture
+def fk_enforced_session() -> Session:
+    """Same as `session`, but with SQLite foreign-key enforcement turned on.
+
+    The plain `session` fixture leaves SQLite's default (FKs unenforced), which
+    is why the ForeignKeyViolation in _ensure_thirteenf_manager/
+    _ensure_disclosed_subsidiary/_audit_firm_entity_id (MdmEntity inserted after
+    its FK-dependent row, because no relationship() links them so the ORM can't
+    auto-order the flush) was invisible to this suite and only surfaced against
+    real Postgres in prod. Use this fixture for any test of a code path that
+    creates an MdmEntity + a dependent row in the same flush.
+    """
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    @event.listens_for(engine, "connect")
+    def _enable_fk(dbapi_conn, _):
+        dbapi_conn.execute("PRAGMA foreign_keys=ON")
+        dbapi_conn.create_function("NOW", 0, lambda: datetime.utcnow().isoformat())
+
     Base.metadata.create_all(engine)
     sess = Session(engine)
     _seed_registry(sess)
@@ -952,7 +982,7 @@ class TestRunRelationships:
         assert manager is not None
         assert manager.canonical_name == "Manager Only LLC"
 
-    def test_thirteenf_manager_resolves_name_against_real_silver_schema(self, session, tmp_path):
+    def test_thirteenf_manager_resolves_name_against_real_silver_schema(self, fk_enforced_session, tmp_path):
         """Regression: _ensure_thirteenf_manager's sec_company query must match the
         real schema (entity_name), not a StubSilver fixture that can silently drift
         from it. A prior version of this file's StubSilver fixture used the same
@@ -962,7 +992,13 @@ class TestRunRelationships:
         entity_name). This test runs the same code path against a real
         SilverDatabase-backed DuckDB file instead of a stub, so a future rename of
         either side would fail here.
+
+        Uses fk_enforced_session (not the plain `session` fixture) because a
+        second, independent prod bug shared this exact code path: MdmEntity was
+        inserted after its FK-dependent MdmAdviser row (ForeignKeyViolation on
+        real Postgres), invisible under SQLite's default no-FK-enforcement.
         """
+        session = fk_enforced_session
         from edgar_warehouse.silver_store import SilverDatabase
 
         silver_path = tmp_path / "silver.duckdb"
