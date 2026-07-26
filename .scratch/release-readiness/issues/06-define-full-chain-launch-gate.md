@@ -86,15 +86,38 @@ completed_at}`, plus the rollback-readiness precondition result. Overall
 `status: "pass"` requires every entry `pass` with zero exclusions. This is
 the artifact ticket 08 (GO Packet) reads.
 
-### Note — INSTITUTIONAL_HOLDS = 0 is a known, undeployed gap, not new work
+### Note — INSTITUTIONAL_HOLDS = 0 is a reader-registration bug, not a fetch gap
 
-EDGE-11 (`.planning/workstreams/fix-pipelines/REQUIREMENTS.md`) already
-root-caused this: the bulk artifact-fetch pipeline never selects 13F-HR
-forms for fetch, so `sec_thirteenf_holding` is never populated. A fast-path
-fix is committed but undeployed, blocked on a deferred fetch-volume/cost
-decision — not a diagnosis gap. Because stage 7 has no exclusion valve, this
-gate **cannot reach Pass** until that fix ships and INSTITUTIONAL_HOLDS is
-populated. That is a deliberate consequence of inheriting ticket 04's rule,
-not something 06 needs to soften — it surfaces the deferred cost decision as
-real pressure on the release timeline instead of hiding it behind a
+**Correction (2026-07-26, superseding this note's original text):** the
+EDGE-11 finding cited here as "bulk fetch never selects 13F-HR" is stale.
+Live prod evidence: `EDGARTOOLS_PROD.EDGARTOOLS_SOURCE.SEC_THIRTEENF_HOLDING`
+already has **6.8M rows** — the fetch/parse pipeline works and has run at
+scale. The real cause, confirmed against prod CloudWatch logs
+(`mdm-mdm-large/edgar-warehouse/7fd06878e8254bcab9cbdb4263066ab8`,
+2026-07-25T23:26:52Z): `{"event": "mdm_relationship_skip", "rel_type":
+"INSTITUTIONAL_HOLDS", "reason": "missing_source_table", "source_table":
+"sec_thirteenf_filing"}`. MDM's relationship-derive step reads silver
+through `ShardedSilverReader` (`edgar_warehouse/silver_support/sharded_reader.py`),
+which only exposes tables listed in its hardcoded `_TABLES` allowlist as
+cross-shard UNION ALL views. `sec_thirteenf_filing` was added to the schema
+in the same commit as `sec_thirteenf_holding` (d20cad8) but never added to
+`_TABLES` — so the derive query's JOIN against it raises a DuckDB catalog
+error, which `_find_missing_source_table`'s deliberately-broad exception
+matching (see its own comment) swallows as a legitimate "not loaded yet"
+skip. A registration bug and an empty universe are indistinguishable through
+that path — exactly the "unproven zero" stage 7 exists to reject. Same bug
+also silently drops `sec_employment_event` (the EDGE-09 sibling gap for
+EMPLOYED_BY's Item 5.02 8-K path).
+
+Fix: add both table names to `_TABLES`
+(`edgar_warehouse/silver_support/sharded_reader.py`) — a one-line
+registration fix, not a fetch/parse change. No new SEC fetching is needed;
+the source data already exists in the shards. Regression test:
+`tests/unit/test_sharding.py::test_sharded_silver_reader_exposes_thirteenf_filing_and_employment_event`.
+
+Because stage 7 has no exclusion valve, this gate **cannot reach Pass**
+until the fix is deployed and `derive-relationships` is re-run for
+INSTITUTIONAL_HOLDS (and EMPLOYED_BY's 8-K path). That is a deliberate
+consequence of inheriting ticket 04's rule, not something 06 needs to
+soften — it surfaces the real blocker instead of hiding it behind a
 documented-exclusion escape hatch.

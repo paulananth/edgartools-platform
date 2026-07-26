@@ -113,5 +113,22 @@ mdm graph-activate --generation-id residual-full-20260726T010010Z
 
 ## INSTITUTIONAL_HOLDS
 
-Still **0** in MDM after derive step “OK” — separate investigation (silver 13F
-path / eligibility / derive filters), not the verify failure root cause.
+Still **0** in MDM after derive step "OK" as of this doc's original writing —
+not the verify failure root cause.
+
+**Update 2026-07-26 (later same day):** root-caused via live prod evidence,
+not silver 13F fetch/eligibility. `SEC_THIRTEENF_HOLDING` already has 6.8M
+rows in Snowflake SOURCE. CloudWatch confirms the derive step's actual skip
+reason: `{"event": "mdm_relationship_skip", "rel_type":
+"INSTITUTIONAL_HOLDS", "reason": "missing_source_table", "source_table":
+"sec_thirteenf_filing"}`
+(`mdm-mdm-large/edgar-warehouse/7fd06878e8254bcab9cbdb4263066ab8`,
+2026-07-25T23:26:52Z). `ShardedSilverReader._TABLES`
+(`edgar_warehouse/silver_support/sharded_reader.py`) never registered
+`sec_thirteenf_filing` as a cross-shard view (added same commit as
+`sec_thirteenf_holding`, d20cad8, but omitted from the allowlist), so the
+derive JOIN raises a DuckDB catalog error that the graceful missing-table
+skip mistakes for an empty universe. Fixed by adding the table name (plus
+sibling `sec_employment_event`, EDGE-09's gap) to `_TABLES`. No SEC refetch
+needed — see `.scratch/release-readiness/issues/06-define-full-chain-launch-gate.md`
+for the full chain of evidence.
