@@ -86,6 +86,7 @@ _SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA = GOLD_SCHEMAS['_SEC_AUDITOR_REPORT_EVIDENCE
 _SEC_EMPLOYMENT_EVENT_SCHEMA = GOLD_SCHEMAS['_SEC_EMPLOYMENT_EVENT_SCHEMA']
 _FACT_EARNINGS_CALENDAR_SCHEMA = GOLD_SCHEMAS['_FACT_EARNINGS_CALENDAR_SCHEMA']
 _FACT_GUIDANCE_SCHEMA = GOLD_SCHEMAS['_FACT_GUIDANCE_SCHEMA']
+_FACT_CONSENSUS_ESTIMATE_SCHEMA = GOLD_SCHEMAS['_FACT_CONSENSUS_ESTIMATE_SCHEMA']
 
 
 def _empty(schema: pa.Schema) -> pa.Table:
@@ -1288,3 +1289,20 @@ def build_earnings_calendar_table_from_rows(
     if table.schema.equals(_FACT_EARNINGS_CALENDAR_SCHEMA):
         return table
     return table.cast(_FACT_EARNINGS_CALENDAR_SCHEMA)
+
+
+def build_consensus_estimates_table_from_rows(
+    rows: list[dict[str, Any]],
+) -> pa.Table:
+    """Build ERDP-01 gold table from normalized or raw consensus rows.
+
+    Thin wrapper so serving export paths can import from ``gold_models``
+    alongside other builders.  Implementation lives in
+    ``edgar_warehouse.explore.consensus_estimates``.
+    """
+    from edgar_warehouse.explore.consensus_estimates import build_consensus_estimates_table
+
+    table = build_consensus_estimates_table(rows)
+    if table.schema.equals(_FACT_CONSENSUS_ESTIMATE_SCHEMA):
+        return table
+    return table.cast(_FACT_CONSENSUS_ESTIMATE_SCHEMA)
