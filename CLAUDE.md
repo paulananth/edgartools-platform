@@ -432,6 +432,130 @@ executes as. For any Streamlit-in-Snowflake app whose access-control story matte
 claim; Terraform-created objects in this repo default to the admin role as owner unless
 something has deliberately re-created them otherwise.
 
+## Dev Terraform/Snowflake go-live blockers 5-whys (partially resolved 2026-07-27)
+
+**Problem:** Resuming a paused live `terraform apply` for the dev Snowflake stack
+(`infra/terraform/snowflake/accounts/dev` and
+`infra/terraform/access/snowflake/accounts/dev`, the roots `go-live.sh`/
+`deploy-snowflake-stack.sh --env dev` drive) hit `terraform init` failing on a
+nonexistent S3 bucket, then a real Snowflake "free trial has ended" error, then a
+plan that wanted to destroy the entire `native_pull` module (16 tables, storage
+integration, export stage, manifest task), then an apply that silently would have
+unscheduled the production manifest task, then a final grant failure. Five
+distinct blockers, stacked.
+
+1. **`terraform init` failed:** local (gitignored) `backend.hcl` files across 4 dev
+   roots pointed at `edgartools-dev-tfstate-690839588395`, which was never
+   provisioned (its `bootstrap-state` local state has `resources: []` — `init`'d,
+   never `apply`'d). **Why did every local file have the same wrong bucket?**
+   They're generated from the tracked `.example` templates — 2 of the 4
+   `.example` files (`accounts/dev`, `access/aws/accounts/dev`) carried the wrong
+   suffixed name while the other 2 correctly said `edgartools-dev-tfstate` (the
+   real bucket, in use since 2026-07-02, holding all 4 roots' actual state).
+   **Root cause:** a repo-level inconsistency in the tracked `.example` files,
+   silently propagated into every local checkout. **Fix:** corrected both wrong
+   `.example` files and the 4 local `backend.hcl` files to `edgartools-dev-tfstate`.
+2. **After `init` succeeded, `terraform plan` failed with `390913 (08004): Your
+   free trial has ended and all of your virtual warehouses have been suspended`.**
+   This looked like a billing blocker but wasn't: dev's `terraform.tfvars` had
+   `snowflake_organization_name = "EADPGLN"` / `account_name = "YG91578"` — a
+   **different account** from the one this whole platform actually runs on
+   (`XCPCLKF`/`KB19989`, confirmed via `SELECT CURRENT_ORGANIZATION_NAME(),
+   CURRENT_ACCOUNT_NAME()` against the `snowconn`/`edgartools-prod` connections
+   both dbt and this repo's other tooling already use). `EADPGLN-YG91578` never
+   held any real EdgarTools infrastructure. **Fix:** corrected both dev
+   `terraform.tfvars` files' account identifiers to `XCPCLKF`/`KB19989`, plus a
+   third stale reference (`provisioning_state_bucket` pointing at the
+   decommissioned `077127448006` account's bucket) in
+   `access/snowflake/accounts/dev/terraform.tfvars`.
+3. **With the right account, the plan showed `0 add, 0 change, 27 destroy`** —
+   all of `module.native_pull` (every source/gold table Terraform tracks, the
+   storage integration, export stage, Snowpipe, manifest task).
+   `local.native_pull_enabled` in
+   `infra/terraform/snowflake/accounts/dev/main.tf` requires 3 variables
+   (`snowflake_storage_role_arn`, `snowflake_export_root_url`,
+   `snowflake_manifest_sns_topic_arn`) that the local `terraform.tfvars` had
+   simply never set, defaulting them to `null` and disabling the whole module.
+   **Fix:** recovered the real values from the existing state (`terraform state
+   pull`, not guessed) and added them to `terraform.tfvars`.
+4. **With that fixed, the plan dropped to 4 changes, but one was a real,
+   unrelated bug:** `snowflake_task.manifest_processor` in
+   `infra/terraform/snowflake/modules/native_pull/main.tf` had never declared a
+   `schedule` block in its entire git history, yet the live task
+   (`SNOWFLAKE_RUN_MANIFEST_TASK`, applied 2026-07-06) has `schedule: 1 MINUTE`,
+   `state: started`, `predecessors: []` (standalone) — set out-of-band at some
+   point, never back-ported into the module. Applying as-is would have either
+   failed (Snowflake generally rejects resuming a standalone task with no
+   schedule) or stripped the schedule from a `started` task, stopping the
+   `PROCESS_RUN_MANIFEST_STREAM` pipeline that refreshes `EDGARTOOLS_GOLD`.
+   **Fix:** added an explicit `schedule { minutes = 1 }` block to the task
+   resource (module is shared by dev and prod — prod almost certainly has the
+   same latent gap, not yet verified/applied there). Confirmed via `SHOW TASKS`
+   after apply that the schedule survived.
+5. **Applying `access/snowflake/accounts/dev` (creates `EDGARTOOLS_DEV_LOADER`/
+   `EDGARTOOLS_DEV_DASHBOARD_OWNER` roles + grants, retires
+   `EDGARTOOLS_DEV_REFRESHER`) landed everything except 5 grants targeting the
+   `EDGARTOOLS_DECISION` schema**, which does not exist in dev at all (`SHOW
+   SCHEMAS IN DATABASE EDGARTOOLS_DEV` confirms). GH-247's PR (#294) added
+   Terraform-managed reader grants for a Decision Contract schema that has, at
+   most, only ever existed ad hoc in prod. **Not fixed** — creating it needs its
+   own scoped decision about what belongs in it (see
+   `infra/snowflake/sql/decision_contract/02_subject_bundle_read_issuer.sql`,
+   still labeled a "sketch" as of GH-246's PR #292). Plan saved at
+   `/tmp/dev-access-plan3.tfplan` (ephemeral, not committed) for whoever picks
+   this up next.
+
+**Root cause common to #1–#3:** nobody had ever run `terraform init`/`plan`/
+`apply` against these two dev roots since the 2026-07-06 apply and the
+`690839588395`/`XCPCLKF` account migration — local config silently drifted from
+reality (wrong bucket, wrong account, incomplete vars) with nothing to catch it
+until the next live-apply attempt.
+
+**Verified safe before applying #5's role deletion:** `SHOW GRANTS TO ROLE
+EDGARTOOLS_DEV_REFRESHER` showed only inbound USAGE/MONITOR/OPERATE grants, no
+owned objects (dev's dynamic tables are owned by `EDGARTOOLS_DEV_DEPLOYER`) — so
+dropping it did not repeat the ownership-orphaning pattern from the
+manifest-pipeline incident above.
+
+**Update (2026-07-27, same day):** #4 was confirmed live in prod, and it was
+worse than "latent" — `SNOWFLAKE_RUN_MANIFEST_TASK` had already lost its
+schedule (`schedule: None`) after an unrelated cursor-bug incident earlier that
+morning (03:13–03:18) auto-suspended it; it had been resumed but never
+rescheduled, so gold refresh was running only on occasional manual triggers,
+not the intended 1-minute cadence. Applied the same module fix to
+`snowflake/accounts/prod` and `access/snowflake/accounts/prod` (the latter
+required `terraform import`-ing `EDGARTOOLS_PROD_LOADER`, which already existed
+from the `08_loader_role.sql` bootstrap run during that same morning's
+incident — Terraform didn't know about it). Verified live: schedule restored,
+`EDGARTOOLS_PROD_DASHBOARD_OWNER`/`EDGARTOOLS_PROD_LOADER` roles and grants
+landed, `EDGARTOOLS_PROD_REFRESHER` retired (confirmed it owned nothing first).
+Also applied GH-251's `infra/snowflake/sql/graph_review/01_graph_review_contract.sql`
+to prod (schema, 4 tables, 5 fail-closed views, `EDGARTOOLS_GRAPH_REVIEW_READER`
+role) — unblocked there because prod already has the generation-scoped
+`GRAPH_ACTIVE_POINTER`/`GRAPH_GENERATION` tables (from the residual-holds work
+above); **dev does not** — dev's `NEO4J_GRAPH_MIGRATION` schema has only ever
+had non-generation-scoped `sync-graph` runs, so the same SQL fails there
+(`GRAPH_ACTIVE_POINTER does not exist`) after creating the schema + 4 empty
+tables (harmless, `CREATE IF NOT EXISTS` — resumes cleanly once dev gets a
+generation-scoped `sync-graph --generation-id ...` + `graph-activate` run).
+
+**Still open:** the `EDGARTOOLS_DECISION` schema gap (#5) — scoped further:
+`infra/snowflake/sql/decision_contract/01_subject_feature_screen.sql` is close
+(builds from existing gold tables, but its "MDM active-company universe" join
+is an explicit placeholder that just self-joins `COMPANY`, documented as
+"compile checks only, not agent-grade"); `02_subject_bundle_read_issuer.sql`
+has an actual bug, not just a placeholder — `BUNDLE_AUDITOR` references
+`EDGARTOOLS_GOLD.SEC_AUDITOR_REPORT_EVIDENCE`, but that table only exists in
+`EDGARTOOLS_SOURCE` (verified live), never `EDGARTOOLS_GOLD`. The real open
+decision behind both: no Snowflake-side source has been chosen yet for "MDM
+active company universe" — MDM's authoritative state is Postgres, not
+Snowflake; the closest reflection is `NEO4J_GRAPH_MIGRATION.MDM_GRAPH_NODES`
+(entity_type=COMPANY), but nobody has decided if that's right, what "active"
+means for it, or whether it should route through the generation-scoped
+`GRAPH_ACTIVE_POINTER` pattern GH-251 established. Also still open: dev's
+generation-scoped graph sync gap noted above (deprioritized for now, not
+worked further).
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. It runs in four
