@@ -4,6 +4,20 @@ The shared language for the AWS-first SEC EDGAR data platform: production operat
 
 ## Language
 
+### Snowflake operational roles
+
+**Deployer Role**:
+The account role that creates and owns Terraform-managed Snowflake infrastructure (warehouses, schemas, the dashboard Streamlit app) — deployment of infrastructure, not ownership of pipeline data objects.
+_Avoid_: Owning EDGARTOOLS_GOLD dynamic tables or the manifest-pipeline procedures, running dbt against gold
+
+**Loader Role**:
+The account role that owns and refreshes the pipeline's data objects — the EDGARTOOLS_GOLD dynamic tables and the manifest-pipeline procedures (LOAD_EXPORTS_FOR_RUN, REFRESH_AFTER_LOAD, PROCESS_RUN_MANIFEST_STREAM) — deliberately distinct from the Deployer Role so that pipeline-object ownership cannot drift to whichever role happens to run `dbt run` or a manual fix that day; `dbt run --target prod` and the manifest task must always execute as this role.
+_Avoid_: Reusing the Deployer Role or ACCOUNTADMIN for gold-table/procedure ownership, letting ownership vary by whichever role last touched an object
+
+**Reader Role**:
+The read-only consumption-layer role for dashboards and reports (the Streamlit-in-Snowflake dashboard runs as this role by Terraform pin; the standalone dashboard is bring-your-own-connection and not required to use it) — SELECT only, never owns or mutates pipeline objects.
+_Avoid_: Granting write/ownership privileges, treating "dashboard" and "report" as distinct concepts (they are the same thing in this platform)
+
 ### Data plane (ingest and engagement)
 
 **Runtime System of Engagement**:

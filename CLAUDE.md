@@ -332,7 +332,7 @@ outage plus a second, self-inflicted access break, while migrating one pilot com
 4. Why did the interim fix (granting `ACCOUNTADMIN` ownership of `REFRESH_AFTER_LOAD` as a
    stopgap) get corrected mid-incident? Per explicit user instruction: ad-hoc `ACCOUNTADMIN`
    ownership is not an acceptable pattern for pipeline objects. **Root cause of the ownership
-   churn:** fixed by creating a single dedicated `EDGARTOOLS_LOADER` role
+   churn:** fixed by creating a single dedicated `EDGARTOOLS_PROD_LOADER` role
    (`infra/snowflake/sql/bootstrap/08_loader_role.sql`) and transferring ownership of all 20 gold
    dynamic tables plus the 3 manifest procedures onto it in one operation, and pointing
    `profiles.yml`'s prod dbt target at that role by default (it previously defaulted to

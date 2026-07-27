@@ -1,4 +1,4 @@
--- Create EDGARTOOLS_LOADER, the dedicated role that owns the EDGARTOOLS_GOLD
+-- Create EDGARTOOLS_PROD_LOADER, the dedicated role that owns the EDGARTOOLS_GOLD
 -- dynamic tables and the manifest-pipeline procedures (LOAD_EXPORTS_FOR_RUN,
 -- REFRESH_AFTER_LOAD, PROCESS_RUN_MANIFEST_STREAM), and grant it what those
 -- procedures need to run EXECUTE AS OWNER.
@@ -36,8 +36,8 @@
 --   set source_schema_name = 'EDGARTOOLS_SOURCE';
 --   set gold_schema_name = 'EDGARTOOLS_GOLD';
 --   set admin_role_name = 'ACCOUNTADMIN';
---   set loader_role_name = 'EDGARTOOLS_LOADER';
---   set loader_default_grantee = 'ACCOUNTADMIN';  -- role that should be able to USE ROLE EDGARTOOLS_LOADER
+--   set loader_role_name = 'EDGARTOOLS_DEV_LOADER';
+--   set loader_default_grantee = 'ACCOUNTADMIN';  -- role that should be able to USE ROLE EDGARTOOLS_DEV_LOADER
 --   set refresh_warehouse_name = 'EDGARTOOLS_DEV_REFRESH_WH';
 --   set source_load_procedure_name = 'LOAD_EXPORTS_FOR_RUN';
 --   set refresh_procedure_name = 'REFRESH_AFTER_LOAD';
@@ -45,10 +45,10 @@
 --   set manifest_stream_name = 'SNOWFLAKE_RUN_MANIFEST_STREAM';
 --   set status_table_name = 'SNOWFLAKE_REFRESH_STATUS';
 --
--- After running this file, also grant EDGARTOOLS_LOADER to whichever human
+-- After running this file, also grant EDGARTOOLS_PROD_LOADER to whichever human
 -- users need to operate the pipeline directly (not scripted here -- usernames
 -- are per-operator, not environment config):
---   GRANT ROLE EDGARTOOLS_LOADER TO USER <username>;
+--   GRANT ROLE EDGARTOOLS_PROD_LOADER TO USER <username>;
 
 USE ROLE IDENTIFIER($admin_role_name);
 
@@ -64,7 +64,7 @@ GRANT USAGE ON WAREHOUSE IDENTIFIER($refresh_warehouse_name) TO ROLE IDENTIFIER(
 
 -- Object-creation privileges mirroring what a deployer role needs to run
 -- 01_source_stage.sql / 02_refresh_status.sql / 03_source_load_wrapper.sql /
--- 04_refresh_wrapper.sql end to end with $deployer_role_name = EDGARTOOLS_LOADER.
+-- 04_refresh_wrapper.sql end to end with $deployer_role_name = EDGARTOOLS_PROD_LOADER.
 GRANT CREATE TABLE ON SCHEMA IDENTIFIER($database_name || '.' || $source_schema_name) TO ROLE IDENTIFIER($loader_role_name);
 GRANT CREATE STAGE ON SCHEMA IDENTIFIER($database_name || '.' || $source_schema_name) TO ROLE IDENTIFIER($loader_role_name);
 GRANT CREATE STREAM ON SCHEMA IDENTIFIER($database_name || '.' || $source_schema_name) TO ROLE IDENTIFIER($loader_role_name);
@@ -117,7 +117,7 @@ GRANT OWNERSHIP ON DYNAMIC TABLE CONSENSUS_ESTIMATES TO ROLE IDENTIFIER($loader_
 GRANT OWNERSHIP ON DYNAMIC TABLE TRANSCRIPT_EVENTS TO ROLE IDENTIFIER($loader_role_name) COPY CURRENT GRANTS;
 
 -- Re-parent ownership of the 3 manifest-pipeline procedures onto the loader
--- role so EXECUTE AS OWNER runs as EDGARTOOLS_LOADER consistently. Signatures
+-- role so EXECUTE AS OWNER runs as EDGARTOOLS_PROD_LOADER consistently. Signatures
 -- must match exactly (Snowflake identifies procedures by name + arg types).
 USE SCHEMA IDENTIFIER($source_schema_name);
 GRANT OWNERSHIP ON PROCEDURE IDENTIFIER($source_load_procedure_name)(VARCHAR, VARCHAR)
