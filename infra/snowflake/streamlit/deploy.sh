@@ -84,10 +84,18 @@ STREAMLIT_OBJECT="${DASHBOARD_STREAMLIT_OBJECT:-EDGARTOOLS_DASHBOARD}"
 # apps that actually import it (GH-246's Agent View/Explore policy).
 read -ra RELEASE_FILES <<< "${DASHBOARD_RELEASE_FILES:-streamlit_app.py dashboard_modes.py environment.yml}"
 # Space-separated pytest paths for this app's credential-free pre-flight
-# tests. Required unless --skip-tests -- deliberately NOT defaulted to the
-# original dashboard's tests, so a second app's deploy can't silently
-# "pass" pre-flight by validating an unrelated app instead of itself.
-read -ra TEST_PATHS <<< "${DASHBOARD_TEST_PATHS:-}"
+# tests. Defaults to the original EDGARTOOLS_DASHBOARD app's tests only
+# when APP_NAME is left at its own default -- preserves docs/runbook.md's
+# documented zero-config `bash deploy.sh` invocation. Any other APP_NAME
+# must set DASHBOARD_TEST_PATHS explicitly (or pass --skip-tests): a second
+# app's deploy must not silently "pass" pre-flight by validating an
+# unrelated app instead of itself.
+if [[ "${APP_NAME}" == "dashboard" ]]; then
+  DEFAULT_TEST_PATHS="tests/architecture/test_snowflake_streamlit_financial_factors.py tests/unit/test_dashboard_modes.py"
+else
+  DEFAULT_TEST_PATHS=""
+fi
+read -ra TEST_PATHS <<< "${DASHBOARD_TEST_PATHS:-${DEFAULT_TEST_PATHS}}"
 
 DRY_RUN=false
 SKIP_TESTS=false

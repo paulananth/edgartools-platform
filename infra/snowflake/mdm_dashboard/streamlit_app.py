@@ -33,6 +33,8 @@ from typing import Any, Mapping
 import streamlit as st
 from snowflake.snowpark.context import get_active_session
 
+st.set_page_config(page_title="EdgarTools MDM Graph Review", layout="wide")
+
 REVIEW_SCHEMA = "MDM_GRAPH_REVIEW"
 SECTIONS = ["Overview", "Parity", "Mismatch Diagnostics"]
 ROW_LIMIT_OPTIONS = [25, 50, 100, 250]
@@ -556,7 +558,6 @@ def render_mismatch_diagnostics(metrics: Mapping[str, Any], *, row_limit: int) -
 
 
 def main() -> None:
-    st.set_page_config(page_title="EdgarTools MDM Graph Review", layout="wide")
     st.sidebar.title("EdgarTools MDM Graph")
     st.sidebar.caption("Read-only, generation-scoped graph review (GH-251/GH-252)")
     section_name = st.sidebar.radio("Section", SECTIONS)
@@ -576,5 +577,9 @@ def main() -> None:
         render_mismatch_diagnostics(metrics, row_limit=row_limit)
 
 
-if __name__ == "__main__":
+# Streamlit / SiS provide session_state; unit tests inject a fake streamlit
+# without it -- see infra/snowflake/streamlit/streamlit_app.py for why this
+# is used instead of `if __name__ == "__main__"` (the SiS runtime does not
+# reliably set __name__ to "__main__" when executing a staged app).
+if hasattr(st, "session_state"):
     main()
