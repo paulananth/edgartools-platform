@@ -54,7 +54,8 @@ const targetTables = new Map([
   // manifest -- found 2026-07-27 while landing ERDP-01: GUIDANCE_FACTS (#277)
   // was already merged and had never actually loaded into EDGARTOOLS_SOURCE.
   ["GUIDANCE_FACTS", `${databaseName}.${sourceSchema}.GUIDANCE_FACTS`],
-  ["CONSENSUS_ESTIMATES", `${databaseName}.${sourceSchema}.CONSENSUS_ESTIMATES`]
+  ["CONSENSUS_ESTIMATES", `${databaseName}.${sourceSchema}.CONSENSUS_ESTIMATES`],
+  ["TRANSCRIPT_EVENTS", `${databaseName}.${sourceSchema}.TRANSCRIPT_EVENTS`]
 ]);
 
 const mergeKeys = new Map([
@@ -78,7 +79,8 @@ const mergeKeys = new Map([
   ["SEC_EMPLOYMENT_EVENT", ["ACCESSION_NUMBER", "EVENT_INDEX"]],
   ["EARNINGS_CALENDAR", ["FACT_KEY"]],
   ["GUIDANCE_FACTS", ["FACT_KEY"]],
-  ["CONSENSUS_ESTIMATES", ["FACT_KEY"]]
+  ["CONSENSUS_ESTIMATES", ["FACT_KEY"]],
+  ["TRANSCRIPT_EVENTS", ["EVENT_KEY"]]
 ]);
 
 function q(value) {

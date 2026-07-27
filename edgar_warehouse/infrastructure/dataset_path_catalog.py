@@ -31,6 +31,7 @@ _ALLOWED_TEMPLATE_TOKENS = frozenset(
         "date_path",
         "document_name",
         "end_date",
+        "event_id",
         "run_id",
         "section",
         "shard_index",
@@ -274,6 +275,15 @@ class WarehousePathResolver:
             cik=cik,
             accession_number=accession_number,
             document_name=self.text_filename(text_version),
+        )
+
+    def transcript_text_path(self, cik: int, event_id: str) -> str:
+        """ERDP-04: platform-held transcript text object path (A04.7)."""
+        return self._render(
+            "transcripts.text.path",
+            cik=cik,
+            event_id=event_id,
+            document_name=self._catalog.get("transcripts.text.filename"),
         )
 
     def planned_manifest_paths(

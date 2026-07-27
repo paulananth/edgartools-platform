@@ -751,3 +751,51 @@ schemas:
     - name: ingested_at
       type: timestamp_us_utc
       nullable: false
+  # ERDP-04 — Transcript events (Gold Explore pointer; not pure-SEC Agent-Grade)
+  _FACT_TRANSCRIPT_EVENT_SCHEMA:
+    - name: event_key
+      type: int64
+      nullable: false
+    - name: cik
+      type: int64
+      nullable: false
+    - name: ticker
+      type: string
+    - name: company_key
+      type: int64
+    - name: event_id
+      type: string
+      nullable: false
+    - name: event_type
+      type: string
+      nullable: false
+    - name: fiscal_year
+      type: int32
+    - name: fiscal_quarter
+      type: int32
+    - name: event_date
+      type: date32
+      nullable: false
+    - name: accession_number
+      type: string
+    - name: storage_uri
+      type: string
+      nullable: false
+    - name: content_sha256
+      type: string
+    - name: char_count
+      type: int64
+    - name: language
+      type: string
+      nullable: false
+    - name: source_system
+      type: string
+      nullable: false
+    - name: source_url
+      type: string
+    - name: as_of
+      type: date32
+      nullable: false
+    - name: ingested_at
+      type: timestamp_us_utc
+      nullable: false

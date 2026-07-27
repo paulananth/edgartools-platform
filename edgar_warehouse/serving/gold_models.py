@@ -87,6 +87,7 @@ _SEC_EMPLOYMENT_EVENT_SCHEMA = GOLD_SCHEMAS['_SEC_EMPLOYMENT_EVENT_SCHEMA']
 _FACT_EARNINGS_CALENDAR_SCHEMA = GOLD_SCHEMAS['_FACT_EARNINGS_CALENDAR_SCHEMA']
 _FACT_GUIDANCE_SCHEMA = GOLD_SCHEMAS['_FACT_GUIDANCE_SCHEMA']
 _FACT_CONSENSUS_ESTIMATE_SCHEMA = GOLD_SCHEMAS['_FACT_CONSENSUS_ESTIMATE_SCHEMA']
+_FACT_TRANSCRIPT_EVENT_SCHEMA = GOLD_SCHEMAS['_FACT_TRANSCRIPT_EVENT_SCHEMA']
 
 
 def _empty(schema: pa.Schema) -> pa.Table:
@@ -1306,3 +1307,20 @@ def build_consensus_estimates_table_from_rows(
     if table.schema.equals(_FACT_CONSENSUS_ESTIMATE_SCHEMA):
         return table
     return table.cast(_FACT_CONSENSUS_ESTIMATE_SCHEMA)
+
+
+def build_transcript_events_table_from_rows(
+    rows: list[dict[str, Any]],
+) -> pa.Table:
+    """Build ERDP-04 gold table from normalized or raw transcript event rows.
+
+    Thin wrapper so serving export paths can import from ``gold_models``
+    alongside other builders.  Implementation lives in
+    ``edgar_warehouse.explore.transcript_events``.
+    """
+    from edgar_warehouse.explore.transcript_events import build_transcript_events_table
+
+    table = build_transcript_events_table(rows)
+    if table.schema.equals(_FACT_TRANSCRIPT_EVENT_SCHEMA):
+        return table
+    return table.cast(_FACT_TRANSCRIPT_EVENT_SCHEMA)

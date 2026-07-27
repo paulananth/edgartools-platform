@@ -59,11 +59,13 @@ const goldTables = [
   // "never refreshes again after ON_CREATE" hazard as the block above.
   // EARNINGS_CALENDAR shipped with ERDP-03 (merged to main before this
   // allowlist gap was found) and was live-broken until this line landed;
-  // GUIDANCE_FACTS (ERDP-02) and CONSENSUS_ESTIMATES (ERDP-01) each ship
-  // in the same PR that adds their entry, so neither ran unregistered.
+  // GUIDANCE_FACTS (ERDP-02), CONSENSUS_ESTIMATES (ERDP-01), and
+  // TRANSCRIPT_EVENTS (ERDP-04) each ship in the same PR that adds their
+  // entry, so none ran unregistered.
   "EARNINGS_CALENDAR",
   "GUIDANCE_FACTS",
-  "CONSENSUS_ESTIMATES"
+  "CONSENSUS_ESTIMATES",
+  "TRANSCRIPT_EVENTS"
 ];
 const pollIntervalSeconds = 5;
 const timeoutSeconds = 900;

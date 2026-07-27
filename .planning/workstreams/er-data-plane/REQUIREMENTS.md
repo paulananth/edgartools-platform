@@ -112,13 +112,26 @@ cases), `tests/unit/test_earnings_release_guidance_wiring.py` (3 cases).
 
 **Pilot sources (locked):** `ir_website` + `firm_manual` only; **small pilot CIK list** (not full-universe free scrape). Detail: `specs/ERDP-04-transcript-mvp.md` §10.1.
 
-- [ ] **ERDP-04-01**: Platform exposes Gold Explore **`TRANSCRIPT_EVENTS`** with `cik`, `event_id`, `event_type`, `event_date`, `storage_uri`, `source_system`, `as_of` (full columns per detailed spec).
-- [ ] **ERDP-04-02**: Text bytes live in object store **or** documented external URL referenced by `storage_uri`.
-- [ ] **ERDP-04-03**: **A04.1 / A04.2** — Sample event has resolvable URI and non-empty text (or HTTP 200 external in test env).
-- [ ] **ERDP-04-04**: **A04.3** — Documented path for earnings-analysis to use transcript without web search when URI present (platform docs location above).
-- [ ] **ERDP-04-05**: Transcript content is not required in pure-SEC feature vectors.
-- [ ] **ERDP-04-06**: Pilot supports both `firm_manual` (S3 copy) and `ir_website` (pointer-only) for ≥1 CIK each.
-- [ ] **ERDP-04-07**: Pilot CIK list documented; no bulk third-party web scrape as default ingest.
+Implemented 2026-07-27: gold `_FACT_TRANSCRIPT_EVENT_SCHEMA`/`TRANSCRIPT_EVENTS`
+(Explore-only, no silver table — same "not SEC-extracted" architecture as
+ERDP-01/03), extractor `edgar_warehouse.explore.transcript_events`
+(`register_ir_pointer` for pointer-only ir_website rows, `store_transcript_text`
+for firm_manual uploads with content_sha256/char_count integrity fields,
+`load_firm_manual_csv` for already-uploaded metadata), path-catalog entry
+(`transcripts.text.path` in `warehouse_paths.properties` — A04.7), dbt model
++ `sources.yml`/`gold.yml`, export wiring, `REFRESH_AFTER_LOAD` allowlist
+entry. **Pilot CIK list locked to `PILOT_CIKS = {320193}` (Apple only)** —
+resolves the previously-undecided "pilot universe definition" gap. Docs:
+`docs/er-transcript-events.md`. Tests: `tests/unit/test_transcript_events.py`
+(13 cases).
+
+- [x] **ERDP-04-01**: Platform exposes Gold Explore **`TRANSCRIPT_EVENTS`** with `cik`, `event_id`, `event_type`, `event_date`, `storage_uri`, `source_system`, `as_of` (full columns per detailed spec).
+- [x] **ERDP-04-02**: Text bytes live in object store **or** documented external URL referenced by `storage_uri`.
+- [x] **ERDP-04-03**: **A04.1 / A04.2** — Sample event has resolvable URI and non-empty text (or HTTP 200 external in test env). *(unit-tested via FakeStorageRoot; live fetch not exercised in CI — same posture as ERDP-01/03)*
+- [x] **ERDP-04-04**: **A04.3** — Documented path for earnings-analysis to use transcript without web search when URI present (platform docs location above).
+- [x] **ERDP-04-05**: Transcript content is not required in pure-SEC feature vectors.
+- [x] **ERDP-04-06**: Pilot supports both `firm_manual` (S3 copy) and `ir_website` (pointer-only) for ≥1 CIK each.
+- [x] **ERDP-04-07**: Pilot CIK list documented; no bulk third-party web scrape as default ingest. *(`PILOT_CIKS = {320193}`)*
 
 ### ERDP-05 — Existing-surface ER read map
 
