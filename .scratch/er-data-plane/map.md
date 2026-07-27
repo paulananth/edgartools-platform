@@ -7,7 +7,7 @@ Repo: **edgartools-platform** only (financial-services owns ER skills; this effo
 
 A locked **phase-1 ER data plane plan** for edgartools-platform: requirements live in [`.scratch/er-data-plane/spec.md`](./spec.md), completeness proven by [`.scratch/er-data-plane/coverage-matrix.md`](./coverage-matrix.md) (9/9 ER skills, zero unclassified required inputs). Phase-1 products: consensus, guidance values, earnings calendar, transcript MVP, existing-surface read paths, pure-SEC vs market boundary, **and ERDP-07 yfinance EOD Explore join** (scope expand). REQUIREMENTS at `.planning/workstreams/er-data-plane/REQUIREMENTS.md`. Durable product docs (`docs/…`, ADRs) are promoted **after** decisions land — not before.
 
-**Status: DESTINATION REACHED** (2026-07-24) — REQUIREMENTS published. **Implementation:** ERDP-07 + ERDP-03 landed; ERDP-01/02/04 gold products still open.
+**Status: DESTINATION REACHED** (2026-07-24) — REQUIREMENTS published, all 7 map tickets resolved, frontier empty. **Wayfinding for this map is complete** — nothing left to decide. **Implementation** (tracked via the REQUIREMENTS.md checklist, not further tickets): ERDP-07 + ERDP-03 + ERDP-02 landed; ERDP-01 (consensus) and ERDP-04 (transcript MVP) remain — specs and pilot sources already locked (see Implementation status below), so they're ready to build directly, no open decision blocks them.
 
 ## Notes
 
@@ -33,18 +33,21 @@ A locked **phase-1 ER data plane plan** for edgartools-platform: requirements li
 - [Draft phase-1 schemas and acceptance criteria](./issues/06-draft-phase1-schemas-acceptance.md) — Schemas + A01–A06 accepted; asset [erdp-01-04-schema-sketches.md](./assets/erdp-01-04-schema-sketches.md); `spec.md` §6. Unblocks REQUIREMENTS generation.
 - [Generate planning REQUIREMENTS.md](./issues/07-generate-planning-requirements.md) — [`.planning/workstreams/er-data-plane/REQUIREMENTS.md`](../../.planning/workstreams/er-data-plane/REQUIREMENTS.md) published; planning destination reached.
 
+## Implementation status
+
+<!-- Post-destination build log, not wayfinder decisions — no ticket resolved these, they're direct-build outcomes tracked against the already-published REQUIREMENTS.md checklist. Kept here (not in Decisions so far, which is ticket-resolutions only) so a session can see build state without re-deriving it. -->
+
+- **Pilot free sources locked:** consensus=`yahoo` (+firm_manual, optional `fmp`); calendar=`finnhub` (+yahoo/firm_manual); transcript=`ir_website`+`firm_manual`. Consensus provider choice and transcript retention depth (schema allows full-bytes or pointer-only) are both settled by this — [assets/free-sources-consensus-calendar-transcript.md](./assets/free-sources-consensus-calendar-transcript.md), [assets/eod-price-source-decision.md](./assets/eod-price-source-decision.md).
+- **ERDP-07 implemented (Explore):** `edgar_warehouse/market/eod_join.py` + `docs/er-market-eod-join.md` + `tests/unit/test_market_eod_join.py`; ERDP-06 boundary docs done; REQs ERDP-07-* checked. Scope-expand rationale: [assets/er-skills-unblocked-with-eod.md](./assets/er-skills-unblocked-with-eod.md); [specs/ERDP-07-market-eod-join.md](./specs/ERDP-07-market-eod-join.md).
+- **ERDP-03 implemented (Explore gold):** `edgar_warehouse/explore/earnings_calendar.py` + dbt `EARNINGS_CALENDAR` + `docs/er-earnings-calendar.md` + unit tests; REQs ERDP-03-* checked; Finnhub commercial license still ops gate.
+- **ERDP-02 implemented (Explore gold, 2026-07-26):** `edgar_warehouse/explore/guidance_facts.py` (SEC extractor over `EarningsRelease.guidance` + `firm_manual` CSV loader) + silver `sec_guidance_fact`/`sec_guidance_fact_reject` + dbt `GUIDANCE_FACTS` + `docs/er-guidance-facts.md` + 51 unit tests; REQs ERDP-02-01/02/04/05/06/07 checked, ERDP-02-03 (live Snowflake join) and dbt compile still open — no warehouse creds available in-session. A02.1 verified via synthetic FinancialTable fixtures, not a live curated accession set (D5 backfill also not yet run).
+- **ERDP-01 (consensus) and ERDP-04 (transcript MVP) not yet started:** specs locked (`specs/ERDP-01-consensus-estimates.md`, `specs/ERDP-04-transcript-mvp.md`), pilot sources locked (above), REQUIREMENTS.md checklists fully unchecked. No open decision blocks either — next work here is direct implementation, not a wayfinder ticket.
+
 ## Not yet specified
 
-- Consensus **provider** choice (vendor vs firm feed vs multi-source) — implementation detail under A01 source_system
-- Transcript: how much text is retained vs pointer-only in ops (schema allows both)
 - Exact Subject Bundle section additions for ER (optional later)
 - How financial-services skills document platform contracts — after REQUIREMENTS / build
 - Phase-2 Gold MARKET schema details (only if/when that effort is charted)
-- Pilot EOD source decided: **Yahoo / yfinance** (External Explore) — [assets/eod-price-source-decision.md](./assets/eod-price-source-decision.md)
-- **Scope expand:** **ERDP-07** market EOD join in phase-1 (not gold table); unblocks valuation-heavy ER skills — [assets/er-skills-unblocked-with-eod.md](./assets/er-skills-unblocked-with-eod.md); [specs/ERDP-07-market-eod-join.md](./specs/ERDP-07-market-eod-join.md); REQUIREMENTS updated
-- **Pilot free sources locked:** consensus=`yahoo` (+firm_manual); calendar=`finnhub` (+yahoo/firm_manual); transcript=`ir_website`+`firm_manual` — [assets/free-sources-consensus-calendar-transcript.md](./assets/free-sources-consensus-calendar-transcript.md)
-- **ERDP-07 implemented (Explore):** `edgar_warehouse/market/eod_join.py` + `docs/er-market-eod-join.md` + `tests/unit/test_market_eod_join.py`; ERDP-06 boundary docs done; REQs ERDP-07-* checked.
-- **ERDP-03 implemented (Explore gold):** `edgar_warehouse/explore/earnings_calendar.py` + dbt `EARNINGS_CALENDAR` + `docs/er-earnings-calendar.md` + unit tests; REQs ERDP-03-* checked; Finnhub commercial license still ops gate.
 
 
 

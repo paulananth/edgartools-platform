@@ -38,6 +38,15 @@ sources:
       #   DIMENSIONAL (<1M rows, surrogate fact_key, joined to COMPANY+DATE+FORM in the build step):
       - name: EARNINGS_RELEASE
         description: 8-K earnings release fact per (cik, accession). Dimensional — COMPANY+DATE×2+FORM joins.
+      # ERDP-02 — Guidance facts (Gold Explore; SEC-preferred, firm_manual override)
+      - name: GUIDANCE_FACTS
+        description: >
+          Structured guidance values (value_low/value_mid/value_high) per
+          (cik, metric, fiscal_year, fiscal_quarter, as_of, accession_number,
+          is_non_gaap, source_system). Explore-only — not pure-SEC
+          Agent-Grade. SEC-derived (sec_8k/sec_10q/sec_10k) preferred;
+          firm_manual coexists via source_system. Built from silver
+          sec_guidance_fact by edgar_warehouse.serving.gold_models.
       - name: EXECUTIVE_RECORD
         description: DEF 14A executive compensation fact per (cik, accession, exec_name). Dimensional — COMPANY+DATE joins.
       - name: ACCOUNTING_FLAG

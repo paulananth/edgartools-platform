@@ -53,7 +53,7 @@ Consumers: financial-services equity-research skills / agents (Explore Gold + **
 
 ### ERDP-OPS — Warehouse registration (all new gold products)
 
-- [ ] **ERDP-OPS-01**: Each new gold product (`CONSENSUS_ESTIMATES`, `GUIDANCE_FACTS`, `EARNINGS_CALENDAR`, `TRANSCRIPT_EVENTS`) is registered consistently with existing fundamentals tables: gold schema registry entry, Snowflake export path/manifest participation, and dbt `EDGARTOOLS_GOLD` model (or documented equivalent). *(partial: `EARNINGS_CALENDAR` registered 2026-07-24; 01/02/04 still open)*
+- [ ] **ERDP-OPS-01**: Each new gold product (`CONSENSUS_ESTIMATES`, `GUIDANCE_FACTS`, `EARNINGS_CALENDAR`, `TRANSCRIPT_EVENTS`) is registered consistently with existing fundamentals tables: gold schema registry entry, Snowflake export path/manifest participation, and dbt `EDGARTOOLS_GOLD` model (or documented equivalent). *(partial: `EARNINGS_CALENDAR` registered 2026-07-24; `GUIDANCE_FACTS` registered 2026-07-26; 01/04 still open)*
 - [ ] **ERDP-OPS-02**: Transcript object-store prefix is documented in the warehouse path catalog when platform-held bytes are used.
 
 ### ERDP-01 — Consensus estimates
@@ -71,13 +71,20 @@ Consumers: financial-services equity-research skills / agents (Explore Gold + **
 
 ### ERDP-02 — Guidance facts
 
-- [ ] **ERDP-02-01**: Platform exposes Gold Explore **`GUIDANCE_FACTS`** with columns per normative schema / detailed spec (including `value_low` / `value_mid` / `value_high`, `as_of`, optional `accession_number`, `is_non_gaap`, `source_system`, units).
-- [ ] **ERDP-02-02**: **A02.1** — Sample 8-K with numeric guidance yields ≥1 row with at least one of low/mid/high non-null and `accession_number` set.
-- [ ] **ERDP-02-03**: **A02.2** — When `accession_number` present, row joins to `EARNINGS_RELEASES` or `FILING_DETAIL` on `(cik, accession_number)`.
-- [ ] **ERDP-02-04**: **A02.3** — Documented path for model-update prior-guide vs actual using period keys + `as_of`.
-- [ ] **ERDP-02-05**: Prefer SEC-derived rows (`sec_8k` / `sec_10q` / `sec_10k`); allow `source_system=firm_manual` overrides (coexist by key including `source_system`).
-- [ ] **ERDP-02-06**: Every published row has ≥1 of low/mid/high non-null (constraint check).
-- [ ] **ERDP-02-07**: Phase-1 metric minimum for SEC path: support at least `revenue` and `eps_diluted`.
+Implemented 2026-07-26: silver `sec_guidance_fact` (+ `sec_guidance_fact_reject`
+quarantine), gold `_FACT_GUIDANCE_SCHEMA`/`GUIDANCE_FACTS`, extractor
+`edgar_warehouse.explore.guidance_facts`, dbt model + `sources.yml`, export
+wiring (`gold_models.py`/`snowflake.py`/`run_manifest_builder.py`). Docs:
+`docs/er-guidance-facts.md`. Tests: `tests/unit/test_guidance_facts.py` (48
+cases), `tests/unit/test_earnings_release_guidance_wiring.py` (3 cases).
+
+- [x] **ERDP-02-01**: Platform exposes Gold Explore **`GUIDANCE_FACTS`** with columns per normative schema / detailed spec (including `value_low` / `value_mid` / `value_high`, `as_of`, optional `accession_number`, `is_non_gaap`, `source_system`, units). *(schema + gold builder + dbt + export registration; dbt compile not run — no Snowflake creds in this session)*
+- [x] **ERDP-02-02**: **A02.1** — Sample 8-K with numeric guidance yields ≥1 row with at least one of low/mid/high non-null and `accession_number` set. *(verified via 5 synthetic FinancialTable-shaped fixtures covering range/point/non-GAAP/multi-metric/unrecognized-row shapes, same testing style as ERDP-03 — not yet run against a live curated set of real accessions; see D5 backfill note)*
+- [ ] **ERDP-02-03**: **A02.2** — When `accession_number` present, row joins to `EARNINGS_RELEASES` or `FILING_DETAIL` on `(cik, accession_number)`. *(join query documented and accession_number correctness unit-tested; the actual Snowflake join has not been run — no warehouse access this session)*
+- [x] **ERDP-02-04**: **A02.3** — Documented path for model-update prior-guide vs actual using period keys + `as_of`. *(docs/er-guidance-facts.md §5.2)*
+- [x] **ERDP-02-05**: Prefer SEC-derived rows (`sec_8k` / `sec_10q` / `sec_10k`); allow `source_system=firm_manual` overrides (coexist by key including `source_system`). *(natural key includes source_system; both paths write through the same merge_guidance_facts into one gold builder)*
+- [x] **ERDP-02-06**: Every published row has ≥1 of low/mid/high non-null (constraint check). *(enforced in normalize_guidance_row; violations quarantined to sec_guidance_fact_reject, not silently dropped)*
+- [x] **ERDP-02-07**: Phase-1 metric minimum for SEC path: support at least `revenue` and `eps_diluted`. *(map_metric classifies both; unit-tested)*
 
 ### ERDP-03 — Earnings calendar
 

@@ -26,6 +26,7 @@ SNOWFLAKE_EXPORT_TABLES = {
     # Dimensional tables (Q3-D: surrogate fact_key, COMPANY+DATE+FORM joins,
     # loaded by the existing LOAD_EXPORTS_FOR_RUN proc):
     "EARNINGS_RELEASE": "earnings_release",
+    "GUIDANCE_FACTS": "guidance_facts",
     "EXECUTIVE_RECORD": "executive_record",
     "ACCOUNTING_FLAG": "accounting_flag",
     # Agent neighborhood evidence (ticket 08) — passthrough from silver

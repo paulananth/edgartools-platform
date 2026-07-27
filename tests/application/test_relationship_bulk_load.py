@@ -702,6 +702,12 @@ def test_release_mode_item502_unresolved_records_accepted_terminal_status() -> N
         def merge_employment_events(self, rows, run_id):
             return len(rows)
 
+        def merge_guidance_facts(self, rows, run_id):
+            return 0
+
+        def merge_guidance_fact_rejects(self, rows, run_id):
+            return 0
+
     db = FakeSource()
     content = (b"Item 5.02 Departure of Directors. The Board named the following "
                b"to committees and other matters were discussed at length.")

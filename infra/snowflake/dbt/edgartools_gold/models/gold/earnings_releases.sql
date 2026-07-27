@@ -12,12 +12,12 @@
 --
 -- Grain: one row per (cik, accession_number).
 --
--- NOTE: Guidance ranges, non-GAAP EPS, beat/miss flags, and the
--- eps_beat_streak window are NOT computed here.  The underlying silver
--- schema deliberately does not carry those columns because they require
--- either validated per-company guidance extraction or cross-period
--- comparison.  Both will land in a forward migration with population in
--- the same change.
+-- NOTE: Non-GAAP EPS, beat/miss flags, and the eps_beat_streak window are
+-- NOT computed here.  The underlying silver schema deliberately does not
+-- carry those columns because they require cross-period comparison.
+-- Guidance ranges (revenue/EPS low/mid/high) landed as ERDP-02's separate
+-- GUIDANCE_FACTS table, not as columns here — join on (cik, accession_number)
+-- when has_guidance is true (see docs/er-guidance-facts.md §8.3).
 {{ gold_model_config('EARNINGS_RELEASES') }}
 
 with base as (

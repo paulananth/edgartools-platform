@@ -526,6 +526,62 @@ def test_sharded_silver_reader_exposes_thirteenf_filing_and_employment_event(tmp
         reader.close()
 
 
+def test_sharded_silver_reader_exposes_guidance_fact_tables(tmp_path) -> None:
+    """ShardedSilverReader._TABLES must include sec_guidance_fact and
+    sec_guidance_fact_reject (ERDP-02), or gold-refresh's _build_fact_guidance
+    query hits the exact EDGE-09/EDGE-11 registration gap: a real silver table
+    invisible to the cross-shard union view during a full gold-refresh.
+    """
+    from edgar_warehouse.silver_store import SilverDatabase
+    from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
+
+    shard_path = tmp_path / "shard-0.duckdb"
+    db = SilverDatabase(str(shard_path))
+    db.merge_guidance_facts([{
+        "fact_key": 1,
+        "cik": 1,
+        "ticker": "ACME",
+        "company_key": None,
+        "accession_number": "0001-8K",
+        "metric": "revenue",
+        "period_type": "quarterly",
+        "fiscal_year": 2026,
+        "fiscal_quarter": 2,
+        "period_end": "2026-06-30",
+        "value_low": 100.0,
+        "value_mid": 110.0,
+        "value_high": 120.0,
+        "unit": "USD_MM",
+        "currency": "USD",
+        "is_non_gaap": False,
+        "as_of": "2026-05-01",
+        "source_system": "sec_8k",
+        "source_ref": None,
+        "excerpt": None,
+        "confidence": "high",
+        "parser_version": "1",
+    }], "test-run")
+    db.merge_guidance_fact_rejects([{
+        "cik": 1,
+        "accession_number": "0001-8K",
+        "metric": "revenue",
+        "reject_reason": "low_gt_high",
+        "raw_payload": "{}",
+        "parser_version": "1",
+    }], "test-run")
+    db.close()
+
+    reader = ShardedSilverReader([str(shard_path)])
+    try:
+        fact_rows = reader.fetch("SELECT accession_number FROM sec_guidance_fact")
+        assert [r["accession_number"] for r in fact_rows] == ["0001-8K"]
+
+        reject_rows = reader.fetch("SELECT accession_number FROM sec_guidance_fact_reject")
+        assert [r["accession_number"] for r in reject_rows] == ["0001-8K"]
+    finally:
+        reader.close()
+
+
 # ---------------------------------------------------------------------------
 # Issue 1: silver shard reconciliation and per-CIK write lock
 # ---------------------------------------------------------------------------

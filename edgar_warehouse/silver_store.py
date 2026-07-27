@@ -616,14 +616,62 @@ CREATE TABLE IF NOT EXISTS sec_earnings_release (
     -- Presence flags (high-confidence: edgartools detects table presence reliably)
     has_non_gaap            BOOLEAN NOT NULL DEFAULT FALSE,
     has_guidance            BOOLEAN NOT NULL DEFAULT FALSE,
-    -- NOTE: Specific guidance ranges (revenue/EPS low/high), non-GAAP EPS value,
-    -- and beat/miss flags are NOT stored here. They require either validated
-    -- per-company extraction logic (guidance ranges) or cross-period comparison
-    -- (beat/miss). When those extractors land, columns will be added via forward
-    -- migration with population in the same change.
+    -- NOTE: Non-GAAP EPS value and beat/miss flags are NOT stored here --
+    -- they require cross-period comparison and will land via forward
+    -- migration when built. Guidance ranges (revenue/EPS low/mid/high) are
+    -- NOT stored here either, but for a different reason: they landed as
+    -- ERDP-02's separate sec_guidance_fact table (below), keyed by
+    -- accession_number for the join, not as new columns on this table.
     parser_version          TEXT,
     ingested_at             TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (cik, accession_number)
+);
+
+-- ERDP-02: structured guidance values (low/mid/high) extracted from the
+-- earnings-release guidance table, plus firm_manual override/supplement
+-- rows. accession_number is NOT NULL DEFAULT '' (not nullable) because
+-- DuckDB PRIMARY KEY columns reject NULL; firm_manual rows (no SEC
+-- accession) use '' as the "no accession" sentinel instead.
+CREATE TABLE IF NOT EXISTS sec_guidance_fact (
+    fact_key                BIGINT NOT NULL,
+    cik                     BIGINT NOT NULL,
+    ticker                  TEXT,
+    company_key             BIGINT,
+    accession_number        TEXT NOT NULL DEFAULT '',
+    metric                  TEXT NOT NULL,   -- controlled vocab: revenue, eps_diluted, ...
+    period_type             TEXT NOT NULL,   -- annual | quarterly | range_fy | other
+    fiscal_year             INTEGER NOT NULL,
+    fiscal_quarter          INTEGER NOT NULL, -- 0 = annual (D4)
+    period_end              DATE,
+    value_low               DOUBLE,
+    value_mid               DOUBLE,
+    value_high              DOUBLE,
+    unit                    TEXT,
+    currency                TEXT,
+    is_non_gaap             BOOLEAN NOT NULL DEFAULT FALSE,
+    as_of                   DATE NOT NULL,
+    source_system           TEXT NOT NULL,   -- sec_8k | sec_10q | sec_10k | firm_manual | other
+    source_ref              TEXT,
+    excerpt                 TEXT,            -- <=500 chars, raw table cell context
+    confidence               TEXT NOT NULL DEFAULT 'medium', -- high | medium | low
+    parser_version           TEXT,
+    ingested_at              TIMESTAMPTZ DEFAULT NOW(),
+    -- Natural key includes source_system so SEC-derived and firm_manual
+    -- rows coexist without overwrite (ERDP-02-05).
+    PRIMARY KEY (cik, metric, fiscal_year, fiscal_quarter, as_of,
+                 accession_number, is_non_gaap, source_system)
+);
+
+-- D6: quarantine for candidate guidance facts that fail §5.3 constraints
+-- (e.g. all of low/mid/high null, low > high). Not gold-published.
+CREATE TABLE IF NOT EXISTS sec_guidance_fact_reject (
+    cik                     BIGINT NOT NULL,
+    accession_number        TEXT NOT NULL DEFAULT '',
+    metric                  TEXT,
+    reject_reason           TEXT NOT NULL,
+    raw_payload             TEXT,            -- JSON-encoded candidate row
+    parser_version          TEXT,
+    ingested_at             TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS sec_accounting_flag (
@@ -3584,6 +3632,62 @@ class SilverDatabase:
                 r.get("parser_version"),
             ],
         )
+
+    def merge_guidance_facts(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        return self._merge_rows(
+            """
+            INSERT INTO sec_guidance_fact
+                (fact_key, cik, ticker, company_key, accession_number, metric,
+                 period_type, fiscal_year, fiscal_quarter, period_end,
+                 value_low, value_mid, value_high, unit, currency,
+                 is_non_gaap, as_of, source_system, source_ref, excerpt,
+                 confidence, parser_version)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT (cik, metric, fiscal_year, fiscal_quarter, as_of,
+                         accession_number, is_non_gaap, source_system) DO UPDATE SET
+                fact_key = excluded.fact_key,
+                ticker = excluded.ticker,
+                company_key = excluded.company_key,
+                period_type = excluded.period_type,
+                period_end = excluded.period_end,
+                value_low = excluded.value_low,
+                value_mid = excluded.value_mid,
+                value_high = excluded.value_high,
+                unit = excluded.unit,
+                currency = excluded.currency,
+                source_ref = excluded.source_ref,
+                excerpt = excluded.excerpt,
+                confidence = excluded.confidence,
+                parser_version = excluded.parser_version
+            """,
+            rows,
+            lambda r: [
+                r["fact_key"], r["cik"], r.get("ticker"), r.get("company_key"),
+                r.get("accession_number") or "", r["metric"], r["period_type"],
+                r["fiscal_year"], r["fiscal_quarter"], r.get("period_end"),
+                r.get("value_low"), r.get("value_mid"), r.get("value_high"),
+                r.get("unit"), r.get("currency"), bool(r.get("is_non_gaap", False)),
+                r["as_of"], r["source_system"], r.get("source_ref"), r.get("excerpt"),
+                r.get("confidence", "medium"), r.get("parser_version"),
+            ],
+        )
+
+    def merge_guidance_fact_rejects(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        count = 0
+        for row in rows:
+            self._conn.execute(
+                """
+                INSERT INTO sec_guidance_fact_reject
+                    (cik, accession_number, metric, reject_reason, raw_payload, parser_version)
+                VALUES (?,?,?,?,?,?)
+                """,
+                [
+                    row["cik"], row.get("accession_number") or "", row.get("metric"),
+                    row["reject_reason"], row.get("raw_payload"), row.get("parser_version"),
+                ],
+            )
+            count += 1
+        return count
 
     def merge_accounting_flags(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
