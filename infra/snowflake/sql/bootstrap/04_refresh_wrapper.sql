@@ -193,17 +193,44 @@ LANGUAGE SQL
 EXECUTE AS OWNER
 AS
 $$
-BEGIN
-  FOR manifest_record IN (
+-- Found 2026-07-27: the shorthand `FOR record IN (SELECT col1, col2 FROM ...)
+-- DO` cursor construct (this exact procedure body) started failing with
+-- "Unsupported: Scalar subquery with multi-column SELECT clause" --
+-- independently reproduced live with a trivial literal two-column SELECT
+-- unrelated to any table. Not a "never worked" case: TASK_HISTORY shows this
+-- same procedure succeeded as recently as 2026-07-26 16:53:53, under a day
+-- before the failures started, so treat this as a real but not fully
+-- understood intermittent defect in the multi-column shorthand form, not a
+-- permanent account-wide break. See CLAUDE.md's manifest-pipeline ownership
+-- + cursor-syntax incident 5-whys for the full timeline. The explicit
+-- CURSOR / OPEN / FETCH form below (with a pre-computed row count, since a
+-- naive FETCH-until-not-found loop also hung under this same account state)
+-- is the workaround in use here.
+DECLARE
+  cnt INTEGER;
+  c1 CURSOR FOR
     SELECT DISTINCT workflow_name, run_id
     FROM EDGARTOOLS_SOURCE.SNOWFLAKE_RUN_MANIFEST_STREAM
-    WHERE METADATA$ACTION = 'INSERT'
-  ) DO
-    CALL EDGARTOOLS_SOURCE.LOAD_EXPORTS_FOR_RUN(manifest_record.workflow_name, manifest_record.run_id);
-    CALL EDGARTOOLS_GOLD.REFRESH_AFTER_LOAD(manifest_record.workflow_name, manifest_record.run_id);
+    WHERE METADATA$ACTION = 'INSERT';
+  r_workflow_name STRING;
+  r_run_id STRING;
+BEGIN
+  cnt := (
+    SELECT COUNT(*) FROM (
+      SELECT DISTINCT workflow_name, run_id
+      FROM EDGARTOOLS_SOURCE.SNOWFLAKE_RUN_MANIFEST_STREAM
+      WHERE METADATA$ACTION = 'INSERT'
+    )
+  );
+  OPEN c1;
+  FOR i IN 1 TO cnt DO
+    FETCH c1 INTO r_workflow_name, r_run_id;
+    CALL EDGARTOOLS_SOURCE.LOAD_EXPORTS_FOR_RUN(r_workflow_name, r_run_id);
+    CALL EDGARTOOLS_GOLD.REFRESH_AFTER_LOAD(r_workflow_name, r_run_id);
   END FOR;
+  CLOSE c1;
 
-  RETURN OBJECT_CONSTRUCT('status', 'succeeded');
+  RETURN OBJECT_CONSTRUCT('status', 'succeeded', 'processed', cnt);
 END;
 $$;
 

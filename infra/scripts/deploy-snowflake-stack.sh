@@ -429,6 +429,15 @@ if [[ ${RUN_DBT} -eq 1 ]]; then
   DBT_SNOWFLAKE_DATABASE="$(json_value "${SNOWFLAKE_OUTPUTS_FILE}" "database_name")"
   export DBT_SNOWFLAKE_WAREHOUSE
   DBT_SNOWFLAKE_WAREHOUSE="$(json_map_value "${SNOWFLAKE_OUTPUTS_FILE}" "warehouse_names" "refresh")"
+  # KNOWN GAP (2026-07-27, see CLAUDE.md manifest-pipeline ownership 5-whys): this pulls the
+  # Terraform-managed "deployer" role (EDGARTOOLS_PROD_DEPLOYER in prod), NOT the EDGARTOOLS_PROD_LOADER
+  # role that now owns the EDGARTOOLS_GOLD dynamic tables (infra/snowflake/sql/bootstrap/08_loader_role.sql).
+  # Terraform has no knowledge of EDGARTOOLS_PROD_LOADER yet. Running --run-dbt as-is will re-flip
+  # ownership of the dynamic tables back to the deployer role and can silently re-break
+  # REFRESH_AFTER_LOAD the same way it did in that incident. Do not `--run-dbt` against prod until
+  # this is reconciled in Terraform (either make EDGARTOOLS_PROD_LOADER the deployer role, or teach this
+  # script to override DBT_SNOWFLAKE_ROLE for dynamic-table models) -- deliberately left undone this
+  # session per explicit scope: no blind Terraform changes.
   export DBT_SNOWFLAKE_ROLE
   DBT_SNOWFLAKE_ROLE="$(json_map_value "${SNOWFLAKE_OUTPUTS_FILE}" "role_names" "deployer")"
 
