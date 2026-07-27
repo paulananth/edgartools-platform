@@ -18,6 +18,7 @@ A coverage matrix (`.scratch/er-data-plane/coverage-matrix.md`) that accurately 
 ## Decisions so far
 
 - [01 — Survey financial-services ER skill requirements per new Explore product](issues/01-survey-er-skill-requirements-per-product.md) — earnings-analysis is the hardest gate on all four products (mandatory dated+hyperlinked source citations, exact-quarter transcript match ±1 day, guide-vs-guide history); GUIDANCE_FACTS' checklist must treat "no guidance issued" as a valid explicit outcome, not a row-count failure; TRANSCRIPT_EVENTS' `PILOT_CIKS={320193}`+latest-only misses earnings-preview (needs *prior*-quarter call) and initiating-coverage (needs 2-3 quarters) on history depth independent of CIK breadth; idea-generation/sector-overview have zero textual basis for their matrix `Gap` cells on Consensus.
+- [03 — Product-ready promotion criteria for CONSENSUS_ESTIMATES](issues/03-promotion-criteria-consensus-estimates.md) — 8-criterion checklist (50% universe coverage, trailing-4Q pre-earnings freshness, source scope restricted to `{yahoo, firm_manual}`, format-verified yahoo `source_ref` authenticity, git-reviewed-artifact provenance for firm_manual, grain coherence, identity-checked join, Explore-only labeling). Load-bearing finding: no fabrication check based on a banned-string-prefix (e.g. `demo:*`) would have caught tonight's own incident — the real fix is source-scope restriction + yahoo's deterministic `source_ref` format, not string pattern-matching.
 
 ## Not yet specified
 
