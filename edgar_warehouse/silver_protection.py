@@ -212,6 +212,14 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
         ("accession_number", "event_index"),
         authority_column="ingested_at",
     ),
+    "sec_guidance_fact": ProtectedTablePolicy(
+        "sec_guidance_fact",
+        (
+            "cik", "metric", "fiscal_year", "fiscal_quarter", "as_of",
+            "accession_number", "is_non_gaap", "source_system",
+        ),
+        authority_column="ingested_at",
+    ),
 }
 
 # Write-provenance columns (record which run last touched a row, not business
@@ -244,6 +252,9 @@ EXCLUDED_OPERATIONAL_TABLES = frozenset(
         "sec_source_checkpoint",
         "sec_company_sync_state",
         "sec_reconcile_finding",
+        # ERDP-02 D6: append-only quarantine log for rejected guidance-fact
+        # candidates -- no natural key (rows accumulate, never conflict).
+        "sec_guidance_fact_reject",
     }
 )
 
