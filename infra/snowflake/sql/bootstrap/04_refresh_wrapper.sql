@@ -54,7 +54,15 @@ const goldTables = [
   "ACCOUNTING_FLAGS",
   "FINANCIAL_FACTS",
   "FINANCIAL_DERIVED",
-  "FINANCIAL_FACTORS"
+  "FINANCIAL_FACTORS",
+  // Explore-layer isolated DAG branches (ERDP-02/03) -- same
+  // "never refreshes again after ON_CREATE" hazard as the block above.
+  // EARNINGS_CALENDAR shipped with ERDP-03 (merged to main before this
+  // allowlist gap was found) and was live-broken until this line landed;
+  // GUIDANCE_FACTS ships in the same PR that adds this entry, so it never
+  // ran unregistered in prod.
+  "EARNINGS_CALENDAR",
+  "GUIDANCE_FACTS"
 ];
 const pollIntervalSeconds = 5;
 const timeoutSeconds = 900;
