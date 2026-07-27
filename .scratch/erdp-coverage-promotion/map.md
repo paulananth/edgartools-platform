@@ -24,6 +24,8 @@ A coverage matrix (`.scratch/er-data-plane/coverage-matrix.md`) that accurately 
 
 ## Not yet specified
 
+- Ticket 05 (`EARNINGS_CALENDAR` promotion criteria) surfaced a new sub-question, graduated into [07 — Free authoritative earnings-calendar data sources](issues/07-free-earnings-calendar-sources.md) (research, running): the module's documented `yahoo` fallback doesn't actually exist in code (`earnings_calendar.py` has no `parse_yahoo_*`/`fetch_yahoo_*` function) — only `finnhub` (license-gated) and `firm_manual` (manual, can't scale to coverage-universe-wide) are real today. Ticket 05 is blocked on 07's findings.
+
 - Promotion criteria for the pre-existing F1–F12 coverage-matrix footnotes (older Gold/MDM/graph products, e.g. identity, filings metadata, historical financials) — the user's request that triggered this map was specifically about the 4 new Explore products (ERDP-01…04); whether the same "product-ready, all critical requirements" bar should later apply to F1–F12 is a separate, not-yet-scoped question.
 - `ERDP-COV-02`/`ERDP-COV-03` (every Gap cell maps to a requirement; spec stays aligned) — likely fall out automatically once the tickets below resolve, but not confirmed.
 
