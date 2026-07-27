@@ -34,4 +34,13 @@ resource "snowflake_streamlit" "dashboard" {
   query_warehouse = var.reader_warehouse_name
   title           = var.streamlit_title
   comment         = "EdgarTools ${var.environment} gold-mirror dashboard."
+
+  # stage is built from local.stage_fqn (a plain string interpolation, not a
+  # resource attribute reference), so Terraform sees no implicit dependency
+  # edge on snowflake_stage_internal.dashboard_src and is free to create
+  # both in parallel. Hit live in prod for GH-252's second dashboard
+  # instance: "The specified stage DASHBOARD_SRC does not exist" when the
+  # streamlit create raced ahead of the stage create. The first (GH-246)
+  # instance never hit this only by ordering luck.
+  depends_on = [snowflake_stage_internal.dashboard_src]
 }

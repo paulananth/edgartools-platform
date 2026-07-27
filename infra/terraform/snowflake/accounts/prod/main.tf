@@ -42,6 +42,27 @@ module "dashboard" {
   reader_warehouse_name = module.baseline.warehouse_names.reader
 }
 
+module "mdm_dashboard" {
+  # GH-252: hosted MDM/graph review dashboard. A second instance of the same
+  # generic dashboard module, not new Terraform -- reads GH-251's
+  # MDM_GRAPH_REVIEW review contract (infra/snowflake/sql/graph_review/
+  # 01_graph_review_contract.sql), not the gold schema, so this app is
+  # prod-only for now: dev never got a generation-scoped sync-graph run, so
+  # dev's NEO4J_GRAPH_MIGRATION.GRAPH_ACTIVE_POINTER/GRAPH_GENERATION tables
+  # (and therefore GH-251's fail-closed views) don't exist there yet --
+  # see CLAUDE.md's "Dev Terraform/Snowflake go-live blockers" entry.
+  source = "../../modules/dashboard"
+
+  environment           = local.environment
+  database_name         = module.baseline.database_name
+  gold_schema_name      = "MDM_GRAPH_REVIEW"
+  reader_role_name      = "EDGARTOOLS_GRAPH_REVIEW_READER"
+  reader_warehouse_name = module.baseline.warehouse_names.reader
+  dashboard_schema_name = "MDM_GRAPH_REVIEW_DASHBOARD"
+  streamlit_name        = "MDM_GRAPH_DASHBOARD"
+  streamlit_title       = "EdgarTools MDM Graph Review"
+}
+
 module "native_pull" {
   count = local.native_pull_enabled ? 1 : 0
 

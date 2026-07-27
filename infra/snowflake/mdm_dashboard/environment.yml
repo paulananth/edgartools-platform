@@ -1,0 +1,6 @@
+name: edgartools-mdm-dashboard
+channels:
+  - snowflake
+dependencies:
+  - streamlit
+  - pandas

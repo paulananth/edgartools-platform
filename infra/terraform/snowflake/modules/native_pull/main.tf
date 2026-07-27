@@ -538,6 +538,15 @@ resource "snowflake_task" "manifest_processor" {
   sql_statement = "CALL ${local.gold_schema_fqn}.${var.stream_processor_procedure_name}()"
   comment       = "Triggered task that processes EdgarTools manifest stream rows."
 
+  # Standalone task (no predecessor DAG) -- Snowflake requires an explicit
+  # schedule to resume/start one. This was previously unset here and only
+  # existed as out-of-band drift (`ALTER TASK ... SET SCHEDULE`) on the live
+  # dev task, so re-applying this module without it would strip the
+  # schedule from a `started` task and stop manifest processing.
+  schedule {
+    minutes = 1
+  }
+
   depends_on = [
     snowflake_execute.stream_processor_procedure,
   ]

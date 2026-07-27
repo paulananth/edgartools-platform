@@ -64,7 +64,11 @@ def _run(
 
 
 def _read_latest_evidence(evidence_dir: Path) -> dict:
-    latest = evidence_dir / "edgartools-dev" / "latest.json"
+    # GH-252: evidence is namespaced by app (DASHBOARD_APP_NAME, default
+    # "dashboard") under the environment, not just by environment -- so two
+    # apps deployed through the same connection can't clobber each other's
+    # previous_app_version/rollback_command.
+    latest = evidence_dir / "edgartools-dev" / "dashboard" / "latest.json"
     return json.loads(latest.read_text(encoding="utf-8"))
 
 
@@ -139,7 +143,7 @@ def test_two_runs_produce_two_distinct_versioned_evidence_files(tmp_path: Path) 
     _run(tmp_path, "--dry-run", evidence_dir=evidence_dir)
     _run(tmp_path, "--dry-run", evidence_dir=evidence_dir)
 
-    versioned = sorted((evidence_dir / "edgartools-dev").glob("sha-*.json"))
+    versioned = sorted((evidence_dir / "edgartools-dev" / "dashboard").glob("sha-*.json"))
     # Same repo commit both runs -> same app_version -> the per-version file
     # is the same path both times (overwritten), not two files. This
     # documents that behavior rather than asserting a stronger guarantee
@@ -187,7 +191,7 @@ def test_environment_variable_overrides_are_honored(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     payload = json.loads(
-        (tmp_path / "evidence" / "custom-env-label" / "latest.json").read_text(
+        (tmp_path / "evidence" / "custom-env-label" / "dashboard" / "latest.json").read_text(
             encoding="utf-8"
         )
     )
