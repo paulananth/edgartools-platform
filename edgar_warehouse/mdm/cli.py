@@ -288,6 +288,18 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
             "'mdm graph-activate' accepts); on fail, marks it 'failed' (07-05 RSYNC-02)."
         ),
     )
+    vg.add_argument(
+        "--skip-review-publish",
+        action="store_true",
+        default=False,
+        help=(
+            "GH-251: skip publishing this run's payload to the generation-scoped "
+            "Snowflake graph-review contract (infra/snowflake/sql/graph_review/). "
+            "Useful before that schema has been applied to an environment, or for "
+            "local/offline tests. Publish failures never fail this command's own "
+            "pass/fail exit code either way -- see graph_review_publish.py."
+        ),
+    )
     vg.set_defaults(handler=_logged_handler("verify-graph", _handle_verify_graph))
 
     # verify-insider-coverage (Ticket 21 slice 3: insider-scoped EMPLOYED_BY gate)
@@ -1488,6 +1500,50 @@ def _handle_load_relationships(args) -> int:
     return 0
 
 
+def _publish_graph_review(connection, settings, args, result) -> None:
+    """GH-251: persist this verify-graph run's payload to the review contract.
+
+    Never raises -- a review-publish failure (including the review schema
+    not existing yet, before infra/snowflake/sql/graph_review/
+    01_graph_review_contract.sql has been applied to this environment) is
+    printed as a warning and does not affect verify-graph's own pass/fail
+    exit code, which signals graph *parity*, not "could we write audit
+    rows." Callers who need publish failures to be fatal should check the
+    printed warning themselves (there is no separate exit code for it).
+    """
+    from edgar_warehouse.mdm.graph_review_publish import (
+        GraphReviewPublishError,
+        publish_graph_review,
+        resolve_active_generation_id,
+    )
+
+    try:
+        generation_id = args.generation_id
+        if not generation_id:
+            generation_id = resolve_active_generation_id(
+                connection, database=settings.database
+            )
+        if not generation_id:
+            print(
+                "verify-graph: skipping review publish -- no generation has "
+                "ever been activated in this environment",
+                file=sys.stderr,
+            )
+            return
+        publish_graph_review(
+            connection,
+            database=settings.database,
+            payload=result.payload,
+            generation_id=generation_id,
+        )
+    except GraphReviewPublishError as exc:
+        print(f"verify-graph: review publish skipped: {exc}", file=sys.stderr)
+    except Exception as exc:  # pragma: no cover - defensive: never let review
+        # publishing (an audit-trail side effect) turn a passing/failing
+        # verify-graph run into a crash.
+        print(f"verify-graph: review publish skipped (unexpected error): {exc}", file=sys.stderr)
+
+
 def _handle_verify_graph(args) -> int:
     from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
     from edgar_warehouse.mdm.snowflake_graph import (
@@ -1524,6 +1580,8 @@ def _handle_verify_graph(args) -> int:
                     generation_id=args.generation_id,
                 )
             )
+            if not args.skip_review_publish:
+                _publish_graph_review(connection, settings, args, result)
         finally:
             connection.close()
     except (RuntimeError, ValueError) as exc:
