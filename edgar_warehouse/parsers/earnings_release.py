@@ -113,28 +113,49 @@ def parse_earnings_release(
         except (ValueError, TypeError):
             pass
 
-    # Probe optional tables — exceptions during access mean "absent", not "fatal"
+    # Probe optional tables — exceptions during access mean "we don't know",
+    # NOT "confirmed absent". has_non_gaap has no consumer requiring that
+    # distinction today; has_guidance below does (see GuidanceProbeError).
     try:
         has_non_gaap = er.eps_reconciliation is not None
     except Exception:
         has_non_gaap = False
+
+    from edgar_warehouse.explore.guidance_facts import GuidanceProbeError
+
+    guidance_probe_exception: str | None = None
     try:
         has_guidance = er.guidance is not None
-    except Exception:
+    except Exception as exc:
         has_guidance = False
+        guidance_probe_exception = str(exc)
+        logger.warning(
+            "guidance presence probe raised an exception for %s -- has_guidance=False "
+            "downstream, but this is NOT a confirmed absence: %s", accession_number, exc,
+        )
 
     # ERDP-02: structured guidance values, not just presence. Same cached
-    # bronze content, no re-fetch. Absence/extraction failure -> [] (not
-    # fatal to earnings_release parsing) -- has_guidance above still
-    # reflects table presence even when no numeric value was extractable.
+    # bronze content, no re-fetch. A genuinely empty/absent table -> [] (not
+    # an error). An exception while probing/extracting is quarantined to
+    # sec_guidance_fact_reject with a distinguishing reject_reason instead of
+    # being silently treated the same as a confirmed absence.
     guidance_rows: list[dict[str, Any]] = []
     guidance_rejects: list[dict[str, Any]] = []
-    if has_guidance:
+    if guidance_probe_exception is not None:
+        guidance_rejects.append({
+            "cik": int(cik),
+            "accession_number": accession_number,
+            "metric": None,
+            "reject_reason": f"guidance_probe_exception: {guidance_probe_exception}",
+            "parser_version": GUIDANCE_PARSER_VERSION,
+        })
+    elif has_guidance:
         from edgar_warehouse.explore.guidance_facts import (
             extract_guidance_from_earnings_release,
             validate_guidance_rows,
         )
 
+        candidates: list[dict[str, Any]] = []
         try:
             candidates = extract_guidance_from_earnings_release(
                 er,
@@ -146,11 +167,31 @@ def parse_earnings_release(
                 source_system="sec_8k",
                 parser_version=GUIDANCE_PARSER_VERSION,
             )
-        except Exception as exc:
-            logger.debug("guidance extraction failed for %s: %s", accession_number, exc)
-            candidates = []
+        except GuidanceProbeError as exc:
+            logger.warning("guidance extraction probe failed for %s: %s", accession_number, exc)
+            guidance_rejects.append({
+                "cik": int(cik),
+                "accession_number": accession_number,
+                "metric": None,
+                "reject_reason": f"guidance_extraction_exception: {exc}",
+                "parser_version": GUIDANCE_PARSER_VERSION,
+            })
+        except Exception as exc:  # unexpected bug, not a probe access failure -- never crash the batch
+            logger.error(
+                "unexpected exception during guidance extraction for %s: %s",
+                accession_number, exc, exc_info=True,
+            )
+            guidance_rejects.append({
+                "cik": int(cik),
+                "accession_number": accession_number,
+                "metric": None,
+                "reject_reason": f"guidance_extraction_unexpected_exception: {exc}",
+                "parser_version": GUIDANCE_PARSER_VERSION,
+            })
         if candidates:
-            guidance_rows, guidance_rejects = validate_guidance_rows(candidates)
+            accepted, rejected = validate_guidance_rows(candidates)
+            guidance_rows = accepted
+            guidance_rejects.extend(rejected)
 
     row = {
         "cik": int(cik),

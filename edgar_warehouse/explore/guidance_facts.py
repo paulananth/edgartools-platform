@@ -50,6 +50,18 @@ class GuidanceRowError(ValueError):
     """Invalid guidance row after normalization attempts (candidate for quarantine)."""
 
 
+class GuidanceProbeError(RuntimeError):
+    """Accessing or parsing the guidance table itself raised an unexpected exception.
+
+    Distinct from a confirmed "no guidance table" (``.guidance is None``) or
+    "table present but empty" -- both of those are legitimate, exception-free
+    negative outcomes and must never raise this. This exists so callers can
+    tell "we checked and there's nothing" apart from "something went wrong
+    and we don't actually know" -- several ER skills require that distinction
+    (see docs/er-guidance-facts.md's Promotion checklist, criterion 2).
+    """
+
+
 # ---------------------------------------------------------------------------
 # Row-label -> metric classification (D2: table heuristics first)
 # ---------------------------------------------------------------------------
@@ -576,14 +588,17 @@ def extract_guidance_from_earnings_release(
     """Extract candidate guidance rows from an ``edgartools`` ``EarningsRelease``.
 
     Returns ``[]`` when the release has no guidance table (``.guidance is
-    None``) or extraction fails -- absence is not an error (mirrors
-    ``has_guidance`` presence-only detection already in
-    ``edgar_warehouse.parsers.earnings_release``).
+    None``) or the table is present but empty -- both are confirmed,
+    exception-free absences. Raises :class:`GuidanceProbeError` when
+    accessing or parsing the table itself raises an unexpected exception, so
+    callers can tell "confirmed absent" apart from "we don't actually know"
+    (see :class:`GuidanceProbeError`'s docstring) instead of silently
+    treating both the same way.
     """
     try:
         table = er.guidance
-    except Exception:
-        return []
+    except Exception as exc:
+        raise GuidanceProbeError(f"er.guidance access failed: {exc}") from exc
     if table is None:
         return []
     try:
@@ -591,8 +606,8 @@ def extract_guidance_from_earnings_release(
     except Exception:
         try:
             dataframe = table.dataframe
-        except Exception:
-            return []
+        except Exception as exc:
+            raise GuidanceProbeError(f"guidance table dataframe access failed: {exc}") from exc
     if dataframe is None or dataframe.empty:
         return []
 
