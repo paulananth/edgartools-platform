@@ -171,7 +171,28 @@ WHERE c.is_current;
 
 ---
 
-## 5. Related
+## 5. Promotion checklist (Partial → Covered)
+
+**Current coverage-matrix status: Partial, not Covered** (`.scratch/er-data-plane/coverage-matrix.md` F16). §4's acceptance criteria above are implementation-time checks; promotion to Covered requires the stricter, ER-consumption-focused checklist below, resolved via `.scratch/erdp-coverage-promotion/issues/03-promotion-criteria-consensus-estimates.md` (full reasoning and source citations there).
+
+| # | Criterion |
+|---|-----------|
+| 1 | ≥50% of the Decision Subject Universe has both `revenue` and `eps_diluted` for the latest quarter |
+| 2 | Pre-earnings freshness (`as_of < filing_date`) proven across *all* CIKs reporting in the trailing 4 fiscal quarters, not a hand-picked sample |
+| 3 | `source_system` restricted to `{yahoo, firm_manual}` — any row claiming `fmp`/`finnhub`/`estimize`/`factset`/`bloomberg`/`cap_iq` disqualifies (no ingest code produces these today) |
+| 4 | `yahoo` rows: `source_ref` matches `^yahoo:[^:]+:(0q\|\+1q\|0y\|\+1y):(avg\|low\|high\|numberOfAnalysts)$` exactly (the real format `parse_yahoo_consensus_estimate` emits) — a free authenticity proof |
+| 5 | `firm_manual` rows trace to a checked-in, git-reviewed CSV — not an ad-hoc row |
+| 6 | `revenue` and `eps_diluted` for the same `(cik, fiscal_year, fiscal_quarter, as_of)` share the same `source_system` |
+| 7 | 100% join to `COMPANY`/`TICKER_REFERENCE`, identity-checked against `entity_name` (not just non-null join) |
+| 8 | Explore-only labeling re-affirmed (this doc, ADR 0001) |
+
+**Not required for promotion:** trailing history of consensus values (every ER skill wants only the current/NTM figure); segment-level metrics beyond revenue/eps_diluted.
+
+**Residual risk:** criteria 2 and 4 are provable only retrospectively, against quarters that have already reported — no acceptance query can guarantee the *next* print's consensus will be genuinely pre-earnings and accurate.
+
+---
+
+## 6. Related
 
 - [er-guidance-facts.md](./er-guidance-facts.md) — company-issued guidance is a separate product (ERDP-02)
 - [er-earnings-calendar.md](./er-earnings-calendar.md) — forward-looking print dates (ERDP-03)

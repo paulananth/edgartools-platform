@@ -215,7 +215,35 @@ WHERE g.accession_number IS NOT NULL;
 
 ---
 
-## 7. Deferred / out of phase-1 scope (spec §13)
+## 7. Promotion checklist (Partial → Covered)
+
+**Current coverage-matrix status: Partial, not Covered** (`.scratch/er-data-plane/coverage-matrix.md` F17). Full reasoning and source citations: `.scratch/erdp-coverage-promotion/issues/04-promotion-criteria-guidance-facts.md`.
+
+**Blocking prerequisite — not yet done.** `has_guidance` (`edgar_warehouse/parsers/earnings_release.py:116-124`) and this product's own extractor (`guidance_facts.py:565-594`) both silently treat *any* exception during `.guidance` access/parsing as "no guidance issued." A real code bug is currently indistinguishable from a legitimate negative at the data layer — no acceptance query can tell them apart. Must be fixed (distinguish "confirmed absent" from "exception during access," e.g. log/count separately or route to `sec_guidance_fact_reject`) before promotion is evaluated at all.
+
+Also note: Apple's one real production run reporting `rows_earnings_release: 0` does **not** establish that 8-K is an unreliable guidance source — that number reflects the earnings-release parser not matching any of the 30 parsed filings, a more basic signal than guidance extraction specifically coming up empty.
+
+| # | Criterion |
+|---|-----------|
+| 0 | *(prerequisite above)* |
+| 1 | `metric ∈ {revenue, eps_diluted}` supported at minimum, re-verified live |
+| 2 | Every `has_guidance=false` `EARNINGS_RELEASES` row is a positive, exception-free determination (guaranteed once #0 lands) |
+| 3 | **Extraction yield ≥ 90%** of `has_guidance=true` rows have ≥1 `GUIDANCE_FACTS` row for the same `accession_number`; the remainder must land in `sec_guidance_fact_reject` with a reason, not be silently dropped — this is the measured replacement for "is 8-K reliable," a stricter production bar than A02.6's exploratory ≥30% target above |
+| 4 | Guide-vs-guide: for any CIK with guidance in two consecutive fiscal quarters, both quarters' rows exist |
+| 5 | ≥1 of low/mid/high non-null on every published row (already enforced — re-verified live) |
+| 6 | `source_system='sec_8k'` rows: `source_ref` matches `^sec_8k:[0-9]{10}-[0-9]{2}-[0-9]{6}:guidance:.+$` (the real format `guidance_facts.py:557` emits) and the embedded accession joins to a real `FILING_DETAIL`/`EARNINGS_RELEASES` row |
+| 7 | `firm_manual` rows trace to a checked-in, git-reviewed CSV (no deterministic `source_ref` format to verify here — `guidance_facts.py:321-322`) |
+| 8 | SEC-derived preferred; `firm_manual` overrides coexist by natural key (already enforced) |
+| 9 | 100% join to `COMPANY`/`TICKER_REFERENCE`, identity-checked |
+| 10 | Explore-only labeling re-affirmed |
+
+**Not required for promotion:** universe-wide coverage — every consuming ER skill is per-request/single-company for this product, unlike consensus estimates.
+
+**Residual risk:** the 90% yield bar is measured against *known* guidance tables (`has_guidance=true`); it cannot detect a systematic false-negative in `has_guidance` itself beyond what #0's exception count makes visible.
+
+---
+
+## 8. Deferred / out of phase-1 scope (spec §13)
 
 - **D3** — Midpoint auto-fill when only low/high given: an optional
   read-side view, not computed at write time (`value_mid` stays `NULL`).
@@ -229,7 +257,7 @@ WHERE g.accession_number IS NOT NULL;
 
 ---
 
-## 8. Related
+## 9. Related
 
 - Reactive actuals: `EDGARTOOLS_GOLD.EARNINGS_RELEASES` (`has_guidance` presence flag, GAAP metrics)
 - [er-earnings-calendar.md](./er-earnings-calendar.md) — forward-looking dates (ERDP-03), separate product
