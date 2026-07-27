@@ -175,7 +175,7 @@ requirement to put transcript content into pure-SEC feature vectors).
 | 4 | Content-integrity spot-check: fetch `storage_uri` for a sample and confirm `sha256(fetched_text) == content_sha256` |
 | 5 | Exact-date-match, ±1 day, against the corresponding filing/release date — earnings-analysis's strictest correctness bar of any of the 4 ERDP products |
 | 6 | 100% join to `COMPANY`/`TICKER_REFERENCE`, identity-checked |
-| 7 | **Blocking dependency, not a query**: multi-quarter history capture for at least one CIK — not yet built. Required before earnings-preview/initiating-coverage's Covered status can even be evaluated. |
+| 7 | **Blocking dependency, not a query**: real transcript **content** for a second, distinct fiscal quarter — required before earnings-preview/initiating-coverage's Covered status can even be evaluated. **Corrected 2026-07-27**: this is not a missing-code gap — `register_ir_pointer`/`store_transcript_text` already accept any number of quarters per CIK with no collision (regression-tested, `tests/unit/test_transcript_events.py::MultiQuarterHistoryTests`). The blocker is that only content-bearing rows (criterion 3) count, and no free/first-party transcript text source exists yet — Apple's own IR site publishes a press release plus a ~2-week audio-only webcast replay, not text; real transcript text elsewhere is third-party licensed content. Tracked as `.scratch/erdp-coverage-promotion/issues/08-free-transcript-content-sources.md` (open research ticket), not a code build item. |
 
 **Not required for promotion:** a coverage-universe-wide transcript sweep — every consuming skill is single-company/per-request; `PILOT_CIKS` breadth is a smaller blocker than history depth for the two skills needing more than "latest."
 

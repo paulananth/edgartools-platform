@@ -190,5 +190,86 @@ class FirmManualCsvTests(unittest.TestCase):
         self.assertEqual(table.num_rows, 1)
 
 
+class MultiQuarterHistoryTests(unittest.TestCase):
+    """erdp-coverage-promotion ticket 06 §7: is multi-quarter capture for one
+    CIK actually blocked by missing ingest code, or already supported?
+
+    `event_id`/`event_key` are derived from `event_date` (`derive_ir_event_id`,
+    `transcript_event_key`), so nothing dedupes or collides across quarters --
+    this proves that mechanically, not the separate (unresolved) question of
+    whether real transcript *content* for those quarters is obtainable.
+    """
+
+    class _FakeStorageRoot:
+        def __init__(self) -> None:
+            self.writes: dict[str, str] = {}
+
+        def write_text(self, relative_path: str, payload: str) -> str:
+            uri = f"s3://fake-bucket/{relative_path}"
+            self.writes[uri] = payload
+            return uri
+
+    def test_two_fiscal_quarters_same_cik_via_ir_pointer_do_not_collide(self) -> None:
+        q3 = register_ir_pointer(
+            cik=320193,
+            event_date=date(2026, 7, 31),
+            source_url="https://investor.apple.com/fy2026q3-call",
+            fiscal_year=2026,
+            fiscal_quarter=3,
+        )
+        q2 = register_ir_pointer(
+            cik=320193,
+            event_date=date(2026, 4, 30),
+            source_url="https://investor.apple.com/fy2026q2-call",
+            fiscal_year=2026,
+            fiscal_quarter=2,
+        )
+        self.assertNotEqual(q3["event_id"], q2["event_id"])
+        self.assertNotEqual(q3["event_key"], q2["event_key"])
+        table = build_transcript_events_table([q3, q2])
+        self.assertEqual(table.num_rows, 2)
+        self.assertEqual(set(table.column("cik").to_pylist()), {320193})
+        self.assertEqual(
+            set(table.column("fiscal_quarter").to_pylist()), {3, 2}
+        )
+
+    def test_two_fiscal_quarters_same_cik_via_stored_text_do_not_collide(self) -> None:
+        storage_root = self._FakeStorageRoot()
+        q3 = store_transcript_text(
+            cik=320193,
+            event_date=date(2026, 7, 31),
+            text="Q3 call text.",
+            storage_root=storage_root,
+            source_system="firm_manual",
+            fiscal_year=2026,
+            fiscal_quarter=3,
+        )
+        q2 = store_transcript_text(
+            cik=320193,
+            event_date=date(2026, 4, 30),
+            text="Q2 call text.",
+            storage_root=storage_root,
+            source_system="firm_manual",
+            fiscal_year=2026,
+            fiscal_quarter=2,
+        )
+        self.assertNotEqual(q3["event_key"], q2["event_key"])
+        self.assertNotEqual(q3["storage_uri"], q2["storage_uri"])
+        self.assertEqual(len(storage_root.writes), 2)
+        table = build_transcript_events_table([q3, q2])
+        self.assertEqual(table.num_rows, 2)
+
+    def test_load_firm_manual_records_does_not_dedupe_across_quarters(self) -> None:
+        rows = load_firm_manual_csv(
+            "cik,event_id,event_type,event_date,storage_uri\n"
+            "320193,fy2026q3,earnings_call,2026-07-31,"
+            "s3://bucket/transcripts/cik=320193/event_id=fy2026q3/transcript.txt\n"
+            "320193,fy2026q2,earnings_call,2026-04-30,"
+            "s3://bucket/transcripts/cik=320193/event_id=fy2026q2/transcript.txt\n"
+        )
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({r["event_id"] for r in rows}, {"fy2026q3", "fy2026q2"})
+
+
 if __name__ == "__main__":
     unittest.main()
