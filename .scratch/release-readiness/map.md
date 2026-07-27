@@ -78,7 +78,8 @@ Unblocked open tickets (work through the map; claim before starting):
 1. [Define the Rollback Rehearsal Contract](issues/05-define-rollback-rehearsal-contract.md) — grilling (now also the standing precondition ticket 06's stage 2 depends on)  
 2. [Define Release-Bound Dashboard Acceptance](issues/07-define-release-bound-dashboard-acceptance.md) — prototype  
 3. [Design the Release Evidence Automation](issues/09-design-release-evidence-automation.md) — prototype (cross-cutting per ticket 06; assembles the Candidate Evidence Set, not a numbered stage)  
-4. [Define the Direct-Evidence GO Packet](issues/08-define-direct-evidence-go-packet.md) — grilling (blocked by 05, 07, 09 — 06 resolved 2026-07-26)
+4. [Define ERDP-05-04-Equivalent Promotion Criteria for the F1–F12 Coverage-Matrix Products](issues/25-define-erdp-f1-f12-promotion-checklist.md) — grilling, new 2026-07-27. Not yet worked (recorded as a go-live dependency only, per explicit instruction) — the older Gold/MDM ER products (identity, filings metadata, historical financials, ownership, 13F, graph neighborhood, executive pay, accounting scores, etc.) have no defined Partial→Covered promotion checklist, unlike the 4 new Explore products (`erdp-coverage-promotion`, DESTINATION REACHED 2026-07-27).  
+5. [Define the Direct-Evidence GO Packet](issues/08-define-direct-evidence-go-packet.md) — grilling (blocked by 05, 07, 09, **25** — 06 resolved 2026-07-26)
 
 ## Hygiene log
 
