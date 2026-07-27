@@ -48,7 +48,13 @@ const targetTables = new Map([
   ["SEC_AUDITOR_REPORT_EVIDENCE", `${databaseName}.${sourceSchema}.SEC_AUDITOR_REPORT_EVIDENCE`],
   ["SEC_EMPLOYMENT_EVENT", `${databaseName}.${sourceSchema}.SEC_EMPLOYMENT_EVENT`],
   // ERDP-03 Explore export (gold-refresh may emit empty parquet; table must still load)
-  ["EARNINGS_CALENDAR", `${databaseName}.${sourceSchema}.EARNINGS_CALENDAR`]
+  ["EARNINGS_CALENDAR", `${databaseName}.${sourceSchema}.EARNINGS_CALENDAR`],
+  // ERDP-02 / ERDP-01 Explore exports. Missing here means LOAD_EXPORTS_FOR_RUN
+  // throws "Unsupported source table" the first time either appears in a run
+  // manifest -- found 2026-07-27 while landing ERDP-01: GUIDANCE_FACTS (#277)
+  // was already merged and had never actually loaded into EDGARTOOLS_SOURCE.
+  ["GUIDANCE_FACTS", `${databaseName}.${sourceSchema}.GUIDANCE_FACTS`],
+  ["CONSENSUS_ESTIMATES", `${databaseName}.${sourceSchema}.CONSENSUS_ESTIMATES`]
 ]);
 
 const mergeKeys = new Map([
@@ -70,7 +76,9 @@ const mergeKeys = new Map([
   ["SEC_SUBSIDIARY_EVIDENCE", ["ACCESSION_NUMBER", "DOCUMENT_NAME", "ROW_ORDINAL"]],
   ["SEC_AUDITOR_REPORT_EVIDENCE", ["ACCESSION_NUMBER", "EVIDENCE_FINGERPRINT"]],
   ["SEC_EMPLOYMENT_EVENT", ["ACCESSION_NUMBER", "EVENT_INDEX"]],
-  ["EARNINGS_CALENDAR", ["FACT_KEY"]]
+  ["EARNINGS_CALENDAR", ["FACT_KEY"]],
+  ["GUIDANCE_FACTS", ["FACT_KEY"]],
+  ["CONSENSUS_ESTIMATES", ["FACT_KEY"]]
 ]);
 
 function q(value) {

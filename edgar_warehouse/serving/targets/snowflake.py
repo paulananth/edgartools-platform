@@ -145,6 +145,23 @@ def write_earnings_calendar_to_serving_export(
     return table.num_rows
 
 
+def write_consensus_estimates_to_serving_export(
+    table: pa.Table,
+    export_root: Any,
+    run_id: str,
+    business_date: str,
+) -> int:
+    """Write ERDP-01 CONSENSUS_ESTIMATES Explore table to serving export path."""
+    export_spec = default_capture_spec_factory().serving_export_table(
+        table_path="consensus_estimates",
+        business_date=business_date,
+        run_id=run_id,
+    )
+    _write_parquet(table, export_root, export_spec.relative_path)
+    return table.num_rows
+
+
 write_ticker_reference_to_snowflake_export = write_ticker_reference_to_serving_export
 write_gold_to_snowflake_export = write_gold_to_serving_export
 write_earnings_calendar_to_snowflake_export = write_earnings_calendar_to_serving_export
+write_consensus_estimates_to_snowflake_export = write_consensus_estimates_to_serving_export

@@ -60,14 +60,24 @@ Consumers: financial-services equity-research skills / agents (Explore Gold + **
 
 **Pilot sources (locked):** primary `yahoo`; fallback `firm_manual`; optional `fmp`. Detail: `specs/ERDP-01-consensus-estimates.md` §11.1.
 
-- [ ] **ERDP-01-01**: Platform exposes Gold Explore table **`CONSENSUS_ESTIMATES`** with columns per normative schema sketch (at minimum: `cik`, `ticker`, `metric`, `period_type`, `fiscal_year`, `fiscal_quarter`, `period_end`, `estimate_value`, `unit`, `currency`, `statistic`, `as_of`, `source_system`, `source_ref`, `ingested_at`, `fact_key`).
-- [ ] **ERDP-01-02**: **A01.2** — Natural key retains history across `as_of`: two snapshots on different `as_of` dates for the same period are both retained (no silent overwrite). Free pilot may document best-effort/waiver for deep as_of history.
-- [ ] **ERDP-01-03**: **A01.1** — For a CIK in the **sample universe**, ≥1 row for `metric=eps_diluted` and ≥1 for `metric=revenue` for the latest completed fiscal quarter with non-null `as_of` (via pilot `yahoo` or `firm_manual`).
-- [ ] **ERDP-01-04**: **A01.4** — Sample rows join to `COMPANY` or `TICKER_REFERENCE` on `cik`.
-- [ ] **ERDP-01-05**: **A01.3 / A01.5** — Platform docs (see consumer-path location above) label Explore-only; beat/miss path vs `EARNINGS_RELEASES`/actuals with `as_of` ≤ print date is documented.
-- [ ] **ERDP-01-06**: Phase-1 **metric vocabulary minimum** accepted by ingest: at least `revenue`, `eps_diluted` (unknown metrics rejected or quarantined).
-- [ ] **ERDP-01-07**: `firm_manual` load path works for ≥1 test CIK (CSV/Parquet → gold).
-- [ ] **ERDP-01-08**: Pilot ingest implements at least one automated path with `source_system=yahoo` (or documents blocker + firm_manual-only pilot).
+Implemented 2026-07-27: gold `_FACT_CONSENSUS_ESTIMATE_SCHEMA`/`CONSENSUS_ESTIMATES`
+(Explore-only, no silver table — built directly from vendor/firm rows like
+ERDP-03, not extracted from SEC bronze/silver), extractor
+`edgar_warehouse.explore.consensus_estimates` (normalize/validate/build,
+`yahoo` fetch via optional `[market]` yfinance extra + pure parser,
+`firm_manual` CSV loader), dbt model + `sources.yml`/`gold.yml`, export
+wiring (`gold_models.py`/`snowflake.py`/`run_manifest_builder.py`),
+`REFRESH_AFTER_LOAD` allowlist entry. Docs: `docs/er-consensus-estimates.md`.
+Tests: `tests/unit/test_consensus_estimates.py` (15 cases).
+
+- [x] **ERDP-01-01**: Platform exposes Gold Explore table **`CONSENSUS_ESTIMATES`** with columns per normative schema sketch (at minimum: `cik`, `ticker`, `metric`, `period_type`, `fiscal_year`, `fiscal_quarter`, `period_end`, `estimate_value`, `unit`, `currency`, `statistic`, `as_of`, `source_system`, `source_ref`, `ingested_at`, `fact_key`).
+- [x] **ERDP-01-02**: **A01.2** — Natural key retains history across `as_of`: two snapshots on different `as_of` dates for the same period are both retained (no silent overwrite). Free pilot may document best-effort/waiver for deep as_of history.
+- [x] **ERDP-01-03**: **A01.1** — For a CIK in the **sample universe**, ≥1 row for `metric=eps_diluted` and ≥1 for `metric=revenue` for the latest completed fiscal quarter with non-null `as_of` (via pilot `yahoo` or `firm_manual`).
+- [x] **ERDP-01-04**: **A01.4** — Sample rows join to `COMPANY` or `TICKER_REFERENCE` on `cik`.
+- [x] **ERDP-01-05**: **A01.3 / A01.5** — Platform docs (see consumer-path location above) label Explore-only; beat/miss path vs `EARNINGS_RELEASES`/actuals with `as_of` ≤ print date is documented.
+- [x] **ERDP-01-06**: Phase-1 **metric vocabulary minimum** accepted by ingest: at least `revenue`, `eps_diluted` (unknown metrics rejected or quarantined).
+- [x] **ERDP-01-07**: `firm_manual` load path works for ≥1 test CIK (CSV/Parquet → gold).
+- [x] **ERDP-01-08**: Pilot ingest implements at least one automated path with `source_system=yahoo` (or documents blocker + firm_manual-only pilot). *(parser implemented + tested; live network fetch is opt-in like ERDP-03's `ERDP03_LIVE` pattern — not exercised in CI)*
 
 ### ERDP-02 — Guidance facts
 

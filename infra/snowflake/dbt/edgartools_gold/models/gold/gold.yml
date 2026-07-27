@@ -267,6 +267,42 @@ models:
         tests:
           - not_null
 
+  - name: consensus_estimates
+    description: >
+      ERDP-01 Street (or proxy) consensus statistics (mean/median/high/low/
+      n_analysts) per (cik, metric, period_type, FY, FQ, statistic, as_of,
+      source_system). is_current marks latest as_of per base key. Beat/miss
+      vs actuals computed at query time against EARNINGS_RELEASES /
+      FINANCIAL_DERIVED, not stored. Not pure-SEC Agent-Grade (ADR 0001).
+    columns:
+      - name: fact_key
+        tests:
+          - not_null
+      - name: cik
+        tests:
+          - not_null
+      - name: metric
+        tests:
+          - not_null
+      - name: period_type
+        tests:
+          - not_null
+      - name: estimate_value
+        tests:
+          - not_null
+      - name: unit
+        tests:
+          - not_null
+      - name: statistic
+        tests:
+          - not_null
+      - name: as_of
+        tests:
+          - not_null
+      - name: source_system
+        tests:
+          - not_null
+
   - name: accounting_flags
     description: Annual auditor identity and forensic score tier classifications (Beneish, Altman, Piotroski) per 10-K filing.
     columns:

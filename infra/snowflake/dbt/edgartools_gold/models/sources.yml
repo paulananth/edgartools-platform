@@ -65,3 +65,12 @@ sources:
           (cik, fiscal_year, fiscal_quarter, source_system, as_of).
           Explore-only — not pure-SEC Agent-Grade. Pilot sources finnhub /
           yahoo / firm_manual via edgar_warehouse.explore.earnings_calendar.
+      # ERDP-01 — Consensus estimates (Gold Explore; external pilot sources)
+      - name: CONSENSUS_ESTIMATES
+        description: >
+          Street (or proxy) consensus statistics (mean/median/high/low/
+          n_analysts) per (cik, metric, period_type, fiscal_year,
+          fiscal_quarter, statistic, as_of, source_system). Explore-only —
+          not pure-SEC Agent-Grade. Beat/miss vs actuals computed at query
+          time, not stored. Pilot sources yahoo / firm_manual via
+          edgar_warehouse.explore.consensus_estimates.

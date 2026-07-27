@@ -479,3 +479,55 @@ CREATE TABLE IF NOT EXISTS EARNINGS_CALENDAR (
   ingested_at       TIMESTAMP_TZ NOT NULL
 )
 COMMENT = 'ERDP-03 forward earnings calendar (Explore). Grain fact_key; natural key cik/fy/fq/source/as_of.';
+
+-- ERDP-02 Explore — structured guidance values (not pure-SEC Agent-Grade).
+-- Found 2026-07-27 missing here entirely: without this table, the parquet
+-- LOAD_EXPORTS_FOR_RUN produces for GUIDANCE_FACTS has nowhere to land.
+CREATE TABLE IF NOT EXISTS GUIDANCE_FACTS (
+  fact_key          NUMBER(38, 0) NOT NULL,
+  cik               NUMBER(38, 0) NOT NULL,
+  ticker            STRING,
+  company_key       NUMBER(38, 0),
+  accession_number  STRING,
+  metric            STRING NOT NULL,
+  period_type       STRING NOT NULL,
+  fiscal_year       NUMBER(38, 0) NOT NULL,
+  fiscal_quarter    NUMBER(38, 0) NOT NULL,
+  period_end        DATE,
+  value_low         FLOAT,
+  value_mid         FLOAT,
+  value_high        FLOAT,
+  unit              STRING,
+  currency          STRING,
+  is_non_gaap       BOOLEAN NOT NULL,
+  as_of             DATE NOT NULL,
+  source_system     STRING NOT NULL,
+  source_ref        STRING,
+  excerpt           STRING,
+  confidence        STRING NOT NULL,
+  parser_version    STRING,
+  ingested_at       TIMESTAMP_TZ NOT NULL
+)
+COMMENT = 'ERDP-02 structured guidance values (Explore). Grain fact_key; natural key cik/metric/fy/fq/as_of/accession/is_non_gaap/source.';
+
+-- ERDP-01 Explore — consensus estimates (not pure-SEC Agent-Grade).
+CREATE TABLE IF NOT EXISTS CONSENSUS_ESTIMATES (
+  fact_key          NUMBER(38, 0) NOT NULL,
+  cik               NUMBER(38, 0) NOT NULL,
+  ticker            STRING,
+  company_key       NUMBER(38, 0),
+  metric            STRING NOT NULL,
+  period_type       STRING NOT NULL,
+  fiscal_year       NUMBER(38, 0),
+  fiscal_quarter    NUMBER(38, 0),
+  period_end        DATE,
+  estimate_value    FLOAT NOT NULL,
+  unit              STRING NOT NULL,
+  currency          STRING,
+  statistic         STRING NOT NULL,
+  as_of             DATE NOT NULL,
+  source_system     STRING NOT NULL,
+  source_ref        STRING,
+  ingested_at       TIMESTAMP_TZ NOT NULL
+)
+COMMENT = 'ERDP-01 consensus estimates (Explore). Grain fact_key; natural key cik/metric/period_type/fy/fq/statistic/as_of/source.';

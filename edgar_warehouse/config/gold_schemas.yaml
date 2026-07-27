@@ -705,3 +705,49 @@ schemas:
     - name: ingested_at
       type: timestamp_us_utc
       nullable: false
+  # ERDP-01 — Consensus estimates (Gold Explore; not pure-SEC Agent-Grade)
+  _FACT_CONSENSUS_ESTIMATE_SCHEMA:
+    - name: fact_key
+      type: int64
+      nullable: false
+    - name: cik
+      type: int64
+      nullable: false
+    - name: ticker
+      type: string
+    - name: company_key
+      type: int64
+    - name: metric
+      type: string
+      nullable: false
+    - name: period_type
+      type: string
+      nullable: false
+    - name: fiscal_year
+      type: int32
+    - name: fiscal_quarter
+      type: int32
+    - name: period_end
+      type: date32
+    - name: estimate_value
+      type: float64
+      nullable: false
+    - name: unit
+      type: string
+      nullable: false
+    - name: currency
+      type: string
+    - name: statistic
+      type: string
+      nullable: false
+    - name: as_of
+      type: date32
+      nullable: false
+    - name: source_system
+      type: string
+      nullable: false
+    - name: source_ref
+      type: string
+    - name: ingested_at
+      type: timestamp_us_utc
+      nullable: false
