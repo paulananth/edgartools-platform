@@ -29,8 +29,9 @@ A coverage matrix (`.scratch/er-data-plane/coverage-matrix.md`) that accurately 
 
 ## Not yet specified
 
-- Promotion criteria for the pre-existing F1–F12 coverage-matrix footnotes (older Gold/MDM/graph products, e.g. identity, filings metadata, historical financials) — the user's request that triggered this map was specifically about the 4 new Explore products (ERDP-01…04); whether the same "product-ready, all critical requirements" bar should later apply to F1–F12 is a separate, not-yet-scoped question.
 - `ERDP-COV-02`/`ERDP-COV-03` (every Gap cell maps to a requirement; spec stays aligned) — likely fall out automatically once the tickets below resolve, but not confirmed.
+
+**Resolved outside this map's own ticket set (2026-07-27):** whether the same "product-ready, all critical requirements" promotion-checklist bar should later apply to the pre-existing F1–F12 coverage-matrix footnotes (older Gold/MDM/graph products — identity, filings metadata, historical financials, etc.) — **yes**, confirmed with the user. The actual criteria-authoring is deliberately **not done here** (out of this closed map's scope, which was specifically the 4 new Explore products) — recorded as a required go-live dependency instead: [release-readiness ticket 25](../release-readiness/issues/25-define-erdp-f1-f12-promotion-checklist.md), blocking [release-readiness ticket 08](../release-readiness/issues/08-define-direct-evidence-go-packet.md) (the Direct-Evidence GO Packet).
 
 ## Out of scope
 
