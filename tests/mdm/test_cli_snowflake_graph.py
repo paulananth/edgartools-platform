@@ -506,6 +506,121 @@ def test_verify_graph_reports_strict_snowflake_parity(monkeypatch, capsys):
     assert connection.closed is True
 
 
+def test_verify_graph_skip_review_publish_never_invokes_publisher(monkeypatch, capsys):
+    """GH-251: --skip-review-publish means _publish_graph_review is never
+    called at all, not called-and-a-no-op."""
+    _clear_graph_env(monkeypatch)
+    connection = FakeSnowflakeConnection(
+        result_sets=_strict_parity_results(
+            node_rows=_all_6_node_rows_at_parity(),
+            relationship_rows=_all_4_populated_relationship_rows_at_parity(),
+        )
+    )
+    _patch_verify_settings(monkeypatch, connection)
+
+    calls = []
+    monkeypatch.setattr(
+        "edgar_warehouse.mdm.cli._publish_graph_review",
+        lambda *a, **k: calls.append((a, k)),
+    )
+
+    args = build_parser().parse_args(["mdm", "verify-graph", "--skip-review-publish"])
+
+    assert args.handler(args) == 0
+    assert calls == []
+
+
+def test_verify_graph_publishes_review_when_a_generation_is_active(monkeypatch, capsys):
+    """GH-251: default behavior (no --skip-review-publish) resolves the
+    active generation and publishes this run's payload to it."""
+    _clear_graph_env(monkeypatch)
+    connection = FakeSnowflakeConnection(
+        result_sets=_strict_parity_results(
+            node_rows=_all_6_node_rows_at_parity(),
+            relationship_rows=_all_4_populated_relationship_rows_at_parity(),
+        )
+    )
+    _patch_verify_settings(monkeypatch, connection)
+
+    monkeypatch.setattr(
+        "edgar_warehouse.mdm.graph_review_publish.resolve_active_generation_id",
+        lambda *a, **k: "gen-active-001",
+    )
+    published = []
+    monkeypatch.setattr(
+        "edgar_warehouse.mdm.graph_review_publish.publish_graph_review",
+        lambda connection, **kwargs: published.append(kwargs),
+    )
+
+    args = build_parser().parse_args(["mdm", "verify-graph"])
+
+    assert args.handler(args) == 0
+    assert len(published) == 1
+    assert published[0]["generation_id"] == "gen-active-001"
+    assert published[0]["database"] == "EDGARTOOLS_DEV"
+    assert published[0]["payload"]["status"] == "ok"
+
+
+def test_verify_graph_review_publish_failure_does_not_change_exit_code(monkeypatch, capsys):
+    """GH-251: a review-publish failure is a warning, not a verify-graph
+    failure -- exit code must still reflect graph *parity* only."""
+    from edgar_warehouse.mdm.graph_review_publish import GraphReviewPublishError
+
+    _clear_graph_env(monkeypatch)
+    connection = FakeSnowflakeConnection(
+        result_sets=_strict_parity_results(
+            node_rows=_all_6_node_rows_at_parity(),
+            relationship_rows=_all_4_populated_relationship_rows_at_parity(),
+        )
+    )
+    _patch_verify_settings(monkeypatch, connection)
+
+    monkeypatch.setattr(
+        "edgar_warehouse.mdm.graph_review_publish.resolve_active_generation_id",
+        lambda *a, **k: "gen-active-001",
+    )
+
+    def _boom(*_args, **_kwargs):
+        raise GraphReviewPublishError("simulated: review schema does not exist yet")
+
+    monkeypatch.setattr(
+        "edgar_warehouse.mdm.graph_review_publish.publish_graph_review", _boom
+    )
+
+    args = build_parser().parse_args(["mdm", "verify-graph"])
+
+    # Still 0 -- the fixture's graph parity passed; review-publish failing
+    # must not flip that.
+    assert args.handler(args) == 0
+    stderr = capsys.readouterr().err
+    assert "review publish skipped" in stderr
+    assert "simulated: review schema does not exist yet" in stderr
+
+
+def test_verify_graph_no_active_generation_skips_publish_with_warning(monkeypatch, capsys):
+    """GH-251: a fresh environment (nothing ever activated) is a clean skip,
+    not an error -- FakeSnowflakeCursor's default fetchone() is (0,), which
+    resolve_active_generation_id must treat as "no row", not generation "0"."""
+    _clear_graph_env(monkeypatch)
+    connection = FakeSnowflakeConnection(
+        result_sets=_strict_parity_results(
+            node_rows=_all_6_node_rows_at_parity(),
+            relationship_rows=_all_4_populated_relationship_rows_at_parity(),
+        )
+    )
+    _patch_verify_settings(monkeypatch, connection)
+
+    args = build_parser().parse_args(["mdm", "verify-graph"])
+
+    assert args.handler(args) == 0
+    stderr = capsys.readouterr().err
+    assert "no generation has ever been activated" in stderr
+    # No GRAPH_REVIEW_* statement should have been attempted.
+    assert not any(
+        "GRAPH_REVIEW_" in sql for sql in connection.cursor_instance.executed
+    )
+
+
 def test_verify_graph_generation_id_flag_promotes_candidate_to_verified_on_pass(monkeypatch, capsys):
     # Before this flag existed, verify-graph could only ever check the
     # currently-active generation -- with no generation ever activated yet
