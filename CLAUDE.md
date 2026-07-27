@@ -309,6 +309,73 @@ other — for any code path that has *never actually run against real data*, pre
 fixture (real `SilverDatabase`/DuckDB) over a string-matched stub, or treat passing stub-only tests
 for such paths as unproven, not verified.
 
+## Manifest-pipeline ownership + cursor-syntax incident 5-whys (resolved 2026-07-27)
+
+**Problem:** applying the ERDP-01/02/04 Snowflake bootstrap SQL fixes to prod (new
+`GUIDANCE_FACTS`/`CONSENSUS_ESTIMATES`/`TRANSCRIPT_EVENTS` tables, updated `LOAD_EXPORTS_FOR_RUN`/
+`REFRESH_AFTER_LOAD`/`PROCESS_RUN_MANIFEST_STREAM`) turned into a live `SNOWFLAKE_RUN_MANIFEST_TASK`
+outage plus a second, self-inflicted access break, while migrating one pilot company (Apple,
+320193) end-to-end.
+
+1. Symptom: `SNOWFLAKE_RUN_MANIFEST_TASK` started `FAILED`-looping shortly after the bootstrap SQL
+   was reapplied, instead of the expected `SUCCEEDED`/`SKIPPED`(idle) pattern.
+2. Why fail? `REFRESH_AFTER_LOAD` (recreated under `EDGARTOOLS_PROD_DEPLOYER`) tried
+   `ALTER DYNAMIC TABLE ... REFRESH` on tables it didn't own — `COMPANY` and most of the original 9
+   gold tables were owned by `ACCOUNTADMIN` from early ad-hoc bootstrapping, `EARNINGS_CALENDAR`
+   plus the 3 new Explore tables were owned by whichever role last ran `dbt run --full-refresh`
+   against them. Snowflake requires the *direct owner* role for that `ALTER` (documented elsewhere
+   in this file). Ownership had never been consistent across the 20 gold tables.
+3. Why was ownership never consistent? No source-controlled bootstrap SQL provisioned a single role
+   for these objects — each fix session used whatever role was convenient at the time
+   (`ACCOUNTADMIN` for early manual bootstrapping, `EDGARTOOLS_PROD_DEPLOYER` for dbt runs), so
+   ownership silently drifted table-by-table with every unrelated deploy.
+4. Why did the interim fix (granting `ACCOUNTADMIN` ownership of `REFRESH_AFTER_LOAD` as a
+   stopgap) get corrected mid-incident? Per explicit user instruction: ad-hoc `ACCOUNTADMIN`
+   ownership is not an acceptable pattern for pipeline objects. **Root cause of the ownership
+   churn:** fixed by creating a single dedicated `EDGARTOOLS_LOADER` role
+   (`infra/snowflake/sql/bootstrap/08_loader_role.sql`) and transferring ownership of all 20 gold
+   dynamic tables plus the 3 manifest procedures onto it in one operation, and pointing
+   `profiles.yml`'s prod dbt target at that role by default (it previously defaulted to
+   `EDGARTOOLS_PROD_DEPLOYER`, which would have silently re-flipped ownership on the next
+   unparameterized `dbt run --target prod`).
+5. **Compounding self-inflicted bug:** the ownership transfer used
+   `GRANT OWNERSHIP ... REVOKE CURRENT GRANTS`, which revokes *all* outbound grants on an object,
+   not just the previous owner's — this silently stripped `EDGARTOOLS_PROD_READER`'s (the
+   Streamlit dashboard's role) `SELECT` on all 20 gold tables. Caught before being reported as
+   fixed, via `SHOW GRANTS ON TABLE ... COMPANY` showing only the new `OWNERSHIP` row. Fixed with
+   `GRANT SELECT ON ALL/FUTURE DYNAMIC TABLES ... TO ROLE EDGARTOOLS_PROD_READER`; `08_loader_role.sql`
+   uses `COPY CURRENT GRANTS` instead so a future re-application of this fix cannot repeat it.
+
+**Separate, genuine defect found and fixed along the way:** `PROCESS_RUN_MANIFEST_STREAM`'s
+shorthand `FOR row IN (SELECT col1, col2 FROM ...) DO` cursor form (Snowflake Scripting's
+row-iteration-over-a-query syntax) fails with `Unsupported: Scalar subquery with multi-column
+SELECT clause` — independently reproduced live on 2026-07-27 with a trivial two-column literal
+`SELECT 1, 2 UNION ALL SELECT 3, 4`, unrelated to any table in this repo. **This is not a
+"never worked" case**: `TASK_HISTORY` shows the same procedure body succeeded as recently as
+2026-07-26 16:53:53, less than a day before the failures started — so treat this as a real but
+not fully understood intermittent defect in the multi-column form, not a permanently broken
+construct. Do not use the shorthand `FOR row IN (SELECT col_a, col_b, ...) DO` form for 2+ columns
+in this account; use the explicit form instead:
+```sql
+DECLARE
+  cnt INTEGER;
+  c1 CURSOR FOR (SELECT col_a, col_b FROM ...);
+  v_a TYPE; v_b TYPE;
+BEGIN
+  cnt := (SELECT COUNT(*) FROM (SELECT col_a, col_b FROM ...));
+  OPEN c1;
+  FOR i IN 1 TO cnt DO
+    FETCH c1 INTO v_a, v_b;
+    ...
+  END FOR;
+  CLOSE c1;
+END;
+```
+A naive "loop until `FETCH` stops returning rows" pattern (checking `SQLROWCOUNT`/`v_a IS NULL`)
+hung indefinitely under this same account state and had to be killed with
+`SELECT SYSTEM$CANCEL_QUERY('<query_id>')` — the bounded `FOR i IN 1 TO <precomputed COUNT(*)>`
+form above is the one that worked. Live in `04_refresh_wrapper.sql`.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. It runs in four
