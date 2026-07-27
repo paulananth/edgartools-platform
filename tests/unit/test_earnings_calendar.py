@@ -8,6 +8,7 @@ from datetime import date, datetime, timezone
 
 from edgar_warehouse.explore.earnings_calendar import (
     CalendarRowError,
+    SOURCE_SYSTEMS,
     build_earnings_calendar_table,
     coverage_for_universe,
     current_calendar_rows,
@@ -16,6 +17,7 @@ from edgar_warehouse.explore.earnings_calendar import (
     mark_reported,
     next_n_days,
     normalize_calendar_row,
+    parse_alphavantage_earnings_calendar,
     parse_finnhub_earnings_calendar,
 )
 
@@ -141,6 +143,62 @@ class FinnhubParseTests(unittest.TestCase):
         self.assertEqual(rows[0]["ticker"], "AAPL")
         self.assertEqual(rows[0]["session"], "after_close")
         self.assertEqual(rows[0]["source_system"], "finnhub")
+
+
+class AlphaVantageParseTests(unittest.TestCase):
+    def test_source_system_registered(self) -> None:
+        self.assertIn("alphavantage", SOURCE_SYSTEMS)
+
+    def test_parse_bulk_csv(self) -> None:
+        csv_text = (
+            "symbol,name,reportDate,fiscalDateEnding,estimate,currency\n"
+            "AAPL,Apple Inc,2025-10-30,2025-09-27,1.60,USD\n"
+            "UNKNOWN,Nobody Inc,2025-08-01,2025-06-30,0.10,USD\n"
+        )
+        rows = parse_alphavantage_earnings_calendar(
+            csv_text,
+            ticker_to_cik={"AAPL": 320193},
+            as_of=date(2025, 7, 1),
+        )
+        # UNKNOWN has no CIK mapping and is skipped.
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["ticker"], "AAPL")
+        self.assertEqual(row["cik"], 320193)
+        self.assertEqual(row["source_system"], "alphavantage")
+        self.assertEqual(str(row["expected_date"]), "2025-10-30")
+        self.assertEqual(str(row["period_end"]), "2025-09-27")
+        # No session field exists on this endpoint at all -- confirmed
+        # accepted decision (erdp-coverage-promotion ticket 05), not a gap.
+        self.assertEqual(row["session"], "unknown")
+        self.assertEqual(row["status"], "estimated")
+        self.assertEqual(row["source_ref"], "alphavantage:EARNINGS_CALENDAR:AAPL:2025-10-30")
+
+    def test_fiscal_quarter_derived_from_calendar_month(self) -> None:
+        # fiscalDateEnding=2025-09-27 -> September -> calendar Q3 under the
+        # documented calendar-quarter heuristic (KNOWN LIMITATION: wrong
+        # quarter *number* for non-calendar fiscal years like Apple's real
+        # FY, though the date itself stays exact).
+        csv_text = (
+            "symbol,name,reportDate,fiscalDateEnding,estimate,currency\n"
+            "AAPL,Apple Inc,2025-10-30,2025-09-27,1.60,USD\n"
+        )
+        rows = parse_alphavantage_earnings_calendar(csv_text, ticker_to_cik={"AAPL": 320193})
+        self.assertEqual(rows[0]["fiscal_quarter"], 3)
+        self.assertEqual(rows[0]["fiscal_year"], 2025)
+
+    def test_row_missing_dates_is_skipped(self) -> None:
+        csv_text = "symbol,name,reportDate,fiscalDateEnding,estimate,currency\nAAPL,Apple Inc,,,,\n"
+        rows = parse_alphavantage_earnings_calendar(csv_text, ticker_to_cik={"AAPL": 320193})
+        self.assertEqual(rows, [])
+
+    def test_row_without_cik_mapping_is_skipped(self) -> None:
+        csv_text = (
+            "symbol,name,reportDate,fiscalDateEnding,estimate,currency\n"
+            "AAPL,Apple Inc,2025-10-30,2025-09-27,1.60,USD\n"
+        )
+        rows = parse_alphavantage_earnings_calendar(csv_text, ticker_to_cik={})
+        self.assertEqual(rows, [])
 
 
 class CurrentAndCoverageTests(unittest.TestCase):
