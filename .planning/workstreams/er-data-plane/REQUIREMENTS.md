@@ -53,8 +53,8 @@ Consumers: financial-services equity-research skills / agents (Explore Gold + **
 
 ### ERDP-OPS — Warehouse registration (all new gold products)
 
-- [ ] **ERDP-OPS-01**: Each new gold product (`CONSENSUS_ESTIMATES`, `GUIDANCE_FACTS`, `EARNINGS_CALENDAR`, `TRANSCRIPT_EVENTS`) is registered consistently with existing fundamentals tables: gold schema registry entry, Snowflake export path/manifest participation, and dbt `EDGARTOOLS_GOLD` model (or documented equivalent). *(partial: `EARNINGS_CALENDAR` registered 2026-07-24; `GUIDANCE_FACTS` registered 2026-07-26; 01/04 still open)*
-- [ ] **ERDP-OPS-02**: Transcript object-store prefix is documented in the warehouse path catalog when platform-held bytes are used.
+- [x] **ERDP-OPS-01**: Each new gold product (`CONSENSUS_ESTIMATES`, `GUIDANCE_FACTS`, `EARNINGS_CALENDAR`, `TRANSCRIPT_EVENTS`) is registered consistently with existing fundamentals tables: gold schema registry entry, Snowflake export path/manifest participation, and dbt `EDGARTOOLS_GOLD` model (or documented equivalent). *(`EARNINGS_CALENDAR` registered 2026-07-24; `GUIDANCE_FACTS` registered 2026-07-26; `CONSENSUS_ESTIMATES`/`TRANSCRIPT_EVENTS` registered 2026-07-27 — verified live in prod: `gold_schemas.yaml` schema entries, `run_manifest_builder.py` mapping, dbt models + `gold.yml`, and all three bootstrap SQL layers (01 DDL, 03 load-wrapper targetTables/mergeKeys, 04 refresh-wrapper goldTables allowlist); `gold-refresh` confirmed both tables refresh successfully in prod)*
+- [x] **ERDP-OPS-02**: Transcript object-store prefix is documented in the warehouse path catalog when platform-held bytes are used. *(`edgar_warehouse/config/warehouse_paths.properties`: `transcripts.text.path = transcripts/cik={cik}/event_id={event_id}/{document_name}`; `DatasetPathCatalog.transcript_text_path()`)*
 
 ### ERDP-01 — Consensus estimates
 
