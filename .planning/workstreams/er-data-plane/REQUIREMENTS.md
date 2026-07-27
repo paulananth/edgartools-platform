@@ -53,8 +53,8 @@ Consumers: financial-services equity-research skills / agents (Explore Gold + **
 
 ### ERDP-OPS — Warehouse registration (all new gold products)
 
-- [ ] **ERDP-OPS-01**: Each new gold product (`CONSENSUS_ESTIMATES`, `GUIDANCE_FACTS`, `EARNINGS_CALENDAR`, `TRANSCRIPT_EVENTS`) is registered consistently with existing fundamentals tables: gold schema registry entry, Snowflake export path/manifest participation, and dbt `EDGARTOOLS_GOLD` model (or documented equivalent). *(partial: `EARNINGS_CALENDAR` registered 2026-07-24; `GUIDANCE_FACTS` registered 2026-07-26; 01/04 still open)*
-- [ ] **ERDP-OPS-02**: Transcript object-store prefix is documented in the warehouse path catalog when platform-held bytes are used.
+- [x] **ERDP-OPS-01**: Each new gold product (`CONSENSUS_ESTIMATES`, `GUIDANCE_FACTS`, `EARNINGS_CALENDAR`, `TRANSCRIPT_EVENTS`) is registered consistently with existing fundamentals tables: gold schema registry entry, Snowflake export path/manifest participation, and dbt `EDGARTOOLS_GOLD` model (or documented equivalent). *(`EARNINGS_CALENDAR` registered 2026-07-24; `GUIDANCE_FACTS` registered 2026-07-26; `CONSENSUS_ESTIMATES`/`TRANSCRIPT_EVENTS` registered 2026-07-27 — verified live in prod: `gold_schemas.yaml` schema entries, `run_manifest_builder.py` mapping, dbt models + `gold.yml`, and all three bootstrap SQL layers (01 DDL, 03 load-wrapper targetTables/mergeKeys, 04 refresh-wrapper goldTables allowlist); `gold-refresh` confirmed both tables refresh successfully in prod)*
+- [x] **ERDP-OPS-02**: Transcript object-store prefix is documented in the warehouse path catalog when platform-held bytes are used. *(`edgar_warehouse/config/warehouse_paths.properties`: `transcripts.text.path = transcripts/cik={cik}/event_id={event_id}/{document_name}`; `DatasetPathCatalog.transcript_text_path()`)*
 
 ### ERDP-01 — Consensus estimates
 
@@ -138,7 +138,7 @@ resolves the previously-undecided "pilot universe definition" gap. Docs:
 - [x] **ERDP-05-01**: Maintain `.scratch/er-data-plane/assets/erdp-05-existing-surface-read-map.md` and/or promoted `docs/` copy listing Gold/MDM/graph/Bundle surfaces with grain, Explore vs Agent-Grade, watermark rules. *(ERDP-07 §9b + `docs/er-market-eod-join.md` linked; full docs/ promote of entire map may follow.)*
 - [x] **ERDP-05-02**: **A05.1** — Map covers coverage-matrix footnotes F1–F12 Partial products.
 - [x] **ERDP-05-03**: **A05.2** — Fail-closed Agent-Grade rules (Decision Watermark) documented.
-- [ ] **ERDP-05-04**: **A05.3** — Partial → Covered promotion checklist exists per product (acceptance query); may trail implementation of ERDP-01…04.
+- [x] **ERDP-05-04**: **A05.3** — Partial → Covered promotion checklist exists per product (acceptance query); may trail implementation of ERDP-01…04. *(all 4 checklists written 2026-07-27, `.scratch/erdp-coverage-promotion/issues/03-06-*.md`: CONSENSUS_ESTIMATES 8 criteria, GUIDANCE_FACTS 10 criteria + 1 blocking code-fix prerequisite, EARNINGS_CALENDAR 9 criteria + 1 blocking build prerequisite, TRANSCRIPT_EVENTS 6 criteria with per-skill-differentiated Covered tiers. Checklist existing ≠ any product actually passing it yet — none do.)*
 - [x] **ERDP-05-05**: Document read paths for new Explore tables (01–04) once published (same docs home). *(partial: 03 + 07 documented; 01/02/04 when published)*
 
 ### ERDP-06 — Pure-SEC vs market boundary

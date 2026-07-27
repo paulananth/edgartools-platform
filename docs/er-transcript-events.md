@@ -161,7 +161,29 @@ requirement to put transcript content into pure-SEC feature vectors).
 
 ---
 
-## 5. Related
+## 5. Promotion checklist (Partial → Covered)
+
+**Current coverage-matrix status: Partial, not Covered** (`.scratch/er-data-plane/coverage-matrix.md` F19). Full reasoning and source citations: `.scratch/erdp-coverage-promotion/issues/06-promotion-criteria-transcript-events.md`.
+
+**Covered status differs by consuming ER skill — not a single uniform bar.** earnings-analysis needs only the latest quarter (structurally satisfiable Apple-only, criteria 1–6 below). earnings-preview needs the *prior* quarter specifically and initiating-coverage needs 2–3 quarters — neither is satisfiable no matter how well the single-quarter Apple pilot performs; this is a coverage-*shape* gate, not a data-quality gate (criterion 7).
+
+| # | Criterion (earnings-analysis tier) |
+|---|-----------|
+| 1 | `source_system ∈ {ir_website, firm_manual}` — `fmp`/`other` disqualify (unimplemented) |
+| 2 | `ir_website` rows: re-derive `derive_ir_event_id(cik, event_date, event_type, source_url)` from the row's own fields and confirm it equals the stored `event_id` — a hand-crafted row with a fabricated `event_id` fails immediately |
+| 3 | **Content required, not just a pointer**: `content_sha256 IS NOT NULL` and `char_count IS NOT NULL` (went through `store_transcript_text`, not `register_ir_pointer` alone) — a bare pointer satisfies citation needs but not earnings-analysis's stated need for quotable Q&A excerpts/management quotes |
+| 4 | Content-integrity spot-check: fetch `storage_uri` for a sample and confirm `sha256(fetched_text) == content_sha256` |
+| 5 | Exact-date-match, ±1 day, against the corresponding filing/release date — earnings-analysis's strictest correctness bar of any of the 4 ERDP products |
+| 6 | 100% join to `COMPANY`/`TICKER_REFERENCE`, identity-checked |
+| 7 | **Blocking dependency, not a query**: multi-quarter history capture for at least one CIK — not yet built. Required before earnings-preview/initiating-coverage's Covered status can even be evaluated. |
+
+**Not required for promotion:** a coverage-universe-wide transcript sweep — every consuming skill is single-company/per-request; `PILOT_CIKS` breadth is a smaller blocker than history depth for the two skills needing more than "latest."
+
+**Residual risk:** criterion 4 only proves the stored bytes match the stored hash — it cannot prove the original fetched text was itself an accurate, unmodified transcript.
+
+---
+
+## 6. Related
 
 - [er-consensus-estimates.md](./er-consensus-estimates.md) — ERDP-01
 - [er-guidance-facts.md](./er-guidance-facts.md) — ERDP-02

@@ -24,14 +24,14 @@ Sources: [assets/er-skills-io.md](./assets/er-skills-io.md), [assets/er-edgartoo
 | Identity (ticker/CIK) | Partial | Partial | Partial | Partial | Partial | Partial | Partial | Partial | Partial |
 | Filings metadata | Partial | Partial | Partial | Partial | Partial | Partial | Partial | Partial | Partial |
 | Filing / research text | Partial | Partial | Partial | N/A | Partial | Partial | N/A | N/A | Partial |
-| Transcript | N/A | Gap | Gap | N/A | Gap | N/A | N/A | N/A | N/A |
+| Transcript | N/A | Partial | N/A | N/A | Partial | Partial | N/A | N/A | N/A |
 | IR deck / supplemental | N/A | Gap | N/A | N/A | Gap | Gap | N/A | N/A | N/A |
 | Historical financials (derived/facts) | N/A | Partial | Partial | Partial | Partial | Partial | Partial | Partial | Partial |
 | Earnings 8-K GAAP snapshot | Partial | Partial | Partial | Partial | Partial | Partial | Partial | N/A | N/A |
 | Non-GAAP values | N/A | Gap | Gap | Gap | Gap | Gap | N/A | N/A | N/A |
-| Guidance **values** | N/A | Gap | Gap | Gap | Gap | Gap | N/A | N/A | N/A |
-| Consensus + as-of | Gap | Gap | Gap | Gap | Gap | Gap | N/A | Gap | Gap |
-| Earnings calendar date/time | Gap | Gap | Gap | N/A | N/A | N/A | Gap | N/A | N/A |
+| Guidance **values** | N/A | Partial | Partial | Partial | Partial | Partial | N/A | N/A | N/A |
+| Consensus + as-of | Partial | Partial | Partial | Partial | Partial | Partial | N/A | N/A | N/A |
+| Earnings calendar date/time | Partial | Partial | Partial | N/A | N/A | N/A | Partial | N/A | N/A |
 | Market price / mcap / beta | N/A | Partial | Partial | Partial | Partial | Partial | Partial | Partial | Partial |
 | Options / implied move | N/A | External | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
 | Ownership / Form 4 | N/A | N/A | Partial | N/A | Partial | Partial | Partial | Partial | N/A |
@@ -72,8 +72,12 @@ Every **Partial** cell below maps to an existing platform surface. None are **Co
 | F13 | Market price / mcap / beta | **ERDP-07**: `PriceProvider` / yfinance (close, mcap, beta); join ticker\|CIK + as_of; WACC via `wacc.py` | External Explore (not gold table) | Partial until A07.* + docs (ERDP-07). **Never** in pure-SEC features. |
 | F14 | Peer comps (ad hoc) | Gold peer financials (SIC/ranks) + ERDP-07 prices → EV/EBITDA, P/E recipes | Gold + ERDP-07 | Not a packaged gold comps product; recipe-level Partial. |
 | F15 | Model-derived PT | Gold FCF/EPS + ERDP-07 WACC/multiples → DCF/P/E PT | Gold + ERDP-07 | **Street** ratings/PT history remain External. |
+| F16 | Consensus + as-of | Gold Explore `CONSENSUS_ESTIMATES` (`edgar_warehouse/explore/consensus_estimates.py`); `yahoo`/`firm_manual` pilot sources | Gold Explore (not Agent-Grade) | Reclassified Gap→Partial 2026-07-27 (ERDP-01 landed). No promoted data in prod as of this reclassification — 0% of the 50% universe-coverage bar in the ERDP-05-04 promotion checklist (`.scratch/erdp-coverage-promotion/issues/03-*.md`); `idea-generation`/`sector-overview` correctly N/A (no textual basis found). |
+| F17 | Guidance **values** | Gold Explore `GUIDANCE_FACTS` (SEC 8-K extractor + `firm_manual`); `edgar_warehouse/explore/guidance_facts.py` | Gold Explore | Reclassified Gap→Partial 2026-07-27 (ERDP-02 landed). SEC-8-K path yielded 0 rows on the one real production run (Apple) — open whether 8-K is the right primary source (promotion checklist for this product still open, ticket 04 of `erdp-coverage-promotion`). |
+| F18 | Earnings calendar date/time | Gold Explore `EARNINGS_CALENDAR`; `finnhub`/`yahoo`/`firm_manual` sources; `edgar_warehouse/explore/earnings_calendar.py` | Gold Explore | Reclassified Gap→Partial 2026-07-27 (ERDP-03 landed). `finnhub` path needs an uncleared commercial license — ops gate, not a code gap. `initiating-coverage`/`model-update`/`idea-generation`/`sector-overview` correctly N/A (no textual basis found). |
+| F19 | Transcript | Gold Explore `TRANSCRIPT_EVENTS` (`ir_website` pointer + `firm_manual` copy); `edgar_warehouse/explore/transcript_events.py` | Gold Explore (not Agent-Grade) | Reclassified 2026-07-27 (ERDP-04 landed): `earnings-preview`/`earnings-analysis` Gap→Partial; `initiating-coverage` N/A→Partial (real need found, matrix previously missed it — `references/task1-company-research.md:27`); `morning-note` Gap→N/A (its only mention is scheduling, already covered by the Earnings-calendar row, not this one). `PILOT_CIKS={320193}` (Apple-only) + latest-quarter-only means history depth, not just CIK breadth, blocks `earnings-preview` (needs *prior* quarter) and `initiating-coverage` (needs 2-3 quarters) — see ticket 06 of `erdp-coverage-promotion`. |
 
-**Covered cells:** none until ERDP-05/07 acceptance + docs. Promote Partial → Covered when read path + A0x pass.
+**Covered cells:** none until ERDP-05/07 acceptance + docs, or (for F16–F19) the ERDP-05-04 promotion checklist passes per product. Promote Partial → Covered when read path + A0x pass.
 
 ### Skill unblock note (EOD scope expand)
 
@@ -83,12 +87,14 @@ With F13 only (no ERDP-01…04): **model-update valuation**, **initiating Task 3
 
 ## Gap → ERDP / disposition
 
+**Note (2026-07-27):** the four rows below are historical — they describe the original Gap→ERDP assignment made when these were still Gap cells. All four have since landed as real products and the matrix rows are now Partial (see F16–F19 above), not Gap. Kept here for the original disposition trail, not as current status.
+
 | Data class | Disposition |
 |------------|-------------|
-| Consensus + as-of | **ERDP-01** |
-| Guidance **values** | **ERDP-02** (enrich beyond `has_guidance`) |
-| Earnings calendar date/time | **ERDP-03** |
-| Transcript | **ERDP-04** |
+| Consensus + as-of | **ERDP-01** — landed, see F16 |
+| Guidance **values** | **ERDP-02** (enrich beyond `has_guidance`) — landed, see F17 |
+| Earnings calendar date/time | **ERDP-03** — landed, see F18 |
+| Transcript | **ERDP-04** — landed, see F19 |
 | Non-GAAP **values** (as separate actuals product) | **Out of scope** phase-1 (REQUIREMENTS polish B): only `is_non_gaap` + numeric values on `GUIDANCE_FACTS`; full non-GAAP actuals product is Future |
 | IR deck / supplemental | **Out of scope** phase-1 (object/pointer possible later; not ERDP-01…04) |
 | Peer comps pack | **Out of scope** phase-1 (deferred on map) |

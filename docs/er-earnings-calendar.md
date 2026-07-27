@@ -1,7 +1,7 @@
 # ER earnings calendar (ERDP-03)
 
 **Status:** phase-1 Gold Explore product  
-**Pilot sources:** `finnhub` (primary), `yahoo` / `firm_manual` (fallback)  
+**Pilot sources:** `finnhub` (primary, license-gated — not yet cleared), `firm_manual` (fallback, doesn't scale to a coverage-universe-wide need). **`yahoo` is not implemented** despite being referenced below and in `SOURCE_SYSTEMS` — no `parse_yahoo_*`/`fetch_yahoo_*` function exists in `earnings_calendar.py` (confirmed 2026-07-27, `.scratch/erdp-coverage-promotion/issues/07-free-earnings-calendar-sources.md`). Planned real path: Alpha Vantage `EARNINGS_CALENDAR` (see §5 below) — not yet built.  
 **Grade:** **Explore only** — not pure-SEC Agent-Grade Decision Features  
 **ADR:** [0001-agent-decision-surface-first.md](./adr/0001-agent-decision-surface-first.md)  
 **Spec:** `.scratch/er-data-plane/specs/ERDP-03-earnings-calendar.md`  
@@ -104,7 +104,9 @@ table = build_earnings_calendar_table(rows)
 Maps Finnhub `hour`: `bmo`→`pre_market`, `amc`→`after_close`, `dmh`→`during_session`.
 
 **License:** verify Finnhub free-tier terms before commercial gold publication.
-If blocked, document waiver and use `yahoo` / `firm_manual` pilot only.
+If blocked, use `firm_manual` (doesn't scale to universe-wide) or implement
+the Alpha Vantage path (§5 below) — **not** `yahoo`, which despite being
+named here and in `SOURCE_SYSTEMS` has no implementation.
 
 ### 2.3 Mark reported from gold releases (A03.7)
 
@@ -174,7 +176,32 @@ WHERE c.is_current;
 
 ---
 
-## 5. Related
+## 5. Promotion checklist (Partial → Covered)
+
+**Current coverage-matrix status: Partial, not Covered** (`.scratch/er-data-plane/coverage-matrix.md` F18). Full reasoning and source citations: `.scratch/erdp-coverage-promotion/issues/05-promotion-criteria-earnings-calendar.md` and `07-free-earnings-calendar-sources.md`.
+
+**Build prerequisite — not yet done.** Neither real path today (`finnhub`, license-gated; `firm_manual`, doesn't scale) can satisfy catalyst-calendar/morning-note's coverage-universe-wide, every-trading-day need. Deep research into free alternatives (yfinance, Nasdaq's internal API, SEC, Alpha Vantage) found **Alpha Vantage's `EARNINGS_CALENDAR`** is the only candidate that's genuinely bulk, official/documented, and ToS-clean — yfinance's per-ticker earnings-date function is confirmed literal HTML scraping in the pinned version, and Nasdaq's endpoint (which does have real session-timing data) is undocumented with `robots.txt: Disallow: /` on the whole subdomain. Alpha Vantage is date-only (no session timing — no free ToS-clean source has any); accepted as `session="unknown"`, already a legitimate enum value. **To build:** add `"alphavantage"` to `SOURCE_SYSTEMS`; implement a fetch/parse function calling `EARNINGS_CALENDAR` with `symbol` omitted (bulk mode, respecting the 25-req/day free-tier ceiling).
+
+| # | Criterion |
+|---|-----------|
+| 0 | *(prerequisite above)* |
+| 1 | `source_system ∈ {finnhub, firm_manual, alphavantage}` — `yahoo`/`fmp`/`other` disqualify |
+| 2 | At least one **bulk** source (`finnhub` or `alphavantage`) active, covering ≥90% of the Decision Subject Universe for the current+next fiscal quarter — `firm_manual` alone cannot pass this by construction, not a measured gap |
+| 3 | `finnhub` rows: `source_ref` matches `^finnhub:calendar/earnings:[^:]+:[0-9]{4}:Q[1-4]$` (real format, `earnings_calendar.py:369`) |
+| 4 | `alphavantage` rows (once built): deterministic `source_ref` format specified at implementation time, same authenticity-check convention |
+| 5 | `firm_manual` rows trace to a checked-in, git-reviewed CSV |
+| 6 | `confirmed` rows never use `session=unknown` (already enforced — A03.2); `estimated` rows may |
+| 7 | Staleness re-verification: a row `as_of` >X days old with `expected_date` in the next 2 weeks must have a fresher re-confirming row, not be served stale (catalyst-calendar's own "dates shift" caveat) |
+| 8 | 100% join to `COMPANY`/`TICKER_REFERENCE`, identity-checked |
+| 9 | Explore-only labeling re-affirmed |
+
+**Not required for promotion:** exact time-of-day beyond session bucketing; history — every consumer wants only the *next* occurrence.
+
+**Residual risk:** criterion 7 depends on the upstream vendor actually re-publishing changed dates promptly — no acceptance query against the platform's own data can detect silent vendor staleness without an independent second source.
+
+---
+
+## 6. Related
 
 - [er-market-eod-join.md](./er-market-eod-join.md) — prices are separate (ERDP-07)  
 - Reactive actuals: `EDGARTOOLS_GOLD.EARNINGS_RELEASES`  
