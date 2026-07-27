@@ -5,6 +5,11 @@ Reads gold tables from EDGARTOOLS_GOLD via the active Snowpark session.
 Ticket 13: Agent View vs Explore mode toggle. Mode semantics are defined in
 ``edgar_warehouse.serving.dashboard_modes`` (unit-tested). This file mirrors
 the allowlist for SiS deploy (only this module is staged).
+
+Company Details' "Equity research (Explore)" section surfaces the 4 ERDP
+Gold Explore products (CONSENSUS_ESTIMATES / GUIDANCE_FACTS /
+EARNINGS_CALENDAR / TRANSCRIPT_EVENTS, see ``docs/er-*.md``) -- Explore-only
+per ADR 0001, gated the same way Financial factors is.
 """
 
 from __future__ import annotations
@@ -379,6 +384,115 @@ def _company_financial_factors(cik: int, limit: int = 40):
     )
 
 
+def _company_consensus_estimates(cik: int, limit: int = 40):
+    """ERDP-01: Gold Explore only (ADR 0001) -- not Decision Contract input."""
+    return _safe_df(
+        "Consensus estimates",
+        f"""
+        select
+          metric, period_type, fiscal_year, fiscal_quarter, period_end,
+          estimate_value, unit, currency, statistic,
+          source_system, source_ref, as_of, ingested_at
+        from {GOLD_SCHEMA}.CONSENSUS_ESTIMATES
+        where cik = ? and is_current
+        order by fiscal_year desc nulls last, fiscal_quarter desc nulls last, metric, statistic
+        limit {int(limit)}
+        """,
+        params=[int(cik)],
+    )
+
+
+def _company_guidance_facts(cik: int, limit: int = 40):
+    """ERDP-02: Gold Explore only (ADR 0001) -- not Decision Contract input."""
+    return _safe_df(
+        "Guidance facts",
+        f"""
+        select
+          metric, period_type, fiscal_year, fiscal_quarter, period_end,
+          value_low, value_mid, value_high, unit, currency, is_non_gaap,
+          source_system, source_ref, as_of, accession_number
+        from {GOLD_SCHEMA}.GUIDANCE_FACTS
+        where cik = ? and is_current
+        order by fiscal_year desc nulls last, fiscal_quarter desc nulls last, metric
+        limit {int(limit)}
+        """,
+        params=[int(cik)],
+    )
+
+
+def _company_earnings_calendar(cik: int, limit: int = 20):
+    """ERDP-03: Gold Explore only (ADR 0001) -- not Decision Contract input."""
+    return _safe_df(
+        "Earnings calendar",
+        f"""
+        select
+          fiscal_year, fiscal_quarter, expected_date, expected_time, timezone,
+          session, status, source_system, source_ref, as_of
+        from {GOLD_SCHEMA}.EARNINGS_CALENDAR
+        where cik = ? and is_current
+        order by expected_date desc nulls last
+        limit {int(limit)}
+        """,
+        params=[int(cik)],
+    )
+
+
+def _company_transcript_events(cik: int, limit: int = 20):
+    """ERDP-04: Gold Explore only (ADR 0001) -- not Decision Contract input.
+
+    No ``is_current`` filter -- unlike the other 3 ERDP products, a
+    transcript pointer is revalidated in place, not versioned (see
+    transcript_events.sql).
+    """
+    return _safe_df(
+        "Transcript events",
+        f"""
+        select
+          event_type, fiscal_year, fiscal_quarter, event_date, storage_uri,
+          content_sha256 is not null as has_content, char_count, language,
+          source_system, source_url, as_of
+        from {GOLD_SCHEMA}.TRANSCRIPT_EVENTS
+        where cik = ?
+        order by event_date desc nulls last
+        limit {int(limit)}
+        """,
+        params=[int(cik)],
+    )
+
+
+def _render_equity_research(mode: str, cik: int) -> None:
+    """ERDP-01..04 Gold Explore products -- Explore-only, not Decision Contract input.
+
+    Same guard pattern as the Financial factors section: this is only ever
+    reached from the Explore branch of ``render_details``, but the explicit
+    ``_is_object_allowed`` check is defense-in-depth against future callers.
+    """
+    st.subheader("Equity research (Explore)")
+    if not _is_object_allowed(mode, "CONSENSUS_ESTIMATES"):
+        st.error("Agent View cannot query free gold ERDP Explore tables.")
+        return
+    st.caption(
+        "CONSENSUS_ESTIMATES / GUIDANCE_FACTS / EARNINGS_CALENDAR / TRANSCRIPT_EVENTS "
+        "-- Gold Explore products (ADR 0001). Not pure-SEC Agent-Grade Decision "
+        "Features and not Trading Decision input."
+    )
+    tabs = st.tabs(["Consensus", "Guidance", "Earnings calendar", "Transcripts"])
+    with tabs[0]:
+        _show_dataframe(_company_consensus_estimates(cik))
+    with tabs[1]:
+        _show_dataframe(_company_guidance_facts(cik))
+    with tabs[2]:
+        _show_dataframe(_company_earnings_calendar(cik))
+    with tabs[3]:
+        transcripts = _company_transcript_events(cik)
+        _show_dataframe(transcripts)
+        if transcripts is not None and not transcripts.empty:
+            st.caption(
+                "storage_uri is a pointer (ir_website) or platform-held copy "
+                "(firm_manual, has_content=True) -- not rendered inline."
+            )
+
+
 def _company_timeline(company_key: int):
     return _df(
         f"""
@@ -522,6 +636,9 @@ def render_details(mode: str = MODE_EXPLORE):
         st.info("No filings to display.")
     else:
         st.dataframe(recent, use_container_width=True, hide_index=True)
+
+    st.divider()
+    _render_equity_research(mode, cik)
 
 
 def _pipeline_runs():

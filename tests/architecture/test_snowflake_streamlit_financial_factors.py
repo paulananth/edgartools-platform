@@ -71,6 +71,9 @@ class _FakeStreamlit:
     def error(self, *_args, **_kwargs) -> None:
         return None
 
+    def caption(self, *_args, **_kwargs) -> None:
+        return None
+
     def write(self, *_args, **_kwargs) -> None:
         return None
 
@@ -180,6 +183,112 @@ class SnowflakeStreamlitFinancialFactorsTests(unittest.TestCase):
         self.assertIn("from EDGARTOOLS_GOLD.FINANCIAL_FACTORS", calls[0]["sql"])
         self.assertIn("where cik = ?", calls[0]["sql"])
         self.assertIn("limit 5", calls[0]["sql"])
+
+
+class EquityResearchSectionTests(unittest.TestCase):
+    """Company Details' ERDP-01..04 "Equity research (Explore)" section."""
+
+    def test_consensus_estimates_query_uses_bound_cik_and_current_filter(self) -> None:
+        module = _load_app()
+        calls = []
+        module._safe_df = lambda label, sql, params=None: calls.append(
+            {"label": label, "sql": sql, "params": params}
+        )
+
+        module._company_consensus_estimates("320193", limit="5")
+
+        self.assertEqual(calls[0]["label"], "Consensus estimates")
+        self.assertEqual(calls[0]["params"], [320193])
+        self.assertIn("from EDGARTOOLS_GOLD.CONSENSUS_ESTIMATES", calls[0]["sql"])
+        self.assertIn("where cik = ? and is_current", calls[0]["sql"])
+        self.assertIn("limit 5", calls[0]["sql"])
+
+    def test_guidance_facts_query_uses_bound_cik_and_current_filter(self) -> None:
+        module = _load_app()
+        calls = []
+        module._safe_df = lambda label, sql, params=None: calls.append(
+            {"label": label, "sql": sql, "params": params}
+        )
+
+        module._company_guidance_facts(320193, limit=10)
+
+        self.assertEqual(calls[0]["label"], "Guidance facts")
+        self.assertEqual(calls[0]["params"], [320193])
+        self.assertIn("from EDGARTOOLS_GOLD.GUIDANCE_FACTS", calls[0]["sql"])
+        self.assertIn("where cik = ? and is_current", calls[0]["sql"])
+
+    def test_earnings_calendar_query_uses_bound_cik_and_current_filter(self) -> None:
+        module = _load_app()
+        calls = []
+        module._safe_df = lambda label, sql, params=None: calls.append(
+            {"label": label, "sql": sql, "params": params}
+        )
+
+        module._company_earnings_calendar(320193)
+
+        self.assertEqual(calls[0]["label"], "Earnings calendar")
+        self.assertEqual(calls[0]["params"], [320193])
+        self.assertIn("from EDGARTOOLS_GOLD.EARNINGS_CALENDAR", calls[0]["sql"])
+        self.assertIn("where cik = ? and is_current", calls[0]["sql"])
+
+    def test_transcript_events_query_uses_bound_cik_without_is_current(self) -> None:
+        """Unlike the other 3 ERDP products, a transcript pointer is revalidated
+        in place (MERGE on event_key), not versioned -- no is_current column."""
+        module = _load_app()
+        calls = []
+        module._safe_df = lambda label, sql, params=None: calls.append(
+            {"label": label, "sql": sql, "params": params}
+        )
+
+        module._company_transcript_events(320193)
+
+        self.assertEqual(calls[0]["label"], "Transcript events")
+        self.assertEqual(calls[0]["params"], [320193])
+        self.assertIn("from EDGARTOOLS_GOLD.TRANSCRIPT_EVENTS", calls[0]["sql"])
+        self.assertIn("where cik = ?", calls[0]["sql"])
+        self.assertNotIn("is_current", calls[0]["sql"])
+
+    def test_agent_view_blocks_equity_research_section(self) -> None:
+        module = _load_app()
+        called = []
+        for name in (
+            "_company_consensus_estimates",
+            "_company_guidance_facts",
+            "_company_earnings_calendar",
+            "_company_transcript_events",
+        ):
+            setattr(module, name, lambda *_a, _n=name, **_k: called.append(_n))
+
+        module._render_equity_research("agent_view", 320193)
+
+        self.assertEqual(called, [])
+
+    def test_explore_mode_renders_all_four_erdp_products(self) -> None:
+        module = _load_app()
+        called = []
+        for name in (
+            "_company_consensus_estimates",
+            "_company_guidance_facts",
+            "_company_earnings_calendar",
+            "_company_transcript_events",
+        ):
+            setattr(
+                module,
+                name,
+                lambda *_a, _n=name, **_k: (called.append(_n), pd.DataFrame())[1],
+            )
+
+        module._render_equity_research("explore", 320193)
+
+        self.assertEqual(
+            called,
+            [
+                "_company_consensus_estimates",
+                "_company_guidance_facts",
+                "_company_earnings_calendar",
+                "_company_transcript_events",
+            ],
+        )
 
 
 if __name__ == "__main__":
