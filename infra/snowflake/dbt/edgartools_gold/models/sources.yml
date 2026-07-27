@@ -74,3 +74,12 @@ sources:
           not pure-SEC Agent-Grade. Beat/miss vs actuals computed at query
           time, not stored. Pilot sources yahoo / firm_manual via
           edgar_warehouse.explore.consensus_estimates.
+      # ERDP-04 — Transcript events (Gold Explore pointer; external pilot sources)
+      - name: TRANSCRIPT_EVENTS
+        description: >
+          Durable pointer (+ optional platform-held copy) for one earnings
+          call / investor day event per (cik, event_id, source_system) —
+          natural key excludes as_of; a pointer is revalidated in place, not
+          versioned. Explore-only — not pure-SEC Agent-Grade. Pilot sources
+          ir_website / firm_manual, small locked pilot CIK list, via
+          edgar_warehouse.explore.transcript_events.

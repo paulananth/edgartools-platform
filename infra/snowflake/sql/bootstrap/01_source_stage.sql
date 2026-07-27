@@ -531,3 +531,28 @@ CREATE TABLE IF NOT EXISTS CONSENSUS_ESTIMATES (
   ingested_at       TIMESTAMP_TZ NOT NULL
 )
 COMMENT = 'ERDP-01 consensus estimates (Explore). Grain fact_key; natural key cik/metric/period_type/fy/fq/statistic/as_of/source.';
+
+-- ERDP-04 Explore — transcript event pointers (not pure-SEC Agent-Grade).
+-- Natural key excludes as_of (unlike ERDP-01/02/03): a pointer is
+-- revalidated in place, not versioned.
+CREATE TABLE IF NOT EXISTS TRANSCRIPT_EVENTS (
+  event_key         NUMBER(38, 0) NOT NULL,
+  cik               NUMBER(38, 0) NOT NULL,
+  ticker            STRING,
+  company_key       NUMBER(38, 0),
+  event_id          STRING NOT NULL,
+  event_type        STRING NOT NULL,
+  fiscal_year       NUMBER(38, 0),
+  fiscal_quarter    NUMBER(38, 0),
+  event_date        DATE NOT NULL,
+  accession_number  STRING,
+  storage_uri       STRING NOT NULL,
+  content_sha256    STRING,
+  char_count        NUMBER(38, 0),
+  language          STRING NOT NULL,
+  source_system     STRING NOT NULL,
+  source_url        STRING,
+  as_of             DATE NOT NULL,
+  ingested_at       TIMESTAMP_TZ NOT NULL
+)
+COMMENT = 'ERDP-04 transcript event pointers (Explore). Grain event_key; natural key cik/event_id/source_system.';

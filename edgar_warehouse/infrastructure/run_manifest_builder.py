@@ -37,6 +37,8 @@ SNOWFLAKE_EXPORT_TABLES = {
     "EARNINGS_CALENDAR": "earnings_calendar",
     # ERDP-01 Gold Explore (external consensus load → SOURCE → dbt)
     "CONSENSUS_ESTIMATES": "consensus_estimates",
+    # ERDP-04 Gold Explore (transcript pointer load → SOURCE → dbt)
+    "TRANSCRIPT_EVENTS": "transcript_events",
 }
 
 

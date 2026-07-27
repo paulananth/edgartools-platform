@@ -12,6 +12,8 @@ from edgar_warehouse.serving.targets.snowflake import (
     write_gold_to_snowflake_export,
     write_ticker_reference_to_serving_export,
     write_ticker_reference_to_snowflake_export,
+    write_transcript_events_to_serving_export,
+    write_transcript_events_to_snowflake_export,
 )
 
 __all__ = [
@@ -26,4 +28,6 @@ __all__ = [
     "write_gold_to_snowflake_export",
     "write_ticker_reference_to_serving_export",
     "write_ticker_reference_to_snowflake_export",
+    "write_transcript_events_to_serving_export",
+    "write_transcript_events_to_snowflake_export",
 ]
