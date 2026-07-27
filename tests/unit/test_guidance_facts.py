@@ -8,6 +8,7 @@ from datetime import date, datetime, timezone
 import pandas as pd
 
 from edgar_warehouse.explore.guidance_facts import (
+    GuidanceProbeError,
     GuidanceRowError,
     build_guidance_facts_table,
     current_guidance_rows,
@@ -410,14 +411,43 @@ class ExtractGuidanceFromEarningsReleaseTests(unittest.TestCase):
         )
         self.assertEqual(rows, [])
 
-    def test_guidance_property_raising_is_absorbed(self) -> None:
+    def test_guidance_property_raising_is_not_absorbed(self) -> None:
+        # Regression guard: a genuine exception while probing for guidance
+        # must be distinguishable from a confirmed "no guidance" (empty
+        # list) -- silently absorbing both the same way is exactly the bug
+        # fixed in the GUIDANCE_FACTS promotion-checklist blocking
+        # prerequisite (ticket 04, erdp-coverage-promotion).
         class _RaisingEarningsRelease:
             @property
             def guidance(self):
                 raise RuntimeError("boom")
 
+        with self.assertRaises(GuidanceProbeError):
+            extract_guidance_from_earnings_release(
+                _RaisingEarningsRelease(), cik=1, accession_number="acc-1", filing_date="2026-01-01",
+            )
+
+    def test_dataframe_access_raising_is_not_absorbed(self) -> None:
+        class _RaisingTable:
+            @property
+            def scaled_dataframe(self):
+                raise RuntimeError("scaled boom")
+
+            @property
+            def dataframe(self):
+                raise RuntimeError("plain boom")
+
+        er = _FakeEarningsRelease(_RaisingTable())
+        with self.assertRaises(GuidanceProbeError):
+            extract_guidance_from_earnings_release(
+                er, cik=1, accession_number="acc-1", filing_date="2026-01-01",
+            )
+
+    def test_empty_dataframe_is_a_confirmed_absence_not_an_error(self) -> None:
+        df = pd.DataFrame()
+        er = _FakeEarningsRelease(_FakeFinancialTable(df))
         rows = extract_guidance_from_earnings_release(
-            _RaisingEarningsRelease(), cik=1, accession_number="acc-1", filing_date="2026-01-01",
+            er, cik=1, accession_number="acc-1", filing_date="2026-01-01",
         )
         self.assertEqual(rows, [])
 

@@ -1,7 +1,7 @@
 # ER earnings calendar (ERDP-03)
 
 **Status:** phase-1 Gold Explore product  
-**Pilot sources:** `finnhub` (primary, license-gated — not yet cleared), `firm_manual` (fallback, doesn't scale to a coverage-universe-wide need). **`yahoo` is not implemented** despite being referenced below and in `SOURCE_SYSTEMS` — no `parse_yahoo_*`/`fetch_yahoo_*` function exists in `earnings_calendar.py` (confirmed 2026-07-27, `.scratch/erdp-coverage-promotion/issues/07-free-earnings-calendar-sources.md`). Planned real path: Alpha Vantage `EARNINGS_CALENDAR` (see §5 below) — not yet built.  
+**Pilot sources:** `finnhub` (primary, license-gated — not yet cleared), `alphavantage` (bulk fallback, date-only/`session="unknown"` by design — see §2.3), `firm_manual` (fallback, doesn't scale to a coverage-universe-wide need). **`yahoo` is not implemented** despite being referenced below and in `SOURCE_SYSTEMS` — no `parse_yahoo_*`/`fetch_yahoo_*` function exists in `earnings_calendar.py` (confirmed 2026-07-27, `.scratch/erdp-coverage-promotion/issues/07-free-earnings-calendar-sources.md`).  
 **Grade:** **Explore only** — not pure-SEC Agent-Grade Decision Features  
 **ADR:** [0001-agent-decision-surface-first.md](./adr/0001-agent-decision-surface-first.md)  
 **Spec:** `.scratch/er-data-plane/specs/ERDP-03-earnings-calendar.md`  
@@ -104,11 +104,43 @@ table = build_earnings_calendar_table(rows)
 Maps Finnhub `hour`: `bmo`→`pre_market`, `amc`→`after_close`, `dmh`→`during_session`.
 
 **License:** verify Finnhub free-tier terms before commercial gold publication.
-If blocked, use `firm_manual` (doesn't scale to universe-wide) or implement
-the Alpha Vantage path (§5 below) — **not** `yahoo`, which despite being
-named here and in `SOURCE_SYSTEMS` has no implementation.
+If blocked, use `firm_manual` (doesn't scale to universe-wide) or `alphavantage`
+(§2.3 below) — **not** `yahoo`, which despite being named here and in
+`SOURCE_SYSTEMS` has no implementation.
 
-### 2.3 Mark reported from gold releases (A03.7)
+### 2.3 alphavantage (bulk fallback, no license gate)
+
+```bash
+export ALPHAVANTAGE_API_KEY=...
+```
+
+```python
+from edgar_warehouse.explore.earnings_calendar import (
+    fetch_alphavantage_earnings_calendar,
+    build_earnings_calendar_table,
+)
+
+# Deliberately bulk mode -- no ticker/symbol loop. One call returns the
+# whole market's near-term calendar; the free tier is 25 requests/day, so
+# calling per-ticker would exhaust the quota almost immediately.
+rows = fetch_alphavantage_earnings_calendar(
+    horizon="3month",
+    ticker_to_cik={"AAPL": 320193, "MSFT": 789019},
+)
+table = build_earnings_calendar_table(rows)
+```
+
+Date-only response (`symbol`, `name`, `reportDate`, `fiscalDateEnding`,
+`estimate`, `currency`) — no session/AM-PM field exists on this endpoint at
+all, so every row gets `session="unknown"`. This is a deliberate, confirmed
+decision (erdp-coverage-promotion ticket 05), not a parsing gap: no free,
+ToS-clean source provides session timing at all (ticket 07's research).
+`fiscal_quarter` is derived from `fiscalDateEnding`'s calendar month
+(`((month - 1) // 3) + 1`) — correct for calendar-aligned fiscal years,
+mislabels the quarter *number* (not the date, which stays exact) for
+non-calendar fiscal years such as Apple's real FY.
+
+### 2.4 Mark reported from gold releases (A03.7)
 
 ```python
 from edgar_warehouse.explore.earnings_calendar import mark_reported
@@ -180,7 +212,7 @@ WHERE c.is_current;
 
 **Current coverage-matrix status: Partial, not Covered** (`.scratch/er-data-plane/coverage-matrix.md` F18). Full reasoning and source citations: `.scratch/erdp-coverage-promotion/issues/05-promotion-criteria-earnings-calendar.md` and `07-free-earnings-calendar-sources.md`.
 
-**Build prerequisite — not yet done.** Neither real path today (`finnhub`, license-gated; `firm_manual`, doesn't scale) can satisfy catalyst-calendar/morning-note's coverage-universe-wide, every-trading-day need. Deep research into free alternatives (yfinance, Nasdaq's internal API, SEC, Alpha Vantage) found **Alpha Vantage's `EARNINGS_CALENDAR`** is the only candidate that's genuinely bulk, official/documented, and ToS-clean — yfinance's per-ticker earnings-date function is confirmed literal HTML scraping in the pinned version, and Nasdaq's endpoint (which does have real session-timing data) is undocumented with `robots.txt: Disallow: /` on the whole subdomain. Alpha Vantage is date-only (no session timing — no free ToS-clean source has any); accepted as `session="unknown"`, already a legitimate enum value. **To build:** add `"alphavantage"` to `SOURCE_SYSTEMS`; implement a fetch/parse function calling `EARNINGS_CALENDAR` with `symbol` omitted (bulk mode, respecting the 25-req/day free-tier ceiling).
+**Build prerequisite — done (2026-07-27).** Neither `finnhub` (license-gated) nor `firm_manual` (doesn't scale) alone could satisfy catalyst-calendar/morning-note's coverage-universe-wide, every-trading-day need. Research into free alternatives (yfinance, Nasdaq's internal API, SEC, Alpha Vantage) found **Alpha Vantage's `EARNINGS_CALENDAR`** was the only candidate that's genuinely bulk, official/documented, and ToS-clean — yfinance's per-ticker earnings-date function is confirmed literal HTML scraping in the pinned version, and Nasdaq's endpoint (which does have real session-timing data) is undocumented with `robots.txt: Disallow: /` on the whole subdomain. Alpha Vantage is date-only (no session timing — no free ToS-clean source has any); accepted as `session="unknown"`, already a legitimate enum value. `fetch_alphavantage_earnings_calendar`/`parse_alphavantage_earnings_calendar` implement this (§2.3), bulk mode only, respecting the 25-req/day free-tier ceiling. Criterion 1 below (`source_system` scope) now reflects this as live, not "once built."
 
 | # | Criterion |
 |---|-----------|
@@ -188,7 +220,7 @@ WHERE c.is_current;
 | 1 | `source_system ∈ {finnhub, firm_manual, alphavantage}` — `yahoo`/`fmp`/`other` disqualify |
 | 2 | At least one **bulk** source (`finnhub` or `alphavantage`) active, covering ≥90% of the Decision Subject Universe for the current+next fiscal quarter — `firm_manual` alone cannot pass this by construction, not a measured gap |
 | 3 | `finnhub` rows: `source_ref` matches `^finnhub:calendar/earnings:[^:]+:[0-9]{4}:Q[1-4]$` (real format, `earnings_calendar.py:369`) |
-| 4 | `alphavantage` rows (once built): deterministic `source_ref` format specified at implementation time, same authenticity-check convention |
+| 4 | `alphavantage` rows: format-verified authenticity — `source_ref` matches `^alphavantage:EARNINGS_CALENDAR:[^:]+:\d{4}-\d{2}-\d{2}$` (the real format `earnings_calendar.py`'s `parse_alphavantage_earnings_calendar` emits), same authenticity-check convention as `finnhub`/`yahoo`/`sec_8k` |
 | 5 | `firm_manual` rows trace to a checked-in, git-reviewed CSV |
 | 6 | `confirmed` rows never use `session=unknown` (already enforced — A03.2); `estimated` rows may |
 | 7 | Staleness re-verification: a row `as_of` >X days old with `expected_date` in the next 2 weeks must have a fresher re-confirming row, not be served stale (catalyst-calendar's own "dates shift" caveat) |

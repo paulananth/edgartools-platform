@@ -4,8 +4,16 @@ Forward-looking expected report dates (date, session, status).  Not a
 substitute for reactive ``EARNINGS_RELEASES.filing_date``.
 
 Pilot sources:
-- ``finnhub`` (primary automated)
-- ``yahoo`` / ``firm_manual`` (fallback)
+- ``finnhub`` (primary automated, license-gated -- not yet cleared)
+- ``alphavantage`` (bulk fallback -- the only free, ToS-clean, genuinely
+  bulk source found; see erdp-coverage-promotion tickets 05/07. Date-only,
+  no session timing -- ``session="unknown"`` by design, a deliberate
+  accepted decision, not a workaround)
+- ``firm_manual`` (fallback)
+
+NOTE: ``yahoo`` appears in ``SOURCE_SYSTEMS`` below but has no
+``parse_yahoo_*``/``fetch_yahoo_*`` implementation -- confirmed absent,
+not a gap in this docstring (erdp-coverage-promotion ticket 07).
 
 Docs: ``docs/er-earnings-calendar.md``
 """
@@ -33,7 +41,7 @@ _FACT_EARNINGS_CALENDAR_SCHEMA = GOLD_SCHEMAS["_FACT_EARNINGS_CALENDAR_SCHEMA"]
 SESSIONS = frozenset({"pre_market", "after_close", "during_session", "unknown"})
 STATUSES = frozenset({"estimated", "confirmed", "reported", "cancelled"})
 SOURCE_SYSTEMS = frozenset(
-    {"finnhub", "yahoo", "fmp", "firm_manual", "other"}
+    {"finnhub", "alphavantage", "yahoo", "fmp", "firm_manual", "other"}
 )
 
 # Vendor hour / label → canonical session
@@ -417,6 +425,126 @@ def fetch_finnhub_earnings_calendar(
         raise CalendarRowError("finnhub response was not valid JSON") from exc
     return parse_finnhub_earnings_calendar(
         payload,
+        ticker_to_cik=ticker_to_cik,
+        as_of=as_of,
+    )
+
+
+def _fiscal_quarter_from_period_end(period_end: date) -> int:
+    """Calendar-quarter heuristic: fiscal_quarter = ((month - 1) // 3) + 1.
+
+    KNOWN LIMITATION (phase-1): correct for companies with a calendar-
+    aligned fiscal year; mislabels the quarter *number* (not the date
+    itself, which stays exact) for non-calendar fiscal years, e.g. Apple's
+    FY ends in late September. Alpha Vantage's ``EARNINGS_CALENDAR``
+    response gives ``fiscalDateEnding`` as a real date but no explicit
+    fiscal-quarter integer, unlike Finnhub's response.
+    """
+    return ((period_end.month - 1) // 3) + 1
+
+
+def parse_alphavantage_earnings_calendar(
+    csv_text: str,
+    *,
+    ticker_to_cik: Mapping[str, int | str] | None = None,
+    as_of: date | None = None,
+) -> list[dict[str, Any]]:
+    """Parse Alpha Vantage's ``EARNINGS_CALENDAR`` CSV response into calendar rows.
+
+    Standard published fields (``https://www.alphavantage.co/documentation/#earnings-calendar``):
+    ``symbol``, ``name``, ``reportDate``, ``fiscalDateEnding``, ``estimate``,
+    ``currency``. Date-only -- no session/AM-PM field exists on this
+    endpoint at all, so every row gets ``session="unknown"`` (a deliberate,
+    confirmed decision -- see erdp-coverage-promotion ticket 05 -- not a
+    parsing gap). Rows whose ticker cannot be mapped to a CIK are skipped
+    when ``ticker_to_cik`` is provided; if omitted, a ``cik`` column must
+    already be present or the row is skipped.
+    """
+    as_of_d = as_of or date.today()
+    mapping = {str(k).upper(): v for k, v in (ticker_to_cik or {}).items()}
+
+    rows: list[dict[str, Any]] = []
+    reader = csv.DictReader(io.StringIO(csv_text))
+    for item in reader:
+        symbol = str(item.get("symbol") or "").strip().upper()
+        cik_val = item.get("cik")
+        if cik_val is None and symbol:
+            cik_val = mapping.get(symbol)
+        if cik_val is None:
+            logger.debug("skip alphavantage row without CIK mapping: %s", symbol or item)
+            continue
+
+        report_date = item.get("reportDate")
+        fiscal_date_ending = item.get("fiscalDateEnding")
+        if not report_date or not fiscal_date_ending:
+            continue
+
+        period_end = _parse_date(fiscal_date_ending)
+        if period_end is None:
+            continue
+
+        raw = {
+            "cik": cik_val,
+            "ticker": symbol or None,
+            "fiscal_year": period_end.year,
+            "fiscal_quarter": _fiscal_quarter_from_period_end(period_end),
+            "expected_date": report_date,
+            "period_end": fiscal_date_ending,
+            "session": "unknown",
+            "status": "estimated",
+            "source_system": "alphavantage",
+            "source_ref": f"alphavantage:EARNINGS_CALENDAR:{symbol}:{report_date}",
+            "as_of": as_of_d,
+        }
+        try:
+            rows.append(normalize_calendar_row(raw))
+        except CalendarRowError as exc:
+            logger.debug("skip invalid alphavantage row %s: %s", symbol, exc)
+            continue
+    return rows
+
+
+def fetch_alphavantage_earnings_calendar(
+    *,
+    api_key: str | None = None,
+    horizon: str = "3month",
+    ticker_to_cik: Mapping[str, int | str] | None = None,
+    as_of: date | None = None,
+    timeout_s: float = 30.0,
+) -> list[dict[str, Any]]:
+    """HTTP fetch Alpha Vantage's bulk earnings calendar and normalize rows.
+
+    Deliberately **bulk mode only** -- ``symbol`` is never supplied, so one
+    call returns the full market's near-term calendar in the given
+    ``horizon`` window (``3month``/``6month``/``12month``). This respects
+    the free tier's 25-requests/day ceiling (confirmed via Alpha Vantage's
+    own pricing page, erdp-coverage-promotion ticket 07) by design -- do
+    not add a ``symbol=`` per-ticker calling pattern here, it would burn
+    the daily quota against a coverage universe almost immediately.
+
+    Requires ``ALPHAVANTAGE_API_KEY`` env var or ``api_key=``.
+    """
+    token = api_key or os.environ.get("ALPHAVANTAGE_API_KEY")
+    if not token:
+        raise CalendarRowError("ALPHAVANTAGE_API_KEY not set")
+
+    # urllib only — architecture forbids httpx outside sec_client.py.
+    from urllib.error import HTTPError, URLError
+    from urllib.parse import urlencode
+    from urllib.request import Request, urlopen
+
+    query = urlencode({"function": "EARNINGS_CALENDAR", "horizon": horizon, "apikey": token})
+    url = f"https://www.alphavantage.co/query?{query}"
+    request = Request(url, headers={"User-Agent": "edgartools-platform/earnings-calendar"})
+    try:
+        with urlopen(request, timeout=timeout_s) as resp:
+            csv_text = resp.read().decode("utf-8")
+    except HTTPError as exc:
+        raise CalendarRowError(f"alphavantage HTTP {exc.code}") from exc
+    except URLError as exc:
+        raise CalendarRowError(f"alphavantage request failed: {exc.reason}") from exc
+    return parse_alphavantage_earnings_calendar(
+        csv_text,
         ticker_to_cik=ticker_to_cik,
         as_of=as_of,
     )
