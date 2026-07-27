@@ -539,6 +539,35 @@ had non-generation-scoped `sync-graph` runs, so the same SQL fails there
 tables (harmless, `CREATE IF NOT EXISTS` — resumes cleanly once dev gets a
 generation-scoped `sync-graph --generation-id ...` + `graph-activate` run).
 
+**Update (2026-07-27, later same day):** applying the SQL contract to prod
+wasn't sufficient on its own — the first `mdm verify-graph` run against it
+(execution `gh251-populate-review-1785189032`) failed at the ECS task level
+with all 4 review tables still at 0 rows and zero `graph_review`/`publish`
+log lines. Root cause: prod's running `edgartools-prod-mdm` image (digest
+tag `sha-6ea935cc32ed`, pushed 2026-07-26T19:26:11-04:00) predated GH-251's
+merge (PR #293, 2026-07-27T19:25:36Z) by over a day, so it simply didn't
+contain the `graph_review_publish` code path — a deploy/promotion gap (dev
+auto-builds on every `main` push; prod never auto-promotes, see "Image
+management" below), not a code bug. Rebuilt and pushed a fresh prod MDM
+image from current `main` (digest `sha256:cc098d80...`, tags
+`sha-2fa5fafb63a9`/`prod`) and redeployed via `deploy-aws-application.sh
+--env prod --enable-mdm`. Re-ran `mdm verify-graph`
+(`gh251-populate-review-retry-1785191328`): the ECS task still exits 1, but
+that's a real, pre-existing graph parity mismatch (missing `person`/
+`security` nodes, missing `COMPANY_HOLDS`/`HOLDS`/`IS_INSIDER` edges — 193,323
+MDM-active vs. 193,063 graph nodes, 166,067 vs. 157,732 edges) unrelated to
+GH-251 or this deploy. Confirmed the actual goal directly: all 4
+`MDM_GRAPH_REVIEW` tables are populated (6 entity types, 11 relationship
+types, 40 mismatch samples, 11 native-app checks) and
+`V_GRAPH_REVIEW_ACTIVE_GENERATION` resolves to the real active generation
+(`ticket20-strict-endpoint-seal-850ea34-20260725T130457Z`, 193,063 nodes /
+157,732 edges — exact match to the verifier's own output). GH-251's contract
+is genuinely live and correct in prod. **Lesson:** a SQL-contract "applied
+successfully" is necessary but not sufficient evidence a publish path
+works — always confirm the *code* that writes to it is actually running in
+the target environment before trusting an empty-tables-after-first-run
+result as diagnostic.
+
 **Still open:** the `EDGARTOOLS_DECISION` schema gap (#5) — scoped further:
 `infra/snowflake/sql/decision_contract/01_subject_feature_screen.sql` is close
 (builds from existing gold tables, but its "MDM active-company universe" join
