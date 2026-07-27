@@ -2,9 +2,12 @@
 
 Reads gold tables from EDGARTOOLS_GOLD via the active Snowpark session.
 
-Ticket 13: Agent View vs Explore mode toggle. Mode semantics are defined in
-``edgar_warehouse.serving.dashboard_modes`` (unit-tested). This file mirrors
-the allowlist for SiS deploy (only this module is staged).
+Ticket 13 / GH-246: Agent View vs Explore mode toggle. Mode semantics are
+the single authoritative policy in ``edgar_warehouse.serving.dashboard_modes``
+(unit-tested) -- no local re-implementation. ``deploy.sh`` stages
+``dashboard_modes.py`` flat alongside this file so the SiS runtime, which
+has no ``edgar_warehouse`` package installed, imports the identical source
+file rather than a hand-copied duplicate.
 
 Company Details' "Equity research (Explore)" section surfaces the 4 ERDP
 Gold Explore products (CONSENSUS_ESTIMATES / GUIDANCE_FACTS /
@@ -18,53 +21,44 @@ import plotly.express as px
 import streamlit as st
 from snowflake.snowpark.context import get_active_session
 
+try:
+    from edgar_warehouse.serving.dashboard_modes import (
+        AGENT_VIEW_BANNER,
+        AGENT_VIEW_ALLOWED_OBJECTS,
+        EXPLORE_BANNER,
+        MODE_AGENT_VIEW,
+        MODE_EXPLORE,
+        SESSION_CIK_KEY,
+        SESSION_MODE_KEY,
+        is_object_allowed as _is_object_allowed,
+        normalize_mode as _normalize_mode,
+    )
+except ImportError:  # pragma: no cover -- exercised only in the SiS stage
+    # SiS runtime: edgar_warehouse isn't installed as a package here (see
+    # deploy.sh -- only streamlit_app.py + dashboard_modes.py are staged).
+    # dashboard_modes.py is staged flat next to this file, so add the stage
+    # root to sys.path and import the identical source as a top-level module.
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from dashboard_modes import (
+        AGENT_VIEW_BANNER,
+        AGENT_VIEW_ALLOWED_OBJECTS,
+        EXPLORE_BANNER,
+        MODE_AGENT_VIEW,
+        MODE_EXPLORE,
+        SESSION_CIK_KEY,
+        SESSION_MODE_KEY,
+        is_object_allowed as _is_object_allowed,
+        normalize_mode as _normalize_mode,
+    )
+
 st.set_page_config(page_title="EdgarTools Warehouse", layout="wide")
 
 GOLD_SCHEMA = "EDGARTOOLS_GOLD"
 SOURCE_SCHEMA = "EDGARTOOLS_SOURCE"
 DECISION_SCHEMA = "EDGARTOOLS_DECISION"
-
-# --- Ticket 13 mode contract (mirror edgar_warehouse.serving.dashboard_modes) ---
-MODE_AGENT_VIEW = "agent_view"
-MODE_EXPLORE = "explore"
-SESSION_MODE_KEY = "edgartools_dashboard_mode"
-SESSION_CIK_KEY = "edgartools_inspected_cik"
-AGENT_VIEW_ALLOWED_OBJECTS = frozenset(
-    {
-        "SUBJECT_FEATURE_SCREEN",
-        "SUBJECT_BUNDLE_READ",
-        "SUBJECT_BUNDLE_READ_ISSUER",
-        "SUBJECT_BUNDLE_READ_MANAGER",
-        "DECISION_WATERMARK",
-        "DECISION_CONTRACT_STATUS",
-        "BUNDLE_HOLDERS_OF_SUBJECT",
-        "BUNDLE_AUDITOR",
-        "EDGARTOOLS_GOLD_STATUS",
-    }
-)
-EXPLORE_BANNER = (
-    "Explore Mode — free gold / SOURCE queries for research. "
-    "**Not** the agent Decision Contract and **not** Trading Decision input."
-)
-AGENT_VIEW_BANNER = (
-    "Agent View — Decision Contract objects only "
-    "(Subject Feature Screen / Subject Bundle Read / watermark). "
-    "Same surface a trading agent would pin."
-)
-
-
-def _normalize_mode(value: str | None) -> str:
-    raw = (value or "").strip().lower().replace(" ", "_").replace("-", "_")
-    if raw in {"explore", "explore_mode", "research"}:
-        return MODE_EXPLORE
-    return MODE_AGENT_VIEW
-
-
-def _is_object_allowed(mode: str, object_name: str) -> bool:
-    if _normalize_mode(mode) == MODE_EXPLORE:
-        return True
-    bare = str(object_name or "").strip().upper().split(".")[-1]
-    return bare in AGENT_VIEW_ALLOWED_OBJECTS
 
 
 def _render_mode_chrome() -> str:

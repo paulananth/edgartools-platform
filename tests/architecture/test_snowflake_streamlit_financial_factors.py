@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import builtins
 import importlib.util
 import math
+import re
+import shutil
 import sys
+import tempfile
 import types
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import pandas as pd
@@ -114,13 +119,32 @@ class _FakeSession:
         return _FakeQuery(sql, params=params)
 
 
-def _load_app():
+class _RecordingFakeSession:
+    """Records every SQL string issued through it -- GH-246 criterion 3."""
+
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    def sql(self, sql: str, params=None):
+        self.queries.append(sql)
+        return _FakeQuery(sql, params=params)
+
+
+def _load_app(app_path: Path = STREAMLIT_APP, *, block_edgar_warehouse: bool = False):
+    """Load ``streamlit_app.py`` (or a copy) with streamlit/plotly/snowflake faked out.
+
+    ``block_edgar_warehouse`` simulates the real Streamlit-in-Snowflake
+    runtime, which has no ``edgar_warehouse`` package installed (see
+    deploy.sh) -- it forces the module's mode-contract import to fall
+    through to its flat ``dashboard_modes`` fallback branch, the one code
+    path this test file otherwise never exercises.
+    """
     spec = importlib.util.spec_from_file_location(
         "_snowflake_streamlit_app_under_test",
-        STREAMLIT_APP,
+        app_path,
     )
     if spec is None or spec.loader is None:
-        raise AssertionError("could not load streamlit_app.py")
+        raise AssertionError(f"could not load {app_path}")
 
     fake_plotly_express = types.ModuleType("plotly.express")
     fake_plotly_express.bar = lambda *_args, **_kwargs: None
@@ -145,11 +169,33 @@ def _load_app():
     }
     originals = {name: sys.modules.get(name) for name in replacements}
     sys.modules.update(replacements)
+
+    # The fallback branch does `from dashboard_modes import ...` as a bare
+    # top-level module. Python caches modules by name in sys.modules, so a
+    # prior test's flat dashboard_modes (from a different temp dir) would
+    # otherwise be silently reused instead of resolving fresh via sys.path.
+    dashboard_modes_original = sys.modules.pop("dashboard_modes", None)
+
+    real_import = builtins.__import__
+
+    def _blocking_import(name, *args, **kwargs):
+        if block_edgar_warehouse and (
+            name == "edgar_warehouse" or name.startswith("edgar_warehouse.")
+        ):
+            raise ImportError(f"simulated SiS runtime: {name!r} is not installed")
+        return real_import(name, *args, **kwargs)
+
+    sys_path_before = list(sys.path)
     try:
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        with unittest.mock.patch("builtins.__import__", side_effect=_blocking_import):
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
         return module
     finally:
+        sys.path[:] = sys_path_before
+        sys.modules.pop("dashboard_modes", None)
+        if dashboard_modes_original is not None:
+            sys.modules["dashboard_modes"] = dashboard_modes_original
         for name, original in originals.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -289,6 +335,96 @@ class EquityResearchSectionTests(unittest.TestCase):
                 "_company_transcript_events",
             ],
         )
+
+
+class SingleAuthoritativePolicyTests(unittest.TestCase):
+    """GH-246 criterion 2: one authoritative object-access policy, not
+    duplicated allowlists -- proven by object identity, not equal values
+    (equal values would still pass if someone re-introduced a hand copy)."""
+
+    def test_constants_and_functions_are_the_same_objects_as_dashboard_modes(self) -> None:
+        from edgar_warehouse.serving import dashboard_modes
+
+        module = _load_app()
+
+        self.assertIs(
+            module.AGENT_VIEW_ALLOWED_OBJECTS, dashboard_modes.AGENT_VIEW_ALLOWED_OBJECTS
+        )
+        self.assertIs(module._is_object_allowed, dashboard_modes.is_object_allowed)
+        self.assertIs(module._normalize_mode, dashboard_modes.normalize_mode)
+        self.assertEqual(module.MODE_AGENT_VIEW, dashboard_modes.MODE_AGENT_VIEW)
+        self.assertEqual(module.MODE_EXPLORE, dashboard_modes.MODE_EXPLORE)
+
+
+class SisFallbackImportTests(unittest.TestCase):
+    """GH-246: streamlit_app.py's flat-file import fallback for the real
+    Streamlit-in-Snowflake runtime, which has no edgar_warehouse package
+    installed (deploy.sh stages only streamlit_app.py, dashboard_modes.py,
+    and environment.yml) -- otherwise-untested outside a live SiS deploy."""
+
+    def test_falls_back_to_flat_dashboard_modes_when_package_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            shutil.copy(STREAMLIT_APP, tmp_path / "streamlit_app.py")
+            shutil.copy(
+                REPO_ROOT / "edgar_warehouse" / "serving" / "dashboard_modes.py",
+                tmp_path / "dashboard_modes.py",
+            )
+
+            module = _load_app(tmp_path / "streamlit_app.py", block_edgar_warehouse=True)
+
+        self.assertEqual(module.MODE_AGENT_VIEW, "agent_view")
+        self.assertEqual(module.MODE_EXPLORE, "explore")
+        self.assertTrue(module._is_object_allowed("explore", "ANYTHING"))
+        self.assertFalse(module._is_object_allowed("agent_view", "COMPANY"))
+        self.assertTrue(module._is_object_allowed("agent_view", "SUBJECT_FEATURE_SCREEN"))
+
+    def test_missing_staged_dashboard_modes_fails_loudly(self) -> None:
+        """If dashboard_modes.py isn't actually staged next to streamlit_app.py
+        (a deploy.sh packaging regression), loading must raise -- not silently
+        fall back to some other behavior that masks the missing file."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            shutil.copy(STREAMLIT_APP, tmp_path / "streamlit_app.py")
+            # deliberately not staging dashboard_modes.py alongside it
+
+            with self.assertRaises(ImportError):
+                _load_app(tmp_path / "streamlit_app.py", block_edgar_warehouse=True)
+
+
+class AgentViewQueryAllowlistTests(unittest.TestCase):
+    """GH-246 criterion 3: record every query issued by Agent View routes,
+    fail on any non-allowlisted object.
+
+    Scoped to the routes that are already supposed to be contract-only
+    today: render_summary's Agent View branch and
+    _render_agent_view_company. render_details' company search/identity
+    lookup (_lookup_companies/_company_metadata) still queries unrestricted
+    gold data before the mode branch even runs -- criterion 1's known,
+    tracked gap (GH-246), deliberately NOT covered by this test so it does
+    not silently pass a query that is not actually contract-scoped yet.
+    """
+
+    def test_agent_view_summary_and_company_routes_stay_within_allowlist(self) -> None:
+        module = _load_app()
+        recorder = _RecordingFakeSession()
+        module._session = lambda: recorder
+
+        module.render_summary(mode="agent_view")
+        module._render_agent_view_company(320193)
+
+        self.assertTrue(recorder.queries, "expected at least one query to be recorded")
+        for sql in recorder.queries:
+            referenced = re.findall(r"from\s+([A-Za-z0-9_.]+)", sql, flags=re.IGNORECASE)
+            self.assertTrue(referenced, f"no FROM clause found in recorded query: {sql}")
+            for ref in referenced:
+                bare = ref.split(".")[-1].upper()
+                self.assertIn(
+                    bare,
+                    module.AGENT_VIEW_ALLOWED_OBJECTS,
+                    f"Agent View issued a query against a non-allowlisted "
+                    f"object {bare!r}: {sql}",
+                )
 
 
 if __name__ == "__main__":
