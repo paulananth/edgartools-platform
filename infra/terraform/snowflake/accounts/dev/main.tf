@@ -1,15 +1,16 @@
 locals {
-  environment            = "dev"
-  database_name          = "EDGARTOOLS_DEV"
-  source_schema_name     = "EDGARTOOLS_SOURCE"
-  gold_schema_name       = "EDGARTOOLS_GOLD"
-  deployer_role_name     = "EDGARTOOLS_DEV_DEPLOYER"
-  loader_role_name       = "EDGARTOOLS_DEV_LOADER"
-  reader_role_name       = "EDGARTOOLS_DEV_READER"
-  refresh_warehouse_name = "EDGARTOOLS_DEV_REFRESH_WH"
-  reader_warehouse_name  = "EDGARTOOLS_DEV_READER_WH"
-  native_pull_enabled    = var.snowflake_storage_role_arn != null && var.snowflake_export_root_url != null && var.snowflake_manifest_sns_topic_arn != null
-  storage_external_id    = coalesce(var.snowflake_storage_external_id, "edgartools-${local.environment}-snowflake-native-pull")
+  environment               = "dev"
+  database_name             = "EDGARTOOLS_DEV"
+  source_schema_name        = "EDGARTOOLS_SOURCE"
+  gold_schema_name          = "EDGARTOOLS_GOLD"
+  deployer_role_name        = "EDGARTOOLS_DEV_DEPLOYER"
+  loader_role_name          = "EDGARTOOLS_DEV_LOADER"
+  reader_role_name          = "EDGARTOOLS_DEV_READER"
+  dashboard_owner_role_name = "EDGARTOOLS_DEV_DASHBOARD_OWNER"
+  refresh_warehouse_name    = "EDGARTOOLS_DEV_REFRESH_WH"
+  reader_warehouse_name     = "EDGARTOOLS_DEV_READER_WH"
+  native_pull_enabled       = var.snowflake_storage_role_arn != null && var.snowflake_export_root_url != null && var.snowflake_manifest_sns_topic_arn != null
+  storage_external_id       = coalesce(var.snowflake_storage_external_id, "edgartools-${local.environment}-snowflake-native-pull")
 }
 
 module "baseline" {
@@ -22,6 +23,7 @@ module "baseline" {
   deployer_role_name             = local.deployer_role_name
   loader_role_name               = local.loader_role_name
   reader_role_name               = local.reader_role_name
+  dashboard_owner_role_name      = local.dashboard_owner_role_name
   refresh_warehouse_name         = local.refresh_warehouse_name
   reader_warehouse_name          = local.reader_warehouse_name
   refresh_warehouse_size         = var.refresh_warehouse_size

@@ -18,12 +18,19 @@ variable "gold_schema_name" {
   type        = string
 }
 
+variable "decision_schema_name" {
+  description = "GH-247/GH-246: Decision Contract schema name. Not provisioned by account_baseline (created ad hoc by infra/snowflake/sql/decision_contract/*.sql) -- referenced here by name only, same pattern as other object-level grants this module doesn't own the lifecycle of."
+  type        = string
+  default     = "EDGARTOOLS_DECISION"
+}
+
 variable "role_names" {
-  description = "Role names keyed by deployer, loader, and reader."
+  description = "Role names keyed by deployer, loader, reader, and dashboard_owner."
   type = object({
-    deployer = string
-    loader   = string
-    reader   = string
+    deployer        = string
+    loader          = string
+    reader          = string
+    dashboard_owner = string
   })
 }
 
