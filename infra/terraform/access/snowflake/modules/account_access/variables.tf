@@ -19,11 +19,11 @@ variable "gold_schema_name" {
 }
 
 variable "role_names" {
-  description = "Role names keyed by deployer, refresher, and reader."
+  description = "Role names keyed by deployer, loader, and reader."
   type = object({
-    deployer  = string
-    refresher = string
-    reader    = string
+    deployer = string
+    loader   = string
+    reader   = string
   })
 }
 

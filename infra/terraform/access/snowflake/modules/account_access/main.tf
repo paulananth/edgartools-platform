@@ -67,16 +67,16 @@ resource "snowflake_grant_privileges_to_account_role" "schema_usage" {
         privileges = ["USAGE", "CREATE TABLE", "CREATE VIEW", "CREATE STAGE", "CREATE FILE FORMAT", "CREATE PROCEDURE", "CREATE TASK", "CREATE DYNAMIC TABLE"]
       },
       {
-        id         = "refresher_source"
-        role_key   = "refresher"
+        id         = "loader_source"
+        role_key   = "loader"
         schema_key = "source"
-        privileges = ["USAGE"]
+        privileges = ["USAGE", "CREATE TABLE", "CREATE VIEW", "CREATE STAGE", "CREATE FILE FORMAT", "CREATE PROCEDURE", "CREATE TASK", "CREATE PIPE", "CREATE STREAM"]
       },
       {
-        id         = "refresher_gold"
-        role_key   = "refresher"
+        id         = "loader_gold"
+        role_key   = "loader"
         schema_key = "gold"
-        privileges = ["USAGE"]
+        privileges = ["USAGE", "CREATE DYNAMIC TABLE", "CREATE PROCEDURE", "CREATE TASK"]
       },
       {
         id         = "reader_gold"
@@ -112,8 +112,8 @@ resource "snowflake_grant_privileges_to_account_role" "warehouse_usage" {
         privileges    = ["USAGE", "MONITOR", "OPERATE"]
       },
       {
-        id            = "refresher_refresh"
-        role_key      = "refresher"
+        id            = "loader_refresh"
+        role_key      = "loader"
         warehouse_key = "refresh"
         privileges    = ["USAGE", "MONITOR", "OPERATE"]
       },
@@ -154,6 +154,44 @@ resource "snowflake_grant_privileges_to_account_role" "deployer_source_future_ob
   for_each = toset(["TABLES", "VIEWS", "DYNAMIC TABLES"])
 
   account_role_name = snowflake_account_role.roles["deployer"].name
+  privileges        = ["SELECT"]
+
+  on_schema_object {
+    future {
+      object_type_plural = each.value
+      in_schema          = local.schema_fqns["source"]
+    }
+  }
+}
+
+# loader reads every EDGARTOOLS_SOURCE table (current + future) to run the
+# manifest pipeline (LOAD_EXPORTS_FOR_RUN). Two object-level grants this role
+# also needs -- SELECT on the manifest stream, SELECT+UPDATE on
+# SNOWFLAKE_REFRESH_STATUS -- aren't modeled here (Terraform doesn't grant
+# per-object privileges anywhere in this module, only schema/database/
+# warehouse-level); they're granted by
+# infra/snowflake/sql/bootstrap/08_loader_role.sql, which also owns
+# transferring ownership of the EDGARTOOLS_GOLD dynamic tables and the 3
+# manifest procedures onto this role -- object ownership isn't something
+# this Terraform module manages for any role, including deployer.
+resource "snowflake_grant_privileges_to_account_role" "loader_source_all_objects" {
+  for_each = toset(["TABLES", "VIEWS", "DYNAMIC TABLES"])
+
+  account_role_name = snowflake_account_role.roles["loader"].name
+  privileges        = ["SELECT"]
+
+  on_schema_object {
+    all {
+      object_type_plural = each.value
+      in_schema          = local.schema_fqns["source"]
+    }
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "loader_source_future_objects" {
+  for_each = toset(["TABLES", "VIEWS", "DYNAMIC TABLES"])
+
+  account_role_name = snowflake_account_role.roles["loader"].name
   privileges        = ["SELECT"]
 
   on_schema_object {

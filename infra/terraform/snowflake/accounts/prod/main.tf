@@ -4,7 +4,7 @@ locals {
   source_schema_name     = "EDGARTOOLS_SOURCE"
   gold_schema_name       = "EDGARTOOLS_GOLD"
   deployer_role_name     = "EDGARTOOLS_PROD_DEPLOYER"
-  refresher_role_name    = "EDGARTOOLS_PROD_REFRESHER"
+  loader_role_name       = "EDGARTOOLS_PROD_LOADER"
   reader_role_name       = "EDGARTOOLS_PROD_READER"
   refresh_warehouse_name = "EDGARTOOLS_PROD_REFRESH_WH"
   reader_warehouse_name  = "EDGARTOOLS_PROD_READER_WH"
@@ -20,7 +20,7 @@ module "baseline" {
   source_schema_name             = local.source_schema_name
   gold_schema_name               = local.gold_schema_name
   deployer_role_name             = local.deployer_role_name
-  refresher_role_name            = local.refresher_role_name
+  loader_role_name               = local.loader_role_name
   reader_role_name               = local.reader_role_name
   refresh_warehouse_name         = local.refresh_warehouse_name
   reader_warehouse_name          = local.reader_warehouse_name

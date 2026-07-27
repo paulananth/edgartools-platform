@@ -5,9 +5,9 @@ locals {
   }
 
   roles = {
-    deployer  = var.deployer_role_name
-    refresher = var.refresher_role_name
-    reader    = var.reader_role_name
+    deployer = var.deployer_role_name
+    loader   = var.loader_role_name
+    reader   = var.reader_role_name
   }
 
   warehouses = {
