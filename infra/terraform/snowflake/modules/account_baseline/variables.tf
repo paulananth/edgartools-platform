@@ -33,6 +33,11 @@ variable "reader_role_name" {
   type        = string
 }
 
+variable "dashboard_owner_role_name" {
+  description = "GH-247: least-privilege role that owns the Streamlit-in-Snowflake dashboard object and its source stage. Deliberately distinct from reader (viewer access) and deployer/loader (data-plane roles) -- has no direct SELECT on gold/decision/status data; the dashboard runs under Caller's Rights, so the viewer's own role grants (reader) are what govern query access, not the owner's."
+  type        = string
+}
+
 variable "refresh_warehouse_name" {
   description = "Warehouse used for Snowflake refresh workloads."
   type        = string
