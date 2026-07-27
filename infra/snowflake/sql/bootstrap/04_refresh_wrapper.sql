@@ -38,7 +38,23 @@ const goldTables = [
   "ADVISER_DISCLOSURES",
   "PRIVATE_FUNDS",
   "FILING_DETAIL",
-  "TICKER_REFERENCE"
+  "TICKER_REFERENCE",
+  // "Isolated DAG branch" gold models (target_lag=DOWNSTREAM, zero ref()
+  // edges into the original 9-table chain above -- nothing else ever drives
+  // their refresh, so they must be refreshed explicitly here or they never
+  // refresh again after their empty initialize=ON_CREATE run). Found
+  // 2026-07-26: all 6 had zero refresh history in prod despite non-empty
+  // EDGARTOOLS_SOURCE data once gold-refresh finally ran for the first
+  // time. FINANCIAL_FACTORS must stay after FINANCIAL_DERIVED -- it's a
+  // real dbt ref() dependency, not a source(), and Snowflake does not
+  // cascade a DOWNSTREAM-lag refresh across ref() edges on its own.
+  "EXECUTIVE_RECORDS",
+  "EARNINGS_RELEASES",
+  "INSTITUTIONAL_HOLDINGS",
+  "ACCOUNTING_FLAGS",
+  "FINANCIAL_FACTS",
+  "FINANCIAL_DERIVED",
+  "FINANCIAL_FACTORS"
 ];
 const pollIntervalSeconds = 5;
 const timeoutSeconds = 900;

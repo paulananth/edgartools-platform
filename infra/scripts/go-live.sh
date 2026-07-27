@@ -731,6 +731,28 @@ done
 echo \"bronze_seed_silver_gold SUCCEEDED. Do not treat this alone as Blocker 4 / hosted-graph-E2E PASS -- separately confirm via CloudWatch logs that zero sec_pull_started events occurred during BatchSilver.\""
 
   add_stage \
+    "Snowflake: standalone gold-refresh" \
+    "Explicitly triggers the dedicated edgartools-${ENVIRONMENT}-gold-refresh Step Function and polls to a terminal state. The bronze_seed_silver_gold stage above runs a GoldRefresh step internally, but that is not a substitute for this: found 2026-07-26 in prod that the standalone gold-refresh state machine had ZERO executions ever (go-live.sh never called it directly), and separately that Snowflake's REFRESH_AFTER_LOAD stored procedure only refreshes a hardcoded table allowlist -- several newer gold tables (EXECUTIVE_RECORDS, EARNINGS_RELEASES, INSTITUTIONAL_HOLDINGS, ACCOUNTING_FLAGS, FINANCIAL_FACTS, FINANCIAL_DERIVED, FINANCIAL_FACTORS) were missing from that list and so never refreshed past their empty initialize=ON_CREATE run, even though their EDGARTOOLS_SOURCE data was current. Both gaps are fixed (04_refresh_wrapper.sql updated and reapplied to prod), but this stage exists so a stale gold layer surfaces as an explicit, auditable go-live step instead of silently depending on a side effect of the combined pipeline." \
+    "account_id=\"\$(aws --profile ${deployer_q} sts get-caller-identity --query Account --output text)\"
+state_machine_arn=\"arn:aws:states:${AWS_REGION_NAME}:\${account_id}:stateMachine:edgartools-${ENVIRONMENT}-gold-refresh\"
+execution_name=\"gold-refresh-\$(date +%s)\"
+execution_arn=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions start-execution --state-machine-arn \"\${state_machine_arn}\" --name \"\${execution_name}\" --input '{}' --query executionArn --output text)\"
+echo \"Started execution: \${execution_arn}\"
+while true; do
+  status=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions describe-execution --execution-arn \"\${execution_arn}\" --query status --output text)\"
+  echo \"Status: \${status}\"
+  case \"\${status}\" in
+    SUCCEEDED) break ;;
+    FAILED|ABORTED|TIMED_OUT)
+      echo \"gold-refresh did not succeed: \${status}. Inspect via: aws stepfunctions get-execution-history --execution-arn \${execution_arn}\" >&2
+      exit 1
+      ;;
+    *) sleep 30 ;;
+  esac
+done
+echo \"gold-refresh SUCCEEDED. Snowflake ingestion of the export manifest (Snowpipe + SNOWFLAKE_RUN_MANIFEST_TASK + REFRESH_AFTER_LOAD) typically completes within a couple of minutes after this -- verify row counts in EDGARTOOLS_GOLD before treating gold as current.\""
+
+  add_stage \
     "MDM + graph: connectivity, migrations, sync, verification" \
     "Runs bounded MDM connectivity, migrations, graph sync, and graph verification commands." \
     "uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm check-connectivity
