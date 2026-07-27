@@ -23,8 +23,8 @@ variable "deployer_role_name" {
   type        = string
 }
 
-variable "refresher_role_name" {
-  description = "Role used by the post-load Snowflake refresh runtime."
+variable "loader_role_name" {
+  description = "Role that owns the EDGARTOOLS_GOLD dynamic tables and manifest-pipeline procedures, and executes the post-load Snowflake refresh runtime."
   type        = string
 }
 

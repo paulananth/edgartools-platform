@@ -432,12 +432,19 @@ if [[ ${RUN_DBT} -eq 1 ]]; then
   # KNOWN GAP (2026-07-27, see CLAUDE.md manifest-pipeline ownership 5-whys): this pulls the
   # Terraform-managed "deployer" role (EDGARTOOLS_PROD_DEPLOYER in prod), NOT the EDGARTOOLS_PROD_LOADER
   # role that now owns the EDGARTOOLS_GOLD dynamic tables (infra/snowflake/sql/bootstrap/08_loader_role.sql).
-  # Terraform has no knowledge of EDGARTOOLS_PROD_LOADER yet. Running --run-dbt as-is will re-flip
-  # ownership of the dynamic tables back to the deployer role and can silently re-break
-  # REFRESH_AFTER_LOAD the same way it did in that incident. Do not `--run-dbt` against prod until
-  # this is reconciled in Terraform (either make EDGARTOOLS_PROD_LOADER the deployer role, or teach this
-  # script to override DBT_SNOWFLAKE_ROLE for dynamic-table models) -- deliberately left undone this
-  # session per explicit scope: no blind Terraform changes.
+  # Running --run-dbt as-is will re-flip ownership of the dynamic tables back to the deployer role and
+  # can silently re-break REFRESH_AFTER_LOAD the same way it did in that incident.
+  #
+  # FIX WRITTEN, NOT YET APPLIED (2026-07-27): account_baseline/account_access Terraform now define a
+  # "loader" role (renamed from the pre-existing, never-fully-granted "refresher" role -- see
+  # infra/terraform/access/snowflake/modules/account_access/main.tf) with the grants EDGARTOOLS_PROD_LOADER
+  # actually needs. Once that's applied (needs the AWS-root cross-stack outputs --
+  # snowflake_storage_role_arn/snowflake_export_root_url/snowflake_manifest_sns_topic_arn -- wired in via
+  # this script's normal flow, PLUS a check that the native_pull module's tracked snowflake_execute
+  # procedure resources aren't holding a stale pre-cursor-fix SQL body that `apply` would revert),
+  # switch the line below from "deployer" to "loader". Do not `--run-dbt` against prod until that
+  # Terraform is actually applied and this line is switched -- switching the line first, before applying,
+  # would just fail (the "loader" key doesn't exist in role_names output yet).
   export DBT_SNOWFLAKE_ROLE
   DBT_SNOWFLAKE_ROLE="$(json_map_value "${SNOWFLAKE_OUTPUTS_FILE}" "role_names" "deployer")"
 
