@@ -112,8 +112,6 @@ def write_gold_to_serving_export(
         "sec_employment_event": "sec_employment_event",
         # ERDP-03 Explore calendar (built outside silver gold_refresh path)
         "earnings_calendar": "fact_earnings_calendar",
-        # ERDP-01 Explore consensus estimates (built outside silver gold_refresh path)
-        "consensus_estimates": "fact_consensus_estimates",
     }
     counts: dict[str, int] = {}
     capture_specs = default_capture_spec_factory()
