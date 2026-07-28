@@ -526,6 +526,43 @@ def test_sharded_silver_reader_exposes_thirteenf_filing_and_employment_event(tmp
         reader.close()
 
 
+def test_sharded_silver_reader_exposes_sec_adv_firm_roster(tmp_path) -> None:
+    """ShardedSilverReader._TABLES must include sec_adv_firm_roster the same
+    change that creates the table -- CLAUDE.md's INSTITUTIONAL_HOLDS/EMPLOYED_BY
+    5-whys (see test_sharded_silver_reader_exposes_thirteenf_filing_and_employment_event
+    above) documents a real incident where a new silver table was populated
+    correctly but omitted from this allowlist, causing MDM's cross-shard reader
+    to silently treat real data as "missing" instead of erroring.
+    """
+    from edgar_warehouse.silver_store import SilverDatabase
+    from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
+
+    shard_path = tmp_path / "shard-0.duckdb"
+    db = SilverDatabase(str(shard_path))
+    db.merge_adv_firm_roster([{
+        "adviser_crd_number": "1588",
+        "dataset_period": "2026-07",
+        "private_funds_reported": True,
+        "private_fund_count_7b1": 3,
+        "any_hedge_funds": True,
+        "hedge_fund_count": 3,
+        "any_pe_funds": False,
+        "pe_fund_count": None,
+        "total_gross_assets_private_funds": 709905606,
+        "private_fund_count_7b2": 0,
+        "source_sha256": "abc123",
+        "parser_version": "firm_roster_v1",
+    }], "test-run")
+    db.close()
+
+    reader = ShardedSilverReader([str(shard_path)])
+    try:
+        rows = reader.fetch("SELECT adviser_crd_number FROM sec_adv_firm_roster")
+        assert [r["adviser_crd_number"] for r in rows] == ["1588"]
+    finally:
+        reader.close()
+
+
 def test_sharded_silver_reader_exposes_guidance_fact_tables(tmp_path) -> None:
     """ShardedSilverReader._TABLES must include sec_guidance_fact and
     sec_guidance_fact_reject (ERDP-02), or gold-refresh's _build_fact_guidance

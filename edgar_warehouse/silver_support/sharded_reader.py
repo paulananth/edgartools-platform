@@ -69,6 +69,7 @@ class ShardedSilverReader:
         "sec_adv_office",
         "sec_adv_disclosure_event",
         "sec_adv_private_fund",
+        "sec_adv_firm_roster",
         "sec_subsidiary_evidence",
         "sec_auditor_report_evidence",
         "sec_pcaob_firm_identity",
