@@ -110,6 +110,9 @@ def write_gold_to_serving_export(
         "sec_subsidiary_evidence": "sec_subsidiary_evidence",
         "sec_auditor_report_evidence": "sec_auditor_report_evidence",
         "sec_employment_event": "sec_employment_event",
+        # Firm Roster completeness cross-check (ticket 03)
+        "sec_adv_firm_roster": "sec_adv_firm_roster",
+        "sec_adv_private_fund": "sec_adv_private_fund",
         # ERDP-03 Explore calendar (built outside silver gold_refresh path)
         "earnings_calendar": "fact_earnings_calendar",
     }

@@ -174,6 +174,10 @@ def _handle_fetch_adv_bulk(args: argparse.Namespace) -> int:
     return run_command("fetch-adv-bulk", args)
 
 
+def _handle_fetch_firm_roster(args: argparse.Namespace) -> int:
+    return run_command("fetch-firm-roster", args)
+
+
 def _handle_reconcile_relationship_release(args: argparse.Namespace) -> int:
     return run_command("reconcile-relationship-release", args)
 
@@ -694,6 +698,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(fetch_adv_bulk)
     fetch_adv_bulk.set_defaults(handler=_handle_fetch_adv_bulk)
+
+    fetch_firm_roster = subparsers.add_parser(
+        "fetch-firm-roster",
+        help=(
+            "Fetch the latest SEC Firm Roster CSV archive not yet in silver "
+            "and stage a source manifest for ingest-relationship-sources."
+        ),
+    )
+    fetch_firm_roster.add_argument(
+        "--dataset-period",
+        help=(
+            "Force a specific YYYY-MM period instead of auto-detecting the latest "
+            "published one. Manual repair/backfill only -- the normal path auto-detects."
+        ),
+    )
+    fetch_firm_roster.add_argument(
+        "--force",
+        action="store_true",
+        help="Allow re-fetching a period already ingested (requires --dataset-period).",
+    )
+    _add_run_id_arg(fetch_firm_roster)
+    fetch_firm_roster.set_defaults(handler=_handle_fetch_firm_roster)
 
     reconcile_relationship_release = subparsers.add_parser(
         "reconcile-relationship-release",

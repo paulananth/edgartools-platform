@@ -1948,9 +1948,49 @@ ingest_adv_bulk_sources = ecs_state(wh_medium_arn,
     "States.Array('ingest-relationship-sources', '--source-manifest', "
     f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-adv-bulk/{{}}/source_manifest.json', $$.Execution.Name), "
     "'--run-id', $$.Execution.Name)",
-    next_state="MdmRun")
+    next_state="FirmRosterForceCheck")
 ingest_adv_bulk_sources["Catch"] = adv_bulk_fetch_catch
 ingest_adv_bulk_sources["ResultPath"] = None
+
+# Firm Roster completeness cross-check (adv-firm-roster-crosscheck spec, ticket 02):
+# fetch-firm-roster + ingest-relationship-sources, sharing this same Stage and the
+# same $.dataset_period/$.force SM-input fields the advFilingData fetch above already
+# uses -- one shared manual-repair override for the whole AdvBulkFetch stage, not a
+# separate schedule. Re-checks $.force (FirmRosterForceCheck) rather than reusing
+# ForceCheck's own routing, since ForceCheck already routed to FetchAdvBulk/
+# FetchAdvBulkForced above and a Choice state can only have one Next per branch.
+firm_roster_force_check = {
+    "Type": "Choice",
+    "Comment": "Route to FetchFirmRosterForced (includes --force) when caller supplied force=true; otherwise FetchFirmRoster (no --force).",
+    "Choices": [
+        {
+            "Variable": "$.force",
+            "BooleanEquals": True,
+            "Next": "FetchFirmRosterForced",
+        }
+    ],
+    "Default": "FetchFirmRoster",
+}
+
+fetch_firm_roster = ecs_state(wh_medium_arn,
+    "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
+    next_state="IngestFirmRosterSources")
+fetch_firm_roster["Catch"] = adv_bulk_fetch_catch
+fetch_firm_roster["ResultPath"] = None
+
+fetch_firm_roster_forced = ecs_state(wh_medium_arn,
+    "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)",
+    next_state="IngestFirmRosterSources")
+fetch_firm_roster_forced["Catch"] = adv_bulk_fetch_catch
+fetch_firm_roster_forced["ResultPath"] = None
+
+ingest_firm_roster_sources = ecs_state(wh_medium_arn,
+    "States.Array('ingest-relationship-sources', '--source-manifest', "
+    f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-firm-roster/{{}}/source_manifest.json', $$.Execution.Name), "
+    "'--run-id', $$.Execution.Name)",
+    next_state="MdmRun")
+ingest_firm_roster_sources["Catch"] = adv_bulk_fetch_catch
+ingest_firm_roster_sources["ResultPath"] = None
 
 # (5)–(9) MDM chain + GoldRefresh — run once after ALL windows complete (same invariant as before).
 # MdmExport is new (data-architecture Issue 3): mdm sync-graph materializes Snowflake graph
@@ -2001,7 +2041,9 @@ definition = {
         "fundamentals modes run sequentially after Branch A because they share the same silver "
         "DuckDB artifact; Branch B failures are caught so the pipeline still advances (AD-13), "
         "(4d) AdvBulkFetch — fetch-adv-bulk + ingest-relationship-sources (adv-fetch-pipeline-"
-        "wiring spec), lenient like Branch B, so MDM sees fresh ADV silver in this execution, "
+        "wiring spec), then fetch-firm-roster + ingest-relationship-sources (adv-firm-roster-"
+        "crosscheck spec, ticket 02), both lenient like Branch B, so MDM sees fresh ADV silver "
+        "and the Firm Roster completeness cross-check stays current in this execution, "
         "(5) MDM entity resolution + export to Snowflake mirror + Neo4j sync in bulk "
         "(data-architecture Issue 3: export precedes sync-graph so graph reflects this run), "
         "(6) single gold build + Snowflake export manifest, "
@@ -2030,6 +2072,10 @@ definition = {
         "FetchAdvBulk":         fetch_adv_bulk,
         "FetchAdvBulkForced":   fetch_adv_bulk_forced,
         "IngestAdvBulkSources": ingest_adv_bulk_sources,
+        "FirmRosterForceCheck":     firm_roster_force_check,
+        "FetchFirmRoster":          fetch_firm_roster,
+        "FetchFirmRosterForced":    fetch_firm_roster_forced,
+        "IngestFirmRosterSources":  ingest_firm_roster_sources,
         "MdmRun":            mdm_run,
         "MdmBackfill":       mdm_backfill,
         "MdmExport":         mdm_export,
@@ -2272,17 +2318,55 @@ else:
         "States.Array('ingest-relationship-sources', '--source-manifest', "
         f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-adv-bulk/{{}}/source_manifest.json', $$.Execution.Name), "
         "'--run-id', $$.Execution.Name)",
-        next_state="MdmRun")
+        next_state="FirmRosterForceCheck")
     ingest_adv_bulk_sources["Catch"] = adv_bulk_fetch_catch
     ingest_adv_bulk_sources["ResultPath"] = None
+
+    # Firm Roster completeness cross-check (adv-firm-roster-crosscheck spec, ticket 02) --
+    # same shape/rationale as load_history's copy above (kept in sync per this file's
+    # documented Stage0CompanyIdentity duplication convention).
+    firm_roster_force_check = {
+        "Type": "Choice",
+        "Comment": "Route to FetchFirmRosterForced (includes --force) when caller supplied force=true; otherwise FetchFirmRoster (no --force).",
+        "Choices": [
+            {
+                "Variable": "$.force",
+                "BooleanEquals": True,
+                "Next": "FetchFirmRosterForced",
+            }
+        ],
+        "Default": "FetchFirmRoster",
+    }
+
+    fetch_firm_roster = ecs_state(wh_medium_arn,
+        "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
+        next_state="IngestFirmRosterSources")
+    fetch_firm_roster["Catch"] = adv_bulk_fetch_catch
+    fetch_firm_roster["ResultPath"] = None
+
+    fetch_firm_roster_forced = ecs_state(wh_medium_arn,
+        "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)",
+        next_state="IngestFirmRosterSources")
+    fetch_firm_roster_forced["Catch"] = adv_bulk_fetch_catch
+    fetch_firm_roster_forced["ResultPath"] = None
+
+    ingest_firm_roster_sources = ecs_state(wh_medium_arn,
+        "States.Array('ingest-relationship-sources', '--source-manifest', "
+        f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-firm-roster/{{}}/source_manifest.json', $$.Execution.Name), "
+        "'--run-id', $$.Execution.Name)",
+        next_state="MdmRun")
+    ingest_firm_roster_sources["Catch"] = adv_bulk_fetch_catch
+    ingest_firm_roster_sources["ResultPath"] = None
 
     definition = {
         "Comment": (
             f"{display}: (0) compute CIK windows, (0b) Stage0CompanyIdentity -- Company Identity "
             "capture, strict, runs before ownership/ADV so IS_INSIDER derivation sees resolved "
             "Company entities, (1) bronze+silver capture, (1b) AdvBulkFetch -- fetch-adv-bulk + "
-            "ingest-relationship-sources (adv-fetch-pipeline-wiring spec), lenient, so MDM sees "
-            "fresh ADV silver, (2) MDM entity resolution + Neo4j sync, (3) gold build + "
+            "ingest-relationship-sources (adv-fetch-pipeline-wiring spec), then fetch-firm-roster "
+            "+ ingest-relationship-sources (adv-firm-roster-crosscheck spec, ticket 02), both "
+            "lenient, so MDM sees fresh ADV silver and the Firm Roster cross-check stays current, "
+            "(2) MDM entity resolution + Neo4j sync, (3) gold build + "
             "Snowflake export manifest."
         ),
         "StartAt": "ComputeWindows",
@@ -2296,6 +2380,10 @@ else:
             "FetchAdvBulk":         fetch_adv_bulk,
             "FetchAdvBulkForced":   fetch_adv_bulk_forced,
             "IngestAdvBulkSources": ingest_adv_bulk_sources,
+            "FirmRosterForceCheck":    firm_roster_force_check,
+            "FetchFirmRoster":         fetch_firm_roster,
+            "FetchFirmRosterForced":   fetch_firm_roster_forced,
+            "IngestFirmRosterSources": ingest_firm_roster_sources,
             "MdmRun":           mdm_run,
             "MdmBackfill":      mdm_backfill,
             "MdmExport":        mdm_export,

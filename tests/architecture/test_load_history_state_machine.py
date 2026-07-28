@@ -510,3 +510,86 @@ def test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_via_result_path_null
         assert definition["States"][state_name]["ResultPath"] is None, (
             f"{state_name} must set ResultPath=null to preserve $ into the next state"
         )
+
+
+def test_firm_roster_stage_runs_after_ingest_adv_bulk_sources_before_mdm_run(definition: dict) -> None:
+    order = _linear_order(definition)
+    assert "IngestAdvBulkSources" in order
+    assert "FetchFirmRoster" in order
+    assert "IngestFirmRosterSources" in order
+    assert "MdmRun" in order
+    assert order.index("IngestAdvBulkSources") < order.index("FetchFirmRoster")
+    assert order.index("FetchFirmRoster") < order.index("IngestFirmRosterSources")
+    assert order.index("IngestFirmRosterSources") < order.index("MdmRun")
+
+
+def test_ingest_adv_bulk_sources_routes_into_firm_roster_force_check_not_around_it(
+    definition: dict,
+) -> None:
+    """Regression guard mirroring test_stage1b_thirteenf_catch_routes_into_adv_
+    bulk_fetch_not_around_it above: IngestAdvBulkSources' success-path Next must
+    route into FirmRosterForceCheck, not straight to MdmRun -- otherwise the
+    Firm Roster cross-check stage would be silently skipped every run."""
+    assert definition["States"]["IngestAdvBulkSources"]["Next"] == "FirmRosterForceCheck"
+
+
+def test_firm_roster_force_check_routes_to_two_distinct_fetch_firm_roster_command_shapes(
+    definition: dict,
+) -> None:
+    """Mirrors test_force_check_routes_to_two_distinct_fetch_adv_bulk_command_
+    shapes above: FirmRosterForceCheck re-inspects the same $.force SM-input
+    field (rather than ForceCheck routing here directly, since a Choice state
+    can only have one Next per branch and ForceCheck already routes to
+    FetchAdvBulk/FetchAdvBulkForced)."""
+    states = definition["States"]
+    force_check = states["FirmRosterForceCheck"]
+    assert force_check["Type"] == "Choice"
+    assert force_check["Choices"][0]["Variable"] == "$.force"
+    assert force_check["Choices"][0]["BooleanEquals"] is True
+    assert force_check["Choices"][0]["Next"] == "FetchFirmRosterForced"
+    assert force_check["Default"] == "FetchFirmRoster"
+
+    no_force_cmd = _command_of(definition, "FetchFirmRoster")
+    forced_cmd = _command_of(definition, "FetchFirmRosterForced")
+    assert "'fetch-firm-roster'" in no_force_cmd
+    assert "'--force'" not in no_force_cmd
+    assert "'--force'" in forced_cmd
+    assert no_force_cmd.replace(", '--force'", "") == forced_cmd.replace(", '--force'", "")
+
+    assert states["FetchFirmRoster"]["Next"] == "IngestFirmRosterSources"
+    assert states["FetchFirmRosterForced"]["Next"] == "IngestFirmRosterSources"
+
+
+def test_ingest_firm_roster_sources_references_fetch_firm_roster_manifest_path(definition: dict) -> None:
+    """Mirrors test_ingest_adv_bulk_sources_references_fetch_adv_bulk_manifest_
+    path above: --source-manifest must resolve to the same deterministic,
+    run-id-scoped path fetch-firm-roster itself writes to."""
+    cmd = _command_of(definition, "IngestFirmRosterSources")
+    assert "'ingest-relationship-sources'" in cmd
+    assert "'--source-manifest'" in cmd
+    assert "runs/fetch-firm-roster/" in cmd
+    assert "source_manifest.json" in cmd
+    assert "$$.Execution.Name" in cmd
+
+
+def test_fetch_and_ingest_firm_roster_catch_falls_through_to_mdm_run(definition: dict) -> None:
+    """Mirrors test_fetch_adv_bulk_and_ingest_adv_bulk_sources_catch_falls_
+    through_to_mdm_run above: a transient Firm Roster fetch/ingest failure
+    must never abort the rest of load_history -- this cross-check is purely
+    additive visibility, per the parent spec."""
+    for state_name in ("FetchFirmRoster", "FetchFirmRosterForced", "IngestFirmRosterSources"):
+        state = definition["States"][state_name]
+        assert state.get("Catch") == [
+            {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmRun"}
+        ], f"{state_name} missing lenient Catch-to-MdmRun"
+
+
+def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_null(
+    definition: dict,
+) -> None:
+    """Mirrors test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_via_
+    result_path_null above -- same D-15 bug class."""
+    for state_name in ("FetchFirmRoster", "FetchFirmRosterForced", "IngestFirmRosterSources"):
+        assert definition["States"][state_name]["ResultPath"] is None, (
+            f"{state_name} must set ResultPath=null to preserve $ into the next state"
+        )

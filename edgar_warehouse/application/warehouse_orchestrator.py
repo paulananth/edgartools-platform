@@ -1881,6 +1881,15 @@ def _capture_bronze_raw(
                     source_sha256=actual_sha, sync_run_id=sync_run_id,
                 )
                 rows_written += sum(counts.values())
+            elif kind == "iapd_firm_roster":
+                from edgar_warehouse.application.adv_firm_roster_ingest import (
+                    ingest_firm_roster_archive,
+                )
+                counts = ingest_firm_roster_archive(
+                    db, payload, dataset_period=str(source.get("dataset_period") or ""),
+                    source_sha256=actual_sha, sync_run_id=sync_run_id,
+                )
+                rows_written += sum(counts.values())
             elif kind == "sec_subsidiary_exhibit":
                 from edgar_warehouse.application.subsidiary_exhibits import (
                     ingest_subsidiary_parse_result, parse_subsidiary_exhibit,
@@ -1997,6 +2006,62 @@ def _capture_bronze_raw(
         metrics["adv_bulk_fetch_sources_found"] = len(sources)
         metrics["adv_bulk_fetch_not_yet_published"] = not_yet_published
         metrics["adv_bulk_fetch_manifest_path"] = manifest_path
+        return raw_writes, metrics
+
+    if command_name == "fetch-firm-roster":
+        from edgar_warehouse.application.firm_roster_fetch import (
+            build_source_manifest,
+            fetch_archive_bytes,
+            fetch_firm_roster_sources,
+            fetch_listing_bytes,
+        )
+
+        forced_period = str(arguments.get("dataset_period") or "").strip() or None
+        force = bool(arguments.get("force"))
+        if force and forced_period is None:
+            raise WarehouseRuntimeError("--force requires --dataset-period")
+
+        # Unlike sec_adv_private_fund (which has no dataset_period column, only
+        # source_dataset_period -- see the fetch-adv-bulk block above),
+        # sec_adv_firm_roster's dataset_period is its own real business-key
+        # column (ticket 01), so this reads it directly.
+        already_ingested = {
+            str(row["dataset_period"])
+            for row in db.fetch(
+                "SELECT DISTINCT dataset_period FROM sec_adv_firm_roster "
+                "WHERE dataset_period IS NOT NULL"
+            )
+        }
+
+        def _fetch_listing() -> bytes:
+            return fetch_listing_bytes(context.identity)
+
+        def _fetch_archive(href: str) -> bytes:
+            return fetch_archive_bytes(context.identity, href)
+
+        def _upload(file_name: str, content: bytes) -> str:
+            relative = f"runs/{command_name}/{sync_run_id}/{file_name}"
+            return context.bronze_root.write_bytes(relative, content)
+
+        sources, latest_period = fetch_firm_roster_sources(
+            already_ingested=already_ingested,
+            forced_period=forced_period,
+            force=force,
+            fetch_listing=_fetch_listing,
+            fetch_archive=_fetch_archive,
+            upload=_upload,
+        )
+
+        manifest = build_source_manifest(sources)
+        # A distinct filename from the generic run-audit manifest.json, matching
+        # fetch-adv-bulk's own reasoning above.
+        manifest_relative = f"runs/{command_name}/{sync_run_id}/source_manifest.json"
+        manifest_path = context.bronze_root.write_json(manifest_relative, manifest)
+        raw_writes.append({"layer": "bronze", "path": manifest_path, "relative_path": manifest_relative})
+
+        metrics["firm_roster_fetch_sources_found"] = len(sources)
+        metrics["firm_roster_fetch_latest_period"] = latest_period
+        metrics["firm_roster_fetch_manifest_path"] = manifest_path
         return raw_writes, metrics
 
     if command_name == "reconcile-relationship-release":
@@ -4852,6 +4917,12 @@ def _resolve_scope(
         return {"source_manifest": arguments.get("source_manifest")}
 
     if command_name == "fetch-adv-bulk":
+        return {
+            "dataset_period": arguments.get("dataset_period"),
+            "force": bool(arguments.get("force")),
+        }
+
+    if command_name == "fetch-firm-roster":
         return {
             "dataset_period": arguments.get("dataset_period"),
             "force": bool(arguments.get("force")),

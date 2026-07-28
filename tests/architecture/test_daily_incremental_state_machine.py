@@ -356,3 +356,83 @@ def test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_via_result_path_null
         assert daily_definition["States"][state_name]["ResultPath"] is None, (
             f"{state_name} must set ResultPath=null to preserve $ into the next state"
         )
+
+
+def test_firm_roster_stage_runs_after_ingest_adv_bulk_sources_before_mdm_run(
+    daily_definition: dict,
+) -> None:
+    order = _linear_order_with_choice(daily_definition)
+    assert "IngestAdvBulkSources" in order
+    assert "FetchFirmRoster" in order
+    assert "IngestFirmRosterSources" in order
+    assert "MdmRun" in order
+    assert order.index("IngestAdvBulkSources") < order.index("FetchFirmRoster")
+    assert order.index("FetchFirmRoster") < order.index("IngestFirmRosterSources")
+    assert order.index("IngestFirmRosterSources") < order.index("MdmRun")
+
+
+def test_ingest_adv_bulk_sources_routes_into_firm_roster_force_check_not_around_it(
+    daily_definition: dict,
+) -> None:
+    assert daily_definition["States"]["IngestAdvBulkSources"]["Next"] == "FirmRosterForceCheck"
+
+
+def test_firm_roster_force_check_routes_to_two_distinct_fetch_firm_roster_command_shapes(
+    daily_definition: dict,
+) -> None:
+    states = daily_definition["States"]
+    force_check = states["FirmRosterForceCheck"]
+    assert force_check["Type"] == "Choice"
+    assert force_check["Choices"][0]["Variable"] == "$.force"
+    assert force_check["Choices"][0]["BooleanEquals"] is True
+    assert force_check["Choices"][0]["Next"] == "FetchFirmRosterForced"
+    assert force_check["Default"] == "FetchFirmRoster"
+
+    no_force_cmd = _command_of(daily_definition, "FetchFirmRoster")
+    forced_cmd = _command_of(daily_definition, "FetchFirmRosterForced")
+    assert "'fetch-firm-roster'" in no_force_cmd
+    assert "'--force'" not in no_force_cmd
+    assert "'--force'" in forced_cmd
+    assert no_force_cmd.replace(", '--force'", "") == forced_cmd.replace(", '--force'", "")
+
+    assert states["FetchFirmRoster"]["Next"] == "IngestFirmRosterSources"
+    assert states["FetchFirmRosterForced"]["Next"] == "IngestFirmRosterSources"
+
+
+def test_ingest_firm_roster_sources_references_fetch_firm_roster_manifest_path(
+    daily_definition: dict,
+) -> None:
+    cmd = _command_of(daily_definition, "IngestFirmRosterSources")
+    assert "'ingest-relationship-sources'" in cmd
+    assert "'--source-manifest'" in cmd
+    assert "runs/fetch-firm-roster/" in cmd
+    assert "source_manifest.json" in cmd
+    assert "$$.Execution.Name" in cmd
+
+
+def test_fetch_and_ingest_firm_roster_catch_falls_through_to_mdm_run(
+    daily_definition: dict,
+) -> None:
+    for state_name in ("FetchFirmRoster", "FetchFirmRosterForced", "IngestFirmRosterSources"):
+        state = daily_definition["States"][state_name]
+        assert state.get("Catch") == [
+            {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmRun"}
+        ], f"{state_name} missing lenient Catch-to-MdmRun"
+
+
+def test_bootstrap_unaffected_by_firm_roster_wiring(bootstrap_definition: dict) -> None:
+    """bootstrap shares write_warehouse_mdm_gold_definition with daily_incremental
+    but is architecturally separate -- the new Firm Roster states must not
+    appear in bootstrap's generated JSON."""
+    assert "FetchFirmRoster" not in bootstrap_definition["States"]
+    assert "FirmRosterForceCheck" not in bootstrap_definition["States"]
+    assert bootstrap_definition["States"]["RunWarehouseTask"]["Next"] == "MdmRun"
+
+
+def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_null(
+    daily_definition: dict,
+) -> None:
+    for state_name in ("FetchFirmRoster", "FetchFirmRosterForced", "IngestFirmRosterSources"):
+        assert daily_definition["States"][state_name]["ResultPath"] is None, (
+            f"{state_name} must set ResultPath=null to preserve $ into the next state"
+        )

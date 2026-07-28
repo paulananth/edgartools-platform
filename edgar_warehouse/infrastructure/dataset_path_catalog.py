@@ -310,6 +310,7 @@ class WarehousePathResolver:
             "parse-ownership-bronze",
             "parse-adv-bronze",
             "fetch-adv-bulk",
+            "fetch-firm-roster",
             "ingest-relationship-sources",
             "reconcile-relationship-release",
         ):

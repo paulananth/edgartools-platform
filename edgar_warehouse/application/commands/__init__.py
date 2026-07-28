@@ -12,6 +12,7 @@ from edgar_warehouse.application.commands import (
     compute_windows,
     daily_incremental,
     fetch_adv_bulk,
+    fetch_firm_roster,
     full_reconcile,
     gold_refresh,
     ingest_relationship_sources,
@@ -48,6 +49,7 @@ COMMAND_REGISTRY = {
     "bootstrap-fundamentals": bootstrap_fundamentals.execute,   # Branch B (AD-05)
     "gold-refresh": gold_refresh.execute,
     "fetch-adv-bulk": fetch_adv_bulk.execute,
+    "fetch-firm-roster": fetch_firm_roster.execute,
     "ingest-relationship-sources": ingest_relationship_sources.execute,
     "reconcile-relationship-release": reconcile_relationship_release.execute,
     "migrate-silver-shards": migrate_silver_shards.execute,

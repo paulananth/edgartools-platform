@@ -457,6 +457,51 @@ CREATE TABLE IF NOT EXISTS SEC_EMPLOYMENT_EVENT (
 )
 COMMENT = 'Employment / Item 5.02 events for EMPLOYED_BY. Passthrough from silver sec_employment_event.';
 
+-- Firm Roster completeness cross-check (ticket 03) — passthrough exports.
+CREATE TABLE IF NOT EXISTS SEC_ADV_FIRM_ROSTER (
+  adviser_crd_number               STRING NOT NULL,
+  dataset_period                   STRING NOT NULL,
+  private_funds_reported           BOOLEAN,
+  private_fund_count_7b1           NUMBER(38, 0),
+  any_hedge_funds                  BOOLEAN,
+  hedge_fund_count                 NUMBER(38, 0),
+  any_pe_funds                     BOOLEAN,
+  pe_fund_count                    NUMBER(38, 0),
+  total_gross_assets_private_funds NUMBER(28, 2),
+  private_fund_count_7b2           NUMBER(38, 0),
+  source_sha256                    STRING,
+  parser_version                   STRING
+)
+COMMENT = 'SEC Firm Roster CSV aggregate private-fund counts, full-universe monthly snapshot. Passthrough from silver sec_adv_firm_roster.';
+
+-- Raw passthrough of the existing sec_adv_private_fund silver table (advFilingData
+-- pipeline), keyed on its real silver PK (accession_number, fund_index) -- NOT
+-- (adviser_crd_number, dataset_period), which is not row-unique here (one CRD
+-- reports many fund_index rows per period). Exists because the dimensional
+-- PRIVATE_FUNDS gold table is CIK-keyed, not CRD-keyed, so this is the only
+-- CRD-keyed private-fund data in Snowflake for the Firm Roster cross-check to
+-- join against.
+CREATE TABLE IF NOT EXISTS SEC_ADV_PRIVATE_FUND (
+  accession_number      STRING NOT NULL,
+  fund_index            NUMBER(38, 0) NOT NULL,
+  filing_id             STRING,
+  adviser_crd_number    STRING,
+  private_fund_id       STRING,
+  reference_id          STRING,
+  schedule_section      STRING,
+  reporting_role        STRING,
+  filing_action         STRING,
+  fund_name             STRING,
+  fund_type             STRING,
+  jurisdiction           STRING,
+  aum_amount             NUMBER(28, 2),
+  effective_date         DATE,
+  source_dataset_period  STRING,
+  source_sha256          STRING,
+  parser_version         STRING
+)
+COMMENT = 'CRD-keyed passthrough of silver sec_adv_private_fund, for the Firm Roster completeness cross-check (dimensional PRIVATE_FUNDS is CIK-keyed only).';
+
 -- ERDP-03 Explore — forward earnings calendar (not pure-SEC Agent-Grade).
 -- gold-refresh may emit empty parquet; SOURCE table + load map must exist.
 CREATE TABLE IF NOT EXISTS EARNINGS_CALENDAR (
