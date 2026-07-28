@@ -94,6 +94,24 @@ is execution needed to unblock a later decision, not the destination itself).
   by a local `dataset_period`-already-ingested check (unchanged by the
   delta-vs-snapshot correction); each `dataset_period` is fully immutable
   once ingested; ERA and RIA get identical handling.
+- [02 — Fetch Target and Rolling-Window Strategy](issues/02-parser-and-private-fund-detail-strategy.md)
+  — 13-month rolling window locked (already tested in production; dedup-latest-per-CRD
+  logic was already live in `mdm/adv_bulk.py`, not actually open); Firm Roster CSV
+  ingested as a parallel completeness cross-check (design spun off to ticket 08); no
+  2000-2024 historical backfill, confirming ticket 03's conclusion under corrected
+  premises; found a genuine gap — bulk feed never populates `sec_adv_office`/
+  `sec_adv_disclosure_event` — spun off to ticket 07 (research).
+- [07 — Office and Disclosure-Event Coverage in the Bulk advFilingData Feed](issues/07-office-disclosure-bulk-coverage.md)
+  — the gap is a parser-extension problem, not a missing-data problem: the monthly
+  archive already contains real per-office data (`IA/ERA_Schedule_D_1F`, 13K+ rows) and
+  real per-event DRP disclosure data (4 file families × IA/ERA), all keyed by the same
+  `FilingID` the existing parser already joins on — `adv_bulk_ingest.py` just doesn't read
+  these 6 file families yet. No implementation done (research-only ticket).
+- [05 — Reconcile Ticket 21 and the Adviser-Fund Source Contract](issues/05-reconcile-ticket-21-and-contract.md)
+  — updated `adviser-fund-source-contract.md` with the rolling-window and Firm Roster
+  cross-check addendum (real gaps, not a no-op); annotated ticket 21 (implementation was
+  correct, only the 2026-07-24 blocker doc's diagnosis was wrong); appended a correction
+  to the blocker doc rather than rewriting it.
 
 ## Not yet specified
 

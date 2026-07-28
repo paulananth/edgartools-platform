@@ -2,6 +2,30 @@
 
 ## Status: BLOCKED — parser rewrite needed before ADV can flow to MDM/Neo4j
 
+## Correction (2026-07-27, `.scratch/adv-pipeline` map, tickets 01/02/05)
+
+**This doc's headline finding was wrong.** The "SEC changed the format" premise below
+was based on downloading and inspecting `sec.gov`'s Firm Roster CSV
+(`ia07012026.zip`/`ia07012026-exempt.zip`) — which is a *different, aggregate-only*
+bulk product from the one `adv_bulk_ingest.py` was written against. The relational
+per-fund format this doc calls "old" was never discontinued: it continues today as
+`adviserinfo.sec.gov`'s monthly `advFilingData` feed
+(`reports.adviserinfo.sec.gov/reports/foia/reports_metadata.json`), and
+`adv_bulk_ingest.py`'s existing filename regexes match that feed's real files exactly
+— confirmed by downloading and inspecting the June 2026 `advFilingData` archive
+directly. **No parser rewrite was needed.** Full findings:
+`.scratch/adv-pipeline/issues/01-confirm-scope-of-iapd-format-change.md` and
+`.scratch/adv-pipeline/research/01-iapd-format-scope-findings.md`.
+
+The doc below is left unmodified past this point as a historical record of the
+(incorrect) diagnosis and the debugging path that produced it — see
+`.scratch/adv-pipeline/map.md` for the corrected, current picture: a 13-month rolling
+window of `advFilingData` monthly deltas is the real ingestion target (this feed is a
+filing-activity delta, not a full snapshot — a genuine, separate finding from the
+format-change question this doc was originally about), the Firm Roster CSV is used as
+a parallel completeness cross-check rather than the primary source, and a real,
+separate gap was found in office/disclosure-event coverage (ticket 07).
+
 ## Context
 
 Operator asked to load ADV data end-to-end (fetch → silver → MDM → Neo4j graph)

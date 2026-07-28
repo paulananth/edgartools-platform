@@ -1,7 +1,7 @@
 # 05 — Reconcile Ticket 21 and the Adviser-Fund Source Contract
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 02
 Blocks: none
 
@@ -35,4 +35,22 @@ the release-readiness tracker with ticket 02's decision:
 
 ## Answer
 
-(pending)
+Ticket 02 found two real gaps, so all three reconciliation steps did real work (none
+were no-ops):
+
+1. **`adviser-fund-source-contract.md` updated** — added an "Addendum: rolling-window
+   acquisition and Firm Roster completeness control" section documenting (a) the
+   release source is a monthly filing-activity delta feed requiring a 13-month rolling
+   union with latest-per-CRD dedup, not a single full-universe snapshot, and (b) the
+   Firm Roster CSV is adopted as a parallel completeness cross-check, explicitly scoped
+   out of the applicability ledger/graph contract/GO acceptance. The contract's core
+   identity/resolution/graph rules (CRD/PFID, no name-only matching, `MANAGES_FUND`
+   shape) are unchanged — confirmed correct by ticket 01/02, not superseded.
+2. **Ticket 21 annotated** (not reopened — its implementation was correct, only the
+   2026-07-24 blocker doc's diagnosis was wrong) with a pointer to ticket 01's finding
+   and this map, so future readers don't mistake the corrected blocker doc for evidence
+   ticket 21's implementation was broken.
+3. **Blocker doc corrected via append** — `adv-bulk-ingest-format-change-2026-07-24.md`
+   now has a "Correction (2026-07-27)" section at the top stating the format-change
+   premise was wrong (wrong SEC product staged, not a real SEC change), while leaving
+   the original diagnosis text below it untouched as a historical record.
