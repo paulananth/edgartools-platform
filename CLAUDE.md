@@ -376,6 +376,62 @@ hung indefinitely under this same account state and had to be killed with
 `SELECT SYSTEM$CANCEL_QUERY('<query_id>')` — the bounded `FOR i IN 1 TO <precomputed COUNT(*)>`
 form above is the one that worked. Live in `04_refresh_wrapper.sql`.
 
+## Streamlit-in-Snowflake ownership 5-whys (resolved 2026-07-27)
+
+**Problem:** GH-252's second dashboard (`MDM_GRAPH_DASHBOARD`) was deployed with a
+dedicated, correctly-scoped reader role (`EDGARTOOLS_GRAPH_REVIEW_READER`, SELECT on
+exactly 5 review views) — but that role's grants turned out not to control what the
+*app itself* could see when opened.
+
+1. Symptom: nothing wrong yet — worth checking *before* declaring "access limited to a
+   dedicated read role" (GH-251 criterion 6) actually true for the new dashboard, not
+   just for someone manually `USE ROLE`-ing into the reader role.
+2. Why does the reader role's SELECT grants not settle it? Streamlit-in-Snowflake apps
+   run with the app **owner's** privileges by default ("owner's rights"), not the
+   viewer's. Restricted caller's rights exists only as a Preview feature for
+   container-runtime apps — not what `CREATE STREAMLIT` (the module's resource type)
+   produces (docs.snowflake.com/en/developer-guide/streamlit/object-management/owners-rights).
+3. Why does that matter here specifically? `infra/terraform/snowflake/modules/dashboard`
+   creates the `snowflake_streamlit` resource authenticated as whichever role ran
+   `terraform apply` — in this repo, always `ACCOUNTADMIN`. `SHOW STREAMLITS` confirmed
+   **both** dashboards (the original `EDGARTOOLS_DASHBOARD` and the new
+   `MDM_GRAPH_DASHBOARD`) were owned by `ACCOUNTADMIN`. Any viewer with `USAGE` on the
+   app queries with ACCOUNTADMIN's full privileges through it, not the reader role's.
+4. Why not just `GRANT OWNERSHIP ... TO ROLE EDGARTOOLS_GRAPH_REVIEW_READER`? Confirmed
+   live: Snowflake rejects it outright — `Unsupported feature 'GRANT/REVOKE OWNERSHIP ON
+   STREAMLIT'`. Ownership of a Streamlit object cannot be transferred after creation at
+   all — the only way to change it is to create the object while running **as** the
+   target role.
+5. **Root cause:** the shared `dashboard` Terraform module always creates its
+   `snowflake_streamlit` resource under the Terraform-authenticated admin role, with no
+   mechanism (Terraform or otherwise) to create it under a minimal-privilege role instead.
+
+**Resolution (GH-252's dashboard only, not the original — see "Still shared" below):**
+`infra/snowflake/sql/graph_review/02_dashboard_reader_grants.sql` now: grants
+`EDGARTOOLS_GRAPH_REVIEW_READER` `CREATE STREAMLIT` on its schema + `READ` on its stage,
+`DROP`s the Terraform-created (ACCOUNTADMIN-owned) `MDM_GRAPH_DASHBOARD` object, and
+recreates it identically while running `USE ROLE EDGARTOOLS_GRAPH_REVIEW_READER` —
+confirmed via `SHOW STREAMLITS` that `owner` is now `EDGARTOOLS_GRAPH_REVIEW_READER`, and
+via `terraform plan` that this produces **zero drift** (the `snowflake_streamlit` resource
+schema doesn't track an owner/role attribute at all, so Terraform is blind to who owns it
+— re-applying the module won't fight this, but it also means a future `-replace` or
+destroy/recreate of this resource silently reverts ownership to ACCOUNTADMIN again; re-run
+`02_dashboard_reader_grants.sql` afterward if that ever happens).
+
+**Still shared / not fixed:** the original `EDGARTOOLS_DASHBOARD` has the identical
+ACCOUNTADMIN-owner gap, already implicitly deferred by `deploy.sh`'s own header comment
+since GH-247 ("*going forward: that dashboard-owner role once its grants are live*",
+referring to the provisioned-but-unused `EDGARTOOLS_{ENV}_DASHBOARD_OWNER` role). Not
+touched in this pass — GH-252 was in scope, the original dashboard's fix is its own
+follow-up (same drop/recreate-as-target-role recipe would apply).
+
+**Lesson:** a role's `SELECT`/`USAGE` grants prove it *can* be activated and *can* query
+the right objects — neither proves what a Streamlit app built on top of it actually
+executes as. For any Streamlit-in-Snowflake app whose access-control story matters, check
+`SHOW STREAMLITS ... ` for the `owner` column before trusting a "dedicated read role"
+claim; Terraform-created objects in this repo default to the admin role as owner unless
+something has deliberately re-created them otherwise.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. It runs in four

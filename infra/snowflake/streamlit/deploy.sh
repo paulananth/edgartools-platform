@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 # GH-247: reproducible, verifiable Snowflake dashboard release path.
+# GH-252: parametrized to deploy any Streamlit-in-Snowflake app in this
+# repo (not just the original EDGARTOOLS_DASHBOARD), via DASHBOARD_APP_NAME/
+# DASHBOARD_SOURCE_DIR/DASHBOARD_STREAMLIT_OBJECT/DASHBOARD_RELEASE_FILES/
+# DASHBOARD_TEST_PATHS below -- see "App parametrization" section. All
+# defaults are unchanged from before GH-252, so an invocation with none of
+# those set behaves exactly as it did for the original dashboard.
 #
 # Replaces the old bare two-file "PUT ... OVERWRITE=TRUE" upload. A single
 # run of this script: runs credential-free dashboard tests, computes and
@@ -22,21 +28,30 @@
 #
 # Prereqs:
 #   - SnowCLI installed (`snow --version`), unless --dry-run
-#   - Terraform-managed stage `EDGARTOOLS_DASHBOARD.DASHBOARD_SRC` already exists
+#   - Terraform-managed stage (DASHBOARD_DATABASE.DASHBOARD_SCHEMA.DASHBOARD_STAGE)
+#     already exists
 #   - A SnowCLI connection (default: edgartools-dev)
 #   - uv (for the pre-flight credential-free test run)
 #
-# Usage:
+# Usage (original EDGARTOOLS_DASHBOARD app, all defaults):
 #   bash deploy.sh                       # uses default connection edgartools-dev
 #   SNOW_CONNECTION=edgartools-prod bash deploy.sh
 #   bash deploy.sh --dry-run             # compute + write evidence.json locally,
 #                                         # run pre-flight tests, skip all `snow sql`
 #   bash deploy.sh --skip-tests          # skip the pre-flight test run (not recommended)
 #
-# Rollback (documented, not yet exercised against live Snowflake -- see
-# PR #<this one>): each release's evidence.json records a
-# `rollback_command` field pointing at the release this one is about to
-# replace. Run that recorded command (a `COPY FILES INTO @stage FROM
+# Usage (a different app, e.g. GH-252's MDM dashboard):
+#   DASHBOARD_APP_NAME=mdm-dashboard \
+#   DASHBOARD_SOURCE_DIR="${REPO_ROOT}/infra/snowflake/mdm_dashboard" \
+#   DASHBOARD_SCHEMA=MDM_GRAPH_REVIEW_DASHBOARD \
+#   DASHBOARD_STREAMLIT_OBJECT=MDM_GRAPH_DASHBOARD \
+#   DASHBOARD_RELEASE_FILES="streamlit_app.py environment.yml" \
+#   DASHBOARD_TEST_PATHS="tests/architecture/test_mdm_dashboard_streamlit.py" \
+#   SNOW_CONNECTION=edgartools-prod bash deploy.sh
+#
+# Rollback: each release's evidence.json records a `rollback_command` field
+# pointing at the release this one is about to replace. Run that recorded
+# command (a `COPY FILES INTO @stage FROM
 # @stage/releases/<previous_app_version>/` statement) to restore it.
 
 set -euo pipefail
@@ -52,6 +67,36 @@ ENVIRONMENT_LABEL="${DASHBOARD_ENVIRONMENT:-${CONNECTION}}"
 RETAIN_RELEASES="${DASHBOARD_RETAIN_RELEASES:-5}"
 EVIDENCE_DIR="${DASHBOARD_EVIDENCE_DIR:-${SCRIPT_DIR}/.evidence}"
 
+# --- App parametrization (GH-252) -------------------------------------------
+# APP_NAME namespaces the local evidence history so two apps deployed to the
+# same CONNECTION/ENVIRONMENT_LABEL never read or overwrite each other's
+# previous_app_version/rollback_command -- keep this stable per app.
+APP_NAME="${DASHBOARD_APP_NAME:-dashboard}"
+# Where streamlit_app.py/environment.yml/etc. for THIS app live.
+APP_SOURCE_DIR="${DASHBOARD_SOURCE_DIR:-${SCRIPT_DIR}}"
+# The CREATE STREAMLIT object name this app's stage backs (DESCRIBE'd as a
+# post-deploy check below) -- independent of DASHBOARD_SCHEMA/STAGE, which
+# already vary per app.
+STREAMLIT_OBJECT="${DASHBOARD_STREAMLIT_OBJECT:-EDGARTOOLS_DASHBOARD}"
+# Space-separated filenames to stage from APP_SOURCE_DIR, relative to it.
+# "dashboard_modes.py" is special-cased below (staged from
+# edgar_warehouse/serving/, not APP_SOURCE_DIR) -- list it here only for
+# apps that actually import it (GH-246's Agent View/Explore policy).
+read -ra RELEASE_FILES <<< "${DASHBOARD_RELEASE_FILES:-streamlit_app.py dashboard_modes.py environment.yml}"
+# Space-separated pytest paths for this app's credential-free pre-flight
+# tests. Defaults to the original EDGARTOOLS_DASHBOARD app's tests only
+# when APP_NAME is left at its own default -- preserves docs/runbook.md's
+# documented zero-config `bash deploy.sh` invocation. Any other APP_NAME
+# must set DASHBOARD_TEST_PATHS explicitly (or pass --skip-tests): a second
+# app's deploy must not silently "pass" pre-flight by validating an
+# unrelated app instead of itself.
+if [[ "${APP_NAME}" == "dashboard" ]]; then
+  DEFAULT_TEST_PATHS="tests/architecture/test_snowflake_streamlit_financial_factors.py tests/unit/test_dashboard_modes.py"
+else
+  DEFAULT_TEST_PATHS=""
+fi
+read -ra TEST_PATHS <<< "${DASHBOARD_TEST_PATHS:-${DEFAULT_TEST_PATHS}}"
+
 DRY_RUN=false
 SKIP_TESTS=false
 for arg in "$@"; do
@@ -64,6 +109,13 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+if [[ "${SKIP_TESTS}" == "false" && ${#TEST_PATHS[@]} -eq 0 ]]; then
+  echo "DASHBOARD_TEST_PATHS is required (space-separated pytest paths for" >&2
+  echo "this app's credential-free pre-flight tests), or pass --skip-tests" >&2
+  echo "to explicitly opt out (not recommended)." >&2
+  exit 1
+fi
 
 json_escape() {
   # Minimal JSON string escaping for values this script controls (paths,
@@ -93,13 +145,10 @@ sha256_of() {
 #    Snowflake connection or secret is ever touched.
 # ---------------------------------------------------------------------------
 if [[ "${SKIP_TESTS}" == "false" ]]; then
-  echo "Running credential-free dashboard tests..."
+  echo "Running credential-free dashboard tests for ${APP_NAME}..."
   (
     cd "${REPO_ROOT}"
-    uv run python -m pytest \
-      tests/architecture/test_snowflake_streamlit_financial_factors.py \
-      tests/unit/test_dashboard_modes.py \
-      -q
+    uv run python -m pytest "${TEST_PATHS[@]}" -q
   )
 else
   echo "Skipping pre-flight tests (--skip-tests)." >&2
@@ -114,22 +163,30 @@ fi
 STAGING_DIR="$(mktemp -d)"
 trap 'rm -rf "${STAGING_DIR}"' EXIT
 
-cp "${SCRIPT_DIR}/streamlit_app.py" "${STAGING_DIR}/streamlit_app.py"
-cp "${SCRIPT_DIR}/environment.yml" "${STAGING_DIR}/environment.yml"
-
-# GH-246: dashboard_modes.py is the single authoritative Agent View/Explore
-# mode policy (edgar_warehouse/serving/dashboard_modes.py, unit-tested).
-# Staged here byte-identical -- not hand-copied -- so the SiS runtime (which
-# has no edgar_warehouse package installed) imports the same source file
-# every other caller in the repo imports.
-DASHBOARD_MODES_SRC="${REPO_ROOT}/edgar_warehouse/serving/dashboard_modes.py"
-if [[ ! -f "${DASHBOARD_MODES_SRC}" ]]; then
-  echo "Missing source file: ${DASHBOARD_MODES_SRC}" >&2
-  exit 1
-fi
-cp "${DASHBOARD_MODES_SRC}" "${STAGING_DIR}/dashboard_modes.py"
-
-RELEASE_FILES=(streamlit_app.py dashboard_modes.py environment.yml)
+for file in "${RELEASE_FILES[@]}"; do
+  if [[ "${file}" == "dashboard_modes.py" ]]; then
+    # GH-246: dashboard_modes.py is the single authoritative Agent
+    # View/Explore mode policy (edgar_warehouse/serving/dashboard_modes.py,
+    # unit-tested). Staged here byte-identical -- not hand-copied -- so the
+    # SiS runtime (which has no edgar_warehouse package installed) imports
+    # the same source file every other caller in the repo imports. Only
+    # apps that actually list it in RELEASE_FILES need this -- e.g. GH-252's
+    # MDM dashboard has no Agent View/Explore concept and omits it.
+    DASHBOARD_MODES_SRC="${REPO_ROOT}/edgar_warehouse/serving/dashboard_modes.py"
+    if [[ ! -f "${DASHBOARD_MODES_SRC}" ]]; then
+      echo "Missing source file: ${DASHBOARD_MODES_SRC}" >&2
+      exit 1
+    fi
+    cp "${DASHBOARD_MODES_SRC}" "${STAGING_DIR}/dashboard_modes.py"
+    continue
+  fi
+  src="${APP_SOURCE_DIR}/${file}"
+  if [[ ! -f "${src}" ]]; then
+    echo "Missing source file: ${src}" >&2
+    exit 1
+  fi
+  cp "${src}" "${STAGING_DIR}/${file}"
+done
 
 # ---------------------------------------------------------------------------
 # 3. Release evidence (GH-247: "records git commit, source digest,
@@ -157,16 +214,25 @@ for file in "${RELEASE_FILES[@]}"; do
 done
 SOURCE_DIGESTS_JSON+="}"
 
-# Combined digest over all release files concatenated in a fixed order --
-# one value to compare for "did anything in this release change" without
-# inspecting every per-file digest.
+# Combined digest over RELEASE_FILES concatenated in array order -- one
+# value to compare for "did anything in this release change" without
+# inspecting every per-file digest. Driven by the same array used to stage
+# and per-file-digest the release above, not a hardcoded filename list --
+# a second app with different RELEASE_FILES (e.g. no dashboard_modes.py)
+# must not cat a file it never staged.
 COMBINED_FILE="${STAGING_DIR}/.combined_for_digest"
-cat "${STAGING_DIR}/streamlit_app.py" "${STAGING_DIR}/dashboard_modes.py" "${STAGING_DIR}/environment.yml" > "${COMBINED_FILE}"
+: > "${COMBINED_FILE}"
+for file in "${RELEASE_FILES[@]}"; do
+  cat "${STAGING_DIR}/${file}" >> "${COMBINED_FILE}"
+done
 COMBINED_DIGEST="$(sha256_of "${COMBINED_FILE}")"
 rm -f "${COMBINED_FILE}"
 
 RELEASES_PREFIX="releases"
-PREVIOUS_EVIDENCE_LOCAL="${EVIDENCE_DIR}/${ENVIRONMENT_LABEL}/latest.json"
+# Namespaced by APP_NAME, not just ENVIRONMENT_LABEL -- two apps deployed
+# through the same connection/environment (e.g. both prod) must not read or
+# clobber each other's previous_app_version/rollback_command.
+PREVIOUS_EVIDENCE_LOCAL="${EVIDENCE_DIR}/${ENVIRONMENT_LABEL}/${APP_NAME}/latest.json"
 PREVIOUS_APP_VERSION=""
 if [[ -f "${PREVIOUS_EVIDENCE_LOCAL}" ]]; then
   # Plain grep/sed, not jq -- jq isn't a listed prereq for this script and
@@ -201,9 +267,9 @@ EOF
 )
 
 mkdir -p "$(dirname "${PREVIOUS_EVIDENCE_LOCAL}")"
-echo "${EVIDENCE_JSON}" > "${EVIDENCE_DIR}/${ENVIRONMENT_LABEL}/${APP_VERSION}.json"
+echo "${EVIDENCE_JSON}" > "${EVIDENCE_DIR}/${ENVIRONMENT_LABEL}/${APP_NAME}/${APP_VERSION}.json"
 echo "${EVIDENCE_JSON}" > "${PREVIOUS_EVIDENCE_LOCAL}"
-echo "Release evidence written to ${EVIDENCE_DIR}/${ENVIRONMENT_LABEL}/${APP_VERSION}.json"
+echo "Release evidence written to ${EVIDENCE_DIR}/${ENVIRONMENT_LABEL}/${APP_NAME}/${APP_VERSION}.json"
 echo "${EVIDENCE_JSON}"
 
 if [[ "${DRY_RUN}" == "true" ]]; then
@@ -282,9 +348,9 @@ SQL
 # ---------------------------------------------------------------------------
 echo "Post-deploy check: describing the Streamlit object..."
 snow sql --connection "${CONNECTION}" --stdin <<SQL
-DESCRIBE STREAMLIT ${DATABASE}.${SCHEMA}.EDGARTOOLS_DASHBOARD;
+DESCRIBE STREAMLIT ${DATABASE}.${SCHEMA}.${STREAMLIT_OBJECT};
 LIST @${STAGE_FQN};
 SQL
 
-echo "Done. Open Snowsight → Streamlit → ${DATABASE}.${SCHEMA}.EDGARTOOLS_DASHBOARD"
-echo "Release: ${APP_VERSION} (git ${GIT_COMMIT_SHORT}), evidence at ${EVIDENCE_DIR}/${ENVIRONMENT_LABEL}/${APP_VERSION}.json"
+echo "Done. Open Snowsight → Streamlit → ${DATABASE}.${SCHEMA}.${STREAMLIT_OBJECT}"
+echo "Release: ${APP_VERSION} (git ${GIT_COMMIT_SHORT}), evidence at ${EVIDENCE_DIR}/${ENVIRONMENT_LABEL}/${APP_NAME}/${APP_VERSION}.json"
