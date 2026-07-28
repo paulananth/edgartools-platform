@@ -227,3 +227,132 @@ def test_bootstrap_unaffected_by_daily_incremental_restructure(bootstrap_definit
     assert "ComputeWindows" not in bootstrap_definition["States"]
     order = _linear_order(bootstrap_definition)
     assert order.index("SeedUniverse") < order.index("RunWarehouseTask")
+
+
+# -- ADV fetch pipeline wiring spec (.scratch/adv-fetch-pipeline-wiring, ticket 02):
+# AdvBulkFetch stage between RunWarehouseTask and MdmRun -------------------------
+
+
+def _linear_order_with_choice(definition: dict) -> list[str]:
+    """Like _linear_order but also follows Choice.Default, needed once
+    DatasetPeriodCheck/ForceCheck (Choice states) sit between RunWarehouseTask and
+    MdmRun -- the module-level _linear_order only follows plain "Next", matching
+    this file's original no-Choice-states shape."""
+    states = definition["States"]
+
+    def next_of(state: dict) -> str | None:
+        if "Next" in state:
+            return state["Next"]
+        if state.get("Type") == "Choice":
+            return state.get("Default") or state["Choices"][0]["Next"]
+        return None
+
+    order: list[str] = []
+    seen: set[str] = set()
+    name = definition["StartAt"]
+    while name and name not in seen:
+        seen.add(name)
+        order.append(name)
+        name = next_of(states[name])
+    return order
+
+
+def test_fetch_adv_bulk_stage_runs_after_run_warehouse_task_before_mdm_run(
+    daily_definition: dict,
+) -> None:
+    order = _linear_order_with_choice(daily_definition)
+    assert "RunWarehouseTask" in order
+    assert "FetchAdvBulk" in order
+    assert "IngestAdvBulkSources" in order
+    assert "MdmRun" in order
+    assert order.index("RunWarehouseTask") < order.index("FetchAdvBulk")
+    assert order.index("FetchAdvBulk") < order.index("IngestAdvBulkSources")
+    assert order.index("IngestAdvBulkSources") < order.index("MdmRun")
+
+
+def test_fetch_adv_bulk_command_shape_with_no_sm_input_overrides(daily_definition: dict) -> None:
+    cmd = _command_of(daily_definition, "FetchAdvBulk")
+    assert "'fetch-adv-bulk'" in cmd
+    assert "'--dataset-period'" in cmd
+    assert "'--force'" not in cmd
+    assert "'--run-id'" in cmd
+
+
+def test_dataset_period_check_and_default_precede_force_check(daily_definition: dict) -> None:
+    states = daily_definition["States"]
+    check = states["DatasetPeriodCheck"]
+    assert check["Type"] == "Choice"
+    assert check["Choices"][0]["Variable"] == "$.dataset_period"
+    assert check["Choices"][0]["IsPresent"] is True
+    assert check["Choices"][0]["Next"] == "ForceCheck"
+    assert check["Default"] == "DatasetPeriodDefault"
+
+    default_state = states["DatasetPeriodDefault"]
+    assert default_state["Type"] == "Pass"
+    assert default_state["Result"] == ""
+    assert default_state["ResultPath"] == "$.dataset_period"
+    assert default_state["Next"] == "ForceCheck"
+
+
+def test_force_check_routes_to_two_distinct_fetch_adv_bulk_command_shapes(
+    daily_definition: dict,
+) -> None:
+    states = daily_definition["States"]
+    force_check = states["ForceCheck"]
+    assert force_check["Type"] == "Choice"
+    assert force_check["Choices"][0]["Variable"] == "$.force"
+    assert force_check["Choices"][0]["BooleanEquals"] is True
+    assert force_check["Choices"][0]["Next"] == "FetchAdvBulkForced"
+    assert force_check["Default"] == "FetchAdvBulk"
+
+    no_force_cmd = _command_of(daily_definition, "FetchAdvBulk")
+    forced_cmd = _command_of(daily_definition, "FetchAdvBulkForced")
+    assert "'--force'" not in no_force_cmd
+    assert "'--force'" in forced_cmd
+    assert no_force_cmd.replace(", '--force'", "") == forced_cmd.replace(", '--force'", "")
+
+    assert states["FetchAdvBulk"]["Next"] == "IngestAdvBulkSources"
+    assert states["FetchAdvBulkForced"]["Next"] == "IngestAdvBulkSources"
+
+
+def test_ingest_adv_bulk_sources_references_fetch_adv_bulk_manifest_path(
+    daily_definition: dict,
+) -> None:
+    cmd = _command_of(daily_definition, "IngestAdvBulkSources")
+    assert "'ingest-relationship-sources'" in cmd
+    assert "'--source-manifest'" in cmd
+    assert "runs/fetch-adv-bulk/" in cmd
+    assert "source_manifest.json" in cmd
+    assert "$$.Execution.Name" in cmd
+
+
+def test_fetch_adv_bulk_and_ingest_adv_bulk_sources_catch_falls_through_to_mdm_run(
+    daily_definition: dict,
+) -> None:
+    for state_name in ("FetchAdvBulk", "FetchAdvBulkForced", "IngestAdvBulkSources"):
+        state = daily_definition["States"][state_name]
+        assert state.get("Catch") == [
+            {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmRun"}
+        ], f"{state_name} missing lenient Catch-to-MdmRun"
+
+
+def test_bootstrap_unaffected_by_adv_bulk_fetch_wiring(bootstrap_definition: dict) -> None:
+    """bootstrap shares write_warehouse_mdm_gold_definition with daily_incremental
+    but is architecturally separate (its own workflow_name branch) -- the new
+    AdvBulkFetch stage must not appear in bootstrap's generated JSON."""
+    assert "FetchAdvBulk" not in bootstrap_definition["States"]
+    assert "DatasetPeriodCheck" not in bootstrap_definition["States"]
+    assert "ForceCheck" not in bootstrap_definition["States"]
+    assert bootstrap_definition["States"]["RunWarehouseTask"]["Next"] == "MdmRun"
+
+
+def test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_via_result_path_null(
+    daily_definition: dict,
+) -> None:
+    """Regression guard for the D-15 bug class (see load_history's identical
+    test): an ecs:runTask.sync Task without ResultPath=null replaces $ entirely
+    with its own result, destroying $.dataset_period/$.force downstream."""
+    for state_name in ("FetchAdvBulk", "FetchAdvBulkForced", "IngestAdvBulkSources"):
+        assert daily_definition["States"][state_name]["ResultPath"] is None, (
+            f"{state_name} must set ResultPath=null to preserve $ into the next state"
+        )

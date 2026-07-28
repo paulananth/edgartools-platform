@@ -130,6 +130,13 @@ is execution needed to unblock a later decision, not the destination itself).
   CIK-windowed); `daily_incremental` invokes it daily with a cheap local-check-first
   no-op path, no fixed day-of-month gate; optional `dataset_period`/`force` SM-input
   fields for manual repair, mirroring `artifact_policy`'s Check→Default pattern.
+- [08 — Design the Firm Roster CSV Completeness Cross-Check](issues/08-firm-roster-crosscheck-design.md)
+  — new narrow `sec_adv_firm_roster` silver table (CRD + ~8 aggregate private-fund
+  columns only, not the full 448/171-column row) plus a dbt gold reconciliation view
+  (`adv_fund_count_reconciliation`) joining it against `advFilingData`-derived fund
+  counts; mismatches surface as a queryable gold view and a dashboard panel, never
+  gating MDM/graph sync; fetch mirrors `daily_incremental`'s monthly local-check-first
+  pattern, reconciliation recomputes on the gold table's normal refresh schedule.
 
 ## Not yet specified
 
@@ -145,11 +152,24 @@ is execution needed to unblock a later decision, not the destination itself).
   which had to query `sec_adv_private_fund` instead for its idempotency
   check). Whether this is worth its own backfill/schema ticket, or is
   harmless as-is, hasn't been decided.
-- The Step Function JSON wiring for ticket 06's decisions 2–4
-  (`load_history`/`daily_incremental` stage placement, SM-input threading)
-  is specified but not yet implemented — see ticket 06's Answer for the
-  exact shapes to wire in.
-
 ## Out of scope
 
 (none yet)
+
+## Handoff
+
+The frontier is empty — all 8 tickets are resolved and the way to this map's destination
+is clear. Per the Destination's stated handoff, `/to-spec` has produced two
+`ready-for-agent` specs covering the remaining build work (ticket 06 decisions 2–4 and
+ticket 08's full design), ready for `/to-tickets` + `/implement`:
+
+- [Wire `fetch-adv-bulk` into `load_history` and `daily_incremental`](../adv-fetch-pipeline-wiring/spec.md)
+  — small, self-contained; reuses the existing `test_load_history_state_machine.py`/
+  `test_daily_incremental_state_machine.py` structural test harness, which turned out to
+  already de-risk the concern that made this deferred in ticket 06's session.
+- [Firm Roster CSV completeness cross-check](../adv-firm-roster-crosscheck/spec.md) —
+  larger new subsystem (parser, two new Snowflake passthrough tables, dbt reconciliation
+  model, dashboard panel). Depends on the first spec's Stage existing, but is independently
+  buildable/testable up to that wiring point. Scope grew by one table
+  (`SEC_ADV_PRIVATE_FUND`) beyond ticket 08's Answer once the existing gold `PRIVATE_FUNDS`
+  table was confirmed CIK-keyed, not CRD-keyed — see that spec's Further Notes.
