@@ -87,20 +87,20 @@ per explicit user choice "Grill it first"):
   (was only a documented claim, now enforced) and filenames from the SEC
   metadata payload are matched with `fullmatch`, not `search`, before being
   used in a storage path.
-- **Not done — named follow-up, not silently dropped:** decisions 2 and 3,
-  the actual Step Function JSON wiring in
-  `infra/scripts/deploy-aws-application.sh` (new sequential Stage between
-  bronze/silver and MDM in `load_history`; daily invocation with no
-  day-of-month gate in `daily_incremental`) and decision 4's
-  `dataset_period`/`force` SM-input Check/Default plumbing. That file defines
-  several similarly-shaped state machines (`bootstrap`, `daily_incremental`,
-  `load_history`, `targeted_resync`) via Python heredocs with no shared
-  helper across them, and there is no way to validate a hand-edit against a
-  real `terraform plan`/deploy dry-run in this session. Given a near-miss
-  earlier in this same effort where a rushed plan would have altered a live
-  task's schedule, the two already-decided shapes above are recorded here so
-  whoever picks this up isn't re-deciding them — only wiring them in.
+- **Done (2026-07-28), fully tested:** decisions 2, 3, and 4 — the Step Function JSON
+  wiring in `infra/scripts/deploy-aws-application.sh`, via
+  `/to-spec` + `/to-tickets` + `/implement` on the
+  [ADV fetch pipeline wiring spec](../../adv-fetch-pipeline-wiring/spec.md). A new
+  `AdvBulkFetch` Stage (`DatasetPeriodCheck`/`DatasetPeriodDefault` → `ForceCheck` →
+  `FetchAdvBulk`/`FetchAdvBulkForced` → `IngestAdvBulkSources`) runs after
+  `Stage1BThirteenF`/`RunWarehouseTask` and before `MdmRun` in both `load_history` and
+  `daily_incremental`, with `dataset_period`/`force` SM-input threaded via the
+  Check→Default pattern exactly as decided here. Structural tests added to both
+  `tests/architecture/test_load_history_state_machine.py` and
+  `test_daily_incremental_state_machine.py`. Code review caught and fixed two real bugs
+  (Stage1BThirteenF's own lenient Catch bypassing the new stage; missing `ResultPath: null`
+  reintroducing this file's documented D-15 bug class). Committed on
+  `claude/adv-pipeline-t04-t05` (`28a343e`); not yet pushed/merged.
 - The `ingest-relationship-sources` empty-manifest relaxation (a
-  fail-closed check loosened to treat `{"sources": []}` as a valid no-op) is
-  load-bearing for the SM wiring above once it lands — until then it has no
-  caller depending on it in production.
+  fail-closed check loosened to treat `{"sources": []}` as a valid no-op) is now
+  load-bearing for the shipped SM wiring above.

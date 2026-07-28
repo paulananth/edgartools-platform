@@ -161,15 +161,22 @@ is execution needed to unblock a later decision, not the destination itself).
 The frontier is empty — all 8 tickets are resolved and the way to this map's destination
 is clear. Per the Destination's stated handoff, `/to-spec` has produced two
 `ready-for-agent` specs covering the remaining build work (ticket 06 decisions 2–4 and
-ticket 08's full design), ready for `/to-tickets` + `/implement`:
+ticket 08's full design):
 
 - [Wire `fetch-adv-bulk` into `load_history` and `daily_incremental`](../adv-fetch-pipeline-wiring/spec.md)
-  — small, self-contained; reuses the existing `test_load_history_state_machine.py`/
-  `test_daily_incremental_state_machine.py` structural test harness, which turned out to
-  already de-risk the concern that made this deferred in ticket 06's session.
+  — **done.** Both tickets (`01-wire-stage-into-load-history`,
+  `02-wire-stage-into-daily-incremental`) implemented via TDD against the existing
+  `test_load_history_state_machine.py`/`test_daily_incremental_state_machine.py`
+  structural test harness, code-reviewed (two real bugs found and fixed: a Catch bypassing
+  the new stage, a missing `ResultPath: null` reintroducing this file's own documented
+  D-15 bug class), and committed on `claude/adv-pipeline-t04-t05` (commit `28a343e`). Not
+  yet pushed/merged.
 - [Firm Roster CSV completeness cross-check](../adv-firm-roster-crosscheck/spec.md) —
-  larger new subsystem (parser, two new Snowflake passthrough tables, dbt reconciliation
-  model, dashboard panel). Depends on the first spec's Stage existing, but is independently
-  buildable/testable up to that wiring point. Scope grew by one table
-  (`SEC_ADV_PRIVATE_FUND`) beyond ticket 08's Answer once the existing gold `PRIVATE_FUNDS`
-  table was confirmed CIK-keyed, not CRD-keyed — see that spec's Further Notes.
+  broken into 4 published tickets under `../adv-firm-roster-crosscheck/issues/`, approved
+  by the user 2026-07-28: `01-firm-roster-parser-silver-table` (unblocked, frontier) →
+  `{02-fetch-ingest-stage-wiring, 03-snowflake-passthrough-exports}` (both blocked only by
+  01, parallelizable) → `04-reconciliation-model-dashboard` (blocked by 03). Ticket 02 can
+  now wire directly into the `AdvBulkFetch` Stage the first spec shipped, rather than
+  waiting on it. Not yet implemented. Scope grew by one table (`SEC_ADV_PRIVATE_FUND`)
+  beyond ticket 08's Answer once the existing gold `PRIVATE_FUNDS` table was confirmed
+  CIK-keyed, not CRD-keyed — see that spec's Further Notes.
