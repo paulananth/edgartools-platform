@@ -123,6 +123,14 @@ is execution needed to unblock a later decision, not the destination itself).
   relationship types' un-attested pending work (ticket 20's in-flight `INSTITUTIONAL_HOLDS`
   backfill, etc.) into a new activated generation. Ticket 02's decision is validated.
 
+- [06 — Automated Fetch and Pipeline Wiring Shape](issues/06-automated-fetch-and-pipeline-wiring.md)
+  — new `fetch-adv-bulk` CLI subcommand (manifest as its own artifact, mirroring
+  `mdm build-relationship-release-manifest`); wired into `load_history` as a new
+  sequential Stage between bronze/silver and MDM (not a parallel Map — ADV fetch isn't
+  CIK-windowed); `daily_incremental` invokes it daily with a cheap local-check-first
+  no-op path, no fixed day-of-month gate; optional `dataset_period`/`force` SM-input
+  fields for manual repair, mirroring `artifact_policy`'s Check→Default pattern.
+
 ## Not yet specified
 
 - Longer-term: whether ADV data should ever get its own Stage-0-style phase
@@ -131,6 +139,16 @@ is execution needed to unblock a later decision, not the destination itself).
   `ingest-relationship-sources` invocation alongside them — ticket 06
   resolves the immediate wiring shape; whether it later gets promoted to a
   first-class phase is out of view until that ships and is observed running.
+- `sec_adv_filing` has no `source_dataset_period` column, unlike
+  `sec_adv_private_fund` — `ingest_adv_bulk_archive`'s `filing_rows` never
+  carries it (found while implementing ticket 06's `fetch-adv-bulk` command,
+  which had to query `sec_adv_private_fund` instead for its idempotency
+  check). Whether this is worth its own backfill/schema ticket, or is
+  harmless as-is, hasn't been decided.
+- The Step Function JSON wiring for ticket 06's decisions 2–4
+  (`load_history`/`daily_incremental` stage placement, SM-input threading)
+  is specified but not yet implemented — see ticket 06's Answer for the
+  exact shapes to wire in.
 
 ## Out of scope
 

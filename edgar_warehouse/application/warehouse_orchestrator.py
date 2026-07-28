@@ -1853,8 +1853,12 @@ def _capture_bronze_raw(
         except (OSError, UnicodeError, json.JSONDecodeError) as exc:
             raise WarehouseRuntimeError(f"could not read relationship source manifest: {exc}") from exc
         sources = manifest.get("sources") if isinstance(manifest, dict) else None
-        if not isinstance(sources, list) or not sources:
-            raise WarehouseRuntimeError("relationship source manifest requires a nonempty sources list")
+        if not isinstance(sources, list):
+            raise WarehouseRuntimeError("relationship source manifest requires a sources list")
+        # An empty sources list is a valid no-op, not an error -- fetch-adv-bulk
+        # (and any other manifest producer) legitimately has nothing new on most
+        # runs (e.g. daily_incremental's cheap check finding nothing to fetch).
+        # Only a malformed manifest (missing/non-list "sources") fails closed.
         rows_written = 0
         for source in sources:
             if not isinstance(source, dict):
@@ -1930,6 +1934,69 @@ def _capture_bronze_raw(
                 raise WarehouseRuntimeError(f"unsupported relationship source kind: {kind!r}")
         metrics["rows_inserted"] += rows_written
         metrics["relationship_source_count"] = len(sources)
+        return raw_writes, metrics
+
+    if command_name == "fetch-adv-bulk":
+        from edgar_warehouse.application.adv_bulk_fetch import (
+            build_source_manifest,
+            fetch_adv_bulk_sources,
+            fetch_archive_bytes,
+            fetch_reports_metadata_bytes,
+        )
+
+        forced_period = str(arguments.get("dataset_period") or "").strip() or None
+        force = bool(arguments.get("force"))
+        if force and forced_period is None:
+            raise WarehouseRuntimeError("--force requires --dataset-period")
+
+        # sec_adv_filing has no source_dataset_period column (a pre-existing
+        # gap: ingest_adv_bulk_archive's filing_rows never carries it, unlike
+        # fund_rows -- see the adv-pipeline map ticket 06 for the flagged
+        # follow-up). Querying sec_adv_private_fund instead is safe in the
+        # direction that matters: a period where every filer happened to
+        # report zero private funds would read as "not yet ingested" and get
+        # harmlessly re-fetched/re-ingested (merge is idempotent) -- never a
+        # silent skip of real work.
+        already_ingested = {
+            str(row["source_dataset_period"])
+            for row in db.fetch(
+                "SELECT DISTINCT source_dataset_period FROM sec_adv_private_fund "
+                "WHERE source_dataset_period IS NOT NULL"
+            )
+        }
+
+        def _fetch_metadata() -> bytes:
+            return fetch_reports_metadata_bytes(context.identity)
+
+        def _fetch_archive(year: str, file_name: str) -> bytes:
+            return fetch_archive_bytes(context.identity, year, file_name)
+
+        def _upload(file_name: str, content: bytes) -> str:
+            relative = f"runs/{command_name}/{sync_run_id}/{file_name}"
+            return context.bronze_root.write_bytes(relative, content)
+
+        sources, not_yet_published = fetch_adv_bulk_sources(
+            already_ingested=already_ingested,
+            as_of=now.date(),
+            forced_period=forced_period,
+            force=force,
+            fetch_metadata=_fetch_metadata,
+            fetch_archive=_fetch_archive,
+            upload=_upload,
+        )
+
+        manifest = build_source_manifest(sources)
+        # A distinct filename from the generic run-audit manifest.json the
+        # planned_manifest_paths framework writes to the same run-id-derived
+        # directory -- sharing the name causes a silent overwrite (caught by
+        # tests/application/test_fetch_adv_bulk_command.py).
+        manifest_relative = f"runs/{command_name}/{sync_run_id}/source_manifest.json"
+        manifest_path = context.bronze_root.write_json(manifest_relative, manifest)
+        raw_writes.append({"layer": "bronze", "path": manifest_path, "relative_path": manifest_relative})
+
+        metrics["adv_bulk_fetch_sources_found"] = len(sources)
+        metrics["adv_bulk_fetch_not_yet_published"] = not_yet_published
+        metrics["adv_bulk_fetch_manifest_path"] = manifest_path
         return raw_writes, metrics
 
     if command_name == "reconcile-relationship-release":
@@ -4783,6 +4850,12 @@ def _resolve_scope(
 
     if command_name == "ingest-relationship-sources":
         return {"source_manifest": arguments.get("source_manifest")}
+
+    if command_name == "fetch-adv-bulk":
+        return {
+            "dataset_period": arguments.get("dataset_period"),
+            "force": bool(arguments.get("force")),
+        }
 
     if command_name == "bootstrap-fundamentals":
         # Branch B counterpart of bootstrap-batch. CIK list + mode dispatch.

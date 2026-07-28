@@ -749,6 +749,18 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         self.assertEqual(args.source_manifest, "s3://bucket/sources.json")
         self.assertEqual(args.run_id, "release-1")
 
+    def test_fetch_adv_bulk_is_a_deployed_cli_command(self) -> None:
+        args = cli.build_parser().parse_args(["fetch-adv-bulk", "--run-id", "fetch-1"])
+        self.assertIsNone(args.dataset_period)
+        self.assertFalse(args.force)
+        self.assertEqual(args.run_id, "fetch-1")
+
+        forced = cli.build_parser().parse_args([
+            "fetch-adv-bulk", "--dataset-period", "2025-03", "--force",
+        ])
+        self.assertEqual(forced.dataset_period, "2025-03")
+        self.assertTrue(forced.force)
+
 
 if __name__ == "__main__":
     unittest.main()

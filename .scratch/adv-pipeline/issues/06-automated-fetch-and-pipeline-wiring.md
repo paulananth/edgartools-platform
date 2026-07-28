@@ -1,7 +1,7 @@
 # 06 — Automated Fetch and Pipeline Wiring Shape
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: 02, 03, 04
 Blocks: none
 
@@ -32,4 +32,75 @@ decide the concrete shape of automated ingestion:
 
 ## Answer
 
-(pending)
+Grilled with the user 2026-07-27, one question at a time. All four settled:
+
+1. **Fetch component: new `edgar-warehouse` CLI subcommand (`fetch-adv-bulk`),
+   manifest as its own artifact.** Fetches `reports_metadata.json`,
+   determines which `dataset_period`s in the rolling window aren't yet
+   ingested (per ticket 03's immutable-once-ingested rule), downloads only
+   those, computes SHA-256, stages to S3, writes a manifest file — mirrors
+   the existing `mdm build-relationship-release-manifest` precedent (build
+   the manifest as reviewable evidence, keep `ingest-relationship-sources`
+   unchanged as the separate consuming step) rather than fetching and
+   ingesting in one opaque step.
+2. **`load_history` wiring: new sequential Stage, not a parallel Map.**
+   Company Identity's Stage 0 precedent
+   (`.scratch/company-master-pipeline/issues/05-bulk-mode-state-machine-shape.md`)
+   used a Distributed Map because it fetches many small per-CIK submissions;
+   ADV bulk fetch is a handful of sequential monthly archive downloads (13
+   for baseline, not CIK-windowed at all), so the parallel-Map machinery
+   doesn't apply. A single ECS task step (same execution pattern as
+   `gold-refresh`), placed between Stage 1 (bronze/silver) and Stage 2 (MDM
+   entity resolution) so `mdm run`/`derive-relationships` sees fresh ADV
+   silver data in the same execution.
+3. **`daily_incremental` wiring: daily invocation, cheap check inside the
+   command, no state-machine-level day-of-month gate.** The same
+   `fetch-adv-bulk` subcommand runs every day; its own logic checks local
+   silver first (zero network cost on a hit — the current month's
+   `dataset_period` already ingested) before ever polling
+   `reports_metadata.json`. Explicitly rejected a fixed day-of-month
+   trigger: ticket 01's research found SEC's actual publish-day pattern is
+   grounded in only 2 real data points so far ("not an established
+   long-run track record") — a fixed-day gate risks silently missing a late
+   publish, whereas a daily poll with a local-first check costs almost
+   nothing on the ~29 no-op days and self-heals if SEC's timing drifts.
+4. **SM-input threading: optional `dataset_period` + `force` fields,
+   mirroring `artifact_policy`'s Check→Default Pass-state pattern.** Unlike
+   `artifact_policy` (a meaningful operator choice on every run),
+   `dataset_period` isn't something an operator needs on the normal path —
+   the subcommand auto-detects it. The two fields exist for the manual
+   repair/backfill case: `dataset_period` forces a specific month instead of
+   auto-detecting the window; `force` allows re-ingesting an
+   already-ingested period, mirroring CLAUDE.md's platform-wide `--force`
+   repair-flag convention. Both default to unset via the same Check/Default
+   pair `artifact_policy` uses, interpolated into the command via
+   `States.Format` the same way.
+
+Implementation status (same session, after this grilling settled the design
+per explicit user choice "Grill it first"):
+
+- **Done, fully tested:** decision 1, the `fetch-adv-bulk` CLI subcommand —
+  pure logic (`edgar_warehouse/application/adv_bulk_fetch.py`), orchestrator
+  dispatch, CLI registration, command registry, manifest-path registration,
+  scope resolution, and SEC host allowlisting for
+  `reports.adviserinfo.sec.gov`. `force` without `dataset_period` is rejected
+  (was only a documented claim, now enforced) and filenames from the SEC
+  metadata payload are matched with `fullmatch`, not `search`, before being
+  used in a storage path.
+- **Not done — named follow-up, not silently dropped:** decisions 2 and 3,
+  the actual Step Function JSON wiring in
+  `infra/scripts/deploy-aws-application.sh` (new sequential Stage between
+  bronze/silver and MDM in `load_history`; daily invocation with no
+  day-of-month gate in `daily_incremental`) and decision 4's
+  `dataset_period`/`force` SM-input Check/Default plumbing. That file defines
+  several similarly-shaped state machines (`bootstrap`, `daily_incremental`,
+  `load_history`, `targeted_resync`) via Python heredocs with no shared
+  helper across them, and there is no way to validate a hand-edit against a
+  real `terraform plan`/deploy dry-run in this session. Given a near-miss
+  earlier in this same effort where a rushed plan would have altered a live
+  task's schedule, the two already-decided shapes above are recorded here so
+  whoever picks this up isn't re-deciding them — only wiring them in.
+- The `ingest-relationship-sources` empty-manifest relaxation (a
+  fail-closed check loosened to treat `{"sources": []}` as a valid no-op) is
+  load-bearing for the SM wiring above once it lands — until then it has no
+  caller depending on it in production.

@@ -309,6 +309,7 @@ class WarehousePathResolver:
             "seed-bronze-batches",
             "parse-ownership-bronze",
             "parse-adv-bronze",
+            "fetch-adv-bulk",
             "ingest-relationship-sources",
             "reconcile-relationship-release",
         ):

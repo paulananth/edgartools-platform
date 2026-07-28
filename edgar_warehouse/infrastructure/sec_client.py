@@ -15,7 +15,12 @@ from pyrate_limiter import Duration, InMemoryBucket, Limiter, Rate
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 
 DEFAULT_MAX_RESPONSE_BYTES = 50 * 1024 * 1024
-ALLOWED_HOSTS = frozenset({"www.sec.gov", "sec.gov", "data.sec.gov"})
+ALLOWED_HOSTS = frozenset({
+    "www.sec.gov", "sec.gov", "data.sec.gov",
+    # IAPD's advFilingData bulk feed (ADV pipeline, ticket 06) -- the
+    # metadata manifest and monthly archives are both served from this host.
+    "reports.adviserinfo.sec.gov",
+})
 
 
 def _create_sec_rate_limiter() -> Limiter:
