@@ -84,6 +84,8 @@ _FACT_ACCOUNTING_FLAG_SCHEMA = GOLD_SCHEMAS['_FACT_ACCOUNTING_FLAG_SCHEMA']
 _SEC_SUBSIDIARY_EVIDENCE_SCHEMA = GOLD_SCHEMAS['_SEC_SUBSIDIARY_EVIDENCE_SCHEMA']
 _SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA = GOLD_SCHEMAS['_SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA']
 _SEC_EMPLOYMENT_EVENT_SCHEMA = GOLD_SCHEMAS['_SEC_EMPLOYMENT_EVENT_SCHEMA']
+_SEC_ADV_FIRM_ROSTER_SCHEMA = GOLD_SCHEMAS['_SEC_ADV_FIRM_ROSTER_SCHEMA']
+_SEC_ADV_PRIVATE_FUND_PASSTHROUGH_SCHEMA = GOLD_SCHEMAS['_SEC_ADV_PRIVATE_FUND_PASSTHROUGH_SCHEMA']
 _FACT_EARNINGS_CALENDAR_SCHEMA = GOLD_SCHEMAS['_FACT_EARNINGS_CALENDAR_SCHEMA']
 _FACT_GUIDANCE_SCHEMA = GOLD_SCHEMAS['_FACT_GUIDANCE_SCHEMA']
 _FACT_CONSENSUS_ESTIMATE_SCHEMA = GOLD_SCHEMAS['_FACT_CONSENSUS_ESTIMATE_SCHEMA']
@@ -1014,6 +1016,69 @@ def _build_sec_employment_event(conn: Any) -> pa.Table:
     )
 
 
+def _build_sec_adv_firm_roster(conn: Any) -> pa.Table:
+    table = _arrow(
+        conn.execute(
+            """
+            SELECT
+                adviser_crd_number,
+                dataset_period,
+                private_funds_reported,
+                private_fund_count_7b1::BIGINT AS private_fund_count_7b1,
+                any_hedge_funds,
+                hedge_fund_count::BIGINT AS hedge_fund_count,
+                any_pe_funds,
+                pe_fund_count::BIGINT AS pe_fund_count,
+                total_gross_assets_private_funds,
+                private_fund_count_7b2::BIGINT AS private_fund_count_7b2,
+                source_sha256,
+                parser_version
+            FROM sec_adv_firm_roster
+            ORDER BY adviser_crd_number, dataset_period
+            """
+        )
+    )
+    return (
+        _empty(_SEC_ADV_FIRM_ROSTER_SCHEMA)
+        if table.num_rows == 0
+        else table.cast(_SEC_ADV_FIRM_ROSTER_SCHEMA)
+    )
+
+
+def _build_sec_adv_private_fund_passthrough(conn: Any) -> pa.Table:
+    table = _arrow(
+        conn.execute(
+            """
+            SELECT
+                accession_number,
+                fund_index::BIGINT AS fund_index,
+                filing_id,
+                adviser_crd_number,
+                private_fund_id,
+                reference_id,
+                schedule_section,
+                reporting_role,
+                filing_action,
+                fund_name,
+                fund_type,
+                jurisdiction,
+                aum_amount,
+                effective_date,
+                source_dataset_period,
+                source_sha256,
+                parser_version
+            FROM sec_adv_private_fund
+            ORDER BY accession_number, fund_index
+            """
+        )
+    )
+    return (
+        _empty(_SEC_ADV_PRIVATE_FUND_PASSTHROUGH_SCHEMA)
+        if table.num_rows == 0
+        else table.cast(_SEC_ADV_PRIVATE_FUND_PASSTHROUGH_SCHEMA)
+    )
+
+
 def _build_fact_earnings_release(conn: Any) -> pa.Table:
     table = _arrow(
         conn.execute(
@@ -1208,6 +1273,13 @@ def build_gold(db: Any) -> dict[str, pa.Table]:
         "sec_subsidiary_evidence":        _timed("sec_subsidiary_evidence",        lambda: _build_sec_subsidiary_evidence(conn)),
         "sec_auditor_report_evidence":    _timed("sec_auditor_report_evidence",    lambda: _build_sec_auditor_report_evidence(conn)),
         "sec_employment_event":           _timed("sec_employment_event",           lambda: _build_sec_employment_event(conn)),
+        # Firm Roster completeness cross-check (ticket 03). "sec_adv_private_fund"
+        # here is a distinct dict key from "fact_adv_private_fund" above -- that
+        # one is the existing CIK-keyed dimensional PRIVATE_FUNDS gold table;
+        # this one is a raw CRD-keyed passthrough export of the same silver
+        # table, added because the dimensional table has no CRD column.
+        "sec_adv_firm_roster":            _timed("sec_adv_firm_roster",            lambda: _build_sec_adv_firm_roster(conn)),
+        "sec_adv_private_fund":           _timed("sec_adv_private_fund",           lambda: _build_sec_adv_private_fund_passthrough(conn)),
     }
 
 

@@ -121,6 +121,9 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
     "sec_adv_private_fund": ProtectedTablePolicy(
         "sec_adv_private_fund", ("accession_number", "fund_index")
     ),
+    "sec_adv_firm_roster": ProtectedTablePolicy(
+        "sec_adv_firm_roster", ("adviser_crd_number", "dataset_period")
+    ),
     "sec_subsidiary_evidence": ProtectedTablePolicy(
         "sec_subsidiary_evidence", ("accession_number", "document_name", "row_ordinal")
     ),

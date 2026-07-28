@@ -31,3 +31,19 @@ lineage, reconstructs the latest effective filing per CRD, resolves funds by PFI
 and derives evidence-bound temporal `MANAGES_FUND` relationships. Production
 watermark acquisition, zero-unresolved reconciliation, and hosted-graph parity are
 the execution evidence owned by ticket 20.
+
+## Annotation (2026-07-27, `.scratch/adv-pipeline` map, ticket 01/02)
+
+A 2026-07-24 session recorded `docs/release-readiness/adv-bulk-ingest-format-change-2026-07-24.md`,
+which reported this ticket's parser as blocked by an SEC format change ("parser rewrite
+needed"). **That finding was wrong and has been corrected** — see
+`.scratch/adv-pipeline/issues/01-confirm-scope-of-iapd-format-change.md` (resolved
+2026-07-24). The relational per-fund format this ticket implemented against was never
+discontinued; the debugging session that reported "zero rows" had staged the wrong SEC
+product (`sec.gov`'s aggregate-only Firm Roster CSV) instead of the correct one
+(`adviserinfo.sec.gov`'s monthly `advFilingData` feed). `adv_bulk_ingest.py`'s regexes,
+as implemented by this ticket's commits, were tested directly against a real
+`advFilingData` archive and match every target file. **This ticket's implementation was
+never broken in production** — do not read the 2026-07-24 blocker doc as evidence
+otherwise. Full corrected picture, including the rolling-window and Firm Roster
+cross-check decisions this finding fed into: `.scratch/adv-pipeline/map.md`.

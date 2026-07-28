@@ -381,3 +381,215 @@ def test_total_cik_limit_check_defaults_to_no_limit_sentinel(definition: dict) -
 def test_window_size_and_total_cik_limit_checks_precede_compute_windows(definition: dict) -> None:
     order = _linear_order(definition)
     assert order.index("WindowSizeCheck") < order.index("TotalCikLimitCheck") < order.index("ComputeWindows")
+
+
+# -- ADV fetch pipeline wiring spec (.scratch/adv-fetch-pipeline-wiring, ticket 01):
+# AdvBulkFetch stage between Stage1BThirteenF and MdmRun ------------------------
+
+
+def test_fetch_adv_bulk_stage_runs_after_stage1b_thirteenf_before_mdm_run(definition: dict) -> None:
+    order = _linear_order(definition)
+    assert "Stage1BThirteenF" in order
+    assert "FetchAdvBulk" in order
+    assert "IngestAdvBulkSources" in order
+    assert "MdmRun" in order
+    assert order.index("Stage1BThirteenF") < order.index("FetchAdvBulk")
+    assert order.index("FetchAdvBulk") < order.index("IngestAdvBulkSources")
+    assert order.index("IngestAdvBulkSources") < order.index("MdmRun")
+
+
+def test_fetch_adv_bulk_command_shape_with_no_sm_input_overrides(definition: dict) -> None:
+    cmd = _command_of(definition, "FetchAdvBulk")
+    assert "'fetch-adv-bulk'" in cmd
+    assert "'--dataset-period'" in cmd
+    assert "'--force'" not in cmd
+    assert "'--run-id'" in cmd
+
+
+def test_dataset_period_check_and_default_precede_force_check(definition: dict) -> None:
+    """Mirrors ArtifactPolicyCheck/ArtifactPolicyDefault's existing Check-Default
+    pattern: an absent $.dataset_period gets defaulted to an empty string (which
+    fetch-adv-bulk's own dispatch already treats the same as omitted) rather than
+    the stage failing or a value being required."""
+    states = definition["States"]
+    check = states["DatasetPeriodCheck"]
+    assert check["Type"] == "Choice"
+    assert check["Choices"][0]["Variable"] == "$.dataset_period"
+    assert check["Choices"][0]["IsPresent"] is True
+    assert check["Choices"][0]["Next"] == "ForceCheck"
+    assert check["Default"] == "DatasetPeriodDefault"
+
+    default_state = states["DatasetPeriodDefault"]
+    assert default_state["Type"] == "Pass"
+    assert default_state["Result"] == ""
+    assert default_state["ResultPath"] == "$.dataset_period"
+    assert default_state["Next"] == "ForceCheck"
+
+
+def test_stage1b_thirteenf_routes_into_dataset_period_check(definition: dict) -> None:
+    order = _linear_order(definition)
+    assert order.index("Stage1BThirteenF") < order.index("DatasetPeriodCheck")
+    assert order.index("DatasetPeriodCheck") < order.index("ForceCheck")
+
+
+def test_force_check_routes_to_two_distinct_fetch_adv_bulk_command_shapes(definition: dict) -> None:
+    """--force is a bare boolean CLI flag (action='store_true'), so it cannot be
+    conditionally included via States.Format string interpolation the way
+    --dataset-period's value can. ForceCheck must instead branch to two literal
+    Task definitions -- one whose command includes the --force token, one that
+    omits it -- both converging on the same next state."""
+    states = definition["States"]
+    force_check = states["ForceCheck"]
+    assert force_check["Type"] == "Choice"
+    assert force_check["Choices"][0]["Variable"] == "$.force"
+    assert force_check["Choices"][0]["BooleanEquals"] is True
+    assert force_check["Choices"][0]["Next"] == "FetchAdvBulkForced"
+    assert force_check["Default"] == "FetchAdvBulk"
+
+    no_force_cmd = _command_of(definition, "FetchAdvBulk")
+    forced_cmd = _command_of(definition, "FetchAdvBulkForced")
+    assert "'--force'" not in no_force_cmd
+    assert "'--force'" in forced_cmd
+    # Otherwise identical apart from the --force token.
+    assert no_force_cmd.replace(", '--force'", "") == forced_cmd.replace(", '--force'", "")
+
+    assert states["FetchAdvBulk"]["Next"] == "IngestAdvBulkSources"
+    assert states["FetchAdvBulkForced"]["Next"] == "IngestAdvBulkSources"
+
+
+def test_ingest_adv_bulk_sources_references_fetch_adv_bulk_manifest_path(definition: dict) -> None:
+    """ingest-relationship-sources' --source-manifest must resolve to the same
+    deterministic, run-id-scoped path fetch-adv-bulk itself writes to
+    (bronze_root/runs/fetch-adv-bulk/<run-id>/source_manifest.json, confirmed
+    against tests/application/test_fetch_adv_bulk_command.py) -- the state
+    machine re-derives this independently rather than capturing FetchAdvBulk's
+    literal output, mirroring how Stage0CompanyIdentity re-derives
+    cik_windows.jsonl's S3 key instead of passing it through execution state."""
+    cmd = _command_of(definition, "IngestAdvBulkSources")
+    assert "'ingest-relationship-sources'" in cmd
+    assert "'--source-manifest'" in cmd
+    assert "runs/fetch-adv-bulk/" in cmd
+    assert "source_manifest.json" in cmd
+    assert "$$.Execution.Name" in cmd
+
+
+def test_fetch_adv_bulk_and_ingest_adv_bulk_sources_catch_falls_through_to_mdm_run(
+    definition: dict,
+) -> None:
+    """A transient ADV fetch/ingest failure must never abort the rest of
+    load_history -- matches the existing Branch B / AD-13 lenient pattern, and
+    directly implements the ADV Pipeline map's standing requirement (ticket 02's
+    Notes) that entity resolution/graph sync must never gate on ADV data."""
+    for state_name in ("FetchAdvBulk", "FetchAdvBulkForced", "IngestAdvBulkSources"):
+        state = definition["States"][state_name]
+        assert state.get("Catch") == [
+            {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmRun"}
+        ], f"{state_name} missing lenient Catch-to-MdmRun"
+
+
+def test_stage1b_thirteenf_catch_routes_into_adv_bulk_fetch_not_around_it(
+    definition: dict,
+) -> None:
+    """Regression guard: Stage1BThirteenF's own (pre-existing) lenient Catch must
+    route into DatasetPeriodCheck, not straight to MdmRun -- otherwise a Branch B
+    thirteenf failure (an expected, accepted AD-13 outcome, not a rare case)
+    would silently skip the entire AdvBulkFetch stage instead of still attempting
+    it before MDM runs."""
+    catch = definition["States"]["Stage1BThirteenF"]["Catch"]
+    assert catch == [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "DatasetPeriodCheck"}]
+
+
+def test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_via_result_path_null(
+    definition: dict,
+) -> None:
+    """Regression guard for the D-15 bug class documented on the `seed` state
+    above: an ecs:runTask.sync Task without ResultPath=null replaces $ entirely
+    with its own result, destroying $.dataset_period/$.force for any state
+    downstream of this stage that might need them."""
+    for state_name in ("FetchAdvBulk", "FetchAdvBulkForced", "IngestAdvBulkSources"):
+        assert definition["States"][state_name]["ResultPath"] is None, (
+            f"{state_name} must set ResultPath=null to preserve $ into the next state"
+        )
+
+
+def test_firm_roster_stage_runs_after_ingest_adv_bulk_sources_before_mdm_run(definition: dict) -> None:
+    order = _linear_order(definition)
+    assert "IngestAdvBulkSources" in order
+    assert "FetchFirmRoster" in order
+    assert "IngestFirmRosterSources" in order
+    assert "MdmRun" in order
+    assert order.index("IngestAdvBulkSources") < order.index("FetchFirmRoster")
+    assert order.index("FetchFirmRoster") < order.index("IngestFirmRosterSources")
+    assert order.index("IngestFirmRosterSources") < order.index("MdmRun")
+
+
+def test_ingest_adv_bulk_sources_routes_into_firm_roster_force_check_not_around_it(
+    definition: dict,
+) -> None:
+    """Regression guard mirroring test_stage1b_thirteenf_catch_routes_into_adv_
+    bulk_fetch_not_around_it above: IngestAdvBulkSources' success-path Next must
+    route into FirmRosterForceCheck, not straight to MdmRun -- otherwise the
+    Firm Roster cross-check stage would be silently skipped every run."""
+    assert definition["States"]["IngestAdvBulkSources"]["Next"] == "FirmRosterForceCheck"
+
+
+def test_firm_roster_force_check_routes_to_two_distinct_fetch_firm_roster_command_shapes(
+    definition: dict,
+) -> None:
+    """Mirrors test_force_check_routes_to_two_distinct_fetch_adv_bulk_command_
+    shapes above: FirmRosterForceCheck re-inspects the same $.force SM-input
+    field (rather than ForceCheck routing here directly, since a Choice state
+    can only have one Next per branch and ForceCheck already routes to
+    FetchAdvBulk/FetchAdvBulkForced)."""
+    states = definition["States"]
+    force_check = states["FirmRosterForceCheck"]
+    assert force_check["Type"] == "Choice"
+    assert force_check["Choices"][0]["Variable"] == "$.force"
+    assert force_check["Choices"][0]["BooleanEquals"] is True
+    assert force_check["Choices"][0]["Next"] == "FetchFirmRosterForced"
+    assert force_check["Default"] == "FetchFirmRoster"
+
+    no_force_cmd = _command_of(definition, "FetchFirmRoster")
+    forced_cmd = _command_of(definition, "FetchFirmRosterForced")
+    assert "'fetch-firm-roster'" in no_force_cmd
+    assert "'--force'" not in no_force_cmd
+    assert "'--force'" in forced_cmd
+    assert no_force_cmd.replace(", '--force'", "") == forced_cmd.replace(", '--force'", "")
+
+    assert states["FetchFirmRoster"]["Next"] == "IngestFirmRosterSources"
+    assert states["FetchFirmRosterForced"]["Next"] == "IngestFirmRosterSources"
+
+
+def test_ingest_firm_roster_sources_references_fetch_firm_roster_manifest_path(definition: dict) -> None:
+    """Mirrors test_ingest_adv_bulk_sources_references_fetch_adv_bulk_manifest_
+    path above: --source-manifest must resolve to the same deterministic,
+    run-id-scoped path fetch-firm-roster itself writes to."""
+    cmd = _command_of(definition, "IngestFirmRosterSources")
+    assert "'ingest-relationship-sources'" in cmd
+    assert "'--source-manifest'" in cmd
+    assert "runs/fetch-firm-roster/" in cmd
+    assert "source_manifest.json" in cmd
+    assert "$$.Execution.Name" in cmd
+
+
+def test_fetch_and_ingest_firm_roster_catch_falls_through_to_mdm_run(definition: dict) -> None:
+    """Mirrors test_fetch_adv_bulk_and_ingest_adv_bulk_sources_catch_falls_
+    through_to_mdm_run above: a transient Firm Roster fetch/ingest failure
+    must never abort the rest of load_history -- this cross-check is purely
+    additive visibility, per the parent spec."""
+    for state_name in ("FetchFirmRoster", "FetchFirmRosterForced", "IngestFirmRosterSources"):
+        state = definition["States"][state_name]
+        assert state.get("Catch") == [
+            {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmRun"}
+        ], f"{state_name} missing lenient Catch-to-MdmRun"
+
+
+def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_null(
+    definition: dict,
+) -> None:
+    """Mirrors test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_via_
+    result_path_null above -- same D-15 bug class."""
+    for state_name in ("FetchFirmRoster", "FetchFirmRosterForced", "IngestFirmRosterSources"):
+        assert definition["States"][state_name]["ResultPath"] is None, (
+            f"{state_name} must set ResultPath=null to preserve $ into the next state"
+        )
