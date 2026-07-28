@@ -1,0 +1,158 @@
+version: 2
+
+# Ticket 04 (.scratch/adv-firm-roster-crosscheck/issues/04-reconciliation-model-dashboard.md):
+# unit-test suite for adv_fund_count_reconciliation's mismatch logic.
+#
+# Grain note: unlike financial_derived (one output row per input row),
+# adv_fund_count_reconciliation aggregates SEC_ADV_PRIVATE_FUND by
+# adviser_crd_number, so `expect.rows` enumerates one row per CRD, not one
+# per `given` row.
+unit_tests:
+  - name: adv_fund_count_reconciliation_known_match
+    description: >
+      A CRD whose distinct private_fund_id count from advFilingData equals
+      the Firm Roster's 7B(1)+7B(2) total is not flagged as a mismatch.
+    model: adv_fund_count_reconciliation
+    given:
+      - input: source('edgartools_source', 'SEC_ADV_PRIVATE_FUND')
+        rows:
+          - adviser_crd_number: "111111"
+            accession_number: "0001111111-26-000001"
+            fund_index: 1
+            private_fund_id: "F1"
+          - adviser_crd_number: "111111"
+            accession_number: "0001111111-26-000001"
+            fund_index: 2
+            private_fund_id: "F2"
+      - input: source('edgartools_source', 'SEC_ADV_FIRM_ROSTER')
+        rows:
+          - adviser_crd_number: "111111"
+            dataset_period: "202607"
+            private_fund_count_7b1: 2
+            private_fund_count_7b2: 0
+    expect:
+      rows:
+        - adviser_crd_number: "111111"
+          roster_dataset_period: "202607"
+          filing_derived_fund_count: 2
+          roster_fund_count: 2
+          fund_count_delta: 0
+          mismatch: false
+
+  - name: adv_fund_count_reconciliation_known_mismatch
+    description: >
+      A CRD whose distinct private_fund_id count from advFilingData is lower
+      than the Firm Roster's 7B(1)+7B(2) total (e.g. a rolling-window
+      coverage gap) is flagged as a mismatch.
+    model: adv_fund_count_reconciliation
+    given:
+      - input: source('edgartools_source', 'SEC_ADV_PRIVATE_FUND')
+        rows:
+          - adviser_crd_number: "222222"
+            accession_number: "0002222222-26-000001"
+            fund_index: 1
+            private_fund_id: "F3"
+      - input: source('edgartools_source', 'SEC_ADV_FIRM_ROSTER')
+        rows:
+          - adviser_crd_number: "222222"
+            dataset_period: "202607"
+            private_fund_count_7b1: 3
+            private_fund_count_7b2: 0
+    expect:
+      rows:
+        - adviser_crd_number: "222222"
+          roster_dataset_period: "202607"
+          filing_derived_fund_count: 1
+          roster_fund_count: 3
+          fund_count_delta: 2
+          mismatch: true
+
+  - name: adv_fund_count_reconciliation_roster_only_zero_funds_is_not_a_mismatch
+    description: >
+      A CRD with no advFilingData rows at all (never reported a private fund
+      through that pipeline) and a Firm Roster count of zero is a true
+      negative, not a mismatch -- the coalesce-to-zero full-outer-join
+      behavior must not flag the majority of advisers (who have no private
+      funds) as mismatched.
+    model: adv_fund_count_reconciliation
+    given:
+      - input: source('edgartools_source', 'SEC_ADV_PRIVATE_FUND')
+        rows: []
+      - input: source('edgartools_source', 'SEC_ADV_FIRM_ROSTER')
+        rows:
+          - adviser_crd_number: "333333"
+            dataset_period: "202607"
+            private_fund_count_7b1: 0
+            private_fund_count_7b2: 0
+    expect:
+      rows:
+        - adviser_crd_number: "333333"
+          roster_dataset_period: "202607"
+          filing_derived_fund_count: 0
+          roster_fund_count: 0
+          fund_count_delta: 0
+          mismatch: false
+
+  - name: adv_fund_count_reconciliation_multiple_roster_periods_keeps_latest
+    description: >
+      SEC_ADV_FIRM_ROSTER accumulates one row per (CRD, dataset_period) as
+      successive monthly snapshots load -- only the most recent period's
+      count is used for reconciliation, not a sum or the earliest period.
+    model: adv_fund_count_reconciliation
+    given:
+      - input: source('edgartools_source', 'SEC_ADV_PRIVATE_FUND')
+        rows:
+          - adviser_crd_number: "444444"
+            accession_number: "0004444444-26-000001"
+            fund_index: 1
+            private_fund_id: "F4"
+      - input: source('edgartools_source', 'SEC_ADV_FIRM_ROSTER')
+        rows:
+          - adviser_crd_number: "444444"
+            dataset_period: "202606"
+            private_fund_count_7b1: 5
+            private_fund_count_7b2: 0
+          - adviser_crd_number: "444444"
+            dataset_period: "202607"
+            private_fund_count_7b1: 1
+            private_fund_count_7b2: 0
+    expect:
+      rows:
+        - adviser_crd_number: "444444"
+          roster_dataset_period: "202607"
+          filing_derived_fund_count: 1
+          roster_fund_count: 1
+          fund_count_delta: 0
+          mismatch: false
+
+  - name: adv_fund_count_reconciliation_excludes_null_crd_roster_rows
+    description: >
+      A SEC_ADV_FIRM_ROSTER row with a null adviser_crd_number is excluded
+      before the full outer join, not surfaced as a null-CRD reconciliation
+      row -- gold.yml declares adviser_crd_number not_null on this model.
+    model: adv_fund_count_reconciliation
+    given:
+      - input: source('edgartools_source', 'SEC_ADV_PRIVATE_FUND')
+        rows:
+          - adviser_crd_number: "555555"
+            accession_number: "0005555555-26-000001"
+            fund_index: 1
+            private_fund_id: "F5"
+      - input: source('edgartools_source', 'SEC_ADV_FIRM_ROSTER')
+        rows:
+          - adviser_crd_number: "555555"
+            dataset_period: "202607"
+            private_fund_count_7b1: 1
+            private_fund_count_7b2: 0
+          - adviser_crd_number: null
+            dataset_period: "202607"
+            private_fund_count_7b1: 9
+            private_fund_count_7b2: 0
+    expect:
+      rows:
+        - adviser_crd_number: "555555"
+          roster_dataset_period: "202607"
+          filing_derived_fund_count: 1
+          roster_fund_count: 1
+          fund_count_delta: 0
+          mismatch: false
