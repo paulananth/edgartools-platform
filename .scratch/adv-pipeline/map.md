@@ -112,6 +112,16 @@ is execution needed to unblock a later decision, not the destination itself).
   cross-check addendum (real gaps, not a no-op); annotated ticket 21 (implementation was
   correct, only the 2026-07-24 blocker doc's diagnosis was wrong); appended a correction
   to the blocker doc rather than rewriting it.
+- [04 — Manual End-to-End Validation](issues/04-manual-end-to-end-validation.md) — ran
+  against prod (dev reported not viable); the real finding was that this session's ingest
+  was a byte-identical no-op (proven via matching source/staged/canonical checksums in the
+  task's own log) — the 13-month `advFilingData` window was already loaded by a prior
+  session (matching this map's own Notes citing 2026-07-23/24 graph work), not freshly
+  loaded today. Read-only Snowflake query confirmed 138,585 real `MANAGES_FUND` edges live
+  in the graph (exact match to MDM), decisively not the placeholder 112/1 counts. Did NOT
+  run `backfill-relationships`/`sync-graph`/`graph-activate` — would have swept in other
+  relationship types' un-attested pending work (ticket 20's in-flight `INSTITUTIONAL_HOLDS`
+  backfill, etc.) into a new activated generation. Ticket 02's decision is validated.
 
 ## Not yet specified
 
