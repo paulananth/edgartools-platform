@@ -273,7 +273,7 @@ def test_export_pending_mirrors_entity_and_change_log_when_mirror_writer_provide
 
     assert total == 1
     domain_tables = {call[0] for call in domain_writer.calls}
-    assert domain_tables == {"MDM_COMPANY"}
+    assert domain_tables == {"MDM_COMPANY_ENTITY"}
     mirror_tables = {call[0] for call in mirror_writer.calls}
     assert mirror_tables == {"MDM_ENTITY", "MDM_CHANGE_LOG"}
     entity_call = next(call for call in mirror_writer.calls if call[0] == "MDM_ENTITY")
@@ -297,7 +297,7 @@ def test_export_pending_skips_mirror_when_mirror_writer_is_none(session):
     total = exporter.export_pending()
 
     assert total == 1
-    assert {call[0] for call in domain_writer.calls} == {"MDM_COMPANY"}
+    assert {call[0] for call in domain_writer.calls} == {"MDM_COMPANY_ENTITY"}
 
 
 def test_export_all_pending_drains_every_entity_batch(session):
@@ -322,7 +322,7 @@ def test_export_all_pending_drains_every_entity_batch(session):
     total = exporter.export_all_pending(batch_size=2)
 
     assert total == 5
-    assert [len(rows) for table, rows, _key in writer.calls if table == "MDM_COMPANY"] == [2, 2, 1]
+    assert [len(rows) for table, rows, _key in writer.calls if table == "MDM_COMPANY_ENTITY"] == [2, 2, 1]
     assert session.query(db.MdmChangeLog).filter(
         db.MdmChangeLog.exported_at.is_(None)
     ).count() == 0
@@ -510,9 +510,41 @@ def test_export_active_relationship_endpoints_seals_persons_without_change_log(s
     person_call = next(call for call in mirror_writer.calls if call[0] == "MDM_PERSON")
     assert person_call[1][0]["entity_id"] == person_id
     # GOLD writer also receives domain rows for change-log-less stubs.
-    assert {call[0] for call in domain_writer.calls} == {"MDM_PERSON", "MDM_COMPANY"}
+    assert {call[0] for call in domain_writer.calls} == {"MDM_PERSON", "MDM_COMPANY_ENTITY"}
 
 
 def test_export_active_relationship_endpoints_returns_zero_without_mirror_writer(session):
     exporter = MDMExporter(session=session, writer=FakeWriter())
     assert exporter.export_active_relationship_endpoints() == 0
+
+
+def test_company_gold_and_mirror_targets_diverge_by_design(session):
+    """Ticket 06 (.scratch/unified-company-dimension/issues/06-*.md): the GOLD
+    landing table renamed MDM_COMPANY -> MDM_COMPANY_ENTITY to free the old
+    name for a future compat view, but the MDM-schema graph-sync mirror
+    (snowflake_graph.py still reads the literal name "MDM_COMPANY") must not
+    follow that rename. A future refactor that collapses DOMAIN_TO_TABLE and
+    DOMAIN_TO_MIRROR_TABLE back into one name would silently break sync-graph
+    without failing here -- same shape as the FakePipeline/issuer_ciks drift.
+    """
+    rel_type_id = str(uuid.uuid4())
+    session.add(db.MdmRelationshipType(
+        rel_type_id=rel_type_id, rel_type_name="MANAGES_FUND",
+        source_node_type="adviser", target_node_type="fund",
+        direction="outbound", is_temporal=True, merge_strategy="extend_temporal", is_active=True,
+    ))
+    company_id = str(uuid.uuid4())
+    session.add(db.MdmEntity(entity_id=company_id, entity_type="company"))
+    session.add(db.MdmCompany(entity_id=company_id, cik=320193, canonical_name="Issuer Corp"))
+    session.commit()
+
+    domain_writer = FakeWriter()
+    mirror_writer = FakeWriter()
+    exporter = MDMExporter(session=session, writer=domain_writer, mirror_writer=mirror_writer)
+
+    exporter._mirror_entity_ids([company_id])
+
+    domain_company_calls = [call for call in domain_writer.calls if call[0] not in ("MDM_ENTITY",)]
+    mirror_company_calls = [call for call in mirror_writer.calls if call[0] not in ("MDM_ENTITY",)]
+    assert {call[0] for call in domain_company_calls} == {"MDM_COMPANY_ENTITY"}
+    assert {call[0] for call in mirror_company_calls} == {"MDM_COMPANY"}
