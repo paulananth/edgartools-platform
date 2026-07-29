@@ -1,7 +1,7 @@
 # Define ERDP-05-04-Equivalent Promotion Criteria for the F1–F12 Coverage-Matrix Products
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by:
 
 ## Question
