@@ -68,6 +68,33 @@ class TestOwnershipFilingDate:
         assert orch._ownership_filing_date(None) is None
 
 
+class TestIsItem202CandidateForm:
+    def test_matches_bare_item_202(self):
+        assert orch._is_item_202_candidate_form("8-K", "2.02") is True
+
+    def test_matches_item_202_combined_with_other_items(self):
+        assert orch._is_item_202_candidate_form("8-K", "2.02,9.01") is True
+
+    def test_matches_8k_a(self):
+        assert orch._is_item_202_candidate_form("8-K/A", "2.02") is True
+
+    def test_does_not_match_item_502(self):
+        assert orch._is_item_202_candidate_form("8-K", "5.02") is False
+
+    def test_does_not_match_blank_items(self):
+        # Ambiguous/blank items are owned by _is_item_502_candidate_form's
+        # catch-all bucket, not this predicate.
+        assert orch._is_item_202_candidate_form("8-K", None) is False
+        assert orch._is_item_202_candidate_form("8-K", "") is False
+
+    def test_does_not_match_non_8k_form(self):
+        assert orch._is_item_202_candidate_form("10-Q", "2.02") is False
+
+    def test_does_not_false_positive_on_substring(self):
+        # "12.02" contains "2.02" as a substring but is not item 2.02.
+        assert orch._is_item_202_candidate_form("8-K", "12.02") is False
+
+
 class TestConfiguredParserAccessionsLookback:
     def _db(self, filings: dict[str, dict]) -> MagicMock:
         db = MagicMock()
@@ -106,10 +133,15 @@ class TestConfiguredParserAccessionsLookback:
                 "filing_date": date(2025, 6, 1),
                 "items": "5.02",
             },
+            "earnings-8k": {
+                "form": "8-K",
+                "filing_date": date(2025, 6, 1),
+                "items": "2.02,9.01",
+            },
             "unrelated-8k": {
                 "form": "8-K",
                 "filing_date": date(2025, 6, 1),
-                "items": "2.02",
+                "items": "1.01",
             },
         }
         db = self._db(filings)
@@ -125,6 +157,7 @@ class TestConfiguredParserAccessionsLookback:
             "adv",
             "undated-form4",
             "recent-item502",
+            "earnings-8k",
         ]
         assert "old-form4" not in selected
         assert "old-item502" not in selected

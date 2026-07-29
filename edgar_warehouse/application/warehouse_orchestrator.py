@@ -3209,6 +3209,23 @@ def _configured_parser_accessions(
     return selected
 
 
+def _is_item_202_candidate_form(form_type: Any, items: Any = None) -> bool:
+    """True for 8-K/8-K/A with Item 2.02 (earnings results) declared.
+
+    Unlike ``_is_item_502_candidate_form``, blank/ambiguous items do not
+    qualify here — the item-502 predicate already owns that ambiguous-items
+    catch-all bucket, and earnings 8-Ks are always explicitly item-tagged by
+    SEC filers.
+    """
+    normalized = str(form_type or "").strip().upper()
+    if normalized not in {"8-K", "8-K/A"}:
+        return False
+    normalized_items = str(items or "").strip()
+    if not normalized_items:
+        return False
+    return bool(re.search(r"(?:^|[^0-9])2\s*\.\s*02(?:[^0-9]|$)", normalized_items, re.I))
+
+
 def _is_configured_parser_form(form_type: Any, items: Any = None) -> bool:
     normalized = str(form_type or "").strip().upper()
     if normalized in OWNERSHIP_FORMS or normalized in ADV_FORMS:
@@ -3216,6 +3233,8 @@ def _is_configured_parser_form(form_type: Any, items: Any = None) -> bool:
     if normalized in {"DEF 14A", "DEF 14A/A", "DEFA14A", "PRE 14A", "13F-HR", "13F-HR/A"}:
         return True
     if _is_item_502_candidate_form(form_type, items):
+        return True
+    if _is_item_202_candidate_form(form_type, items):
         return True
     return False
 
