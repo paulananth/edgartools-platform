@@ -5,7 +5,11 @@ import io
 import pytest
 from botocore.exceptions import ClientError
 
-from edgar_warehouse.infrastructure.object_storage import PromotionConflictError, StorageLocation
+from edgar_warehouse.application.errors import WarehouseRuntimeError
+from edgar_warehouse.infrastructure.object_storage import (
+    PromotionConflictError,
+    StorageLocation,
+)
 
 
 class _ReadableObjectStore:
@@ -42,6 +46,73 @@ class _RejectingS3Client:
             },
             "PutObject",
         )
+
+
+class _StatefulS3Client:
+    def __init__(self) -> None:
+        self.objects: dict[tuple[str, str], bytes] = {}
+        self.puts: list[dict[str, object]] = []
+
+    def get_object(self, *, Bucket: str, Key: str):
+        object_key = (Bucket, Key)
+        if object_key not in self.objects:
+            raise ClientError(
+                {
+                    "Error": {"Code": "NoSuchKey", "Message": "Not found"},
+                    "ResponseMetadata": {"HTTPStatusCode": 404},
+                },
+                "GetObject",
+            )
+        return {"Body": io.BytesIO(self.objects[object_key])}
+
+    def put_object(self, **kwargs):
+        object_key = (str(kwargs["Bucket"]), str(kwargs["Key"]))
+        if kwargs.get("IfNoneMatch") == "*" and object_key in self.objects:
+            raise ClientError(
+                {
+                    "Error": {
+                        "Code": "PreconditionFailed",
+                        "Message": "Already exists",
+                    },
+                    "ResponseMetadata": {"HTTPStatusCode": 412},
+                },
+                "PutObject",
+            )
+        self.puts.append(kwargs)
+        self.objects[object_key] = bytes(kwargs["Body"])
+        return {"ETag": '"new-etag"', "VersionId": f"version-{len(self.puts)}"}
+
+
+def test_remote_immutable_write_reuses_identical_object_without_another_put(
+    monkeypatch,
+):
+    client = _StatefulS3Client()
+    monkeypatch.setattr("boto3.client", lambda service: client)
+    storage = StorageLocation("s3://bucket/warehouse/bronze")
+
+    artifact_key = "filings/sec/accession/primary.xml"
+    first = storage.write_immutable_bytes(artifact_key, b"immutable")
+    second = storage.write_immutable_bytes(artifact_key, b"immutable")
+
+    assert first == "s3://bucket/warehouse/bronze/filings/sec/accession/primary.xml"
+    assert second == first
+    assert len(client.puts) == 1
+    assert client.puts[0]["IfNoneMatch"] == "*"
+
+
+def test_remote_immutable_write_rejects_different_content_at_existing_key(monkeypatch):
+    client = _StatefulS3Client()
+    monkeypatch.setattr("boto3.client", lambda service: client)
+    storage = StorageLocation("s3://bucket/warehouse/bronze")
+
+    storage.write_immutable_bytes("filings/sec/accession/primary.xml", b"immutable")
+
+    with pytest.raises(WarehouseRuntimeError, match="different content"):
+        storage.write_immutable_bytes("filings/sec/accession/primary.xml", b"changed")
+
+    assert len(client.puts) == 1
+    stored_key = ("bucket", "warehouse/bronze/filings/sec/accession/primary.xml")
+    assert client.objects[stored_key] == b"immutable"
 
 
 def test_remote_promotion_atomically_requires_the_canonical_etag(monkeypatch):

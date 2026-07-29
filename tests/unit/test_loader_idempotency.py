@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import tempfile
 import unittest
 from datetime import date
@@ -375,6 +376,61 @@ class LoaderIdempotencyTests(unittest.TestCase):
         self.assertEqual(len(db.merged_rows), 1)
         self.assertTrue(db.merged_rows[0]["is_primary"])
         self.assertEqual(db.merged_rows[0]["document_name"], "primary.xml")
+
+    def test_filing_artifact_retry_after_lost_silver_state_does_not_mutate_bronze(
+        self,
+    ) -> None:
+        accession = "0000320193-26-000004"
+        payload = b"<ownershipDocument>immutable</ownershipDocument>"
+        primary_attachment = _FakeAttachment(
+            sequence_number="1",
+            document="primary.xml",
+            document_type="4",
+            description="Primary document",
+            url="https://www.sec.gov/Archives/edgar/data/320193/primary.xml",
+            content=payload,
+        )
+        fake_filing = _FakeFiling(attachments=_FakeAttachments([primary_attachment]))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            context = SimpleNamespace(
+                bronze_root=StorageLocation(tmp),
+                identity="tester@example.com",
+            )
+            first = bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context,
+                db=_ArtifactDb(),
+                accession_number=accession,
+                sync_run_id="failed-before-silver-publish",
+                get_filing=Mock(return_value=fake_filing),
+                force=False,
+            )
+            artifact_path = Path(first["raw_writes"][0]["path"])
+            preserved_timestamp_ns = 1_000_000_000
+            os.utime(artifact_path, ns=(preserved_timestamp_ns, preserved_timestamp_ns))
+
+            second = bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context,
+                db=_ArtifactDb(),
+                accession_number=accession,
+                sync_run_id="retry-with-lost-silver-state",
+                get_filing=Mock(return_value=fake_filing),
+                force=False,
+            )
+
+            self.assertEqual(Path(second["raw_writes"][0]["path"]).read_bytes(), payload)
+            self.assertEqual(artifact_path.stat().st_mtime_ns, preserved_timestamp_ns)
+
+            bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context,
+                db=_ArtifactDb(),
+                accession_number=accession,
+                sync_run_id="explicit-force-repair",
+                get_filing=Mock(return_value=fake_filing),
+                force=True,
+            )
+
+            self.assertEqual(artifact_path.stat().st_mtime_ns, preserved_timestamp_ns)
 
     def test_edgartools_fallback_maps_non_primary_attachment_correctly(self) -> None:
         """A filing with multiple attachments must correctly identify which one is
