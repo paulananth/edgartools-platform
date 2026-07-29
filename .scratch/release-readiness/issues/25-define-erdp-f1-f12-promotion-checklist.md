@@ -1,7 +1,7 @@
 # Define ERDP-05-04-Equivalent Promotion Criteria for the F1–F12 Coverage-Matrix Products
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by:
 
 ## Question
@@ -12,4 +12,29 @@ Deliberately **not resolved by this ticket** — recorded as a required go-live 
 
 ## Answer
 
-(pending — not worked yet, per explicit instruction to record as a dependency only)
+**Scoping decision (2026-07-29): survey first, then graduate to 12 per-product satellite
+tickets** — the same shape as `erdp-coverage-promotion`, where ticket 01 (a research ticket
+surveying all 9 ER skills once) fed tickets 03–06 (one grilling ticket per product, each
+resolved independently against the survey's findings).
+
+**Why not resolve all 12 checklists directly in this ticket:** the F1–F12 products are
+consumed far more broadly than any of the four `erdp-coverage-promotion` products — Identity
+and Historical financials alone are needed by nearly every one of the 9 ER skills, versus 2–6
+skills for each of `CONSENSUS_ESTIMATES`/`GUIDANCE_FACTS`/`EARNINGS_CALENDAR`/
+`TRANSCRIPT_EVENTS`. Producing a checklist at the same depth as tickets 03–06 (grounded in
+real schema/code, cross-checked per skill, adversarially stress-tested) for all 12 products in
+one sitting would blow the ~100K-token per-ticket budget this map's tickets are sized to, and
+would likely produce shallower, less-grounded criteria than the precedent this ticket is
+explicitly asked to match.
+
+**This ticket resolves as a pure scoping decision, not a completed checklist.** It graduates
+into:
+- [Survey financial-services ER skill requirements per F1–F12 product](27-survey-er-skill-requirements-per-f1-f12-product.md)
+  — research ticket, mirroring `erdp-coverage-promotion` ticket 01's method exactly but for
+  the 12 legacy Gold/MDM products instead of the 4 new Explore products.
+- Twelve new grilling tickets (28–39, one per F1–F12), each blocked by ticket 27, each asking
+  "what is the complete, product-ready promotion checklist for this one product" in the same
+  form as `erdp-coverage-promotion` tickets 03–06.
+
+No product-specific criteria are decided here — that work is explicitly deferred to the
+graduated tickets.
