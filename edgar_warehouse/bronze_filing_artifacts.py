@@ -16,8 +16,9 @@ from datetime import UTC, datetime
 from typing import Any, Final
 
 import edgar
-
-from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory
+from edgar_warehouse.infrastructure.dataset_path_catalog import (
+    default_capture_spec_factory,
+)
 
 # Ticket 06 architecture marker — architecture tests assert this contract.
 FILING_DOCUMENT_NETWORK_GATEWAY: Final = "edgartools"
@@ -288,7 +289,7 @@ def _write_raw_artifact(
     accession_number: str,
     form: str | None,
 ) -> dict[str, Any]:
-    destination = context.bronze_root.write_bytes(relative_path, payload)
+    destination = context.bronze_root.write_immutable_bytes(relative_path, payload)
     sha256 = hashlib.sha256(payload).hexdigest()
     content_type = mimetypes.guess_type(relative_path)[0] or "application/octet-stream"
     fetched_at = datetime.now(UTC)

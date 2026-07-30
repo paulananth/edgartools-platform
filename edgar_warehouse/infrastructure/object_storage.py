@@ -242,6 +242,83 @@ class StorageLocation:
         self.write_bytes(staged_relative, payload)
         return staged_relative
 
+    def write_immutable_bytes(self, relative_path: str, payload: bytes) -> str:
+        """Create an immutable object once, or reuse identical existing content.
+
+        The conditional create prevents a retry, replay, or concurrent writer
+        from creating another S3 version for the same logical artifact key.
+        Existing content is read and compared byte-for-byte; a different payload
+        at the same key fails closed instead of overwriting immutable data.
+        """
+        relative = sanitize_relative_path(relative_path)
+        destination = self.join(relative)
+        if self.is_remote:
+            import base64
+            import hashlib
+            from urllib.parse import urlsplit
+
+            import boto3
+            from botocore.exceptions import ClientError
+
+            parsed = urlsplit(destination)
+            client = boto3.client("s3")
+            checksum_sha256 = base64.b64encode(
+                hashlib.sha256(payload).digest()
+            ).decode("ascii")
+            request = {
+                "Bucket": parsed.netloc,
+                "Key": parsed.path.lstrip("/"),
+                "Body": payload,
+                "ChecksumSHA256": checksum_sha256,
+                "IfNoneMatch": "*",
+            }
+            try:
+                client.put_object(**request)
+                return destination
+            except ClientError as exc:
+                status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+                code = exc.response.get("Error", {}).get("Code")
+                if status not in {409, 412} and code not in {
+                    "ConditionalRequestConflict",
+                    "PreconditionFailed",
+                }:
+                    raise
+
+            response = client.get_object(
+                Bucket=parsed.netloc,
+                Key=parsed.path.lstrip("/"),
+            )
+            body = response["Body"]
+            offset = 0
+            content_matches = True
+            try:
+                while chunk := body.read(1024 * 1024):
+                    end = offset + len(chunk)
+                    if payload[offset:end] != chunk:
+                        content_matches = False
+                        break
+                    offset = end
+            finally:
+                body.close()
+            if content_matches and offset == len(payload):
+                return destination
+            raise WarehouseRuntimeError(
+                f"immutable object {relative!r} already exists with different content"
+            )
+
+        destination_path = Path(destination)
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with destination_path.open("xb") as handle:
+                handle.write(payload)
+            return str(destination_path)
+        except FileExistsError:
+            if destination_path.read_bytes() == payload:
+                return str(destination_path)
+            raise WarehouseRuntimeError(
+                f"immutable object {relative!r} already exists with different content"
+            )
+
     def promote_staged(
         self,
         staged_relative_path: str,

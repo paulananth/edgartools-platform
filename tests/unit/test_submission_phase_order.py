@@ -436,12 +436,14 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 ("parser", "item-502"),
                 ("artifact", "ambiguous-8k"),
                 ("parser", "ambiguous-8k"),
+                ("artifact", "earnings-8k"),
+                ("parser", "earnings-8k"),
                 ("artifact", "13f-1"),
                 ("parser", "13f-1"),
             ],
         )
-        self.assertEqual(result["rows_written"], 24)
-        self.assertEqual(len(result["raw_writes"]), 6)
+        self.assertEqual(result["rows_written"], 28)
+        self.assertEqual(len(result["raw_writes"]), 7)
 
     def test_release_artifact_pipeline_fails_closed(self) -> None:
         with patch(
