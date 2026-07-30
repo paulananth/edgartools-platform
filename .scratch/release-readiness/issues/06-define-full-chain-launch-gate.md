@@ -24,15 +24,16 @@ not bound to today's Ticket 20 or residual-full execution specifically.
 Binding a specific candidate's evidence to this gate is ticket 08's (GO
 Packet) job, not 06's.
 
-### Ordered stage set (one production execution under a new execution name)
+### Ordered gate set (one production execution under a new execution name)
 
 1. **Candidate Identity Binding** (01) — opens the Candidate Evidence Set at
    `docs/release-readiness/releases/rc-<YYYYMMDD>-<12-char-commit>/` for the
    RC commit + warehouse/MDM image digests.
 2. **Rollback-readiness check** (05, standing precondition, not per-candidate)
-   — gate confirms an unexpired rollback rehearsal exists for the current
-   rollback mechanism before any pipeline work starts. Cheap fail-fast check;
-   05 itself defines the rehearsal cadence/trigger and what proves it, not 06.
+   — gate confirms the standing rollback proof matches the current rollback
+   mechanism before any pipeline work starts. This is a cheap fail-fast check
+   based on mechanism identity, not a calendar expiration; 05 defines what
+   proves it.
 3. **MdmExport Preflight** (02/10) — same-runtime, non-mutating entitlement
    check of rotated secret + warehouse before any export runs.
 4. **BatchSilver @ MaxConcurrency=4 + Integrity Proof** (03) + contention-safe
@@ -56,14 +57,13 @@ Packet) job, not 06's.
 8. **Release-Bound Dashboard Acceptance** (07) — dashboard reads back
    correctly against this candidate's fully assembled data; runs last among
    data stages since it's the first check that reads the complete result.
-9. **GO Packet assembly** (08) — final evidence packet presented for the
-   explicit human GO decision. GO is never automated by this gate.
 
 **Cross-cutting, not a numbered stage:** Release Evidence Automation (09)
 runs alongside stages 1–8, assembling each stage's evidence into the
-Candidate Evidence Set as it's produced. Its own done-condition ("manifest
-fully assembled") is a precondition for stage 9, not a checkpoint with
-pass/fail semantics on pipeline data.
+Candidate Evidence Set as it's produced. **GO Packet assembly is the
+downstream decision workflow defined by ticket 08, not a ninth gate.** The
+candidate becomes ready for the Release Owner only after automation validates
+the complete eight-gate set; GO itself remains an explicit human decision.
 
 ### Stop conditions
 
@@ -79,12 +79,18 @@ completed work rather than truly redoing it.
 
 ### Evidence artifact
 
-Stage 9 writes `full-chain-launch-pass.json` into the Candidate Evidence Set
+After stage 8, Release Evidence Automation writes
+`full-chain-launch-pass.json` into the Candidate Evidence Set
 (mirrors ticket 03's `maxconcurrency4-data-integrity.json` naming), an
-ordered array of the 9 stages each with `{stage, status, evidence_ref,
+ordered array of the eight required gates each with `{stage, status, evidence_ref,
 completed_at}`, plus the rollback-readiness precondition result. Overall
 `status: "pass"` requires every entry `pass` with zero exclusions. This is
 the artifact ticket 08 (GO Packet) reads.
+
+**Correction (2026-07-29):** ticket 08's later, more specific packet decision
+supersedes this Answer's original classification of GO Packet assembly as
+stage 9. The launch gate has eight required gates; packet assembly validates
+and indexes their results without becoming another gate.
 
 ### Note — INSTITUTIONAL_HOLDS = 0 is a reader-registration bug, not a fetch gap
 

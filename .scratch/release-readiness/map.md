@@ -32,7 +32,8 @@ Produce a decision-complete validation plan for production operator readiness, b
 - [Define Relationship Eligibility at the Release Watermark](issues/04-define-relationship-eligibility-at-release-watermark.md) — All eleven relationship types required for initial GO; applicability ledger per candidate; one watermark snapshot for eligibility/coverage/graph/parity.
 - [Define the MdmExport Entitlement Preflight and Retry Policy](issues/10-define-mdm-export-entitlement-preflight-and-retry-policy.md) — Same-runtime non-mutating export capability gate; command-owned transient retry; full-chain revalidation after operator fix.
 - [Define the BatchSilver Contention-Safe Publication Boundary](issues/11-define-batchsilver-contention-safe-publication-boundary.md) — Semantic rehydrate-and-merge + atomic S3 conditional write; conflicts rerun full batch.
-- [Define the Full-Chain Launch Gate](issues/06-define-full-chain-launch-gate.md) — Reusable per-candidate template, 9 ordered stages (identity → rollback-readiness precondition → export preflight → BatchSilver integrity → relationship source completion → MDM/graph execution → relationship eligibility & parity, strict/no exclusions → dashboard acceptance → GO packet); new execution name on any failure; `full-chain-launch-pass.json` evidence. Currently cannot Pass: INSTITUTIONAL_HOLDS = 0 — **not** EDGE-11 (that's stale; source data has 6.8M rows) but a `ShardedSilverReader._TABLES` registration gap for `sec_thirteenf_filing`, fixed 2026-07-26, no exclusion valve until re-derived.
+- [Define the Full-Chain Launch Gate](issues/06-define-full-chain-launch-gate.md) — Reusable per-candidate template with 8 ordered gates (identity → rollback-readiness precondition → export preflight → BatchSilver integrity → relationship source completion → MDM/graph execution → relationship eligibility & parity, strict/no exclusions → dashboard acceptance); GO packet assembly is the downstream decision workflow, not a ninth gate. A failed attempt uses a new execution name; `full-chain-launch-pass.json` indexes the eight results. Currently cannot Pass: INSTITUTIONAL_HOLDS = 0 — **not** EDGE-11 (that's stale; source data has 6.8M rows) but a `ShardedSilverReader._TABLES` registration gap for `sec_thirteenf_filing`, fixed 2026-07-26, no exclusion valve until re-derived.
+- [Define the Direct-Evidence GO Packet](issues/08-define-direct-evidence-go-packet.md) — The Candidate Evidence Set is the sole packet: append-only attempts, exactly eight indexed gates with explicit role attestations, a seal-anchored 24-hour window with standing rollback exception, an externally digest-bound authority registry, and fail-closed `not_ready` → `ready_for_owner` → verified sealed GO. F1-F12 product promotion is outside operator GO; implementation graduated to ticket 48.
 - [Define the Rollback Rehearsal Contract](issues/05-define-rollback-rehearsal-contract.md) — Two-part standing (not per-candidate) proof, both attested by AWS Operator: (1) digest restoration proven by ordinary use of `deploy-aws-application.sh --image-ref` — no dedicated drill, no staleness/expiration concept, bound to a **1-hour RTO**; (2) BatchSilver concurrency restoration requires an actual live re-run exercising the old-task/new-task overlap during the rollback transition (not just a parameter check), proving ticket 11's contention-safe publication boundary holds — separate from the 1-hour bound, judged pass/fail not by a clock. Evidence at a fixed non-RC-scoped path (`docs/release-readiness/rollback-rehearsal.json`), regenerated only when the mechanism itself changes.
 - [Execute the Rollback Rehearsal](issues/26-execute-rollback-rehearsal.md) — Both proofs executed live in prod 2026-07-29, **PASS**. Digest restore: 5m37s (within 1h RTO). BatchSilver overlap: two `bootstrap-batch` tasks on the two distinct digests from Proof 1, hydrated the same base silver version 0.7s apart, publish windows overlapped ~70s, neither write lost (2 distinct sequential canonical versions), CIK-scoped semantic digest byte-identical before/after. Evidence: `docs/release-readiness/rollback-rehearsal.json` + `rollback-rehearsal-batchsilver-overlap-evidence.json`.
 - [Define ERDP-05-04-Equivalent Promotion Criteria for the F1–F12 Coverage-Matrix Products](issues/25-define-erdp-f1-f12-promotion-checklist.md) — Scoping decision only (2026-07-29): survey first (ticket 27), then graduate to 12 per-product satellite tickets (28–39), mirroring `erdp-coverage-promotion`'s ticket 01 → 03–06 shape. No product-specific criteria decided in this ticket itself.
@@ -89,19 +90,19 @@ Produce a decision-complete validation plan for production operator readiness, b
 - Replacing passive Terraform with runtime commands, image rollout, schedules, or secret values.
 - Re-running Ticket 20 bulk-load from zero without a new operator decision (technical package already PASS).
 
-## Open frontier (hygiene 2026-07-29s)
+## Open frontier (hygiene 2026-07-29t)
 
 Unblocked open tickets (work through the map; claim before starting):
 
-1. [Define the Direct-Evidence GO Packet](issues/08-define-direct-evidence-go-packet.md) — grilling (blocked by 01, 05, 06, 07, 09, 25 — all now resolved per native blocking; note ticket 25 resolved as a scoping decision only, not completed F1-F12 checklists — whoever works ticket 8 should judge whether the GO packet needs 28–39 substantively done or only needs 25's tracking/scoping to exist)
-2. [Decide whether/how to narrow daily_incremental's Stage 0 and set its actual schedule](issues/45-decide-narrow-daily-incremental-stage0-and-cadence.md) — grilling (graduated from resolved ticket 43; operator must weigh order-of-magnitude runtime savings against two evidenced coverage gaps, plus `daily_incremental` currently has no EventBridge schedule at all)
-3. [Decide how to repair Apple's 45 orphaned earnings-8-K bronze objects](issues/46-decide-repair-apple-orphaned-8k-bronze.md) — task (graduated from resolved ticket 44; root cause fully understood — a provably-immaterial trailing-newline normalization mismatch between two historical capture mechanisms — operator must choose the repair mechanism, e.g. scoped `--force` overwrite, then execute and re-verify ticket 42's F5 smoke test)
-4. [Investigate whether the 2026-07-19–2026-07-28 window silently overwrote other migrated bronze objects](issues/47-investigate-silent-overwrite-window-prodb-migration.md) — research (graduated from ticket 44's adjacent finding: before PR #298's immutability guard existed, any re-fetch of migrated bronze content during that 9-day window would have silently overwritten it with no audit trail; not yet checked whether this happened to any real accession beyond Apple's, which was never touched during that window)
+1. [Decide whether/how to narrow daily_incremental's Stage 0 and set its actual schedule](issues/45-decide-narrow-daily-incremental-stage0-and-cadence.md) — grilling (graduated from resolved ticket 43; operator must weigh order-of-magnitude runtime savings against two evidenced coverage gaps, plus `daily_incremental` currently has no EventBridge schedule at all)
+2. [Decide how to repair Apple's 45 orphaned earnings-8-K bronze objects](issues/46-decide-repair-apple-orphaned-8k-bronze.md) — task (graduated from resolved ticket 44; root cause fully understood — a provably-immaterial trailing-newline normalization mismatch between two historical capture mechanisms — operator must choose the repair mechanism, e.g. scoped `--force` overwrite, then execute and re-verify ticket 42's F5 smoke test)
+3. [Investigate whether the 2026-07-19–2026-07-28 window silently overwrote other migrated bronze objects](issues/47-investigate-silent-overwrite-window-prodb-migration.md) — research (graduated from ticket 44's adjacent finding: before PR #298's immutability guard existed, any re-fetch of migrated bronze content during that 9-day window would have silently overwritten it with no audit trail; not yet checked whether this happened to any real accession beyond Apple's, which was never touched during that window)
+4. [Implement the Direct-Evidence GO Validation Contract](issues/48-implement-direct-evidence-go-validation-contract.md) — task (graduated from resolved ticket 08; extend the existing automation to model attempts, the exact eight-gate/role predicate, external authority, freshness/chronology, and signed-seal verification without manufacturing approval)
 
 **All twelve F1-F12 promotion-criteria tickets (28-39) are now either resolved or explicitly
 blocked** — the F1-F12 sub-workstream (tickets 25/27-41) is at its natural pause point pending
-either a fundamentals-pipeline backfill decision (ticket 42) or a return to the two remaining
-map-level tickets (08, 09) above.
+either a fundamentals-pipeline backfill decision (ticket 42) or later product work. Those
+product tickets are not gates for Production Operator Readiness.
 
 Blocked (do not claim):
 
@@ -116,6 +117,20 @@ Claimed, in progress:
 
 ## Hygiene log
 
+- **2026-07-29 (t):** Ticket 08 resolved through one-at-a-time operator
+  grilling after a two-axis standards/spec review. The Candidate Evidence Set
+  is the only Direct-Evidence GO Packet; an unchanged immutable candidate may
+  preserve multiple append-only attempts, but only one active attempt can
+  satisfy the exact eight-gate and required-role matrix. Candidate-specific
+  evidence is fresh relative to the verified Release Seal's fixed 24-hour
+  window; standing rollback proof is the only clock-independent exception and
+  remains valid only while its mechanism identity matches. Signer authority
+  comes from an external digest-bound registry, the Release Owner acts only
+  after automated `ready_for_owner` validation, and GO is effective only after
+  the authorized signed annotated tag verifies against the exact finalized
+  evidence commit. F1-F12 product promotion criteria remain outside Production
+  Operator Readiness. Removed ticket 08 from the frontier and graduated the
+  missing automation work to ticket 48; no implementation was performed.
 - **2026-07-29 (s):** Ticket 09 (Design the Release Evidence Automation) implemented as real
   working code, per an explicit `/implement 09` request (overriding this ticket's `prototype`
   type default, which would otherwise mean a throwaway discussion artifact — the user asked for
