@@ -40,6 +40,22 @@ _Avoid_: Parallel sec_client downloads for the same objects after cutover, parse
 Skip SEC network when silver already holds successful work for the skip key (for filings: accession + form-family + parser_version; for facts: CIK + facts_parser_version; catalogs: checkpoint completeness), unless force or version bump requires refresh.
 _Avoid_: Always re-fetch, skip only by bronze presence, accession-only forever skip that blocks parser upgrades
 
+**Daily Identity Refresh**:
+The recurring company-identity refresh for tracked entities whose recent SEC daily-index activity signals that their submissions state may have changed.
+_Avoid_: Daily full-universe identity sweep, filing ingestion
+
+**Identity Backstop Sweep**:
+The periodic refresh of company identity across the full tracked universe, covering administrative submissions changes that have no filing signal.
+_Avoid_: Daily identity refresh, historical filing backfill
+
+**Identity Refresh Slot**:
+One scheduled opportunity to run either a Daily Identity Refresh or an Identity Backstop Sweep; it may be completed or deferred but never overlaps another identity refresh.
+_Avoid_: Concurrent refresh trigger, untracked skipped schedule
+
+**Overdue Identity Backstop**:
+An Identity Backstop Sweep displaced by an active refresh and therefore prioritized at the next available Identity Refresh Slot.
+_Avoid_: Silently skipped weekly sweep, narrow refresh taking priority
+
 **Bronze Persist**:
 Optional raw archive of SEC (or other) payloads written only when an operator explicitly requests it, or when the source cannot be obtained via edgartools; not the default hot path.
 _Avoid_: Always bronze first, treating bronze absence as agent-grade failure by default
