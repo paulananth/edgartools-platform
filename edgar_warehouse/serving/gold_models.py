@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import math
-from datetime import date, timedelta
-from typing import Any
+import json
+import sys
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, Callable, Iterator
 
 try:
     import pyarrow as pa
@@ -1221,66 +1223,89 @@ def _build_fact_accounting_flag(conn: Any) -> pa.Table:
     return _empty(_FACT_ACCOUNTING_FLAG_SCHEMA) if table.num_rows == 0 else table.cast(_FACT_ACCOUNTING_FLAG_SCHEMA)
 
 
-def build_gold(db: Any) -> dict[str, pa.Table]:
-    # Accepts SilverDatabase or ShardedSilverReader via duck typing (._conn attribute).
-    import json
-    import sys
-    from datetime import datetime, timezone
+def _timed(name: str, fn: Callable[[], pa.Table]) -> pa.Table:
+    t0 = datetime.now(timezone.utc)
+    print(json.dumps({"event": "gold_table_started", "table": name,
+                      "emitted_at": t0.isoformat().replace("+00:00", "Z")}),
+          file=sys.stderr, flush=True)
+    result = fn()
+    duration = (datetime.now(timezone.utc) - t0).total_seconds()
+    print(json.dumps({"event": "gold_table_completed", "table": name,
+                      "rows": len(result), "duration_seconds": round(duration, 2),
+                      "emitted_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")}),
+          file=sys.stderr, flush=True)
+    return result
 
-    def _timed(name: str, fn):
-        t0 = datetime.now(timezone.utc)
-        print(json.dumps({"event": "gold_table_started", "table": name,
-                          "emitted_at": t0.isoformat().replace("+00:00", "Z")}),
-              file=sys.stderr, flush=True)
-        result = fn()
-        duration = (datetime.now(timezone.utc) - t0).total_seconds()
-        print(json.dumps({"event": "gold_table_completed", "table": name,
-                          "rows": len(result), "duration_seconds": round(duration, 2),
-                          "emitted_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")}),
-              file=sys.stderr, flush=True)
-        return result
 
-    conn = get_connection(db)
-    return {
-        "dim_company":                    _timed("dim_company",                    lambda: _build_dim_company(conn)),
-        "dim_form":                       _timed("dim_form",                       lambda: _build_dim_form(conn)),
-        "dim_date":                       _timed("dim_date",                       lambda: _build_dim_date(conn)),
-        "dim_filing":                     _timed("dim_filing",                     lambda: _build_dim_filing(conn)),
-        "fact_filing_activity":           _timed("fact_filing_activity",           lambda: _build_fact_filing_activity(conn)),
-        "dim_party":                      _timed("dim_party",                      lambda: _build_dim_party(conn)),
-        "dim_security":                   _timed("dim_security",                   lambda: _build_dim_security(conn)),
-        "dim_ownership_txn_type":         _timed("dim_ownership_txn_type",         lambda: _build_dim_ownership_txn_type(conn)),
-        "dim_geography":                  _timed("dim_geography",                  lambda: _build_dim_geography(conn)),
-        "dim_disclosure_category":        _timed("dim_disclosure_category",        lambda: _build_dim_disclosure_category(conn)),
-        "dim_private_fund":               _timed("dim_private_fund",               lambda: _build_dim_private_fund(conn)),
-        "fact_ownership_transaction":     _timed("fact_ownership_transaction",     lambda: _build_fact_ownership_transaction(conn)),
-        "fact_ownership_holding_snapshot":_timed("fact_ownership_holding_snapshot",lambda: _build_fact_ownership_holding_snapshot(conn)),
-        "fact_adv_office":                _timed("fact_adv_office",                lambda: _build_fact_adv_office(conn)),
-        "fact_adv_disclosure":            _timed("fact_adv_disclosure",            lambda: _build_fact_adv_disclosure(conn)),
-        "fact_adv_private_fund":          _timed("fact_adv_private_fund",          lambda: _build_fact_adv_private_fund(conn)),
+def _gold_table_builders(conn: Any) -> list[tuple[str, Callable[[], pa.Table]]]:
+    return [
+        ("dim_company",                    lambda: _build_dim_company(conn)),
+        ("dim_form",                       lambda: _build_dim_form(conn)),
+        ("dim_date",                       lambda: _build_dim_date(conn)),
+        ("dim_filing",                     lambda: _build_dim_filing(conn)),
+        ("fact_filing_activity",           lambda: _build_fact_filing_activity(conn)),
+        ("dim_party",                      lambda: _build_dim_party(conn)),
+        ("dim_security",                   lambda: _build_dim_security(conn)),
+        ("dim_ownership_txn_type",         lambda: _build_dim_ownership_txn_type(conn)),
+        ("dim_geography",                  lambda: _build_dim_geography(conn)),
+        ("dim_disclosure_category",        lambda: _build_dim_disclosure_category(conn)),
+        ("dim_private_fund",               lambda: _build_dim_private_fund(conn)),
+        ("fact_ownership_transaction",     lambda: _build_fact_ownership_transaction(conn)),
+        ("fact_ownership_holding_snapshot",lambda: _build_fact_ownership_holding_snapshot(conn)),
+        ("fact_adv_office",                lambda: _build_fact_adv_office(conn)),
+        ("fact_adv_disclosure",            lambda: _build_fact_adv_disclosure(conn)),
+        ("fact_adv_private_fund",          lambda: _build_fact_adv_private_fund(conn)),
         # Branch B fundamentals — PR-1 (Q1-C hybrid passthrough+dimensional).
-        # The dict KEY here is informational; the actual Snowflake target table
-        # name comes from SNOWFLAKE_EXPORT_TABLES (run_manifest_builder.py),
+        # The tuple name here is informational; the actual Snowflake target
+        # table name comes from SNOWFLAKE_EXPORT_TABLES (run_manifest_builder.py),
         # which is keyed UPPER-snake by Snowflake table name.
-        "sec_financial_fact":             _timed("sec_financial_fact",             lambda: _build_sec_financial_fact(conn)),
-        "sec_thirteenf_holding":          _timed("sec_thirteenf_holding",          lambda: _build_sec_thirteenf_holding(conn)),
-        "sec_financial_derived":          _timed("sec_financial_derived",          lambda: _build_sec_financial_derived(conn)),
-        "fact_earnings_release":          _timed("fact_earnings_release",          lambda: _build_fact_earnings_release(conn)),
-        "fact_guidance":                  _timed("fact_guidance",                  lambda: _build_fact_guidance(conn)),
-        "fact_executive_record":          _timed("fact_executive_record",          lambda: _build_fact_executive_record(conn)),
-        "fact_accounting_flag":           _timed("fact_accounting_flag",           lambda: _build_fact_accounting_flag(conn)),
+        ("sec_financial_fact",             lambda: _build_sec_financial_fact(conn)),
+        ("sec_thirteenf_holding",          lambda: _build_sec_thirteenf_holding(conn)),
+        ("sec_financial_derived",          lambda: _build_sec_financial_derived(conn)),
+        ("fact_earnings_release",          lambda: _build_fact_earnings_release(conn)),
+        ("fact_guidance",                  lambda: _build_fact_guidance(conn)),
+        ("fact_executive_record",          lambda: _build_fact_executive_record(conn)),
+        ("fact_accounting_flag",           lambda: _build_fact_accounting_flag(conn)),
         # Agent neighborhood evidence (ticket 08)
-        "sec_subsidiary_evidence":        _timed("sec_subsidiary_evidence",        lambda: _build_sec_subsidiary_evidence(conn)),
-        "sec_auditor_report_evidence":    _timed("sec_auditor_report_evidence",    lambda: _build_sec_auditor_report_evidence(conn)),
-        "sec_employment_event":           _timed("sec_employment_event",           lambda: _build_sec_employment_event(conn)),
+        ("sec_subsidiary_evidence",        lambda: _build_sec_subsidiary_evidence(conn)),
+        ("sec_auditor_report_evidence",    lambda: _build_sec_auditor_report_evidence(conn)),
+        ("sec_employment_event",           lambda: _build_sec_employment_event(conn)),
         # Firm Roster completeness cross-check (ticket 03). "sec_adv_private_fund"
-        # here is a distinct dict key from "fact_adv_private_fund" above -- that
-        # one is the existing CIK-keyed dimensional PRIVATE_FUNDS gold table;
-        # this one is a raw CRD-keyed passthrough export of the same silver
-        # table, added because the dimensional table has no CRD column.
-        "sec_adv_firm_roster":            _timed("sec_adv_firm_roster",            lambda: _build_sec_adv_firm_roster(conn)),
-        "sec_adv_private_fund":           _timed("sec_adv_private_fund",           lambda: _build_sec_adv_private_fund_passthrough(conn)),
-    }
+        # here is a distinct name from "fact_adv_private_fund" above -- that one
+        # is the existing CIK-keyed dimensional PRIVATE_FUNDS gold table; this
+        # one is a raw CRD-keyed passthrough export of the same silver table,
+        # added because the dimensional table has no CRD column.
+        ("sec_adv_firm_roster",            lambda: _build_sec_adv_firm_roster(conn)),
+        ("sec_adv_private_fund",           lambda: _build_sec_adv_private_fund_passthrough(conn)),
+    ]
+
+
+def iter_gold_tables(db: Any) -> Iterator[tuple[str, pa.Table]]:
+    """Yield each gold table one at a time instead of materializing the whole
+    gold layer in memory simultaneously.
+
+    Memory-critical callers — anything in GOLD_AFFECTING_COMMANDS — must use
+    this and write+discard each table before building the next, rather than
+    build_gold(), which holds every table alive at once and OOM'd
+    daily_incremental in prod (2026-07-30) building the ~6.8M-row
+    sec_thirteenf_holding table on top of ~7M rows of already-built
+    predecessor tables still held in the dict.
+    """
+    # Accepts SilverDatabase or ShardedSilverReader via duck typing (._conn attribute).
+    conn = get_connection(db)
+    for name, fn in _gold_table_builders(conn):
+        yield name, _timed(name, fn)
+
+
+def build_gold(db: Any) -> dict[str, pa.Table]:
+    """Materialize the whole gold layer as a dict.
+
+    Holds every gold table in memory simultaneously — only safe for callers
+    that need random access across the full set (e.g. data-quality
+    validation, tests). See iter_gold_tables() for why memory-critical
+    callers must not use this.
+    """
+    return dict(iter_gold_tables(db))
 
 
 def _write_parquet(table: pa.Table, storage_root: Any, relative_path: str) -> dict[str, Any]:
@@ -1301,29 +1326,41 @@ def write_gold_to_storage(tables: dict[str, pa.Table], storage_root: Any, run_id
     return {entry["table_name"]: entry["row_count"] for entry in manifest}
 
 
+def write_gold_table_manifest_entry(
+    table_name: str,
+    table: pa.Table,
+    storage_root: Any,
+    run_id: str,
+) -> dict[str, Any]:
+    """Write a single gold table to storage and return its manifest entry.
+
+    Extracted from write_gold_to_storage_manifest so memory-critical callers
+    (paired with iter_gold_tables()) can write and discard one table at a
+    time instead of writing the whole dict at once.
+    """
+    capture_specs = default_capture_spec_factory()
+    output_spec = capture_specs.gold_table_output(table_name, run_id)
+    write_record = _write_parquet(table, storage_root, output_spec.relative_path)
+    return {
+        "table_name": table_name,
+        "storage_layer": "warehouse_gold",
+        "relative_path": write_record["relative_path"],
+        "storage_path": write_record["path"],
+        "row_count": int(table.num_rows),
+        "parquet_sha256": write_record["sha256"],
+        "byte_size": write_record["byte_size"],
+    }
+
+
 def write_gold_to_storage_manifest(
     tables: dict[str, pa.Table],
     storage_root: Any,
     run_id: str,
 ) -> list[dict[str, Any]]:
-    manifest: list[dict[str, Any]] = []
-    capture_specs = default_capture_spec_factory()
-    for table_name, table in tables.items():
-        output_spec = capture_specs.gold_table_output(table_name, run_id)
-        write_record = _write_parquet(table, storage_root, output_spec.relative_path)
-        row_count = int(table.num_rows)
-        manifest.append(
-            {
-                "table_name": table_name,
-                "storage_layer": "warehouse_gold",
-                "relative_path": write_record["relative_path"],
-                "storage_path": write_record["path"],
-                "row_count": row_count,
-                "parquet_sha256": write_record["sha256"],
-                "byte_size": write_record["byte_size"],
-            }
-        )
-    return manifest
+    return [
+        write_gold_table_manifest_entry(table_name, table, storage_root, run_id)
+        for table_name, table in tables.items()
+    ]
 
 
 def build_ticker_reference_table(

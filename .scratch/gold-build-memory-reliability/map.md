@@ -31,7 +31,7 @@ carries execution, not open design decisions (see Notes).
 
 <!-- Closed ticket decisions — one-line gist + link; detail lives in the ticket. -->
 
-(none yet)
+- [Stream build_gold() per table instead of materializing the whole gold layer](issues/01-stream-build-gold-per-table.md) — implemented on `claude/gold-build-streaming` (not yet merged/deployed): `iter_gold_tables()` generator + per-table write/export helpers replace the eager whole-dict build; peak-memory reduction reasoned from CloudWatch evidence but not yet empirically confirmed in prod — that's expected to land via ticket 03's redeploy.
 
 ## Not yet specified
 
@@ -43,6 +43,12 @@ carries execution, not open design decisions (see Notes).
   ticket 02's finding) have ever actually run at full-universe scale — if not, they carry the
   same latent risk as `daily_incremental` did before this incident, but there's no incident
   evidence yet to ticket a fix against.
+- `validate_data_quality.py`'s `_check_gold_vs_silver` still calls `build_gold()` (the
+  whole-dict form) directly — it needs random access across the full gold layer (checking
+  each table in `_DIRECT_GOLD_SILVER_TABLES` against silver row counts), so ticket 01
+  deliberately left it alone. It carries the same eager-materialization memory risk ticket 01
+  just fixed for `GOLD_AFFECTING_COMMANDS`, but isn't in that set and has no incident evidence
+  yet — not sharp enough to ticket until it actually OOMs or a real need to fix it surfaces.
 
 ## Out of scope
 
