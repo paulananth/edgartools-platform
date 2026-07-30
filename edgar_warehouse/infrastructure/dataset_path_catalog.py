@@ -325,7 +325,7 @@ class WarehousePathResolver:
                 "gold": self._render("manifest.default.gold.path", **default_tokens),
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }
-        if command_name in ("compute-windows", "write-run-summary"):
+        if command_name in ("compute-windows", "write-run-summary", "compute-identity-refresh-window"):
             # These commands write JSONL/JSON manifests to bronze; no gold or silver manifests.
             return {
                 "bronze": self._render("manifest.default.bronze.path", **default_tokens),
@@ -336,7 +336,13 @@ class WarehousePathResolver:
             return {
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }
-        if command_name in ("verify-pipeline-run", "validate-data-quality"):
+        if command_name in (
+            "verify-pipeline-run",
+            "validate-data-quality",
+            "acquire-identity-refresh-lease",
+            "release-identity-refresh-lease",
+        ):
+            # Lease commands only touch the pipeline_run_lease DB row -- no S3 writes at all.
             return {
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }

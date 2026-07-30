@@ -146,19 +146,29 @@ def test_generates_valid_json_with_no_dangling_references(daily_definition: dict
 # -- ticket 06: Stage0CompanyIdentity woven into daily_incremental -----------
 
 
-def test_daily_incremental_starts_with_compute_windows(daily_definition: dict) -> None:
-    assert daily_definition["StartAt"] == "ComputeWindows"
+def test_daily_incremental_starts_with_refresh_mode_check(daily_definition: dict) -> None:
+    """Restructured by release-readiness ticket 45/49 (bounded Daily Identity
+    Refresh): daily_incremental now decides refresh_mode before choosing
+    between the bounded default path and the full-universe backstop path --
+    see tests/architecture/test_daily_identity_refresh_state_machine.py for
+    the full shape of both branches."""
+    assert daily_definition["StartAt"] == "RefreshModeCheck"
 
 
-def test_daily_incremental_stage0_company_identity_runs_before_run_warehouse_task(
+def test_daily_incremental_default_path_reaches_run_warehouse_task_via_bounded_stage0(
     daily_definition: dict,
 ) -> None:
-    order = _linear_order(daily_definition)
-    assert "ComputeWindows" in order
-    assert "Stage0CompanyIdentity" in order
+    """The default (no refresh_mode input) path no longer runs the
+    full-universe ComputeWindows/Stage0CompanyIdentity pair -- it runs the
+    bounded ComputeIdentityRefreshWindow/Stage0CompanyIdentityBounded pair
+    instead (ticket 45/49). The original full-universe pair still exists,
+    reachable via refresh_mode="backstop" -- covered separately."""
+    order = _linear_order_with_choice(daily_definition)
+    assert "ComputeIdentityRefreshWindow" in order
+    assert "Stage0CompanyIdentityBounded" in order
     assert "RunWarehouseTask" in order
-    assert order.index("ComputeWindows") < order.index("Stage0CompanyIdentity")
-    assert order.index("Stage0CompanyIdentity") < order.index("RunWarehouseTask")
+    assert order.index("ComputeIdentityRefreshWindow") < order.index("Stage0CompanyIdentityBounded")
+    assert order.index("Stage0CompanyIdentityBounded") < order.index("RunWarehouseTask")
 
 
 def test_daily_incremental_stage0_company_identity_command_shape(daily_definition: dict) -> None:

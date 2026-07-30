@@ -2268,6 +2268,112 @@ def _capture_bronze_raw(
         metrics["window_count"] = len(window_descs)
         return raw_writes, metrics
 
+    if command_name == "compute-identity-refresh-window":
+        # Index-only pre-stage for the bounded Daily Identity Refresh
+        # (release-readiness ticket 45/49): force-recheck the trailing N
+        # calendar days (force=True, unlike daily-incremental's own
+        # already-succeeded-checkpoint short-circuit) so a late SEC
+        # daily-index republish within the window is still caught, union
+        # the impacted CIKs across those days, and write that union as the
+        # CIK source for company-identity processing -- instead of
+        # compute-windows' full tracked-universe scope.
+        lookback_days = int(scope["lookback_days"])
+        batch_size = int(scope["batch_size"])
+        end_date = now.date()
+        start_date = end_date - timedelta(days=lookback_days - 1)
+        impacted_ciks: list[int] = []
+        for target_date in _date_range(start=start_date, end=end_date):
+            result = _load_daily_index_for_date(
+                context=context,
+                db=db,
+                target_date=target_date,
+                sync_run_id=sync_run_id,
+                now=now,
+                force=True,
+            )
+            raw_writes.extend(result["raw_writes"])
+            metrics["rows_inserted"] += result["rows_written"]
+            metrics["rows_skipped"] += result["rows_skipped"]
+            _merge_capture_network_metrics(metrics, result)
+            impacted_ciks.extend(result["impacted_ciks"])
+        impacted_ciks = _dedupe_ints(impacted_ciks)
+        reference_result = _sync_reference_data(
+            context=context,
+            db=db,
+            sync_run_id=sync_run_id,
+            fetch_date=now.date(),
+        )
+        raw_writes.extend(reference_result["raw_writes"])
+        metrics["rows_inserted"] += reference_result["rows_written"]
+        metrics["rows_skipped"] += reference_result["rows_skipped"]
+        impacted_ciks = _filter_ciks_to_universe(impacted_ciks, db=db)
+        batches_path = _write_cik_universe_batches(
+            context=context,
+            rows=[{"cik": cik} for cik in impacted_ciks],
+            fetch_date=now.date(),
+            sync_run_id=sync_run_id,
+            batch_size=batch_size,
+        )
+        _emit_pipeline_event(
+            "compute_identity_refresh_window_completed",
+            run_id=sync_run_id,
+            cik_count=len(impacted_ciks),
+            lookback_days=lookback_days,
+            batch_size=batch_size,
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
+        )
+        metrics["cik_count"] = len(impacted_ciks)
+        metrics["cik_universe_path"] = batches_path
+        return raw_writes, metrics
+
+    if command_name == "acquire-identity-refresh-lease":
+        # Run-level lease shared by the Daily Identity Refresh and the Identity
+        # Backstop Sweep (release-readiness ticket 45/49) so only one of the
+        # two ever runs at a time. NOTE: wiring the resulting lease_acquired
+        # metric into a Step Functions Choice state (to end the execution as
+        # "deferred"/"backstop_overdue" instead of proceeding to Stage0, plus
+        # the AWS Operator alert and the 18h stale-execution alarm) is
+        # deliberately not done in this command -- that's state-machine-level
+        # observability work tracked separately in ticket 49, not invented
+        # here.
+        mode = str(scope["mode"] or "").strip()
+        if mode not in {"daily", "backstop"}:
+            raise WarehouseRuntimeError(
+                f"acquire-identity-refresh-lease requires --mode of 'daily' or 'backstop', got {mode!r}"
+            )
+        acquired = db.acquire_pipeline_run_lease(
+            lease_name="daily_identity_refresh",
+            run_id=sync_run_id,
+            mode=mode,
+            acquired_at=now,
+        )
+        if acquired:
+            _emit_pipeline_event(
+                "identity_refresh_lease_acquired", run_id=sync_run_id, mode=mode
+            )
+        else:
+            held = db.get_pipeline_run_lease("daily_identity_refresh")
+            _emit_pipeline_event(
+                "identity_refresh_lease_deferred",
+                run_id=sync_run_id,
+                mode=mode,
+                held_by_run_id=held.get("run_id") if held else None,
+                held_since=str(held.get("acquired_at")) if held else None,
+                backstop_overdue=(mode == "backstop"),
+            )
+        metrics["lease_acquired"] = acquired
+        return raw_writes, metrics
+
+    if command_name == "release-identity-refresh-lease":
+        db.release_pipeline_run_lease(
+            lease_name="daily_identity_refresh",
+            run_id=sync_run_id,
+            released_at=now,
+        )
+        _emit_pipeline_event("identity_refresh_lease_released", run_id=sync_run_id)
+        return raw_writes, metrics
+
     if command_name == "write-run-summary":
         from_windows_key = str(arguments.get("from_windows_key") or "").strip()
         if not from_windows_key:
@@ -4935,6 +5041,12 @@ def _resolve_scope(
     if command_name == "ingest-relationship-sources":
         return {"source_manifest": arguments.get("source_manifest")}
 
+    if command_name == "acquire-identity-refresh-lease":
+        return {"mode": arguments.get("mode")}
+
+    if command_name == "release-identity-refresh-lease":
+        return {}
+
     if command_name == "fetch-adv-bulk":
         return {
             "dataset_period": arguments.get("dataset_period"),
@@ -4990,6 +5102,12 @@ def _resolve_scope(
         return {
             "window_size": arguments.get("window_size", 500),
             "total_cik_limit": arguments.get("total_cik_limit"),
+        }
+
+    if command_name == "compute-identity-refresh-window":
+        return {
+            "lookback_days": int(arguments.get("lookback_days") or 7),
+            "batch_size": int(arguments.get("batch_size") or 500),
         }
 
     if command_name == "write-run-summary":
