@@ -62,6 +62,7 @@ _REQUIRED_TEMPLATE_KEYS = frozenset(
         "reference.cik_windows.path",
         "reference.cik_snapshot.path",
         "reference.run_summary.path",
+        "reference.identity_refresh_lease.path",
         "submissions.main.filename",
         "submissions.main.path",
         "submissions.pagination.path",
@@ -164,6 +165,13 @@ class WarehousePathResolver:
     def run_summary_path(self, run_id: str) -> str:
         """Return the S3-relative path for run-summary.json for the given run."""
         return self._render("reference.run_summary.path", run_id=run_id)
+
+    def identity_refresh_lease_path(self, run_id: str) -> str:
+        """Return the S3-relative path for the Daily Identity Refresh /
+        Identity Backstop Sweep lease-result.json side-channel for the given
+        run -- the state machine reads this via s3:getObject to branch on
+        lease_acquired, since ecs:runTask.sync doesn't surface app stdout."""
+        return self._render("reference.identity_refresh_lease.path", run_id=run_id)
 
     def run_manifest_path(self, command_path: str, run_id: str) -> str:
         """Return the S3-relative path for a consolidated run_manifest.json."""

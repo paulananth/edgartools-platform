@@ -147,6 +147,192 @@ work is done and tested, but the lease/schedule/observability wiring and the
 full evidence-gathering + Operator GO remain. Whoever picks this up next
 should start from the "Explicitly NOT done" list above.
 
+## Progress (2026-07-30, later same day — go-live branch, lease wired in)
+
+On branch `claude/daily-identity-refresh-go-live` (based on `main`, which now
+carries the merged Refresh-behavior work above): implemented the
+"AcquireLease/ReleaseLease not yet inserted into the state machine" gap from
+the previous session's list.
+
+**Done, tested (854 unit+architecture tests passing), gof-refactor-reviewer
+and two-axis `/code-review` run against the diff, findings applied:**
+- State machine restructured: `RefreshModeCheck`/`RefreshModeDefault` now
+  route to a new `AcquireLease` step (ECS task calling
+  `acquire-identity-refresh-lease --mode <refresh_mode>`) before either
+  refresh mode is chosen. Since `ecs:runTask.sync` can't surface app-level
+  stdout to a Choice state, `AcquireLease` writes `lease_result.json` to S3
+  as its source of truth (new `identity_refresh_lease_path()` template);
+  `ReadLeaseResult` reads it back via `aws-sdk:s3:getObject` +
+  `States.StringToJson`; `LeaseAcquiredCheck` is fail-closed (only an
+  explicit `lease_acquired=true` proceeds to `RefreshMode`, everything else
+  falls through `Default` to a `Deferred` terminal state). `GoldRefresh` now
+  routes to `ReleaseLease` (best-effort — a `Catch` routes release failures
+  to a non-fatal terminal state) instead of ending directly. `bootstrap`'s
+  definition confirmed unaffected.
+- `acquire_pipeline_run_lease` (`silver_store.py`) gained a staleness-based
+  reclaim: a lease held past `stale_after_seconds` (default **20h** — 2h of
+  margin past the Identity Backstop Sweep's own 18h completion/alarm bound,
+  not 18h itself, to avoid a new run's acquire racing a legitimately-still-
+  finishing backstop mid-`ReleaseLease`) is reclaimable by a later acquirer.
+  This is the actual safety net for a crashed run; release-on-failure
+  elsewhere is deliberately best-effort, not wrapped in Catch on every
+  downstream state (a "wrap everything in Parallel+Catch" alternative was
+  considered and rejected as disproportionate ASL surgery — advisor's call).
+- Extracted `IDENTITY_REFRESH_LEASE_NAME` (`warehouse_orchestrator.py`) as a
+  single source of truth for the lease's name, and a test
+  (`test_read_lease_result_key_matches_the_real_path_resolver`) cross-checking
+  the deploy script's hand-typed S3 key against the real path-resolver output
+  — both fix the same class of gap Standards-axis review found: the lease
+  *name* and the lease-result *path* were each duplicated across files with
+  nothing tying the copies together, so an edit to one copy could silently
+  break the mechanism.
+- `Deferred`'s own execution output now carries a labeled
+  `{"disposition": "deferred", "lease_check": {...}}` field (via `Parameters`/
+  `ResultPath`) instead of relying entirely on `$` passthrough — Spec-axis
+  review found the prior bare Pass state's disposition was only visible one
+  layer down (CloudWatch events), not in the execution's own output where an
+  operator would look first.
+- Clarified (deploy-script comment + test docstring + a new
+  `test_read_lease_result_has_no_catch`) that `ReadLeaseResult` deliberately
+  has no `Retry`/`Catch`: a missing/corrupt `lease_result.json` fails the
+  execution outright rather than falling through to `Deferred` — Spec-axis
+  review found the original comments overclaimed that "anything else (false,
+  missing, malformed)" reaches `Deferred`, when only a successfully-parsed
+  `lease_acquired: false` actually does. This is the correct behavior (an
+  unknown failure mode must not be silently relabeled as the benign "lease
+  busy" case), so the fix was to the documentation, not the code.
+
+**Still explicitly NOT done (unchanged from the list above, plus two new
+gaps this session's own review surfaced and left open rather than
+building further):**
+- EventBridge/Terraform schedule changes, CloudWatch alerting (deferral
+  alerts, 18h stale-execution alarm) — still entirely unstarted; these were
+  the two options *not* chosen when this session picked "wire the lease into
+  the state machine" over "EventBridge/Terraform schedule wiring" as the
+  branch's scope.
+- **`backstop_overdue` is recorded but never consumed.** `lease_result.json`
+  and the `identity_refresh_lease_deferred` event both carry this flag when
+  a losing acquirer was the backstop mode, but nothing reads it to force the
+  *next* available slot into backstop mode ahead of a narrow daily refresh
+  (ticket 45's "prioritize it at the next available slot" requirement) —
+  that logic doesn't exist yet because the thing that would consume it (the
+  schedule/slot-selection mechanism) is itself one of the still-unstarted
+  EventBridge items above.
+- No prod deploy of this branch — code, tests, and commits only.
+
+**Status remains `claimed`.**
+
+## Progress (2026-07-30, later same day — schedule wiring + backstop_overdue consumption)
+
+Closed the two gaps the prior progress note above left open: `backstop_overdue`
+consumption, and EventBridge/Terraform schedule wiring. Both landed together
+on `claude/daily-identity-refresh-go-live` on top of the lease-wiring commit
+(open as PR #316).
+
+**backstop_overdue is now real, persisted state, not just a per-run flag.**
+Consulted advisor before writing code: two static cron rules (Mon-Sat →
+`daily`, Sun → `backstop`) structurally cannot satisfy "prioritize the next
+available slot" on their own — Monday's rule always sends `daily` regardless
+of what Sunday did. Fixed by moving mode resolution *into* the pipeline:
+- `pipeline_run_lease` gained a persisted `backstop_overdue` column
+  (migration `008_pipeline_run_lease_backstop_overdue` — DuckDB rejects a
+  `NOT NULL` constraint on `ALTER TABLE ADD COLUMN`, so the migration uses
+  `DEFAULT FALSE` without it, matching this file's other `ADD COLUMN`
+  migrations; the `CREATE TABLE` DDL for fresh stores keeps `NOT NULL`).
+- `mark_pipeline_run_lease_backstop_overdue()` sets it when a `backstop`-mode
+  acquire attempt is deferred; `release_pipeline_run_lease()` clears it via
+  `CASE WHEN mode = 'backstop' THEN FALSE ELSE backstop_overdue END` — a
+  `daily`-mode release passing through must never accidentally clear an
+  overdue backstop it had nothing to do with.
+- `acquire-identity-refresh-lease` now resolves an `effective_mode` from the
+  persisted flag *before* acquiring (overriding the trigger's own
+  `--mode`/`requested_mode`), and writes the resolved value — not the raw
+  request — into `lease_result.json`.
+- A new `ApplyEffectiveRefreshMode` ASL Pass state overwrites `$.refresh_mode`
+  from `$.lease_check.parsed.mode` right after `LeaseAcquiredCheck`'s
+  fail-closed true branch, so the existing `RefreshMode` dispatch (which
+  chooses `ComputeWindows` vs `ComputeIdentityRefreshWindow`) reflects the
+  lease's decision, not the trigger payload — reusing the same "Pass state
+  overwrites a top-level field" idiom `RefreshModeDefault` already used.
+- Verified the mechanism survives more than one missed slot, not just a
+  single defer-then-succeed cycle (a genuine gap the Spec-axis code-review
+  caught in the first version of this coverage): a new test drives Sunday's
+  backstop deferred → Monday's backstop-resolved retry *also* deferred →
+  Tuesday's trigger still resolves to `backstop` → only Tuesday's successful
+  `backstop`-mode release finally clears the flag.
+
+**EventBridge schedule moved from passive Terraform to an explicit,
+off-by-default deploy-script control**, per ticket 45's exact requirement:
+- Deleted `infra/terraform/accounts/prod/scheduled_daily_incremental.tf`
+  (and its `daily_incremental_schedule_enabled` variable) — confirmed safe
+  first: the variable defaulted to `false`, no tfvars anywhere set it `true`,
+  and `terraform validate` is clean with the file gone, so every resource in
+  it was `count = 0` in prod and this is a pure no-op removal, not surgery
+  on live state. (Standards-axis code-review caveat, not fully closable from
+  this sandbox: this reasoning is corroborated by the local
+  `infra/.aws-tfstate-backups/` snapshots, which contain zero references to
+  `daily_incremental_scheduler`, but a live `terraform state list` against
+  the real `edgartools-prod-tfstate` backend was not run — worth one before
+  the next `accounts/prod` apply, purely as a sanity check.)
+- Added `infra/terraform/access/aws/accounts/prod/scheduled_daily_incremental.tf`
+  (new file, same name as the deleted one, different root): only a
+  least-privilege `daily_incremental_scheduler` IAM role +
+  `states:StartExecution` policy scoped to exactly the
+  `edgartools-prod-daily-incremental` state machine ARN. Created
+  unconditionally (no enable flag) — the role alone starts nothing, since no
+  rule/target is created in Terraform at all; new output
+  `daily_incremental_scheduler_role_arn`.
+- Added `--configure-daily-incremental-schedule enable|disable` and
+  `--daily-incremental-scheduler-role-arn <arn>` to
+  `infra/scripts/deploy-aws-application.sh`. This is a standalone action —
+  it exits immediately after configuring, before any image build, task
+  definition registration, or state-machine deploy runs, so it can never be
+  an accidental side effect of an ordinary `--env prod` deploy. `enable`
+  creates/updates two rules via `put_daily_incremental_schedule_rule()` (a
+  gof-refactor-reviewer finding: the two rule blocks were near-identical,
+  extracted into one shared helper) — `cron(0 12 ? * MON-SAT *)` sending
+  `{"refresh_mode": "daily"}`, and `cron(0 12 ? * SUN *)` sending
+  `{"refresh_mode": "backstop"}`, both against the deterministic
+  `${NAME_PREFIX}-daily-incremental` state machine ARN and the scheduler
+  role above. `disable` removes targets and deletes both rules, and is a
+  clean no-op if they don't exist. Not yet run against prod — this PR adds
+  the capability only.
+
+**Process, per this session's CLAUDE.md convention:** ran
+`/gof-refactor-reviewer` (one finding, fixed: the duplicated rule-setup
+blocks above) and a full two-axis `/code-review` against the lease-wiring
+commit (`390a5de`, i.e. scoped to just this session's diff, not re-reviewing
+already-reviewed work). Findings applied:
+- Standards axis: no hard violations. Fixed a real test-infrastructure
+  fragility — `test_daily_incremental_schedule_controls.py`'s function-source
+  extraction anchored on a guard string
+  (`if ! is_empty "$CONFIGURE_DAILY_INCREMENTAL_SCHEDULE"; then`) that's
+  duplicated in the deploy script (it also opens the CLI-argument validation
+  block); a future reorder of the two occurrences relative to the function
+  definitions could have silently truncated the extracted source. Fixed by
+  anchoring on the more specific, provably-unique
+  `<closing brace>, blank line, if-guard` sequence instead, while still
+  excluding the guard's own body from what's actually sourced (the original
+  fix attempt included the guard's call line in the extracted text, which
+  broke all 6 tests with a dangling unterminated `if` — caught immediately
+  by re-running the suite before considering this done).
+- Spec axis: cadence (`12:00 UTC`, Mon-Sat / Sun) and cron syntax
+  (`?`/day-of-week form) confirmed correct against ticket 45's literal text;
+  no scope creep; CloudWatch alerting and Phase 1/2 correctly out of scope
+  for a code diff. One real gap found and fixed: the original tests only
+  proved a single defer-then-succeed cycle for `backstop_overdue`, not that
+  it survives multiple consecutive deferrals — added the two-consecutive-
+  deferrals test described above.
+
+Full test suite: 865 passed (unit + architecture), 4 skipped. Both Terraform
+roots (`accounts/prod`, `access/aws/accounts/prod`) `terraform validate`
+clean.
+
+**Still not done:** CloudWatch alerting (deferral alerts, 18h/20h-stale
+execution alarm), actually running `--configure-daily-incremental-schedule
+enable` against prod, Phase 1 manual evidence-gathering, Phase 2 Operator
+GO checkpoint. **Status remains `claimed`.**
+
 ## Done when
 
 Focused tests, repository CI, deployed definitions, manual production timing,
