@@ -8,7 +8,6 @@ on-PATH pattern in test_prod_promotion_preflight.py.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import subprocess
@@ -33,15 +32,6 @@ def _fake_snow(tmp_path: Path) -> Path:
         / "edgar_warehouse/serving/dashboard_query_registry.py",
         "environment.yml": REPO_ROOT / "infra/snowflake/streamlit/environment.yml",
     }
-    stage_listing = [
-        {
-            "name": f"dashboard_src/{name}",
-            "size": path.stat().st_size,
-            "md5": hashlib.md5(path.read_bytes(), usedforsecurity=False).hexdigest(),
-            "last_modified": "2026-07-29",
-        }
-        for name, path in staged_files.items()
-    ]
     git_short = subprocess.run(
         ['git', 'rev-parse', '--short=12', 'HEAD'],
         cwd=REPO_ROOT,
@@ -69,8 +59,16 @@ if [[ "$*" == *"--format json"* && "$*" == *"/releases/"* ]]; then
   printf '%s\\n' '[]'
 elif [[ "$*" == *"--format json"* && "$*" == *"SHOW STREAMLITS"* ]]; then
   printf '%s\\n' '{json.dumps(streamlit_listing)}'
-elif [[ "$*" == *"--format json"* && "$*" == *"LIST @"* ]]; then
-  printf '%s\\n' '{json.dumps(stage_listing)}'
+elif [[ "$*" == *"GET @"* ]]; then
+  file_name="$(printf '%s' "$*" | sed -E 's#.*GET @[^ ]+/([^ ]+) file://.*#\\1#')"
+  destination="$(printf '%s' "$*" | sed -E 's#.* file://([^ ]+)/ OVERWRITE.*#\\1#')"
+  case "$file_name" in
+    streamlit_app.py) cp '{staged_files["streamlit_app.py"]}' "$destination/$file_name" ;;
+    dashboard_modes.py) cp '{staged_files["dashboard_modes.py"]}' "$destination/$file_name" ;;
+    dashboard_query_registry.py) cp '{staged_files["dashboard_query_registry.py"]}' "$destination/$file_name" ;;
+    environment.yml) cp '{staged_files["environment.yml"]}' "$destination/$file_name" ;;
+    *) exit 2 ;;
+  esac
 fi
 exit 0
 """,
