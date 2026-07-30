@@ -261,14 +261,10 @@ resource "snowflake_grant_privileges_to_account_role" "reader_dashboard_streamli
 
 # GH-247: dashboard_owner is the least-privilege role that owns the
 # Streamlit-in-Snowflake dashboard object and its source stage --
-# distinct from reader (viewer access above) and from
-# deployer/loader (data-plane roles). It gets NO direct SELECT on gold/
-# decision/status data: SiS dashboards run under Caller's Rights, so the
-# viewing session's own role (reader) is what governs query access, not
-# the object owner's. Purely additive grants -- does not touch any
-# existing role's grant set, so this cannot repeat the 2026-07-27
-# REVOKE-CURRENT-GRANTS reader-access incident (CLAUDE.md "Manifest-
-# pipeline ownership + cursor-syntax incident 5-whys").
+# distinct from reader (viewer access above) and from deployer/loader
+# (data-plane roles). Streamlit-in-Snowflake runs with owner's rights, so
+# dashboard_owner inherits the bounded reader role. It does not receive an
+# independent data allowlist that could drift from the viewer contract.
 #
 # NOT applied to live Snowflake by this commit. Two things a live-apply
 # pass still needs to verify, not assumed correct here:
@@ -301,6 +297,21 @@ resource "snowflake_grant_privileges_to_account_role" "dashboard_owner_warehouse
   }
 }
 
+resource "snowflake_grant_account_role" "reader_to_dashboard_owner" {
+  role_name        = snowflake_account_role.roles["reader"].name
+  parent_role_name = snowflake_account_role.roles["dashboard_owner"].name
+}
+
+resource "snowflake_grant_privileges_to_account_role" "dashboard_owner_stage_access" {
+  account_role_name = snowflake_account_role.roles["dashboard_owner"].name
+  privileges        = ["READ", "WRITE"]
+
+  on_schema_object {
+    object_type = "STAGE"
+    object_name = var.dashboard_stage_qualified_name
+  }
+}
+
 # GH-246/GH-247 criterion 2: Decision Contract dependency modeled
 # explicitly for the dashboard's viewer role. EDGARTOOLS_DECISION is not
 # provisioned by account_baseline (see decision_schema_name's
@@ -314,29 +325,25 @@ resource "snowflake_grant_privileges_to_account_role" "reader_decision_schema_us
   }
 }
 
-resource "snowflake_grant_privileges_to_account_role" "reader_decision_all_objects" {
-  for_each = toset(["TABLES", "VIEWS"])
-
+resource "snowflake_grant_privileges_to_account_role" "reader_decision_all_views" {
   account_role_name = snowflake_account_role.roles["reader"].name
   privileges        = ["SELECT"]
 
   on_schema_object {
     all {
-      object_type_plural = each.value
+      object_type_plural = "VIEWS"
       in_schema          = local.decision_schema_fqn
     }
   }
 }
 
-resource "snowflake_grant_privileges_to_account_role" "reader_decision_future_objects" {
-  for_each = toset(["TABLES", "VIEWS"])
-
+resource "snowflake_grant_privileges_to_account_role" "reader_decision_future_views" {
   account_role_name = snowflake_account_role.roles["reader"].name
   privileges        = ["SELECT"]
 
   on_schema_object {
     future {
-      object_type_plural = each.value
+      object_type_plural = "VIEWS"
       in_schema          = local.decision_schema_fqn
     }
   }

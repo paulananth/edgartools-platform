@@ -52,6 +52,11 @@ variable "dashboard_streamlit_qualified_name" {
   type        = string
 }
 
+variable "dashboard_stage_qualified_name" {
+  description = "Fully qualified internal stage holding the dashboard release."
+  type        = string
+}
+
 variable "grant_roles_to_admin" {
   description = "Whether to grant managed roles to the parent admin role."
   type        = bool

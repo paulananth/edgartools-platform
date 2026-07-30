@@ -16,15 +16,9 @@
 # writes a secret-free JSON evidence artifact both locally and to the
 # stage.
 #
-# What this script does NOT do (see PR/issue #247 for why): apply the
-# EDGARTOOLS_{ENV}_DASHBOARD_OWNER role from
-# infra/terraform/access/snowflake/modules/account_access -- that is a
-# separate, deliberately-approved live Terraform apply, not something a
-# deploy script does implicitly. This script assumes whatever role the
-# SnowCLI connection authenticates as already has the necessary
-# CREATE STAGE/CREATE STREAMLIT/USAGE privileges on the dashboard schema
-# (today: an existing broader role; going forward: that dashboard-owner
-# role once its grants are live).
+# Terraform provisions the owner/viewer grants. For the primary dashboard,
+# this script also enforces Snowflake owner's-rights semantics by recreating
+# the Streamlit object as the dedicated dashboard-owner role after upload.
 #
 # Prereqs:
 #   - SnowCLI installed (`snow --version`), unless --dry-run
@@ -39,6 +33,7 @@
 #   bash deploy.sh --dry-run             # compute + write evidence.json locally,
 #                                         # run pre-flight tests, skip all `snow sql`
 #   bash deploy.sh --skip-tests          # skip the pre-flight test run (not recommended)
+#   bash deploy.sh --rollback sha-abc123def456
 #
 # Usage (a different app, e.g. GH-252's MDM dashboard):
 #   DASHBOARD_APP_NAME=mdm-dashboard \
@@ -66,6 +61,8 @@ STAGE_FQN="${DATABASE}.${SCHEMA}.${STAGE}"
 ENVIRONMENT_LABEL="${DASHBOARD_ENVIRONMENT:-${CONNECTION}}"
 RETAIN_RELEASES="${DASHBOARD_RETAIN_RELEASES:-5}"
 EVIDENCE_DIR="${DASHBOARD_EVIDENCE_DIR:-${SCRIPT_DIR}/.evidence}"
+RELEASE_CONTROL="${REPO_ROOT}/infra/scripts/dashboard-release-control.py"
+RELEASES_PREFIX="releases"
 
 # --- App parametrization (GH-252) -------------------------------------------
 # APP_NAME namespaces the local evidence history so two apps deployed to the
@@ -99,16 +96,91 @@ read -ra TEST_PATHS <<< "${DASHBOARD_TEST_PATHS:-${DEFAULT_TEST_PATHS}}"
 
 DRY_RUN=false
 SKIP_TESTS=false
-for arg in "$@"; do
-  case "${arg}" in
+ROLLBACK_VERSION=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     --dry-run) DRY_RUN=true ;;
     --skip-tests) SKIP_TESTS=true ;;
+    --rollback)
+      shift
+      [[ $# -gt 0 ]] || { echo "--rollback requires a release version" >&2; exit 1; }
+      ROLLBACK_VERSION="$1"
+      ;;
     *)
-      echo "Unknown argument: ${arg}" >&2
+      echo "Unknown argument: $1" >&2
       exit 1
       ;;
   esac
+  shift
 done
+
+OWNER_RIGHTS="${DASHBOARD_ENFORCE_OWNER_RIGHTS:-}"
+if [[ -z "${OWNER_RIGHTS}" ]]; then
+  [[ "${APP_NAME}" == "dashboard" ]] && OWNER_RIGHTS=true || OWNER_RIGHTS=false
+fi
+OWNER_ROLE="${DASHBOARD_OWNER_ROLE:-${DATABASE}_DASHBOARD_OWNER}"
+VIEWER_ROLE="${DASHBOARD_VIEWER_ROLE:-${DATABASE}_READER}"
+READER_WAREHOUSE="${DASHBOARD_READER_WAREHOUSE:-${DATABASE}_READER_WH}"
+ADMIN_ROLE="${DASHBOARD_ADMIN_ROLE:-ACCOUNTADMIN}"
+SMOKE_OBJECT="${DASHBOARD_SMOKE_OBJECT:-${DATABASE}.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS}"
+
+for identifier in "${OWNER_ROLE}" "${VIEWER_ROLE}" "${READER_WAREHOUSE}" "${ADMIN_ROLE}" "${SMOKE_OBJECT}"; do
+  if [[ ! "${identifier}" =~ ^[A-Z0-9_]+(\.[A-Z0-9_]+){0,2}$ ]]; then
+    echo "Unsafe Snowflake identifier: ${identifier}" >&2
+    exit 1
+  fi
+done
+if [[ -n "${ROLLBACK_VERSION}" && ! "${ROLLBACK_VERSION}" =~ ^sha-[0-9a-f]{12}$ ]]; then
+  echo "Rollback version must match sha-<12 lowercase hex>" >&2
+  exit 1
+fi
+if [[ -n "${ROLLBACK_VERSION}" && "${DRY_RUN}" == "true" ]]; then
+  echo "--rollback and --dry-run cannot be combined" >&2
+  exit 1
+fi
+
+run_role_smoke() {
+  local role="$1"
+  snow sql --connection "${CONNECTION}" --stdin <<SQL
+USE ROLE ${role};
+USE WAREHOUSE ${READER_WAREHOUSE};
+SELECT COUNT(*) AS BOUNDED_SMOKE_ROWS
+FROM (SELECT 1 FROM ${SMOKE_OBJECT} LIMIT 1);
+SQL
+}
+
+if [[ -n "${ROLLBACK_VERSION}" ]]; then
+  echo "Restoring ${ROLLBACK_VERSION} from the immutable rollback target..."
+  for file in "${RELEASE_FILES[@]}" evidence.json; do
+    snow sql --connection "${CONNECTION}" -q "REMOVE @${STAGE_FQN}/${file};"
+  done
+  snow sql --connection "${CONNECTION}" -q \
+    "COPY FILES INTO @${STAGE_FQN} FROM @${STAGE_FQN}/${RELEASES_PREFIX}/${ROLLBACK_VERSION}/;"
+  snow sql --connection "${CONNECTION}" --stdin <<SQL
+USE ROLE ${OWNER_ROLE};
+ALTER STREAMLIT ${DATABASE}.${SCHEMA}.${STREAMLIT_OBJECT}
+  SET COMMENT = 'release=${ROLLBACK_VERSION};rollback_restored=true';
+DESCRIBE STREAMLIT ${DATABASE}.${SCHEMA}.${STREAMLIT_OBJECT};
+SQL
+  run_role_smoke "${OWNER_ROLE}"
+  run_role_smoke "${VIEWER_ROLE}"
+  rollback_verified_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  rollback_evidence_dir="${EVIDENCE_DIR}/${ENVIRONMENT_LABEL}/${APP_NAME}"
+  mkdir -p "${rollback_evidence_dir}"
+  cat > "${rollback_evidence_dir}/rollback-${ROLLBACK_VERSION}.json" <<EOF
+{
+  "restored_app_version": "${ROLLBACK_VERSION}",
+  "verified_at": "${rollback_verified_at}",
+  "owner_role": "${OWNER_ROLE}",
+  "viewer_role": "${VIEWER_ROLE}",
+  "bounded_smoke_object": "${SMOKE_OBJECT}",
+  "owner_smoke_passed": true,
+  "viewer_smoke_passed": true
+}
+EOF
+  echo "Rollback ${ROLLBACK_VERSION} restored and smoke-verified."
+  exit 0
+fi
 
 if [[ "${SKIP_TESTS}" == "false" && ${#TEST_PATHS[@]} -eq 0 ]]; then
   echo "DASHBOARD_TEST_PATHS is required (space-separated pytest paths for" >&2
@@ -198,8 +270,21 @@ done
 GIT_COMMIT="$(cd "${REPO_ROOT}" && git rev-parse HEAD)"
 GIT_COMMIT_SHORT="$(cd "${REPO_ROOT}" && git rev-parse --short=12 HEAD)"
 APP_VERSION="sha-${GIT_COMMIT_SHORT}"
+SOURCE_TREE_DIRTY=false
+if [[ -n "$(cd "${REPO_ROOT}" && git status --porcelain)" ]]; then
+  SOURCE_TREE_DIRTY=true
+fi
 DEPENDENCY_LOCK_DIGEST="$(sha256_of "${STAGING_DIR}/environment.yml")"
 DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+WAREHOUSE_EVIDENCE="${DASHBOARD_WAREHOUSE_RELEASE_EVIDENCE:-}"
+DRIFT_ARGS=(drift-status --dashboard-commit "${GIT_COMMIT}")
+if [[ -n "${WAREHOUSE_EVIDENCE}" ]]; then
+  DRIFT_ARGS+=(--warehouse-evidence "${WAREHOUSE_EVIDENCE}")
+fi
+WAREHOUSE_ALIGNMENT="$(
+  cd "${REPO_ROOT}"
+  uv run python "${RELEASE_CONTROL}" "${DRIFT_ARGS[@]}"
+)"
 
 SOURCE_DIGESTS_JSON="{"
 first=true
@@ -228,16 +313,19 @@ done
 COMBINED_DIGEST="$(sha256_of "${COMBINED_FILE}")"
 rm -f "${COMBINED_FILE}"
 
-RELEASES_PREFIX="releases"
 # Namespaced by APP_NAME, not just ENVIRONMENT_LABEL -- two apps deployed
 # through the same connection/environment (e.g. both prod) must not read or
 # clobber each other's previous_app_version/rollback_command.
 PREVIOUS_EVIDENCE_LOCAL="${EVIDENCE_DIR}/${ENVIRONMENT_LABEL}/${APP_NAME}/latest.json"
-PREVIOUS_APP_VERSION=""
-if [[ -f "${PREVIOUS_EVIDENCE_LOCAL}" ]]; then
+PREVIOUS_APP_VERSION="${DASHBOARD_PREVIOUS_APP_VERSION:-}"
+if [[ -z "${PREVIOUS_APP_VERSION}" && -f "${PREVIOUS_EVIDENCE_LOCAL}" ]]; then
   # Plain grep/sed, not jq -- jq isn't a listed prereq for this script and
   # the evidence file's shape is controlled by this same script.
   PREVIOUS_APP_VERSION="$(grep -o '"app_version": *"[^"]*"' "${PREVIOUS_EVIDENCE_LOCAL}" | head -1 | sed -E 's/.*"([^"]+)"$/\1/' || true)"
+fi
+if [[ -n "${PREVIOUS_APP_VERSION}" && ! "${PREVIOUS_APP_VERSION}" =~ ^sha-[0-9a-f]{12}$ ]]; then
+  echo "Previous app version must match sha-<12 lowercase hex>" >&2
+  exit 1
 fi
 
 ROLLBACK_COMMAND="n/a (no previous release recorded locally at ${PREVIOUS_EVIDENCE_LOCAL})"
@@ -245,7 +333,7 @@ if [[ -n "${PREVIOUS_APP_VERSION}" ]]; then
   # Single-quoted -q argument -- avoids embedding literal double quotes in
   # a value that gets JSON-encoded below (json_escape still runs as
   # defense-in-depth, not as the only thing preventing invalid JSON here).
-  ROLLBACK_COMMAND="snow sql --connection ${CONNECTION} -q 'COPY FILES INTO @${STAGE_FQN} FROM @${STAGE_FQN}/${RELEASES_PREFIX}/${PREVIOUS_APP_VERSION}/;'"
+  ROLLBACK_COMMAND="SNOW_CONNECTION=${CONNECTION} DASHBOARD_DATABASE=${DATABASE} bash infra/snowflake/streamlit/deploy.sh --rollback ${PREVIOUS_APP_VERSION}"
 fi
 
 EVIDENCE_JSON=$(cat <<EOF
@@ -259,6 +347,8 @@ EVIDENCE_JSON=$(cat <<EOF
   "dependency_lock_digest": "$(json_escape "${DEPENDENCY_LOCK_DIGEST}")",
   "combined_source_digest": "$(json_escape "${COMBINED_DIGEST}")",
   "source_digests": ${SOURCE_DIGESTS_JSON},
+  "source_tree_dirty": ${SOURCE_TREE_DIRTY},
+  "warehouse_dashboard_alignment": ${WAREHOUSE_ALIGNMENT},
   "previous_app_version": $( [[ -n "${PREVIOUS_APP_VERSION}" ]] && echo "\"$(json_escape "${PREVIOUS_APP_VERSION}")\"" || echo "null" ),
   "rollback_command": "$(json_escape "${ROLLBACK_COMMAND}")",
   "dry_run": ${DRY_RUN}
@@ -275,6 +365,10 @@ echo "${EVIDENCE_JSON}"
 if [[ "${DRY_RUN}" == "true" ]]; then
   echo "--dry-run: skipping all snow sql calls (backup, upload, prune, staged evidence)."
   exit 0
+fi
+if [[ "${SOURCE_TREE_DIRTY}" == "true" && "${DASHBOARD_ALLOW_DIRTY_SOURCE:-false}" != "true" ]]; then
+  echo "Refusing to deploy a dirty source tree; commit the exact release first." >&2
+  exit 1
 fi
 
 # ---------------------------------------------------------------------------
@@ -295,14 +389,21 @@ else
 fi
 
 echo "Pruning releases beyond retention count (${RETAIN_RELEASES})..."
-snow sql --connection "${CONNECTION}" --stdin <<SQL
-LIST @${STAGE_FQN}/${RELEASES_PREFIX}/;
-SQL
-# Deliberately not auto-parsing the LIST output to auto-REMOVE here --
-# that couples this script to snow CLI's exact output format for a
-# destructive operation. Prints the listing so an operator (or a follow-up
-# scripted pass, once the output format is confirmed live) can prune
-# manually: REMOVE @<stage>/releases/<old_app_version>/;
+release_listing="${STAGING_DIR}/release-listing.json"
+snow sql --connection "${CONNECTION}" --format json \
+  -q "LIST @${STAGE_FQN}/${RELEASES_PREFIX}/;" > "${release_listing}"
+while IFS= read -r stale_version; do
+  [[ "${stale_version}" =~ ^sha-[0-9a-f]{12}$ ]] || {
+    echo "Unsafe prune candidate: ${stale_version}" >&2
+    exit 1
+  }
+  snow sql --connection "${CONNECTION}" \
+    -q "REMOVE @${STAGE_FQN}/${RELEASES_PREFIX}/${stale_version}/;"
+done < <(
+  cd "${REPO_ROOT}"
+  uv run python "${RELEASE_CONTROL}" prune-candidates \
+    --listing "${release_listing}" --retain "${RETAIN_RELEASES}"
+)
 
 # ---------------------------------------------------------------------------
 # 5. Upload the new release + staged evidence copy.
@@ -338,19 +439,84 @@ PUT file://${evidence_path_native//\\//} @${STAGE_FQN}
     OVERWRITE=TRUE;
 SQL
 
+if [[ "${OWNER_RIGHTS}" == "true" ]]; then
+  echo "Enforcing dedicated owner-rights boundary..."
+  snow sql --connection "${CONNECTION}" --stdin <<SQL
+USE ROLE ${ADMIN_ROLE};
+GRANT ROLE ${VIEWER_ROLE} TO ROLE ${OWNER_ROLE};
+GRANT READ, WRITE ON STAGE ${STAGE_FQN} TO ROLE ${OWNER_ROLE};
+DROP STREAMLIT IF EXISTS ${DATABASE}.${SCHEMA}.${STREAMLIT_OBJECT};
+USE ROLE ${OWNER_ROLE};
+USE WAREHOUSE ${READER_WAREHOUSE};
+CREATE STREAMLIT ${DATABASE}.${SCHEMA}.${STREAMLIT_OBJECT}
+  ROOT_LOCATION = '@${STAGE_FQN}'
+  MAIN_FILE = 'streamlit_app.py'
+  QUERY_WAREHOUSE = '${READER_WAREHOUSE}'
+  TITLE = 'EdgarTools Warehouse Dashboard'
+  COMMENT = 'release=${APP_VERSION};source_sha256=${COMBINED_DIGEST}';
+GRANT USAGE ON STREAMLIT ${DATABASE}.${SCHEMA}.${STREAMLIT_OBJECT}
+  TO ROLE ${VIEWER_ROLE};
+SQL
+fi
+
 # ---------------------------------------------------------------------------
 # 6. Post-deploy checks (GH-247: "inspect the Streamlit object and staged
 #    artifact digest and run bounded owner/viewer smoke queries").
-#    Object inspection is implemented; the owner/viewer smoke queries are
-#    NOT -- see PR body: they need the dashboard_owner role's live grants
-#    (infra/terraform/access/snowflake/modules/account_access) applied
-#    first, which this script does not do.
 # ---------------------------------------------------------------------------
 echo "Post-deploy check: describing the Streamlit object..."
-snow sql --connection "${CONNECTION}" --stdin <<SQL
-DESCRIBE STREAMLIT ${DATABASE}.${SCHEMA}.${STREAMLIT_OBJECT};
-LIST @${STAGE_FQN};
-SQL
+snow sql --connection "${CONNECTION}" \
+  -q "DESCRIBE STREAMLIT ${DATABASE}.${SCHEMA}.${STREAMLIT_OBJECT};"
+streamlit_listing="${STAGING_DIR}/streamlit-listing.json"
+snow sql --connection "${CONNECTION}" --format json \
+  -q "SHOW STREAMLITS LIKE '${STREAMLIT_OBJECT}' IN SCHEMA ${DATABASE}.${SCHEMA};" \
+  > "${streamlit_listing}"
+if [[ "${OWNER_RIGHTS}" == "true" ]]; then
+  OBJECT_VERIFICATION="$(
+    cd "${REPO_ROOT}"
+    uv run python "${RELEASE_CONTROL}" verify-streamlit \
+      --listing "${streamlit_listing}" \
+      --expected-name "${STREAMLIT_OBJECT}" \
+      --expected-owner "${OWNER_ROLE}" \
+      --expected-release "${APP_VERSION}"
+  )"
+else
+  OBJECT_VERIFICATION='{"status":"owner-rights-not-managed-for-this-app"}'
+fi
+stage_listing="${STAGING_DIR}/stage-listing.json"
+snow sql --connection "${CONNECTION}" --format json \
+  -q "LIST @${STAGE_FQN};" > "${stage_listing}"
+VERIFY_ARGS=(verify-staged --listing "${stage_listing}" --source-dir "${STAGING_DIR}")
+for file in "${RELEASE_FILES[@]}"; do
+  VERIFY_ARGS+=(--file "${file}")
+done
+STAGED_DIGESTS="$(
+  cd "${REPO_ROOT}"
+  uv run python "${RELEASE_CONTROL}" "${VERIFY_ARGS[@]}"
+)"
+echo "Verified staged digests: ${STAGED_DIGESTS}"
+run_role_smoke "${OWNER_ROLE}"
+run_role_smoke "${VIEWER_ROLE}"
+
+VERIFIED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+VERIFICATION_JSON=$(cat <<EOF
+{
+  "git_commit": "${GIT_COMMIT}",
+  "app_version": "${APP_VERSION}",
+  "verified_at": "${VERIFIED_AT}",
+  "streamlit": ${OBJECT_VERIFICATION},
+  "staged_file_md5": ${STAGED_DIGESTS},
+  "owner_role": "${OWNER_ROLE}",
+  "viewer_role": "${VIEWER_ROLE}",
+  "bounded_smoke_object": "${SMOKE_OBJECT}",
+  "owner_smoke_passed": true,
+  "viewer_smoke_passed": true,
+  "warehouse_dashboard_alignment": ${WAREHOUSE_ALIGNMENT}
+}
+EOF
+)
+verification_path="${EVIDENCE_DIR}/${ENVIRONMENT_LABEL}/${APP_NAME}/${APP_VERSION}.verification.json"
+echo "${VERIFICATION_JSON}" > "${verification_path}"
+echo "Post-deploy verification evidence written to ${verification_path}"
 
 echo "Done. Open Snowsight → Streamlit → ${DATABASE}.${SCHEMA}.${STREAMLIT_OBJECT}"
 echo "Release: ${APP_VERSION} (git ${GIT_COMMIT_SHORT}), evidence at ${EVIDENCE_DIR}/${ENVIRONMENT_LABEL}/${APP_NAME}/${APP_VERSION}.json"

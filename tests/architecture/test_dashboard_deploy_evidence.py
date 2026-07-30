@@ -8,11 +8,11 @@ on-PATH pattern in test_prod_promotion_preflight.py.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
 from pathlib import Path
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "infra" / "snowflake" / "streamlit" / "deploy.sh"
@@ -26,6 +26,37 @@ def _fake_snow(tmp_path: Path) -> Path:
     fakebin.mkdir(exist_ok=True)
     snow = fakebin / "snow"
     log_path = tmp_path / "snow_calls.log"
+    staged_files = {
+        "streamlit_app.py": REPO_ROOT / "infra/snowflake/streamlit/streamlit_app.py",
+        "dashboard_modes.py": REPO_ROOT / "edgar_warehouse/serving/dashboard_modes.py",
+        "dashboard_query_registry.py": REPO_ROOT
+        / "edgar_warehouse/serving/dashboard_query_registry.py",
+        "environment.yml": REPO_ROOT / "infra/snowflake/streamlit/environment.yml",
+    }
+    stage_listing = [
+        {
+            "name": f"dashboard_src/{name}",
+            "size": path.stat().st_size,
+            "md5": hashlib.md5(path.read_bytes(), usedforsecurity=False).hexdigest(),
+            "last_modified": "2026-07-29",
+        }
+        for name, path in staged_files.items()
+    ]
+    git_short = subprocess.run(
+        ['git', 'rev-parse', '--short=12', 'HEAD'],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip()
+    app_version = f"sha-{git_short}"
+    streamlit_listing = [
+        {
+            "name": "EDGARTOOLS_DASHBOARD",
+            "owner": "EDGARTOOLS_DEV_DASHBOARD_OWNER",
+            "comment": f"release={app_version};source_sha256=fake",
+        }
+    ]
     snow.write_text(
         f"""#!/usr/bin/env bash
 set -euo pipefail
@@ -34,6 +65,13 @@ set -euo pipefail
   cat
   echo "---"
 }} >> {log_path}
+if [[ "$*" == *"--format json"* && "$*" == *"/releases/"* ]]; then
+  printf '%s\\n' '[]'
+elif [[ "$*" == *"--format json"* && "$*" == *"SHOW STREAMLITS"* ]]; then
+  printf '%s\\n' '{json.dumps(streamlit_listing)}'
+elif [[ "$*" == *"--format json"* && "$*" == *"LIST @"* ]]; then
+  printf '%s\\n' '{json.dumps(stage_listing)}'
+fi
 exit 0
 """,
         encoding="utf-8",
@@ -50,6 +88,7 @@ def _run(
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["DASHBOARD_EVIDENCE_DIR"] = str(evidence_dir or (tmp_path / "evidence"))
+    env["DASHBOARD_ALLOW_DIRTY_SOURCE"] = "true"
     if with_fake_snow:
         fakebin = _fake_snow(tmp_path)
         env["PATH"] = f"{fakebin}{os.pathsep}{env['PATH']}"
@@ -94,13 +133,18 @@ def test_dry_run_emits_valid_json_with_expected_fields(tmp_path: Path) -> None:
         assert len(digest) == 64  # sha256 hex digest
     assert len(payload["combined_source_digest"]) == 64
     assert len(payload["dependency_lock_digest"]) == 64
+    assert isinstance(payload["source_tree_dirty"], bool)
+    assert payload["warehouse_dashboard_alignment"]["status"] == "unknown"
 
 
 def test_dry_run_never_shells_out_to_snow(tmp_path: Path) -> None:
     """--dry-run must not require snow on PATH at all -- confirms nothing
     in the evidence-computation path accidentally calls it."""
-    env_without_snow_dirs = tmp_path / "empty-path-marker"
-    env_without_snow_dirs.mkdir()
+    fakebin = tmp_path / "bin"
+    fakebin.mkdir()
+    snow = fakebin / "snow"
+    snow.write_text("#!/usr/bin/env bash\nexit 99\n", encoding="utf-8")
+    snow.chmod(0o755)
     result = subprocess.run(
         ["bash", str(SCRIPT), "--dry-run", "--skip-tests"],
         cwd=REPO_ROOT,
@@ -108,7 +152,7 @@ def test_dry_run_never_shells_out_to_snow(tmp_path: Path) -> None:
         capture_output=True,
         env={
             **os.environ,
-            "PATH": "/usr/bin:/bin",  # deliberately no snow
+            "PATH": f"{fakebin}{os.pathsep}{os.environ['PATH']}",
             "DASHBOARD_EVIDENCE_DIR": str(tmp_path / "evidence"),
         },
         check=False,
@@ -130,12 +174,9 @@ def test_second_run_detects_previous_release_and_builds_rollback_command(
     second_payload = _read_latest_evidence(evidence_dir)
 
     assert second_payload["previous_app_version"] == first_payload["app_version"]
-    assert "COPY FILES INTO" in second_payload["rollback_command"]
+    assert "deploy.sh --rollback" in second_payload["rollback_command"]
     assert first_payload["app_version"] in second_payload["rollback_command"]
-    # Regression: the rollback_command's embedded `snow sql -q '...'` must
-    # not itself break the JSON it's embedded in (caught during
-    # development -- double-quoted -q argument broke parsing until the
-    # script switched to single quotes + json_escape).
+    # Regression: embedded shell syntax must not break the JSON.
     json.dumps(second_payload)  # would already have raised in _read_latest_evidence
 
 
@@ -165,7 +206,7 @@ def test_non_dry_run_backs_up_previous_release_before_overwriting(
     # sequence -- otherwise the first run's PUTs (no backup expected: there
     # was no previous release yet) would make an index-order comparison
     # meaningless across both runs combined.
-    log_path.unlink()
+    log_path.write_text("", encoding="utf-8")
 
     second = _run(tmp_path, evidence_dir=evidence_dir, with_fake_snow=True)
     assert second.returncode == 0, second.stderr
@@ -203,3 +244,35 @@ def test_unknown_argument_fails_fast(tmp_path: Path) -> None:
     result = _run(tmp_path, "--not-a-real-flag")
     assert result.returncode != 0
     assert "Unknown argument" in result.stderr
+
+
+def test_non_dry_run_enforces_owner_rights_and_role_smokes(tmp_path: Path) -> None:
+    result = _run(tmp_path, with_fake_snow=True)
+    assert result.returncode == 0, result.stderr
+    log = (tmp_path / "snow_calls.log").read_text(encoding="utf-8")
+    assert "GRANT ROLE EDGARTOOLS_DEV_READER TO ROLE EDGARTOOLS_DEV_DASHBOARD_OWNER" in log
+    assert "DROP STREAMLIT IF EXISTS EDGARTOOLS_DEV.EDGARTOOLS_DASHBOARD.EDGARTOOLS_DASHBOARD" in log
+    assert "USE ROLE EDGARTOOLS_DEV_DASHBOARD_OWNER" in log
+    assert "USE ROLE EDGARTOOLS_DEV_READER" in log
+    assert "BOUNDED_SMOKE_ROWS" in log
+
+
+def test_rollback_is_bounded_and_smoke_verified(tmp_path: Path) -> None:
+    result = _run(
+        tmp_path,
+        "--rollback",
+        "sha-123456abcdef",
+        with_fake_snow=True,
+    )
+    assert result.returncode == 0, result.stderr
+    log = (tmp_path / "snow_calls.log").read_text(encoding="utf-8")
+    assert "REMOVE @EDGARTOOLS_DEV.EDGARTOOLS_DASHBOARD.DASHBOARD_SRC/streamlit_app.py" in log
+    assert "FROM @EDGARTOOLS_DEV.EDGARTOOLS_DASHBOARD.DASHBOARD_SRC/releases/sha-123456abcdef/" in log
+    assert "release=sha-123456abcdef;rollback_restored=true" in log
+    assert log.count("BOUNDED_SMOKE_ROWS") == 2
+
+
+def test_rollback_rejects_unbounded_version(tmp_path: Path) -> None:
+    result = _run(tmp_path, "--rollback", "../../main", with_fake_snow=True)
+    assert result.returncode != 0
+    assert "must match" in result.stderr
