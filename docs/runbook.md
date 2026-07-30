@@ -539,10 +539,39 @@ bash infra/snowflake/streamlit/deploy.sh
 # For prod:
 SNOW_CONNECTION=edgartools-prod \
 DASHBOARD_DATABASE=EDGARTOOLS_PROD \
+DASHBOARD_ENVIRONMENT=prod \
+DASHBOARD_WAREHOUSE_RELEASE_EVIDENCE=docs/release-readiness/releases/<rc>/release-evidence.json \
 bash infra/snowflake/streamlit/deploy.sh
 ```
 
-After upload, open Snowsight → Streamlit → `EDGARTOOLS_PROD.EDGARTOOLS_DASHBOARD.EDGARTOOLS_DASHBOARD`.
+The access Terraform must be applied first so
+`EDGARTOOLS_<ENV>_DASHBOARD_OWNER` inherits the bounded reader contract and
+has stage access. Deployment backs up the prior release, safely prunes only
+validated `sha-<12 hex>` release directories beyond the retention count,
+recreates the object under the dedicated owner role, verifies staged file
+digests, and runs bounded smoke reads as both owner and viewer. Secret-free
+release and verification JSON are written below
+`infra/snowflake/streamlit/.evidence/<environment>/dashboard/`.
+
+The warehouse evidence input makes dashboard drift explicit:
+`warehouse_dashboard_alignment.status` is `aligned`, `drift`, or `unknown`.
+It does not turn dashboard acceptance into full-chain data acceptance.
+
+Test rollback to the prior version recorded in release evidence:
+
+```bash
+SNOW_CONNECTION=edgartools-prod \
+DASHBOARD_DATABASE=EDGARTOOLS_PROD \
+DASHBOARD_ENVIRONMENT=prod \
+bash infra/snowflake/streamlit/deploy.sh --rollback sha-<12-hex>
+```
+
+Rollback removes only the known root release files, copies the selected
+immutable backup, and must pass both role smokes. It writes a separate
+`rollback-<version>.json` exercise artifact.
+
+After upload, open Snowsight → Streamlit →
+`EDGARTOOLS_PROD.EDGARTOOLS_DASHBOARD.EDGARTOOLS_DASHBOARD`.
 
 ### Option B — External Streamlit (local or self-hosted)
 

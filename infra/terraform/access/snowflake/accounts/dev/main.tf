@@ -23,6 +23,7 @@ module "account_access" {
   role_names                         = local.provisioning.role_names
   warehouse_names                    = local.provisioning.warehouse_names
   dashboard_schema_name              = local.provisioning.dashboard_schema_name
+  dashboard_stage_qualified_name     = local.provisioning.dashboard_stage_qualified_name
   dashboard_streamlit_qualified_name = local.provisioning.dashboard_streamlit_qualified_name
   grant_roles_to_admin               = var.grant_roles_to_admin
   parent_admin_role_name             = var.parent_admin_role_name
