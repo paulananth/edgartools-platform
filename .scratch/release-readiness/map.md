@@ -51,7 +51,7 @@ Produce a decision-complete validation plan for production operator readiness, b
 - [Filings metadata promotion criteria (F2)](issues/29-promotion-criteria-filings-metadata.md) — 7 numbered criteria. Same real gate as ticket 28: `docs/subject-bundle-read.md` has zero filing-index section (verified live), so Filings metadata is **not promotable** regardless of gold data health. Coverage scoped to active `entity_type='operating'` (≥95% bar, live 98.7%), not the full tracked universe. Two adversarial findings: `dim_filing` (named in the matrix footnote) doesn't exist as a Snowflake object at all; only 2 of 9 skills (earnings-analysis, initiating-coverage) have an explicit textual need for filing metadata as such. Flags a real cross-ticket dependency to ticket 32 (F5): earnings-analysis's filing-date-must-match-release-quarter bar is an F2×F5 cross-check, not verifiable from either product alone.
 - [Identity / ticker-CIK promotion criteria (F1)](issues/28-promotion-criteria-identity.md) — 9 numbered criteria. The real gate is criterion 1: a documented, working ticker read path doesn't exist today (`TICKER_REFERENCE` is 0 rows per ticket 40) — Identity is **not promotable** until that ships, independent of how well the underlying data scores. Coverage criterion scoped to the ticker-*eligible* subset (SEC `company_tickers.json` cross-check), bar ≥95%, not the full active/tracked universe. CIK is explicitly out of the ER-facing contract (no skill ever references it).
 - [Design the Release Evidence Automation](issues/09-design-release-evidence-automation.md) — Implemented as working code (explicit `/implement` request): `edgar_warehouse/application/release_evidence.py` (pure, no network/live-system I/O, no wall-clock reads) + `edgar_warehouse/scripts/release_evidence_cli.py` (`init`/`add-gate`/`validate`). Schema, state-transition model, sanitization boundary, and validation report all per ticket 01's Answer. TDD throughout (137 focused tests, 93% statement coverage); successive post-handoff adversarial reviews closed fabricated-GO, tampering, malformed-type, chronology, lineage, symlink, and DSN-leakage gaps, ending in an independent APPROVE. GO remains fail-closed with `go_validation_not_implemented` until ticket 08 defines the complete gate and signer predicate.
-- [Define Release-Bound Dashboard Acceptance](issues/07-define-release-bound-dashboard-acceptance.md) — `docs/release-readiness/dashboard-acceptance.json`, one entry per view keyed `<DASHBOARD>::<view_id>` across all 25 real views in the two Terraform-deployed Streamlit-in-Snowflake dashboards (`EDGARTOOLS_DASHBOARD`, `MDM_GRAPH_DASHBOARD`; the non-deployed `examples/dashboard/edgar_universe_dashboard.py` excluded), each with `status` + `watermark_checked` + three independent sub-checks (mutation surface, secret leakage, unbounded output). `READY` only if every view passes with a current watermark and all three sub-checks true; stale-watermark and thin-sample passes are distinct, explicit `NOT_READY` reasons, not silently accepted. Staleness is detected on watermark rebase, never auto-cleared. Attested by **Dashboard Reviewer** (ticket 01's existing named role). Validated via a logic prototype (`prototype/07-dashboard-acceptance` branch, not merged).
+- [Define Release-Bound Dashboard Acceptance](issues/07-define-release-bound-dashboard-acceptance.md) — `docs/release-readiness/dashboard-acceptance.json`, one entry per view keyed `<DASHBOARD>::<view_id>` across all 25 real views in the two Terraform-deployed Streamlit-in-Snowflake dashboards (`EDGARTOOLS_DASHBOARD`, `MDM_GRAPH_DASHBOARD`; the non-deployed `examples/dashboard/edgar_universe_dashboard.py` excluded), each with `status` + `watermark_checked` + three independent sub-checks (mutation surface, secret leakage, unbounded output). `READY` only if every view passes with a current watermark and all three sub-checks true; stale-watermark and thin-sample passes are distinct, explicit `NOT_READY` reasons, not silently accepted. Staleness is detected on watermark rebase, never auto-cleared. Attested by **Dashboard Reviewer** (ticket 01's existing named role). The original throwaway prototype was later user-directed into main as a hardened tracked reference after fail-open inventory/status review findings were fixed.
 
 ### Relationship contracts (research)
 
@@ -90,7 +90,7 @@ Produce a decision-complete validation plan for production operator readiness, b
 - Replacing passive Terraform with runtime commands, image rollout, schedules, or secret values.
 - Re-running Ticket 20 bulk-load from zero without a new operator decision (technical package already PASS).
 
-## Open frontier (hygiene 2026-07-29t)
+## Open frontier (hygiene 2026-07-29u)
 
 Unblocked open tickets (work through the map; claim before starting):
 
@@ -117,6 +117,18 @@ Claimed, in progress:
 
 ## Hygiene log
 
+- **2026-07-29 (u):** At the user's explicit request, reviewed and pulled
+  `prototype/07-dashboard-acceptance` into a Codex-owned integration branch,
+  superseding ticket 07's earlier throwaway-only instruction. The two-axis
+  review found no hard repository-standard violation, but caught four spec
+  defects before integration: an empty inventory could return `READY`,
+  arbitrary status strings could evade all failure branches, reason-bearing
+  strings violated the `READY`/`NOT_READY` schema enum, and Dashboard Reviewer
+  authority was conventional rather than enforced. The integrated reference
+  now validates the exact 25-view inventory and runtime enums, separates
+  structured reason codes, enforces the attesting role, centralizes view/safety
+  domain types and TUI recording logic, and has focused adversarial tests. It
+  remains `.scratch/` reference code, not the production release validator.
 - **2026-07-29 (t):** Ticket 08 resolved through one-at-a-time operator
   grilling after a two-axis standards/spec review. The Candidate Evidence Set
   is the only Direct-Evidence GO Packet; an unchanged immutable candidate may
