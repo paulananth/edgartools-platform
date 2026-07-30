@@ -48,10 +48,13 @@ Operator, MDM/Graph Operator, Release Owner). No new role introduced.
 
 All four points (schema shape, staleness-detected-not-auto-cleared, view-inventory boundary,
 attesting role) confirmed directly with the user after driving a logic prototype through the
-stale-watermark and thin-sample cases by hand. Prototype captured on throwaway branch
-`prototype/07-dashboard-acceptance` (commit `78013d8`), not merged to main — the validated
-decision above is the durable artifact, the prototype code is a primary-source reference only.
+stale-watermark and thin-sample cases by hand. The prototype originated on
+`prototype/07-dashboard-acceptance` (commit `78013d8`). On 2026-07-29 the user explicitly
+requested that it be reviewed and pulled into main as a tracked primary-source reference.
+That review found and fixed fail-open inventory/status validation, separated the
+`READY`/`NOT_READY` enum from reason codes, and enforced the Dashboard Reviewer role. It remains
+reference code under `.scratch/`, not the production validator or the durable decision itself.
 
 This binds to the same Release Candidate/Release Data Watermark ticket 01 and ticket 04
-established, and is consumed as stage 8 of 9 by ticket 06's Full-Chain Launch Gate
+established, and is consumed as gate 8 of 8 by ticket 06's Full-Chain Launch Gate
 (`full-chain-launch-pass.json`), same pattern as ticket 05/26's rollback-rehearsal.json.
