@@ -213,6 +213,8 @@ def test_non_dry_run_backs_up_previous_release_before_overwriting(
     # Second run must have issued a COPY FILES backup before the PUTs that
     # overwrite the stage root (GH-247: "retains a prior rollback target").
     assert "COPY FILES INTO" in log
+    assert "FILES = ('streamlit_app.py')" in log
+    assert "PATTERN =" not in log
     assert "PUT " in log
     assert log.index("COPY FILES INTO") < log.index("PUT ")
 

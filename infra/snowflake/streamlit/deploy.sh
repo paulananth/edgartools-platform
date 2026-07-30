@@ -379,11 +379,13 @@ fi
 # ---------------------------------------------------------------------------
 if [[ -n "${PREVIOUS_APP_VERSION}" ]]; then
   echo "Backing up current release (${PREVIOUS_APP_VERSION}) to @${STAGE_FQN}/${RELEASES_PREFIX}/${PREVIOUS_APP_VERSION}/ before overwrite..."
-  snow sql --connection "${CONNECTION}" --stdin <<SQL
+  for file in "${RELEASE_FILES[@]}" evidence.json; do
+    snow sql --connection "${CONNECTION}" --stdin <<SQL
 COPY FILES INTO @${STAGE_FQN}/${RELEASES_PREFIX}/${PREVIOUS_APP_VERSION}/
     FROM @${STAGE_FQN}
-    PATTERN = '.*\\.py|.*\\.yml';
+    FILES = ('${file}');
 SQL
+  done
 else
   echo "No previous release recorded locally -- skipping backup (first deploy for ${ENVIRONMENT_LABEL}, or evidence dir was cleared)."
 fi
