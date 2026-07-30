@@ -169,12 +169,16 @@ A structured approval bound to one Release Candidate, Release Data Watermark, an
 _Avoid_: Prose sign-off, unbound approval, inherited PASS
 
 **Live-Evidence Window**:
-The 24-hour interval ending at the final GO decision during which every required production-data, workflow, graph, Snowflake/dbt, and dashboard Gate Attestation must remain valid for the same Release Data Watermark.
+The 24-hour interval ending at the verified Release Seal timestamp during which every candidate-specific production-data, workflow, graph, Snowflake/dbt, dashboard, and Release Owner attestation must remain valid for the same Release Data Watermark. Standing mechanism-bound proofs such as the Rollback Rehearsal are referenced by the candidate but remain outside this window.
 _Avoid_: Indefinite production proof, mixed-window evidence
 
 **Candidate Evidence Set**:
-The append-only manifest and secret-safe evidence directory for one Release Candidate, retained whether its final disposition is GO, NO-GO, or superseded.
+The append-only manifest and secret-safe evidence directory for one Release Candidate, containing every preserved Evidence Attempt and retained whether its final disposition is GO, NO-GO, or superseded.
 _Avoid_: Mutable latest report, overwritten failed attempt
+
+**Evidence Attempt**:
+An immutable set of candidate-specific gate evidence and attestations bound to one Release Data Watermark inside an open Candidate Evidence Set; a stale or failed attempt remains preserved when a later attempt supersedes it. It may reference a standing gate proof whose validity is independent of the attempt's watermark and clock.
+_Avoid_: Overwritten evidence, mutable retry, new candidate for unchanged code and images
 
 **Release Evidence Automation**:
 The deterministic tooling that creates and validates a Candidate Evidence Set, binds sanitized gate artifacts to it, and rejects identity drift or incomplete evidence without manufacturing human approval.
@@ -183,6 +187,10 @@ _Avoid_: Hand-authored manifest, automatic approval
 **Release Seal**:
 A verified signed Git tag on the evidence commit containing the finalized GO manifest.
 _Avoid_: Branch-tip approval, unsigned tag
+
+**Release Authority Registry**:
+The authoritative roster of identities allowed to attest release roles and seal a release; a Candidate Evidence Set cannot authorize its own approvers.
+_Avoid_: Self-authorized signer, manifest-local trust list, unpinned approver roster
 
 **Full-Chain Launch Pass**:
 A release-candidate production execution in which every required workflow stage succeeds, including BatchSilver, MDM processing, MDM export, graph synchronization and verification, and gold refresh.
@@ -277,8 +285,20 @@ Pre-GO proof that operators can restore the prior approved image digests and saf
 _Avoid_: Unrehearsed rollback notes, post-launch-only recovery plan
 
 **Direct-Evidence GO**:
-A GO decision in which every hard gate has committed, secret-safe evidence tied to the Release Candidate; missing proof remains NO-GO and cannot be replaced by risk acceptance.
+A GO decision in which every hard gate has committed, secret-safe evidence tied to the Release Candidate and the signed Release Seal verifies against the finalized evidence commit; missing proof leaves the candidate not ready and cannot be replaced by risk acceptance.
 _Avoid_: Conditional GO, accepted-basis PASS
+
+**Direct-Evidence GO Packet**:
+The Candidate Evidence Set used for the final decision: it is presented to the Release Owner while ready for review and becomes finalized only after the owner's GO attestation and verified Release Seal.
+_Avoid_: Duplicate GO packet, parallel release summary, manually restated gate status
+
+**Ready-for-Owner Candidate**:
+A Release Candidate whose complete gate evidence and attestations validate for a Release Owner decision while its disposition remains unset; it is not yet GO.
+_Avoid_: Preapproved release, automated GO, unsigned approval
+
+**Release Decision Validation State**:
+The readiness classification distinguishing incomplete evidence, readiness for a Release Owner decision, and effective sealed GO; human NO-GO and supersession remain separate dispositions.
+_Avoid_: Conditional GO, warning-only GO, inferred NO-GO
 
 **Production Operator Readiness**:
 The state in which approved operators can deploy, verify, monitor, and recover the AWS, Snowflake, MDM, hosted-graph, and dashboard paths using bounded, secret-safe procedures.
