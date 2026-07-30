@@ -1,7 +1,7 @@
 # 45 — Decide whether/how to narrow daily_incremental's Stage 0 and set its actual schedule
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: (none)
 
 ## Question
