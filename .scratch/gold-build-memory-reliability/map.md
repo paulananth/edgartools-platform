@@ -31,14 +31,11 @@ carries execution, not open design decisions (see Notes).
 
 <!-- Closed ticket decisions — one-line gist + link; detail lives in the ticket. -->
 
-- [Stream build_gold() per table instead of materializing the whole gold layer](issues/01-stream-build-gold-per-table.md) — implemented on `claude/gold-build-streaming` (not yet merged/deployed): `iter_gold_tables()` generator + per-table write/export helpers replace the eager whole-dict build; peak-memory reduction reasoned from CloudWatch evidence but not yet empirically confirmed in prod — that's expected to land via ticket 03's redeploy.
+- [Stream build_gold() per table instead of materializing the whole gold layer](issues/01-stream-build-gold-per-table.md) — implemented on `claude/gold-build-streaming` (not yet merged/deployed): `iter_gold_tables()` generator + per-table write/export helpers replace the eager whole-dict build; peak-memory reduction reasoned from CloudWatch evidence but not yet empirically confirmed in prod — that's expected to land via ticket 03's redeploy. Also moved `db.record_gold_manifest` to a per-table idempotent upsert inside the loop (this resolved the fog item below about incremental manifest recording — a real behavior change caught during review, not left for later).
+- [Link GOLD_AFFECTING_COMMANDS membership to required task-profile sizing](issues/02-link-gold-affecting-commands-to-task-sizing.md) — added `tests/architecture/test_gold_affecting_commands_task_sizing.py`, invoking the real `workflow_profile()` bash function per member and asserting a memory floor (today's actual minimum, 4096MB). Surfaced two new gaps: (1) `bootstrap-next` is never passed to `workflow_profile()` at all — hardcoded to the medium task def inside `load_history`'s state machine — now a documented, tested exception rather than a silent one; (2) `gold-refresh` itself runs on two different profiles depending on caller — the standalone state machine resolves to `medium` via `workflow_profile()`, but every composite pipeline (`load_history`, `mdm_gold`, `ownership_mdm_gold`, `residual_holds_graph`, `silver_mdm_gold`, `bronze_seed_silver_gold`, `generation_build`) hardcodes its embedded gold-refresh step to `large` directly — invisible today only because the two profiles share the same 4096MB. Directly relevant to ticket 03's question 1.
 
 ## Not yet specified
 
-- Whether the same streaming fix (ticket 01) should also change how `db.record_gold_manifest`
-  aggregates the end-of-run manifest — today it's a single call over the full manifest list;
-  a fully incremental `build_gold` may want incremental manifest recording too. Not sharp enough
-  to ticket until ticket 01 is underway and the actual caller shape is being rewritten.
 - Whether `bootstrap`/`full_reconcile` (also `medium`, also in `GOLD_AFFECTING_COMMANDS`, per
   ticket 02's finding) have ever actually run at full-universe scale — if not, they carry the
   same latent risk as `daily_incremental` did before this incident, but there's no incident
@@ -49,6 +46,11 @@ carries execution, not open design decisions (see Notes).
   deliberately left it alone. It carries the same eager-materialization memory risk ticket 01
   just fixed for `GOLD_AFFECTING_COMMANDS`, but isn't in that set and has no incident evidence
   yet — not sharp enough to ticket until it actually OOMs or a real need to fix it surfaces.
+- Ticket 02's architecture test only validates the `workflow_profile()`-driven dispatch path
+  (standalone per-command state machines) — it doesn't inspect the composite pipelines'
+  embedded `wh_large_arn`/`wh_medium_arn` direct-wiring (see ticket 02's second finding). Not
+  sharp enough to ticket yet since nothing is actually at risk today (they all use `large`);
+  would sharpen into a ticket if that direct-wiring is ever found drifted.
 
 ## Out of scope
 
