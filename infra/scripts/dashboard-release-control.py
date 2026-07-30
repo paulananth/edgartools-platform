@@ -71,32 +71,21 @@ def drift_status(dashboard_commit: str, warehouse_evidence: Path | None) -> dict
     }
 
 
-def verify_staged(listing: Any, source_dir: Path, files: list[str]) -> dict[str, str]:
-    """Verify the root-stage copy of each release file by size and MD5."""
-    rows = listing[0] if isinstance(listing, list) and listing and isinstance(listing[0], list) else listing
-    if not isinstance(rows, list):
-        raise TypeError("SnowCLI LIST output must be a JSON array")
-    root_rows: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        name = str(row.get("name", ""))
-        if "/releases/" in name:
-            continue
-        root_rows[name.rsplit("/", 1)[-1]] = row
+def verify_downloaded(
+    source_dir: Path, download_dir: Path, files: list[str]
+) -> dict[str, str]:
+    """Verify GET-back bytes from the stage against the promoted sources."""
     verified: dict[str, str] = {}
     for filename in files:
-        path = source_dir / filename
-        row = root_rows.get(filename)
-        if row is None:
-            raise ValueError(f"staged release is missing {filename}")
-        content = path.read_bytes()
-        expected_md5 = hashlib.md5(content, usedforsecurity=False).hexdigest()
-        if str(row.get("md5", "")).lower() != expected_md5:
-            raise ValueError(f"staged digest mismatch for {filename}")
-        if int(row.get("size", -1)) != len(content):
-            raise ValueError(f"staged size mismatch for {filename}")
-        verified[filename] = expected_md5
+        source = source_dir / filename
+        downloaded = download_dir / filename
+        if not downloaded.is_file():
+            raise ValueError(f"downloaded stage verification is missing {filename}")
+        expected = hashlib.sha256(source.read_bytes()).hexdigest()
+        actual = hashlib.sha256(downloaded.read_bytes()).hexdigest()
+        if actual != expected:
+            raise ValueError(f"downloaded stage digest mismatch for {filename}")
+        verified[filename] = actual
     return verified
 
 
@@ -140,10 +129,10 @@ def main() -> int:
     drift.add_argument("--dashboard-commit", required=True)
     drift.add_argument("--warehouse-evidence", type=Path)
 
-    verify = subparsers.add_parser("verify-staged")
-    verify.add_argument("--listing", type=Path, required=True)
-    verify.add_argument("--source-dir", type=Path, required=True)
-    verify.add_argument("--file", action="append", dest="files", required=True)
+    downloaded = subparsers.add_parser("verify-downloaded")
+    downloaded.add_argument("--source-dir", type=Path, required=True)
+    downloaded.add_argument("--download-dir", type=Path, required=True)
+    downloaded.add_argument("--file", action="append", dest="files", required=True)
 
     streamlit = subparsers.add_parser("verify-streamlit")
     streamlit.add_argument("--listing", type=Path, required=True)
@@ -159,9 +148,8 @@ def main() -> int:
         return 0
     if args.command == "drift-status":
         result = drift_status(args.dashboard_commit, args.warehouse_evidence)
-    elif args.command == "verify-staged":
-        listing = json.loads(args.listing.read_text(encoding="utf-8"))
-        result = verify_staged(listing, args.source_dir, args.files)
+    elif args.command == "verify-downloaded":
+        result = verify_downloaded(args.source_dir, args.download_dir, args.files)
     else:
         listing = json.loads(args.listing.read_text(encoding="utf-8"))
         result = verify_streamlit(

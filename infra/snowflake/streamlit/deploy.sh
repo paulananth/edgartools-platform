@@ -482,10 +482,13 @@ if [[ "${OWNER_RIGHTS}" == "true" ]]; then
 else
   OBJECT_VERIFICATION='{"status":"owner-rights-not-managed-for-this-app"}'
 fi
-stage_listing="${STAGING_DIR}/stage-listing.json"
-snow sql --connection "${CONNECTION}" --format json \
-  -q "LIST @${STAGE_FQN};" > "${stage_listing}"
-VERIFY_ARGS=(verify-staged --listing "${stage_listing}" --source-dir "${STAGING_DIR}")
+downloaded_stage="${STAGING_DIR}/downloaded-stage"
+mkdir -p "${downloaded_stage}"
+for file in "${RELEASE_FILES[@]}"; do
+  snow sql --connection "${CONNECTION}" \
+    -q "GET @${STAGE_FQN}/${file} file://${downloaded_stage}/ OVERWRITE=TRUE;"
+done
+VERIFY_ARGS=(verify-downloaded --source-dir "${STAGING_DIR}" --download-dir "${downloaded_stage}")
 for file in "${RELEASE_FILES[@]}"; do
   VERIFY_ARGS+=(--file "${file}")
 done
@@ -504,7 +507,7 @@ VERIFICATION_JSON=$(cat <<EOF
   "app_version": "${APP_VERSION}",
   "verified_at": "${VERIFIED_AT}",
   "streamlit": ${OBJECT_VERIFICATION},
-  "staged_file_md5": ${STAGED_DIGESTS},
+  "staged_file_sha256": ${STAGED_DIGESTS},
   "owner_role": "${OWNER_ROLE}",
   "viewer_role": "${VIEWER_ROLE}",
   "bounded_smoke_object": "${SMOKE_OBJECT}",

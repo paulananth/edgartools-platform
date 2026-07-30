@@ -57,34 +57,30 @@ def test_missing_warehouse_evidence_is_unknown_not_aligned() -> None:
     assert result["warehouse_git_commit"] is None
 
 
-def test_staged_release_verification_checks_digest_and_size(tmp_path: Path) -> None:
+def test_get_back_verification_uses_sha256_bytes(tmp_path: Path) -> None:
     module = _load()
     source = tmp_path / "source"
+    downloaded = tmp_path / "downloaded"
     source.mkdir()
-    app = source / "streamlit_app.py"
-    app.write_text("print('ok')\n", encoding="utf-8")
-    digest = __import__("hashlib").md5(
-        app.read_bytes(), usedforsecurity=False
-    ).hexdigest()
-    listing = [
-        {
-            "name": "dashboard_src/streamlit_app.py",
-            "size": len(app.read_bytes()),
-            "md5": digest,
-        }
-    ]
+    downloaded.mkdir()
+    (source / "app.py").write_bytes(b"same bytes\n")
+    (downloaded / "app.py").write_bytes(b"same bytes\n")
 
-    assert module.verify_staged(listing, source, ["streamlit_app.py"]) == {
-        "streamlit_app.py": digest
-    }
+    verified = module.verify_downloaded(source, downloaded, ["app.py"])
+
+    assert len(verified["app.py"]) == 64
 
 
-def test_staged_release_verification_fails_on_digest_mismatch(tmp_path: Path) -> None:
+def test_get_back_verification_rejects_changed_bytes(tmp_path: Path) -> None:
     module = _load()
-    (tmp_path / "app.py").write_text("x", encoding="utf-8")
-    listing = [{"name": "stage/app.py", "size": 1, "md5": "0" * 32}]
+    source = tmp_path / "source"
+    downloaded = tmp_path / "downloaded"
+    source.mkdir()
+    downloaded.mkdir()
+    (source / "app.py").write_bytes(b"source")
+    (downloaded / "app.py").write_bytes(b"changed")
     with pytest.raises(ValueError, match="digest mismatch"):
-        module.verify_staged(listing, tmp_path, ["app.py"])
+        module.verify_downloaded(source, downloaded, ["app.py"])
 
 
 def test_streamlit_verification_binds_owner_and_release() -> None:
