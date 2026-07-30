@@ -389,6 +389,13 @@ CREATE TABLE IF NOT EXISTS pipeline_run_lease (
     mode                       TEXT,
     acquired_at                TIMESTAMPTZ,
     released_at                TIMESTAMPTZ,
+    -- Set when a 'backstop'-mode acquire attempt is deferred (lease busy);
+    -- cleared only when a 'backstop'-mode run subsequently releases the
+    -- lease successfully. Carries the miss forward across runs/days so the
+    -- next available slot resolves to backstop instead of whatever its own
+    -- regular schedule would have requested (release-readiness ticket 45's
+    -- "prioritize the next available slot" requirement).
+    backstop_overdue           BOOLEAN NOT NULL DEFAULT FALSE,
     updated_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -898,6 +905,11 @@ class SilverDatabase:
                 "March-2026 filing hit 22,277 of the 32,767 SMALLINT ceiling).",
                 self._widen_adv_fund_index_to_bigint,
             ),
+            (
+                "008_pipeline_run_lease_backstop_overdue",
+                "Add backstop_overdue to pipeline_run_lease.",
+                self._add_pipeline_run_lease_backstop_overdue,
+            ),
         )
 
     def _schema_migration_applied(self, migration_name: str) -> bool:
@@ -963,6 +975,16 @@ class SilverDatabase:
             self._conn.execute(
                 f"ALTER TABLE sec_adv_private_fund ADD COLUMN IF NOT EXISTS {column} {column_type}"
             )
+
+    def _add_pipeline_run_lease_backstop_overdue(self) -> None:
+        # DuckDB's ALTER TABLE ADD COLUMN rejects a NOT NULL constraint
+        # ("Adding columns with constraints not yet supported"); DEFAULT
+        # alone is sufficient here since every write path (mark/clear) sets
+        # an explicit TRUE/FALSE and never NULL.
+        self._conn.execute(
+            "ALTER TABLE pipeline_run_lease ADD COLUMN IF NOT EXISTS "
+            "backstop_overdue BOOLEAN DEFAULT FALSE"
+        )
 
     def _widen_adv_fund_index_to_bigint(self) -> None:
         """``CREATE TABLE IF NOT EXISTS`` never widens an existing store's column type.
@@ -2670,14 +2692,42 @@ class SilverDatabase:
         run_id: str,
         released_at: datetime,
     ) -> None:
-        """Release the lease, but only if this run_id currently holds it."""
+        """Release the lease, but only if this run_id currently holds it.
+
+        Clears backstop_overdue iff the releasing run's own mode was
+        'backstop' -- a successful backstop run is the only thing that
+        satisfies an overdue backstop. A daily-mode release must never
+        clear it, or an overdue backstop would be silently dropped by the
+        next unrelated daily run instead of carrying forward to the next
+        available slot.
+        """
         self._conn.execute(
             """
             UPDATE pipeline_run_lease
-            SET status = 'idle', released_at = ?, updated_at = ?
+            SET status = 'idle',
+                released_at = ?,
+                updated_at = ?,
+                backstop_overdue = CASE WHEN mode = 'backstop' THEN FALSE ELSE backstop_overdue END
             WHERE lease_name = ? AND run_id = ? AND status = 'held'
             """,
             [released_at, released_at, lease_name, run_id],
+        )
+
+    def mark_pipeline_run_lease_backstop_overdue(self, *, lease_name: str) -> None:
+        """Record that a 'backstop'-mode acquire attempt was deferred.
+
+        Only called when acquire_pipeline_run_lease returns False for a
+        'backstop' attempt -- the lease row is guaranteed to already exist
+        in that case (a deferral means something else currently holds it),
+        so this is a plain UPDATE, not an upsert.
+        """
+        self._conn.execute(
+            """
+            UPDATE pipeline_run_lease
+            SET backstop_overdue = TRUE
+            WHERE lease_name = ?
+            """,
+            [lease_name],
         )
 
     def get_pipeline_run_lease(self, lease_name: str) -> dict[str, Any] | None:

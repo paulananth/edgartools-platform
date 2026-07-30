@@ -297,6 +297,165 @@ def test_acquire_identity_refresh_lease_command_writes_success_to_s3(tmp_path) -
         db.close()
 
 
+def test_pipeline_run_lease_backstop_overdue_persists_until_a_backstop_run_releases(tmp_path) -> None:
+    """A deferred 'backstop' acquire marks backstop_overdue; only a subsequent
+    'backstop'-mode release clears it -- an intervening 'daily' release must not
+    silently drop the overdue backstop (release-readiness ticket 45's 'prioritize
+    the next available slot' requirement)."""
+    from edgar_warehouse.silver_store import SilverDatabase
+
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    now = datetime(2026, 7, 30, 12, tzinfo=UTC)
+    try:
+        # Sunday's backstop can't run -- Saturday's daily run is still holding the lease.
+        assert db.acquire_pipeline_run_lease(
+            lease_name="daily_identity_refresh", run_id="sat-daily", mode="daily", acquired_at=now
+        )
+        assert not db.acquire_pipeline_run_lease(
+            lease_name="daily_identity_refresh", run_id="sun-backstop", mode="backstop", acquired_at=now
+        )
+        db.mark_pipeline_run_lease_backstop_overdue(lease_name="daily_identity_refresh")
+        assert db.get_pipeline_run_lease("daily_identity_refresh")["backstop_overdue"] is True
+
+        # Saturday's run finishes and releases under mode='daily' -- the overdue flag
+        # it had nothing to do with must survive this release.
+        db.release_pipeline_run_lease(lease_name="daily_identity_refresh", run_id="sat-daily", released_at=now)
+        assert db.get_pipeline_run_lease("daily_identity_refresh")["backstop_overdue"] is True
+
+        # The next run acquires in 'backstop' mode (mirroring what the orchestrator's
+        # effective-mode resolution would compute once overdue is set).
+        assert db.acquire_pipeline_run_lease(
+            lease_name="daily_identity_refresh", run_id="mon-run", mode="backstop", acquired_at=now
+        )
+        assert db.get_pipeline_run_lease("daily_identity_refresh")["backstop_overdue"] is True
+
+        # Only this 'backstop'-mode release clears the flag.
+        db.release_pipeline_run_lease(lease_name="daily_identity_refresh", run_id="mon-run", released_at=now)
+        assert db.get_pipeline_run_lease("daily_identity_refresh")["backstop_overdue"] is False
+    finally:
+        db.close()
+
+
+def test_acquire_identity_refresh_lease_resolves_overdue_backstop_over_requested_daily_mode(tmp_path) -> None:
+    """Ticket 45's 'prioritize the next available slot': once backstop_overdue is set,
+    an acquire attempt that *requests* 'daily' must actually run as 'backstop' -- the
+    persisted flag overrides the caller's own --mode, and lease_result.json (the state
+    machine's source of truth) carries the resolved value, not the raw request."""
+    from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
+    from edgar_warehouse.silver_store import SilverDatabase
+
+    context = _context(tmp_path)
+    now = datetime(2026, 7, 30, 12, tzinfo=UTC)
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    try:
+        db.acquire_pipeline_run_lease(
+            lease_name="daily_identity_refresh", run_id="prior-holder", mode="daily", acquired_at=now
+        )
+        # A backstop attempt is deferred and marks the flag overdue.
+        warehouse_orchestrator._capture_bronze_raw(
+            context=context,
+            db=db,
+            command_name="acquire-identity-refresh-lease",
+            arguments={"mode": "backstop", "run_id": "sun-backstop"},
+            scope={"mode": "backstop"},
+            now=now,
+            sync_run_id="sun-backstop",
+        )
+        db.release_pipeline_run_lease(lease_name="daily_identity_refresh", run_id="prior-holder", released_at=now)
+
+        # Monday's trigger requests 'daily' as usual -- but the overdue flag must win.
+        _, metrics = warehouse_orchestrator._capture_bronze_raw(
+            context=context,
+            db=db,
+            command_name="acquire-identity-refresh-lease",
+            arguments={"mode": "daily", "run_id": "mon-run"},
+            scope={"mode": "daily"},
+            now=now,
+            sync_run_id="mon-run",
+        )
+        assert metrics["lease_acquired"] is True
+        assert metrics["effective_refresh_mode"] == "backstop"
+
+        lease_result_rel = default_path_resolver().identity_refresh_lease_path("mon-run")
+        payload = json.loads(Path(context.bronze_root.join(lease_result_rel)).read_text())
+        assert payload["mode"] == "backstop"
+    finally:
+        db.close()
+
+
+def test_acquire_identity_refresh_lease_resolves_overdue_backstop_across_two_consecutive_deferrals(
+    tmp_path,
+) -> None:
+    """Ticket 45's carry-forward must survive more than one missed slot: if
+    Monday's backstop-resolved attempt is *itself* deferred (something is
+    still holding the lease), Tuesday's trigger must still resolve to
+    'backstop' -- not fall back to 'daily' just because one retry already
+    happened. Only a run that actually acquires and releases in 'backstop'
+    mode clears the flag (code-review finding: the original coverage only
+    exercised a single defer-then-succeed cycle)."""
+    from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
+    from edgar_warehouse.silver_store import SilverDatabase
+
+    context = _context(tmp_path)
+    now = datetime(2026, 7, 30, 12, tzinfo=UTC)
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    try:
+        db.acquire_pipeline_run_lease(
+            lease_name="daily_identity_refresh", run_id="sat-daily", mode="daily", acquired_at=now
+        )
+        # Sunday's backstop is deferred -- marks overdue.
+        warehouse_orchestrator._capture_bronze_raw(
+            context=context,
+            db=db,
+            command_name="acquire-identity-refresh-lease",
+            arguments={"mode": "backstop", "run_id": "sun-backstop"},
+            scope={"mode": "backstop"},
+            now=now,
+            sync_run_id="sun-backstop",
+        )
+        # Saturday's holder is still running -- Monday's trigger (requesting
+        # 'daily') resolves to 'backstop' per the overdue flag, but is ALSO
+        # deferred, since the lease is still held.
+        _, mon_metrics = warehouse_orchestrator._capture_bronze_raw(
+            context=context,
+            db=db,
+            command_name="acquire-identity-refresh-lease",
+            arguments={"mode": "daily", "run_id": "mon-run"},
+            scope={"mode": "daily"},
+            now=now,
+            sync_run_id="mon-run",
+        )
+        assert mon_metrics["lease_acquired"] is False
+        assert mon_metrics["effective_refresh_mode"] == "backstop"
+        assert db.get_pipeline_run_lease("daily_identity_refresh")["backstop_overdue"] is True
+
+        db.release_pipeline_run_lease(lease_name="daily_identity_refresh", run_id="sat-daily", released_at=now)
+
+        # Tuesday's trigger (requesting 'daily' again) must STILL resolve to
+        # 'backstop' -- one prior deferral does not exhaust the carry-forward.
+        _, tue_metrics = warehouse_orchestrator._capture_bronze_raw(
+            context=context,
+            db=db,
+            command_name="acquire-identity-refresh-lease",
+            arguments={"mode": "daily", "run_id": "tue-run"},
+            scope={"mode": "daily"},
+            now=now,
+            sync_run_id="tue-run",
+        )
+        assert tue_metrics["lease_acquired"] is True
+        assert tue_metrics["effective_refresh_mode"] == "backstop"
+
+        lease_result_rel = default_path_resolver().identity_refresh_lease_path("tue-run")
+        payload = json.loads(Path(context.bronze_root.join(lease_result_rel)).read_text())
+        assert payload["mode"] == "backstop"
+
+        # Only Tuesday's successful 'backstop'-mode release finally clears it.
+        db.release_pipeline_run_lease(lease_name="daily_identity_refresh", run_id="tue-run", released_at=now)
+        assert db.get_pipeline_run_lease("daily_identity_refresh")["backstop_overdue"] is False
+    finally:
+        db.close()
+
+
 def test_acquire_identity_refresh_lease_command_rejects_unknown_mode(tmp_path) -> None:
     from edgar_warehouse.application.errors import WarehouseRuntimeError
 

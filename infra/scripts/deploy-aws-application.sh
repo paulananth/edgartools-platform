@@ -88,6 +88,25 @@ Options:
   --mdm-generation-partition-concurrency <n>
                                     MaxConcurrency for generation_build's BuildPartitions Distributed Map. Default: 8.
   --output-file <path>              Write deployment summary JSON.
+  --configure-daily-incremental-schedule <enable|disable>
+                                    Off-by-default operator control (release-readiness
+                                    ticket 45/49) for edgartools-<env>-daily-incremental's
+                                    recurring trigger: creates/updates (enable) or removes
+                                    (disable) two EventBridge rules -- Daily Identity
+                                    Refresh Mon-Sat 12:00 UTC (refresh_mode=daily) and
+                                    Identity Backstop Sweep Sun 12:00 UTC
+                                    (refresh_mode=backstop). Never runs as a side effect of
+                                    an ordinary deploy; run this flag alone, as
+                                    sec_platform_deployer, after an explicit operator go.
+                                    Exits immediately after configuring -- does not build
+                                    images, register task definitions, or touch state
+                                    machines.
+  --daily-incremental-scheduler-role-arn <arn>
+                                    IAM role ARN EventBridge assumes to start
+                                    edgartools-<env>-daily-incremental. Required with
+                                    --configure-daily-incremental-schedule enable. Source:
+                                    infra/terraform/access/aws/accounts/<env> output
+                                    daily_incremental_scheduler_role_arn.
   -h, --help                        Show this help.
 USAGE
 }
@@ -171,6 +190,8 @@ MDM_GRAPH_SCHEMA_VERSION="v1"
 MDM_GENERATION_PARTITION_CONCURRENCY=8
 RUNNER_ROLE_NAME_PREFIX=""
 OUTPUT_FILE=""
+CONFIGURE_DAILY_INCREMENTAL_SCHEDULE=""
+DAILY_INCREMENTAL_SCHEDULER_ROLE_ARN=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -226,6 +247,8 @@ while [[ $# -gt 0 ]]; do
     --mdm-generation-partition-concurrency) MDM_GENERATION_PARTITION_CONCURRENCY="${2:?}"; shift 2 ;;
     --runner-role-name-prefix) RUNNER_ROLE_NAME_PREFIX="${2:?}"; shift 2 ;;
     --output-file) OUTPUT_FILE="${2:?}"; shift 2 ;;
+    --configure-daily-incremental-schedule) CONFIGURE_DAILY_INCREMENTAL_SCHEDULE="${2:?}"; shift 2 ;;
+    --daily-incremental-scheduler-role-arn) DAILY_INCREMENTAL_SCHEDULER_ROLE_ARN="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -257,6 +280,15 @@ if ! is_empty "$MDM_DATABASE_SOURCE"; then
 fi
 if ! is_empty "$WAREHOUSE_BRONZE_CIK_LIMIT"; then
   [[ "$WAREHOUSE_BRONZE_CIK_LIMIT" =~ ^[0-9]+$ ]] || fail "--warehouse-bronze-cik-limit must be a non-negative integer"
+fi
+if ! is_empty "$CONFIGURE_DAILY_INCREMENTAL_SCHEDULE"; then
+  case "$CONFIGURE_DAILY_INCREMENTAL_SCHEDULE" in
+    enable|disable) ;;
+    *) fail "--configure-daily-incremental-schedule must be enable or disable" ;;
+  esac
+  if [[ "$CONFIGURE_DAILY_INCREMENTAL_SCHEDULE" == "enable" ]] && is_empty "$DAILY_INCREMENTAL_SCHEDULER_ROLE_ARN"; then
+    fail "--daily-incremental-scheduler-role-arn is required with --configure-daily-incremental-schedule enable"
+  fi
 fi
 
 case "$PUBLISH_MODE" in
@@ -400,6 +432,94 @@ PY
 ACCOUNT_ID="$(aws_cli sts get-caller-identity --query Account --output text)"
 if [[ "$ACCOUNT_ID" != "$EXPECTED_AWS_ACCOUNT_ID" ]]; then
   fail "AWS account mismatch: --aws-account-id requested ${EXPECTED_AWS_ACCOUNT_ID}, but profile ${AWS_PROFILE_NAME:-<default>} resolved to ${ACCOUNT_ID}."
+fi
+
+# --configure-daily-incremental-schedule is a standalone action (release-readiness
+# ticket 45/49): it needs only ACCOUNT_ID/AWS_REGION_NAME/NAME_PREFIX (all resolved
+# above) and the deterministic state-machine ARN upsert_state_machine's own naming
+# convention produces (${NAME_PREFIX}-daily-incremental) -- no image build, task
+# definition, or state-machine deploy is required. Handled here, before any of that
+# heavier work below runs, and exits immediately so this flag is never an accidental
+# side effect of an ordinary deploy invocation.
+build_daily_incremental_targets_json() {
+  # $1 = state machine ARN, $2 = scheduler role ARN, $3 = refresh_mode value.
+  # EventBridge's target Input is itself a JSON-encoded string (not a nested
+  # object), hence json.dumps applied twice below -- once for the target
+  # list, once for the Input string it contains.
+  python3 - "$1" "$2" "$3" <<'PY'
+import json
+import sys
+
+arn, role_arn, refresh_mode = sys.argv[1:4]
+print(json.dumps([{
+    "Id": "daily-incremental-sfn",
+    "Arn": arn,
+    "RoleArn": role_arn,
+    "Input": json.dumps({"refresh_mode": refresh_mode}),
+}]))
+PY
+}
+
+# Creates/updates one EventBridge rule + its daily-incremental target.
+# $1 = rule name, $2 = cron schedule expression, $3 = description,
+# $4 = refresh_mode value for the target's Input, $5 = state machine ARN,
+# $6 = scheduler role ARN. Shared by both the Mon-Sat and Sunday rules
+# below so their put-rule/put-targets shape can't drift out of sync.
+put_daily_incremental_schedule_rule() {
+  local rule_name="$1" cron_expr="$2" description="$3" refresh_mode="$4" state_machine_arn="$5" role_arn="$6"
+  aws_cli events put-rule \
+    --name "$rule_name" \
+    --schedule-expression "$cron_expr" \
+    --state ENABLED \
+    --description "$description" >/dev/null
+  aws_cli events put-targets --rule "$rule_name" \
+    --targets "$(build_daily_incremental_targets_json "$state_machine_arn" "$role_arn" "$refresh_mode")" >/dev/null
+  log "EventBridge rule ${rule_name} configured (${cron_expr})"
+}
+
+configure_daily_incremental_schedule() {
+  local action="$1" role_arn="$2"
+  local state_machine_arn="arn:aws:states:${AWS_REGION_NAME}:${ACCOUNT_ID}:stateMachine:${NAME_PREFIX}-daily-incremental"
+  local daily_rule="${NAME_PREFIX}-daily-incremental-refresh"
+  local backstop_rule="${NAME_PREFIX}-daily-incremental-backstop"
+
+  if [[ "$action" == "disable" ]]; then
+    log "Disabling daily_incremental schedule (${daily_rule}, ${backstop_rule})"
+    local rule
+    for rule in "$daily_rule" "$backstop_rule"; do
+      if aws_cli events describe-rule --name "$rule" >/dev/null 2>&1; then
+        aws_cli events remove-targets --rule "$rule" --ids daily-incremental-sfn >/dev/null
+        aws_cli events delete-rule --name "$rule"
+        log "Deleted EventBridge rule ${rule}"
+      else
+        log "EventBridge rule ${rule} does not exist -- nothing to disable"
+      fi
+    done
+    return 0
+  fi
+
+  log "Enabling daily_incremental schedule: Daily Identity Refresh Mon-Sat 12:00 UTC, Identity Backstop Sweep Sun 12:00 UTC"
+
+  # 12:00 UTC = 7am EST / 8am EDT -- safely after the daily-index file's
+  # expected ~6am ET availability in both standard and daylight time, with
+  # margin (same rationale the removed passive-Terraform schedule used).
+  # EventBridge cron requires exactly one of day-of-month/day-of-week to be
+  # '?' when the other field is explicit -- '?' goes on day-of-month here
+  # since both rules pin an explicit day-of-week.
+  put_daily_incremental_schedule_rule \
+    "$daily_rule" "cron(0 12 ? * MON-SAT *)" \
+    "Daily Identity Refresh for ${NAME_PREFIX}-daily-incremental (release-readiness ticket 45/49)" \
+    "daily" "$state_machine_arn" "$role_arn"
+
+  put_daily_incremental_schedule_rule \
+    "$backstop_rule" "cron(0 12 ? * SUN *)" \
+    "Identity Backstop Sweep for ${NAME_PREFIX}-daily-incremental (release-readiness ticket 45/49)" \
+    "backstop" "$state_machine_arn" "$role_arn"
+}
+
+if ! is_empty "$CONFIGURE_DAILY_INCREMENTAL_SCHEDULE"; then
+  configure_daily_incremental_schedule "$CONFIGURE_DAILY_INCREMENTAL_SCHEDULE" "$DAILY_INCREMENTAL_SCHEDULER_ROLE_ARN"
+  exit 0
 fi
 
 # Parameter resolution order (no Terraform):
@@ -2345,10 +2465,18 @@ else:
             {
                 "Variable": "$.lease_check.parsed.lease_acquired",
                 "BooleanEquals": True,
-                "Next": "RefreshMode",
+                "Next": "ApplyEffectiveRefreshMode",
             }
         ],
         "Default": "Deferred",
+    }
+
+    apply_effective_refresh_mode = {
+        "Type": "Pass",
+        "Comment": "Overwrite $.refresh_mode with the lease-resolved effective mode. An overdue backstop (persisted on pipeline_run_lease.backstop_overdue, set when a prior 'backstop' attempt was deferred) takes priority over whatever this trigger's own regular schedule slot requested (release-readiness ticket 45's 'prioritize the next available slot' requirement) -- acquire-identity-refresh-lease resolves that server-side and lease_result.json carries the resolved value, not the raw trigger payload, so RefreshMode's dispatch below must read from there instead of the original $.refresh_mode.",
+        "InputPath": "$.lease_check.parsed.mode",
+        "ResultPath": "$.refresh_mode",
+        "Next": "RefreshMode",
     }
 
     deferred = {
@@ -2582,6 +2710,7 @@ else:
             "AcquireLease":       acquire_lease,
             "ReadLeaseResult":    read_lease_result,
             "LeaseAcquiredCheck": lease_acquired_check,
+            "ApplyEffectiveRefreshMode": apply_effective_refresh_mode,
             "Deferred":           deferred,
             "RefreshMode":        refresh_mode,
             "ComputeIdentityRefreshWindow": compute_identity_refresh_window,

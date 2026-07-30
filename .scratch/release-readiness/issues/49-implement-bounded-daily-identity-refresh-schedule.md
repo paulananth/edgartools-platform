@@ -222,6 +222,117 @@ building further):**
 
 **Status remains `claimed`.**
 
+## Progress (2026-07-30, later same day — schedule wiring + backstop_overdue consumption)
+
+Closed the two gaps the prior progress note above left open: `backstop_overdue`
+consumption, and EventBridge/Terraform schedule wiring. Both landed together
+on `claude/daily-identity-refresh-go-live` on top of the lease-wiring commit
+(open as PR #316).
+
+**backstop_overdue is now real, persisted state, not just a per-run flag.**
+Consulted advisor before writing code: two static cron rules (Mon-Sat →
+`daily`, Sun → `backstop`) structurally cannot satisfy "prioritize the next
+available slot" on their own — Monday's rule always sends `daily` regardless
+of what Sunday did. Fixed by moving mode resolution *into* the pipeline:
+- `pipeline_run_lease` gained a persisted `backstop_overdue` column
+  (migration `008_pipeline_run_lease_backstop_overdue` — DuckDB rejects a
+  `NOT NULL` constraint on `ALTER TABLE ADD COLUMN`, so the migration uses
+  `DEFAULT FALSE` without it, matching this file's other `ADD COLUMN`
+  migrations; the `CREATE TABLE` DDL for fresh stores keeps `NOT NULL`).
+- `mark_pipeline_run_lease_backstop_overdue()` sets it when a `backstop`-mode
+  acquire attempt is deferred; `release_pipeline_run_lease()` clears it via
+  `CASE WHEN mode = 'backstop' THEN FALSE ELSE backstop_overdue END` — a
+  `daily`-mode release passing through must never accidentally clear an
+  overdue backstop it had nothing to do with.
+- `acquire-identity-refresh-lease` now resolves an `effective_mode` from the
+  persisted flag *before* acquiring (overriding the trigger's own
+  `--mode`/`requested_mode`), and writes the resolved value — not the raw
+  request — into `lease_result.json`.
+- A new `ApplyEffectiveRefreshMode` ASL Pass state overwrites `$.refresh_mode`
+  from `$.lease_check.parsed.mode` right after `LeaseAcquiredCheck`'s
+  fail-closed true branch, so the existing `RefreshMode` dispatch (which
+  chooses `ComputeWindows` vs `ComputeIdentityRefreshWindow`) reflects the
+  lease's decision, not the trigger payload — reusing the same "Pass state
+  overwrites a top-level field" idiom `RefreshModeDefault` already used.
+- Verified the mechanism survives more than one missed slot, not just a
+  single defer-then-succeed cycle (a genuine gap the Spec-axis code-review
+  caught in the first version of this coverage): a new test drives Sunday's
+  backstop deferred → Monday's backstop-resolved retry *also* deferred →
+  Tuesday's trigger still resolves to `backstop` → only Tuesday's successful
+  `backstop`-mode release finally clears the flag.
+
+**EventBridge schedule moved from passive Terraform to an explicit,
+off-by-default deploy-script control**, per ticket 45's exact requirement:
+- Deleted `infra/terraform/accounts/prod/scheduled_daily_incremental.tf`
+  (and its `daily_incremental_schedule_enabled` variable) — confirmed safe
+  first: the variable defaulted to `false`, no tfvars anywhere set it `true`,
+  and `terraform validate` is clean with the file gone, so every resource in
+  it was `count = 0` in prod and this is a pure no-op removal, not surgery
+  on live state. (Standards-axis code-review caveat, not fully closable from
+  this sandbox: this reasoning is corroborated by the local
+  `infra/.aws-tfstate-backups/` snapshots, which contain zero references to
+  `daily_incremental_scheduler`, but a live `terraform state list` against
+  the real `edgartools-prod-tfstate` backend was not run — worth one before
+  the next `accounts/prod` apply, purely as a sanity check.)
+- Added `infra/terraform/access/aws/accounts/prod/scheduled_daily_incremental.tf`
+  (new file, same name as the deleted one, different root): only a
+  least-privilege `daily_incremental_scheduler` IAM role +
+  `states:StartExecution` policy scoped to exactly the
+  `edgartools-prod-daily-incremental` state machine ARN. Created
+  unconditionally (no enable flag) — the role alone starts nothing, since no
+  rule/target is created in Terraform at all; new output
+  `daily_incremental_scheduler_role_arn`.
+- Added `--configure-daily-incremental-schedule enable|disable` and
+  `--daily-incremental-scheduler-role-arn <arn>` to
+  `infra/scripts/deploy-aws-application.sh`. This is a standalone action —
+  it exits immediately after configuring, before any image build, task
+  definition registration, or state-machine deploy runs, so it can never be
+  an accidental side effect of an ordinary `--env prod` deploy. `enable`
+  creates/updates two rules via `put_daily_incremental_schedule_rule()` (a
+  gof-refactor-reviewer finding: the two rule blocks were near-identical,
+  extracted into one shared helper) — `cron(0 12 ? * MON-SAT *)` sending
+  `{"refresh_mode": "daily"}`, and `cron(0 12 ? * SUN *)` sending
+  `{"refresh_mode": "backstop"}`, both against the deterministic
+  `${NAME_PREFIX}-daily-incremental` state machine ARN and the scheduler
+  role above. `disable` removes targets and deletes both rules, and is a
+  clean no-op if they don't exist. Not yet run against prod — this PR adds
+  the capability only.
+
+**Process, per this session's CLAUDE.md convention:** ran
+`/gof-refactor-reviewer` (one finding, fixed: the duplicated rule-setup
+blocks above) and a full two-axis `/code-review` against the lease-wiring
+commit (`390a5de`, i.e. scoped to just this session's diff, not re-reviewing
+already-reviewed work). Findings applied:
+- Standards axis: no hard violations. Fixed a real test-infrastructure
+  fragility — `test_daily_incremental_schedule_controls.py`'s function-source
+  extraction anchored on a guard string
+  (`if ! is_empty "$CONFIGURE_DAILY_INCREMENTAL_SCHEDULE"; then`) that's
+  duplicated in the deploy script (it also opens the CLI-argument validation
+  block); a future reorder of the two occurrences relative to the function
+  definitions could have silently truncated the extracted source. Fixed by
+  anchoring on the more specific, provably-unique
+  `<closing brace>, blank line, if-guard` sequence instead, while still
+  excluding the guard's own body from what's actually sourced (the original
+  fix attempt included the guard's call line in the extracted text, which
+  broke all 6 tests with a dangling unterminated `if` — caught immediately
+  by re-running the suite before considering this done).
+- Spec axis: cadence (`12:00 UTC`, Mon-Sat / Sun) and cron syntax
+  (`?`/day-of-week form) confirmed correct against ticket 45's literal text;
+  no scope creep; CloudWatch alerting and Phase 1/2 correctly out of scope
+  for a code diff. One real gap found and fixed: the original tests only
+  proved a single defer-then-succeed cycle for `backstop_overdue`, not that
+  it survives multiple consecutive deferrals — added the two-consecutive-
+  deferrals test described above.
+
+Full test suite: 865 passed (unit + architecture), 4 skipped. Both Terraform
+roots (`accounts/prod`, `access/aws/accounts/prod`) `terraform validate`
+clean.
+
+**Still not done:** CloudWatch alerting (deferral alerts, 18h/20h-stale
+execution alarm), actually running `--configure-daily-incremental-schedule
+enable` against prod, Phase 1 manual evidence-gathering, Phase 2 Operator
+GO checkpoint. **Status remains `claimed`.**
+
 ## Done when
 
 Focused tests, repository CI, deployed definitions, manual production timing,

@@ -2342,39 +2342,57 @@ def _capture_bronze_raw(
         # acquired"] -- is the source of truth the state machine reads via
         # s3:getObject; the metric is telemetry only, kept in sync but never
         # consulted by the SFN.
-        mode = str(scope["mode"] or "").strip()
-        if mode not in {"daily", "backstop"}:
+        requested_mode = str(scope["mode"] or "").strip()
+        if requested_mode not in {"daily", "backstop"}:
             raise WarehouseRuntimeError(
-                f"acquire-identity-refresh-lease requires --mode of 'daily' or 'backstop', got {mode!r}"
+                f"acquire-identity-refresh-lease requires --mode of 'daily' or 'backstop', got {requested_mode!r}"
             )
+        # An overdue backstop (persisted on pipeline_run_lease, set when a
+        # prior 'backstop' attempt was deferred) takes priority over
+        # whatever this trigger's own regular schedule slot requested --
+        # release-readiness ticket 45's "prioritize the next available
+        # slot" requirement. The persisted flag decides the effective mode,
+        # not the caller's --mode; lease_result.json (below) carries that
+        # resolved value, and the state machine's ApplyEffectiveRefreshMode
+        # step overwrites $.refresh_mode with it before RefreshMode dispatches.
+        lease_before = db.get_pipeline_run_lease(IDENTITY_REFRESH_LEASE_NAME)
+        overdue_before = bool(lease_before and lease_before.get("backstop_overdue"))
+        effective_mode = "backstop" if overdue_before else requested_mode
         acquired = db.acquire_pipeline_run_lease(
             lease_name=IDENTITY_REFRESH_LEASE_NAME,
             run_id=sync_run_id,
-            mode=mode,
+            mode=effective_mode,
             acquired_at=now,
         )
         held = db.get_pipeline_run_lease(IDENTITY_REFRESH_LEASE_NAME)
         if acquired:
             _emit_pipeline_event(
-                "identity_refresh_lease_acquired", run_id=sync_run_id, mode=mode
+                "identity_refresh_lease_acquired",
+                run_id=sync_run_id,
+                mode=effective_mode,
+                requested_mode=requested_mode,
             )
         else:
+            if effective_mode == "backstop":
+                db.mark_pipeline_run_lease_backstop_overdue(lease_name=IDENTITY_REFRESH_LEASE_NAME)
             _emit_pipeline_event(
                 "identity_refresh_lease_deferred",
                 run_id=sync_run_id,
-                mode=mode,
+                mode=effective_mode,
+                requested_mode=requested_mode,
                 held_by_run_id=held.get("run_id") if held else None,
                 held_since=str(held.get("acquired_at")) if held else None,
-                backstop_overdue=(mode == "backstop"),
+                backstop_overdue=(effective_mode == "backstop"),
             )
         metrics["lease_acquired"] = acquired
+        metrics["effective_refresh_mode"] = effective_mode
         lease_result_rel = default_path_resolver().identity_refresh_lease_path(sync_run_id)
         context.bronze_root.write_json(
             lease_result_rel,
             {
                 "lease_acquired": acquired,
-                "mode": mode,
-                "backstop_overdue": bool((not acquired) and mode == "backstop"),
+                "mode": effective_mode,
+                "backstop_overdue": bool((not acquired) and effective_mode == "backstop"),
                 "held_by_run_id": (held.get("run_id") if held else None),
             },
         )

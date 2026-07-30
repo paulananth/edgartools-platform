@@ -238,10 +238,10 @@ def test_read_lease_result_key_matches_the_real_path_resolver(daily_incremental_
 
 def test_lease_acquired_check_is_fail_closed_on_default(daily_incremental_definition) -> None:
     """Only an explicit, successfully-parsed lease_acquired=True proceeds to
-    RefreshMode -- a successfully-parsed lease_acquired=False falls through
-    Default to Deferred. This is deliberately inverted from this file's
-    other Choice states (where Default is the common path) for safety: a
-    lease miss must never be mistaken for a lease hit.
+    ApplyEffectiveRefreshMode -- a successfully-parsed lease_acquired=False
+    falls through Default to Deferred. This is deliberately inverted from
+    this file's other Choice states (where Default is the common path) for
+    safety: a lease miss must never be mistaken for a lease hit.
 
     This Choice only ever runs at all if ReadLeaseResult's getObject/
     StringToJson succeeded -- a missing or corrupt lease_result.json fails
@@ -254,8 +254,27 @@ def test_lease_acquired_check_is_fail_closed_on_default(daily_incremental_defini
     assert check["Type"] == "Choice"
     assert check["Choices"][0]["Variable"] == "$.lease_check.parsed.lease_acquired"
     assert check["Choices"][0]["BooleanEquals"] is True
-    assert check["Choices"][0]["Next"] == "RefreshMode"
+    assert check["Choices"][0]["Next"] == "ApplyEffectiveRefreshMode"
     assert check["Default"] == "Deferred"
+
+
+def test_apply_effective_refresh_mode_overwrites_refresh_mode_from_lease_result(
+    daily_incremental_definition,
+) -> None:
+    """acquire-identity-refresh-lease resolves the *effective* mode server-side
+    (an overdue backstop, persisted on pipeline_run_lease.backstop_overdue,
+    overrides whatever the trigger's own regular schedule slot requested --
+    release-readiness ticket 45's 'prioritize the next available slot'
+    requirement) and writes it into lease_result.json's 'mode' field. This
+    Pass state overwrites the *raw* $.refresh_mode (set before AcquireLease
+    ever ran, straight from the trigger payload) with that resolved value,
+    so RefreshMode's dispatch below reflects the lease's decision, not the
+    original request."""
+    state = daily_incremental_definition["States"]["ApplyEffectiveRefreshMode"]
+    assert state["Type"] == "Pass"
+    assert state["InputPath"] == "$.lease_check.parsed.mode"
+    assert state["ResultPath"] == "$.refresh_mode"
+    assert state["Next"] == "RefreshMode"
 
 
 def test_read_lease_result_has_no_catch(daily_incremental_definition) -> None:

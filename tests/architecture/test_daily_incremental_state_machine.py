@@ -37,7 +37,7 @@ _END_MARKER = "\nPY\n}\n"
 # the fail-closed Deferred path, not the happy path) -- trace helpers must be
 # told to prefer the explicit lease_acquired=True branch when tracing the
 # successful/main flow. See _linear_order_with_choice's docstring.
-_LEASE_ACQUIRED_PREFER = {"LeaseAcquiredCheck": "RefreshMode"}
+_LEASE_ACQUIRED_PREFER = {"LeaseAcquiredCheck": "ApplyEffectiveRefreshMode"}
 
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 
@@ -261,7 +261,10 @@ def _linear_order_with_choice(definition: dict, prefer: dict[str, str] | None = 
     default trace. LeaseAcquiredCheck inverts this deliberately for safety
     (Default = Deferred, a fail-closed disposition for anything that isn't
     exactly lease_acquired=True) -- pass `prefer={"LeaseAcquiredCheck":
-    "RefreshMode"}` to trace the happy path through it instead."""
+    "ApplyEffectiveRefreshMode"}` to trace the happy path through it
+    instead (ApplyEffectiveRefreshMode itself has a plain "Next", so the
+    trace continues on to RefreshMode from there without needing its own
+    prefer entry)."""
     states = definition["States"]
     prefer = prefer or {}
 

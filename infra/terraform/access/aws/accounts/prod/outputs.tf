@@ -52,3 +52,8 @@ output "snowflake_manifest_subscriber_arn" {
   description = "Prod Snowflake-managed AWS principal ARN used by AWS access, if known."
   value       = local.subscriber_arn
 }
+
+output "daily_incremental_scheduler_role_arn" {
+  description = "Prod IAM role ARN EventBridge assumes to start edgartools-prod-daily-incremental (release-readiness ticket 45/49). The rule/target that uses this role is created by deploy-aws-application.sh's off-by-default schedule controls, not Terraform."
+  value       = aws_iam_role.daily_incremental_scheduler.arn
+}
