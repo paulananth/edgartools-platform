@@ -1,7 +1,7 @@
 # Decide the task-memory fix to unblock the failed daily_incremental execution
 
 Type: grilling
-Status: open
+Status: claimed
 
 ## Question
 
