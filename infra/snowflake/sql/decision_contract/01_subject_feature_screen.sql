@@ -4,38 +4,25 @@
 -- Semantics (unit-tested): edgar_warehouse.serving.subject_feature_screen
 -- Deploy after gold FINANCIAL_FACTORS + MDM entity tracking exist.
 --
--- Replace schema placeholders before apply:
---   EDGARTOOLS_GOLD          -> gold dynamic tables
---   EDGARTOOLS_DECISION      -> decision-contract schema (create if needed)
---   MDM entity source        -> hosted MDM/export table with active company CIKs
+-- COMPANY is enriched by the MDM company export.  Decision Subject Universe
+-- membership is therefore the explicit tracking_status='active' subset, not
+-- every warehouse company.  The public bundle views add the active graph
+-- generation and publication-alignment gates.
 --
 -- Pure-SEC features only — no price / PE / market cap columns.
 -- Coverage flags: present | empty | unavailable | not_applicable
 
-CREATE SCHEMA IF NOT EXISTS EDGARTOOLS_DECISION;
+CREATE SCHEMA IF NOT EXISTS {{ database }}.EDGARTOOLS_DECISION;
 
-CREATE OR REPLACE VIEW EDGARTOOLS_DECISION.SUBJECT_FEATURE_SCREEN AS
-WITH warehouse_active AS (
-    -- Prefer an exported tracking table when available; COMPANY is the fallback spine.
+CREATE OR REPLACE VIEW {{ database }}.EDGARTOOLS_DECISION.SUBJECT_FEATURE_SCREEN AS
+WITH universe AS (
     SELECT DISTINCT cik::NUMBER AS cik
-    FROM EDGARTOOLS_GOLD.COMPANY
-),
-mdm_active AS (
-    -- PLACEHOLDER: replace with the environment's MDM active-company export
-    -- (warehouse ∩ MDM is required for Decision Subject Universe).
-    -- Until wired, this CTE intentionally mirrors warehouse_active so the
-    -- view deploys for compile checks only — not agent-grade membership.
-    SELECT DISTINCT cik::NUMBER AS cik
-    FROM EDGARTOOLS_GOLD.COMPANY
-),
-universe AS (
-    SELECT w.cik
-    FROM warehouse_active w
-    INNER JOIN mdm_active m ON m.cik = w.cik
+    FROM {{ database }}.EDGARTOOLS_GOLD.COMPANY
+    WHERE LOWER(COALESCE(tracking_status, '')) = 'active'
 ),
 factors AS (
     SELECT *
-    FROM EDGARTOOLS_GOLD.FINANCIAL_FACTORS
+    FROM {{ database }}.EDGARTOOLS_GOLD.FINANCIAL_FACTORS
 ),
 fy AS (
     SELECT *
@@ -67,7 +54,7 @@ SELECT
     fy.total_assets AS fy_total_assets,
     fy.total_equity AS fy_total_equity,
     fy.free_cash_flow AS fy_free_cash_flow,
-    fy.roe AS fy_roe,
+    fy.return_on_equity AS fy_roe,
     CASE
         WHEN fy.cik IS NULL THEN 'unavailable'
         WHEN fy.revenue IS NULL

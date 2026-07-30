@@ -23,16 +23,21 @@ from snowflake.snowpark.context import get_active_session
 
 try:
     from edgar_warehouse.serving.dashboard_modes import (
-        AGENT_VIEW_BANNER,
         AGENT_VIEW_ALLOWED_OBJECTS,
+        AGENT_VIEW_BANNER,
         EXPLORE_BANNER,
         MODE_AGENT_VIEW,
         MODE_EXPLORE,
         SESSION_CIK_KEY,
         SESSION_MODE_KEY,
+    )
+    from edgar_warehouse.serving.dashboard_modes import (
         is_object_allowed as _is_object_allowed,
+    )
+    from edgar_warehouse.serving.dashboard_modes import (
         normalize_mode as _normalize_mode,
     )
+    from edgar_warehouse.serving.dashboard_query_registry import registered_query
 except ImportError:  # pragma: no cover -- exercised only in the SiS stage
     # SiS runtime: edgar_warehouse isn't installed as a package here (see
     # deploy.sh -- only streamlit_app.py + dashboard_modes.py are staged).
@@ -43,16 +48,21 @@ except ImportError:  # pragma: no cover -- exercised only in the SiS stage
 
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from dashboard_modes import (
-        AGENT_VIEW_BANNER,
         AGENT_VIEW_ALLOWED_OBJECTS,
+        AGENT_VIEW_BANNER,
         EXPLORE_BANNER,
         MODE_AGENT_VIEW,
         MODE_EXPLORE,
         SESSION_CIK_KEY,
         SESSION_MODE_KEY,
+    )
+    from dashboard_modes import (
         is_object_allowed as _is_object_allowed,
+    )
+    from dashboard_modes import (
         normalize_mode as _normalize_mode,
     )
+    from dashboard_query_registry import registered_query
 
 st.set_page_config(page_title="EdgarTools Warehouse", layout="wide")
 
@@ -106,9 +116,20 @@ def _df(sql: str, params: list | None = None):
 def _safe_df(label: str, sql: str, params: list | None = None):
     try:
         return _df(sql, params=params)
-    except Exception as exc:
-        st.warning(f"{label} is not available: {exc}")
+    except Exception:  # noqa: BLE001 - connector exceptions share no stable base
+        # Fixed, secret-safe copy: connector exceptions may contain account
+        # identifiers, SQL text, stage paths, or credentials.
+        st.warning(
+            f"{label} is temporarily unavailable. "
+            "No data was shown; contact the dashboard operator with this section name."
+        )
         return None
+
+
+def _registered_df(query_id: str, params: list | None = None):
+    """Execute one registry-enforced Agent View query."""
+    query = registered_query(query_id)
+    return _safe_df(query.query_id, query.sql, params=params)
 
 
 def _show_dataframe(df, columns: list[str] | None = None):
@@ -123,7 +144,7 @@ def _show_dataframe(df, columns: list[str] | None = None):
 
 
 def _metric_text(value, fmt: str) -> str:
-    if value is None or value != value:
+    if value is None or value != value:  # noqa: PLR0124 - generic NaN detection
         return "—"
     return format(float(value), fmt)
 
@@ -226,7 +247,7 @@ def _two_year_timeline():
     st.plotly_chart(fig, use_container_width=True)
 
 
-def _render_agent_view_company(cik: int) -> None:
+def _render_agent_view_company(cik: int, bundle=None) -> None:
     """Agent View: contract objects only (no free gold FINANCIAL_FACTORS joins)."""
     st.subheader("Agent View — Decision Contract")
     st.write(
@@ -239,36 +260,41 @@ def _render_agent_view_company(cik: int) -> None:
             ),
         }
     )
-    if not _is_object_allowed(MODE_AGENT_VIEW, "SUBJECT_FEATURE_SCREEN"):
-        st.error("Contract screen object not allowed — misconfigured mode.")
+    if bundle is None:
+        bundle = _registered_df("agent.subject_bundle", params=[int(cik)])
+    if bundle is None or bundle.empty:
+        st.error(
+            "Agent-grade evidence is unavailable because the Decision Contract "
+            "is missing, stale, or not aligned with the active graph generation."
+        )
         return
-    screen = _safe_df(
-        "Subject Feature Screen",
-        f"""
-        select *
-        from {DECISION_SCHEMA}.SUBJECT_FEATURE_SCREEN
-        where cik = ?
-        limit 5
-        """,
-        params=[int(cik)],
-    )
-    if screen is not None:
-        st.caption("EDGARTOOLS_DECISION.SUBJECT_FEATURE_SCREEN (ticket 10)")
-        _show_dataframe(screen)
-    st.caption(
-        "Subject Bundle Read sections are built by the Python contract layer "
-        "(tickets 11–12); publish SQL views when ready for SiS."
-    )
+    row = bundle.iloc[0]
+    freshness = {
+        "contract_version": row.get("DECISION_CONTRACT_VERSION"),
+        "decision_watermark": row.get("DECISION_WATERMARK"),
+        "business_date": row.get("BUSINESS_DATE"),
+        "gold_updated_at": row.get("GOLD_UPDATED_AT"),
+        "graph_generation_id": row.get("GRAPH_GENERATION_ID"),
+        "graph_activated_at": row.get("GRAPH_ACTIVATED_AT"),
+        "coverage_state": row.get("COVERAGE_STATE"),
+        "alignment_status": row.get("ALIGNMENT_STATUS"),
+    }
+    if freshness["alignment_status"] != "aligned":
+        st.error(
+            "Agent-grade evidence is unavailable because contract and graph "
+            "generations are not aligned."
+        )
+        return
+    st.caption("Published Decision Contract freshness and alignment")
+    st.write(freshness)
+    _show_dataframe(bundle)
 
 
 def render_summary(mode: str = MODE_EXPLORE):
     st.header("Summary")
     if mode == MODE_AGENT_VIEW:
         st.caption("Agent View summary is limited to contract/status surfaces.")
-        status = _safe_df(
-            "Gold status",
-            f"select * from {GOLD_SCHEMA}.EDGARTOOLS_GOLD_STATUS limit 20",
-        )
+        status = _registered_df("agent.contract_status")
         _show_dataframe(status)
         return
     _kpi_row()
@@ -298,6 +324,13 @@ def _lookup_companies(query: str):
         """,
         params=[pattern, pattern],
     )
+
+
+def _lookup_contract_subjects(query: str):
+    if not query:
+        return None
+    pattern = f"%{query}%"
+    return _registered_df("agent.subject_search", params=[pattern, pattern])
 
 
 def _company_metadata(company_key: int):
@@ -511,7 +544,11 @@ def render_details(mode: str = MODE_EXPLORE):
         st.info("Enter a ticker symbol or part of a company name to start.")
         return
 
-    matches = _lookup_companies(query.strip())
+    matches = (
+        _lookup_contract_subjects(query.strip())
+        if mode == MODE_AGENT_VIEW
+        else _lookup_companies(query.strip())
+    )
     if matches is None or matches.empty:
         st.warning(f"No companies matched '{query}'.")
         return
@@ -522,34 +559,38 @@ def render_details(mode: str = MODE_EXPLORE):
     )
     label = st.selectbox("Matches", matches["label"].tolist())
     selected = matches.loc[matches["label"] == label].iloc[0]
-    company_key = int(selected["COMPANY_KEY"])
-
-    meta = _company_metadata(company_key)
-    if meta.empty:
-        st.error("Selected company not found.")
-        return
-    row = meta.iloc[0]
-    cik = int(row["CIK"])
+    if mode == MODE_AGENT_VIEW:
+        row = selected
+        cik = int(row["CIK"])
+        company_key = None
+    else:
+        company_key = int(selected["COMPANY_KEY"])
+        meta = _company_metadata(company_key)
+        if meta.empty:
+            st.error("Selected company not found.")
+            return
+        row = meta.iloc[0]
+        cik = int(row["CIK"])
     st.session_state[SESSION_CIK_KEY] = cik
 
     st.subheader(row["ENTITY_NAME"])
     col1, col2, col3 = st.columns(3)
     col1.metric("CIK", cik)
     col2.metric("Tickers", row["TICKERS"] or "—")
-    col3.metric("Entity type", row["ENTITY_TYPE"] or "—")
+    col3.metric("Entity type", row.get("ENTITY_TYPE") or "—")
 
     with st.expander("Metadata", expanded=True):
         st.write(
             {
-                "SIC": row["SIC"],
-                "SIC description": row["SIC_DESCRIPTION"],
-                "State of incorporation": row["STATE_OF_INCORPORATION"],
-                "Fiscal year end": row["FISCAL_YEAR_END"],
+                "SIC": row.get("SIC"),
+                "SIC description": row.get("SIC_DESCRIPTION"),
+                "State of incorporation": row.get("STATE_OF_INCORPORATION"),
+                "Fiscal year end": row.get("FISCAL_YEAR_END"),
             }
         )
 
     if mode == MODE_AGENT_VIEW:
-        _render_agent_view_company(cik)
+        _render_agent_view_company(cik, bundle=matches.loc[matches["CIK"] == cik])
         return
 
     st.subheader("Financial factors")
