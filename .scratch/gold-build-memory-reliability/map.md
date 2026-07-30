@@ -31,14 +31,11 @@ carries execution, not open design decisions (see Notes).
 
 <!-- Closed ticket decisions — one-line gist + link; detail lives in the ticket. -->
 
-- [Stream build_gold() per table instead of materializing the whole gold layer](issues/01-stream-build-gold-per-table.md) — implemented on `claude/gold-build-streaming` (not yet merged/deployed): `iter_gold_tables()` generator + per-table write/export helpers replace the eager whole-dict build; peak-memory reduction reasoned from CloudWatch evidence but not yet empirically confirmed in prod — that's expected to land via ticket 03's redeploy.
+- [Stream build_gold() per table instead of materializing the whole gold layer](issues/01-stream-build-gold-per-table.md) — implemented on `claude/gold-build-streaming` (not yet merged/deployed): `iter_gold_tables()` generator + per-table write/export helpers replace the eager whole-dict build; peak-memory reduction reasoned from CloudWatch evidence but not yet empirically confirmed in prod — that's expected to land via ticket 03's redeploy. Also moved `db.record_gold_manifest` to a per-table idempotent upsert inside the loop (this resolved the fog item below about incremental manifest recording — a real behavior change caught during review, not left for later).
+- [Link GOLD_AFFECTING_COMMANDS membership to required task-profile sizing](issues/02-link-gold-affecting-commands-to-task-sizing.md) — added `tests/architecture/test_gold_affecting_commands_task_sizing.py`. Surfaced that `GOLD_AFFECTING_COMMANDS` members resolve through **three different real dispatch paths**, not one: (1) `bootstrap-full`/`targeted-resync`/`full-reconcile`/`gold-refresh` (standalone) go through `workflow_profile()`'s case statement — the only path the test's first version actually checked; (2) **`bootstrap`/`daily-incremental` never call `workflow_profile()` at all** — its cases for them are dead code, and their real `RunWarehouseTask` step (the one that OOM'd) is wired directly in `write_warehouse_mdm_gold_definition`, discovered only while deploying ticket 03's fix and requiring the test to be rewritten to generate that function's real JSON instead; (3) `bootstrap-next` is hardcoded inside `load_history`'s state machine, bypassing both. Also found `gold-refresh` itself runs on two profiles depending on caller (standalone → `workflow_profile()`; every composite pipeline's embedded step → `large` directly) — invisible only because the two shared 4096MB before ticket 03.
 
 ## Not yet specified
 
-- Whether the same streaming fix (ticket 01) should also change how `db.record_gold_manifest`
-  aggregates the end-of-run manifest — today it's a single call over the full manifest list;
-  a fully incremental `build_gold` may want incremental manifest recording too. Not sharp enough
-  to ticket until ticket 01 is underway and the actual caller shape is being rewritten.
 - Whether `bootstrap`/`full_reconcile` (also `medium`, also in `GOLD_AFFECTING_COMMANDS`, per
   ticket 02's finding) have ever actually run at full-universe scale — if not, they carry the
   same latent risk as `daily_incremental` did before this incident, but there's no incident
@@ -49,6 +46,21 @@ carries execution, not open design decisions (see Notes).
   deliberately left it alone. It carries the same eager-materialization memory risk ticket 01
   just fixed for `GOLD_AFFECTING_COMMANDS`, but isn't in that set and has no incident evidence
   yet — not sharp enough to ticket until it actually OOMs or a real need to fix it surfaces.
+- Ticket 02's architecture test validates all three real dispatch paths now (see the updated
+  Decisions-so-far entry) but still doesn't inspect the composite pipelines' embedded
+  `wh_large_arn`/`wh_medium_arn` direct-wiring for `gold-refresh` (see ticket 02's second
+  finding). Not sharp enough to ticket yet since nothing is actually at risk today (they all
+  use `large`); would sharpen into a ticket if that direct-wiring is ever found drifted.
+- `bootstrap-next` is now the **sole remaining `GOLD_AFFECTING_COMMANDS` member still on
+  4096MB** after ticket 03's fix raised `large` to 8192MB and moved
+  `daily_incremental`/`bootstrap`/`full_reconcile`/`gold_refresh` onto it — it's hardcoded to
+  the medium task-def ARN inside `write_load_history_definition`, out of scope for ticket 03's
+  question (which named only the four `medium`-profile members explicitly). Same class of risk
+  `daily_incremental` just hit, on the one path nobody has touched yet. Not sharp enough to
+  ticket until there's a decision on whether `load_history`'s per-window `bootstrap-next` should
+  also move to `large`, or whether the "DEEPER FOLLOW-UP" comment already in
+  `deploy-aws-application.sh` (skip the redundant per-window inline gold build entirely, since
+  Stage-3 gold-refresh rebuilds it anyway) is the better fix.
 
 ## Out of scope
 
