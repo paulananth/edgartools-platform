@@ -927,13 +927,27 @@ TASK_DEF_SMALL_ARN="$(register_task_definition small 512 1024)"
 # per-window `bootstrap-next` runs on `medium` and builds gold from the canonical silver.duckdb
 # (full accumulated universe, multi-GB — e.g. 2.7M sec_financial_fact rows), not just its window.
 # At 2048 MB it OOM-killed (exit 137) building the sec_financial_fact gold table, failing
-# load_history exec #3. 4096 matches the memory the dedicated gold-refresh (`large`) already uses
-# for the same full-universe gold build. cpu 1024 supports 4096 on Fargate.
+# load_history exec #3. 4096 matched the memory the dedicated gold-refresh (`large`) used at the
+# time for the same full-universe gold build. cpu 1024 supports 4096 on Fargate.
+# STALE AS OF 2026-07-30 (gold-build-memory-reliability ticket 03): `large` is now 8192MB (see
+# below), so `bootstrap-next` on `medium`'s unchanged 4096MB is the one remaining
+# full-universe-gold-build path NOT covered by this session's memory bump -- it's hardcoded
+# directly to the medium task-def ARN inside write_load_history_definition, bypassing
+# workflow_profile() entirely, so it wasn't in scope for ticket 03's "GOLD_AFFECTING_COMMANDS
+# medium members" question. Flagged in the map's fog, not fixed here.
 # DEEPER FOLLOW-UP: per-window bootstrap-next rebuilding the FULL gold every window is redundant
 # with the Stage-3 gold-refresh — consider making WindowedBootstrap skip the inline gold build
 # (phased-pipeline invariant: no gold per batch) rather than only widening memory.
 TASK_DEF_MEDIUM_ARN="$(register_task_definition medium 1024 4096)"
-TASK_DEF_LARGE_ARN="$(register_task_definition large 2048 4096)"
+# large memory raised 4096 -> 8192 (2026-07-30, gold-build-memory-reliability ticket 03):
+# `large` and `medium` shared the identical 4096MB ceiling (only CPU differed), so
+# 37c3171's "move gold-refresh to large" fix was memory-ineffective -- confirmed when
+# daily_incremental (medium, 4096MB) OOM-killed 4x building sec_thirteenf_holding.
+# 8192 matches mdm-large's floor for the same class of full-universe gold-build memory
+# pressure. daily_incremental/bootstrap/full_reconcile/gold_refresh all moved onto this
+# profile below (workflow_profile()) since they share the identical build_gold() call
+# site -- see .scratch/gold-build-memory-reliability/issues/03-decide-task-memory-fix-to-unblock-daily-incremental.md.
+TASK_DEF_LARGE_ARN="$(register_task_definition large 2048 8192)"
 TASK_DEF_MDM_SMALL_ARN=""
 TASK_DEF_MDM_MEDIUM_ARN=""
 TASK_DEF_MDM_LARGE_ARN=""
@@ -969,14 +983,27 @@ task_definition_for_mdm_workflow() {
 
 workflow_profile() {
   case "$1" in
-    daily_incremental) printf '%s\n' "medium" ;;
-    bootstrap) printf '%s\n' "medium" ;;
+    # DEAD CODE as of 2026-07-30 (gold-build-memory-reliability ticket 03 investigation):
+    # workflow_profile() is never actually *called* with "daily_incremental" or "bootstrap"
+    # anywhere in this script -- their real RunWarehouseTask task-def comes from
+    # write_warehouse_mdm_gold_definition's run_wh (see that function's own comment), not
+    # from here. These two cases are kept only so a value exists if that ever changes; set
+    # to "large" to match the ticket 03 decision (both need large's raised 8192MB ceiling,
+    # same as bootstrap_full/full_reconcile/gold_refresh below), not because this line is
+    # actually reached in production.
+    daily_incremental) printf '%s\n' "large" ;;
+    bootstrap) printf '%s\n' "large" ;;
+    # bootstrap_full/targeted_resync/full_reconcile/gold_refresh: this IS the operative path
+    # (see the workflow_profile()-driven loop below) -- moved medium -> large (2026-07-30,
+    # ticket 03): all four call the identical memory-heavy build_gold() path and need
+    # large's raised 8192MB ceiling, not medium's unchanged 4096MB. See TASK_DEF_LARGE_ARN's
+    # comment above.
     bootstrap_full) printf '%s\n' "large" ;;
     targeted_resync) printf '%s\n' "large" ;;
-    full_reconcile) printf '%s\n' "medium" ;;
+    full_reconcile) printf '%s\n' "large" ;;
     load_daily_form_index_for_date) printf '%s\n' "small" ;;
     catch_up_daily_form_index) printf '%s\n' "small" ;;
-    gold_refresh) printf '%s\n' "medium" ;;
+    gold_refresh) printf '%s\n' "large" ;;
     seed_universe) printf '%s\n' "medium" ;;
     *) fail "unknown workflow: $1" ;;
   esac
@@ -2148,7 +2175,15 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
         s["Next"] = next_state
     return s
 
-run_wh = ecs_state(wh_medium_arn,
+# wh_large_arn, not wh_medium_arn (2026-07-30, gold-build-memory-reliability ticket 03):
+# this is the state that actually runs `bootstrap`/`daily-incremental` themselves --
+# both are in GOLD_AFFECTING_COMMANDS (they do bronze+silver+gold in one command) and
+# this exact step, on wh_medium_arn, is what OOM-killed daily_incremental in prod
+# (task-def edgartools-prod-medium:92, 4096MB, mid-sec_thirteenf_holding). Note this
+# workflow's task profile was NEVER resolved via workflow_profile() -- that function's
+# daily_incremental/bootstrap cases are dead code, since write_warehouse_mdm_gold_definition
+# (this function) builds their state machines directly and was never wired through it.
+run_wh = ecs_state(wh_large_arn,
     f"States.Array('{wh_cmd}', '--run-id', $$.Execution.Name)",
     next_state="MdmRun")
 mdm_run = ecs_state(mdm_medium_arn,

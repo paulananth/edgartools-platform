@@ -248,7 +248,7 @@ NOTE: fix #1 (code) and #3 (default) take effect only after a warehouse image re
 deploy. Fix #2 (SM input plumbing) takes effect after the next `deploy-aws-application.sh`
 run that re-registers the `load_history` state machine — no image rebuild required.
 
-## Gold-build memory / daily_incremental OOM 5-whys (fixed, not yet deployed, 2026-07-30)
+## Gold-build memory / daily_incremental OOM 5-whys (fixed and deployed, re-run pending, 2026-07-30)
 
 **Problem:** `daily_incremental`'s first-ever prod execution
 (`daily-incremental-1785336584`) OOM-killed (exit 137) 4 times in a row, identically,
@@ -296,16 +296,27 @@ between `build_gold()` and `iter_gold_tables()` and the generator's actual lazin
 builder, e.g. `sec_thirteenf_holding`, is provably not invoked until the generator reaches
 it).
 
-**Not yet done:** this fix hasn't been deployed or re-run against the failing scenario —
-"peak memory drops materially" is not yet empirically confirmed in prod, only reasoned from
-the CloudWatch row-count evidence above (streaming removes ~7M rows of predecessor-table
-memory pressure that was previously still alive when `sec_thirteenf_holding` started
-building). The task-memory ceiling itself (`medium`/`large` sharing 4096MB) is also
-unchanged — see
+**Deployed 2026-07-30 (ticket 03):** `large`'s memory raised 4096 → 8192MB
+(`register_task_definition large 2048 8192`); `daily_incremental`/`bootstrap`/`full_reconcile`/
+`gold_refresh` all moved onto `large`. A critical finding changed the actual fix needed:
+`workflow_profile()` is never called with `"daily_incremental"`/`"bootstrap"` at all (dead
+code) — their real `RunWarehouseTask` step is built by `write_warehouse_mdm_gold_definition`'s
+`run_wh`, which was still hardcoded to the medium ARN; that's what was actually rewired.
+Warehouse image (digest `sha256:aca8078c658bc3f66ac40fa9e41923c4f29743f23ad5623756d94888728cbb30`,
+confirmed via `docker run --entrypoint python ... -c "from edgar_warehouse.serving.gold_models
+import iter_gold_tables"` to contain ticket 01's streaming fix) deployed to prod via
+`deploy-aws-application.sh --env prod --enable-mdm`. A fresh `daily_incremental` execution was
+started to confirm. **Re-run outcome still pending as of this entry** — see
 `.scratch/gold-build-memory-reliability/issues/03-decide-task-memory-fix-to-unblock-daily-incremental.md`
-for that tactical bridge, which is expected to be the point where a fresh
-`daily_incremental` execution actually confirms this fix in prod. Full ticket detail:
-`.scratch/gold-build-memory-reliability/map.md`.
+for the execution ARN and result once known. **Confounding caveat:** both the streaming fix and
+the memory bump are live together in this one deploy — a pass confirms the combination works,
+not that either fix alone was sufficient; ticket 01's own "peak memory drops materially" step
+remains formally unconfirmed in isolation. **Also note:** the failed execution
+(`daily-incremental-1785336584`) ran an older state-machine shape that predates
+`Stage0CompanyIdentity` (added by the Company Identity Pipeline map, never before run in
+prod) — the re-run exercises ~70 sequential per-window tasks ahead of the actual
+`RunWarehouseTask` step that OOM'd, so a Stage0 failure would be an unrelated, new issue, not
+this fix failing. Full ticket detail: `.scratch/gold-build-memory-reliability/map.md`.
 
 ## AWS teardown 5-whys (resolved 2026-07-11)
 
