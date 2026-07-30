@@ -11,6 +11,7 @@ opened all 25 views by hand.
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -46,6 +47,8 @@ def _all_pass_state(mod, watermark: str = "wm-1"):
             mutation_surface_clear=True,
             secret_leakage_clear=True,
             unbounded_output_clear=True,
+            row_count_observed=10,
+            checked_at="2026-07-29T12:00:00Z",
         )
     return state
 
@@ -77,6 +80,42 @@ class TestViewInventory:
         with pytest.raises(mod.SchemaError, match="unknown"):
             mod.load_acceptance(path)
 
+    @pytest.mark.parametrize("invalid_status", ["approved", "", None, 1])
+    def test_load_rejects_status_outside_closed_enum(self, mod, tmp_path, invalid_status):
+        payload = mod.to_evidence_json(_all_pass_state(mod))
+        payload["views"][mod.VIEW_IDS[0]]["status"] = invalid_status
+        path = tmp_path / "dashboard-acceptance.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(mod.SchemaError, match="status"):
+            mod.load_acceptance(path)
+
+    @pytest.mark.parametrize(
+        ("field", "invalid_value"),
+        [
+            ("operator", None),
+            ("operator", ""),
+            ("checked_at", None),
+            ("checked_at", ""),
+            ("row_count_observed", None),
+            ("row_count_observed", -1),
+            ("row_count_observed", True),
+            ("mutation_surface_clear", None),
+            ("secret_leakage_clear", "yes"),
+            ("unbounded_output_clear", 1),
+        ],
+    )
+    def test_load_rejects_unattested_completed_check(
+        self, mod, tmp_path, field, invalid_value
+    ):
+        payload = mod.to_evidence_json(_all_pass_state(mod))
+        payload["views"][mod.VIEW_IDS[0]][field] = invalid_value
+        path = tmp_path / "dashboard-acceptance.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(mod.SchemaError, match=field):
+            mod.load_acceptance(path)
+
 
 class TestOverallStatusPrecedence:
     """The four failure reasons must stay distinguishable -- collapsing them
@@ -94,6 +133,25 @@ class TestOverallStatusPrecedence:
         status, reasons = mod.overall_status(state)
         assert status == "READY"
         assert reasons == []
+
+    def test_invalid_in_memory_status_is_not_ready(self, mod):
+        state = _all_pass_state(mod)
+        key = mod.VIEW_IDS[0]
+        state.views[key] = mod.ViewCheck(
+            status="approved",
+            watermark_checked="wm-1",
+            operator="dashboard_reviewer",
+            checked_at="2026-07-29T12:00:00Z",
+            mutation_surface_clear=True,
+            secret_leakage_clear=True,
+            unbounded_output_clear=True,
+            row_count_observed=10,
+        )
+
+        status, reasons = mod.overall_status(state)
+
+        assert status == "NOT_READY"
+        assert reasons == ["invalid"]
 
     def test_stale_watermark_after_rebase_is_not_ready_stale(self, mod):
         state = _all_pass_state(mod, watermark="wm-1")
@@ -118,6 +176,7 @@ class TestOverallStatusPrecedence:
             state, key, status="fail", watermark_checked="wm-1",
             operator="dashboard_reviewer", mutation_surface_clear=True,
             secret_leakage_clear=True, unbounded_output_clear=True,
+            row_count_observed=10, checked_at="2026-07-29T12:00:00Z",
         )
         status, reasons = mod.overall_status(state)
         assert status == "NOT_READY"
@@ -130,6 +189,7 @@ class TestOverallStatusPrecedence:
             state, key, status="pass", watermark_checked="wm-1",
             operator="dashboard_reviewer", mutation_surface_clear=True,
             secret_leakage_clear=True, unbounded_output_clear=False,
+            row_count_observed=10, checked_at="2026-07-29T12:00:00Z",
         )
         status, reasons = mod.overall_status(state)
         assert status == "NOT_READY"
@@ -145,6 +205,7 @@ class TestOverallStatusPrecedence:
             state, mod.VIEW_IDS[10], status="fail", watermark_checked="wm-2",
             operator="dashboard_reviewer", mutation_surface_clear=True,
             secret_leakage_clear=True, unbounded_output_clear=True,
+            row_count_observed=10, checked_at="2026-07-29T12:00:00Z",
         )
         status, reasons = mod.overall_status(state)
         assert status == "NOT_READY"

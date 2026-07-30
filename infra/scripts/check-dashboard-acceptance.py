@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Literal
 
 Status = Literal["not_checked", "pass", "fail"]
+VALID_STATUSES = frozenset({"not_checked", "pass", "fail"})
 
 # Every real, Terraform-deployed, launch-critical dashboard view as of
 # release-readiness ticket 07 (2026-07-29). examples/dashboard/
@@ -144,6 +145,41 @@ def unchecked_views(state: DashboardAcceptanceState) -> list[str]:
     return [k for k, c in state.views.items() if c.status == "not_checked"]
 
 
+def _completed_check_schema_errors(check: ViewCheck) -> list[str]:
+    if check.status not in VALID_STATUSES:
+        return ["status"]
+    if check.status == "not_checked":
+        return []
+
+    errors: list[str] = []
+    for field in ("watermark_checked", "operator", "checked_at"):
+        value = getattr(check, field)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(field)
+    for field in (
+        "mutation_surface_clear",
+        "secret_leakage_clear",
+        "unbounded_output_clear",
+    ):
+        if type(getattr(check, field)) is not bool:
+            errors.append(field)
+    if (
+        type(check.row_count_observed) is not int
+        or check.row_count_observed < 0
+    ):
+        errors.append("row_count_observed")
+    return errors
+
+
+def invalid_views(state: DashboardAcceptanceState) -> list[str]:
+    """Views whose status or completed-check attestation is malformed."""
+    return [
+        key
+        for key, check in state.views.items()
+        if _completed_check_schema_errors(check)
+    ]
+
+
 def failed_views(state: DashboardAcceptanceState) -> list[str]:
     return [k for k, c in state.views.items() if c.status == "fail"]
 
@@ -179,6 +215,8 @@ def overall_status(state: DashboardAcceptanceState) -> tuple[str, list[str]]:
     just the first one found -- an operator fixing one failure mode must not
     be told READY while another still applies."""
     reasons: list[str] = []
+    if invalid_views(state):
+        reasons.append("invalid")
     if unchecked_views(state):
         reasons.append("unchecked")
     if stale_views(state):
@@ -243,7 +281,9 @@ def load_acceptance(path: Path) -> DashboardAcceptanceState:
 
     views = {}
     for key, raw in raw_views.items():
-        views[key] = ViewCheck(
+        if not isinstance(raw, dict):
+            raise SchemaError(f"{key}: view record must be an object")
+        check = ViewCheck(
             status=raw.get("status", "not_checked"),
             watermark_checked=raw.get("watermark_checked"),
             operator=raw.get("operator"),
@@ -254,6 +294,10 @@ def load_acceptance(path: Path) -> DashboardAcceptanceState:
             row_count_observed=raw.get("row_count_observed"),
             note=raw.get("note"),
         )
+        errors = _completed_check_schema_errors(check)
+        if errors:
+            raise SchemaError(f"{key}: invalid field(s): {', '.join(errors)}")
+        views[key] = check
     return DashboardAcceptanceState(
         release_candidate=payload["release_candidate"],
         release_watermark=payload["release_watermark"],
@@ -267,6 +311,7 @@ def _print_report(state: DashboardAcceptanceState) -> str:
     if reasons:
         lines.append(f"Reasons: {', '.join(reasons)}")
         for label, views in (
+            ("invalid", invalid_views(state)),
             ("unchecked", unchecked_views(state)),
             ("stale", stale_views(state)),
             ("fail", failed_views(state)),
