@@ -28,7 +28,6 @@ AGENT_VIEW_ALLOWED_OBJECTS = frozenset(
         "DECISION_CONTRACT_STATUS",
         "BUNDLE_HOLDERS_OF_SUBJECT",
         "BUNDLE_AUDITOR",
-        "EDGARTOOLS_GOLD_STATUS",  # freshness only, not free gold joins
     }
 )
 

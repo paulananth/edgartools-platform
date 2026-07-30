@@ -14,7 +14,6 @@ from pathlib import Path
 
 import pandas as pd
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STREAMLIT_APP = REPO_ROOT / "infra" / "snowflake" / "streamlit" / "streamlit_app.py"
 
@@ -424,8 +423,8 @@ class SingleAuthoritativePolicyTests(unittest.TestCase):
 class SisFallbackImportTests(unittest.TestCase):
     """GH-246: streamlit_app.py's flat-file import fallback for the real
     Streamlit-in-Snowflake runtime, which has no edgar_warehouse package
-    installed (deploy.sh stages only streamlit_app.py, dashboard_modes.py,
-    and environment.yml) -- otherwise-untested outside a live SiS deploy."""
+    installed (deploy.sh stages only the app, its policy/query modules, and
+    environment.yml) -- otherwise-untested outside a live SiS deploy."""
 
     def test_falls_back_to_flat_dashboard_modes_when_package_unavailable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -434,6 +433,13 @@ class SisFallbackImportTests(unittest.TestCase):
             shutil.copy(
                 REPO_ROOT / "edgar_warehouse" / "serving" / "dashboard_modes.py",
                 tmp_path / "dashboard_modes.py",
+            )
+            shutil.copy(
+                REPO_ROOT
+                / "edgar_warehouse"
+                / "serving"
+                / "dashboard_query_registry.py",
+                tmp_path / "dashboard_query_registry.py",
             )
 
             module = _load_app(tmp_path / "streamlit_app.py", block_edgar_warehouse=True)
@@ -461,13 +467,8 @@ class AgentViewQueryAllowlistTests(unittest.TestCase):
     """GH-246 criterion 3: record every query issued by Agent View routes,
     fail on any non-allowlisted object.
 
-    Scoped to the routes that are already supposed to be contract-only
-    today: render_summary's Agent View branch and
-    _render_agent_view_company. render_details' company search/identity
-    lookup (_lookup_companies/_company_metadata) still queries unrestricted
-    gold data before the mode branch even runs -- criterion 1's known,
-    tracked gap (GH-246), deliberately NOT covered by this test so it does
-    not silently pass a query that is not actually contract-scoped yet.
+    Covers summary, company search, identity, and detail.  The contract query
+    registry is the only Agent View SQL source.
     """
 
     def test_agent_view_summary_and_company_routes_stay_within_allowlist(self) -> None:
@@ -476,6 +477,7 @@ class AgentViewQueryAllowlistTests(unittest.TestCase):
         module._session = lambda: recorder
 
         module.render_summary(mode="agent_view")
+        module._lookup_contract_subjects("Apple")
         module._render_agent_view_company(320193)
 
         self.assertTrue(recorder.queries, "expected at least one query to be recorded")
@@ -490,6 +492,42 @@ class AgentViewQueryAllowlistTests(unittest.TestCase):
                     f"Agent View issued a query against a non-allowlisted "
                     f"object {bare!r}: {sql}",
                 )
+
+    def test_agent_view_registry_contains_every_route_query(self) -> None:
+        module = _load_app()
+        query_ids = {
+            "agent.contract_status",
+            "agent.subject_search",
+            "agent.subject_bundle",
+        }
+        for query_id in query_ids:
+            query = module.registered_query(query_id)
+            self.assertLessEqual(query.max_rows, 25)
+            self.assertTrue(
+                module._is_object_allowed("agent_view", query.object_name),
+                query_id,
+            )
+
+    def test_unregistered_agent_query_fails_closed(self) -> None:
+        module = _load_app()
+        with self.assertRaisesRegex(KeyError, "unregistered dashboard query"):
+            module.registered_query("agent.free_gold")
+
+
+class SecretSafeFailureCopyTests(unittest.TestCase):
+    def test_connector_exception_is_not_rendered(self) -> None:
+        module = _load_app()
+        warnings = []
+        module._df = lambda *_a, **_k: (_ for _ in ()).throw(
+            RuntimeError("password=secret account=prod")
+        )
+        module.st.warning = warnings.append
+
+        self.assertIsNone(module._safe_df("Company lookup", "select 1"))
+        self.assertEqual(len(warnings), 1)
+        self.assertNotIn("secret", warnings[0])
+        self.assertNotIn("account=prod", warnings[0])
+        self.assertIn("temporarily unavailable", warnings[0])
 
 
 if __name__ == "__main__":

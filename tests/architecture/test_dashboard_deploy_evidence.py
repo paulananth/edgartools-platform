@@ -87,6 +87,7 @@ def test_dry_run_emits_valid_json_with_expected_fields(tmp_path: Path) -> None:
     assert set(payload["source_digests"]) == {
         "streamlit_app.py",
         "dashboard_modes.py",
+        "dashboard_query_registry.py",
         "environment.yml",
     }
     for digest in payload["source_digests"].values():

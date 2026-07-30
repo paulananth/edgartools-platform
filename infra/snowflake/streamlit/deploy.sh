@@ -82,7 +82,7 @@ STREAMLIT_OBJECT="${DASHBOARD_STREAMLIT_OBJECT:-EDGARTOOLS_DASHBOARD}"
 # "dashboard_modes.py" is special-cased below (staged from
 # edgar_warehouse/serving/, not APP_SOURCE_DIR) -- list it here only for
 # apps that actually import it (GH-246's Agent View/Explore policy).
-read -ra RELEASE_FILES <<< "${DASHBOARD_RELEASE_FILES:-streamlit_app.py dashboard_modes.py environment.yml}"
+read -ra RELEASE_FILES <<< "${DASHBOARD_RELEASE_FILES:-streamlit_app.py dashboard_modes.py dashboard_query_registry.py environment.yml}"
 # Space-separated pytest paths for this app's credential-free pre-flight
 # tests. Defaults to the original EDGARTOOLS_DASHBOARD app's tests only
 # when APP_NAME is left at its own default -- preserves docs/runbook.md's
@@ -164,7 +164,7 @@ STAGING_DIR="$(mktemp -d)"
 trap 'rm -rf "${STAGING_DIR}"' EXIT
 
 for file in "${RELEASE_FILES[@]}"; do
-  if [[ "${file}" == "dashboard_modes.py" ]]; then
+  if [[ "${file}" == "dashboard_modes.py" || "${file}" == "dashboard_query_registry.py" ]]; then
     # GH-246: dashboard_modes.py is the single authoritative Agent
     # View/Explore mode policy (edgar_warehouse/serving/dashboard_modes.py,
     # unit-tested). Staged here byte-identical -- not hand-copied -- so the
@@ -172,12 +172,12 @@ for file in "${RELEASE_FILES[@]}"; do
     # the same source file every other caller in the repo imports. Only
     # apps that actually list it in RELEASE_FILES need this -- e.g. GH-252's
     # MDM dashboard has no Agent View/Explore concept and omits it.
-    DASHBOARD_MODES_SRC="${REPO_ROOT}/edgar_warehouse/serving/dashboard_modes.py"
+    DASHBOARD_MODES_SRC="${REPO_ROOT}/edgar_warehouse/serving/${file}"
     if [[ ! -f "${DASHBOARD_MODES_SRC}" ]]; then
       echo "Missing source file: ${DASHBOARD_MODES_SRC}" >&2
       exit 1
     fi
-    cp "${DASHBOARD_MODES_SRC}" "${STAGING_DIR}/dashboard_modes.py"
+    cp "${DASHBOARD_MODES_SRC}" "${STAGING_DIR}/${file}"
     continue
   fi
   src="${APP_SOURCE_DIR}/${file}"
