@@ -33,6 +33,9 @@ SNOWFLAKE_EXPORT_TABLES = {
     "SEC_SUBSIDIARY_EVIDENCE": "sec_subsidiary_evidence",
     "SEC_AUDITOR_REPORT_EVIDENCE": "sec_auditor_report_evidence",
     "SEC_EMPLOYMENT_EVENT": "sec_employment_event",
+    # Firm Roster completeness cross-check (ticket 03) — passthrough from silver
+    "SEC_ADV_FIRM_ROSTER": "sec_adv_firm_roster",
+    "SEC_ADV_PRIVATE_FUND": "sec_adv_private_fund",
     # ERDP-03 Gold Explore (external calendar load → SOURCE → dbt)
     "EARNINGS_CALENDAR": "earnings_calendar",
     # ERDP-01 Gold Explore (external consensus load → SOURCE → dbt)

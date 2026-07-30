@@ -1810,7 +1810,7 @@ stage1b_per_filing_catch = [{
 stage1b_thirteenf_catch = [{
     "ErrorEquals": ["States.ALL"],
     "ResultPath": None,
-    "Next": "MdmRun",
+    "Next": "DatasetPeriodCheck",
 }]
 
 per_window_fundamentals_per_filing = ecs_state(wh_medium_arn,
@@ -1868,8 +1868,129 @@ fundamentals_thirteenf = {
     },
     "ResultPath": None,
     "Catch": stage1b_thirteenf_catch,
-    "Next": "MdmRun",
+    "Next": "DatasetPeriodCheck",
 }
+
+# (4d) AdvBulkFetch stage (adv-fetch-pipeline-wiring spec, ticket 01 — ADV Pipeline map
+# ticket 06 decisions 2/4): fetches new SEC/IAPD advFilingData monthly archives and
+# ingests them into ADV silver, so MdmRun (which resolves adviser/fund entities as part
+# of its --entity-type all sweep) always sees fresh ADV data in the same execution.
+# Single ECS task pair, not a windowed Map — fetch-adv-bulk is not CIK-scoped, matching
+# GoldRefresh's precedent of one task for whole-warehouse-state work.
+#
+# DatasetPeriodCheck/DatasetPeriodDefault mirrors ArtifactPolicyCheck/ArtifactPolicyDefault's
+# existing Check-Default pattern: dataset_period is optional SM input for manual repair
+# only; an absent value defaults to an empty string, which fetch-adv-bulk's own dispatch
+# (warehouse_orchestrator.py) already treats identically to an omitted --dataset-period.
+dataset_period_check = {
+    "Type": "Choice",
+    "Comment": "Route to ForceCheck directly when caller supplied dataset_period; otherwise inject the empty-string default.",
+    "Choices": [
+        {
+            "Variable": "$.dataset_period",
+            "IsPresent": True,
+            "Next": "ForceCheck",
+        }
+    ],
+    "Default": "DatasetPeriodDefault",
+}
+
+dataset_period_default = {
+    "Type": "Pass",
+    "Comment": "Inject default dataset_period='' when caller passed {} or omitted the key — fetch-adv-bulk auto-detects the rolling window in that case.",
+    "Result": "",
+    "ResultPath": "$.dataset_period",
+    "Next": "ForceCheck",
+}
+
+# ForceCheck: --force is a bare boolean CLI flag (argparse action='store_true'), unlike
+# artifact_policy/dataset_period which are always-present *value* flags States.Format can
+# interpolate into a single command array. A boolean flag's token must be conditionally
+# present or absent entirely, which States.Format cannot do within one array — so this
+# branches to two literal FetchAdvBulk Task definitions instead of injecting a value.
+force_check = {
+    "Type": "Choice",
+    "Comment": "Route to FetchAdvBulkForced (includes --force) when caller supplied force=true; otherwise FetchAdvBulk (no --force), the normal path.",
+    "Choices": [
+        {
+            "Variable": "$.force",
+            "BooleanEquals": True,
+            "Next": "FetchAdvBulkForced",
+        }
+    ],
+    "Default": "FetchAdvBulk",
+}
+
+adv_bulk_fetch_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmRun"}]
+
+fetch_adv_bulk = ecs_state(wh_medium_arn,
+    "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
+    next_state="IngestAdvBulkSources")
+fetch_adv_bulk["Catch"] = adv_bulk_fetch_catch
+# ResultPath: null preserves $.dataset_period/$.force unchanged into the next state --
+# without this the ECS runTask.sync result object replaces the entire input (D-15 bug,
+# see the `seed` state's comment above for the original occurrence of this class of bug).
+fetch_adv_bulk["ResultPath"] = None
+
+fetch_adv_bulk_forced = ecs_state(wh_medium_arn,
+    "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)",
+    next_state="IngestAdvBulkSources")
+fetch_adv_bulk_forced["Catch"] = adv_bulk_fetch_catch
+fetch_adv_bulk_forced["ResultPath"] = None
+
+# IngestAdvBulkSources re-derives fetch-adv-bulk's manifest path independently
+# (bronze_root/runs/fetch-adv-bulk/<run-id>/source_manifest.json, confirmed against
+# tests/application/test_fetch_adv_bulk_command.py) rather than the state machine
+# capturing FetchAdvBulk's literal output — mirroring how Stage0CompanyIdentity
+# re-derives cik_windows.jsonl's S3 key the same way instead of passing it through
+# execution state.
+ingest_adv_bulk_sources = ecs_state(wh_medium_arn,
+    "States.Array('ingest-relationship-sources', '--source-manifest', "
+    f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-adv-bulk/{{}}/source_manifest.json', $$.Execution.Name), "
+    "'--run-id', $$.Execution.Name)",
+    next_state="FirmRosterForceCheck")
+ingest_adv_bulk_sources["Catch"] = adv_bulk_fetch_catch
+ingest_adv_bulk_sources["ResultPath"] = None
+
+# Firm Roster completeness cross-check (adv-firm-roster-crosscheck spec, ticket 02):
+# fetch-firm-roster + ingest-relationship-sources, sharing this same Stage and the
+# same $.dataset_period/$.force SM-input fields the advFilingData fetch above already
+# uses -- one shared manual-repair override for the whole AdvBulkFetch stage, not a
+# separate schedule. Re-checks $.force (FirmRosterForceCheck) rather than reusing
+# ForceCheck's own routing, since ForceCheck already routed to FetchAdvBulk/
+# FetchAdvBulkForced above and a Choice state can only have one Next per branch.
+firm_roster_force_check = {
+    "Type": "Choice",
+    "Comment": "Route to FetchFirmRosterForced (includes --force) when caller supplied force=true; otherwise FetchFirmRoster (no --force).",
+    "Choices": [
+        {
+            "Variable": "$.force",
+            "BooleanEquals": True,
+            "Next": "FetchFirmRosterForced",
+        }
+    ],
+    "Default": "FetchFirmRoster",
+}
+
+fetch_firm_roster = ecs_state(wh_medium_arn,
+    "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
+    next_state="IngestFirmRosterSources")
+fetch_firm_roster["Catch"] = adv_bulk_fetch_catch
+fetch_firm_roster["ResultPath"] = None
+
+fetch_firm_roster_forced = ecs_state(wh_medium_arn,
+    "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)",
+    next_state="IngestFirmRosterSources")
+fetch_firm_roster_forced["Catch"] = adv_bulk_fetch_catch
+fetch_firm_roster_forced["ResultPath"] = None
+
+ingest_firm_roster_sources = ecs_state(wh_medium_arn,
+    "States.Array('ingest-relationship-sources', '--source-manifest', "
+    f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-firm-roster/{{}}/source_manifest.json', $$.Execution.Name), "
+    "'--run-id', $$.Execution.Name)",
+    next_state="MdmRun")
+ingest_firm_roster_sources["Catch"] = adv_bulk_fetch_catch
+ingest_firm_roster_sources["ResultPath"] = None
 
 # (5)–(9) MDM chain + GoldRefresh — run once after ALL windows complete (same invariant as before).
 # MdmExport is new (data-architecture Issue 3): mdm sync-graph materializes Snowflake graph
@@ -1919,6 +2040,10 @@ definition = {
         "(4b) Stage1BEntityFacts then (4c) Stage1BPerFiling then Stage1BThirteenF — Branch B "
         "fundamentals modes run sequentially after Branch A because they share the same silver "
         "DuckDB artifact; Branch B failures are caught so the pipeline still advances (AD-13), "
+        "(4d) AdvBulkFetch — fetch-adv-bulk + ingest-relationship-sources (adv-fetch-pipeline-"
+        "wiring spec), then fetch-firm-roster + ingest-relationship-sources (adv-firm-roster-"
+        "crosscheck spec, ticket 02), both lenient like Branch B, so MDM sees fresh ADV silver "
+        "and the Firm Roster completeness cross-check stays current in this execution, "
         "(5) MDM entity resolution + export to Snowflake mirror + Neo4j sync in bulk "
         "(data-architecture Issue 3: export precedes sync-graph so graph reflects this run), "
         "(6) single gold build + Snowflake export manifest, "
@@ -1941,6 +2066,16 @@ definition = {
         "Stage1BEntityFacts": fundamentals_entity_facts,
         "Stage1BPerFiling":  fundamentals_per_filing,
         "Stage1BThirteenF":  fundamentals_thirteenf,
+        "DatasetPeriodCheck":   dataset_period_check,
+        "DatasetPeriodDefault": dataset_period_default,
+        "ForceCheck":           force_check,
+        "FetchAdvBulk":         fetch_adv_bulk,
+        "FetchAdvBulkForced":   fetch_adv_bulk_forced,
+        "IngestAdvBulkSources": ingest_adv_bulk_sources,
+        "FirmRosterForceCheck":     firm_roster_force_check,
+        "FetchFirmRoster":          fetch_firm_roster,
+        "FetchFirmRosterForced":    fetch_firm_roster_forced,
+        "IngestFirmRosterSources":  ingest_firm_roster_sources,
         "MdmRun":            mdm_run,
         "MdmBackfill":       mdm_backfill,
         "MdmExport":         mdm_export,
@@ -2122,18 +2257,133 @@ else:
         "Next": "RunWarehouseTask",
     }
 
+    # AdvBulkFetch stage (adv-fetch-pipeline-wiring spec, ticket 02 — ADV Pipeline map
+    # ticket 06 decisions 2/4), inserted between RunWarehouseTask and MdmRun. Identical
+    # shape to write_load_history_definition's own AdvBulkFetch stage (same "keep in
+    # sync" duplication convention Stage0CompanyIdentity already established for this
+    # file) — see that function's comments for the full rationale. run_wh was built
+    # above with Next="MdmRun" for the shared bootstrap/daily_incremental case; retarget
+    # it here since this branch only executes for daily_incremental.
+    run_wh["Next"] = "DatasetPeriodCheck"
+
+    dataset_period_check = {
+        "Type": "Choice",
+        "Comment": "Route to ForceCheck directly when caller supplied dataset_period; otherwise inject the empty-string default.",
+        "Choices": [
+            {
+                "Variable": "$.dataset_period",
+                "IsPresent": True,
+                "Next": "ForceCheck",
+            }
+        ],
+        "Default": "DatasetPeriodDefault",
+    }
+
+    dataset_period_default = {
+        "Type": "Pass",
+        "Comment": "Inject default dataset_period='' when caller passed {} or omitted the key — fetch-adv-bulk auto-detects the rolling window in that case.",
+        "Result": "",
+        "ResultPath": "$.dataset_period",
+        "Next": "ForceCheck",
+    }
+
+    force_check = {
+        "Type": "Choice",
+        "Comment": "Route to FetchAdvBulkForced (includes --force) when caller supplied force=true; otherwise FetchAdvBulk (no --force), the normal path.",
+        "Choices": [
+            {
+                "Variable": "$.force",
+                "BooleanEquals": True,
+                "Next": "FetchAdvBulkForced",
+            }
+        ],
+        "Default": "FetchAdvBulk",
+    }
+
+    adv_bulk_fetch_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmRun"}]
+
+    fetch_adv_bulk = ecs_state(wh_medium_arn,
+        "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
+        next_state="IngestAdvBulkSources")
+    fetch_adv_bulk["Catch"] = adv_bulk_fetch_catch
+    fetch_adv_bulk["ResultPath"] = None
+
+    fetch_adv_bulk_forced = ecs_state(wh_medium_arn,
+        "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)",
+        next_state="IngestAdvBulkSources")
+    fetch_adv_bulk_forced["Catch"] = adv_bulk_fetch_catch
+    fetch_adv_bulk_forced["ResultPath"] = None
+
+    ingest_adv_bulk_sources = ecs_state(wh_medium_arn,
+        "States.Array('ingest-relationship-sources', '--source-manifest', "
+        f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-adv-bulk/{{}}/source_manifest.json', $$.Execution.Name), "
+        "'--run-id', $$.Execution.Name)",
+        next_state="FirmRosterForceCheck")
+    ingest_adv_bulk_sources["Catch"] = adv_bulk_fetch_catch
+    ingest_adv_bulk_sources["ResultPath"] = None
+
+    # Firm Roster completeness cross-check (adv-firm-roster-crosscheck spec, ticket 02) --
+    # same shape/rationale as load_history's copy above (kept in sync per this file's
+    # documented Stage0CompanyIdentity duplication convention).
+    firm_roster_force_check = {
+        "Type": "Choice",
+        "Comment": "Route to FetchFirmRosterForced (includes --force) when caller supplied force=true; otherwise FetchFirmRoster (no --force).",
+        "Choices": [
+            {
+                "Variable": "$.force",
+                "BooleanEquals": True,
+                "Next": "FetchFirmRosterForced",
+            }
+        ],
+        "Default": "FetchFirmRoster",
+    }
+
+    fetch_firm_roster = ecs_state(wh_medium_arn,
+        "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
+        next_state="IngestFirmRosterSources")
+    fetch_firm_roster["Catch"] = adv_bulk_fetch_catch
+    fetch_firm_roster["ResultPath"] = None
+
+    fetch_firm_roster_forced = ecs_state(wh_medium_arn,
+        "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)",
+        next_state="IngestFirmRosterSources")
+    fetch_firm_roster_forced["Catch"] = adv_bulk_fetch_catch
+    fetch_firm_roster_forced["ResultPath"] = None
+
+    ingest_firm_roster_sources = ecs_state(wh_medium_arn,
+        "States.Array('ingest-relationship-sources', '--source-manifest', "
+        f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-firm-roster/{{}}/source_manifest.json', $$.Execution.Name), "
+        "'--run-id', $$.Execution.Name)",
+        next_state="MdmRun")
+    ingest_firm_roster_sources["Catch"] = adv_bulk_fetch_catch
+    ingest_firm_roster_sources["ResultPath"] = None
+
     definition = {
         "Comment": (
             f"{display}: (0) compute CIK windows, (0b) Stage0CompanyIdentity -- Company Identity "
             "capture, strict, runs before ownership/ADV so IS_INSIDER derivation sees resolved "
-            "Company entities, (1) bronze+silver capture, (2) MDM entity resolution + Neo4j sync, "
-            "(3) gold build + Snowflake export manifest."
+            "Company entities, (1) bronze+silver capture, (1b) AdvBulkFetch -- fetch-adv-bulk + "
+            "ingest-relationship-sources (adv-fetch-pipeline-wiring spec), then fetch-firm-roster "
+            "+ ingest-relationship-sources (adv-firm-roster-crosscheck spec, ticket 02), both "
+            "lenient, so MDM sees fresh ADV silver and the Firm Roster cross-check stays current, "
+            "(2) MDM entity resolution + Neo4j sync, (3) gold build + "
+            "Snowflake export manifest."
         ),
         "StartAt": "ComputeWindows",
         "States": {
             "ComputeWindows":    compute_windows,
             "Stage0CompanyIdentity": stage0_company_identity,
             "RunWarehouseTask": run_wh,
+            "DatasetPeriodCheck":   dataset_period_check,
+            "DatasetPeriodDefault": dataset_period_default,
+            "ForceCheck":           force_check,
+            "FetchAdvBulk":         fetch_adv_bulk,
+            "FetchAdvBulkForced":   fetch_adv_bulk_forced,
+            "IngestAdvBulkSources": ingest_adv_bulk_sources,
+            "FirmRosterForceCheck":    firm_roster_force_check,
+            "FetchFirmRoster":         fetch_firm_roster,
+            "FetchFirmRosterForced":   fetch_firm_roster_forced,
+            "IngestFirmRosterSources": ingest_firm_roster_sources,
             "MdmRun":           mdm_run,
             "MdmBackfill":      mdm_backfill,
             "MdmExport":        mdm_export,

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-29T02:10:00Z",
+  "status": "pass",
+  "deploy_path_verified": true,
+  "deploy_path_detail": {
+    "mechanism": "deploy-aws-application.sh --image-ref/--mdm-image-ref --skip-build",
+    "terraform_touched": false,
+    "task_definitions_updated": 6,
+    "state_machines_updated": 26
+  },
+  "digest_restore_duration": "5m37s",
+  "digest_restore_rto_bound": "1h",
+  "digest_restore_within_bound": true,
+  "batchsilver_transition_overlap_proof": {
+    "status": "pass",
+    "evidence_ref": "docs/release-readiness/rollback-rehearsal-batchsilver-overlap-evidence.json"
+  },
+  "attested_by": "aws_operator",
+  "attested_at": "2026-07-29T02:10:00Z"
+}

@@ -1,7 +1,7 @@
 # 02 — Fetch Target and Rolling-Window Strategy (was: Parser Rewrite)
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: 01
 Blocks: 04, 05, 06
 
@@ -52,4 +52,49 @@ remains open:
 
 ## Answer
 
-(pending)
+**Preamble — two of the four sub-questions turned out to already be resolved in code, not
+open decisions.** Reading `edgar_warehouse/mdm/adv_bulk.py` (`resolve_advisers_bulk`/
+`resolve_funds_bulk`) shows MDM already projects the *latest filing per CRD/PFID* from
+whatever's in silver via its own `_latest_by_identity` dedup — this is live in production,
+independent of `adv_bulk_ingest.py`'s unused `reconstruct_effective_adv_set` (dead code
+outside tests). Code comments in `adv_bulk_ingest.py` (fund_index SMALLINT-overflow fix,
+date-format handling, cp1252 decode fix) confirm a **13-month window (2025-06..2026-06)
+has already been run against the real archive in production** and surfaced/fixed real
+bugs. So "does the dedup/rolling-read logic work" was never actually open — only the
+*fetch window size* was.
+
+1. **Rolling-window size: 13 months.** SEC's annual-reaffirmation rule (confirmed primary-
+   source in ticket 01: Form ADV instructions PDF, "must amend Form ADV each year ...
+   within 90 days after the end of your fiscal year," identical for RIA and ERA) bounds
+   the theoretical worst case at ~15 months (12mo cycle + 90-day grace). Decided: keep the
+   already-tested 13-month window rather than widening to the strict 15-month bound — a
+   small tail of late filers may be briefly stale, accepted as consistent with the
+   existing 13F/proxy narrow-window precedent in CLAUDE.md, and because SEC's own
+   enforcement already tolerates the 90-day grace.
+2. **Firm Roster CSV: ingested, as a parallel completeness cross-check** (not skipped).
+   Flags firms where `advFilingData`-derived fund counts don't match the Firm Roster's
+   aggregate counts. This is new scope beyond what existed before this ticket — spun off
+   as ticket 08 (design) rather than decided here, per this map's "decide, don't build"
+   discipline.
+3. **Historical backfill: rolling window only, no 2000-2024 backfill.** Confirms ticket
+   03's original conclusion still holds, even though the premise it was reasoned from
+   ("no historical depth exists at all") was corrected by ticket 01 — the decision itself
+   is unchanged: mirrors the 13F/proxy narrow-to-current-state precedent, and the 13-month
+   window already captures every currently-active adviser/fund per the annual-
+   reaffirmation rule. Pre-2025 filings add little value for firms still active today
+   (superseded by later amendments) and none for firms no longer active.
+4. **Genuine gap found, not yet resolved — spun off as ticket 07 (research).**
+   `adv_bulk_ingest.py` only populates `sec_adv_filing` and `sec_adv_private_fund` from
+   the bulk feed. `sec_adv_office`/`sec_adv_disclosure_event` are populated only by the
+   separate EDGAR-native parser (`edgar_warehouse/parsers/adv.py`), which runs for a small
+   subset of advisers (those who also file ADV on EDGAR directly). Since
+   `resolve_advisers_bulk` reads `sec_adv_office` for `hq_city`/`hq_state`, at bulk scale
+   the vast majority of advisers resolved via the bulk feed would have null HQ data. The
+   archive has ~95 other unexamined Schedule A/B/D/R and DRP tables per firm (e.g.
+   `IA_Schedule_D_1B` for offices, DRP schedules for disclosures) that may contain
+   equivalents — ticket 07 inspects them before any build decision is made.
+
+**New tickets surfaced:** 07 (research — inspect archive for office/disclosure
+equivalents), 08 (grilling — design the Firm Roster CSV cross-check). Neither blocks 04,
+05, or 06 — office/disclosure quality and the cross-check are both additive to the core
+destination (resolved Adviser/Fund entities reaching the graph), not prerequisites for it.

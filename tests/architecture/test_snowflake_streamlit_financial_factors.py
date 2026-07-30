@@ -337,6 +337,71 @@ class EquityResearchSectionTests(unittest.TestCase):
         )
 
 
+class AdvFundCountReconciliationTests(unittest.TestCase):
+    """Ticket 04 (.scratch/adv-firm-roster-crosscheck/issues/
+    04-reconciliation-model-dashboard.md): dashboard panel for the
+    ADV_FUND_COUNT_RECONCILIATION gold model, added to render_pipeline()."""
+
+    def test_mismatch_table_query_targets_correct_table_and_filters_mismatches(self) -> None:
+        module = _load_app()
+        calls = []
+        module._safe_df = lambda label, sql, params=None: calls.append(
+            {"label": label, "sql": sql, "params": params}
+        )
+
+        module._adv_fund_count_mismatches()
+
+        self.assertEqual(calls[0]["label"], "ADV fund count reconciliation")
+        self.assertIn(
+            "from EDGARTOOLS_GOLD.ADV_FUND_COUNT_RECONCILIATION", calls[0]["sql"]
+        )
+        self.assertIn("where mismatch", calls[0]["sql"])
+        self.assertIn("fund_count_delta", calls[0]["sql"])
+
+    def test_summary_query_targets_correct_table_without_mismatch_filter(self) -> None:
+        """The summary metric counts ALL firms (denominator), so its query
+        must not filter to mismatched rows the way the detail table does."""
+        module = _load_app()
+        calls = []
+        module._safe_df = lambda label, sql, params=None: calls.append(
+            {"label": label, "sql": sql, "params": params}
+        )
+
+        module._adv_fund_count_reconciliation_summary()
+
+        self.assertEqual(calls[0]["label"], "ADV fund count reconciliation summary")
+        self.assertIn(
+            "from EDGARTOOLS_GOLD.ADV_FUND_COUNT_RECONCILIATION", calls[0]["sql"]
+        )
+        self.assertNotIn("where mismatch", calls[0]["sql"])
+
+    def test_mismatch_stats_defaults_to_zero_on_missing_or_empty_summary(self) -> None:
+        module = _load_app()
+
+        self.assertEqual(module._adv_reconciliation_mismatch_stats(None), (0, 0, 0.0))
+        self.assertEqual(
+            module._adv_reconciliation_mismatch_stats(pd.DataFrame()), (0, 0, 0.0)
+        )
+
+    def test_mismatch_stats_guards_against_division_by_zero(self) -> None:
+        module = _load_app()
+
+        summary = pd.DataFrame([{"TOTAL_FIRMS": 0, "MISMATCHED_FIRMS": 0}])
+
+        self.assertEqual(module._adv_reconciliation_mismatch_stats(summary), (0, 0, 0.0))
+
+    def test_mismatch_stats_computes_percentage(self) -> None:
+        module = _load_app()
+
+        summary = pd.DataFrame([{"TOTAL_FIRMS": 1000, "MISMATCHED_FIRMS": 250}])
+
+        mismatched, total, pct = module._adv_reconciliation_mismatch_stats(summary)
+
+        self.assertEqual(mismatched, 250)
+        self.assertEqual(total, 1000)
+        self.assertAlmostEqual(pct, 25.0)
+
+
 class SingleAuthoritativePolicyTests(unittest.TestCase):
     """GH-246 criterion 2: one authoritative object-access policy, not
     duplicated allowlists -- proven by object identity, not equal values

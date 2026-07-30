@@ -47,6 +47,9 @@ const targetTables = new Map([
   ["SEC_SUBSIDIARY_EVIDENCE", `${databaseName}.${sourceSchema}.SEC_SUBSIDIARY_EVIDENCE`],
   ["SEC_AUDITOR_REPORT_EVIDENCE", `${databaseName}.${sourceSchema}.SEC_AUDITOR_REPORT_EVIDENCE`],
   ["SEC_EMPLOYMENT_EVENT", `${databaseName}.${sourceSchema}.SEC_EMPLOYMENT_EVENT`],
+  // Firm Roster completeness cross-check (ticket 03) — passthrough exports
+  ["SEC_ADV_FIRM_ROSTER", `${databaseName}.${sourceSchema}.SEC_ADV_FIRM_ROSTER`],
+  ["SEC_ADV_PRIVATE_FUND", `${databaseName}.${sourceSchema}.SEC_ADV_PRIVATE_FUND`],
   // ERDP-03 Explore export (gold-refresh may emit empty parquet; table must still load)
   ["EARNINGS_CALENDAR", `${databaseName}.${sourceSchema}.EARNINGS_CALENDAR`],
   // ERDP-02 / ERDP-01 Explore exports. Missing here means LOAD_EXPORTS_FOR_RUN
@@ -77,6 +80,12 @@ const mergeKeys = new Map([
   ["SEC_SUBSIDIARY_EVIDENCE", ["ACCESSION_NUMBER", "DOCUMENT_NAME", "ROW_ORDINAL"]],
   ["SEC_AUDITOR_REPORT_EVIDENCE", ["ACCESSION_NUMBER", "EVIDENCE_FINGERPRINT"]],
   ["SEC_EMPLOYMENT_EVENT", ["ACCESSION_NUMBER", "EVENT_INDEX"]],
+  // SEC_ADV_PRIVATE_FUND deliberately keys on its real silver PK, not
+  // (ADVISER_CRD_NUMBER, DATASET_PERIOD) -- that pair is not row-unique here
+  // (one CRD reports many FUND_INDEX rows per period) and would throw
+  // "Duplicate row detected" the first time a firm reports >1 fund.
+  ["SEC_ADV_FIRM_ROSTER", ["ADVISER_CRD_NUMBER", "DATASET_PERIOD"]],
+  ["SEC_ADV_PRIVATE_FUND", ["ACCESSION_NUMBER", "FUND_INDEX"]],
   ["EARNINGS_CALENDAR", ["FACT_KEY"]],
   ["GUIDANCE_FACTS", ["FACT_KEY"]],
   ["CONSENSUS_ESTIMATES", ["FACT_KEY"]],

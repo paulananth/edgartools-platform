@@ -600,6 +600,77 @@ schemas:
       type: date32
     - name: parser_version
       type: string
+  # Firm Roster completeness cross-check (ticket 03) — passthrough exports
+  _SEC_ADV_FIRM_ROSTER_SCHEMA:
+    - name: adviser_crd_number
+      type: string
+      nullable: false
+    - name: dataset_period
+      type: string
+      nullable: false
+    - name: private_funds_reported
+      type: bool_
+    - name: private_fund_count_7b1
+      type: int64
+    - name: any_hedge_funds
+      type: bool_
+    - name: hedge_fund_count
+      type: int64
+    - name: any_pe_funds
+      type: bool_
+    - name: pe_fund_count
+      type: int64
+    - name: total_gross_assets_private_funds
+      type: float64
+    - name: private_fund_count_7b2
+      type: int64
+    - name: source_sha256
+      type: string
+    - name: parser_version
+      type: string
+  # SEC_ADV_PRIVATE_FUND -- raw passthrough of the existing sec_adv_private_fund
+  # silver table (advFilingData pipeline), keyed on its real silver PK
+  # (accession_number, fund_index) -- carries adviser_crd_number/
+  # source_dataset_period as ordinary columns for ticket 04's CRD-keyed
+  # reconciliation, since the dimensional PRIVATE_FUNDS gold table is
+  # CIK-keyed, not CRD-keyed.
+  _SEC_ADV_PRIVATE_FUND_PASSTHROUGH_SCHEMA:
+    - name: accession_number
+      type: string
+      nullable: false
+    - name: fund_index
+      type: int64
+      nullable: false
+    - name: filing_id
+      type: string
+    - name: adviser_crd_number
+      type: string
+    - name: private_fund_id
+      type: string
+    - name: reference_id
+      type: string
+    - name: schedule_section
+      type: string
+    - name: reporting_role
+      type: string
+    - name: filing_action
+      type: string
+    - name: fund_name
+      type: string
+    - name: fund_type
+      type: string
+    - name: jurisdiction
+      type: string
+    - name: aum_amount
+      type: float64
+    - name: effective_date
+      type: date32
+    - name: source_dataset_period
+      type: string
+    - name: source_sha256
+      type: string
+    - name: parser_version
+      type: string
   # ERDP-03 — Earnings calendar (Gold Explore; not pure-SEC Agent-Grade)
   _FACT_EARNINGS_CALENDAR_SCHEMA:
     - name: fact_key

@@ -21,11 +21,24 @@ from edgar_warehouse.mdm import database as db
 
 
 DOMAIN_TO_TABLE = {
-    "company": ("mdm_company", "MDM_COMPANY", db.MdmCompany),
+    "company": ("mdm_company", "MDM_COMPANY_ENTITY", db.MdmCompany),
     "adviser": ("mdm_adviser", "MDM_ADVISER", db.MdmAdviser),
     "person": ("mdm_person", "MDM_PERSON", db.MdmPerson),
     "security": ("mdm_security", "MDM_SECURITY", db.MdmSecurity),
     "fund": ("mdm_fund", "MDM_FUND", db.MdmFund),
+}
+
+# The MDM-schema graph-sync mirror (snowflake_graph.py's render_graph_tables,
+# joined via _mdm_fq(context, "MDM_COMPANY")) keeps its original per-domain
+# table name even though the EDGARTOOLS_GOLD landing target above renamed to
+# MDM_COMPANY_ENTITY (ticket 06,
+# .scratch/unified-company-dimension/issues/06-resolve-mdm-company-export-target-circularity.md).
+# Only the GOLD golden-record table had a circularity problem with the future
+# COMPANY compat view; the MDM-schema mirror was never part of that, and
+# sync-graph's SQL still reads the literal name "MDM_COMPANY". Domains not
+# listed here keep the same name in both places.
+DOMAIN_TO_MIRROR_TABLE = {
+    "company": "MDM_COMPANY",
 }
 
 
@@ -494,7 +507,8 @@ class MDMExporter:
             payload = [self._serialize(row) for row in domain_rows]
             total += self.writer.upsert(sf_table, payload)
             if self.mirror_writer is not None:
-                total += self.mirror_writer.upsert(sf_table, payload, key="entity_id")
+                mirror_table = DOMAIN_TO_MIRROR_TABLE.get(entity_type, sf_table)
+                total += self.mirror_writer.upsert(mirror_table, payload, key="entity_id")
         return total
 
     def sync_reference_tables(self) -> int:

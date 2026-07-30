@@ -58,6 +58,19 @@ sources:
         description: Principal auditor evidence per annual filing for AUDITED_BY derivation.
       - name: SEC_EMPLOYMENT_EVENT
         description: Item 5.02 / employment events for EMPLOYED_BY temporal updates.
+      # Firm Roster completeness cross-check (ticket 03) — passthrough from silver
+      - name: SEC_ADV_FIRM_ROSTER
+        description: >
+          SEC Firm Roster CSV aggregate private-fund counts per (adviser_crd_number,
+          dataset_period) — a full-universe monthly snapshot, unlike advFilingData's
+          rolling delta. Passthrough from silver sec_adv_firm_roster.
+      - name: SEC_ADV_PRIVATE_FUND
+        description: >
+          CRD-keyed passthrough of silver sec_adv_private_fund (advFilingData
+          pipeline), keyed on its real silver PK (accession_number, fund_index).
+          Exists because the dimensional PRIVATE_FUNDS source is CIK-keyed, not
+          CRD-keyed — the only CRD-keyed private-fund data in Snowflake, for the
+          Firm Roster completeness cross-check to join against.
       # ERDP-03 — Earnings calendar (Gold Explore; external pilot sources)
       - name: EARNINGS_CALENDAR
         description: >
@@ -83,3 +96,22 @@ sources:
           versioned. Explore-only — not pure-SEC Agent-Grade. Pilot sources
           ir_website / firm_manual, small locked pilot CIK list, via
           edgar_warehouse.explore.transcript_events.
+
+  # MDM's golden-record export lands directly in EDGARTOOLS_GOLD via
+  # edgar_warehouse/mdm/export.py's MERGE path (Python/SQLAlchemy from MDM's
+  # own Postgres) — a categorically different write mechanism from the S3
+  # native-pull the edgartools_source source above documents. Declared as its
+  # own dbt source (not folded into edgartools_source) so that distinction
+  # stays visible in the DAG rather than implying a single write path.
+  - name: mdm_export
+    database: "{{ env_var('DBT_SNOWFLAKE_DATABASE', 'EDGARTOOLS_DEV') }}"
+    schema: "{{ env_var('DBT_GOLD_SCHEMA', 'EDGARTOOLS_GOLD') }}"
+    tables:
+      - name: MDM_COMPANY_ENTITY
+        description: >
+          MDM golden-record company entity, MERGEd by MDMExporter.export_pending()
+          (edgar_warehouse/mdm/export.py) directly into EDGARTOOLS_GOLD — not a
+          dbt model. Renamed from MDM_COMPANY (ticket 06,
+          .scratch/unified-company-dimension/issues/06-resolve-mdm-company-export-target-circularity.md)
+          to free that name for the COMPANY compat view (ticket 05). Left-joined
+          into COMPANY by cik.

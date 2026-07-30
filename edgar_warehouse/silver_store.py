@@ -253,6 +253,23 @@ CREATE TABLE IF NOT EXISTS sec_adv_private_fund (
     PRIMARY KEY (accession_number, fund_index)
 );
 
+CREATE TABLE IF NOT EXISTS sec_adv_firm_roster (
+    adviser_crd_number       TEXT,
+    dataset_period           TEXT,
+    private_funds_reported   BOOLEAN,
+    private_fund_count_7b1   BIGINT,
+    any_hedge_funds          BOOLEAN,
+    hedge_fund_count         BIGINT,
+    any_pe_funds             BOOLEAN,
+    pe_fund_count            BIGINT,
+    total_gross_assets_private_funds DECIMAL(28,2),
+    private_fund_count_7b2   BIGINT,
+    source_sha256            TEXT,
+    parser_version           TEXT,
+    last_sync_run_id         TEXT,
+    PRIMARY KEY (adviser_crd_number, dataset_period)
+);
+
 CREATE TABLE IF NOT EXISTS sec_subsidiary_evidence (
     accession_number      TEXT,
     registrant_cik        BIGINT,
@@ -2184,6 +2201,54 @@ class SilverDatabase:
                 row.get("aum_amount"),
                 row.get("effective_date"),
                 row.get("source_dataset_period"),
+                row.get("source_sha256"),
+                row.get("parser_version"),
+                sync_run_id,
+            ],
+        )
+
+    def merge_adv_firm_roster(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        """UPSERT into sec_adv_firm_roster, a raw passthrough of the SEC Firm
+        Roster CSV's aggregate private-fund columns, keyed on
+        (adviser_crd_number, dataset_period). A monthly, modest-row-count
+        table (~17K firms), so the simple row-by-row _merge_rows loop is
+        used, mirroring merge_subsidiary_evidence rather than the
+        staging-table bulk path merge_adv_private_funds needs for its
+        much larger multi-hundred-thousand-row volumes.
+        """
+        return self._merge_rows(
+            """
+            INSERT INTO sec_adv_firm_roster
+                (adviser_crd_number, dataset_period, private_funds_reported,
+                 private_fund_count_7b1, any_hedge_funds, hedge_fund_count,
+                 any_pe_funds, pe_fund_count, total_gross_assets_private_funds,
+                 private_fund_count_7b2, source_sha256, parser_version, last_sync_run_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (adviser_crd_number, dataset_period) DO UPDATE SET
+                private_funds_reported = excluded.private_funds_reported,
+                private_fund_count_7b1 = excluded.private_fund_count_7b1,
+                any_hedge_funds = excluded.any_hedge_funds,
+                hedge_fund_count = excluded.hedge_fund_count,
+                any_pe_funds = excluded.any_pe_funds,
+                pe_fund_count = excluded.pe_fund_count,
+                total_gross_assets_private_funds = excluded.total_gross_assets_private_funds,
+                private_fund_count_7b2 = excluded.private_fund_count_7b2,
+                source_sha256 = excluded.source_sha256,
+                parser_version = excluded.parser_version,
+                last_sync_run_id = excluded.last_sync_run_id
+            """,
+            rows,
+            lambda row: [
+                row["adviser_crd_number"],
+                row["dataset_period"],
+                row["private_funds_reported"],
+                row["private_fund_count_7b1"],
+                row["any_hedge_funds"],
+                row.get("hedge_fund_count"),
+                row["any_pe_funds"],
+                row.get("pe_fund_count"),
+                row.get("total_gross_assets_private_funds"),
+                row["private_fund_count_7b2"],
                 row.get("source_sha256"),
                 row.get("parser_version"),
                 sync_run_id,

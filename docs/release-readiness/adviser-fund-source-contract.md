@@ -100,6 +100,43 @@ Each effective candidate produces:
 
 This keeps the PFID on the graph-facing relationship because it is easy to query and directly ties the edge to its regulatory identity. Exact parity compares canonical endpoint IDs, PFID, effective dates, source filing and evidence fingerprint; counts alone cannot pass.
 
+## Addendum: rolling-window acquisition and Firm Roster completeness control (2026-07-27)
+
+Confirmed via `.scratch/adv-pipeline` map, tickets 01/02 (primary-source SEC/IAPD
+research, not inference — see `.scratch/adv-pipeline/research/01-iapd-format-scope-findings.md`).
+These corrections do not change the contract's identity, resolution, or graph rules
+above; they refine what "the chosen bulk snapshot" (Watermark and candidate inventory,
+above) actually is.
+
+- **The release source is a monthly filing-activity delta feed, not a single
+  full-universe snapshot.** `adviserinfo.sec.gov`'s `advFilingData` product (backing
+  `/adv`, manifest at `reports.adviserinfo.sec.gov/reports/foia/reports_metadata.json`)
+  publishes one ZIP per month containing only that month's filing activity — verified
+  by row count (June 2026: 2,938 firm-filing rows vs. ~17,073 registered firms, ~17%
+  coverage). A single month's file is not a complete candidate inventory. The Release
+  Data Watermark's "chosen bulk snapshot" is therefore a **rolling 13-month union** of
+  monthly `advFilingData` files, deduplicated to the latest filing per CRD (SEC/state
+  advisers reaffirm Form ADV, including Schedule D 7.B, at least annually — confirmed
+  from `formadv-instructions.pdf`'s 90-day-after-fiscal-year-end annual amendment
+  requirement, identical for RIA and ERA). No 2000-2024 historical backfill is in
+  scope — the rolling window is sufficient to capture every currently-active
+  adviser/fund, mirroring this platform's existing 13F/proxy narrow-to-current-state
+  precedent.
+- **The Firm Roster CSV (`sec.gov`'s data-research bulk page, aggregate-only private-
+  fund counts) is adopted as a parallel completeness cross-check**, not as a release
+  source and not as a substitute for the Section 7.B. relational tables above. It flags
+  firms where the `advFilingData`-derived private-fund count disagrees with the Firm
+  Roster's aggregate count, surfacing possible coverage gaps in the rolling window for
+  operator review. It does not participate in the applicability ledger, the graph
+  contract, or GO/no-GO acceptance for `MANAGES_FUND` — those remain governed
+  exclusively by the Section 7.B. relational data as specified above.
+- The "old relational per-fund format" this contract's "Parsing, normalization and
+  effective set" section describes was never discontinued; it is the current form of
+  `advFilingData`. A 2026-07-24 debugging session incorrectly concluded otherwise after
+  staging the wrong SEC product — see the correction appended to
+  `docs/release-readiness/adv-bulk-ingest-format-change-2026-07-24.md`. This contract's
+  parsing rules were never invalidated and required no rewrite.
+
 ## Ownership and acceptance
 
 - Release Data Operator: official snapshot acquisition and entitlement preflight.

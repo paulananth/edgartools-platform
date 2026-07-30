@@ -76,6 +76,13 @@ GRANT CREATE VIEW ON SCHEMA IDENTIFIER($database_name || '.' || $source_schema_n
 GRANT CREATE DYNAMIC TABLE ON SCHEMA IDENTIFIER($database_name || '.' || $gold_schema_name) TO ROLE IDENTIFIER($loader_role_name);
 GRANT CREATE PROCEDURE ON SCHEMA IDENTIFIER($database_name || '.' || $gold_schema_name) TO ROLE IDENTIFIER($loader_role_name);
 GRANT CREATE TASK ON SCHEMA IDENTIFIER($database_name || '.' || $gold_schema_name) TO ROLE IDENTIFIER($loader_role_name);
+-- Added for ticket 05's MDM_COMPANY compat view
+-- (.scratch/unified-company-dimension/issues/05-implement-unified-company-dimension.md),
+-- the first plain (non-dynamic-table) view dbt has needed to create directly
+-- in EDGARTOOLS_GOLD -- confirmed live 2026-07-29 that this role had no
+-- CREATE VIEW grant there (only CREATE DYNAMIC TABLE), so `dbt run` failed
+-- with "must have CREATE VIEW granted on SCHEMA ... EDGARTOOLS_GOLD".
+GRANT CREATE VIEW ON SCHEMA IDENTIFIER($database_name || '.' || $gold_schema_name) TO ROLE IDENTIFIER($loader_role_name);
 
 -- Manifest pipeline reads: every EDGARTOOLS_SOURCE table (current + future),
 -- the manifest stream, and the per-run status table it writes to.

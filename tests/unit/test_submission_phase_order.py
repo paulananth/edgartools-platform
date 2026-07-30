@@ -436,12 +436,14 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 ("parser", "item-502"),
                 ("artifact", "ambiguous-8k"),
                 ("parser", "ambiguous-8k"),
+                ("artifact", "earnings-8k"),
+                ("parser", "earnings-8k"),
                 ("artifact", "13f-1"),
                 ("parser", "13f-1"),
             ],
         )
-        self.assertEqual(result["rows_written"], 24)
-        self.assertEqual(len(result["raw_writes"]), 6)
+        self.assertEqual(result["rows_written"], 28)
+        self.assertEqual(len(result["raw_writes"]), 7)
 
     def test_release_artifact_pipeline_fails_closed(self) -> None:
         with patch(
@@ -748,6 +750,18 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         ])
         self.assertEqual(args.source_manifest, "s3://bucket/sources.json")
         self.assertEqual(args.run_id, "release-1")
+
+    def test_fetch_adv_bulk_is_a_deployed_cli_command(self) -> None:
+        args = cli.build_parser().parse_args(["fetch-adv-bulk", "--run-id", "fetch-1"])
+        self.assertIsNone(args.dataset_period)
+        self.assertFalse(args.force)
+        self.assertEqual(args.run_id, "fetch-1")
+
+        forced = cli.build_parser().parse_args([
+            "fetch-adv-bulk", "--dataset-period", "2025-03", "--force",
+        ])
+        self.assertEqual(forced.dataset_period, "2025-03")
+        self.assertTrue(forced.force)
 
 
 if __name__ == "__main__":
