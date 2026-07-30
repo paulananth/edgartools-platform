@@ -191,6 +191,40 @@ def test_pipeline_run_lease_acquire_is_exclusive(tmp_path) -> None:
         db.close()
 
 
+def test_pipeline_run_lease_reclaims_a_stale_hold(tmp_path) -> None:
+    """A crashed run that never reached ReleaseLease can't wedge the
+    schedule permanently -- a lease held past stale_after_seconds is
+    reclaimable by a later acquire attempt (go-live follow-up to ticket 49;
+    release-on-failure elsewhere is best-effort precisely because this
+    reclaim rule is the actual safety net)."""
+    from datetime import timedelta
+
+    from edgar_warehouse.silver_store import SilverDatabase
+
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    try:
+        held_at = datetime(2026, 7, 30, 0, 0, tzinfo=UTC)
+        assert db.acquire_pipeline_run_lease(
+            lease_name="daily_identity_refresh", run_id="crashed-run", mode="daily", acquired_at=held_at
+        )
+
+        # Still within the 20h default stale window -- not reclaimable yet.
+        still_fresh = held_at + timedelta(hours=10)
+        assert not db.acquire_pipeline_run_lease(
+            lease_name="daily_identity_refresh", run_id="new-run", mode="daily", acquired_at=still_fresh
+        )
+
+        # Past the 20h window -- reclaimable even though "crashed-run" never released it.
+        past_stale = held_at + timedelta(hours=21)
+        assert db.acquire_pipeline_run_lease(
+            lease_name="daily_identity_refresh", run_id="new-run", mode="daily", acquired_at=past_stale
+        )
+        held = db.get_pipeline_run_lease("daily_identity_refresh")
+        assert held["run_id"] == "new-run"
+    finally:
+        db.close()
+
+
 def test_acquire_identity_refresh_lease_command_records_deferred_on_conflict(tmp_path) -> None:
     """The orchestrator command surfaces a deferred disposition (not an exception)
     when the lease is already held -- ticket 45's 'deferred, not an invisible skip'."""
@@ -214,6 +248,51 @@ def test_acquire_identity_refresh_lease_command_records_deferred_on_conflict(tmp
             sync_run_id="backstop-run",
         )
         assert metrics["lease_acquired"] is False
+
+        # The S3 side-channel -- not the metric -- is the source of truth the
+        # state machine actually reads (ecs:runTask.sync can't surface the
+        # metric to a Choice state).
+        from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
+
+        lease_result_rel = default_path_resolver().identity_refresh_lease_path("backstop-run")
+        written_path = Path(context.bronze_root.join(lease_result_rel))
+        assert written_path.exists()
+        payload = json.loads(written_path.read_text())
+        assert payload["lease_acquired"] is False
+        assert payload["backstop_overdue"] is True
+        assert payload["held_by_run_id"] == "already-running"
+    finally:
+        db.close()
+
+
+def test_acquire_identity_refresh_lease_command_writes_success_to_s3(tmp_path) -> None:
+    from edgar_warehouse.silver_store import SilverDatabase
+    from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
+
+    context = _context(tmp_path)
+    now = datetime(2026, 7, 30, 12, tzinfo=UTC)
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    try:
+        _, metrics = warehouse_orchestrator._capture_bronze_raw(
+            context=context,
+            db=db,
+            command_name="acquire-identity-refresh-lease",
+            arguments={"mode": "daily", "run_id": "daily-run"},
+            scope={"mode": "daily"},
+            now=now,
+            sync_run_id="daily-run",
+        )
+        assert metrics["lease_acquired"] is True
+
+        lease_result_rel = default_path_resolver().identity_refresh_lease_path("daily-run")
+        written_path = Path(context.bronze_root.join(lease_result_rel))
+        payload = json.loads(written_path.read_text())
+        assert payload == {
+            "lease_acquired": True,
+            "mode": "daily",
+            "backstop_overdue": False,
+            "held_by_run_id": "daily-run",
+        }
     finally:
         db.close()
 

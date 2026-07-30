@@ -1210,6 +1210,18 @@ Key routing rules:
 - Resume context → invoke /context-restore
 - Author a backlog-ready spec/issue → invoke /spec
 
+**Before starting any non-trivial coding task, consult `/gof-refactor-reviewer`**
+on the code area you're about to touch — it flags pattern-shaped structural
+problems (repeated-change axes, duplicated conditionals, etc.) worth knowing
+about before adding to them, per its own Rule 0 (default verdict is "leave
+it" — only real, evidenced findings block anything). This is in addition to,
+not instead of, the code-review pass below.
+
+**`/code-review` must include a `/gof-refactor-reviewer` pass** on the
+changed files as part of its checks, alongside the Standards/Spec axes —
+findings from it are reported the same way (evidenced, adjudicated, capped),
+not just a lint pass.
+
 ## Agent skills
 
 ### Issue tracker

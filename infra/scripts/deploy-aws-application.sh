@@ -2272,24 +2272,42 @@ else:
     # trailing 7 days' impacted CIKs (an order of magnitude fewer) and
     # processes only those. Both converge on RunWarehouseTask.
     #
-    # NOTE (explicit scope gap, not silently dropped): ticket 45 also calls
-    # for a run-level lease (AcquireLease/ReleaseLease, backed by the new
-    # acquire-identity-refresh-lease/release-identity-refresh-lease CLI
-    # commands and pipeline_run_lease table) so the Daily Identity Refresh and
-    # the Identity Backstop Sweep never run concurrently, plus EventBridge
-    # schedules and CloudWatch alerting. None of that is wired into this state
-    # machine yet -- the CLI/DB layer exists and is unit-tested, but the
-    # Step-Functions-level branching on lease_acquired (which isn't a plain
-    # ecs:runTask.sync result field) is real design work left to a follow-up,
-    # not invented here under this ticket's session-scope split.
+    # AcquireLease/ReleaseLease (release-readiness ticket 49, go-live follow-up):
+    # a run-level lease shared by the Daily Identity Refresh and the Identity
+    # Backstop Sweep so they never run concurrently. ecs:runTask.sync doesn't
+    # surface app-level stdout/metrics to a Choice state, so the acquire
+    # command writes lease_result.json to S3 (bronze root) as its source of
+    # truth; ReadLeaseResult reads it back via the aws-sdk:s3:getObject
+    # service integration and States.StringToJson, and LeaseAcquiredCheck
+    # branches on the parsed lease_acquired boolean. An explicit
+    # lease_acquired=false routes to Deferred -- an explicit terminal state,
+    # not an invisible skip -- and starts no downstream data work.
+    #
+    # NOTE (deliberate, found sharp in code review): ReadLeaseResult has no
+    # Retry/Catch. A missing or corrupt lease_result.json (S3 write failure,
+    # object not found) fails the Task outright -- it does NOT fall through
+    # to Deferred. This is intentional: "lease busy" (a benign, expected
+    # outcome) and "something is actually broken" (an unknown failure mode)
+    # are different dispositions, and silently treating the latter as the
+    # former would mask real bugs behind a falsely reassuring "deferred, all
+    # good" event. An unreadable lease result fails the execution loudly
+    # instead.
+    #
+    # Stale-lease reclaim (20h -- 2h of margin past the Identity Backstop
+    # Sweep's own 18h completion/alarm bound, so a new run's acquire can't
+    # race a legitimately-still-finishing backstop mid-ReleaseLease) lives in
+    # acquire_pipeline_run_lease itself (silver_store.py), not here, so a
+    # crashed run can't wedge the schedule permanently -- release-on-failure
+    # elsewhere in this chain is therefore best-effort, not wrapped in Catch
+    # on every downstream state.
     refresh_mode_check = {
         "Type": "Choice",
-        "Comment": "Route to RefreshMode directly when caller supplied refresh_mode; otherwise inject the 'daily' default.",
+        "Comment": "Route to AcquireLease directly when caller supplied refresh_mode; otherwise inject the 'daily' default.",
         "Choices": [
             {
                 "Variable": "$.refresh_mode",
                 "IsPresent": True,
-                "Next": "RefreshMode",
+                "Next": "AcquireLease",
             }
         ],
         "Default": "RefreshModeDefault",
@@ -2299,8 +2317,72 @@ else:
         "Comment": "Inject default refresh_mode='daily' when caller passed {} or omitted the key.",
         "Result": "daily",
         "ResultPath": "$.refresh_mode",
-        "Next": "RefreshMode",
+        "Next": "AcquireLease",
     }
+
+    acquire_lease = ecs_state(wh_medium_arn,
+        "States.Array('acquire-identity-refresh-lease', '--mode', States.Format('{}', $.refresh_mode), "
+        "'--run-id', $$.Execution.Name)",
+        next_state="ReadLeaseResult", retry_secs=30)
+    acquire_lease["ResultPath"] = None
+
+    read_lease_result = {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+        "Parameters": {
+            "Bucket": bronze_bucket_name,
+            "Key.$": "States.Format('warehouse/bronze/reference/identity_refresh_lease/runs/{}/lease_result.json', $$.Execution.Name)",
+        },
+        "ResultSelector": {"parsed.$": "States.StringToJson($.Body)"},
+        "ResultPath": "$.lease_check",
+        "Next": "LeaseAcquiredCheck",
+    }
+
+    lease_acquired_check = {
+        "Type": "Choice",
+        "Comment": "lease_result.json (not a plain ecs:runTask.sync field) is the source of truth for whether this run holds the shared Daily Identity Refresh / Identity Backstop Sweep lease.",
+        "Choices": [
+            {
+                "Variable": "$.lease_check.parsed.lease_acquired",
+                "BooleanEquals": True,
+                "Next": "RefreshMode",
+            }
+        ],
+        "Default": "Deferred",
+    }
+
+    deferred = {
+        "Type": "Pass",
+        "Comment": "Lease already held by another run -- an explicit disposition, not an invisible skip. No downstream data work started; the next successful refresh catches up filing-signaled work (release-readiness ticket 45).",
+        # A labeled top-level field, not just app-level events buried in
+        # CloudWatch: an operator glancing at this execution's own output in
+        # the Step Functions console sees why it stopped without digging.
+        "Parameters": {
+            "disposition": "deferred",
+            "lease_check.$": "$.lease_check.parsed",
+        },
+        "ResultPath": "$.deferred_summary",
+        "End": True,
+    }
+
+    release_lease = ecs_state(wh_medium_arn,
+        "States.Array('release-identity-refresh-lease', '--run-id', $$.Execution.Name)",
+        is_end=True, retry_secs=30)
+    release_lease["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseLeaseFailedNonFatal"}]
+
+    release_lease_failed_non_fatal = {
+        "Type": "Pass",
+        "Comment": "Release is best-effort -- a failure here must not mark an otherwise-successful gold build FAILED. The 18h stale-lease reclaim in acquire_pipeline_run_lease is the actual safety net for a wedged lease.",
+        "End": True,
+    }
+
+    # GoldRefresh (`gold`, built above) is shared with the bootstrap branch's
+    # standalone definition, which is_end=True there. Mutating it here is
+    # safe: this Python process only ever executes one of the if/else
+    # branches per invocation (see run_wh["Next"] retarget above, same
+    # pattern), so bootstrap's own use of `gold` is never affected.
+    del gold["End"]
+    gold["Next"] = "ReleaseLease"
     refresh_mode = {
         "Type": "Choice",
         "Comment": "backstop -> full-universe Identity Backstop Sweep (existing ComputeWindows path); daily (default) -> bounded Daily Identity Refresh.",
@@ -2497,6 +2579,10 @@ else:
         "States": {
             "RefreshModeCheck":   refresh_mode_check,
             "RefreshModeDefault": refresh_mode_default,
+            "AcquireLease":       acquire_lease,
+            "ReadLeaseResult":    read_lease_result,
+            "LeaseAcquiredCheck": lease_acquired_check,
+            "Deferred":           deferred,
             "RefreshMode":        refresh_mode,
             "ComputeIdentityRefreshWindow": compute_identity_refresh_window,
             "Stage0CompanyIdentityBounded": stage0_company_identity_bounded,
@@ -2519,6 +2605,8 @@ else:
             "MdmSync":          mdm_sync,
             "MdmVerify":        mdm_verify,
             "GoldRefresh":      gold,
+            "ReleaseLease":     release_lease,
+            "ReleaseLeaseFailedNonFatal": release_lease_failed_non_fatal,
         },
     }
 pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")

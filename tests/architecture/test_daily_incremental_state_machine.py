@@ -33,6 +33,12 @@ DEPLOY_SCRIPT = REPO_ROOT / "infra" / "scripts" / "deploy-aws-application.sh"
 _START_MARKER = "write_warehouse_mdm_gold_definition() {\n"
 _END_MARKER = "\nPY\n}\n"
 
+# LeaseAcquiredCheck inverts this file's usual Choice convention (Default is
+# the fail-closed Deferred path, not the happy path) -- trace helpers must be
+# told to prefer the explicit lease_acquired=True branch when tracing the
+# successful/main flow. See _linear_order_with_choice's docstring.
+_LEASE_ACQUIRED_PREFER = {"LeaseAcquiredCheck": "RefreshMode"}
+
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 
 
@@ -163,7 +169,7 @@ def test_daily_incremental_default_path_reaches_run_warehouse_task_via_bounded_s
     bounded ComputeIdentityRefreshWindow/Stage0CompanyIdentityBounded pair
     instead (ticket 45/49). The original full-universe pair still exists,
     reachable via refresh_mode="backstop" -- covered separately."""
-    order = _linear_order_with_choice(daily_definition)
+    order = _linear_order_with_choice(daily_definition, prefer=_LEASE_ACQUIRED_PREFER)
     assert "ComputeIdentityRefreshWindow" in order
     assert "Stage0CompanyIdentityBounded" in order
     assert "RunWarehouseTask" in order
@@ -243,16 +249,27 @@ def test_bootstrap_unaffected_by_daily_incremental_restructure(bootstrap_definit
 # AdvBulkFetch stage between RunWarehouseTask and MdmRun -------------------------
 
 
-def _linear_order_with_choice(definition: dict) -> list[str]:
-    """Like _linear_order but also follows Choice.Default, needed once
-    DatasetPeriodCheck/ForceCheck (Choice states) sit between RunWarehouseTask and
-    MdmRun -- the module-level _linear_order only follows plain "Next", matching
-    this file's original no-Choice-states shape."""
-    states = definition["States"]
+def _linear_order_with_choice(definition: dict, prefer: dict[str, str] | None = None) -> list[str]:
+    """Like _linear_order but also follows Choice states, needed once
+    DatasetPeriodCheck/ForceCheck/LeaseAcquiredCheck (Choice states) sit
+    between RunWarehouseTask and MdmRun -- the module-level _linear_order
+    only follows plain "Next", matching this file's original no-Choice-states
+    shape.
 
-    def next_of(state: dict) -> str | None:
+    For most Choice states here, Default IS the main/happy path (the
+    Choices branch is the override) -- so Default-first is the right
+    default trace. LeaseAcquiredCheck inverts this deliberately for safety
+    (Default = Deferred, a fail-closed disposition for anything that isn't
+    exactly lease_acquired=True) -- pass `prefer={"LeaseAcquiredCheck":
+    "RefreshMode"}` to trace the happy path through it instead."""
+    states = definition["States"]
+    prefer = prefer or {}
+
+    def next_of(name: str, state: dict) -> str | None:
         if "Next" in state:
             return state["Next"]
+        if name in prefer:
+            return prefer[name]
         if state.get("Type") == "Choice":
             return state.get("Default") or state["Choices"][0]["Next"]
         return None
@@ -263,14 +280,14 @@ def _linear_order_with_choice(definition: dict) -> list[str]:
     while name and name not in seen:
         seen.add(name)
         order.append(name)
-        name = next_of(states[name])
+        name = next_of(name, states[name])
     return order
 
 
 def test_fetch_adv_bulk_stage_runs_after_run_warehouse_task_before_mdm_run(
     daily_definition: dict,
 ) -> None:
-    order = _linear_order_with_choice(daily_definition)
+    order = _linear_order_with_choice(daily_definition, prefer=_LEASE_ACQUIRED_PREFER)
     assert "RunWarehouseTask" in order
     assert "FetchAdvBulk" in order
     assert "IngestAdvBulkSources" in order
@@ -371,7 +388,7 @@ def test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_via_result_path_null
 def test_firm_roster_stage_runs_after_ingest_adv_bulk_sources_before_mdm_run(
     daily_definition: dict,
 ) -> None:
-    order = _linear_order_with_choice(daily_definition)
+    order = _linear_order_with_choice(daily_definition, prefer=_LEASE_ACQUIRED_PREFER)
     assert "IngestAdvBulkSources" in order
     assert "FetchFirmRoster" in order
     assert "IngestFirmRosterSources" in order

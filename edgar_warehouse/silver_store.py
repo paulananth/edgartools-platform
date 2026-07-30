@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -2623,14 +2623,26 @@ class SilverDatabase:
         run_id: str,
         mode: str,
         acquired_at: datetime,
+        stale_after_seconds: int = 20 * 3600,
     ) -> bool:
         """Atomically acquire a run-level pipeline lease.
 
-        The UPDATE branch only fires when the lease isn't currently 'held',
-        so a concurrent acquire attempt against an already-held lease is a
-        no-op rather than stealing it. Returns True iff this run_id now
-        holds the lease.
+        The UPDATE branch fires when the lease isn't currently 'held', OR
+        when it's held but stale (acquired_at older than
+        stale_after_seconds) -- so a crashed run that never reached
+        ReleaseLease can't wedge the schedule permanently. Deliberately set
+        to 20h, not 18h: ticket 45's Identity Backstop Sweep must complete
+        "in at most 18 hours" and its stale-*execution alarm* fires at that
+        same 18h mark -- reusing 18h here too would let a new run's acquire
+        race a legitimately-still-finishing backstop that's mid-ReleaseLease
+        at the exact boundary (zero margin, found in code review). The 2h
+        gap is slack between "the alarm should have fired" and "it's safe to
+        assume this run is actually dead, not just alarmingly slow."
+        Release-on-failure is otherwise best-effort (not wrapped in Step
+        Functions Catch on every downstream state); this reclaim rule is the
+        actual safety net. Returns True iff this run_id now holds the lease.
         """
+        stale_cutoff = acquired_at - timedelta(seconds=stale_after_seconds)
         self._conn.execute(
             """
             INSERT INTO pipeline_run_lease
@@ -2644,8 +2656,9 @@ class SilverDatabase:
                 released_at = NULL,
                 updated_at = excluded.updated_at
             WHERE pipeline_run_lease.status != 'held'
+               OR pipeline_run_lease.acquired_at < ?
             """,
-            [lease_name, run_id, mode, acquired_at, acquired_at],
+            [lease_name, run_id, mode, acquired_at, acquired_at, stale_cutoff],
         )
         held = self.get_pipeline_run_lease(lease_name)
         return bool(held) and held.get("run_id") == run_id and held.get("status") == "held"
