@@ -377,6 +377,21 @@ CREATE TABLE IF NOT EXISTS discovery_checkpoint (
     PRIMARY KEY (scope_type, scope_key)
 );
 
+-- Run-level lease shared by the Daily Identity Refresh and the Identity
+-- Backstop Sweep (release-readiness ticket 45/49) so only one of the two
+-- ever runs at a time. Deliberately separate from discovery_checkpoint,
+-- which leases individual CIKs within a run, not a whole run against its
+-- siblings.
+CREATE TABLE IF NOT EXISTS pipeline_run_lease (
+    lease_name                 TEXT PRIMARY KEY,
+    status                     TEXT NOT NULL DEFAULT 'idle',
+    run_id                     TEXT,
+    mode                       TEXT,
+    acquired_at                TIMESTAMPTZ,
+    released_at                TIMESTAMPTZ,
+    updated_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS sec_raw_object (
     raw_object_id       TEXT PRIMARY KEY,
     source_type         TEXT,
@@ -2596,6 +2611,71 @@ class SilverDatabase:
                     finished_at,
                 ],
             )
+
+    # ------------------------------------------------------------------
+    # pipeline_run_lease
+    # ------------------------------------------------------------------
+
+    def acquire_pipeline_run_lease(
+        self,
+        *,
+        lease_name: str,
+        run_id: str,
+        mode: str,
+        acquired_at: datetime,
+    ) -> bool:
+        """Atomically acquire a run-level pipeline lease.
+
+        The UPDATE branch only fires when the lease isn't currently 'held',
+        so a concurrent acquire attempt against an already-held lease is a
+        no-op rather than stealing it. Returns True iff this run_id now
+        holds the lease.
+        """
+        self._conn.execute(
+            """
+            INSERT INTO pipeline_run_lease
+                (lease_name, status, run_id, mode, acquired_at, released_at, updated_at)
+            VALUES (?, 'held', ?, ?, ?, NULL, ?)
+            ON CONFLICT (lease_name) DO UPDATE SET
+                status = 'held',
+                run_id = excluded.run_id,
+                mode = excluded.mode,
+                acquired_at = excluded.acquired_at,
+                released_at = NULL,
+                updated_at = excluded.updated_at
+            WHERE pipeline_run_lease.status != 'held'
+            """,
+            [lease_name, run_id, mode, acquired_at, acquired_at],
+        )
+        held = self.get_pipeline_run_lease(lease_name)
+        return bool(held) and held.get("run_id") == run_id and held.get("status") == "held"
+
+    def release_pipeline_run_lease(
+        self,
+        *,
+        lease_name: str,
+        run_id: str,
+        released_at: datetime,
+    ) -> None:
+        """Release the lease, but only if this run_id currently holds it."""
+        self._conn.execute(
+            """
+            UPDATE pipeline_run_lease
+            SET status = 'idle', released_at = ?, updated_at = ?
+            WHERE lease_name = ? AND run_id = ? AND status = 'held'
+            """,
+            [released_at, released_at, lease_name, run_id],
+        )
+
+    def get_pipeline_run_lease(self, lease_name: str) -> dict[str, Any] | None:
+        result = self._conn.execute(
+            "SELECT * FROM pipeline_run_lease WHERE lease_name = ?",
+            [lease_name],
+        ).fetchone()
+        if result is None:
+            return None
+        cols = [d[0] for d in self._conn.description]
+        return dict(zip(cols, result))
 
     # ------------------------------------------------------------------
     # sec_raw_object

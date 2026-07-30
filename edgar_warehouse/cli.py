@@ -207,6 +207,18 @@ def _handle_compute_windows(args: argparse.Namespace) -> int:
     return run_command("compute-windows", args)
 
 
+def _handle_compute_identity_refresh_window(args: argparse.Namespace) -> int:
+    return run_command("compute-identity-refresh-window", args)
+
+
+def _handle_acquire_identity_refresh_lease(args: argparse.Namespace) -> int:
+    return run_command("acquire-identity-refresh-lease", args)
+
+
+def _handle_release_identity_refresh_lease(args: argparse.Namespace) -> int:
+    return run_command("release-identity-refresh-lease", args)
+
+
 def _handle_write_run_summary(args: argparse.Namespace) -> int:
     return run_command("write-run-summary", args)
 
@@ -864,6 +876,56 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(compute_windows)
     compute_windows.set_defaults(handler=_handle_compute_windows)
+
+    compute_identity_refresh_window = subparsers.add_parser(
+        "compute-identity-refresh-window",
+        help=(
+            "Index-only pre-stage for the bounded Daily Identity Refresh (release-readiness "
+            "ticket 45/49): force-recheck the trailing N calendar days of SEC daily indexes, "
+            "union their impacted CIKs, refresh global ticker/exchange reference data once, "
+            "and write the union as batched cik_list JSONL (reusing seed-universe's batch "
+            "shape) for company-identity processing -- instead of compute-windows' "
+            "full tracked-universe scope."
+        ),
+    )
+    compute_identity_refresh_window.add_argument(
+        "--lookback-days",
+        type=int,
+        default=7,
+        help="Number of trailing calendar days to force-recheck and union (default: 7).",
+    )
+    compute_identity_refresh_window.add_argument(
+        "--batch-size",
+        type=int,
+        default=500,
+        help="Number of CIKs per batch line in the output JSONL (default: 500).",
+    )
+    _add_run_id_arg(compute_identity_refresh_window)
+    compute_identity_refresh_window.set_defaults(handler=_handle_compute_identity_refresh_window)
+
+    acquire_identity_refresh_lease = subparsers.add_parser(
+        "acquire-identity-refresh-lease",
+        help=(
+            "Atomically acquire the run-level lease shared by the Daily Identity Refresh and "
+            "the Identity Backstop Sweep (release-readiness ticket 45/49), so only one of the "
+            "two ever runs at a time."
+        ),
+    )
+    acquire_identity_refresh_lease.add_argument(
+        "--mode",
+        choices=["daily", "backstop"],
+        required=True,
+        help="Which refresh mode is attempting to acquire the lease.",
+    )
+    _add_run_id_arg(acquire_identity_refresh_lease)
+    acquire_identity_refresh_lease.set_defaults(handler=_handle_acquire_identity_refresh_lease)
+
+    release_identity_refresh_lease = subparsers.add_parser(
+        "release-identity-refresh-lease",
+        help="Release the Daily Identity Refresh / Identity Backstop Sweep run-level lease.",
+    )
+    _add_run_id_arg(release_identity_refresh_lease)
+    release_identity_refresh_lease.set_defaults(handler=_handle_release_identity_refresh_lease)
 
     write_run_summary = subparsers.add_parser(
         "write-run-summary",

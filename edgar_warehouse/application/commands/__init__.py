@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from edgar_warehouse.application.commands import (
+    acquire_identity_refresh_lease,
     bootstrap_batch,
     bootstrap_full,
     bootstrap_fundamentals,
     bootstrap_next,
     bootstrap,
     catch_up_daily_form_index,
+    compute_identity_refresh_window,
     compute_windows,
     daily_incremental,
     fetch_adv_bulk,
@@ -21,6 +23,7 @@ from edgar_warehouse.application.commands import (
     parse_adv_bronze,
     parse_ownership_bronze,
     reconcile_relationship_release,
+    release_identity_refresh_lease,
     seed_bronze_batches,
     seed_silver_batches,
     seed_universe,
@@ -34,6 +37,9 @@ COMMAND_REGISTRY = {
     "bootstrap-full": bootstrap_full.execute,
     "bootstrap": bootstrap.execute,
     "compute-windows": compute_windows.execute,
+    "compute-identity-refresh-window": compute_identity_refresh_window.execute,
+    "acquire-identity-refresh-lease": acquire_identity_refresh_lease.execute,
+    "release-identity-refresh-lease": release_identity_refresh_lease.execute,
     "daily-incremental": daily_incremental.execute,
     "load-daily-form-index-for-date": load_daily_form_index_for_date.execute,
     "catch-up-daily-form-index": catch_up_daily_form_index.execute,

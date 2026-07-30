@@ -2259,6 +2259,93 @@ else:
     # NOTE: write_load_history_definition's Stage0CompanyIdentity (see its
     # per_window_company_identity comment) builds this exact same shape in a
     # separate Python heredoc -- keep the two in sync on any change.
+    #
+    # refresh_mode (release-readiness ticket 45/49, "Decide whether/how to
+    # narrow daily_incremental's Stage 0"): the full-universe ComputeWindows ->
+    # Stage0CompanyIdentity pair below took 10h16m alone on the first-ever prod
+    # execution (ticket 45's evidence), because it reprocesses the entire
+    # ~26,300-CIK tracked universe every run instead of just the CIKs that
+    # actually filed something recently. RefreshMode branches on
+    # $.refresh_mode: "backstop" keeps this exact full-universe path
+    # (the weekly Identity Backstop Sweep, unchanged); the default "daily"
+    # path goes through ComputeIdentityRefreshWindow instead, which unions the
+    # trailing 7 days' impacted CIKs (an order of magnitude fewer) and
+    # processes only those. Both converge on RunWarehouseTask.
+    #
+    # NOTE (explicit scope gap, not silently dropped): ticket 45 also calls
+    # for a run-level lease (AcquireLease/ReleaseLease, backed by the new
+    # acquire-identity-refresh-lease/release-identity-refresh-lease CLI
+    # commands and pipeline_run_lease table) so the Daily Identity Refresh and
+    # the Identity Backstop Sweep never run concurrently, plus EventBridge
+    # schedules and CloudWatch alerting. None of that is wired into this state
+    # machine yet -- the CLI/DB layer exists and is unit-tested, but the
+    # Step-Functions-level branching on lease_acquired (which isn't a plain
+    # ecs:runTask.sync result field) is real design work left to a follow-up,
+    # not invented here under this ticket's session-scope split.
+    refresh_mode_check = {
+        "Type": "Choice",
+        "Comment": "Route to RefreshMode directly when caller supplied refresh_mode; otherwise inject the 'daily' default.",
+        "Choices": [
+            {
+                "Variable": "$.refresh_mode",
+                "IsPresent": True,
+                "Next": "RefreshMode",
+            }
+        ],
+        "Default": "RefreshModeDefault",
+    }
+    refresh_mode_default = {
+        "Type": "Pass",
+        "Comment": "Inject default refresh_mode='daily' when caller passed {} or omitted the key.",
+        "Result": "daily",
+        "ResultPath": "$.refresh_mode",
+        "Next": "RefreshMode",
+    }
+    refresh_mode = {
+        "Type": "Choice",
+        "Comment": "backstop -> full-universe Identity Backstop Sweep (existing ComputeWindows path); daily (default) -> bounded Daily Identity Refresh.",
+        "Choices": [
+            {
+                "Variable": "$.refresh_mode",
+                "StringEquals": "backstop",
+                "Next": "ComputeWindows",
+            }
+        ],
+        "Default": "ComputeIdentityRefreshWindow",
+    }
+
+    compute_identity_refresh_window = ecs_state(wh_medium_arn,
+        "States.Array('compute-identity-refresh-window', '--lookback-days', '7', "
+        "'--batch-size', '500', '--run-id', $$.Execution.Name)",
+        next_state="Stage0CompanyIdentityBounded")
+
+    per_batch_company_identity = ecs_state(wh_medium_arn,
+        "States.Array('bootstrap-fundamentals', '--mode', 'company-identity', "
+        "'--cik-list', $.cik_list, '--run-id', $$.Execution.Name)",
+        is_end=True)
+
+    stage0_company_identity_bounded = {
+        "Type": "Map",
+        "Comment": "Stage 0 (Daily Identity Refresh): company identity capture bounded to the trailing-7-day impacted-CIK union, not the full tracked universe.",
+        "MaxConcurrency": 1,
+        "ToleratedFailurePercentage": 0,
+        "ItemReader": {
+            "Resource": "arn:aws:states:::s3:getObject",
+            "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
+            "Parameters": {
+                "Bucket": bronze_bucket_name,
+                "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_batches.jsonl', $$.Execution.Name)",
+            },
+        },
+        "ItemProcessor": {
+            "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
+            "StartAt": "RunCompanyIdentityBatch",
+            "States": {"RunCompanyIdentityBatch": per_batch_company_identity},
+        },
+        "ResultPath": None,
+        "Next": "RunWarehouseTask",
+    }
+
     compute_windows = ecs_state(wh_medium_arn,
         "States.Array('compute-windows', '--window-size', '500', '--total-cik-limit', '0', "
         "'--run-id', $$.Execution.Name)",
@@ -2395,17 +2482,24 @@ else:
 
     definition = {
         "Comment": (
-            f"{display}: (0) compute CIK windows, (0b) Stage0CompanyIdentity -- Company Identity "
-            "capture, strict, runs before ownership/ADV so IS_INSIDER derivation sees resolved "
-            "Company entities, (1) bronze+silver capture, (1b) AdvBulkFetch -- fetch-adv-bulk + "
+            f"{display}: (0) RefreshMode -- backstop (full-universe ComputeWindows, weekly) vs "
+            "daily (bounded ComputeIdentityRefreshWindow, default) -- release-readiness ticket "
+            "45/49, (0b) Stage0CompanyIdentity[Bounded] -- Company Identity capture, strict, runs "
+            "before ownership/ADV so IS_INSIDER derivation sees resolved Company entities, "
+            "(1) bronze+silver capture, (1b) AdvBulkFetch -- fetch-adv-bulk + "
             "ingest-relationship-sources (adv-fetch-pipeline-wiring spec), then fetch-firm-roster "
             "+ ingest-relationship-sources (adv-firm-roster-crosscheck spec, ticket 02), both "
             "lenient, so MDM sees fresh ADV silver and the Firm Roster cross-check stays current, "
             "(2) MDM entity resolution + Neo4j sync, (3) gold build + "
             "Snowflake export manifest."
         ),
-        "StartAt": "ComputeWindows",
+        "StartAt": "RefreshModeCheck",
         "States": {
+            "RefreshModeCheck":   refresh_mode_check,
+            "RefreshModeDefault": refresh_mode_default,
+            "RefreshMode":        refresh_mode,
+            "ComputeIdentityRefreshWindow": compute_identity_refresh_window,
+            "Stage0CompanyIdentityBounded": stage0_company_identity_bounded,
             "ComputeWindows":    compute_windows,
             "Stage0CompanyIdentity": stage0_company_identity,
             "RunWarehouseTask": run_wh,
