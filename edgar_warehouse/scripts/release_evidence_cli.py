@@ -37,9 +37,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from edgar_warehouse.application.release_evidence import (
     ReleaseEvidenceError,
@@ -60,15 +61,43 @@ def _write_manifest(path: Path, manifest: dict[str, Any]) -> None:
 
 def _load_manifest(candidate_dir: Path) -> dict[str, Any]:
     manifest_path = candidate_dir / "release-evidence.json"
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise ValueError("release-evidence.json must be a regular non-symlink file")
     return json.loads(manifest_path.read_text(encoding="utf-8"))
 
 
+def _require_canonical_candidate_dir(
+    *,
+    repo_root: Path,
+    candidate_dir: Path,
+    manifest: dict[str, Any],
+) -> Path:
+    candidate_id = manifest.get("candidate_id")
+    if not isinstance(candidate_id, str) or not candidate_id:
+        raise ValueError("manifest candidate_id must be a non-empty string")
+    if ".." in candidate_dir.parts:
+        raise ValueError("candidate_dir must not contain parent traversal")
+
+    canonical = (
+        repo_root.resolve() / "docs" / "release-readiness" / "releases" / candidate_id
+    )
+    supplied = candidate_dir.resolve()
+    if (
+        supplied != canonical
+        or canonical.resolve() != canonical
+        or not canonical.is_relative_to(repo_root.resolve())
+    ):
+        raise ValueError(
+            "candidate_dir must be the canonical candidate directory under repo_root"
+        )
+    return canonical
+
+
 def _cmd_init(args: argparse.Namespace) -> int:
-    repo_root = Path(args.repo_root)
+    repo_root = Path(args.repo_root).resolve()
     watermark = json.loads(args.watermark_json)
     identity_freeze_timestamp = (
-        args.identity_freeze_timestamp
-        or datetime.now(timezone.utc).isoformat()
+        args.identity_freeze_timestamp or datetime.now(UTC).isoformat()
     )
 
     manifest = build_manifest(
@@ -79,18 +108,42 @@ def _cmd_init(args: argparse.Namespace) -> int:
         release_data_watermark=watermark,
         identity_freeze_timestamp=identity_freeze_timestamp,
     )
+    initial_report = validate_manifest(
+        manifest,
+        repo_root=repo_root,
+        as_of=datetime.fromisoformat(identity_freeze_timestamp),
+    )
+    if not initial_report.ok:
+        summary = "; ".join(
+            f"{finding.code}: {finding.message}" for finding in initial_report.findings
+        )
+        raise ValueError(f"initial manifest is invalid: {summary}")
 
-    candidate_dir = repo_root / "docs/release-readiness/releases" / manifest["candidate_id"]
+    candidate_dir = (
+        repo_root / "docs/release-readiness/releases" / manifest["candidate_id"]
+    )
+    candidate_dir = _require_canonical_candidate_dir(
+        repo_root=repo_root,
+        candidate_dir=candidate_dir,
+        manifest=manifest,
+    )
     manifest_path = candidate_dir / "release-evidence.json"
     if manifest_path.exists():
-        existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+        existing = _load_manifest(candidate_dir)
         # A byte-identical re-request (e.g. a retried deploy step) is a
         # harmless no-op. Anything else colliding on the same candidate_id
         # text (same commit, same date, different digests/branch/watermark)
         # is the exact case ticket 01 forbids silently merging: "Any commit
         # or image-digest change creates a new candidate."
         if existing == manifest:
-            print(json.dumps({"candidate_id": manifest["candidate_id"], "path": str(manifest_path)}))
+            print(
+                json.dumps(
+                    {
+                        "candidate_id": manifest["candidate_id"],
+                        "path": str(manifest_path),
+                    }
+                )
+            )
             return 0
         print(
             f"error: candidate {manifest['candidate_id']!r} is already frozen at "
@@ -103,7 +156,11 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
     (candidate_dir / "evidence").mkdir(parents=True, exist_ok=True)
     _write_manifest(manifest_path, manifest)
-    print(json.dumps({"candidate_id": manifest["candidate_id"], "path": str(manifest_path)}))
+    print(
+        json.dumps(
+            {"candidate_id": manifest["candidate_id"], "path": str(manifest_path)}
+        )
+    )
     return 0
 
 
@@ -111,12 +168,17 @@ def _cmd_add_gate(args: argparse.Namespace) -> int:
     repo_root = Path(args.repo_root).resolve()
     candidate_dir = Path(args.candidate_dir)
     manifest = _load_manifest(candidate_dir)
+    candidate_dir = _require_canonical_candidate_dir(
+        repo_root=repo_root,
+        candidate_dir=candidate_dir,
+        manifest=manifest,
+    )
 
     evidence_file = Path(args.evidence_file).resolve()
     evidence_relpath = evidence_file.relative_to(repo_root).as_posix()
     evidence_bytes = evidence_file.read_bytes()
 
-    captured_at = args.captured_at or datetime.now(timezone.utc).isoformat()
+    captured_at = args.captured_at or datetime.now(UTC).isoformat()
 
     updated = add_gate(
         manifest,
@@ -136,15 +198,16 @@ def _cmd_add_gate(args: argparse.Namespace) -> int:
 
 
 def _cmd_validate(args: argparse.Namespace) -> int:
-    repo_root = Path(args.repo_root)
+    repo_root = Path(args.repo_root).resolve()
     candidate_dir = Path(args.candidate_dir)
     manifest = _load_manifest(candidate_dir)
-
-    as_of = (
-        datetime.fromisoformat(args.as_of)
-        if args.as_of
-        else datetime.now(timezone.utc)
+    candidate_dir = _require_canonical_candidate_dir(
+        repo_root=repo_root,
+        candidate_dir=candidate_dir,
+        manifest=manifest,
     )
+
+    as_of = datetime.fromisoformat(args.as_of) if args.as_of else datetime.now(UTC)
 
     report = validate_manifest(manifest, repo_root=repo_root, as_of=as_of)
     payload = {
@@ -230,7 +293,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return int(args.func(args))
-    except (OSError, UnicodeError, json.JSONDecodeError, ReleaseEvidenceError, ValueError) as exc:
+    except (
+        AttributeError,
+        OSError,
+        TypeError,
+        UnicodeError,
+        json.JSONDecodeError,
+        ReleaseEvidenceError,
+        ValueError,
+    ) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
