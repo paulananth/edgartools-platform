@@ -1,7 +1,7 @@
 # Define the Direct-Evidence GO Packet
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 01, 05, 06, 07, 09, 25
 
 ## Question
