@@ -172,9 +172,37 @@ class TestInit:
         assert exit_code != 0
         assert not (_candidate_dir(tmp_path) / "release-evidence.json").exists()
 
+    def test_rejects_non_object_watermark_before_writing(self, tmp_path: Path) -> None:
+        exit_code = _init(tmp_path, watermark_json="[]")
+        assert exit_code != 0
+        assert not (_candidate_dir(tmp_path) / "release-evidence.json").exists()
+
+    def test_rejects_secret_in_watermark_before_writing(self, tmp_path: Path) -> None:
+        watermark = json.loads(WATERMARK_JSON)
+        watermark["snowflake_export"]["run_id"] = (
+            "snowflake://release_user:password@org-account/database"
+        )
+        exit_code = _init(tmp_path, watermark_json=json.dumps(watermark))
+        assert exit_code != 0
+        assert not (_candidate_dir(tmp_path) / "release-evidence.json").exists()
+
+    def test_rejects_symlinked_canonical_candidate_directory_before_writing(
+        self, tmp_path: Path
+    ) -> None:
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        candidate_dir = _candidate_dir(tmp_path)
+        candidate_dir.parent.mkdir(parents=True)
+        candidate_dir.symlink_to(outside, target_is_directory=True)
+        assert _init(tmp_path) == 1
+        assert not (outside / "release-evidence.json").exists()
+        assert not (outside / "evidence").exists()
+
 
 class TestAddGate:
-    def _evidence_file(self, tmp_path: Path, content: bytes = b'{"status": "pass"}') -> Path:
+    def _evidence_file(
+        self, tmp_path: Path, content: bytes = b'{"status": "pass"}'
+    ) -> Path:
         evidence_dir = _candidate_dir(tmp_path) / "evidence"
         evidence_path = evidence_dir / "maxconcurrency4-data-integrity.json"
         evidence_path.write_bytes(content)
@@ -257,6 +285,43 @@ class TestAddGate:
         )
         assert manifest["gates"] == []
 
+    def test_rejects_manifest_loaded_from_noncanonical_candidate_directory(
+        self, tmp_path: Path
+    ) -> None:
+        assert _init(tmp_path) == 0
+        untrusted_dir = tmp_path / "untrusted" / "nested"
+        untrusted_dir.mkdir(parents=True)
+        copied_manifest = untrusted_dir / "release-evidence.json"
+        copied_manifest.write_bytes(
+            (_candidate_dir(tmp_path) / "release-evidence.json").read_bytes()
+        )
+        evidence_path = self._evidence_file(tmp_path)
+        exit_code = command.main(
+            [
+                "add-gate",
+                "--repo-root",
+                str(tmp_path),
+                "--candidate-dir",
+                str(untrusted_dir),
+                "--gate-name",
+                "batchsilver_integrity",
+                "--status",
+                "pass",
+                "--evidence-file",
+                str(evidence_path),
+                "--media-type",
+                "application/json",
+                "--capture-tool",
+                "x",
+                "--capture-tool-version",
+                "1.0.0",
+                "--captured-at",
+                "2026-07-29T12:05:00+00:00",
+            ]
+        )
+        assert exit_code == 1
+        assert json.loads(copied_manifest.read_text(encoding="utf-8"))["gates"] == []
+
 
 class TestValidate:
     def _init_and_add_gate(self, tmp_path: Path) -> None:
@@ -309,6 +374,53 @@ class TestValidate:
         report = json.loads(capsys.readouterr().out)
         assert report["ok"] is True
         assert report["findings"] == []
+
+    def test_rejects_manifest_loaded_from_noncanonical_candidate_directory(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        assert _init(tmp_path) == 0
+        capsys.readouterr()
+        untrusted_dir = tmp_path / "untrusted" / "nested"
+        untrusted_dir.mkdir(parents=True)
+        (untrusted_dir / "release-evidence.json").write_bytes(
+            (_candidate_dir(tmp_path) / "release-evidence.json").read_bytes()
+        )
+        exit_code = command.main(
+            [
+                "validate",
+                "--repo-root",
+                str(tmp_path),
+                "--candidate-dir",
+                str(untrusted_dir),
+                "--as-of",
+                "2026-07-29T12:30:00+00:00",
+            ]
+        )
+        assert exit_code == 1
+        assert "canonical candidate directory" in capsys.readouterr().err
+
+    def test_rejects_symlinked_manifest_file(self, tmp_path: Path, capsys) -> None:
+        assert _init(tmp_path) == 0
+        capsys.readouterr()
+        manifest_path = _candidate_dir(tmp_path) / "release-evidence.json"
+        outside_manifest = tmp_path / "outside-release-evidence.json"
+        manifest_path.replace(outside_manifest)
+        manifest_path.symlink_to(outside_manifest)
+        assert _init(tmp_path) == 1
+        capsys.readouterr()
+        exit_code = command.main(
+            [
+                "validate",
+                "--repo-root",
+                str(tmp_path),
+                "--candidate-dir",
+                str(_candidate_dir(tmp_path)),
+                "--as-of",
+                "2026-07-29T12:30:00+00:00",
+            ]
+        )
+        assert exit_code == 1
+        assert "regular non-symlink file" in capsys.readouterr().err
 
     def test_validate_reports_findings_and_nonzero_exit(
         self, tmp_path: Path, capsys

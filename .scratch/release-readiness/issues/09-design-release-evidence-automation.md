@@ -53,7 +53,7 @@ Attestations or a final disposition, creating the Git Release Seal, and retrofit
 flat `docs/release-readiness/*.json` evidence files into the new `releases/rc-.../` layout — the
 manifest indexes artifacts, it never collects them.
 
-**Verification:** TDD throughout (58 new tests: 39 pure-module, 11 CLI, 6 architecture, plus a
+**Verification:** TDD throughout (137 focused tests: 114 pure-module, 17 CLI, 6 architecture, plus a
 dedicated architecture test asserting the module can never manufacture human approval — statically
 grepping for forbidden disposition-assignment literals and function names, plus behaviorally
 confirming every code path leaves `disposition`/`attestations`/`release_seal` untouched). Two-axis
@@ -62,4 +62,15 @@ violation (CLI raw tracebacks on malformed input instead of the repo's clean std
 pattern) and four Spec-axis gaps (missing `addendum_references`/`release_owner_attestation`
 fields, unvalidated disposition enum, unvalidated attestation/watermark shape, and an
 operator-configurable `expiry_hours` that undercut the fixed 24-hour invariant) — all fixed and
-covered by new tests before commit. Full suite: 1442 passed, 4 skipped (pre-existing), 0 failed.
+covered by new tests before commit.
+
+Successive post-handoff adversarial reviews found and closed fail-closed gaps covering fabricated
+GO manifests, schema/lifecycle/gate/watermark/expiry tampering, malformed JSON types, identity and
+timestamp chronology, candidate/evidence/CLI directory lineage, symlink escapes, and
+Postgres/Snowflake DSN leakage. Until ticket 08 defines the complete gate inventory and signer
+sequence, GO validation returns `go_validation_not_implemented` rather than manufacturing an
+approval predicate. Final independent review: APPROVE. Focused verification: 137 passed with 93%
+statement coverage across the module and CLI. Repository-wide verification: 1519 passed, 4
+skipped, 35 subtests passed, with 3 pre-existing MDM test-double failures in
+`tests/mdm/test_cli_snowflake_graph.py`; their fix is outside this branch's explicitly selected
+two-commit handoff scope.

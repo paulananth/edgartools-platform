@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import inspect
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from edgar_warehouse.application import release_evidence
@@ -32,8 +32,8 @@ _FORBIDDEN_APPROVAL_TOKENS = (
     '"disposition"] = "no_go"',
     "['disposition'] = 'go'",
     "['disposition'] = 'no_go'",
-    "disposition = \"go\"",
-    "disposition = \"no_go\"",
+    'disposition = "go"',
+    'disposition = "no_go"',
 )
 
 _FORBIDDEN_FUNCTION_NAME_FRAGMENTS = ("attest", "approve", "seal", "set_disposition")
@@ -49,7 +49,9 @@ class NoAutoApprovalTests(unittest.TestCase):
         offenders = [
             token for token in _FORBIDDEN_APPROVAL_TOKENS if token in self.source
         ]
-        self.assertEqual(offenders, [], f"forbidden disposition assignment: {offenders}")
+        self.assertEqual(
+            offenders, [], f"forbidden disposition assignment: {offenders}"
+        )
 
     def test_no_public_function_named_like_an_approval_action(self) -> None:
         public_functions = [
@@ -70,9 +72,7 @@ class NoAutoApprovalTests(unittest.TestCase):
         )
 
     def test_module_never_reads_the_wall_clock(self) -> None:
-        offenders = [
-            token for token in _WALL_CLOCK_READ_TOKENS if token in self.source
-        ]
+        offenders = [token for token in _WALL_CLOCK_READ_TOKENS if token in self.source]
         self.assertEqual(
             offenders,
             [],
@@ -133,9 +133,11 @@ class NoAutoApprovalTests(unittest.TestCase):
         manifest["disposition"] = "go"  # simulates a human-attested final state
         before = dict(manifest)
         release_evidence.validate_manifest(
-            manifest, repo_root=REPO_ROOT, as_of=datetime.now(timezone.utc)
+            manifest, repo_root=REPO_ROOT, as_of=datetime.now(UTC)
         )
-        self.assertEqual(manifest, before, "validate_manifest must never mutate its input")
+        self.assertEqual(
+            manifest, before, "validate_manifest must never mutate its input"
+        )
 
 
 if __name__ == "__main__":
