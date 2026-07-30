@@ -38,6 +38,18 @@ try:
         normalize_mode as _normalize_mode,
     )
     from edgar_warehouse.serving.dashboard_query_registry import registered_query
+    from edgar_warehouse.serving.dashboard_workflows import (
+        MAX_ADV_ROWS,
+        MAX_COMPANY_ROWS,
+        MAX_INSIDER_ROWS,
+        MAX_SCREEN_ROWS,
+        PERFORMANCE_BUDGET_MS,
+        adv_query,
+        company_query,
+        fundamentals_query,
+        insider_query,
+        sec_filing_url,
+    )
 except ImportError:  # pragma: no cover -- exercised only in the SiS stage
     # SiS runtime: edgar_warehouse isn't installed as a package here (see
     # deploy.sh -- only streamlit_app.py + dashboard_modes.py are staged).
@@ -63,6 +75,18 @@ except ImportError:  # pragma: no cover -- exercised only in the SiS stage
         normalize_mode as _normalize_mode,
     )
     from dashboard_query_registry import registered_query
+    from dashboard_workflows import (
+        MAX_ADV_ROWS,
+        MAX_COMPANY_ROWS,
+        MAX_INSIDER_ROWS,
+        MAX_SCREEN_ROWS,
+        PERFORMANCE_BUDGET_MS,
+        adv_query,
+        company_query,
+        fundamentals_query,
+        insider_query,
+        sec_filing_url,
+    )
 
 st.set_page_config(page_title="EdgarTools Warehouse", layout="wide")
 
@@ -132,6 +156,11 @@ def _registered_df(query_id: str, params: list | None = None):
     return _safe_df(query.query_id, query.sql, params=params)
 
 
+def _workflow_df(query):
+    """Execute one bounded Explore workflow query."""
+    return _safe_df(query.query_id, query.sql, params=list(query.params))
+
+
 def _show_dataframe(df, columns: list[str] | None = None):
     if df is None or df.empty:
         st.info("No rows to display.")
@@ -141,6 +170,21 @@ def _show_dataframe(df, columns: list[str] | None = None):
         if visible:
             df = df[visible]
     st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+def _bounded_export(df, *, filename: str, max_rows: int) -> None:
+    """Expose exactly the already-bounded result, never an unrestricted export."""
+    if df is None or df.empty:
+        return
+    st.caption(f"Showing/exporting {len(df):,} rows (hard maximum {max_rows:,}).")
+    download = getattr(st, "download_button", None)
+    if download is not None:
+        download(
+            "Download bounded CSV",
+            data=df.head(max_rows).to_csv(index=False),
+            file_name=filename,
+            mime="text/csv",
+        )
 
 
 def _metric_text(value, fmt: str) -> str:
@@ -319,10 +363,11 @@ def _lookup_companies(query: str):
         left join {GOLD_SCHEMA}.TICKER_REFERENCE t on t.cik = c.cik
         where c.entity_name ilike ?
            or t.ticker ilike ?
+           or to_varchar(c.cik) = ?
         order by c.entity_name
         limit 25
         """,
-        params=[pattern, pattern],
+        params=[pattern, pattern, query],
     )
 
 
@@ -373,6 +418,69 @@ def _company_recent_filings(company_key: int, limit: int = 100):
         """,
         params=[int(company_key)],
     )
+
+
+def _add_sec_evidence_links(
+    df, cik_column: str = "CIK", *, fixed_cik: int | None = None
+):
+    """Return a copy with deterministic SEC archive evidence links."""
+    if df is None or df.empty or "ACCESSION_NUMBER" not in df.columns:
+        return df
+    result = df.copy()
+    if fixed_cik is not None:
+        result["SEC_EVIDENCE_URL"] = result["ACCESSION_NUMBER"].apply(
+            lambda accession: sec_filing_url(int(fixed_cik), str(accession))
+        )
+    elif cik_column in result.columns:
+        result["SEC_EVIDENCE_URL"] = result.apply(
+            lambda row: sec_filing_url(
+                int(row[cik_column]), str(row["ACCESSION_NUMBER"])
+            ),
+            axis=1,
+        )
+    return result
+
+
+def _render_company360_surfaces(cik: int) -> None:
+    st.subheader("Company 360 audit surfaces (Explore)")
+    st.caption(
+        f"Every read is parameterized and capped at {MAX_COMPANY_ROWS} rows. "
+        "Blank values remain unavailable; they are never displayed as numeric zero."
+    )
+    labels = [
+        ("Filings", "filings"),
+        ("Financials", "financials"),
+        ("Insiders", "insiders"),
+        ("Earnings", "earnings"),
+        ("Executive pay", "executives"),
+        ("Accounting flags", "accounting_flags"),
+        ("Institutional holders", "institutional_holders"),
+        ("Relationships", "relationships"),
+    ]
+    tabs = st.tabs([label for label, _surface in labels])
+    for tab, (_label, surface) in zip(tabs, labels, strict=True):
+        with tab:
+            rows = _workflow_df(company_query(surface, cik))
+            if rows is None or rows.empty:
+                st.info(
+                    "Coverage unavailable for this surface at the current source "
+                    "dates. This is distinct from a measured numeric zero."
+                )
+            else:
+                evidence_surfaces = {
+                    "filings",
+                    "financials",
+                    "insiders",
+                    "earnings",
+                    "executives",
+                    "accounting_flags",
+                }
+                linked = (
+                    _add_sec_evidence_links(rows, fixed_cik=cik)
+                    if surface in evidence_surfaces
+                    else rows
+                )
+                _show_dataframe(linked)
 
 
 def _company_financial_factors(cik: int, limit: int = 40):
@@ -534,11 +642,16 @@ def _company_timeline(company_key: int):
 
 
 def render_details(mode: str = MODE_EXPLORE):
-    st.header("Company Details")
+    st.header("Company 360")
     st.caption(
         f"Mode: **{mode}** — same CIK can be inspected in Agent View and Explore for audit comparison."
     )
-    query = st.text_input("Search by ticker or company name", placeholder="e.g. AAPL or Apple")
+    prior_cik = getattr(st, "session_state", {}).get(SESSION_CIK_KEY, "")
+    query = st.text_input(
+        "Search by ticker, company name, or CIK",
+        value=str(prior_cik) if prior_cik and mode == MODE_EXPLORE else "",
+        placeholder="e.g. AAPL, Apple, or 320193",
+    )
 
     if not query:
         st.info("Enter a ticker symbol or part of a company name to start.")
@@ -673,7 +786,236 @@ def render_details(mode: str = MODE_EXPLORE):
         st.dataframe(recent, use_container_width=True, hide_index=True)
 
     st.divider()
+    _render_company360_surfaces(cik)
+    st.divider()
     _render_equity_research(mode, cik)
+
+
+def _parse_optional_number(value: str) -> float | None:
+    value = value.strip()
+    if not value:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        st.warning("Numeric filters must contain a number; the invalid value was ignored.")
+        return None
+
+
+def render_fundamentals(mode: str) -> None:
+    st.header("Fundamentals Screener")
+    if mode == MODE_AGENT_VIEW:
+        st.info(
+            "The accounting screener is an Explore workflow. Agent View remains "
+            "limited to published Decision Contract subject bundles."
+        )
+        return
+    st.caption(
+        f"Active tracked issuers only; accounting data only; maximum {MAX_SCREEN_ROWS} "
+        f"rows; target p95 query budget {PERFORMANCE_BUDGET_MS:,} ms."
+    )
+    sic = st.text_input("SIC prefix", value="", key="fund_sic")
+    period = st.selectbox("Fiscal period", ["FY", "Q1", "Q2", "Q3"], key="fund_period")
+    min_revenue = _parse_optional_number(
+        st.text_input("Minimum revenue", value="", key="fund_revenue")
+    )
+    min_growth = _parse_optional_number(
+        st.text_input("Minimum 3-year revenue growth", value="", key="fund_growth")
+    )
+    min_liquidity = _parse_optional_number(
+        st.text_input("Minimum current ratio", value="", key="fund_liquidity")
+    )
+    max_leverage = _parse_optional_number(
+        st.text_input("Maximum debt/assets", value="", key="fund_leverage")
+    )
+    min_cash = _parse_optional_number(
+        st.text_input("Minimum cash/assets", value="", key="fund_cash")
+    )
+    min_fcf = _parse_optional_number(
+        st.text_input("Minimum FCF/revenue", value="", key="fund_fcf")
+    )
+    max_accruals = _parse_optional_number(
+        st.text_input("Maximum accruals/assets", value="", key="fund_accruals")
+    )
+    risk = st.selectbox(
+        "Beneish risk tier", ["all", "low", "medium", "high"], key="fund_risk"
+    )
+    query = fundamentals_query(
+        sic_pattern=f"{sic.strip()}%",
+        fiscal_period=period,
+        min_revenue=min_revenue,
+        min_growth=min_growth,
+        min_current_ratio=min_liquidity,
+        max_debt_to_assets=max_leverage,
+        min_cash_to_assets=min_cash,
+        min_fcf_to_revenue=min_fcf,
+        max_accruals_to_assets=max_accruals,
+        risk_tier=risk,
+    )
+    rows = _workflow_df(query)
+    if rows is None or rows.empty:
+        st.info(
+            "No covered issuers matched. Missing feature history is not treated as zero."
+        )
+        return
+    _show_dataframe(_add_sec_evidence_links(rows))
+    _bounded_export(rows, filename="fundamentals-screen.csv", max_rows=MAX_SCREEN_ROWS)
+    selected_cik = st.selectbox(
+        "Open result in Company 360",
+        rows["CIK"].astype(int).tolist(),
+        key="fund_drill_cik",
+    )
+    st.session_state[SESSION_CIK_KEY] = int(selected_cik)
+    st.caption("Selection and dashboard mode are preserved for Company 360 drill-through.")
+
+
+def render_insider_watch(mode: str) -> None:
+    st.header("Insider Watch")
+    if mode == MODE_AGENT_VIEW:
+        st.info(
+            "Insider Watch is an Explore workflow. Agent View does not query "
+            "free ownership tables."
+        )
+        return
+    st.caption(
+        f"Deduplicated Form 3/4/5 transactions; maximum {MAX_INSIDER_ROWS} rows. "
+        "P means purchase and S means sale; missing price/notional remains unavailable."
+    )
+    st.caption(
+        "Earnings-event comparison is shown as unavailable unless an authoritative "
+        "issuer event is present; no calendar proximity is presented as evidence."
+    )
+    issuer = st.text_input("Issuer name", value="", key="insider_issuer")
+    start_date = st.text_input(
+        "Start date (YYYY-MM-DD)", value="1900-01-01", key="insider_start"
+    )
+    end_date = st.text_input(
+        "End date (YYYY-MM-DD)", value="2999-12-31", key="insider_end"
+    )
+    form = st.selectbox("Form", ["%", "3%", "4%", "5%"], key="insider_form")
+    owner_role = st.selectbox(
+        "Owner role",
+        ["all", "officer", "director", "ten_percent_owner", "unavailable"],
+        key="insider_role",
+    )
+    code = st.selectbox("Transaction code", ["all", "P", "S"], key="insider_code")
+    derivative = st.selectbox(
+        "Security type",
+        ["all", "non_derivative", "derivative"],
+        key="insider_derivative",
+    )
+    min_shares = _parse_optional_number(
+        st.text_input("Minimum shares", value="", key="insider_min_shares")
+    )
+    min_notional = _parse_optional_number(
+        st.text_input("Minimum notional", value="", key="insider_min_notional")
+    )
+    rows = _workflow_df(
+        insider_query(
+            start_date=start_date,
+            end_date=end_date,
+            issuer_pattern=f"%{issuer.strip()}%",
+            form_pattern=form,
+            owner_role=owner_role,
+            transaction_code=code,
+            min_shares=min_shares,
+            min_notional=min_notional,
+            derivative=derivative,
+        )
+    )
+    if rows is None or rows.empty:
+        st.info("No covered transactions matched the current filters.")
+        return
+    _show_dataframe(_add_sec_evidence_links(rows))
+    _bounded_export(rows, filename="insider-watch.csv", max_rows=MAX_INSIDER_ROWS)
+    selected_cik = st.selectbox(
+        "Open issuer in Company 360",
+        rows["CIK"].astype(int).tolist(),
+        key="insider_drill_cik",
+    )
+    st.session_state[SESSION_CIK_KEY] = int(selected_cik)
+
+
+def render_adv_explorer(mode: str) -> None:
+    st.header("ADV Adviser / Fund Explorer")
+    if mode == MODE_AGENT_VIEW:
+        st.info(
+            "ADV Explorer is explicitly Explore-only and is not agent-grade "
+            "Decision Contract evidence."
+        )
+        return
+    st.caption(
+        f"Read-only active adviser/fund records and active MANAGES_FUND generation; "
+        f"maximum {MAX_ADV_ROWS} rows. Missing AUM remains unavailable, never zero."
+    )
+    search = st.text_input(
+        "Adviser/fund name, CRD, SEC file number, or PFID",
+        value="",
+        key="adv_search",
+    )
+    if not search.strip():
+        st.info("Enter an adviser or fund identifier to search.")
+        return
+    rows = _workflow_df(adv_query(f"%{search.strip()}%"))
+    if rows is None or rows.empty:
+        st.info(
+            "No active covered adviser/fund relationship matched. The graph may "
+            "be unavailable, partial, or stale; no mutation was attempted."
+        )
+        return
+    rows = rows.copy()
+    rows["IAPD_EVIDENCE_URL"] = rows["CRD_NUMBER"].apply(
+        lambda value: (
+            f"https://adviserinfo.sec.gov/firm/summary/{value}"
+            if value is not None and str(value).strip()
+            else None
+        )
+    )
+    _show_dataframe(rows)
+    _bounded_export(rows, filename="adv-explorer.csv", max_rows=MAX_ADV_ROWS)
+
+
+def _render_freshness_strip(mode: str) -> None:
+    st.caption("Release-bound freshness")
+    if mode == MODE_AGENT_VIEW:
+        status = _registered_df("agent.contract_status")
+        if status is None or status.empty:
+            st.warning(
+                "Decision watermark / contract-generation alignment unavailable. "
+                "Agent-grade evidence is fail-closed."
+            )
+        else:
+            row = status.iloc[0]
+            st.write(
+                {
+                    "decision_watermark": row.get("DECISION_WATERMARK"),
+                    "business_date": row.get("BUSINESS_DATE"),
+                    "gold_updated_at": row.get("GOLD_UPDATED_AT"),
+                    "graph_generation_id": row.get("GRAPH_GENERATION_ID"),
+                    "alignment_status": row.get("ALIGNMENT_STATUS"),
+                }
+            )
+        return
+    status = _safe_df(
+        "Explore freshness",
+        f"""
+        select
+          max(updated_at) as gold_source_updated_at,
+          max(business_date) as source_business_date,
+          (
+            select active_generation_id
+            from NEO4J_GRAPH_MIGRATION.GRAPH_ACTIVE_POINTER
+            where pointer_id = 'active'
+          ) as graph_generation_id,
+          'not_decision_contract_evidence' as alignment_status
+        from {SOURCE_SCHEMA}.SNOWFLAKE_REFRESH_STATUS
+        limit 1
+        """,
+    )
+    if status is None or status.empty:
+        st.warning("Explore source dates and graph generation are unavailable.")
+    else:
+        st.write(status.iloc[0].to_dict())
 
 
 def _pipeline_runs():
@@ -922,13 +1264,34 @@ def render_pipeline():
 def main() -> None:
     """App entry — only run under Streamlit (not when imported by unit tests)."""
     mode = _render_mode_chrome()
-    summary_tab, details_tab, pipeline_tab = st.tabs(
-        ["Summary", "Company Details", "Pipeline"]
+    _render_freshness_strip(mode)
+    (
+        summary_tab,
+        details_tab,
+        fundamentals_tab,
+        insider_tab,
+        adv_tab,
+        pipeline_tab,
+    ) = st.tabs(
+        [
+            "Summary",
+            "Company 360",
+            "Fundamentals Screener",
+            "Insider Watch",
+            "ADV Explorer",
+            "Pipeline",
+        ]
     )
     with summary_tab:
         render_summary(mode=mode)
     with details_tab:
         render_details(mode=mode)
+    with fundamentals_tab:
+        render_fundamentals(mode=mode)
+    with insider_tab:
+        render_insider_watch(mode=mode)
+    with adv_tab:
+        render_adv_explorer(mode=mode)
     with pipeline_tab:
         if mode == MODE_AGENT_VIEW:
             st.header("Pipeline")
