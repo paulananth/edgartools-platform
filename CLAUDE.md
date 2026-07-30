@@ -248,6 +248,65 @@ NOTE: fix #1 (code) and #3 (default) take effect only after a warehouse image re
 deploy. Fix #2 (SM input plumbing) takes effect after the next `deploy-aws-application.sh`
 run that re-registers the `load_history` state machine — no image rebuild required.
 
+## Gold-build memory / daily_incremental OOM 5-whys (fixed, not yet deployed, 2026-07-30)
+
+**Problem:** `daily_incremental`'s first-ever prod execution
+(`daily-incremental-1785336584`) OOM-killed (exit 137) 4 times in a row, identically,
+exhausting `MaxAttempts:3` retries and failing the execution.
+
+1. Symptom: CloudWatch shows all 4 attempts dying mid-`gold_table_started` for
+   `sec_thirteenf_holding` (~6.8M rows), on a 4096MB `medium` Fargate task.
+2. Why does one table's build kill the whole task? `build_gold()`
+   (`edgar_warehouse/serving/gold_models.py`) returned a fully-realized
+   `dict[str, pa.Table]` — every prior table stayed alive in memory while the next one
+   built. By the time `sec_thirteenf_holding` started, ~7M rows across `dim_filing`
+   (3.26M), `fact_filing_activity` (3.26M), `fact_adv_private_fund` (374K), and 13 smaller
+   tables were still held in the dict — confirmed via the identical `gold_table_completed`
+   row counts across all 4 attempts.
+3. Why hold everything in memory? The caller (`warehouse_orchestrator.py`) then made two
+   more full passes over that same dict — `write_gold_to_storage_manifest` and
+   `write_gold_to_serving_export` — before `del gold_tables` freed anything. Peak memory was
+   the sum of every gold table simultaneously, not the largest one.
+4. Why did `gold-refresh`'s own prior OOM fix (commit `37c3171`, May 2026, moved it to the
+   `large` task profile) not protect `daily_incremental`? `GOLD_AFFECTING_COMMANDS`
+   (7 members, all calling this same `build_gold()` path) and `workflow_profile()`
+   (`infra/scripts/deploy-aws-application.sh`, per-command task sizing) are two independent
+   collections with no link between them — adding `daily_incremental` to the first didn't
+   flag that it needed the second's `large` profile too. Separately, `large` and `medium`
+   currently share the identical 4096MB ceiling (only CPU differs), so `37c3171`'s "move to
+   `large`" fix may already be memory-ineffective today regardless.
+5. **Root cause:** no caller in the memory-heavy `GOLD_AFFECTING_COMMANDS` path streamed
+   gold-table construction — every one materialized the whole ~24-table gold layer before
+   writing any of it, so the failure was only a matter of when one of them ran at
+   sufficient scale to hit the ceiling.
+
+**Resolution (structural fix, done 2026-07-30):** `build_gold()` split into a builder
+registry (`_gold_table_builders`) plus a new generator, `iter_gold_tables()`, that yields
+`(name, table)` pairs one at a time; `build_gold()` is now just
+`dict(iter_gold_tables(db))`, kept for the one remaining caller
+(`validate_data_quality.py`) that needs random access across the full gold layer.
+`warehouse_orchestrator.py`'s `GOLD_AFFECTING_COMMANDS` caller now streams: build one
+table, write it to storage, export it to Snowflake, `del table`, move to the next — instead
+of three full passes over the whole gold layer held in memory at once. Confirmed via
+source inspection (every `_build_*` function signature) that no builder depends on a
+previously-built table (all take only a `conn` argument), so streaming changes lifetime, not
+build order or output. Characterization
+tests (`tests/unit/test_gold_models_streaming.py`) cover both the schema/table-name parity
+between `build_gold()` and `iter_gold_tables()` and the generator's actual laziness (a later
+builder, e.g. `sec_thirteenf_holding`, is provably not invoked until the generator reaches
+it).
+
+**Not yet done:** this fix hasn't been deployed or re-run against the failing scenario —
+"peak memory drops materially" is not yet empirically confirmed in prod, only reasoned from
+the CloudWatch row-count evidence above (streaming removes ~7M rows of predecessor-table
+memory pressure that was previously still alive when `sec_thirteenf_holding` started
+building). The task-memory ceiling itself (`medium`/`large` sharing 4096MB) is also
+unchanged — see
+`.scratch/gold-build-memory-reliability/issues/03-decide-task-memory-fix-to-unblock-daily-incremental.md`
+for that tactical bridge, which is expected to be the point where a fresh
+`daily_incremental` execution actually confirms this fix in prod. Full ticket detail:
+`.scratch/gold-build-memory-reliability/map.md`.
+
 ## AWS teardown 5-whys (resolved 2026-07-11)
 
 `destroy-aws-complete.sh` is authored/tested for Linux/CI and failed three times on macOS

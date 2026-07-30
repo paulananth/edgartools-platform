@@ -5,7 +5,7 @@ Status: open
 
 ## Question
 
-`GOLD_AFFECTING_COMMANDS` (`edgar_warehouse/application/warehouse_orchestrator.py:81-91`, 6
+`GOLD_AFFECTING_COMMANDS` (`edgar_warehouse/application/warehouse_orchestrator.py:81-91`, 7
 members: `bootstrap-full`, `bootstrap-next`, `bootstrap`, `daily-incremental`,
 `targeted-resync`, `full-reconcile`, `gold-refresh`) all call the identical memory-heavy
 `build_gold()` path. Each workflow's ECS task profile is set independently in

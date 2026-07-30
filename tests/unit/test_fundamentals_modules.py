@@ -557,13 +557,15 @@ class FundamentalsGoldBuilderTests(unittest.TestCase):
                 self.assertIn(snow_table, SNOWFLAKE_EXPORT_TABLES)
 
     def test_build_gold_registers_fundamentals_builders(self) -> None:
-        """build_gold() return dict must include the 6 new builders so the
-        gold-refresh loop emits PyArrow tables for them."""
+        """build_gold()/iter_gold_tables() must include the 6 new builders so
+        the gold-refresh loop emits PyArrow tables for them."""
         from edgar_warehouse.serving import gold_models
         # We need the source code, not a runtime call (gold-refresh requires
-        # a live silver connection). Check the function body for the registrations.
+        # a live silver connection). Check the builder registry for the
+        # registrations -- build_gold() and iter_gold_tables() both delegate
+        # to _gold_table_builders().
         import inspect
-        source = inspect.getsource(gold_models.build_gold)
+        source = inspect.getsource(gold_models._gold_table_builders)
         for builder_key in (
             "sec_financial_fact",
             "sec_thirteenf_holding",
@@ -592,16 +594,16 @@ class FundamentalsSnowflakeExportTests(unittest.TestCase):
     }
 
     def test_export_map_has_six_new_entries(self) -> None:
-        """write_gold_to_snowflake_export() must export all 6 Branch B tables."""
+        """GOLD_EXPORT_MAP must export all 6 Branch B tables."""
         from edgar_warehouse.serving.targets import snowflake as snow_target
-        import inspect
-        source = inspect.getsource(snow_target.write_gold_to_snowflake_export)
         for export_name, builder_key in self.EXPECTED_EXPORTS.items():
             with self.subTest(export=export_name):
-                self.assertIn(f'"{export_name}":', source,
-                              f"export_map missing '{export_name}'")
-                self.assertIn(f'"{builder_key}"', source,
-                              f"export_map missing build_gold() key '{builder_key}'")
+                self.assertIn(export_name, snow_target.GOLD_EXPORT_MAP,
+                              f"GOLD_EXPORT_MAP missing '{export_name}'")
+                self.assertEqual(
+                    snow_target.GOLD_EXPORT_MAP[export_name], builder_key,
+                    f"GOLD_EXPORT_MAP['{export_name}'] must map to build_gold() key '{builder_key}'",
+                )
 
     def test_export_runs_against_empty_tables(self) -> None:
         """The export step must handle empty PyArrow tables gracefully (e.g.

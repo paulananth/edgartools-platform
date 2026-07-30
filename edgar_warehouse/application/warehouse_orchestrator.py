@@ -460,8 +460,11 @@ def _execute_warehouse_bronze_capture(
         )
         silver_table_counts = db.get_table_counts()
         if context.snowflake_export_root is not None and command_name in GOLD_AFFECTING_COMMANDS:
-            from edgar_warehouse.serving.gold_models import build_gold, write_gold_to_storage_manifest
-            from edgar_warehouse.serving.targets.snowflake import write_gold_to_serving_export
+            from edgar_warehouse.serving.gold_models import (
+                iter_gold_tables,
+                write_gold_table_manifest_entry,
+            )
+            from edgar_warehouse.serving.targets.snowflake import write_gold_table_to_serving_export
 
             gold_started_at = datetime.now(UTC)
             _emit_pipeline_event(
@@ -471,65 +474,62 @@ def _execute_warehouse_bronze_capture(
                 silver_table_counts=silver_table_counts,
             )
 
-            _emit_pipeline_event("gold_build_started", command=command_name, run_id=run_id)
+            export_business_date = _resolve_export_business_date(command_name=command_name, scope=scope, now=now)
 
-            gold_tables = build_gold(db)
+            # Stream one gold table at a time: build -> write to storage ->
+            # export to Snowflake -> discard -> next. See iter_gold_tables()
+            # for why the previous all-at-once shape is unsafe.
+            _emit_pipeline_event("gold_build_started", command=command_name, run_id=run_id)
+            gold_manifest_entries = []
+            gold_row_counts = {}
+            snowflake_export_counts = {}
+            table_count = 0
+            for table_name, table in iter_gold_tables(db):
+                table_count += 1
+                manifest_entry = write_gold_table_manifest_entry(
+                    table_name, table, context.storage_root, run_id
+                )
+                gold_manifest_entries.append(manifest_entry)
+                gold_row_counts[manifest_entry["table_name"]] = int(manifest_entry["row_count"])
+                # Recorded per table, not batched at the end of the loop: this is
+                # an idempotent per-(run_id, storage_layer, table_name) upsert, so
+                # a later table's export failure can't erase an earlier table's
+                # already-durable manifest row the way a single end-of-loop call
+                # would (that table's write already succeeded on disk).
+                db.record_gold_manifest(
+                    run_id=run_id,
+                    command_name=command_name,
+                    entries=[manifest_entry],
+                )
+
+                export_result = write_gold_table_to_serving_export(
+                    table_name, table, context.snowflake_export_root, run_id, export_business_date
+                )
+                if export_result is not None:
+                    export_name, export_row_count = export_result
+                    snowflake_export_counts[export_name] = export_row_count
+
+                del table
+
+            # build/write/export are now fused per table (see loop above), so
+            # there's no separate storage-write or Snowflake-export phase
+            # left to time -- one combined duration covers all three, unlike
+            # the old three-pass shape where each phase had its own timer.
+            gold_build_duration = (datetime.now(UTC) - gold_started_at).total_seconds()
             _emit_pipeline_event(
                 "gold_build_completed",
                 command=command_name,
                 run_id=run_id,
-                duration_seconds=(datetime.now(UTC) - gold_started_at).total_seconds(),
-                table_count=len(gold_tables),
-            )
-
-            storage_started_at = datetime.now(UTC)
-            _emit_pipeline_event("gold_storage_write_started", command=command_name, run_id=run_id)
-            gold_manifest_entries = write_gold_to_storage_manifest(gold_tables, context.storage_root, run_id)
-            db.record_gold_manifest(
-                run_id=run_id,
-                command_name=command_name,
-                entries=gold_manifest_entries,
-            )
-            gold_row_counts = {
-                entry["table_name"]: int(entry["row_count"])
-                for entry in gold_manifest_entries
-            }
-            _emit_pipeline_event(
-                "gold_storage_write_completed",
-                command=command_name,
-                run_id=run_id,
-                duration_seconds=(datetime.now(UTC) - storage_started_at).total_seconds(),
+                duration_seconds=gold_build_duration,
+                table_count=table_count,
                 gold_row_counts=gold_row_counts,
                 gold_manifest=gold_manifest_entries,
-            )
-
-            export_business_date = _resolve_export_business_date(command_name=command_name, scope=scope, now=now)
-            export_started_at = datetime.now(UTC)
-            _emit_pipeline_event(
-                "gold_snowflake_export_started",
-                command=command_name,
-                run_id=run_id,
-                export_business_date=str(export_business_date),
-            )
-            snowflake_export_counts = write_gold_to_serving_export(
-                gold_tables,
-                context.snowflake_export_root,
-                run_id,
-                export_business_date,
-            )
-            _emit_pipeline_event(
-                "gold_snowflake_export_completed",
-                command=command_name,
-                run_id=run_id,
-                duration_seconds=(datetime.now(UTC) - export_started_at).total_seconds(),
                 snowflake_export_counts=snowflake_export_counts,
             )
-
-            del gold_tables
             _emit_pipeline_event(
                 "gold_publish_completed",
                 command=command_name,
-                duration_seconds=(datetime.now(UTC) - gold_started_at).total_seconds(),
+                duration_seconds=gold_build_duration,
                 gold_row_counts=gold_row_counts,
                 run_id=run_id,
                 snowflake_export_counts=snowflake_export_counts,

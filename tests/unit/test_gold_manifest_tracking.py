@@ -126,16 +126,16 @@ def test_gold_refresh_records_gold_manifest_rows(tmp_path) -> None:
             return_value=([], {"rows_inserted": 0, "rows_skipped": 0, "sync_status": "succeeded"}),
         ),
         patch(
-            "edgar_warehouse.serving.gold_models.build_gold",
-            return_value={"dim_company": MagicMock(num_rows=1)},
+            "edgar_warehouse.serving.gold_models.iter_gold_tables",
+            return_value=iter([("dim_company", MagicMock(num_rows=1))]),
         ),
         patch(
-            "edgar_warehouse.serving.gold_models.write_gold_to_storage_manifest",
-            return_value=manifest_entries,
+            "edgar_warehouse.serving.gold_models.write_gold_table_manifest_entry",
+            return_value=manifest_entries[0],
         ),
         patch(
-            "edgar_warehouse.serving.targets.snowflake.write_gold_to_serving_export",
-            return_value={"company": 1},
+            "edgar_warehouse.serving.targets.snowflake.write_gold_table_to_serving_export",
+            return_value=("company", 1),
         ),
     ):
         _execute_warehouse_bronze_capture(
