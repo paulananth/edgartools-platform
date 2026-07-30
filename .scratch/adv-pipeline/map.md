@@ -177,6 +177,10 @@ ticket 08's full design):
   `{02-fetch-ingest-stage-wiring, 03-snowflake-passthrough-exports}` (both blocked only by
   01, parallelizable) → `04-reconciliation-model-dashboard` (blocked by 03). Ticket 02 can
   now wire directly into the `AdvBulkFetch` Stage the first spec shipped, rather than
-  waiting on it. Not yet implemented. Scope grew by one table (`SEC_ADV_PRIVATE_FUND`)
-  beyond ticket 08's Answer once the existing gold `PRIVATE_FUNDS` table was confirmed
-  CIK-keyed, not CRD-keyed — see that spec's Further Notes.
+  waiting on it. Scope grew by one table (`SEC_ADV_PRIVATE_FUND`) beyond ticket 08's
+  Answer once the existing gold `PRIVATE_FUNDS` table was confirmed CIK-keyed, not
+  CRD-keyed — see that spec's Further Notes. **Tickets 01-03 shipped** (PR #296,
+  `9f09def`). **Ticket 04 implemented 2026-07-28** (`adv_fund_count_reconciliation` dbt
+  model + dashboard panel, `claude/adv-fund-count-reconciliation`) — see that ticket's file
+  for the join-semantics resolution and the live-Snowflake-credentials gap (`dbt
+  compile`/`dbt run --full-refresh`/browser smoke test not run this session).

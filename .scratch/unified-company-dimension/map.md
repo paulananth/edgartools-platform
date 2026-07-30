@@ -8,8 +8,17 @@ both **SEC CIK / company_key** identity and **MDM entity_id**, so filing joins
 and MDM/graph joins share a single canonical row per company without forcing
 consumers to pick between two tables.
 
-**Status:** design grilling **complete** — **do not implement** until an
-implementation task ticket is claimed.
+**Status:** design grilling complete; ticket 05 **claimed and applied to
+prod** (2026-07-29) — a circularity gap in the original design was found and
+resolved by ticket 06 before any code was written. Steps 1–3 are live in
+prod: `EDGARTOOLS_GOLD.COMPANY` now carries `entity_id`/`display_name`/
+`tracking_status`/`parent_company_entity_id` for all 32,970 rows (0
+multi-match), and `MDM_COMPANY` is a compat view over the renamed
+`MDM_COMPANY_ENTITY`. Only step 4 (drop the compat view after a soak period)
+remains, deferred pending a soak-length decision — see ticket 05's Progress
+section for the full applied-changes list, including a live-discovered
+missing `CREATE VIEW` grant on `EDGARTOOLS_PROD_LOADER` that was fixed at
+the root (`08_loader_role.sql`), not just patched ad hoc.
 
 ## Notes
 
@@ -37,10 +46,31 @@ implementation task ticket is claimed.
 - [04 resolved](issues/04-migration-and-consumer-cutover.md) — phased cutover:
   enrich COMPANY → compat view → migrate readers → stop dual GOLD export →
   drop view after soak.
+- [05 research](issues/05-research-findings.md) — live-state check (2026-07-29):
+  both tables internally clean (32,970 rows each, no duplicate keys); the
+  CIK↔entity_id join is currently a perfect 1:1 (0 multi-match, 0 orphans
+  either side) — cleaner than the multi-match case ticket 02 designed for.
+  `COMPANY` is dbt-managed (`company.sql`, plain pass-through); `MDM_COMPANY`
+  is written by `export.py`'s MERGE path, not dbt.
+- [06 resolved](issues/06-resolve-mdm-company-export-target-circularity.md) —
+  ticket 05's plan was circular as scoped: `MDM_COMPANY` is the *only*
+  Snowflake landing target for the MDM export, so once it becomes a compat
+  view over the enriched `COMPANY`, `company.sql`'s join to it would be
+  self-referential. Fixed by renaming the export's physical MERGE target to
+  **`MDM_COMPANY_ENTITY`** *now* (not deferred to cutover) — `company.sql`
+  joins that instead, freeing the `MDM_COMPANY` name for the compat view.
+  Considered and rejected moving the target into `EDGARTOOLS_SOURCE`
+  (confirmed live: zero MDM tables there today; that schema's whole contract
+  is "one write mechanism, native S3 pull" — MDM's Postgres-MERGE export is a
+  different mechanism entirely and mixing them would blur that boundary).
+  Also rejected `RAW`/`STG_` naming (implies bronze/source-layer semantics
+  this gold-schema table doesn't have) in favor of `_ENTITY`, matching the
+  other 4 MDM export targets.
 
 ## Not yet specified (implementation detail)
 
-- Exact multi-match priority order (confidence vs tracking vs entity_id).
+- Exact multi-match priority order (confidence vs tracking vs entity_id) —
+  currently 0 live cases; keep the flag as a safeguard, not exercised today.
 - Soak period length before dropping `MDM_COMPANY` view.
 - Whether graph `MDM` schema mirror writer changes (default: **no**).
 

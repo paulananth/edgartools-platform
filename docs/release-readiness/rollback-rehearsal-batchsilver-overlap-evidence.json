@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-29T02:10:00Z",
+  "purpose": "BatchSilver contention-safe publication proof under a genuine rollback-transition old-task/new-task overlap, per ticket 05/ticket 11",
+  "scenario": {
+    "target_cik": 320193,
+    "old_task": {
+      "warehouse_image_digest_tag": "sha-19e7ad9f6e50",
+      "task_definition_revision": "medium:89"
+    },
+    "new_task": {
+      "warehouse_image_digest_tag": "sha-48d761abe60d",
+      "task_definition_revision": "medium:86"
+    },
+    "command": "bootstrap-batch --cik-list 320193 --artifact-policy skip --parser-policy skip",
+    "exit_codes": {"old_task": 0, "new_task": 0}
+  },
+  "overlap_measurement": {
+    "hydrate_gap_seconds": 0.7,
+    "old_task_publish_duration_seconds": 72.22,
+    "new_task_publish_duration_seconds": 71.56,
+    "publish_window_overlap_seconds": 70.11,
+    "note": "Both tasks hydrated the canonical silver database from the same pre-test base version 0.7s apart (genuine concurrent read), then their publish windows overlapped for ~70s (genuine concurrent write) before either completed."
+  },
+  "publication_lineage": {
+    "base_canonical_version": "32ef432524892e101daf80b15e89638c",
+    "old_task_source_version_at_hydrate": "32ef432524892e101daf80b15e89638c",
+    "new_task_source_version_at_hydrate": "32ef432524892e101daf80b15e89638c",
+    "old_task_published_canonical_version": "32ef432524892e101daf80b15e89638c",
+    "new_task_published_canonical_version": "38eda5b9c8b2e66977129657306070a3",
+    "distinct_sequential_versions_observed": 2,
+    "lost_update": false
+  },
+  "cik_scoped_reconciliation": {
+    "tables_checked": [
+      "sec_company",
+      "sec_company_address",
+      "sec_company_former_name",
+      "sec_company_submission_file",
+      "sec_company_filing",
+      "sec_company_ticker"
+    ],
+    "method": "SHA-256 of canonical (sorted, all-columns-cast-to-VARCHAR) rows for the target CIK, captured before task launch and after both tasks reached STOPPED",
+    "result": "identical row_count and semantic_sha256 for all 6 tables, before vs. after",
+    "duplicate_primary_key_groups_introduced": 0,
+    "note": "One duplicate-looking (cik, ticker) pair in sec_company_ticker (AAPL with/without exchange) is a pre-existing data characteristic unrelated to this test — confirmed identical between the before and after snapshot, so not introduced by the overlap."
+  },
+  "result": "PASS",
+  "conclusion": "Two ECS tasks running different warehouse image digests (the exact pair used across this session's digest-restore rehearsal) published to the same canonical silver object for the same CIK with genuinely overlapping hydrate and publish windows. Neither publish was silently lost: two distinct sequential canonical versions were recorded, and the target CIK's data is byte-identical (via semantic digest) before and after. Ticket 11's contention-safe publication boundary held under a real rollback-transition-style overlap."
+}

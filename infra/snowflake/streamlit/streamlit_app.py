@@ -720,6 +720,50 @@ def _manifest_copy_history():
     )
 
 
+def _adv_fund_count_mismatches():
+    """Ticket 04: mismatched-firm detail table for the ADV fund count
+    completeness cross-check (advFilingData vs Firm Roster CSV)."""
+    return _safe_df(
+        "ADV fund count reconciliation",
+        f"""
+        select
+          adviser_crd_number,
+          roster_dataset_period,
+          filing_derived_fund_count,
+          roster_fund_count,
+          fund_count_delta,
+          private_fund_count_7b1,
+          private_fund_count_7b2
+        from {GOLD_SCHEMA}.ADV_FUND_COUNT_RECONCILIATION
+        where mismatch
+        order by abs(fund_count_delta) desc
+        """,
+    )
+
+
+def _adv_fund_count_reconciliation_summary():
+    return _safe_df(
+        "ADV fund count reconciliation summary",
+        f"""
+        select
+          count(*) as total_firms,
+          sum(case when mismatch then 1 else 0 end) as mismatched_firms
+        from {GOLD_SCHEMA}.ADV_FUND_COUNT_RECONCILIATION
+        """,
+    )
+
+
+def _adv_reconciliation_mismatch_stats(summary) -> tuple[int, int, float]:
+    """Returns (mismatched_firms, total_firms, mismatch_pct), defaulting to
+    zeros on missing/empty input and guarding against division by zero."""
+    if summary is None or summary.empty:
+        return 0, 0, 0.0
+    total = int(summary["TOTAL_FIRMS"].iloc[0] or 0)
+    mismatched = int(summary["MISMATCHED_FIRMS"].iloc[0] or 0)
+    pct = (mismatched / total * 100) if total else 0.0
+    return mismatched, total, pct
+
+
 def _render_pipeline_metrics(runs):
     if runs is None or runs.empty:
         col1, col2, col3, col4 = st.columns(4)
@@ -803,6 +847,33 @@ def render_pipeline():
             "REFRESH_END_TIME",
             "DATA_TIMESTAMP",
             "STATE_MESSAGE",
+        ],
+    )
+
+    st.subheader("ADV fund count reconciliation")
+    st.caption(
+        "advFilingData-derived private fund counts vs SEC's independently-published "
+        "Firm Roster CSV aggregate counts. Purely additive visibility -- never gates "
+        "MDM entity resolution or graph sync."
+    )
+    mismatched, total, pct = _adv_reconciliation_mismatch_stats(
+        _adv_fund_count_reconciliation_summary()
+    )
+    st.metric(
+        "Firms mismatched",
+        f"{mismatched:,} / {total:,}",
+        f"{pct:.1f}%",
+    )
+    _show_dataframe(
+        _adv_fund_count_mismatches(),
+        [
+            "ADVISER_CRD_NUMBER",
+            "ROSTER_DATASET_PERIOD",
+            "FILING_DERIVED_FUND_COUNT",
+            "ROSTER_FUND_COUNT",
+            "FUND_COUNT_DELTA",
+            "PRIVATE_FUND_COUNT_7B1",
+            "PRIVATE_FUND_COUNT_7B2",
         ],
     )
 

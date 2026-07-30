@@ -69,19 +69,20 @@ class FakePipeline:
         self.entity_calls.append(("security", limit))
         return 3
 
-    def run_persons(self, limit=None) -> int:
-        self.entity_calls.append(("person", limit))
+    def run_persons(self, limit=None, issuer_ciks=None) -> int:
+        self.entity_calls.append(("person", limit, issuer_ciks))
         return 4
 
     def run_funds(self, limit=None) -> int:
         self.entity_calls.append(("fund", limit))
         return 5
 
-    def derive_relationships(self, *, target_per_type=None, relationship_types=None):
+    def derive_relationships(self, *, target_per_type=None, relationship_types=None, issuer_ciks=None):
         self.derive_calls.append(
             {
                 "target_per_type": target_per_type,
                 "relationship_types": relationship_types,
+                "issuer_ciks": issuer_ciks,
             }
         )
         return {
@@ -1257,7 +1258,7 @@ def test_load_relationships_default_derives_without_snowflake_credentials(monkey
     assert session.committed is True
     assert session.closed is True
     assert FakePipeline.instances[0].derive_calls == [
-        {"target_per_type": 25, "relationship_types": ["HOLDS"]}
+        {"target_per_type": 25, "relationship_types": ["HOLDS"], "issuer_ciks": None}
     ]
     payload = json.loads(capsys.readouterr().out)
     assert payload["graph_sync"]["enabled"] is False

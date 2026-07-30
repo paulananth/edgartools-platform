@@ -23,6 +23,45 @@ definitions. Verified zero billable resources remaining.
 - Do NOT reprovision anything into `077127448006`. If an old ARN/bucket/`aws-prod-application.json`
   still references `077127448006`, it is stale — the live target is `690839588395`.
 
+## Snowflake DEV is DECOMMISSIONED (2026-07-29) — READ THIS before running any `snowconn`/dev Snowflake command
+
+**AWS-side dev (`edgartools-dev-*` S3/ECS/Step Functions, incl. the `edgartools-dev-tfstate`
+Terraform state bucket) was decommissioned first, separately from this Snowflake teardown.**
+By the time this Snowflake decommission ran, the `edgartools-dev-tfstate` bucket no longer
+existed — so `terraform destroy` was **not** viable for either
+`infra/terraform/snowflake/accounts/dev` or `infra/terraform/access/snowflake/accounts/dev`
+(no remote state to read). Decommissioned instead via a direct live-object sweep against
+Snowflake account `xcpclkf-kb19989` (same account prod lives in — dev/prod are separate
+**databases**, not separate accounts): `EDGARTOOLS_DEV` database (dropped CASCADE — all 8
+schemas: `EDGARTOOLS_GOLD`, `EDGARTOOLS_SOURCE`, `EDGARTOOLS_DASHBOARD`, `MDM`,
+`MDM_GRAPH_REVIEW`, `NEO4J_GRAPH_MIGRATION`, `PUBLIC`, plus `INFORMATION_SCHEMA`), both
+warehouses (`EDGARTOOLS_DEV_READER_WH`, `EDGARTOOLS_DEV_REFRESH_WH`), all 4 roles
+(`EDGARTOOLS_DEV_LOADER`, `EDGARTOOLS_DEV_DASHBOARD_OWNER`, `EDGARTOOLS_DEV_DEPLOYER`,
+`EDGARTOOLS_DEV_READER`), the `EDGARTOOLS_DEV_EXPORT_INTEGRATION` storage integration, and
+the account-level `EDGARTOOLS_DEV_MDM` Snowflake Postgres instance (MDM's dev operational
+store — a distinct object type from the database, `retention_time=0`, no undrop safety net;
+its `EDGARTOOLS_DEV_MDM_POSTGRES_POLICY` network policy had to be dropped first since a
+network rule inside `EDGARTOOLS_DEV.MDM` was bound to it, which otherwise blocks
+`DROP DATABASE ... CASCADE` with "includes network rule - policy associations"). Verified
+live afterward: zero `EDGARTOOLS_DEV%`-named objects of any kind remain in the account.
+
+**No state backup exists for this teardown** — unlike the AWS `077127448006` decommission,
+which had `~/edgartools-077-tfstate-backups-FINAL`, dev Snowflake's Terraform backend was
+already gone before this ran, so there was nothing to pull. The live-object inventory
+gathered immediately before the drop (captured in this session's transcript) is the only
+record of what existed.
+
+**Everywhere else in this file that references dev Snowflake is now stale**, including but
+not limited to: the `snowconn` SnowCLI connection convention, the "Dev Terraform/Snowflake
+go-live blockers" 5-whys section below, `EDGARTOOLS_DEV_LOADER`/`EDGARTOOLS_DEV_DEPLOYER`
+role references, `dbt run --target dev` (the default target), and the
+`WAREHOUSE_BRONZE_ROOT="s3://edgartools-dev-bronze/..."` env-var example. Do not run any
+dev-targeted command (`dbt ... --target dev`, `deploy-snowflake-stack.sh --env dev`,
+`bootstrap-*` against dev) without first reprovisioning the dev Terraform roots from
+scratch — there is currently no dev Snowflake environment to target. Prod
+(`EDGARTOOLS_PROD`, `edgartools-prod` connection) is unaffected and was not touched by this
+teardown.
+
 ## Parallel Agent Workstreams
 
 Claude and Codex may work on this repository independently, but they must not share an uncoordinated edit surface.

@@ -387,3 +387,18 @@ models:
       - name: updated_at
         tests:
           - not_null
+
+  - name: adv_fund_count_reconciliation
+    description: >
+      Completeness cross-check between advFilingData-derived private fund
+      counts (SEC_ADV_PRIVATE_FUND) and SEC's independently-published Firm
+      Roster CSV aggregate counts (SEC_ADV_FIRM_ROSTER) per adviser_crd_number.
+      Purely additive visibility -- never gates MDM entity resolution or
+      graph sync.
+    columns:
+      - name: adviser_crd_number
+        tests:
+          - not_null
+      - name: mismatch
+        tests:
+          - not_null

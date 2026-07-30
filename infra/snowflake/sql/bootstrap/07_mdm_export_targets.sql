@@ -39,12 +39,48 @@
 --     edgartools-dev/mdm/snowflake -> MDM_SNOWFLAKE_ROLE=ACCOUNTADMIN as of
 --     2026-07-10; prod may differ -- confirm against
 --     edgartools-prod/mdm/snowflake before applying there).
+--   set loader_role_name = 'EDGARTOOLS_DEV_LOADER';  -- EDGARTOOLS_PROD_LOADER in
+--     prod (see 08_loader_role.sql). This is the role dbt's company.sql model
+--     runs as; its dynamic-table INITIAL refresh checks this role's *direct*
+--     grants only (see CLAUDE.md "EDGARTOOLS_DEV_DEPLOYER lacks direct SELECT
+--     on EDGARTOOLS_SOURCE"), so it needs a direct SELECT grant on
+--     MDM_COMPANY_ENTITY below, confirmed live 2026-07-29 that
+--     EDGARTOOLS_PROD_LOADER had none.
 
 USE ROLE IDENTIFIER($deployer_role_name);
 USE DATABASE IDENTIFIER($database_name);
 USE SCHEMA IDENTIFIER($gold_schema_name);
 
-CREATE TABLE IF NOT EXISTS MDM_COMPANY (
+-- Ticket 06 (.scratch/unified-company-dimension/issues/06-resolve-mdm-company-export-target-circularity.md):
+-- rename the company export target from MDM_COMPANY to MDM_COMPANY_ENTITY so
+-- the MDM_COMPANY name is free for a future compat view over the enriched
+-- COMPANY dimension (ticket 05). Preserves the existing 32k+ prod rows via
+-- rename rather than a fresh CREATE TABLE, since MDM export only drains
+-- mdm_change_log rows with exported_at IS NULL -- a brand-new empty table
+-- would never get backfilled with already-exported history.
+--
+-- Guarded (not a bare `ALTER TABLE IF EXISTS ... RENAME`) so this file stays
+-- safe to re-run indefinitely, confirmed live 2026-07-29:
+--   1. A bare rename errors "already exists" on any run after the first,
+--      since MDM_COMPANY_ENTITY exists by then.
+--   2. `ALTER TABLE IF EXISTS` does not check object type -- once
+--      MDM_COMPANY becomes a view (ticket 05 step 2), a guardless rename
+--      would rename that view too (confirmed live to succeed, not error)
+--      rather than being the no-op an idempotent script requires.
+EXECUTE IMMEDIATE $$
+BEGIN
+  LET target_exists INTEGER := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+    WHERE TABLE_SCHEMA = $gold_schema_name AND TABLE_NAME = 'MDM_COMPANY_ENTITY'
+  );
+  IF (target_exists = 0) THEN
+    ALTER TABLE IF EXISTS MDM_COMPANY RENAME TO MDM_COMPANY_ENTITY;
+  END IF;
+  RETURN 'mdm_company_entity target_exists=' || target_exists;
+END;
+$$;
+
+CREATE TABLE IF NOT EXISTS MDM_COMPANY_ENTITY (
   entity_id                 VARCHAR(36)   NOT NULL,
   cik                       NUMBER(38, 0),
   canonical_name            VARCHAR,
@@ -62,7 +98,11 @@ CREATE TABLE IF NOT EXISTS MDM_COMPANY (
   valid_to                  TIMESTAMP_TZ,
   PRIMARY KEY (entity_id)
 )
-COMMENT = 'MDM golden-record company export target. MERGEd by MDMExporter.export_pending() (edgar_warehouse/mdm/export.py) keyed on entity_id. Mirrors edgar_warehouse/mdm/database.py::MdmCompany.';
+COMMENT = 'MDM golden-record company export target (renamed from MDM_COMPANY, ticket 06). MERGEd by MDMExporter.export_pending() (edgar_warehouse/mdm/export.py) keyed on entity_id. Mirrors edgar_warehouse/mdm/database.py::MdmCompany. Joined by company.sql (ticket 05) to enrich EDGARTOOLS_GOLD.COMPANY; MDM_COMPANY itself is slated to become a compat view over that enriched COMPANY.';
+
+-- company.sql (ticket 05) runs as $loader_role_name and its dynamic-table
+-- INITIAL refresh only honors this role's direct grants, not a secondary role.
+GRANT SELECT ON TABLE MDM_COMPANY_ENTITY TO ROLE IDENTIFIER($loader_role_name);
 
 CREATE TABLE IF NOT EXISTS MDM_ADVISER (
   entity_id                  VARCHAR(36)   NOT NULL,
