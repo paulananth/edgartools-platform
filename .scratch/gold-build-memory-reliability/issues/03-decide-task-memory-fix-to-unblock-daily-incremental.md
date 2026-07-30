@@ -116,3 +116,27 @@ section with the outcome once known; only then does this ticket's question 3 res
 PRs are open and unmerged: #311 (streaming fix) → #312 (task-sizing guard) → #313 (this
 ticket's memory bump + wiring fix). If review changes anything in any of them before merge,
 prod and `main` will have diverged silently until they're reconciled.
+
+**Update (2026-07-30, later same day) — faster verification path started in parallel.**
+`daily_incremental`'s `Stage0CompanyIdentity` turned out to be a separately-diagnosed,
+already-decided-but-not-yet-implemented problem: it reprocesses the entire ~26,300-CIK
+tracked universe sequentially (`MaxConcurrency=1`) on every run, not just the day's impacted
+CIKs — confirmed live (16/53 windows after ~7h) to match release-readiness's
+[ticket 43](../../release-readiness/issues/43-investigate-daily-incremental-full-universe-scope.md)/
+[ticket 45](../../release-readiness/issues/45-decide-narrow-daily-incremental-stage0-and-cadence.md)
+finding of a 10h16m Stage0-alone runtime on the first-ever prod execution. That fix
+([ticket 49](../../release-readiness/issues/49-implement-bounded-daily-identity-refresh-schedule.md))
+is designed but still `Status: open` — out of scope for this ticket, not re-litigated here.
+
+Rather than wait ~8+ more hours for `daily-incremental-ticket03-1785413694` to clear Stage0
+before reaching `RunWarehouseTask`, started a second, much faster verification: `bootstrap`
+(`deploy-aws-application.sh:2218`, `if workflow_name != "daily_incremental"` branch) goes
+`SeedUniverse → RunWarehouseTask` directly with no Stage0 prefix, but hits the *identical*
+`write_warehouse_mdm_gold_definition`/`run_wh` wiring and the same full-universe
+`iter_gold_tables()` gold build (including `sec_thirteenf_holding`) this ticket's fix targets.
+Started `bootstrap-ticket03-verify-1785426021`
+(`arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bootstrap:bootstrap-ticket03-verify-1785426021`),
+confirmed `RUNNING`. `daily_incremental`'s original execution is left running in parallel as a
+slower, secondary confirmation. Whichever completes first (or fails) first will supply the
+discriminating `gold_table_completed`/OOM signal for `sec_thirteenf_holding` this ticket's
+question 3 is waiting on.
