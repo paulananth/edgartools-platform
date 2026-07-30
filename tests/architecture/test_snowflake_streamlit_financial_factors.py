@@ -441,6 +441,13 @@ class SisFallbackImportTests(unittest.TestCase):
                 / "dashboard_query_registry.py",
                 tmp_path / "dashboard_query_registry.py",
             )
+            shutil.copy(
+                REPO_ROOT
+                / "edgar_warehouse"
+                / "serving"
+                / "dashboard_workflows.py",
+                tmp_path / "dashboard_workflows.py",
+            )
 
             module = _load_app(tmp_path / "streamlit_app.py", block_edgar_warehouse=True)
 

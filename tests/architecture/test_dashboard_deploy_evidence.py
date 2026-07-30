@@ -30,6 +30,8 @@ def _fake_snow(tmp_path: Path) -> Path:
         "dashboard_modes.py": REPO_ROOT / "edgar_warehouse/serving/dashboard_modes.py",
         "dashboard_query_registry.py": REPO_ROOT
         / "edgar_warehouse/serving/dashboard_query_registry.py",
+        "dashboard_workflows.py": REPO_ROOT
+        / "edgar_warehouse/serving/dashboard_workflows.py",
         "environment.yml": REPO_ROOT / "infra/snowflake/streamlit/environment.yml",
     }
     git_short = subprocess.run(
@@ -66,6 +68,7 @@ elif [[ "$*" == *"GET @"* ]]; then
     streamlit_app.py) cp '{staged_files["streamlit_app.py"]}' "$destination/$file_name" ;;
     dashboard_modes.py) cp '{staged_files["dashboard_modes.py"]}' "$destination/$file_name" ;;
     dashboard_query_registry.py) cp '{staged_files["dashboard_query_registry.py"]}' "$destination/$file_name" ;;
+    dashboard_workflows.py) cp '{staged_files["dashboard_workflows.py"]}' "$destination/$file_name" ;;
     environment.yml) cp '{staged_files["environment.yml"]}' "$destination/$file_name" ;;
     *) exit 2 ;;
   esac
@@ -125,6 +128,7 @@ def test_dry_run_emits_valid_json_with_expected_fields(tmp_path: Path) -> None:
         "streamlit_app.py",
         "dashboard_modes.py",
         "dashboard_query_registry.py",
+        "dashboard_workflows.py",
         "environment.yml",
     }
     for digest in payload["source_digests"].values():

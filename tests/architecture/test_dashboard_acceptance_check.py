@@ -54,8 +54,8 @@ def _all_pass_state(mod, watermark: str = "wm-1"):
 
 
 class TestViewInventory:
-    def test_exactly_25_views_covering_both_dashboards(self, mod):
-        assert len(mod.VIEW_IDS) == 25
+    def test_exactly_35_views_covering_both_dashboards(self, mod):
+        assert len(mod.VIEW_IDS) == 35
         dashboards = {key.split("::", 1)[0] for key in mod.VIEW_IDS}
         assert dashboards == {"EDGARTOOLS_DASHBOARD", "MDM_GRAPH_DASHBOARD"}
 
@@ -213,9 +213,9 @@ class TestOverallStatusPrecedence:
 
 
 class TestSkeletonEmission:
-    def test_skeleton_has_all_25_views_not_checked(self, mod):
+    def test_skeleton_has_all_35_views_not_checked(self, mod):
         skeleton = mod.emit_skeleton(release_candidate="rc-1", release_watermark="wm-1")
-        assert len(skeleton["views"]) == 25
+        assert len(skeleton["views"]) == 35
         assert all(v["status"] == "not_checked" for v in skeleton["views"].values())
 
     def test_skeleton_never_fabricates_a_pass(self, mod):

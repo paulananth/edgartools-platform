@@ -79,7 +79,7 @@ STREAMLIT_OBJECT="${DASHBOARD_STREAMLIT_OBJECT:-EDGARTOOLS_DASHBOARD}"
 # "dashboard_modes.py" is special-cased below (staged from
 # edgar_warehouse/serving/, not APP_SOURCE_DIR) -- list it here only for
 # apps that actually import it (GH-246's Agent View/Explore policy).
-read -ra RELEASE_FILES <<< "${DASHBOARD_RELEASE_FILES:-streamlit_app.py dashboard_modes.py dashboard_query_registry.py environment.yml}"
+read -ra RELEASE_FILES <<< "${DASHBOARD_RELEASE_FILES:-streamlit_app.py dashboard_modes.py dashboard_query_registry.py dashboard_workflows.py environment.yml}"
 # Space-separated pytest paths for this app's credential-free pre-flight
 # tests. Defaults to the original EDGARTOOLS_DASHBOARD app's tests only
 # when APP_NAME is left at its own default -- preserves docs/runbook.md's
@@ -88,7 +88,7 @@ read -ra RELEASE_FILES <<< "${DASHBOARD_RELEASE_FILES:-streamlit_app.py dashboar
 # app's deploy must not silently "pass" pre-flight by validating an
 # unrelated app instead of itself.
 if [[ "${APP_NAME}" == "dashboard" ]]; then
-  DEFAULT_TEST_PATHS="tests/architecture/test_snowflake_streamlit_financial_factors.py tests/unit/test_dashboard_modes.py"
+  DEFAULT_TEST_PATHS="tests/architecture/test_snowflake_streamlit_financial_factors.py tests/architecture/test_dashboard_uat_gate.py tests/unit/test_dashboard_modes.py tests/unit/test_dashboard_workflows.py"
 else
   DEFAULT_TEST_PATHS=""
 fi
@@ -236,7 +236,7 @@ STAGING_DIR="$(mktemp -d)"
 trap 'rm -rf "${STAGING_DIR}"' EXIT
 
 for file in "${RELEASE_FILES[@]}"; do
-  if [[ "${file}" == "dashboard_modes.py" || "${file}" == "dashboard_query_registry.py" ]]; then
+  if [[ "${file}" == "dashboard_modes.py" || "${file}" == "dashboard_query_registry.py" || "${file}" == "dashboard_workflows.py" ]]; then
     # GH-246: dashboard_modes.py is the single authoritative Agent
     # View/Explore mode policy (edgar_warehouse/serving/dashboard_modes.py,
     # unit-tested). Staged here byte-identical -- not hand-copied -- so the
