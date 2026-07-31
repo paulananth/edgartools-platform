@@ -107,6 +107,14 @@ Options:
                                     --configure-daily-incremental-schedule enable. Source:
                                     infra/terraform/access/aws/accounts/<env> output
                                     daily_incremental_scheduler_role_arn.
+  --configure-daily-incremental-alarms <enable|disable>
+                                    Explicitly create/update or remove the 18-hour
+                                    timeout CloudWatch alarm. Per-deferral SNS delivery
+                                    is part of the deployed state machine. This
+                                    standalone action never deploys workloads or
+                                    enables schedules.
+  --operator-alert-topic-arn <arn>  Confirmed operator SNS topic used by both alarms.
+                                    Required when enabling alarms.
   -h, --help                        Show this help.
 USAGE
 }
@@ -192,6 +200,8 @@ RUNNER_ROLE_NAME_PREFIX=""
 OUTPUT_FILE=""
 CONFIGURE_DAILY_INCREMENTAL_SCHEDULE=""
 DAILY_INCREMENTAL_SCHEDULER_ROLE_ARN=""
+CONFIGURE_DAILY_INCREMENTAL_ALARMS=""
+OPERATOR_ALERT_TOPIC_ARN=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -249,6 +259,8 @@ while [[ $# -gt 0 ]]; do
     --output-file) OUTPUT_FILE="${2:?}"; shift 2 ;;
     --configure-daily-incremental-schedule) CONFIGURE_DAILY_INCREMENTAL_SCHEDULE="${2:?}"; shift 2 ;;
     --daily-incremental-scheduler-role-arn) DAILY_INCREMENTAL_SCHEDULER_ROLE_ARN="${2:?}"; shift 2 ;;
+    --configure-daily-incremental-alarms) CONFIGURE_DAILY_INCREMENTAL_ALARMS="${2:?}"; shift 2 ;;
+    --operator-alert-topic-arn) OPERATOR_ALERT_TOPIC_ARN="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -258,6 +270,15 @@ done
 [[ -n "$EXPECTED_AWS_ACCOUNT_ID" ]] || fail "--aws-account-id is required"
 if [[ ! "$EXPECTED_AWS_ACCOUNT_ID" =~ ^[0-9]{12}$ ]]; then
   fail "--aws-account-id must be a 12-digit AWS account ID"
+fi
+if ! is_empty "$CONFIGURE_DAILY_INCREMENTAL_ALARMS"; then
+  case "$CONFIGURE_DAILY_INCREMENTAL_ALARMS" in
+    enable|disable) ;;
+    *) fail "--configure-daily-incremental-alarms must be enable or disable" ;;
+  esac
+  if [[ "$CONFIGURE_DAILY_INCREMENTAL_ALARMS" == "enable" ]] && is_empty "$OPERATOR_ALERT_TOPIC_ARN"; then
+    fail "--operator-alert-topic-arn is required with --configure-daily-incremental-alarms enable"
+  fi
 fi
 if is_empty "$RUNNER_ROLE_NAME_PREFIX"; then
   if [[ "$ENVIRONMENT" == "prod" ]]; then
@@ -519,6 +540,50 @@ configure_daily_incremental_schedule() {
 
 if ! is_empty "$CONFIGURE_DAILY_INCREMENTAL_SCHEDULE"; then
   configure_daily_incremental_schedule "$CONFIGURE_DAILY_INCREMENTAL_SCHEDULE" "$DAILY_INCREMENTAL_SCHEDULER_ROLE_ARN"
+  exit 0
+fi
+
+require_confirmed_operator_alert_topic() {
+  local topic_arn="$1" confirmed_subscriptions
+
+  [[ "$topic_arn" == "arn:aws:sns:${AWS_REGION_NAME}:${ACCOUNT_ID}:"* ]] ||
+    fail "--operator-alert-topic-arn must be an SNS topic in ${AWS_REGION_NAME}, account ${ACCOUNT_ID}"
+  confirmed_subscriptions="$(aws_cli sns list-subscriptions-by-topic \
+    --topic-arn "$topic_arn" \
+    --query "length(Subscriptions[?SubscriptionArn!='PendingConfirmation'])" \
+    --output text)"
+  [[ "$confirmed_subscriptions" =~ ^[1-9][0-9]*$ ]] ||
+    fail "--operator-alert-topic-arn must have at least one confirmed subscription"
+}
+
+configure_daily_incremental_alarms() {
+  local action="$1" topic_arn="$2"
+  local state_machine_arn="arn:aws:states:${AWS_REGION_NAME}:${ACCOUNT_ID}:stateMachine:${NAME_PREFIX}-daily-incremental"
+  local timeout_alarm="${NAME_PREFIX}-daily-incremental-timeout"
+
+  if [[ "$action" == "disable" ]]; then
+    aws_cli cloudwatch delete-alarms --alarm-names "$timeout_alarm"
+    log "Deleted daily_incremental timeout alarm"
+    return 0
+  fi
+
+  require_confirmed_operator_alert_topic "$topic_arn"
+
+  aws_cli cloudwatch put-metric-alarm \
+    --alarm-name "$timeout_alarm" \
+    --alarm-description "Daily Identity Refresh execution reached the hard 18-hour bound" \
+    --namespace "AWS/States" \
+    --metric-name "ExecutionsTimedOut" \
+    --dimensions "Name=StateMachineArn,Value=${state_machine_arn}" \
+    --statistic Sum --period 60 --evaluation-periods 1 \
+    --threshold 1 --comparison-operator GreaterThanOrEqualToThreshold \
+    --treat-missing-data notBreaching \
+    --alarm-actions "$topic_arn"
+  log "Configured daily_incremental 18-hour timeout alarm"
+}
+
+if ! is_empty "$CONFIGURE_DAILY_INCREMENTAL_ALARMS"; then
+  configure_daily_incremental_alarms "$CONFIGURE_DAILY_INCREMENTAL_ALARMS" "$OPERATOR_ALERT_TOPIC_ARN"
   exit 0
 fi
 
@@ -2295,17 +2360,20 @@ write_warehouse_mdm_gold_definition() {
   local wh_task_large_arn="$5"    # warehouse large (gold-refresh)
   local workflow_name="$6"        # e.g. bootstrap or daily_incremental
   local bronze_bucket_name="$7"   # daily_incremental's Stage0CompanyIdentity ItemReader
+  local operator_alert_topic_arn="$8" # daily_incremental deferral notification target
 
   python3 - "$output_file" "$CLUSTER_ARN" \
     "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
-    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$workflow_name" "$bronze_bucket_name" <<'PY'
+    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$workflow_name" "$bronze_bucket_name" \
+    "$operator_alert_topic_arn" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
  container_name, subnet_json, security_group_json,
- mdm_run_limit, mdm_graph_limit, workflow_name, bronze_bucket_name) = sys.argv[1:]
+ mdm_run_limit, mdm_graph_limit, workflow_name, bronze_bucket_name,
+ operator_alert_topic_arn) = sys.argv[1:]
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
@@ -2545,7 +2613,26 @@ else:
                 "Next": "ApplyEffectiveRefreshMode",
             }
         ],
-        "Default": "Deferred",
+        "Default": "NotifyDeferred",
+    }
+
+    notify_deferred = {
+        "Type": "Task",
+        "Comment": "Notify the AWS Operator for every lease-busy slot before returning the explicit deferred disposition. A delivery failure is not relabeled as a benign defer.",
+        "Resource": "arn:aws:states:::sns:publish",
+        "Parameters": {
+            "TopicArn": operator_alert_topic_arn,
+            "Subject": "EdgarTools Daily Identity Refresh deferred",
+            "Message.$": "States.JsonToString($.lease_check.parsed)",
+        },
+        "ResultPath": None,
+        "Retry": [{
+            "ErrorEquals": ["States.TaskFailed"],
+            "IntervalSeconds": 5,
+            "BackoffRate": 2.0,
+            "MaxAttempts": 3,
+        }],
+        "Next": "Deferred",
     }
 
     apply_effective_refresh_mode = {
@@ -2778,6 +2865,7 @@ else:
             "Snowflake export manifest."
         ),
         "StartAt": "ValidateForceInput",
+        "TimeoutSeconds": 18 * 60 * 60,
         "States": {
             "ValidateForceInput": validate_force_input,
             "ForceDefault":       force_default,
@@ -2787,6 +2875,7 @@ else:
             "AcquireLease":       acquire_lease,
             "ReadLeaseResult":    read_lease_result,
             "LeaseAcquiredCheck": lease_acquired_check,
+            "NotifyDeferred":      notify_deferred,
             "ApplyEffectiveRefreshMode": apply_effective_refresh_mode,
             "Deferred":           deferred,
             "RefreshMode":        refresh_mode,
@@ -3569,7 +3658,7 @@ PY
   recent10_definition_file="$(json_file sfn-bootstrap)"
   write_warehouse_mdm_gold_definition "$recent10_definition_file" \
     "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
-    "bootstrap" "$BRONZE_BUCKET_NAME"
+    "bootstrap" "$BRONZE_BUCKET_NAME" ""
   recent10_state_machine_arn="$(upsert_state_machine bootstrap "$recent10_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
   python3 - "bootstrap" "$recent10_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
@@ -3578,10 +3667,14 @@ print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
 
   # daily_incremental: daily new filings → MDM chain → gold. Same pipeline shape.
+  if is_empty "$OPERATOR_ALERT_TOPIC_ARN"; then
+    fail "--operator-alert-topic-arn is required when deploying daily_incremental with MDM"
+  fi
+  require_confirmed_operator_alert_topic "$OPERATOR_ALERT_TOPIC_ARN"
   daily_definition_file="$(json_file sfn-daily-incremental)"
   write_warehouse_mdm_gold_definition "$daily_definition_file" \
     "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
-    "daily_incremental" "$BRONZE_BUCKET_NAME"
+    "daily_incremental" "$BRONZE_BUCKET_NAME" "$OPERATOR_ALERT_TOPIC_ARN"
   daily_state_machine_arn="$(upsert_state_machine daily_incremental "$daily_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
   python3 - "daily_incremental" "$daily_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'

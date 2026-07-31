@@ -22,6 +22,23 @@
 # part of this ticket) used.
 locals {
   daily_incremental_state_machine_arn = "arn:aws:states:${var.aws_region}:${var.expected_aws_account_id}:stateMachine:edgartools-prod-daily-incremental"
+  identity_refresh_alert_topic_arn    = "arn:aws:sns:${var.aws_region}:${var.expected_aws_account_id}:sec-edgar-pipeline-alerts"
+}
+
+resource "aws_iam_role_policy" "identity_refresh_operator_alerts" {
+  name = "publish-identity-refresh-operator-alerts"
+  role = basename(module.runtime_access.runner_step_functions_role_arn)
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "sns:Publish"
+        Resource = local.identity_refresh_alert_topic_arn
+      }
+    ]
+  })
 }
 
 resource "aws_iam_role" "daily_incremental_scheduler" {

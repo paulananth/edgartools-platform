@@ -34,6 +34,7 @@ _WMG_END = "\nPY\n}\n"
 
 _FAKE_MEDIUM_ARN = "arn:fake-wh-medium"
 _FAKE_LARGE_ARN = "arn:fake-wh-large"
+_FAKE_ALERT_TOPIC_ARN = "arn:aws:sns:us-east-1:000000000000:fake-operator-alerts"
 
 
 def _extract_function_source() -> str:
@@ -65,7 +66,7 @@ def _generate_definition(workflow_name: str) -> dict:
             f'source "{fn_file.as_posix()}"\n'
             f'write_warehouse_mdm_gold_definition "{out_file.as_posix()}" '
             f'"{_FAKE_MEDIUM_ARN}" "arn:fake-mdm-small" "arn:fake-mdm-medium" "{_FAKE_LARGE_ARN}" '
-            f'"{workflow_name}" "fake-bronze-bucket"\n',
+            f'"{workflow_name}" "fake-bronze-bucket" "{_FAKE_ALERT_TOPIC_ARN}"\n',
             encoding="utf-8",
         )
 
@@ -112,6 +113,10 @@ def test_daily_incremental_default_path_is_bounded_not_full_universe(daily_incre
     cmd = compute_window["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "compute-identity-refresh-window" in cmd
     assert "'--mode', 'daily'" in cmd
+    assert cmd.count("States.Array(") == 1, (
+        "the generated daily refresh command must contain exactly one intrinsic "
+        "constructor; duplicated fragments make the ECS override invalid"
+    )
     assert compute_window["Next"] == "Stage0CompanyIdentityBounded"
 
     bounded_stage0 = states["Stage0CompanyIdentityBounded"]
@@ -127,6 +132,12 @@ def test_daily_incremental_default_path_is_bounded_not_full_universe(daily_incre
     ]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "--cik-list" in inner_cmd
     assert "company-identity" in inner_cmd
+
+
+def test_daily_incremental_enforces_the_eighteen_hour_execution_bound(
+    daily_incremental_definition,
+) -> None:
+    assert daily_incremental_definition["TimeoutSeconds"] == 18 * 60 * 60
 
 
 def test_daily_incremental_backstop_uses_complete_company_eligible_universe(
@@ -182,6 +193,7 @@ def test_bootstrap_definition_has_no_refresh_mode_states(bootstrap_definition) -
         "AcquireLease",
         "ReadLeaseResult",
         "LeaseAcquiredCheck",
+        "NotifyDeferred",
         "Deferred",
         "ReleaseLease",
         "ReleaseLeaseFailedNonFatal",
@@ -269,7 +281,7 @@ def test_lease_acquired_check_is_fail_closed_on_default(daily_incremental_defini
     assert check["Choices"][0]["Variable"] == "$.lease_check.parsed.lease_acquired"
     assert check["Choices"][0]["BooleanEquals"] is True
     assert check["Choices"][0]["Next"] == "ApplyEffectiveRefreshMode"
-    assert check["Default"] == "Deferred"
+    assert check["Default"] == "NotifyDeferred"
 
 
 def test_apply_effective_refresh_mode_overwrites_refresh_mode_from_lease_result(
@@ -301,12 +313,29 @@ def test_read_lease_result_has_no_catch(daily_incremental_definition) -> None:
     assert "Catch" not in daily_incremental_definition["States"]["ReadLeaseResult"]
 
 
-def test_deferred_is_a_terminal_state_not_an_invisible_skip(daily_incremental_definition) -> None:
+def test_deferred_notifies_the_operator_before_the_terminal_disposition(
+    daily_incremental_definition,
+) -> None:
     """Deferred's own execution output must carry a labeled disposition, not
     just an app-level event buried in CloudWatch -- found in code review
     that the original bare Pass state relied entirely on $ passthrough for
     this, which worked but wasn't operator-legible at a glance."""
-    deferred = daily_incremental_definition["States"]["Deferred"]
+    states = daily_incremental_definition["States"]
+    check = states["LeaseAcquiredCheck"]
+    assert check["Default"] == "NotifyDeferred"
+
+    notification = states["NotifyDeferred"]
+    assert notification["Type"] == "Task"
+    assert notification["Resource"] == "arn:aws:states:::sns:publish"
+    assert notification["Parameters"] == {
+        "TopicArn": _FAKE_ALERT_TOPIC_ARN,
+        "Subject": "EdgarTools Daily Identity Refresh deferred",
+        "Message.$": "States.JsonToString($.lease_check.parsed)",
+    }
+    assert notification["ResultPath"] is None
+    assert notification["Next"] == "Deferred"
+
+    deferred = states["Deferred"]
     assert deferred["Type"] == "Pass"
     assert deferred["End"] is True
     assert deferred["Parameters"]["disposition"] == "deferred"
