@@ -2306,6 +2306,13 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
 run_wh = ecs_state(wh_large_arn,
     f"States.Array('{wh_cmd}', '--run-id', $$.Execution.Name)",
     next_state="MdmRun")
+if workflow_name == "daily_incremental":
+    # Scheduled daily/backstop runs must derive filing candidates from an exact,
+    # freshly forced index union. Identity selection remains independently scoped.
+    run_wh["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"] = (
+        "States.Array('daily-incremental', '--recurring-index-lookback-days', '7', "
+        "'--run-id', $$.Execution.Name)"
+    )
 mdm_run = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')",
     next_state="MdmBackfill")

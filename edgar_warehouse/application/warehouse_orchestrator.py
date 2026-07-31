@@ -1038,9 +1038,28 @@ def _capture_bronze_raw(
     if command_name == "daily-incremental":
         impacted_ciks: list[int] = []
         form_15_ciks: list[int] = []
+        recurring_lookback_days = int(
+            arguments.get("recurring_index_lookback_days") or 0
+        )
+        if recurring_lookback_days < 0:
+            raise WarehouseRuntimeError(
+                "--recurring-index-lookback-days must be a non-negative integer"
+            )
+        business_date_start = date.fromisoformat(scope["business_date_start"])
+        business_date_end = date.fromisoformat(scope["business_date_end"])
+        if recurring_lookback_days:
+            business_date_start = business_date_end - timedelta(
+                days=recurring_lookback_days - 1
+            )
+        required_accessions: set[str] | None = (
+            set() if recurring_lookback_days else None
+        )
+        required_candidate_rows: dict[str, dict[str, Any]] | None = (
+            {} if recurring_lookback_days else None
+        )
         for target_date in _date_range(
-            start=date.fromisoformat(scope["business_date_start"]),
-            end=date.fromisoformat(scope["business_date_end"]),
+            start=business_date_start,
+            end=business_date_end,
         ):
             result = _load_daily_index_for_date(
                 context=context,
@@ -1048,7 +1067,7 @@ def _capture_bronze_raw(
                 target_date=target_date,
                 sync_run_id=sync_run_id,
                 now=now,
-                force=bool(arguments.get("force")),
+                force=(True if recurring_lookback_days else bool(arguments.get("force"))),
             )
             raw_writes.extend(result["raw_writes"])
             metrics["rows_inserted"] += result["rows_written"]
@@ -1056,7 +1075,22 @@ def _capture_bronze_raw(
             _merge_capture_network_metrics(metrics, result)
             impacted_ciks.extend(result["impacted_ciks"])
             form_15_ciks.extend(result.get("form_15_ciks", []))
+            if required_accessions is not None:
+                required_accessions.update(result.get("accession_numbers", []))
+                if required_candidate_rows is None:
+                    raise WarehouseRuntimeError(
+                        "recurring daily-index candidate metadata was not initialized"
+                    )
+                for row in result.get("candidate_rows", []):
+                    accession = str(row.get("accession_number") or "").strip()
+                    if accession:
+                        required_candidate_rows[accession] = dict(row)
             if result["status"] in {"waiting_for_publish", "failed_retryable"}:
+                if recurring_lookback_days:
+                    raise WarehouseRuntimeError(
+                        "recurring daily-index window is incomplete: "
+                        f"{target_date.isoformat()}={result['status']}"
+                    )
                 metrics["sync_status"] = "partial"
                 break
         impacted_ciks = _dedupe_ints(impacted_ciks)
@@ -1075,7 +1109,10 @@ def _capture_bronze_raw(
             run_id=sync_run_id,
             claimed_at=now,
         )
-        if selected_ciks:
+        # A previously claimed CIK can still have a newly forced-index accession.
+        # Recurring artifact work therefore follows the exact accession union even
+        # when no submissions-refresh claim is available for this run.
+        if selected_ciks or recurring_lookback_days:
             try:
                 result = _run_submissions_bronze_then_silver(
                     context=context,
@@ -1088,25 +1125,30 @@ def _capture_bronze_raw(
                     load_mode="daily_incremental",
                     artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
                     parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
+                    recurring_mode=bool(recurring_lookback_days),
+                    required_accessions=required_accessions,
+                    required_candidate_rows=required_candidate_rows,
                     ownership_lookback_years=arguments.get("ownership_lookback_years"),
                     item_502_lookback_years=arguments.get("item_502_lookback_years"),
                 )
             except Exception:
+                if selected_ciks:
+                    db.finish_discovery_ciks(
+                        selected_ciks,
+                        discovery_source="daily_incremental",
+                        run_id=sync_run_id,
+                        status="failed",
+                        finished_at=now,
+                    )
+                raise
+            if selected_ciks:
                 db.finish_discovery_ciks(
                     selected_ciks,
                     discovery_source="daily_incremental",
                     run_id=sync_run_id,
-                    status="failed",
+                    status="succeeded",
                     finished_at=now,
                 )
-                raise
-            db.finish_discovery_ciks(
-                selected_ciks,
-                discovery_source="daily_incremental",
-                run_id=sync_run_id,
-                status="succeeded",
-                finished_at=now,
-            )
             raw_writes.extend(result["raw_writes"])
             metrics["rows_inserted"] += result["rows_written"]
             metrics["rows_skipped"] += result["rows_skipped"]
@@ -2549,6 +2591,7 @@ def _run_submissions_bronze_then_silver(
     artifact_policy: str = "none",
     parser_policy: str = "none",
     release_mode: bool = False,
+    recurring_mode: bool = False,
     required_accessions: set[str] | None = None,
     required_candidate_rows: Mapping[str, Mapping[str, Any]] | None = None,
     repair_manifest_accessions: set[str] | None = None,
@@ -2556,6 +2599,10 @@ def _run_submissions_bronze_then_silver(
     item_502_lookback_years: Any = None,
 ) -> dict[str, Any]:
     """Capture every selected SEC submission into bronze before applying silver."""
+    if release_mode and recurring_mode:
+        raise WarehouseRuntimeError(
+            "submission processing cannot be both release and recurring mode"
+        )
     bronze_snapshots = []
     total_ciks = len(ciks)
     bronze_started_at = datetime.now(UTC)
@@ -2652,7 +2699,7 @@ def _run_submissions_bronze_then_silver(
     )
 
     observed_accessions = _dedupe_strings([*recent_accessions, *pagination_accessions])
-    if release_mode:
+    if release_mode or recurring_mode:
         required = set(required_accessions or ())
         missing = sorted(required - set(observed_accessions))
         if missing:
@@ -2667,16 +2714,18 @@ def _run_submissions_bronze_then_silver(
                     continue
                 seed_rows.append(dict(candidate_row))
             if unavailable_metadata:
+                candidate_kind = "daily-index" if recurring_mode else "relationship"
                 raise WarehouseRuntimeError(
-                    "required relationship candidates missing frozen index metadata: "
+                    f"required {candidate_kind} candidates missing frozen index metadata: "
                     f"{unavailable_metadata}"
                 )
             if seed_rows:
                 rows_written += int(db.merge_filings(seed_rows, sync_run_id))
             unresolved = [accession for accession in missing if db.get_filing(accession) is None]
             if unresolved:
+                candidate_kind = "daily-index" if recurring_mode else "relationship"
                 raise WarehouseRuntimeError(
-                    f"required relationship candidates could not be staged: {unresolved}"
+                    f"required {candidate_kind} candidates could not be staged: {unresolved}"
                 )
         artifact_accessions = [
             accession for accession in observed_accessions if accession in required
@@ -2687,6 +2736,28 @@ def _run_submissions_bronze_then_silver(
     else:
         artifact_accessions = observed_accessions
 
+    if recurring_mode:
+        required = set(required_accessions or ())
+        bounded = set(artifact_accessions)
+        out_of_union = bounded - required
+        _emit_pipeline_event(
+            "daily_artifact_boundary_applied",
+            daily_index_accession_count=len(required),
+            daily_index_accession_digest=_accession_set_digest(required),
+            recent_source_count=len(set(recent_accessions)),
+            pagination_source_count=len(set(pagination_accessions)),
+            observed_source_count=len(set(observed_accessions)),
+            bounded_candidate_count=len(bounded),
+            historical_candidates_excluded_count=len(set(observed_accessions) - required),
+            seeded_candidate_count=len(set(missing)),
+            out_of_union_count=len(out_of_union),
+            run_id=sync_run_id,
+        )
+        if out_of_union:
+            raise WarehouseRuntimeError(
+                "daily artifact expansion-contract violation before configured-form selection"
+            )
+
     artifact_result = _run_configured_form_artifact_pipeline(
         context=context,
         db=db,
@@ -2696,6 +2767,8 @@ def _run_submissions_bronze_then_silver(
         parser_policy=parser_policy,
         force=force,
         release_mode=release_mode,
+        recurring_mode=recurring_mode,
+        accession_boundary=(set(required_accessions or ()) if recurring_mode else None),
         repair_manifest_accessions=repair_manifest_accessions,
         ownership_lookback_years=ownership_lookback_years,
         item_502_lookback_years=item_502_lookback_years,
@@ -2863,10 +2936,20 @@ def _run_configured_form_artifact_pipeline(
     parser_policy: str,
     force: bool,
     release_mode: bool = False,
+    recurring_mode: bool = False,
+    accession_boundary: set[str] | None = None,
     repair_manifest_accessions: set[str] | None = None,
     ownership_lookback_years: Any = None,
     item_502_lookback_years: Any = None,
 ) -> dict[str, Any]:
+    if release_mode and recurring_mode:
+        raise WarehouseRuntimeError(
+            "artifact processing cannot be both release and recurring mode"
+        )
+    if recurring_mode and accession_boundary is None:
+        raise WarehouseRuntimeError(
+            "recurring artifact processing requires an exact daily-index accession boundary"
+        )
     if release_mode and force and not repair_manifest_accessions:
         raise WarehouseRuntimeError("release --force requires an explicit bounded repair manifest")
     fetch_artifacts = _artifact_policy_fetches(artifact_policy)
@@ -2885,17 +2968,41 @@ def _run_configured_form_artifact_pipeline(
     if not fetch_artifacts and not run_parsers:
         return {"raw_writes": [], "rows_written": 0, "rows_skipped": 0, **_empty_network}
 
+    selection_metrics: dict[str, Any] = {}
     selected_accessions = _configured_parser_accessions(
         db,
         accession_numbers,
         ownership_lookback_years=ownership_lookback_years,
         item_502_lookback_years=item_502_lookback_years,
+        selection_metrics=selection_metrics,
     )
+    out_of_union: list[str] = []
+    if recurring_mode:
+        out_of_union = sorted(set(selected_accessions) - set(accession_boundary or ()))
+        _emit_pipeline_event(
+            "daily_artifact_selection_completed",
+            daily_index_accession_count=len(accession_boundary or ()),
+            daily_index_accession_digest=_accession_set_digest(accession_boundary or ()),
+            out_of_union_count=len(out_of_union),
+            run_id=sync_run_id,
+            **selection_metrics,
+        )
+        if out_of_union:
+            _emit_pipeline_event(
+                "daily_artifact_expansion_contract_violation",
+                out_of_union_count=len(out_of_union),
+                out_of_union_digest=_accession_set_digest(out_of_union),
+                run_id=sync_run_id,
+            )
+            raise WarehouseRuntimeError(
+                "daily artifact expansion-contract violation; configured candidates "
+                f"outside forced-index accession union: {out_of_union}"
+            )
     if release_mode and force:
         unapproved = sorted(set(selected_accessions) - set(repair_manifest_accessions or ()))
         if unapproved:
             raise WarehouseRuntimeError(f"release force includes accessions outside repair manifest: {unapproved}")
-    if not selected_accessions:
+    if not selected_accessions and not recurring_mode:
         return {"raw_writes": [], "rows_written": 0, "rows_skipped": 0, **_empty_network}
 
     _emit_pipeline_event(
@@ -2905,6 +3012,7 @@ def _run_configured_form_artifact_pipeline(
         parser_policy=parser_policy,
         run_id=sync_run_id,
     )
+    artifact_started_at = datetime.now(UTC)
     import time as _time
     _CONSECUTIVE_ERROR_LIMIT = int(os.environ.get("WAREHOUSE_ARTIFACT_CIRCUIT_BREAKER", "20"))
     raw_writes: list[dict[str, Any]] = []
@@ -2912,24 +3020,58 @@ def _run_configured_form_artifact_pipeline(
     rows_written = 0
     errors = 0
     consecutive_errors = 0
+    retry_count = 0
+    processed_accessions = 0
+    attempted_accessions = 0
+    fast_parse_skips = 0
+    artifact_attempts = 1
     from edgar_warehouse.infrastructure.capture_metrics import CaptureNetworkMetrics
 
     capture_network = CaptureNetworkMetrics()
     progress_every = max(1, int(os.environ.get("WAREHOUSE_ARTIFACT_PROGRESS_EVERY", "100")))
+
+    def emit_partial(*, reason: str, processed: int, remaining: int) -> None:
+        _emit_pipeline_event(
+            "filing_artifact_pipeline_partial",
+            accession_count=len(selected_accessions),
+            attempted_accessions=attempted_accessions,
+            processed_accessions=processed,
+            remaining_accessions=remaining,
+            errors=errors,
+            retry_count=retry_count,
+            fast_parse_skips=fast_parse_skips,
+            circuit_breaker_disposition=(
+                "open" if reason == "circuit_open" else "closed"
+            ),
+            reason=reason,
+            duration_seconds=(datetime.now(UTC) - artifact_started_at).total_seconds(),
+            run_id=sync_run_id,
+            **capture_network.as_dict(),
+        )
+
     for accession_index, accession_number in enumerate(selected_accessions, start=1):
         if consecutive_errors >= _CONSECUTIVE_ERROR_LIMIT:
+            remaining_accessions = len(selected_accessions) - processed_accessions
             _emit_pipeline_event(
                 "filing_artifact_circuit_open",
                 consecutive_errors=consecutive_errors,
-                remaining_accessions=len(selected_accessions) - errors - rows_written,
+                attempted_accessions=attempted_accessions,
+                processed_accessions=processed_accessions,
+                remaining_accessions=remaining_accessions,
                 run_id=sync_run_id,
             )
-            if release_mode:
-                remaining = selected_accessions[errors + rows_written:]
+            if release_mode or recurring_mode:
+                emit_partial(
+                    reason="circuit_open",
+                    processed=processed_accessions,
+                    remaining=remaining_accessions,
+                )
                 raise WarehouseRuntimeError(
-                    f"artifact circuit breaker left unresolved candidates: {remaining}"
+                    "artifact circuit breaker left "
+                    f"{remaining_accessions} unresolved candidates"
                 )
             break
+        attempted_accessions = accession_index
         try:
             # Ticket 03: silver-once ownership skip (accession + parser_version).
             # When silver already has a successful ownership parse at the current
@@ -2963,6 +3105,7 @@ def _run_configured_form_artifact_pipeline(
                             )
                         if not needs_evidence:
                             ownership_skip = True
+                            fast_parse_skips += 1
                             capture_network.record_artifact_result({"network_fetches": 0})
                             consecutive_errors = 0
                             if release_mode:
@@ -2986,18 +3129,49 @@ def _run_configured_form_artifact_pipeline(
                                             "|".join(sorted(evidence_parts)).encode("utf-8")
                                         ).hexdigest(),
                                     })
+                            processed_accessions += 1
+                            if (
+                                accession_index % progress_every == 0
+                                or accession_index == len(selected_accessions)
+                            ):
+                                _emit_pipeline_event(
+                                    "filing_artifact_pipeline_progress",
+                                    processed=accession_index,
+                                    accession_count=len(selected_accessions),
+                                    rows_written=rows_written,
+                                    errors=errors,
+                                    retry_count=retry_count,
+                                    fast_parse_skips=fast_parse_skips,
+                                    progress_every=progress_every,
+                                    run_id=sync_run_id,
+                                    **capture_network.as_dict(),
+                                )
                             continue
 
             if fetch_artifacts:
                 from edgar_warehouse.infrastructure.filing_artifact_service import refresh_filing_artifacts
 
-                artifact_attempts = (
-                    max(1, int(os.environ.get("WAREHOUSE_RELEASE_ARTIFACT_ATTEMPTS", "3")))
-                    if release_mode
-                    else 1
-                )
+                if release_mode:
+                    artifact_attempts = max(
+                        1,
+                        int(os.environ.get("WAREHOUSE_RELEASE_ARTIFACT_ATTEMPTS", "3")),
+                    )
+                elif recurring_mode:
+                    artifact_attempts = max(
+                        1,
+                        int(os.environ.get("WAREHOUSE_RECURRING_ARTIFACT_ATTEMPTS", "3")),
+                    )
+                else:
+                    artifact_attempts = 1
                 artifact_retry_base_seconds = float(
-                    os.environ.get("WAREHOUSE_RELEASE_ARTIFACT_RETRY_BASE_SECONDS", "1.0")
+                    os.environ.get(
+                        (
+                            "WAREHOUSE_RELEASE_ARTIFACT_RETRY_BASE_SECONDS"
+                            if release_mode
+                            else "WAREHOUSE_RECURRING_ARTIFACT_RETRY_BASE_SECONDS"
+                        ),
+                        "1.0",
+                    )
                 )
                 for artifact_attempt in range(1, artifact_attempts + 1):
                     try:
@@ -3019,6 +3193,7 @@ def _run_configured_form_artifact_pipeline(
                         retry_delay = artifact_retry_base_seconds * (2 ** (artifact_attempt - 1))
                         client_reset = _reset_edgartools_client_after_pool_timeout(exc)
                         filing_cache_reset = _reset_edgartools_filing_cache_after_transient_content_error(exc)
+                        retry_count += 1
                         _emit_pipeline_event(
                             "filing_artifact_retry",
                             accession_number=accession_number,
@@ -3075,6 +3250,7 @@ def _run_configured_form_artifact_pipeline(
                     ).hexdigest(),
                 })
             consecutive_errors = 0
+            processed_accessions += 1
         except Exception as exc:
             errors += 1
             consecutive_errors += 1
@@ -3089,6 +3265,36 @@ def _run_configured_form_artifact_pipeline(
                 raise WarehouseRuntimeError(
                     f"required artifact candidate {accession_number} failed"
                 ) from exc
+            if recurring_mode and consecutive_errors >= _CONSECUTIVE_ERROR_LIMIT:
+                remaining_accessions = len(selected_accessions) - processed_accessions
+                _emit_pipeline_event(
+                    "filing_artifact_circuit_open",
+                    consecutive_errors=consecutive_errors,
+                    attempted_accessions=attempted_accessions,
+                    processed_accessions=processed_accessions,
+                    remaining_accessions=remaining_accessions,
+                    run_id=sync_run_id,
+                )
+                emit_partial(
+                    reason="circuit_open",
+                    processed=processed_accessions,
+                    remaining=remaining_accessions,
+                )
+                raise WarehouseRuntimeError(
+                    "artifact circuit breaker left "
+                    f"{remaining_accessions} unresolved candidates"
+                ) from exc
+            if recurring_mode and _is_transient_artifact_error(exc):
+                remaining_accessions = len(selected_accessions) - processed_accessions
+                emit_partial(
+                    reason="retry_exhausted",
+                    processed=processed_accessions,
+                    remaining=remaining_accessions,
+                )
+                raise WarehouseRuntimeError(
+                    "recurring artifact retry exhausted for "
+                    f"{accession_number} after {artifact_attempts} attempts"
+                ) from exc
         # P2: mid-pass progress so operators can see resume/cache work without
         # waiting for the whole batch to finish (start/complete-only was silent
         # for multi-hour StrictBatchSilver loops).
@@ -3096,6 +3302,8 @@ def _run_configured_form_artifact_pipeline(
             _emit_pipeline_event(
                 "filing_artifact_pipeline_progress",
                 processed=accession_index,
+                attempted_accessions=attempted_accessions,
+                processed_accessions=processed_accessions,
                 accession_count=len(selected_accessions),
                 rows_written=rows_written,
                 errors=errors,
@@ -3103,6 +3311,16 @@ def _run_configured_form_artifact_pipeline(
                 run_id=sync_run_id,
                 **capture_network.as_dict(),
             )
+    if recurring_mode and errors:
+        remaining_accessions = len(selected_accessions) - processed_accessions
+        emit_partial(
+            reason="candidate_failures",
+            processed=processed_accessions,
+            remaining=remaining_accessions,
+        )
+        raise WarehouseRuntimeError(
+            f"recurring artifact pipeline had {errors} failed candidates"
+        )
     network_metrics = capture_network.as_dict()
     _emit_pipeline_event(
         "filing_artifact_pipeline_completed",
@@ -3110,6 +3328,13 @@ def _run_configured_form_artifact_pipeline(
         raw_object_count=len(raw_writes),
         rows_written=rows_written,
         errors=errors,
+        retry_count=retry_count,
+        fast_parse_skips=fast_parse_skips,
+        attempted_accessions=attempted_accessions,
+        processed_accessions=processed_accessions,
+        remaining_accessions=len(selected_accessions) - processed_accessions,
+        circuit_breaker_disposition="closed",
+        duration_seconds=(datetime.now(UTC) - artifact_started_at).total_seconds(),
         run_id=sync_run_id,
         **network_metrics,
     )
@@ -3118,6 +3343,11 @@ def _run_configured_form_artifact_pipeline(
         "rows_written": rows_written,
         "rows_skipped": errors,
         "candidate_outcomes": candidate_outcomes,
+        "retry_count": retry_count,
+        "fast_parse_skips": fast_parse_skips,
+        "attempted_accessions": attempted_accessions,
+        "processed_accessions": processed_accessions,
+        "remaining_accessions": len(selected_accessions) - processed_accessions,
         **network_metrics,
     }
 
@@ -3332,6 +3562,7 @@ def _configured_parser_accessions(
     ownership_lookback_years: Any = None,
     item_502_lookback_years: Any = None,
     as_of: date | None = None,
+    selection_metrics: dict[str, Any] | None = None,
 ) -> list[str]:
     ownership_years = _resolve_ownership_lookback_years(ownership_lookback_years)
     item_502_years = _resolve_item_502_lookback_years(
@@ -3341,14 +3572,20 @@ def _configured_parser_accessions(
     ownership_min = _ownership_min_filing_date(ownership_years, as_of=as_of)
     item_502_min = _ownership_min_filing_date(item_502_years, as_of=as_of)
     selected: list[str] = []
+    missing_metadata = 0
+    rejected_unconfigured_form = 0
     skipped_ownership_lookback = 0
     skipped_item_502_lookback = 0
-    for accession_number in _dedupe_strings(accession_numbers):
+    selected_form_counts: dict[str, int] = {}
+    deduped_accessions = _dedupe_strings(accession_numbers)
+    for accession_number in deduped_accessions:
         filing = db.get_filing(accession_number)
         if filing is None:
+            missing_metadata += 1
             continue
         form = filing.get("form")
         if not _is_configured_parser_form(form, filing.get("items")):
+            rejected_unconfigured_form += 1
             continue
         normalized = str(form or "").strip().upper()
         if normalized in OWNERSHIP_FORMS and not _ownership_within_lookback(
@@ -3362,6 +3599,20 @@ def _configured_parser_accessions(
             skipped_item_502_lookback += 1
             continue
         selected.append(accession_number)
+        form_name = str(form or "").strip().upper() or "UNKNOWN"
+        selected_form_counts[form_name] = selected_form_counts.get(form_name, 0) + 1
+    if selection_metrics is not None:
+        selection_metrics.update(
+            {
+                "input_accession_count": len(deduped_accessions),
+                "missing_metadata_count": missing_metadata,
+                "configured_form_rejected_count": rejected_unconfigured_form,
+                "ownership_lookback_rejected_count": skipped_ownership_lookback,
+                "item_502_lookback_rejected_count": skipped_item_502_lookback,
+                "configured_candidate_count": len(selected),
+                "configured_form_counts": selected_form_counts,
+            }
+        )
     if skipped_ownership_lookback:
         _emit_pipeline_event(
             "ownership_lookback_filtered",
@@ -4312,6 +4563,8 @@ def _load_daily_index_for_date(
             "rows_written": 0,
             "rows_skipped": 1,
             "impacted_ciks": [],
+            "accession_numbers": [],
+            "candidate_rows": [],
             "status": "skipped_non_business_day",
         }
 
@@ -4322,6 +4575,10 @@ def _load_daily_index_for_date(
             "rows_written": 0,
             "rows_skipped": 1,
             "impacted_ciks": _dedupe_ints([int(row["cik"]) for row in rows if row.get("cik") is not None]),
+            "accession_numbers": _dedupe_strings(
+                [str(row["accession_number"]) for row in rows if row.get("accession_number")]
+            ),
+            "candidate_rows": _daily_index_candidate_rows(rows),
             "form_15_ciks": _ciks_filing_form15(rows),
             "status": "succeeded",
             # Ticket 05: finalized dates are catalog silver-skips (no network)
@@ -4348,6 +4605,8 @@ def _load_daily_index_for_date(
             "rows_written": 0,
             "rows_skipped": 1,
             "impacted_ciks": [],
+            "accession_numbers": [],
+            "candidate_rows": [],
             "status": "waiting_for_publish",
         }
 
@@ -4405,6 +4664,10 @@ def _load_daily_index_for_date(
             "rows_written": row_count,
             "rows_skipped": 0,
             "impacted_ciks": _dedupe_ints([int(row["cik"]) for row in rows if row.get("cik") is not None]),
+            "accession_numbers": _dedupe_strings(
+                [str(row["accession_number"]) for row in rows if row.get("accession_number")]
+            ),
+            "candidate_rows": _daily_index_candidate_rows(rows),
             "form_15_ciks": _ciks_filing_form15(rows),
             "status": "succeeded",
             "network_fetches": 1,
@@ -4430,8 +4693,32 @@ def _load_daily_index_for_date(
             "rows_written": 0,
             "rows_skipped": 0,
             "impacted_ciks": [],
+            "accession_numbers": [],
+            "candidate_rows": [],
             "status": "failed_retryable",
         }
+
+
+def _daily_index_candidate_rows(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Return filing metadata sufficient to keep exact index accessions selectable."""
+    candidates: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in rows:
+        accession = str(row.get("accession_number") or "").strip()
+        if not accession or accession in seen:
+            continue
+        seen.add(accession)
+        candidates.append(
+            {
+                "accession_number": accession,
+                "cik": row.get("cik"),
+                "form": row.get("form"),
+                "filing_date": row.get("filing_date"),
+                "report_date": None,
+                "items": None,
+            }
+        )
+    return candidates
 
 
 def _run_accession_resync(
@@ -4890,6 +5177,12 @@ def _filter_ciks_to_universe(impacted_ciks: list[int], *, db: SilverDatabase) ->
 def _cik_set_digest(ciks: Iterable[int]) -> str:
     """Return a stable digest for an exact ordered CIK set."""
     normalized = ",".join(str(cik) for cik in sorted(set(ciks)))
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _accession_set_digest(accessions: Iterable[str]) -> str:
+    """Return a stable digest for an exact accession set."""
+    normalized = ",".join(sorted(set(accessions)))
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
