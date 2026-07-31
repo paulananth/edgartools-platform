@@ -90,8 +90,13 @@ def bootstrap_definition() -> dict:
     return _generate_definition("bootstrap")
 
 
-def test_daily_incremental_starts_at_refresh_mode_check(daily_incremental_definition) -> None:
-    assert daily_incremental_definition["StartAt"] == "RefreshModeCheck"
+def test_daily_incremental_validates_operator_input_before_refresh_mode(
+    daily_incremental_definition,
+) -> None:
+    assert daily_incremental_definition["StartAt"] == "ValidateForceInput"
+    assert daily_incremental_definition["States"]["ForceDefault"]["Next"] == (
+        "RefreshModeCheck"
+    )
 
 
 def test_daily_incremental_default_path_is_bounded_not_full_universe(daily_incremental_definition) -> None:
