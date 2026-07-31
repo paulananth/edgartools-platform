@@ -51,3 +51,10 @@ Insider Watch.
 The shared Subject Input has the same resolution behavior in Agent View and
 Explore. The rendered result states its active mode and readiness state; it
 never silently switches mode to make a query succeed.
+
+### Accepted: ADV interaction
+
+ADV retains its adviser/fund resolver and entity identity but renders the same
+four observable states: `results`, `no_coverage`, `no_match`, and
+`unavailable`. ADV results do not drill through to Company 360 unless a future
+explicit issuer relationship supports that navigation.
