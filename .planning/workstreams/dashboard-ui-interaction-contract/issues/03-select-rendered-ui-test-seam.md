@@ -1,7 +1,7 @@
 # Select the rendered dashboard UI test seam
 
 Type: research (AFK)
-Status: resolved
+Status: superseded by user direction
 Assignee: Codex
 Blocks: 04-implement-dashboard-subject-resolver-and-ui-contract-tests
 
@@ -11,7 +11,7 @@ Which test seam can deterministically drive the rendered Streamlit tab inputs
 and assert tab-specific output states, while keeping SQL contract tests and
 release-readiness acceptance separate?
 
-## Answer
+## Superseded answer
 
 Use Streamlit `AppTest` as the primary deterministic rendered-UI test seam.
 The project locks Streamlit 1.56.0 in `uv.lock`; AppTest imports successfully
@@ -48,6 +48,7 @@ raised safe exception drives `no_coverage` and `unavailable` cases.
 | ADV | Adviser/fund search shows results and deterministic `no_match` |
 | Pipeline | Agent View explains boundary; Explore shows bounded operational result and unavailable state |
 
-The AppTest suite runs with `uv run --extra dashboard python -m pytest <ui-test-path> -q`.
-It is appended to the dashboard deploy script's credential-free preflight, not
-to `dashboard-acceptance.json` or a pipeline test.
+The AppTest recommendation is not accepted. The user requires every UI-contract
+acceptance assertion to use a real build and deployed dashboard, exercised
+through an authenticated browser. Existing fake-Streamlit and fake-Snowpark
+tests may stay as narrow code checks but are not valid UI acceptance evidence.

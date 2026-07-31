@@ -21,8 +21,10 @@ testable outcome without depending on a pipeline run or release readiness.
 - Each tab must return one observable output state: `results`, `no_coverage`,
   `no_match`, or `unavailable`. `no_coverage` is not `no_match` and is never
   reported as a pipeline failure.
-- UI interaction tests must exercise the rendered tab input and output state,
-  separately from SQL contract tests and release-evidence checks.
+- UI interaction acceptance must exercise the built, deployed Streamlit app
+  through an authenticated browser. Mocked Snowpark data and fake Streamlit
+  widgets are not valid evidence for this workstream; existing unit tests may
+  remain as code checks but cannot satisfy UI acceptance.
 
 ## Decisions so far
 
@@ -33,10 +35,10 @@ testable outcome without depending on a pipeline run or release readiness.
   — subject tabs share a mode-stable resolver and every tab exposes explicit
   `results`/`no_coverage`/`no_match`/`unavailable` output semantics; Summary and
   Pipeline stay non-subject.
-- [Select the rendered dashboard UI test seam](issues/03-select-rendered-ui-test-seam.md)
-  — use Streamlit AppTest plus a deterministic fake Snowpark session for widget
-  interaction assertions; retain fake-Streamlit policy tests, and reserve a
-  browser only for explicitly authorized live acceptance.
+- [Reject simulated dashboard UI acceptance](issues/03-select-rendered-ui-test-seam.md)
+  — user direction supersedes the earlier AppTest recommendation: only a real
+  built/deployed Streamlit app exercised through an authenticated browser can
+  prove the interaction contract.
 
 ## Not yet specified
 

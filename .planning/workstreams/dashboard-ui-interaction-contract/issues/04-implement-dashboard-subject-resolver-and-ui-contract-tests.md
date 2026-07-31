@@ -1,7 +1,8 @@
 # Implement dashboard subject resolver and UI contract tests
 
 Type: task (AFK)
-Status: open
+Status: blocked
+Blocked by: 05-establish-real-deployed-dashboard-ui-test-runner
 
 ## Question
 
