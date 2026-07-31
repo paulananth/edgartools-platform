@@ -45,3 +45,9 @@ For `results`, render the resolved issuer identity, a visible bounded row count,
 the tab's bounded data table, and an “Open in Company 360” drill-through when
 the rows identify an issuer. This applies to Company 360, Fundamentals, and
 Insider Watch.
+
+### Accepted: mode-stable subject interaction
+
+The shared Subject Input has the same resolution behavior in Agent View and
+Explore. The rendered result states its active mode and readiness state; it
+never silently switches mode to make a query succeed.
