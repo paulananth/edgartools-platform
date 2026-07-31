@@ -30,3 +30,11 @@ render `no_match`, an agent-readiness error, or a pipeline failure.
 For a symbol, issuer name, or CIK that the Subject Resolver cannot resolve,
 every subject-capable tab renders `no_match` and no result table. The message is
 “No SEC company matched '<input>'. Try ticker, company name, or CIK.”
+
+### Accepted: technical failure after resolution
+
+When subject resolution or a tab query fails technically, render `unavailable`.
+If resolution succeeded, preserve the issuer identity and show a message such as
+“Apple (CIK 320193) resolved, but this tab is temporarily unavailable. Retry
+later.” Do not expose connector details, render an empty table, or use pipeline
+or release-readiness wording.
