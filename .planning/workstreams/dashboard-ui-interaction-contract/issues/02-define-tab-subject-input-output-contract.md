@@ -24,3 +24,9 @@ When a Subject Input resolves (for example `AAPL` → Apple, CIK 320193) but a
 tab has no rows, render `no_coverage` with the resolved issuer identity and a
 tab-specific message such as “No financial coverage is available.” It must not
 render `no_match`, an agent-readiness error, or a pipeline failure.
+
+### Accepted: unresolved subject
+
+For a symbol, issuer name, or CIK that the Subject Resolver cannot resolve,
+every subject-capable tab renders `no_match` and no result table. The message is
+“No SEC company matched '<input>'. Try ticker, company name, or CIK.”
