@@ -37,9 +37,31 @@ _END_MARKER = "\nPY\n}\n"
 # the fail-closed Deferred path, not the happy path) -- trace helpers must be
 # told to prefer the explicit lease_acquired=True branch when tracing the
 # successful/main flow. See _linear_order_with_choice's docstring.
-_LEASE_ACQUIRED_PREFER = {"LeaseAcquiredCheck": "ApplyEffectiveRefreshMode"}
+_LEASE_ACQUIRED_PREFER = {
+    "ValidateForceInput": "ForceDefault",
+    "LeaseAcquiredCheck": "ApplyEffectiveRefreshMode",
+    "ForceCheck": "FetchAdvBulk",
+    "FirmRosterForceCheck": "FetchFirmRoster",
+}
 
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
+
+
+def _choice_next(state: dict, execution_input: dict) -> str:
+    """Evaluate the root-field Choice operators used by the generated contract."""
+    for choice in state["Choices"]:
+        key = choice["Variable"].removeprefix("$.")
+        present = key in execution_input
+        value = execution_input.get(key)
+        if "IsPresent" in choice and present is choice["IsPresent"]:
+            return choice["Next"]
+        if "IsBoolean" in choice and present and isinstance(value, bool):
+            if choice["IsBoolean"] is True:
+                return choice["Next"]
+        if "BooleanEquals" in choice and isinstance(value, bool):
+            if value is choice["BooleanEquals"]:
+                return choice["Next"]
+    return state["Default"]
 
 
 def _extract_function_source() -> str:
@@ -152,13 +174,29 @@ def test_generates_valid_json_with_no_dangling_references(daily_definition: dict
 # -- ticket 06: Stage0CompanyIdentity woven into daily_incremental -----------
 
 
-def test_daily_incremental_starts_with_refresh_mode_check(daily_definition: dict) -> None:
+def test_daily_incremental_validates_force_before_refresh_mode(daily_definition: dict) -> None:
     """Restructured by release-readiness ticket 45/49 (bounded Daily Identity
     Refresh): daily_incremental now decides refresh_mode before choosing
     between the daily impacted-company path and complete company backstop --
     see tests/architecture/test_daily_identity_refresh_state_machine.py for
     the full shape of both branches."""
-    assert daily_definition["StartAt"] == "RefreshModeCheck"
+    states = daily_definition["States"]
+    assert daily_definition["StartAt"] == "ValidateForceInput"
+    validation = states["ValidateForceInput"]
+    assert _choice_next(validation, {}) == "ForceDefault"
+    assert _choice_next(validation, {"force": False}) == "RefreshModeCheck"
+    assert _choice_next(validation, {"force": True}) == "RefreshModeCheck"
+    assert _choice_next(validation, {"force": "true"}) == "InvalidForceInput"
+
+    assert states["ForceDefault"] == {
+        "Type": "Pass",
+        "Comment": "Normalize an omitted operator force input to false.",
+        "Result": False,
+        "ResultPath": "$.force",
+        "Next": "RefreshModeCheck",
+    }
+    assert states["InvalidForceInput"]["Type"] == "Fail"
+    assert states["InvalidForceInput"]["Error"] == "InvalidForceInput"
 
 
 def test_daily_incremental_default_path_reaches_run_warehouse_task_via_bounded_stage0(
@@ -356,10 +394,10 @@ def test_force_check_routes_to_two_distinct_fetch_adv_bulk_command_shapes(
     states = daily_definition["States"]
     force_check = states["ForceCheck"]
     assert force_check["Type"] == "Choice"
-    assert force_check["Choices"][0]["Variable"] == "$.force"
-    assert force_check["Choices"][0]["BooleanEquals"] is True
-    assert force_check["Choices"][0]["Next"] == "FetchAdvBulkForced"
-    assert force_check["Default"] == "FetchAdvBulk"
+    assert _choice_next(force_check, {}) == "FetchAdvBulk"
+    assert _choice_next(force_check, {"force": False}) == "FetchAdvBulk"
+    assert _choice_next(force_check, {"force": True}) == "FetchAdvBulkForced"
+    assert _choice_next(force_check, {"force": "true"}) == "InvalidForceInput"
 
     no_force_cmd = _command_of(daily_definition, "FetchAdvBulk")
     forced_cmd = _command_of(daily_definition, "FetchAdvBulkForced")
@@ -414,6 +452,17 @@ def test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_via_result_path_null
         )
 
 
+def test_daily_tasks_before_force_check_preserve_operator_input(daily_definition: dict) -> None:
+    for state_name in (
+        "ComputeIdentityRefreshWindow",
+        "ComputeIdentityBackstopUniverse",
+        "RunWarehouseTask",
+    ):
+        assert daily_definition["States"][state_name]["ResultPath"] is None, (
+            f"{state_name} must preserve normalized operator input through ForceCheck"
+        )
+
+
 def test_firm_roster_stage_runs_after_ingest_adv_bulk_sources_before_mdm_run(
     daily_definition: dict,
 ) -> None:
@@ -439,10 +488,10 @@ def test_firm_roster_force_check_routes_to_two_distinct_fetch_firm_roster_comman
     states = daily_definition["States"]
     force_check = states["FirmRosterForceCheck"]
     assert force_check["Type"] == "Choice"
-    assert force_check["Choices"][0]["Variable"] == "$.force"
-    assert force_check["Choices"][0]["BooleanEquals"] is True
-    assert force_check["Choices"][0]["Next"] == "FetchFirmRosterForced"
-    assert force_check["Default"] == "FetchFirmRoster"
+    assert _choice_next(force_check, {}) == "FetchFirmRoster"
+    assert _choice_next(force_check, {"force": False}) == "FetchFirmRoster"
+    assert _choice_next(force_check, {"force": True}) == "FetchFirmRosterForced"
+    assert _choice_next(force_check, {"force": "true"}) == "InvalidForceInput"
 
     no_force_cmd = _command_of(daily_definition, "FetchFirmRoster")
     forced_cmd = _command_of(daily_definition, "FetchFirmRosterForced")

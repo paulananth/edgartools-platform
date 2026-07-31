@@ -1629,6 +1629,31 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
 mdm_limit = str(mdm_run_limit)
 graph_limit = str(mdm_graph_limit)
 
+# Validate the optional operator repair flag before starting any ECS workload.
+# An omitted value is normalized to false; malformed values fail with a named
+# disposition instead of reaching a Choice state that can raise States.Runtime.
+validate_force_input = {
+    "Type": "Choice",
+    "Comment": "Accept an omitted or boolean force input; reject every other type before workload execution.",
+    "Choices": [
+        {"Variable": "$.force", "IsPresent": False, "Next": "ForceDefault"},
+        {"Variable": "$.force", "IsBoolean": True, "Next": "SeedUniverse"},
+    ],
+    "Default": "InvalidForceInput",
+}
+force_default = {
+    "Type": "Pass",
+    "Comment": "Normalize an omitted operator force input to false.",
+    "Result": False,
+    "ResultPath": "$.force",
+    "Next": "SeedUniverse",
+}
+invalid_force_input = {
+    "Type": "Fail",
+    "Error": "InvalidForceInput",
+    "Cause": "Optional execution input 'force' must be a JSON boolean when present.",
+}
+
 # (1) SeedUniverse: warehouse reference/window seed ONLY — direct-SEC company_tickers.json
 # capture + CIK batch/window bookkeeping (sec_company_ticker, cik_batches.jsonl). Does NOT
 # touch MDM (data-architecture Issue 2: this state's old comment claimed it "enrols CIKs
@@ -2061,11 +2086,21 @@ force_check = {
     "Choices": [
         {
             "Variable": "$.force",
+            "IsPresent": False,
+            "Next": "FetchAdvBulk",
+        },
+        {
+            "Variable": "$.force",
             "BooleanEquals": True,
             "Next": "FetchAdvBulkForced",
-        }
+        },
+        {
+            "Variable": "$.force",
+            "BooleanEquals": False,
+            "Next": "FetchAdvBulk",
+        },
     ],
-    "Default": "FetchAdvBulk",
+    "Default": "InvalidForceInput",
 }
 
 adv_bulk_fetch_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmRun"}]
@@ -2112,11 +2147,21 @@ firm_roster_force_check = {
     "Choices": [
         {
             "Variable": "$.force",
+            "IsPresent": False,
+            "Next": "FetchFirmRoster",
+        },
+        {
+            "Variable": "$.force",
             "BooleanEquals": True,
             "Next": "FetchFirmRosterForced",
-        }
+        },
+        {
+            "Variable": "$.force",
+            "BooleanEquals": False,
+            "Next": "FetchFirmRoster",
+        },
     ],
-    "Default": "FetchFirmRoster",
+    "Default": "InvalidForceInput",
 }
 
 fetch_firm_roster = ecs_state(wh_medium_arn,
@@ -2197,8 +2242,11 @@ definition = {
         "(7) write run-summary.json with window_count and cik_count from S3 manifests. "
         "Implements CHUNK-02 (sequential windowed SM) and CHUNK-04 SM-side."
     ),
-    "StartAt": "SeedUniverse",
+    "StartAt": "ValidateForceInput",
     "States": {
+        "ValidateForceInput": validate_force_input,
+        "ForceDefault":       force_default,
+        "InvalidForceInput":  invalid_force_input,
         "SeedUniverse":      seed,
         "MdmSeedUniverse":   mdm_seed_universe,
         "WindowSizeCheck":   window_size_check,
@@ -2427,6 +2475,28 @@ else:
     # crashed run can't wedge the schedule permanently -- release-on-failure
     # elsewhere in this chain is therefore best-effort, not wrapped in Catch
     # on every downstream state.
+    validate_force_input = {
+        "Type": "Choice",
+        "Comment": "Accept an omitted or boolean force input; reject every other type before workload execution.",
+        "Choices": [
+            {"Variable": "$.force", "IsPresent": False, "Next": "ForceDefault"},
+            {"Variable": "$.force", "IsBoolean": True, "Next": "RefreshModeCheck"},
+        ],
+        "Default": "InvalidForceInput",
+    }
+    force_default = {
+        "Type": "Pass",
+        "Comment": "Normalize an omitted operator force input to false.",
+        "Result": False,
+        "ResultPath": "$.force",
+        "Next": "RefreshModeCheck",
+    }
+    invalid_force_input = {
+        "Type": "Fail",
+        "Error": "InvalidForceInput",
+        "Cause": "Optional execution input 'force' must be a JSON boolean when present.",
+    }
+
     refresh_mode_check = {
         "Type": "Choice",
         "Comment": "Route to AcquireLease directly when caller supplied refresh_mode; otherwise inject the 'daily' default.",
@@ -2536,11 +2606,13 @@ else:
         "'--lookback-days', '7', "
         "'--batch-size', '500', '--run-id', $$.Execution.Name)",
         next_state="Stage0CompanyIdentityBounded")
+    compute_identity_refresh_window["ResultPath"] = None
 
     compute_identity_backstop_universe = ecs_state(wh_medium_arn,
         "States.Array('compute-identity-refresh-window', '--mode', 'backstop', "
         "'--batch-size', '500', '--run-id', $$.Execution.Name)",
         next_state="Stage0CompanyIdentityBounded")
+    compute_identity_backstop_universe["ResultPath"] = None
 
     per_batch_company_identity = ecs_state(wh_medium_arn,
         "States.Array('bootstrap-fundamentals', '--mode', 'company-identity', "
@@ -2577,6 +2649,7 @@ else:
     # above with Next="MdmRun" for the shared bootstrap/daily_incremental case; retarget
     # it here since this branch only executes for daily_incremental.
     run_wh["Next"] = "DatasetPeriodCheck"
+    run_wh["ResultPath"] = None
 
     dataset_period_check = {
         "Type": "Choice",
@@ -2605,11 +2678,21 @@ else:
         "Choices": [
             {
                 "Variable": "$.force",
+                "IsPresent": False,
+                "Next": "FetchAdvBulk",
+            },
+            {
+                "Variable": "$.force",
                 "BooleanEquals": True,
                 "Next": "FetchAdvBulkForced",
-            }
+            },
+            {
+                "Variable": "$.force",
+                "BooleanEquals": False,
+                "Next": "FetchAdvBulk",
+            },
         ],
-        "Default": "FetchAdvBulk",
+        "Default": "InvalidForceInput",
     }
 
     adv_bulk_fetch_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmRun"}]
@@ -2643,11 +2726,21 @@ else:
         "Choices": [
             {
                 "Variable": "$.force",
+                "IsPresent": False,
+                "Next": "FetchFirmRoster",
+            },
+            {
+                "Variable": "$.force",
                 "BooleanEquals": True,
                 "Next": "FetchFirmRosterForced",
-            }
+            },
+            {
+                "Variable": "$.force",
+                "BooleanEquals": False,
+                "Next": "FetchFirmRoster",
+            },
         ],
-        "Default": "FetchFirmRoster",
+        "Default": "InvalidForceInput",
     }
 
     fetch_firm_roster = ecs_state(wh_medium_arn,
@@ -2684,8 +2777,11 @@ else:
             "(2) MDM entity resolution + Neo4j sync, (3) gold build + "
             "Snowflake export manifest."
         ),
-        "StartAt": "RefreshModeCheck",
+        "StartAt": "ValidateForceInput",
         "States": {
+            "ValidateForceInput": validate_force_input,
+            "ForceDefault":       force_default,
+            "InvalidForceInput":  invalid_force_input,
             "RefreshModeCheck":   refresh_mode_check,
             "RefreshModeDefault": refresh_mode_default,
             "AcquireLease":       acquire_lease,

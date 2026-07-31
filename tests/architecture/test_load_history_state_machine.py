@@ -37,6 +37,23 @@ _END_MARKER = "\nPY\n}\n"
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 
 
+def _choice_next(state: dict, execution_input: dict) -> str:
+    """Evaluate the root-field Choice operators used by the generated contract."""
+    for choice in state["Choices"]:
+        key = choice["Variable"].removeprefix("$.")
+        present = key in execution_input
+        value = execution_input.get(key)
+        if "IsPresent" in choice and present is choice["IsPresent"]:
+            return choice["Next"]
+        if "IsBoolean" in choice and present and isinstance(value, bool):
+            if choice["IsBoolean"] is True:
+                return choice["Next"]
+        if "BooleanEquals" in choice and isinstance(value, bool):
+            if value is choice["BooleanEquals"]:
+                return choice["Next"]
+    return state["Default"]
+
+
 def _extract_function_source() -> str:
     text = DEPLOY_SCRIPT.read_text(encoding="utf-8")
     start = text.index(_START_MARKER)
@@ -120,10 +137,15 @@ def _linear_order(definition: dict) -> list[str]:
     order: list[str] = []
     seen: set[str] = set()
     name = definition["StartAt"]
+    preferred_choices = {
+        "ValidateForceInput": "ForceDefault",
+        "ForceCheck": "FetchAdvBulk",
+        "FirmRosterForceCheck": "FetchFirmRoster",
+    }
     while name and name not in seen:
         seen.add(name)
         order.append(name)
-        name = next_of(states[name])
+        name = preferred_choices.get(name) or next_of(states[name])
     return order
 
 
@@ -149,6 +171,26 @@ def test_generates_valid_json_with_no_dangling_references(definition: dict) -> N
                     check(branch["States"], branch["StartAt"], f"{label}.{name}(Parallel[{i}])")
 
     check(definition["States"], definition["StartAt"], "top")
+
+
+def test_load_history_validates_force_before_workload(definition: dict) -> None:
+    states = definition["States"]
+    assert definition["StartAt"] == "ValidateForceInput"
+    validation = states["ValidateForceInput"]
+    assert _choice_next(validation, {}) == "ForceDefault"
+    assert _choice_next(validation, {"force": False}) == "SeedUniverse"
+    assert _choice_next(validation, {"force": True}) == "SeedUniverse"
+    assert _choice_next(validation, {"force": 1}) == "InvalidForceInput"
+
+    assert states["ForceDefault"] == {
+        "Type": "Pass",
+        "Comment": "Normalize an omitted operator force input to false.",
+        "Result": False,
+        "ResultPath": "$.force",
+        "Next": "SeedUniverse",
+    }
+    assert states["InvalidForceInput"]["Type"] == "Fail"
+    assert states["InvalidForceInput"]["Error"] == "InvalidForceInput"
 
 
 # -- Issue 2: MDM seeding -----------------------------------------------------
@@ -441,10 +483,10 @@ def test_force_check_routes_to_two_distinct_fetch_adv_bulk_command_shapes(defini
     states = definition["States"]
     force_check = states["ForceCheck"]
     assert force_check["Type"] == "Choice"
-    assert force_check["Choices"][0]["Variable"] == "$.force"
-    assert force_check["Choices"][0]["BooleanEquals"] is True
-    assert force_check["Choices"][0]["Next"] == "FetchAdvBulkForced"
-    assert force_check["Default"] == "FetchAdvBulk"
+    assert _choice_next(force_check, {}) == "FetchAdvBulk"
+    assert _choice_next(force_check, {"force": False}) == "FetchAdvBulk"
+    assert _choice_next(force_check, {"force": True}) == "FetchAdvBulkForced"
+    assert _choice_next(force_check, {"force": "true"}) == "InvalidForceInput"
 
     no_force_cmd = _command_of(definition, "FetchAdvBulk")
     forced_cmd = _command_of(definition, "FetchAdvBulkForced")
@@ -544,10 +586,10 @@ def test_firm_roster_force_check_routes_to_two_distinct_fetch_firm_roster_comman
     states = definition["States"]
     force_check = states["FirmRosterForceCheck"]
     assert force_check["Type"] == "Choice"
-    assert force_check["Choices"][0]["Variable"] == "$.force"
-    assert force_check["Choices"][0]["BooleanEquals"] is True
-    assert force_check["Choices"][0]["Next"] == "FetchFirmRosterForced"
-    assert force_check["Default"] == "FetchFirmRoster"
+    assert _choice_next(force_check, {}) == "FetchFirmRoster"
+    assert _choice_next(force_check, {"force": False}) == "FetchFirmRoster"
+    assert _choice_next(force_check, {"force": True}) == "FetchFirmRosterForced"
+    assert _choice_next(force_check, {"force": "true"}) == "InvalidForceInput"
 
     no_force_cmd = _command_of(definition, "FetchFirmRoster")
     forced_cmd = _command_of(definition, "FetchFirmRosterForced")
