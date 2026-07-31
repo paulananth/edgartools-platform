@@ -1,7 +1,8 @@
 # Select the rendered dashboard UI test seam
 
 Type: research (AFK)
-Status: open
+Status: claimed
+Assignee: Codex
 Blocks: 04-implement-dashboard-subject-resolver-and-ui-contract-tests
 
 ## Question
