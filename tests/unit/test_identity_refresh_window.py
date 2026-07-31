@@ -43,12 +43,102 @@ def _fake_index_result(impacted_ciks: list[int]) -> dict:
     }
 
 
+def test_company_identity_universe_is_active_operating_or_current_sec_ticker(
+    tmp_path,
+) -> None:
+    """The reusable scheduled-identity boundary includes active operating
+    entities and active tracked CIKs in the canonical company_tickers snapshot,
+    while excluding other and non-active entities."""
+    from edgar_warehouse.silver_store import SilverDatabase
+
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    try:
+        for cik, status in (
+            (100, "active"),
+            (200, "active"),
+            (300, "active"),
+            (400, "paused"),
+        ):
+            db.upsert_company_sync_state({"cik": cik, "tracking_status": status})
+        db.merge_company(
+            [
+                {"cik": 100, "entity_name": "Operating Co", "entity_type": "operating"},
+                {"cik": 200, "entity_name": "Ticker Co", "entity_type": "other"},
+                {"cik": 300, "entity_name": "Other Entity", "entity_type": "other"},
+                {"cik": 400, "entity_name": "Paused Co", "entity_type": "operating"},
+            ],
+            "seed-run",
+        )
+        db.replace_company_tickers(
+            [
+                {"cik": 200, "ticker": "TICK", "exchange": "NYSE"},
+                {"cik": 400, "ticker": "PAUS", "exchange": "NASDAQ"},
+            ],
+            "ticker-run",
+            source_name="company_tickers",
+        )
+
+        assert db.get_company_identity_ciks("active") == [100, 200]
+    finally:
+        db.close()
+
+
+def test_reference_sync_returns_canonical_ticker_snapshot_identity(tmp_path) -> None:
+    """Scheduled identity evidence can bind eligibility to the exact captured
+    company_tickers object instead of an untracked refetch or mutable count."""
+    from edgar_warehouse.silver_store import SilverDatabase
+
+    company_tickers_payload = (
+        b'{"0":{"cik_str":200,"ticker":"TICK","title":"Ticker Co"}}'
+    )
+    exchange_payload = (
+        b'{"fields":["cik","name","ticker","exchange"],"data":[]}'
+    )
+
+    def fake_download(*, url: str, identity: str) -> bytes:
+        del identity
+        if url.endswith("/company_tickers.json"):
+            return company_tickers_payload
+        if url.endswith("/company_tickers_exchange.json"):
+            return exchange_payload
+        raise AssertionError(f"unexpected reference URL: {url}")
+
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    try:
+        with patch.object(
+            warehouse_orchestrator,
+            "_download_sec_bytes",
+            side_effect=fake_download,
+        ):
+            result = warehouse_orchestrator._sync_reference_data(
+                context=_context(tmp_path),
+                db=db,
+                sync_run_id="reference-run",
+                fetch_date=date(2026, 7, 30),
+            )
+
+        assert result["reference_snapshot_identity"] == {
+            "source_name": "company_tickers",
+            "sha256": (
+                "bd52126ec45bde11a58b34c8af00cd2b7a38cc057626baf2b67d13b9482ced1a"
+            ),
+            "path": str(
+                tmp_path
+                / "bronze"
+                / "reference/sec/company_tickers/2026/07/30/company_tickers.json"
+            ),
+        }
+    finally:
+        db.close()
+
+
 def test_compute_identity_refresh_window_unions_trailing_days_and_force_rechecks(tmp_path) -> None:
     """Every one of the trailing lookback_days is passed force=True (so a late SEC
     daily-index republish is still caught, per ticket 45's second accepted gap), and
     the impacted CIKs across all of them are unioned/deduped."""
     db = MagicMock()
-    db.get_tracked_ciks.return_value = [100, 200, 300, 400]
+    db.get_tracked_ciks.return_value = [100, 200, 300, 400, 500]
+    db.get_company_identity_ciks.return_value = [100, 300, 400, 500]
     context = _context(tmp_path)
     now = datetime(2026, 7, 30, 12, tzinfo=UTC)
 
@@ -72,10 +162,19 @@ def test_compute_identity_refresh_window_unions_trailing_days_and_force_rechecks
         patch.object(
             warehouse_orchestrator,
             "_sync_reference_data",
-            return_value={"raw_writes": [], "rows_written": 0, "rows_skipped": 0},
+            return_value={
+                "raw_writes": [],
+                "rows_written": 0,
+                "rows_skipped": 0,
+                "reference_snapshot_identity": {
+                    "source_name": "company_tickers",
+                    "sha256": "ticker-snapshot-sha",
+                    "path": "reference/sec/company_tickers/2026/07/30/company_tickers.json",
+                },
+            },
         ) as sync_ref,
     ):
-        raw_writes, metrics = warehouse_orchestrator._capture_bronze_raw(
+        _, metrics = warehouse_orchestrator._capture_bronze_raw(
             context=context,
             db=db,
             command_name="compute-identity-refresh-window",
@@ -93,24 +192,40 @@ def test_compute_identity_refresh_window_unions_trailing_days_and_force_rechecks
     # Reference data refreshed exactly once per refresh, not once per day.
     sync_ref.assert_called_once()
 
-    # Union across all days, deduped, filtered to the active tracked universe.
-    assert metrics["cik_count"] == 4  # {100, 200, 300, 400}
+    # Union across all days, deduped, then intersected with the reusable active
+    # operating-or-current-ticker identity universe. CIK 200 is active but not
+    # company eligible, so it must not enter the batch artifact.
+    assert metrics["input_cik_count"] == 4
+    assert metrics["tracked_active_cik_count"] == 5
+    assert metrics["company_eligible_universe_cik_count"] == 4
+    assert metrics["excluded_cik_count"] == 1
+    assert metrics["cik_count"] == 3  # {100, 300, 400}
+    assert metrics["selected_cik_digest"] == (
+        "daa0d861fa51dec0b8b90f7c7a49536112bd7765a4ee0bb77042c25890a6b0ee"
+    )
+    assert metrics["reference_snapshot_identity"]["sha256"] == "ticker-snapshot-sha"
+    assert metrics["prestage_duration_seconds"] >= 0
 
-    from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory
+    from edgar_warehouse.infrastructure.dataset_path_catalog import (
+        default_capture_spec_factory,
+    )
 
     batches_rel = default_capture_spec_factory().cik_universe_batches("identity-refresh-1").relative_path
     written_path = Path(context.bronze_root.join(batches_rel))
     assert written_path.exists(), f"batches JSONL not written to {written_path}"
     lines = [json.loads(line) for line in written_path.read_text().splitlines() if line.strip()]
     all_ciks = sorted(int(c) for line in lines for c in line["cik_list"].split(","))
-    assert all_ciks == [100, 200, 300, 400]
+    assert all_ciks == [100, 300, 400]
 
 
-def test_compute_identity_refresh_window_falls_through_when_universe_empty(tmp_path) -> None:
-    """Cold-start guard: an empty tracked-active universe doesn't zero out the union
-    (mirrors _filter_ciks_to_universe's existing daily-incremental behavior)."""
+def test_compute_identity_refresh_window_fails_closed_when_eligible_universe_empty(
+    tmp_path,
+) -> None:
+    """Scheduled identity must never fall back to all impacted filers when the
+    company-eligibility inputs are empty."""
     db = MagicMock()
     db.get_tracked_ciks.return_value = []
+    db.get_company_identity_ciks.return_value = []
     context = _context(tmp_path)
     now = datetime(2026, 7, 30, 12, tzinfo=UTC)
 
@@ -136,7 +251,75 @@ def test_compute_identity_refresh_window_falls_through_when_universe_empty(tmp_p
             sync_run_id="identity-refresh-2",
         )
 
-    assert metrics["cik_count"] == 1
+    assert metrics["input_cik_count"] == 1
+    assert metrics["company_eligible_universe_cik_count"] == 0
+    assert metrics["excluded_cik_count"] == 1
+    assert metrics["cik_count"] == 0
+
+
+def test_compute_identity_refresh_window_backstop_uses_complete_company_universe(
+    tmp_path,
+) -> None:
+    """Backstop mode skips daily-index discovery and writes the complete
+    company-eligible active universe through the explicit-CIK batch path."""
+    db = MagicMock()
+    db.get_tracked_ciks.return_value = [100, 200, 300]
+    db.get_company_identity_ciks.return_value = [100, 300]
+    context = _context(tmp_path)
+    now = datetime(2026, 7, 30, 12, tzinfo=UTC)
+
+    with (
+        patch.object(warehouse_orchestrator, "_load_daily_index_for_date") as load_index,
+        patch.object(
+            warehouse_orchestrator,
+            "_sync_reference_data",
+            return_value={
+                "raw_writes": [],
+                "rows_written": 0,
+                "rows_skipped": 0,
+                "reference_snapshot_identity": {
+                    "source_name": "company_tickers",
+                    "sha256": "ticker-snapshot-sha",
+                    "path": "reference/sec/company_tickers/2026/07/30/company_tickers.json",
+                },
+            },
+        ),
+    ):
+        _, metrics = warehouse_orchestrator._capture_bronze_raw(
+            context=context,
+            db=db,
+            command_name="compute-identity-refresh-window",
+            arguments={
+                "mode": "backstop",
+                "lookback_days": 7,
+                "batch_size": 500,
+                "run_id": "identity-backstop-1",
+            },
+            scope={"mode": "backstop", "lookback_days": 7, "batch_size": 500},
+            now=now,
+            sync_run_id="identity-backstop-1",
+        )
+
+    load_index.assert_not_called()
+    assert metrics["refresh_mode"] == "backstop"
+    assert metrics["input_cik_count"] == 3
+    assert metrics["company_eligible_universe_cik_count"] == 2
+    assert metrics["excluded_cik_count"] == 1
+    assert metrics["cik_count"] == 2
+
+    from edgar_warehouse.infrastructure.dataset_path_catalog import (
+        default_capture_spec_factory,
+    )
+
+    batches_rel = default_capture_spec_factory().cik_universe_batches(
+        "identity-backstop-1"
+    ).relative_path
+    lines = [
+        json.loads(line)
+        for line in Path(context.bronze_root.join(batches_rel)).read_text().splitlines()
+        if line.strip()
+    ]
+    assert lines == [{"cik_list": "100,300"}]
 
 
 def test_cli_accepts_identity_refresh_window_flags() -> None:
@@ -150,8 +333,14 @@ def test_cli_accepts_identity_refresh_window_flags() -> None:
     assert args.batch_size == 50
 
     defaults = parser.parse_args(["compute-identity-refresh-window"])
+    assert defaults.mode == "daily"
     assert defaults.lookback_days == 7
     assert defaults.batch_size == 500
+
+    backstop = parser.parse_args(
+        ["compute-identity-refresh-window", "--mode", "backstop"]
+    )
+    assert backstop.mode == "backstop"
 
 
 # ---------------------------------------------------------------------------

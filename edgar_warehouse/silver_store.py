@@ -3441,6 +3441,48 @@ class SilverDatabase:
             ).fetchall()
         return [int(row[0]) for row in rows]
 
+    def get_company_identity_ciks(
+        self,
+        tracking_status_filter: str = "active",
+    ) -> list[int]:
+        """Return tracked CIKs eligible for scheduled company identity refresh.
+
+        Eligibility is deliberately narrower than the filing/relationship
+        universe: an entity must be operating or present in the canonical
+        SEC ``company_tickers`` snapshot.
+        """
+        statuses = [
+            status.strip()
+            for status in str(tracking_status_filter or "active").split(",")
+            if status.strip()
+        ]
+        status_clause = ""
+        parameters: list[Any] = []
+        if statuses and "all" not in statuses:
+            placeholders = ", ".join("?" for _ in statuses)
+            status_clause = f"AND sync.tracking_status IN ({placeholders})"
+            parameters.extend(statuses)
+        rows = self._conn.execute(
+            f"""
+            SELECT DISTINCT sync.cik
+            FROM sec_company_sync_state AS sync
+            LEFT JOIN sec_company AS company ON company.cik = sync.cik
+            WHERE (
+                LOWER(TRIM(COALESCE(company.entity_type, ''))) = 'operating'
+                OR EXISTS (
+                    SELECT 1
+                    FROM sec_company_ticker AS ticker
+                    WHERE ticker.cik = sync.cik
+                      AND ticker.source_name = 'company_tickers'
+                )
+            )
+            {status_clause}
+            ORDER BY sync.cik
+            """,
+            parameters,
+        ).fetchall()
+        return [int(row[0]) for row in rows]
+
     def get_ciks_with_bronze(self, tracking_status_filter: str = "all") -> list[dict[str, Any]]:
         """Return CIKs that have bronze submissions loaded (have a submissions_main checkpoint).
 

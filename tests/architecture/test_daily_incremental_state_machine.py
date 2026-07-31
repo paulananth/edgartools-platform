@@ -155,7 +155,7 @@ def test_generates_valid_json_with_no_dangling_references(daily_definition: dict
 def test_daily_incremental_starts_with_refresh_mode_check(daily_definition: dict) -> None:
     """Restructured by release-readiness ticket 45/49 (bounded Daily Identity
     Refresh): daily_incremental now decides refresh_mode before choosing
-    between the bounded default path and the full-universe backstop path --
+    between the daily impacted-company path and complete company backstop --
     see tests/architecture/test_daily_identity_refresh_state_machine.py for
     the full shape of both branches."""
     assert daily_definition["StartAt"] == "RefreshModeCheck"
@@ -167,8 +167,8 @@ def test_daily_incremental_default_path_reaches_run_warehouse_task_via_bounded_s
     """The default (no refresh_mode input) path no longer runs the
     full-universe ComputeWindows/Stage0CompanyIdentity pair -- it runs the
     bounded ComputeIdentityRefreshWindow/Stage0CompanyIdentityBounded pair
-    instead (ticket 45/49). The original full-universe pair still exists,
-    reachable via refresh_mode="backstop" -- covered separately."""
+    instead (ticket 45/49). Backstop uses the same explicit-CIK stage with a
+    complete company-eligible input."""
     order = _linear_order_with_choice(daily_definition, prefer=_LEASE_ACQUIRED_PREFER)
     assert "ComputeIdentityRefreshWindow" in order
     assert "Stage0CompanyIdentityBounded" in order
@@ -178,17 +178,18 @@ def test_daily_incremental_default_path_reaches_run_warehouse_task_via_bounded_s
 
 
 def test_daily_incremental_stage0_company_identity_command_shape(daily_definition: dict) -> None:
-    cmd = _command_of(daily_definition, "Stage0CompanyIdentity")
+    cmd = _command_of(daily_definition, "Stage0CompanyIdentityBounded")
     assert "'bootstrap-fundamentals'" in cmd
     assert "'--mode', 'company-identity'" in cmd
-    assert "'--cik-offset'" in cmd
-    assert "'--cik-limit'" in cmd
+    assert "'--cik-list'" in cmd
+    assert "'--cik-offset'" not in cmd
+    assert "'--cik-limit'" not in cmd
 
 
 def test_daily_incremental_stage0_company_identity_is_strict_not_lenient(
     daily_definition: dict,
 ) -> None:
-    state = daily_definition["States"]["Stage0CompanyIdentity"]
+    state = daily_definition["States"]["Stage0CompanyIdentityBounded"]
     assert state["Type"] == "Map"
     assert state["MaxConcurrency"] == 1
     assert state["ToleratedFailurePercentage"] == 0
@@ -200,7 +201,7 @@ def test_daily_incremental_stage0_company_identity_uses_distributed_mode(
 ) -> None:
     """AWS Step Functions rejects ItemReader on an INLINE Map -- must match
     load_history's already-working DISTRIBUTED pattern (fix-pipelines 06-03)."""
-    state = daily_definition["States"]["Stage0CompanyIdentity"]
+    state = daily_definition["States"]["Stage0CompanyIdentityBounded"]
     assert "ItemReader" in state
     assert state["ItemProcessor"]["ProcessorConfig"]["Mode"] == "DISTRIBUTED"
     assert state["ItemProcessor"]["ProcessorConfig"]["ExecutionType"] == "STANDARD"
@@ -220,6 +221,17 @@ def test_daily_incremental_mdm_run_still_uses_entity_type_all(daily_definition: 
     (run_all() calls run_companies())."""
     cmd = _command_of(daily_definition, "MdmRun")
     assert "'--entity-type', 'all'" in cmd
+
+
+def test_daily_filing_ingestion_does_not_inherit_identity_cik_batches(
+    daily_definition: dict,
+) -> None:
+    """The company filter scopes Stage 0 only. RunWarehouseTask retains the
+    ordinary daily-incremental filing contract and receives no identity batch."""
+    cmd = _command_of(daily_definition, "RunWarehouseTask")
+    assert "'daily-incremental'" in cmd
+    assert "'--cik-list'" not in cmd
+    assert "$.cik_list" not in cmd
 
 
 def test_daily_incremental_no_dedicated_gold_refresh_for_company_identity(

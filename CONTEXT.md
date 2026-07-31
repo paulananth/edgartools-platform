@@ -45,7 +45,7 @@ The recurring company-identity refresh for tracked entities whose recent SEC dai
 _Avoid_: Daily full-universe identity sweep, filing ingestion
 
 **Identity Backstop Sweep**:
-The periodic refresh of company identity across the full tracked universe, covering administrative submissions changes that have no filing signal.
+The periodic refresh of company identity across the complete active company-eligible universe (`entity_type = operating` or present in the captured canonical SEC ticker snapshot), covering administrative submissions changes that have no filing signal.
 _Avoid_: Daily identity refresh, historical filing backfill
 
 **Identity Refresh Slot**:
