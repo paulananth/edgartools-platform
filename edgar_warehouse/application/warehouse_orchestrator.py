@@ -2975,7 +2975,6 @@ def _run_configured_form_artifact_pipeline(
                             db=db,
                             accession_number=accession_number,
                             sync_run_id=sync_run_id,
-                            download_bytes=_download_sec_bytes,
                             force=force,
                         )
                         break
@@ -4421,7 +4420,6 @@ def _run_accession_resync(
             db=db,
             accession_number=accession_number,
             sync_run_id=sync_run_id,
-            download_bytes=_download_sec_bytes,
             force=force,
         )
         raw_writes.extend(artifact_result["raw_writes"])

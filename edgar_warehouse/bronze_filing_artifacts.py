@@ -1,8 +1,7 @@
 """Filing artifact fetch and attachment registration helpers.
 
-Ticket 06 (phase 1): filing documents/attachments use an edgartools-only
-network gateway. Silver/cache skip still wins before network. Parallel
-sec_client download_bytes is not used for this object class.
+edgartools supplies filing/attachment discovery metadata. Immutable bronze
+content is fetched separately as the exact SEC archival response.
 """
 
 from __future__ import annotations
@@ -20,8 +19,8 @@ from edgar_warehouse.infrastructure.dataset_path_catalog import (
     default_capture_spec_factory,
 )
 
-# Ticket 06 architecture marker — architecture tests assert this contract.
-FILING_DOCUMENT_NETWORK_GATEWAY: Final = "edgartools"
+# Ticket 56 architecture marker — architecture tests assert this contract.
+FILING_DOCUMENT_NETWORK_GATEWAY: Final = "raw_sec_http"
 
 
 def _emit_artifact_event(event: str, **payload: Any) -> None:
@@ -58,15 +57,6 @@ class TransientFilingContentError(RuntimeError):
     """
 
 
-class ParallelSecDownloadForbidden(RuntimeError):
-    """Raised if filing-document capture would fall back to a non-edgartools client.
-
-    Ticket 06: filing documents/attachments must not use a parallel raw SEC
-    download path. Missing edgartools content is a hard failure, not a silent
-    sec_client fallback.
-    """
-
-
 def fetch_filing_artifacts(
     *,
     context: Any,
@@ -81,11 +71,16 @@ def fetch_filing_artifacts(
 ) -> dict[str, Any]:
     """Fetch and register filing documents/attachments for one accession.
 
-    ``download_bytes`` is accepted for call-site compatibility (orchestrator /
-    service still pass it) but must not be used for this object class. Network
-    content comes only from edgartools ``get_filing`` + attachment.content.
+    ``get_filing`` supplies metadata only. ``download_bytes`` must fetch the
+    canonical attachment URL through the repository-owned raw SEC gateway;
+    its bytes are persisted unchanged.
     """
-    del download_bytes  # ticket 06: unused; kept for signature compatibility
+    if download_bytes is None:
+        from edgar_warehouse.infrastructure.filing_content_gateway import (
+            download_filing_content_bytes,
+        )
+
+        download_bytes = download_filing_content_bytes
 
     filing = db.get_filing(accession_number)
     if filing is None:
@@ -130,8 +125,8 @@ def fetch_filing_artifacts(
                 "network_gateway": FILING_DOCUMENT_NETWORK_GATEWAY,
             }
 
-    # Ticket 06: cold / partial / force always discover via edgartools — no
-    # primary_document URL + sec_client download_bytes fast path.
+    # Always discover the complete attachment set through edgartools. Content
+    # bytes are fetched below, one canonical document URL at a time.
     _started_at = time.monotonic()
     _emit_artifact_event(
         "sec_call_started", accession_number=accession_number, call="get_filing"
@@ -191,15 +186,36 @@ def fetch_filing_artifacts(
             raw_writes.append(_cached_raw_record(existing_raw))
             continue
 
-        payload = row.get("content_bytes")
-        if payload is None:
-            raise ParallelSecDownloadForbidden(
-                f"accession {accession_number} document {document_name!r} has no "
-                f"edgartools content; {FILING_DOCUMENT_NETWORK_GATEWAY}-only gateway "
-                "refuses parallel sec_client download for filing documents"
+        _started_at = time.monotonic()
+        _emit_artifact_event(
+            "artifact_content_fetch_started",
+            accession_number=accession_number,
+            document_name=document_name,
+            url=document_url,
+        )
+        try:
+            payload = download_bytes(document_url, context.identity)
+        except Exception as exc:
+            _emit_artifact_event(
+                "artifact_content_fetch_failed",
+                accession_number=accession_number,
+                document_name=document_name,
+                duration_ms=_elapsed_ms(_started_at),
+                error=exc.__class__.__name__,
             )
-        if isinstance(payload, str):
-            payload = payload.encode("utf-8")
+            raise
+        if not isinstance(payload, bytes):
+            raise TypeError(
+                f"filing content gateway returned {type(payload).__name__}; expected bytes"
+            )
+        network_fetches += 1
+        _emit_artifact_event(
+            "artifact_content_fetch_completed",
+            accession_number=accession_number,
+            document_name=document_name,
+            bytes=len(payload),
+            duration_ms=_elapsed_ms(_started_at),
+        )
 
         artifact_spec = capture_specs.filing_document(
             cik=cik,
@@ -219,7 +235,7 @@ def fetch_filing_artifacts(
             form=filing.get("form"),
         )
         raw_writes.append(raw_record)
-        hydrated = {key: value for key, value in row.items() if key != "content_bytes"}
+        hydrated = dict(row)
         hydrated["raw_object_id"] = raw_record["raw_object_id"]
         hydrated_rows.append(hydrated)
 
@@ -319,9 +335,7 @@ def _write_raw_artifact(
 
 
 def _map_edgartools_attachments(filing_obj: Any, accession_number: str) -> list[dict[str, Any]]:
-    """Map an edgartools Filing's attachments onto this module's attachment_rows
-    shape, pre-fetching content bytes to avoid a second HTTP round-trip in the
-    caller's write loop.
+    """Map edgartools filing metadata onto this module's attachment rows.
 
     is_primary is derived via membership in attachments.primary_documents rather
     than string-matching a primary_document name — more general, since a filing
@@ -330,31 +344,6 @@ def _map_edgartools_attachments(filing_obj: Any, accession_number: str) -> list[
     primary_documents = list(filing_obj.attachments.primary_documents)
     rows: list[dict[str, Any]] = []
     for attachment in filing_obj.attachments:
-        _started_at = time.monotonic()
-        _emit_artifact_event(
-            "artifact_call_started",
-            accession_number=accession_number,
-            document_name=attachment.document,
-        )
-        try:
-            content = attachment.content
-        except Exception as exc:
-            _emit_artifact_event(
-                "artifact_call_failed",
-                accession_number=accession_number,
-                document_name=attachment.document,
-                duration_ms=_elapsed_ms(_started_at),
-                error=exc.__class__.__name__,
-            )
-            raise
-        content_bytes = content.encode("utf-8") if isinstance(content, str) else content
-        _emit_artifact_event(
-            "artifact_call_completed",
-            accession_number=accession_number,
-            document_name=attachment.document,
-            bytes=len(content_bytes) if content_bytes else 0,
-            duration_ms=_elapsed_ms(_started_at),
-        )
         if not attachment.document_type:
             raise TransientFilingContentError(
                 f"accession {accession_number} document {attachment.document!r} has no "
@@ -370,7 +359,6 @@ def _map_edgartools_attachments(filing_obj: Any, accession_number: str) -> list[
                 "document_description": attachment.description,
                 "document_url": attachment.url,
                 "is_primary": attachment in primary_documents,
-                "content_bytes": content_bytes,
             }
         )
     return rows

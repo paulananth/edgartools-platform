@@ -37,16 +37,15 @@ Capture runs emit `network_fetches` and `silver_skips` (and accession-level
 variants) on the filing-artifact pipeline completion event and command metrics
 so operators can prove a re-run did not reload SEC.
 
-## Filing document network gateway (ticket 06)
+## Filing document network gateway (ticket 56)
 
-Filing documents and attachments use an **edgartools-only** network path
-(`FILING_DOCUMENT_NETWORK_GATEWAY = "edgartools"` in
-`bronze_filing_artifacts.py`). There is no parallel primary-document URL +
-`sec_client.download_sec_bytes` fast path for this object class.
+edgartools discovers filing and attachment metadata, including multi-document
+forms. Filing bytes use the repository-owned raw SEC HTTP gateway
+(`FILING_DOCUMENT_NETWORK_GATEWAY = "raw_sec_http"`) for each canonical
+attachment URL, so immutable bronze contains the byte-exact archival response.
 
 - Cache / silver skip still wins before network (existing attachments + raw objects).
-- Missing edgartools content fails closed (`ParallelSecDownloadForbidden`); it does
-  not fall back to raw HTTP.
+- `attachment.content` is never persisted; a raw-content failure fails closed.
 - Bronze evidence writes remain available for `strict_release` / repair paths.
 
 ## Catalog + companyfacts gateway (ticket 07)
