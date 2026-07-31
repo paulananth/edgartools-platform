@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import unittest
 from datetime import date
 from types import SimpleNamespace
@@ -167,6 +168,146 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         )
         self.assertEqual(result["rows_written"], 3)
         self.assertEqual(len(result["raw_writes"]), 2)
+
+    def test_recurring_submission_flow_bounds_artifacts_to_daily_index_accessions(self) -> None:
+        """An impacted CIK's historical submissions must not widen a daily run."""
+
+        pipeline_events: list[tuple[str, dict]] = []
+
+        def capture(**kwargs):
+            return {"cik": kwargs["cik"], "raw_writes": []}
+
+        def apply(**kwargs):
+            return {
+                "rows_written": 0,
+                "rows_skipped": 0,
+                "recent_accessions": ["index-ownership", "historical-proxy"],
+                "pagination_accessions": ["historical-13f"],
+            }
+
+        with (
+            patch.object(
+                warehouse_orchestrator,
+                "_capture_submission_bronze_snapshot",
+                side_effect=capture,
+            ),
+            patch.object(
+                warehouse_orchestrator,
+                "_apply_submission_snapshot_to_silver",
+                side_effect=apply,
+            ),
+            patch.object(
+                warehouse_orchestrator,
+                "_run_configured_form_artifact_pipeline",
+                return_value={"raw_writes": [], "rows_written": 0, "rows_skipped": 0},
+            ) as artifact_pipeline,
+            patch.object(
+                warehouse_orchestrator,
+                "_emit_pipeline_event",
+                side_effect=lambda name, **fields: pipeline_events.append((name, fields)),
+            ),
+        ):
+            warehouse_orchestrator._run_submissions_bronze_then_silver(
+                context=object(),
+                db=object(),
+                sync_run_id="daily-run",
+                ciks=[1001],
+                include_pagination=False,
+                fetch_date=date(2026, 7, 29),
+                force=False,
+                load_mode="daily_incremental",
+                artifact_policy="all_attachments",
+                parser_policy="configured_forms",
+                recurring_mode=True,
+                required_accessions={"index-ownership"},
+            )
+
+        self.assertEqual(
+            artifact_pipeline.call_args.kwargs["accession_numbers"],
+            ["index-ownership"],
+        )
+        self.assertEqual(
+            artifact_pipeline.call_args.kwargs["accession_boundary"],
+            {"index-ownership"},
+        )
+        self.assertTrue(artifact_pipeline.call_args.kwargs["recurring_mode"])
+        boundary = next(
+            fields for name, fields in pipeline_events if name == "daily_artifact_boundary_applied"
+        )
+        self.assertEqual(boundary["daily_index_accession_count"], 1)
+        self.assertEqual(
+            boundary["daily_index_accession_digest"],
+            hashlib.sha256(b"index-ownership").hexdigest(),
+        )
+        self.assertEqual(boundary["recent_source_count"], 2)
+        self.assertEqual(boundary["pagination_source_count"], 1)
+        self.assertEqual(boundary["historical_candidates_excluded_count"], 2)
+        self.assertEqual(boundary["out_of_union_count"], 0)
+
+    def test_recurring_submission_flow_seeds_index_accession_missing_from_submissions(self) -> None:
+        class DailyDb:
+            def __init__(self) -> None:
+                self.filings: dict[str, dict] = {}
+
+            def get_filing(self, accession: str):
+                return self.filings.get(accession)
+
+            def merge_filings(self, rows, _run_id):
+                self.filings.update({row["accession_number"]: dict(row) for row in rows})
+                return len(rows)
+
+        db = DailyDb()
+
+        with (
+            patch.object(
+                warehouse_orchestrator,
+                "_capture_submission_bronze_snapshot",
+                return_value={"cik": 1001, "raw_writes": []},
+            ),
+            patch.object(
+                warehouse_orchestrator,
+                "_apply_submission_snapshot_to_silver",
+                return_value={
+                    "rows_written": 0,
+                    "rows_skipped": 0,
+                    "recent_accessions": ["historical-proxy"],
+                    "pagination_accessions": [],
+                },
+            ),
+            patch.object(
+                warehouse_orchestrator,
+                "_run_configured_form_artifact_pipeline",
+                return_value={"raw_writes": [], "rows_written": 0, "rows_skipped": 0},
+            ) as artifact_pipeline,
+        ):
+            result = warehouse_orchestrator._run_submissions_bronze_then_silver(
+                context=object(),
+                db=db,
+                sync_run_id="daily-run",
+                ciks=[1001],
+                include_pagination=False,
+                fetch_date=date(2026, 7, 29),
+                force=False,
+                load_mode="daily_incremental",
+                artifact_policy="all_attachments",
+                parser_policy="configured_forms",
+                recurring_mode=True,
+                required_accessions={"index-ownership"},
+                required_candidate_rows={
+                    "index-ownership": {
+                        "accession_number": "index-ownership",
+                        "cik": 1001,
+                        "form": "4",
+                        "filing_date": date(2026, 7, 29),
+                    }
+                },
+            )
+
+        self.assertEqual(
+            artifact_pipeline.call_args.kwargs["accession_numbers"],
+            ["index-ownership"],
+        )
+        self.assertEqual(result["rows_written"], 1)
 
     def test_release_submission_flow_sends_only_manifest_required_accessions(self) -> None:
         def capture(**kwargs):
@@ -445,6 +586,103 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         self.assertEqual(result["rows_written"], 28)
         self.assertEqual(len(result["raw_writes"]), 7)
 
+    def test_recurring_artifact_pipeline_rejects_out_of_index_candidate(self) -> None:
+        with self.assertRaisesRegex(Exception, "expansion-contract violation.*proxy-1"):
+            warehouse_orchestrator._run_configured_form_artifact_pipeline(
+                context=SimpleNamespace(identity="tester@example.com"),
+                db=_ConfiguredFormDb(),
+                sync_run_id="daily-run",
+                accession_numbers=["ownership-1", "proxy-1"],
+                accession_boundary={"ownership-1"},
+                artifact_policy="all_attachments",
+                parser_policy="configured_forms",
+                force=False,
+                recurring_mode=True,
+            )
+
+    def test_recurring_artifact_pipeline_emits_selection_rejection_evidence(self) -> None:
+        db = _ConfiguredFormDb()
+        db.filings["ownership-1"]["filing_date"] = date(2000, 1, 1)
+        events: list[tuple[str, dict]] = []
+        refresh_result = {
+            "raw_writes": [],
+            "attachment_count": 0,
+            "network_fetches": 0,
+        }
+
+        with (
+            patch(
+                "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
+                return_value=refresh_result,
+            ),
+            patch.object(
+                warehouse_orchestrator,
+                "_emit_pipeline_event",
+                side_effect=lambda name, **fields: events.append((name, fields)),
+            ),
+        ):
+            warehouse_orchestrator._run_configured_form_artifact_pipeline(
+                context=SimpleNamespace(identity="tester@example.com"),
+                db=db,
+                sync_run_id="daily-run",
+                accession_numbers=["ownership-1", "generic-1", "13f-1"],
+                accession_boundary={"ownership-1", "generic-1", "13f-1"},
+                artifact_policy="all_attachments",
+                parser_policy="branch_b_deferred",
+                force=False,
+                recurring_mode=True,
+            )
+
+        selection = next(
+            fields for name, fields in events if name == "daily_artifact_selection_completed"
+        )
+        self.assertEqual(selection["daily_index_accession_count"], 3)
+        self.assertEqual(selection["configured_candidate_count"], 1)
+        self.assertEqual(selection["configured_form_rejected_count"], 1)
+        self.assertEqual(selection["ownership_lookback_rejected_count"], 1)
+        self.assertEqual(selection["item_502_lookback_rejected_count"], 0)
+        self.assertEqual(selection["out_of_union_count"], 0)
+        self.assertEqual(selection["configured_form_counts"], {"13F-HR": 1})
+
+    def test_recurring_artifact_pipeline_ignores_years_of_historical_configured_forms(self) -> None:
+        db = _ConfiguredFormDb()
+        for year in range(2010, 2026):
+            accession = f"historical-proxy-{year}"
+            db.filings[accession] = {
+                "accession_number": accession,
+                "form": "DEF 14A",
+                "filing_date": date(year, 4, 1),
+            }
+        db.filings["daily-ownership"] = {
+            "accession_number": "daily-ownership",
+            "form": "4",
+            "filing_date": date(2026, 7, 29),
+        }
+        refresh_result = {
+            "raw_writes": [],
+            "attachment_count": 0,
+            "network_fetches": 0,
+        }
+
+        with patch(
+            "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
+            return_value=refresh_result,
+        ) as refresh:
+            warehouse_orchestrator._run_configured_form_artifact_pipeline(
+                context=SimpleNamespace(identity="tester@example.com"),
+                db=db,
+                sync_run_id="daily-run",
+                accession_numbers=["daily-ownership"],
+                accession_boundary={"daily-ownership"},
+                artifact_policy="all_attachments",
+                parser_policy="branch_b_deferred",
+                force=False,
+                recurring_mode=True,
+            )
+
+        self.assertEqual(refresh.call_count, 1)
+        self.assertEqual(refresh.call_args.kwargs["accession_number"], "daily-ownership")
+
     def test_release_artifact_pipeline_fails_closed(self) -> None:
         with patch(
             "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
@@ -519,6 +757,126 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         close_clients.assert_called_once_with()
         sleep.assert_called_once_with(1.0)
         self.assertEqual(result["candidate_outcomes"][0]["accession_number"], "13f-1")
+
+    def test_recurring_artifact_pipeline_resets_pool_before_bounded_retry(self) -> None:
+        class PoolTimeout(Exception):
+            pass
+
+        events: list[tuple[str, dict]] = []
+        refresh_result = {
+            "raw_writes": [{"source_name": "filing_document"}],
+            "attachment_count": 1,
+            "network_fetches": 1,
+        }
+        with (
+            patch(
+                "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
+                side_effect=[PoolTimeout(), refresh_result],
+            ) as refresh,
+            patch("edgar.httpclient.close_clients") as close_clients,
+            patch("time.sleep") as sleep,
+            patch.object(
+                warehouse_orchestrator,
+                "_emit_pipeline_event",
+                side_effect=lambda name, **fields: events.append((name, fields)),
+            ),
+        ):
+            result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
+                context=SimpleNamespace(identity="tester@example.com"),
+                db=_ConfiguredFormDb(),
+                sync_run_id="daily-run",
+                accession_numbers=["13f-1"],
+                accession_boundary={"13f-1"},
+                artifact_policy="all_attachments",
+                parser_policy="branch_b_deferred",
+                force=False,
+                recurring_mode=True,
+            )
+
+        self.assertEqual(refresh.call_count, 2)
+        close_clients.assert_called_once_with()
+        self.assertEqual(sleep.call_args_list[0].args, (1.0,))
+        self.assertEqual(result["retry_count"], 1)
+        self.assertEqual(result["processed_accessions"], 1)
+        self.assertEqual(result["remaining_accessions"], 0)
+        completed = next(
+            fields for name, fields in events if name == "filing_artifact_pipeline_completed"
+        )
+        self.assertEqual(completed["attempted_accessions"], 1)
+        self.assertEqual(completed["circuit_breaker_disposition"], "closed")
+
+    def test_recurring_artifact_pipeline_fails_when_pool_retries_are_exhausted(self) -> None:
+        class PoolTimeout(Exception):
+            pass
+
+        events: list[tuple[str, dict]] = []
+        with (
+            patch(
+                "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
+                side_effect=PoolTimeout(),
+            ) as refresh,
+            patch("edgar.httpclient.close_clients") as close_clients,
+            patch("time.sleep"),
+            patch.object(
+                warehouse_orchestrator,
+                "_emit_pipeline_event",
+                side_effect=lambda name, **fields: events.append((name, fields)),
+            ),
+            self.assertRaisesRegex(Exception, "retry exhausted.*13f-1"),
+        ):
+            warehouse_orchestrator._run_configured_form_artifact_pipeline(
+                context=SimpleNamespace(identity="tester@example.com"),
+                db=_ConfiguredFormDb(),
+                sync_run_id="daily-run",
+                accession_numbers=["13f-1"],
+                accession_boundary={"13f-1"},
+                artifact_policy="all_attachments",
+                parser_policy="branch_b_deferred",
+                force=False,
+                recurring_mode=True,
+            )
+
+        self.assertEqual(refresh.call_count, 3)
+        self.assertEqual(close_clients.call_count, 2)
+        partial = next(fields for name, fields in events if name == "filing_artifact_pipeline_partial")
+        self.assertEqual(partial["processed_accessions"], 0)
+        self.assertEqual(partial["remaining_accessions"], 1)
+        self.assertEqual(partial["circuit_breaker_disposition"], "closed")
+        self.assertNotIn("filing_artifact_pipeline_completed", [name for name, _ in events])
+
+    def test_recurring_artifact_pipeline_fails_when_circuit_opens(self) -> None:
+        events: list[tuple[str, dict]] = []
+        with (
+            patch(
+                "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
+                side_effect=ValueError("bad filing"),
+            ),
+            patch.dict("os.environ", {"WAREHOUSE_ARTIFACT_CIRCUIT_BREAKER": "2"}),
+            patch.object(
+                warehouse_orchestrator,
+                "_emit_pipeline_event",
+                side_effect=lambda name, **fields: events.append((name, fields)),
+            ),
+            self.assertRaisesRegex(Exception, "circuit breaker.*2 unresolved"),
+        ):
+            warehouse_orchestrator._run_configured_form_artifact_pipeline(
+                context=SimpleNamespace(identity="tester@example.com"),
+                db=_ConfiguredFormDb(),
+                sync_run_id="daily-run",
+                accession_numbers=["ownership-1", "proxy-1"],
+                accession_boundary={"ownership-1", "proxy-1"},
+                artifact_policy="all_attachments",
+                parser_policy="branch_b_deferred",
+                force=True,
+                recurring_mode=True,
+            )
+
+        circuit = next(fields for name, fields in events if name == "filing_artifact_circuit_open")
+        self.assertEqual(circuit["attempted_accessions"], 2)
+        self.assertEqual(circuit["processed_accessions"], 0)
+        self.assertEqual(circuit["remaining_accessions"], 2)
+        self.assertIn("filing_artifact_pipeline_partial", [name for name, _ in events])
+        self.assertNotIn("filing_artifact_pipeline_completed", [name for name, _ in events])
 
     def test_release_artifact_pipeline_busts_edgartools_filing_cache_on_content_error(self) -> None:
         """Production regression: accession 0000009631-13-000012.

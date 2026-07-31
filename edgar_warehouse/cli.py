@@ -139,6 +139,10 @@ def _handle_bootstrap(args: argparse.Namespace) -> int:
 
 
 def _handle_daily_incremental(args: argparse.Namespace) -> int:
+    if args.recurring_index_lookback_days is None:
+        args.recurring_index_lookback_days = (
+            0 if args.start_date is not None or args.end_date is not None else 7
+        )
     return run_command("daily-incremental", args)
 
 
@@ -284,6 +288,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     daily_incremental.add_argument("--start-date", help="Inclusive start business date in YYYY-MM-DD format")
     daily_incremental.add_argument("--end-date", help="Inclusive end business date in YYYY-MM-DD format")
+    daily_incremental.add_argument(
+        "--recurring-index-lookback-days",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Force the trailing N calendar days of SEC daily indexes and constrain "
+            "artifact discovery to their exact accession union. Defaults to 7 for an "
+            "ordinary daily run; an explicit --start-date/--end-date range preserves "
+            "historical discovery unless this option is also supplied."
+        ),
+    )
     daily_incremental.add_argument(
         "--include-reference-refresh",
         dest="include_reference_refresh",
