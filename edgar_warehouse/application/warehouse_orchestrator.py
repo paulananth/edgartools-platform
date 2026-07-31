@@ -2275,34 +2275,37 @@ def _capture_bronze_raw(
         return raw_writes, metrics
 
     if command_name == "compute-identity-refresh-window":
-        # Index-only pre-stage for the bounded Daily Identity Refresh
-        # (release-readiness ticket 45/49): force-recheck the trailing N
-        # calendar days (force=True, unlike daily-incremental's own
-        # already-succeeded-checkpoint short-circuit) so a late SEC
-        # daily-index republish within the window is still caught, union
-        # the impacted CIKs across those days, and write that union as the
-        # CIK source for company-identity processing -- instead of
-        # compute-windows' full tracked-universe scope.
+        # Shared pre-stage for both scheduled identity modes. Daily mode
+        # force-rechecks the trailing indexes; backstop mode skips filing
+        # discovery and selects the complete company-eligible universe.
+        refresh_started_at = datetime.now(UTC)
+        refresh_mode = str(scope.get("mode") or "daily").strip()
+        if refresh_mode not in {"daily", "backstop"}:
+            raise WarehouseRuntimeError(
+                "compute-identity-refresh-window requires --mode of "
+                f"'daily' or 'backstop', got {refresh_mode!r}"
+            )
         lookback_days = int(scope["lookback_days"])
         batch_size = int(scope["batch_size"])
         end_date = now.date()
         start_date = end_date - timedelta(days=lookback_days - 1)
         impacted_ciks: list[int] = []
-        for target_date in _date_range(start=start_date, end=end_date):
-            result = _load_daily_index_for_date(
-                context=context,
-                db=db,
-                target_date=target_date,
-                sync_run_id=sync_run_id,
-                now=now,
-                force=True,
-            )
-            raw_writes.extend(result["raw_writes"])
-            metrics["rows_inserted"] += result["rows_written"]
-            metrics["rows_skipped"] += result["rows_skipped"]
-            _merge_capture_network_metrics(metrics, result)
-            impacted_ciks.extend(result["impacted_ciks"])
-        impacted_ciks = _dedupe_ints(impacted_ciks)
+        if refresh_mode == "daily":
+            for target_date in _date_range(start=start_date, end=end_date):
+                result = _load_daily_index_for_date(
+                    context=context,
+                    db=db,
+                    target_date=target_date,
+                    sync_run_id=sync_run_id,
+                    now=now,
+                    force=True,
+                )
+                raw_writes.extend(result["raw_writes"])
+                metrics["rows_inserted"] += result["rows_written"]
+                metrics["rows_skipped"] += result["rows_skipped"]
+                _merge_capture_network_metrics(metrics, result)
+                impacted_ciks.extend(result["impacted_ciks"])
+            impacted_ciks = _dedupe_ints(impacted_ciks)
         reference_result = _sync_reference_data(
             context=context,
             db=db,
@@ -2312,24 +2315,52 @@ def _capture_bronze_raw(
         raw_writes.extend(reference_result["raw_writes"])
         metrics["rows_inserted"] += reference_result["rows_written"]
         metrics["rows_skipped"] += reference_result["rows_skipped"]
-        impacted_ciks = _filter_ciks_to_universe(impacted_ciks, db=db)
+        tracked_active_ciks = db.get_tracked_ciks("active")
+        company_eligible_ciks = db.get_company_identity_ciks("active")
+        if refresh_mode == "backstop":
+            input_cik_count = len(tracked_active_ciks)
+            selected_ciks = company_eligible_ciks
+        else:
+            input_cik_count = len(impacted_ciks)
+            company_eligible_set = set(company_eligible_ciks)
+            selected_ciks = sorted(
+                cik for cik in impacted_ciks if cik in company_eligible_set
+            )
+        excluded_cik_count = input_cik_count - len(selected_ciks)
+        cik_digest = _cik_set_digest(selected_ciks)
         batches_path = _write_cik_universe_batches(
             context=context,
-            rows=[{"cik": cik} for cik in impacted_ciks],
+            rows=[{"cik": cik} for cik in selected_ciks],
             fetch_date=now.date(),
             sync_run_id=sync_run_id,
             batch_size=batch_size,
         )
+        duration_seconds = (
+            datetime.now(UTC) - refresh_started_at
+        ).total_seconds()
+        selection_evidence = {
+            "refresh_mode": refresh_mode,
+            "cik_count": len(selected_ciks),
+            "lookback_days": lookback_days,
+            "batch_size": batch_size,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "input_cik_count": input_cik_count,
+            "tracked_active_cik_count": len(tracked_active_ciks),
+            "company_eligible_universe_cik_count": len(company_eligible_ciks),
+            "excluded_cik_count": excluded_cik_count,
+            "selected_cik_digest": cik_digest,
+            "reference_snapshot_identity": reference_result.get(
+                "reference_snapshot_identity"
+            ),
+            "prestage_duration_seconds": duration_seconds,
+        }
         _emit_pipeline_event(
             "compute_identity_refresh_window_completed",
             run_id=sync_run_id,
-            cik_count=len(impacted_ciks),
-            lookback_days=lookback_days,
-            batch_size=batch_size,
-            start_date=start_date.isoformat(),
-            end_date=end_date.isoformat(),
+            **selection_evidence,
         )
-        metrics["cik_count"] = len(impacted_ciks)
+        metrics.update(selection_evidence)
         metrics["cik_universe_path"] = batches_path
         return raw_writes, metrics
 
@@ -3906,6 +3937,7 @@ def _sync_reference_data(
     rows_written = 0
     rows_skipped = 0
     seed_document: dict[str, Any] | None = None
+    reference_snapshot_identity: dict[str, str] | None = None
     now = datetime.now(UTC)
     capture_specs = default_capture_spec_factory()
 
@@ -3939,6 +3971,12 @@ def _sync_reference_data(
             document = _decode_json_bytes(raw_payload, spec.source_url or "")
 
         raw_writes.append(write_record)
+        if spec.source_name == "company_tickers":
+            reference_snapshot_identity = {
+                "source_name": spec.source_name,
+                "sha256": str(write_record["sha256"]),
+                "path": str(write_record["path"]),
+            }
         rows = _parse_company_ticker_rows(document)
         checkpoint = db.get_source_checkpoint(spec.source_name, "global")
         if cached_ref is None and (not checkpoint or checkpoint.get("last_sha256") != write_record["sha256"]):
@@ -3971,6 +4009,7 @@ def _sync_reference_data(
         "rows_written": rows_written,
         "rows_skipped": rows_skipped,
         "seed_document": seed_document,
+        "reference_snapshot_identity": reference_snapshot_identity,
     }
 
 
@@ -4848,6 +4887,12 @@ def _filter_ciks_to_universe(impacted_ciks: list[int], *, db: SilverDatabase) ->
     return [c for c in impacted_ciks if c in tracked_set]
 
 
+def _cik_set_digest(ciks: Iterable[int]) -> str:
+    """Return a stable digest for an exact ordered CIK set."""
+    normalized = ",".join(str(cik) for cik in sorted(set(ciks)))
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 def _seed_silver_tracking_status(
     db: SilverDatabase,
     ciks: list[int],
@@ -5139,6 +5184,7 @@ def _resolve_scope(
 
     if command_name == "compute-identity-refresh-window":
         return {
+            "mode": str(arguments.get("mode") or "daily"),
             "lookback_days": int(arguments.get("lookback_days") or 7),
             "batch_size": int(arguments.get("batch_size") or 500),
         }

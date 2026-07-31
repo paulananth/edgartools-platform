@@ -251,6 +251,7 @@ EXCLUDED_OPERATIONAL_TABLES = frozenset(
         "sec_parse_run",
         "sec_sync_run",
         "pipeline_run",
+        "pipeline_run_lease",
         "gold_manifest",
         "sec_source_checkpoint",
         "sec_company_sync_state",

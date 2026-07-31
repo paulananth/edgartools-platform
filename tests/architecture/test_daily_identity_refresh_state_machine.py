@@ -11,9 +11,9 @@ tests/architecture/test_gold_affecting_commands_task_sizing.py) and asserts:
   -> Stage0CompanyIdentityBounded stages, NOT the full-universe ComputeWindows
   path that took 10h16m alone on the first prod execution (ticket 45's
   evidence).
-- refresh_mode="backstop" still routes through the original, unchanged
-  full-universe ComputeWindows -> Stage0CompanyIdentity pair (the weekly
-  Identity Backstop Sweep ticket 45 requires as a coverage backstop).
+- refresh_mode="backstop" routes through the same explicit-CIK batch Map as
+  daily mode, but its pre-stage emits the complete active company-eligible
+  universe rather than an index-impacted subset.
 - bootstrap's definition (a different workflow_name) is untouched by any of
   this -- it never had the full-universe Stage0 prefix in the first place.
 """
@@ -106,6 +106,7 @@ def test_daily_incremental_default_path_is_bounded_not_full_universe(daily_incre
     compute_window = states["ComputeIdentityRefreshWindow"]
     cmd = compute_window["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "compute-identity-refresh-window" in cmd
+    assert "'--mode', 'daily'" in cmd
     assert compute_window["Next"] == "Stage0CompanyIdentityBounded"
 
     bounded_stage0 = states["Stage0CompanyIdentityBounded"]
@@ -123,34 +124,41 @@ def test_daily_incremental_default_path_is_bounded_not_full_universe(daily_incre
     assert "company-identity" in inner_cmd
 
 
-def test_daily_incremental_backstop_path_is_unchanged_full_universe(daily_incremental_definition) -> None:
-    """refresh_mode='backstop' must still route through the original,
-    byte-for-byte-unchanged full-universe ComputeWindows -> Stage0CompanyIdentity
-    pair -- ticket 45's Identity Backstop Sweep."""
+def test_daily_incremental_backstop_uses_complete_company_eligible_universe(
+    daily_incremental_definition,
+) -> None:
+    """Backstop must use the shared company-eligibility contract and explicit
+    CIK batches, never the old offset-based all-entity path."""
     states = daily_incremental_definition["States"]
     refresh_mode = states["RefreshMode"]
     backstop_choice = next(
         c for c in refresh_mode["Choices"] if c.get("StringEquals") == "backstop"
     )
-    assert backstop_choice["Next"] == "ComputeWindows"
+    assert backstop_choice["Next"] == "ComputeIdentityBackstopUniverse"
 
-    compute_windows = states["ComputeWindows"]
-    cmd = compute_windows["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
-    assert "compute-windows" in cmd
-    assert "--total-cik-limit" in cmd and "'0'" in cmd, "backstop must still process the full, unbounded universe"
-    assert compute_windows["Next"] == "Stage0CompanyIdentity"
+    compute_backstop = states["ComputeIdentityBackstopUniverse"]
+    cmd = compute_backstop["Parameters"]["Overrides"]["ContainerOverrides"][0][
+        "Command.$"
+    ]
+    assert "compute-identity-refresh-window" in cmd
+    assert "'--mode', 'backstop'" in cmd
+    assert compute_backstop["Next"] == "Stage0CompanyIdentityBounded"
 
-    stage0 = states["Stage0CompanyIdentity"]
-    assert stage0["Type"] == "Map"
-    assert stage0["Next"] == "RunWarehouseTask"
+    assert "ComputeWindows" not in states
+    assert "Stage0CompanyIdentity" not in states
 
 
-def test_daily_incremental_both_stage0_variants_converge_on_run_warehouse_task(
+def test_daily_incremental_both_modes_share_explicit_cik_stage0(
     daily_incremental_definition,
 ) -> None:
     states = daily_incremental_definition["States"]
+    assert states["ComputeIdentityRefreshWindow"]["Next"] == (
+        "Stage0CompanyIdentityBounded"
+    )
+    assert states["ComputeIdentityBackstopUniverse"]["Next"] == (
+        "Stage0CompanyIdentityBounded"
+    )
     assert states["Stage0CompanyIdentityBounded"]["Next"] == "RunWarehouseTask"
-    assert states["Stage0CompanyIdentity"]["Next"] == "RunWarehouseTask"
 
 
 def test_bootstrap_definition_has_no_refresh_mode_states(bootstrap_definition) -> None:
@@ -162,6 +170,7 @@ def test_bootstrap_definition_has_no_refresh_mode_states(bootstrap_definition) -
         "RefreshModeCheck",
         "RefreshMode",
         "ComputeIdentityRefreshWindow",
+        "ComputeIdentityBackstopUniverse",
         "Stage0CompanyIdentityBounded",
         "ComputeWindows",
         "Stage0CompanyIdentity",

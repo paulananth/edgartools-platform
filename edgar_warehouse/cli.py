@@ -880,13 +880,17 @@ def build_parser() -> argparse.ArgumentParser:
     compute_identity_refresh_window = subparsers.add_parser(
         "compute-identity-refresh-window",
         help=(
-            "Index-only pre-stage for the bounded Daily Identity Refresh (release-readiness "
-            "ticket 45/49): force-recheck the trailing N calendar days of SEC daily indexes, "
-            "union their impacted CIKs, refresh global ticker/exchange reference data once, "
-            "and write the union as batched cik_list JSONL (reusing seed-universe's batch "
-            "shape) for company-identity processing -- instead of compute-windows' "
-            "full tracked-universe scope."
+            "Build the scheduled company-identity CIK batches. Daily mode "
+            "force-rechecks trailing SEC daily indexes and intersects impacted "
+            "CIKs with the active company-eligible universe; backstop mode emits "
+            "the complete active company-eligible universe."
         ),
+    )
+    compute_identity_refresh_window.add_argument(
+        "--mode",
+        choices=["daily", "backstop"],
+        default="daily",
+        help="Scheduled identity refresh mode (default: daily).",
     )
     compute_identity_refresh_window.add_argument(
         "--lookback-days",

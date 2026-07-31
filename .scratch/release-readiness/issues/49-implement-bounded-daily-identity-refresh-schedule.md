@@ -21,8 +21,9 @@ be implemented and proven before recurring production triggers are enabled?
 - Invoke the existing explicit-CIK company-identity path in bounded chunks.
 - Refresh global ticker/exchange reference data once per refresh rather than
   once per CIK window.
-- Preserve an Identity Backstop Sweep that processes the complete tracked
-  universe.
+- Preserve an Identity Backstop Sweep that processes the complete active
+  company-eligible universe: `entity_type = operating` or present in the
+  captured canonical SEC `company_tickers` snapshot.
 
 ### Schedule ownership and cadence
 
@@ -58,9 +59,15 @@ checkpoint, collect Release-Candidate-bound evidence that:
   the forced seven-day recheck in at most 6 hours;
 - one manual Identity Backstop Sweep completes the full downstream chain in at
   most 18 hours;
-- the daily run covers the exact expected impacted-CIK union, including a
-  forced late-index-republish fixture;
-- the backstop covers the complete tracked universe; and
+- the daily run covers the exact expected intersection of the forced
+  impacted-CIK union and company-eligible universe, including a forced
+  late-index-republish fixture;
+- the backstop covers the complete company-eligible universe from the same
+  captured reference snapshot;
+- both identity modes record the reference snapshot identity, input/eligible/
+  excluded counts, selected-CIK digest, and pre-stage elapsed time; strict Map
+  success plus the execution timeline provides processed-CIK and end-to-end
+  duration evidence; and
 - a deliberate competing trigger records `deferred` without starting duplicate
   data work.
 
@@ -327,6 +334,31 @@ already-reviewed work). Findings applied:
 Full test suite: 865 passed (unit + architecture), 4 skipped. Both Terraform
 roots (`accounts/prod`, `access/aws/accounts/prod`) `terraform validate`
 clean.
+
+## Progress (2026-07-31 — company-only identity universe)
+
+The scheduled identity scope now uses one reusable silver eligibility query:
+active tracked CIKs whose `sec_company.entity_type` is `operating` or whose
+CIK is present in the captured canonical `company_tickers` snapshot. Daily
+mode intersects the forced seven-day impacted-CIK union with that eligibility
+set. Backstop mode emits the complete eligible set through the same explicit
+`cik_list` batch Map; the old scheduled `ComputeWindows`/
+`Stage0CompanyIdentity` all-entity branch has been removed without changing
+the independent load-history or explicit-CIK repair paths.
+
+The pre-stage records the canonical ticker snapshot path and SHA-256, input,
+active-tracked, eligible, excluded, and selected counts, a stable exact
+selected-CIK digest, mode, and pre-stage duration. Empty eligibility fails
+closed to an empty scheduled batch rather than falling back to all impacted
+filers.
+
+Phase 1 evidence must now prove exact company-eligible-universe parity for
+both modes using those emitted identities and counts. It must not compare the
+backstop against the approximately 26,300-CIK all-entity tracked universe.
+The selected digest becomes processed evidence only when the strict
+`Stage0CompanyIdentityBounded` Map succeeds; its Step Functions execution
+timestamps, not the pre-stage timer, establish identity-stage and full-chain
+elapsed time.
 
 **Still not done:** CloudWatch alerting (deferral alerts, 18h/20h-stale
 execution alarm), actually running `--configure-daily-incremental-schedule

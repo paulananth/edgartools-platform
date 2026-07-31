@@ -2386,11 +2386,11 @@ else:
     # execution (ticket 45's evidence), because it reprocesses the entire
     # ~26,300-CIK tracked universe every run instead of just the CIKs that
     # actually filed something recently. RefreshMode branches on
-    # $.refresh_mode: "backstop" keeps this exact full-universe path
-    # (the weekly Identity Backstop Sweep, unchanged); the default "daily"
-    # path goes through ComputeIdentityRefreshWindow instead, which unions the
-    # trailing 7 days' impacted CIKs (an order of magnitude fewer) and
-    # processes only those. Both converge on RunWarehouseTask.
+    # $.refresh_mode: "backstop" selects the complete active company-eligible
+    # universe (the weekly Identity Backstop Sweep); the default "daily" path
+    # intersects the trailing 7 days' impacted CIKs with that same bounded
+    # universe. Both use the explicit-CIK Stage 0 Map and converge on
+    # RunWarehouseTask.
     #
     # AcquireLease/ReleaseLease (release-readiness ticket 49, go-live follow-up):
     # a run-level lease shared by the Daily Identity Refresh and the Identity
@@ -2513,19 +2513,25 @@ else:
     gold["Next"] = "ReleaseLease"
     refresh_mode = {
         "Type": "Choice",
-        "Comment": "backstop -> full-universe Identity Backstop Sweep (existing ComputeWindows path); daily (default) -> bounded Daily Identity Refresh.",
+        "Comment": "Both scheduled identity modes use the active operating-or-current-SEC-ticker universe: backstop selects the complete eligible set; daily intersects it with the trailing index window.",
         "Choices": [
             {
                 "Variable": "$.refresh_mode",
                 "StringEquals": "backstop",
-                "Next": "ComputeWindows",
+                "Next": "ComputeIdentityBackstopUniverse",
             }
         ],
         "Default": "ComputeIdentityRefreshWindow",
     }
 
     compute_identity_refresh_window = ecs_state(wh_medium_arn,
-        "States.Array('compute-identity-refresh-window', '--lookback-days', '7', "
+        "States.Array('compute-identity-refresh-window', '--mode', 'daily', "
+        "'--lookback-days', '7', "
+        "'--batch-size', '500', '--run-id', $$.Execution.Name)",
+        next_state="Stage0CompanyIdentityBounded")
+
+    compute_identity_backstop_universe = ecs_state(wh_medium_arn,
+        "States.Array('compute-identity-refresh-window', '--mode', 'backstop', "
         "'--batch-size', '500', '--run-id', $$.Execution.Name)",
         next_state="Stage0CompanyIdentityBounded")
 
@@ -2536,7 +2542,7 @@ else:
 
     stage0_company_identity_bounded = {
         "Type": "Map",
-        "Comment": "Stage 0 (Daily Identity Refresh): company identity capture bounded to the trailing-7-day impacted-CIK union, not the full tracked universe.",
+        "Comment": "Stage 0 scheduled company identity: explicit CIK batches already bounded by the shared active operating-or-current-SEC-ticker eligibility contract.",
         "MaxConcurrency": 1,
         "ToleratedFailurePercentage": 0,
         "ItemReader": {
@@ -2551,39 +2557,6 @@ else:
             "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
             "StartAt": "RunCompanyIdentityBatch",
             "States": {"RunCompanyIdentityBatch": per_batch_company_identity},
-        },
-        "ResultPath": None,
-        "Next": "RunWarehouseTask",
-    }
-
-    compute_windows = ecs_state(wh_medium_arn,
-        "States.Array('compute-windows', '--window-size', '500', '--total-cik-limit', '0', "
-        "'--run-id', $$.Execution.Name)",
-        next_state="Stage0CompanyIdentity")
-
-    per_window_company_identity = ecs_state(wh_medium_arn,
-        "States.Array('bootstrap-fundamentals', '--mode', 'company-identity', "
-        "'--cik-offset', States.Format('{}', $.window_offset), "
-        "'--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
-        is_end=True)
-
-    stage0_company_identity = {
-        "Type": "Map",
-        "Comment": "Stage 0: Company Identity capture (MaxConcurrency=1, strict) -- same shape as load_history's ticket 05 stage.",
-        "MaxConcurrency": 1,
-        "ToleratedFailurePercentage": 0,
-        "ItemReader": {
-            "Resource": "arn:aws:states:::s3:getObject",
-            "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
-            "Parameters": {
-                "Bucket": bronze_bucket_name,
-                "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)",
-            },
-        },
-        "ItemProcessor": {
-            "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
-            "StartAt": "RunCompanyIdentityWindow",
-            "States": {"RunCompanyIdentityWindow": per_window_company_identity},
         },
         "ResultPath": None,
         "Next": "RunWarehouseTask",
@@ -2692,9 +2665,10 @@ else:
 
     definition = {
         "Comment": (
-            f"{display}: (0) RefreshMode -- backstop (full-universe ComputeWindows, weekly) vs "
-            "daily (bounded ComputeIdentityRefreshWindow, default) -- release-readiness ticket "
-            "45/49, (0b) Stage0CompanyIdentity[Bounded] -- Company Identity capture, strict, runs "
+            f"{display}: (0) RefreshMode -- backstop (complete company-eligible universe, weekly) vs "
+            "daily (index-impacted company-eligible intersection, default), both emitted by "
+            "compute-identity-refresh-window -- release-readiness ticket 45/49/51, "
+            "(0b) Stage0CompanyIdentityBounded -- Company Identity capture, strict, runs "
             "before ownership/ADV so IS_INSIDER derivation sees resolved Company entities, "
             "(1) bronze+silver capture, (1b) AdvBulkFetch -- fetch-adv-bulk + "
             "ingest-relationship-sources (adv-fetch-pipeline-wiring spec), then fetch-firm-roster "
@@ -2714,9 +2688,8 @@ else:
             "Deferred":           deferred,
             "RefreshMode":        refresh_mode,
             "ComputeIdentityRefreshWindow": compute_identity_refresh_window,
+            "ComputeIdentityBackstopUniverse": compute_identity_backstop_universe,
             "Stage0CompanyIdentityBounded": stage0_company_identity_bounded,
-            "ComputeWindows":    compute_windows,
-            "Stage0CompanyIdentity": stage0_company_identity,
             "RunWarehouseTask": run_wh,
             "DatasetPeriodCheck":   dataset_period_check,
             "DatasetPeriodDefault": dataset_period_default,
