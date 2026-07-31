@@ -95,7 +95,7 @@ def _generate(workflow_name: str) -> dict:
             f'source "{fn_file.as_posix()}"\n'
             f'write_warehouse_mdm_gold_definition "{out_file.as_posix()}" '
             '"arn:wh-medium" "arn:mdm-small" "arn:mdm-medium" "arn:wh-large" '
-            f'"{workflow_name}" "fake-bronze-bucket"\n',
+            f'"{workflow_name}" "fake-bronze-bucket" "arn:aws:sns:us-east-1:000000000000:fake-alerts"\n',
             encoding="utf-8",
         )
 

@@ -371,3 +371,38 @@ Focused tests, repository CI, deployed definitions, manual production timing,
 coverage evidence, and the concurrency-deferral proof all pass for one
 immutable Release Candidate. The ticket records the AWS Operator's explicit
 enable/hold decision and verifies live EventBridge state afterward.
+
+## Progress (2026-07-31 — alerting implemented; production rollout blocked by authority and delivery)
+
+Completed the remaining alerting implementation on the combined release-candidate
+base `47005767bc9efcc677e346ab06ca53c9bb00ad0b`:
+
+- the Daily Identity Refresh state machine has a hard top-level
+  `TimeoutSeconds=64800` bound, so an execution still active at 18 hours ends
+  as `TIMED_OUT` rather than continuing silently;
+- every explicit lease-busy disposition routes through a retrying direct SNS
+  publish before the terminal `deferred` output, avoiding the false claim that
+  a CloudWatch alarm state transition can notify once for every metric event;
+- an off-by-default standalone deploy control creates or removes the distinct
+  `AWS/States ExecutionsTimedOut` CloudWatch alarm, requires an in-account SNS
+  topic with at least one confirmed subscription, and never deploys workloads
+  or enables recurrence;
+- AWS access Terraform grants the Step Functions role `sns:Publish` only to
+  `arn:aws:sns:us-east-1:690839588395:sec-edgar-pipeline-alerts` and exports
+  that ARN for the operator deploy boundary.
+
+Focused architecture tests pass, the full unit+architecture suite passes,
+`bash -n` and production access Terraform validation pass, and the live AWS
+`ValidateStateMachineDefinition` API returns `OK` with no diagnostics for the
+generated daily definition. The GoF review found no evidence-backed catalog
+refactor worth adding to this composition-root script.
+
+No production mutation was performed. The required profile resolves to the
+correct account but the actual caller is
+`arn:aws:iam::690839588395:user/admin-user`, not a verified
+`sec_platform_deployer` principal. In addition, the live
+`sec-edgar-pipeline-alerts` topic has zero confirmed subscriptions. The live
+state machine remains revision `fc38774b-1da4-4e33-9d34-a0c43cd47e27`, with
+zero daily schedule rules and zero CloudWatch alarms. Phase 1 manual daily,
+backstop, late-republish, repair-routing, and competing-trigger evidence is
+therefore still pending. Status remains `claimed`; schedules remain disabled.

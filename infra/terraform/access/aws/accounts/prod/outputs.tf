@@ -57,3 +57,8 @@ output "daily_incremental_scheduler_role_arn" {
   description = "Prod IAM role ARN EventBridge assumes to start edgartools-prod-daily-incremental (release-readiness ticket 45/49). The rule/target that uses this role is created by deploy-aws-application.sh's off-by-default schedule controls, not Terraform."
   value       = aws_iam_role.daily_incremental_scheduler.arn
 }
+
+output "identity_refresh_operator_alert_topic_arn" {
+  description = "Existing operator SNS topic used for per-deferral notification and the 18-hour timeout alarm. It must have a confirmed subscription before alarm enablement."
+  value       = local.identity_refresh_alert_topic_arn
+}

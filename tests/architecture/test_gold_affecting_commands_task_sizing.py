@@ -157,7 +157,7 @@ def _run_warehouse_task_profile(workflow_name: str) -> str:
             f'source "{fn_file.as_posix()}"\n'
             f'write_warehouse_mdm_gold_definition "{out_file.as_posix()}" '
             f'"{_FAKE_MEDIUM_ARN}" "arn:fake-mdm-small" "arn:fake-mdm-medium" "{_FAKE_LARGE_ARN}" '
-            f'"{workflow_name}" "fake-bronze-bucket"\n',
+            f'"{workflow_name}" "fake-bronze-bucket" "arn:aws:sns:us-east-1:000000000000:fake-alerts"\n',
             encoding="utf-8",
         )
 
