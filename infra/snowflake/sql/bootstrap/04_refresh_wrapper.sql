@@ -225,8 +225,8 @@ BEGIN
   OPEN c1;
   FOR i IN 1 TO cnt DO
     FETCH c1 INTO r_workflow_name, r_run_id;
-    CALL EDGARTOOLS_SOURCE.LOAD_EXPORTS_FOR_RUN(r_workflow_name, r_run_id);
-    CALL EDGARTOOLS_GOLD.REFRESH_AFTER_LOAD(r_workflow_name, r_run_id);
+    CALL EDGARTOOLS_SOURCE.LOAD_EXPORTS_FOR_RUN(:r_workflow_name, :r_run_id);
+    CALL EDGARTOOLS_GOLD.REFRESH_AFTER_LOAD(:r_workflow_name, :r_run_id);
   END FOR;
   CLOSE c1;
 
