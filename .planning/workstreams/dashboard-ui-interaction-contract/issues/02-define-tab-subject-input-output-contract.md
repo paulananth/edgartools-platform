@@ -38,3 +38,10 @@ If resolution succeeded, preserve the issuer identity and show a message such as
 “Apple (CIK 320193) resolved, but this tab is temporarily unavailable. Retry
 later.” Do not expose connector details, render an empty table, or use pipeline
 or release-readiness wording.
+
+### Accepted: successful subject-tab result
+
+For `results`, render the resolved issuer identity, a visible bounded row count,
+the tab's bounded data table, and an “Open in Company 360” drill-through when
+the rows identify an issuer. This applies to Company 360, Fundamentals, and
+Insider Watch.
