@@ -49,16 +49,13 @@ AGENT_VIEW_QUERIES: dict[str, DashboardQuery] = {
     ),
     "agent.subject_search": DashboardQuery(
         query_id="agent.subject_search",
-        object_name="SUBJECT_BUNDLE_DISPLAY_ISSUER",
+        object_name="DASHBOARD_SUBJECT_RESOLVER",
         sql="""
             select
-              cik, entity_name, tickers, sic, sic_description, readiness_state, not_ready_reason,
-              state_of_incorporation, fiscal_year_end,
-              decision_contract_version, decision_watermark,
-              business_date, graph_generation_id, coverage_state,
-              alignment_status
-            from EDGARTOOLS_DECISION.SUBJECT_BUNDLE_DISPLAY_ISSUER
-            where entity_name ilike ? or tickers ilike ?
+              company_key, cik, entity_name, entity_type, tickers, sic, sic_description,
+              state_of_incorporation, fiscal_year_end, resolution_source
+            from EDGARTOOLS_DECISION.DASHBOARD_SUBJECT_RESOLVER
+            where entity_name ilike ? or tickers ilike ? or to_varchar(cik) = ?
             order by entity_name, cik
             limit 25
         """,

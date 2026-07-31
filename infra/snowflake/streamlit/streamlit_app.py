@@ -358,29 +358,29 @@ def render_summary(mode: str = MODE_EXPLORE):
 
 
 def _lookup_companies(query: str):
-    if not query:
-        return None
-    pattern = f"%{query}%"
-    return _df(
-        f"""
-        select distinct c.company_key, c.cik, c.entity_name, c.sic_description
-        from {GOLD_SCHEMA}.COMPANY c
-        left join {GOLD_SCHEMA}.TICKER_REFERENCE t on t.cik = c.cik
-        where c.entity_name ilike ?
-           or t.ticker ilike ?
-           or to_varchar(c.cik) = ?
-        order by c.entity_name
-        limit 25
-        """,
-        params=[pattern, pattern, query],
-    )
+    return _lookup_subjects(query)
 
 
 def _lookup_contract_subjects(query: str):
+    return _lookup_subjects(query)
+
+
+def _lookup_subjects(query: str):
+    """Resolve ticker, issuer name, or CIK through the bounded SEC snapshot view.
+
+    Identity lookup is deliberately mode-stable.  The caller chooses which
+    tab-specific facts it may display after resolution; this function never
+    changes the dashboard mode or uses pipeline/readiness state as a filter.
+    """
     if not query:
         return None
     pattern = f"%{query}%"
-    return _registered_df("agent.subject_search", params=[pattern, pattern])
+    query_spec = registered_query("agent.subject_search")
+    return _safe_df(
+        query_spec.query_id,
+        query_spec.sql,
+        params=[pattern, pattern, query],
+    )
 
 
 def _company_metadata(company_key: int):
@@ -662,13 +662,11 @@ def render_details(mode: str = MODE_EXPLORE):
         st.info("Enter a ticker symbol or part of a company name to start.")
         return
 
-    matches = (
-        _lookup_contract_subjects(query.strip())
-        if mode == MODE_AGENT_VIEW
-        else _lookup_companies(query.strip())
-    )
+    matches = _lookup_subjects(query.strip())
     if matches is None or matches.empty:
-        st.warning(f"No companies matched '{query}'.")
+        st.warning(
+            f"No SEC company matched '{query}'. Try ticker, company name, or CIK."
+        )
         return
 
     matches = matches.copy()
@@ -677,18 +675,9 @@ def render_details(mode: str = MODE_EXPLORE):
     )
     label = st.selectbox("Matches", matches["label"].tolist())
     selected = matches.loc[matches["label"] == label].iloc[0]
-    if mode == MODE_AGENT_VIEW:
-        row = selected
-        cik = int(row["CIK"])
-        company_key = None
-    else:
-        company_key = int(selected["COMPANY_KEY"])
-        meta = _company_metadata(company_key)
-        if meta.empty:
-            st.error("Selected company not found.")
-            return
-        row = meta.iloc[0]
-        cik = int(row["CIK"])
+    row = selected
+    cik = int(row["CIK"])
+    company_key = int(row["COMPANY_KEY"])
     st.session_state[SESSION_CIK_KEY] = cik
 
     st.subheader(row["ENTITY_NAME"])
@@ -708,7 +697,7 @@ def render_details(mode: str = MODE_EXPLORE):
         )
 
     if mode == MODE_AGENT_VIEW:
-        _render_agent_view_company(cik, bundle=matches.loc[matches["CIK"] == cik])
+        _render_agent_view_company(cik)
         return
 
     st.subheader("Financial factors")
@@ -807,13 +796,43 @@ def _parse_optional_number(value: str) -> float | None:
         return None
 
 
+def _resolve_subject_input(query: str, *, select_key: str):
+    """Render the shared Subject Input outcome without changing dashboard mode."""
+    if not query.strip():
+        return None
+    matches = _lookup_subjects(query.strip())
+    if matches is None:
+        return None
+    if matches.empty:
+        st.warning(
+            f"No SEC company matched '{query}'. Try ticker, company name, or CIK."
+        )
+        return None
+    matches = matches.copy()
+    matches["label"] = matches.apply(
+        lambda row: f"{row['ENTITY_NAME']} — CIK {int(row['CIK'])}", axis=1
+    )
+    label = st.selectbox("Resolved SEC company", matches["label"].tolist(), key=select_key)
+    return matches.loc[matches["label"] == label].iloc[0]
+
+
 def render_fundamentals(mode: str) -> None:
     st.header("Fundamentals Screener")
+    subject_input = st.text_input(
+        "Subject input (ticker, company name, or CIK)",
+        value="",
+        key="fund_subject",
+        placeholder="e.g. AAPL, Apple, or 320193",
+    )
+    subject = _resolve_subject_input(subject_input, select_key="fund_subject_match")
     if mode == MODE_AGENT_VIEW:
-        st.info(
-            "The accounting screener is an Explore workflow. Agent View remains "
-            "limited to published Decision Contract subject bundles."
-        )
+        if subject is not None:
+            st.info(
+                f"{subject['ENTITY_NAME']} (CIK {int(subject['CIK'])}) resolved. "
+                "No financial coverage is available in Agent View."
+            )
+        else:
+            st.info("Resolve an SEC company to inspect its Agent View coverage state.")
         return
     st.caption(
         f"Active tracked issuers only; accounting data only; maximum {MAX_SCREEN_ROWS} "
@@ -846,6 +865,7 @@ def render_fundamentals(mode: str) -> None:
         "Beneish risk tier", ["all", "low", "medium", "high"], key="fund_risk"
     )
     query = fundamentals_query(
+        cik=int(subject["CIK"]) if subject is not None else None,
         sic_pattern=f"{sic.strip()}%",
         fiscal_period=period,
         min_revenue=min_revenue,
@@ -859,9 +879,13 @@ def render_fundamentals(mode: str) -> None:
     )
     rows = _workflow_df(query)
     if rows is None or rows.empty:
-        st.info(
-            "No covered issuers matched. Missing feature history is not treated as zero."
-        )
+        if subject is not None:
+            st.info(
+                f"{subject['ENTITY_NAME']} (CIK {int(subject['CIK'])}) resolved. "
+                "No financial coverage is available."
+            )
+        else:
+            st.info("No covered issuers matched. Missing feature history is not treated as zero.")
         return
     _show_dataframe(_add_sec_evidence_links(rows))
     _bounded_export(rows, filename="fundamentals-screen.csv", max_rows=MAX_SCREEN_ROWS)
@@ -876,11 +900,21 @@ def render_fundamentals(mode: str) -> None:
 
 def render_insider_watch(mode: str) -> None:
     st.header("Insider Watch")
+    subject_input = st.text_input(
+        "Subject input (ticker, company name, or CIK)",
+        value="",
+        key="insider_subject",
+        placeholder="e.g. AAPL, Apple, or 320193",
+    )
+    subject = _resolve_subject_input(subject_input, select_key="insider_subject_match")
     if mode == MODE_AGENT_VIEW:
-        st.info(
-            "Insider Watch is an Explore workflow. Agent View does not query "
-            "free ownership tables."
-        )
+        if subject is not None:
+            st.info(
+                f"{subject['ENTITY_NAME']} (CIK {int(subject['CIK'])}) resolved. "
+                "No insider-transaction coverage is available in Agent View."
+            )
+        else:
+            st.info("Resolve an SEC company to inspect its Agent View coverage state.")
         return
     st.caption(
         f"Deduplicated Form 3/4/5 transactions; maximum {MAX_INSIDER_ROWS} rows. "
@@ -917,6 +951,7 @@ def render_insider_watch(mode: str) -> None:
     )
     rows = _workflow_df(
         insider_query(
+            cik=int(subject["CIK"]) if subject is not None else None,
             start_date=start_date,
             end_date=end_date,
             issuer_pattern=f"%{issuer.strip()}%",
@@ -929,7 +964,13 @@ def render_insider_watch(mode: str) -> None:
         )
     )
     if rows is None or rows.empty:
-        st.info("No covered transactions matched the current filters.")
+        if subject is not None:
+            st.info(
+                f"{subject['ENTITY_NAME']} (CIK {int(subject['CIK'])}) resolved. "
+                "No covered transactions are available."
+            )
+        else:
+            st.info("No covered transactions matched the current filters.")
         return
     _show_dataframe(_add_sec_evidence_links(rows))
     _bounded_export(rows, filename="insider-watch.csv", max_rows=MAX_INSIDER_ROWS)
