@@ -363,6 +363,42 @@ The image reference in the summary is a verified `@digest` reference, for exampl
 
 Do not copy this image reference into Terraform. Image rollout, workflow
 deployment, and workload execution are explicit operator actions outside the AWS
+
+### Bounded ECS warehouse tasks
+
+Use the standard launcher for CIK-scoped operational work instead of composing
+an `aws ecs run-task` command manually. It verifies the selected AWS account,
+uses the active task-definition revision, discovers the only container name and
+the environment's Fargate network configuration, and permits only bounded
+warehouse task profiles. It does not expose `--force`.
+
+```bash
+# Print the exact resolved command without starting a task.
+bash scripts/ops/run-ecs-task.sh artifact-registration \
+  --env prod \
+  --aws-profile sec_platform_deployer \
+  --aws-account-id 690839588395 \
+  --cik-list 320193 \
+  --artifact-policy all_attachments \
+  --dry-run
+
+# Launch and wait for the bounded Branch A registration pass.
+bash scripts/ops/run-ecs-task.sh artifact-registration \
+  --env prod \
+  --aws-profile sec_platform_deployer \
+  --aws-account-id 690839588395 \
+  --cik-list 320193 \
+  --artifact-policy all_attachments \
+  --wait
+
+# Run Branch B only after Branch A published successfully.
+bash scripts/ops/run-ecs-task.sh per-filing \
+  --env prod \
+  --aws-profile sec_platform_deployer \
+  --aws-account-id 690839588395 \
+  --cik-list 320193 \
+  --wait
+```
 infrastructure root.
 
 ---
