@@ -25,6 +25,10 @@ testable outcome without depending on a pipeline run or release readiness.
   through an authenticated browser. Mocked Snowpark data and fake Streamlit
   widgets are not valid evidence for this workstream; existing unit tests may
   remain as code checks but cannot satisfy UI acceptance.
+- The acceptance suite has two real layers: (1) connection integration tests
+  run against a configured Snowflake connection and actual deployed/query
+  objects without a browser; (2) browser E2E tests drive the deployed Streamlit
+  app. Neither layer uses fake data or a mocked Snowpark session.
 
 ## Decisions so far
 
