@@ -29,13 +29,15 @@ testable outcome without depending on a pipeline run or release readiness.
 - [Use a bounded canonical SEC ticker resolver](issues/01-decide-canonical-subject-resolver.md)
   — confirmed: `AAPL` resolves through the canonical SEC ticker snapshot rather
   than the currently empty `TICKER_REFERENCE` export.
+- [Define tab subject-input and observable-output contract](issues/02-define-tab-subject-input-output-contract.md)
+  — subject tabs share a mode-stable resolver and every tab exposes explicit
+  `results`/`no_coverage`/`no_match`/`unavailable` output semantics; Summary and
+  Pipeline stay non-subject.
 
 ## Not yet specified
 
 - The exact rendered-UI harness and fixture/connection boundary for deterministic
   tests.
-- How Summary and Pipeline expose their non-subject operational inputs under the
-  same observable-output conventions.
 
 ## Out of scope
 

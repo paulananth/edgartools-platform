@@ -1,7 +1,7 @@
 # Define tab subject-input and observable-output contract
 
 Type: grilling (HITL)
-Status: claimed
+Status: resolved
 Assignee: Codex
 Blocks: 04-implement-dashboard-subject-resolver-and-ui-contract-tests
 
@@ -58,3 +58,26 @@ ADV retains its adviser/fund resolver and entity identity but renders the same
 four observable states: `results`, `no_coverage`, `no_match`, and
 `unavailable`. ADV results do not drill through to Company 360 unless a future
 explicit issuer relationship supports that navigation.
+
+### Accepted: non-subject tabs
+
+Summary and Pipeline retain their own non-subject controls. They expose the
+same visible outcome vocabulary where it applies (`results`, `no_coverage`,
+`unavailable`), but Pipeline status is never evidence for data completeness,
+agent readiness, or the success of another tab.
+
+## Answer
+
+| Tab | Input | Results | No coverage | No match | Unavailable |
+| --- | --- | --- | --- | --- | --- |
+| Company 360 | Shared Subject Input | Resolved issuer, bounded Company 360 surfaces | Resolved issuer with the unavailable surface named | Resolver-only | Resolved issuer when available, safe retry copy |
+| Fundamentals Screener | Shared Subject Input plus screen filters | Resolved issuer, row count, bounded factors, Company 360 drill-through | Resolved issuer plus “No financial coverage is available” | Resolver-only | Resolved issuer when available, safe retry copy |
+| Insider Watch | Shared Subject Input plus ownership filters | Resolved issuer, row count, bounded transactions, Company 360 drill-through | Resolved issuer plus no covered transactions | Resolver-only | Resolved issuer when available, safe retry copy |
+| ADV Explorer | Adviser/fund identifier | Bounded adviser/fund results | Explicit unavailable coverage | No active adviser/fund match | Safe retry copy |
+| Summary | Native summary controls | Bounded summary result | Explicit unavailable coverage | Not applicable | Safe retry copy |
+| Pipeline | Native pipeline controls | Bounded operational result | Explicit unavailable coverage | Not applicable | Safe retry copy |
+
+The shared Subject Input is mode-stable: it resolves identically in Agent View
+and Explore and labels the active mode/readiness without silently switching.
+The interaction tests assert these visible states; they do not assert a
+pipeline run, data completeness, or release readiness.

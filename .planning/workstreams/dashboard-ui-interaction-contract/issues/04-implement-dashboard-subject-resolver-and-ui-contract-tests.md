@@ -2,7 +2,7 @@
 
 Type: task (AFK)
 Status: blocked
-Blocked by: 02-define-tab-subject-input-output-contract, 03-select-rendered-ui-test-seam
+Blocked by: 03-select-rendered-ui-test-seam
 
 ## Question
 
