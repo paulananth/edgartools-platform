@@ -222,6 +222,31 @@ def test_daily_incremental_mdm_run_still_uses_entity_type_all(daily_definition: 
     assert "'--entity-type', 'all'" in cmd
 
 
+def test_daily_filing_ingestion_does_not_inherit_identity_cik_batches(
+    daily_definition: dict,
+) -> None:
+    """The company filter scopes Stage 0 only. RunWarehouseTask retains the
+    ordinary daily-incremental filing contract and receives no identity batch."""
+    cmd = _command_of(daily_definition, "RunWarehouseTask")
+    assert "'daily-incremental'" in cmd
+    assert "'--cik-list'" not in cmd
+    assert "$.cik_list" not in cmd
+
+
+def test_scheduled_daily_filing_ingestion_forces_exact_seven_day_index_boundary(
+    daily_definition: dict,
+) -> None:
+    cmd = _command_of(daily_definition, "RunWarehouseTask")
+    assert "'--recurring-index-lookback-days', '7'" in cmd
+
+
+def test_bootstrap_does_not_inherit_recurring_daily_index_boundary(
+    bootstrap_definition: dict,
+) -> None:
+    cmd = _command_of(bootstrap_definition, "RunWarehouseTask")
+    assert "--recurring-index-lookback-days" not in cmd
+
+
 def test_daily_incremental_no_dedicated_gold_refresh_for_company_identity(
     daily_definition: dict,
 ) -> None:

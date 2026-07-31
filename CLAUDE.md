@@ -201,6 +201,32 @@ follow that format for new entries.
 **Resolution:** `bootstrap-batch` removed from `GOLD_AFFECTING_COMMANDS`. New `gold-refresh`
 command builds gold once. New `load_history` Step Function chains all four phases correctly.
 
+## Daily accession-expansion 5-whys (resolved in code 2026-07-31; RC run pending)
+
+**Problem:** A recurring daily run expanded 3,082 index-impacted CIKs into 148,524
+historical artifact candidates, ran for 13h20m, opened its circuit, and still reported
+the warehouse task as successful after abandoning candidates.
+
+1. Daily-index discovery retained impacted CIKs but discarded the exact accession union.
+2. Refreshing each impacted CIK's submissions metadata returned years of `recent` and
+   pagination accessions, not only filings from the daily window.
+3. Configured-form selection consumed that historical set, so a bounded CIK input did
+   not imply a bounded artifact input.
+4. The artifact loop had no assertion tying selected candidates back to the daily index.
+5. Exhausted retries and an opened circuit were treated as partial metrics rather than
+   command failures, allowing silver publication and downstream work to continue.
+
+**Resolution:** Recurring `daily-incremental` defaults to a seven-calendar-day boundary,
+revalidates those small SEC index catalogs, carries their exact accession union and digest
+through submissions refresh, intersects configured-form selection with that union, and
+fails closed on expansion, retry exhaustion, or an opened circuit. This scheduled index
+revalidation is a narrow freshness operation, not an artifact-repair override: immutable
+bronze conflict handling remains enforced, while filing artifacts still skip captured
+objects unless an operator explicitly supplies `--force`. Historical discovery remains
+unchanged for explicit `--start-date`/`--end-date` ranges and can also be selected with
+`--recurring-index-lookback-days 0`. An immutable-RC production run must still prove the
+full chain completes inside the six-hour bound.
+
 ## Artifact-throttle 5-whys (resolved 2026-07-12)
 
 **Problem:** A 20-CIK `load_history` re-run spent ~20+ min (est. ~93 min floor) in
