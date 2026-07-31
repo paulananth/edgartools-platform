@@ -361,6 +361,65 @@ The image reference in the summary is a verified `@digest` reference, for exampl
 123456789012.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse@sha256:abc123...
 ```
 
+### macOS / Colima — publish once, then deploy once
+
+For a source revision that has not yet been published, build and push exactly
+one immutable `sha-<git-sha>` image. Save the resulting digest reference, then
+deploy that exact reference with `--skip-build`. Do **not** rerun either command
+because a terminal wrapper returned before the deployment script has finished:
+first inspect the existing deploy process and the active ECS task-definition
+images. A second publish is needed only for a new source revision; a second
+deployment is needed only when all three task definitions still reference a
+different digest after the original process has stopped.
+
+Budget roughly **three minutes** for the deploy script's ECR retention audit,
+task-definition registration, and Step Functions update. After starting it,
+wait the full three minutes before the first status check. If it is still
+running, wait five-minute intervals between subsequent checks; never poll in a
+tight loop. Once it has stopped, perform one authoritative verification of the
+three ECS task-definition images and the output summary before deciding whether
+the rollout needs investigation or a single justified retry.
+
+```bash
+colima status
+test "$(docker context show)" = colima
+
+IMAGE_TAG="sha-$(git rev-parse --short=12 HEAD)"
+IMAGE_REF_FILE="/tmp/edgartools-prod-warehouse-${IMAGE_TAG}.txt"
+
+AWS_PROFILE=sec_platform_deployer \
+bash infra/scripts/publish-warehouse-image.sh \
+  --aws-region us-east-1 \
+  --ecr-repository edgartools-prod-warehouse \
+  --role warehouse \
+  --image-tag "$IMAGE_TAG" \
+  --mode docker \
+  --cache-from-tag dev \
+  --output-file "$IMAGE_REF_FILE"
+
+IMAGE_REF="$(< "$IMAGE_REF_FILE")"
+AWS_PROFILE=sec_platform_deployer \
+bash infra/scripts/deploy-aws-application.sh \
+  --env prod \
+  --aws-profile sec_platform_deployer \
+  --aws-account-id 690839588395 \
+  --aws-region us-east-1 \
+  --skip-build \
+  --image-ref "$IMAGE_REF" \
+  --output-file /tmp/edgartools-prod-application.json
+
+# Authoritative rollout verification: each size must match $IMAGE_REF.
+for size in small medium large; do
+  task_definition="$(aws --profile sec_platform_deployer --region us-east-1 \
+    ecs list-task-definitions --family-prefix "edgartools-prod-${size}" \
+    --status ACTIVE --sort DESC --max-results 1 \
+    --query 'taskDefinitionArns[0]' --output text)"
+  aws --profile sec_platform_deployer --region us-east-1 \
+    ecs describe-task-definition --task-definition "$task_definition" \
+    --query 'taskDefinition.containerDefinitions[0].image' --output text
+done
+```
+
 Do not copy this image reference into Terraform. Image rollout, workflow
 deployment, and workload execution are explicit operator actions outside the AWS
 infrastructure root.
