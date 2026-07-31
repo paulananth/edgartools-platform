@@ -21,9 +21,7 @@ FEATURE_SCREEN_SQL = CONTRACT_SQL.with_name("01_subject_feature_screen.sql")
 
 def test_every_agent_query_is_registered_bounded_and_contract_scoped() -> None:
     assert set(AGENT_VIEW_QUERIES) == {
-        "agent.contract_status",
-        "agent.subject_search",
-        "agent.subject_bundle",
+        "agent.contract_status", "agent.subject_search", "agent.subject_bundle",
     }
     for query_id, query in AGENT_VIEW_QUERIES.items():
         assert registered_query(query_id) is query
@@ -43,6 +41,15 @@ def test_contract_views_fail_closed_on_publication_and_active_generation() -> No
     assert "JOIN ACTIVE_GRAPH_SUBJECT" in sql
 
 
+def test_display_contract_distinguishes_preview_from_agent_ready() -> None:
+    sql = CONTRACT_SQL.read_text(encoding="utf-8").upper()
+    assert "DECISION_CONTRACT_DISPLAY_STATUS" in sql
+    assert "'AGENT_READY' AS READINESS_STATE" in sql
+    assert "'NOT_READY' AS READINESS_STATE" in sql
+    assert "NO_VERIFIED_PUBLICATION" in sql
+    assert "SUBJECT_BUNDLE_DISPLAY_ISSUER" in sql
+
+
 def test_feature_screen_uses_tracked_active_subjects_not_all_gold_companies() -> None:
     sql = FEATURE_SCREEN_SQL.read_text(encoding="utf-8").upper()
     assert "TRACKING_STATUS" in sql
@@ -54,6 +61,6 @@ def test_feature_screen_uses_tracked_active_subjects_not_all_gold_companies() ->
 def test_reader_gets_only_public_contract_views() -> None:
     sql = CONTRACT_SQL.read_text(encoding="utf-8").upper()
     grants = [line.strip() for line in sql.splitlines() if line.strip().startswith("GRANT SELECT")]
-    assert len(grants) == 3
+    assert len(grants) == 5
     assert not any("DECISION_CONTRACT_PUBLICATION" in grant for grant in grants)
     assert not any("MDM_GRAPH_" in grant for grant in grants)
