@@ -43,6 +43,10 @@ testable outcome without depending on a pipeline run or release readiness.
   — user direction supersedes the earlier AppTest recommendation: only a real
   built/deployed Streamlit app exercised through an authenticated browser can
   prove the interaction contract.
+- [Establish real deployed dashboard UI test runner](issues/05-establish-real-deployed-dashboard-ui-test-runner.md)
+  — both real suites target the existing production dashboard through
+  `edgartools-prod`: connection integration first, then authenticated browser
+  E2E against the same deployed app.
 
 ## Not yet specified
 
