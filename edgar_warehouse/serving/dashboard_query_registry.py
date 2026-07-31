@@ -31,10 +31,10 @@ class DashboardQuery:
 AGENT_VIEW_QUERIES: dict[str, DashboardQuery] = {
     "agent.contract_status": DashboardQuery(
         query_id="agent.contract_status",
-        object_name="DECISION_CONTRACT_STATUS",
+        object_name="DECISION_CONTRACT_DISPLAY_STATUS",
         sql="""
             select
-              decision_contract_version,
+              readiness_state, not_ready_reason, decision_contract_version,
               decision_watermark,
               business_date,
               gold_updated_at,
@@ -42,24 +42,22 @@ AGENT_VIEW_QUERIES: dict[str, DashboardQuery] = {
               graph_activated_at,
               coverage_state,
               alignment_status
-            from EDGARTOOLS_DECISION.DECISION_CONTRACT_STATUS
-            where alignment_status = 'aligned'
-            order by published_at desc
+            from EDGARTOOLS_DECISION.DECISION_CONTRACT_DISPLAY_STATUS
             limit 1
         """,
         max_rows=1,
     ),
     "agent.subject_search": DashboardQuery(
         query_id="agent.subject_search",
-        object_name="SUBJECT_BUNDLE_READ_ISSUER",
+        object_name="SUBJECT_BUNDLE_DISPLAY_ISSUER",
         sql="""
             select
-              cik, entity_name, tickers, sic, sic_description,
+              cik, entity_name, tickers, sic, sic_description, readiness_state, not_ready_reason,
               state_of_incorporation, fiscal_year_end,
               decision_contract_version, decision_watermark,
               business_date, graph_generation_id, coverage_state,
               alignment_status
-            from EDGARTOOLS_DECISION.SUBJECT_BUNDLE_READ_ISSUER
+            from EDGARTOOLS_DECISION.SUBJECT_BUNDLE_DISPLAY_ISSUER
             where entity_name ilike ? or tickers ilike ?
             order by entity_name, cik
             limit 25
@@ -68,10 +66,10 @@ AGENT_VIEW_QUERIES: dict[str, DashboardQuery] = {
     ),
     "agent.subject_bundle": DashboardQuery(
         query_id="agent.subject_bundle",
-        object_name="SUBJECT_BUNDLE_READ_ISSUER",
+        object_name="SUBJECT_BUNDLE_DISPLAY_ISSUER",
         sql="""
             select *
-            from EDGARTOOLS_DECISION.SUBJECT_BUNDLE_READ_ISSUER
+            from EDGARTOOLS_DECISION.SUBJECT_BUNDLE_DISPLAY_ISSUER
             where cik = ?
             limit 1
         """,

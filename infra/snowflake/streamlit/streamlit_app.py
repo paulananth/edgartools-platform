@@ -292,7 +292,7 @@ def _two_year_timeline():
 
 
 def _render_agent_view_company(cik: int, bundle=None) -> None:
-    """Agent View: contract objects only (no free gold FINANCIAL_FACTORS joins)."""
+    """Contract-shaped Agent View with explicit ready/not-ready display state."""
     st.subheader("Agent View — Decision Contract")
     st.write(
         {
@@ -313,7 +313,15 @@ def _render_agent_view_company(cik: int, bundle=None) -> None:
         )
         return
     row = bundle.iloc[0]
+    readiness_state = str(row.get("READINESS_STATE") or "not_ready")
+    if readiness_state != "agent_ready":
+        st.warning(
+            "Not agent-ready preview: the displayed contract-shaped data is "
+            "available for dashboard validation only and is not a Trading Decision input."
+        )
     freshness = {
+        "readiness_state": readiness_state,
+        "not_ready_reason": row.get("NOT_READY_REASON"),
         "contract_version": row.get("DECISION_CONTRACT_VERSION"),
         "decision_watermark": row.get("DECISION_WATERMARK"),
         "business_date": row.get("BUSINESS_DATE"),
@@ -323,13 +331,10 @@ def _render_agent_view_company(cik: int, bundle=None) -> None:
         "coverage_state": row.get("COVERAGE_STATE"),
         "alignment_status": row.get("ALIGNMENT_STATUS"),
     }
-    if freshness["alignment_status"] != "aligned":
-        st.error(
-            "Agent-grade evidence is unavailable because contract and graph "
-            "generations are not aligned."
-        )
-        return
-    st.caption("Published Decision Contract freshness and alignment")
+    if readiness_state == "agent_ready":
+        st.caption("Published agent-ready Decision Contract freshness and alignment")
+    else:
+        st.caption("Not-ready contract preview; publication and alignment are intentionally unverified.")
     st.write(freshness)
     _show_dataframe(bundle)
 
