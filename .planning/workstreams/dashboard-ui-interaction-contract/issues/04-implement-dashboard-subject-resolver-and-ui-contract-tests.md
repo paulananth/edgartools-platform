@@ -1,8 +1,7 @@
 # Implement dashboard subject resolver and UI contract tests
 
 Type: task (AFK)
-Status: blocked
-Blocked by: 03-select-rendered-ui-test-seam
+Status: open
 
 ## Question
 

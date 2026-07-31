@@ -33,11 +33,13 @@ testable outcome without depending on a pipeline run or release readiness.
   — subject tabs share a mode-stable resolver and every tab exposes explicit
   `results`/`no_coverage`/`no_match`/`unavailable` output semantics; Summary and
   Pipeline stay non-subject.
+- [Select the rendered dashboard UI test seam](issues/03-select-rendered-ui-test-seam.md)
+  — use Streamlit AppTest plus a deterministic fake Snowpark session for widget
+  interaction assertions; retain fake-Streamlit policy tests, and reserve a
+  browser only for explicitly authorized live acceptance.
 
 ## Not yet specified
 
-- The exact rendered-UI harness and fixture/connection boundary for deterministic
-  tests.
 
 ## Out of scope
 
