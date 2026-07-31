@@ -13,6 +13,8 @@ testable outcome without depending on a pipeline run or release readiness.
   or pipeline validation.
 - A **Subject Input** accepts a ticker, company name, or CIK. A **Subject Resolution**
   returns either one canonical CIK or a bounded set of disambiguation choices.
+- Company 360, Fundamentals Screener, and Insider Watch share the Subject Input.
+  Summary and Pipeline remain non-subject tabs; ADV retains its adviser/fund resolver.
 - The canonical SEC company-ticker snapshot must be exposed through a bounded
   dashboard read view. It is the source for ticker resolution; the empty
   `TICKER_REFERENCE` export must not make an otherwise resolvable ticker disappear.
