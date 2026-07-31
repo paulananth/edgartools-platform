@@ -150,6 +150,7 @@ def company_query(surface: str, cik: int, *, limit: int = MAX_COMPANY_ROWS) -> W
 
 def fundamentals_query(
     *,
+    cik: int | None = None,
     sic_pattern: str,
     fiscal_period: str,
     min_revenue: float | None,
@@ -178,6 +179,7 @@ def fundamentals_query(
             left join EDGARTOOLS_GOLD.ACCOUNTING_FLAGS a
               on a.cik = f.cik and a.is_most_recent
             where coalesce(c.tracking_status, 'active') = 'active'
+              and (? is null or f.cik = ?)
               and c.sic ilike ?
               and f.fiscal_period = ?
               and (? is null or f.revenue >= ?)
@@ -196,6 +198,7 @@ def fundamentals_query(
             limit {limit}
         """.strip(),
         params=(
+            cik, cik,
             sic_pattern,
             fiscal_period,
             min_revenue, min_revenue,
@@ -213,6 +216,7 @@ def fundamentals_query(
 
 def insider_query(
     *,
+    cik: int | None = None,
     start_date: Any,
     end_date: Any,
     issuer_pattern: str,
@@ -257,6 +261,7 @@ def insider_query(
             join EDGARTOOLS_GOLD.COMPANY c on c.cik = f.cik
             left join active_people p on p.accession_number = o.accession_number
             where f.filing_date between ? and ?
+              and (? is null or f.cik = ?)
               and c.display_name ilike ?
               and f.form ilike ?
               and (? = 'all' or lower(coalesce(p.owner_role, 'unavailable')) = ?)
@@ -272,7 +277,7 @@ def insider_query(
             limit {limit}
         """.strip(),
         params=(
-            start_date, end_date, issuer_pattern, form_pattern,
+            start_date, end_date, cik, cik, issuer_pattern, form_pattern,
             owner_role, owner_role,
             transaction_code, transaction_code,
             min_shares, min_shares, min_notional, min_notional,

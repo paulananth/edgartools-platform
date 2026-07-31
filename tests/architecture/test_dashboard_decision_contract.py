@@ -61,6 +61,15 @@ def test_feature_screen_uses_tracked_active_subjects_not_all_gold_companies() ->
 def test_reader_gets_only_public_contract_views() -> None:
     sql = CONTRACT_SQL.read_text(encoding="utf-8").upper()
     grants = [line.strip() for line in sql.splitlines() if line.strip().startswith("GRANT SELECT")]
-    assert len(grants) == 5
+    assert len(grants) == 6
+    assert any("DASHBOARD_SUBJECT_RESOLVER" in grant for grant in grants)
     assert not any("DECISION_CONTRACT_PUBLICATION" in grant for grant in grants)
     assert not any("MDM_GRAPH_" in grant for grant in grants)
+
+
+def test_subject_resolver_is_snapshot_based_not_readiness_gated() -> None:
+    sql = CONTRACT_SQL.read_text(encoding="utf-8").upper()
+    resolver_sql = sql.split("DASHBOARD_SUBJECT_RESOLVER AS", maxsplit=1)[1]
+    assert "EDGARTOOLS_GOLD.TICKER_REFERENCE" in resolver_sql
+    assert "CANONICAL_SEC_COMPANY_TICKERS" in resolver_sql
+    assert "TRACKING_STATUS" not in resolver_sql.split("GRANT USAGE", maxsplit=1)[0]

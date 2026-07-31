@@ -214,6 +214,33 @@ JOIN {{ database }}.EDGARTOOLS_DECISION.SUBJECT_FEATURE_SCREEN f
   ON f.CIK = t.CIK
 CROSS JOIN display_status s;
 
+-- Dashboard-only identity resolver.  This deliberately reads the canonical
+-- SEC ticker snapshot mirror directly rather than a Decision Contract
+-- publication: finding an issuer must not depend on pipeline completeness or
+-- agent readiness.  It contains no financial or ownership facts.
+CREATE OR REPLACE VIEW {{ database }}.EDGARTOOLS_DECISION.DASHBOARD_SUBJECT_RESOLVER AS
+WITH sec_company_ticker_snapshot AS (
+  SELECT
+    CIK,
+    LISTAGG(DISTINCT TICKER, ', ') WITHIN GROUP (ORDER BY TICKER) AS TICKERS
+  FROM {{ database }}.EDGARTOOLS_GOLD.TICKER_REFERENCE
+  WHERE TICKER IS NOT NULL
+  GROUP BY CIK
+)
+SELECT
+  c.COMPANY_KEY,
+  c.CIK,
+  COALESCE(c.DISPLAY_NAME, c.ENTITY_NAME) AS ENTITY_NAME,
+  c.ENTITY_TYPE,
+  s.TICKERS,
+  c.SIC,
+  c.SIC_DESCRIPTION,
+  c.STATE_OF_INCORPORATION,
+  c.FISCAL_YEAR_END,
+  'canonical_sec_company_tickers' AS RESOLUTION_SOURCE
+FROM {{ database }}.EDGARTOOLS_GOLD.COMPANY c
+JOIN sec_company_ticker_snapshot s ON s.CIK = c.CIK;
+
 -- Reader access is explicit.  Substitute the environment reader role at apply
 -- time; no raw publication table or graph table access is granted here.
 GRANT USAGE ON SCHEMA {{ database }}.EDGARTOOLS_DECISION
@@ -227,4 +254,6 @@ GRANT SELECT ON VIEW {{ database }}.EDGARTOOLS_DECISION.SUBJECT_BUNDLE_READ_ISSU
 GRANT SELECT ON VIEW {{ database }}.EDGARTOOLS_DECISION.DECISION_CONTRACT_DISPLAY_STATUS
   TO ROLE IDENTIFIER('{{ reader_role }}');
 GRANT SELECT ON VIEW {{ database }}.EDGARTOOLS_DECISION.SUBJECT_BUNDLE_DISPLAY_ISSUER
+  TO ROLE IDENTIFIER('{{ reader_role }}');
+GRANT SELECT ON VIEW {{ database }}.EDGARTOOLS_DECISION.DASHBOARD_SUBJECT_RESOLVER
   TO ROLE IDENTIFIER('{{ reader_role }}');
