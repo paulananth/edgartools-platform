@@ -363,6 +363,7 @@ The image reference in the summary is a verified `@digest` reference, for exampl
 
 Do not copy this image reference into Terraform. Image rollout, workflow
 deployment, and workload execution are explicit operator actions outside the AWS
+infrastructure root.
 
 ### Bounded ECS warehouse tasks
 
@@ -399,7 +400,6 @@ bash scripts/ops/run-ecs-task.sh per-filing \
   --cik-list 320193 \
   --wait
 ```
-infrastructure root.
 
 ---
 

@@ -1238,6 +1238,55 @@ def test_thirteenf_filing_and_employment_event_are_classified(tmp_path):
     assert result.rows_inserted["sec_employment_event"] == 1
 
 
+def test_pipeline_run_lease_is_published_with_the_newer_lease_state(tmp_path):
+    """Regression (2026-07-31): pipeline_run_lease is required to preserve
+    run-level concurrency across canonical silver publications.  Its omission
+    from the fail-closed registry blocked unrelated artifact registration
+    after the table first appeared in production.
+    """
+    from edgar_warehouse.silver_protection import merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+    ddl = (
+        "CREATE TABLE pipeline_run_lease (lease_name TEXT PRIMARY KEY, "
+        "status TEXT NOT NULL, run_id TEXT, updated_at TIMESTAMPTZ NOT NULL)"
+    )
+    _make_duckdb(
+        canonical,
+        ddl,
+        [
+            (
+                "INSERT INTO pipeline_run_lease VALUES "
+                "('daily_identity_refresh', 'held', 'older-run', '2026-07-31 10:00:00+00')"
+            )
+        ],
+    )
+    _make_duckdb(
+        candidate,
+        ddl,
+        [
+            (
+                "INSERT INTO pipeline_run_lease VALUES "
+                "('daily_identity_refresh', 'idle', 'newer-run', '2026-07-31 11:00:00+00')"
+            )
+        ],
+    )
+
+    result = merge_candidate_into_canonical(candidate, canonical, output)
+
+    assert result.rows_updated["pipeline_run_lease"] == 1
+    conn = duckdb.connect(str(output), read_only=True)
+    try:
+        assert conn.execute(
+            "SELECT status, run_id FROM pipeline_run_lease WHERE lease_name = "
+            "'daily_identity_refresh'"
+        ).fetchone() == ("idle", "newer-run")
+    finally:
+        conn.close()
+
+
 def test_migration_backup_tables_are_excluded_from_unclassified_check(tmp_path):
     """Regression (2026-07-24): a real production ingest-relationship-sources
     run hit SilverDatabase's fund_index BIGINT migration against a stale

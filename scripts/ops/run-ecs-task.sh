@@ -27,7 +27,19 @@
 set -euo pipefail
 
 usage() {
-  sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'
+  cat <<'EOF'
+Launch a bounded warehouse ECS task with the active task definition.
+
+Usage:
+  bash scripts/ops/run-ecs-task.sh <profile> --env <dev|prod> \
+    --aws-profile <profile> --aws-account-id <12-digit-id> --cik-list <ciks> [options]
+
+Profiles:
+  artifact-registration  bootstrap-batch with the selected artifact policy
+  per-filing             bootstrap-fundamentals --mode per-filing
+  entity-facts           bootstrap-fundamentals --mode entity-facts
+  thirteenf              bootstrap-fundamentals --mode thirteenf
+EOF
 }
 
 fail() {
@@ -150,6 +162,10 @@ echo "tail=bash scripts/ops/tail-task.sh --env $ENVIRONMENT --profile $AWS_PROFI
 
 if "$WAIT"; then
   aws_cli ecs wait tasks-stopped --cluster "$cluster" --tasks "$task_arn"
-  aws_cli ecs describe-tasks --cluster "$cluster" --tasks "$task_arn" \
+  task_result="$(aws_cli ecs describe-tasks --cluster "$cluster" --tasks "$task_arn" \
     --query 'tasks[0].{lastStatus:lastStatus,stoppedReason:stoppedReason,exitCode:containers[0].exitCode}' --output json
+  )"
+  echo "$task_result"
+  task_exit_code="$(jq -r '.exitCode // empty' <<<"$task_result")"
+  [[ "$task_exit_code" == 0 ]] || fail "task stopped unsuccessfully (exit code: ${task_exit_code:-unknown})"
 fi

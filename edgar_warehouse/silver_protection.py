@@ -223,6 +223,12 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
         ),
         authority_column="ingested_at",
     ),
+    # A run-level concurrency record, not an expendable execution log.  It
+    # must survive publication so the daily identity-refresh/backstop lease
+    # remains exclusive across successive canonical silver databases.
+    "pipeline_run_lease": ProtectedTablePolicy(
+        "pipeline_run_lease", ("lease_name",), authority_column="updated_at"
+    ),
 }
 
 # Write-provenance columns (record which run last touched a row, not business
