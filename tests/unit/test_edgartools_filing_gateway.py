@@ -1,7 +1,7 @@
-"""Ticket 06 — edgartools-only gateway for filing document capture (phase 1).
+"""Ticket 56 — byte-exact filing document capture.
 
 Seams under test (spec Capture / skip boundary):
-- fetch_filing_artifacts network path uses edgartools get_filing only
+- fetch_filing_artifacts uses edgartools metadata plus raw SEC document bytes
 - cache / silver skip still short-circuits before network
 - strict_release evidence persist (bronze raw write) still works
 """
@@ -12,12 +12,15 @@ import contextlib
 import hashlib
 import io
 import json
+import os
 import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 from edgar_warehouse import bronze_filing_artifacts
+from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 
 
@@ -75,7 +78,13 @@ class _FakeAttachment:
         self.document_type = document_type
         self.description = description
         self.url = url
-        self.content = content
+        self._content = content
+
+    @property
+    def content(self):
+        if isinstance(self._content, Exception):
+            raise self._content
+        return self._content
 
 
 class _FakeAttachments:
@@ -95,9 +104,7 @@ class _FakeFiling:
 
 
 class EdgartoolsFilingGatewayTests(unittest.TestCase):
-    def test_known_primary_document_uses_edgartools_not_parallel_download(self) -> None:
-        """Ticket 06: even when primary_document is known, cold fetch must not use
-        the parallel sec_client download_bytes path — only edgartools get_filing."""
+    def test_primary_document_persists_raw_gateway_bytes_not_edgartools_content(self) -> None:
         accession = "0000320193-26-000010"
         payload = b"<ownershipDocument>gateway</ownershipDocument>"
         primary = _FakeAttachment(
@@ -106,14 +113,10 @@ class EdgartoolsFilingGatewayTests(unittest.TestCase):
             document_type="4",
             description="Primary document",
             url="https://www.sec.gov/Archives/edgar/data/320193/primary.xml",
-            content=payload,
+            content=AssertionError("transformed edgartools content must not be read"),
         )
         get_filing = Mock(return_value=_FakeFiling(_FakeAttachments([primary])))
-        download_bytes = Mock(
-            side_effect=AssertionError(
-                "parallel non-edgartools download_bytes must not be used for filing documents"
-            )
-        )
+        download_bytes = Mock(return_value=payload)
 
         with tempfile.TemporaryDirectory() as tmp:
             db = _ArtifactDb(
@@ -137,8 +140,8 @@ class EdgartoolsFilingGatewayTests(unittest.TestCase):
             )
 
         get_filing.assert_called_once_with(accession)
-        download_bytes.assert_not_called()
-        self.assertEqual(result["network_fetches"], 1)
+        download_bytes.assert_called_once_with(primary.url, "tester@example.com")
+        self.assertEqual(result["network_fetches"], 2)
         self.assertEqual(result["attachment_count"], 1)
         self.assertEqual(len(db.merged_rows), 1)
         self.assertEqual(
@@ -210,7 +213,7 @@ class EdgartoolsFilingGatewayTests(unittest.TestCase):
                 db=db,
                 accession_number=accession,
                 sync_run_id="run-strict",
-                download_bytes=Mock(side_effect=AssertionError("no parallel download")),
+                download_bytes=Mock(return_value=payload),
                 get_filing=get_filing,
                 force=False,
             )
@@ -221,9 +224,42 @@ class EdgartoolsFilingGatewayTests(unittest.TestCase):
         assert stored is not None
         self.assertEqual(stored["sha256"], raw_id)
         self.assertEqual(stored["byte_size"], len(payload))
-        self.assertEqual(result["network_fetches"], 1)
+        self.assertEqual(result["network_fetches"], 2)
         self.assertEqual(len(result["raw_writes"]), 1)
         self.assertNotIn("cached", result["raw_writes"][0])
+
+    def test_exact_raw_bytes_reuse_bronze_but_different_bytes_fail_closed(self) -> None:
+        accession = "0000320193-26-000013"
+        url = "https://www.sec.gov/Archives/edgar/data/320193/primary.xml"
+        primary = _FakeAttachment(
+            sequence_number="1", document="primary.xml", document_type="4",
+            description="Primary", url=url, content=AssertionError("must not read content"),
+        )
+        filing = _FakeFiling(_FakeAttachments([primary]))
+        exact = b"<ownershipDocument>exact raw SEC bytes</ownershipDocument>"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+            first = bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context, db=_ArtifactDb(), accession_number=accession,
+                sync_run_id="first", download_bytes=Mock(return_value=exact),
+                get_filing=Mock(return_value=filing), force=False,
+            )
+            artifact_path = first["raw_writes"][0]["path"]
+            os.utime(artifact_path, ns=(1_000_000_000, 1_000_000_000))
+            bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context, db=_ArtifactDb(), accession_number=accession,
+                sync_run_id="register-only", download_bytes=Mock(return_value=exact),
+                get_filing=Mock(return_value=filing), force=False,
+            )
+            self.assertEqual(Path(artifact_path).read_bytes(), exact)
+            self.assertEqual(Path(artifact_path).stat().st_mtime_ns, 1_000_000_000)
+            with self.assertRaises(WarehouseRuntimeError):
+                bronze_filing_artifacts.fetch_filing_artifacts(
+                    context=context, db=_ArtifactDb(), accession_number=accession,
+                    sync_run_id="conflict", download_bytes=Mock(return_value=exact + b"!"),
+                    get_filing=Mock(return_value=filing), force=False,
+                )
 
 
 class DebugEventLoggingTests(unittest.TestCase):
@@ -259,7 +295,7 @@ class DebugEventLoggingTests(unittest.TestCase):
                     db=db,
                     accession_number=accession,
                     sync_run_id="run-debug",
-                    download_bytes=Mock(side_effect=AssertionError("no parallel download")),
+                    download_bytes=Mock(return_value=payload),
                     get_filing=get_filing,
                     force=False,
                 )
@@ -268,15 +304,15 @@ class DebugEventLoggingTests(unittest.TestCase):
         event_names = [e["event"] for e in events]
         self.assertIn("sec_call_started", event_names)
         self.assertIn("sec_call_completed", event_names)
-        self.assertIn("artifact_call_started", event_names)
-        self.assertIn("artifact_call_completed", event_names)
+        self.assertIn("artifact_content_fetch_started", event_names)
+        self.assertIn("artifact_content_fetch_completed", event_names)
         self.assertNotIn("accession_cache_hit", event_names)
 
         sec_completed = next(e for e in events if e["event"] == "sec_call_completed")
         self.assertEqual(sec_completed["accession_number"], accession)
         self.assertEqual(sec_completed["call"], "get_filing")
 
-        artifact_completed = next(e for e in events if e["event"] == "artifact_call_completed")
+        artifact_completed = next(e for e in events if e["event"] == "artifact_content_fetch_completed")
         self.assertEqual(artifact_completed["accession_number"], accession)
         self.assertEqual(artifact_completed["document_name"], "primary.xml")
         self.assertEqual(artifact_completed["bytes"], len(payload))

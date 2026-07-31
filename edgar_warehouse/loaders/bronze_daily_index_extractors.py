@@ -9,7 +9,9 @@ from datetime import date
 _DAILY_IDX_FULL_PATTERN = re.compile(
     r"^(?P<form>\S[\S ]*?)\s{2,}(?P<company>.+?)\s{2,}(?P<cik>\d{4,10})\s+(?P<date>\d{8}|\d{4}-\d{2}-\d{2})\s+(?P<filename>edgar/data/\S+)"
 )
-_ACCESSION_PATTERN = re.compile(r"edgar/data/\d+/([0-9-]+)-index\.")
+_ACCESSION_PATTERN = re.compile(
+    r"^edgar/data/\d+/(?P<accession>\d{10}-\d{2}-\d{6})(?:-index\.[^/]+|\.txt)$"
+)
 
 
 def stage_daily_index_filing_loader(
@@ -43,8 +45,10 @@ def stage_daily_index_filing_loader(
         except ValueError:
             continue
         file_name_value = match.group("filename")
-        accession_match = _ACCESSION_PATTERN.search(file_name_value)
-        accession_number_value = accession_match.group(1) if accession_match else file_name_value
+        accession_match = _ACCESSION_PATTERN.match(file_name_value)
+        accession_number_value = (
+            accession_match.group("accession") if accession_match else file_name_value
+        )
         filing_txt_url_value = "https://www.sec.gov/Archives/" + file_name_value
         record_hash_value = hashlib.sha256(
             f"{form_value}|{company_value}|{cik_value}|{filing_date_value}|{file_name_value}".encode()

@@ -23,9 +23,8 @@ def _parse_debug_events(stderr_text: str) -> list[dict]:
 
 
 class GatewayRegistryTests(unittest.TestCase):
-    def test_cutover_classes_include_catalogs_facts_and_filings(self) -> None:
+    def test_cutover_classes_include_catalogs_and_facts_not_filing_content(self) -> None:
         for name in (
-            "filing_document",
             "company_tickers",
             "company_tickers_exchange",
             "submissions_main",
@@ -34,6 +33,9 @@ class GatewayRegistryTests(unittest.TestCase):
             "companyfacts",
         ):
             self.assertTrue(gateway.is_edgartools_gateway_class(name), name)
+        self.assertFalse(gateway.is_edgartools_gateway_class("filing_document"))
+        self.assertTrue(gateway.is_raw_sec_content_class("filing_document"))
+        self.assertFalse(gateway.is_non_edgartools_source("filing_document"))
 
     def test_non_edgartools_sources_are_explicit_and_not_claimed(self) -> None:
         self.assertTrue(gateway.is_non_edgartools_source("iapd_adv_bulk"))
@@ -113,15 +115,14 @@ class OrchestratorRoutesThroughGatewayTests(unittest.TestCase):
         # Bound at import as _gateway_download_bytes — patch the orchestrator symbol.
         with patch.object(
             wo, "_gateway_download_bytes", return_value=b"via-gateway"
-        ) as gw:
-            with patch(
-                "edgar_warehouse.infrastructure.sec_client.download_sec_bytes",
-                side_effect=AssertionError("sec_client parallel path"),
-            ):
-                out = wo._download_sec_bytes(
-                    "https://data.sec.gov/submissions/CIK0000320193.json",
-                    "Tester test@example.com",
-                )
+        ) as gw, patch(
+            "edgar_warehouse.infrastructure.sec_client.download_sec_bytes",
+            side_effect=AssertionError("sec_client parallel path"),
+        ):
+            out = wo._download_sec_bytes(
+                "https://data.sec.gov/submissions/CIK0000320193.json",
+                "Tester test@example.com",
+            )
         gw.assert_called_once()
         self.assertEqual(out, b"via-gateway")
 
@@ -146,25 +147,23 @@ class EntityFactsUsesGatewayTests(unittest.TestCase):
         with patch(
             "edgar_warehouse.infrastructure.edgartools_sec_gateway.fetch_companyfacts_json",
             return_value=facts,
-        ) as gw:
-            with patch(
-                "edgar_warehouse.infrastructure.sec_client.download_sec_bytes",
-                side_effect=AssertionError("parallel sec_client"),
-            ):
-                with patch(
-                    "edgar_warehouse.parsers.financials.parse_entity_facts",
-                    return_value={
-                        "sec_financial_fact": [],
-                        "sec_accounting_flag": [],
-                    },
-                ):
-                    metrics = fi.run_bootstrap_entity_facts(
-                        cik_list=[320193],
-                        db=_Db(),
-                        identity="Tester test@example.com",
-                        sync_run_id="run1",
-                        force=True,
-                    )
+        ) as gw, patch(
+            "edgar_warehouse.infrastructure.sec_client.download_sec_bytes",
+            side_effect=AssertionError("parallel sec_client"),
+        ), patch(
+            "edgar_warehouse.parsers.financials.parse_entity_facts",
+            return_value={
+                "sec_financial_fact": [],
+                "sec_accounting_flag": [],
+            },
+        ):
+            metrics = fi.run_bootstrap_entity_facts(
+                cik_list=[320193],
+                db=_Db(),
+                identity="Tester test@example.com",
+                sync_run_id="run1",
+                force=True,
+            )
         gw.assert_called_once()
         self.assertEqual(metrics["network_fetches"], 1)
         self.assertEqual(metrics["silver_skips"], 0)
@@ -223,11 +222,8 @@ class DebugEventLoggingTests(unittest.TestCase):
         url = "https://www.sec.gov/files/company_tickers.json"
         download_file = Mock(side_effect=RuntimeError("boom"))
         stderr = io.StringIO()
-        with contextlib.redirect_stderr(stderr):
-            with self.assertRaises(WarehouseRuntimeError):
-                gateway.download_bytes(
-                    url, "Tester test@example.com", download_file_fn=download_file
-                )
+        with contextlib.redirect_stderr(stderr), self.assertRaises(WarehouseRuntimeError):
+            gateway.download_bytes(url, "Tester test@example.com", download_file_fn=download_file)
 
         events = _parse_debug_events(stderr.getvalue())
         event_names = [e["event"] for e in events]

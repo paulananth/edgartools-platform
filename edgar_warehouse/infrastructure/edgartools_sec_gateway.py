@@ -4,9 +4,9 @@ Phase-2 cutover: catalogs (tickers, submissions, daily index) and companyfacts
 use edgartools HTTP (`edgar.httprequests`) rather than the parallel
 ``sec_client.download_sec_bytes`` stack.
 
-Filing documents (ticket 06) are covered by ``bronze_filing_artifacts`` +
-``FILING_DOCUMENT_NETWORK_GATEWAY``; they appear in the registry below so
-architecture tests have one inventory of cut-over object classes.
+Filing document metadata still uses edgartools discovery, but immutable
+document bodies use ``filing_content_gateway`` and are intentionally absent
+from this HTTP gateway registry.
 
 Non-edgartools sources (IAPD ADV bulk, PCAOB bulk, operator FOIA drops) stay on
 mandatory archive paths and must never be listed as edgartools-covered.
@@ -17,12 +17,12 @@ from __future__ import annotations
 import json
 import sys
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, Callable, Final
+from typing import Any, Final
 from urllib.parse import urlparse
 
 import edgar
-
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 
 # Match sec_client host policy so the gateway does not widen allowed SEC hosts.
@@ -34,8 +34,6 @@ CATALOG_AND_FACTS_NETWORK_GATEWAY: Final = "edgartools"
 # Object classes whose SEC network I/O must go through edgartools-backed paths.
 EDGARTOOLS_GATEWAY_OBJECT_CLASSES: Final = frozenset(
     {
-        "filing_document",
-        "filing_attachment",
         "company_tickers",
         "company_tickers_exchange",
         "submissions_main",
@@ -54,6 +52,10 @@ NON_EDGARTOOLS_OBJECT_CLASSES: Final = frozenset(
     }
 )
 
+# Filing discovery stays in edgartools; only immutable content uses this raw
+# SEC client path.  Keep it separate from truly non-edgartools source families.
+RAW_SEC_CONTENT_OBJECT_CLASSES: Final = frozenset({"filing_document", "filing_attachment"})
+
 
 def is_edgartools_gateway_class(object_class: str) -> bool:
     return str(object_class or "").strip() in EDGARTOOLS_GATEWAY_OBJECT_CLASSES
@@ -61,6 +63,10 @@ def is_edgartools_gateway_class(object_class: str) -> bool:
 
 def is_non_edgartools_source(object_class: str) -> bool:
     return str(object_class or "").strip() in NON_EDGARTOOLS_OBJECT_CLASSES
+
+
+def is_raw_sec_content_class(object_class: str) -> bool:
+    return str(object_class or "").strip() in RAW_SEC_CONTENT_OBJECT_CLASSES
 
 
 def ensure_identity(identity: str) -> None:

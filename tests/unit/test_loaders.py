@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from datetime import date
 import unittest
+from datetime import date
 
-from edgar_warehouse.loaders import stage_company_loader, stage_daily_index_filing_loader
+from edgar_warehouse.loaders import (
+    stage_company_loader,
+    stage_daily_index_filing_loader,
+)
 
 
 class LoaderTests(unittest.TestCase):
@@ -56,3 +59,21 @@ class LoaderTests(unittest.TestCase):
         self.assertEqual(rows[0]["cik"], 123456)
         self.assertEqual(rows[0]["accession_number"], "0000123456-24-000001")
         self.assertEqual(rows[0]["row_ordinal"], 1)
+
+    def test_stage_daily_index_filing_loader_extracts_accession_from_txt_path(self) -> None:
+        payload = b"8-K  ACME CORP  123456  20240102  edgar/data/123456/0000123456-24-000001.txt\n"
+
+        rows = stage_daily_index_filing_loader(
+            payload=payload,
+            business_date=date(2024, 1, 2),
+            sync_run_id="sync-1",
+            raw_object_id="raw-1",
+            source_url="https://www.sec.gov/Archives/edgar/daily-index/2024/QTR1/form.20240102.idx",
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["accession_number"], "0000123456-24-000001")
+        self.assertEqual(
+            rows[0]["filing_txt_url"],
+            "https://www.sec.gov/Archives/edgar/data/123456/0000123456-24-000001.txt",
+        )

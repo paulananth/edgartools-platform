@@ -145,8 +145,8 @@ for the pipeline it's attached to, or exists purely to check state.
 
 | Table/output | Source mode | Data points |
 | --- | --- | --- |
-| `sec_filing_attachment` | Direct SEC fast path or edgartools fallback | Accession number, sequence number, document name/type/description, document URL, primary flag, raw object id, sync run. |
-| Filing document bytes | Direct SEC or edgartools fallback | Primary document and attachments stored in S3 bronze by CIK/accession/section/document name. |
+| `sec_filing_attachment` | edgartools filing/attachment discovery metadata | Accession number, sequence number, document name/type/description, document URL, primary flag, raw object id, sync run. |
+| Filing document bytes | Repository-owned raw SEC HTTP per canonical attachment URL | Byte-exact primary documents and attachments stored in S3 bronze by CIK/accession/section/document name. |
 | `sec_filing_text` | Local text projection | Accession, text version, source document name, text storage path, text SHA256, char count, extracted time. |
 
 ### Ownership Data

@@ -351,7 +351,7 @@ class LoaderIdempotencyTests(unittest.TestCase):
         )
         fake_filing = _FakeFiling(attachments=_FakeAttachments([primary_attachment]))
         get_filing = Mock(return_value=fake_filing)
-        downloads = Mock(side_effect=AssertionError("download_bytes should not be called — edgartools already fetched content"))
+        downloads = Mock(return_value=b"<ownershipDocument />")
 
         with tempfile.TemporaryDirectory() as tmp:
             db = _ArtifactDb()
@@ -370,7 +370,7 @@ class LoaderIdempotencyTests(unittest.TestCase):
         get_filing.assert_called_once_with(accession)
         self.assertEqual(result["attachment_count"], 1)
         # A real SEC fetch occurred (edgartools get_filing) → orchestrator must throttle.
-        self.assertEqual(result["network_fetches"], 1)
+        self.assertEqual(result["network_fetches"], 2)
         # One raw_writes entry (the document) — no separate index-page artifact anymore.
         self.assertEqual(len(result["raw_writes"]), 1)
         self.assertEqual(len(db.merged_rows), 1)
@@ -402,6 +402,7 @@ class LoaderIdempotencyTests(unittest.TestCase):
                 db=_ArtifactDb(),
                 accession_number=accession,
                 sync_run_id="failed-before-silver-publish",
+                download_bytes=Mock(return_value=payload),
                 get_filing=Mock(return_value=fake_filing),
                 force=False,
             )
@@ -414,6 +415,7 @@ class LoaderIdempotencyTests(unittest.TestCase):
                 db=_ArtifactDb(),
                 accession_number=accession,
                 sync_run_id="retry-with-lost-silver-state",
+                download_bytes=Mock(return_value=payload),
                 get_filing=Mock(return_value=fake_filing),
                 force=False,
             )
@@ -426,6 +428,7 @@ class LoaderIdempotencyTests(unittest.TestCase):
                 db=_ArtifactDb(),
                 accession_number=accession,
                 sync_run_id="explicit-force-repair",
+                download_bytes=Mock(return_value=payload),
                 get_filing=Mock(return_value=fake_filing),
                 force=True,
             )
@@ -455,7 +458,7 @@ class LoaderIdempotencyTests(unittest.TestCase):
         )
         fake_filing = _FakeFiling(attachments=_FakeAttachments([exhibit, primary], primary_documents=[primary]))
         get_filing = Mock(return_value=fake_filing)
-        downloads = Mock(side_effect=AssertionError("download_bytes should not be called"))
+        downloads = Mock(return_value=b"<raw attachment />")
 
         with tempfile.TemporaryDirectory() as tmp:
             db = _ArtifactDb()
@@ -544,9 +547,7 @@ class LoaderIdempotencyTests(unittest.TestCase):
             attachments=_FakeAttachments([cover_page, infotable], primary_documents=[cover_page])
         )
         get_filing = Mock(return_value=fake_filing)
-        downloads = Mock(side_effect=AssertionError(
-            "download_bytes should not be called — edgartools already fetched content"
-        ))
+        downloads = Mock(return_value=b"<raw attachment />")
 
         with tempfile.TemporaryDirectory() as tmp:
             db = _ArtifactDb()
@@ -598,7 +599,7 @@ class LoaderIdempotencyTests(unittest.TestCase):
             attachments=_FakeAttachments([cover_page, infotable], primary_documents=[cover_page])
         )
         get_filing = Mock(return_value=fake_filing)
-        downloads = Mock(side_effect=AssertionError("download_bytes should not be called"))
+        downloads = Mock(return_value=b"<raw attachment />")
 
         with tempfile.TemporaryDirectory() as tmp:
             db = _ArtifactDb()
@@ -781,7 +782,7 @@ class LoaderIdempotencyTests(unittest.TestCase):
                 db=db,
                 accession_number=accession,
                 sync_run_id="run-1",
-                download_bytes=Mock(side_effect=AssertionError("should use edgartools content")),
+                download_bytes=Mock(return_value=new_payload),
                 get_filing=get_filing,
                 force=True,
                 operator="ops@example.com",
@@ -825,7 +826,7 @@ class LoaderIdempotencyTests(unittest.TestCase):
                 db=db,
                 accession_number=accession,
                 sync_run_id="run-1",
-                download_bytes=Mock(side_effect=AssertionError("should use edgartools content")),
+                download_bytes=Mock(return_value=b"<raw first-time />"),
                 get_filing=get_filing,
                 force=True,
             )
@@ -879,7 +880,7 @@ class LoaderIdempotencyTests(unittest.TestCase):
                 db=db,
                 accession_number=accession,
                 sync_run_id="run-1",
-                download_bytes=Mock(side_effect=AssertionError("should use edgartools content")),
+                download_bytes=Mock(return_value=b"<ownershipDocument>x</ownershipDocument>"),
                 get_filing=get_filing,
                 force=True,
             )

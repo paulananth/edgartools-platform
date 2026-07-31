@@ -2,7 +2,7 @@
 
 Type: task
 Status: open
-Blocked by: (none)
+Blocked by: 56
 
 ## Question
 
@@ -40,3 +40,20 @@ Decide:
 This is a task ticket (decision + execution) rather than pure research — the root cause is fully
 understood (ticket 44); what remains is an operator decision on repair mechanism plus carrying it
 out.
+
+## Progress (2026-07-31)
+
+The proposed one-byte normalization was fully dry-run, applied with per-key
+ETag preconditions, and independently verified for all 45 keys. However, the
+subsequent Apple-only `bootstrap-batch` run on the current immutable production
+image still had 18 immutable-content conflicts. Direct live comparison of one
+of those accessions (`0000320193-19-000073`) showed the current gateway payload
+is 109 bytes shorter than the restored migrated object and differs from byte 1,
+not solely by a terminal newline.
+
+All 45 keys were immediately restored to their prior byte-exact S3 versions,
+again with current-version preconditions; independent readback matched every
+prior SHA-256. No `bootstrap-fundamentals --mode per-filing` run was started.
+The one-byte repair is rejected and no shared immutability exception was added.
+Ticket 55 must establish the actual current-image content contract before a new
+operator repair decision can be made.

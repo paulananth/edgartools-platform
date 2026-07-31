@@ -3,7 +3,6 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = REPO_ROOT / "edgar_warehouse"
 
@@ -89,13 +88,8 @@ class BoundaryTests(unittest.TestCase):
                 offenders.append(path)
         self.assertEqual(offenders, [])
 
-    def test_filing_document_capture_does_not_import_parallel_sec_client(self) -> None:
-        """Ticket 06: filing document/attachment network gateway is edgartools-only.
-
-        bronze_filing_artifacts + filing_artifact_service must not reintroduce a
-        parallel raw SEC client for this object class (download_sec_bytes / httpx).
-        Catalogs and companyfacts may still use sec_client until ticket 07.
-        """
+    def test_filing_document_content_uses_only_the_narrow_raw_gateway(self) -> None:
+        """Ticket 56: content may reach sec_client only through its adapter."""
         targets = [
             PACKAGE_ROOT / "bronze_filing_artifacts.py",
             PACKAGE_ROOT / "infrastructure" / "filing_artifact_service.py",
@@ -114,13 +108,15 @@ class BoundaryTests(unittest.TestCase):
                     offenders.append(f"{path.name}:{fragment}")
         self.assertEqual(offenders, [])
 
-    def test_filing_document_gateway_marker_declares_edgartools_exclusive(self) -> None:
-        """Ticket 06 regression: module must declare exclusive gateway identity so
-        future reintroductions of a dual stack cannot silently drop the contract.
-        """
+    def test_filing_document_gateway_marker_declares_raw_sec_http(self) -> None:
         text = (PACKAGE_ROOT / "bronze_filing_artifacts.py").read_text(encoding="utf-8")
         self.assertIn("FILING_DOCUMENT_NETWORK_GATEWAY", text)
-        self.assertIn('"edgartools"', text)
+        self.assertIn('"raw_sec_http"', text)
+
+        content_gateway = PACKAGE_ROOT / "infrastructure" / "filing_content_gateway.py"
+        gateway_text = content_gateway.read_text(encoding="utf-8")
+        self.assertIn("from edgar_warehouse.infrastructure.sec_client import download_sec_bytes", gateway_text)
+        self.assertNotIn("import edgar", gateway_text)
 
     def test_catalog_and_facts_use_edgartools_gateway_not_parallel_sec_client(self) -> None:
         """Ticket 07: catalogs + companyfacts network must not import download_sec_bytes
@@ -150,6 +146,7 @@ class BoundaryTests(unittest.TestCase):
             CATALOG_AND_FACTS_NETWORK_GATEWAY,
             EDGARTOOLS_GATEWAY_OBJECT_CLASSES,
             NON_EDGARTOOLS_OBJECT_CLASSES,
+            RAW_SEC_CONTENT_OBJECT_CLASSES,
         )
 
         self.assertEqual(CATALOG_AND_FACTS_NETWORK_GATEWAY, "edgartools")
@@ -160,11 +157,15 @@ class BoundaryTests(unittest.TestCase):
             "submissions_pagination",
             "daily_index",
             "companyfacts",
-            "filing_document",
         ):
             self.assertIn(required, EDGARTOOLS_GATEWAY_OBJECT_CLASSES)
-        self.assertIn("iapd_adv_bulk", NON_EDGARTOOLS_OBJECT_CLASSES)
+        self.assertIn("filing_document", RAW_SEC_CONTENT_OBJECT_CLASSES)
+        self.assertIn("filing_attachment", RAW_SEC_CONTENT_OBJECT_CLASSES)
         self.assertEqual(
             EDGARTOOLS_GATEWAY_OBJECT_CLASSES & NON_EDGARTOOLS_OBJECT_CLASSES,
+            frozenset(),
+        )
+        self.assertEqual(
+            EDGARTOOLS_GATEWAY_OBJECT_CLASSES & RAW_SEC_CONTENT_OBJECT_CLASSES,
             frozenset(),
         )
