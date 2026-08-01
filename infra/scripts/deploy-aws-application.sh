@@ -1954,6 +1954,14 @@ windowed_bootstrap = {
             "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)",
         },
     },
+    # ItemReader rows carry only the window bounds. Project the execution-level
+    # artifact policy into every child input before RunWindow evaluates its
+    # command expression; otherwise $.artifact_policy raises States.Runtime.
+    "ItemSelector": {
+        "window_offset.$": "$$.Map.Item.Value.window_offset",
+        "window_limit.$": "$$.Map.Item.Value.window_limit",
+        "artifact_policy.$": "$.artifact_policy",
+    },
     "ItemProcessor": {
         "ProcessorConfig": {
             "Mode": "DISTRIBUTED",

@@ -240,6 +240,22 @@ def test_windowed_bootstrap_is_silver_only(definition: dict) -> None:
     assert "'--silver-only'" in per_window_cmd
 
 
+def test_windowed_bootstrap_projects_artifact_policy_into_each_item(
+    definition: dict,
+) -> None:
+    """The S3 JSONL rows contain only window bounds, while RunWindow also reads
+    the execution-scoped artifact policy. The Distributed Map must combine both
+    inputs before starting each child execution."""
+    branch_a_states = definition["States"]["Stage1Parallel"]["Branches"][0]["States"]
+    windowed_bootstrap = branch_a_states["WindowedBootstrap"]
+
+    assert windowed_bootstrap["ItemSelector"] == {
+        "window_offset.$": "$$.Map.Item.Value.window_offset",
+        "window_limit.$": "$$.Map.Item.Value.window_limit",
+        "artifact_policy.$": "$.artifact_policy",
+    }
+
+
 def test_load_history_has_one_final_gold_refresh_after_mdm_verify(definition: dict) -> None:
     gold_commands: list[tuple[str, str]] = []
 
