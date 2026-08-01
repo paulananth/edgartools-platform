@@ -1,7 +1,7 @@
 # Implement durable Daily-Artifact resume and disposition
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: (none — Decide a Durable Daily-Artifact Resume and Disposition Contract resolved)
 
 ## Goal
@@ -41,3 +41,28 @@ outstanding work without weakening byte-exact immutable capture.
   secrets.
 - Schedule activation remains separately gated by full-chain evidence within
   six hours.
+
+## Progress (2026-08-01)
+
+Implemented the durable local/runtime contract:
+
+- `daily_artifact_resume` writes an immutable run manifest bound to run id,
+  image identity, exact daily-index accession union, and selected configured
+  candidates; attempting to resume with changed identity fails closed.
+- Immutable per-accession `succeeded` markers cause a same-run retry to skip
+  completed artifact work. Immutable-content conflicts write a separate
+  `terminal_repair_required` marker and remain excluded until a matching,
+  immutable operator repair attestation supplies operator identity, repair
+  action, and conflict evidence.
+- The recurring artifact pipeline loads this durable disposition before work,
+  writes terminal success/repair outcomes, and leaves unresolved repair work
+  fail-closed. Existing local test doubles without a storage root retain their
+  prior non-durable behavior; every deployed command context has the storage
+  root and therefore uses the ledger.
+
+Focused daily regressions: 171 passed. Repository-wide Ruff currently reports
+pre-existing findings in `warehouse_orchestrator.py` (including unresolved
+`_resolve_seed_limit` / `_resolve_seed_document` references); the new module
+is clean. Remaining acceptance work is immutable-image deployment and a
+controlled production partial/resume/repair-evidence run. Status remains
+claimed until that evidence exists.

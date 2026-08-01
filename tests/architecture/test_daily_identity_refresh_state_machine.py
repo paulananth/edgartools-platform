@@ -133,6 +133,14 @@ def test_daily_incremental_default_path_is_bounded_not_full_universe(daily_incre
     assert "--cik-list" in inner_cmd
     assert "company-identity" in inner_cmd
     assert "--identity-refresh-run-id" in inner_cmd
+    assert "$.identity_refresh_run_id" in inner_cmd
+    assert "$$.Execution.Name" not in inner_cmd
+
+    item_selector = bounded_stage0["ItemSelector"]
+    assert item_selector == {
+        "cik_list.$": "$$.Map.Item.Value.cik_list",
+        "identity_refresh_run_id.$": "$$.Execution.Name",
+    }
 
     reducer = states["ReduceIdentityRefresh"]
     reducer_cmd = reducer["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]

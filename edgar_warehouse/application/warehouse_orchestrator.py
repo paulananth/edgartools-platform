@@ -2869,6 +2869,24 @@ def _is_transient_artifact_error(exc: BaseException) -> bool:
     return False
 
 
+def _is_immutable_object_conflict(exc: BaseException) -> bool:
+    """Classify immutable content conflicts as operator-repair dispositions."""
+    pending: list[BaseException] = [exc]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        message = str(current).lower()
+        if "immutable object" in message and "different content" in message:
+            return True
+        for nested in (getattr(current, "__cause__", None), getattr(current, "__context__", None)):
+            if isinstance(nested, BaseException):
+                pending.append(nested)
+    return False
+
+
 def _reset_edgartools_client_after_pool_timeout(exc: BaseException) -> bool:
     """Discard edgartools' process-wide client when its connection pool is exhausted."""
     pending: list[BaseException] = [exc]
@@ -3028,6 +3046,31 @@ def _run_configured_form_artifact_pipeline(
             raise WarehouseRuntimeError(f"release force includes accessions outside repair manifest: {unapproved}")
     if not selected_accessions and not recurring_mode:
         return {"raw_writes": [], "rows_written": 0, "rows_skipped": 0, **_empty_network}
+
+    resume_manifest: dict[str, Any] | None = None
+    repair_required: list[str] = []
+    resumed_accessions = 0
+    if recurring_mode and hasattr(context, "storage_root"):
+        from edgar_warehouse.application.daily_artifact_resume import prepare_resume
+
+        selected_before_resume = list(selected_accessions)
+        selected_accessions, repair_required, resume_manifest = prepare_resume(
+            context.storage_root,
+            run_id=sync_run_id,
+            # Production task definitions inject the immutable digest; the
+            # sentinel exists only for isolated local tests.
+            image_identity=os.environ.get("WAREHOUSE_IMAGE_REF", "").strip() or "local-development",
+            daily_index_accessions=accession_boundary or (),
+            selected_accessions=selected_accessions,
+        )
+        resumed_accessions = len(selected_before_resume) - len(selected_accessions) - len(repair_required)
+        _emit_pipeline_event(
+            "daily_artifact_resume_loaded",
+            run_id=sync_run_id,
+            resumed_accession_count=resumed_accessions,
+            pending_accession_count=len(selected_accessions),
+            terminal_repair_count=len(repair_required),
+        )
 
     _emit_pipeline_event(
         "filing_artifact_pipeline_started",
@@ -3272,6 +3315,15 @@ def _run_configured_form_artifact_pipeline(
                         "|".join(sorted(evidence_parts)).encode("utf-8")
                     ).hexdigest(),
                 })
+            if recurring_mode and resume_manifest is not None:
+                from edgar_warehouse.application.daily_artifact_resume import record_succeeded
+
+                record_succeeded(
+                    context.storage_root,
+                    run_id=sync_run_id,
+                    accession=accession_number,
+                    manifest=resume_manifest or {},
+                )
             consecutive_errors = 0
             processed_accessions += 1
         except Exception as exc:
@@ -3284,6 +3336,17 @@ def _run_configured_form_artifact_pipeline(
                 error=repr(exc),
                 run_id=sync_run_id,
             )
+            if recurring_mode and resume_manifest is not None and _is_immutable_object_conflict(exc):
+                from edgar_warehouse.application.daily_artifact_resume import record_terminal_repair
+
+                record_terminal_repair(
+                    context.storage_root,
+                    run_id=sync_run_id,
+                    accession=accession_number,
+                    manifest=resume_manifest or {},
+                    error_type=type(exc).__name__,
+                    error=repr(exc),
+                )
             if release_mode:
                 raise WarehouseRuntimeError(
                     f"required artifact candidate {accession_number} failed"
@@ -3334,7 +3397,7 @@ def _run_configured_form_artifact_pipeline(
                 run_id=sync_run_id,
                 **capture_network.as_dict(),
             )
-    if recurring_mode and errors:
+    if recurring_mode and (errors or repair_required):
         remaining_accessions = len(selected_accessions) - processed_accessions
         emit_partial(
             reason="candidate_failures",
@@ -3342,7 +3405,8 @@ def _run_configured_form_artifact_pipeline(
             remaining=remaining_accessions,
         )
         raise WarehouseRuntimeError(
-            f"recurring artifact pipeline had {errors} failed candidates"
+            f"recurring artifact pipeline had {errors} failed candidates and "
+            f"{len(repair_required)} terminal repair candidates"
         )
     network_metrics = capture_network.as_dict()
     _emit_pipeline_event(

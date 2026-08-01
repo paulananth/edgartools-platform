@@ -99,3 +99,20 @@ task. The fresh manual execution is now RUNNING:
 
 This is the acceptance run. Record batch coverage, reducer evidence, one
 canonical promotion, and elapsed time only after its terminal outcome.
+
+## Failed acceptance run and corrective action (2026-08-01)
+
+The first production acceptance run failed after 28 minutes in the reducer.
+Every distributed-Map batch wrote under its child Step Functions execution
+name, while the reducer correctly looked under the parent run name
+`daily-run-scoped-identity-20260801T121338Z`. The generated command contained
+the correct `--identity-refresh-run-id` flag, but evaluated
+`$$.Execution.Name` inside each distributed child, where that context value is
+child-scoped.
+
+Corrective action copies the parent execution name into each Map item with an
+`ItemSelector` before the distributed child boundary, then uses that explicit
+payload value for both `--identity-refresh-run-id` and `--run-id`. The workflow
+regression now asserts the exact value source, not merely the flag's presence.
+The ticket remains claimed until a new immutable-image production run proves
+complete batch coverage and exactly one canonical publication.

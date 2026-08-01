@@ -2706,8 +2706,8 @@ else:
 
     per_batch_company_identity = ecs_state(wh_medium_arn,
         "States.Array('bootstrap-fundamentals', '--mode', 'company-identity', "
-        "'--cik-list', $.cik_list, '--identity-refresh-run-id', $$.Execution.Name, "
-        "'--run-id', $$.Execution.Name)",
+        "'--cik-list', $.cik_list, '--identity-refresh-run-id', $.identity_refresh_run_id, "
+        "'--run-id', $.identity_refresh_run_id)",
         is_end=True)
 
     reduce_identity_refresh = ecs_state(wh_medium_arn,
@@ -2731,6 +2731,14 @@ else:
                 "Bucket": bronze_bucket_name,
                 "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_batches.jsonl', $$.Execution.Name)",
             },
+        },
+        # ItemSelector is evaluated in the parent Map execution. Copy the
+        # parent daily-run identity into each child input before the
+        # DISTRIBUTED processor starts; inside a child, $$.Execution.Name is
+        # the child execution name and cannot address the parent's run plan.
+        "ItemSelector": {
+            "cik_list.$": "$$.Map.Item.Value.cik_list",
+            "identity_refresh_run_id.$": "$$.Execution.Name",
         },
         "ItemProcessor": {
             "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
