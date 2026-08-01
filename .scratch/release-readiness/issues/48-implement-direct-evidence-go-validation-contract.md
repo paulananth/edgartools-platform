@@ -1,7 +1,7 @@
 # Implement the Direct-Evidence GO Validation Contract
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 08
 
 ## Question
@@ -44,3 +44,21 @@ Focused tests prove every valid state transition and fail closed on missing,
 duplicate, stale, superseded, unauthorized, reordered, tampered, or incorrectly
 sealed evidence. Architecture tests continue to prove that no module or CLI
 path can manufacture a human approval.
+
+## Answer
+
+Implemented schema-v2 Candidate Evidence Sets in
+`edgar_warehouse.application.release_evidence`. A contract manifest freezes a
+versioned, digest-bound external Release Authority Registry and rollback
+mechanism identity; it preserves one active append-only Evidence Attempt with
+its own watermark. The validator now enforces ticket 08's exact ordered
+eight-gate inventory, required role matrix, signer authorization, evidence and
+attestation bindings, attempt uniqueness, gate chronology, the seal-anchored
+24-hour window, and an authorized signed annotated Git Release Seal targeting
+the recorded finalized evidence commit. It reports `not_ready`,
+`ready_for_owner`, or `go_verified` without creating any human attestation,
+disposition, or seal.
+
+The CLI can create the contract form with `--authority-registry` and
+`--rollback-mechanism-id`; legacy schema-v1 manifests remain readable for
+previous evidence. Focused application, CLI, and no-auto-approval tests pass.
