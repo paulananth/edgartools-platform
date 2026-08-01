@@ -256,6 +256,53 @@ def test_windowed_bootstrap_projects_artifact_policy_into_each_item(
     }
 
 
+@pytest.mark.parametrize("artifact_policy", ["skip", "all_attachments"])
+def test_execution_routing_survives_compute_windows_to_windowed_bootstrap(
+    definition: dict, artifact_policy: str,
+) -> None:
+    """Successful ECS/Map outputs must not replace the normalized execution
+    input before WindowedBootstrap resolves its execution-scoped selector."""
+    states = definition["States"]
+    state_input = {
+        "force": False,
+        "window_size": 1,
+        "total_cik_limit": 2,
+        "artifact_policy": artifact_policy,
+    }
+    synthetic_state_output = {"ecs_task_result": "successful"}
+
+    # This is the successful top-level route from normalized operator input to
+    # the branch that reads $.artifact_policy. Under ASL, an omitted ResultPath
+    # defaults to "$" and replaces the entire state input; ResultPath null
+    # discards the state result and preserves its input.
+    for state_name in (
+        "SeedUniverse",
+        "MdmSeedUniverse",
+        "ComputeWindows",
+        "Stage0CompanyIdentity",
+        "Stage1Parallel",
+    ):
+        state = states[state_name]
+        result_path = state.get("ResultPath", "$")
+        if result_path == "$":
+            state_input = synthetic_state_output
+        elif result_path is not None:
+            raise AssertionError(
+                f"test route does not model non-root ResultPath {result_path!r} "
+                f"on {state_name}"
+            )
+
+    selector = states["Stage1Parallel"]["Branches"][0]["States"]
+    selector = selector["WindowedBootstrap"]["ItemSelector"]
+    execution_scoped_paths = {
+        target: path.removeprefix("$.")
+        for target, path in selector.items()
+        if path.startswith("$.")
+    }
+    assert execution_scoped_paths == {"artifact_policy.$": "artifact_policy"}
+    assert state_input[execution_scoped_paths["artifact_policy.$"]] == artifact_policy
+
+
 def test_load_history_has_one_final_gold_refresh_after_mdm_verify(definition: dict) -> None:
     gold_commands: list[tuple[str, str]] = []
 

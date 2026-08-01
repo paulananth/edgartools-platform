@@ -1852,6 +1852,10 @@ artifact_policy_default = {
 compute_windows = ecs_state(wh_medium_arn,
     "States.Array('compute-windows', '--window-size', States.Format('{}', $.window_size), '--total-cik-limit', States.Format('{}', $.total_cik_limit), '--run-id', $$.Execution.Name)",
     next_state="Stage0CompanyIdentity")
+# ComputeWindows publishes its durable window manifest to S3; its ECS result is
+# not the data contract for later states. Preserve the normalized execution
+# input so Stage0 and Stage1 still receive artifact_policy/force/defaults.
+compute_windows["ResultPath"] = None
 
 # (3b) Stage0CompanyIdentity: Company Identity capture -- global reference data
 # (company_tickers/company_tickers_exchange) plus per-CIK submissions.json
