@@ -25,12 +25,15 @@ import copy
 import hashlib
 import json
 import re
+import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 SCHEMA_VERSION = 1
+CONTRACT_SCHEMA_VERSION = 2
 
 # Ticket 01's Answer: "Live production evidence must ... remain within the
 # 24-hour Live-Evidence Window." A fixed invariant, not an operator-adjustable
@@ -104,6 +107,20 @@ _REQUIRED_HOSTED_GRAPH_FIELDS = ("generation_id", "publication_id")
 
 _VALID_GATE_STATUSES = frozenset({"pass", "fail"})
 _VALID_DISPOSITIONS = frozenset({"go", "no_go", "superseded"})
+
+# Ticket 08 is intentionally a closed inventory.  These names, their order,
+# and the roles below are contract data, not operator-provided configuration.
+_CONTRACT_GATES: tuple[tuple[str, frozenset[str]], ...] = (
+    ("candidate_identity_binding", frozenset({"candidate_builder"})),
+    ("rollback_readiness", frozenset({"aws_operator"})),
+    ("mdm_export_entitlement_preflight", frozenset({"mdm_graph_operator", "snowflake_operator"})),
+    ("batchsilver_max_concurrency_data_integrity", frozenset({"aws_operator"})),
+    ("required_relationship_source_completion", frozenset({"aws_operator"})),
+    ("mdm_export_graph_execution", frozenset({"mdm_graph_operator", "snowflake_operator"})),
+    ("relationship_eligibility_exact_parity", frozenset({"mdm_graph_operator"})),
+    ("release_bound_dashboard_acceptance", frozenset({"dashboard_reviewer"})),
+)
+_CONTRACT_GATE_ROLES = dict(_CONTRACT_GATES)
 
 
 class ReleaseEvidenceError(Exception):
@@ -215,6 +232,9 @@ def build_manifest(
     mdm_image_digest: str,
     release_data_watermark: dict[str, Any],
     identity_freeze_timestamp: str,
+    authority_registry_path: str | None = None,
+    authority_registry: dict[str, Any] | None = None,
+    rollback_mechanism_id: str | None = None,
 ) -> dict[str, Any]:
     """Build a fresh Candidate Evidence Set manifest.
 
@@ -234,6 +254,52 @@ def build_manifest(
 
     date_stamp = identity_freeze_timestamp[:10].replace("-", "")
     candidate_id = candidate_id_for(commit_sha, date_stamp)
+
+    if (authority_registry_path is None) != (authority_registry is None):
+        raise ValueError(
+            "authority_registry_path and authority_registry must be supplied together"
+        )
+    if authority_registry is not None:
+        if not isinstance(authority_registry_path, str) or not authority_registry_path:
+            raise ValueError("authority_registry_path must be a non-empty repository path")
+        if not isinstance(authority_registry, dict):
+            raise ValueError("authority_registry must be a JSON object")
+        registry_version = authority_registry.get("registry_version")
+        if not isinstance(registry_version, str) or not registry_version.strip():
+            raise ValueError("authority_registry.registry_version must be a non-empty string")
+        if not isinstance(rollback_mechanism_id, str) or not rollback_mechanism_id.strip():
+            raise ValueError("rollback_mechanism_id is required for contract manifests")
+        return {
+            "schema_version": CONTRACT_SCHEMA_VERSION,
+            "candidate_id": candidate_id,
+            "commit_sha": commit_sha,
+            "source_branch": source_branch,
+            "lifecycle_status": "frozen",
+            "identity_freeze_timestamp": identity_freeze_timestamp,
+            "warehouse_image_digest": warehouse_image_digest,
+            "mdm_image_digest": mdm_image_digest,
+            "authority_registry": {
+                "path": authority_registry_path,
+                "sha256": sha256_hex(_canonical_json_bytes(authority_registry)),
+                "registry_version": registry_version,
+            },
+            "rollback_mechanism_id": rollback_mechanism_id,
+            "attempts": [
+                {
+                    "attempt_id": "attempt-001",
+                    "status": "active",
+                    "release_data_watermark": copy.deepcopy(release_data_watermark),
+                    "watermark_digest": watermark_digest_for(release_data_watermark),
+                    "gates": [],
+                    "attestations": [],
+                }
+            ],
+            "disposition": None,
+            "release_owner_attestation": None,
+            "release_seal": None,
+            "finalized_evidence_commit": None,
+            "addendum_references": [],
+        }
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -270,6 +336,8 @@ def add_gate(
     capture_tool: str,
     capture_tool_version: str,
     captured_at: str,
+    rollback_mechanism_id: str | None = None,
+    additional_evidence: tuple[tuple[str, bytes], ...] = (),
 ) -> dict[str, Any]:
     """Return a new manifest with one sanitized gate record appended.
 
@@ -279,6 +347,21 @@ def add_gate(
     """
     if not isinstance(manifest, dict):
         raise GateRejectedError("manifest must be a JSON object")
+
+    if manifest.get("schema_version") == CONTRACT_SCHEMA_VERSION:
+        return _add_contract_gate(
+            manifest,
+            gate_name=gate_name,
+            status=status,
+            evidence_relpath=evidence_relpath,
+            evidence_bytes=evidence_bytes,
+            media_type=media_type,
+            capture_tool=capture_tool,
+            capture_tool_version=capture_tool_version,
+            captured_at=captured_at,
+            rollback_mechanism_id=rollback_mechanism_id,
+            additional_evidence=additional_evidence,
+        )
 
     if manifest.get("disposition") is not None:
         raise IdentityFrozenError(
@@ -393,6 +476,7 @@ class ValidationFinding:
 class ValidationReport:
     ok: bool
     findings: list[ValidationFinding]
+    readiness: str | None = None
 
 
 def validate_manifest(
@@ -400,6 +484,7 @@ def validate_manifest(
     *,
     repo_root: Path,
     as_of: datetime,
+    git_verifier: Callable[[dict[str, Any], Path], bool] | None = None,
 ) -> ValidationReport:
     """Validate schema, lineage, digest-matches-file, freshness, and secrets.
 
@@ -407,6 +492,11 @@ def validate_manifest(
     is the caller-supplied "current time" for the 24-hour freshness check —
     this function never reads the wall clock itself.
     """
+    if isinstance(manifest, dict) and manifest.get("schema_version") == CONTRACT_SCHEMA_VERSION:
+        return _validate_contract_manifest(
+            manifest, repo_root=repo_root, as_of=as_of, git_verifier=git_verifier
+        )
+
     findings: list[ValidationFinding] = []
 
     if not isinstance(manifest, dict):
@@ -1351,3 +1441,328 @@ def _path_contains_symlink(repo_root: Path, target: Path) -> bool:
         if current.is_symlink():
             return True
     return False
+
+
+# ---------------------------------------------------------------------------
+# Ticket 48 contract manifests (schema v2)
+# ---------------------------------------------------------------------------
+
+
+def _canonical_json_bytes(value: Any) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+        "utf-8"
+    )
+
+
+def _active_attempt(manifest: dict[str, Any]) -> dict[str, Any]:
+    attempts = manifest.get("attempts")
+    if not isinstance(attempts, list):
+        raise GateRejectedError("contract manifest attempts must be an array")
+    active = [attempt for attempt in attempts if isinstance(attempt, dict) and attempt.get("status") == "active"]
+    if len(active) != 1:
+        raise GateRejectedError("contract manifest must have exactly one active attempt")
+    return active[0]
+
+
+def _add_contract_gate(
+    manifest: dict[str, Any],
+    **kwargs: Any,
+) -> dict[str, Any]:
+    if manifest.get("disposition") is not None:
+        raise IdentityFrozenError("candidate already has a final disposition; no further gates may be added")
+    gate_name = kwargs["gate_name"]
+    if gate_name not in _CONTRACT_GATE_ROLES:
+        raise GateRejectedError(f"gate {gate_name!r} is not in ticket 08's fixed gate inventory")
+    active = _active_attempt(manifest)
+    gates = active.get("gates")
+    if not isinstance(gates, list):
+        raise GateRejectedError("active attempt gates must be an array")
+    expected_index = len(gates)
+    if expected_index >= len(_CONTRACT_GATES) or gate_name != _CONTRACT_GATES[expected_index][0]:
+        expected = _CONTRACT_GATES[expected_index][0] if expected_index < len(_CONTRACT_GATES) else "no further gate"
+        raise GateRejectedError(f"gate order is fixed; expected {expected!r}, got {gate_name!r}")
+
+    # Reuse the v1 sanitization/lineage builder against a compatibility view,
+    # then place the resulting immutable record inside the active attempt.
+    compat = {
+        "schema_version": SCHEMA_VERSION,
+        "candidate_id": manifest.get("candidate_id"),
+        "identity_freeze_timestamp": manifest.get("identity_freeze_timestamp"),
+        "gates": gates,
+        "disposition": None,
+    }
+    rollback_mechanism_id = kwargs.pop("rollback_mechanism_id", None)
+    additional_evidence = kwargs.pop("additional_evidence", ())
+    record = add_gate(compat, **kwargs)["gates"][-1]
+    artifacts = [
+        {"evidence_path": record["evidence_path"], "evidence_sha256": record["evidence_sha256"]}
+    ]
+    for path, content in additional_evidence:
+        if not isinstance(path, str) or not isinstance(content, bytes):
+            raise GateRejectedError("additional evidence must contain a path and bytes")
+        candidate_id = manifest.get("candidate_id")
+        expected_prefix = _candidate_evidence_prefix(candidate_id)
+        parts = PurePosixPath(path).parts
+        if PurePosixPath(path).is_absolute() or ".." in parts or parts[: len(PurePosixPath(expected_prefix).parts)] != PurePosixPath(expected_prefix).parts:
+            raise LineageError("additional evidence must be under the candidate evidence directory")
+        if scan_for_secrets(content):
+            raise SanitizationError("additional evidence contains forbidden content")
+        artifacts.append({"evidence_path": path, "evidence_sha256": sha256_hex(content)})
+    record["artifacts"] = artifacts
+    if gate_name == "rollback_readiness":
+        if rollback_mechanism_id != manifest.get("rollback_mechanism_id"):
+            raise GateRejectedError("Rollback Readiness must use the frozen rollback mechanism identity")
+        record["rollback_mechanism_id"] = rollback_mechanism_id
+    updated = copy.deepcopy(manifest)
+    _active_attempt(updated)["gates"].append(record)
+    return updated
+
+
+def _contract_finding(code: str, message: str, gate_name: str | None = None) -> ValidationFinding:
+    return ValidationFinding(code=code, message=message, gate_name=gate_name)
+
+
+def _validate_contract_manifest(
+    manifest: dict[str, Any],
+    *,
+    repo_root: Path,
+    as_of: datetime,
+    git_verifier: Callable[[dict[str, Any], Path], bool] | None,
+) -> ValidationReport:
+    findings: list[ValidationFinding] = []
+    required = {
+        "schema_version", "candidate_id", "commit_sha", "identity_freeze_timestamp",
+        "warehouse_image_digest", "mdm_image_digest", "authority_registry",
+        "rollback_mechanism_id", "attempts", "disposition", "release_owner_attestation",
+        "release_seal", "finalized_evidence_commit", "addendum_references",
+    }
+    for field in sorted(required - set(manifest)):
+        findings.append(_contract_finding("missing_field", f"manifest is missing required field {field!r}"))
+    if manifest.get("schema_version") != CONTRACT_SCHEMA_VERSION:
+        findings.append(_contract_finding("invalid_schema_version", "contract manifest must use schema_version 2"))
+    try:
+        as_of_dt = _parse_utc_timestamp(as_of.isoformat(), "as_of")
+        freeze_dt = _parse_utc_timestamp(manifest.get("identity_freeze_timestamp"), "identity_freeze_timestamp")
+    except (AttributeError, TypeError, ValueError) as exc:
+        findings.append(_contract_finding("invalid_timestamp", str(exc)))
+        as_of_dt = freeze_dt = None
+
+    registry = _load_bound_registry(manifest.get("authority_registry"), repo_root, findings)
+    attempts = manifest.get("attempts")
+    if not isinstance(attempts, list) or not attempts:
+        findings.append(_contract_finding("invalid_attempts", "attempts must be a non-empty JSON array"))
+        attempts = []
+    active = [a for a in attempts if isinstance(a, dict) and a.get("status") == "active"]
+    if len(active) != 1:
+        findings.append(_contract_finding("active_attempt_violation", "exactly one Evidence Attempt must be active"))
+        active_attempt = None
+    else:
+        active_attempt = active[0]
+    evidence_as_of = as_of_dt
+    if manifest.get("disposition") == "go" and isinstance(manifest.get("release_seal"), dict):
+        try:
+            evidence_as_of = _parse_utc_timestamp(manifest["release_seal"].get("timestamp"), "release_seal.timestamp")
+        except (TypeError, ValueError) as exc:
+            findings.append(_contract_finding("invalid_release_seal", str(exc)))
+    seen_attempts: set[str] = set()
+    for attempt in attempts:
+        findings.extend(_validate_contract_attempt(attempt, manifest, repo_root, evidence_as_of, freeze_dt, registry, seen_attempts))
+
+    disposition = manifest.get("disposition")
+    readiness = "not_ready"
+    if disposition not in {None, "go", "no_go", "superseded"}:
+        findings.append(_contract_finding("invalid_disposition", "disposition must be null, go, no_go, or superseded"))
+    if disposition in {"no_go", "superseded"}:
+        readiness = "not_ready"
+    elif active_attempt is not None and not findings:
+        if disposition is None:
+            readiness = "ready_for_owner" if _attempt_is_complete(active_attempt) else "not_ready"
+        elif disposition == "go":
+            findings.extend(_validate_go_finalization(manifest, active_attempt, registry, freeze_dt, git_verifier, repo_root))
+            readiness = "go_verified" if not findings else "not_ready"
+    return ValidationReport(ok=not findings, findings=findings, readiness=readiness)
+
+
+def _load_bound_registry(value: Any, repo_root: Path, findings: list[ValidationFinding]) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        findings.append(_contract_finding("invalid_authority_registry", "authority_registry must be a JSON object"))
+        return None
+    path, digest, version = value.get("path"), value.get("sha256"), value.get("registry_version")
+    if not all(isinstance(item, str) and item for item in (path, digest, version)):
+        findings.append(_contract_finding("invalid_authority_registry", "registry path, sha256, and version are required"))
+        return None
+    candidate = PurePosixPath(path)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        findings.append(_contract_finding("registry_lineage_violation", "authority registry must be a repository-relative path"))
+        return None
+    full_path = repo_root / candidate
+    if not full_path.is_file() or full_path.is_symlink():
+        findings.append(_contract_finding("registry_missing", "bound authority registry is missing or a symlink"))
+        return None
+    try:
+        raw = full_path.read_bytes()
+        registry = json.loads(raw)
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        findings.append(_contract_finding("invalid_authority_registry", f"cannot read registry: {exc}"))
+        return None
+    if sha256_hex(_canonical_json_bytes(registry)) != digest:
+        findings.append(_contract_finding("registry_digest_mismatch", "authority registry no longer matches its frozen digest"))
+    if not isinstance(registry, dict) or registry.get("registry_version") != version or not isinstance(registry.get("roles"), dict):
+        findings.append(_contract_finding("invalid_authority_registry", "registry version or roles are invalid"))
+        return None
+    return registry
+
+
+def _validate_contract_attempt(
+    attempt: Any, manifest: dict[str, Any], repo_root: Path, as_of: datetime | None,
+    freeze: datetime | None, registry: dict[str, Any] | None, seen: set[str],
+) -> list[ValidationFinding]:
+    findings: list[ValidationFinding] = []
+    if not isinstance(attempt, dict):
+        return [_contract_finding("invalid_attempt", "each Evidence Attempt must be a JSON object")]
+    attempt_id = attempt.get("attempt_id")
+    if not isinstance(attempt_id, str) or not attempt_id or attempt_id in seen:
+        findings.append(_contract_finding("invalid_attempt_id", "attempt_id must be unique and non-empty"))
+    else:
+        seen.add(attempt_id)
+    if attempt.get("status") not in {"active", "superseded"}:
+        findings.append(_contract_finding("invalid_attempt_status", "attempt status must be active or superseded"))
+    watermark = attempt.get("release_data_watermark")
+    if not isinstance(watermark, dict):
+        findings.append(_contract_finding("invalid_watermark", "attempt watermark must be a JSON object"))
+        watermark = {}
+    else:
+        findings.extend(_validate_watermark(watermark))
+    if attempt.get("watermark_digest") != watermark_digest_for(watermark):
+        findings.append(_contract_finding("watermark_digest_mismatch", "attempt watermark_digest does not bind its watermark"))
+    gates = attempt.get("gates")
+    if not isinstance(gates, list):
+        findings.append(_contract_finding("invalid_type", "attempt gates must be a JSON array"))
+        gates = []
+    for index, gate in enumerate(gates):
+        expected = _CONTRACT_GATES[index][0] if index < len(_CONTRACT_GATES) else None
+        if not isinstance(gate, dict) or gate.get("gate_name") != expected:
+            findings.append(_contract_finding("gate_inventory_violation", "gates must be the exact ordered ticket 08 inventory"))
+            continue
+        findings.extend(_validate_gate(gate, manifest.get("candidate_id"), repo_root, as_of, freeze))
+        findings.extend(_validate_contract_artifacts(gate, manifest.get("candidate_id"), repo_root))
+        if gate.get("gate_name") == "rollback_readiness" and gate.get("rollback_mechanism_id") != manifest.get("rollback_mechanism_id"):
+            findings.append(_contract_finding("rollback_mechanism_mismatch", "standing rollback proof must match the frozen mechanism identity", expected))
+    attestations = attempt.get("attestations")
+    if not isinstance(attestations, list):
+        findings.append(_contract_finding("invalid_type", "attempt attestations must be a JSON array"))
+    else:
+        findings.extend(_validate_contract_attestations(attestations, attempt, manifest, gates, registry, freeze, as_of))
+    return findings
+
+
+def _validate_contract_artifacts(gate: dict[str, Any], candidate_id: Any, repo_root: Path) -> list[ValidationFinding]:
+    artifacts = gate.get("artifacts")
+    if not isinstance(artifacts, list) or not artifacts:
+        return [_contract_finding("invalid_artifacts", "each contract gate must index one or more digest-bound artifacts", gate.get("gate_name"))]
+    findings: list[ValidationFinding] = []
+    seen: set[str] = set()
+    expected_prefix = PurePosixPath(_candidate_evidence_prefix(candidate_id)) if isinstance(candidate_id, str) else None
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            findings.append(_contract_finding("invalid_artifacts", "artifact must be a JSON object", gate.get("gate_name"))); continue
+        path, digest = artifact.get("evidence_path"), artifact.get("evidence_sha256")
+        path_obj = PurePosixPath(path) if isinstance(path, str) else None
+        if not isinstance(path, str) or not isinstance(digest, str) or not _EVIDENCE_DIGEST_RE.fullmatch(digest) or path_obj is None or path_obj.is_absolute() or ".." in path_obj.parts or expected_prefix is None or path_obj.parts[: len(expected_prefix.parts)] != expected_prefix.parts or path in seen:
+            findings.append(_contract_finding("invalid_artifacts", "artifact path/digest is invalid or duplicated", gate.get("gate_name"))); continue
+        seen.add(path)
+        full_path = repo_root / path
+        if not full_path.is_file() or full_path.is_symlink() or sha256_hex(full_path.read_bytes()) != digest:
+            findings.append(_contract_finding("artifact_digest_mismatch", "artifact does not match its recorded digest", gate.get("gate_name")))
+    return findings
+
+
+def _validate_contract_attestations(attestations: list[Any], attempt: dict[str, Any], manifest: dict[str, Any], gates: list[Any], registry: dict[str, Any] | None, freeze: datetime | None, as_of: datetime | None) -> list[ValidationFinding]:
+    findings: list[ValidationFinding] = []
+    gate_digests = {g.get("gate_name"): f"sha256:{g.get('evidence_sha256')}" for g in gates if isinstance(g, dict)}
+    seen: set[tuple[str, str]] = set()
+    for attestation in attestations:
+        if not isinstance(attestation, dict):
+            findings.append(_contract_finding("invalid_attestation", "attestation must be a JSON object")); continue
+        required = ("attempt_id", "gate_name", "role", "approver_handle", "key_fingerprint", "signature", "candidate_id", "watermark_digest", "evidence_digest", "attested_at")
+        if any(not isinstance(attestation.get(key), str) or not attestation[key] for key in required):
+            findings.append(_contract_finding("incomplete_attestation", "attestation lacks a required signed-action field")); continue
+        gate_name, role = attestation["gate_name"], attestation["role"]
+        if (gate_name, role) in seen: findings.append(_contract_finding("duplicate_attestation", "a role may attest a gate only once", gate_name))
+        seen.add((gate_name, role))
+        if attestation["attempt_id"] != attempt.get("attempt_id") or attestation["candidate_id"] != manifest.get("candidate_id") or attestation["watermark_digest"] != attempt.get("watermark_digest") or attestation["evidence_digest"] != gate_digests.get(gate_name):
+            findings.append(_contract_finding("attestation_binding_mismatch", "attestation must bind this candidate, attempt, watermark, and gate evidence", gate_name))
+        if role not in _CONTRACT_GATE_ROLES.get(gate_name, frozenset()): findings.append(_contract_finding("unauthorized_gate_role", "role is not required for this gate", gate_name))
+        if not _registry_authorizes(registry, role, attestation["approver_handle"], attestation["key_fingerprint"]): findings.append(_contract_finding("unauthorized_signer", "signer is not in the frozen authority registry", gate_name))
+        try:
+            attested_at = _parse_utc_timestamp(attestation["attested_at"], "attested_at")
+            gate = next((gate for gate in gates if isinstance(gate, dict) and gate.get("gate_name") == gate_name), None)
+            captured_at = _parse_utc_timestamp(gate.get("captured_at"), "captured_at") if gate else None
+            if freeze is not None and attested_at < freeze: findings.append(_contract_finding("attestation_before_identity_freeze", "attestation predates the identity freeze", gate_name))
+            if as_of is not None and attested_at > as_of: findings.append(_contract_finding("attestation_from_future", "attestation is after validation time", gate_name))
+            if captured_at is not None and attested_at < captured_at: findings.append(_contract_finding("invalid_chronology", "gate attestation predates its evidence capture", gate_name))
+        except (TypeError, ValueError) as exc: findings.append(_contract_finding("invalid_timestamp", str(exc), gate_name))
+    return findings
+
+
+def _registry_authorizes(registry: dict[str, Any] | None, role: str, handle: str, fingerprint: str) -> bool:
+    entries = registry.get("roles", {}).get(role, []) if registry else []
+    return any(isinstance(entry, dict) and entry.get("handle") == handle and entry.get("key_fingerprint") == fingerprint for entry in entries)
+
+
+def _attempt_is_complete(attempt: dict[str, Any]) -> bool:
+    gates = attempt.get("gates", [])
+    if [g.get("gate_name") for g in gates if isinstance(g, dict)] != [name for name, _ in _CONTRACT_GATES] or any(g.get("status") != "pass" for g in gates): return False
+    covered = {(a.get("gate_name"), a.get("role")) for a in attempt.get("attestations", []) if isinstance(a, dict)}
+    return all((name, role) in covered for name, roles in _CONTRACT_GATES for role in roles)
+
+
+def _validate_go_finalization(manifest: dict[str, Any], attempt: dict[str, Any], registry: dict[str, Any] | None, freeze: datetime | None, git_verifier: Callable[[dict[str, Any], Path], bool] | None, repo_root: Path) -> list[ValidationFinding]:
+    findings: list[ValidationFinding] = []
+    owner, seal, finalized = manifest.get("release_owner_attestation"), manifest.get("release_seal"), manifest.get("finalized_evidence_commit")
+    if not _attempt_is_complete(attempt): findings.append(_contract_finding("incomplete_final_disposition", "GO requires every passing gate and required gate attestation"))
+    required_owner_fields = {"attempt_id", "candidate_id", "watermark_digest", "signature", "attested_at"}
+    owner_is_bound = isinstance(owner, dict) and all(isinstance(owner.get(field), str) and owner[field] for field in required_owner_fields) and owner.get("attempt_id") == attempt.get("attempt_id") and owner.get("candidate_id") == manifest.get("candidate_id") and owner.get("watermark_digest") == attempt.get("watermark_digest")
+    if not owner_is_bound or owner.get("role") != "release_owner" or not _registry_authorizes(registry, owner.get("role", ""), owner.get("approver_handle", ""), owner.get("key_fingerprint", "")):
+        findings.append(_contract_finding("unauthorized_release_owner", "GO requires an authorized Release Owner attestation"))
+    if not isinstance(seal, dict) or not isinstance(finalized, str) or not _COMMIT_SHA_RE.fullmatch(finalized) or seal.get("target_commit") != finalized:
+        findings.append(_contract_finding("invalid_release_seal", "GO requires a seal targeting the exact finalized evidence commit")); return findings
+    if not _registry_authorizes(registry, "release_owner", seal.get("signer_handle", ""), seal.get("key_fingerprint", "")):
+        findings.append(_contract_finding("unauthorized_release_seal", "Release Seal signer is not authorized"))
+    verifier = git_verifier or _verify_release_seal_from_git
+    if not verifier(seal, repo_root): findings.append(_contract_finding("release_seal_verification_failed", "signed annotated Release Seal did not verify"))
+    try:
+        seal_time = _parse_utc_timestamp(seal.get("timestamp"), "release_seal.timestamp")
+        owner_time = _parse_utc_timestamp(owner.get("attested_at"), "release_owner_attestation.attested_at") if isinstance(owner, dict) else None
+        if owner_time is None or owner_time > seal_time:
+            findings.append(_contract_finding("invalid_chronology", "Release Owner must attest no later than the Release Seal"))
+        elif owner_time < seal_time - timedelta(hours=LIVE_EVIDENCE_WINDOW_HOURS):
+            findings.append(_contract_finding("evidence_stale", "Release Owner attestation is outside the seal-anchored 24-hour window"))
+        for gate in attempt.get("gates", []):
+            if not isinstance(gate, dict): continue
+            captured = _parse_utc_timestamp(gate.get("captured_at"), "captured_at")
+            matching = [a for a in attempt.get("attestations", []) if isinstance(a, dict) and a.get("gate_name") == gate.get("gate_name")]
+            if captured > seal_time or captured < seal_time - timedelta(hours=LIVE_EVIDENCE_WINDOW_HOURS):
+                findings.append(_contract_finding("evidence_stale", "gate evidence is outside the seal-anchored 24-hour window", gate.get("gate_name")))
+            for attestation in matching:
+                attested = _parse_utc_timestamp(attestation.get("attested_at"), "attested_at")
+                if attested < captured or attested > owner_time:
+                    findings.append(_contract_finding("invalid_chronology", "gate capture, attestation, owner, and seal must be ordered", gate.get("gate_name")))
+    except (TypeError, ValueError) as exc:
+        findings.append(_contract_finding("invalid_timestamp", str(exc)))
+    return findings
+
+
+def _verify_release_seal_from_git(seal: dict[str, Any], repo_root: Path) -> bool:
+    """Read-only Git verification for an annotated, signed Release Seal."""
+    tag = seal.get("tag")
+    target = seal.get("target_commit")
+    if not isinstance(tag, str) or not tag or not isinstance(target, str):
+        return False
+    try:
+        tag_type = subprocess.run(["git", "-C", str(repo_root), "cat-file", "-t", tag], capture_output=True, text=True, check=False)
+        verify = subprocess.run(["git", "-C", str(repo_root), "tag", "-v", tag], capture_output=True, text=True, check=False)
+        resolved = subprocess.run(["git", "-C", str(repo_root), "rev-list", "-n", "1", tag], capture_output=True, text=True, check=False)
+    except OSError:
+        return False
+    return tag_type.returncode == 0 and tag_type.stdout.strip() == "tag" and verify.returncode == 0 and resolved.stdout.strip() == target

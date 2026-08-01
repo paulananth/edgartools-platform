@@ -100,6 +100,12 @@ def _cmd_init(args: argparse.Namespace) -> int:
         args.identity_freeze_timestamp or datetime.now(UTC).isoformat()
     )
 
+    authority_registry = None
+    if args.authority_registry:
+        registry_path = (repo_root / args.authority_registry).resolve()
+        if not registry_path.is_relative_to(repo_root):
+            raise ValueError("authority registry must be under repo_root")
+        authority_registry = json.loads(registry_path.read_text(encoding="utf-8"))
     manifest = build_manifest(
         commit_sha=args.commit_sha,
         source_branch=args.source_branch,
@@ -107,6 +113,9 @@ def _cmd_init(args: argparse.Namespace) -> int:
         mdm_image_digest=args.mdm_image_digest,
         release_data_watermark=watermark,
         identity_freeze_timestamp=identity_freeze_timestamp,
+        authority_registry_path=args.authority_registry,
+        authority_registry=authority_registry,
+        rollback_mechanism_id=args.rollback_mechanism_id,
     )
     initial_report = validate_manifest(
         manifest,
@@ -190,6 +199,7 @@ def _cmd_add_gate(args: argparse.Namespace) -> int:
         capture_tool=args.capture_tool,
         capture_tool_version=args.capture_tool_version,
         captured_at=captured_at,
+        rollback_mechanism_id=args.rollback_mechanism_id,
     )
 
     _write_manifest(candidate_dir / "release-evidence.json", updated)
@@ -212,6 +222,7 @@ def _cmd_validate(args: argparse.Namespace) -> int:
     report = validate_manifest(manifest, repo_root=repo_root, as_of=as_of)
     payload = {
         "ok": report.ok,
+        "readiness": report.readiness,
         "findings": [
             {"code": f.code, "message": f.message, "gate_name": f.gate_name}
             for f in report.findings
@@ -244,6 +255,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Inline JSON object for the Release Data Watermark.",
     )
     init_parser.add_argument(
+        "--authority-registry",
+        default=None,
+        help="Repository-relative JSON Release Authority Registry; enables ticket 48 schema v2.",
+    )
+    init_parser.add_argument(
+        "--rollback-mechanism-id",
+        default=None,
+        help="Exact standing rollback mechanism identity required by ticket 08.",
+    )
+    init_parser.add_argument(
         "--identity-freeze-timestamp",
         default=None,
         help="ISO8601 UTC timestamp; defaults to the current time.",
@@ -261,6 +282,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--evidence-file",
         required=True,
         help="Path to the evidence file, already written under the candidate's evidence/ dir.",
+    )
+    add_gate_parser.add_argument(
+        "--rollback-mechanism-id",
+        default=None,
+        help="Required only for the Rollback Readiness gate of a contract manifest.",
     )
     add_gate_parser.add_argument("--media-type", required=True)
     add_gate_parser.add_argument("--capture-tool", required=True)

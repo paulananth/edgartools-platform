@@ -55,12 +55,19 @@ def _choice_next(state: dict, execution_input: dict) -> str:
         value = execution_input.get(key)
         if "IsPresent" in choice and present is choice["IsPresent"]:
             return choice["Next"]
-        if "IsBoolean" in choice and present and isinstance(value, bool):
-            if choice["IsBoolean"] is True:
-                return choice["Next"]
-        if "BooleanEquals" in choice and isinstance(value, bool):
-            if value is choice["BooleanEquals"]:
-                return choice["Next"]
+        if (
+            "IsBoolean" in choice
+            and present
+            and isinstance(value, bool)
+            and choice["IsBoolean"] is True
+        ):
+            return choice["Next"]
+        if (
+            "BooleanEquals" in choice
+            and isinstance(value, bool)
+            and value is choice["BooleanEquals"]
+        ):
+            return choice["Next"]
     return state["Default"]
 
 

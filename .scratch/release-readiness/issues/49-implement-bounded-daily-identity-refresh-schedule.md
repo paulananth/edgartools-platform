@@ -2,7 +2,7 @@
 
 Type: task
 Status: claimed
-Blocked by: 45
+Blocked by: 45, 51, 52, 54
 
 ## Question
 
@@ -406,3 +406,44 @@ state machine remains revision `fc38774b-1da4-4e33-9d34-a0c43cd47e27`, with
 zero daily schedule rules and zero CloudWatch alarms. Phase 1 manual daily,
 backstop, late-republish, repair-routing, and competing-trigger evidence is
 therefore still pending. Status remains `claimed`; schedules remain disabled.
+
+## Progress (2026-07-31 — live runtime-bound research supersedes the all-tracked-CIK backstop)
+
+[Research the SEC-listed company universe for bounded daily loads](50-research-sec-company-universe-for-daily-load.md)
+resolved two independent causes of the current greater-than-six-hour
+production execution. The old deployed `Stage0CompanyIdentity` spent 9h56m on
+the approximately 26,300-CIK all-entity universe, while the subsequent
+already-narrow 3,082-CIK `RunWarehouseTask` expanded into 148,524 historical
+artifact candidates and encountered repeated long `PoolTimeout` failures.
+
+This supersedes this ticket's earlier requirement that the Identity Backstop
+Sweep cover every tracked CIK. The backstop now covers the complete
+company-eligible universe decided by ticket 50 (active `operating` entities
+union active CIKs present in the current SEC ticker snapshot, 3,243 in the
+canonical snapshot). Filing and relationship ingestion remain all-form/
+all-entity where their own contracts require it; they are not ticker-filtered.
+
+Implementation and evidence are blocked on
+[Implement the company-only identity refresh universe](51-implement-company-only-identity-refresh-universe.md)
+and
+[Bind daily artifacts to the forced-index accession union](52-bind-daily-artifacts-to-index-accessions.md).
+No schedule may be enabled and the Phase 1 six-hour evidence cannot pass until
+both land in the same immutable Release Candidate.
+
+## Progress (2026-07-31 — latest execution ended and exposed an optional-input routing blocker)
+
+The latest production execution, `daily-incremental-ticket03-1785413694`, is
+no longer running. It failed after 13h20m16s. `Stage0CompanyIdentity` consumed
+approximately 9h56m; `RunWarehouseTask` then ran for approximately 3h20m and
+its ECS container exited 0. The state machine nevertheless failed immediately
+afterward in `ForceCheck` with `States.Runtime` because ordinary `{}` input had
+no `$.force` value.
+
+This graduates
+[Make daily-incremental optional input routing total](54-make-daily-incremental-optional-input-routing-total.md)
+as a separate blocker. The Phase 1 full-chain evidence cannot pass merely by
+reducing Stage 0 and artifact time: the generated state machine must also
+preserve and safely route absent and explicit operator inputs. Live checks
+confirmed no running execution, no running ECS task in the warehouse cluster,
+and no EventBridge rule with the `edgartools-prod-daily` prefix; the schedule
+remains disabled.

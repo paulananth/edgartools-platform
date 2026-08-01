@@ -1,7 +1,7 @@
 # 47 — Investigate whether the 2026-07-19–2026-07-28 window silently overwrote other migrated bronze objects
 
 Type: research
-Status: open
+Status: resolved
 Blocked by: (none)
 
 ## Question
@@ -46,3 +46,19 @@ Investigate:
 This is a research ticket — read-only investigation (S3 version listings, execution history,
 timestamp cross-referencing). No repair action in scope here; if a real, material corruption
 instance is found, spin off a dedicated repair-decision ticket mirroring ticket 46's shape.
+
+## Answer
+
+No silent overwrite was confirmed. The retained production Step Functions history contains no
+artifact-fetching `bootstrap*`, `load_history`, `targeted_resync`, daily, or repair execution in
+the 2026-07-19–2026-07-28 window; the only relevant Ticket 20 runs either failed before a
+successful item or record zero SEC fetches. Canonical bronze versioning is enabled, and the Apple
+control object retains its July 19 migration version with no successor during the window.
+
+This is intentionally an execution-bound conclusion, not a universal proof over every bronze
+key: the legacy bucket's version history was purged during cutover and a whole-prefix canonical
+noncurrent-version aggregate was not available in this pass. Do not initiate a repair based only
+on the theoretical risk. If operator GO needs universal assurance, create a separate read-only
+inventory decision to paginate canonical filing versions, byte-compare in-window version pairs,
+and correlate any differences with ECS/CloudWatch provenance. Full evidence:
+[`47-research-findings.md`](47-research-findings.md).
