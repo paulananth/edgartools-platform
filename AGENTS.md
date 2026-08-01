@@ -63,6 +63,12 @@ Large files should be read in chunks before editing: `edgar_warehouse/runtime.py
 - Docker images use AWS ECR for deployable artifacts.
 - On macOS, use Colima for local Docker fast feedback. On Linux/CI, `docker buildx` with registry cache is the default path.
 
+## GoF Design Review
+
+- Before writing or modifying code, use the `gof-refactor-reviewer` skill to review the relevant existing code and its git history for evidence-backed Gang of Four refactoring opportunities. If the work is a new design with no existing code to review, use `gof-pattern-selector` instead.
+- During code review, explicitly check whether `gof-refactor-reviewer` is available. When available, invoke it as part of the review; when unavailable, state that limitation and perform a focused manual design-pattern review.
+- Do not force a design pattern into the code. Follow the skill's default of leaving the current design in place unless demonstrated change history and present-day costs justify the refactor.
+
 Common setup:
 
 ```bash
