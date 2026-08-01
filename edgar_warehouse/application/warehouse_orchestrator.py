@@ -89,8 +89,50 @@ GOLD_AFFECTING_COMMANDS = {
     "full-reconcile",
     "gold-refresh",  # builds gold from current silver state, no bronze capture
 }
-
 SNOWFLAKE_EXPORT_COMMANDS = GOLD_AFFECTING_COMMANDS | {"seed-universe"}
+
+
+def _gold_publication_enabled(command_name: str, arguments: dict[str, Any]) -> bool:
+    """Return whether this invocation owns a gold/Snowflake publication.
+
+    ``bootstrap-next`` remains gold-affecting for standalone compatibility,
+    but phased ``load_history`` windows explicitly defer publication to the
+    workflow's single final ``gold-refresh`` task.
+    """
+
+    return command_name in GOLD_AFFECTING_COMMANDS and not (
+        command_name == "bootstrap-next" and bool(arguments.get("silver_only"))
+    )
+
+
+def _snowflake_publication_enabled(command_name: str, arguments: dict[str, Any]) -> bool:
+    """Return whether this invocation plans any Snowflake publication."""
+
+    return command_name in SNOWFLAKE_EXPORT_COMMANDS and not (
+        command_name == "bootstrap-next" and bool(arguments.get("silver_only"))
+    )
+
+
+def _planned_writes_for_publication(
+    *,
+    command_name: str,
+    command_path: str,
+    run_id: str,
+    scope: dict[str, Any],
+    include_gold: bool,
+) -> dict[str, str]:
+    """Filter the command's normal writes by this invocation's publication policy."""
+
+    writes = _planned_writes(
+        command_name=command_name,
+        command_path=command_path,
+        run_id=run_id,
+        scope=scope,
+    )
+    if include_gold:
+        return writes
+    return {layer: path for layer, path in writes.items() if layer != "gold"}
+
 
 # Single source of truth for the run-level lease shared by the Daily Identity
 # Refresh and the Identity Backstop Sweep (release-readiness ticket 45/49) --
@@ -225,9 +267,16 @@ def _execute_warehouse_infrastructure_validation(
     run_id = _resolve_run_id(arguments)
     command_path = command_name.replace("_", "-")
     scope = _resolve_scope(command_name=command_name, arguments=arguments, now=now)
+    publish_gold = _gold_publication_enabled(command_name, arguments)
 
     writes = []
-    for layer, relative_path in _planned_writes(command_name=command_name, command_path=command_path, run_id=run_id, scope=scope).items():
+    for layer, relative_path in _planned_writes_for_publication(
+        command_name=command_name,
+        command_path=command_path,
+        run_id=run_id,
+        scope=scope,
+        include_gold=publish_gold,
+    ).items():
         target = context.bronze_root if layer == "bronze" else context.storage_root
         manifest = _layer_manifest(
             command_name=command_name,
@@ -248,7 +297,10 @@ def _execute_warehouse_infrastructure_validation(
         )
 
     snowflake_exports = []
-    if context.snowflake_export_root is not None:
+    publish_snowflake = context.snowflake_export_root is not None and not (
+        command_name == "bootstrap-next" and bool(arguments.get("silver_only"))
+    )
+    if publish_snowflake:
         export_business_date = _resolve_export_business_date(command_name=command_name, scope=scope, now=now)
         for table_name, table_path in SNOWFLAKE_EXPORT_TABLES.items():
             relative_path = (
@@ -297,7 +349,7 @@ def _execute_warehouse_infrastructure_validation(
             "identity_present": True,
             "snowflake_export_root": context.snowflake_export_root.root if context.snowflake_export_root else None,
         },
-        "message": _warehouse_success_message(context.snowflake_export_root is not None),
+        "message": _warehouse_success_message(publish_snowflake),
         "run_id": run_id,
         "runtime_mode": context.runtime_mode,
         "scope": scope,
@@ -315,6 +367,8 @@ def _execute_warehouse_bronze_capture(
     now = datetime.now(UTC)
     run_id = _resolve_run_id(arguments)
     command_path = command_name.replace("_", "-")
+    publish_gold = _gold_publication_enabled(command_name, arguments)
+    publish_snowflake = _snowflake_publication_enabled(command_name, arguments)
 
     # --- Shard-aware hydrate/open (Phase 9, STORE-02) ---
     # bootstrap-batch is the ECS chunk task that receives a pre-resolved CIK list
@@ -408,9 +462,9 @@ def _execute_warehouse_bronze_capture(
         scope=scope,
         now=now,
         include_snowflake_export_manifest=(
-            context.snowflake_export_root is not None
-            and command_name in SNOWFLAKE_EXPORT_COMMANDS
+            context.snowflake_export_root is not None and publish_snowflake
         ),
+        include_gold_manifest=publish_gold,
         shard_index=_active_shard_index if _using_shard_path else None,
     )
     db.start_pipeline_run(
@@ -465,7 +519,7 @@ def _execute_warehouse_bronze_capture(
             rows_skipped=metrics.get("rows_skipped", 0),
         )
         silver_table_counts = db.get_table_counts()
-        if context.snowflake_export_root is not None and command_name in GOLD_AFFECTING_COMMANDS:
+        if context.snowflake_export_root is not None and publish_gold:
             from edgar_warehouse.serving.gold_models import (
                 iter_gold_tables,
                 write_gold_table_manifest_entry,
@@ -620,7 +674,13 @@ def _execute_warehouse_bronze_capture(
             db.close()
 
     writes = []
-    for layer, relative_path in _planned_writes(command_name=command_name, command_path=command_path, run_id=run_id, scope=scope).items():
+    for layer, relative_path in _planned_writes_for_publication(
+        command_name=command_name,
+        command_path=command_path,
+        run_id=run_id,
+        scope=scope,
+        include_gold=publish_gold,
+    ).items():
         target = context.bronze_root if layer == "bronze" else context.storage_root
         manifest = _layer_manifest(
             command_name=command_name,
@@ -640,7 +700,7 @@ def _execute_warehouse_bronze_capture(
             }
         )
 
-    if context.snowflake_export_root is not None and command_name in GOLD_AFFECTING_COMMANDS:
+    if context.snowflake_export_root is not None and publish_gold:
         export_business_date = _resolve_export_business_date(command_name=command_name, scope=scope, now=now)
         run_manifest_relative_path = _snowflake_export_run_manifest_relative_path(
             workflow_name=command_name.replace("-", "_"),
@@ -747,7 +807,7 @@ def _execute_warehouse_bronze_capture(
             "Raw SEC files and run manifests were written to the configured bronze"
             + (
                 ", warehouse, and Snowflake export roots."
-                if context.snowflake_export_root is not None else
+                if snowflake_export_manifest_write is not None else
                 " and warehouse roots."
             )
         ),
@@ -5597,14 +5657,16 @@ def _planned_pipeline_writes(
     scope: dict[str, Any],
     now: datetime,
     include_snowflake_export_manifest: bool,
+    include_gold_manifest: bool,
     shard_index: int | None,
 ) -> list[dict[str, Any]]:
     writes: list[dict[str, Any]] = []
-    for layer, relative_path in _planned_writes(
+    for layer, relative_path in _planned_writes_for_publication(
         command_name=command_name,
         command_path=command_path,
         run_id=run_id,
         scope=scope,
+        include_gold=include_gold_manifest,
     ).items():
         target = context.bronze_root if layer == "bronze" else context.storage_root
         writes.append(

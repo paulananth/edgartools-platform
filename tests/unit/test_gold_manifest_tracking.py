@@ -151,3 +151,107 @@ def test_gold_refresh_records_gold_manifest_rows(tmp_path) -> None:
     )
     complete_metrics = fake_db.complete_pipeline_run.call_args.kwargs["metrics"]
     assert complete_metrics["gold_manifest"] == manifest_entries
+
+
+def test_bootstrap_next_silver_only_skips_gold_in_bronze_capture(tmp_path) -> None:
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _execute_warehouse_bronze_capture,
+    )
+
+    context = _context(tmp_path)
+    fake_db = MagicMock()
+    fake_db.get_table_counts.return_value = {"sec_company": 1}
+
+    with (
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage"
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
+            return_value=fake_db,
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._resolve_scope",
+            return_value={"limit": 100, "offset": 0},
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._capture_bronze_raw",
+            return_value=(
+                [],
+                {"rows_inserted": 1, "rows_skipped": 0, "sync_status": "succeeded"},
+            ),
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_with_retry",
+            return_value={"layer": "silver_database", "path": "silver.duckdb"},
+        ),
+        patch(
+            "edgar_warehouse.serving.gold_models.iter_gold_tables",
+            return_value=iter(()),
+        ) as iter_gold,
+        patch(
+            "edgar_warehouse.serving.targets.snowflake.write_gold_table_to_serving_export"
+        ) as export_gold,
+    ):
+        result = _execute_warehouse_bronze_capture(
+            context=context,
+            command_name="bootstrap-next",
+            arguments={"run_id": "silver-only-run", "silver_only": True},
+        )
+
+    iter_gold.assert_not_called()
+    export_gold.assert_not_called()
+    fake_db.record_gold_manifest.assert_not_called()
+    assert result["gold_row_counts"] is None
+    assert result["snowflake_export_manifest"] is None
+    assert not {"gold", "snowflake_export_manifest"} & {
+        write["layer"] for write in result["writes"]
+    }
+
+
+def test_bootstrap_next_default_still_publishes_gold_in_bronze_capture(tmp_path) -> None:
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _execute_warehouse_bronze_capture,
+    )
+
+    context = _context(tmp_path)
+    fake_db = MagicMock()
+    fake_db.get_table_counts.return_value = {"sec_company": 1}
+
+    with (
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage"
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
+            return_value=fake_db,
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._resolve_scope",
+            return_value={"limit": 100, "offset": 0},
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._capture_bronze_raw",
+            return_value=(
+                [],
+                {"rows_inserted": 1, "rows_skipped": 0, "sync_status": "succeeded"},
+            ),
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_with_retry",
+            return_value={"layer": "silver_database", "path": "silver.duckdb"},
+        ),
+        patch(
+            "edgar_warehouse.serving.gold_models.iter_gold_tables",
+            return_value=iter(()),
+        ) as iter_gold,
+    ):
+        result = _execute_warehouse_bronze_capture(
+            context=context,
+            command_name="bootstrap-next",
+            arguments={"run_id": "default-publication-run"},
+        )
+
+    iter_gold.assert_called_once_with(fake_db)
+    assert result["gold_row_counts"] == {}
+    assert result["snowflake_export_manifest"] is not None

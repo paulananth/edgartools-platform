@@ -233,6 +233,36 @@ def test_bootstrap_next_and_compute_windows_use_the_same_tracking_status_filter(
     assert f"'--tracking-status-filter', '{LOAD_HISTORY_TRACKING_STATUS_FILTER}'" in per_window_cmd
 
 
+def test_windowed_bootstrap_is_silver_only(definition: dict) -> None:
+    branch_a_states = definition["States"]["Stage1Parallel"]["Branches"][0]["States"]
+    per_window_cmd = _command_of_state(branch_a_states["WindowedBootstrap"])
+    assert "'bootstrap-next'" in per_window_cmd
+    assert "'--silver-only'" in per_window_cmd
+
+
+def test_load_history_has_one_final_gold_refresh_after_mdm_verify(definition: dict) -> None:
+    gold_commands: list[tuple[str, str]] = []
+
+    def walk(states: dict, label: str) -> None:
+        for name, state in states.items():
+            command = _command_of_state(state)
+            if "'gold-refresh'" in command:
+                gold_commands.append((f"{label}.{name}", command))
+            if state.get("Type") == "Map":
+                processor = state["ItemProcessor"]
+                walk(processor["States"], f"{label}.{name}(Map)")
+            if state.get("Type") == "Parallel":
+                for index, branch in enumerate(state["Branches"]):
+                    walk(branch["States"], f"{label}.{name}(Parallel[{index}])")
+
+    walk(definition["States"], "top")
+    assert [name for name, _ in gold_commands] == ["top.GoldRefresh"]
+    assert definition["States"]["GoldRefresh"]["Parameters"]["TaskDefinition"] == "arn:wh-large"
+
+    order = _linear_order(definition)
+    assert order.index("MdmVerify") < order.index("GoldRefresh")
+
+
 # -- Company Identity Pipeline wayfinder map, ticket 05: Stage0CompanyIdentity ---
 
 

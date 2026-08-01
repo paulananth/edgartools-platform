@@ -1111,21 +1111,10 @@ register_mdm_task_definition() {
 }
 
 TASK_DEF_SMALL_ARN="$(register_task_definition small 512 1024)"
-# medium memory raised 2048 -> 4096 (2026-07-12, fix-pipelines 06-03): the WindowedBootstrap
-# per-window `bootstrap-next` runs on `medium` and builds gold from the canonical silver.duckdb
-# (full accumulated universe, multi-GB — e.g. 2.7M sec_financial_fact rows), not just its window.
-# At 2048 MB it OOM-killed (exit 137) building the sec_financial_fact gold table, failing
-# load_history exec #3. 4096 matched the memory the dedicated gold-refresh (`large`) used at the
-# time for the same full-universe gold build. cpu 1024 supports 4096 on Fargate.
-# STALE AS OF 2026-07-30 (gold-build-memory-reliability ticket 03): `large` is now 8192MB (see
-# below), so `bootstrap-next` on `medium`'s unchanged 4096MB is the one remaining
-# full-universe-gold-build path NOT covered by this session's memory bump -- it's hardcoded
-# directly to the medium task-def ARN inside write_load_history_definition, bypassing
-# workflow_profile() entirely, so it wasn't in scope for ticket 03's "GOLD_AFFECTING_COMMANDS
-# medium members" question. Flagged in the map's fog, not fixed here.
-# DEEPER FOLLOW-UP: per-window bootstrap-next rebuilding the FULL gold every window is redundant
-# with the Stage-3 gold-refresh — consider making WindowedBootstrap skip the inline gold build
-# (phased-pipeline invariant: no gold per batch) rather than only widening memory.
+# Medium handles Bronze/Silver window work. load_history's per-window
+# `bootstrap-next` explicitly uses --silver-only; the workflow's single final
+# `gold-refresh` owns the full-universe gold/Snowflake publication on large.
+# 4096 MB remains the measured floor for canonical Silver merge/publication.
 TASK_DEF_MEDIUM_ARN="$(register_task_definition medium 1024 4096)"
 # large memory raised 4096 -> 8192 (2026-07-30, gold-build-memory-reliability ticket 03):
 # `large` and `medium` shared the identical 4096MB ceiling (only CPU differed), so
@@ -1929,7 +1918,9 @@ stage0_company_identity = {
 # round trip and could drop whichever task published second.
 #
 # (4a) Branch A — WindowedBootstrap DISTRIBUTED Map.
-# Per-window command: bootstrap-next --cik-limit M --cik-offset N --run-id <execution-name>.
+# Per-window command: bootstrap-next --silver-only --cik-limit M --cik-offset N
+# --run-id <execution-name>. Gold/Snowflake publication belongs exclusively to
+# the final GoldRefresh state after every Silver/fundamentals/MDM stage.
 # --tracking-status-filter is explicit here (bootstrap-next's own CLI default is
 # 'bootstrap_pending' alone, for its OTHER standalone/ad-hoc use — process the pending backlog).
 # Within load_history it must match ComputeWindows' filter exactly, or window offsets computed
@@ -1947,7 +1938,7 @@ stage0_company_identity = {
 # write_ownership_mdm_gold_definition's batch_map (Mode: DISTRIBUTED, ExecutionType:
 # STANDARD) elsewhere in this script.
 per_window = ecs_state(wh_medium_arn,
-    "States.Array('bootstrap-next', '--cik-limit', States.Format('{}', $.window_limit), '--cik-offset', States.Format('{}', $.window_offset), '--tracking-status-filter', 'active,bootstrap_pending', '--artifact-policy', States.Format('{}', $.artifact_policy), '--run-id', $$.Execution.Name)",
+    "States.Array('bootstrap-next', '--silver-only', '--cik-limit', States.Format('{}', $.window_limit), '--cik-offset', States.Format('{}', $.window_offset), '--tracking-status-filter', 'active,bootstrap_pending', '--artifact-policy', States.Format('{}', $.artifact_policy), '--run-id', $$.Execution.Name)",
     is_end=True)
 
 windowed_bootstrap = {

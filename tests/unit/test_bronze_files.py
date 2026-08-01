@@ -5,14 +5,77 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from edgar_warehouse.application.warehouse_orchestrator import _write_cik_universe_batches
+from edgar_warehouse.application.warehouse_orchestrator import (
+    _execute_warehouse_infrastructure_validation,
+    _gold_publication_enabled,
+    _snowflake_publication_enabled,
+    _write_cik_universe_batches,
+)
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
-from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory, default_path_resolver
+from edgar_warehouse.infrastructure.dataset_path_catalog import (
+    default_capture_spec_factory,
+    default_path_resolver,
+)
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 from edgar_warehouse.infrastructure.run_manifest_builder import planned_writes
 
 
 class BronzeFileContractTests(unittest.TestCase):
+    def test_bootstrap_next_silver_only_disables_gold_publication(self) -> None:
+        self.assertTrue(_gold_publication_enabled("bootstrap-next", {}))
+        self.assertFalse(
+            _gold_publication_enabled("bootstrap-next", {"silver_only": True})
+        )
+        self.assertTrue(_gold_publication_enabled("gold-refresh", {"silver_only": True}))
+        self.assertTrue(_snowflake_publication_enabled("seed-universe", {}))
+        self.assertFalse(
+            _snowflake_publication_enabled(
+                "bootstrap-next", {"silver_only": True}
+            )
+        )
+
+    def test_infrastructure_validation_silver_only_omits_gold_and_exports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            context = WarehouseCommandContext(
+                bronze_root=StorageLocation(str(root / "bronze")),
+                storage_root=StorageLocation(str(root / "warehouse")),
+                silver_root=StorageLocation(str(root / "silver")),
+                snowflake_export_root=StorageLocation(str(root / "snowflake")),
+                environment_name="test",
+                identity="tester@example.com",
+                runtime_mode="infrastructure_validation",
+            )
+
+            payload = _execute_warehouse_infrastructure_validation(
+                context=context,
+                command_name="bootstrap-next",
+                arguments={
+                    "limit": 100,
+                    "run_id": "silver-only-run",
+                    "silver_only": True,
+                    "tracking_status_filter": "bootstrap_pending",
+                },
+            )
+            default_payload = _execute_warehouse_infrastructure_validation(
+                context=context,
+                command_name="bootstrap-next",
+                arguments={
+                    "limit": 100,
+                    "run_id": "default-publication-run",
+                    "tracking_status_filter": "bootstrap_pending",
+                },
+            )
+
+        layers = {write["layer"] for write in payload["writes"]}
+        self.assertNotIn("gold", layers)
+        self.assertNotIn("snowflake_export", layers)
+        self.assertIn("silver", layers)
+
+        default_layers = {write["layer"] for write in default_payload["writes"]}
+        self.assertIn("gold", default_layers)
+        self.assertIn("snowflake_export", default_layers)
+
     def test_planned_writes_for_bootstrap_use_expected_bronze_manifest_path(self) -> None:
         self.assertEqual(
             planned_writes(

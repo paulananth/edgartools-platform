@@ -27,11 +27,11 @@ mechanism, not a single assumed one -- there turn out to be three:
    plain parameters. Resolved by generating that function's real state
    machine JSON (mirroring test_daily_incremental_state_machine.py's
    approach) and reading RunWarehouseTask's actual TaskDefinition.
-3. `bootstrap-next`: never passed to workflow_profile() at all, and not
-   built by write_warehouse_mdm_gold_definition either -- it only runs
-   inside load_history's windowed state machine, hardcoded straight to the
-   medium task definition ARN (write_load_history_definition's
-   wh_task_medium_arn parameter). Documented as an explicit exception below.
+3. `bootstrap-next`: never passed to workflow_profile() at all. Its deployed
+   load_history path is hardcoded to medium but explicitly uses
+   `--silver-only`, so it no longer executes the gold-affecting portion of the
+   command there. The special-case below remains a guard on that real wiring;
+   test_load_history_state_machine separately proves the policy flag is present.
 
 The floor is today's actual minimum across all three paths -- not an
 aspirational value. Bump GOLD_BUILD_MEMORY_FLOOR_MB whenever that minimum
@@ -65,14 +65,14 @@ GOLD_BUILD_MEMORY_FLOOR_MB = 4096
 _WAREHOUSE_MDM_GOLD_MEMBERS = {"bootstrap", "daily-incremental"}
 
 # bootstrap-next is never passed to workflow_profile() and never built by
-# write_warehouse_mdm_gold_definition -- it's hardcoded to the medium task
-# definition ARN inside write_load_history_definition (the only state
-# machine that ever runs it; see module docstring, path 3).
+# write_warehouse_mdm_gold_definition -- its deployed load_history invocation
+# is hardcoded to medium and explicitly silver-only (see module docstring,
+# path 3 and test_load_history_state_machine.py).
 #
-# Mapped to the *name* of the profile it's actually wired to, not a literal
-# memory number -- resolved against _profile_memory_mb() below so that if
-# medium's registered memory changes, this exception tracks it instead of
-# silently going stale itself (the exact drift this ticket exists to catch).
+# Mapped to the profile actually wired so the architecture inventory remains
+# complete. Its gold path is disabled at that call site; this floor assertion
+# now conservatively proves even a policy regression would retain the former
+# 4096 MB safety floor while the generated-workflow test catches the regression.
 _SPECIAL_CASED_PROFILE = {
     "bootstrap-next": "medium",
 }
