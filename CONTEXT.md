@@ -56,9 +56,45 @@ _Avoid_: Concurrent refresh trigger, untracked skipped schedule
 An Identity Backstop Sweep displaced by an active refresh and therefore prioritized at the next available Identity Refresh Slot.
 _Avoid_: Silently skipped weekly sweep, narrow refresh taking priority
 
+**Identity Refresh Batch Delta**:
+The immutable, CIK-batch-scoped company-identity result produced within one Identity Refresh Run; it is not canonical silver and is eligible for consolidation only after its declared batch succeeds.
+_Avoid_: Per-batch canonical publication, mutable shared batch output, treating a partial delta as a completed refresh
+
+**Identity Refresh Reducer**:
+The sole run-scoped publisher that verifies the complete Identity Refresh Batch Delta set, merges it with canonical silver, and performs the one ETag-guarded canonical promotion for that refresh run.
+_Avoid_: Distributed canonical writers, canonical publish before complete-batch verification, bypassing the existing merge and promotion guard
+
+**Identity Refresh Run**:
+The immutable execution identity binding one selected CIK universe, one reference snapshot, one warehouse image, its declared batch deltas, and (only after complete verification) one canonical silver publication.
+_Avoid_: Reusing successful deltas with changed inputs or image, retrying a failed batch as a new unbound refresh, publishing a partial run
+
+**Identity Reference Snapshot**:
+The once-per-Identity-Refresh-Run global ticker and reference-data result consumed by the Identity Refresh Reducer together with the complete batch-delta set.
+_Avoid_: Reference fetch/write per CIK batch, a reducer combining deltas with an unbound or later reference version
+
+**Identity Refresh Publication Retry**:
+A bounded retry of only the Identity Refresh Reducer after an interrupted or ETag-conflicted promotion; it rehydrates canonical and re-merges the same verified Identity Refresh Run inputs without repeating batch capture.
+_Avoid_: Re-running successful batches for a publication race, replacing run inputs during retry, unbounded silent retries
+
+**Identity Refresh Aggregate Integrity**:
+The reducer processes the declared batch-delta set in its manifest order and rejects any ambiguous same-key merge conflict, so no partial or arbitrarily resolved identity refresh can become canonical.
+_Avoid_: Arrival-order merge, last-writer-wins conflict handling, publishing a subset after a rejected delta
+
 **Bronze Persist**:
 Optional raw archive of SEC (or other) payloads written only when an operator explicitly requests it, or when the source cannot be obtained via edgartools; not the default hot path.
 _Avoid_: Always bronze first, treating bronze absence as agent-grade failure by default
+
+**Daily-Artifact Run Manifest**:
+The immutable, ordered accession selection for one daily-artifact run, bound to its daily-index input identity, warehouse image, and parser/configuration versions; it is the only candidate set a resume may use.
+_Avoid_: Re-selecting candidates on retry, mixing image or index inputs, adding repaired work through a later run's selection
+
+**Daily-Artifact Outcome Ledger**:
+The append-only, run-and-accession-scoped record of candidate attempts and dispositions. Successful work is final; only pending, retryable, or explicitly repair-authorized work may be resumed.
+_Avoid_: Process-local telemetry as recovery state, overwriting failures, full-task rework after a partial success
+
+**Daily-Artifact Repair Attestation**:
+An immutable operator record that binds an immutable-content conflict, checksum evidence, repair action, and operator identity to one original manifest candidate before its bounded replay. It does not override the immutable-object guard.
+_Avoid_: Accepting a mismatch silently, replacing an object without evidence, treating a new selection as repair
 
 ### Agent decision support
 

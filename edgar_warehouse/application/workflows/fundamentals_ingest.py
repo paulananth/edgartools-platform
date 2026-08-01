@@ -4,8 +4,8 @@ Handles three distinct processing modes:
 
 per-filing
 ----------
-Fetches primary document for 8-K (earnings releases) and DEF 14A (proxy
-compensation) filings whose form type is in BRANCH_B_FORMS.  Dispatches through
+Fetches the primary document for proxy filings and, for Item 2.02 8-K earnings
+releases, the registered Exhibit 99.1 when available. Dispatches through
 ``edgar_warehouse.parsers.get_parser()`` (same mechanism as bootstrap-batch).
 Writes to: sec_earnings_release, sec_executive_record, sec_guidance_fact
 (ERDP-02, plus sec_guidance_fact_reject for constraint failures).
@@ -34,6 +34,7 @@ filing metadata and fundamentals rows remain application-consistent.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from datetime import UTC, datetime
 from typing import Any
@@ -48,6 +49,60 @@ BRANCH_B_FILING_FORMS = frozenset({
 
 # 13F forms handled by the thirteenf path
 BRANCH_B_13F_FORMS = frozenset({"13F-HR", "13F-HR/A"})
+
+
+def _is_item_202_earnings_filing(filing: dict[str, Any]) -> bool:
+    """Return whether an 8-K explicitly reports Item 2.02 results."""
+    return (
+        str(filing.get("form") or "").strip() in {"8-K", "8-K/A"}
+        and bool(re.search(r"(^|,)\s*2\.02\s*(,|$)", str(filing.get("items") or "")))
+    )
+
+
+def _select_earnings_attachment(
+    filing: dict[str, Any], attachments: list[dict[str, Any]], primary: dict[str, Any],
+) -> dict[str, Any]:
+    """Prefer the Item 2.02 earnings exhibit, otherwise retain the primary document.
+
+    The 8-K cover document normally announces that results are furnished; the
+    structured income statement consumed by ``EarningsRelease`` is in Exhibit
+    99.1. Item 5.02 processing continues to use ``primary`` independently.
+    """
+    if not _is_item_202_earnings_filing(filing):
+        return primary
+    for attachment in attachments:
+        document_type = str(attachment.get("document_type") or "").upper()
+        document_type = document_type.replace(" ", "")
+        description = str(attachment.get("document_description") or "").upper()
+        description = description.replace(" ", "")
+        is_earnings_exhibit = document_type in {"EX-99.1", "EX-99.01"}
+        is_earnings_exhibit |= description in {"EXHIBIT99.1", "EXHIBIT99.01"}
+        if is_earnings_exhibit:
+            return attachment
+    return primary
+
+
+def _read_attachment_content(
+    source: Any, attachment: dict[str, Any], *, accession_number: str,
+) -> str:
+    """Resolve a registered attachment through its raw object and decode its bytes."""
+    raw_object_id = attachment.get("raw_object_id")
+    if not raw_object_id:
+        raise WarehouseRuntimeError(
+            f"{accession_number} attachment is missing its raw object"
+        )
+    raw_rows = source.fetch(
+        "SELECT * FROM sec_raw_object WHERE raw_object_id = ?",
+        [str(raw_object_id)],
+    )
+    raw_object = raw_rows[0] if raw_rows else None
+    if raw_object is None:
+        raise WarehouseRuntimeError(
+            f"{accession_number} attachment raw object is missing"
+        )
+    from edgar_warehouse.infrastructure.object_storage import read_bytes
+
+    return read_bytes(str(raw_object["storage_path"])).decode("utf-8", errors="replace")
 
 
 def _emit(event: str, **kwargs: Any) -> None:
@@ -75,7 +130,6 @@ def run_bootstrap_fundamentals_per_filing(
     Returns row counts per table written.
     """
     from edgar_warehouse.parsers import get_parser
-    from edgar_warehouse.infrastructure.object_storage import read_bytes
 
     metrics: dict[str, Any] = {
         "filings_scanned": 0,
@@ -178,20 +232,18 @@ def run_bootstrap_fundamentals_per_filing(
                     )
                 metrics["filings_skipped"] += 1
                 continue
-            raw_rows = source.fetch(
-                "SELECT * FROM sec_raw_object WHERE raw_object_id = ?",
-                [str(primary["raw_object_id"])],
+            primary_content = _read_attachment_content(
+                source, primary, accession_number=accession_number,
             )
-            raw_object = raw_rows[0] if raw_rows else None
-            if raw_object is None:
-                if release_mode:
-                    raise WarehouseRuntimeError(
-                        f"required candidate {accession_number} primary raw object is missing"
-                    )
-                metrics["filings_skipped"] += 1
-                continue
-            content = read_bytes(str(raw_object["storage_path"])).decode(
-                "utf-8", errors="replace"
+            parser_attachment = _select_earnings_attachment(
+                filing, attachments, primary,
+            )
+            parser_content = (
+                primary_content
+                if parser_attachment is primary
+                else _read_attachment_content(
+                    source, parser_attachment, accession_number=accession_number,
+                )
             )
         except Exception as exc:
             if release_mode:
@@ -206,10 +258,10 @@ def run_bootstrap_fundamentals_per_filing(
 
         try:
             if form_type in ("8-K", "8-K/A"):
-                parsed = parser(accession_number, content, form_type, cik,
+                parsed = parser(accession_number, parser_content, form_type, cik,
                                 filing_date=str(filing_date) if filing_date else None)
             else:
-                parsed = parser(accession_number, content, form_type, cik)
+                parsed = parser(accession_number, primary_content, form_type, cik)
         except Exception as exc:
             if release_mode:
                 raise WarehouseRuntimeError(
@@ -248,7 +300,7 @@ def run_bootstrap_fundamentals_per_filing(
                 cik=int(cik),
                 filing_date=(filing_date if isinstance(filing_date, _date)
                              else _date.fromisoformat(str(filing_date)[:10])),
-                content=content,
+                content=primary_content,
             )
             # Release-Owner-accepted Item 5.02 unresolved exception (see
             # docs/release-readiness/required-relationship-bulk-load-completion-gate.md).

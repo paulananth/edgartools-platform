@@ -567,7 +567,27 @@ def _execute_warehouse_bronze_capture(
             run_id=run_id,
             storage_root=context.storage_root.root,
         )
-        if _using_shard_path and _active_shard_index is not None:
+        if command_name == "compute-identity-refresh-window":
+            # This pre-stage is the sole owner of the global reference snapshot.
+            # It deliberately does not publish canonical silver: the reducer will
+            # merge this immutable candidate with all batch deltas exactly once.
+            from edgar_warehouse.application.identity_refresh_publication import persist_run_manifest
+
+            image_identity = os.environ.get("WAREHOUSE_IMAGE_REF", "").strip()
+            snapshot = persist_run_manifest(
+                context.storage_root,
+                run_id=run_id,
+                image_identity=image_identity,
+                reference_snapshot_file=Path(context.silver_root.join("silver", "sec", "silver.duckdb")),
+                batches=metrics.pop("_identity_refresh_batches"),
+            )
+            silver_database_write = {
+                "layer": "identity_refresh_reference_snapshot",
+                "path": context.storage_root.join(snapshot["reference_snapshot"]["path"]),
+                "run_manifest_path": context.storage_root.join("identity_refresh/runs", run_id, "run_manifest.json"),
+                "size_bytes": Path(context.silver_root.join("silver", "sec", "silver.duckdb")).stat().st_size,
+            }
+        elif _using_shard_path and _active_shard_index is not None:
             silver_database_write = _publish_shard_if_remote(context, _active_shard_index)
         else:
             silver_database_write = _publish_silver_database_with_retry(context)
@@ -2397,6 +2417,10 @@ def _capture_bronze_raw(
             ),
             "prestage_duration_seconds": duration_seconds,
         }
+        selection_evidence["_identity_refresh_batches"] = [
+            selected_ciks[index : index + batch_size]
+            for index in range(0, len(selected_ciks), batch_size)
+        ]
         _emit_pipeline_event(
             "compute_identity_refresh_window_completed",
             run_id=sync_run_id,

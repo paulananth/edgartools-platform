@@ -121,7 +121,7 @@ def test_daily_incremental_default_path_is_bounded_not_full_universe(daily_incre
 
     bounded_stage0 = states["Stage0CompanyIdentityBounded"]
     assert bounded_stage0["Type"] == "Map"
-    assert bounded_stage0["Next"] == "RunWarehouseTask"
+    assert bounded_stage0["Next"] == "ReduceIdentityRefresh"
     item_reader_key = bounded_stage0["ItemReader"]["Parameters"]["Key.$"]
     assert "cik_batches.jsonl" in item_reader_key, (
         "bounded Stage0 must read the cik_list batches file (seed-universe's batch shape), "
@@ -132,6 +132,12 @@ def test_daily_incremental_default_path_is_bounded_not_full_universe(daily_incre
     ]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "--cik-list" in inner_cmd
     assert "company-identity" in inner_cmd
+    assert "--identity-refresh-run-id" in inner_cmd
+
+    reducer = states["ReduceIdentityRefresh"]
+    reducer_cmd = reducer["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    assert "reduce-identity-refresh" in reducer_cmd
+    assert reducer["Next"] == "RunWarehouseTask"
 
 
 def test_daily_incremental_enforces_the_eighteen_hour_execution_bound(
@@ -174,7 +180,7 @@ def test_daily_incremental_both_modes_share_explicit_cik_stage0(
     assert states["ComputeIdentityBackstopUniverse"]["Next"] == (
         "Stage0CompanyIdentityBounded"
     )
-    assert states["Stage0CompanyIdentityBounded"]["Next"] == "RunWarehouseTask"
+    assert states["Stage0CompanyIdentityBounded"]["Next"] == "ReduceIdentityRefresh"
 
 
 def test_bootstrap_definition_has_no_refresh_mode_states(bootstrap_definition) -> None:
