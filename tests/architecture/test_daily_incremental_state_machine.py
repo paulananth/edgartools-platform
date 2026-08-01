@@ -462,7 +462,7 @@ def test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_via_result_path_null
 def test_daily_tasks_before_force_check_preserve_operator_input(daily_definition: dict) -> None:
     for state_name in (
         "ComputeIdentityRefreshWindow",
-        "ComputeWindows",
+        "ComputeIdentityBackstopUniverse",
         "RunWarehouseTask",
     ):
         assert daily_definition["States"][state_name]["ResultPath"] is None, (
