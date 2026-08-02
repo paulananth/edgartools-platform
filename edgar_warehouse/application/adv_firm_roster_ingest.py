@@ -74,10 +74,15 @@ def _flag(value: str) -> bool:
 def _count(value: str) -> int | None:
     # Real Firm Roster count columns are right-padded with whitespace inside
     # the CSV cell (e.g. "                   3") and are empty when the
-    # corresponding "Any ... Funds" flag is "N" -- confirmed live.
+    # corresponding "Any ... Funds" flag is "N". Large counts use standard
+    # thousands grouping (for example "22,277") -- confirmed live.
     candidate = value.strip()
     if not candidate:
         return None
+    if "," in candidate:
+        if re.fullmatch(r"\d{1,3}(?:,\d{3})+", candidate) is None:
+            raise WarehouseRuntimeError(f"invalid Firm Roster count: {value!r}")
+        candidate = candidate.replace(",", "")
     try:
         return int(candidate)
     except ValueError as exc:

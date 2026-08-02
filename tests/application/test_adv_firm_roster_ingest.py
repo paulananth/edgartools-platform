@@ -213,6 +213,41 @@ def test_firm_roster_amount_strips_commas_and_whitespace() -> None:
     assert parsed.rows[0].total_gross_assets_private_funds == Decimal("1234567.89")
 
 
+def test_firm_roster_counts_accept_grouped_thousands() -> None:
+    archive = _archive({
+        "IA_SEC_-_FIRM_ROSTER_FOIA_DOWNLOAD_-_34622660.CSV": _HEADER + _roster_row(
+            count_7b1="22,277",
+            hedge_count="1,234",
+            any_pe="Y",
+            pe_count="2,345",
+            count_7b2="3,456",
+        ),
+    })
+
+    parsed = parse_firm_roster_archive(
+        archive, dataset_period="2026-07", source_sha256="abc123"
+    )
+
+    row = parsed.rows[0]
+    assert row.private_fund_count_7b1 == 22277
+    assert row.hedge_fund_count == 1234
+    assert row.pe_fund_count == 2345
+    assert row.private_fund_count_7b2 == 3456
+
+
+def test_firm_roster_count_rejects_invalid_grouping() -> None:
+    archive = _archive({
+        "IA_SEC_-_FIRM_ROSTER_FOIA_DOWNLOAD_-_34622660.CSV": _HEADER + _roster_row(
+            count_7b1="22,77"
+        ),
+    })
+
+    with pytest.raises(WarehouseRuntimeError, match="invalid Firm Roster count"):
+        parse_firm_roster_archive(
+            archive, dataset_period="2026-07", source_sha256="abc123"
+        )
+
+
 def test_ingest_firm_roster_archive_writes_real_silver_rows(tmp_path) -> None:
     archive = _archive({
         "IA_SEC_-_FIRM_ROSTER_FOIA_DOWNLOAD_-_34622660.CSV": (
