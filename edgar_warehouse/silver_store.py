@@ -2381,36 +2381,58 @@ class SilverDatabase:
     # ------------------------------------------------------------------
 
     def merge_daily_index_filings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        """Upsert staged daily index filing rows. Returns row count."""
+        """Upsert staged daily index filing rows. Returns row count.
+
+        A single business day's index commonly holds several thousand rows
+        (e.g. ~6,028 measured for an ordinary weekday). The previous
+        row-by-row execute() loop autocommitted each INSERT individually --
+        measured 53s for 6,028 rows live in prod (a plain BEGIN/COMMIT wrap
+        around the same loop only got 3,000 rows down to ~5.7s, since each
+        execute() call still pays DuckDB's per-statement parse/plan/bind
+        overhead). Same fix as merge_filings/_merge_rows_bulk elsewhere in
+        this file: stage all rows in one shot via a registered Arrow table,
+        then apply the upsert as a single set-based SQL statement (measured
+        0.02-0.12s for 3,000 rows). QUALIFY dedupes same-key rows within one
+        batch, keeping the highest-`seq` (last) occurrence to match the
+        original loop's last-write-wins semantics.
+        """
+        if not rows:
+            return 0
         now = datetime.now(UTC)
-        count = 0
-        for row in rows:
-            self._conn.execute(
-                """
-                INSERT INTO stg_daily_index_filing
-                    (sync_run_id, raw_object_id, source_name, source_url,
-                     business_date, source_year, source_quarter, row_ordinal,
-                     form, company_name, cik, filing_date, file_name,
-                     accession_number, filing_txt_url, record_hash, staged_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (business_date, accession_number) DO UPDATE SET
-                    sync_run_id = excluded.sync_run_id,
-                    raw_object_id = excluded.raw_object_id,
-                    source_name = excluded.source_name,
-                    source_url = excluded.source_url,
-                    source_year = excluded.source_year,
-                    source_quarter = excluded.source_quarter,
-                    row_ordinal = excluded.row_ordinal,
-                    form = excluded.form,
-                    company_name = excluded.company_name,
-                    cik = excluded.cik,
-                    filing_date = excluded.filing_date,
-                    file_name = excluded.file_name,
-                    filing_txt_url = excluded.filing_txt_url,
-                    record_hash = excluded.record_hash,
-                    staged_at = excluded.staged_at
-                """,
+        self._conn.execute(
+            """
+            CREATE TEMP TABLE IF NOT EXISTS stg_daily_index_filing_bulk (
+                seq              BIGINT,
+                sync_run_id      TEXT,
+                raw_object_id    TEXT,
+                source_name      TEXT,
+                source_url       TEXT,
+                business_date    DATE,
+                source_year      SMALLINT,
+                source_quarter   SMALLINT,
+                row_ordinal      INTEGER,
+                form             TEXT,
+                company_name     TEXT,
+                cik              BIGINT,
+                filing_date      DATE,
+                file_name        TEXT,
+                accession_number TEXT,
+                filing_txt_url   TEXT,
+                record_hash      TEXT,
+                staged_at        TIMESTAMPTZ
+            )
+            """
+        )
+        try:
+            col_names = [
+                "seq", "sync_run_id", "raw_object_id", "source_name", "source_url",
+                "business_date", "source_year", "source_quarter", "row_ordinal",
+                "form", "company_name", "cik", "filing_date", "file_name",
+                "accession_number", "filing_txt_url", "record_hash", "staged_at",
+            ]
+            staged = [
                 [
+                    seq,
                     sync_run_id,
                     row.get("raw_object_id"),
                     row.get("source_name", "daily_form_index"),
@@ -2428,10 +2450,54 @@ class SilverDatabase:
                     row.get("filing_txt_url"),
                     row.get("record_hash"),
                     now,
-                ],
+                ]
+                for seq, row in enumerate(rows)
+            ]
+            columns = list(zip(*staged))
+            arrow_table = pa.table(dict(zip(col_names, columns)))
+            self._conn.register("_daily_index_stage_src", arrow_table)
+            try:
+                self._conn.execute(
+                    "INSERT INTO stg_daily_index_filing_bulk SELECT * FROM _daily_index_stage_src"
+                )
+            finally:
+                self._conn.unregister("_daily_index_stage_src")
+            self._conn.execute(
+                """
+                INSERT INTO stg_daily_index_filing
+                    (sync_run_id, raw_object_id, source_name, source_url,
+                     business_date, source_year, source_quarter, row_ordinal,
+                     form, company_name, cik, filing_date, file_name,
+                     accession_number, filing_txt_url, record_hash, staged_at)
+                SELECT sync_run_id, raw_object_id, source_name, source_url,
+                       business_date, source_year, source_quarter, row_ordinal,
+                       form, company_name, cik, filing_date, file_name,
+                       accession_number, filing_txt_url, record_hash, staged_at
+                FROM stg_daily_index_filing_bulk
+                QUALIFY ROW_NUMBER() OVER (
+                    PARTITION BY business_date, accession_number ORDER BY seq DESC
+                ) = 1
+                ON CONFLICT (business_date, accession_number) DO UPDATE SET
+                    sync_run_id = excluded.sync_run_id,
+                    raw_object_id = excluded.raw_object_id,
+                    source_name = excluded.source_name,
+                    source_url = excluded.source_url,
+                    source_year = excluded.source_year,
+                    source_quarter = excluded.source_quarter,
+                    row_ordinal = excluded.row_ordinal,
+                    form = excluded.form,
+                    company_name = excluded.company_name,
+                    cik = excluded.cik,
+                    filing_date = excluded.filing_date,
+                    file_name = excluded.file_name,
+                    filing_txt_url = excluded.filing_txt_url,
+                    record_hash = excluded.record_hash,
+                    staged_at = excluded.staged_at
+                """
             )
-            count += 1
-        return count
+        finally:
+            self._conn.execute("DELETE FROM stg_daily_index_filing_bulk")
+        return len(rows)
 
     def get_daily_index_filings(self, business_date: str) -> list[dict[str, Any]]:
         """Return all stg_daily_index_filing rows for a given business_date."""
