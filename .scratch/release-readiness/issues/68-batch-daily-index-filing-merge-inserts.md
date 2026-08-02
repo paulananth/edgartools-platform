@@ -87,6 +87,7 @@ run used to validate ticket 67 — `ComputeIdentityRefreshWindow` was visibly st
 ## Done when
 
 Done — fix implemented, validated against real production data end-to-end, regression
-tests added, full suite green modulo the one pre-existing unrelated failure. Not yet
-deployed to prod as of this entry; needs the same build/deploy cycle as ticket 67 before
-its effect shows up in a live `ComputeIdentityRefreshWindow` run.
+tests added, full suite green modulo the one pre-existing unrelated failure. Merged to
+`main` as `087bfd8e` (PR #331, squash). **Not yet deployed to prod** as of this entry —
+needs the same build/deploy cycle as ticket 67 before its effect shows up in a live
+`ComputeIdentityRefreshWindow` run.
