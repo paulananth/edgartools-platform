@@ -1,127 +1,147 @@
 {
   "version": "1.0",
-  "timestamp": "2026-07-25T18:58:41.136Z",
+  "timestamp": "2026-08-02T00:15:31.952Z",
   "phase": null,
-  "phase_name": "ticket-20-complete",
+  "phase_name": "claude-clean-handoff",
   "phase_dir": null,
   "plan": null,
-  "task": 8,
-  "total_tasks": 8,
-  "status": "completed_technical_pass",
-  "workstream": "ticket20-production",
-  "ticket": 20,
-  "owning_runtime_handoff_to": "grok",
-  "branch": "agent/grok-ticket20-handoff",
-  "main_head": "eef3f5bc714f2a6fb4e4c043eb22f2f08d01bfc4",
+  "task": 2,
+  "total_tasks": 3,
+  "status": "paused",
+  "workstream": "fix-pipelines",
+  "owning_runtime_handoff_to": "claude",
+  "branch": "main",
+  "main_head_before_handoff": "567fa4f4788c87a20444ff9cfff09f8149194c78",
   "completed_tasks": [
     {
       "id": 1,
-      "name": "Complete production ADV ingestion and MDM projection",
+      "name": "Merge run-scoped Daily Identity publication and silver-only load-history changes sequentially",
       "status": "done",
-      "commit": "84808341"
+      "commit": "567fa4f",
+      "note": "PR #326 merged first as b9dd942 after routing fix 11ca3e8 and green CI; PR #328 was then retargeted to main, updated, passed CI, and merged as 567fa4f."
     },
     {
       "id": 2,
-      "name": "Derive, export, sync, verify, and activate ADV MANAGES_FUND graph",
+      "name": "Preserve dirty worktrees and clean local branch/worktree topology",
       "status": "done",
-      "commit": "07efab65",
-      "note": "Active generation adv-mdm-07efab6-20260724t2348z has 154303 nodes and 138582 edges; graph_info, BFS, and WCC passed."
-    },
-    {
-      "id": 3,
-      "name": "Fix Ticket 20 prior-ledger fan-in and full MDM export drain",
-      "status": "done",
-      "commit": "47128cef"
-    },
-    {
-      "id": 4,
-      "name": "Make expected silver publication CAS contention nonfatal",
-      "status": "done",
-      "commit": "eef3f5bc",
-      "note": "PR #255 merged; default CAS retry is unbounded with capped jitter. Explicit positive WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS still imposes a finite ceiling."
-    },
-    {
-      "id": 5,
-      "name": "Quarantine premature markers from failed publication and run corrected strict resume",
-      "status": "done",
-      "note": "Invalid batch ca800f9f06951b76 plus 107 accession markers were copied under invalidated_markers and version-deleted from active marker paths. Corrected eight-batch resume completed BatchSilver and reconciliation."
-    },
-    {
-      "id": 6,
-      "name": "Complete downstream strict MDM and graph chain",
-      "status": "blocked",
-      "progress": "StrictMdmRun, StrictMdmBackfill, StrictMdmIdempotency, StrictMdmExport, StrictMdmSync, and StrictMdmSyncIdempotency succeeded. StrictMdmVerifyCandidate failed."
+      "progress": "Five named recovery stashes and four backup tags preserve all detected uncommitted and unmerged work. Linked worktrees were removed; local non-main branches are deleted after this handoff commit."
     }
   ],
-  "remaining_tasks": [],
-  "blockers": [],
-  "human_actions_pending": [],
+  "remaining_tasks": [
+    {
+      "id": 3,
+      "name": "Claude triages preserved work, finishes the running load-history validation, and chooses the next deployable change",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [
+    {
+      "description": "The direct Snowflake publication cutover is uncommitted and spans 93 files, including deletion of the native-pull implementation.",
+      "type": "technical",
+      "workaround": "Recover stash ee3fa9a1c2a890719fa53db44d507bd3aa00f38e into an isolated branch with git stash branch; review and test before merging."
+    },
+    {
+      "description": "The currently running load-history execution predates the final PR #326/#328 merge and does not validate a newly built image from main.",
+      "type": "external",
+      "workaround": "Record its terminal result separately, then build/deploy main through repository scripts before claiming the merged behavior is production-validated."
+    }
+  ],
+  "human_actions_pending": [
+    {
+      "action": "Choose which preserved stash Claude should resume first.",
+      "context": "The direct Snowflake cutover is the largest implementation; reducer amplification and cleanup integration are smaller independent follow-ons.",
+      "blocking": false
+    }
+  ],
   "decisions": [
     {
-      "decision": "Expected ETag compare-and-swap loss retries until eventual promotion by default",
-      "rationale": "A sibling publication is expected contention; every retry re-reads canonical and re-merges the original candidate, so failing after five wins caused false release failure.",
+      "decision": "Merge stacked PRs only in dependency order with green CI.",
+      "rationale": "PR #326 supplied the prerequisite run-scoped publication contract; PR #328 was retargeted and updated only after #326 merged.",
       "phase": null
     },
     {
-      "decision": "Premature markers from an unpublished batch are invalid evidence",
-      "rationale": "The failed task wrote batch/accession markers before canonical silver promotion. Those exact versioned objects were quarantined and invalidated so resume could not skip unpublished data.",
+      "decision": "Do not introduce a GoF pattern for the reducer routing fix.",
+      "rationale": "The existing routing tables were the established design; adding Strategy or Command indirection for one missing entry had no evidence-backed payoff.",
       "phase": null
     },
     {
-      "decision": "Candidate graph verification remains fail-closed",
-      "rationale": "Missing EMPLOYED_BY source nodes are a real integrity failure; the failed candidate was not activated and gold refresh was not reached.",
-      "phase": null
-    },
-    {
-      "decision": "Never redrive an execution after changing images",
-      "rationale": "Step Functions redrive preserves old task-definition bindings; use a new execution name after each deployment.",
-      "phase": null
-    },
-    {
-      "decision": "Production PASS requires the full chain plus the unchanged-watermark integrity rerun",
-      "rationale": "BatchSilver, clean logs, or candidate parity alone are not release evidence.",
+      "decision": "Preserve dirty and unmerged work before local branch deletion.",
+      "rationale": "Named stash object IDs and backup tags allow exact recovery without retaining a large local branch/worktree surface.",
       "phase": null
     }
   ],
   "uncommitted_files": [],
-  "background_processes": [],
-  "infrastructure": {
-    "aws_account": "690839588395",
-    "region": "us-east-1",
-    "profile": "sec_platform_deployer",
-    "state_machine": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-bronze-seed-silver-gold",
-    "failed_execution": "arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-bronze-seed-silver-gold:ticket20-strict-q1y-resume-eef3f5b-20260725T0156Z",
-    "failed_stage": "StrictMdmVerifyCandidate",
-    "failed_task": "28027be0fdb8486bb7d9276ef6a2a468",
-    "warehouse_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse@sha256:650878cb25e7a99259d6e4e882c48a61b6c46c0586f63759fe17a4e1885ab371",
-    "mdm_image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-mdm@sha256:e38db60bd72e5878ec045b6e9625a4be12c5f22bcf2027a1a705e195b2dfbbca",
-    "task_definitions": "small:64 medium:69 large:64 mdm-small:57 mdm-medium:57",
-    "runner_roles": "sec_platform_prod_runner_execution, sec_platform_prod_runner_task, sec_platform_prod_runner_step_functions",
-    "freeze_manifest": "s3://edgartools-prod-bronze-690839588395/warehouse/bronze/reference/relationship_release/ticket20-agent-q1y-20260724T003912Z/candidate_manifest.json",
-    "freeze_fingerprint": "61be5eaeebc99c7eb9bf1e5a5e2c67076619bcc28b19ece715a7c2ebb175d852",
-    "watermark": "2026-07-02",
-    "candidate_count": 20833,
-    "cik_count": 10792,
-    "batch_count": 108,
-    "invalidated_marker_quarantine": "s3://edgartools-prod-bronze-690839588395/warehouse/bronze/reference/relationship_release/ticket20-agent-q1y-20260724T003912Z/invalidated_markers/ticket20-strict-q1y-resume-20260725T0003Z/ca800f9f06951b76/",
-    "candidate_generation": "ticket20-strict-q1y-resume-eef3f5b-20260725T0156Z",
-    "protected_active_generation": "adv-mdm-07efab6-20260724t2348z"
-  },
+  "recovery_stashes": [
+    {
+      "object": "ee3fa9a1c2a890719fa53db44d507bd3aa00f38e",
+      "name": "claude-handoff: direct Snowflake publication cutover",
+      "scope": "93 files; direct Snowflake writer, S3 retention cleanup, Terraform and native-pull removal, tests"
+    },
+    {
+      "object": "03d0eed4e9dc6621f6192a5402bbfe8395f31443",
+      "name": "claude-handoff: daily reducer analysis ticket 64",
+      "scope": "Issue 64 5-why and reducer merge-amplification analysis"
+    },
+    {
+      "object": "af6be9404ccf690175d5a8d30142c9f43dc27f18",
+      "name": "claude-handoff: bootstrap staging cleanup scripts",
+      "scope": "S3 staging cleanup scripts, bronze historic review/delete scripts, ADRs, Ticket 63 and context edits"
+    },
+    {
+      "object": "e1fa7b17734f923c703fa4dafe315e106ab2fd8d",
+      "name": "claude-handoff: S3 request churn planning",
+      "scope": "S3 request attribution research and planning artifacts"
+    },
+    {
+      "object": "0c75694566ca43593528050c51d8230087dc610e",
+      "name": "claude-handoff: bronze cleanup local evidence",
+      "scope": "4280 generated local evidence files; recover only if audit evidence is needed"
+    }
+  ],
+  "preexisting_stashes": [
+    {
+      "object": "45ed3fe2de4185b0e7b826ad9226632aaf57c75a",
+      "note": "pre-PR #325 follow-on; not modified during cleanup"
+    },
+    {
+      "object": "4ff7b7cccd1100f80d6ff693167a16210ef746b1",
+      "note": "corrupted STATE.md recovery-only stash; do not restore wholesale"
+    }
+  ],
+  "backup_tags": [
+    "handoff/20260802/claude-daily-identity-refresh-go-live -> 921a9a9",
+    "handoff/20260802/codex-ops-cost-control-wayfinder -> 9d1187f",
+    "handoff/20260802/codex-ticket48-direct-evidence-go -> a5cfbb7",
+    "handoff/20260802/prototype-dashboard-acceptance -> 78013d8"
+  ],
+  "background_processes": [
+    {
+      "type": "AWS Step Functions",
+      "name": "load-history-silver-only-20260801T235002Z",
+      "state_machine": "edgartools-prod-load-history",
+      "status_checked_at": "2026-08-02T00:15:00Z",
+      "status": "RUNNING",
+      "current_state": "WindowedBootstrap",
+      "input": {
+        "window_size": 1,
+        "total_cik_limit": 2,
+        "artifact_policy": "skip"
+      }
+    },
+    {
+      "type": "local service",
+      "name": "Colima",
+      "status": "running"
+    }
+  ],
   "required_reading": [
+    "AGENTS.md",
     ".planning/HANDOFF.json",
     ".planning/.continue-here.md",
-    "docs/release-readiness/ticket20-strict-bulk-load-resume.md",
-    "docs/release-readiness/required-relationship-bulk-load-completion-gate.md",
-    "docs/release-readiness/relationship-source-coverage-by-document-type.md",
-    "edgar_warehouse/mdm/snowflake_graph.py",
-    "edgar_warehouse/mdm/export.py",
-    "edgar_warehouse/mdm/graph.py"
+    ".scratch/release-readiness/issues/61-implement-run-scoped-daily-identity-publication.md",
+    ".scratch/release-readiness/issues/63-implement-durable-daily-artifact-resume-disposition.md",
+    ".scratch/gold-build-memory-reliability/issues/04-eliminate-redundant-bootstrap-next-gold-builds.md"
   ],
-  "next_action": "Release Owner reviews evidence and records GO/NO_GO. Insider coverage remains Ticket 21.",
-  "context_notes": "Grok now owns continuation. Work only from a clean branch/worktree based on main. The original checkout at /Users/aneenaananth/projects/edgartools-platform contains protected unrelated ER/data-plane and dashboard research changes; do not stage, revert, or overwrite them. Execution ticket20-strict-q1y-resume-eef3f5b-20260725T0156Z is consumed and must never be redriven after a fix. The candidate graph failed before activation, so the prior active ADV generation remains safe. Ticket 20 is not PASS and no GO claim is authorized.",
-  "successful_execution": {
-    "name": "ticket20-strict-endpoint-seal-850ea34-20260725T130457Z",
-    "status": "SUCCEEDED",
-    "evidence": "docs/release-readiness/ticket20-completion-evidence-2026-07-25.md"
-  }
+  "next_action": "Claude first checks the terminal status and execution history for load-history-silver-only-20260801T235002Z, then recovers exactly one selected stash into an isolated branch using git stash branch <branch> <stash-object>.",
+  "context_notes": "No open GitHub PRs remained at handoff time. Local verification for the PR #326 CI repair was 907 passed, 4 skipped; both PRs subsequently passed all GitHub CI jobs. The final merged main image was not built or deployed in this closing sequence. Stash object IDs are durable recovery references; do not drop them until the recovered work is either merged or explicitly rejected. Local branch cleanup intentionally preserves only main plus the backup tags listed above."
 }
