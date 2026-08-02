@@ -113,6 +113,7 @@ Unblocked open tickets (work through the map; claim before starting):
 6. [Fix CLAUDE.md's stale Phased Pipeline concurrency documentation](issues/66-fix-stale-phased-pipeline-concurrency-docs.md) — task (`load_history` no longer has a `bootstrap-batch ×N` Map at all — live AWS shows 5 Distributed Maps all `MaxConcurrency=1`, fully sequential; the separate `bootstrap-batched` state machine that does have `MaxConcurrency=3` has zero prod executions ever; CLAUDE.md's "~15 min/100 companies" timing claim doesn't match the current architecture)
 
 - [Fix authority-column false-positive conflicts in silver merge](issues/67-fix-authority-column-false-positive-conflicts.md) — resolved: `sec_company_filing`'s merge policy never excluded its own `authority_column` (`last_synced_at`) from the same-key conflict check, so every re-synced filing row registered as "different" forever even with zero real content change — measured live at 452,996-of-452,996 false-positive rows in one 500-CIK batch, ~753s of pointless single-row UPDATEs. Fixed generically (all 31 registry policies) via a `NOT EXISTS` anti-join scoped to comparable (non-key/provenance/authority) columns; validated end-to-end against real prod data (11.04s total, down from the ~753s extrapolation), full suite green.
+- [Batch daily-index filing merge inserts instead of per-row autocommit](issues/68-batch-daily-index-filing-merge-inserts.md) — resolved: found while watching ticket 67's live verification run — `ComputeIdentityRefreshWindow` was still ~53s/file even though each SEC download itself took 100-250ms. `merge_daily_index_filings` ran one autocommitted `INSERT ... ON CONFLICT` per row (6,029 rows for one real daily-index file, confirmed live). Fixed via the same Arrow-staged bulk-upsert pattern `merge_filings`/`_merge_rows_bulk` already use elsewhere in `silver_store.py`; validated end-to-end against the real downloaded file (0.137s, down from 53s), full suite green. PR #331.
 
 **All twelve F1-F12 promotion-criteria tickets (28-39) are now either resolved or explicitly
 blocked** — the F1-F12 sub-workstream (tickets 25/27-41) is at its natural pause point pending
@@ -132,6 +133,19 @@ Claimed, in progress:
 
 ## Hygiene log
 
+- **2026-08-02 (aa):** Deployed ticket 67's fix to prod and started a fresh verification
+  execution (`daily-incremental-ticket67-verify-1785709701`) to confirm it against real
+  data. While watching it, found and fixed a second, independent bottleneck in the same
+  spirit: `ComputeIdentityRefreshWindow` (the step *before* `ReduceIdentityRefresh`) was
+  taking ~53s per daily-index file even though each SEC download itself completed in
+  100-250ms — see
+  [Batch daily-index filing merge inserts instead of per-row autocommit](issues/68-batch-daily-index-filing-merge-inserts.md).
+  Not a caching gap (daily mode intentionally force-rechecks every lookback day by
+  design); the cost was `merge_daily_index_filings`'s per-row autocommit loop, same
+  structural shape as ticket 67 but in a different file/stage. PR #331 open, not yet
+  merged/deployed. The verification execution itself was left running throughout —
+  unaffected by this second fix, it's still on the pre-fix warehouse image for this
+  particular step.
 - **2026-08-02 (z):** Root-caused and fixed the `daily-incremental-postdeploy-1785701660`
   execution's 55+-minute `ReduceIdentityRefresh` stall — see
   [Fix authority-column false-positive conflicts in silver merge](issues/67-fix-authority-column-false-positive-conflicts.md).

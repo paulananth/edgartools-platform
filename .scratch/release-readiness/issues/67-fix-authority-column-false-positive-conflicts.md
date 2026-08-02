@@ -94,14 +94,24 @@ reads this column as a staleness signal, so skipping its write on a no-op row is
 
 Implemented on branch `claude/fix-silver-merge-authority-column-noise` — PR #330
 (https://github.com/paulananth/edgartools-platform/pull/330), merged to `main` as `4e78725d`
-(squash). CI green (Application/MDM/Unit py3.11+py3.12/Shell lint/dbt compile all pass). **Not
-yet deployed to prod** — the currently-deployed warehouse image predates this commit; a fresh
-`daily-incremental`/`daily-identity-refresh` execution against the new image is still needed to
-supply the real production timing evidence tickets 49/61/63 are waiting on. The prior stalled
-execution (`daily-incremental-postdeploy-1785701660`) was manually stopped (superseded, still
-running old code) and its `pipeline_run_lease` explicitly released via
+(squash). CI green (Application/MDM/Unit py3.11+py3.12/Shell lint/dbt compile all pass). The
+prior stalled execution (`daily-incremental-postdeploy-1785701660`) was manually stopped
+(superseded, still running old code) and its `pipeline_run_lease` explicitly released via
 `release-identity-refresh-lease --run-id daily-incremental-postdeploy-1785701660` (exit 0) so it
 doesn't block the next run.
+
+**Deployed to prod 2026-08-02** (digest `sha256:393e8157c4e0b34a76161ac456ef2513d0bbce6ea3f3a8cd96059b8fe8dae57c`,
+via `deploy-aws-application.sh --env prod`), then verified live with a fresh execution,
+`daily-incremental-ticket67-verify-1785709701`. **Confirmed fixed**: `ReduceIdentityRefresh`
+(id 39-44 in the execution history) ran from `TaskSubmitted` 18:57:45.358 to `TaskSucceeded`
+19:02:18.507 -- **4 minutes 33 seconds total** (ECS provisioning + image pull + hydrating the
+1021.8MB canonical `silver.duckdb` + all 3 identity-refresh batches + republish), versus 55+
+minutes with zero forward progress in the pre-fix execution. Live `silver_table_merged` events
+matched the pre-deploy local reproduction almost exactly: `sec_company_filing` batch 1 (500
+CIKs) showed `rows_updated: 542, rows_unchanged: 452454` -- the identical 542 figure predicted
+by the local dry run against the same real data before this was ever deployed. Batches 2/3:
+208/195472 and 362/26323 respectively. No stalling, no timeout, no false-positive noise. This
+is the real production timing evidence tickets 49/61/63 were waiting on.
 
 ## Done when
 
