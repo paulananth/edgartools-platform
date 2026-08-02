@@ -244,6 +244,14 @@ def test_cli_flags_present():
         assert args.cik_offset == 0, f"{subcommand} default cik_offset should be 0"
 
 
+def test_bootstrap_next_silver_only_is_explicit_and_off_by_default():
+    from edgar_warehouse.cli import build_parser
+
+    parser = build_parser()
+    assert parser.parse_args(["bootstrap-next"]).silver_only is False
+    assert parser.parse_args(["bootstrap-next", "--silver-only"]).silver_only is True
+
+
 # ---------------------------------------------------------------------------
 # test_write_run_summary_output — Plan C Task 2
 # ---------------------------------------------------------------------------

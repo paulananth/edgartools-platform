@@ -233,6 +233,99 @@ def test_bootstrap_next_and_compute_windows_use_the_same_tracking_status_filter(
     assert f"'--tracking-status-filter', '{LOAD_HISTORY_TRACKING_STATUS_FILTER}'" in per_window_cmd
 
 
+def test_windowed_bootstrap_is_silver_only(definition: dict) -> None:
+    branch_a_states = definition["States"]["Stage1Parallel"]["Branches"][0]["States"]
+    per_window_cmd = _command_of_state(branch_a_states["WindowedBootstrap"])
+    assert "'bootstrap-next'" in per_window_cmd
+    assert "'--silver-only'" in per_window_cmd
+
+
+def test_windowed_bootstrap_projects_artifact_policy_into_each_item(
+    definition: dict,
+) -> None:
+    """The S3 JSONL rows contain only window bounds, while RunWindow also reads
+    the execution-scoped artifact policy. The Distributed Map must combine both
+    inputs before starting each child execution."""
+    branch_a_states = definition["States"]["Stage1Parallel"]["Branches"][0]["States"]
+    windowed_bootstrap = branch_a_states["WindowedBootstrap"]
+
+    assert windowed_bootstrap["ItemSelector"] == {
+        "window_offset.$": "$$.Map.Item.Value.window_offset",
+        "window_limit.$": "$$.Map.Item.Value.window_limit",
+        "artifact_policy.$": "$.artifact_policy",
+    }
+
+
+@pytest.mark.parametrize("artifact_policy", ["skip", "all_attachments"])
+def test_execution_routing_survives_compute_windows_to_windowed_bootstrap(
+    definition: dict, artifact_policy: str,
+) -> None:
+    """Successful ECS/Map outputs must not replace the normalized execution
+    input before WindowedBootstrap resolves its execution-scoped selector."""
+    states = definition["States"]
+    state_input = {
+        "force": False,
+        "window_size": 1,
+        "total_cik_limit": 2,
+        "artifact_policy": artifact_policy,
+    }
+    synthetic_state_output = {"ecs_task_result": "successful"}
+
+    # This is the successful top-level route from normalized operator input to
+    # the branch that reads $.artifact_policy. Under ASL, an omitted ResultPath
+    # defaults to "$" and replaces the entire state input; ResultPath null
+    # discards the state result and preserves its input.
+    for state_name in (
+        "SeedUniverse",
+        "MdmSeedUniverse",
+        "ComputeWindows",
+        "Stage0CompanyIdentity",
+        "Stage1Parallel",
+    ):
+        state = states[state_name]
+        result_path = state.get("ResultPath", "$")
+        if result_path == "$":
+            state_input = synthetic_state_output
+        elif result_path is not None:
+            raise AssertionError(
+                f"test route does not model non-root ResultPath {result_path!r} "
+                f"on {state_name}"
+            )
+
+    selector = states["Stage1Parallel"]["Branches"][0]["States"]
+    selector = selector["WindowedBootstrap"]["ItemSelector"]
+    execution_scoped_paths = {
+        target: path.removeprefix("$.")
+        for target, path in selector.items()
+        if path.startswith("$.")
+    }
+    assert execution_scoped_paths == {"artifact_policy.$": "artifact_policy"}
+    assert state_input[execution_scoped_paths["artifact_policy.$"]] == artifact_policy
+
+
+def test_load_history_has_one_final_gold_refresh_after_mdm_verify(definition: dict) -> None:
+    gold_commands: list[tuple[str, str]] = []
+
+    def walk(states: dict, label: str) -> None:
+        for name, state in states.items():
+            command = _command_of_state(state)
+            if "'gold-refresh'" in command:
+                gold_commands.append((f"{label}.{name}", command))
+            if state.get("Type") == "Map":
+                processor = state["ItemProcessor"]
+                walk(processor["States"], f"{label}.{name}(Map)")
+            if state.get("Type") == "Parallel":
+                for index, branch in enumerate(state["Branches"]):
+                    walk(branch["States"], f"{label}.{name}(Parallel[{index}])")
+
+    walk(definition["States"], "top")
+    assert [name for name, _ in gold_commands] == ["top.GoldRefresh"]
+    assert definition["States"]["GoldRefresh"]["Parameters"]["TaskDefinition"] == "arn:wh-large"
+
+    order = _linear_order(definition)
+    assert order.index("MdmVerify") < order.index("GoldRefresh")
+
+
 # -- Company Identity Pipeline wayfinder map, ticket 05: Stage0CompanyIdentity ---
 
 

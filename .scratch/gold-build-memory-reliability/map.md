@@ -51,20 +51,6 @@ carries execution, not open design decisions (see Notes).
   `wh_large_arn`/`wh_medium_arn` direct-wiring for `gold-refresh` (see ticket 02's second
   finding). Not sharp enough to ticket yet since nothing is actually at risk today (they all
   use `large`); would sharpen into a ticket if that direct-wiring is ever found drifted.
-- `bootstrap-next` is now the **sole remaining `GOLD_AFFECTING_COMMANDS` member still on
-  4096MB** after ticket 03's fix raised `large` to 8192MB and moved
-  `daily_incremental`/`bootstrap`/`full_reconcile`/`gold_refresh` onto it — it's hardcoded to
-  the medium task-def ARN inside `write_load_history_definition`, out of scope for ticket 03's
-  question (which named only the four `medium`-profile members explicitly). (Non-members like
-  `ComputeWindows`/`Stage0CompanyIdentity`'s per-window `bootstrap-fundamentals` also stay on
-  `medium` — expected, since they don't call `build_gold()` and were never part of this map's
-  scope; the claim above is specifically about `GOLD_AFFECTING_COMMANDS` membership, not "every
-  step of every pipeline.") Same class of risk `daily_incremental` just hit, on the one path
-  nobody has touched yet. Not sharp enough to ticket until there's a decision on whether
-  `load_history`'s per-window `bootstrap-next` should also move to `large`, or whether the
-  "DEEPER FOLLOW-UP" comment already in `deploy-aws-application.sh` (skip the redundant
-  per-window inline gold build entirely, since Stage-3 gold-refresh rebuilds it anyway) is the
-  better fix.
 
 ## Out of scope
 

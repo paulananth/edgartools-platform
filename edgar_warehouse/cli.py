@@ -846,6 +846,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Force re-fetch even if already loaded",
     )
     bootstrap_next.add_argument(
+        "--silver-only",
+        action="store_true",
+        default=False,
+        help=(
+            "Publish Bronze/Silver only and skip the inline gold build and "
+            "Snowflake export. Used by phased workflows that run one final "
+            "gold-refresh after all windows complete."
+        ),
+    )
+    bootstrap_next.add_argument(
         "--cik-limit",
         type=int,
         default=None,
