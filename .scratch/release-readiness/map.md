@@ -110,6 +110,7 @@ Unblocked open tickets (work through the map; claim before starting):
 3. [Implement durable Daily-Artifact resume and disposition](issues/63-implement-durable-daily-artifact-resume-disposition.md) — task (implements the accepted immutable manifest, outcome ledger, candidate-only resume, and operator repair-attestation contract)
 4. [Add progress logging to the Daily Identity Refresh reducer](issues/64-add-identity-refresh-reducer-progress-logging.md) — task (the reducer emits zero log output for its entire runtime, confirmed live via a `RUNNING` ECS task with `storedBytes: 0` after 17+ minutes)
 5. [Clean up orphaned staged-promotion blobs in S3 `silverstage/`](issues/65-clean-up-orphaned-staged-promotion-blobs.md) — task (`promote_staged` never deletes the staged object it just promoted and no bucket lifecycle rule exists; confirmed live: 46 objects, 49.3GB already orphaned under the old `_staging/` prefix in prod; prefix renamed `_staging/`→`silverstage/` 2026-08-02, go-forward only)
+6. [Fix CLAUDE.md's stale Phased Pipeline concurrency documentation](issues/66-fix-stale-phased-pipeline-concurrency-docs.md) — task (`load_history` no longer has a `bootstrap-batch ×N` Map at all — live AWS shows 5 Distributed Maps all `MaxConcurrency=1`, fully sequential; the separate `bootstrap-batched` state machine that does have `MaxConcurrency=3` has zero prod executions ever; CLAUDE.md's "~15 min/100 companies" timing claim doesn't match the current architecture)
 
 **All twelve F1-F12 promotion-criteria tickets (28-39) are now either resolved or explicitly
 blocked** — the F1-F12 sub-workstream (tickets 25/27-41) is at its natural pause point pending
@@ -129,6 +130,17 @@ Claimed, in progress:
 
 ## Hygiene log
 
+- **2026-08-02 (y):** Filed
+  [Fix CLAUDE.md's stale Phased Pipeline concurrency documentation](issues/66-fix-stale-phased-pipeline-concurrency-docs.md)
+  after checking `load_history`'s deployed concurrency directly against AWS while answering an
+  operator throughput question. Found the documented `bootstrap-batch ×N (MaxConcurrency=10)`
+  shape no longer exists in the live `edgartools-prod-load-history` definition at all — it's
+  now 5 Distributed Maps (`Stage0CompanyIdentity`, `Stage1Parallel/WindowedBootstrap`,
+  `Stage1BEntityFacts`, `Stage1BPerFiling`, `Stage1BThirteenF`), every one `MaxConcurrency=1`
+  by design (silver-promotion-consistency, same class of reason as the ticket-20 N-way race
+  finding elsewhere in CLAUDE.md). The standalone `edgartools-prod-bootstrap-batched` state
+  machine does have `MaxConcurrency=3` (matching the deploy script default CLAUDE.md's Key
+  invariants section describes) but has never executed in prod. Added to the open frontier.
 - **2026-08-02 (x):** Filed two new task tickets found live while monitoring the
   `daily-incremental-postdeploy-1785701660` evidence-gathering execution's
   `ReduceIdentityRefresh` step (ticket 61's reducer):
