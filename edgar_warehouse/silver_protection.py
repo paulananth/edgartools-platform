@@ -16,8 +16,10 @@ those abort the whole merge with a row-level report instead.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -326,12 +328,66 @@ def _columns(conn: duckdb.DuckDBPyConnection, catalog: str, table_name: str) -> 
     return {row[0]: row[1] for row in rows}
 
 
+def _emit_table_merge_event(table_name: str, *, inserted: int, updated: int, unchanged: int) -> None:
+    """One structured line per table merged, matching this codebase's
+    event-keyed JSON logging convention (e.g. gold_models.py's
+    gold_table_started/completed). merge_candidate_into_canonical previously
+    emitted nothing at all -- a table taking minutes for zero real writes
+    (the sec_company_filing authority-column incident) was invisible in
+    CloudWatch until reproduced locally against a downloaded copy of prod
+    data. This does not identify the run -- callers with a run/task id log
+    that context separately; this is purely per-table merge accounting.
+    """
+    print(
+        json.dumps(
+            {
+                "event": "silver_table_merged",
+                "table": table_name,
+                "rows_inserted": inserted,
+                "rows_updated": updated,
+                "rows_unchanged": unchanged,
+            }
+        ),
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+def _comparable_columns(policy: "ProtectedTablePolicy", all_columns: list[str]) -> list[str]:
+    """Columns whose values determine whether two same-key rows are
+    *meaningfully* different -- excludes business keys, the global and
+    per-table provenance columns, and the table's own declared
+    ``authority_column``.
+
+    The authority column exists to tiebreak an already-real conflict, not to
+    manufacture one: it is a sync/ingestion timestamp that changes on every
+    re-sync regardless of whether the row's actual content changed. Treating
+    it as a comparable column means a full-history re-sync flags every
+    previously-seen row as "different" forever, even when nothing about the
+    row itself changed (see the sec_company_filing incident: a 500-CIK
+    identity-refresh batch produced a 452,996-row delta where 100% of rows
+    differed only on last_synced_at/last_sync_run_id -- confirmed live
+    against production data).
+    """
+    excluded = set(policy.business_keys) | _PROVENANCE_COLUMNS | policy.provenance_columns
+    if policy.authority_column is not None:
+        excluded.add(policy.authority_column)
+    return [c for c in all_columns if c not in excluded]
+
+
 def _delta_rows_as_dicts(
-    conn: duckdb.DuckDBPyConnection, table_name: str, columns: list[str]
+    conn: duckdb.DuckDBPyConnection,
+    table_name: str,
+    columns: list[str],
+    business_keys: tuple[str, ...],
+    compare_columns: list[str],
 ) -> list[dict[str, Any]]:
-    """Candidate ('cand') rows that differ, in any column, from canonical
-    ('out') -- computed via SQL EXCEPT so only the delta materializes into
-    Python, not the full candidate table.
+    """Candidate ('cand') rows that differ, on any *comparable* column, from
+    the canonical ('out') row sharing the same business key -- computed via a
+    NOT EXISTS anti-join (keyed on business_keys, scoped to compare_columns)
+    so only the delta materializes into Python, not the full candidate table,
+    and a row whose only change is a provenance/authority column never
+    counts as a difference at all.
 
     Some Branch B publish callers (bootstrap-fundamentals' windowed
     --cik-offset/--cik-limit path: entity-facts, per-filing, thirteenf,
@@ -339,22 +395,31 @@ def _delta_rows_as_dicts(
     handful of rows in place, so the "candidate" file can be as large as
     canonical itself (2M+ rows in sec_company_filing) even when a run only
     touches a few hundred CIKs. Fetching every candidate row unconditionally
-    (the previous approach) reads that whole table regardless of how much
+    (an earlier approach) reads that whole table regardless of how much
     actually changed -- the same class of OOM already fixed for the
     canonical-side lookup below, but on the candidate side this time.
-    EXCEPT sidesteps needing to know which rows a run "should" have touched
-    (no cik-scoping, no run-id/timestamp bookkeeping to get right per table)
-    -- it just returns whatever's actually different, correct for both a
-    genuinely small candidate and a full hydrated copy alike, and correct
-    for tables like sec_company_ticker whose writes span the whole
-    reference-data universe rather than a single run's CIK window.
+
+    A prior version of this function compared *every* column via SQL EXCEPT,
+    including the authority column -- correct for "is this candidate row
+    absent from canonical," wrong for "is this candidate row meaningfully
+    different," since it treated a same-key row whose real data is
+    byte-identical as a genuine delta purely because its sync timestamp
+    advanced. IS NOT DISTINCT FROM is used instead of plain equality for
+    null-safety (a NULL-vs-NULL comparable column must not register as a
+    difference).
     """
     quoted_table = _quote_ident(table_name)
-    cols_sql = ", ".join(_quote_ident(c) for c in columns)
+    select_cols_sql = ", ".join(f"c.{_quote_ident(c)}" for c in columns)
+    key_eq_sql = " AND ".join(f"c.{_quote_ident(k)} = o.{_quote_ident(k)}" for k in business_keys)
+    compare_eq_sql = " AND ".join(
+        f"c.{_quote_ident(c)} IS NOT DISTINCT FROM o.{_quote_ident(c)}" for c in compare_columns
+    )
+    match_sql = " AND ".join(part for part in (key_eq_sql, compare_eq_sql) if part)
     result = conn.execute(
-        f"SELECT {cols_sql} FROM cand.main.{quoted_table} "
-        f"EXCEPT "
-        f"SELECT {cols_sql} FROM out.main.{quoted_table}"
+        f"SELECT {select_cols_sql} FROM cand.main.{quoted_table} c "
+        f"WHERE NOT EXISTS ("
+        f"  SELECT 1 FROM out.main.{quoted_table} o WHERE {match_sql}"
+        f")"
     )
     return [dict(zip(columns, row)) for row in result.fetchall()]
 
@@ -530,8 +595,29 @@ def merge_candidate_into_canonical(
                 )
 
             all_columns = list(_columns(conn, "out", table_name).keys())
-            candidate_rows = _delta_rows_as_dicts(conn, table_name, all_columns)
+            comparable_columns = _comparable_columns(policy, all_columns)
+            candidate_rows = _delta_rows_as_dicts(
+                conn, table_name, all_columns, policy.business_keys, comparable_columns
+            )
+            # Rows the anti-join filtered out before ever reaching Python:
+            # same business key, identical on every comparable column, so
+            # only a provenance/authority column (if anything) differed.
+            # Counted via COUNT(*) rather than fetched, so a full-history
+            # re-sync candidate that touches nothing real still reports an
+            # accurate rows_unchanged total without materializing it.
+            cand_total = conn.execute(
+                f"SELECT COUNT(*) FROM cand.main.{_quote_ident(table_name)}"
+            ).fetchone()[0]
+            provenance_filtered = cand_total - len(candidate_rows)
             if not candidate_rows:
+                if provenance_filtered:
+                    tables_merged.append(table_name)
+                    rows_inserted[table_name] = 0
+                    rows_updated[table_name] = 0
+                    rows_unchanged[table_name] = provenance_filtered
+                    _emit_table_merge_event(
+                        table_name, inserted=0, updated=0, unchanged=provenance_filtered
+                    )
                 continue
 
             canonical_by_key: dict[tuple[Any, ...], dict[str, Any]] = {
@@ -541,7 +627,8 @@ def merge_candidate_into_canonical(
                 )
             }
 
-            inserted = updated = unchanged = 0
+            inserted = updated = 0
+            unchanged = provenance_filtered
             for cand_row in candidate_rows:
                 key = _key_tuple(cand_row, policy.business_keys)
                 canon_row = canonical_by_key.get(key)
@@ -553,11 +640,8 @@ def merge_candidate_into_canonical(
 
                 differing = tuple(
                     c
-                    for c in all_columns
-                    if c not in policy.business_keys
-                    and c not in _PROVENANCE_COLUMNS
-                    and c not in policy.provenance_columns
-                    and canon_row.get(c) != cand_row.get(c)
+                    for c in comparable_columns
+                    if canon_row.get(c) != cand_row.get(c)
                 )
                 if not differing:
                     unchanged += 1
@@ -584,6 +668,9 @@ def merge_candidate_into_canonical(
             rows_inserted[table_name] = inserted
             rows_updated[table_name] = updated
             rows_unchanged[table_name] = unchanged
+            _emit_table_merge_event(
+                table_name, inserted=inserted, updated=updated, unchanged=unchanged
+            )
 
         if conflicts:
             raise SemanticMergeConflictError(conflicts)

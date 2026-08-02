@@ -112,6 +112,8 @@ Unblocked open tickets (work through the map; claim before starting):
 5. [Clean up orphaned staged-promotion blobs in S3 `silverstage/`](issues/65-clean-up-orphaned-staged-promotion-blobs.md) — task (`promote_staged` never deletes the staged object it just promoted and no bucket lifecycle rule exists; confirmed live: 46 objects, 49.3GB already orphaned under the old `_staging/` prefix in prod; prefix renamed `_staging/`→`silverstage/` 2026-08-02, go-forward only)
 6. [Fix CLAUDE.md's stale Phased Pipeline concurrency documentation](issues/66-fix-stale-phased-pipeline-concurrency-docs.md) — task (`load_history` no longer has a `bootstrap-batch ×N` Map at all — live AWS shows 5 Distributed Maps all `MaxConcurrency=1`, fully sequential; the separate `bootstrap-batched` state machine that does have `MaxConcurrency=3` has zero prod executions ever; CLAUDE.md's "~15 min/100 companies" timing claim doesn't match the current architecture)
 
+- [Fix authority-column false-positive conflicts in silver merge](issues/67-fix-authority-column-false-positive-conflicts.md) — resolved: `sec_company_filing`'s merge policy never excluded its own `authority_column` (`last_synced_at`) from the same-key conflict check, so every re-synced filing row registered as "different" forever even with zero real content change — measured live at 452,996-of-452,996 false-positive rows in one 500-CIK batch, ~753s of pointless single-row UPDATEs. Fixed generically (all 31 registry policies) via a `NOT EXISTS` anti-join scoped to comparable (non-key/provenance/authority) columns; validated end-to-end against real prod data (11.04s total, down from the ~753s extrapolation), full suite green.
+
 **All twelve F1-F12 promotion-criteria tickets (28-39) are now either resolved or explicitly
 blocked** — the F1-F12 sub-workstream (tickets 25/27-41) is at its natural pause point pending
 either a fundamentals-pipeline backfill decision (ticket 42) or later product work. Those
@@ -130,6 +132,17 @@ Claimed, in progress:
 
 ## Hygiene log
 
+- **2026-08-02 (z):** Root-caused and fixed the `daily-incremental-postdeploy-1785701660`
+  execution's 55+-minute `ReduceIdentityRefresh` stall — see
+  [Fix authority-column false-positive conflicts in silver merge](issues/67-fix-authority-column-false-positive-conflicts.md).
+  Not a network or infra issue (S3 gateway endpoint confirmed correctly attached to the task's
+  route table, ruling out NAT bottleneck theories); a real data-merge defect in
+  `silver_protection.py`, present since the file's earliest committed version, first triggered at
+  scale by ticket 61's new reducer path. Reviewed via `/gof-refactor-reviewer` and `advisor`
+  before implementation per explicit user request. Left the actual stalled execution running
+  untouched (the code fix doesn't help it retroactively; aborting risks stranding
+  `pipeline_run_lease`, per the advisor's operational note) — its outcome is orthogonal to this
+  fix and will still supply real before-fix timing evidence once it completes.
 - **2026-08-02 (y):** Filed
   [Fix CLAUDE.md's stale Phased Pipeline concurrency documentation](issues/66-fix-stale-phased-pipeline-concurrency-docs.md)
   after checking `load_history`'s deployed concurrency directly against AWS while answering an

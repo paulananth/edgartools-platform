@@ -787,8 +787,11 @@ def test_merge_only_reads_canonical_rows_the_candidate_touches(tmp_path):
         candidate,
         ddl,
         [
+            # existing key, REAL data change (cik reassigned, not just the
+            # authority timestamp -- an authority-only change is unchanged,
+            # not updated; see test_merge_treats_authority_column_only_change_as_unchanged)
             "INSERT INTO sec_company_filing VALUES "
-            "('acc-5', 5, '2026-02-01 00:00:00')",  # existing key, updated value
+            "('acc-5', 999997, '2026-02-01 00:00:00')",
             "INSERT INTO sec_company_filing VALUES "
             "('acc-brand-new', 999999, '2026-02-01 00:00:00')",  # new key
         ],
@@ -802,14 +805,15 @@ def test_merge_only_reads_canonical_rows_the_candidate_touches(tmp_path):
     conn = duckdb.connect(str(output))
     total = conn.execute("SELECT COUNT(*) FROM sec_company_filing").fetchone()[0]
     updated_row = conn.execute(
-        "SELECT last_synced_at FROM sec_company_filing WHERE accession_number = 'acc-5'"
+        "SELECT cik, last_synced_at FROM sec_company_filing WHERE accession_number = 'acc-5'"
     ).fetchone()
     untouched_row = conn.execute(
         "SELECT last_synced_at FROM sec_company_filing WHERE accession_number = 'acc-6'"
     ).fetchone()
     conn.close()
     assert total == 200001
-    assert str(updated_row[0]).startswith("2026-02-01")
+    assert updated_row[0] == 999997
+    assert str(updated_row[1]).startswith("2026-02-01")
     assert str(untouched_row[0]).startswith("2026-01-01")  # untouched canonical row preserved
 
 
@@ -842,12 +846,15 @@ def test_merge_only_reads_candidate_rows_that_actually_changed(tmp_path):
     conn.close()
 
     # Candidate = a full copy of canonical (the windowed hydrate-then-mutate
-    # shape), with just two rows changed: one existing key updated, one brand
-    # new key inserted -- everything else byte-identical to canonical.
+    # shape), with just two rows changed: one existing key with a REAL data
+    # change (cik reassigned, not just the authority timestamp -- see
+    # test_merge_treats_authority_column_only_change_as_unchanged for the
+    # provenance-only case), one brand new key inserted -- everything else
+    # byte-identical to canonical.
     shutil.copy2(canonical, candidate)
     conn = duckdb.connect(str(candidate))
     conn.execute(
-        "UPDATE sec_company_filing SET last_synced_at = '2026-02-01 00:00:00' "
+        "UPDATE sec_company_filing SET cik = 999998, last_synced_at = '2026-02-01 00:00:00' "
         "WHERE accession_number = 'acc-5'"
     )
     conn.execute(
@@ -859,20 +866,140 @@ def test_merge_only_reads_candidate_rows_that_actually_changed(tmp_path):
 
     assert result.rows_inserted["sec_company_filing"] == 1
     assert result.rows_updated["sec_company_filing"] == 1
-    assert result.rows_unchanged.get("sec_company_filing", 0) == 0
+    # The other 199,999 candidate rows are byte-identical to canonical --
+    # counted as unchanged via a cheap COUNT(*), never materialized into Python.
+    assert result.rows_unchanged.get("sec_company_filing", 0) == 199999
 
     conn = duckdb.connect(str(output))
     total = conn.execute("SELECT COUNT(*) FROM sec_company_filing").fetchone()[0]
     updated_row = conn.execute(
-        "SELECT last_synced_at FROM sec_company_filing WHERE accession_number = 'acc-5'"
+        "SELECT cik, last_synced_at FROM sec_company_filing WHERE accession_number = 'acc-5'"
     ).fetchone()
     untouched_row = conn.execute(
         "SELECT last_synced_at FROM sec_company_filing WHERE accession_number = 'acc-6'"
     ).fetchone()
     conn.close()
     assert total == 200001
-    assert str(updated_row[0]).startswith("2026-02-01")
+    assert updated_row[0] == 999998
+    assert str(updated_row[1]).startswith("2026-02-01")
     assert str(untouched_row[0]).startswith("2026-01-01")  # untouched row preserved
+
+
+def test_merge_treats_authority_column_only_change_as_unchanged(tmp_path):
+    """Regression (2026-08-02): a full-history re-sync candidate bumps every
+    touched row's last_synced_at/last_sync_run_id regardless of whether the
+    row's real content changed. Confirmed live against production data: a
+    500-CIK identity-refresh batch produced a 452,996-row delta for
+    sec_company_filing where 100% of rows differed only on those two
+    provenance/authority columns -- zero genuine content changes -- forcing
+    ~753s of single-row UPDATEs (measured) for work that should have cost
+    nothing. A same-key row must be counted unchanged, and canonical's
+    authority-column value must be preserved (not silently overwritten by a
+    no-op "update"), whenever every comparable (non-key,
+    non-provenance/authority) column is identical."""
+    from edgar_warehouse.silver_protection import merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+    ddl = "CREATE TABLE sec_company_filing (accession_number TEXT PRIMARY KEY, cik BIGINT, last_synced_at TIMESTAMPTZ)"
+
+    _make_duckdb(
+        canonical,
+        ddl,
+        ["INSERT INTO sec_company_filing VALUES ('acc-1', 42, '2026-01-01 00:00:00')"],
+    )
+    # Same real data (cik unchanged), only the sync bookkeeping timestamp
+    # advanced -- the shape of a full-history re-sync touching a filing that
+    # hasn't actually changed.
+    _make_duckdb(
+        candidate,
+        ddl,
+        ["INSERT INTO sec_company_filing VALUES ('acc-1', 42, '2026-06-01 00:00:00')"],
+    )
+
+    result = merge_candidate_into_canonical(candidate, canonical, output)
+
+    assert result.rows_updated.get("sec_company_filing", 0) == 0
+    assert result.rows_inserted.get("sec_company_filing", 0) == 0
+    assert result.rows_unchanged["sec_company_filing"] == 1
+
+    conn = duckdb.connect(str(output))
+    row = conn.execute(
+        "SELECT cik, last_synced_at FROM sec_company_filing WHERE accession_number = 'acc-1'"
+    ).fetchone()
+    conn.close()
+    assert row[0] == 42
+    # Canonical's original timestamp is preserved -- no write happened at all.
+    assert str(row[1]).startswith("2026-01-01")
+
+
+def test_merge_still_updates_and_advances_authority_column_on_a_real_change(tmp_path):
+    """The authority-column exclusion must only suppress false-positive
+    conflicts, not real ones: a genuine content change on the same key must
+    still route through _resolve_conflict and land with the candidate's
+    (newer) authority-column value written through, exactly as before."""
+    from edgar_warehouse.silver_protection import merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+    ddl = "CREATE TABLE sec_company_filing (accession_number TEXT PRIMARY KEY, cik BIGINT, last_synced_at TIMESTAMPTZ)"
+
+    _make_duckdb(
+        canonical,
+        ddl,
+        ["INSERT INTO sec_company_filing VALUES ('acc-1', 42, '2026-01-01 00:00:00')"],
+    )
+    _make_duckdb(
+        candidate,
+        ddl,
+        ["INSERT INTO sec_company_filing VALUES ('acc-1', 43, '2026-06-01 00:00:00')"],
+    )
+
+    result = merge_candidate_into_canonical(candidate, canonical, output)
+
+    assert result.rows_updated["sec_company_filing"] == 1
+    assert result.rows_unchanged.get("sec_company_filing", 0) == 0
+
+    conn = duckdb.connect(str(output))
+    row = conn.execute(
+        "SELECT cik, last_synced_at FROM sec_company_filing WHERE accession_number = 'acc-1'"
+    ).fetchone()
+    conn.close()
+    assert row[0] == 43
+    assert str(row[1]).startswith("2026-06-01")
+
+
+def test_merge_null_comparable_column_is_not_a_false_positive_difference(tmp_path):
+    """The anti-join uses IS NOT DISTINCT FROM specifically so a NULL-vs-NULL
+    comparable column doesn't register as a difference (plain SQL `=` would
+    make every NULL-holding row look permanently "different")."""
+    from edgar_warehouse.silver_protection import merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+    ddl = (
+        "CREATE TABLE sec_company_filing "
+        "(accession_number TEXT PRIMARY KEY, cik BIGINT, act TEXT, last_synced_at TIMESTAMPTZ)"
+    )
+
+    _make_duckdb(
+        canonical,
+        ddl,
+        ["INSERT INTO sec_company_filing VALUES ('acc-1', 42, NULL, '2026-01-01 00:00:00')"],
+    )
+    _make_duckdb(
+        candidate,
+        ddl,
+        ["INSERT INTO sec_company_filing VALUES ('acc-1', 42, NULL, '2026-06-01 00:00:00')"],
+    )
+
+    result = merge_candidate_into_canonical(candidate, canonical, output)
+
+    assert result.rows_unchanged["sec_company_filing"] == 1
+    assert result.rows_updated.get("sec_company_filing", 0) == 0
 
 
 def test_merge_first_publish_of_new_classified_table_preserves_primary_key(tmp_path):
