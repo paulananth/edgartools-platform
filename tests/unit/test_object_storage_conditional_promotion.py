@@ -119,7 +119,7 @@ def test_remote_promotion_atomically_requires_the_canonical_etag(monkeypatch):
     """A remote promotion must bind the write itself to the hydrated ETag."""
     objects = {
         "s3://bucket/warehouse/silver/sec/silver.duckdb": b"canonical",
-        "s3://bucket/warehouse/_staging/token/silver/sec/silver.duckdb": b"merged",
+        "s3://bucket/warehouse/silverstage/token/silver/sec/silver.duckdb": b"merged",
     }
     store = _ReadableObjectStore(
         objects,
@@ -130,7 +130,7 @@ def test_remote_promotion_atomically_requires_the_canonical_etag(monkeypatch):
     monkeypatch.setattr("boto3.client", lambda service: client)
 
     result = StorageLocation("s3://bucket/warehouse").promote_staged(
-        "_staging/token/silver/sec/silver.duckdb",
+        "silverstage/token/silver/sec/silver.duckdb",
         "silver/sec/silver.duckdb",
         expected_etag="old-etag",
     )
@@ -149,14 +149,14 @@ def test_remote_promotion_atomically_requires_the_canonical_etag(monkeypatch):
 
 
 def test_remote_first_promotion_atomically_requires_an_absent_canonical_key(monkeypatch):
-    staged_path = "s3://bucket/warehouse/_staging/token/silver/sec/silver.duckdb"
+    staged_path = "s3://bucket/warehouse/silverstage/token/silver/sec/silver.duckdb"
     store = _ReadableObjectStore({staged_path: b"first"}, {})
     client = _RecordingS3Client()
     monkeypatch.setattr("fsspec.filesystem", lambda *args, **kwargs: store)
     monkeypatch.setattr("boto3.client", lambda service: client)
 
     StorageLocation("s3://bucket/warehouse").promote_staged(
-        "_staging/token/silver/sec/silver.duckdb",
+        "silverstage/token/silver/sec/silver.duckdb",
         "silver/sec/silver.duckdb",
         expected_etag=None,
     )
@@ -166,7 +166,7 @@ def test_remote_first_promotion_atomically_requires_an_absent_canonical_key(monk
 
 
 def test_remote_promotion_reports_atomic_precondition_failure_as_retryable_conflict(monkeypatch):
-    staged_path = "s3://bucket/warehouse/_staging/token/silver/sec/silver.duckdb"
+    staged_path = "s3://bucket/warehouse/silverstage/token/silver/sec/silver.duckdb"
     objects = {
         "s3://bucket/warehouse/silver/sec/silver.duckdb": b"newer-canonical",
         staged_path: b"merged",
@@ -180,7 +180,7 @@ def test_remote_promotion_reports_atomic_precondition_failure_as_retryable_confl
 
     with pytest.raises(PromotionConflictError) as exc_info:
         StorageLocation("s3://bucket/warehouse").promote_staged(
-            "_staging/token/silver/sec/silver.duckdb",
+            "silverstage/token/silver/sec/silver.duckdb",
             "silver/sec/silver.duckdb",
             expected_etag="old-etag",
         )

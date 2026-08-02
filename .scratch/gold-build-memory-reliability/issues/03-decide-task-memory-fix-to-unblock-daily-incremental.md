@@ -1,7 +1,7 @@
 # Decide the task-memory fix to unblock the failed daily_incremental execution
 
 Type: grilling
-Status: claimed
+Status: resolved
 
 ## Question
 
@@ -140,3 +140,34 @@ confirmed `RUNNING`. `daily_incremental`'s original execution is left running in
 slower, secondary confirmation. Whichever completes first (or fails) first will supply the
 discriminating `gold_table_completed`/OOM signal for `sec_thirteenf_holding` this ticket's
 question 3 is waiting on.
+
+## Update (2026-08-02 — question 3 resolved, discriminating signal confirmed)
+
+Both parallel executions reached a terminal state days ago and were never checked back against
+this ticket's own stated success criterion — closing that gap now via `describe-execution` and
+CloudWatch, not new work.
+
+- `bootstrap-ticket03-verify-1785426021` — **SUCCEEDED**. Its `RunWarehouseTask`-equivalent
+  `bootstrap` command ran on `edgartools-prod-large:90` (8192MB, image digest
+  `sha256:aca8078c658bc3f66ac40fa9e41923c4f29743f23ad5623756d94888728cbb30` — the exact digest
+  this ticket built). CloudWatch confirms the discriminating event this ticket named as the test:
+  `{"event": "gold_table_started", "table": "sec_thirteenf_holding", ...}` followed by
+  `{"event": "gold_table_completed", "table": "sec_thirteenf_holding", "rows": 6799919,
+  "duration_seconds": 5.81, ...}`, attributed to the `bootstrap` command's own log stream (not
+  `GoldRefresh`, avoiding the attribution confound flagged above). All 28 gold tables completed;
+  `gold_build_completed`/`gold_publish_completed` fired cleanly. Container exited 0. This is the
+  first time `sec_thirteenf_holding`'s gold build has ever completed in any of the four prior OOM
+  attempts or since — the memory bump + streaming fix combination works.
+- `daily-incremental-ticket03-1785413694` — **FAILED**, but not from OOM. `Stage0CompanyIdentity`
+  (~9h56m) and `RunWarehouseTask` (~3h20m) both completed with the container exiting 0 — no OOM
+  signature — then the execution failed afterward in `ForceCheck` with `States.Runtime` on absent
+  `$.force` (the exact bug independently root-caused and fixed by ticket 54, merged as PR #319).
+  Secondary confirmation, consistent with the primary result: the memory fix held under the real
+  `daily_incremental` dispatch path too, just masked by an unrelated later failure.
+
+**Question 3 answered: yes.** Both the `large` memory bump (4096→8192MB) and the `run_wh`
+dispatch-wiring fix are confirmed working in prod, independent of ticket 01's isolated streaming
+claim (still formally unconfirmed alone, per the note above, but the combination this ticket
+shipped is proven end-to-end). No further production run is required to close this ticket.
+
+**Status: resolved.**

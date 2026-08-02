@@ -44,3 +44,18 @@ company-eligibility contract, the old all-entity window cannot re-enter either
 scheduled identity path, non-company relationship entities remain available
 to their own workflows, and Release-Candidate-bound execution evidence records
 the exact universe and duration.
+
+## Progress (2026-08-02 — record correction)
+
+This ticket had no Progress section even though its implementation shipped and
+merged: `codex/ticket51-company-only-universe` → PR #317
+(`f835cf9c...` on `main`). The actual narrative was written under
+[ticket 49](49-implement-bounded-daily-identity-refresh-schedule.md)'s
+"Progress (2026-07-31 — company-only identity universe)" section instead of
+here — not duplicating it, pointing at it: the eligibility boundary
+(`entity_type = operating` OR present in the captured `company_tickers`
+snapshot), applied to both Daily Identity Refresh and Identity Backstop Sweep,
+with reference-snapshot identity/input/eligible/excluded/selected-digest
+evidence emission, is described there. Still `claimed`, not `resolved` — no
+Release-Candidate-bound production execution evidence has been recorded
+against this ticket's specific "Done when" bar.

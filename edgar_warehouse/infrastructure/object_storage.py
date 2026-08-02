@@ -238,7 +238,7 @@ class StorageLocation:
         import uuid
 
         canonical_relative = sanitize_relative_path(canonical_relative_path)
-        staged_relative = f"_staging/{uuid.uuid4().hex}/{canonical_relative}"
+        staged_relative = f"silverstage/{uuid.uuid4().hex}/{canonical_relative}"
         self.write_bytes(staged_relative, payload)
         return staged_relative
 

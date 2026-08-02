@@ -323,13 +323,13 @@ def test_publish_silver_database_uploads_to_remote(tmp_path):
         ),
         patch(
             "edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes",
-            return_value="_staging/token/silver/sec/silver.duckdb",
+            return_value="silverstage/token/silver/sec/silver.duckdb",
         ) as mock_stage,
         patch(
             "edgar_warehouse.infrastructure.object_storage.StorageLocation.promote_staged",
             return_value=PromotionResult(
                 canonical_path="s3://bucket/warehouse/silver/sec/silver.duckdb",
-                staged_relative_path="_staging/token/silver/sec/silver.duckdb",
+                staged_relative_path="silverstage/token/silver/sec/silver.duckdb",
                 previous_version=ObjectVersion(exists=False, etag=None, version_id=None),
                 new_version=ObjectVersion(exists=True, etag="new-etag", version_id=None),
             ),
@@ -346,7 +346,7 @@ def test_publish_silver_database_uploads_to_remote(tmp_path):
     assert result["tables_merged"] == []
     mock_stage.assert_called_once_with("silver/sec/silver.duckdb", b"duckdb-data")
     mock_promote.assert_called_once_with(
-        "_staging/token/silver/sec/silver.duckdb", "silver/sec/silver.duckdb", expected_etag=None
+        "silverstage/token/silver/sec/silver.duckdb", "silver/sec/silver.duckdb", expected_etag=None
     )
 
 
@@ -411,13 +411,13 @@ def test_publish_silver_database_merges_when_canonical_already_exists(tmp_path):
         ),
         patch(
             "edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes",
-            return_value="_staging/token/silver/sec/silver.duckdb",
+            return_value="silverstage/token/silver/sec/silver.duckdb",
         ),
         patch(
             "edgar_warehouse.infrastructure.object_storage.StorageLocation.promote_staged",
             return_value=PromotionResult(
                 canonical_path="s3://bucket/warehouse/silver/sec/silver.duckdb",
-                staged_relative_path="_staging/token/silver/sec/silver.duckdb",
+                staged_relative_path="silverstage/token/silver/sec/silver.duckdb",
                 previous_version=ObjectVersion(exists=True, etag="old-etag", version_id=None),
                 new_version=ObjectVersion(exists=True, etag="new-etag", version_id=None),
             ),
@@ -537,7 +537,7 @@ def test_publish_silver_database_retries_on_lost_promotion_race(tmp_path, monkey
         ),
         patch(
             "edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes",
-            return_value="_staging/token/silver/sec/silver.duckdb",
+            return_value="silverstage/token/silver/sec/silver.duckdb",
         ),
         patch(
             "edgar_warehouse.infrastructure.object_storage.StorageLocation.promote_staged",
@@ -578,7 +578,7 @@ def test_publish_silver_database_default_policy_outlasts_sibling_publishers(
                 "silver/sec/silver.duckdb",
                 f"etag-{call_count['n'] - 1}",
                 f"etag-{call_count['n']}",
-                f"_staging/attempt-{call_count['n']}/silver/sec/silver.duckdb",
+                f"silverstage/attempt-{call_count['n']}/silver/sec/silver.duckdb",
             )
         return {"canonical_version": "eventual-winner"}
 
@@ -621,7 +621,7 @@ def test_publish_silver_database_retry_gives_up_after_max_attempts(tmp_path, mon
         ),
         patch(
             "edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes",
-            return_value="_staging/token/silver/sec/silver.duckdb",
+            return_value="silverstage/token/silver/sec/silver.duckdb",
         ),
         patch(
             "edgar_warehouse.infrastructure.object_storage.StorageLocation.promote_staged",

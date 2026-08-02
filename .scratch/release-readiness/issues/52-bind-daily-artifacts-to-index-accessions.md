@@ -76,3 +76,15 @@ No implementation has started in this Wayfinder session. The next work is to
 bind recurring artifact selection to the exact forced-index accession union,
 make exhausted retry/circuit disposition fail closed, and prove the ordinary
 `PoolTimeout` reset path is reachable before any new production timing run.
+
+## Progress (2026-08-02 — record correction)
+
+The note above is stale. Implementation happened in a later, untracked session:
+`codex/ticket52-daily-accession-boundary` merged as PR #318
+(`2ffa5faf...` on `main`). Not yet confirmed line-by-line against every "Required
+work" bullet above; still `claimed`, not `resolved` — the "Done when" bar requires
+an immutable-Release-Candidate production execution proving the recurring path
+cannot reproduce the 148,524-candidate expansion, and no such execution has been
+identified since the merge. The old
+`daily-incremental-ticket03-1785413694`/`bootstrap-ticket03-verify-1785426021`
+executions (2026-07-30) predate this merge and cannot serve as its evidence.

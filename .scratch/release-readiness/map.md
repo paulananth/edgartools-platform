@@ -108,6 +108,8 @@ Unblocked open tickets (work through the map; claim before starting):
 1. [Implement and Activate the Bounded Daily Identity Refresh Schedule](issues/49-implement-bounded-daily-identity-refresh-schedule.md) — **in progress, still open** (claimed 2026-07-30): "Refresh behavior" (bounded default path, `pipeline_run_lease` primitives) and the lease-wiring into the state machine's branching are both implemented and tested (`claude/daily-identity-refresh-go-live`, open as PR #316), and this session additionally closed `backstop_overdue` consumption (persisted on `pipeline_run_lease`, resolved into an `effective_mode` before every acquire, survives multiple consecutive deferrals) and EventBridge/Terraform schedule ownership (passive-Terraform file deleted; least-privilege scheduler IAM added to access Terraform; off-by-default `--configure-daily-incremental-schedule enable|disable` added to `deploy-aws-application.sh`). Explicitly NOT done: CloudWatch alerting, an actual prod `enable` run, and the full Phase 1/2 evidence-and-activation checkpoint — see the ticket's "Progress" section for the itemized remainder.
 2. [Implement run-scoped Daily Identity Refresh publication](issues/61-implement-run-scoped-daily-identity-publication.md) — task (implements the resolved single-reducer, one-publication contract; schedule activation remains separately gated on immutable-image full-chain evidence)
 3. [Implement durable Daily-Artifact resume and disposition](issues/63-implement-durable-daily-artifact-resume-disposition.md) — task (implements the accepted immutable manifest, outcome ledger, candidate-only resume, and operator repair-attestation contract)
+4. [Add progress logging to the Daily Identity Refresh reducer](issues/64-add-identity-refresh-reducer-progress-logging.md) — task (the reducer emits zero log output for its entire runtime, confirmed live via a `RUNNING` ECS task with `storedBytes: 0` after 17+ minutes)
+5. [Clean up orphaned staged-promotion blobs in S3 `silverstage/`](issues/65-clean-up-orphaned-staged-promotion-blobs.md) — task (`promote_staged` never deletes the staged object it just promoted and no bucket lifecycle rule exists; confirmed live: 46 objects, 49.3GB already orphaned under the old `_staging/` prefix in prod; prefix renamed `_staging/`→`silverstage/` 2026-08-02, go-forward only)
 
 **All twelve F1-F12 promotion-criteria tickets (28-39) are now either resolved or explicitly
 blocked** — the F1-F12 sub-workstream (tickets 25/27-41) is at its natural pause point pending
@@ -127,6 +129,42 @@ Claimed, in progress:
 
 ## Hygiene log
 
+- **2026-08-02 (x):** Filed two new task tickets found live while monitoring the
+  `daily-incremental-postdeploy-1785701660` evidence-gathering execution's
+  `ReduceIdentityRefresh` step (ticket 61's reducer):
+  [Add progress logging to the Daily Identity Refresh reducer](issues/64-add-identity-refresh-reducer-progress-logging.md)
+  (the reducer — `identity_refresh_publication.py:169-238` — emits zero log output for its
+  entire multi-stage, multi-GB-copy runtime; confirmed live via `describe-log-streams`
+  reporting `storedBytes: 0` after 17+ minutes `RUNNING`) and
+  [Clean up orphaned staged-promotion blobs in S3 `_staging/`](issues/65-clean-up-orphaned-staged-promotion-blobs.md)
+  (`promote_staged` — `object_storage.py:322-389` — never deletes the ~1GB staged object it
+  just promoted, and the bucket has no lifecycle rule; confirmed live: 46 objects, 49.3GB
+  already orphaned in `s3://edgartools-prod-warehouse-690839588395/warehouse/_staging/`, and
+  `get-bucket-lifecycle-configuration` returns `NoSuchLifecycleConfiguration`). Both added to
+  the open frontier as unblocked, unclaimed tasks.
+- **2026-08-02 (w):** Frontier review (no ticket resolved, one sibling map's ticket
+  closed — see gold-build-memory-reliability). Confirmed all three frontier
+  tickets (49, 61, 63) remain genuinely blocked on **immutable-image production
+  evidence**, not on unresolved decisions — each has local implementation done
+  and merged/committed, and each names the same missing step. Corrected two
+  stale records found in passing: ticket 52's file claimed "no implementation
+  has started" when PR #318 had already merged; ticket 51 had no Progress
+  section at all despite PR #317 merging (its narrative was written into
+  ticket 49 instead). Checked three previously "pending outcome" prod
+  executions named in ticket files: `load-history-silver-only-20260801T235002Z`
+  is **ABORTED**; `daily-incremental-ticket03-1785413694` is **FAILED** (not
+  OOM — the pre-ticket-54 `ForceCheck` bug, now fixed); `bootstrap-ticket03-verify-1785426021`
+  **SUCCEEDED** and supplied the exact discriminating signal
+  gold-build-memory-reliability's ticket 03 needed — that ticket is now
+  resolved. Confirmed live: ticket 61's ItemSelector corrective fix (parent
+  execution name into distributed Map items) is present on `main`
+  (`deploy-aws-application.sh:2738-2742`), so 61 is deploy-ready, not
+  code-blocked. No new image has been built/deployed from current `main` since
+  PR #326/#328/#329 merged — one build+deploy would unblock the evidence step
+  shared by 49, 61, 63, and gold-build-memory-reliability's ticket 04.
+  [Decide and execute the fundamentals pipeline backfill](issues/42-decide-execute-fundamentals-backfill.md)
+  remains the one live ticket that's a genuine operator decision (split
+  F4/F9 backfill now vs. hold for F5/F11), not evidence-gathering.
 - **2026-07-29 (v):** Resolved
   [Decide whether/how to narrow daily_incremental's Stage 0 and set its actual schedule](issues/45-decide-narrow-daily-incremental-stage0-and-cadence.md)
   through HITL grilling. Operator chose an impacted-CIK Daily Identity Refresh
