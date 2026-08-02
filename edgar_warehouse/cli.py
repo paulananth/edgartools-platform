@@ -251,6 +251,10 @@ def _handle_bootstrap_fundamentals(args: argparse.Namespace) -> int:
     return run_command("bootstrap-fundamentals", args)
 
 
+def _handle_reduce_identity_refresh(args: argparse.Namespace) -> int:
+    return run_command("reduce-identity-refresh", args)
+
+
 def _handle_verify_pipeline_run(args: argparse.Namespace) -> int:
     return run_command("verify-pipeline-run", args)
 
@@ -923,6 +927,17 @@ def build_parser() -> argparse.ArgumentParser:
     _add_run_id_arg(compute_identity_refresh_window)
     compute_identity_refresh_window.set_defaults(handler=_handle_compute_identity_refresh_window)
 
+    reduce_identity_refresh = subparsers.add_parser(
+        "reduce-identity-refresh",
+        help="Fail-closed reducer: merge one completed Daily Identity Refresh run and publish canonical silver once.",
+    )
+    _add_run_id_arg(reduce_identity_refresh)
+    reduce_identity_refresh.add_argument(
+        "--max-attempts", type=int, default=3,
+        help="Bounded reducer-only retry count for an ETag promotion conflict (default: 3).",
+    )
+    reduce_identity_refresh.set_defaults(handler=_handle_reduce_identity_refresh)
+
     acquire_identity_refresh_lease = subparsers.add_parser(
         "acquire-identity-refresh-lease",
         help=(
@@ -1064,6 +1079,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--candidate-manifest",
         default=None,
         help="Local or S3 JSON manifest containing the bounded release candidate accessions",
+    )
+    bootstrap_fundamentals.add_argument(
+        "--identity-refresh-run-id",
+        default=None,
+        help=(
+            "Daily Identity Refresh only: persist this explicit company-identity CIK batch as an "
+            "immutable delta; do not publish canonical silver. Must equal --run-id."
+        ),
     )
     bootstrap_fundamentals.add_argument(
         "--force",

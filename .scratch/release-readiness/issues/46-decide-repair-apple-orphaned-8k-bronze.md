@@ -1,8 +1,8 @@
 # 46 — Decide how to repair Apple's 45 orphaned earnings-8-K bronze objects
 
 Type: task
-Status: open
-Blocked by: 56
+Status: resolved
+Blocked by: none
 
 ## Question
 
@@ -57,3 +57,28 @@ prior SHA-256. No `bootstrap-fundamentals --mode per-filing` run was started.
 The one-byte repair is rejected and no shared immutability exception was added.
 Ticket 55 must establish the actual current-image content contract before a new
 operator repair decision can be made.
+
+## Unblocked (2026-08-01)
+
+The byte-exact direct-SEC capture implementation is now available. This ticket
+may proceed with its scoped Apple repair decision and verification; it must use
+that byte-preserving path and must not revive the rejected normalization
+exception or overwrite the preserved bronze objects without the chosen repair
+procedure.
+
+## Resolution (2026-08-01)
+
+The chosen repair is to retain the restored, byte-exact bronze objects as canonical and consume
+their registered raw/attachment artifacts; no normalization exception and no overwrite were
+introduced.  The remaining F5 failure was a separate consumer-selection defect: the
+per-filing workflow fed the primary Item 2.02 8-K to the earnings parser instead of its
+`EX-99.1` release attachment.
+
+After the targeted selection fix, unit regression, immutable-image deployment
+(`sha256:70cdc1c710d1a334a28e7c894f41db61a024baf61a3ddaa76029a937b2ea5e57`,
+`edgartools-prod-medium:104`), and direct Apple run
+`84eeed611ba64bc7a0cefbe92c5e826b`, the task exited 0 and wrote 44 Apple
+`sec_earnings_release` rows.  A read-only query of the newly uploaded canonical production
+silver database verifies accession `0000320193-19-000073` with FY2019 Q2,
+revenue $53.809B, net income $10.044B, and diluted EPS $2.18.  The preserved SEC bytes were
+used without mutating the 45 original bronze objects; this ticket is resolved.

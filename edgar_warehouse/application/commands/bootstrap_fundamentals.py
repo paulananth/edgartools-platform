@@ -70,6 +70,7 @@ def execute(args: Any) -> int:
     raw_cik_list: list[int] = getattr(args, "cik_list", None) or []
     mode: str = str(getattr(args, "mode", "per-filing") or "per-filing")
     run_id: str = str(getattr(args, "run_id", None) or str(uuid.uuid4()))
+    identity_refresh_run_id = str(getattr(args, "identity_refresh_run_id", None) or "")
     silver_root_override: str = getattr(args, "silver_root", None) or ""
     release_mode = bool(getattr(args, "release_mode", False))
     candidate_manifest = getattr(args, "candidate_manifest", None)
@@ -78,6 +79,12 @@ def execute(args: Any) -> int:
         return 2
     if release_mode and mode in ("entity-facts", "company-identity"):
         _err("bootstrap-fundamentals --release-mode is only valid for per-filing or thirteenf")
+        return 2
+    if identity_refresh_run_id and (mode != "company-identity" or not raw_cik_list):
+        _err("--identity-refresh-run-id requires company-identity mode with an explicit --cik-list")
+        return 2
+    if identity_refresh_run_id and identity_refresh_run_id != run_id:
+        _err("--identity-refresh-run-id must match --run-id")
         return 2
 
     candidate_manifest_rows: list[Any] | None = None
@@ -243,14 +250,15 @@ def execute(args: Any) -> int:
                 _sync_reference_data,
             )
             fetch_date = started_at.date()
-            reference_metrics = _sync_reference_data(
-                context=context,
-                db=db,
-                sync_run_id=run_id,
-                fetch_date=fetch_date,
-            )
-            metrics["reference_rows_written"] = reference_metrics["rows_written"]
-            metrics["reference_rows_skipped"] = reference_metrics["rows_skipped"]
+            if not identity_refresh_run_id:
+                reference_metrics = _sync_reference_data(
+                    context=context,
+                    db=db,
+                    sync_run_id=run_id,
+                    fetch_date=fetch_date,
+                )
+                metrics["reference_rows_written"] = reference_metrics["rows_written"]
+                metrics["reference_rows_skipped"] = reference_metrics["rows_skipped"]
             # artifact_policy/parser_policy default to "none": bronze submissions
             # capture + form-agnostic silver staging (sec_company,
             # sec_company_filing, sec_company_address, sec_company_former_name)
@@ -287,9 +295,37 @@ def execute(args: Any) -> int:
 
     db.close()
 
+    # A run-scoped Daily Identity Refresh persists only its immutable CIK delta.
+    # The dedicated reducer is the sole canonical publisher for that run.
+    if identity_refresh_run_id:
+        from pathlib import Path
+
+        from edgar_warehouse.application.identity_refresh_publication import persist_batch_outcome
+
+        image_identity = os.environ.get("WAREHOUSE_IMAGE_REF", "").strip()
+        if not image_identity:
+            _err("identity refresh batch requires WAREHOUSE_IMAGE_REF")
+            return 2
+        try:
+            outcome = persist_batch_outcome(
+                context.storage_root,
+                run_id=identity_refresh_run_id,
+                image_identity=image_identity,
+                ciks=cik_list,
+                delta_file=Path(context.silver_root.join("silver", "sec", "silver.duckdb")),
+            )
+            metrics["identity_refresh_delta"] = {
+                "batch_id": outcome["batch_id"],
+                "path": outcome["delta_path"],
+                "sha256": outcome["sha256"],
+            }
+        except Exception as exc:
+            _err(f"Failed to persist identity refresh batch delta: {exc}")
+            return 1
+
     # Upload the unified silver database to remote storage so later tasks can
     # consume the Branch A and Branch B tables from one consistent file.
-    if context.storage_root.root:
+    if context.storage_root.root and not identity_refresh_run_id:
         from edgar_warehouse.application.warehouse_orchestrator import (
             _publish_silver_database_if_remote,
         )

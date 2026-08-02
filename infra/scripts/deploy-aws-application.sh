@@ -970,6 +970,9 @@ environment_values = [
     {"name": "WAREHOUSE_BRONZE_ROOT", "value": f"s3://{bronze_bucket}/warehouse/bronze"},
     {"name": "WAREHOUSE_STORAGE_ROOT", "value": f"s3://{warehouse_bucket}/warehouse"},
     {"name": "WAREHOUSE_SILVER_ROOT", "value": "/tmp/edgar-warehouse-silver"},
+    # Bound into immutable Daily Identity Refresh plans and verified again by
+    # the reducer. This is the deployed ECR digest, never a mutable tag.
+    {"name": "WAREHOUSE_IMAGE_REF", "value": image_ref},
     {"name": "SNOWFLAKE_EXPORT_ROOT", "value": snowflake_export_root},
     {"name": "SERVING_EXPORT_ROOT", "value": snowflake_export_root},
 ]
@@ -2703,8 +2706,18 @@ else:
 
     per_batch_company_identity = ecs_state(wh_medium_arn,
         "States.Array('bootstrap-fundamentals', '--mode', 'company-identity', "
-        "'--cik-list', $.cik_list, '--run-id', $$.Execution.Name)",
+        "'--cik-list', $.cik_list, '--identity-refresh-run-id', $.identity_refresh_run_id, "
+        "'--run-id', $.identity_refresh_run_id)",
         is_end=True)
+
+    reduce_identity_refresh = ecs_state(wh_medium_arn,
+        "States.Array('reduce-identity-refresh', '--run-id', $$.Execution.Name, '--max-attempts', '3')",
+        next_state="RunWarehouseTask")
+    # The command performs the bounded reducer-only retry itself. Step
+    # Functions must not create an additional retry envelope with a different
+    # budget or accidentally re-enter Map work.
+    reduce_identity_refresh["Retry"] = [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 1,
+                                          "BackoffRate": 1.0, "MaxAttempts": 1}]
 
     stage0_company_identity_bounded = {
         "Type": "Map",
@@ -2719,13 +2732,21 @@ else:
                 "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_batches.jsonl', $$.Execution.Name)",
             },
         },
+        # ItemSelector is evaluated in the parent Map execution. Copy the
+        # parent daily-run identity into each child input before the
+        # DISTRIBUTED processor starts; inside a child, $$.Execution.Name is
+        # the child execution name and cannot address the parent's run plan.
+        "ItemSelector": {
+            "cik_list.$": "$$.Map.Item.Value.cik_list",
+            "identity_refresh_run_id.$": "$$.Execution.Name",
+        },
         "ItemProcessor": {
             "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
             "StartAt": "RunCompanyIdentityBatch",
             "States": {"RunCompanyIdentityBatch": per_batch_company_identity},
         },
         "ResultPath": None,
-        "Next": "RunWarehouseTask",
+        "Next": "ReduceIdentityRefresh",
     }
 
     # AdvBulkFetch stage (adv-fetch-pipeline-wiring spec, ticket 02 — ADV Pipeline map
@@ -2882,6 +2903,7 @@ else:
             "ComputeIdentityRefreshWindow": compute_identity_refresh_window,
             "ComputeIdentityBackstopUniverse": compute_identity_backstop_universe,
             "Stage0CompanyIdentityBounded": stage0_company_identity_bounded,
+            "ReduceIdentityRefresh": reduce_identity_refresh,
             "RunWarehouseTask": run_wh,
             "DatasetPeriodCheck":   dataset_period_check,
             "DatasetPeriodDefault": dataset_period_default,

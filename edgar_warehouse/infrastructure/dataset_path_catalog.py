@@ -333,6 +333,13 @@ class WarehousePathResolver:
                 "gold": self._render("manifest.default.gold.path", **default_tokens),
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }
+        if command_name == "reduce-identity-refresh":
+            # The reducer promotes canonical silver and records its run-scoped
+            # completion evidence; it does not capture bronze or build gold.
+            return {
+                "silver": self._render("manifest.default.silver.path", **default_tokens),
+                "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
+            }
         if command_name in ("compute-windows", "write-run-summary", "compute-identity-refresh-window"):
             # These commands write JSONL/JSON manifests to bronze; no gold or silver manifests.
             return {

@@ -892,6 +892,48 @@ class BranchBSourceReaderTests(unittest.TestCase):
         fake_db.fetch.assert_not_called()
         fake_db.merge_earnings_releases.assert_called_once()
 
+    def test_per_filing_uses_item_202_exhibit_for_apple_earnings_parser(self) -> None:
+        """Apple's 8-K cover is not the earnings statement; Exhibit 99.1 is."""
+        from edgar_warehouse.application.workflows.fundamentals_ingest import (
+            run_bootstrap_fundamentals_per_filing,
+        )
+
+        source = MagicMock()
+        source.fetch.side_effect = [
+            [{"accession_number": "0000320193-19-000073", "cik": 320193, "form": "8-K",
+              "filing_date": "2019-05-01", "items": "2.02"}],
+            [
+                {"raw_object_id": "primary", "is_primary": True,
+                 "document_name": "a8-kq320196292019.htm", "document_type": "8-K"},
+                {"raw_object_id": "earnings", "is_primary": False,
+                 "document_name": "a8-kexhibit991q320196292019.htm",
+                 "document_type": "EX-99.1"},
+            ],
+            [{"raw_object_id": "primary", "storage_path": "s3://bucket/primary.htm"}],
+            [{"raw_object_id": "earnings", "storage_path": "s3://bucket/ex99-1.htm"}],
+        ]
+        db = MagicMock()
+        db.merge_earnings_releases.return_value = 1
+        db.merge_executive_records.return_value = 0
+        db.merge_guidance_facts.return_value = 0
+        db.merge_guidance_fact_rejects.return_value = 0
+
+        parsed_contents: list[str] = []
+        def parser(*args, **kwargs):
+            parsed_contents.append(args[1])
+            return {"sec_earnings_release": [{"accession_number": args[0]}]}
+
+        with patch("edgar_warehouse.parsers.get_parser", return_value=parser), patch(
+            "edgar_warehouse.infrastructure.object_storage.read_bytes",
+            side_effect=[b"<html>8-K cover</html>", b"<table>Apple earnings</table>"],
+        ):
+            metrics = run_bootstrap_fundamentals_per_filing(
+                cik_list=[320193], source=source, db=db, sync_run_id="apple-f5",
+            )
+
+        self.assertEqual(parsed_contents, ["<table>Apple earnings</table>"])
+        self.assertEqual(metrics["rows_earnings_release"], 1)
+
     def test_release_per_filing_emits_accession_terminal_outcome(self) -> None:
         from edgar_warehouse.application.workflows.fundamentals_ingest import (
             run_bootstrap_fundamentals_per_filing,

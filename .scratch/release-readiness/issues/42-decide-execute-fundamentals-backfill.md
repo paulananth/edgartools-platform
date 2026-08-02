@@ -200,3 +200,28 @@ No `docs/release-readiness/fundamentals-backfill-evidence.json` written yet — 
 the operator decides how to split the remaining scope (see Recommendation above), since writing
 a "stage 1: PASS" evidence entry would misrepresent a mixed 1-pass/2-fail result as a clean gate
 pass.
+
+### F5 follow-up — Apple Exhibit 99.1 selection fixed and live-validated (2026-08-01)
+
+Ticket 56's byte-exact capture boundary registered the preserved Apple artifacts, but the
+per-filing reader still always handed the primary 8-K document to the earnings parser.  For
+Item 2.02 filings the earnings release is the `EX-99.1` attachment, so the parser was receiving
+the cover 8-K rather than the release.  The workflow now selects `EX-99.1` (also accepting the
+equivalent `EX-99.01` type) only for explicit Item 2.02 8-K earnings parsing; Item 5.02 parsing
+continues to use the primary document.  A focused unit regression uses Apple accession
+`0000320193-19-000073` and proves that the exhibit bytes, not the primary bytes, reach the
+earnings parser.
+
+The immutable warehouse image
+`sha256:70cdc1c710d1a334a28e7c894f41db61a024baf61a3ddaa76029a937b2ea5e57` was deployed as
+`edgartools-prod-medium:104`.  Direct ECS run
+`84eeed611ba64bc7a0cefbe92c5e826b` (`bootstrap-fundamentals --mode per-filing --cik-list
+320193`) exited 0: 118 filings scanned, 75 parsed, 43 skipped, and **44
+`sec_earnings_release` rows written**.  The fresh canonical production `silver.duckdb` upload
+(2026-08-01 11:47:40 UTC) contains the known Apple release row:
+
+`0000320193-19-000073 | FY2019 Q2 | 2019-06-29 | revenue_gaap=53,809,000,000 |
+net_income_gaap=10,044,000,000 | eps_gaap_diluted=2.18`.
+
+F5's Apple smoke-test criterion is now met.  Ticket 42 remains claimed because the sample/full
+backfill rollout decision and the independent F11 source-design gap remain unresolved.
