@@ -92,7 +92,8 @@ comparison) would have left the 452,996-row materialization/lookup cost in place
 confirmed via `warehouse_orchestrator.py:5161-5180` and a repo-wide grep finding no code path
 reads this column as a staleness signal, so skipping its write on a no-op row is safe.
 
-Implemented on branch `claude/fix-silver-merge-authority-column-noise`.
+Implemented on branch `claude/fix-silver-merge-authority-column-noise` — PR #330
+(https://github.com/paulananth/edgartools-platform/pull/330), open, not yet merged/deployed.
 
 ## Done when
 
