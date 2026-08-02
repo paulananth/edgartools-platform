@@ -93,7 +93,15 @@ confirmed via `warehouse_orchestrator.py:5161-5180` and a repo-wide grep finding
 reads this column as a staleness signal, so skipping its write on a no-op row is safe.
 
 Implemented on branch `claude/fix-silver-merge-authority-column-noise` — PR #330
-(https://github.com/paulananth/edgartools-platform/pull/330), open, not yet merged/deployed.
+(https://github.com/paulananth/edgartools-platform/pull/330), merged to `main` as `4e78725d`
+(squash). CI green (Application/MDM/Unit py3.11+py3.12/Shell lint/dbt compile all pass). **Not
+yet deployed to prod** — the currently-deployed warehouse image predates this commit; a fresh
+`daily-incremental`/`daily-identity-refresh` execution against the new image is still needed to
+supply the real production timing evidence tickets 49/61/63 are waiting on. The prior stalled
+execution (`daily-incremental-postdeploy-1785701660`) was manually stopped (superseded, still
+running old code) and its `pipeline_run_lease` explicitly released via
+`release-identity-refresh-lease --run-id daily-incremental-postdeploy-1785701660` (exit 0) so it
+doesn't block the next run.
 
 ## Done when
 
