@@ -5628,6 +5628,12 @@ def _resolve_scope(
             "batch_size": int(arguments.get("batch_size") or 500),
         }
 
+    if command_name == "reduce-identity-refresh":
+        return {
+            "run_id": arguments.get("run_id"),
+            "max_attempts": int(arguments.get("max_attempts") or 3),
+        }
+
     if command_name == "write-run-summary":
         return {
             "from_windows_key": arguments.get("from_windows_key"),

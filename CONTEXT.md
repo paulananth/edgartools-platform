@@ -240,6 +240,14 @@ _Avoid_: Hand-authored manifest, automatic approval
 A verified signed Git tag on the evidence commit containing the finalized GO manifest.
 _Avoid_: Branch-tip approval, unsigned tag
 
+**Operational Forensics Window**:
+The seven-day period for which production CloudWatch execution and workflow logs remain directly queryable; durable run manifests and release evidence, not indefinite log retention, carry longer-lived proof.
+_Avoid_: Treating CloudWatch logs as permanent evidence, retaining routine logs for 30 days by default
+
+**Rollback Image Set**:
+The current production image, the two most recent verified successful rollback images, and any additional image referenced by a currently running task; only this explicit set is protected from repository cleanup.
+_Avoid_: Treating every registered task-definition revision as rollback intent, deleting a running-task image, unbounded tagged-image retention
+
 **Release Authority Registry**:
 The authoritative roster of identities allowed to attest release roles and seal a release; a Candidate Evidence Set cannot authorize its own approvers.
 _Avoid_: Self-authorized signer, manifest-local trust list, unpinned approver roster
