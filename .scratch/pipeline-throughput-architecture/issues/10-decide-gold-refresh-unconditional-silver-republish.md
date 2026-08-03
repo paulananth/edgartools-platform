@@ -52,3 +52,34 @@ A decision -- skip it (and under what precise safe condition), or leave
 the unconditional merge as the deliberate safety mechanism it appears to
 be -- backed by understanding the concurrency scenario the no-force design
 protects against, not just the time savings.
+
+## Sharper root cause found (2026-08-03, answering a direct user question)
+
+Traced the actual merge mechanics rather than just the timing:
+`merge_candidate_into_canonical` (`silver_protection.py:548`) only pulls
+candidate data into the published output for tables in
+`PROTECTED_TABLE_REGISTRY` -- the real business tables. `gold-refresh`
+never writes to any of those; it only reads them.
+
+The only tables `gold-refresh` *does* write locally --
+`pipeline_run`/`sec_sync_run` (via `complete_pipeline_run`/
+`complete_sync_run`) -- are in `EXCLUDED_OPERATIONAL_TABLES`
+(`silver_protection.py:253-271`), which the merge loop **never touches at
+all**. The output file starts as `shutil.copy2(canonical_path,
+output_path)` -- a copy of canonical, not of gold-refresh's local
+candidate -- so those excluded-table writes just sit in a discarded local
+temp file and never reach canonical. A separate JSON `run_manifest` is
+written to S3 independently and appears to be the actual durable run
+record.
+
+**This changes the question**: it's not "should we skip the merge when
+this run happens to be unchanged" (implying it's sometimes needed) --
+gold-refresh's silver-publish step moves **zero bytes of real content on
+every single run, by construction**, since neither its reads (business
+tables, correctly one-directional per the user's stated requirement:
+silver -> gold/MDM/neo4j) nor its local writes (excluded operational
+tables) can ever survive this step's own merge semantics. The remaining
+open question narrows to: is there *any* other reason this step needs to
+run for `gold-refresh` specifically (e.g. does anything downstream expect
+`gold-refresh` to have touched canonical silver's ETag/version, even
+without content change?), or can it be skipped outright for this command.
