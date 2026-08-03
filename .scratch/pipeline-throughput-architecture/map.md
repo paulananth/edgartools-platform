@@ -57,6 +57,8 @@ executes the micro-fixes this map's evidence builds on.
 
 8. [Decide gold-refresh fan-out](issues/08-decide-gold-refresh-fanout.md) — resolved (grilling): **no fan-out**. Modeled with ticket 07's real numbers adjusted for ticket 10's fix: post-fix baseline ~108.5s, of which ~52.7s (hydration + setup + container overhead) is fixed per task and doesn't shrink with more tasks — only the 55.77s table build divides. Best realistic case (~N=4-6) is ~39-43% faster (~62-67s), before accounting for real ECS/Fargate task-launch latency eating into that further. Real but modest savings against genuine new complexity (Distributed Map, per-task hydration, N-way partial-output reconciliation) for a command that was never the actual bottleneck this map exists to fix.
 
+9. [Decide cross-command SEC fetch mutual exclusion](issues/09-decide-cross-command-sec-fetch-mutual-exclusion.md) — resolved (grilling): **hard mutual exclusion**. Ruled out "accept the risk" with real data, not judgment — found `bootstrap` and `daily-incremental` actually overlapped for **4.16 hours** in prod on 2026-07-30, both jointly over SEC's ceiling. Chose hard exclusion over a shared rate budget: reuse the existing `pipeline_run_lease` primitive under a new shared lease name, same reasoning ticket 03 used to avoid building new distributed coordination. Scope: the 5 commands from ticket 06. Accepted tradeoff: commands wait for each other. Implementation split to [release-readiness ticket 80](../../release-readiness/issues/80-implement-cross-command-sec-fetch-lease.md).
+
 ## Not yet specified
 
 - Whether the underlying storage model -- one DuckDB file per silver
