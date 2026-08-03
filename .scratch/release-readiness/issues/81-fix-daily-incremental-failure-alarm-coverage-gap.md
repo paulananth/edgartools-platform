@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: in_progress
 
 ## Question
 
@@ -86,3 +86,37 @@ ticket 49's territory.
 - The orphaned `sec-edgar-pipeline-failure` alarm is either deleted or
   repointed at a real, existing state machine — operator's call, recorded here.
 - Confirmed live (not just planned) via `aws cloudwatch describe-alarms`.
+
+## Progress (2026-08-03) — code + tests done, live deploy not yet run
+
+Implemented move 1 (new `ExecutionsFailed` alarm): `configure_daily_incremental_alarms`
+in `infra/scripts/deploy-aws-application.sh` now creates/deletes a second alarm,
+`${NAME_PREFIX}-daily-incremental-failed` (`AWS/States` `ExecutionsFailed` metric, same
+`StateMachineArn` dimension, same `sec-edgar-pipeline-alerts` topic, same
+`require_confirmed_operator_alert_topic` guard, same off-by-default
+`--configure-daily-incremental-alarms enable|disable` flag) -- mirrors the existing
+timeout alarm exactly, one call handles both now. `disable` deletes both alarms in one
+`cloudwatch delete-alarms` call.
+
+Extended `tests/architecture/test_daily_incremental_alarm_controls.py`:
+`test_enable_creates_the_execution_failure_alarm` (new) and
+`test_disable_deletes_both_alarms` (renamed/extended from the timeout-only version) --
+confirmed to fail against pre-fix code (3 of 5 tests fail: no `-failed` alarm created,
+disable only deletes one alarm). `test_enable_creates_the_timeout_alarm` was extended to
+assert both alarm names appear across the enable calls. Full
+`tests/unit`+`tests/application`+`tests/architecture` suite: 1274 passed, 4 skipped, same
+pre-existing unrelated `test_go_live_wizard.py` failure noted on tickets 75/76.
+
+**Not yet done (both require a live prod AWS action, deliberately deferred for explicit
+confirmation per this repo's destructive/shared-system-change convention):**
+- Running `deploy-aws-application.sh --env prod --configure-daily-incremental-alarms
+  enable --operator-alert-topic-arn arn:aws:sns:us-east-1:690839588395:sec-edgar-pipeline-alerts`
+  to actually create the new `edgartools-prod-daily-incremental-failed` alarm live (the
+  existing timeout alarm will be re-put with identical parameters -- idempotent, no-op
+  in effect).
+- Move 2 (orphaned `sec-edgar-pipeline-failure` alarm): recommend **delete**, not
+  repoint -- it references a state machine (`sec-edgar-bronze-ingest`) that no longer
+  exists at all, and repointing it at `edgartools-prod-daily-incremental` would just
+  duplicate the new `-failed` alarm's `ExecutionsFailed` coverage under a stale name.
+  Not yet executed -- a live `aws cloudwatch delete-alarms` against prod, same
+  confirm-before-executing convention as the new alarm's deploy.

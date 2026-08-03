@@ -76,6 +76,7 @@ def test_enable_creates_the_timeout_alarm() -> None:
     calls = [call for call in _run("enable") if call[:2] == ["cloudwatch", "put-metric-alarm"]]
     assert {_arg(call, "--alarm-name") for call in calls} == {
         "edgartools-prod-daily-incremental-timeout",
+        "edgartools-prod-daily-incremental-failed",
     }
     by_name = {_arg(call, "--alarm-name"): call for call in calls}
     timeout = by_name["edgartools-prod-daily-incremental-timeout"]
@@ -88,11 +89,25 @@ def test_enable_creates_the_timeout_alarm() -> None:
     ) in timeout
 
 
-def test_disable_deletes_the_timeout_alarm() -> None:
+def test_enable_creates_the_execution_failure_alarm() -> None:
+    calls = [call for call in _run("enable") if call[:2] == ["cloudwatch", "put-metric-alarm"]]
+    by_name = {_arg(call, "--alarm-name"): call for call in calls}
+    failed = by_name["edgartools-prod-daily-incremental-failed"]
+    assert _arg(failed, "--namespace") == "AWS/States"
+    assert _arg(failed, "--metric-name") == "ExecutionsFailed"
+    assert _arg(failed, "--alarm-actions") == _TOPIC_ARN
+    assert (
+        "Name=StateMachineArn,Value=arn:aws:states:us-east-1:690839588395:"
+        "stateMachine:edgartools-prod-daily-incremental"
+    ) in failed
+
+
+def test_disable_deletes_both_alarms() -> None:
     calls = [call for call in _run("disable") if call[:2] == ["cloudwatch", "delete-alarms"]]
     assert len(calls) == 1
     assert set(calls[0][calls[0].index("--alarm-names") + 1 :]) == {
         "edgartools-prod-daily-incremental-timeout",
+        "edgartools-prod-daily-incremental-failed",
     }
 
 
