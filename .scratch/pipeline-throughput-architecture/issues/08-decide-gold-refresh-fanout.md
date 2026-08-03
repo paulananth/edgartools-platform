@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: resolved
 
 Blocked by: 07
 
@@ -28,3 +28,34 @@ operational-cost caveat ticket 04 raised).
 A decision -- fan out or not, and if so, at what granularity (how many
 tasks, how tables get grouped/assigned) -- backed by ticket 07's measured
 breakdown, not estimation.
+
+## Answer (2026-08-03, grilling with user)
+
+**No fan-out. Leave gold-refresh as a single sequential task.**
+
+Modeled the tradeoff using ticket 07's real breakdown, adjusted for
+[ticket 10](10-decide-gold-refresh-unconditional-silver-republish.md)'s
+fix (which removes the 60.65s no-op publish entirely, not just shrinks
+it). Post-fix baseline: hydration (13.78s) + setup (7.58s) + table build
+(55.77s) + container overhead (31.34s) ~= 108.5s total. The problem for
+fan-out: hydration, setup, and container overhead (~52.7s combined) are
+**fixed per task** -- every additional parallel task re-downloads the full
+1021.9MB canonical file and re-pays its own container startup; only the
+55.77s table build actually divides. Theoretical best case at N=4 tasks:
+~66.6s (39% faster); N=6: ~62.0s (43% faster) -- and that ignores real
+ECS/Fargate task-launch latency (10-30s observed elsewhere this session),
+which erodes the gain further and worsens with higher N. Diminishing
+returns arrive fast: past ~4-6 tasks, the single largest table
+(`fact_adv_private_fund`, 8.19s) plus fixed overhead sets a floor around
+60s regardless of task count.
+
+**Verdict**: real but modest savings (~35-45s off an already-sub-2-minute
+task) against genuine new complexity -- a Distributed Map state, per-task
+silver hydration, and reconciling N tasks' partial gold-table outputs into
+one consistent manifest, with more partial-failure/retry surface. Unlike
+`daily-incremental` (the actual ~3.5-hour runtime that motivated this
+whole map), `gold-refresh` was never the bottleneck this workstream was
+chasing. User agreed with this recommendation.
+
+No implementation ticket needed -- this is a "leave it" verdict, same
+shape as [ticket 05](05-decide-silver-merge-storage-path.md).
