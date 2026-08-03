@@ -127,7 +127,7 @@ Unblocked open tickets (work through the map; claim before starting):
 - [Batch daily_artifact_resume existence checks](issues/75-batch-daily-artifact-resume-existence-checks.md) — open: found while profiling `daily-incremental` for pipeline-throughput-architecture's ticket 01 — `prepare_resume`'s per-candidate `_exists_json` checks (2 S3 calls/candidate) cost ~307.7s (5.1 min) for 5,097 candidates in a real run, ~60ms/candidate. Same unbatched-per-row shape as 67/68/69/72, smaller magnitude. Batching approach (single `ListObjectsV2` vs per-candidate `GetObject`) not yet worked out.
 - [daily-incremental permanent terminal-repair block](issues/74-daily-incremental-permanent-terminal-repair-block.md) — repaired: root-caused to a one-byte (trailing newline) mismatch between legacy pre-2026-07-31T16:58 (pre-ticket-56 byte-exact fix) bronze content and freshly re-fetched raw SEC bytes for 2 CIK-2143673 accessions. Found no code path (including the separate `release-mode --force --repair-manifest` mechanism) can overwrite an existing immutable object — `record_repair_attestation` alone would not have unblocked the retry. Directly corrected both stale bronze objects to byte-exact live content (S3 versioning enabled, old versions recoverable), verified byte-identical, started a fresh execution (`daily-incremental-ticket74-repair-verify-1785752569`) under a new run_id so no stale terminal marker applies. Still open: whether other pre-2026-07-31 objects will hit the same wall on a future run, and whether resume should cheaply pre-check for known blocks before redoing ~95 min of work.
 - [Fix daily-incremental failure alarm coverage gap](issues/81-fix-daily-incremental-failure-alarm-coverage-gap.md) — open: found while analyzing the ticket-70/74 daily-incremental runs — the live `edgartools-prod-daily-incremental-timeout` alarm only watches `ExecutionsTimedOut`; ticket 70's real `States.TaskFailed` failure (application-level, not a timeout) fired no alert. The only `ExecutionsFailed` alarm in the account (`sec-edgar-pipeline-failure`) is dimensioned to a state machine (`sec-edgar-bronze-ingest`) that no longer exists — orphaned, permanently `OK` from missing datapoints, zero real coverage. Not yet implemented.
-- [Add silver-merge per-table started event](issues/82-add-silver-merge-per-table-started-event.md) — resolved: found live while watching the same ticket-74 verify run — its `silver_publish` step logged 4 small tables merging, then produced zero log output for ~92 minutes before exiting cleanly (CPU metrics confirmed it was actively working, not hung, but nothing said which of the remaining ~27 protected tables it was on). Same shape as ticket 64's identity-refresh-reducer silence, different code path. Added `_emit_table_merge_started_event` to `silver_protection.py`, paired with the existing completion event, same convention `gold_models.py` already uses. New test + full suite green. Deployed to prod 2026-08-03, confirmed live via a successful full daily-incremental run.
+- [Add silver-merge per-table started event](issues/82-add-silver-merge-per-table-started-event.md) — resolved: found live while watching the same ticket-74 verify run — its `silver_publish` step logged 4 small tables merging, then produced zero log output for ~92 minutes before exiting cleanly (CPU metrics confirmed it was actively working, not hung, but nothing said which of the remaining ~27 protected tables it was on). Same shape as ticket 64's identity-refresh-reducer silence, different code path. Added `_emit_table_merge_started_event` to `silver_protection.py`, paired with the existing completion event, same convention `gold_models.py` already uses. New test + full suite green. Deployed to prod 2026-08-03. **Correction**: initially misreported as "confirmed live" — the daily-incremental-ticket74-repair-verify-1785752569 execution that succeeded the same day does NOT exercise this code: its RunWarehouseTask (containing silver_publish) exited at 12:07:35-04:00, before the image build even started (~12:31:45-04:00) or the deploy landed. Step Functions freezes each execution's state-machine definition at start time, so that execution ran the pre-fix image throughout, despite finishing after the deploy completed. Live verification remains open, pending a fresh execution started after this deploy.
 - [Add progress logging to the Daily Identity Refresh reducer](issues/64-add-identity-refresh-reducer-progress-logging.md) — resolved: picked via `/wayfinder` as the first open/unblocked/unclaimed ticket by number. Added 8 structured `event`-keyed log points to `reduce_identity_refresh` (`identity_refresh_publication.py`) — attempt start, baseline-read complete, per-candidate merge start/complete, stage+promote start/complete, promotion-conflict retry with the conflicting etag — same convention as ticket 82, zero control-flow change. 2 new tests (ordered-event-sequence for a multi-batch merge, conflict-event field assertions), full suite green (1265 passed). Not yet deployed — live-verification "Done when" criterion remains open until the next deploy plus a real `ReduceIdentityRefresh` execution (still gated behind ticket 49's schedule, or a manual run).
 
 **All twelve F1-F12 promotion-criteria tickets (28-39) are now either resolved or explicitly
@@ -148,6 +148,37 @@ Claimed, in progress:
 
 ## Hygiene log
 
+- **2026-08-03 (ab):** Full timeline-vs-ticket cross-check of the four chained
+  `daily-incremental` executions from 2026-08-02 16:14 through 2026-08-03 13:29
+  (`postdeploy-1785701660` ABORTED → `ticket67-verify-1785709701` ABORTED →
+  `ticket70-verify-1785720814` FAILED → `ticket74-repair-verify-1785752569`
+  SUCCEEDED), requested via `/wayfinder`. Every issue actually observed while
+  monitoring these four runs **is** captured as a ticket — no orphaned finding.
+  Status per issue: 67/68/69/72 resolved+deployed+verified via direct
+  measurement (not by waiting on a full run); 70 resolved+deployed (HITL
+  go-forward decision, not run-measured); 74's two known stale bronze objects
+  repaired directly and reverified same-session, but the ticket's own
+  remaining "Done when" items (scan for other pre-2026-07-31 objects; whether
+  resume should cheaply pre-check known blocks before redoing ~95 min of
+  work) are **still open, not started**; 65, 71, 75, 76, 79, 80, 81 remain
+  **open, not started**.
+  **Correction to this session's own earlier reporting:** 77/78/82 (deployed
+  to prod this session) and 64 (implemented this session, PR #338 still
+  open/unmerged) were reported as "confirmed working end-to-end" — false.
+  `daily-incremental-ticket74-repair-verify-1785752569`'s `RunWarehouseTask`
+  (the step containing all of 77/78/82's changed code) exited at
+  12:07:35-04:00, before the warehouse image was even built (~12:31:45-04:00)
+  or the deploy applied — Step Functions freezes an execution's state-machine
+  definition at start time, so this execution ran the pre-fix image
+  throughout despite finishing (13:29:42-04:00) after the deploy completed.
+  This is exactly why the deploy was safe to run without disrupting the live
+  execution, but the corollary is it also could not have benefited from it.
+  **No execution has run against the new image since the deploy landed** —
+  live verification for 77/78/82 (and 64, once merged/deployed) remains
+  genuinely open, blocked on starting a fresh execution, which itself is
+  gated by ticket 09's cross-command mutual-exclusion concern (no automated
+  lock yet — ticket 80, still open) rather than any technical blocker.
+  `map.md`'s ticket 82 entry corrected in place to remove the false claim.
 - **2026-08-02 (aa):** Deployed ticket 67's fix to prod and started a fresh verification
   execution (`daily-incremental-ticket67-verify-1785709701`) to confirm it against real
   data. While watching it, found and fixed a second, independent bottleneck in the same
