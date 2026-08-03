@@ -44,7 +44,7 @@ executes the micro-fixes this map's evidence builds on.
 
 ## Decisions so far
 
-(none yet)
+- [Research SEC rate-limit headroom](issues/02-research-sec-rate-limit-headroom.md) — SEC's published ceiling is a flat 10 req/sec with no burst allowance, framed per-operator "regardless of machines used" (10-min cooldown on violation); the in-process limiter is a hardcoded 9 req/sec/task (no env override); prod's `network_runtime` Terraform module has no NAT gateway at all -- ECS tasks run in public subnets with `AssignPublicIp: ENABLED`, so concurrent tasks get distinct public IPs, not a shared NAT IP.
 
 ## Not yet specified
 
