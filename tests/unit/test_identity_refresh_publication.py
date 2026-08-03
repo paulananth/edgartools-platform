@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import shutil
 from pathlib import Path
 
@@ -158,3 +159,111 @@ def test_promotion_conflict_retries_only_the_reducer_with_same_delta(tmp_path: P
     assert completed["reducer"]["attempt"] == 2
     assert promotion_attempts == 2
     assert merge_inputs == [b"batch", b"batch"]
+
+
+def _events_from_stderr(capsys: pytest.CaptureFixture) -> list[dict]:
+    lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
+    return [json.loads(line) for line in lines]
+
+
+def test_reducer_emits_progress_events_in_order_for_a_multi_batch_merge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """Ticket 64: reduce_identity_refresh previously emitted zero log output
+    for its entire runtime -- a real prod ReduceIdentityRefresh task ran 17+
+    minutes with CloudWatch reporting storedBytes: 0, indistinguishable from
+    hung without reading the source. This asserts the reducer now emits the
+    named started/completed events, in order, for every stage across a
+    multi-batch merge."""
+    storage = StorageLocation(str(tmp_path / "warehouse"))
+    reference = tmp_path / "reference.duckdb"
+    delta_a = tmp_path / "batch-a.duckdb"
+    delta_b = tmp_path / "batch-b.duckdb"
+    reference.write_bytes(b"reference")
+    delta_a.write_bytes(b"batch-a")
+    delta_b.write_bytes(b"batch-b")
+    persist_run_manifest(
+        storage, run_id="run-1", image_identity="sha256:image", reference_snapshot_file=reference,
+        batches=[[100], [200]],
+    )
+    persist_batch_outcome(storage, run_id="run-1", image_identity="sha256:image", ciks=[100], delta_file=delta_a)
+    persist_batch_outcome(storage, run_id="run-1", image_identity="sha256:image", ciks=[200], delta_file=delta_b)
+
+    def fake_merge(candidate: Path, canonical: Path, output: Path):
+        shutil.copy2(canonical, output)
+        return type("Result", (), {"tables_merged": ("sec_company",)})()
+
+    monkeypatch.setattr("edgar_warehouse.application.identity_refresh_publication.merge_candidate_into_canonical", fake_merge)
+    capsys.readouterr()  # discard any setup output
+    reduce_identity_refresh(storage, run_id="run-1", image_identity="sha256:image")
+    events = _events_from_stderr(capsys)
+
+    batch_a_id = batch_id_for_ciks([100])
+    batch_b_id = batch_id_for_ciks([200])
+    assert [e["event"] for e in events] == [
+        "identity_refresh_attempt_started",
+        "identity_refresh_baseline_read_completed",
+        "identity_refresh_candidate_merge_started",
+        "identity_refresh_candidate_merge_completed",
+        "identity_refresh_candidate_merge_started",
+        "identity_refresh_candidate_merge_completed",
+        "identity_refresh_stage_and_promote_started",
+        "identity_refresh_stage_and_promote_completed",
+    ]
+    assert all(e["run_id"] == "run-1" for e in events)
+    attempt_started = events[0]
+    assert attempt_started["attempt"] == 1
+    assert attempt_started["max_attempts"] == 3
+    baseline_read = events[1]
+    assert baseline_read["canonical_exists"] is False
+    assert baseline_read["byte_size"] == len(b"reference")
+    merge_started_a, merge_completed_a, merge_started_b, merge_completed_b = events[2:6]
+    assert merge_started_a["batch_id"] == batch_a_id
+    assert merge_completed_a["batch_id"] == batch_a_id
+    assert merge_completed_a["tables_merged"] == ["sec_company"]
+    assert merge_started_b["batch_id"] == batch_b_id
+    assert merge_completed_b["batch_id"] == batch_b_id
+    stage_started, stage_completed = events[6:8]
+    assert stage_started["byte_size"] == len(b"reference")
+    assert "staged_path" in stage_completed
+    assert "result_etag" in stage_completed
+
+
+def test_reducer_emits_promotion_conflict_event_with_conflicting_etag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    storage = StorageLocation(str(tmp_path / "warehouse"))
+    reference = tmp_path / "reference.duckdb"
+    delta = tmp_path / "batch.duckdb"
+    reference.write_bytes(b"reference")
+    delta.write_bytes(b"batch")
+    persist_run_manifest(storage, run_id="run-1", image_identity="sha256:image", reference_snapshot_file=reference, batches=[[100]])
+    persist_batch_outcome(storage, run_id="run-1", image_identity="sha256:image", ciks=[100], delta_file=delta)
+
+    def fake_merge(candidate: Path, canonical: Path, output: Path):
+        shutil.copy2(canonical, output)
+        return type("Result", (), {"tables_merged": ()})()
+
+    original_promote = StorageLocation.promote_staged
+    promotion_attempts = 0
+
+    def conflict_once(self: StorageLocation, staged: str, canonical: str, *, expected_etag: str | None):
+        nonlocal promotion_attempts
+        promotion_attempts += 1
+        if promotion_attempts == 1:
+            raise PromotionConflictError(canonical, expected_etag, "newer-etag", staged)
+        return original_promote(self, staged, canonical, expected_etag=expected_etag)
+
+    monkeypatch.setattr("edgar_warehouse.application.identity_refresh_publication.merge_candidate_into_canonical", fake_merge)
+    monkeypatch.setattr(StorageLocation, "promote_staged", conflict_once)
+    capsys.readouterr()
+    reduce_identity_refresh(storage, run_id="run-1", image_identity="sha256:image", max_attempts=2)
+    events = _events_from_stderr(capsys)
+
+    conflict_events = [e for e in events if e["event"] == "identity_refresh_promotion_conflict"]
+    assert len(conflict_events) == 1
+    assert conflict_events[0]["attempt"] == 1
+    assert conflict_events[0]["max_attempts"] == 2
+    assert conflict_events[0]["conflicting_etag"] == "newer-etag"
+    # A second full attempt cycle followed the conflict.
+    assert [e["event"] for e in events].count("identity_refresh_attempt_started") == 2

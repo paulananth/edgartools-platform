@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 import tempfile
+import time
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +28,20 @@ from edgar_warehouse.silver_protection import merge_candidate_into_canonical
 
 _SHA256_LENGTH = 64
 _RUN_PREFIX = "identity_refresh/runs"
+
+
+def _emit_reducer_event(event: str, *, run_id: str, **fields: Any) -> None:
+    """Structured per-stage log event for `reduce_identity_refresh`, matching
+    this codebase's existing `event`-keyed JSON logging convention (e.g.
+    gold_models.py's gold_table_started/completed, silver_protection.py's
+    silver_table_merge_started/silver_table_merged). Before this, the
+    reducer emitted zero output for its entire runtime -- a real prod
+    ReduceIdentityRefresh task ran 17+ minutes with `describe-log-streams`
+    reporting storedBytes: 0, indistinguishable from hung without reading
+    the source. Printed to stderr (not stdout) so it never collides with
+    reduce_identity_refresh.py's single final stdout JSON result line.
+    """
+    print(json.dumps({"event": event, "run_id": run_id, **fields}), file=sys.stderr, flush=True)
 
 
 @dataclass(frozen=True)
@@ -190,20 +206,42 @@ def reduce_identity_refresh(
 
     canonical_relative = "silver/sec/silver.duckdb"
     for attempt in range(1, max_attempts + 1):
+        _emit_reducer_event(
+            "identity_refresh_attempt_started", run_id=run_id, attempt=attempt, max_attempts=max_attempts
+        )
         baseline = storage_root.read_object_version(canonical_relative)
         try:
             with tempfile.TemporaryDirectory(prefix="identity-refresh-reducer-") as tmp:
                 tmp_path = Path(tmp)
                 current = tmp_path / "canonical.duckdb"
                 if baseline.exists:
-                    current.write_bytes(read_bytes(storage_root.join(canonical_relative)))
+                    baseline_payload = read_bytes(storage_root.join(canonical_relative))
+                    current.write_bytes(baseline_payload)
                     candidates = [("reference", str(reference["path"]))] + [(item.batch_id, item.delta_path) for item in inputs]
                 else:
-                    current.write_bytes(_read_verified(storage_root, str(reference["path"]), str(reference["sha256"])))
+                    baseline_payload = _read_verified(storage_root, str(reference["path"]), str(reference["sha256"]))
+                    current.write_bytes(baseline_payload)
                     candidates = [(item.batch_id, item.delta_path) for item in inputs]
+                _emit_reducer_event(
+                    "identity_refresh_baseline_read_completed",
+                    run_id=run_id,
+                    attempt=attempt,
+                    canonical_exists=baseline.exists,
+                    byte_size=len(baseline_payload),
+                    etag=baseline.etag,
+                )
                 merge_order: list[str] = []
                 tables_merged: list[str] = []
                 for index, (label, relative) in enumerate(candidates):
+                    _emit_reducer_event(
+                        "identity_refresh_candidate_merge_started",
+                        run_id=run_id,
+                        attempt=attempt,
+                        batch_id=label,
+                        candidate_index=index,
+                        candidate_count=len(candidates),
+                    )
+                    merge_started_at = time.monotonic()
                     candidate = tmp_path / f"candidate-{index}.duckdb"
                     expected_sha = str(reference["sha256"]) if label == "reference" else next(item.sha256 for item in inputs if item.batch_id == label)
                     candidate.write_bytes(_read_verified(storage_root, relative, expected_sha))
@@ -212,10 +250,42 @@ def reduce_identity_refresh(
                     current = merged
                     merge_order.append(label)
                     tables_merged.extend(result.tables_merged)
+                    _emit_reducer_event(
+                        "identity_refresh_candidate_merge_completed",
+                        run_id=run_id,
+                        attempt=attempt,
+                        batch_id=label,
+                        tables_merged=list(result.tables_merged),
+                        elapsed_seconds=time.monotonic() - merge_started_at,
+                    )
                 payload = current.read_bytes()
+            _emit_reducer_event(
+                "identity_refresh_stage_and_promote_started",
+                run_id=run_id,
+                attempt=attempt,
+                byte_size=len(payload),
+                baseline_etag=baseline.etag,
+            )
+            stage_promote_started_at = time.monotonic()
             staged_relative = storage_root.write_staged_bytes(canonical_relative, payload)
             promotion = storage_root.promote_staged(staged_relative, canonical_relative, expected_etag=baseline.etag)
-        except PromotionConflictError:
+            _emit_reducer_event(
+                "identity_refresh_stage_and_promote_completed",
+                run_id=run_id,
+                attempt=attempt,
+                staged_path=staged_relative,
+                result_etag=promotion.new_version.etag,
+                elapsed_seconds=time.monotonic() - stage_promote_started_at,
+            )
+        except PromotionConflictError as exc:
+            _emit_reducer_event(
+                "identity_refresh_promotion_conflict",
+                run_id=run_id,
+                attempt=attempt,
+                max_attempts=max_attempts,
+                expected_etag=exc.expected_etag,
+                conflicting_etag=exc.actual_etag,
+            )
             if attempt == max_attempts:
                 raise
             continue
