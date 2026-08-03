@@ -85,6 +85,51 @@ in place, not repaired -- repairing them (writing valid
 `record_repair_attestation` payloads) is a decision for whoever picks up this
 ticket, not something to do silently mid-investigation.
 
+## Repair performed (2026-08-03, explicit user instruction)
+
+Traced why `record_repair_attestation` alone would **not** have been
+sufficient: `prepare_resume` moving an attested accession from
+`repair_required` back to `pending` only re-admits it into the artifact-fetch
+loop -- the loop still calls `fetch_filing_artifacts` -> `_write_raw_artifact`
+-> `write_immutable_bytes` unconditionally on the retry, which would hit the
+exact same byte mismatch and fail identically again. Confirmed via code
+reading (`bronze_filing_artifacts.py:346`, `object_storage.py:265-339`) that
+**no code path in this repository can overwrite an existing immutable
+object** -- not even the separate `release-mode --force --repair-manifest`
+mechanism (`bootstrap-batch`'s CLI-exposed repair path), which also routes
+through `write_immutable_bytes` and would hit the identical error. The
+attestation mechanism only records operator sign-off that a conflict is
+understood; it was never wired to actually change the stored bytes.
+
+Given that, the only correct fix was to correct the stale bytes directly:
+
+1. Re-verified both accessions have exactly one document each (`aws s3 ls
+   --recursive` under each accession prefix) -- no other attachments at risk.
+2. Confirmed the bronze bucket (`edgartools-prod-bronze-690839588395`) has S3
+   versioning **enabled** -- an overwrite is recoverable, not destructive.
+   Recorded pre-repair version IDs for both objects before touching them
+   (`cKRJt30JV_em3XjdlfFp41IGqaQurpt9`, `kh0Q8Uh.lzNNj6a4V6bwnXdfY1KTUxKE`).
+3. Re-fetched live SEC bytes immediately before the repair (fresh `curl`,
+   proper `EDGAR_IDENTITY`-equivalent User-Agent) and re-confirmed the diff
+   was still exactly the one trailing newline, nothing else.
+4. Overwrote both canonical bronze keys directly via `s3api put-object`
+   (bypassing `write_immutable_bytes`, which has no override -- this was a
+   deliberate, explicit, one-time correction of two specific known-stale
+   objects, not a new general capability). New version IDs:
+   `ckgRLTHBq5_uAgmYN7ccT4jjcfE9q3Bv`, `LLxEzGcUW_USPAhAK9sOgMdV6B1Y4O.d`.
+5. Downloaded both back and byte-diffed against the live SEC fetch --
+   confirmed identical.
+
+No `record_repair_attestation` call was needed: the follow-up run uses a
+**new** execution/run_id (`daily-incremental-ticket74-repair-verify-1785752569`,
+started 2026-08-03T06:22:51-04:00), which has no prior `terminal_repair_required`
+marker under its own run-scoped S3 prefix at all. With the bronze bytes now
+byte-exact, a fresh fetch for these two accessions will match on the first
+attempt and never trip the conflict.
+
+Old `daily-incremental-ticket70-verify-1785720814` execution: stopped, lease
+released, **not resumed** -- superseded by the new execution above.
+
 ## Done when
 
 A decision exists on: (1) how to repair these 2 known accessions (build the
