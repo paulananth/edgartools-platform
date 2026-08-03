@@ -215,6 +215,11 @@ def reduce_identity_refresh(
                 payload = current.read_bytes()
             staged_relative = storage_root.write_staged_bytes(canonical_relative, payload)
             promotion = storage_root.promote_staged(staged_relative, canonical_relative, expected_etag=baseline.etag)
+            # Deliberately only on success: promote_staged leaves a staged
+            # object in place on PromotionConflictError so a caller can
+            # inspect/retry it (release-readiness ticket 65) -- the bucket
+            # lifecycle rule on silverstage/ is the backstop for that case.
+            storage_root.delete_object(staged_relative)
         except PromotionConflictError:
             if attempt == max_attempts:
                 raise

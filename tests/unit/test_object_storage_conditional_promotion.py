@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
@@ -10,6 +11,15 @@ from edgar_warehouse.infrastructure.object_storage import (
     PromotionConflictError,
     StorageLocation,
 )
+
+
+class _DeletingS3Client:
+    def __init__(self) -> None:
+        self.deletes: list[dict[str, str]] = []
+
+    def delete_object(self, **kwargs):
+        self.deletes.append(kwargs)
+        return {}
 
 
 class _ReadableObjectStore:
@@ -187,3 +197,32 @@ def test_remote_promotion_reports_atomic_precondition_failure_as_retryable_confl
 
     assert exc_info.value.expected_etag == "old-etag"
     assert objects[staged_path] == b"merged"
+
+
+def test_local_delete_object_removes_the_file(tmp_path):
+    storage = StorageLocation(str(tmp_path))
+    storage.write_bytes("silverstage/token/silver/sec/silver.duckdb", b"staged")
+    target = Path(storage.join("silverstage/token/silver/sec/silver.duckdb"))
+    assert target.exists()
+
+    storage.delete_object("silverstage/token/silver/sec/silver.duckdb")
+
+    assert not target.exists()
+
+
+def test_local_delete_object_is_a_noop_for_a_missing_file(tmp_path):
+    storage = StorageLocation(str(tmp_path))
+    # No prior write -- must not raise.
+    storage.delete_object("silverstage/does-not-exist/silver.duckdb")
+
+
+def test_remote_delete_object_calls_s3_delete_object(monkeypatch):
+    client = _DeletingS3Client()
+    monkeypatch.setattr("boto3.client", lambda service: client)
+    storage = StorageLocation("s3://bucket/warehouse")
+
+    storage.delete_object("silverstage/token/silver/sec/silver.duckdb")
+
+    assert client.deletes == [
+        {"Bucket": "bucket", "Key": "warehouse/silverstage/token/silver/sec/silver.duckdb"}
+    ]

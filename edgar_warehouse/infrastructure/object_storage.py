@@ -407,6 +407,26 @@ class StorageLocation:
             new_version=new_version,
         )
 
+    def delete_object(self, relative_path: str) -> None:
+        """Delete one object. Best-effort: missing objects are not an error.
+
+        `promote_staged` never deletes the staged object it just promoted
+        (deliberately, so a `PromotionConflictError` leaves it in place for
+        inspection/retry) -- callers that know a promotion succeeded use this
+        to clean up their own staged object explicitly (release-readiness
+        ticket 65). A bucket lifecycle rule is the backstop for the conflict
+        case and for anything a caller doesn't clean up itself.
+        """
+        relative = sanitize_relative_path(relative_path)
+        destination = self.join(relative)
+        if self.is_remote:
+            from urllib.parse import urlsplit
+
+            parsed = urlsplit(destination)
+            self._s3().delete_object(Bucket=parsed.netloc, Key=parsed.path.lstrip("/"))
+            return
+        Path(destination).unlink(missing_ok=True)
+
     def write_bytes(self, relative_path: str, payload: bytes) -> str:
         relative = sanitize_relative_path(relative_path)
         destination = self.join(relative)

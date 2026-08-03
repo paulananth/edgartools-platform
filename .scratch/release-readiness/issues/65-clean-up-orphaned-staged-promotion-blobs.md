@@ -1,7 +1,7 @@
 # Clean up orphaned staged-promotion blobs in S3 `silverstage/`
 
 Type: task
-Status: open
+Status: claimed
 
 ## Progress (2026-08-02 — prefix renamed)
 
@@ -76,3 +76,47 @@ The lifecycle rule is live in Terraform and confirmed via `get-bucket-lifecycle-
 a focused test proves `reduce_identity_refresh` deletes its own staged object after a
 successful promotion and leaves it in place after a `PromotionConflictError`; and the
 pre-existing 49.3GB of orphaned objects in prod is cleaned up.
+
+## Progress (2026-08-03)
+
+**Implemented**, on branch `claude/cleanup-orphaned-staged-blobs` (off `main` — note this
+branch predates [ticket 64](64-add-identity-refresh-reducer-progress-logging.md)'s merge,
+so `reduce_identity_refresh` here is the pre-ticket-64 version; a merge-time conflict with
+PR #338 is expected and will be resolved the same way tickets 77/78 were):
+
+- **Explicit delete on success**: added `StorageLocation.delete_object` (best-effort,
+  `missing_ok=True` locally, `s3.delete_object` remotely) to `object_storage.py`, and one
+  call site in `reduce_identity_refresh` right after a successful `promote_staged` —
+  deliberately *inside* the `try` block, after `promotion = ...` and before the function can
+  reach the `except PromotionConflictError` clause, so a conflict never triggers a delete.
+- **S3 lifecycle rule**: added `aws_s3_bucket_lifecycle_configuration.warehouse` to
+  `infra/terraform/modules/storage_buckets/main.tf` (shared by dev+prod, no prod-only
+  hardcoding), filtered to the `silverstage/` prefix, 3-day expiration plus matching
+  `noncurrent_version_expiration` (the bucket has versioning enabled). `terraform validate`
+  and `terraform fmt -check` both clean.
+- Confirmed `write_staged_bytes` already writes to `silverstage/` (not `_staging/`) — that
+  part of this ticket's "Progress (2026-08-02)" rename note was already live before this
+  session; no further code change needed for it.
+
+**Tests**: 3 new tests in `tests/unit/test_object_storage_conditional_promotion.py`
+(`delete_object` local-removes, local-missing-is-noop, remote-calls-s3-delete_object) and 2
+new tests in `tests/unit/test_identity_refresh_publication.py`
+(`test_reducer_deletes_its_own_staged_object_after_successful_promotion`,
+`test_reducer_preserves_staged_object_after_promotion_conflict` — the latter captures both
+attempts' distinct staged paths via a monkeypatched `promote_staged` and asserts the
+conflicted attempt's object survives while the successful attempt's own object is deleted).
+Full `tests/unit` + `tests/application` + `tests/architecture` suite: 1268 passed, 4 skipped
+(pre-existing), 1 pre-existing unrelated deselect, 35 subtests.
+
+**Live sweep — not yet done, pending explicit go-ahead.** Re-checked the orphaned prefix live
+just before writing this: it has *grown* since this ticket was filed —
+**48 objects, 51.4GB** (was 46/49.3GB on 2026-08-02), confirming the leak is ongoing pending
+deploy of the fix above. Safety precondition checked and clear: zero `RUNNING` executions
+across `daily-incremental`, `load-history`, `bootstrap`, `bootstrap-full`, `targeted-resync`,
+`bootstrap-batched` at check time — nothing currently has an in-flight staged object under
+this prefix. The actual `aws s3 rm --recursive` has not been run; this is a real, live,
+~51GB deletion in prod and deliberately left for explicit confirmation before executing,
+per this repo's destructive-operation convention (same as ticket 71's stance).
+
+Not yet deployed — the code fix (delete-on-success + lifecycle rule) takes effect on the
+next warehouse image rebuild/deploy plus a `terraform apply` for the lifecycle rule.

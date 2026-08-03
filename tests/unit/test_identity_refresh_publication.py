@@ -158,3 +158,71 @@ def test_promotion_conflict_retries_only_the_reducer_with_same_delta(tmp_path: P
     assert completed["reducer"]["attempt"] == 2
     assert promotion_attempts == 2
     assert merge_inputs == [b"batch", b"batch"]
+
+
+def test_reducer_deletes_its_own_staged_object_after_successful_promotion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Release-readiness ticket 65: promote_staged never deletes the staged
+    object it just promoted (deliberately, so a conflict leaves it in place
+    for retry/inspection) -- confirmed live in prod: 46 orphaned objects,
+    49.3GB, in the staging prefix with no lifecycle rule. The reducer must
+    delete its own staged object once a promotion actually succeeds."""
+    storage = StorageLocation(str(tmp_path / "warehouse"))
+    reference = tmp_path / "reference.duckdb"
+    delta = tmp_path / "batch.duckdb"
+    reference.write_bytes(b"reference")
+    delta.write_bytes(b"batch")
+    persist_run_manifest(storage, run_id="run-1", image_identity="sha256:image", reference_snapshot_file=reference, batches=[[100]])
+    persist_batch_outcome(storage, run_id="run-1", image_identity="sha256:image", ciks=[100], delta_file=delta)
+
+    def fake_merge(candidate: Path, canonical: Path, output: Path):
+        shutil.copy2(canonical, output)
+        return type("Result", (), {"tables_merged": ()})()
+
+    monkeypatch.setattr("edgar_warehouse.application.identity_refresh_publication.merge_candidate_into_canonical", fake_merge)
+    completed = reduce_identity_refresh(storage, run_id="run-1", image_identity="sha256:image")
+
+    staged_path = completed["reducer"]["staged_path"]
+    assert not Path(storage.join(staged_path)).exists()
+
+
+def test_reducer_preserves_staged_object_after_promotion_conflict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    storage = StorageLocation(str(tmp_path / "warehouse"))
+    reference = tmp_path / "reference.duckdb"
+    delta = tmp_path / "batch.duckdb"
+    reference.write_bytes(b"reference")
+    delta.write_bytes(b"batch")
+    persist_run_manifest(storage, run_id="run-1", image_identity="sha256:image", reference_snapshot_file=reference, batches=[[100]])
+    persist_batch_outcome(storage, run_id="run-1", image_identity="sha256:image", ciks=[100], delta_file=delta)
+
+    def fake_merge(candidate: Path, canonical: Path, output: Path):
+        shutil.copy2(canonical, output)
+        return type("Result", (), {"tables_merged": ()})()
+
+    original_promote = StorageLocation.promote_staged
+    staged_paths: list[str] = []
+    promotion_attempts = 0
+
+    def record_and_conflict_once(self: StorageLocation, staged: str, canonical: str, *, expected_etag: str | None):
+        nonlocal promotion_attempts
+        promotion_attempts += 1
+        staged_paths.append(staged)
+        if promotion_attempts == 1:
+            raise PromotionConflictError(canonical, expected_etag, "newer", staged)
+        return original_promote(self, staged, canonical, expected_etag=expected_etag)
+
+    monkeypatch.setattr("edgar_warehouse.application.identity_refresh_publication.merge_candidate_into_canonical", fake_merge)
+    monkeypatch.setattr(StorageLocation, "promote_staged", record_and_conflict_once)
+    completed = reduce_identity_refresh(storage, run_id="run-1", image_identity="sha256:image", max_attempts=2)
+
+    assert len(staged_paths) == 2
+    conflicted_staged_path, succeeded_staged_path = staged_paths
+    assert conflicted_staged_path != succeeded_staged_path
+    # The conflicted attempt's staged object is left in place for inspection/retry.
+    assert Path(storage.join(conflicted_staged_path)).exists()
+    # The successful attempt's own staged object is cleaned up.
+    assert not Path(storage.join(succeeded_staged_path)).exists()
+    assert completed["reducer"]["staged_path"] == succeeded_staged_path
