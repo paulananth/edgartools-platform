@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved
 
 ## Question
 
@@ -44,3 +44,25 @@ merge/conflict-detection logic at all -- purely removes a redundant read.
 Fixed, with a test asserting each reference/delta object is read from
 storage exactly once per reducer attempt (not twice), following this
 workstream's real-data/DB-backed test discipline (tickets 67-72).
+
+## Resolved (2026-08-03)
+
+`reduce_identity_refresh` now reads the reference snapshot and every batch
+delta exactly once for the whole call (not once per attempt, not twice per
+attempt) -- the pre-loop verification pass captures the checksummed bytes
+into a `dict[relative_path, bytes]`, and both the no-baseline-yet branch and
+the per-candidate merge loop read from that dict instead of re-calling
+`_read_verified`. This is strictly better than the ticket's own "once per
+attempt" bar: retries on `PromotionConflictError` now reuse the same
+in-memory bytes across all `max_attempts`, not just within one attempt.
+
+Added `test_reducer_reads_each_reference_and_delta_object_exactly_once`
+(`tests/unit/test_identity_refresh_publication.py`), which forces a
+promotion-conflict retry (`max_attempts=2`) and counts `read_bytes` calls by
+storage path -- confirmed to fail against pre-fix code (3 reads each: 1
+pre-loop + 1 per attempt) and pass against the fix (1 read each). Full
+`tests/unit`+`tests/application`+`tests/architecture` suite: 1271 passed (one
+new test), 4 skipped, plus one pre-existing unrelated failure
+(`test_go_live_wizard.py::test_plan_prints_preview_only_aws_ordered_commands`,
+confirmed via `git stash` to fail identically on pre-fix `main` -- an
+AWS-profile-env-dependent test, not a regression from this change).

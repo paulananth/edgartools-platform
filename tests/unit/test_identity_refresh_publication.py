@@ -18,6 +18,7 @@ from edgar_warehouse.application.identity_refresh_publication import (
 from edgar_warehouse.infrastructure.object_storage import (
     PromotionConflictError,
     StorageLocation,
+    read_bytes,
 )
 
 
@@ -159,6 +160,51 @@ def test_promotion_conflict_retries_only_the_reducer_with_same_delta(tmp_path: P
     assert completed["reducer"]["attempt"] == 2
     assert promotion_attempts == 2
     assert merge_inputs == [b"batch", b"batch"]
+
+
+def test_reducer_reads_each_reference_and_delta_object_exactly_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    storage = StorageLocation(str(tmp_path / "warehouse"))
+    reference = tmp_path / "reference.duckdb"
+    delta = tmp_path / "batch.duckdb"
+    reference.write_bytes(b"reference")
+    delta.write_bytes(b"batch")
+    persist_run_manifest(storage, run_id="run-1", image_identity="sha256:image", reference_snapshot_file=reference, batches=[[100]])
+    persist_batch_outcome(storage, run_id="run-1", image_identity="sha256:image", ciks=[100], delta_file=delta)
+
+    def fake_merge(candidate: Path, canonical: Path, output: Path):
+        shutil.copy2(canonical, output)
+        return type("Result", (), {"tables_merged": ()})()
+
+    original_promote = StorageLocation.promote_staged
+    promotion_attempts = 0
+
+    def conflict_once(self: StorageLocation, staged: str, canonical: str, *, expected_etag: str | None):
+        nonlocal promotion_attempts
+        promotion_attempts += 1
+        if promotion_attempts == 1:
+            raise PromotionConflictError(canonical, expected_etag, "newer", staged)
+        return original_promote(self, staged, canonical, expected_etag=expected_etag)
+
+    read_calls: list[str] = []
+    original_read_bytes = read_bytes
+
+    def counting_read_bytes(storage_path: str) -> bytes:
+        read_calls.append(storage_path)
+        return original_read_bytes(storage_path)
+
+    monkeypatch.setattr("edgar_warehouse.application.identity_refresh_publication.merge_candidate_into_canonical", fake_merge)
+    monkeypatch.setattr(StorageLocation, "promote_staged", conflict_once)
+    monkeypatch.setattr("edgar_warehouse.application.identity_refresh_publication.read_bytes", counting_read_bytes)
+    completed = reduce_identity_refresh(storage, run_id="run-1", image_identity="sha256:image", max_attempts=2)
+
+    assert completed["reducer"]["attempt"] == 2
+    assert promotion_attempts == 2
+    reference_reads = [call for call in read_calls if call.endswith("reference_snapshot.duckdb")]
+    delta_reads = [call for call in read_calls if call.endswith("delta.duckdb")]
+    assert len(reference_reads) == 1, f"expected reference snapshot read exactly once, got {reference_reads}"
+    assert len(delta_reads) == 1, f"expected batch delta read exactly once, got {delta_reads}"
 
 
 def test_reducer_deletes_its_own_staged_object_after_successful_promotion(
