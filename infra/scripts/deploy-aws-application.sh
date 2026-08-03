@@ -109,10 +109,13 @@ Options:
                                     daily_incremental_scheduler_role_arn.
   --configure-daily-incremental-alarms <enable|disable>
                                     Explicitly create/update or remove the 18-hour
-                                    timeout CloudWatch alarm. Per-deferral SNS delivery
-                                    is part of the deployed state machine. This
-                                    standalone action never deploys workloads or
-                                    enables schedules.
+                                    timeout alarm AND the application-level execution-
+                                    failure alarm (AWS/States ExecutionsFailed --
+                                    release-readiness ticket 81; covers States.TaskFailed
+                                    and similar non-timeout failures the timeout alarm
+                                    does not see). Per-deferral SNS delivery is part of
+                                    the deployed state machine. This standalone action
+                                    never deploys workloads or enables schedules.
   --operator-alert-topic-arn <arn>  Confirmed operator SNS topic used by both alarms.
                                     Required when enabling alarms.
   -h, --help                        Show this help.
@@ -560,10 +563,11 @@ configure_daily_incremental_alarms() {
   local action="$1" topic_arn="$2"
   local state_machine_arn="arn:aws:states:${AWS_REGION_NAME}:${ACCOUNT_ID}:stateMachine:${NAME_PREFIX}-daily-incremental"
   local timeout_alarm="${NAME_PREFIX}-daily-incremental-timeout"
+  local failed_alarm="${NAME_PREFIX}-daily-incremental-failed"
 
   if [[ "$action" == "disable" ]]; then
-    aws_cli cloudwatch delete-alarms --alarm-names "$timeout_alarm"
-    log "Deleted daily_incremental timeout alarm"
+    aws_cli cloudwatch delete-alarms --alarm-names "$timeout_alarm" "$failed_alarm"
+    log "Deleted daily_incremental timeout and failure alarms"
     return 0
   fi
 
@@ -580,6 +584,21 @@ configure_daily_incremental_alarms() {
     --treat-missing-data notBreaching \
     --alarm-actions "$topic_arn"
   log "Configured daily_incremental 18-hour timeout alarm"
+
+  # release-readiness ticket 81: the timeout alarm only sees ExecutionsTimedOut --
+  # an application-level failure (States.TaskFailed, e.g. an ECS task exiting
+  # non-zero) increments ExecutionsFailed instead and previously reached no one.
+  aws_cli cloudwatch put-metric-alarm \
+    --alarm-name "$failed_alarm" \
+    --alarm-description "Daily Identity Refresh execution failed (application-level, not a timeout)" \
+    --namespace "AWS/States" \
+    --metric-name "ExecutionsFailed" \
+    --dimensions "Name=StateMachineArn,Value=${state_machine_arn}" \
+    --statistic Sum --period 60 --evaluation-periods 1 \
+    --threshold 1 --comparison-operator GreaterThanOrEqualToThreshold \
+    --treat-missing-data notBreaching \
+    --alarm-actions "$topic_arn"
+  log "Configured daily_incremental execution-failure alarm"
 }
 
 if ! is_empty "$CONFIGURE_DAILY_INCREMENTAL_ALARMS"; then
