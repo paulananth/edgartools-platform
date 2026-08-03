@@ -191,18 +191,22 @@ def reduce_identity_refresh(
 ) -> dict[str, Any]:
     """Merge one verified run and perform exactly one promotion per attempt.
 
-    Promotion conflicts repeat this reducer only. The immutable deltas are
-    read and checksummed again on every attempt; no capture function is called
-    from this module.
+    Promotion conflicts repeat this reducer only. The reference snapshot and
+    every delta are read and checksummed exactly once, up front; the verified
+    bytes are held in memory and reused for every merge attempt instead of
+    being re-fetched from storage.
     """
     if max_attempts < 1:
         raise WarehouseRuntimeError("identity refresh reducer max_attempts must be positive")
     manifest = load_complete_run_manifest(storage_root, run_id=run_id, image_identity=image_identity)
     inputs = validate_complete_run_manifest(manifest, expected_run_id=run_id, expected_image_identity=image_identity)
     reference = manifest["reference_snapshot"]
-    _read_verified(storage_root, str(reference["path"]), str(reference["sha256"]))
+    reference_path = str(reference["path"])
+    verified_bytes: dict[str, bytes] = {
+        reference_path: _read_verified(storage_root, reference_path, str(reference["sha256"]))
+    }
     for item in inputs:
-        _read_verified(storage_root, item.delta_path, item.sha256)
+        verified_bytes[item.delta_path] = _read_verified(storage_root, item.delta_path, item.sha256)
 
     canonical_relative = "silver/sec/silver.duckdb"
     for attempt in range(1, max_attempts + 1):
@@ -217,9 +221,9 @@ def reduce_identity_refresh(
                 if baseline.exists:
                     baseline_payload = read_bytes(storage_root.join(canonical_relative))
                     current.write_bytes(baseline_payload)
-                    candidates = [("reference", str(reference["path"]))] + [(item.batch_id, item.delta_path) for item in inputs]
+                    candidates = [("reference", reference_path)] + [(item.batch_id, item.delta_path) for item in inputs]
                 else:
-                    baseline_payload = _read_verified(storage_root, str(reference["path"]), str(reference["sha256"]))
+                    baseline_payload = verified_bytes[reference_path]
                     current.write_bytes(baseline_payload)
                     candidates = [(item.batch_id, item.delta_path) for item in inputs]
                 _emit_reducer_event(
@@ -243,8 +247,7 @@ def reduce_identity_refresh(
                     )
                     merge_started_at = time.monotonic()
                     candidate = tmp_path / f"candidate-{index}.duckdb"
-                    expected_sha = str(reference["sha256"]) if label == "reference" else next(item.sha256 for item in inputs if item.batch_id == label)
-                    candidate.write_bytes(_read_verified(storage_root, relative, expected_sha))
+                    candidate.write_bytes(verified_bytes[relative])
                     merged = tmp_path / f"merged-{index}.duckdb"
                     result = merge_candidate_into_canonical(candidate, current, merged)
                     current = merged
