@@ -9,8 +9,10 @@ from __future__ import annotations
 import hashlib
 import json
 import mimetypes
+import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from typing import Any, Final
 
@@ -21,6 +23,21 @@ from edgar_warehouse.infrastructure.dataset_path_catalog import (
 
 # Ticket 56 architecture marker — architecture tests assert this contract.
 FILING_DOCUMENT_NETWORK_GATEWAY: Final = "raw_sec_http"
+
+# Ticket 77 (pipeline-throughput-architecture ticket 03): bounded worker pool
+# for the per-document artifact-fetch loop below. Matches the existing
+# BOOTSTRAP_BATCH_CONCURRENCY 2-5 recommended range; pyrate_limiter's
+# thread-safe Limiter (source-verified internal RLock) remains the real
+# throughput ceiling regardless of pool size.
+_DEFAULT_ARTIFACT_FETCH_CONCURRENCY: Final = 5
+
+
+def _artifact_fetch_concurrency() -> int:
+    raw = os.environ.get(
+        "WAREHOUSE_ARTIFACT_FETCH_CONCURRENCY", str(_DEFAULT_ARTIFACT_FETCH_CONCURRENCY)
+    )
+    return max(1, int(raw))
+
 
 # Ticket 70 — raster-image exhibits (investor-presentation slides etc.) that no
 # parser in this repo reads. Narrowest rule from the operator decision: image
@@ -200,9 +217,13 @@ def fetch_filing_artifacts(
             count=len(excluded_binary_rows),
         )
 
-    raw_writes: list[dict[str, Any]] = []
-    hydrated_rows: list[dict[str, Any]] = []
-    for row in attachment_rows:
+    # Ticket 77: cache-hit resolution stays sequential (cheap DB reads, no
+    # network) so it runs first and determines which documents actually need
+    # a real fetch. Only the real fetches — the loop's dominant cost — go
+    # through the worker pool below.
+    cache_hit_by_index: dict[int, tuple[dict[str, Any], dict[str, Any]]] = {}
+    pending: list[dict[str, Any]] = []
+    for index, row in enumerate(attachment_rows):
         document_name = row["document_name"]
         document_url = row["document_url"]
         prior_raw = prior_raw_by_document.get(document_name)
@@ -220,40 +241,8 @@ def fetch_filing_artifacts(
             )
             hydrated = {key: value for key, value in row.items() if key != "content_bytes"}
             hydrated["raw_object_id"] = existing_raw.get("raw_object_id")
-            hydrated_rows.append(hydrated)
-            raw_writes.append(_cached_raw_record(existing_raw))
+            cache_hit_by_index[index] = (hydrated, _cached_raw_record(existing_raw))
             continue
-
-        _started_at = time.monotonic()
-        _emit_artifact_event(
-            "artifact_content_fetch_started",
-            accession_number=accession_number,
-            document_name=document_name,
-            url=document_url,
-        )
-        try:
-            payload = download_bytes(document_url, context.identity)
-        except Exception as exc:
-            _emit_artifact_event(
-                "artifact_content_fetch_failed",
-                accession_number=accession_number,
-                document_name=document_name,
-                duration_ms=_elapsed_ms(_started_at),
-                error=exc.__class__.__name__,
-            )
-            raise
-        if not isinstance(payload, bytes):
-            raise TypeError(
-                f"filing content gateway returned {type(payload).__name__}; expected bytes"
-            )
-        network_fetches += 1
-        _emit_artifact_event(
-            "artifact_content_fetch_completed",
-            accession_number=accession_number,
-            document_name=document_name,
-            bytes=len(payload),
-            duration_ms=_elapsed_ms(_started_at),
-        )
 
         artifact_spec = capture_specs.filing_document(
             cik=cik,
@@ -261,21 +250,71 @@ def fetch_filing_artifacts(
             document_name=document_name,
             is_primary=bool(row.get("is_primary")),
         )
-        raw_record = _write_raw_artifact(
-            context=context,
-            db=db,
-            payload=payload,
-            relative_path=artifact_spec.relative_path,
-            source_type="filing_document" if row.get("is_primary") else "attachment",
-            source_url=document_url,
-            cik=cik,
-            accession_number=accession_number,
-            form=filing.get("form"),
+        pending.append(
+            {
+                "index": index,
+                "row": row,
+                "document_url": document_url,
+                "relative_path": artifact_spec.relative_path,
+                "source_type": "filing_document" if row.get("is_primary") else "attachment",
+            }
         )
-        raw_writes.append(raw_record)
+
+    # Real fetches run concurrently. Each worker does network I/O + the
+    # immutable S3 write only — no DuckDB access, since a single
+    # SilverDatabase connection is not safe for concurrent use (ticket 03).
+    # Results are collected here and every db.upsert_raw_object call happens
+    # back on this thread, in the loop below.
+    fetch_results: dict[int, dict[str, Any]] = {}
+    fetch_errors: dict[int, BaseException] = {}
+    if pending:
+        worker_count = min(len(pending), _artifact_fetch_concurrency())
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            future_to_task = {
+                executor.submit(
+                    _fetch_and_store_attachment,
+                    context=context,
+                    download_bytes=download_bytes,
+                    accession_number=accession_number,
+                    document_name=task["row"]["document_name"],
+                    document_url=task["document_url"],
+                    relative_path=task["relative_path"],
+                    source_type=task["source_type"],
+                    cik=cik,
+                    form=filing.get("form"),
+                ): task
+                for task in pending
+            }
+            for future in as_completed(future_to_task):
+                task = future_to_task[future]
+                try:
+                    fetch_results[task["index"]] = future.result()
+                except BaseException as exc:  # noqa: BLE001 — re-raised below, want the original type
+                    fetch_errors[task["index"]] = exc
+
+    network_fetches += len(fetch_results)
+    applied_by_index: dict[int, tuple[dict[str, Any], dict[str, Any]]] = {}
+    for task in pending:
+        index = task["index"]
+        storage_record = fetch_results.get(index)
+        if storage_record is None:
+            continue
+        row = task["row"]
+        document_name = row["document_name"]
+        prior_raw = prior_raw_by_document.get(document_name)
+        db.upsert_raw_object(
+            {key: value for key, value in storage_record.items() if key != "relative_path"}
+        )
+        raw_record = {
+            "raw_object_id": storage_record["raw_object_id"],
+            "path": storage_record["storage_path"],
+            "relative_path": storage_record["relative_path"],
+            "source_url": storage_record["source_url"],
+            "source_type": storage_record["source_type"],
+        }
         hydrated = dict(row)
         hydrated["raw_object_id"] = raw_record["raw_object_id"]
-        hydrated_rows.append(hydrated)
+        applied_by_index[index] = (hydrated, raw_record)
 
         if force and prior_raw is not None:
             repair_audit.append(
@@ -290,6 +329,24 @@ def fetch_filing_artifacts(
                     "reason": reason,
                 }
             )
+
+    if fetch_errors:
+        # Fail closed exactly as the sequential loop did: no partial merge.
+        # Raise the original exception for the earliest-in-order failing
+        # document so orchestrator error classification (transient / immutable
+        # conflict) is unaffected by which order concurrent fetches finished in.
+        first_failed_index = min(fetch_errors)
+        raise fetch_errors[first_failed_index]
+
+    raw_writes: list[dict[str, Any]] = []
+    hydrated_rows: list[dict[str, Any]] = []
+    for index in range(len(attachment_rows)):
+        if index in cache_hit_by_index:
+            hydrated, raw_record = cache_hit_by_index[index]
+        else:
+            hydrated, raw_record = applied_by_index[index]
+        hydrated_rows.append(hydrated)
+        raw_writes.append(raw_record)
 
     db.merge_filing_attachments(hydrated_rows, sync_run_id)
     result: dict[str, Any] = {
@@ -331,10 +388,69 @@ def _cached_raw_record(raw_object: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _write_raw_artifact(
+def _fetch_and_store_attachment(
     *,
     context: Any,
-    db: Any,
+    download_bytes: Any,
+    accession_number: str,
+    document_name: str,
+    document_url: str,
+    relative_path: str,
+    source_type: str,
+    cik: int,
+    form: str | None,
+) -> dict[str, Any]:
+    """Network fetch + immutable storage write for one attachment.
+
+    Ticket 77: this is the unit of work each artifact-fetch pool thread runs.
+    Deliberately does not touch ``db`` — a single SilverDatabase DuckDB
+    connection is not safe for concurrent access, so every db.* call stays on
+    the main thread (see the caller in ``fetch_filing_artifacts``).
+    """
+    started_at = time.monotonic()
+    _emit_artifact_event(
+        "artifact_content_fetch_started",
+        accession_number=accession_number,
+        document_name=document_name,
+        url=document_url,
+    )
+    try:
+        payload = download_bytes(document_url, context.identity)
+    except Exception as exc:
+        _emit_artifact_event(
+            "artifact_content_fetch_failed",
+            accession_number=accession_number,
+            document_name=document_name,
+            duration_ms=_elapsed_ms(started_at),
+            error=exc.__class__.__name__,
+        )
+        raise
+    if not isinstance(payload, bytes):
+        raise TypeError(
+            f"filing content gateway returned {type(payload).__name__}; expected bytes"
+        )
+    _emit_artifact_event(
+        "artifact_content_fetch_completed",
+        accession_number=accession_number,
+        document_name=document_name,
+        bytes=len(payload),
+        duration_ms=_elapsed_ms(started_at),
+    )
+    return _store_raw_artifact_bytes(
+        context=context,
+        payload=payload,
+        relative_path=relative_path,
+        source_type=source_type,
+        source_url=document_url,
+        cik=cik,
+        accession_number=accession_number,
+        form=form,
+    )
+
+
+def _store_raw_artifact_bytes(
+    *,
+    context: Any,
     payload: bytes,
     relative_path: str,
     source_type: str,
@@ -343,32 +459,31 @@ def _write_raw_artifact(
     accession_number: str,
     form: str | None,
 ) -> dict[str, Any]:
+    """Write immutable content to storage and compute its record fields.
+
+    Storage-only — no DuckDB access — safe to call from a worker thread.
+    ``write_immutable_bytes`` is itself idempotent for byte-identical content
+    (create-once, verify-and-reuse on conflict), so a retried accession that
+    re-runs this for an already-written document is safe.
+    """
     destination = context.bronze_root.write_immutable_bytes(relative_path, payload)
     sha256 = hashlib.sha256(payload).hexdigest()
     content_type = mimetypes.guess_type(relative_path)[0] or "application/octet-stream"
     fetched_at = datetime.now(UTC)
-    db.upsert_raw_object(
-        {
-            "raw_object_id": sha256,
-            "source_type": source_type,
-            "cik": cik,
-            "accession_number": accession_number,
-            "form": form,
-            "source_url": source_url,
-            "storage_path": destination,
-            "content_type": content_type,
-            "byte_size": len(payload),
-            "sha256": sha256,
-            "fetched_at": fetched_at,
-            "http_status": 200,
-        }
-    )
     return {
         "raw_object_id": sha256,
-        "path": destination,
-        "relative_path": relative_path,
-        "source_url": source_url,
         "source_type": source_type,
+        "cik": cik,
+        "accession_number": accession_number,
+        "form": form,
+        "source_url": source_url,
+        "storage_path": destination,
+        "content_type": content_type,
+        "byte_size": len(payload),
+        "sha256": sha256,
+        "fetched_at": fetched_at,
+        "http_status": 200,
+        "relative_path": relative_path,
     }
 
 

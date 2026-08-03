@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: in_progress
 
 ## Question
 
@@ -53,3 +53,54 @@ established discipline -- tickets 67-72)
 Implemented, all 5 test categories passing, full suite green, live
 measurement recorded showing the artifact-fetch loop's real achieved
 req/sec post-fix.
+
+## Progress (2026-08-03)
+
+**Implemented**, on branch `claude/artifact-fetch-concurrency` (commit
+`d1c9f4d1`): `fetch_filing_artifacts` (`bronze_filing_artifacts.py`) splits
+into a sequential cache-hit-resolution pass (cheap DB reads only) followed
+by a `ThreadPoolExecutor` pool (default 5 workers,
+`WAREHOUSE_ARTIFACT_FETCH_CONCURRENCY`) over only the documents that need a
+real fetch. `_write_raw_artifact` split into `_fetch_and_store_attachment`
+(worker-safe: network fetch + immutable S3 write + hash, zero DuckDB
+access) and the main-thread `db.upsert_raw_object` application step, so
+every `db.*` call stays off the pool threads. Results are applied and
+merged in strict original `attachment_rows` order regardless of completion
+order, so a failure still fails closed with zero partial merge and the
+same exception type/message a sequential run would raise.
+
+Scope note (sharpened during implementation, confirmed against real
+numbers before committing to it): ticket 03's own text names
+"`fetch_filing_artifacts`'s... loop" -- the *per-document* loop inside one
+accession's fetch (~5 documents/accession on average, per ticket 01's
+30,624 fetches / 5,095 accessions), not the orchestrator's per-accession
+loop in `warehouse_orchestrator.py`. Parallelizing at the document level
+collapses ~5 serial round-trips to ~1-2 per accession and leaves the
+orchestrator's circuit breaker / resume-manifest / retry-with-backoff /
+release-mode state machine completely untouched -- so ticket 03's flagged
+"circuit breaker consecutive-errors redefinition" nuance doesn't apply;
+its premise (out-of-order *accession* completion) never arises.
+
+**Test plan items 1-4**: done, all passing, stable across repeated runs.
+New file `tests/unit/test_artifact_fetch_concurrency.py` (5 tests):
+correctness equivalence (concurrent vs. env-var-forced-sequential, same
+merge order/raw_writes), rate-limiter compliance (a real, unmocked
+`pyrate_limiter.Limiter` shared across worker threads, asserting wall-clock
+throttling holds), DB-write serialization (thread-id-recording double,
+100% of `db.*` calls on the main thread), partial-failure equivalence (a
+real immutable-content conflict reproduced via a pre-seeded storage
+object -- ticket 74's exact failure mode, not a mocked exception -- 
+asserting the same classification and zero partial merge). Full
+`tests/unit` + `tests/architecture` suite green (932 passed; one
+pre-existing, unrelated `AWS_PROFILE`-dependent wizard test failure
+confirmed present on `main` before this change too).
+
+**Test plan item 5 (live measurement): not done.** Requires deploying this
+image to prod, and prod's `daily-incremental-ticket74-repair-verify-1785752569`
+(the ticket 74 repair-verify run) was still `RUNNING` at last check.
+Per [pipeline-throughput-architecture ticket 09](../../pipeline-throughput-architecture/issues/09-decide-cross-command-sec-fetch-mutual-exclusion.md),
+running two SEC-fetching commands concurrently is a real compliance risk
+(not yet guarded by an actual lock -- that's [ticket 80](80-implement-cross-command-sec-fetch-lease.md),
+still open) -- so no new prod execution should be triggered until that run
+finishes. Left open pending: (a) that run completing, (b) an explicit
+decision to build + push a new warehouse image and deploy it to prod.
