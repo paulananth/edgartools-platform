@@ -45,6 +45,7 @@ executes the micro-fixes this map's evidence builds on.
 ## Decisions so far
 
 - [Research SEC rate-limit headroom](issues/02-research-sec-rate-limit-headroom.md) — SEC's published ceiling is a flat 10 req/sec with no burst allowance, framed per-operator "regardless of machines used" (10-min cooldown on violation); the in-process limiter is a hardcoded 9 req/sec/task (no env override); prod's `network_runtime` Terraform module has no NAT gateway at all -- ECS tasks run in public subnets with `AssignPublicIp: ENABLED`, so concurrent tasks get distinct public IPs, not a shared NAT IP.
+- [Profile the real pipeline stage bottleneck breakdown](issues/01-profile-pipeline-stage-bottleneck-breakdown.md) — resolved for `daily-incremental` from real timestamps (a fully-cold-cache attempt, 209.5 min total): artifact-fetch loop dominates at 57.5% (119.4 min, post-tickets-69/70-fix), submissions bronze-capture 23.3% (48.3 min), silver apply 16.3% (33.9 min, ~1,175 rows/sec — scales with volume, not pathological), resume/repair existence-checks 2.5% (5.1 min — a new small unbatched-per-row finding, filed separately as release-readiness ticket 75). Critically: the artifact loop runs at only 4.27 fetches/sec, well under the 9-10 req/sec rate-limit ceiling — **not rate-limit-bound today**, real headroom exists before concurrency would even contend with SEC's limit. `load_history`/`bootstrap-batch` not profiled this session — left as a gap in Not yet specified. Unblocks tickets 03, 04, 05.
 
 ## Not yet specified
 
@@ -57,7 +58,16 @@ executes the micro-fixes this map's evidence builds on.
   shows whether storage I/O is actually the dominant cost.
 - Whether ECS task memory/CPU sizing itself (as opposed to task *count* or
   intra-task concurrency) is a limiting factor -- folded into ticket 01's
-  profiling pass rather than ticketed separately for now.
+  profiling pass rather than ticketed separately for now. Ticket 01's
+  resolution found no evidence of CPU/memory throttling (no OOM, no visible
+  stalls) but did not pull Container Insights metrics directly -- still
+  genuinely unmeasured.
+- `load_history`/`bootstrap-batch`'s own stage-by-stage breakdown -- ticket
+  01 profiled `daily-incremental` only (the pipeline that was actually
+  running live during this investigation); `load_history` already has
+  fan-out parallelism via `bootstrap-batch` xN, so it's a lower-priority gap,
+  but tickets 03/04's decisions should stay scoped to what ticket 01 actually
+  measured until this is filled in.
 
 ## Out of scope
 
