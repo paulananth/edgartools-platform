@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: resolved
 
 Blocked by: 07
 
@@ -83,3 +83,45 @@ open question narrows to: is there *any* other reason this step needs to
 run for `gold-refresh` specifically (e.g. does anything downstream expect
 `gold-refresh` to have touched canonical silver's ETag/version, even
 without content change?), or can it be skipped outright for this command.
+
+## Answer (2026-08-03, grilling with user)
+
+**Skip it -- confirmed nothing depends on it running.** Checked three
+angles before recommending: (1) no S3 event notifications on the
+`silver.duckdb` key anywhere in Terraform -- nothing is triggered by its
+version changing; (2) no dashboard, Snowflake export, or MDM code
+anywhere in the repo references `pipeline_run`/`sec_sync_run` -- the
+separate JSON `run_manifest` written to S3 independently is the only
+thing anything actually reads for run history; (3) no code anywhere
+consumes the `silver_database` write-entry in the pipeline-completion
+manifest except the function that produces it. Structurally, the
+ETag-guarded promote's real value is catching a concurrent writer
+corrupting canonical with a merged delta -- but gold-refresh has no real
+delta to merge, so there's no race for that check to protect against.
+
+**Scope: general rule, not gold-refresh-specific** -- extend to any
+command whose local silver candidate never actually changed a
+`PROTECTED_TABLE_REGISTRY` table's content, not just `gold-refresh` by
+name.
+
+**Mechanism: dynamic detection, not a static command allowlist.**
+Explicitly rejected a `GOLD_AFFECTING_COMMANDS`-style hardcoded list of
+"commands known to be read-only" -- that carries a real, silent
+correctness risk: if a command later gains real writes and its entry
+isn't removed from the list, data gets silently dropped with no error.
+Instead: right before publish, cheaply check (row counts or a lightweight
+hash) whether any `PROTECTED_TABLE_REGISTRY` table in the local candidate
+actually differs from what was hydrated. If none do, skip the expensive
+`shutil.copy2` + merge + promote cycle entirely, regardless of which
+command ran. Must specifically compare only `PROTECTED_TABLE_REGISTRY`
+tables, not the whole local file -- `complete_pipeline_run`/
+`complete_sync_run` write `EXCLUDED_OPERATIONAL_TABLES` bookkeeping rows
+on *every* command's local copy, so a naive "is the local file
+byte-identical to what was hydrated" check would never trigger. This
+generalizes automatically and correctly to any future command without
+requiring anyone to remember to classify it.
+
+Implementation split to
+[release-readiness ticket 79](../../release-readiness/issues/79-implement-skip-noop-silver-publish.md),
+matching this map's decision-only mode and the split already used for
+tickets 03/06 -> 77/78.
