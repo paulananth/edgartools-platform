@@ -86,6 +86,6 @@ count).
 
 ## Done when
 
-Done — decision made with the operator, implemented, tested. Not yet deployed to
-prod as of this entry. Retroactive cleanup is out of this ticket's scope, tracked
-separately in ticket 71.
+Done — decision made with the operator, implemented, tested. Merged to `main` as
+`52bd7f11` (PR #333, squash). **Not yet deployed to prod** as of this entry.
+Retroactive cleanup is out of this ticket's scope, tracked separately in ticket 71.
