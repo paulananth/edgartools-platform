@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved
 
 ## Question
 
@@ -109,3 +109,21 @@ role is re-evaluated per point 2 above, and a live measurement confirms
 aggregate SEC request rate across all concurrently running tasks *of the
 same command* stays at or under 10 req/sec. Cross-*command* concurrency is
 explicitly out of this ticket's scope -- see ticket 09.
+
+## Resolved as a decision (2026-08-03)
+
+The direction above is the decision, and it's settled -- but this map is
+decision-spec only (see map Notes: "resolving a ticket here means writing
+down the decision, not shipping code"). This ticket's "Done when" as
+originally written called for the actual code change and a live
+measurement, which oversteps that mode -- the same mistake avoided for
+`gold-refresh` by splitting profile (07) from decide (08). Correcting it
+here: implementation (the `ThreadPoolExecutor` change itself, the
+`BOOTSTRAP_BATCH_CONCURRENCY` re-evaluation, and the live compliance
+measurement) moves to
+[release-readiness ticket 78](../../release-readiness/issues/78-implement-shared-submissions-fetch-concurrency.md),
+matching where every other implementation-shaped finding from this
+workstream lives (tickets 65, 67-76). Ticket 03's own artifact-fetch-loop
+implementation had the same gap (decided, never split into an
+implementation ticket) -- filed alongside as
+[release-readiness ticket 77](../../release-readiness/issues/77-implement-artifact-fetch-concurrency.md).
