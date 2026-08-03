@@ -35,6 +35,19 @@ Reusing `ComputeIdentityRefreshWindow`'s narrower 1,194-CIK set here would be
 institutional-manager filings from capture. The two computations serve different
 purposes and cannot share a result via a simple substitution.
 
+**Verified CIK is not company-only, with live evidence** (checked directly
+against `form.20260728.idx`, the same real SEC daily-index file used elsewhere
+this session): every SEC filer gets its own CIK on first filing, individual or
+entity, not just public companies.
+- Individual insiders: `4  ABERNATHY ROBERT E  1222888  20260728
+  edgar/data/1222888/...` -- a person's name and CIK filing their own Form 4.
+- Investment advisers: `edgar_warehouse/parsers/adv.py` accepts `cik` (the EDGAR
+  filer id) as a field distinct from `crd_number` (the FINRA/IARD regulatory id,
+  regex-extracted from the filing body) -- two separate identifier systems for
+  the same adviser.
+- 13F institutional managers: `13F-HR  4Thought Financial Group Inc.  1840261
+  ... edgar/data/1840261/...` -- same pattern.
+
 **What genuinely is duplicated:** both stages independently call
 `_load_daily_index_for_date(force=True)` for the same 7 calendar days, re-fetching
 and re-parsing the same SEC daily-index files from scratch each time. This part
