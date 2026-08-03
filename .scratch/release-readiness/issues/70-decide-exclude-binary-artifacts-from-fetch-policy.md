@@ -1,7 +1,7 @@
 # Decide whether to exclude binary presentation artifacts from the default fetch policy
 
 Type: grilling
-Status: open
+Status: resolved
 
 ## Question
 
@@ -44,4 +44,48 @@ performance fix.
 
 ## Answer
 
-(pending)
+Resolved via HITL exchange with the operator (2026-08-03):
+
+1. **Yes, exclude by default.** "Capture everything SEC attaches" is not kept as an
+   unconditional guarantee where the content is binary presentation material no
+   parser reads.
+2. **Rule: image extensions only** — `.jpg`/`.jpeg`/`.png`/`.gif`, the narrowest
+   option. PDFs, zips, XBRL, and every other attachment type are unaffected.
+   The primary document is *never* excluded, regardless of its own extension.
+3. **Both go-forward and retroactive.** The fetch-policy change applies
+   immediately to new fetches; a follow-up task to find and remove already-
+   captured binary exhibits from S3 bronze was also requested — filed separately
+   as [ticket 71](71-cleanup-existing-binary-attachments-in-bronze.md) rather than
+   done inline here, since a bulk-delete against prod S3 needs its own scoped
+   investigation (how many objects, how much data, confirmation nothing already
+   depends on them) before executing anything destructive.
+
+## Implementation
+
+`edgar_warehouse/bronze_filing_artifacts.py`: new `_is_excluded_binary_attachment`
+helper (checked against `document_name`'s extension, case-insensitive; always
+`False` for `is_primary` rows) filters `attachment_rows` right after
+`_map_edgartools_attachments` returns, before the fetch loop -- excluded documents
+are never downloaded, never written to S3, and never registered in
+`sec_filing_attachment` at all (not "captured but marked skipped"). A new
+`binary_attachments_excluded` event (matching this session's established
+per-call/per-table event-logging convention from tickets 67-69) logs the excluded
+document names and count per accession for observability.
+
+Two new regression tests in `tests/unit/test_loader_idempotency.py`:
+- `test_binary_image_exhibits_are_excluded_from_fetch_and_registry` — a filing with
+  a primary `.htm`, a real `.xsd`, and two image exhibits (`.jpg`, uppercase
+  `.PNG`) fetches and registers only the two real documents.
+- `test_primary_document_is_never_excluded_even_with_an_image_extension` — a
+  filing whose primary document itself has a `.jpg` extension is still fetched
+  and registered (the one document every filing is required to have is never
+  dropped by this rule).
+
+Both pass; full suite validated alongside the commit (see commit message for exact
+count).
+
+## Done when
+
+Done — decision made with the operator, implemented, tested. Not yet deployed to
+prod as of this entry. Retroactive cleanup is out of this ticket's scope, tracked
+separately in ticket 71.

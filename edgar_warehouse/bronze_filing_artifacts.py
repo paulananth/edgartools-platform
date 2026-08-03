@@ -22,6 +22,30 @@ from edgar_warehouse.infrastructure.dataset_path_catalog import (
 # Ticket 56 architecture marker — architecture tests assert this contract.
 FILING_DOCUMENT_NETWORK_GATEWAY: Final = "raw_sec_http"
 
+# Ticket 70 — raster-image exhibits (investor-presentation slides etc.) that no
+# parser in this repo reads. Narrowest rule from the operator decision: image
+# extensions only, never PDFs/zips/XBRL. Never applied to the primary document
+# regardless of its extension (see _is_excluded_binary_attachment).
+_EXCLUDED_BINARY_EXTENSIONS: Final = frozenset({".jpg", ".jpeg", ".png", ".gif"})
+
+
+def _is_excluded_binary_attachment(document_name: str, *, is_primary: bool) -> bool:
+    """Ticket 70: skip fetching/storing raster-image exhibits by default.
+
+    Live-evidenced motivation: one filing (0000719220-26-000090) attached 24
+    investor-presentation JPGs alongside its 5 real documents -- ~83% of that
+    filing's fetch time for content none of this repo's parsers (ownership
+    XML, ADV, Item 5.02 8-K, XBRL) read. The primary document is never
+    excluded, regardless of its extension -- this only trims secondary
+    binary exhibits.
+    """
+    if is_primary:
+        return False
+    if "." not in document_name:
+        return False
+    extension = "." + document_name.rsplit(".", 1)[1].lower()
+    return extension in _EXCLUDED_BINARY_EXTENSIONS
+
 
 def _emit_artifact_event(event: str, **payload: Any) -> None:
     """Debug visibility for each individual SEC/artifact call this module makes.
@@ -161,6 +185,20 @@ def fetch_filing_artifacts(
     attachment_rows = _map_edgartools_attachments(filing_obj, accession_number)
     if not attachment_rows:
         raise ValueError(f"edgartools found no attachments for accession {accession_number}")
+
+    excluded_binary_rows = [
+        row
+        for row in attachment_rows
+        if _is_excluded_binary_attachment(row["document_name"], is_primary=bool(row.get("is_primary")))
+    ]
+    if excluded_binary_rows:
+        attachment_rows = [row for row in attachment_rows if row not in excluded_binary_rows]
+        _emit_artifact_event(
+            "binary_attachments_excluded",
+            accession_number=accession_number,
+            document_names=[row["document_name"] for row in excluded_binary_rows],
+            count=len(excluded_binary_rows),
+        )
 
     raw_writes: list[dict[str, Any]] = []
     hydrated_rows: list[dict[str, Any]] = []
