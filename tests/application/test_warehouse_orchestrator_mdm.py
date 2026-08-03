@@ -1611,6 +1611,53 @@ def test_merge_publishes_a_new_classified_table_for_the_first_time(tmp_path):
     assert pk == [(["cik", "accession_number", "holding_index"],)]
 
 
+def test_merge_emits_a_started_event_before_the_completed_event_per_table(tmp_path, capsys):
+    """A table's merge previously had zero log output for its entire
+    duration -- only the *previous* table's completion and the *next*
+    table's completion bracketed a slow or stuck table, so it could never be
+    named directly while it was happening (found live: a daily-incremental
+    silver_publish step ran ~92 minutes with no intermediate log line at
+    all). silver_table_merge_started now fires immediately before the work
+    for each table with candidate data, giving the same started/completed
+    symmetry gold_models.py's gold_table_started/completed already has."""
+    from edgar_warehouse.silver_protection import merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+    company_ddl = "CREATE TABLE sec_company (cik BIGINT PRIMARY KEY, entity_name TEXT, last_synced_at TIMESTAMPTZ)"
+    address_ddl = (
+        "CREATE TABLE sec_company_address (cik BIGINT, address_type TEXT, city TEXT, "
+        "last_synced_at TIMESTAMPTZ, PRIMARY KEY (cik, address_type))"
+    )
+    _make_duckdb(
+        canonical,
+        company_ddl,
+        ["INSERT INTO sec_company VALUES (1, 'Alpha Corp', '2026-01-01 00:00:00')"],
+    )
+    conn = duckdb.connect(str(canonical))
+    conn.execute(address_ddl)
+    conn.close()
+    conn = duckdb.connect(str(candidate))
+    conn.execute(company_ddl)
+    conn.execute("INSERT INTO sec_company VALUES (2, 'Beta Inc', '2026-01-01 00:00:00')")
+    conn.close()
+
+    capsys.readouterr()  # discard any output from fixture setup above
+    merge_candidate_into_canonical(candidate, canonical, output)
+    lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
+    events = [json.loads(line) for line in lines]
+
+    # sec_company_address has no candidate data at all -- no events either way.
+    assert not any(e["table"] == "sec_company_address" for e in events)
+
+    company_events = [e for e in events if e["table"] == "sec_company"]
+    assert [e["event"] for e in company_events] == [
+        "silver_table_merge_started",
+        "silver_table_merged",
+    ]
+
+
 # ---------------------------------------------------------------------------
 # object_storage — staged optimistic-concurrency promotion (ARTF-02)
 # ---------------------------------------------------------------------------
