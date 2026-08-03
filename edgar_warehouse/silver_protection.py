@@ -328,6 +328,27 @@ def _columns(conn: duckdb.DuckDBPyConnection, catalog: str, table_name: str) -> 
     return {row[0]: row[1] for row in rows}
 
 
+def _emit_table_merge_started_event(table_name: str) -> None:
+    """Paired with ``_emit_table_merge_event`` (the completion event) to give
+    ``merge_candidate_into_canonical`` the same started/completed symmetry as
+    gold_models.py's gold_table_started/completed. Before this, a table whose
+    merge took a long time (the schema reconciliation, the anti-join delta
+    query, or the per-row Python loop below) was silently invisible for its
+    entire duration -- only the *previous* table's completion and the *next*
+    table's completion bracketed the gap, so a slow or stuck table could only
+    be narrowed down after the fact, never named directly while it was
+    happening. Fired for every table the candidate has data for, regardless
+    of whether the merge ultimately writes anything (mirrors
+    ``_emit_table_merge_event``'s scope for the provenance-filtered-only
+    fast path, which does emit a completion event).
+    """
+    print(
+        json.dumps({"event": "silver_table_merge_started", "table": table_name}),
+        file=sys.stderr,
+        flush=True,
+    )
+
+
 def _emit_table_merge_event(table_name: str, *, inserted: int, updated: int, unchanged: int) -> None:
     """One structured line per table merged, matching this codebase's
     event-keyed JSON logging convention (e.g. gold_models.py's
@@ -548,6 +569,8 @@ def merge_candidate_into_canonical(
         for table_name, policy in PROTECTED_TABLE_REGISTRY.items():
             if table_name not in cand_tables:
                 continue  # candidate has no data for this table; canonical copy stands.
+
+            _emit_table_merge_started_event(table_name)
 
             cand_columns = _columns(conn, "cand", table_name)
             if table_name not in out_tables:
