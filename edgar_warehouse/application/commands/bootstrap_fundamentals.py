@@ -331,7 +331,14 @@ def execute(args: Any) -> int:
         )
         try:
             upload_result = _publish_silver_database_if_remote(context)
-            if upload_result:
+            if upload_result and upload_result.get("skipped"):
+                _log(
+                    "silver_database_publish_skipped_noop",
+                    relative_path=upload_result["relative_path"],
+                    run_id=run_id,
+                )
+                metrics["silver_database_uploaded"] = False
+            elif upload_result:
                 _log(
                     "silver_database_uploaded",
                     destination=upload_result["path"],
