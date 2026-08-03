@@ -71,13 +71,14 @@ def prepare_resume(
     if persisted != manifest:
         raise WarehouseRuntimeError("daily artifact run manifest identity drift")
 
+    outcome_statuses = _list_outcome_statuses(storage, run_id)
     pending: list[str] = []
     repair_required: list[str] = []
     for accession in selected:
-        if _exists_json(storage, _outcome_path(run_id, accession, "succeeded")):
+        statuses = outcome_statuses.get(sanitize_accession_for_path(accession), frozenset())
+        if "succeeded" in statuses:
             continue
-        terminal = _exists_json(storage, _outcome_path(run_id, accession, "terminal_repair_required"))
-        if terminal and not _valid_repair_attestation(storage, run_id, accession, manifest):
+        if "terminal_repair_required" in statuses and not _valid_repair_attestation(storage, run_id, accession, manifest):
             repair_required.append(accession)
             continue
         pending.append(accession)
@@ -130,12 +131,20 @@ def _valid_repair_attestation(storage: StorageLocation, run_id: str, accession: 
             and bool(payload.get("conflict_evidence")))
 
 
-def _exists_json(storage: StorageLocation, relative: str) -> bool:
-    try:
-        _read_json(storage, relative)
-    except WarehouseRuntimeError:
-        return False
-    return True
+def _list_outcome_statuses(storage: StorageLocation, run_id: str) -> dict[str, set[str]]:
+    """Batched existence check: one storage listing instead of two GetObjects per candidate.
+
+    Only the outcome path shape (accession segment, status filename) is needed
+    to answer "does this outcome exist" -- content is never read here.
+    """
+    matches = storage.find_existing(f"{_PREFIX}/{run_id}/outcomes/*/*.json")
+    statuses_by_accession: dict[str, set[str]] = {}
+    for match in matches:
+        parts = match.replace("\\", "/").rstrip("/").split("/")
+        status = parts[-1].removesuffix(".json")
+        accession_segment = parts[-2]
+        statuses_by_accession.setdefault(accession_segment, set()).add(status)
+    return statuses_by_accession
 
 
 def _read_json(storage: StorageLocation, relative: str) -> dict[str, Any]:
