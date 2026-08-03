@@ -94,5 +94,5 @@ to conflate the two.
 
 Done -- fix implemented, validated against the real prod bucket end-to-end (not
 just synthetic benchmarks), existing tests confirmed unaffected, full suite green
-modulo the one pre-existing unrelated failure. Not yet deployed to prod as of this
-entry.
+modulo the one pre-existing unrelated failure. Merged to `main` as `0951a5a8`
+(PR #332, squash). **Not yet deployed to prod** as of this entry.
