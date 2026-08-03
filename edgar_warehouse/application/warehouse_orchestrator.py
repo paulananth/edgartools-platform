@@ -4392,15 +4392,7 @@ def _sync_reference_data(
         if rows and (spec.source_name == "company_tickers_exchange" or seed_document is None):
             seed_document = document
         if seed_company_sync_state:
-            for row in rows:
-                existing = db.get_company_sync_state(int(row["cik"]))
-                db.upsert_company_sync_state(
-                    {
-                        "cik": int(row["cik"]),
-                        "tracking_status": existing.get("tracking_status", "bootstrap_pending") if existing else "bootstrap_pending",
-                        "last_error_message": None,
-                    }
-                )
+            db.seed_company_sync_state_bulk([int(row["cik"]) for row in rows])
 
     return {
         "raw_writes": raw_writes,

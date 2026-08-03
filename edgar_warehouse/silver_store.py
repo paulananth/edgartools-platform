@@ -3475,6 +3475,50 @@ class SilverDatabase:
         cols = [d[0] for d in self._conn.description]
         return dict(zip(cols, result))
 
+    def seed_company_sync_state_bulk(self, ciks: list[int]) -> int:
+        """Bulk-seed sec_company_sync_state for a set of CIKs. Returns count.
+
+        Ticket 71: replaces a per-CIK read (get_company_sync_state) + write
+        (upsert_company_sync_state) loop that ran once per company_tickers.json
+        row (~10-20K rows) -- measured live as a silent ~2m20s gap between the
+        company_tickers.json and company_tickers_exchange.json SEC fetches in
+        _sync_reference_data, the same unbatched-per-row shape as tickets 67-69.
+
+        New CIKs get tracking_status='bootstrap_pending'; existing CIKs keep
+        their current tracking_status untouched (the ON CONFLICT clause below
+        deliberately omits tracking_status, so DuckDB leaves it as-is on a
+        conflict -- replicating the original loop's "preserve if present,
+        default if new" logic without a per-row read). last_error_message is
+        always cleared to NULL, matching the original loop's unconditional
+        `"last_error_message": None` on every row, new or existing.
+        """
+        if not ciks:
+            return 0
+        self._conn.execute(
+            "CREATE TEMP TABLE IF NOT EXISTS stg_company_sync_seed (cik BIGINT)"
+        )
+        try:
+            deduped_ciks = list(dict.fromkeys(int(cik) for cik in ciks))
+            arrow_table = pa.table({"cik": deduped_ciks})
+            self._conn.register("_company_sync_seed_src", arrow_table)
+            try:
+                self._conn.execute(
+                    "INSERT INTO stg_company_sync_seed SELECT * FROM _company_sync_seed_src"
+                )
+            finally:
+                self._conn.unregister("_company_sync_seed_src")
+            self._conn.execute(
+                """
+                INSERT INTO sec_company_sync_state (cik, tracking_status, last_error_message)
+                SELECT cik, 'bootstrap_pending', NULL FROM stg_company_sync_seed
+                ON CONFLICT (cik) DO UPDATE SET
+                    last_error_message = NULL
+                """
+            )
+        finally:
+            self._conn.execute("DELETE FROM stg_company_sync_seed")
+        return len(deduped_ciks)
+
     def get_active_ciks(self) -> list[dict[str, Any]]:
         """Return CIKs already marked active in silver — used by seed-universe to skip re-bootstrapping."""
         return [{"cik": cik} for cik in self.get_tracked_ciks("active")]
