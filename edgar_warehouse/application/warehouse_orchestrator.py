@@ -11,9 +11,10 @@ import sys
 import tempfile
 import uuid
 import warnings
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Final, Iterable, Mapping
 
 from edgar_warehouse.application.command_context_factory import build_warehouse_context
 from edgar_warehouse.application.errors import WarehouseRuntimeError
@@ -2687,7 +2688,6 @@ def _run_submissions_bronze_then_silver(
         raise WarehouseRuntimeError(
             "submission processing cannot be both release and recurring mode"
         )
-    bronze_snapshots = []
     total_ciks = len(ciks)
     bronze_started_at = datetime.now(UTC)
     _emit_pipeline_event(
@@ -2697,24 +2697,25 @@ def _run_submissions_bronze_then_silver(
         load_mode=load_mode,
         run_id=sync_run_id,
     )
-    for index, cik in enumerate(ciks, start=1):
-        bronze_snapshots.append(
-            _capture_submission_bronze_snapshot(
-                context=context,
-                db=db,
-                cik=cik,
-                include_pagination=include_pagination,
-                fetch_date=fetch_date,
-                force=force,
-            )
-        )
-        if index == total_ciks or index % 10 == 0:
+
+    def _emit_bronze_progress(captured: int) -> None:
+        if captured == total_ciks or captured % 10 == 0:
             _emit_pipeline_event(
                 "bronze_capture_progress",
-                captured=index,
+                captured=captured,
                 cik_count=total_ciks,
                 run_id=sync_run_id,
             )
+
+    bronze_snapshots = _capture_submission_bronze_snapshots(
+        context=context,
+        db=db,
+        ciks=ciks,
+        include_pagination=include_pagination,
+        fetch_date=fetch_date,
+        force=force,
+        on_progress=_emit_bronze_progress,
+    )
     raw_writes = [
         write_record
         for snapshot in bronze_snapshots
@@ -4117,50 +4118,197 @@ def _normalize_policy(policy: str) -> str:
     return str(policy or "").strip().lower().replace("-", "_")
 
 
-def _capture_submission_bronze_snapshot(
+# Ticket 78 (pipeline-throughput-architecture ticket 06): bounded worker pool
+# for the concurrent submissions bronze-capture batch below. Same bound/
+# reasoning as ticket 77's WAREHOUSE_ARTIFACT_FETCH_CONCURRENCY.
+_DEFAULT_SUBMISSIONS_FETCH_CONCURRENCY: Final = 5
+
+
+def _submissions_fetch_concurrency() -> int:
+    raw = os.environ.get(
+        "WAREHOUSE_SUBMISSIONS_FETCH_CONCURRENCY", str(_DEFAULT_SUBMISSIONS_FETCH_CONCURRENCY)
+    )
+    return max(1, int(raw))
+
+
+def _dispatch_to_worker_pool(
+    items: list[Any],
+    worker_count_hint: int,
+    fn: "Callable[[Any], dict[str, Any]]",
+    *,
+    on_complete: "Callable[[], None] | None" = None,
+) -> tuple[dict[Any, dict[str, Any]], dict[Any, BaseException]]:
+    """Run ``fn`` over ``items`` on a bounded thread pool, keyed by item.
+
+    ``fn`` must do network I/O + storage writes only -- no db access (a
+    single SilverDatabase DuckDB connection is not safe for concurrent use,
+    ticket 03). ``on_complete`` runs on the main thread (inside
+    ``as_completed``'s iteration), never on a worker thread.
+    """
+    results: dict[Any, dict[str, Any]] = {}
+    errors: dict[Any, BaseException] = {}
+    if not items:
+        return results, errors
+    worker_count = min(len(items), worker_count_hint)
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        future_to_item = {executor.submit(fn, item): item for item in items}
+        for future in as_completed(future_to_item):
+            item = future_to_item[future]
+            try:
+                results[item] = future.result()
+            except BaseException as exc:  # noqa: BLE001 -- re-raised by the caller, want the original type
+                errors[item] = exc
+            else:
+                if on_complete is not None:
+                    on_complete()
+    return results, errors
+
+
+def _capture_submission_bronze_snapshots(
     *,
     context: WarehouseCommandContext,
     db: "SilverDatabase",
-    cik: int,
+    ciks: list[int],
     include_pagination: bool,
     fetch_date: date,
     force: bool,
-) -> dict[str, Any]:
-    main_snapshot = _capture_submissions_main(
-        context=context, db=db, cik=cik, fetch_date=fetch_date, force=force,
-    )
-    raw_writes = [main_snapshot["write_record"]]
-    main_payload = main_snapshot["payload"]
-    pagination_snapshots: list[dict[str, Any]] = []
+    on_progress: "Callable[[int], None] | None" = None,
+) -> list[dict[str, Any]]:
+    """Capture bronze submissions snapshots for every CIK, running real SEC
+    fetches through a bounded worker pool instead of one CIK at a time.
 
-    manifest_file_names = _pagination_file_names(main_payload) if include_pagination else []
-    for file_name in manifest_file_names:
-        pagination_snapshot = _capture_submissions_pagination(
-            context=context,
-            db=db,
-            cik=cik,
-            file_name=file_name,
-            fetch_date=fetch_date,
-            force=force,
+    Ticket 78 (pipeline-throughput-architecture ticket 06): this is the
+    shared function behind all 5 SEC-fetching commands
+    (daily_incremental/bootstrap/bootstrap_full/targeted_resync/
+    bootstrap_batch), replacing the sequential per-CIK loop that was
+    daily-incremental's single biggest measured cost after the artifact-fetch
+    loop (ticket 01: 48.3min / 10,491 CIKs at 1 SEC call/CIK).
+
+    Two-wave shape, since a CIK's pagination file names aren't known until
+    its main submissions payload is in hand:
+      wave 0 (main thread): cache-check every CIK's submissions_main.
+      wave 1 (pool): fetch the cache misses -- network + bronze write only.
+      wave 2, only if include_pagination: cache-check every CIK's pagination
+        files (main thread), then fetch the misses through the pool,
+        flattened across all CIKs rather than nested per-CIK, to maximize
+        concurrency for heavy filers too.
+    Results are assembled back into ``ciks`` order regardless of completion
+    order, so callers see an identical shape/order to the old sequential
+    implementation.
+
+    Progress (``on_progress``) is driven by wave 0+1 completions, which
+    reach ``len(ciks)`` before wave 2 (pagination) begins -- for
+    include_pagination=True runs, the terminal 100% marker fires once mains
+    are resolved, before pagination fetches finish. Accepted tradeoff:
+    daily-incremental (the measured bottleneck this ticket targets) always
+    runs with include_pagination=False, so this never applies to it.
+    """
+    worker_count_hint = _submissions_fetch_concurrency()
+    main_progress = 0
+
+    def _bump_main_progress() -> None:
+        nonlocal main_progress
+        main_progress += 1
+        if on_progress is not None:
+            on_progress(main_progress)
+
+    main_cache_by_cik: dict[int, dict[str, Any]] = {}
+    pending_main_ciks: list[int] = []
+    for cik in ciks:
+        cached = (
+            None
+            if force
+            else _resolve_submissions_main_cached_snapshot(
+                context=context, db=db, cik=cik, fetch_date=fetch_date
+            )
         )
-        pagination_snapshots.append(
+        if cached is not None:
+            main_cache_by_cik[cik] = cached
+            _bump_main_progress()
+        else:
+            pending_main_ciks.append(cik)
+
+    main_fetch_results, main_fetch_errors = _dispatch_to_worker_pool(
+        pending_main_ciks,
+        worker_count_hint,
+        lambda cik: _fetch_submissions_main_snapshot(context=context, cik=cik, fetch_date=fetch_date),
+        on_complete=_bump_main_progress,
+    )
+    if main_fetch_errors:
+        first_failed_cik = min(main_fetch_errors, key=ciks.index)
+        raise main_fetch_errors[first_failed_cik]
+
+    main_snapshot_by_cik: dict[int, dict[str, Any]] = {**main_cache_by_cik, **main_fetch_results}
+
+    pagination_manifest_by_cik: dict[int, list[str]] = {
+        cik: (_pagination_file_names(main_snapshot_by_cik[cik]["payload"]) if include_pagination else [])
+        for cik in ciks
+    }
+
+    pagination_cache_by_key: dict[tuple[int, str], dict[str, Any]] = {}
+    pending_pagination_keys: list[tuple[int, str]] = []
+    for cik in ciks:
+        for file_name in pagination_manifest_by_cik[cik]:
+            key = (cik, file_name)
+            cached = (
+                None
+                if force
+                else _resolve_submissions_pagination_cached_snapshot(
+                    context=context, db=db, cik=cik, file_name=file_name, fetch_date=fetch_date,
+                )
+            )
+            if cached is not None:
+                pagination_cache_by_key[key] = cached
+            else:
+                pending_pagination_keys.append(key)
+
+    pagination_fetch_results, pagination_fetch_errors = _dispatch_to_worker_pool(
+        pending_pagination_keys,
+        worker_count_hint,
+        lambda key: _fetch_submissions_pagination_snapshot(
+            context=context, cik=key[0], file_name=key[1], fetch_date=fetch_date
+        ),
+    )
+    if pagination_fetch_errors:
+        ordered_keys = [
+            (cik, file_name) for cik in ciks for file_name in pagination_manifest_by_cik[cik]
+        ]
+        first_failed_key = min(pagination_fetch_errors, key=ordered_keys.index)
+        raise pagination_fetch_errors[first_failed_key]
+
+    pagination_snapshot_by_key: dict[tuple[int, str], dict[str, Any]] = {
+        **pagination_cache_by_key,
+        **pagination_fetch_results,
+    }
+
+    snapshots: list[dict[str, Any]] = []
+    for cik in ciks:
+        main_snapshot = main_snapshot_by_cik[cik]
+        raw_writes = [main_snapshot["write_record"]]
+        manifest_file_names = pagination_manifest_by_cik[cik]
+        pagination_snapshots: list[dict[str, Any]] = []
+        for file_name in manifest_file_names:
+            snapshot = pagination_snapshot_by_key[(cik, file_name)]
+            pagination_snapshots.append(
+                {
+                    "file_name": file_name,
+                    "payload": snapshot["payload"],
+                    "write_record": snapshot["write_record"],
+                }
+            )
+            raw_writes.append(snapshot["write_record"])
+        snapshots.append(
             {
-                "file_name": file_name,
-                "payload": pagination_snapshot["payload"],
-                "write_record": pagination_snapshot["write_record"],
+                "cik": cik,
+                "include_pagination": include_pagination,
+                "main_payload": main_snapshot["payload"],
+                "main_write_record": main_snapshot["write_record"],
+                "manifest_file_names": manifest_file_names,
+                "pagination_snapshots": pagination_snapshots,
+                "raw_writes": raw_writes,
             }
         )
-        raw_writes.append(pagination_snapshot["write_record"])
-
-    return {
-        "cik": cik,
-        "include_pagination": include_pagination,
-        "main_payload": main_payload,
-        "main_write_record": main_snapshot["write_record"],
-        "manifest_file_names": manifest_file_names,
-        "pagination_snapshots": pagination_snapshots,
-        "raw_writes": raw_writes,
-    }
+    return snapshots
 
 
 def _apply_submission_snapshot_to_silver(
@@ -4456,6 +4604,75 @@ def _reference_sources_for_scope(scope_key: str) -> list[str]:
     raise WarehouseRuntimeError(f"Unsupported reference scope_key: {scope_key}")
 
 
+def _resolve_submissions_main_cached_snapshot(
+    *,
+    context: WarehouseCommandContext,
+    db: "SilverDatabase",
+    cik: int,
+    fetch_date: date,
+) -> "dict[str, Any] | None":
+    """Cache-check only (db + storage reads, no network).
+
+    Ticket 78: split out of ``_capture_submissions_main`` so the concurrent
+    batch capture (``_capture_submission_bronze_snapshots``) can resolve
+    cache hits sequentially on the main thread before dispatching real
+    fetches to a worker pool.
+    """
+    capture_spec = default_capture_spec_factory().submissions_main(cik, fetch_date)
+
+    # Idempotency: consult the silver checkpoint before hitting the SEC API.
+    # If force=False and the bronze file we wrote last time is still intact,
+    # reuse it.  This prevents duplicate bronze files across bootstrap re-runs
+    # and eliminates redundant SEC API calls for data that hasn't changed.
+    cached = _read_bronze_if_cached(
+        bronze_root=context.bronze_root,
+        db=db,
+        source_name=capture_spec.source_name,
+        source_key=f"cik:{cik}",
+        source_url=capture_spec.source_url or "",
+        relative_path=capture_spec.relative_path,
+        cik=cik,
+    )
+    if cached is not None:
+        return cached
+    # No local silver checkpoint (e.g. fresh silver DB that never processed this
+    # CIK), but bronze may already exist in storage from another environment's
+    # run. Check by CIK before falling back to a live SEC call.
+    return _read_bronze_by_glob_if_present(
+        bronze_root=context.bronze_root,
+        source_name=capture_spec.source_name,
+        source_url=capture_spec.source_url or "",
+        relative_glob=default_path_resolver().submissions_main_glob(cik),
+        cik=cik,
+    )
+
+
+def _fetch_submissions_main_snapshot(
+    *,
+    context: WarehouseCommandContext,
+    cik: int,
+    fetch_date: date,
+) -> dict[str, Any]:
+    """Network fetch + bronze write only -- no db access.
+
+    Ticket 78: safe to run on a worker thread.
+    """
+    capture_spec = default_capture_spec_factory().submissions_main(cik, fetch_date)
+    payload_bytes = _download_sec_bytes(url=capture_spec.source_url or "", identity=context.identity)
+    write_record = _write_bronze_object(
+        context=context,
+        relative_path=capture_spec.relative_path,
+        source_name=capture_spec.source_name,
+        source_url=capture_spec.source_url or "",
+        payload=payload_bytes,
+        cik=cik,
+    )
+    return {
+        "payload": _decode_json_bytes(payload_bytes, capture_spec.source_url or ""),
+        "write_record": write_record,
+    }
+
+
 def _capture_submissions_main(
     *,
     context: WarehouseCommandContext,
@@ -4464,37 +4681,56 @@ def _capture_submissions_main(
     fetch_date: date,
     force: bool,
 ) -> dict[str, Any]:
-    capture_spec = default_capture_spec_factory().submissions_main(cik, fetch_date)
-
-    # Idempotency: consult the silver checkpoint before hitting the SEC API.
-    # If force=False and the bronze file we wrote last time is still intact,
-    # reuse it.  This prevents duplicate bronze files across bootstrap re-runs
-    # and eliminates redundant SEC API calls for data that hasn't changed.
     if not force:
-        cached = _read_bronze_if_cached(
-            bronze_root=context.bronze_root,
-            db=db,
-            source_name=capture_spec.source_name,
-            source_key=f"cik:{cik}",
-            source_url=capture_spec.source_url or "",
-            relative_path=capture_spec.relative_path,
-            cik=cik,
+        cached = _resolve_submissions_main_cached_snapshot(
+            context=context, db=db, cik=cik, fetch_date=fetch_date
         )
         if cached is not None:
             return cached
-        # No local silver checkpoint (e.g. fresh silver DB that never processed this
-        # CIK), but bronze may already exist in storage from another environment's
-        # run. Check by CIK before falling back to a live SEC call.
-        cached = _read_bronze_by_glob_if_present(
-            bronze_root=context.bronze_root,
-            source_name=capture_spec.source_name,
-            source_url=capture_spec.source_url or "",
-            relative_glob=default_path_resolver().submissions_main_glob(cik),
-            cik=cik,
-        )
-        if cached is not None:
-            return cached
+    return _fetch_submissions_main_snapshot(context=context, cik=cik, fetch_date=fetch_date)
 
+
+def _resolve_submissions_pagination_cached_snapshot(
+    *,
+    context: WarehouseCommandContext,
+    db: "SilverDatabase",
+    cik: int,
+    file_name: str,
+    fetch_date: date,
+) -> "dict[str, Any] | None":
+    """Cache-check only (db + storage reads, no network). See
+    ``_resolve_submissions_main_cached_snapshot`` (ticket 78)."""
+    capture_spec = default_capture_spec_factory().submissions_pagination(cik, file_name, fetch_date)
+    cached = _read_bronze_if_cached(
+        bronze_root=context.bronze_root,
+        db=db,
+        source_name=capture_spec.source_name,
+        source_key=f"file:{file_name}",
+        source_url=capture_spec.source_url or "",
+        relative_path=capture_spec.relative_path,
+        cik=cik,
+    )
+    if cached is not None:
+        return cached
+    return _read_bronze_by_glob_if_present(
+        bronze_root=context.bronze_root,
+        source_name=capture_spec.source_name,
+        source_url=capture_spec.source_url or "",
+        relative_glob=default_path_resolver().submissions_pagination_glob(cik, file_name),
+        cik=cik,
+    )
+
+
+def _fetch_submissions_pagination_snapshot(
+    *,
+    context: WarehouseCommandContext,
+    cik: int,
+    file_name: str,
+    fetch_date: date,
+) -> dict[str, Any]:
+    """Network fetch + bronze write only -- no db access. See
+    ``_fetch_submissions_main_snapshot`` (ticket 78)."""
+    capture_spec = default_capture_spec_factory().submissions_pagination(cik, file_name, fetch_date)
     payload_bytes = _download_sec_bytes(url=capture_spec.source_url or "", identity=context.identity)
     write_record = _write_bronze_object(
         context=context,
@@ -4519,43 +4755,15 @@ def _capture_submissions_pagination(
     fetch_date: date,
     force: bool,
 ) -> dict[str, Any]:
-    capture_spec = default_capture_spec_factory().submissions_pagination(cik, file_name, fetch_date)
-
     if not force:
-        cached = _read_bronze_if_cached(
-            bronze_root=context.bronze_root,
-            db=db,
-            source_name=capture_spec.source_name,
-            source_key=f"file:{file_name}",
-            source_url=capture_spec.source_url or "",
-            relative_path=capture_spec.relative_path,
-            cik=cik,
+        cached = _resolve_submissions_pagination_cached_snapshot(
+            context=context, db=db, cik=cik, file_name=file_name, fetch_date=fetch_date
         )
         if cached is not None:
             return cached
-        cached = _read_bronze_by_glob_if_present(
-            bronze_root=context.bronze_root,
-            source_name=capture_spec.source_name,
-            source_url=capture_spec.source_url or "",
-            relative_glob=default_path_resolver().submissions_pagination_glob(cik, file_name),
-            cik=cik,
-        )
-        if cached is not None:
-            return cached
-
-    payload_bytes = _download_sec_bytes(url=capture_spec.source_url or "", identity=context.identity)
-    write_record = _write_bronze_object(
-        context=context,
-        relative_path=capture_spec.relative_path,
-        source_name=capture_spec.source_name,
-        source_url=capture_spec.source_url or "",
-        payload=payload_bytes,
-        cik=cik,
+    return _fetch_submissions_pagination_snapshot(
+        context=context, cik=cik, file_name=file_name, fetch_date=fetch_date
     )
-    return {
-        "payload": _decode_json_bytes(payload_bytes, capture_spec.source_url or ""),
-        "write_record": write_record,
-    }
 
 
 def _read_bronze_by_glob_if_present(

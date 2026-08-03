@@ -62,12 +62,16 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         events: list[str] = []
 
         def capture(**kwargs):
-            cik = kwargs["cik"]
-            events.append(f"bronze:{cik}")
-            return {
-                "cik": cik,
-                "raw_writes": [{"source_name": "submissions_main", "cik": cik}],
-            }
+            snapshots = []
+            for cik in kwargs["ciks"]:
+                events.append(f"bronze:{cik}")
+                snapshots.append(
+                    {
+                        "cik": cik,
+                        "raw_writes": [{"source_name": "submissions_main", "cik": cik}],
+                    }
+                )
+            return snapshots
 
         def apply(**kwargs):
             cik = kwargs["snapshot"]["cik"]
@@ -80,7 +84,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             }
 
         with (
-            patch.object(warehouse_orchestrator, "_capture_submission_bronze_snapshot", side_effect=capture),
+            patch.object(warehouse_orchestrator, "_capture_submission_bronze_snapshots", side_effect=capture),
             patch.object(warehouse_orchestrator, "_apply_submission_snapshot_to_silver", side_effect=apply),
         ):
             result = warehouse_orchestrator._run_submissions_bronze_then_silver(
@@ -112,12 +116,16 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         events: list[str] = []
 
         def capture(**kwargs):
-            cik = kwargs["cik"]
-            events.append(f"bronze:{cik}")
-            return {
-                "cik": cik,
-                "raw_writes": [{"source_name": "submissions_main", "cik": cik}],
-            }
+            snapshots = []
+            for cik in kwargs["ciks"]:
+                events.append(f"bronze:{cik}")
+                snapshots.append(
+                    {
+                        "cik": cik,
+                        "raw_writes": [{"source_name": "submissions_main", "cik": cik}],
+                    }
+                )
+            return snapshots
 
         def apply(**kwargs):
             cik = kwargs["snapshot"]["cik"]
@@ -138,7 +146,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             }
 
         with (
-            patch.object(warehouse_orchestrator, "_capture_submission_bronze_snapshot", side_effect=capture),
+            patch.object(warehouse_orchestrator, "_capture_submission_bronze_snapshots", side_effect=capture),
             patch.object(warehouse_orchestrator, "_apply_submission_snapshot_to_silver", side_effect=apply),
             patch.object(
                 warehouse_orchestrator,
@@ -175,7 +183,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         pipeline_events: list[tuple[str, dict]] = []
 
         def capture(**kwargs):
-            return {"cik": kwargs["cik"], "raw_writes": []}
+            return [{"cik": cik, "raw_writes": []} for cik in kwargs["ciks"]]
 
         def apply(**kwargs):
             return {
@@ -188,7 +196,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         with (
             patch.object(
                 warehouse_orchestrator,
-                "_capture_submission_bronze_snapshot",
+                "_capture_submission_bronze_snapshots",
                 side_effect=capture,
             ),
             patch.object(
@@ -261,8 +269,8 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         with (
             patch.object(
                 warehouse_orchestrator,
-                "_capture_submission_bronze_snapshot",
-                return_value={"cik": 1001, "raw_writes": []},
+                "_capture_submission_bronze_snapshots",
+                return_value=[{"cik": 1001, "raw_writes": []}],
             ),
             patch.object(
                 warehouse_orchestrator,
@@ -311,7 +319,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
 
     def test_release_submission_flow_sends_only_manifest_required_accessions(self) -> None:
         def capture(**kwargs):
-            return {"cik": kwargs["cik"], "raw_writes": []}
+            return [{"cik": cik, "raw_writes": []} for cik in kwargs["ciks"]]
 
         def apply(**kwargs):
             return {
@@ -322,7 +330,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             }
 
         with (
-            patch.object(warehouse_orchestrator, "_capture_submission_bronze_snapshot", side_effect=capture),
+            patch.object(warehouse_orchestrator, "_capture_submission_bronze_snapshots", side_effect=capture),
             patch.object(warehouse_orchestrator, "_apply_submission_snapshot_to_silver", side_effect=apply),
             patch.object(
                 warehouse_orchestrator,
@@ -363,8 +371,8 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         with (
             patch.object(
                 warehouse_orchestrator,
-                "_capture_submission_bronze_snapshot",
-                return_value={"cik": 1001, "raw_writes": []},
+                "_capture_submission_bronze_snapshots",
+                return_value=[{"cik": 1001, "raw_writes": []}],
             ),
             patch.object(
                 warehouse_orchestrator,
