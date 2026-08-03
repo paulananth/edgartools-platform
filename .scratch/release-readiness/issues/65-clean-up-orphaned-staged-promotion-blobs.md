@@ -1,7 +1,7 @@
 # Clean up orphaned staged-promotion blobs in S3 `silverstage/`
 
 Type: task
-Status: claimed
+Status: resolved
 
 ## Progress (2026-08-02 — prefix renamed)
 
@@ -120,3 +120,25 @@ per this repo's destructive-operation convention (same as ticket 71's stance).
 
 Not yet deployed — the code fix (delete-on-success + lifecycle rule) takes effect on the
 next warehouse image rebuild/deploy plus a `terraform apply` for the lifecycle rule.
+
+## Sweep completed (2026-08-03)
+
+Both PRs merged (#338 ticket 64, #339 this ticket — resolved a real merge conflict between
+them in `identity_refresh_publication.py`/`test_identity_refresh_publication.py`/`map.md`,
+same shape as the earlier 77/78 conflict; full suite green afterward, 1270 passed). Re-ran
+the safety precondition fresh immediately before the sweep (zero `RUNNING` executions across
+all 6 SEC-fetching/reducer state machines, unchanged from the earlier check) and re-confirmed
+the object count (still 48/51.4GB, unchanged). Ran `aws s3 rm --recursive` scoped strictly to
+`s3://edgartools-prod-warehouse-690839588395/warehouse/_staging/` — confirmed empty
+afterward (0 objects, 0 bytes).
+
+**New finding, not yet actioned:** the *live* `silverstage/` prefix (what
+`write_staged_bytes` actually writes to today) already has its own smaller version of the
+same leak — **16 objects, 18.4GB** — because the code fix isn't deployed yet, so the leak is
+still actively happening under the new prefix name. Deliberately did not sweep
+`silverstage/` in this pass: unlike the dead `_staging/` prefix, it's the prefix the
+still-undeployed fix will actually manage going forward, and a couple of its objects could
+legitimately be conflict-preserved (intentional). Once the code + Terraform lifecycle rule
+deploy, the 3-day expiration rule will catch up on whatever's there by then; a manual sweep
+of `silverstage/` before that deploy is a separate, later decision, not part of this ticket's
+scope (which named the old `_staging/` prefix specifically).
