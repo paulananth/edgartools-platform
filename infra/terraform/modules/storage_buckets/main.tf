@@ -103,6 +103,38 @@ resource "aws_s3_bucket_ownership_controls" "warehouse" {
   }
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "warehouse" {
+  bucket = aws_s3_bucket.warehouse.id
+
+  # Backstop for staged canonical-silver promotion candidates
+  # (silverstage/<uuid>/..., written by ObjectStorage.write_staged_bytes --
+  # see edgar_warehouse/infrastructure/object_storage.py). promote_staged
+  # deliberately never deletes a staged object on a PromotionConflictError
+  # (left in place for inspection/retry), and the reducer's own
+  # explicit-delete-on-success path (release-readiness ticket 65) only
+  # covers the success case. Without this rule a staged object with no
+  # successful promotion and no manual cleanup lives forever -- confirmed
+  # live in prod: 46 orphaned objects, 49.3GB, under the pre-rename
+  # `_staging/` prefix, with no lifecycle rule at all
+  # (`get-bucket-lifecycle-configuration` returned NoSuchLifecycleConfiguration).
+  rule {
+    id     = "expire-silver-staging-candidates"
+    status = "Enabled"
+
+    filter {
+      prefix = "silverstage/"
+    }
+
+    expiration {
+      days = 3
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 3
+    }
+  }
+}
+
 resource "aws_kms_key" "snowflake_export" {
   description             = "CMK for Snowflake export artifacts in ${var.environment}."
   deletion_window_in_days = 7

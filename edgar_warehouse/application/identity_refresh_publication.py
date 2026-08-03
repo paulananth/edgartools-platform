@@ -277,6 +277,11 @@ def reduce_identity_refresh(
                 result_etag=promotion.new_version.etag,
                 elapsed_seconds=time.monotonic() - stage_promote_started_at,
             )
+            # Deliberately only on success: promote_staged leaves a staged
+            # object in place on PromotionConflictError so a caller can
+            # inspect/retry it (release-readiness ticket 65) -- the bucket
+            # lifecycle rule on silverstage/ is the backstop for that case.
+            storage_root.delete_object(staged_relative)
         except PromotionConflictError as exc:
             _emit_reducer_event(
                 "identity_refresh_promotion_conflict",
