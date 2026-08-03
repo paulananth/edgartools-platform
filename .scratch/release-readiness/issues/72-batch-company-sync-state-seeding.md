@@ -79,4 +79,5 @@ was changed.
 
 Done -- fix implemented, validated against real data (row count) and real
 semantics (six DB-backed tests), full suite green modulo the one pre-existing
-unrelated failure. Not yet deployed to prod as of this entry.
+unrelated failure. Merged to `main` as `54ea7485` (PR #334, squash). **Not yet
+deployed to prod** as of this entry.
