@@ -1,5 +1,5 @@
 Type: task
-Status: in_progress
+Status: resolved
 
 ## Question
 
@@ -120,3 +120,27 @@ confirmation per this repo's destructive/shared-system-change convention):**
   duplicate the new `-failed` alarm's `ExecutionsFailed` coverage under a stale name.
   Not yet executed -- a live `aws cloudwatch delete-alarms` against prod, same
   confirm-before-executing convention as the new alarm's deploy.
+
+## Live deploy completed (2026-08-03)
+
+PR #344 merged. Ran `deploy-aws-application.sh --env prod --configure-daily-incremental-alarms
+enable --operator-alert-topic-arn arn:aws:sns:us-east-1:690839588395:sec-edgar-pipeline-alerts`
+against prod (account `690839588395`). Confirmed live via `aws cloudwatch describe-alarms`:
+
+- `edgartools-prod-daily-incremental-timeout` -- unchanged (`ExecutionsTimedOut`, `OK`),
+  re-put idempotently with identical parameters.
+- `edgartools-prod-daily-incremental-failed` -- **new**, `AWS/States` `ExecutionsFailed`,
+  dimensioned to `arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-daily-incremental`,
+  alarm action -> `sec-edgar-pipeline-alerts`, state `INSUFFICIENT_DATA` (expected: no
+  datapoints yet for a brand-new alarm).
+
+Move 2: re-confirmed `sec-edgar-pipeline-failure` was still dimensioned to
+`sec-edgar-bronze-ingest` (re-ran `describe-state-machine` -> `StateMachineDoesNotExist`
+immediately before deleting, not relying on the earlier-session finding) and deleted it via
+`aws cloudwatch delete-alarms --alarm-names sec-edgar-pipeline-failure` -- confirmed empty
+afterward (`describe-alarms` returns `[]`).
+
+Both "Done when" criteria are now live and confirmed, not just planned. `daily-incremental`
+now has real CloudWatch coverage for both timeout and application-level (`States.TaskFailed`)
+failures, both routed to the same confirmed operator subscriber, and the misleading orphaned
+alarm is gone.
