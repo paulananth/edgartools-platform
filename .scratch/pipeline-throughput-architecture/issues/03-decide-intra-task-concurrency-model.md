@@ -84,6 +84,16 @@ mocks):
    from the 4.27/sec baseline toward the ~9/sec ceiling -- correctness tests
    prove safety, only a real run proves speedup.
 
+**Addendum (2026-08-03, discovered while resolving ticket 04):** this
+decision's safety guarantee -- staying within SEC's rate ceiling -- holds
+for this task in isolation, but assumes no *other* SEC-fetching command
+(`bootstrap-batch`, `bootstrap`, `targeted_resync`, etc.) is running
+concurrently. No such cross-command guarantee currently exists in the
+codebase; see [ticket 09](09-decide-cross-command-sec-fetch-mutual-exclusion.md)
+for that separate, broader decision. This ticket's own scope (one task,
+one loop) and decision are unchanged by that finding -- flagged here only
+so the full safety picture isn't lost across tickets.
+
 **Known implementation nuance, flagged but deliberately not decided here**
 (decision-spec scope, not implementation): the existing circuit breaker
 (`consecutive_errors >= _CONSECUTIVE_ERROR_LIMIT`) assumes strictly
