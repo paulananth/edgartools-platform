@@ -111,6 +111,26 @@ class StorageLocation:
         protocol = _protocol_for_uri(normalized)
         _assert_protocol_allowed(protocol)
         object.__setattr__(self, "root", normalized.rstrip("/\\"))
+        object.__setattr__(self, "_s3_client", None)
+
+    def _s3(self) -> Any:
+        """Lazily create and cache one boto3 S3 client for this instance's lifetime.
+
+        A fresh boto3.client("s3") per call discards its connection pool, so
+        every request pays a cold TCP+TLS handshake instead of reusing a warm
+        keep-alive connection. Measured live against the real prod bronze
+        bucket (ticket 69): 184ms/call fresh vs 52.6ms/call reused -- this
+        was the dominant cost in the per-document artifact-fetch loop
+        (bronze_filing_artifacts.py calls write_immutable_bytes once per
+        document, thousands of times per run), not the SEC fetch itself.
+        Single-threaded call sites only (no concurrency in this loop), so
+        instance-level caching needs no locking.
+        """
+        if self._s3_client is None:
+            import boto3
+
+            object.__setattr__(self, "_s3_client", boto3.client("s3"))
+        return self._s3_client
 
     @property
     def is_remote(self) -> bool:
@@ -257,11 +277,10 @@ class StorageLocation:
             import hashlib
             from urllib.parse import urlsplit
 
-            import boto3
             from botocore.exceptions import ClientError
 
             parsed = urlsplit(destination)
-            client = boto3.client("s3")
+            client = self._s3()
             checksum_sha256 = base64.b64encode(
                 hashlib.sha256(payload).digest()
             ).decode("ascii")
@@ -347,7 +366,6 @@ class StorageLocation:
         if self.is_remote:
             from urllib.parse import urlsplit
 
-            import boto3
             from botocore.exceptions import ClientError
 
             destination = urlsplit(canonical_path_str)
@@ -361,7 +379,7 @@ class StorageLocation:
             else:
                 request["IfMatch"] = expected_etag
             try:
-                response = boto3.client("s3").put_object(**request)
+                response = self._s3().put_object(**request)
             except ClientError as exc:
                 status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
                 if status in {404, 409, 412}:
