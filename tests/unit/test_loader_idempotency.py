@@ -479,6 +479,114 @@ class LoaderIdempotencyTests(unittest.TestCase):
         self.assertFalse(rows_by_name["exhibit99.htm"]["is_primary"])
         self.assertTrue(rows_by_name["primary.xml"]["is_primary"])
 
+    def test_binary_image_exhibits_are_excluded_from_fetch_and_registry(self) -> None:
+        """Ticket 70: JPG/PNG/GIF exhibits (investor-presentation slides etc.)
+        are neither downloaded nor registered in sec_filing_attachment --
+        real documents alongside them are unaffected."""
+        accession = "0000719220-26-000090"
+        primary = _FakeAttachment(
+            sequence_number="1",
+            document="primary.htm",
+            document_type="8-K",
+            description="Primary document",
+            url="https://www.sec.gov/Archives/edgar/data/719220/primary.htm",
+            content="<html>primary</html>",
+        )
+        xsd = _FakeAttachment(
+            sequence_number="2",
+            document="stba-20260727.xsd",
+            document_type="EX-101.SCH",
+            description="XBRL schema",
+            url="https://www.sec.gov/Archives/edgar/data/719220/stba-20260727.xsd",
+            content="<xsd />",
+        )
+        slide_jpg = _FakeAttachment(
+            sequence_number="3",
+            document="a2q26stbainvestorpresent001.jpg",
+            document_type="GRAPHIC",
+            description="Investor presentation slide",
+            url="https://www.sec.gov/Archives/edgar/data/719220/a2q26stbainvestorpresent001.jpg",
+            content="binary",
+        )
+        slide_png = _FakeAttachment(
+            sequence_number="4",
+            document="a2q26stbainvestorpresent002.PNG",
+            document_type="GRAPHIC",
+            description="Investor presentation slide (uppercase extension)",
+            url="https://www.sec.gov/Archives/edgar/data/719220/a2q26stbainvestorpresent002.PNG",
+            content="binary",
+        )
+        fake_filing = _FakeFiling(
+            attachments=_FakeAttachments(
+                [primary, xsd, slide_jpg, slide_png], primary_documents=[primary]
+            )
+        )
+        get_filing = Mock(return_value=fake_filing)
+        downloads = Mock(return_value=b"<raw attachment />")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _ArtifactDb()
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+
+            result = bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context,
+                db=db,
+                accession_number=accession,
+                sync_run_id="run-1",
+                download_bytes=downloads,
+                get_filing=get_filing,
+                force=True,
+            )
+
+        self.assertEqual(result["attachment_count"], 2)
+        fetched_urls = {call.args[0] for call in downloads.call_args_list}
+        self.assertEqual(
+            fetched_urls,
+            {
+                "https://www.sec.gov/Archives/edgar/data/719220/primary.htm",
+                "https://www.sec.gov/Archives/edgar/data/719220/stba-20260727.xsd",
+            },
+        )
+        registered_names = {row["document_name"] for row in db.merged_rows}
+        self.assertEqual(registered_names, {"primary.htm", "stba-20260727.xsd"})
+
+    def test_primary_document_is_never_excluded_even_with_an_image_extension(self) -> None:
+        """A filing whose primary document itself happens to be an image
+        (unusual, but the exclusion rule must not special-case away the
+        one document every filing is required to have)."""
+        accession = "0000000001-26-000001"
+        primary_jpg = _FakeAttachment(
+            sequence_number="1",
+            document="primary.jpg",
+            document_type="8-K",
+            description="Primary document",
+            url="https://www.sec.gov/Archives/edgar/data/1/primary.jpg",
+            content="binary",
+        )
+        fake_filing = _FakeFiling(
+            attachments=_FakeAttachments([primary_jpg], primary_documents=[primary_jpg])
+        )
+        get_filing = Mock(return_value=fake_filing)
+        downloads = Mock(return_value=b"<raw attachment />")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _ArtifactDb()
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+
+            result = bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context,
+                db=db,
+                accession_number=accession,
+                sync_run_id="run-1",
+                download_bytes=downloads,
+                get_filing=get_filing,
+                force=True,
+            )
+
+        self.assertEqual(result["attachment_count"], 1)
+        downloads.assert_called_once()
+        self.assertEqual(db.merged_rows[0]["document_name"], "primary.jpg")
+
     def test_edgartools_homepage_fallback_with_missing_document_type_is_transient(self) -> None:
         """Production regression: accession 0000950123-19-003980.
 
