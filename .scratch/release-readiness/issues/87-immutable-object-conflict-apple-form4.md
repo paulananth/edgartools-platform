@@ -119,3 +119,14 @@ failure.
 Not yet deployed to prod or live-verified with a real conflict --
 pending explicit confirmation, matching this workstream's live-action
 convention.
+
+## Deployed + live-verified (2026-08-04)
+
+Re-ran the exact `targeted-resync --scope-type cik --scope-key 320193`
+that originally failed. Result: **27 separate immutable-object conflicts**
+were caught and skipped (`accession_resync_conflict_skipped`), not just
+the single instance originally found -- confirms this is a real, recurring
+SEC-side byte-drift pattern for this CIK, not a one-off. The run still
+ultimately failed, but for an unrelated reason (ticket 88), and ticket 86's
+fix released the lease cleanly on that failure -- confirming both fixes
+compose correctly together in prod.

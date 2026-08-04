@@ -1,5 +1,5 @@
 Type: task
-Status: in_progress
+Status: resolved
 
 ## Question
 
@@ -129,3 +129,15 @@ surface the original caught error dynamically) is genuinely accepted ASL
 syntax, not just something that looks plausible. Not yet deployed to prod
 or live-verified -- pending explicit confirmation per this workstream's
 live-action convention.
+
+## Deployed + live-verified (2026-08-04)
+
+Rebuilt+deployed warehouse/MDM images from `main`@`0abfa98d`, all 5 machines
+confirmed live with the new states, ASL-validated clean. A real
+`targeted-resync` run hit an unrelated failure (ticket 88) inside
+`RunWarehouseTask`, exercising the new `Catch` for real: confirmed via
+direct canonical-S3 read (`SELECT ... FROM pipeline_run_lease`) that
+`sec_fetch_active` released cleanly (`status='idle'`, `run_id` matching
+the execution) with zero manual intervention -- the exact failure mode
+that required two manual recoveries during ticket 84's own verification
+now self-heals.
