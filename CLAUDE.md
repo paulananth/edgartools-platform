@@ -722,25 +722,53 @@ worked further).
 
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
-`load_history` is the canonical way to load companies at scale. It runs in four
-sequential stages, each optimised for its workload:
+`load_history` is the canonical way to load companies at scale. Its live
+`edgartools-prod-load-history` definition (re-verified via
+`describe-state-machine`, not copied from an older architecture doc) runs:
 
 ```
-Stage 1 — Bronze + Silver (parallel, N×10 concurrent ECS tasks)
-  seed-universe  →  bootstrap-batch ×N  (MaxConcurrency=10)
-  • Each batch: fetch SEC submissions + pagination → S3 bronze, parse → silver DuckDB
-  • NO gold build per batch (bootstrap-batch is NOT in GOLD_AFFECTING_COMMANDS)
+Stage 0 — Company identity (windowed, MaxConcurrency=1, strict)
+  seed-universe → mdm-seed-universe → Stage0CompanyIdentity
+
+Stage 1 — Bronze + Silver bootstrap (windowed, MaxConcurrency=1)
+  Stage1Parallel/WindowedBootstrap
+  • Each window: bootstrap-next --silver-only over a CIK slice → S3 bronze, parse → silver DuckDB
+  • MaxConcurrency=1 by design (same class of reason as the ticket-20 N-way
+    silver-promotion-race finding elsewhere in this file) -- windows run one at
+    a time, not in parallel, regardless of BOOTSTRAP_BATCH_CONCURRENCY (see
+    "Key invariants" below -- that env var does not control this Map)
+  • Within each window, artifact fetching (ownership/ADV/13F documents) uses
+    bounded intra-task concurrency (ThreadPoolExecutor, WAREHOUSE_ARTIFACT_FETCH_CONCURRENCY,
+    default 5) -- this is real parallelism, just not CIK-batch-level parallelism
+
+Stage 1B — Fundamentals (windowed, MaxConcurrency=1 each, run after Stage 1)
+  Stage1BEntityFacts → Stage1BPerFiling → Stage1BThirteenF
+  • XBRL company facts, 8-K/DEF 14A per-filing data, and 13F holdings respectively
 
 Stage 2 — MDM entity resolution (sequential Step Functions)
-  mdm-run  →  mdm-backfill-relationships  →  mdm-sync-graph  →  mdm-verify-graph
-  • Runs after ALL batches complete so entity resolution sees the full silver dataset
+  mdm-run → mdm-backfill-relationships → mdm-export → mdm-sync-graph → mdm-verify-graph
+  • Runs after Stage 1/1B complete so entity resolution sees the full silver dataset
   • Derives IS_INSIDER, MANAGES_FUND etc. and syncs to the graph (Snowflake, not external Neo4j)
 
 Stage 3 — Gold refresh (single ECS task)
   gold-refresh
-  • Reads complete silver DuckDB, builds all 9 gold tables, writes Snowflake export manifests
+  • Reads complete silver DuckDB, builds all gold tables, writes Snowflake export manifests
   • SNOWFLAKE_RUN_MANIFEST_TASK picks up the manifest and refreshes EDGARTOOLS_GOLD within 1 min
 ```
+
+**A separate, standalone state machine, `edgartools-prod-bootstrap-batched`,
+does run CIK batches with real parallelism** (`BatchBootstrap` Map,
+`MaxConcurrency=3`) — but it is not part of `load_history`'s call graph at
+all, and as of this writing has **zero executions ever** in prod (confirmed
+via `list-executions`). Treat it as deployed-but-unverified infrastructure,
+not an active throughput lever, until someone actually runs it.
+
+There is a second, genuinely-parallel batch pipeline in prod:
+`edgartools-prod-silver-mdm-gold` (`BatchSilver` Map, `MaxConcurrency=3`,
+runs `bootstrap-batch --artifact-policy skip`) — this is what the
+`BOOTSTRAP_BATCH_CONCURRENCY`/`bootstrap-batch` invariants below actually
+govern. It reprocesses already-loaded bronze (no new SEC submissions
+fetched) and is unrelated to `load_history`'s own bootstrap Stage.
 
 **Graph storage (read this before assuming "Neo4j" means an external service):**
 As of the `neo4j-snowflake` workstream (v1.3, completed 2026-06-12), graph data lives
@@ -787,19 +815,37 @@ aws stepfunctions start-execution \
   --state-machine-arn arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-load-history \
   --name "load-history-$(date +%s)" \
   --input '{}'
-# Runs ~15 min for 100 companies (vs 30-90 min sequential)
 # Monitor: aws stepfunctions describe-execution --execution-arn <arn> --query status
+# No verified timing figure for the current windowed/sequential shape as of this writing --
+# do not rely on a "~15 min for 100 companies" style estimate carried over from an older,
+# genuinely-parallel bootstrap-batch ×N architecture (see the Stage 1 diagram above).
 ```
 
-**Do NOT run `bootstrap-next` locally for large batches** — it is sequential, so throughput
-alone rules it out at scale. Reserve it for single-company ad-hoc loads with explicit
-`--cik-list`. (Historical note: this guidance originally also cited "cannot reach MDM
-Postgres, private VPC" — that no longer applies. MDM Postgres moved off AWS RDS onto
-Snowflake's native Postgres service; see "MDM database" note below. Local reachability to
-the current Snowflake-hosted instance has not been re-verified, so treat the sequential-
-throughput reason as the one to rely on.)
+**Do NOT run `bootstrap-next` locally for large batches.** This is no longer primarily a
+throughput argument -- `load_history`'s own Stage 1 also processes CIK windows one at a
+time (MaxConcurrency=1), so raw per-CIK throughput between the two isn't dramatically
+different. Use `load_history` anyway because it provides what a bare local
+`bootstrap-next` call doesn't: per-window resumability and retry (`MaxAttempts: 3` with
+backoff on `WindowedBootstrap`), correct Stage 0/1/1B/2/3 sequencing (identity before
+ownership/ADV, MDM after silver is complete, gold last), and the cross-command
+`sec_fetch_active` lease that prevents it from racing a concurrently-running
+`daily_incremental`/`bootstrap`/etc. Reserve `bootstrap-next` for single-company ad-hoc
+loads with explicit `--cik-list`. (Historical note: this guidance originally also cited
+"cannot reach MDM Postgres, private VPC" — that no longer applies. MDM Postgres moved off
+AWS RDS onto Snowflake's native Postgres service; see "MDM database" note below. Local
+reachability to the current Snowflake-hosted instance has not been re-verified.)
 
 **Key invariants (do not break):**
+
+The `bootstrap-batch`/`BOOTSTRAP_BATCH_CONCURRENCY` bullets below govern
+`edgartools-prod-silver-mdm-gold` (`BatchSilver` Map, confirmed live at
+`MaxConcurrency=3`, runs `bootstrap-batch --artifact-policy skip`) and the
+standalone `edgartools-prod-bootstrap-batched` (`BatchBootstrap` Map, also
+`MaxConcurrency=3`, but **zero executions ever** in prod — unverified,
+don't treat it as an active lever). Neither is `load_history`, which runs
+`bootstrap-next` (a different command) per window at `MaxConcurrency=1` and
+is not controlled by `BOOTSTRAP_BATCH_CONCURRENCY` at all.
+
 - `bootstrap-batch` must NOT be in `GOLD_AFFECTING_COMMANDS` — enforced in `warehouse_orchestrator.py:79`
 - `gold-refresh` must be in `GOLD_AFFECTING_COMMANDS` — it is the sole gold builder in the phased pipeline
 - `SNOWFLAKE_RUN_MANIFEST_TASK` must be STARTED in `EDGARTOOLS_GOLD` — verify with

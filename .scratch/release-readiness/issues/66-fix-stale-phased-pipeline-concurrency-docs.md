@@ -1,7 +1,7 @@
 # Fix CLAUDE.md's stale Phased Pipeline concurrency documentation
 
 Type: task
-Status: open
+Status: resolved
 
 ## Question
 
@@ -57,3 +57,30 @@ not assumed from the doc:
 CLAUDE.md's Phased Pipeline and Key invariants sections match the live AWS state machine
 definitions (re-verified via `describe-state-machine`, not re-copied from memory), and no
 remaining sentence in CLAUDE.md implies `load_history` runs CIK batches in parallel.
+
+## Resolved (2026-08-04)
+
+Re-verified every claim live against AWS immediately before writing (not from this ticket's
+2026-08-02 findings, which could themselves have drifted): `edgartools-prod-load-history`'s
+Map states (`Stage0CompanyIdentity`, `Stage1Parallel/WindowedBootstrap`, `Stage1BEntityFacts`,
+`Stage1BPerFiling`, `Stage1BThirteenF`) are all still `MaxConcurrency=1`; `WindowedBootstrap`'s
+task command is `bootstrap-next --silver-only` (not `bootstrap-batch` at all);
+`edgartools-prod-bootstrap-batched` still exists at `MaxConcurrency=3` with zero executions
+ever; `edgartools-prod-silver-mdm-gold`'s `BatchSilver` Map is the pipeline the
+`BOOTSTRAP_BATCH_CONCURRENCY`/`bootstrap-batch` invariants actually govern (confirmed its task
+command is literally `bootstrap-batch --artifact-policy skip --parser-policy skip`, matching the
+existing invariant bullets exactly).
+
+Rewrote CLAUDE.md's "Phased Pipeline" section: Stage 1 diagram now matches the live 5-stage
+shape (Stage 0/1/1B/2/3), explicitly notes `MaxConcurrency=1` throughout Stage 1/1B with the
+real reason (ticket-20-class silver-promotion-race avoidance), and separately documents the two
+genuinely-parallel pipelines (`bootstrap-batched`, unverified/unused; `silver-mdm-gold`, real
+and live) so a reader can't conflate either with `load_history`. Removed the unverified "~15 min
+for 100 companies" timing claim (no fresh measurement exists for the current sequential shape;
+per the ticket's own instruction, did not fabricate a replacement number). Reworded "Do NOT run
+`bootstrap-next` locally" to the actual current reason (resumability/retry/correct sequencing/
+the sec_fetch_active lease), since the old "throughput" framing no longer holds now that
+`load_history`'s own Stage 1 is also `MaxConcurrency=1`. Added a preamble to "Key invariants"
+clarifying which two pipelines the `bootstrap-batch`/`BOOTSTRAP_BATCH_CONCURRENCY` bullets
+actually apply to. Spot-checked the rest of CLAUDE.md for the same stale assumption (grep for
+`bootstrap-batch`/`MaxConcurrency`/`N×10`/`parallel`) — no other section carries it.
