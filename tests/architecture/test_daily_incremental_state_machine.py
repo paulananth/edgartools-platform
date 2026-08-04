@@ -238,11 +238,21 @@ def test_daily_incremental_stage0_company_identity_command_shape(daily_definitio
 def test_daily_incremental_stage0_company_identity_is_strict_not_lenient(
     daily_definition: dict,
 ) -> None:
+    """release-readiness ticket 86 added a Catch here (a real failure
+    previously wedged sec_fetch_active for 16h instead of releasing it),
+    but strictness is preserved -- the Catch releases the lease and then
+    still fails the execution (SecFetchTaskFailed, a Fail state), it does
+    not route to ReduceIdentityRefresh or any other "proceed anyway" state."""
     state = daily_definition["States"]["Stage0CompanyIdentityBounded"]
     assert state["Type"] == "Map"
     assert state["MaxConcurrency"] == 1
     assert state["ToleratedFailurePercentage"] == 0
-    assert "Catch" not in state
+    catch = state["Catch"]
+    assert len(catch) == 1
+    assert catch[0]["ErrorEquals"] == ["States.ALL"]
+    assert catch[0]["Next"] == "ReleaseSecFetchLeaseAfterFailure"
+    assert daily_definition["States"]["ReleaseSecFetchLeaseAfterFailure"]["Next"] == "SecFetchTaskFailed"
+    assert daily_definition["States"]["SecFetchTaskFailed"]["Type"] == "Fail"
 
 
 def test_daily_incremental_stage0_company_identity_uses_distributed_mode(

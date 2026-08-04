@@ -1453,11 +1453,43 @@ def build_sec_fetch_lease_states(acquired_next_state):
             "Comment": "Release is best-effort -- a failure here must not mark an otherwise-successful run FAILED. The 16h stale-lease reclaim in acquire_pipeline_run_lease is the actual safety net for a wedged sec_fetch_active lease.",
             "End": True,
         },
+        # release-readiness ticket 86: RunWarehouseTask (the whole point of
+        # this state machine) had no Catch -- a real failure (e.g. an
+        # immutable-object content conflict, found live during ticket 84's
+        # own verification) wedged sec_fetch_active for the full 16h
+        # stale-reclaim window instead of releasing promptly. Distinct from
+        # ReleaseSecFetchLease above (the happy-path release, which ends the
+        # execution successfully): this path always ends in Fail, so
+        # ExecutionsFailed/alarm visibility for a real work failure is
+        # preserved rather than silently reporting success.
+        "ReleaseSecFetchLeaseAfterFailure": {
+            **lease_task_state(
+                "States.Array('release-sec-fetch-lease', '--run-id', $$.Execution.Name)",
+                next_state="SecFetchTaskFailed",
+            ),
+            "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "SecFetchTaskFailed"}],
+        },
+        "SecFetchTaskFailed": {
+            "Type": "Fail",
+            "ErrorPath": "$.sec_fetch_task_error.Error",
+            "CausePath": "$.sec_fetch_task_error.Cause",
+        },
     }
+
+
+def sec_fetch_task_catch():
+    """ticket 86: shared Catch for every RunWarehouseTask variant below --
+    releases sec_fetch_active promptly on a real failure instead of leaving
+    it held for the 16h stale-reclaim window."""
+    return [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.sec_fetch_task_error", "Next": "ReleaseSecFetchLeaseAfterFailure"}]
 
 
 if wrap_with_sec_fetch_lease:
     if cik_command:
+        run_default = run_task_state(default_command, next_state="ReleaseSecFetchLease")
+        run_default["Catch"] = sec_fetch_task_catch()
+        run_with_cik_list = run_task_state(cik_command, next_state="ReleaseSecFetchLease")
+        run_with_cik_list["Catch"] = sec_fetch_task_catch()
         definition = {
             "Comment": "Run an EdgarTools warehouse workflow on ECS Fargate with an optional cik_list override, gated by the cross-command sec_fetch_active lease.",
             "StartAt": "AcquireSecFetchLease",
@@ -1474,17 +1506,19 @@ if wrap_with_sec_fetch_lease:
                     }],
                     "Default": "RunWarehouseTaskDefault",
                 },
-                "RunWarehouseTaskDefault": run_task_state(default_command, next_state="ReleaseSecFetchLease"),
-                "RunWarehouseTaskWithCikList": run_task_state(cik_command, next_state="ReleaseSecFetchLease"),
+                "RunWarehouseTaskDefault": run_default,
+                "RunWarehouseTaskWithCikList": run_with_cik_list,
             },
         }
     else:
+        run_wh_task = run_task_state(default_command, next_state="ReleaseSecFetchLease")
+        run_wh_task["Catch"] = sec_fetch_task_catch()
         definition = {
             "Comment": "Run an EdgarTools warehouse workflow on ECS Fargate, gated by the cross-command sec_fetch_active lease.",
             "StartAt": "AcquireSecFetchLease",
             "States": {
                 **build_sec_fetch_lease_states("RunWarehouseTask"),
-                "RunWarehouseTask": run_task_state(default_command, next_state="ReleaseSecFetchLease"),
+                "RunWarehouseTask": run_wh_task,
             },
         }
 elif cik_command:
@@ -1885,7 +1919,38 @@ def build_sec_fetch_lease_states(acquired_next_state, released_next_state):
             "Comment": "Release is best-effort -- a failure here must not mark an otherwise-successful run FAILED. The 16h stale-lease reclaim in acquire_pipeline_run_lease is the actual safety net for a wedged sec_fetch_active lease.",
             "Next": released_next_state,
         },
+        # release-readiness ticket 86: SeedUniverse/MdmSeedUniverse/
+        # ComputeWindows/Stage0CompanyIdentity/Stage1Parallel had no Catch --
+        # a real failure in any of them (e.g. the immutable-object content
+        # conflict found live during ticket 84's own verification) wedged
+        # sec_fetch_active for the full 16h stale-reclaim window instead of
+        # releasing promptly. Stage1BEntityFacts/Stage1BPerFiling/
+        # Stage1BThirteenF are deliberately excluded -- AD-13 already routes
+        # their failures forward to the next stage, which still reaches
+        # ReleaseSecFetchLease on the happy path, so they were never
+        # actually uncaught in the way this fixes. Distinct from
+        # ReleaseSecFetchLease above (the happy-path release, which
+        # continues into MdmRun): this path always ends in Fail, preserving
+        # ExecutionsFailed/alarm visibility for a real work failure.
+        "ReleaseSecFetchLeaseAfterFailure": {
+            **ecs_state(wh_medium_arn,
+                "States.Array('release-sec-fetch-lease', '--run-id', $$.Execution.Name)",
+                next_state="SecFetchTaskFailed", retry_secs=30),
+            "ResultPath": None,
+            "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "SecFetchTaskFailed"}],
+        },
+        "SecFetchTaskFailed": {
+            "Type": "Fail",
+            "ErrorPath": "$.sec_fetch_task_error.Error",
+            "CausePath": "$.sec_fetch_task_error.Cause",
+        },
     }
+
+def sec_fetch_task_catch():
+    """ticket 86: shared Catch for load_history's currently-uncaught
+    fetch-heavy-span states (SeedUniverse/MdmSeedUniverse/ComputeWindows/
+    Stage0CompanyIdentity/Stage1Parallel)."""
+    return [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.sec_fetch_task_error", "Next": "ReleaseSecFetchLeaseAfterFailure"}]
 
 # Validate the optional operator repair flag before starting any ECS workload.
 # An omitted value is normalized to false; malformed values fail with a named
@@ -1924,6 +1989,7 @@ seed = ecs_state(wh_medium_arn,
 # next state.  Without this, the ECS runTask.sync result object would replace the entire input,
 # destroying $.window_size before WindowSizeCheck can read it (D-15 bug).
 seed["ResultPath"] = None
+seed["Catch"] = sec_fetch_task_catch()
 
 # (1b) MdmSeedUniverse: MDM tracked-universe seed — upserts mdm_entity/mdm_company from
 # edgartools ticker data (data-architecture Issue 2). Without this step a fresh environment
@@ -1938,6 +2004,7 @@ mdm_seed_universe = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'seed-universe', '--tracking-status', '{mdm_seed_universe_tracking_status}')",
     next_state="WindowSizeCheck", retry_secs=60)
 mdm_seed_universe["ResultPath"] = None
+mdm_seed_universe["Catch"] = sec_fetch_task_catch()
 
 # (2) WindowSizeCheck → WindowSizeDefault → TotalCikLimitCheck → TotalCikLimitDefault → ComputeWindows
 # D-15 backward-compat: SM input {} is valid because WindowSizeDefault injects window_size=500
@@ -2057,6 +2124,7 @@ compute_windows = ecs_state(wh_medium_arn,
 # not the data contract for later states. Preserve the normalized execution
 # input so Stage0 and Stage1 still receive artifact_policy/force/defaults.
 compute_windows["ResultPath"] = None
+compute_windows["Catch"] = sec_fetch_task_catch()
 
 # (3b) Stage0CompanyIdentity: Company Identity capture -- global reference data
 # (company_tickers/company_tickers_exchange) plus per-CIK submissions.json
@@ -2114,6 +2182,7 @@ stage0_company_identity = {
     },
     "ResultPath": None,
     "Next": "Stage1Parallel",
+    "Catch": sec_fetch_task_catch(),
 }
 
 # (4) Stage1Parallel: Branch A ownership bootstrap. Branch B fundamentals is
@@ -2238,6 +2307,7 @@ stage1_parallel = {
     ],
     "ResultPath": None,
     "Next": "Stage1BEntityFacts",
+    "Catch": sec_fetch_task_catch(),
 }
 
 # (4c) Stage1BPerFiling / Stage1BThirteenF: Branch B modes that read Branch A's filing/attachment/
@@ -2771,7 +2841,39 @@ def build_sec_fetch_lease_states(acquired_next_state, released_next_state):
         "Comment": "Release is best-effort -- a failure here must not mark an otherwise-successful run FAILED. The 16h stale-lease reclaim in acquire_pipeline_run_lease is the actual safety net for a wedged sec_fetch_active lease.",
         "Next": released_next_state,
     }
+
+    # release-readiness ticket 86: a real failure inside the fetch-heavy span
+    # (found live -- an immutable-object content conflict wedged this exact
+    # lease during ticket 84's own verification) must still release
+    # sec_fetch_active promptly instead of leaving it held for the full 16h
+    # stale-reclaim window, unlike the identity-refresh lease's established
+    # "release is best-effort" convention -- sec_fetch_active is shared
+    # across all 5 SEC-fetching commands, so a wedge here blocks all of them,
+    # not just this command's own next run. Distinct from
+    # ReleaseSecFetchLease/ReleaseSecFetchLeaseFailedNonFatal above (the
+    # happy-path release, which continues the pipeline into MDM/gold): this
+    # path always ends in Fail, preserving ExecutionsFailed/alarm visibility
+    # for a real work failure instead of silently reporting success.
+    release_after_failure = ecs_state(wh_medium_arn,
+        "States.Array('release-sec-fetch-lease', '--run-id', $$.Execution.Name)",
+        next_state="SecFetchTaskFailed", retry_secs=30)
+    release_after_failure["ResultPath"] = None
+    release_after_failure["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "SecFetchTaskFailed"}]
+    states["ReleaseSecFetchLeaseAfterFailure"] = release_after_failure
+    states["SecFetchTaskFailed"] = {
+        "Type": "Fail",
+        "ErrorPath": "$.sec_fetch_task_error.Error",
+        "CausePath": "$.sec_fetch_task_error.Cause",
+    }
     return states
+
+
+def sec_fetch_task_catch():
+    """Ticket 86's shared Catch clause -- attach to every currently-uncaught
+    Task/Map state inside the sec_fetch_active fetch-heavy span so a real
+    failure releases the lease promptly instead of leaving it held for the
+    16h stale-reclaim window."""
+    return [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.sec_fetch_task_error", "Next": "ReleaseSecFetchLeaseAfterFailure"}]
 
 # All workflows except daily_incremental seed the universe first so any
 # bootstrap_pending CIKs are enrolled before the main pipeline step runs.
@@ -2784,6 +2886,10 @@ if workflow_name != "daily_incremental":
     # actual bootstrap SEC-fetch loop) are the fetch-heavy span; MDM/gold
     # never call SEC, so the lease releases right before MdmRun.
     run_wh["Next"] = "ReleaseSecFetchLease"
+    # ticket 86: both states were previously uncaught -- a failure in
+    # either wedged sec_fetch_active for the full 16h stale-reclaim window.
+    seed_universe["Catch"] = sec_fetch_task_catch()
+    run_wh["Catch"] = sec_fetch_task_catch()
     sec_fetch_lease_states = build_sec_fetch_lease_states("SeedUniverse", "MdmRun")
     definition = {
         "Comment": (
@@ -3019,12 +3125,18 @@ else:
         "'--batch-size', '500', '--run-id', $$.Execution.Name)",
         next_state="Stage0CompanyIdentityBounded")
     compute_identity_refresh_window["ResultPath"] = None
+    # ticket 86: previously uncaught -- these states, plus
+    # Stage0CompanyIdentityBounded/ReduceIdentityRefresh/RunWarehouseTask
+    # below, are all inside the sec_fetch_active fetch-heavy span with no
+    # release-on-failure path before this fix.
+    compute_identity_refresh_window["Catch"] = sec_fetch_task_catch()
 
     compute_identity_backstop_universe = ecs_state(wh_medium_arn,
         "States.Array('compute-identity-refresh-window', '--mode', 'backstop', "
         "'--batch-size', '500', '--run-id', $$.Execution.Name)",
         next_state="Stage0CompanyIdentityBounded")
     compute_identity_backstop_universe["ResultPath"] = None
+    compute_identity_backstop_universe["Catch"] = sec_fetch_task_catch()
 
     per_batch_company_identity = ecs_state(wh_medium_arn,
         "States.Array('bootstrap-fundamentals', '--mode', 'company-identity', "
@@ -3046,6 +3158,7 @@ else:
     # budget or accidentally re-enter Map work.
     reduce_identity_refresh["Retry"] = [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 1,
                                           "BackoffRate": 1.0, "MaxAttempts": 1}]
+    reduce_identity_refresh["Catch"] = sec_fetch_task_catch()
 
     stage0_company_identity_bounded = {
         "Type": "Map",
@@ -3075,6 +3188,7 @@ else:
         },
         "ResultPath": None,
         "Next": "ReduceIdentityRefresh",
+        "Catch": sec_fetch_task_catch(),
     }
 
     # AdvBulkFetch stage (adv-fetch-pipeline-wiring spec, ticket 02 — ADV Pipeline map
@@ -3086,6 +3200,7 @@ else:
     # it here since this branch only executes for daily_incremental.
     run_wh["Next"] = "DatasetPeriodCheck"
     run_wh["ResultPath"] = None
+    run_wh["Catch"] = sec_fetch_task_catch()
 
     dataset_period_check = {
         "Type": "Choice",
