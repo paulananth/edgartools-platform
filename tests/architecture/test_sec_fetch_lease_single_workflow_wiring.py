@@ -151,6 +151,39 @@ def test_bootstrap_full_acquires_lease_before_run_and_releases_before_end(
     assert deferred["Parameters"]["disposition"] == "sec_fetch_deferred"
 
 
+def test_bootstrap_full_run_warehouse_task_releases_lease_on_failure(
+    bootstrap_full_definition,
+) -> None:
+    """release-readiness ticket 86: RunWarehouseTask had no Catch -- a real
+    failure (an immutable-object content conflict, found live during
+    ticket 84's own verification) wedged sec_fetch_active for the full 16h
+    stale-reclaim window instead of releasing it. The Catch must release
+    the lease and still fail the execution (ExecutionsFailed/alarm
+    visibility preserved), not silently succeed like
+    ReleaseSecFetchLease's own happy-path Catch does."""
+    states = bootstrap_full_definition["States"]
+    run_task = states["RunWarehouseTask"]
+    assert run_task["Catch"] == [
+        {"ErrorEquals": ["States.ALL"], "ResultPath": "$.sec_fetch_task_error", "Next": "ReleaseSecFetchLeaseAfterFailure"}
+    ]
+
+    release_after_failure = states["ReleaseSecFetchLeaseAfterFailure"]
+    cmd = release_after_failure["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    assert "release-sec-fetch-lease" in cmd
+    assert release_after_failure["ResultPath"] is None
+    assert release_after_failure["Next"] == "SecFetchTaskFailed"
+    # Even if the release-after-failure task itself fails, still reach Fail --
+    # never silently succeed on a real work failure.
+    assert release_after_failure["Catch"] == [
+        {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "SecFetchTaskFailed"}
+    ]
+
+    failed = states["SecFetchTaskFailed"]
+    assert failed["Type"] == "Fail"
+    assert failed["ErrorPath"] == "$.sec_fetch_task_error.Error"
+    assert failed["CausePath"] == "$.sec_fetch_task_error.Cause"
+
+
 def test_bootstrap_full_no_operator_notification(bootstrap_full_definition) -> None:
     """Unlike daily_incremental's identity-refresh lease, these ad-hoc
     operator-triggered workflows get no SNS notification on defer -- the
@@ -180,6 +213,25 @@ def test_targeted_resync_lease_wraps_both_cik_list_branches(targeted_resync_defi
     assert release["End"] is True
 
 
+def test_targeted_resync_both_run_branches_release_lease_on_failure(
+    targeted_resync_definition,
+) -> None:
+    """release-readiness ticket 86: both RunWarehouseTaskDefault and
+    RunWarehouseTaskWithCikList (targeted_resync's two Run branches) must
+    release sec_fetch_active and still fail on a real work failure, not
+    leave it wedged for 16h."""
+    states = targeted_resync_definition["States"]
+    expected_catch = [
+        {"ErrorEquals": ["States.ALL"], "ResultPath": "$.sec_fetch_task_error", "Next": "ReleaseSecFetchLeaseAfterFailure"}
+    ]
+    assert states["RunWarehouseTaskDefault"]["Catch"] == expected_catch
+    assert states["RunWarehouseTaskWithCikList"]["Catch"] == expected_catch
+
+    release_after_failure = states["ReleaseSecFetchLeaseAfterFailure"]
+    assert release_after_failure["Next"] == "SecFetchTaskFailed"
+    assert states["SecFetchTaskFailed"]["Type"] == "Fail"
+
+
 def test_sec_fetch_lease_read_result_key_matches_the_real_path_resolver(
     bootstrap_full_definition, targeted_resync_definition,
 ) -> None:
@@ -207,6 +259,7 @@ def test_unwrapped_workflow_has_no_sec_fetch_lease_states(unwrapped_definition) 
     in when wrap_with_sec_fetch_lease is empty."""
     assert unwrapped_definition["StartAt"] == "RunWarehouseTask"
     assert unwrapped_definition["States"]["RunWarehouseTask"]["End"] is True
+    assert "Catch" not in unwrapped_definition["States"]["RunWarehouseTask"]
     for leaked_state in (
         "AcquireSecFetchLease",
         "ReadSecFetchLeaseResult",
@@ -214,5 +267,7 @@ def test_unwrapped_workflow_has_no_sec_fetch_lease_states(unwrapped_definition) 
         "SecFetchDeferred",
         "ReleaseSecFetchLease",
         "ReleaseSecFetchLeaseFailedNonFatal",
+        "ReleaseSecFetchLeaseAfterFailure",
+        "SecFetchTaskFailed",
     ):
         assert leaked_state not in unwrapped_definition["States"]

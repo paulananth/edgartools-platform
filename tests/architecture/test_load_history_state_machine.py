@@ -360,12 +360,23 @@ def test_stage0_company_identity_is_strict_not_lenient(definition: dict) -> None
     """Unlike Branch B's lenient AD-13 pattern (Catch -> proceed anyway), a
     company-identity failure must abort the run: IS_INSIDER derivation
     depends on resolved Company entities, so silently proceeding with
-    unresolved company data would defeat this pipeline's purpose."""
+    unresolved company data would defeat this pipeline's purpose.
+
+    release-readiness ticket 86 added a Catch here (a real failure
+    previously wedged sec_fetch_active for 16h instead of releasing it),
+    but strictness is preserved -- the Catch releases the lease and then
+    still fails the execution (SecFetchTaskFailed, a Fail state), it does
+    not route to Stage1Parallel or any other "proceed anyway" state."""
     state = definition["States"]["Stage0CompanyIdentity"]
     assert state["Type"] == "Map"
     assert state["MaxConcurrency"] == 1
     assert state["ToleratedFailurePercentage"] == 0
-    assert "Catch" not in state
+    catch = state["Catch"]
+    assert len(catch) == 1
+    assert catch[0]["ErrorEquals"] == ["States.ALL"]
+    assert catch[0]["Next"] == "ReleaseSecFetchLeaseAfterFailure"
+    assert definition["States"]["ReleaseSecFetchLeaseAfterFailure"]["Next"] == "SecFetchTaskFailed"
+    assert definition["States"]["SecFetchTaskFailed"]["Type"] == "Fail"
 
 
 def test_stage0_company_identity_reads_same_cik_windows_manifest(definition: dict) -> None:
@@ -849,3 +860,45 @@ def test_load_history_sec_fetch_lease_spans_the_whole_windowed_pipeline(definiti
     assert "ReleaseSecFetchLease" in order
     assert order.index("Stage1Parallel") < order.index("ReleaseSecFetchLease")
     assert order.index("ReleaseSecFetchLease") < order.index("MdmRun")
+
+
+def test_load_history_previously_uncaught_states_release_lease_on_failure(definition: dict) -> None:
+    """release-readiness ticket 86: SeedUniverse/MdmSeedUniverse/
+    ComputeWindows/Stage0CompanyIdentity/Stage1Parallel had no Catch at all
+    -- a real failure in any of them wedged sec_fetch_active for the full
+    16h stale-reclaim window. Deliberately excludes Stage1BEntityFacts/
+    Stage1BPerFiling/Stage1BThirteenF, which AD-13 already routes forward
+    on failure (still reaching ReleaseSecFetchLease on the happy path), and
+    FetchAdvBulk/IngestFirmRosterSources etc., which already had their own
+    Catch (adv_bulk_fetch_catch, unchanged by this ticket)."""
+    states = definition["States"]
+    expected_catch = [
+        {"ErrorEquals": ["States.ALL"], "ResultPath": "$.sec_fetch_task_error", "Next": "ReleaseSecFetchLeaseAfterFailure"}
+    ]
+    for previously_uncaught_state in (
+        "SeedUniverse",
+        "MdmSeedUniverse",
+        "ComputeWindows",
+        "Stage0CompanyIdentity",
+        "Stage1Parallel",
+    ):
+        assert states[previously_uncaught_state]["Catch"] == expected_catch
+
+    for ad13_state in ("Stage1BEntityFacts", "Stage1BPerFiling", "Stage1BThirteenF"):
+        catch = states[ad13_state]["Catch"]
+        assert catch != expected_catch
+        assert catch[0]["Next"] != "ReleaseSecFetchLeaseAfterFailure"
+
+    release_after_failure = states["ReleaseSecFetchLeaseAfterFailure"]
+    cmd = release_after_failure["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    assert "release-sec-fetch-lease" in cmd
+    assert release_after_failure["ResultPath"] is None
+    assert release_after_failure["Next"] == "SecFetchTaskFailed"
+    assert release_after_failure["Catch"] == [
+        {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "SecFetchTaskFailed"}
+    ]
+
+    failed = states["SecFetchTaskFailed"]
+    assert failed["Type"] == "Fail"
+    assert failed["ErrorPath"] == "$.sec_fetch_task_error.Error"
+    assert failed["CausePath"] == "$.sec_fetch_task_error.Cause"

@@ -466,6 +466,34 @@ def test_bootstrap_releases_sec_fetch_lease_before_mdm_run(bootstrap_definition)
     assert "End" not in fallback
 
 
+def test_bootstrap_seed_universe_and_run_warehouse_task_release_lease_on_failure(
+    bootstrap_definition,
+) -> None:
+    """release-readiness ticket 86: SeedUniverse and RunWarehouseTask had no
+    Catch -- a real failure in either wedged sec_fetch_active for the full
+    16h stale-reclaim window instead of releasing it promptly."""
+    states = bootstrap_definition["States"]
+    expected_catch = [
+        {"ErrorEquals": ["States.ALL"], "ResultPath": "$.sec_fetch_task_error", "Next": "ReleaseSecFetchLeaseAfterFailure"}
+    ]
+    assert states["SeedUniverse"]["Catch"] == expected_catch
+    assert states["RunWarehouseTask"]["Catch"] == expected_catch
+
+    release_after_failure = states["ReleaseSecFetchLeaseAfterFailure"]
+    cmd = release_after_failure["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    assert "release-sec-fetch-lease" in cmd
+    assert release_after_failure["ResultPath"] is None
+    assert release_after_failure["Next"] == "SecFetchTaskFailed"
+    assert release_after_failure["Catch"] == [
+        {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "SecFetchTaskFailed"}
+    ]
+
+    failed = states["SecFetchTaskFailed"]
+    assert failed["Type"] == "Fail"
+    assert failed["ErrorPath"] == "$.sec_fetch_task_error.Error"
+    assert failed["CausePath"] == "$.sec_fetch_task_error.Cause"
+
+
 def test_bootstrap_sec_fetch_lease_notifies_when_alert_topic_present(bootstrap_definition) -> None:
     """The default fixture passes a fake alert-topic ARN (matching
     daily_incremental's real call site) -- bootstrap's real call site passes
@@ -551,6 +579,37 @@ def test_daily_incremental_releases_sec_fetch_lease_before_mdm_run(
 
     fallback = states["ReleaseSecFetchLeaseFailedNonFatal"]
     assert fallback["Next"] == "MdmRun"
+
+
+def test_daily_incremental_previously_uncaught_states_release_lease_on_failure(
+    daily_incremental_definition,
+) -> None:
+    """release-readiness ticket 86: ComputeIdentityRefreshWindow/
+    ComputeIdentityBackstopUniverse/Stage0CompanyIdentityBounded/
+    ReduceIdentityRefresh/RunWarehouseTask had no Catch at all -- a real
+    failure in any of them wedged sec_fetch_active for the full 16h
+    stale-reclaim window. Deliberately excludes FetchAdvBulk/
+    IngestFirmRosterSources etc., which already had their own Catch
+    (adv_bulk_fetch_catch, unchanged by this ticket) before this fix."""
+    states = daily_incremental_definition["States"]
+    expected_catch = [
+        {"ErrorEquals": ["States.ALL"], "ResultPath": "$.sec_fetch_task_error", "Next": "ReleaseSecFetchLeaseAfterFailure"}
+    ]
+    for previously_uncaught_state in (
+        "ComputeIdentityRefreshWindow",
+        "ComputeIdentityBackstopUniverse",
+        "Stage0CompanyIdentityBounded",
+        "ReduceIdentityRefresh",
+        "RunWarehouseTask",
+    ):
+        assert states[previously_uncaught_state]["Catch"] == expected_catch
+
+    release_after_failure = states["ReleaseSecFetchLeaseAfterFailure"]
+    assert release_after_failure["Next"] == "SecFetchTaskFailed"
+    assert release_after_failure["Catch"] == [
+        {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "SecFetchTaskFailed"}
+    ]
+    assert states["SecFetchTaskFailed"]["Type"] == "Fail"
 
 
 def test_sec_fetch_lease_read_result_key_matches_the_real_path_resolver(
