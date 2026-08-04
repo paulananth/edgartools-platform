@@ -215,6 +215,13 @@ unexpectedly, check for a stuck/failed run holding `sec_fetch_active` first
 (`SELECT * FROM pipeline_run_lease WHERE lease_name = 'sec_fetch_active'`)
 before assuming a scheduling issue.
 
+**Merged 2026-08-04:** PR #349
+(https://github.com/paulananth/edgartools-platform/pull/349) squash-merged
+into `main` at `0344a598`. All code/test/architecture-validation work for
+`daily_incremental`/`bootstrap`/`bootstrap_full`/`targeted_resync`/
+`load_history` is now on `main`. Status stays `in_progress` (not
+`resolved`) because the item below is still open.
+
 **Not yet done**:
 - Test plan item 4 (live overlapping-trigger test: deliberately trigger two
   of the 5 commands with overlapping schedules and confirm the second
