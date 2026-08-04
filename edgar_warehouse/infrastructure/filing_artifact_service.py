@@ -34,10 +34,18 @@ def refresh_filing_artifacts(
     )
 
 
-def extract_filing_text(*, context: Any, db: Any, accession_number: str, text_version: str = "generic_text_v1") -> dict[str, Any]:
+def extract_filing_text(
+    *,
+    context: Any,
+    db: Any,
+    accession_number: str,
+    sync_run_id: str,
+    text_version: str = "generic_text_v1",
+) -> dict[str, Any]:
     return extract_text_for_accession(
         context=context,
         db=db,
         accession_number=accession_number,
+        sync_run_id=sync_run_id,
         text_version=text_version,
     )

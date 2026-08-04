@@ -161,20 +161,25 @@ class EdgartoolsFilingGatewayTests(unittest.TestCase):
                 "raw_object_id": raw_id,
             }
         ]
-        raw_objects = {
-            raw_id: {
-                "raw_object_id": raw_id,
-                "accession_number": accession,
-                "source_type": "filing_document",
-                "source_url": attachments[0]["document_url"],
-                "storage_path": "s3://bucket/primary.xml",
-            }
-        }
         with tempfile.TemporaryDirectory() as tmp:
-            db = _ArtifactDb(attachments=attachments, raw_objects=raw_objects)
-            context = SimpleNamespace(
-                bronze_root=StorageLocation(tmp), identity="tester@example.com"
+            storage = StorageLocation(tmp)
+            # Ticket 88: a cache hit is only real if the S3 object actually exists --
+            # write it for real rather than pointing at a fabricated path.
+            destination = storage.write_bytes(
+                "filings/sec/cik=320193/accession=0000320193-26-000011/primary/primary.xml",
+                b"<xml>cached</xml>",
             )
+            raw_objects = {
+                raw_id: {
+                    "raw_object_id": raw_id,
+                    "accession_number": accession,
+                    "source_type": "filing_document",
+                    "source_url": attachments[0]["document_url"],
+                    "storage_path": destination,
+                }
+            }
+            db = _ArtifactDb(attachments=attachments, raw_objects=raw_objects)
+            context = SimpleNamespace(bronze_root=storage, identity="tester@example.com")
             result = bronze_filing_artifacts.fetch_filing_artifacts(
                 context=context,
                 db=db,
@@ -330,20 +335,23 @@ class DebugEventLoggingTests(unittest.TestCase):
                 "raw_object_id": raw_id,
             }
         ]
-        raw_objects = {
-            raw_id: {
-                "raw_object_id": raw_id,
-                "accession_number": accession,
-                "source_type": "filing_document",
-                "source_url": attachments[0]["document_url"],
-                "storage_path": "s3://bucket/primary.xml",
-            }
-        }
         with tempfile.TemporaryDirectory() as tmp:
-            db = _ArtifactDb(attachments=attachments, raw_objects=raw_objects)
-            context = SimpleNamespace(
-                bronze_root=StorageLocation(tmp), identity="tester@example.com"
+            storage = StorageLocation(tmp)
+            destination = storage.write_bytes(
+                "filings/sec/cik=320193/accession=0000320193-26-000021/primary/primary.xml",
+                b"<xml>cached</xml>",
             )
+            raw_objects = {
+                raw_id: {
+                    "raw_object_id": raw_id,
+                    "accession_number": accession,
+                    "source_type": "filing_document",
+                    "source_url": attachments[0]["document_url"],
+                    "storage_path": destination,
+                }
+            }
+            db = _ArtifactDb(attachments=attachments, raw_objects=raw_objects)
+            context = SimpleNamespace(bronze_root=storage, identity="tester@example.com")
             stderr = io.StringIO()
             with contextlib.redirect_stderr(stderr):
                 bronze_filing_artifacts.fetch_filing_artifacts(

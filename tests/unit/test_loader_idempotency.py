@@ -306,18 +306,23 @@ class LoaderIdempotencyTests(unittest.TestCase):
                 "raw_object_id": raw_object_id,
             }
         ]
-        raw_objects = {
-            raw_object_id: {
-                "raw_object_id": raw_object_id,
-                "accession_number": accession,
-                "source_type": "filing_document",
-                "source_url": attachments[0]["document_url"],
-                "storage_path": "s3://bucket/primary.xml",
-            }
-        }
         with tempfile.TemporaryDirectory() as tmp:
+            storage = StorageLocation(tmp)
+            destination = storage.write_bytes(
+                "filings/sec/cik=320193/accession=0000320193-26-000001/primary/primary.xml",
+                b"<ownershipDocument />",
+            )
+            raw_objects = {
+                raw_object_id: {
+                    "raw_object_id": raw_object_id,
+                    "accession_number": accession,
+                    "source_type": "filing_document",
+                    "source_url": attachments[0]["document_url"],
+                    "storage_path": destination,
+                }
+            }
             db = _ArtifactDb(attachments=attachments, raw_objects=raw_objects)
-            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+            context = SimpleNamespace(bronze_root=storage, identity="tester@example.com")
 
             result = bronze_filing_artifacts.fetch_filing_artifacts(
                 context=context,
@@ -747,20 +752,25 @@ class LoaderIdempotencyTests(unittest.TestCase):
                 "raw_object_id": raw_object_id,
             }
         ]
-        raw_objects = {
-            raw_object_id: {
-                "raw_object_id": raw_object_id,
-                "accession_number": accession,
-                "source_type": "filing_document",
-                "source_url": attachments[0]["document_url"],
-                "storage_path": "s3://bucket/def14a.htm",
-                "sha256": raw_object_id,
-            }
-        }
         with tempfile.TemporaryDirectory() as tmp:
+            storage = StorageLocation(tmp)
+            destination = storage.write_bytes(
+                "filings/sec/cik=320193/accession=0000320193-26-000777/primary/def14a.htm",
+                b"<html>def14a</html>",
+            )
+            raw_objects = {
+                raw_object_id: {
+                    "raw_object_id": raw_object_id,
+                    "accession_number": accession,
+                    "source_type": "filing_document",
+                    "source_url": attachments[0]["document_url"],
+                    "storage_path": destination,
+                    "sha256": raw_object_id,
+                }
+            }
             db = _ArtifactDb(attachments=attachments, raw_objects=raw_objects)
             db.filing = {"cik": 320193, "form": "DEF 14A", "primary_document": "def14a.htm"}
-            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+            context = SimpleNamespace(bronze_root=storage, identity="tester@example.com")
 
             result = bronze_filing_artifacts.fetch_filing_artifacts(
                 context=context,
@@ -802,32 +812,41 @@ class LoaderIdempotencyTests(unittest.TestCase):
                 "raw_object_id": infotable_raw_id,
             },
         ]
-        raw_objects = {
-            cover_raw_id: {
-                "raw_object_id": cover_raw_id,
-                "accession_number": accession,
-                "source_type": "filing_document",
-                "source_url": attachments[0]["document_url"],
-                "storage_path": "s3://bucket/primary_doc.xml",
-                "sha256": cover_raw_id,
-            },
-            infotable_raw_id: {
-                "raw_object_id": infotable_raw_id,
-                "accession_number": accession,
-                "source_type": "attachment",
-                "source_url": attachments[1]["document_url"],
-                "storage_path": "s3://bucket/53405.xml",
-                "sha256": infotable_raw_id,
-            },
-        }
         with tempfile.TemporaryDirectory() as tmp:
+            storage = StorageLocation(tmp)
+            cover_destination = storage.write_bytes(
+                "filings/sec/cik=1067983/accession=0001067983-26-000999/primary/primary_doc.xml",
+                b"<xml>cover</xml>",
+            )
+            infotable_destination = storage.write_bytes(
+                "filings/sec/cik=1067983/accession=0001067983-26-000999/attachments/53405.xml",
+                b"<xml>infotable</xml>",
+            )
+            raw_objects = {
+                cover_raw_id: {
+                    "raw_object_id": cover_raw_id,
+                    "accession_number": accession,
+                    "source_type": "filing_document",
+                    "source_url": attachments[0]["document_url"],
+                    "storage_path": cover_destination,
+                    "sha256": cover_raw_id,
+                },
+                infotable_raw_id: {
+                    "raw_object_id": infotable_raw_id,
+                    "accession_number": accession,
+                    "source_type": "attachment",
+                    "source_url": attachments[1]["document_url"],
+                    "storage_path": infotable_destination,
+                    "sha256": infotable_raw_id,
+                },
+            }
             db = _ArtifactDb(attachments=attachments, raw_objects=raw_objects)
             db.filing = {
                 "cik": 1067983,
                 "form": "13F-HR",
                 "primary_document": "xslForm13F_X02/primary_doc.xml",
             }
-            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+            context = SimpleNamespace(bronze_root=storage, identity="tester@example.com")
 
             result = bronze_filing_artifacts.fetch_filing_artifacts(
                 context=context,

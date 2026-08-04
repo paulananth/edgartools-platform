@@ -5283,7 +5283,9 @@ def _run_accession_resync(
     if include_text:
         from edgar_warehouse.infrastructure.filing_artifact_service import extract_filing_text
 
-        text_row = extract_filing_text(context=context, db=db, accession_number=accession_number)
+        text_row = extract_filing_text(
+            context=context, db=db, accession_number=accession_number, sync_run_id=sync_run_id
+        )
         rows_written += 1 if text_row else 0
     if include_parsers:
         rows_written += _run_parse_pipeline(db=db, accession_number=accession_number, sync_run_id=sync_run_id)

@@ -14,31 +14,76 @@ from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_
 from edgar_warehouse.infrastructure.object_storage import read_bytes
 
 
+def _resolve_primary_storage_path(
+    *, context: Any, db: Any, cik: int, accession_number: str
+) -> tuple[str | None, str | None]:
+    """Return (storage_path, document_name) for the accession's primary document.
+
+    A raw_object DB row is not proof the S3 object it points at still exists
+    (release-readiness ticket 88 -- confirmed live for a real accession).
+    Verifies via one S3 LIST of the accession's document prefix before
+    trusting the row, same guard `fetch_filing_artifacts` applies.
+    """
+    attachments = db.get_filing_attachments(accession_number)
+    primary = next((row for row in attachments if row.get("is_primary")), None)
+    if not primary or not primary.get("raw_object_id"):
+        return None, None
+    raw_object = db.get_raw_object(primary["raw_object_id"])
+    if raw_object is None:
+        return None, None
+    existing_keys = set(
+        context.bronze_root.find_existing(
+            default_capture_spec_factory().filing_document_glob(
+                cik=cik, accession_number=accession_number
+            )
+        )
+    )
+    if raw_object["storage_path"] not in existing_keys:
+        return None, None
+    return raw_object["storage_path"], primary["document_name"]
+
+
 def extract_text_for_accession(
     *,
     context: Any,
     db: Any,
     accession_number: str,
+    sync_run_id: str,
     text_version: str = "generic_text_v1",
 ) -> dict[str, Any]:
     filing = db.get_filing(accession_number)
     if filing is None:
         raise ValueError(f"Unknown accession_number {accession_number}")
-    attachments = db.get_filing_attachments(accession_number)
-    primary = next((row for row in attachments if row.get("is_primary")), None)
+    cik = int(filing["cik"])
     source_document_name = filing.get("primary_document")
-    storage_path = None
-    if primary and primary.get("raw_object_id"):
-        raw_object = db.get_raw_object(primary["raw_object_id"])
-        if raw_object is not None:
-            storage_path = raw_object["storage_path"]
-            source_document_name = primary["document_name"]
+    storage_path, resolved_document_name = _resolve_primary_storage_path(
+        context=context, db=db, cik=cik, accession_number=accession_number
+    )
+    if storage_path is None:
+        # Ticket 88: no row, or a row pointing at an absent S3 object -- self-heal
+        # by reusing fetch_filing_artifacts's own (now S3-verified) fetch/cache
+        # logic rather than duplicating it here, then re-resolve.
+        from edgar_warehouse.infrastructure.filing_artifact_service import (
+            refresh_filing_artifacts,
+        )
+
+        refresh_filing_artifacts(
+            context=context,
+            db=db,
+            accession_number=accession_number,
+            sync_run_id=sync_run_id,
+            force=False,
+        )
+        storage_path, resolved_document_name = _resolve_primary_storage_path(
+            context=context, db=db, cik=cik, accession_number=accession_number
+        )
+    if resolved_document_name is not None:
+        source_document_name = resolved_document_name
     if storage_path is None:
         raise ValueError(f"No primary raw artifact registered for {accession_number}")
 
     payload = read_bytes(storage_path)
     normalized_text = _normalize_text(payload=payload, source_document_name=source_document_name or "")
-    cik = int(filing["cik"])
     output_spec = default_capture_spec_factory().text_output(cik, accession_number, text_version)
     destination = context.storage_root.write_text(output_spec.relative_path, normalized_text)
     row = {

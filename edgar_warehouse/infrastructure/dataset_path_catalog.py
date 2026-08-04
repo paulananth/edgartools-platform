@@ -283,6 +283,20 @@ class WarehousePathResolver:
             document_name=sanitize_filename(document_name),
         )
 
+    def filing_document_glob(self, *, cik: int, accession_number: str) -> str:
+        """Glob covering every captured document (primary + attachments) for one accession.
+
+        Used to verify actual S3 presence before trusting a raw_object DB row
+        as a cache hit -- see release-readiness ticket 88.
+        """
+        return self._render(
+            "filings.document.path",
+            cik=cik,
+            accession_number=accession_number,
+            section="*",
+            document_name="*",
+        )
+
     def text_filename(self, text_version: str) -> str:
         return self._render("text.filename", text_version=text_version)
 
@@ -585,6 +599,9 @@ class CaptureSpecFactory:
                 document_name=document_name,
             ),
         )
+
+    def filing_document_glob(self, *, cik: int, accession_number: str) -> str:
+        return self._resolver.filing_document_glob(cik=cik, accession_number=accession_number)
 
     def text_output(self, cik: int, accession_number: str, text_version: str) -> CaptureSpec:
         return CaptureSpec(

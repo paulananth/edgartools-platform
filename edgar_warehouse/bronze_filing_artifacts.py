@@ -134,6 +134,22 @@ def fetch_filing_artifacts(
     # artifacts). See CLAUDE.md artifact-throttle 5-whys.
     network_fetches = 0
     existing_rows = db.get_filing_attachments(accession_number)
+    # Ticket 88: a sec_raw_object DB row is not proof the S3 object it points at
+    # still exists (confirmed live: 494 of Apple's 1,044 rows pointed at objects
+    # that were never durably present). One LIST per accession (not a HEAD per
+    # attachment, matching ticket 75's precedent) so trusting a cache hit costs
+    # the same regardless of attachment count. Only meaningful when there is a
+    # cache to verify -- under force, or with no existing rows, no DB row is
+    # ever trusted as a cache hit anyway, so skip the LIST entirely (a cold
+    # load_history accession must not pay it -- see the artifact-throttle 5-whys
+    # this same file already documents).
+    existing_bronze_keys: set[str] = set()
+    if existing_rows and not force:
+        existing_bronze_keys = set(
+            context.bronze_root.find_existing(
+                capture_specs.filing_document_glob(cik=cik, accession_number=accession_number)
+            )
+        )
     # Snapshot prior raw-object state per document *before* any force-driven
     # refetch, so a repair overwrite can be audited (prior vs. replacement
     # hash/version) even though force bypasses the ordinary cache-hit lookup
@@ -150,7 +166,7 @@ def fetch_filing_artifacts(
 
     if existing_rows and not force:
         hydrated_rows, cached_records, missing_rows = _split_existing_attachment_rows(
-            db, existing_rows
+            db, existing_rows, existing_bronze_keys=existing_bronze_keys
         )
         if not missing_rows:
             _emit_artifact_event(
@@ -232,6 +248,11 @@ def fetch_filing_artifacts(
             existing_raw = db.get_raw_object(str(row["raw_object_id"]))
         if existing_raw is None and prior_raw is not None:
             existing_raw = prior_raw
+        if existing_raw is not None and existing_raw.get("storage_path") not in existing_bronze_keys:
+            # Ticket 88: DB row present but its S3 object isn't -- treat as a
+            # real miss so the pending-fetch path below re-downloads it,
+            # rather than trusting a dangling pointer.
+            existing_raw = None
         already_downloaded = (not force) and existing_raw is not None
         if already_downloaded:
             _emit_artifact_event(
@@ -362,7 +383,7 @@ def fetch_filing_artifacts(
 
 
 def _split_existing_attachment_rows(
-    db: Any, rows: list[dict[str, Any]]
+    db: Any, rows: list[dict[str, Any]], *, existing_bronze_keys: set[str]
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     hydrated_rows: list[dict[str, Any]] = []
     cached_records: list[dict[str, Any]] = []
@@ -370,6 +391,10 @@ def _split_existing_attachment_rows(
     for row in rows:
         raw_object_id = row.get("raw_object_id")
         raw_object = db.get_raw_object(str(raw_object_id)) if raw_object_id else None
+        # Ticket 88: a DB row referencing an S3 key that isn't actually present
+        # is functionally the same as no row at all -- both need a real fetch.
+        if raw_object is not None and raw_object.get("storage_path") not in existing_bronze_keys:
+            raw_object = None
         if raw_object is None:
             missing_rows.append(row)
             continue
