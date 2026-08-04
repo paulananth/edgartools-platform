@@ -73,7 +73,7 @@ from edgar_warehouse.infrastructure.edgartools_sec_gateway import (
     download_bytes as _gateway_download_bytes,
 )
 from edgar_warehouse.infrastructure.object_storage import StorageLocation, read_bytes
-from edgar_warehouse.silver_protection import merge_candidate_into_canonical
+from edgar_warehouse.silver_protection import compute_silver_fingerprint, merge_candidate_into_canonical
 from edgar_warehouse.silver_support.session import open_silver_database, open_silver_shard
 
 if TYPE_CHECKING:
@@ -833,17 +833,57 @@ def _open_silver_database(silver_root: StorageLocation) -> SilverDatabase:
     return open_silver_database(silver_root)
 
 
+def _protected_fingerprint_sidecar_path(local_path: Path) -> Path:
+    """Local-only sidecar recording ``compute_silver_fingerprint``'s output at
+    hydration time, so ``_publish_silver_database_if_remote`` can cheaply tell
+    whether anything actually changed since (release-readiness ticket 79).
+    """
+    return local_path.with_name(local_path.name + ".protected-fingerprint.json")
+
+
+def _write_fingerprint_sidecar(local_path: Path, fingerprint: dict[str, Any]) -> None:
+    _protected_fingerprint_sidecar_path(local_path).write_text(
+        json.dumps(fingerprint, sort_keys=True), encoding="utf-8"
+    )
+
+
+def _read_fingerprint_sidecar(local_path: Path) -> dict[str, Any] | None:
+    sidecar_path = _protected_fingerprint_sidecar_path(local_path)
+    try:
+        return json.loads(sidecar_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, ValueError):
+        return None
+
+
 def _hydrate_silver_database_from_storage(context: WarehouseCommandContext) -> None:
     if not context.storage_root.is_remote or context.silver_root.is_remote:
         return
     remote_path = context.storage_root.join("silver", "sec", "silver.duckdb")
     local_path = Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
+    # Delete any stale sidecar from a prior invocation up front (e.g. a reused
+    # ECS task volume) so "sidecar present" always means "this process
+    # successfully hydrated", never leftover state from an earlier run.
+    _protected_fingerprint_sidecar_path(local_path).unlink(missing_ok=True)
     try:
         payload = read_bytes(remote_path)
     except (FileNotFoundError, OSError):
         return
     local_path.parent.mkdir(parents=True, exist_ok=True)
     local_path.write_bytes(payload)
+    # Snapshot the hydration-time fingerprint before any caller opens the
+    # database and runs schema DDL, so the sidecar reflects exactly what was
+    # downloaded from canonical -- the baseline every later publish attempt
+    # in this process compares itself against. Deliberately fail-open: a
+    # fingerprint failure (e.g. not a valid DuckDB file) must never break
+    # hydration itself -- worst case is just no sidecar, which is the same
+    # safe "always do the real merge" default as remote canonical not
+    # existing yet.
+    try:
+        fingerprint = compute_silver_fingerprint(local_path)
+    except Exception:
+        fingerprint = None
+    if fingerprint is not None:
+        _write_fingerprint_sidecar(local_path, fingerprint)
     _emit_pipeline_event(
         "silver_database_hydrated",
         path=remote_path,
@@ -866,6 +906,18 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
     ``PromotionConflictError`` (retryable; the staged object is preserved)
     instead of silently last-writer-wins. There is no ``--force`` parameter
     on this path -- it cannot bypass the merge or the concurrency check.
+
+    Skip-if-unchanged (release-readiness ticket 79): before any of the above,
+    a cheap local-only check compares the candidate's current
+    ``compute_silver_fingerprint`` against the one snapshotted right after
+    hydration. If they're identical -- same table set, same protected-table
+    content -- nothing this process wrote can differ from canonical, so the
+    whole download/copy2/merge/upload/promote cycle is skipped: it would
+    provably produce a no-op. Fingerprint comparison is local-only (no S3
+    calls), so it costs nothing close to what it replaces. If the sidecar is
+    missing (hydration didn't run, or wrote nothing) the check is skipped and
+    behavior is unchanged -- absence never causes a skip, only presence of a
+    provably-matching fingerprint does.
     """
     if not context.storage_root.is_remote:
         return None
@@ -873,6 +925,33 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
     if not source_path.exists():
         raise WarehouseRuntimeError(f"Silver DuckDB file was not found: {source_path}")
     relative_path = "silver/sec/silver.duckdb"
+
+    hydration_fingerprint = _read_fingerprint_sidecar(source_path)
+    if hydration_fingerprint is not None:
+        try:
+            current_fingerprint = compute_silver_fingerprint(source_path)
+        except Exception:
+            # Fail-open, matching hydration's own handling: a fingerprint
+            # failure here must never block publication -- fall through to
+            # the full, always-correct merge path instead.
+            current_fingerprint = None
+        if current_fingerprint is not None and current_fingerprint == hydration_fingerprint:
+            _emit_pipeline_event(
+                "silver_publish_skipped_noop",
+                relative_path=relative_path,
+                protected_tables=sorted(current_fingerprint["protected"]) if current_fingerprint else [],
+            )
+            return {
+                "layer": "silver_database",
+                "path": context.storage_root.join(relative_path),
+                "relative_path": relative_path,
+                "size_bytes": source_path.stat().st_size,
+                "source_version": None,
+                "staged_checksum": None,
+                "canonical_version": None,
+                "tables_merged": [],
+                "skipped": True,
+            }
 
     baseline = context.storage_root.read_object_version(relative_path)
     tables_merged: tuple[str, ...] = ()

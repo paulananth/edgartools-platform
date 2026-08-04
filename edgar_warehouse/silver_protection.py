@@ -497,6 +497,55 @@ def _matching_canonical_rows_as_dicts(
     return [dict(zip(columns, row)) for row in result.fetchall()]
 
 
+def compute_silver_fingerprint(db_path: Path) -> dict[str, Any] | None:
+    """Cheap, local-only fingerprint used to detect whether a silver DuckDB
+    file has diverged from an earlier snapshot of itself, without touching
+    remote storage or reproducing the full merge.
+
+    Two parts, both required for a safe comparison (release-readiness
+    ticket 79):
+
+    - ``tables``: the full sorted table-name set in the file. A table that
+      didn't exist in the earlier snapshot (including one not yet
+      classified in ``PROTECTED_TABLE_REGISTRY``) changes this set, which
+      forces a mismatch -- so an unregistered new table can never be
+      silently skipped past ``merge_candidate_into_canonical``'s own
+      fail-closed unclassified-table guard.
+    - ``protected``: per-``PROTECTED_TABLE_REGISTRY`` table (only those
+      present in the file), a ``(row_count, content_hash)`` pair covering
+      every column. ``EXCLUDED_OPERATIONAL_TABLES`` bookkeeping writes
+      (``pipeline_run``/``sec_sync_run``) are deliberately excluded, so a
+      command that only ever writes those never registers as "changed"
+      here. The hash is an order-independent ``BIT_XOR`` of each row's
+      ``HASH()`` over every column, so a same-row-count in-place content
+      update (e.g. an authority-column-resolved conflict) is still caught
+      -- a row-count-only check would miss it.
+
+    Returns ``None`` if ``db_path`` doesn't exist.
+    """
+    if not db_path.exists():
+        return None
+    conn = _connect_bounded()
+    try:
+        conn.execute(f"ATTACH '{db_path}' AS fp (READ_ONLY)")
+        table_names = sorted(_table_names(conn, "fp"))
+        table_name_set = set(table_names)
+        protected: dict[str, list[Any]] = {}
+        for table_name in sorted(PROTECTED_TABLE_REGISTRY):
+            if table_name not in table_name_set:
+                continue
+            columns = sorted(_columns(conn, "fp", table_name).keys())
+            col_list = ", ".join(_quote_ident(c) for c in columns)
+            row_count, xor_hash = conn.execute(
+                f"SELECT COUNT(*), COALESCE(BIT_XOR(HASH({col_list})), 0) "
+                f"FROM fp.main.{_quote_ident(table_name)}"
+            ).fetchone()
+            protected[table_name] = [row_count, str(xor_hash)]
+        return {"tables": table_names, "protected": protected}
+    finally:
+        conn.close()
+
+
 def merge_candidate_into_canonical(
     candidate_path: Path,
     canonical_path: Path,

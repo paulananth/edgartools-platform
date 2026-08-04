@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: in_progress
 
 ## Question
 
@@ -83,3 +83,85 @@ tickets 67-78):
 Implemented, all test cases passing, full suite green, live measurement
 confirms the no-op publish cost is eliminated for `gold-refresh` without
 changing behavior for any command that genuinely writes silver data.
+
+## Progress (2026-08-03) — code + tests done, live measurement not yet run
+
+Implemented via `compute_silver_fingerprint` (new,
+`edgar_warehouse/silver_protection.py`), a local-only, no-S3-calls
+fingerprint of a silver DuckDB file: the full sorted table-name set (all
+tables, so a new unregistered table always changes it) plus, for every
+`PROTECTED_TABLE_REGISTRY` table present, a `(row_count,
+BIT_XOR(HASH(all columns)))` pair -- order-independent, catches a
+same-row-count in-place content update (e.g. an authority-column-resolved
+conflict), which a row-count-only check would miss (confirmed both ways
+via a local DuckDB smoke test before committing to the hash approach).
+`EXCLUDED_OPERATIONAL_TABLES` (`pipeline_run`/`sec_sync_run` bookkeeping)
+are deliberately excluded from the content fingerprint.
+
+Wired into `warehouse_orchestrator.py`: `_hydrate_silver_database_from_storage`
+snapshots this fingerprint immediately after writing the downloaded
+canonical bytes locally (before any caller opens the DB and runs schema
+DDL) into a local JSON sidecar
+(`<local_path>.protected-fingerprint.json`); any stale sidecar from a
+reused ECS task volume is deleted up front, so "sidecar present" always
+means "this process just hydrated." `_publish_silver_database_if_remote`
+compares the candidate's current fingerprint against the sidecar *before*
+`read_object_version`/download/`copy2`/merge/upload -- on an exact match
+it skips the entire cycle and returns a `{"skipped": True, "tables_merged":
+[], ...}` result with zero S3 calls. Sidecar absence (hydration didn't
+run, or the very first publish with no prior canonical) always falls
+through to the unchanged full-merge path -- skip requires positive proof
+of a match, never a default. Both the hydration and publish-time
+fingerprint calls are wrapped fail-open (`except Exception: fingerprint =
+None`) so a fingerprint failure of any kind can never break hydration or
+force an incorrect skip -- worst case is just no optimization, never a
+correctness regression. `bootstrap_fundamentals.py`'s caller updated to
+branch on `upload_result.get("skipped")` so a skip logs
+`silver_database_publish_skipped_noop` and `metrics["silver_database_uploaded"]
+= False`, instead of the previous code lying `True` for a no-op.
+
+Reviewed via `advisor` before implementation, which caught a real gap in
+the first draft (fingerprint scoped to registry tables only would have let
+a brand-new unregistered domain table silently slip past
+`merge_candidate_into_canonical`'s own fail-closed unclassified-table
+guard) -- fixed by making the table-*name-set* comparison cover every
+table in the file, not just registry ones, before any implementation
+landed.
+
+**Test plan items 1-3 + advisor's added 5th case**: done, all passing
+(`tests/unit/test_skip_noop_silver_publish.py`, real
+`SilverDatabase`-backed, not mocked): no-op skip (asserts
+`read_object_version`/`write_staged_bytes`/`promote_staged` are never
+called), a real protected-table change still runs the full merge
+unchanged, an excluded-table-only (`pipeline_run`) write is still
+correctly skipped, and a brand-new unregistered table forces the merge
+and still trips `SilverPublicationError`. Confirmed via `git stash` that
+2 of 4 tests fail against pre-fix code (they reach for real S3 access
+under the old unconditional-merge path and hit `PermissionError`); the
+other 2 (real-change, unregistered-table) correctly pass on both sides,
+proving no behavior change for genuine writes. One pre-existing test
+(`test_hydrate_silver_database_from_remote_storage`, which hydrates with
+placeholder non-DuckDB bytes `b"duckdb-bytes"`) initially broke because
+fingerprinting isn't wrapped fail-open yet at that point -- fixed by
+adding the fail-open wrapping described above, not by weakening the test.
+Full suite (`tests/unit`+`tests/application`+`tests/architecture`+`tests/mdm`):
+1713 passed, 4 skipped, 35 subtests passed, one pre-existing unrelated
+`AWS_PROFILE`-dependent `test_go_live_wizard.py` failure (same one noted
+on tickets 75/76/81).
+
+**Cost sanity check (not yet the real prod number)**: a local synthetic
+6.8M-row, 4-column DuckDB table (matching `sec_thirteenf_holding`'s real
+prod scale per ticket 07's profiling) fingerprints in ~0.48s. That's
+per-call; the check runs twice per publish attempt (once at hydration,
+once at publish) -- call it ~1s total for the single largest protected
+table, against the 60.65s no-op cost it replaces. Test plan item 4 (the
+actual live `gold-refresh` measurement against real prod data) is
+**not yet run** -- deliberately deferred per advisor's explicit caution
+not to deploy/measure while a `daily-incremental` execution was
+mid-flight publishing the same canonical silver file (contention risk on
+promotion). That execution has since reached a terminal state (FAILED,
+OOM in `reduce-identity-refresh` -- see
+[ticket 83](83-reduce-identity-refresh-oom-on-merge.md), unrelated to
+this fix), so the contention window has passed, but the live measurement
+itself still needs a fresh deploy + `gold-refresh` execution, not yet
+triggered.
