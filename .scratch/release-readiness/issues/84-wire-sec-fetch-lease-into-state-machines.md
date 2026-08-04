@@ -222,12 +222,73 @@ into `main` at `0344a598`. All code/test/architecture-validation work for
 `load_history` is now on `main`. Status stays `in_progress` (not
 `resolved`) because the item below is still open.
 
-**Not yet done**:
-- Test plan item 4 (live overlapping-trigger test: deliberately trigger two
-  of the 5 commands with overlapping schedules and confirm the second
-  genuinely defers) -- needs a deploy + a carefully-timed live trigger,
-  deferred pending explicit confirmation per this workstream's
-  live/destructive-action convention.
+**Deployed + live-verified 2026-08-04.** Live prod images (warehouse
+`sha-04b31766`, MDM `sha-71de85a9`) were found to predate this work
+entirely (4 and 49 commits behind `main` on `edgar_warehouse/`
+respectively -- the live MDM image predated tickets 77/78/79/80/82/83/84
+outright, matching the class of incident already documented above under
+"Dev Terraform/Snowflake go-live blockers... Update (2026-07-27, later
+same day)"). Rebuilt and pushed both from `main`@`0344a598`
+(`edgartools-prod-warehouse@sha256:9d075ba6...`,
+`edgartools-prod-mdm@sha256:2ac7a00c...`), verified via `docker run`
+import/`--help` checks before deploying (confirmed
+`SEC_FETCH_LEASE_STALE_AFTER_SECONDS == 57600` and
+`acquire-sec-fetch-lease` present in both images). Captured all 5 prior
+state-machine definitions as a rollback file before touching anything.
+Ran `deploy-aws-application.sh --env prod --enable-mdm` with both new
+image refs; all 6 task definitions + 27 state machines updated cleanly.
+Post-deploy: all 5 lease-wired machines confirmed live with the
+`AcquireSecFetchLease`/`ReleaseSecFetchLease` states present and
+`aws stepfunctions validate-state-machine-definition` clean on all 5.
+
+**Test plan item 4 (live overlapping-trigger test): CONFIRMED.** Started
+`targeted-resync` for CIK 320193 (Apple) as the holder; once it entered
+`RunWarehouseTask` (proving it acquired), started a second `targeted-resync`
+for CIK 789019 (Microsoft). The second execution's own output:
+`"lease_acquired": false`, `"held_by_run_id":
+"ticket84-leaseverify-holder-apple-1785840456"` (the first execution's
+exact name), `"disposition": "sec_fetch_deferred"` -- it never reached
+`RunWarehouseTask`. Cross-command mutual exclusion is confirmed working
+live in prod, not just in the architecture tests.
+
+**New finding from the same verification (not anticipated by the
+blast-radius note below as clearly as it should have been): the holder
+execution then failed** inside `RunWarehouseTask` on a genuine, unrelated
+pre-existing bug (see ticket 87) -- and because `RunWarehouseTask` has no
+`Catch` in `targeted_resync` (nor in the other 4 machines' equivalent
+task), the failure skipped `ReleaseSecFetchLease` entirely, wedging
+`sec_fetch_active`. A second probe execution (deliberately-invalid input,
+used to confirm the lease was free again) reproduced the exact same
+wedge a second time. Both times, manual recovery via a one-off
+`ecs run-task` running `release-sec-fetch-lease --run-id <held_by_run_id>`
+worked -- verified not by exit code alone (which only proves the container
+didn't crash) but by directly reading the `pipeline_run_lease` row back out
+of the canonical `silver.duckdb` in S3 afterward: `status='idle'`,
+`run_id` and `released_at`/`updated_at` matching each release exactly.
+Filed as ticket 86 (add a `Catch` on `RunWarehouseTask` routing to
+`ReleaseSecFetchLease`, mirroring the `adv_bulk_fetch_catch` pattern
+already used elsewhere in this same file for `fetch-adv-bulk`/
+`ingest-relationship-sources`) -- this is a real gap in ticket 84's own
+wiring, discovered by ticket 84's own test, not an accepted tradeoff to
+leave alone. Recommend fixing before the next scheduled `daily_incremental`
+run.
+
+**Also surfaced, unrelated to ticket 84 itself:**
+- Ticket 87: a genuine prod data-integrity conflict --
+  `targeted-resync --scope-type cik --scope-key 320193` failed with
+  `"immutable object 'filings/sec/cik=320193/accession=0000320193-24-000075/primary/wk-form4_1717453877.xml'
+  already exists with different content"`. This is the repo's existing
+  fail-closed immutable-bronze guard correctly refusing to silently
+  overwrite -- but it hard-fails the *entire* CIK resync rather than
+  skipping just the one conflicting accession, which combined with the
+  ticket-86 gap above is what wedged the lease in the first place.
+- `targeted-resync --scope-type cik` is not the "check for new filings
+  only" minimal-footprint operation it was assumed to be for this test --
+  the log showed `"accession_count": 1000` for Apple alone (a full
+  historical accession-list resync). Worth knowing for any future ad hoc
+  prod verification that reaches for `targeted-resync` as a "cheap" probe.
+
+**Still not done:**
 - `bootstrap_batched` (the real Distributed-Map `bootstrap-batch ×N`
   machine) and `bronze_seed_silver_gold`'s strict-candidate path remain
   unwired -- see "Not yet specified" below for the follow-up.
