@@ -207,6 +207,93 @@ def test_reducer_reads_each_reference_and_delta_object_exactly_once(
     assert len(delta_reads) == 1, f"expected batch delta read exactly once, got {delta_reads}"
 
 
+def test_reducer_cleans_up_its_verified_candidate_cache_on_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Release-readiness ticket 83: verified candidates are written to a
+    stable local cache directory (not held as Python bytes) for the whole
+    call, replacing the in-memory dict that stacked with the merge's own
+    working set and OOM-killed a real prod run. That cache directory must
+    not leak after a successful call -- the exact class of disk-hygiene bug
+    this workstream has already hit once (ticket 65's orphaned staged
+    blobs)."""
+    storage = StorageLocation(str(tmp_path / "warehouse"))
+    reference = tmp_path / "reference.duckdb"
+    delta = tmp_path / "batch.duckdb"
+    reference.write_bytes(b"reference")
+    delta.write_bytes(b"batch")
+    persist_run_manifest(storage, run_id="run-1", image_identity="sha256:image", reference_snapshot_file=reference, batches=[[100]])
+    persist_batch_outcome(storage, run_id="run-1", image_identity="sha256:image", ciks=[100], delta_file=delta)
+
+    def fake_merge(candidate: Path, canonical: Path, output: Path):
+        assert candidate.exists(), "candidate must be a real cached local file, not an in-memory bytes object"
+        shutil.copy2(canonical, output)
+        return type("Result", (), {"tables_merged": ()})()
+
+    monkeypatch.setattr(
+        "edgar_warehouse.application.identity_refresh_publication.merge_candidate_into_canonical", fake_merge
+    )
+
+    import edgar_warehouse.application.identity_refresh_publication as mod
+
+    captured: list[Path] = []
+    original_mkdtemp = mod.tempfile.mkdtemp
+
+    def capturing_mkdtemp(*args, **kwargs):
+        created = original_mkdtemp(*args, **kwargs)
+        if kwargs.get("prefix", "").startswith("identity-refresh-verified-"):
+            captured.append(Path(created))
+        return created
+
+    monkeypatch.setattr(mod.tempfile, "mkdtemp", capturing_mkdtemp)
+
+    reduce_identity_refresh(storage, run_id="run-1", image_identity="sha256:image", max_attempts=1)
+
+    assert len(captured) == 1
+    assert not captured[0].exists(), "verified-candidate cache directory must be removed after the call"
+
+
+def test_reducer_cleans_up_its_verified_candidate_cache_on_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cache directory must not leak even when the merge itself raises --
+    matches the identity-refresh lease's own 'release-on-failure is
+    best-effort, cleanup must not depend on the happy path' discipline."""
+    storage = StorageLocation(str(tmp_path / "warehouse"))
+    reference = tmp_path / "reference.duckdb"
+    delta = tmp_path / "batch.duckdb"
+    reference.write_bytes(b"reference")
+    delta.write_bytes(b"batch")
+    persist_run_manifest(storage, run_id="run-1", image_identity="sha256:image", reference_snapshot_file=reference, batches=[[100]])
+    persist_batch_outcome(storage, run_id="run-1", image_identity="sha256:image", ciks=[100], delta_file=delta)
+
+    def failing_merge(candidate: Path, canonical: Path, output: Path):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(
+        "edgar_warehouse.application.identity_refresh_publication.merge_candidate_into_canonical", failing_merge
+    )
+
+    import edgar_warehouse.application.identity_refresh_publication as mod
+
+    captured: list[Path] = []
+    original_mkdtemp = mod.tempfile.mkdtemp
+
+    def capturing_mkdtemp(*args, **kwargs):
+        created = original_mkdtemp(*args, **kwargs)
+        if kwargs.get("prefix", "").startswith("identity-refresh-verified-"):
+            captured.append(Path(created))
+        return created
+
+    monkeypatch.setattr(mod.tempfile, "mkdtemp", capturing_mkdtemp)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        reduce_identity_refresh(storage, run_id="run-1", image_identity="sha256:image", max_attempts=1)
+
+    assert len(captured) == 1
+    assert not captured[0].exists(), "verified-candidate cache directory must be removed even when the merge raises"
+
+
 def test_reducer_deletes_its_own_staged_object_after_successful_promotion(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

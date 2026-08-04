@@ -148,6 +148,16 @@ def test_daily_incremental_default_path_is_bounded_not_full_universe(daily_incre
     assert reducer["Next"] == "RunWarehouseTask"
 
 
+def test_reduce_identity_refresh_runs_on_the_large_task_definition(daily_incremental_definition) -> None:
+    """Release-readiness ticket 83: a real prod run was OOM-killed (exit 137)
+    on the medium (4096MB) task definition mid-merge on the largest
+    protected table. Must run on large (8192MB), matching the
+    gold-build-memory-reliability precedent's RunWarehouseTask move --
+    confirmed to fail against the pre-fix wh_medium_arn wiring."""
+    reducer = daily_incremental_definition["States"]["ReduceIdentityRefresh"]
+    assert reducer["Parameters"]["TaskDefinition"] == _FAKE_LARGE_ARN
+
+
 def test_daily_incremental_enforces_the_eighteen_hour_execution_bound(
     daily_incremental_definition,
 ) -> None:
