@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: in_progress
 
 ## Question
 
@@ -86,3 +86,75 @@ Real DB-backed tests (per this workstream's established discipline):
 
 Implemented, all test cases passing, full suite green, live confirmation
 that two SEC-fetching commands can no longer run concurrently.
+
+## Progress (2026-08-04) — Phase 1 (Python + DB layer) done, Phase 2 split off
+
+Reviewed via `advisor` before writing code, which scoped this session's work
+down to Phase 1 only (the DB-level lease primitive and its CLI/orchestrator
+plumbing) and split the Step Functions wiring across all five state
+machines into its own ticket -- [ticket 84](84-wire-sec-fetch-lease-into-state-machines.md)
+-- rather than attempting a partial five-state-machine change in one pass.
+
+**Implemented:** `SEC_FETCH_LEASE_NAME = "sec_fetch_active"`
+(`warehouse_orchestrator.py`) alongside the existing
+`IDENTITY_REFRESH_LEASE_NAME` -- no new DB schema needed, since
+`acquire_pipeline_run_lease`/`release_pipeline_run_lease` were already
+lease-name-parameterized. New `acquire-sec-fetch-lease`/
+`release-sec-fetch-lease` warehouse commands (orchestrator branches, CLI
+subparsers, `COMMAND_REGISTRY` entries, `_resolve_scope` entries -- all four
+registration points the existing `test_runtime_imports.py` architecture
+tests require in sync), deliberately **without** the identity-refresh
+lease's backstop/effective-mode machinery (advisor's explicit call --
+backstop-overdue priority logic is `daily_identity_refresh`-specific, and
+carrying it into this lease would let a deferred SEC-fetch command silently
+flip a later command's mode). New path-catalog entry
+(`reference.sec_fetch_lease.path`, its own `sec_fetch_lease_path()`
+resolver method) so the new lease's `lease_result.json` side-channel can
+never collide with the identity-refresh lease's under the same run_id --
+flagged by advisor as a real risk (`identity_refresh_lease_path` was
+hardcoded to that one lease's template key, not generic).
+
+**Verified, not assumed, before writing any code (advisor's other flagged
+risk):** whether release-readiness ticket 79's skip-if-unchanged silver
+publish fix could break the *existing* `daily_identity_refresh` lease's
+cross-run durability, since its only local write
+(`db.acquire_pipeline_run_lease`) touches `pipeline_run_lease`, a table
+also listed in `EXCLUDED_OPERATIONAL_TABLES`. Traced the actual merge code:
+`pipeline_run_lease` is *also* independently registered in
+`PROTECTED_TABLE_REGISTRY` (`silver_protection.py:231-232`,
+`business_keys=("lease_name",)`, `authority_column="updated_at"`), and
+`merge_candidate_into_canonical`'s merge loop iterates
+`PROTECTED_TABLE_REGISTRY` unconditionally -- registry membership wins, so
+every lease acquire/release is a real content change ticket 79's
+`compute_silver_fingerprint` always detects, and the full merge/publish
+always still runs. Ticket 79 does not regress the identity-refresh lease.
+This finding is recorded on both tickets so neither has to re-derive it.
+
+**Test plan items 1-3 done and green** (`tests/unit/test_sec_fetch_lease.py`,
+7 tests): exclusive acquisition (a second command genuinely can't acquire
+while the first holds it, and can't release under the wrong run_id),
+staleness reclaim (20h default, matching the identity-refresh lease's own
+coverage), a crashed-holder case (acquired, never released, still correctly
+denies a fresh acquirer -- proving a crash never looks like a clean
+release), the orchestrator command's S3 side-channel write on both the
+acquired and deferred paths, the release command freeing the lease, and an
+explicit independence check that holding one lease never blocks the other.
+Full suite (`tests/unit`+`tests/application`+`tests/architecture`+`tests/mdm`):
+1721 passed, 4 skipped, 35 subtests passed, one pre-existing unrelated
+`AWS_PROFILE`-dependent `test_go_live_wizard.py` failure (same one noted on
+tickets 75/76/79/81).
+
+**Not done (deliberately split to ticket 84, per advisor):** nothing
+acquires or releases this lease yet -- the five SEC-fetching state
+machines' Step Functions definitions are unchanged, so mutual exclusion is
+implemented but not yet enforced in prod. Test plan item 4 (live
+confirmation two commands can't run concurrently) can't be exercised until
+ticket 84 lands.
+
+**Incident note:** this ticket's Phase 1 code was accidentally reverted
+mid-session by a `git checkout main -- .` run while still on the
+ticket-79 branch (the same dangerous-command class flagged earlier this
+session) -- caught immediately via a post-command sanity grep, recovered
+in full from conversation context (nothing was guessed), and confirmed
+byte-for-byte via the identical full-suite result (1721 passed) before and
+after. No data was actually lost.

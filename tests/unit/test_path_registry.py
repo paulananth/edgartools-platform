@@ -205,6 +205,12 @@ class WarehousePathResolverTests(unittest.TestCase):
             "reference/cik_universe/runs/run-123/cik_snapshot.jsonl",
         )
 
+    def test_resolver_builds_sec_fetch_lease_path(self) -> None:
+        self.assertEqual(
+            self.resolver.sec_fetch_lease_path("run-123"),
+            "reference/sec_fetch_lease/runs/run-123/lease_result.json",
+        )
+
     def test_resolver_builds_run_summary_path(self) -> None:
         self.assertEqual(
             self.resolver.run_summary_path("run-123"),

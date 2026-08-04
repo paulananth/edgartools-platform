@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from edgar_warehouse.application.commands import (
     acquire_identity_refresh_lease,
+    acquire_sec_fetch_lease,
     bootstrap_batch,
     bootstrap_full,
     bootstrap_fundamentals,
@@ -25,6 +26,7 @@ from edgar_warehouse.application.commands import (
     reconcile_relationship_release,
     reduce_identity_refresh,
     release_identity_refresh_lease,
+    release_sec_fetch_lease,
     seed_bronze_batches,
     seed_silver_batches,
     seed_universe,
@@ -41,6 +43,8 @@ COMMAND_REGISTRY = {
     "compute-identity-refresh-window": compute_identity_refresh_window.execute,
     "acquire-identity-refresh-lease": acquire_identity_refresh_lease.execute,
     "release-identity-refresh-lease": release_identity_refresh_lease.execute,
+    "acquire-sec-fetch-lease": acquire_sec_fetch_lease.execute,
+    "release-sec-fetch-lease": release_sec_fetch_lease.execute,
     "reduce-identity-refresh": reduce_identity_refresh.execute,
     "daily-incremental": daily_incremental.execute,
     "load-daily-form-index-for-date": load_daily_form_index_for_date.execute,

@@ -63,6 +63,7 @@ _REQUIRED_TEMPLATE_KEYS = frozenset(
         "reference.cik_snapshot.path",
         "reference.run_summary.path",
         "reference.identity_refresh_lease.path",
+        "reference.sec_fetch_lease.path",
         "submissions.main.filename",
         "submissions.main.path",
         "submissions.pagination.path",
@@ -172,6 +173,14 @@ class WarehousePathResolver:
         run -- the state machine reads this via s3:getObject to branch on
         lease_acquired, since ecs:runTask.sync doesn't surface app stdout."""
         return self._render("reference.identity_refresh_lease.path", run_id=run_id)
+
+    def sec_fetch_lease_path(self, run_id: str) -> str:
+        """Return the S3-relative path for the cross-command SEC-fetch lease
+        (release-readiness ticket 80) side-channel for the given run --
+        same s3:getObject pattern as identity_refresh_lease_path, kept as a
+        separate template/key so the two leases' results can never collide
+        under the same run_id."""
+        return self._render("reference.sec_fetch_lease.path", run_id=run_id)
 
     def run_manifest_path(self, command_path: str, run_id: str) -> str:
         """Return the S3-relative path for a consolidated run_manifest.json."""
@@ -356,8 +365,13 @@ class WarehousePathResolver:
             "validate-data-quality",
             "acquire-identity-refresh-lease",
             "release-identity-refresh-lease",
+            "acquire-sec-fetch-lease",
+            "release-sec-fetch-lease",
         ):
-            # Lease commands only touch the pipeline_run_lease DB row -- no S3 writes at all.
+            # Lease commands write the pipeline_run_lease DB row plus their own
+            # lease_result.json side-channel (identity_refresh_lease_path /
+            # sec_fetch_lease_path) -- neither goes through this run-manifest
+            # writer, so no bronze/gold manifest entries are produced here.
             return {
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }

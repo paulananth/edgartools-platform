@@ -223,6 +223,14 @@ def _handle_release_identity_refresh_lease(args: argparse.Namespace) -> int:
     return run_command("release-identity-refresh-lease", args)
 
 
+def _handle_acquire_sec_fetch_lease(args: argparse.Namespace) -> int:
+    return run_command("acquire-sec-fetch-lease", args)
+
+
+def _handle_release_sec_fetch_lease(args: argparse.Namespace) -> int:
+    return run_command("release-sec-fetch-lease", args)
+
+
 def _handle_write_run_summary(args: argparse.Namespace) -> int:
     return run_command("write-run-summary", args)
 
@@ -971,6 +979,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(release_identity_refresh_lease)
     release_identity_refresh_lease.set_defaults(handler=_handle_release_identity_refresh_lease)
+
+    acquire_sec_fetch_lease = subparsers.add_parser(
+        "acquire-sec-fetch-lease",
+        help=(
+            "Atomically acquire the cross-command SEC-fetch lease (release-readiness "
+            "ticket 80), so only one of the five SEC-fetching commands runs its "
+            "fetch-heavy phase at a time platform-wide."
+        ),
+    )
+    _add_run_id_arg(acquire_sec_fetch_lease)
+    acquire_sec_fetch_lease.set_defaults(handler=_handle_acquire_sec_fetch_lease)
+
+    release_sec_fetch_lease = subparsers.add_parser(
+        "release-sec-fetch-lease",
+        help="Release the cross-command SEC-fetch lease.",
+    )
+    _add_run_id_arg(release_sec_fetch_lease)
+    release_sec_fetch_lease.set_defaults(handler=_handle_release_sec_fetch_lease)
 
     write_run_summary = subparsers.add_parser(
         "write-run-summary",
