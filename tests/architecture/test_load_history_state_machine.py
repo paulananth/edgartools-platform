@@ -148,6 +148,11 @@ def _linear_order(definition: dict) -> list[str]:
         "ValidateForceInput": "ForceDefault",
         "ForceCheck": "FetchAdvBulk",
         "FirmRosterForceCheck": "FetchFirmRoster",
+        # sec_fetch_active lease (release-readiness ticket 84): Default is the
+        # fail-closed deferred path, not the happy path -- trace the explicit
+        # lease_acquired=True branch instead, matching this repo's convention
+        # for LeaseAcquiredCheck in test_daily_incremental_state_machine.py.
+        "SecFetchLeaseAcquiredCheck": "SeedUniverse",
     }
     while name and name not in seen:
         seen.add(name)
@@ -181,12 +186,15 @@ def test_generates_valid_json_with_no_dangling_references(definition: dict) -> N
 
 
 def test_load_history_validates_force_before_workload(definition: dict) -> None:
+    """Next is AcquireSecFetchLease, not SeedUniverse directly (release-
+    readiness ticket 84) -- the cross-command sec_fetch_active lease gates
+    entry into the whole real-SEC-fetching span."""
     states = definition["States"]
     assert definition["StartAt"] == "ValidateForceInput"
     validation = states["ValidateForceInput"]
     assert _choice_next(validation, {}) == "ForceDefault"
-    assert _choice_next(validation, {"force": False}) == "SeedUniverse"
-    assert _choice_next(validation, {"force": True}) == "SeedUniverse"
+    assert _choice_next(validation, {"force": False}) == "AcquireSecFetchLease"
+    assert _choice_next(validation, {"force": True}) == "AcquireSecFetchLease"
     assert _choice_next(validation, {"force": 1}) == "InvalidForceInput"
 
     assert states["ForceDefault"] == {
@@ -194,7 +202,7 @@ def test_load_history_validates_force_before_workload(definition: dict) -> None:
         "Comment": "Normalize an omitted operator force input to false.",
         "Result": False,
         "ResultPath": "$.force",
-        "Next": "SeedUniverse",
+        "Next": "AcquireSecFetchLease",
     }
     assert states["InvalidForceInput"]["Type"] == "Fail"
     assert states["InvalidForceInput"]["Error"] == "InvalidForceInput"
@@ -621,12 +629,17 @@ def test_fetch_adv_bulk_and_ingest_adv_bulk_sources_catch_falls_through_to_mdm_r
     """A transient ADV fetch/ingest failure must never abort the rest of
     load_history -- matches the existing Branch B / AD-13 lenient pattern, and
     directly implements the ADV Pipeline map's standing requirement (ticket 02's
-    Notes) that entity resolution/graph sync must never gate on ADV data."""
+    Notes) that entity resolution/graph sync must never gate on ADV data.
+    Catch falls through to ReleaseSecFetchLease, not MdmRun directly (release-
+    readiness ticket 84) -- these fetch stages are still inside the
+    sec_fetch_active fetch-heavy span, so a failure must still release the
+    lease before proceeding to MDM."""
     for state_name in ("FetchAdvBulk", "FetchAdvBulkForced", "IngestAdvBulkSources"):
         state = definition["States"][state_name]
         assert state.get("Catch") == [
-            {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmRun"}
-        ], f"{state_name} missing lenient Catch-to-MdmRun"
+            {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}
+        ], f"{state_name} missing lenient Catch-to-ReleaseSecFetchLease"
+    assert definition["States"]["ReleaseSecFetchLease"]["Next"] == "MdmRun"
 
 
 def test_stage1b_thirteenf_catch_routes_into_adv_bulk_fetch_not_around_it(
@@ -718,12 +731,14 @@ def test_fetch_and_ingest_firm_roster_catch_falls_through_to_mdm_run(definition:
     """Mirrors test_fetch_adv_bulk_and_ingest_adv_bulk_sources_catch_falls_
     through_to_mdm_run above: a transient Firm Roster fetch/ingest failure
     must never abort the rest of load_history -- this cross-check is purely
-    additive visibility, per the parent spec."""
+    additive visibility, per the parent spec. Catch falls through to
+    ReleaseSecFetchLease, not MdmRun directly (release-readiness ticket 84)."""
     for state_name in ("FetchFirmRoster", "FetchFirmRosterForced", "IngestFirmRosterSources"):
         state = definition["States"][state_name]
         assert state.get("Catch") == [
-            {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmRun"}
-        ], f"{state_name} missing lenient Catch-to-MdmRun"
+            {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}
+        ], f"{state_name} missing lenient Catch-to-ReleaseSecFetchLease"
+    assert definition["States"]["ReleaseSecFetchLease"]["Next"] == "MdmRun"
 
 
 def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_null(
@@ -735,3 +750,102 @@ def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_n
         assert definition["States"][state_name]["ResultPath"] is None, (
             f"{state_name} must set ResultPath=null to preserve $ into the next state"
         )
+
+
+# ---------------------------------------------------------------------------
+# sec_fetch_active cross-command lease (release-readiness ticket 84):
+# AcquireSecFetchLease -> ReadSecFetchLeaseResult -> SecFetchLeaseAcquiredCheck
+# -> {SeedUniverse | SecFetchDeferred}, and ReleaseSecFetchLease before MdmRun.
+# load_history was restructured from the original parallel bootstrap-batch xN
+# Map into a sequential (MaxConcurrency=1) windowed pipeline (see the "Phased
+# pipeline" comment in the deploy script) -- no fan-out concern remains, so a
+# single acquire/release wraps the whole real-SEC-fetching span.
+# ---------------------------------------------------------------------------
+
+
+def test_load_history_acquires_sec_fetch_lease_before_seed_universe(definition: dict) -> None:
+    states = definition["States"]
+    assert states["ForceDefault"]["Next"] == "AcquireSecFetchLease"
+
+    acquire = states["AcquireSecFetchLease"]
+    cmd = acquire["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    assert "acquire-sec-fetch-lease" in cmd
+    assert acquire["ResultPath"] is None
+    assert acquire["Next"] == "ReadSecFetchLeaseResult"
+
+    read_result = states["ReadSecFetchLeaseResult"]
+    assert read_result["Resource"] == "arn:aws:states:::aws-sdk:s3:getObject"
+    assert read_result["ResultPath"] == "$.sec_fetch_lease_check"
+    assert read_result["Next"] == "SecFetchLeaseAcquiredCheck"
+
+    check = states["SecFetchLeaseAcquiredCheck"]
+    assert check["Type"] == "Choice"
+    assert check["Choices"][0]["Variable"] == "$.sec_fetch_lease_check.parsed.lease_acquired"
+    assert check["Choices"][0]["BooleanEquals"] is True
+    assert check["Choices"][0]["Next"] == "SeedUniverse"
+    assert check["Default"] == "SecFetchDeferred"
+
+    deferred = states["SecFetchDeferred"]
+    assert deferred["Type"] == "Pass"
+    assert deferred["End"] is True
+    assert deferred["Parameters"]["disposition"] == "sec_fetch_deferred"
+
+
+def test_load_history_no_operator_notification_on_sec_fetch_defer(definition: dict) -> None:
+    """load_history is operator-triggered ad-hoc (like bootstrap/bootstrap_full/
+    targeted_resync), unlike the scheduled daily_incremental -- no SNS
+    notification on defer, the operator is already watching the run."""
+    assert "NotifySecFetchDeferred" not in definition["States"]
+
+
+def test_load_history_releases_sec_fetch_lease_before_mdm_run(definition: dict) -> None:
+    states = definition["States"]
+    assert states["IngestFirmRosterSources"]["Next"] == "ReleaseSecFetchLease"
+
+    release = states["ReleaseSecFetchLease"]
+    cmd = release["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    assert "release-sec-fetch-lease" in cmd
+    assert release["ResultPath"] is None
+    assert release["Next"] == "MdmRun"
+    assert release["Catch"] == [
+        {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLeaseFailedNonFatal"}
+    ]
+
+    fallback = states["ReleaseSecFetchLeaseFailedNonFatal"]
+    assert fallback["Type"] == "Pass"
+    assert fallback["Next"] == "MdmRun"
+    assert "End" not in fallback
+
+
+def test_sec_fetch_lease_read_result_key_matches_the_real_path_resolver(definition: dict) -> None:
+    """The hand-typed S3 key in ReadSecFetchLeaseResult must tie to
+    sec_fetch_lease_path()'s real template -- see the identical test in
+    test_daily_identity_refresh_state_machine.py for why (ReadSecFetchLeaseResult
+    has no Catch, so a drifted key hard-fails the execution instead of
+    deferring)."""
+    from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
+
+    relative_template = default_path_resolver().sec_fetch_lease_path("RUNID_PLACEHOLDER").replace(
+        "RUNID_PLACEHOLDER", "{}"
+    )
+    expected_key_expr = (
+        f"States.Format('warehouse/bronze/{relative_template}', $$.Execution.Name)"
+    )
+    key_expr = definition["States"]["ReadSecFetchLeaseResult"]["Parameters"]["Key.$"]
+    assert key_expr == expected_key_expr
+
+
+def test_load_history_sec_fetch_lease_spans_the_whole_windowed_pipeline(definition: dict) -> None:
+    """The lease must be held across SeedUniverse, MdmSeedUniverse,
+    Stage0CompanyIdentity, Stage1Parallel/Stage1B, and the ADV/firm-roster
+    chain -- i.e. acquired strictly before all of them and released strictly
+    after all of them, with no path that reaches MdmRun without passing
+    through ReleaseSecFetchLease first."""
+    order = _linear_order(definition)
+    assert order.index("AcquireSecFetchLease") < order.index("SeedUniverse")
+    assert order.index("SeedUniverse") < order.index("MdmSeedUniverse")
+    assert order.index("MdmSeedUniverse") < order.index("Stage0CompanyIdentity")
+    assert order.index("Stage0CompanyIdentity") < order.index("Stage1Parallel")
+    assert "ReleaseSecFetchLease" in order
+    assert order.index("Stage1Parallel") < order.index("ReleaseSecFetchLease")
+    assert order.index("ReleaseSecFetchLease") < order.index("MdmRun")

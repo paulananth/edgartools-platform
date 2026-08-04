@@ -180,6 +180,27 @@ def test_targeted_resync_lease_wraps_both_cik_list_branches(targeted_resync_defi
     assert release["End"] is True
 
 
+def test_sec_fetch_lease_read_result_key_matches_the_real_path_resolver(
+    bootstrap_full_definition, targeted_resync_definition,
+) -> None:
+    """The hand-typed S3 key in ReadSecFetchLeaseResult must tie to
+    sec_fetch_lease_path()'s real template -- see the identical test in
+    test_daily_identity_refresh_state_machine.py for why (ReadSecFetchLeaseResult
+    has no Catch, so a drifted key hard-fails the execution instead of
+    deferring)."""
+    from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
+
+    relative_template = default_path_resolver().sec_fetch_lease_path("RUNID_PLACEHOLDER").replace(
+        "RUNID_PLACEHOLDER", "{}"
+    )
+    expected_key_expr = (
+        f"States.Format('warehouse/bronze/{relative_template}', $$.Execution.Name)"
+    )
+    for definition in (bootstrap_full_definition, targeted_resync_definition):
+        key_expr = definition["States"]["ReadSecFetchLeaseResult"]["Parameters"]["Key.$"]
+        assert key_expr == expected_key_expr
+
+
 def test_unwrapped_workflow_has_no_sec_fetch_lease_states(unwrapped_definition) -> None:
     """gold_refresh (representing the 5 non-SEC-fetching workflows in the
     loop) must be byte-for-byte the original shape -- no lease states leak

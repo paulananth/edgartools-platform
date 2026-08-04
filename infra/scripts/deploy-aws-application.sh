@@ -1814,6 +1814,79 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
 mdm_limit = str(mdm_run_limit)
 graph_limit = str(mdm_graph_limit)
 
+def build_sec_fetch_lease_states(acquired_next_state, released_next_state):
+    """Cross-command sec_fetch_active lease (release-readiness ticket 84):
+    load_history is operator-triggered and ad-hoc (like bootstrap/
+    bootstrap_full/targeted_resync, unlike the scheduled daily_incremental),
+    so no operator-alert notification on defer -- the operator triggering it
+    is already watching the run. load_history was restructured from the
+    original parallel bootstrap-batch xN Map into a sequential
+    (MaxConcurrency=1) windowed bootstrap-next pipeline (see the "Phased
+    pipeline" comment above) -- no fan-out concern remains here; a single
+    acquire/release wraps the whole real-SEC-fetching span (SeedUniverse
+    through the ADV/firm-roster fetch chain), matching
+    write_warehouse_mdm_gold_definition's daily_incremental branch shape
+    almost exactly (this function can't share code with that one -- each is
+    its own `python3 -` subprocess).
+    """
+    acquire = ecs_state(wh_medium_arn,
+        "States.Array('acquire-sec-fetch-lease', '--run-id', $$.Execution.Name)",
+        next_state="ReadSecFetchLeaseResult", retry_secs=30)
+    acquire["ResultPath"] = None
+
+    read_result = {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+        "Parameters": {
+            "Bucket": bronze_bucket_name,
+            "Key.$": "States.Format('warehouse/bronze/reference/sec_fetch_lease/runs/{}/lease_result.json', $$.Execution.Name)",
+        },
+        "ResultSelector": {"parsed.$": "States.StringToJson($.Body)"},
+        "ResultPath": "$.sec_fetch_lease_check",
+        "Next": "SecFetchLeaseAcquiredCheck",
+    }
+
+    acquired_check = {
+        "Type": "Choice",
+        "Comment": "lease_result.json (not a plain ecs:runTask.sync field) is the source of truth for whether this run holds the shared cross-command sec_fetch_active lease.",
+        "Choices": [
+            {
+                "Variable": "$.sec_fetch_lease_check.parsed.lease_acquired",
+                "BooleanEquals": True,
+                "Next": acquired_next_state,
+            }
+        ],
+        "Default": "SecFetchDeferred",
+    }
+
+    release = ecs_state(wh_medium_arn,
+        "States.Array('release-sec-fetch-lease', '--run-id', $$.Execution.Name)",
+        next_state=released_next_state, retry_secs=30)
+    release["ResultPath"] = None
+    release["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLeaseFailedNonFatal"}]
+
+    return {
+        "AcquireSecFetchLease": acquire,
+        "ReadSecFetchLeaseResult": read_result,
+        "SecFetchLeaseAcquiredCheck": acquired_check,
+        "SecFetchDeferred": {
+            "Type": "Pass",
+            "Comment": "sec_fetch_active lease already held by another SEC-fetching command -- an explicit disposition, not an invisible skip. No SEC/IAPD-fetch work started this run (release-readiness ticket 84).",
+            "Parameters": {
+                "disposition": "sec_fetch_deferred",
+                "sec_fetch_lease_check.$": "$.sec_fetch_lease_check.parsed",
+            },
+            "ResultPath": "$.sec_fetch_deferred_summary",
+            "End": True,
+        },
+        "ReleaseSecFetchLease": release,
+        "ReleaseSecFetchLeaseFailedNonFatal": {
+            "Type": "Pass",
+            "Comment": "Release is best-effort -- a failure here must not mark an otherwise-successful run FAILED. The 16h stale-lease reclaim in acquire_pipeline_run_lease is the actual safety net for a wedged sec_fetch_active lease.",
+            "Next": released_next_state,
+        },
+    }
+
 # Validate the optional operator repair flag before starting any ECS workload.
 # An omitted value is normalized to false; malformed values fail with a named
 # disposition instead of reaching a Choice state that can raise States.Runtime.
@@ -1822,7 +1895,7 @@ validate_force_input = {
     "Comment": "Accept an omitted or boolean force input; reject every other type before workload execution.",
     "Choices": [
         {"Variable": "$.force", "IsPresent": False, "Next": "ForceDefault"},
-        {"Variable": "$.force", "IsBoolean": True, "Next": "SeedUniverse"},
+        {"Variable": "$.force", "IsBoolean": True, "Next": "AcquireSecFetchLease"},
     ],
     "Default": "InvalidForceInput",
 }
@@ -1831,7 +1904,7 @@ force_default = {
     "Comment": "Normalize an omitted operator force input to false.",
     "Result": False,
     "ResultPath": "$.force",
-    "Next": "SeedUniverse",
+    "Next": "AcquireSecFetchLease",
 }
 invalid_force_input = {
     "Type": "Fail",
@@ -2302,7 +2375,11 @@ force_check = {
     "Default": "InvalidForceInput",
 }
 
-adv_bulk_fetch_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmRun"}]
+# Next="ReleaseSecFetchLease", not "MdmRun" directly -- these ADV/firm-roster
+# fetch stages are still inside the sec_fetch_active fetch-heavy span
+# (release-readiness ticket 84), so a failure here must still release the
+# lease before falling through to MDM, not skip release entirely.
+adv_bulk_fetch_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}]
 
 fetch_adv_bulk = ecs_state(wh_medium_arn,
     "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
@@ -2379,9 +2456,18 @@ ingest_firm_roster_sources = ecs_state(wh_medium_arn,
     "States.Array('ingest-relationship-sources', '--source-manifest', "
     f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-firm-roster/{{}}/source_manifest.json', $$.Execution.Name), "
     "'--run-id', $$.Execution.Name)",
-    next_state="MdmRun")
+    next_state="ReleaseSecFetchLease")
 ingest_firm_roster_sources["Catch"] = adv_bulk_fetch_catch
 ingest_firm_roster_sources["ResultPath"] = None
+
+# sec_fetch_active lease (release-readiness ticket 84): acquired right
+# before SeedUniverse, released right before MdmRun -- spans every state
+# that actually calls SEC/IAPD (SeedUniverse, Stage0CompanyIdentity, Branch
+# A/B windowed bootstrap+fundamentals, and the ADV/firm-roster fetch chain).
+# MdmSeedUniverse (an upsert from data SeedUniverse already fetched, no SEC
+# call itself) rides inside the span since it's sandwiched between two
+# fetch stages -- a few minutes of over-holding, not hours.
+sec_fetch_lease_states = build_sec_fetch_lease_states("SeedUniverse", "MdmRun")
 
 # (5)–(9) MDM chain + GoldRefresh — run once after ALL windows complete (same invariant as before).
 # MdmExport is new (data-architecture Issue 3): mdm sync-graph materializes Snowflake graph
@@ -2446,6 +2532,7 @@ definition = {
         "ValidateForceInput": validate_force_input,
         "ForceDefault":       force_default,
         "InvalidForceInput":  invalid_force_input,
+        **sec_fetch_lease_states,
         "SeedUniverse":      seed,
         "MdmSeedUniverse":   mdm_seed_universe,
         "WindowSizeCheck":   window_size_check,

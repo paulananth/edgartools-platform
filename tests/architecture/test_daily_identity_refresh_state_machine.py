@@ -553,6 +553,28 @@ def test_daily_incremental_releases_sec_fetch_lease_before_mdm_run(
     assert fallback["Next"] == "MdmRun"
 
 
+def test_sec_fetch_lease_read_result_key_matches_the_real_path_resolver(
+    daily_incremental_definition, bootstrap_definition,
+) -> None:
+    """Mirrors test_read_lease_result_key_matches_the_real_path_resolver for
+    the identity-refresh lease -- the hand-typed S3 key in
+    ReadSecFetchLeaseResult must tie to sec_fetch_lease_path()'s real
+    template, or a future .properties change silently makes
+    ReadSecFetchLeaseResult (which has no Catch, deliberately) hard-fail
+    every SEC-fetching command's execution instead of failing this test."""
+    from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
+
+    relative_template = default_path_resolver().sec_fetch_lease_path("RUNID_PLACEHOLDER").replace(
+        "RUNID_PLACEHOLDER", "{}"
+    )
+    expected_key_expr = (
+        f"States.Format('warehouse/bronze/{relative_template}', $$.Execution.Name)"
+    )
+    for definition in (daily_incremental_definition, bootstrap_definition):
+        key_expr = definition["States"]["ReadSecFetchLeaseResult"]["Parameters"]["Key.$"]
+        assert key_expr == expected_key_expr
+
+
 def test_daily_incremental_has_both_leases_independently(daily_incremental_definition) -> None:
     """The pre-existing identity-refresh lease (AcquireLease/ReleaseLease,
     spanning the whole run) and the new sec_fetch_active lease
