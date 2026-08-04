@@ -2732,7 +2732,13 @@ else:
         "'--run-id', $.identity_refresh_run_id)",
         is_end=True)
 
-    reduce_identity_refresh = ecs_state(wh_medium_arn,
+    # large, not medium (release-readiness ticket 83): a real prod run was
+    # OOM-killed (exit 137) on medium's 4096MB mid-merge on the largest
+    # protected table, even after the code-level fix (this same ticket)
+    # that stopped holding every verified candidate as Python bytes for the
+    # whole reducer call. Belt-and-suspenders headroom, matching the
+    # gold-build-memory-reliability precedent's RunWarehouseTask move.
+    reduce_identity_refresh = ecs_state(wh_large_arn,
         "States.Array('reduce-identity-refresh', '--run-id', $$.Execution.Name, '--max-attempts', '3')",
         next_state="RunWarehouseTask")
     # The command performs the bounded reducer-only retry itself. Step

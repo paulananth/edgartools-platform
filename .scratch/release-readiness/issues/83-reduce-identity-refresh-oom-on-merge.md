@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: in_progress
 
 ## Question
 
@@ -86,3 +86,69 @@ Root-caused (confirmed, not assumed) why `reduce-identity-refresh` OOM'd
 specifically on `sec_company_filing`'s merge, a fix or re-size decided and
 applied, and a fresh `daily-incremental` execution completes
 `ReduceIdentityRefresh` without OOM.
+
+## Root cause (confirmed live, not inferred, 2026-08-03)
+
+Reproduced directly: downloaded the real canonical `silver.duckdb`
+(~1021.8MB) and the real `reference_snapshot.duckdb` from the failed run's
+own S3 paths, ran `reduce_identity_refresh`'s merge path inside a
+`docker run --memory=4096m` container against the actual locally-built
+warehouse image (matching prod's `medium` task's 4096MB Fargate cgroup
+ceiling exactly). It died silently at the identical point --
+`sec_company_filing`'s merge, zero further output -- matching prod's
+CloudWatch log exactly. Local macOS `/usr/bin/time -l` RSS measurements
+(2.0-2.35GB peak) had NOT shown this, because macOS's own RSS accounting
+doesn't reflect Fargate's cgroup memory accounting; the constrained-container
+repro was necessary to actually see the failure.
+
+Mechanism: ticket 76's earlier fix (`verified_bytes: dict[str, bytes]`, all
+4 candidates' verified inputs held in memory for the reducer's entire
+lifetime, to avoid re-fetching from S3 across retries) stacks with a fresh
+per-attempt `baseline_payload` (a full `read_bytes()` of the growing
+canonical file, re-read every attempt) plus the merge's own DuckDB working
+set for a 6.8M-row-class table. None of these individually is enormous, but
+held simultaneously they push peak memory past the 4096MB ceiling. This is
+a distinct mechanism from the sibling gold-build OOM (CLAUDE.md, "Gold-build
+memory / daily_incremental OOM") -- that one was full-materialization of
+~24 gold tables in one dict; this one is retry-durability bytes plus a
+per-attempt baseline re-read stacking on top of the merge's own footprint.
+
+## Fix (implemented, unit-tested, not yet live-verified)
+
+1. **Structural**: `identity_refresh_publication.py`'s
+   `reduce_identity_refresh` no longer holds verified candidate bytes in a
+   Python dict for the call's lifetime. Verified inputs are now written
+   once to a `tempfile.mkdtemp()`-backed cache directory
+   (`verified_paths: dict[str, Path]`) and read from disk on each retry
+   attempt instead -- preserves ticket 76's original goal (no re-fetch from
+   S3 across retries) while eliminating the multi-gigabyte in-memory
+   stacking. Cache directory is removed via `try/finally: shutil.rmtree`
+   on both success and failure paths. Two new regression tests
+   (`tests/unit/test_identity_refresh_publication.py`) assert the cache
+   directory is created and cleaned up in both cases; confirmed via
+   `git stash` to fail before the fix (no cache dir ever created) and pass
+   after.
+2. **Belt-and-suspenders resize**: `ReduceIdentityRefresh`'s ECS task moved
+   from `wh_medium_arn` (4096MB) to `wh_large_arn` (8192MB) in
+   `deploy-aws-application.sh`, matching the precedent set by the
+   gold-build-memory-reliability fix for `RunWarehouseTask`. New
+   architecture test
+   (`test_reduce_identity_refresh_runs_on_the_large_task_definition`,
+   `tests/architecture/test_daily_identity_refresh_state_machine.py`)
+   asserts this; confirmed via `git stash` to fail before and pass after.
+
+Full suite (`tests/unit tests/application tests/architecture tests/mdm`):
+1724 passed, 4 skipped, 35 subtests passed -- only the one pre-existing,
+unrelated `test_go_live_wizard.py::test_plan_prints_preview_only_aws_ordered_commands`
+failure (stale AWS profile string in a test fixture, unrelated to this
+change).
+
+**Not yet done**: live prod verification (rebuild + push the warehouse
+image, redeploy via `deploy-aws-application.sh --env prod`, trigger a fresh
+`daily-incremental` execution and confirm `ReduceIdentityRefresh` completes
+without OOM) is still outstanding -- deferred pending explicit confirmation
+per this workstream's live/destructive-action convention. That same run
+would also finally obtain [ticket 77](77-implement-artifact-fetch-concurrency.md)/
+[ticket 78](78-implement-shared-submissions-fetch-concurrency.md)'s
+still-missing live throughput measurement, since it needs
+`ReduceIdentityRefresh` to complete before `RunWarehouseTask` even starts.

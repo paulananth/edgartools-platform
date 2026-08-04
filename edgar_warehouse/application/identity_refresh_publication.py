@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import sys
 import tempfile
 import time
@@ -192,9 +193,22 @@ def reduce_identity_refresh(
     """Merge one verified run and perform exactly one promotion per attempt.
 
     Promotion conflicts repeat this reducer only. The reference snapshot and
-    every delta are read and checksummed exactly once, up front; the verified
-    bytes are held in memory and reused for every merge attempt instead of
-    being re-fetched from storage.
+    every delta are read and checksummed exactly once, up front, and written
+    straight to a stable local cache directory (not held as Python bytes).
+    Every retry attempt reuses those same local files -- no re-fetch from
+    storage, and no redundant re-copy into a fresh temp file per attempt.
+
+    Regression (2026-08-03, release-readiness ticket 83): an earlier version
+    of this fix (ticket 76) held every verified candidate's full bytes in a
+    dict for the whole call. That was correct for its own goal (avoid
+    re-fetching from S3 on a promotion-conflict retry) but meant a full
+    canonical-sized reference snapshot, every batch delta, *and* the freshly
+    re-read canonical baseline all coexisted in process memory at once,
+    stacking with the merge's own DuckDB working set -- OOM-killed a real
+    prod run (exit 137) mid-merge on the largest protected table. Verified
+    live via a memory-constrained (4096MB) container reproduction against
+    the exact prod input files before this fix, and the identical repro
+    completing successfully after it.
     """
     if max_attempts < 1:
         raise WarehouseRuntimeError("identity refresh reducer max_attempts must be positive")
@@ -202,118 +216,134 @@ def reduce_identity_refresh(
     inputs = validate_complete_run_manifest(manifest, expected_run_id=run_id, expected_image_identity=image_identity)
     reference = manifest["reference_snapshot"]
     reference_path = str(reference["path"])
-    verified_bytes: dict[str, bytes] = {
-        reference_path: _read_verified(storage_root, reference_path, str(reference["sha256"]))
-    }
-    for item in inputs:
-        verified_bytes[item.delta_path] = _read_verified(storage_root, item.delta_path, item.sha256)
 
-    canonical_relative = "silver/sec/silver.duckdb"
-    for attempt in range(1, max_attempts + 1):
-        _emit_reducer_event(
-            "identity_refresh_attempt_started", run_id=run_id, attempt=attempt, max_attempts=max_attempts
-        )
-        baseline = storage_root.read_object_version(canonical_relative)
-        try:
-            with tempfile.TemporaryDirectory(prefix="identity-refresh-reducer-") as tmp:
-                tmp_path = Path(tmp)
-                current = tmp_path / "canonical.duckdb"
-                if baseline.exists:
-                    baseline_payload = read_bytes(storage_root.join(canonical_relative))
-                    current.write_bytes(baseline_payload)
-                    candidates = [("reference", reference_path)] + [(item.batch_id, item.delta_path) for item in inputs]
-                else:
-                    baseline_payload = verified_bytes[reference_path]
-                    current.write_bytes(baseline_payload)
-                    candidates = [(item.batch_id, item.delta_path) for item in inputs]
+    cache_dir = Path(tempfile.mkdtemp(prefix="identity-refresh-verified-"))
+    try:
+        verified_paths: dict[str, Path] = {
+            reference_path: _read_verified_to_path(
+                storage_root, reference_path, str(reference["sha256"]), cache_dir / "reference.duckdb"
+            )
+        }
+        for index, item in enumerate(inputs):
+            verified_paths[item.delta_path] = _read_verified_to_path(
+                storage_root, item.delta_path, item.sha256, cache_dir / f"delta-{index}.duckdb"
+            )
+
+        canonical_relative = "silver/sec/silver.duckdb"
+        for attempt in range(1, max_attempts + 1):
+            _emit_reducer_event(
+                "identity_refresh_attempt_started", run_id=run_id, attempt=attempt, max_attempts=max_attempts
+            )
+            baseline = storage_root.read_object_version(canonical_relative)
+            try:
+                with tempfile.TemporaryDirectory(prefix="identity-refresh-reducer-") as tmp:
+                    tmp_path = Path(tmp)
+                    if baseline.exists:
+                        current = tmp_path / "canonical.duckdb"
+                        baseline_payload = read_bytes(storage_root.join(canonical_relative))
+                        current.write_bytes(baseline_payload)
+                        byte_size = len(baseline_payload)
+                        del baseline_payload
+                        candidates = [("reference", reference_path)] + [(item.batch_id, item.delta_path) for item in inputs]
+                    else:
+                        # merge_candidate_into_canonical only ever reads
+                        # canonical_path (via its own internal shutil.copy2)
+                        # -- safe to point straight at the stable cached
+                        # reference file instead of duplicating it again.
+                        current = verified_paths[reference_path]
+                        byte_size = current.stat().st_size
+                        candidates = [(item.batch_id, item.delta_path) for item in inputs]
+                    _emit_reducer_event(
+                        "identity_refresh_baseline_read_completed",
+                        run_id=run_id,
+                        attempt=attempt,
+                        canonical_exists=baseline.exists,
+                        byte_size=byte_size,
+                        etag=baseline.etag,
+                    )
+                    merge_order: list[str] = []
+                    tables_merged: list[str] = []
+                    for index, (label, relative) in enumerate(candidates):
+                        _emit_reducer_event(
+                            "identity_refresh_candidate_merge_started",
+                            run_id=run_id,
+                            attempt=attempt,
+                            batch_id=label,
+                            candidate_index=index,
+                            candidate_count=len(candidates),
+                        )
+                        merge_started_at = time.monotonic()
+                        candidate = verified_paths[relative]
+                        merged = tmp_path / f"merged-{index}.duckdb"
+                        result = merge_candidate_into_canonical(candidate, current, merged)
+                        current = merged
+                        merge_order.append(label)
+                        tables_merged.extend(result.tables_merged)
+                        _emit_reducer_event(
+                            "identity_refresh_candidate_merge_completed",
+                            run_id=run_id,
+                            attempt=attempt,
+                            batch_id=label,
+                            tables_merged=list(result.tables_merged),
+                            elapsed_seconds=time.monotonic() - merge_started_at,
+                        )
+                    payload = current.read_bytes()
                 _emit_reducer_event(
-                    "identity_refresh_baseline_read_completed",
+                    "identity_refresh_stage_and_promote_started",
                     run_id=run_id,
                     attempt=attempt,
-                    canonical_exists=baseline.exists,
-                    byte_size=len(baseline_payload),
-                    etag=baseline.etag,
+                    byte_size=len(payload),
+                    baseline_etag=baseline.etag,
                 )
-                merge_order: list[str] = []
-                tables_merged: list[str] = []
-                for index, (label, relative) in enumerate(candidates):
-                    _emit_reducer_event(
-                        "identity_refresh_candidate_merge_started",
-                        run_id=run_id,
-                        attempt=attempt,
-                        batch_id=label,
-                        candidate_index=index,
-                        candidate_count=len(candidates),
-                    )
-                    merge_started_at = time.monotonic()
-                    candidate = tmp_path / f"candidate-{index}.duckdb"
-                    candidate.write_bytes(verified_bytes[relative])
-                    merged = tmp_path / f"merged-{index}.duckdb"
-                    result = merge_candidate_into_canonical(candidate, current, merged)
-                    current = merged
-                    merge_order.append(label)
-                    tables_merged.extend(result.tables_merged)
-                    _emit_reducer_event(
-                        "identity_refresh_candidate_merge_completed",
-                        run_id=run_id,
-                        attempt=attempt,
-                        batch_id=label,
-                        tables_merged=list(result.tables_merged),
-                        elapsed_seconds=time.monotonic() - merge_started_at,
-                    )
-                payload = current.read_bytes()
-            _emit_reducer_event(
-                "identity_refresh_stage_and_promote_started",
-                run_id=run_id,
-                attempt=attempt,
-                byte_size=len(payload),
-                baseline_etag=baseline.etag,
-            )
-            stage_promote_started_at = time.monotonic()
-            staged_relative = storage_root.write_staged_bytes(canonical_relative, payload)
-            promotion = storage_root.promote_staged(staged_relative, canonical_relative, expected_etag=baseline.etag)
-            _emit_reducer_event(
-                "identity_refresh_stage_and_promote_completed",
-                run_id=run_id,
-                attempt=attempt,
-                staged_path=staged_relative,
-                result_etag=promotion.new_version.etag,
-                elapsed_seconds=time.monotonic() - stage_promote_started_at,
-            )
-            # Deliberately only on success: promote_staged leaves a staged
-            # object in place on PromotionConflictError so a caller can
-            # inspect/retry it (release-readiness ticket 65) -- the bucket
-            # lifecycle rule on silverstage/ is the backstop for that case.
-            storage_root.delete_object(staged_relative)
-        except PromotionConflictError as exc:
-            _emit_reducer_event(
-                "identity_refresh_promotion_conflict",
-                run_id=run_id,
-                attempt=attempt,
-                max_attempts=max_attempts,
-                expected_etag=exc.expected_etag,
-                conflicting_etag=exc.actual_etag,
-            )
-            if attempt == max_attempts:
-                raise
-            continue
-        completed = {
-            **manifest,
-            "status": "succeeded",
-            "reducer": {
-                "attempt": attempt,
-                "max_attempts": max_attempts,
-                "canonical_promotion_count": 1,
-                "baseline_etag": baseline.etag,
-                "result_etag": promotion.new_version.etag,
-                "merge_order": merge_order,
-                "tables_merged": tables_merged,
-                "staged_path": staged_relative,
-            },
-        }
-        storage_root.write_immutable_bytes(completed_manifest_path(run_id), _json_bytes(completed))
-        return completed
-    raise AssertionError("unreachable")
+                stage_promote_started_at = time.monotonic()
+                staged_relative = storage_root.write_staged_bytes(canonical_relative, payload)
+                promotion = storage_root.promote_staged(
+                    staged_relative, canonical_relative, expected_etag=baseline.etag
+                )
+                _emit_reducer_event(
+                    "identity_refresh_stage_and_promote_completed",
+                    run_id=run_id,
+                    attempt=attempt,
+                    staged_path=staged_relative,
+                    result_etag=promotion.new_version.etag,
+                    elapsed_seconds=time.monotonic() - stage_promote_started_at,
+                )
+                # Deliberately only on success: promote_staged leaves a staged
+                # object in place on PromotionConflictError so a caller can
+                # inspect/retry it (release-readiness ticket 65) -- the bucket
+                # lifecycle rule on silverstage/ is the backstop for that case.
+                storage_root.delete_object(staged_relative)
+            except PromotionConflictError as exc:
+                _emit_reducer_event(
+                    "identity_refresh_promotion_conflict",
+                    run_id=run_id,
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    expected_etag=exc.expected_etag,
+                    conflicting_etag=exc.actual_etag,
+                )
+                if attempt == max_attempts:
+                    raise
+                continue
+            completed = {
+                **manifest,
+                "status": "succeeded",
+                "reducer": {
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                    "canonical_promotion_count": 1,
+                    "baseline_etag": baseline.etag,
+                    "result_etag": promotion.new_version.etag,
+                    "merge_order": merge_order,
+                    "tables_merged": tables_merged,
+                    "staged_path": staged_relative,
+                },
+            }
+            storage_root.write_immutable_bytes(completed_manifest_path(run_id), _json_bytes(completed))
+            return completed
+        raise AssertionError("unreachable")
+    finally:
+        shutil.rmtree(cache_dir, ignore_errors=True)
 
 
 def validate_complete_run_manifest(
@@ -378,6 +408,20 @@ def _read_verified(storage_root: StorageLocation, relative: str, expected_sha256
     if _sha256(payload) != expected_sha256:
         raise WarehouseRuntimeError(f"identity refresh checksum mismatch for {relative}")
     return payload
+
+
+def _read_verified_to_path(
+    storage_root: StorageLocation, relative: str, expected_sha256: str, dest_path: Path
+) -> Path:
+    """Same verification as ``_read_verified``, but written straight to a
+    local file instead of returned as bytes -- the caller keeps only a
+    ``Path``, so the verified payload's own bytes go out of scope (and are
+    collectable) the moment this call returns, instead of living in a
+    caller-held dict for an entire multi-candidate reducer call (release-
+    readiness ticket 83)."""
+    payload = _read_verified(storage_root, relative, expected_sha256)
+    dest_path.write_bytes(payload)
+    return dest_path
 
 
 def _read_json(storage_root: StorageLocation, relative: str) -> dict[str, Any]:
