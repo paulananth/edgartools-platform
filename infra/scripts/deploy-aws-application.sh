@@ -1288,6 +1288,19 @@ mdm_workflow_relationship_limit_command_expression() {
   esac
 }
 
+# release-readiness ticket 94: sync-graph's `--limit-per-type` was CLI-only --
+# the state machine's ASL only ever wired `$.limit`, so an execution input of
+# {"limit_per_type": N} was silently ignored (fell through to the bare
+# default command, which itself resolves to a small ~200-edge cap deep in
+# snowflake_graph.py). Only mdm_sync_graph supports this flag; every other
+# MDM workflow returns empty, same convention as the relationship_* helpers.
+mdm_workflow_limit_per_type_command_expression() {
+  case "$1" in
+    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'sync-graph', '--limit-per-type', States.Format('{}', $.limit_per_type))" ;;
+    *) return 0 ;;
+  esac
+}
+
 ensure_log_group() {
   local log_group_name="$1" log_group_arn
   if aws_cli logs describe-log-groups --log-group-name-prefix "$log_group_name" --query "logGroups[?logGroupName=='${log_group_name}'].logGroupName | [0]" --output text 2>/dev/null | grep -qx "$log_group_name"; then
@@ -1553,9 +1566,9 @@ PY
 }
 
 write_mdm_workflow_definition() {
-  local output_file="$1" task_definition_arn="$2" default_command="$3" limit_command="$4" relationship_command="${5:-}" relationship_limit_command="${6:-}"
+  local output_file="$1" task_definition_arn="$2" default_command="$3" limit_command="$4" relationship_command="${5:-}" relationship_limit_command="${6:-}" limit_per_type_command="${7:-}"
   python3 - "$output_file" "$CLUSTER_ARN" "$task_definition_arn" "edgar-warehouse" \
-    "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" "$default_command" "$limit_command" "$relationship_command" "$relationship_limit_command" <<'PY'
+    "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" "$default_command" "$limit_command" "$relationship_command" "$relationship_limit_command" "$limit_per_type_command" <<'PY'
 import json
 import pathlib
 import sys
@@ -1571,6 +1584,7 @@ import sys
     limit_command,
     relationship_command,
     relationship_limit_command,
+    limit_per_type_command,
 ) = sys.argv[1:]
 
 subnets = json.loads(subnet_json)
@@ -1680,6 +1694,26 @@ else:
         "StartAt": "RunMdmTask",
         "States": {"RunMdmTask": run_task_state(default_command)},
     }
+
+if limit_per_type_command:
+    # release-readiness ticket 94: additive wrap, not a rewrite -- prepend one
+    # new Choice ahead of whatever definition was built above (default /
+    # limit-only / relationship+limit chain), so a $.limit_per_type override
+    # is checked first and everything else is completely unchanged when it's
+    # absent. Only mdm_sync_graph passes a non-empty limit_per_type_command.
+    definition["States"]["HasLimitPerTypeOverride"] = {
+        "Type": "Choice",
+        "Choices": [{
+            "And": [
+                {"Variable": "$.limit_per_type", "IsPresent": True},
+                {"Variable": "$.limit_per_type", "IsNumeric": True},
+            ],
+            "Next": "RunMdmTaskWithLimitPerType",
+        }],
+        "Default": definition["StartAt"],
+    }
+    definition["States"]["RunMdmTaskWithLimitPerType"] = run_task_state(limit_per_type_command)
+    definition["StartAt"] = "HasLimitPerTypeOverride"
 
 pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
 PY
@@ -4481,8 +4515,9 @@ PY
     limit_command_expression="$(mdm_workflow_limit_command_expression "$workflow")"
     relationship_command_expression="$(mdm_workflow_relationship_command_expression "$workflow")"
     relationship_limit_command_expression="$(mdm_workflow_relationship_limit_command_expression "$workflow")"
+    limit_per_type_command_expression="$(mdm_workflow_limit_per_type_command_expression "$workflow")"
     definition_file="$(json_file "sfn-${workflow}")"
-    write_mdm_workflow_definition "$definition_file" "$task_definition_arn" "$command_expression" "$limit_command_expression" "$relationship_command_expression" "$relationship_limit_command_expression"
+    write_mdm_workflow_definition "$definition_file" "$task_definition_arn" "$command_expression" "$limit_command_expression" "$relationship_command_expression" "$relationship_limit_command_expression" "$limit_per_type_command_expression"
     state_machine_arn="$(upsert_state_machine "$workflow" "$definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
     printf ',\n' >> "$WORKFLOW_ARNS_FILE"
     python3 - "$workflow" "$state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
