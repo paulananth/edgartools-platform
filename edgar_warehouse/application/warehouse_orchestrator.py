@@ -141,6 +141,20 @@ def _planned_writes_for_publication(
 # mechanism silently breaks (masked for up to 18h by the stale-reclaim window).
 IDENTITY_REFRESH_LEASE_NAME = "daily_identity_refresh"
 
+# Cross-command SEC-fetch mutual exclusion (release-readiness ticket 80,
+# implementing pipeline-throughput-architecture ticket 09's decision): a
+# separate pipeline_run_lease row so only one of the five SEC-fetching
+# commands (daily_incremental, bootstrap, bootstrap_full, targeted_resync,
+# bootstrap_batch) runs its SEC-request-heavy phase at a time platform-wide.
+# Deliberately a distinct lease from IDENTITY_REFRESH_LEASE_NAME -- Daily
+# Identity Refresh's own SEC fetching is already serialized against itself
+# via that lease, and coupling the two would block unrelated work for no
+# reason. Phase 1 only (this constant plus the acquire/release commands
+# below); the Step Functions wiring that actually acquires/releases it
+# around each command's fetch phase is a separate follow-up ticket -- see
+# release-readiness ticket 80's Progress notes.
+SEC_FETCH_LEASE_NAME = "sec_fetch_active"
+
 # load_history's tracking-status contract (data-architecture Issue 2): compute-windows,
 # bootstrap-next (via the explicit --tracking-status-filter the load_history state machine
 # passes), and bootstrap-fundamentals's CIK resolution must all query the SAME combined status
@@ -2642,6 +2656,50 @@ def _capture_bronze_raw(
             released_at=now,
         )
         _emit_pipeline_event("identity_refresh_lease_released", run_id=sync_run_id)
+        return raw_writes, metrics
+
+    if command_name == "acquire-sec-fetch-lease":
+        # Cross-command SEC-fetch mutual exclusion (release-readiness ticket
+        # 80). No mode/backstop concept here -- unlike the identity-refresh
+        # lease, there's no priority-scheduling policy to resolve server-side;
+        # a caller either gets the lease or is deferred. lease_result.json (not
+        # metrics["lease_acquired"]) is the source of truth a Step Functions
+        # Choice state reads, matching the identity-refresh lease's own
+        # ecs:runTask.sync limitation.
+        acquired = db.acquire_pipeline_run_lease(
+            lease_name=SEC_FETCH_LEASE_NAME,
+            run_id=sync_run_id,
+            mode="fetch",
+            acquired_at=now,
+        )
+        held = db.get_pipeline_run_lease(SEC_FETCH_LEASE_NAME)
+        if acquired:
+            _emit_pipeline_event("sec_fetch_lease_acquired", run_id=sync_run_id)
+        else:
+            _emit_pipeline_event(
+                "sec_fetch_lease_deferred",
+                run_id=sync_run_id,
+                held_by_run_id=held.get("run_id") if held else None,
+                held_since=str(held.get("acquired_at")) if held else None,
+            )
+        metrics["lease_acquired"] = acquired
+        lease_result_rel = default_path_resolver().sec_fetch_lease_path(sync_run_id)
+        context.bronze_root.write_json(
+            lease_result_rel,
+            {
+                "lease_acquired": acquired,
+                "held_by_run_id": (held.get("run_id") if held else None),
+            },
+        )
+        return raw_writes, metrics
+
+    if command_name == "release-sec-fetch-lease":
+        db.release_pipeline_run_lease(
+            lease_name=SEC_FETCH_LEASE_NAME,
+            run_id=sync_run_id,
+            released_at=now,
+        )
+        _emit_pipeline_event("sec_fetch_lease_released", run_id=sync_run_id)
         return raw_writes, metrics
 
     if command_name == "write-run-summary":
@@ -5841,6 +5899,12 @@ def _resolve_scope(
         return {"mode": arguments.get("mode")}
 
     if command_name == "release-identity-refresh-lease":
+        return {}
+
+    if command_name == "acquire-sec-fetch-lease":
+        return {}
+
+    if command_name == "release-sec-fetch-lease":
         return {}
 
     if command_name == "fetch-adv-bulk":
