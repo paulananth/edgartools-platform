@@ -552,7 +552,7 @@ def _ownership_fact_source_rows(conn: Any) -> list[dict[str, Any]]:
 def _build_fact_ownership_transaction(conn: Any) -> pa.Table:
     # All key and natural-key derivations pushed into DuckDB SQL.
     # Eliminates Python loop + 5× _det_key() calls per row across 37K ownership rows.
-    table = _arrow(conn.execute("""
+    table = _arrow(conn.execute(r"""
         WITH src AS (
             SELECT f.accession_number, f.cik::BIGINT AS cik, f.form, f.filing_date,
                    o.owner_index, o.owner_cik, o.owner_name,
@@ -629,7 +629,7 @@ def _build_fact_ownership_holding_snapshot(conn: Any) -> pa.Table:
     # Same SQL rewrite pattern as _build_fact_ownership_transaction.
     # "Last transaction per holding group" implemented with QUALIFY ROW_NUMBER()
     # instead of a Python groupby loop.
-    table = _arrow(conn.execute("""
+    table = _arrow(conn.execute(r"""
         WITH src AS (
             SELECT f.accession_number, f.cik::BIGINT AS cik, f.filing_date,
                    o.owner_index, o.owner_cik, o.owner_name,
