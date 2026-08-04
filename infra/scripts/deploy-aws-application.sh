@@ -1326,8 +1326,10 @@ PY
 
 write_single_workflow_definition() {
   local output_file="$1" task_definition_arn="$2" default_command="$3" cik_command="$4"
+  local bronze_bucket_name="${5:-}" wrap_with_sec_fetch_lease="${6:-}"
   python3 - "$output_file" "$CLUSTER_ARN" "$task_definition_arn" "edgar-warehouse" \
-    "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" "$default_command" "$cik_command" <<'PY'
+    "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" "$default_command" "$cik_command" \
+    "$bronze_bucket_name" "$wrap_with_sec_fetch_lease" <<'PY'
 import json
 import pathlib
 import sys
@@ -1341,13 +1343,15 @@ import sys
     security_group_json,
     default_command,
     cik_command,
+    bronze_bucket_name,
+    wrap_with_sec_fetch_lease,
 ) = sys.argv[1:]
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
 
-def run_task_state(command_expression):
-    return {
+def run_task_state(command_expression, next_state=None, is_end=False):
+    s = {
         "Type": "Task",
         "Resource": "arn:aws:states:::ecs:runTask.sync",
         "Parameters": {
@@ -1375,10 +1379,115 @@ def run_task_state(command_expression):
             "BackoffRate": 2.0,
             "MaxAttempts": 2,
         }],
-        "End": True,
+    }
+    if is_end:
+        s["End"] = True
+    else:
+        s["Next"] = next_state
+    return s
+
+
+def build_sec_fetch_lease_states(acquired_next_state):
+    """Cross-command sec_fetch_active lease (release-readiness ticket 84):
+    gates this single-task workflow's entire run (the whole thing IS the
+    fetch-heavy phase -- no MDM/gold follow-up exists in this state machine
+    shape) behind the shared lease, and releases it right before the
+    execution ends. No operator-alert notification, unlike daily_incremental's
+    identity-refresh lease -- these are operator-triggered ad-hoc runs
+    (bootstrap_full, targeted_resync), matching
+    write_warehouse_mdm_gold_definition's bootstrap branch: the operator
+    running one is already watching it.
+    """
+    def lease_task_state(command_expression, next_state=None, is_end=False):
+        s = run_task_state(command_expression, next_state=next_state, is_end=is_end)
+        s["Retry"][0]["IntervalSeconds"] = 30
+        s["ResultPath"] = None
+        return s
+
+    acquire = lease_task_state(
+        "States.Array('acquire-sec-fetch-lease', '--run-id', $$.Execution.Name)",
+        next_state="ReadSecFetchLeaseResult",
+    )
+    release = lease_task_state(
+        "States.Array('release-sec-fetch-lease', '--run-id', $$.Execution.Name)",
+        is_end=True,
+    )
+    release["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLeaseFailedNonFatal"}]
+
+    return {
+        "AcquireSecFetchLease": acquire,
+        "ReadSecFetchLeaseResult": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+            "Parameters": {
+                "Bucket": bronze_bucket_name,
+                "Key.$": "States.Format('warehouse/bronze/reference/sec_fetch_lease/runs/{}/lease_result.json', $$.Execution.Name)",
+            },
+            "ResultSelector": {"parsed.$": "States.StringToJson($.Body)"},
+            "ResultPath": "$.sec_fetch_lease_check",
+            "Next": "SecFetchLeaseAcquiredCheck",
+        },
+        "SecFetchLeaseAcquiredCheck": {
+            "Type": "Choice",
+            "Comment": "lease_result.json (not a plain ecs:runTask.sync field) is the source of truth for whether this run holds the shared cross-command sec_fetch_active lease.",
+            "Choices": [{
+                "Variable": "$.sec_fetch_lease_check.parsed.lease_acquired",
+                "BooleanEquals": True,
+                "Next": acquired_next_state,
+            }],
+            "Default": "SecFetchDeferred",
+        },
+        "SecFetchDeferred": {
+            "Type": "Pass",
+            "Comment": "sec_fetch_active lease already held by another SEC-fetching command -- an explicit disposition, not an invisible skip. No SEC-fetch work started this run (release-readiness ticket 84).",
+            "Parameters": {
+                "disposition": "sec_fetch_deferred",
+                "sec_fetch_lease_check.$": "$.sec_fetch_lease_check.parsed",
+            },
+            "ResultPath": "$.sec_fetch_deferred_summary",
+            "End": True,
+        },
+        "ReleaseSecFetchLease": release,
+        "ReleaseSecFetchLeaseFailedNonFatal": {
+            "Type": "Pass",
+            "Comment": "Release is best-effort -- a failure here must not mark an otherwise-successful run FAILED. The 16h stale-lease reclaim in acquire_pipeline_run_lease is the actual safety net for a wedged sec_fetch_active lease.",
+            "End": True,
+        },
     }
 
-if cik_command:
+
+if wrap_with_sec_fetch_lease:
+    if cik_command:
+        definition = {
+            "Comment": "Run an EdgarTools warehouse workflow on ECS Fargate with an optional cik_list override, gated by the cross-command sec_fetch_active lease.",
+            "StartAt": "AcquireSecFetchLease",
+            "States": {
+                **build_sec_fetch_lease_states("HasCikListOverride"),
+                "HasCikListOverride": {
+                    "Type": "Choice",
+                    "Choices": [{
+                        "And": [
+                            {"Variable": "$.cik_list", "IsPresent": True},
+                            {"Variable": "$.cik_list", "IsString": True},
+                        ],
+                        "Next": "RunWarehouseTaskWithCikList",
+                    }],
+                    "Default": "RunWarehouseTaskDefault",
+                },
+                "RunWarehouseTaskDefault": run_task_state(default_command, next_state="ReleaseSecFetchLease"),
+                "RunWarehouseTaskWithCikList": run_task_state(cik_command, next_state="ReleaseSecFetchLease"),
+            },
+        }
+    else:
+        definition = {
+            "Comment": "Run an EdgarTools warehouse workflow on ECS Fargate, gated by the cross-command sec_fetch_active lease.",
+            "StartAt": "AcquireSecFetchLease",
+            "States": {
+                **build_sec_fetch_lease_states("RunWarehouseTask"),
+                "RunWarehouseTask": run_task_state(default_command, next_state="ReleaseSecFetchLease"),
+            },
+        }
+elif cik_command:
     definition = {
         "Comment": "Run an EdgarTools warehouse workflow on ECS Fargate with an optional cik_list override.",
         "StartAt": "HasCikListOverride",
@@ -1394,15 +1503,15 @@ if cik_command:
                 }],
                 "Default": "RunWarehouseTaskDefault",
             },
-            "RunWarehouseTaskDefault": run_task_state(default_command),
-            "RunWarehouseTaskWithCikList": run_task_state(cik_command),
+            "RunWarehouseTaskDefault": run_task_state(default_command, is_end=True),
+            "RunWarehouseTaskWithCikList": run_task_state(cik_command, is_end=True),
         },
     }
 else:
     definition = {
         "Comment": "Run an EdgarTools warehouse workflow on ECS Fargate.",
         "StartAt": "RunWarehouseTask",
-        "States": {"RunWarehouseTask": run_task_state(default_command)},
+        "States": {"RunWarehouseTask": run_task_state(default_command, is_end=True)},
     }
 
 pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
@@ -1705,6 +1814,79 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
 mdm_limit = str(mdm_run_limit)
 graph_limit = str(mdm_graph_limit)
 
+def build_sec_fetch_lease_states(acquired_next_state, released_next_state):
+    """Cross-command sec_fetch_active lease (release-readiness ticket 84):
+    load_history is operator-triggered and ad-hoc (like bootstrap/
+    bootstrap_full/targeted_resync, unlike the scheduled daily_incremental),
+    so no operator-alert notification on defer -- the operator triggering it
+    is already watching the run. load_history was restructured from the
+    original parallel bootstrap-batch xN Map into a sequential
+    (MaxConcurrency=1) windowed bootstrap-next pipeline (see the "Phased
+    pipeline" comment above) -- no fan-out concern remains here; a single
+    acquire/release wraps the whole real-SEC-fetching span (SeedUniverse
+    through the ADV/firm-roster fetch chain), matching
+    write_warehouse_mdm_gold_definition's daily_incremental branch shape
+    almost exactly (this function can't share code with that one -- each is
+    its own `python3 -` subprocess).
+    """
+    acquire = ecs_state(wh_medium_arn,
+        "States.Array('acquire-sec-fetch-lease', '--run-id', $$.Execution.Name)",
+        next_state="ReadSecFetchLeaseResult", retry_secs=30)
+    acquire["ResultPath"] = None
+
+    read_result = {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+        "Parameters": {
+            "Bucket": bronze_bucket_name,
+            "Key.$": "States.Format('warehouse/bronze/reference/sec_fetch_lease/runs/{}/lease_result.json', $$.Execution.Name)",
+        },
+        "ResultSelector": {"parsed.$": "States.StringToJson($.Body)"},
+        "ResultPath": "$.sec_fetch_lease_check",
+        "Next": "SecFetchLeaseAcquiredCheck",
+    }
+
+    acquired_check = {
+        "Type": "Choice",
+        "Comment": "lease_result.json (not a plain ecs:runTask.sync field) is the source of truth for whether this run holds the shared cross-command sec_fetch_active lease.",
+        "Choices": [
+            {
+                "Variable": "$.sec_fetch_lease_check.parsed.lease_acquired",
+                "BooleanEquals": True,
+                "Next": acquired_next_state,
+            }
+        ],
+        "Default": "SecFetchDeferred",
+    }
+
+    release = ecs_state(wh_medium_arn,
+        "States.Array('release-sec-fetch-lease', '--run-id', $$.Execution.Name)",
+        next_state=released_next_state, retry_secs=30)
+    release["ResultPath"] = None
+    release["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLeaseFailedNonFatal"}]
+
+    return {
+        "AcquireSecFetchLease": acquire,
+        "ReadSecFetchLeaseResult": read_result,
+        "SecFetchLeaseAcquiredCheck": acquired_check,
+        "SecFetchDeferred": {
+            "Type": "Pass",
+            "Comment": "sec_fetch_active lease already held by another SEC-fetching command -- an explicit disposition, not an invisible skip. No SEC/IAPD-fetch work started this run (release-readiness ticket 84).",
+            "Parameters": {
+                "disposition": "sec_fetch_deferred",
+                "sec_fetch_lease_check.$": "$.sec_fetch_lease_check.parsed",
+            },
+            "ResultPath": "$.sec_fetch_deferred_summary",
+            "End": True,
+        },
+        "ReleaseSecFetchLease": release,
+        "ReleaseSecFetchLeaseFailedNonFatal": {
+            "Type": "Pass",
+            "Comment": "Release is best-effort -- a failure here must not mark an otherwise-successful run FAILED. The 16h stale-lease reclaim in acquire_pipeline_run_lease is the actual safety net for a wedged sec_fetch_active lease.",
+            "Next": released_next_state,
+        },
+    }
+
 # Validate the optional operator repair flag before starting any ECS workload.
 # An omitted value is normalized to false; malformed values fail with a named
 # disposition instead of reaching a Choice state that can raise States.Runtime.
@@ -1713,7 +1895,7 @@ validate_force_input = {
     "Comment": "Accept an omitted or boolean force input; reject every other type before workload execution.",
     "Choices": [
         {"Variable": "$.force", "IsPresent": False, "Next": "ForceDefault"},
-        {"Variable": "$.force", "IsBoolean": True, "Next": "SeedUniverse"},
+        {"Variable": "$.force", "IsBoolean": True, "Next": "AcquireSecFetchLease"},
     ],
     "Default": "InvalidForceInput",
 }
@@ -1722,7 +1904,7 @@ force_default = {
     "Comment": "Normalize an omitted operator force input to false.",
     "Result": False,
     "ResultPath": "$.force",
-    "Next": "SeedUniverse",
+    "Next": "AcquireSecFetchLease",
 }
 invalid_force_input = {
     "Type": "Fail",
@@ -2193,7 +2375,11 @@ force_check = {
     "Default": "InvalidForceInput",
 }
 
-adv_bulk_fetch_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmRun"}]
+# Next="ReleaseSecFetchLease", not "MdmRun" directly -- these ADV/firm-roster
+# fetch stages are still inside the sec_fetch_active fetch-heavy span
+# (release-readiness ticket 84), so a failure here must still release the
+# lease before falling through to MDM, not skip release entirely.
+adv_bulk_fetch_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}]
 
 fetch_adv_bulk = ecs_state(wh_medium_arn,
     "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
@@ -2270,9 +2456,18 @@ ingest_firm_roster_sources = ecs_state(wh_medium_arn,
     "States.Array('ingest-relationship-sources', '--source-manifest', "
     f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-firm-roster/{{}}/source_manifest.json', $$.Execution.Name), "
     "'--run-id', $$.Execution.Name)",
-    next_state="MdmRun")
+    next_state="ReleaseSecFetchLease")
 ingest_firm_roster_sources["Catch"] = adv_bulk_fetch_catch
 ingest_firm_roster_sources["ResultPath"] = None
+
+# sec_fetch_active lease (release-readiness ticket 84): acquired right
+# before SeedUniverse, released right before MdmRun -- spans every state
+# that actually calls SEC/IAPD (SeedUniverse, Stage0CompanyIdentity, Branch
+# A/B windowed bootstrap+fundamentals, and the ADV/firm-roster fetch chain).
+# MdmSeedUniverse (an upsert from data SeedUniverse already fetched, no SEC
+# call itself) rides inside the span since it's sandwiched between two
+# fetch stages -- a few minutes of over-holding, not hours.
+sec_fetch_lease_states = build_sec_fetch_lease_states("SeedUniverse", "MdmRun")
 
 # (5)–(9) MDM chain + GoldRefresh — run once after ALL windows complete (same invariant as before).
 # MdmExport is new (data-architecture Issue 3): mdm sync-graph materializes Snowflake graph
@@ -2337,6 +2532,7 @@ definition = {
         "ValidateForceInput": validate_force_input,
         "ForceDefault":       force_default,
         "InvalidForceInput":  invalid_force_input,
+        **sec_fetch_lease_states,
         "SeedUniverse":      seed,
         "MdmSeedUniverse":   mdm_seed_universe,
         "WindowSizeCheck":   window_size_check,
@@ -2481,19 +2677,123 @@ gold = ecs_state(wh_large_arn,
 
 display = workflow_name.replace("_", " ").title()
 
+def build_sec_fetch_lease_states(acquired_next_state, released_next_state):
+    """Cross-command sec_fetch_active lease (release-readiness ticket 84,
+    implementing ticket 80's Phase 1 primitive) -- prevents this command's
+    SEC/IAPD-fetching phase from running concurrently with any of the other
+    4 SEC-fetching commands platform-wide. Mirrors the identity-refresh
+    lease pattern's shape (AcquireLease/ReadLeaseResult/LeaseAcquiredCheck/
+    Deferred/ReleaseLease/ReleaseLeaseFailedNonFatal) but is deliberately a
+    defer-and-terminate disposition, not a polling wait: an operator-
+    triggered ad-hoc run (bootstrap) relies on the operator re-triggering
+    once free, matching how these commands are already operated today (no
+    auto-retry exists for their failures either); the scheduled
+    daily_incremental relies on its own next scheduled slot, same as its
+    existing identity-refresh lease. No mode/backstop concept, unlike the
+    identity-refresh lease -- a caller either gets the lease or is deferred.
+    Notification-on-defer is conditional on operator_alert_topic_arn being
+    non-empty (only daily_incremental currently supplies one; ad-hoc
+    commands' operators are already watching their own run).
+    """
+    acquire = ecs_state(wh_medium_arn,
+        "States.Array('acquire-sec-fetch-lease', '--run-id', $$.Execution.Name)",
+        next_state="ReadSecFetchLeaseResult", retry_secs=30)
+    acquire["ResultPath"] = None
+
+    read_result = {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+        "Parameters": {
+            "Bucket": bronze_bucket_name,
+            "Key.$": "States.Format('warehouse/bronze/reference/sec_fetch_lease/runs/{}/lease_result.json', $$.Execution.Name)",
+        },
+        "ResultSelector": {"parsed.$": "States.StringToJson($.Body)"},
+        "ResultPath": "$.sec_fetch_lease_check",
+        "Next": "SecFetchLeaseAcquiredCheck",
+    }
+
+    acquired_check = {
+        "Type": "Choice",
+        "Comment": "lease_result.json (not a plain ecs:runTask.sync field) is the source of truth for whether this run holds the shared cross-command sec_fetch_active lease.",
+        "Choices": [
+            {
+                "Variable": "$.sec_fetch_lease_check.parsed.lease_acquired",
+                "BooleanEquals": True,
+                "Next": acquired_next_state,
+            }
+        ],
+        "Default": "NotifySecFetchDeferred" if operator_alert_topic_arn else "SecFetchDeferred",
+    }
+
+    states = {
+        "AcquireSecFetchLease": acquire,
+        "ReadSecFetchLeaseResult": read_result,
+        "SecFetchLeaseAcquiredCheck": acquired_check,
+        "SecFetchDeferred": {
+            "Type": "Pass",
+            "Comment": "sec_fetch_active lease already held by another SEC-fetching command -- an explicit disposition, not an invisible skip. No SEC/IAPD-fetch work started this run (release-readiness ticket 84).",
+            "Parameters": {
+                "disposition": "sec_fetch_deferred",
+                "sec_fetch_lease_check.$": "$.sec_fetch_lease_check.parsed",
+            },
+            "ResultPath": "$.sec_fetch_deferred_summary",
+            "End": True,
+        },
+    }
+    if operator_alert_topic_arn:
+        states["NotifySecFetchDeferred"] = {
+            "Type": "Task",
+            "Comment": "Notify the AWS Operator for every sec_fetch_active lease-busy slot before returning the explicit deferred disposition. A delivery failure is not relabeled as a benign defer.",
+            "Resource": "arn:aws:states:::sns:publish",
+            "Parameters": {
+                "TopicArn": operator_alert_topic_arn,
+                "Subject": f"EdgarTools {display} deferred (sec-fetch lease busy)",
+                "Message.$": "States.JsonToString($.sec_fetch_lease_check.parsed)",
+            },
+            "ResultPath": None,
+            "Retry": [{
+                "ErrorEquals": ["States.TaskFailed"],
+                "IntervalSeconds": 5,
+                "BackoffRate": 2.0,
+                "MaxAttempts": 3,
+            }],
+            "Next": "SecFetchDeferred",
+        }
+
+    release = ecs_state(wh_medium_arn,
+        "States.Array('release-sec-fetch-lease', '--run-id', $$.Execution.Name)",
+        next_state=released_next_state, retry_secs=30)
+    release["ResultPath"] = None
+    release["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLeaseFailedNonFatal"}]
+    states["ReleaseSecFetchLease"] = release
+    states["ReleaseSecFetchLeaseFailedNonFatal"] = {
+        "Type": "Pass",
+        "Comment": "Release is best-effort -- a failure here must not mark an otherwise-successful run FAILED. The 16h stale-lease reclaim in acquire_pipeline_run_lease is the actual safety net for a wedged sec_fetch_active lease.",
+        "Next": released_next_state,
+    }
+    return states
+
 # All workflows except daily_incremental seed the universe first so any
 # bootstrap_pending CIKs are enrolled before the main pipeline step runs.
 if workflow_name != "daily_incremental":
     seed_universe = ecs_state(wh_medium_arn,
         "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
         next_state="RunWarehouseTask", retry_secs=60)
+    # sec_fetch_active lease (release-readiness ticket 84): SeedUniverse
+    # (fetches company_tickers.json from SEC) and RunWarehouseTask (the
+    # actual bootstrap SEC-fetch loop) are the fetch-heavy span; MDM/gold
+    # never call SEC, so the lease releases right before MdmRun.
+    run_wh["Next"] = "ReleaseSecFetchLease"
+    sec_fetch_lease_states = build_sec_fetch_lease_states("SeedUniverse", "MdmRun")
     definition = {
         "Comment": (
-            f"{display}: (0) seed universe, (1) bronze+silver capture, "
+            f"{display}: (0) acquire cross-command sec_fetch_active lease, (0b) seed universe, "
+            "(1) bronze+silver capture, (1b) release sec_fetch_active lease, "
             "(2) MDM entity resolution + Neo4j sync, (3) gold build + Snowflake export manifest."
         ),
-        "StartAt": "SeedUniverse",
+        "StartAt": "AcquireSecFetchLease",
         "States": {
+            **sec_fetch_lease_states,
             "SeedUniverse":     seed_universe,
             "RunWarehouseTask": run_wh,
             "MdmRun":           mdm_run,
@@ -2665,7 +2965,7 @@ else:
         "Comment": "Overwrite $.refresh_mode with the lease-resolved effective mode. An overdue backstop (persisted on pipeline_run_lease.backstop_overdue, set when a prior 'backstop' attempt was deferred) takes priority over whatever this trigger's own regular schedule slot requested (release-readiness ticket 45's 'prioritize the next available slot' requirement) -- acquire-identity-refresh-lease resolves that server-side and lease_result.json carries the resolved value, not the raw trigger payload, so RefreshMode's dispatch below must read from there instead of the original $.refresh_mode.",
         "InputPath": "$.lease_check.parsed.mode",
         "ResultPath": "$.refresh_mode",
-        "Next": "RefreshMode",
+        "Next": "AcquireSecFetchLease",
     }
 
     deferred = {
@@ -2831,7 +3131,11 @@ else:
         "Default": "InvalidForceInput",
     }
 
-    adv_bulk_fetch_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmRun"}]
+    # Next="ReleaseSecFetchLease", not "MdmRun" directly -- these ADV/firm-roster
+    # fetch stages are still inside the sec_fetch_active fetch-heavy span
+    # (release-readiness ticket 84), so a failure here must still release the
+    # lease before falling through to MDM, not skip release entirely.
+    adv_bulk_fetch_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}]
 
     fetch_adv_bulk = ecs_state(wh_medium_arn,
         "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
@@ -2895,18 +3199,30 @@ else:
         "States.Array('ingest-relationship-sources', '--source-manifest', "
         f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-firm-roster/{{}}/source_manifest.json', $$.Execution.Name), "
         "'--run-id', $$.Execution.Name)",
-        next_state="MdmRun")
+        next_state="ReleaseSecFetchLease")
     ingest_firm_roster_sources["Catch"] = adv_bulk_fetch_catch
     ingest_firm_roster_sources["ResultPath"] = None
+
+    # sec_fetch_active lease (release-readiness ticket 84): acquired right
+    # before RefreshMode dispatch, released right before MdmRun -- spans
+    # every state that actually calls SEC/IAPD (identity-window compute,
+    # Stage0CompanyIdentityBounded, ReduceIdentityRefresh [no SEC calls
+    # itself, but sandwiched between two fetch stages], RunWarehouseTask,
+    # and the ADV/firm-roster fetch chain). Independent of AcquireLease/
+    # ReleaseLease above -- that lease prevents overlapping daily_incremental/
+    # backstop runs of THIS command; this one prevents concurrent SEC/IAPD
+    # traffic ACROSS the 5 different SEC-fetching commands.
+    sec_fetch_lease_states = build_sec_fetch_lease_states("RefreshMode", "MdmRun")
 
     definition = {
         "Comment": (
             f"{display}: (0) RefreshMode -- backstop (complete company-eligible universe, weekly) vs "
             "daily (index-impacted company-eligible intersection, default), both emitted by "
             "compute-identity-refresh-window -- release-readiness ticket 45/49/51, "
+            "(0a) AcquireSecFetchLease -- cross-command sec_fetch_active lease (ticket 84), "
             "(0b) Stage0CompanyIdentityBounded -- Company Identity capture, strict, runs "
             "before ownership/ADV so IS_INSIDER derivation sees resolved Company entities, "
-            "(1) bronze+silver capture, (1b) AdvBulkFetch -- fetch-adv-bulk + "
+            "(1) bronze+silver capture, (1a) ReleaseSecFetchLease, (1b) AdvBulkFetch -- fetch-adv-bulk + "
             "ingest-relationship-sources (adv-fetch-pipeline-wiring spec), then fetch-firm-roster "
             "+ ingest-relationship-sources (adv-firm-roster-crosscheck spec, ticket 02), both "
             "lenient, so MDM sees fresh ADV silver and the Firm Roster cross-check stays current, "
@@ -2927,6 +3243,7 @@ else:
             "NotifyDeferred":      notify_deferred,
             "ApplyEffectiveRefreshMode": apply_effective_refresh_mode,
             "Deferred":           deferred,
+            **sec_fetch_lease_states,
             "RefreshMode":        refresh_mode,
             "ComputeIdentityRefreshWindow": compute_identity_refresh_window,
             "ComputeIdentityBackstopUniverse": compute_identity_backstop_universe,
@@ -3662,7 +3979,17 @@ for workflow in bootstrap_full targeted_resync full_reconcile load_daily_form_in
   command_expression="$(workflow_command_expression "$workflow")"
   cik_command_expression="$(workflow_cik_command_expression "$workflow")"
   definition_file="$(json_file "sfn-${workflow}")"
-  write_single_workflow_definition "$definition_file" "$task_definition_arn" "$command_expression" "$cik_command_expression"
+  # sec_fetch_active cross-command lease (release-readiness ticket 84):
+  # only bootstrap_full and targeted_resync are among the 5 SEC-fetching
+  # commands (CLAUDE.md's Phased Pipeline scope); full_reconcile,
+  # load_daily_form_index_for_date, catch_up_daily_form_index, gold_refresh,
+  # and seed_universe don't call SEC at meaningful volume and stay unwrapped.
+  wrap_with_sec_fetch_lease=""
+  if [[ "$workflow" == "bootstrap_full" || "$workflow" == "targeted_resync" ]]; then
+    wrap_with_sec_fetch_lease="true"
+  fi
+  write_single_workflow_definition "$definition_file" "$task_definition_arn" "$command_expression" "$cik_command_expression" \
+    "$BRONZE_BUCKET_NAME" "$wrap_with_sec_fetch_lease"
   state_machine_arn="$(upsert_state_machine "$workflow" "$definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   if [[ "$first_workflow" == "true" ]]; then
     first_workflow=false

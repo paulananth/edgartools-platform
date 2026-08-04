@@ -210,6 +210,53 @@ def test_release_sec_fetch_lease_command_frees_it(tmp_path) -> None:
         db.close()
 
 
+def test_acquire_sec_fetch_lease_command_uses_16h_staleness_not_the_20h_default(tmp_path) -> None:
+    """Release-readiness ticket 84: the sec_fetch_active lease is sized
+    against real measured prod runtimes (daily-incremental ~7h7m) with a
+    16h ceiling, deliberately shorter than IDENTITY_REFRESH_LEASE_NAME's
+    20h default. The orchestrator command must pass stale_after_seconds
+    explicitly, not fall through to acquire_pipeline_run_lease's default."""
+    from edgar_warehouse.silver_store import SilverDatabase
+
+    context = _context(tmp_path)
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    try:
+        held_at = datetime(2026, 8, 4, 0, 0, tzinfo=UTC)
+        db.acquire_pipeline_run_lease(
+            lease_name=_LEASE_NAME, run_id="stuck-bootstrap-run", mode="fetch", acquired_at=held_at
+        )
+
+        # Still within 16h -- must stay deferred (would already be
+        # reclaimable here under the 20h default, so this proves 16h is
+        # actually the value in effect, not just documentation).
+        still_within_16h = held_at + timedelta(hours=15, minutes=59)
+        _, metrics = warehouse_orchestrator._capture_bronze_raw(
+            context=context,
+            db=db,
+            command_name="acquire-sec-fetch-lease",
+            arguments={"run_id": "waiting-run"},
+            scope={},
+            now=still_within_16h,
+            sync_run_id="waiting-run",
+        )
+        assert metrics["lease_acquired"] is False
+
+        # Just past 16h -- reclaimable.
+        past_16h = held_at + timedelta(hours=16, minutes=1)
+        _, metrics = warehouse_orchestrator._capture_bronze_raw(
+            context=context,
+            db=db,
+            command_name="acquire-sec-fetch-lease",
+            arguments={"run_id": "waiting-run"},
+            scope={},
+            now=past_16h,
+            sync_run_id="waiting-run",
+        )
+        assert metrics["lease_acquired"] is True
+    finally:
+        db.close()
+
+
 def test_sec_fetch_lease_is_independent_of_identity_refresh_lease(tmp_path) -> None:
     """The two leases must never collide -- holding one must not block the
     other, and they must be distinct rows/names entirely."""
