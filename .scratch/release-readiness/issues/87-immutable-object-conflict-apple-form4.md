@@ -1,5 +1,5 @@
 Type: task
-Status: in_progress
+Status: resolved
 
 ## Question
 
@@ -86,3 +86,36 @@ any doc-level drift like this to be tolerated. Not resolved here --
 recording the confirmed root cause for the next session to decide,
 rather than picking a fix unilaterally on a repo-wide fail-closed
 behavior with no clear objectively-correct answer.
+
+## Decision + implementation (2026-08-04)
+
+Decided via `AskUserQuestion`: isolate to the one accession. Implemented
+in `edgar_warehouse/application/warehouse_orchestrator.py`'s
+`targeted-resync --scope-type cik` accession loop -- wraps
+`_run_accession_resync` in a `try/except` that reuses the existing
+`_is_immutable_object_conflict` classification helper (already used by
+the daily-artifact-resume path for the identical class of error).
+Deliberately narrow: only that specific error class is caught and
+skipped; any other exception (network error, real bug, etc.) still
+propagates and fails the whole run, exactly as before. Emits a new
+`accession_resync_conflict_skipped` event per skip and a
+`conflict_skipped_count`/`conflict_skipped_accessions` summary on
+`accession_resync_completed`, so a skip is visible in run output/logs,
+never silent. `metrics["accessions_conflict_skipped"]` added for
+programmatic callers.
+
+Two new unit tests in
+`tests/unit/test_targeted_resync_accession_conflict_isolation.py`:
+one confirms an immutable-object conflict on one accession (out of
+three) doesn't abort the run and the other two still process and merge;
+the other confirms a *different* error type on one accession still
+aborts the whole run (proving the isolation is narrowly scoped, not a
+blanket catch-all). Both verified against the pre-fix code (first test
+fails, matching the original bug; second already passed, since it
+exercises behavior that didn't change). Full suite green: 1751 passed, 4
+skipped, only the pre-existing unrelated `test_go_live_wizard.py`
+failure.
+
+Not yet deployed to prod or live-verified with a real conflict --
+pending explicit confirmation, matching this workstream's live-action
+convention.

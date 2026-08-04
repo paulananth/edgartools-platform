@@ -1509,6 +1509,7 @@ def _capture_bronze_raw(
                     run_id=sync_run_id,
                 )
                 accession_started_at = datetime.now(UTC)
+                conflict_skipped_accessions: list[str] = []
                 for acc_index, accession_number in enumerate(accessions, start=1):
                     _emit_pipeline_event(
                         "accession_resync_progress",
@@ -1517,23 +1518,47 @@ def _capture_bronze_raw(
                         total=total_accessions,
                         run_id=sync_run_id,
                     )
-                    pipeline_result = _run_accession_resync(
-                        context=context,
-                        db=db,
-                        sync_run_id=sync_run_id,
-                        accession_number=accession_number,
-                        include_artifacts=bool(arguments.get("include_artifacts", True)),
-                        include_text=bool(arguments.get("include_text", True)),
-                        include_parsers=bool(arguments.get("include_parsers", True)),
-                        force=bool(arguments.get("force", True)),
-                    )
+                    try:
+                        pipeline_result = _run_accession_resync(
+                            context=context,
+                            db=db,
+                            sync_run_id=sync_run_id,
+                            accession_number=accession_number,
+                            include_artifacts=bool(arguments.get("include_artifacts", True)),
+                            include_text=bool(arguments.get("include_text", True)),
+                            include_parsers=bool(arguments.get("include_parsers", True)),
+                            force=bool(arguments.get("force", True)),
+                        )
+                    except Exception as exc:
+                        # release-readiness ticket 87: a single accession's
+                        # immutable-object conflict (e.g. SEC-side byte drift
+                        # on an already-captured document -- confirmed live,
+                        # not a bug in this repo's byte-preserving capture
+                        # path) must not abort the whole CIK resync. Isolate
+                        # to this one accession and continue; any other
+                        # exception type still fails the run as before.
+                        if not _is_immutable_object_conflict(exc):
+                            raise
+                        conflict_skipped_accessions.append(accession_number)
+                        _emit_pipeline_event(
+                            "accession_resync_conflict_skipped",
+                            accession_number=accession_number,
+                            index=acc_index,
+                            total=total_accessions,
+                            error=repr(exc),
+                            run_id=sync_run_id,
+                        )
+                        continue
                     raw_writes.extend(pipeline_result["raw_writes"])
                     metrics["rows_inserted"] += pipeline_result["rows_written"]
+                metrics["accessions_conflict_skipped"] = len(conflict_skipped_accessions)
                 _emit_pipeline_event(
                     "accession_resync_completed",
                     cik=_parse_cik(scope_key),
                     accession_count=total_accessions,
                     rows_written=metrics["rows_inserted"],
+                    conflict_skipped_count=len(conflict_skipped_accessions),
+                    conflict_skipped_accessions=conflict_skipped_accessions,
                     duration_seconds=(datetime.now(UTC) - accession_started_at).total_seconds(),
                     run_id=sync_run_id,
                 )
