@@ -3330,6 +3330,8 @@ def _run_configured_form_artifact_pipeline(
     rows_written = 0
     errors = 0
     consecutive_errors = 0
+    conflict_skipped_count = 0
+    circuit_opened = False
     retry_count = 0
     processed_accessions = 0
     attempted_accessions = 0
@@ -3362,6 +3364,7 @@ def _run_configured_form_artifact_pipeline(
     for accession_index, accession_number in enumerate(selected_accessions, start=1):
         if consecutive_errors >= _CONSECUTIVE_ERROR_LIMIT:
             remaining_accessions = len(selected_accessions) - processed_accessions
+            circuit_opened = True
             _emit_pipeline_event(
                 "filing_artifact_circuit_open",
                 consecutive_errors=consecutive_errors,
@@ -3571,7 +3574,22 @@ def _run_configured_form_artifact_pipeline(
             processed_accessions += 1
         except Exception as exc:
             errors += 1
-            consecutive_errors += 1
+            # release-readiness ticket 93: an immutable-object conflict (SEC-side
+            # byte drift on an already-captured document, e.g. a trailing-newline
+            # change -- confirmed live, not a repo-side bug, see ticket 87) is an
+            # isolated, individually-recoverable condition on this one accession,
+            # not a signal of systemic failure. Counting it toward the circuit
+            # breaker's consecutive-error streak let a cluster of these (43 in one
+            # observed run) trip the breaker and silently abandon thousands of
+            # unrelated, healthy candidates while still exiting 0. Still counted in
+            # `errors`/logged via filing_artifact_failed below, just excluded from
+            # the streak that trips the breaker -- mirrors ticket 87's
+            # skip-and-continue isolation for targeted-resync.
+            if _is_immutable_object_conflict(exc):
+                conflict_skipped_count += 1
+                consecutive_errors = 0
+            else:
+                consecutive_errors += 1
             _emit_pipeline_event(
                 "filing_artifact_failed",
                 accession_number=accession_number,
@@ -3596,6 +3614,7 @@ def _run_configured_form_artifact_pipeline(
                 ) from exc
             if recurring_mode and consecutive_errors >= _CONSECUTIVE_ERROR_LIMIT:
                 remaining_accessions = len(selected_accessions) - processed_accessions
+                circuit_opened = True
                 _emit_pipeline_event(
                     "filing_artifact_circuit_open",
                     consecutive_errors=consecutive_errors,
@@ -3663,7 +3682,8 @@ def _run_configured_form_artifact_pipeline(
         attempted_accessions=attempted_accessions,
         processed_accessions=processed_accessions,
         remaining_accessions=len(selected_accessions) - processed_accessions,
-        circuit_breaker_disposition="closed",
+        circuit_breaker_disposition="open" if circuit_opened else "closed",
+        conflict_skipped_count=conflict_skipped_count,
         duration_seconds=(datetime.now(UTC) - artifact_started_at).total_seconds(),
         run_id=sync_run_id,
         **network_metrics,
@@ -3675,6 +3695,7 @@ def _run_configured_form_artifact_pipeline(
         "candidate_outcomes": candidate_outcomes,
         "retry_count": retry_count,
         "fast_parse_skips": fast_parse_skips,
+        "conflict_skipped_count": conflict_skipped_count,
         "attempted_accessions": attempted_accessions,
         "processed_accessions": processed_accessions,
         "remaining_accessions": len(selected_accessions) - processed_accessions,

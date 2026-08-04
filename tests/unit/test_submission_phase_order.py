@@ -886,6 +886,72 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         self.assertIn("filing_artifact_pipeline_partial", [name for name, _ in events])
         self.assertNotIn("filing_artifact_pipeline_completed", [name for name, _ in events])
 
+    def test_immutable_object_conflict_does_not_trip_circuit_breaker(self) -> None:
+        # release-readiness ticket 93: a cluster of SEC-side byte-drift
+        # conflicts on already-captured documents (same class ticket 87
+        # diagnosed for Apple's Form 4s) must not count toward the circuit
+        # breaker's consecutive-error streak -- they're isolated,
+        # individually-recoverable, not a systemic-failure signal. Live prod
+        # reproduction: 43 consecutive conflicts tripped the breaker after
+        # only 45/3149 accessions, silently abandoning the rest while still
+        # exiting 0. Non-recurring/non-release mode (bootstrap-batch's own
+        # shape) so a tripped breaker previously `break`-ed silently with no
+        # raised exception -- this test proves the breaker no longer trips at
+        # all for this error class, even far past the configured limit.
+        from edgar_warehouse.application.errors import WarehouseRuntimeError
+
+        conflict = WarehouseRuntimeError(
+            "immutable object 'filings/sec/cik=1800/accession=x/primary/f.xml' "
+            "already exists with different content"
+        )
+        success_result = {
+            "raw_writes": [{"source_name": "filing_document"}],
+            "attachment_count": 1,
+            "network_fetches": 1,
+        }
+        accessions = ["ownership-1", "adv-1", "proxy-1", "item-502", "13f-1", "earnings-8k"]
+        events: list[tuple[str, dict]] = []
+        with (
+            patch(
+                "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
+                side_effect=[conflict] * 5 + [success_result],
+            ),
+            patch("time.sleep"),
+            patch.dict("os.environ", {"WAREHOUSE_ARTIFACT_CIRCUIT_BREAKER": "2"}),
+            patch.object(
+                warehouse_orchestrator,
+                "_emit_pipeline_event",
+                side_effect=lambda name, **fields: events.append((name, fields)),
+            ),
+        ):
+            result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
+                context=SimpleNamespace(identity="tester@example.com"),
+                db=_ConfiguredFormDb(),
+                sync_run_id="batch-run",
+                accession_numbers=accessions,
+                accession_boundary=set(accessions),
+                artifact_policy="all_attachments",
+                parser_policy="branch_b_deferred",
+                force=True,
+            )
+
+        self.assertNotIn("filing_artifact_circuit_open", [name for name, _ in events])
+        self.assertEqual(result["conflict_skipped_count"], 5)
+        self.assertEqual(result["processed_accessions"], 1)
+        # "remaining" = not successfully processed, not "not yet attempted" --
+        # the pipeline did attempt (and skip) all 5 conflicts; none count as
+        # processed, so they still show up here. The real assertion is that
+        # attempted/processed span the whole list -- nothing was abandoned
+        # mid-run the way the pre-fix circuit-open behavior did.
+        self.assertEqual(result["attempted_accessions"], 6)
+        self.assertEqual(result["remaining_accessions"], 5)
+        completed = next(
+            fields for name, fields in events if name == "filing_artifact_pipeline_completed"
+        )
+        self.assertEqual(completed["circuit_breaker_disposition"], "closed")
+        self.assertEqual(completed["conflict_skipped_count"], 5)
+        self.assertEqual(completed["errors"], 5)
+
     def test_release_artifact_pipeline_busts_edgartools_filing_cache_on_content_error(self) -> None:
         """Production regression: accession 0000009631-13-000012.
 
