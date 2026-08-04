@@ -4089,19 +4089,28 @@ class SilverDatabase:
         beneish_m_score: float | None,
         altman_z_score: float | None,
         piotroski_f_score: int | None,
-    ) -> None:
-        """Back-fill forensic scores into an existing sec_accounting_flag row."""
-        self._conn.execute(
+    ) -> bool:
+        """Back-fill forensic scores into an existing sec_accounting_flag row.
+
+        Returns True iff a row actually matched and was updated. Ticket 42
+        found this call previously reported no way to distinguish "updated a
+        real row" from "matched nothing" -- the caller's success counter
+        silently counted the latter as a win. RETURNING makes the distinction
+        explicit rather than relying on "didn't raise" as a proxy for success.
+        """
+        matched = self._conn.execute(
             """
             UPDATE sec_accounting_flag
             SET beneish_m_score   = COALESCE(?, beneish_m_score),
                 altman_z_score    = COALESCE(?, altman_z_score),
                 piotroski_f_score = COALESCE(?, piotroski_f_score)
             WHERE cik = ? AND accession_number = ?
+            RETURNING cik
             """,
             [beneish_m_score, altman_z_score, piotroski_f_score,
              int(cik), accession_number],
-        )
+        ).fetchall()
+        return len(matched) > 0
 
     def merge_executive_records(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(

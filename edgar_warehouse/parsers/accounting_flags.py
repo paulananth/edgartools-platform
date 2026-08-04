@@ -92,17 +92,22 @@ def backfill_accounting_flags(cik: int, silver: "SilverDatabase") -> int:
         # sec_accounting_flag value, so a None here (e.g. no prior year for
         # Beneish on the earliest fiscal year) leaves any previously-computed
         # score untouched rather than clobbering it.
+        # Ticket 42: a DuckDB UPDATE against zero matching rows does not raise --
+        # only count a real, matched write, not merely "the call didn't error"
+        # (the prior version silently counted the base-row-missing case as a
+        # success, masking a structural gap upstream in parse_entity_facts).
         try:
-            silver.update_accounting_flag_scores(
+            matched = silver.update_accounting_flag_scores(
                 cik=int(cik),
                 accession_number=accession,
                 beneish_m_score=beneish,
                 altman_z_score=altman,
                 piotroski_f_score=piotroski,
             )
-            updated += 1
         except Exception:
-            pass  # Row may not exist yet; orchestrator writes it after entity-facts parse
+            matched = False  # Row may not exist yet; orchestrator writes it after entity-facts parse
+        if matched:
+            updated += 1
 
         prev = row
 

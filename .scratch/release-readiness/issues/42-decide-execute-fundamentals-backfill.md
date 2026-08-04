@@ -225,3 +225,32 @@ net_income_gaap=10,044,000,000 | eps_gaap_diluted=2.18`.
 
 F5's Apple smoke-test criterion is now met.  Ticket 42 remains claimed because the sample/full
 backfill rollout decision and the independent F11 source-design gap remain unresolved.
+
+### Rollout + F11 decisions resolved via grilling (2026-08-04)
+
+Re-verified live state unchanged since 2026-08-01 (`sec_financial_fact`=36,809 rows/2 CIKs,
+`sec_financial_derived`=450 rows/2 CIKs, `sec_accounting_flag`=0 rows, `sec_earnings_release`=57
+rows/14 CIKs, `sec_executive_record`=13,457 rows/893 CIKs) before deciding anything, confirming
+the 2026-08-01 findings still hold.
+
+Decided (operator, via `AskUserQuestion`): (1) proceed with the sample then full-universe
+backfill for F4/F9/F5 now, independent of F11 -- F11's gap won't be fixed by scale or time; (2)
+for F11, fix the masking bug now (real correctness bug, independent of the data-source
+question) and defer the data-source redesign to its own ticket rather than deciding it inline.
+
+**Masking bug fixed.** `SilverDatabase.update_accounting_flag_scores` (`silver_store.py`) now
+returns `True`/`False` via `UPDATE ... RETURNING cik` instead of `None` -- DuckDB's `UPDATE`
+against zero matching rows doesn't raise, so "the call didn't error" was never a valid proxy for
+"a row was actually updated." `backfill_accounting_flags` (`accounting_flags.py`) now only
+increments its `updated` counter when a real match occurred. 4 new tests
+(`tests/unit/test_accounting_flags_update_masking.py`), including one that reproduces the exact
+live scenario (derived-metric rows exist, no base `sec_accounting_flag` rows do) and asserts
+`updated == 0` -- confirmed to fail pre-fix (counted 2 no-op "updates") and pass post-fix. Full
+suite green: 1325 passed, 4 skipped, only the pre-existing unrelated `test_go_live_wizard.py`
+failure. Not yet deployed to prod.
+
+**F11 data-source redesign split off** as [ticket 92](92-decide-f11-accounting-flag-data-source.md)
+-- deliberately not decided here.
+
+**Next:** sample backfill (10-20 diverse CIKs) for F4/F9/F5, then full-universe `load_history`
+if the sample passes. See below for results.
