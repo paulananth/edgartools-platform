@@ -155,6 +155,14 @@ IDENTITY_REFRESH_LEASE_NAME = "daily_identity_refresh"
 # release-readiness ticket 80's Progress notes.
 SEC_FETCH_LEASE_NAME = "sec_fetch_active"
 
+# release-readiness ticket 84: sized against real measured prod runtimes
+# (daily-incremental ~7h7m, bootstrap ~4h10m) plus the worst documented
+# related-pipeline run (13h20m, CLAUDE.md's pre-fix daily accession-expansion
+# case), leaving ~2h40m margin -- deliberately shorter than
+# IDENTITY_REFRESH_LEASE_NAME's 20h default, which was sized for a different
+# process (the 18h Identity Backstop Sweep bound).
+SEC_FETCH_LEASE_STALE_AFTER_SECONDS = 16 * 3600
+
 # load_history's tracking-status contract (data-architecture Issue 2): compute-windows,
 # bootstrap-next (via the explicit --tracking-status-filter the load_history state machine
 # passes), and bootstrap-fundamentals's CIK resolution must all query the SAME combined status
@@ -2666,11 +2674,23 @@ def _capture_bronze_raw(
         # metrics["lease_acquired"]) is the source of truth a Step Functions
         # Choice state reads, matching the identity-refresh lease's own
         # ecs:runTask.sync limitation.
+        #
+        # stale_after_seconds is 16h, not the 20h identity-refresh default:
+        # ticket 84 sized it against real measured prod runtimes for the 5
+        # SEC-fetching commands (daily-incremental ~7h7m, bootstrap ~4h10m)
+        # plus the worst documented related-pipeline run (13h20m, the
+        # pre-fix daily accession-expansion case in CLAUDE.md) with ~2h40m
+        # margin over that -- the same bound-plus-margin reasoning the
+        # existing 18h/20h identity-refresh pair used. This lease's
+        # acquired_at is never renewed during a hold (no heartbeat), so this
+        # value is a hard cap on how long a protected run may take before a
+        # waiting command can reclaim the lease out from under it.
         acquired = db.acquire_pipeline_run_lease(
             lease_name=SEC_FETCH_LEASE_NAME,
             run_id=sync_run_id,
             mode="fetch",
             acquired_at=now,
+            stale_after_seconds=SEC_FETCH_LEASE_STALE_AFTER_SECONDS,
         )
         held = db.get_pipeline_run_lease(SEC_FETCH_LEASE_NAME)
         if acquired:

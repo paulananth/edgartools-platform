@@ -44,7 +44,7 @@ def _extract_function_source() -> str:
     return text[start:end]
 
 
-def _generate_definition(workflow_name: str) -> dict:
+def _generate_definition(workflow_name: str, alert_topic_arn: str = _FAKE_ALERT_TOPIC_ARN) -> dict:
     fn_source = _extract_function_source()
     tmp_root = REPO_ROOT / ".pytest_cache" / "daily_identity_refresh_state_machine_test"
     tmp_root.mkdir(parents=True, exist_ok=True)
@@ -66,7 +66,7 @@ def _generate_definition(workflow_name: str) -> dict:
             f'source "{fn_file.as_posix()}"\n'
             f'write_warehouse_mdm_gold_definition "{out_file.as_posix()}" '
             f'"{_FAKE_MEDIUM_ARN}" "arn:fake-mdm-small" "arn:fake-mdm-medium" "{_FAKE_LARGE_ARN}" '
-            f'"{workflow_name}" "fake-bronze-bucket" "{_FAKE_ALERT_TOPIC_ARN}"\n',
+            f'"{workflow_name}" "fake-bronze-bucket" "{alert_topic_arn}"\n',
             encoding="utf-8",
         )
 
@@ -89,6 +89,15 @@ def daily_incremental_definition() -> dict:
 @pytest.fixture(scope="module")
 def bootstrap_definition() -> dict:
     return _generate_definition("bootstrap")
+
+
+@pytest.fixture(scope="module")
+def bootstrap_definition_no_alert_topic() -> dict:
+    """Matches deploy-aws-application.sh's real bootstrap call site, which
+    passes "" for operator_alert_topic_arn (unlike daily_incremental, which
+    requires one) -- release-readiness ticket 84's NotifySecFetchDeferred
+    must be conditional on this, not assumed present."""
+    return _generate_definition("bootstrap", alert_topic_arn="")
 
 
 def test_daily_incremental_validates_operator_input_before_refresh_mode(
@@ -203,9 +212,10 @@ def test_daily_incremental_both_modes_share_explicit_cik_stage0(
 
 def test_bootstrap_definition_has_no_refresh_mode_states(bootstrap_definition) -> None:
     """bootstrap never had the full-universe Stage0 prefix (it goes
-    SeedUniverse -> RunWarehouseTask directly) -- ticket 45/49's narrowing is
-    daily_incremental-specific and must not leak new states into bootstrap."""
-    assert bootstrap_definition["StartAt"] == "SeedUniverse"
+    SeedUniverse -> RunWarehouseTask, now gated by AcquireSecFetchLease per
+    ticket 84) -- ticket 45/49's narrowing is daily_incremental-specific and
+    must not leak new identity-refresh-lease states into bootstrap."""
+    assert bootstrap_definition["StartAt"] == "AcquireSecFetchLease"
     for leaked_state in (
         "RefreshModeCheck",
         "RefreshMode",
@@ -319,12 +329,14 @@ def test_apply_effective_refresh_mode_overwrites_refresh_mode_from_lease_result(
     Pass state overwrites the *raw* $.refresh_mode (set before AcquireLease
     ever ran, straight from the trigger payload) with that resolved value,
     so RefreshMode's dispatch below reflects the lease's decision, not the
-    original request."""
+    original request. Next is AcquireSecFetchLease, not RefreshMode directly
+    (release-readiness ticket 84) -- the cross-command sec_fetch_active
+    lease gates entry into RefreshMode's SEC-calling stages."""
     state = daily_incremental_definition["States"]["ApplyEffectiveRefreshMode"]
     assert state["Type"] == "Pass"
     assert state["InputPath"] == "$.lease_check.parsed.mode"
     assert state["ResultPath"] == "$.refresh_mode"
-    assert state["Next"] == "RefreshMode"
+    assert state["Next"] == "AcquireSecFetchLease"
 
 
 def test_read_lease_result_has_no_catch(daily_incremental_definition) -> None:
@@ -404,3 +416,162 @@ def test_bootstrap_gold_refresh_is_still_a_plain_end_state(bootstrap_definition)
     gold_refresh = bootstrap_definition["States"]["GoldRefresh"]
     assert gold_refresh.get("End") is True
     assert "Next" not in gold_refresh
+
+
+# ---------------------------------------------------------------------------
+# sec_fetch_active cross-command lease (release-readiness ticket 84):
+# AcquireSecFetchLease -> ReadSecFetchLeaseResult -> SecFetchLeaseAcquiredCheck
+# -> {<fetch-phase-start> | SecFetchDeferred}, and ReleaseSecFetchLease
+# before MdmRun. Independent of the existing identity-refresh lease above.
+# ---------------------------------------------------------------------------
+
+
+def test_bootstrap_acquires_sec_fetch_lease_before_seed_universe(bootstrap_definition) -> None:
+    states = bootstrap_definition["States"]
+    assert bootstrap_definition["StartAt"] == "AcquireSecFetchLease"
+    acquire = states["AcquireSecFetchLease"]
+    cmd = acquire["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    assert "acquire-sec-fetch-lease" in cmd
+    assert acquire["ResultPath"] is None
+    assert acquire["Next"] == "ReadSecFetchLeaseResult"
+
+    read_result = states["ReadSecFetchLeaseResult"]
+    assert read_result["Resource"] == "arn:aws:states:::aws-sdk:s3:getObject"
+    assert read_result["ResultPath"] == "$.sec_fetch_lease_check"
+    assert read_result["Next"] == "SecFetchLeaseAcquiredCheck"
+
+    check = states["SecFetchLeaseAcquiredCheck"]
+    assert check["Type"] == "Choice"
+    assert check["Choices"][0]["Variable"] == "$.sec_fetch_lease_check.parsed.lease_acquired"
+    assert check["Choices"][0]["BooleanEquals"] is True
+    assert check["Choices"][0]["Next"] == "SeedUniverse"
+
+
+def test_bootstrap_releases_sec_fetch_lease_before_mdm_run(bootstrap_definition) -> None:
+    states = bootstrap_definition["States"]
+    assert states["RunWarehouseTask"]["Next"] == "ReleaseSecFetchLease"
+
+    release = states["ReleaseSecFetchLease"]
+    cmd = release["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    assert "release-sec-fetch-lease" in cmd
+    assert release["ResultPath"] is None
+    assert release["Next"] == "MdmRun"
+    assert release["Catch"] == [
+        {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLeaseFailedNonFatal"}
+    ]
+
+    fallback = states["ReleaseSecFetchLeaseFailedNonFatal"]
+    assert fallback["Type"] == "Pass"
+    assert fallback["Next"] == "MdmRun"
+    assert "End" not in fallback
+
+
+def test_bootstrap_sec_fetch_lease_notifies_when_alert_topic_present(bootstrap_definition) -> None:
+    """The default fixture passes a fake alert-topic ARN (matching
+    daily_incremental's real call site) -- bootstrap's real call site passes
+    "" instead (see test_bootstrap_sec_fetch_lease_skips_notify_when_no_alert_topic),
+    but this fixture proves the notify path builds correctly when one is
+    supplied."""
+    states = bootstrap_definition["States"]
+    check = states["SecFetchLeaseAcquiredCheck"]
+    assert check["Default"] == "NotifySecFetchDeferred"
+
+    notification = states["NotifySecFetchDeferred"]
+    assert notification["Type"] == "Task"
+    assert notification["Resource"] == "arn:aws:states:::sns:publish"
+    assert notification["Parameters"]["TopicArn"] == _FAKE_ALERT_TOPIC_ARN
+    assert notification["Parameters"]["Message.$"] == "States.JsonToString($.sec_fetch_lease_check.parsed)"
+    assert notification["Next"] == "SecFetchDeferred"
+
+    deferred = states["SecFetchDeferred"]
+    assert deferred["Type"] == "Pass"
+    assert deferred["End"] is True
+    assert deferred["Parameters"]["disposition"] == "sec_fetch_deferred"
+
+
+def test_bootstrap_sec_fetch_lease_skips_notify_when_no_alert_topic(
+    bootstrap_definition_no_alert_topic,
+) -> None:
+    """Matches bootstrap's real deploy-aws-application.sh call site (passes
+    "" for operator_alert_topic_arn) -- must route straight to
+    SecFetchDeferred, never reference an sns:publish Task with an empty
+    TopicArn (which would fail at execution time, not deploy time)."""
+    states = bootstrap_definition_no_alert_topic["States"]
+    check = states["SecFetchLeaseAcquiredCheck"]
+    assert check["Default"] == "SecFetchDeferred"
+    assert "NotifySecFetchDeferred" not in states
+
+
+def test_daily_incremental_acquires_sec_fetch_lease_before_refresh_mode(
+    daily_incremental_definition,
+) -> None:
+    """The lease must be acquired after ApplyEffectiveRefreshMode (so the
+    lease-resolved refresh_mode is already settled) but before RefreshMode's
+    Choice dispatches into any SEC-calling stage."""
+    states = daily_incremental_definition["States"]
+    assert states["ApplyEffectiveRefreshMode"]["Next"] == "AcquireSecFetchLease"
+
+    acquire = states["AcquireSecFetchLease"]
+    assert acquire["ResultPath"] is None
+    assert acquire["Next"] == "ReadSecFetchLeaseResult"
+
+    check = states["SecFetchLeaseAcquiredCheck"]
+    assert check["Choices"][0]["Next"] == "RefreshMode"
+
+
+def test_daily_incremental_releases_sec_fetch_lease_before_mdm_run(
+    daily_incremental_definition,
+) -> None:
+    """Every path into MdmRun that used to go there directly from the ADV/
+    firm-roster fetch chain (the happy path and every Catch fallthrough)
+    must now release the lease first -- a failure partway through the
+    fetch-heavy span must not leave sec_fetch_active wedged for 16h."""
+    states = daily_incremental_definition["States"]
+    assert states["IngestFirmRosterSources"]["Next"] == "ReleaseSecFetchLease"
+
+    for catching_state in (
+        "FetchAdvBulk",
+        "FetchAdvBulkForced",
+        "IngestAdvBulkSources",
+        "FetchFirmRoster",
+        "FetchFirmRosterForced",
+        "IngestFirmRosterSources",
+    ):
+        assert states[catching_state]["Catch"] == [
+            {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}
+        ]
+
+    release = states["ReleaseSecFetchLease"]
+    cmd = release["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    assert "release-sec-fetch-lease" in cmd
+    assert release["Next"] == "MdmRun"
+    assert release["Catch"] == [
+        {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLeaseFailedNonFatal"}
+    ]
+
+    fallback = states["ReleaseSecFetchLeaseFailedNonFatal"]
+    assert fallback["Next"] == "MdmRun"
+
+
+def test_daily_incremental_has_both_leases_independently(daily_incremental_definition) -> None:
+    """The pre-existing identity-refresh lease (AcquireLease/ReleaseLease,
+    spanning the whole run) and the new sec_fetch_active lease
+    (AcquireSecFetchLease/ReleaseSecFetchLease, spanning only the SEC/IAPD-
+    fetching sub-span) must coexist as two distinct, independently-wired
+    lease pairs -- not merged or one replacing the other."""
+    states = daily_incremental_definition["States"]
+    for name in (
+        "AcquireLease", "ReleaseLease", "ReleaseLeaseFailedNonFatal",
+        "AcquireSecFetchLease", "ReleaseSecFetchLease", "ReleaseSecFetchLeaseFailedNonFatal",
+    ):
+        assert name in states
+
+    acquire_lease_cmd = states["AcquireLease"]["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    acquire_sec_fetch_cmd = states["AcquireSecFetchLease"]["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    assert "acquire-identity-refresh-lease" in acquire_lease_cmd
+    assert "acquire-sec-fetch-lease" in acquire_sec_fetch_cmd
+
+    # GoldRefresh still routes to the identity-refresh ReleaseLease at the
+    # very end of the run -- sec_fetch_active already released much earlier,
+    # right before MdmRun.
+    assert states["GoldRefresh"]["Next"] == "ReleaseLease"

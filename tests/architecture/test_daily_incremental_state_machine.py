@@ -40,6 +40,10 @@ _END_MARKER = "\nPY\n}\n"
 _LEASE_ACQUIRED_PREFER = {
     "ValidateForceInput": "ForceDefault",
     "LeaseAcquiredCheck": "ApplyEffectiveRefreshMode",
+    # SecFetchLeaseAcquiredCheck (release-readiness ticket 84) inverts the
+    # same way LeaseAcquiredCheck does -- Default is the fail-closed
+    # deferred path, not the happy path.
+    "SecFetchLeaseAcquiredCheck": "RefreshMode",
     "ForceCheck": "FetchAdvBulk",
     "FirmRosterForceCheck": "FetchFirmRoster",
 }
@@ -308,11 +312,14 @@ def test_daily_incremental_no_dedicated_gold_refresh_for_company_identity(
 def test_bootstrap_unaffected_by_daily_incremental_restructure(bootstrap_definition: dict) -> None:
     """Ticket 06 scoped the restructure to daily_incremental only -- bootstrap
     (recent-filings-only mode) keeps its original shape: SeedUniverse ->
-    RunWarehouseTask, no Stage0CompanyIdentity, no ComputeWindows."""
-    assert bootstrap_definition["StartAt"] == "SeedUniverse"
+    RunWarehouseTask, no Stage0CompanyIdentity, no ComputeWindows. StartAt is
+    now AcquireSecFetchLease, not SeedUniverse directly (release-readiness
+    ticket 84's cross-command lease, added to both branches of the shared
+    function)."""
+    assert bootstrap_definition["StartAt"] == "AcquireSecFetchLease"
     assert "Stage0CompanyIdentity" not in bootstrap_definition["States"]
     assert "ComputeWindows" not in bootstrap_definition["States"]
-    order = _linear_order(bootstrap_definition)
+    order = _linear_order_with_choice(bootstrap_definition, prefer={"SecFetchLeaseAcquiredCheck": "SeedUniverse"})
     assert order.index("SeedUniverse") < order.index("RunWarehouseTask")
 
 
@@ -430,21 +437,28 @@ def test_ingest_adv_bulk_sources_references_fetch_adv_bulk_manifest_path(
 def test_fetch_adv_bulk_and_ingest_adv_bulk_sources_catch_falls_through_to_mdm_run(
     daily_definition: dict,
 ) -> None:
+    """Catch falls through to ReleaseSecFetchLease, not MdmRun directly
+    (release-readiness ticket 84) -- these fetch stages are still inside the
+    sec_fetch_active fetch-heavy span, so a failure must still release the
+    lease before proceeding to MDM."""
     for state_name in ("FetchAdvBulk", "FetchAdvBulkForced", "IngestAdvBulkSources"):
         state = daily_definition["States"][state_name]
         assert state.get("Catch") == [
-            {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmRun"}
-        ], f"{state_name} missing lenient Catch-to-MdmRun"
+            {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}
+        ], f"{state_name} missing lenient Catch-to-ReleaseSecFetchLease"
+    assert daily_definition["States"]["ReleaseSecFetchLease"]["Next"] == "MdmRun"
 
 
 def test_bootstrap_unaffected_by_adv_bulk_fetch_wiring(bootstrap_definition: dict) -> None:
     """bootstrap shares write_warehouse_mdm_gold_definition with daily_incremental
     but is architecturally separate (its own workflow_name branch) -- the new
-    AdvBulkFetch stage must not appear in bootstrap's generated JSON."""
+    AdvBulkFetch stage must not appear in bootstrap's generated JSON.
+    RunWarehouseTask routes to ReleaseSecFetchLease, then MdmRun (ticket 84)."""
     assert "FetchAdvBulk" not in bootstrap_definition["States"]
     assert "DatasetPeriodCheck" not in bootstrap_definition["States"]
     assert "ForceCheck" not in bootstrap_definition["States"]
-    assert bootstrap_definition["States"]["RunWarehouseTask"]["Next"] == "MdmRun"
+    assert bootstrap_definition["States"]["RunWarehouseTask"]["Next"] == "ReleaseSecFetchLease"
+    assert bootstrap_definition["States"]["ReleaseSecFetchLease"]["Next"] == "MdmRun"
 
 
 def test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_via_result_path_null(
@@ -525,20 +539,25 @@ def test_ingest_firm_roster_sources_references_fetch_firm_roster_manifest_path(
 def test_fetch_and_ingest_firm_roster_catch_falls_through_to_mdm_run(
     daily_definition: dict,
 ) -> None:
+    """Catch falls through to ReleaseSecFetchLease, not MdmRun directly
+    (release-readiness ticket 84) -- see the identical ADV-fetch test above."""
     for state_name in ("FetchFirmRoster", "FetchFirmRosterForced", "IngestFirmRosterSources"):
         state = daily_definition["States"][state_name]
         assert state.get("Catch") == [
-            {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmRun"}
-        ], f"{state_name} missing lenient Catch-to-MdmRun"
+            {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}
+        ], f"{state_name} missing lenient Catch-to-ReleaseSecFetchLease"
+    assert daily_definition["States"]["ReleaseSecFetchLease"]["Next"] == "MdmRun"
 
 
 def test_bootstrap_unaffected_by_firm_roster_wiring(bootstrap_definition: dict) -> None:
     """bootstrap shares write_warehouse_mdm_gold_definition with daily_incremental
     but is architecturally separate -- the new Firm Roster states must not
-    appear in bootstrap's generated JSON."""
+    appear in bootstrap's generated JSON. RunWarehouseTask routes to
+    ReleaseSecFetchLease, then MdmRun (ticket 84)."""
     assert "FetchFirmRoster" not in bootstrap_definition["States"]
     assert "FirmRosterForceCheck" not in bootstrap_definition["States"]
-    assert bootstrap_definition["States"]["RunWarehouseTask"]["Next"] == "MdmRun"
+    assert bootstrap_definition["States"]["RunWarehouseTask"]["Next"] == "ReleaseSecFetchLease"
+    assert bootstrap_definition["States"]["ReleaseSecFetchLease"]["Next"] == "MdmRun"
 
 
 def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_null(
