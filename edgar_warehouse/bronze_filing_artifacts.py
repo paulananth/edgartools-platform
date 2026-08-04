@@ -21,6 +21,16 @@ from edgar_warehouse.infrastructure.dataset_path_catalog import (
     default_capture_spec_factory,
 )
 
+# Ticket 96: edgar.get_by_accession_number's whole-market quarterly-index scan
+# inherits httpx's bare 5s default timeout (edgartools' shared HTTP_MGR client
+# sets no timeout of its own), compounded by two nested 5x retry decorators
+# inside edgartools -- producing ~83s-per-call failures under degraded SEC
+# connectivity instead of a fast, clean error. edgartools already defines a
+# more generous BULK_TIMEOUT for exactly this "large SEC file, congested
+# connection" scenario but wires it into an unrelated async path only. This
+# raises the floor for every edgartools HTTP call this module makes.
+edgar.configure_http(timeout=60.0)
+
 # Ticket 56 architecture marker — architecture tests assert this contract.
 FILING_DOCUMENT_NETWORK_GATEWAY: Final = "raw_sec_http"
 
@@ -98,6 +108,27 @@ class TransientFilingContentError(RuntimeError):
     """
 
 
+def get_filing_by_cik_and_accession(cik: int, accession_number: str) -> Any | None:
+    """CIK-scoped filing lookup -- ticket 96's replacement for edgar.get_by_accession_number.
+
+    edgar.get_by_accession_number resolves an accession by scanning SEC's
+    whole-market quarterly filing index (every registrant's filings that
+    quarter), starting at Q1 every time, cached only 8-deep. Under a batch
+    spanning many CIKs/years that cache thrashes, forcing repeated large
+    index downloads on a too-short timeout (see module-level configure_http
+    call above). This instead searches only the known CIK's own submissions
+    data via edgar.Company, which this call site already has resolved.
+
+    No fallback to the whole-market path on a miss -- an accession genuinely
+    absent from its own CIK's submissions is a data-quality signal worth
+    surfacing, not something to paper over by resurrecting the expensive scan.
+    """
+    filings = edgar.Company(cik).get_filings(accession_number=accession_number)
+    if filings is None or filings.empty:
+        return None
+    return filings.get(accession_number)
+
+
 def fetch_filing_artifacts(
     *,
     context: Any,
@@ -105,7 +136,7 @@ def fetch_filing_artifacts(
     accession_number: str,
     sync_run_id: str,
     download_bytes=None,
-    get_filing=edgar.get_by_accession_number,
+    get_filing=None,
     force: bool = False,
     operator: str | None = None,
     reason: str | None = None,
@@ -128,6 +159,8 @@ def fetch_filing_artifacts(
         raise ValueError(f"Unknown accession_number {accession_number}")
 
     cik = int(filing["cik"])
+    if get_filing is None:
+        get_filing = lambda accession: get_filing_by_cik_and_accession(cik, accession)  # noqa: E731
     capture_specs = default_capture_spec_factory()
     # Count real SEC network fetches so the orchestrator can skip its per-accession
     # rate-limit sleep on the idempotent cache-hit path (immutable, already-captured
