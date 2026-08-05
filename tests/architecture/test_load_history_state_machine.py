@@ -354,25 +354,82 @@ def test_stage0_company_identity_runs_after_compute_windows_before_stage1_parall
     assert order.index("Stage0CompanyIdentity") < order.index("Stage1Parallel")
 
 
+def test_reduce_identity_refresh_runs_between_stage0_and_stage1_parallel(
+    definition: dict,
+) -> None:
+    """Company Identity Hydrate Elimination map, ticket 03: a single reducer
+    merges the reference snapshot plus every Stage0CompanyIdentity batch
+    delta into canonical exactly once, replacing the old per-window
+    hydrate+merge round trip."""
+    states = definition["States"]
+    assert states["Stage0CompanyIdentity"]["Next"] == "ReduceIdentityRefresh"
+    reduce_state = states["ReduceIdentityRefresh"]
+    assert reduce_state["Next"] == "Stage1Parallel"
+    cmd = _command_of_state(reduce_state)
+    assert "'reduce-identity-refresh'" in cmd
+    assert "'--run-id', $$.Execution.Name" in cmd
+    assert "'--max-attempts', '3'" in cmd
+    assert reduce_state["Parameters"]["TaskDefinition"] == "arn:wh-large"
+
+
+def test_reduce_identity_refresh_preserves_execution_scoped_state_for_stage1_parallel(
+    definition: dict,
+) -> None:
+    """D-15 bug class: ecs:runTask.sync without ResultPath=null replaces $
+    entirely with the ECS task result, which would destroy
+    $.artifact_policy/$.filing_lookback_years before Stage1Parallel's
+    WindowedBootstrap ItemSelector reads them."""
+    reduce_state = definition["States"]["ReduceIdentityRefresh"]
+    assert reduce_state["ResultPath"] is None
+
+
+def test_reduce_identity_refresh_does_not_add_a_step_functions_retry_envelope(
+    definition: dict,
+) -> None:
+    """The command performs its own bounded reducer-only retry (--max-attempts
+    3); Step Functions must not layer a second, differently-budgeted retry on
+    top or accidentally re-enter Map work on a promotion-conflict retry."""
+    reduce_state = definition["States"]["ReduceIdentityRefresh"]
+    assert reduce_state["Retry"] == [
+        {"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 1, "BackoffRate": 1.0, "MaxAttempts": 1}
+    ]
+
+
 def test_stage0_company_identity_command_shape(definition: dict) -> None:
+    """Company Identity Hydrate Elimination map, ticket 03: delta-then-reduce,
+    not windowed offset/limit -- an explicit --cik-list (from ComputeWindows'
+    cik_batches.jsonl via ItemSelector) plus --identity-refresh-run-id, so
+    bootstrap_fundamentals.py takes its no-hydrate branch instead of loading
+    the entire canonical silver.duckdb per batch."""
     cmd = _command_of(definition, "Stage0CompanyIdentity")
     assert "'bootstrap-fundamentals'" in cmd
     assert "'--mode', 'company-identity'" in cmd
-    assert "'--cik-offset'" in cmd
-    assert "'--cik-limit'" in cmd
+    assert "'--cik-list'" in cmd
+    assert "'--identity-refresh-run-id'" in cmd
+    assert "'--cik-offset'" not in cmd
+    assert "'--cik-limit'" not in cmd
+
+
+def test_stage0_company_identity_item_selector_wires_parent_run_id(definition: dict) -> None:
+    """Inside a DISTRIBUTED child, $$.Execution.Name is the CHILD execution
+    name, not the parent's -- ReduceIdentityRefresh (and bootstrap_fundamentals.py's
+    own --run-id/--identity-refresh-run-id match check, :86-88) need the PARENT
+    run id, so it must be threaded in via ItemSelector at the parent Map level,
+    not read directly inside each per-batch task."""
+    state = definition["States"]["Stage0CompanyIdentity"]
+    assert state["ItemSelector"] == {
+        "cik_list.$": "$$.Map.Item.Value.cik_list",
+        "identity_refresh_run_id.$": "$$.Execution.Name",
+    }
 
 
 def test_stage0_company_identity_uses_large_task_definition(definition: dict) -> None:
-    """Regression guard (live prod OOM, 2026-08-05): this windowed form (no
-    explicit --cik-list) takes bootstrap_fundamentals.py's full-hydrate
-    branch -- it downloads and opens the ENTIRE canonical silver.duckdb
-    before resolving its own tiny CIK window. As canonical has grown (6.8M-
-    row sec_thirteenf_holding, 4.7M-row sec_company_filing), this OOM-killed
-    (exit 137) on medium's 4096MB across all 4 attempts for a real window.
-    Must run on the large (8192MB) task definition, same OOM-class fix as
-    gold-build-memory-reliability ticket 03's run_wh."""
+    """Kept on large (not downgraded to medium alongside the hydrate
+    elimination): load_history's batches are 500 CIKs of full submissions
+    history with include_pagination=True, unlike daily_incremental's bounded
+    daily deltas -- a downgrade should be a separate, measured follow-up."""
     state = definition["States"]["Stage0CompanyIdentity"]
-    inner = state["ItemProcessor"]["States"]["RunCompanyIdentityWindow"]
+    inner = state["ItemProcessor"]["States"]["RunCompanyIdentityBatch"]
     assert inner["Parameters"]["TaskDefinition"] == "arn:wh-large"
 
 
@@ -399,16 +456,19 @@ def test_stage0_company_identity_is_strict_not_lenient(definition: dict) -> None
     assert definition["States"]["SecFetchTaskFailed"]["Type"] == "Fail"
 
 
-def test_stage0_company_identity_reads_same_cik_windows_manifest(definition: dict) -> None:
-    """Reads the same cik_windows.jsonl ComputeWindows writes, so it processes
-    identical CIK windows to Branch A/B rather than an independently-resolved list."""
+def test_stage0_company_identity_reads_cik_batches_manifest(definition: dict) -> None:
+    """Reads cik_batches.jsonl (ComputeWindows' pre-batched partition of the
+    same ordered CIK list Branch A's cik_windows.jsonl also derives from),
+    not cik_windows.jsonl directly -- delta-then-reduce batches are CIK lists,
+    not {offset, limit} window descriptors."""
     state = definition["States"]["Stage0CompanyIdentity"]
     key_expr = state["ItemReader"]["Parameters"]["Key.$"]
+    assert "cik_batches.jsonl" in key_expr
     branch_a_key_expr = (
         definition["States"]["Stage1Parallel"]["Branches"][0]["States"]
         ["WindowedBootstrap"]["ItemReader"]["Parameters"]["Key.$"]
     )
-    assert key_expr == branch_a_key_expr
+    assert key_expr != branch_a_key_expr
 
 
 # -- Issue 1 / 4: Branch B sequencing -----------------------------------------
@@ -525,6 +585,16 @@ def test_all_item_reader_maps_use_distributed_mode(definition: dict) -> None:
                     walk(branch["States"], f"{label}.{name}(Parallel[{i}])")
 
     walk(definition["States"], "top")
+
+
+def test_compute_windows_uses_large_task_definition(definition: dict) -> None:
+    """Company Identity Hydrate Elimination map, ticket 03: ComputeWindows now
+    also calls persist_run_manifest, which reads the full canonical
+    silver.duckdb into a Python bytes object for its immutable reference
+    snapshot -- an added working-set cost on top of the pre-existing full
+    hydrate, on the same canonical file whose growth already caused
+    Stage0CompanyIdentity's live OOM. Belt-and-suspenders headroom."""
+    assert definition["States"]["ComputeWindows"]["Parameters"]["TaskDefinition"] == "arn:wh-large"
 
 
 def test_compute_windows_command_includes_total_cik_limit(definition: dict) -> None:
@@ -949,6 +1019,7 @@ def test_load_history_previously_uncaught_states_release_lease_on_failure(defini
         "MdmSeedUniverse",
         "ComputeWindows",
         "Stage0CompanyIdentity",
+        "ReduceIdentityRefresh",
         "Stage1Parallel",
     ):
         assert states[previously_uncaught_state]["Catch"] == expected_catch

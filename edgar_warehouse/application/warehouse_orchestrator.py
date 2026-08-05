@@ -653,10 +653,16 @@ def _execute_warehouse_bronze_capture(
             run_id=run_id,
             storage_root=context.storage_root.root,
         )
-        if command_name == "compute-identity-refresh-window":
+        if command_name in ("compute-identity-refresh-window", "compute-windows"):
             # This pre-stage is the sole owner of the global reference snapshot.
             # It deliberately does not publish canonical silver: the reducer will
             # merge this immutable candidate with all batch deltas exactly once.
+            # compute-windows joined this branch as part of the Company Identity
+            # Hydrate Elimination map (ticket 03): it now also syncs reference
+            # data and pre-batches load_history's CIK universe for
+            # Stage0CompanyIdentity's own delta-then-reduce Map, so it needs the
+            # identical publish treatment -- see the compute-windows handler
+            # above for where metrics["_identity_refresh_batches"] is populated.
             from edgar_warehouse.application.identity_refresh_publication import persist_run_manifest
 
             image_identity = os.environ.get("WAREHOUSE_IMAGE_REF", "").strip()
@@ -2521,6 +2527,46 @@ def _capture_bronze_raw(
         snapshot_content = "\n".join(json.dumps({"cik": cik}) for cik in ciks) + "\n"
         snapshot_rel = default_path_resolver().cik_snapshot_path(sync_run_id)
         context.bronze_root.write_text(snapshot_rel, snapshot_content)
+
+        # Company Identity Hydrate Elimination map, ticket 03: sync reference
+        # data (company_tickers/company_tickers_exchange) exactly once here,
+        # instead of once per Stage0CompanyIdentity window as today (53x
+        # redundant re-sync at load_history scale) -- this run's single
+        # canonical source for that data, mirroring compute-identity-refresh-
+        # window's own single upstream sync. The resulting rows are captured
+        # by this task's reference snapshot (see the compute-windows branch of
+        # the identity-refresh publish special-case below) and merged into
+        # canonical once by ReduceIdentityRefresh, alongside every
+        # Stage0CompanyIdentity batch delta.
+        reference_result = _sync_reference_data(
+            context=context,
+            db=db,
+            sync_run_id=sync_run_id,
+            fetch_date=now.date(),
+        )
+        raw_writes.extend(reference_result["raw_writes"])
+        metrics["rows_inserted"] += reference_result["rows_written"]
+        metrics["rows_skipped"] += reference_result["rows_skipped"]
+
+        # Pre-batch the same ordered CIK list for Stage0CompanyIdentity's
+        # delta-then-reduce Map (cik_batches.jsonl, read directly by its
+        # ItemReader) and declare the identical partition via
+        # metrics["_identity_refresh_batches"] (consumed by the
+        # persist_run_manifest call below) so the Map's actual batches and the
+        # reducer's declared batches can never diverge -- both slice the same
+        # `ciks` list with the same `window_size` step.
+        batches_path = _write_cik_universe_batches(
+            context=context,
+            rows=[{"cik": cik} for cik in ciks],
+            fetch_date=now.date(),
+            sync_run_id=sync_run_id,
+            batch_size=window_size,
+        )
+        metrics["_identity_refresh_batches"] = [
+            ciks[index : index + window_size] for index in range(0, len(ciks), window_size)
+        ]
+        metrics["cik_universe_path"] = batches_path
+
         _emit_pipeline_event(
             "compute_windows_completed",
             run_id=sync_run_id,
@@ -2528,6 +2574,7 @@ def _capture_bronze_raw(
             window_count=len(window_descs),
             window_size=window_size,
             total_cik_limit=total_cik_limit,
+            reference_rows_written=reference_result["rows_written"],
         )
         metrics["cik_count"] = len(ciks)
         metrics["window_count"] = len(window_descs)
