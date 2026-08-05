@@ -3800,7 +3800,8 @@ class SilverDatabase:
                 ON CONFLICT (cik, accession_number, concept, fiscal_period, segment, period_end, period_start) DO UPDATE SET
                     value = excluded.value,
                     decimals = excluded.decimals,
-                    parser_version = excluded.parser_version
+                    parser_version = excluded.parser_version,
+                    ingested_at = now()
             """,
             rows=rows,
             values_fn=lambda r: [
@@ -3940,7 +3941,8 @@ class SilverDatabase:
                     roic = excluded.roic,
                     roe = excluded.roe,
                     roa = excluded.roa,
-                    parser_version = excluded.parser_version
+                    parser_version = excluded.parser_version,
+                    ingested_at = now()
             """,
             rows=rows,
             values_fn=lambda r: [
@@ -3979,7 +3981,8 @@ class SilverDatabase:
                 eps_gaap_diluted = excluded.eps_gaap_diluted,
                 has_non_gaap = excluded.has_non_gaap,
                 has_guidance = excluded.has_guidance,
-                parser_version = excluded.parser_version
+                parser_version = excluded.parser_version,
+                ingested_at = now()
             """,
             rows,
             lambda r: [
@@ -4018,7 +4021,8 @@ class SilverDatabase:
                 source_ref = excluded.source_ref,
                 excerpt = excluded.excerpt,
                 confidence = excluded.confidence,
-                parser_version = excluded.parser_version
+                parser_version = excluded.parser_version,
+                ingested_at = now()
             """,
             rows,
             lambda r: [
@@ -4067,7 +4071,8 @@ class SilverDatabase:
                 beneish_m_score = COALESCE(excluded.beneish_m_score, sec_accounting_flag.beneish_m_score),
                 altman_z_score = COALESCE(excluded.altman_z_score, sec_accounting_flag.altman_z_score),
                 piotroski_f_score = COALESCE(excluded.piotroski_f_score, sec_accounting_flag.piotroski_f_score),
-                parser_version = excluded.parser_version
+                parser_version = excluded.parser_version,
+                ingested_at = now()
             """,
             rows,
             lambda r: [
@@ -4103,7 +4108,8 @@ class SilverDatabase:
             UPDATE sec_accounting_flag
             SET beneish_m_score   = COALESCE(?, beneish_m_score),
                 altman_z_score    = COALESCE(?, altman_z_score),
-                piotroski_f_score = COALESCE(?, piotroski_f_score)
+                piotroski_f_score = COALESCE(?, piotroski_f_score),
+                ingested_at       = now()
             WHERE cik = ? AND accession_number = ?
             RETURNING cik
             """,
@@ -4128,7 +4134,8 @@ class SilverDatabase:
                 stock_awards = excluded.stock_awards,
                 option_awards = excluded.option_awards,
                 non_equity_incentive = excluded.non_equity_incentive,
-                parser_version = excluded.parser_version
+                parser_version = excluded.parser_version,
+                ingested_at = now()
             """,
             rows,
             lambda r: [
@@ -4155,7 +4162,8 @@ class SilverDatabase:
                 previous_role = excluded.previous_role,
                 compensation_amount = excluded.compensation_amount,
                 effective_date = excluded.effective_date,
-                parser_version = excluded.parser_version
+                parser_version = excluded.parser_version,
+                ingested_at = now()
             """,
             rows,
             lambda r: [
@@ -4180,7 +4188,8 @@ class SilverDatabase:
                 shares_held = excluded.shares_held,
                 market_value = excluded.market_value,
                 security_class = excluded.security_class,
-                parser_version = excluded.parser_version
+                parser_version = excluded.parser_version,
+                ingested_at = now()
             """,
             rows,
             lambda r: [
@@ -4206,7 +4215,8 @@ class SilverDatabase:
                 confidential_omission = excluded.confidential_omission,
                 effective_status = excluded.effective_status,
                 superseded_by_accession = excluded.superseded_by_accession,
-                parser_version = excluded.parser_version
+                parser_version = excluded.parser_version,
+                ingested_at = now()
             """,
             rows,
             lambda r: [

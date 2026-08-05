@@ -1334,6 +1334,65 @@ def test_merge_still_flags_filing_attachment_genuine_content_conflict(tmp_path):
     assert conflicts[0].differing_columns == ("document_type",)
 
 
+def test_merge_lets_fresher_authority_timestamp_republish_corrected_gaap_values(tmp_path):
+    """Regression (Ticket 98): sec_earnings_release DOES declare
+    authority_column="ingested_at" -- but every merge function's
+    ON CONFLICT DO UPDATE clause omitted ingested_at from its SET list, so
+    DuckDB's DEFAULT NOW() (INSERT-only, never re-applied on UPDATE) left a
+    re-processed row's ingested_at frozen at whenever it was first inserted.
+    Two rows with identical ingested_at are an unconditional tie -- ambiguous,
+    per _resolve_conflict's own tie-breaking rule -- so re-running a genuine
+    parser bug fix (tickets 42/97's F5 scale-mismatch correction) against an
+    already-published accession could never win, no matter how much later it
+    ran. Confirmed live: production hit exactly this wall 2026-08-05.
+
+    Fixed by adding ingested_at = now() to every affected DO UPDATE SET
+    clause (silver_store.py). This proves the merge-level effect: a candidate
+    whose ingested_at is genuinely later than canonical's now wins outright,
+    republishing the corrected value instead of raising ambiguous."""
+    from edgar_warehouse.silver_protection import merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+    ddl = (
+        "CREATE TABLE sec_earnings_release ("
+        "cik BIGINT, accession_number TEXT, filing_date DATE, "
+        "revenue_gaap DOUBLE, net_income_gaap DOUBLE, ingested_at TIMESTAMPTZ, "
+        "PRIMARY KEY (cik, accession_number))"
+    )
+    _make_duckdb(
+        canonical,
+        ddl,
+        [
+            "INSERT INTO sec_earnings_release VALUES ("
+            "8818, 'acc-1', '2026-04-28', 2298.5, 168100000.0, '2026-04-28 12:00:00')"
+        ],
+    )
+    # Candidate re-ran the (now-fixed) parser later and correctly scaled
+    # revenue_gaap -- and, post-fix, its own local upsert bumped ingested_at
+    # to reflect that this row was genuinely re-processed.
+    _make_duckdb(
+        candidate,
+        ddl,
+        [
+            "INSERT INTO sec_earnings_release VALUES ("
+            "8818, 'acc-1', '2026-04-28', 2298500000.0, 168100000.0, '2026-08-05 08:00:00')"
+        ],
+    )
+
+    result = merge_candidate_into_canonical(candidate, canonical, output)
+
+    assert result.rows_updated.get("sec_earnings_release", 0) == 1
+    conn = duckdb.connect(str(output))
+    row = conn.execute(
+        "SELECT revenue_gaap FROM sec_earnings_release WHERE cik = ? AND accession_number = ?",
+        [8818, "acc-1"],
+    ).fetchone()
+    conn.close()
+    assert row == (2298500000.0,)
+
+
 def test_merge_raises_row_level_conflict_report_when_ambiguous(tmp_path):
     from edgar_warehouse.silver_protection import SemanticMergeConflictError, merge_candidate_into_canonical
 
