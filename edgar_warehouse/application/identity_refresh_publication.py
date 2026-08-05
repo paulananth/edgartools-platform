@@ -276,7 +276,17 @@ def reduce_identity_refresh(
                         candidate = verified_paths[relative]
                         merged = tmp_path / f"merged-{index}.duckdb"
                         result = merge_candidate_into_canonical(candidate, current, merged)
+                        previous_current = current
                         current = merged
+                        # Bound peak local disk to ~2 canonical-sized files
+                        # (previous + new), not O(candidate_count). Only
+                        # unlink attempt-local intermediates -- never a
+                        # verified_paths cache file (the initial `current`
+                        # when no canonical exists yet is verified_paths[
+                        # reference_path], reused across every retry
+                        # attempt in this same call).
+                        if previous_current not in verified_paths.values():
+                            previous_current.unlink(missing_ok=True)
                         merge_order.append(label)
                         tables_merged.extend(result.tables_merged)
                         _emit_reducer_event(

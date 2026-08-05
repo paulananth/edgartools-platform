@@ -107,6 +107,53 @@ def test_reducer_merges_only_verified_persisted_inputs_and_promotes_once(tmp_pat
     assert Path(storage.join("silver/sec/silver.duckdb")).read_bytes() == b"reference"
 
 
+def test_reducer_bounds_peak_intermediate_disk_across_many_candidates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression guard, company-identity-hydrate-elimination ticket 01/04:
+    each merge iteration's superseded ``current`` file must be unlinked
+    once no longer needed, so peak local disk during the merge loop stays
+    ~O(1) attempt-local files, not O(candidate_count). Only the initial
+    verified-cache reference file (reused across retry attempts) must
+    survive -- everything else the loop itself created must not pile up."""
+    storage = StorageLocation(str(tmp_path / "warehouse"))
+    reference = tmp_path / "reference.duckdb"
+    reference.write_bytes(b"reference")
+    ciks_per_batch = [[100], [200], [300], [400]]
+    persist_run_manifest(
+        storage, run_id="run-1", image_identity="sha256:image",
+        reference_snapshot_file=reference, batches=ciks_per_batch,
+    )
+    for ciks in ciks_per_batch:
+        delta = tmp_path / f"batch-{ciks[0]}.duckdb"
+        delta.write_bytes(f"batch-{ciks[0]}".encode())
+        persist_batch_outcome(
+            storage, run_id="run-1", image_identity="sha256:image", ciks=ciks, delta_file=delta,
+        )
+
+    peak_attempt_local_files: list[int] = []
+
+    def fake_merge(candidate: Path, canonical: Path, output: Path):
+        attempt_dir = output.parent
+        peak_attempt_local_files.append(len(list(attempt_dir.glob("*.duckdb"))))
+        output.write_bytes(canonical.read_bytes() + candidate.read_bytes())
+        return type("Result", (), {"tables_merged": ("sec_company",)})()
+
+    monkeypatch.setattr(
+        "edgar_warehouse.application.identity_refresh_publication.merge_candidate_into_canonical",
+        fake_merge,
+    )
+    reduce_identity_refresh(storage, run_id="run-1", image_identity="sha256:image")
+
+    # Reference doesn't exist as canonical yet, so the loop merges 4 batch
+    # deltas starting from the reference file. Before this fix, file count
+    # in the attempt-local tmp dir grew unbounded (1, 2, 3, 4 merged-*.duckdb
+    # files coexisting); after it, at most 1 attempt-local file (the prior
+    # `current`) should ever be present alongside the new output about to
+    # be written -- i.e. never more than 1 pre-existing file at merge start.
+    assert max(peak_attempt_local_files) <= 1, peak_attempt_local_files
+
+
 def test_ambiguous_merge_conflict_fails_before_canonical_promotion(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from edgar_warehouse.silver_protection import SemanticMergeConflictError
 
