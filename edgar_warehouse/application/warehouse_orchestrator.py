@@ -45,6 +45,7 @@ from edgar_warehouse.domain.policy.command_scope import (
     sync_scope_type_for_command,
 )
 from edgar_warehouse.loaders import (
+    filter_rows_by_min_filing_date,
     seed_universe_loader,
     stage_daily_index_filing_loader,
     stage_manifest_loader,
@@ -191,6 +192,14 @@ DEFAULT_OWNERSHIP_LOOKBACK_YEARS = 2
 # Integrated with the ownership load: same default, same CLI/env ownership
 # lookback knob unless WAREHOUSE_ITEM_502_LOOKBACK_YEARS is set explicitly.
 DEFAULT_ITEM_502_LOOKBACK_YEARS = 2
+# General filing-discovery window (10-K/10-Q/8-K/DEF 14A/13F/ADV/etc): unlike
+# the two lookbacks above, this gates whether a filing row is written into
+# sec_company_filing (bronze discovery) at all, not just whether its artifact
+# gets parsed. 0 = disabled (full history) -- this is the pre-existing
+# behavior for every caller that doesn't opt in, so bootstrap/daily-
+# incremental/targeted-resync are unaffected unless --filing-lookback-years
+# is passed explicitly.
+DEFAULT_FILING_LOOKBACK_YEARS = 0
 
 def _emit_pipeline_event(event: str, **payload: Any) -> None:
     """Emit a structured progress event for ECS/CloudWatch pipeline monitoring."""
@@ -1446,6 +1455,7 @@ def _capture_bronze_raw(
                     parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
                     ownership_lookback_years=arguments.get("ownership_lookback_years"),
                     item_502_lookback_years=arguments.get("item_502_lookback_years"),
+                    filing_lookback_years=arguments.get("filing_lookback_years"),
                 )
             except Exception:
                 db.finish_discovery_ciks(
@@ -2864,12 +2874,14 @@ def _run_submissions_bronze_then_silver(
     repair_manifest_accessions: set[str] | None = None,
     ownership_lookback_years: Any = None,
     item_502_lookback_years: Any = None,
+    filing_lookback_years: Any = None,
 ) -> dict[str, Any]:
     """Capture every selected SEC submission into bronze before applying silver."""
     if release_mode and recurring_mode:
         raise WarehouseRuntimeError(
             "submission processing cannot be both release and recurring mode"
         )
+    filing_min_date = _ownership_min_filing_date(_resolve_filing_lookback_years(filing_lookback_years))
     total_ciks = len(ciks)
     bronze_started_at = datetime.now(UTC)
     _emit_pipeline_event(
@@ -2925,6 +2937,7 @@ def _run_submissions_bronze_then_silver(
     rows_skipped = 0
     recent_accessions: list[str] = []
     pagination_accessions: list[str] = []
+    filtered_by_lookback_count = 0
     now = datetime.now(UTC)
     silver_started_at = datetime.now(UTC)
     _emit_pipeline_event(
@@ -2942,11 +2955,13 @@ def _run_submissions_bronze_then_silver(
             load_mode=load_mode,
             recent_limit=recent_limit,
             now=now,
+            filing_min_date=filing_min_date,
         )
         rows_written += int(result["rows_written"])
         rows_skipped += int(result["rows_skipped"])
         recent_accessions.extend(result["recent_accessions"])
         pagination_accessions.extend(result["pagination_accessions"])
+        filtered_by_lookback_count += int(result.get("filtered_by_lookback_count", 0) or 0)
         if index == total_ciks or index % 10 == 0:
             _emit_pipeline_event(
                 "silver_apply_progress",
@@ -2964,6 +2979,14 @@ def _run_submissions_bronze_then_silver(
         rows_written=rows_written,
         run_id=sync_run_id,
     )
+    if filtered_by_lookback_count:
+        _emit_pipeline_event(
+            "filing_lookback_filtered",
+            skipped_count=filtered_by_lookback_count,
+            lookback_years=_resolve_filing_lookback_years(filing_lookback_years),
+            min_filing_date=filing_min_date.isoformat() if filing_min_date else None,
+            run_id=sync_run_id,
+        )
 
     observed_accessions = _dedupe_strings([*recent_accessions, *pagination_accessions])
     if release_mode or recurring_mode:
@@ -3812,6 +3835,18 @@ def _resolve_ownership_lookback_years(raw: Any = None) -> int:
     )
 
 
+def _resolve_filing_lookback_years(raw: Any = None) -> int:
+    """Resolve the general filing-discovery lookback (10-K/10-Q/8-K/DEF 14A/
+    13F/ADV/etc). Default 0 (disabled, full history) -- unlike ownership/
+    Item 5.02, this gates bronze discovery itself, so it stays opt-in."""
+    return _resolve_nonneg_lookback_years(
+        raw,
+        default=DEFAULT_FILING_LOOKBACK_YEARS,
+        env_name="WAREHOUSE_FILING_LOOKBACK_YEARS",
+        field_name="filing_lookback_years",
+    )
+
+
 def _resolve_item_502_lookback_years(
     raw: Any = None,
     *,
@@ -4523,6 +4558,7 @@ def _apply_submission_snapshot_to_silver(
     load_mode: str,
     recent_limit: int | None,
     now: datetime,
+    filing_min_date: date | None = None,
 ) -> dict[str, Any]:
     raw_writes: list[dict[str, Any]] = []
     rows_written = 0
@@ -4575,13 +4611,16 @@ def _apply_submission_snapshot_to_silver(
     result: dict[str, Any]
     if all_same:
         rows_skipped = 1 + len(pagination_payloads)
-        recent_rows = stage_recent_filing_loader(
-            main_payload,
-            cik,
-            sync_run_id,
-            main_write_record["sha256"],
-            load_mode,
-            recent_limit=recent_limit,
+        recent_rows = filter_rows_by_min_filing_date(
+            stage_recent_filing_loader(
+                main_payload,
+                cik,
+                sync_run_id,
+                main_write_record["sha256"],
+                load_mode,
+                recent_limit=recent_limit,
+            ),
+            filing_min_date,
         )
         result = {
             "rows_written": 0,
@@ -4603,10 +4642,23 @@ def _apply_submission_snapshot_to_silver(
             raw_object_id=main_write_record["sha256"],
             load_mode=load_mode,
             recent_limit=recent_limit,
+            filing_min_date=filing_min_date,
         )
         rows_written += int(result["rows_written"])
 
-    all_filing_rows = list(result["recent_rows"])
+    # Unfiltered by filing_min_date on purpose -- company_sync_state's
+    # latest_filing_date_seen/latest_acceptance_datetime_seen must reflect
+    # the company's true most-recent filing regardless of the discovery
+    # lookback window, not the filtered view. stage_recent_filing_loader is
+    # a pure function of main_payload, so recomputing it fresh here (rather
+    # than reusing result["recent_rows"], which may have been lookback-
+    # filtered) costs nothing extra -- no I/O, no re-fetch.
+    all_filing_rows = list(
+        stage_recent_filing_loader(
+            main_payload, cik, sync_run_id, main_write_record["sha256"], load_mode,
+            recent_limit=recent_limit,
+        )
+    )
     pagination_rows_for_accessions: list[dict[str, Any]] = []
     for _file_name, pagination_payload in pagination_payloads:
         pagination_rows = stage_pagination_filing_loader(
@@ -4657,18 +4709,27 @@ def _apply_submission_snapshot_to_silver(
             "last_error_message": None,
         }
     )
+    filtered_pagination_accessions = _dedupe_strings(
+        [
+            row["accession_number"]
+            for row in filter_rows_by_min_filing_date(pagination_rows_for_accessions, filing_min_date)
+            if row.get("accession_number")
+        ]
+    )
+    filtered_by_lookback_count = 0
+    if filing_min_date is not None:
+        unfiltered_count = len({
+            row["accession_number"] for row in all_filing_rows if row.get("accession_number")
+        })
+        kept_count = len(set(result["recent_accessions"]) | set(filtered_pagination_accessions))
+        filtered_by_lookback_count = max(0, unfiltered_count - kept_count)
     return {
         "raw_writes": raw_writes,
         "rows_written": rows_written,
         "rows_skipped": rows_skipped,
         "recent_accessions": _dedupe_strings(result["recent_accessions"]),
-        "pagination_accessions": _dedupe_strings(
-            [
-                row["accession_number"]
-                for row in pagination_rows_for_accessions
-                if row.get("accession_number")
-            ]
-        ),
+        "pagination_accessions": filtered_pagination_accessions,
+        "filtered_by_lookback_count": filtered_by_lookback_count,
     }
 
 

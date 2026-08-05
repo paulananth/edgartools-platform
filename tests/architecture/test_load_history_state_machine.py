@@ -261,6 +261,7 @@ def test_windowed_bootstrap_projects_artifact_policy_into_each_item(
         "window_offset.$": "$$.Map.Item.Value.window_offset",
         "window_limit.$": "$$.Map.Item.Value.window_limit",
         "artifact_policy.$": "$.artifact_policy",
+        "filing_lookback_years.$": "$.filing_lookback_years",
     }
 
 
@@ -276,6 +277,7 @@ def test_execution_routing_survives_compute_windows_to_windowed_bootstrap(
         "window_size": 1,
         "total_cik_limit": 2,
         "artifact_policy": artifact_policy,
+        "filing_lookback_years": 2,
     }
     synthetic_state_output = {"ecs_task_result": "successful"}
 
@@ -307,8 +309,12 @@ def test_execution_routing_survives_compute_windows_to_windowed_bootstrap(
         for target, path in selector.items()
         if path.startswith("$.")
     }
-    assert execution_scoped_paths == {"artifact_policy.$": "artifact_policy"}
+    assert execution_scoped_paths == {
+        "artifact_policy.$": "artifact_policy",
+        "filing_lookback_years.$": "filing_lookback_years",
+    }
     assert state_input[execution_scoped_paths["artifact_policy.$"]] == artifact_policy
+    assert state_input[execution_scoped_paths["filing_lookback_years.$"]] == 2
 
 
 def test_load_history_has_one_final_gold_refresh_after_mdm_verify(definition: dict) -> None:
@@ -542,6 +548,55 @@ def test_total_cik_limit_check_defaults_to_no_limit_sentinel(definition: dict) -
 def test_window_size_and_total_cik_limit_checks_precede_compute_windows(definition: dict) -> None:
     order = _linear_order(definition)
     assert order.index("WindowSizeCheck") < order.index("TotalCikLimitCheck") < order.index("ComputeWindows")
+
+
+# -- filing_lookback_years: general filing-discovery date bound ---------------
+
+
+def test_artifact_policy_check_routes_into_filing_lookback_years_check(definition: dict) -> None:
+    states = definition["States"]
+    assert states["ArtifactPolicyCheck"]["Choices"][0]["Next"] == "FilingLookbackYearsCheck"
+    assert states["ArtifactPolicyDefault"]["Next"] == "FilingLookbackYearsCheck"
+
+
+def test_filing_lookback_years_check_defaults_to_two_years(definition: dict) -> None:
+    """FilingLookbackYearsCheck routes straight to ComputeWindows when the caller
+    supplied filing_lookback_years; otherwise FilingLookbackYearsDefault injects 2
+    (load_history-specific default, deliberately different from the CLI/code-level
+    default of 0/disabled used by every other bootstrap-next caller)."""
+    states = definition["States"]
+    check = states["FilingLookbackYearsCheck"]
+    assert check["Type"] == "Choice"
+    assert check["Choices"][0]["Variable"] == "$.filing_lookback_years"
+    assert check["Choices"][0]["IsPresent"] is True
+    assert check["Choices"][0]["Next"] == "ComputeWindows"
+    assert check["Default"] == "FilingLookbackYearsDefault"
+
+    default_state = states["FilingLookbackYearsDefault"]
+    assert default_state["Type"] == "Pass"
+    assert default_state["Result"] == 2
+    assert default_state["ResultPath"] == "$.filing_lookback_years"
+    assert default_state["Next"] == "ComputeWindows"
+
+
+def test_windowed_bootstrap_command_includes_filing_lookback_years(definition: dict) -> None:
+    branch_a_states = definition["States"]["Stage1Parallel"]["Branches"][0]["States"]
+    per_window_cmd = _command_of_state(branch_a_states["WindowedBootstrap"])
+    assert "'--filing-lookback-years'" in per_window_cmd
+    assert "$.filing_lookback_years" in per_window_cmd
+
+
+def test_window_size_total_cik_limit_artifact_policy_filing_lookback_checks_precede_compute_windows(
+    definition: dict,
+) -> None:
+    order = _linear_order(definition)
+    assert (
+        order.index("WindowSizeCheck")
+        < order.index("TotalCikLimitCheck")
+        < order.index("ArtifactPolicyCheck")
+        < order.index("FilingLookbackYearsCheck")
+        < order.index("ComputeWindows")
+    )
 
 
 # -- ADV fetch pipeline wiring spec (.scratch/adv-fetch-pipeline-wiring, ticket 01):
