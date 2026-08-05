@@ -471,3 +471,32 @@ shapes. The 128 already-published wrong-magnitude rows from the pre-fix run rema
 canonical prod silver until the merge-policy gap above is resolved. Full-universe `load_history`
 (Task #35) is safe to proceed with the current deployed fix for CIKs not yet loaded; it will not
 retroactively fix the 20-CIK sample's already-published bad rows.
+
+### Merge-policy gap resolved — 2026-08-05 (ticket 98)
+
+Root-caused ticket 98 to something much simpler than the "authority-column decision" it was
+originally scoped as (see [ticket 98](98-decide-sec-earnings-release-authority-column.md) for
+the full investigation): `sec_earnings_release` (and 8 sibling fundamentals/relationship tables)
+already declared `authority_column="ingested_at"` — the real bug was that every merge function's
+`ON CONFLICT ... DO UPDATE SET` clause omitted `ingested_at`, so DuckDB's `DEFAULT NOW()` (which
+only applies on `INSERT`, never `UPDATE`) left it frozen at first-insert time forever. Fixed by
+adding `ingested_at = now()` to all 9 affected `DO UPDATE SET` clauses. No schema change, no
+strategic tradeoff — restored the behavior the existing authority-column declaration already
+implied.
+
+Deployed to prod (`edgartools-prod-large:136`) and re-ran the 20-CIK per-filing sample a third
+time: **exited 0**, `silver_database_uploaded: true` — first successful publish of corrected F5
+data. Confirmed live in the freshly-published canonical: Avery Dennison's `revenue_gaap` and
+Oxford Industries' `net_income_gaap` (the two specific defect cases found during this
+investigation) are now cleanly `NULL` with fresh `ingested_at` timestamps, not the earlier wrong
+or corrupted values. 104 rows remain flagged suspicious across the 20-CIK sample — confirmed
+these are exactly the known, out-of-scope defect #2 (scale-detection-miss, e.g. Crown Crafts/CIK
+25895, Louisiana-Pacific/CIK 60519), same CIKs as originally found, correctly left untouched by
+design — not a new regression.
+
+**`load_history` readiness, re-assessed:** the silent-partial-publish-failure risk identified
+earlier (any window touching an already-loaded CIK would fail to publish, silently swallowed by
+`Stage1BPerFiling`'s `Catch`) is resolved — a genuine re-processing of an existing row now
+correctly wins on authority timestamp instead of hitting an unconditional tie. Confirmed zero
+running executions on any `sec_fetch_active`-sharing state machine. Full-universe `load_history`
+(Task #35) is now safe to run.

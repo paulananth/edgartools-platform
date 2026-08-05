@@ -71,8 +71,27 @@ missed (every `INSERT INTO <table>` site in `silver_store.py` accounted for).
 
 ## Impact
 
-Not a strategy decision after all — a straightforward, mechanically-scoped bug fix. Once
-deployed, re-running ticket 42's F5 fix against the 20 sample CIKs should successfully publish
-the corrected (nulled-where-suspect) values, and `load_history`'s full-universe run is no longer
-at risk of the silent-partial-publish-failure mode described in ticket 42's readiness
-assessment.
+Not a strategy decision after all — a straightforward, mechanically-scoped bug fix.
+
+**Done — confirmed live 2026-08-05.** Merged (PR #357, `071f93df`), warehouse image rebuilt
+(digest `sha256:1e967d73a6442c7fb21aaa6cd5515be51bf7cba3fcc22aaad8a845b78d0d5507`, confirmed via
+`docker run` that `merge_earnings_releases`'s source contains `ingested_at = now()`), deployed
+to prod (`edgartools-prod-large:136`). Re-ran ticket 42's exact 20-CIK per-filing sample a third
+time (`ticket42-perfiling-authorityfix-1785928000`, ECS `c430e507cab44ab09006b8a5be0e8c8f`):
+**exited 0**, `silver_database_uploaded: true` — the first successful publish of corrected F5
+data across 3 total per-filing attempts. Live `silver_table_merged` event for
+`sec_earnings_release`: `rows_updated: 30` (candidate correctly won the authority-timestamp
+comparison, no longer ambiguous).
+
+Downloaded the freshly-published canonical and verified directly: Avery Dennison's
+`revenue_gaap` (defect #1, row-classification) is now `NULL` with a fresh `ingested_at`, not
+the wrong `2298.5` value; Oxford Industries' `net_income_gaap` (defect #2's sibling, row-
+selection) is likewise `NULL`, not the earlier `$500,000,000,000` corruption. 104 rows remain
+flagged as suspicious across the sample — confirmed these are exactly the known, documented,
+out-of-scope defect #2 (upstream edgartools scale-detection-miss, e.g. Crown Crafts/CIK 25895,
+Louisiana-Pacific/CIK 60519) — same CIKs as originally found, correctly left untouched (no
+reliable signal to safely act on), not a new regression.
+
+`load_history`'s full-universe run is no longer at risk of the silent-partial-publish-failure
+mode described in ticket 42's readiness assessment — confirmed no running executions on any
+lease-sharing state machine as of this entry.
