@@ -194,11 +194,11 @@ def parse_earnings_release(
             guidance_rejects.extend(rejected)
 
     scale = metrics.get("scale")
-    revenue_gaap = _correct_scale_mismatch(
+    revenue_gaap = _null_if_scale_suspect(
         _to_float(metrics.get("revenue")), scale,
         accession_number=accession_number, field="revenue_gaap",
     )
-    net_income_gaap = _correct_scale_mismatch(
+    net_income_gaap = _null_if_scale_suspect(
         _to_float(metrics.get("net_income")), scale,
         accession_number=accession_number, field="net_income_gaap",
     )
@@ -232,25 +232,41 @@ def _fiscal_period_to_quarter(fp: Any) -> int | None:
     return {"Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4}.get(str(fp).upper())
 
 
-def _correct_scale_mismatch(
+def _null_if_scale_suspect(
     value: float | None, scale: Any, *, accession_number: str, field: str,
 ) -> float | None:
-    """Reverse a known edgartools row-classification defect that leaves a single
-    AMOUNT-typed value unscaled while its sibling rows in the same table scale
-    correctly (Ticket 42, 2026-08-05: edgartools 5.30.0's ``EarningsRelease``
-    occasionally misclassifies the revenue row's ``RowType`` -- e.g. "Net sales"
-    comes back PERCENTAGE instead of AMOUNT -- so ``get_key_metrics()`` skips
-    multiplying it by the table's own already-*correctly*-detected ``scale``,
-    while an adjacent AMOUNT-classified row like net income in the identical
-    table scales fine. Confirmed live against real cached bytes; not fixed in
-    any edgartools release through 5.45.1).
+    """Quarantine a GAAP value whose magnitude is implausible given the table's
+    own detected scale, rather than trying to guess a correction.
 
-    Only acts when edgartools DID detect a real (non-UNITS) scale for the
-    document/table -- if ``scale`` itself is UNITS or unknown, that's a
-    *different*, currently-unhandled upstream defect (the scale-detection
-    regex missing the document's own scale note entirely; see the same ticket)
-    and there is no reliable signal here to correct from, so the value is left
-    untouched rather than guessed at.
+    Ticket 42 (2026-08-05) confirmed TWO distinct, independent upstream
+    edgartools defects that both produce this exact "scale says millions, but
+    the value is small" symptom:
+
+    1. Row-classification defect (Avery Dennison, CIK 8818): the value IS the
+       real headline figure, just genuinely never multiplied by the table's
+       correctly-detected scale (a row-type misclassification skips it).
+       Reapplying the scale here would be correct.
+    2. Row-*selection* defect (Oxford Industries, CIK 75288, accession
+       0001171843-19-008069): in a complex multi-segment/non-GAAP-
+       reconciliation table with duplicate/near-duplicate row labels (e.g.
+       "Net earnings" vs "Adjustment to net earnings(9)"), edgartools grabs
+       the value from the WRONG row entirely. That value is already correctly
+       scaled for *its actual row* -- multiplying it again produces a
+       result many orders of magnitude too large (observed live: a real
+       $500,000 non-headline figure "corrected" to $500,000,000,000).
+
+    Both defects produce an identical signature in ``get_key_metrics()``'s
+    return value -- there is no way to distinguish them from the metrics dict
+    alone (which row a value came from isn't exposed). An earlier version of
+    this function guessed case 1 and multiplied unconditionally; deployed to
+    prod, it was caught immediately reproducing case 2 on real data before
+    any bad value reached canonical silver (blocked by the pre-existing
+    same-key-conflict merge protection on this already-published accession --
+    that protection will NOT save a brand-new accession with no existing
+    canonical row to conflict against). Guessing is unsafe. Null the value
+    instead: downstream never sees a plausible-looking wrong number, and a
+    NULL is trivially revisable later without ever having published a wrong
+    one.
     """
     if value is None or scale is None:
         return value
@@ -258,12 +274,11 @@ def _correct_scale_mismatch(
     if scale_value <= 1:
         return value
     if value != 0 and abs(value) < scale_value:
-        corrected = value * scale_value
         logger.warning(
-            "earnings_release_magnitude_corrected: %s field=%s raw=%s scale=%s corrected=%s",
-            accession_number, field, value, scale, corrected,
+            "earnings_release_magnitude_suspect: %s field=%s raw=%s scale=%s -- nulled",
+            accession_number, field, value, scale,
         )
-        return corrected
+        return None
     return value
 
 
