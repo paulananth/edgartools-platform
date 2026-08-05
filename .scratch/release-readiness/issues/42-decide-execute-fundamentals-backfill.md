@@ -399,3 +399,75 @@ signal to safely correct from, and guessing would risk introducing new wrong val
   regressions.
 
 Not yet committed/PR'd/deployed/re-verified against a live re-run — awaiting go-ahead.
+
+### Shipped, caught a live regression, hardened, re-verified — 2026-08-05
+
+Shipped per user go-ahead (mirroring ticket 97's sequence): committed, PR #355, merged
+(`a058a6e1`), warehouse image rebuilt (digest `sha256:7298beee...`, confirmed via `docker run`
+that `_correct_scale_mismatch` was present), deployed to prod (`edgartools-prod-large:134`),
+re-ran the 20-CIK per-filing sample (`ticket42-perfiling-scalefix-1785925000`, ECS
+`a933daee45e64ff2a4b291957eb5ac69`).
+
+**Caught a real regression before any bad data landed.** Live logs showed the fix correctly
+multiplying most values (e.g. `2065.0 → 2,065,000,000`), but also five clearly-wrong
+corrections on Oxford Industries (CIK 75288, accession `0001171843-19-008069`): e.g.
+`net_income_gaap raw=500000.0 → corrected=500000000000.0` ($500K "corrected" to $500B).
+Investigated live: this exhibit is a complex multi-segment/non-GAAP-reconciliation table with
+duplicate/near-duplicate row labels (`"Net earnings"` vs `"Adjustment to net earnings(9)"`).
+edgartools' `get_key_metrics()` grabbed the value from the wrong row entirely — a value that
+IS correctly scaled for *its actual row*, just not the headline figure. This is a **third,
+independent upstream edgartools defect** (row-*selection* ambiguity, distinct from both defect
+#1 row-classification and defect #2 scale-detection-miss documented above), and it produces an
+identical signature to defect #1 in `get_key_metrics()`'s return value — no way to tell them
+apart without knowing which row a value came from, which isn't exposed. The multiply-based
+"correction" could not safely distinguish them.
+
+The ECS task failed on its own before publishing (`SemanticMergeConflictError`, the same
+fail-closed protection from ticket 97 — canonical still had the old raw small value, the newly
+computed "corrected" value differed, `sec_earnings_release` has no `authority_column`, so the
+merge correctly refused to publish). Confirmed via CloudWatch logs that no `silver_database_
+uploaded` event occurred. **Canonical prod silver was never touched by the buggy correction** —
+protected by an unrelated, pre-existing safety mechanism, not by anything in this fix itself.
+Also ran `aws ecs stop-task` as an immediate precaution the moment the bad values were spotted
+mid-run; the task had already failed on its own by that point (redundant, but the intent was to
+not depend on a race).
+
+**Hardened immediately given the live-risk window** (a brand-new accession with no existing
+canonical row would not have had the conflict-protection safety net): `_correct_scale_mismatch`
+replaced with `_null_if_scale_suspect` — nulls the suspect field instead of guessing a
+correction. A NULL is trivially revisable later without ever having published a wrong number.
+4 of 5 tests rewritten to assert nulling (including a new explicit Oxford Industries regression
+case); full suite 1016 passed, 4 skipped. Committed, PR #356, merged (`601cdd1b`), image rebuilt
+(digest `sha256:1542c6df...`, confirmed via `docker run` that `_null_if_scale_suspect` is
+present), deployed to prod (`edgartools-prod-large:135`).
+
+Re-ran the identical 20-CIK sample a third time (`ticket42-perfiling-nullfix-1785926200`, ECS
+`3fab2f14af774fd0894b9fafe0b66c16`): logs confirm every suspect value is now nulled
+(`earnings_release_magnitude_suspect: ... -- nulled`), no more astronomical corrections. Task
+again failed to publish — **same** `SemanticMergeConflictError`, now on the NULL-vs-old-raw-
+value diff instead of a wrong-multiplied-value diff. Canonical prod silver remains at its
+pre-fix state (still holding the original 128 wrong-magnitude rows from the first per-filing
+run, documented above).
+
+**New, separate, unresolved structural finding:** `sec_earnings_release` has no
+`authority_column` and `revenue_gaap`/`net_income_gaap` are not `provenance_columns`, so
+**any** change to these fields for an already-published accession — whether a genuine bug fix
+(this one) or any future correction — is unconditionally treated as an ambiguous same-key
+conflict and blocks the entire run's publish. This is architecturally identical in shape to
+ticket 97's `sec_filing_attachment.raw_object_id` finding, but the resolution can't be the same
+(excluding these columns from comparison entirely would silently accept *any* future drift,
+including real errors — the opposite of what's wanted for headline financial metrics). Likely
+needs its own authority strategy (e.g. `parser_version`-based: a newer `PARSER_VERSION` wins) or
+an explicit one-time backfill/force path, not a provenance-column exclusion. **Not resolved in
+this pass** — this blocks getting the corrected (now NULL-for-suspect-values) F5 data into
+canonical for the 20 already-published sample accessions specifically. It does **not** block
+brand-new accessions (no existing canonical row = no conflict = normal INSERT), so ongoing/future
+F5 ingestion (daily_incremental, load_history for CIKs not yet loaded) is safe with the hardened
+parser as deployed.
+
+**Current state:** hardened, safe fix (`_null_if_scale_suspect`) is live in prod
+(`edgartools-prod-large:135`) and protects all *future* F5 ingestion from both known defect
+shapes. The 128 already-published wrong-magnitude rows from the pre-fix run remain wrong in
+canonical prod silver until the merge-policy gap above is resolved. Full-universe `load_history`
+(Task #35) is safe to proceed with the current deployed fix for CIKs not yet loaded; it will not
+retroactively fix the 20-CIK sample's already-published bad rows.

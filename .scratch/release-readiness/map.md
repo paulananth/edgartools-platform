@@ -156,6 +156,10 @@ Claimed, in progress:
 
 - [Decide and execute the fundamentals pipeline backfill (F4/F5/F9/F11)](issues/42-decide-execute-fundamentals-backfill.md) — stage 1 (single-CIK smoke test) executed live, mixed result, paused pending operator decision on two newly-found bugs (see hygiene (n))
 
+Open, unclaimed:
+
+12. [Decide an authority strategy for sec_earnings_release GAAP columns](issues/98-decide-sec-earnings-release-authority-column.md) — found live 2026-08-05 verifying ticket 42's F5 fix: `sec_earnings_release` has no `authority_column`, so any change to `revenue_gaap`/`net_income_gaap` for an already-published accession — correct fix or future regression alike — is an unconditional same-key conflict that blocks publish. Blocks getting the (now correctly-nulled) F5 values for the 20 sample CIKs' already-published rows into canonical; does not block new F5 ingestion.
+
 ## Hygiene log
 
 - **2026-08-03 (ab):** Full timeline-vs-ticket cross-check of the four chained
