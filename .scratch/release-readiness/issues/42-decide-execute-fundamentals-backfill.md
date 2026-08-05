@@ -254,3 +254,20 @@ failure. Not yet deployed to prod.
 
 **Next:** sample backfill (10-20 diverse CIKs) for F4/F9/F5, then full-universe `load_history`
 if the sample passes. See below for results.
+
+### Sample backfill: PASS 2026-08-05 (4th attempt, after tickets 96 and 97)
+
+The same 20-CIK sample (`1800,8818,10329,14177,15615,16160,22701,23194,25895,27093,27996,60519,
+75288,77543,82020,277638,764180,875355,1064728,1603978`) had failed 3 prior times — attempts 1-2
+were the pre-ticket-96 edgartools whole-market-scan timeouts; attempt 3
+(`ticket42-sample-artifacts-retry3-postticket96-1785887896`) got past the fetch phase but exited
+2 on 147 `sec_filing_attachment.raw_object_id` conflicts, root-caused and fixed as
+[ticket 97](97-fix-filing-attachment-raw-object-id-conflicts.md). Re-ran the identical CIK list
+(`ticket42-sample-artifacts-retry4-postticket97-1785894075`, ECS task
+`20a3e448c6ae4a91940234a761c5eb90`) against the ticket-97-fixed image: **exited 0**, first clean
+end-to-end pass. 3,149 accessions processed (221 known immutable-object-conflict skips, circuit
+breaker stayed closed), all 31 protected tables merged without ambiguous conflicts, canonical
+silver published, run manifest written. F4/F9/F5 sample criteria (real row counts + spot-check
+values, per this ticket's original pass criteria) not yet re-verified against the freshly
+published canonical — that check plus the full-universe `load_history` decision are the
+remaining open items.

@@ -82,3 +82,18 @@ live 147-conflict evidence and the downstream-non-consumption check.
 Fix implemented and tested; PR merged; prod warehouse image rebuilt/redeployed; ticket 42's
 sample backfill retry re-run and confirmed to pass the silver-merge/publish step without
 raw_object_id conflicts.
+
+**Done — confirmed live 2026-08-05.** Merged as PR #354 (`61902a40`), warehouse image rebuilt
+(digest `sha256:2ab0b426187e955b0c2250eea707db72a4a242d736de1ca8367732d75b51fb12`, confirmed via
+direct `docker run` that `sec_filing_attachment`'s `provenance_columns` contains `raw_object_id`
+before deploying), deployed to prod (`edgartools-prod-large:132`). Re-ran ticket 42's exact
+20-CIK sample backfill (`ticket42-sample-artifacts-retry4-postticket97-1785894075`, ECS task
+`20a3e448c6ae4a91940234a761c5eb90`): **exited 0** for the first time across 4 attempts (prior 3
+all failed at the merge step, exit code 2). Live `silver_table_merged` event for
+`sec_filing_attachment`: `rows_inserted: 8212, rows_updated: 0, rows_unchanged: 327205` — zero
+conflicts, exactly the table/column that blocked all prior attempts. Every other protected table
+also merged cleanly (13F holdings at 6.8M rows, ownership transactions with real inserts,
+financial facts, etc.), circuit breaker stayed closed, and a run manifest was published to
+bronze. Full run: 42.8 min artifact-fetch phase (3,149 accessions, 221 known immutable-object
+conflicts correctly skipped) + a few minutes of merge/publish, well within the historical
+timing envelope.
