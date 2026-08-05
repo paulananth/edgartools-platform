@@ -1,8 +1,8 @@
 # Decide the target architecture for Stage0CompanyIdentity's windowed silver read/write
 
 Type: grilling
-Status: open
-Blocked by: 01, 02
+Status: claimed
+Blocked by: 01, 02, 04
 
 ## Question
 
@@ -39,3 +39,47 @@ Also decide: does the same fix apply verbatim to `daily_incremental`'s own
 narrowed CIK set, or is that explicitly out of scope for this decision
 (see map's Notes on the existing duplication-convention between the two
 state-machine-generation functions)?
+
+## Progress (grilling session, 2026-08-05)
+
+Locked so far, pending ticket 04's redrive verification before this
+ticket can be marked `resolved`:
+
+1. **Direction: option 2, the full fix** (selective/minimal-table hydrate
+   *and* delta-then-reduce restructuring), not option 1 (hydrate-only) or
+   a middle path. The ~2.1hr repeated-I/O cost ticket 02 found is worth
+   solving now, not deferring.
+2. **Sequencing: the `reduce_identity_refresh` disk-accumulation fix
+   (ticket 01's Q5) ships as its own standalone prerequisite**, before the
+   Stage0 restructuring — it's a real, independent bug already affecting
+   `daily_incremental` today (not load_history-specific), small and
+   mechanical (stop accumulating `merged-{index}.duckdb` files between
+   candidates — reuse a single output path or delete the prior file after
+   each merge), and gates the larger restructuring safely. Does not need
+   its own wayfinder ticket — no open design question about *whether* to
+   fix it, only a small, already-sketched-in-ticket-01 implementation
+   choice left to the engineer doing the fix.
+3. **Failure isolation: do not accept the tradeoff on faith.** Per the
+   operator's explicit instruction, this ticket cannot resolve to
+   delta-then-reduce as a locked answer until ticket 04 verifies (with
+   primary-source evidence, not "plausible") that AWS Step Functions
+   Distributed Map redrive actually provides safe, batch-level
+   resumability for this exact manifest/delta shape. If ticket 04 finds
+   redrive does NOT cleanly apply, this ticket reopens the failure-
+   isolation question (design an explicit partial-promotion mechanism, or
+   a different mitigation ticket 04's own Q4 may surface) before final
+   answer.
+4. **Scope: `load_history` only.** `daily_incremental`'s Stage0
+   CompanyIdentity is only ever exercised in its already-bounded
+   (CIK-list + `identity_refresh_run_id`) form in production — its
+   unbounded path has zero prod executions ever (per CLAUDE.md). No live
+   urgency there; this decision does not extend to restructuring it. The
+   existing duplication-convention comments between
+   `write_load_history_definition` and `write_warehouse_mdm_gold_
+   definition` mean the two Stage0CompanyIdentity definitions may drift
+   apart as a result — accepted, not treated as a defect of this decision.
+
+**Not yet locked:** the concrete implementation shape (exact CLI flags,
+state-machine wiring, redrive-triggering mechanism if needed) — that's
+implementation detail for the follow-up session per this map's Notes, not
+this ticket's job to specify.

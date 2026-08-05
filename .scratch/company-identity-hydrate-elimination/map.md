@@ -100,15 +100,12 @@ idempotency (must not silently multiply real SEC API calls).
 
 ## Not yet specified
 
-- Whether a "selective/minimal-table hydrate" (attach only the small
-  tables company-identity mode actually reads/writes — e.g. `sec_company`,
-  `sec_company_filing`, `sec_company_address`, `sec_company_former_name`,
-  `sec_raw_object` for cache-skip — skipping the 6.8M-row 13F and 434K-row
-  financial-fact tables) is sufficient on its own, or whether the
-  per-window publish cost (independent of what was hydrated in) also needs
-  restructuring (e.g. batching multiple windows into fewer publishes).
 - Whatever concrete migration/rollout plan is needed once the target
   architecture is chosen (this graduates once ticket 03 resolves).
+- The exact fix shape for `reduce_identity_refresh`'s per-candidate disk
+  accumulation (reuse one output path vs. delete-after-each-merge) — left
+  to the implementing engineer per ticket 03's progress notes, not a
+  design decision this map needs to specify further.
 
 ## Out of scope
 
