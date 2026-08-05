@@ -180,7 +180,24 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
         ),
     ),
     "sec_filing_attachment": ProtectedTablePolicy(
-        "sec_filing_attachment", ("accession_number", "document_name")
+        "sec_filing_attachment",
+        ("accession_number", "document_name"),
+        # raw_object_id is a content hash (sha256) pointing at externally-
+        # fetched bytes -- the same class of drift sec_raw_object's own
+        # provenance_columns comment documents (SEC serves slightly
+        # different bytes on refetch of "the same" document over time).
+        # This table declares no authority_column at all (no timestamp
+        # column exists in the DDL to add one to without a schema
+        # migration), so any raw_object_id difference was unconditionally
+        # ambiguous -- confirmed live (Ticket 97): a 20-CIK sample backfill
+        # retry produced 147 such conflicts, 100% on this one column.
+        # raw_object_id is not otherwise consumed downstream (no gold/
+        # serving/mdm reads it; the real content<->hash identity work
+        # happens in sec_raw_object, keyed by the hash itself), so
+        # canonical's first-observed value can safely stay authoritative
+        # without contest, the same way sec_raw_object's own recurrence
+        # class is handled.
+        provenance_columns=frozenset({"raw_object_id"}),
     ),
     "sec_filing_text": ProtectedTablePolicy(
         "sec_filing_text", ("accession_number", "text_version"), authority_column="extracted_at"
