@@ -95,7 +95,7 @@ idempotency (must not silently multiply real SEC API calls).
 
 <!-- Closed ticket decisions — one-line gist + link; detail lives in the ticket. -->
 
-(none yet)
+- [What is Stage0CompanyIdentity's actual per-window cost breakdown, and would a minimal/selective hydrate be enough on its own?](issues/02-per-window-cost-breakdown.md) — No. Selective hydrate fixes the OOM (peak memory) but has zero effect on publish cost: `_publish_silver_database_if_remote` independently re-downloads canonical fresh from S3 and merges into *that* copy, never touching whatever hydrate loaded — the two are architecturally decoupled. `merge_candidate_into_canonical`'s dominant cost is an unconditional full-file `shutil.copy2` of canonical, independent of candidate size. Order-of-magnitude estimate: today's per-window shape costs ~2.1 hours of repeated full-canonical S3 I/O across 53 windows, vs. ~5-10 minutes for a delta-then-reduce restructuring (~15-25x gap, widening as canonical grows). Recommendation for ticket 03: treat selective hydrate and publish restructuring as two separable, both-necessary fixes, not a choice.
 
 ## Not yet specified
 
