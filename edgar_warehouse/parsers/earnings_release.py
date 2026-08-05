@@ -193,6 +193,16 @@ def parse_earnings_release(
             guidance_rows = accepted
             guidance_rejects.extend(rejected)
 
+    scale = metrics.get("scale")
+    revenue_gaap = _correct_scale_mismatch(
+        _to_float(metrics.get("revenue")), scale,
+        accession_number=accession_number, field="revenue_gaap",
+    )
+    net_income_gaap = _correct_scale_mismatch(
+        _to_float(metrics.get("net_income")), scale,
+        accession_number=accession_number, field="net_income_gaap",
+    )
+
     row = {
         "cik": int(cik),
         "accession_number": accession_number,
@@ -200,8 +210,8 @@ def parse_earnings_release(
         "fiscal_year": fiscal_year,
         "fiscal_quarter": _fiscal_period_to_quarter(period_info.get("fiscal_period")),
         "period_end": period_info.get("period_end"),
-        "revenue_gaap": _to_float(metrics.get("revenue")),
-        "net_income_gaap": _to_float(metrics.get("net_income")),
+        "revenue_gaap": revenue_gaap,
+        "net_income_gaap": net_income_gaap,
         "eps_gaap_diluted": _to_float(metrics.get("eps_diluted")),
         "has_non_gaap": has_non_gaap,
         "has_guidance": has_guidance,
@@ -220,6 +230,41 @@ def _fiscal_period_to_quarter(fp: Any) -> int | None:
     if not fp:
         return None
     return {"Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4}.get(str(fp).upper())
+
+
+def _correct_scale_mismatch(
+    value: float | None, scale: Any, *, accession_number: str, field: str,
+) -> float | None:
+    """Reverse a known edgartools row-classification defect that leaves a single
+    AMOUNT-typed value unscaled while its sibling rows in the same table scale
+    correctly (Ticket 42, 2026-08-05: edgartools 5.30.0's ``EarningsRelease``
+    occasionally misclassifies the revenue row's ``RowType`` -- e.g. "Net sales"
+    comes back PERCENTAGE instead of AMOUNT -- so ``get_key_metrics()`` skips
+    multiplying it by the table's own already-*correctly*-detected ``scale``,
+    while an adjacent AMOUNT-classified row like net income in the identical
+    table scales fine. Confirmed live against real cached bytes; not fixed in
+    any edgartools release through 5.45.1).
+
+    Only acts when edgartools DID detect a real (non-UNITS) scale for the
+    document/table -- if ``scale`` itself is UNITS or unknown, that's a
+    *different*, currently-unhandled upstream defect (the scale-detection
+    regex missing the document's own scale note entirely; see the same ticket)
+    and there is no reliable signal here to correct from, so the value is left
+    untouched rather than guessed at.
+    """
+    if value is None or scale is None:
+        return value
+    scale_value = getattr(scale, "value", 1)
+    if scale_value <= 1:
+        return value
+    if value != 0 and abs(value) < scale_value:
+        corrected = value * scale_value
+        logger.warning(
+            "earnings_release_magnitude_corrected: %s field=%s raw=%s scale=%s corrected=%s",
+            accession_number, field, value, scale, corrected,
+        )
+        return corrected
+    return value
 
 
 def _to_float(value: Any) -> float | None:

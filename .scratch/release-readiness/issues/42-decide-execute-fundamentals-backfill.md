@@ -271,3 +271,131 @@ silver published, run manifest written. F4/F9/F5 sample criteria (real row count
 values, per this ticket's original pass criteria) not yet re-verified against the freshly
 published canonical — that check plus the full-universe `load_history` decision are the
 remaining open items.
+
+### F4/F9/F5 re-verification against fresh canonical (2026-08-05)
+
+Downloaded the freshly-published canonical `silver.duckdb` (post-attempt-4,
+`2026-08-04 22:28:59`) and queried directly (not trusting log row counts alone).
+
+**F4/F9 (`sec_financial_fact`/`sec_financial_derived`): PASS.** Real data present for all 20
+sample CIKs; spot-checked Abbott Laboratories' (CIK 1800) FY2024 revenue against known public
+figures — correct.
+
+**F5 (`sec_earnings_release`): initially FAIL — empty.** 0 rows for all 20 sample CIKs. 5-whys:
+all 4 prior retries ran `bootstrap-batch` (the ownership/ADV/13F artifact pipeline), never
+`bootstrap-fundamentals --mode per-filing` (the command that actually populates
+`sec_earnings_release`) — a conflated-command gap, not a code defect. Confirmed both F5-specific
+prerequisites still held before re-running: Item 2.02 8-K attachment coverage across the 20 CIKs
+(97.8%/87.3%), and both previously-fixed F5 bugs (`_is_item_202_candidate_form` item-selection,
+EX-99.1-vs-primary-document exhibit selection) present via grep in the currently-deployed image's
+source commit.
+
+Ran `bootstrap-fundamentals --mode per-filing --cik-list <same 20 CIKs>`
+(ECS `bc905b97cab2402e8a0f04335a416f59`, RUN_ID `ticket42-perfiling-sample-1785924446`): exited 0
+in 636s. `bootstrap_fundamentals_completed`: 3,334 filings scanned, 1,773 parsed, 861
+`sec_earnings_release` rows written (plus 1,915 `sec_executive_record`, 71
+`sec_employment_event`), silver re-published to S3.
+
+Re-downloaded the freshly-published canonical and queried again: all 20/20 sample CIKs now have
+`sec_earnings_release` rows (9–83 rows each, 861 total matching the log). Spot-checked Abbott
+Laboratories (CIK 1800, 30 rows spanning 2018–2026): quarterly revenue/net-income/EPS values
+match Abbott's known real public earnings figures and dates line up with its actual quarterly
+release cadence (mid-Jan/mid-Apr/mid-Jul/mid-Oct) — correct.
+
+**New defect found — wrong-magnitude values, ~15% of sample rows.** Per this ticket's own pass
+bar ("wrong-magnitude values are a fail even if rows exist"), scanned all 861 sample rows for
+implausibly small `revenue_gaap`/`net_income_gaap` given each company's real scale. **128 of 861
+rows (15%), across 15 of the 20 sample CIKs** have values that were clearly reported "in
+millions"/"in thousands" in the source document but never scaled to whole dollars.
+`edgar_warehouse/parsers/earnings_release.py` does no scaling of its own by design (see the
+file's own "WHY-STUB" comment) — it delegates entirely to edgartools' `EarningsRelease`/
+`FinancialTable` classes. Investigated edgartools' actual behavior directly (installed 5.30.0,
+`.venv/.../edgar/earnings.py`), not guessed — re-ran `EarningsRelease` against the real cached
+exhibit bytes for two failing accessions, pulled straight from bronze S3. This surfaced **two
+distinct upstream edgartools defects**, both live in 5.30.0 and, per a full changelog review
+through the current latest (5.45.1, PyPI `edgartools`, checked 2026-08-05), **neither has been
+fixed in any release since** — no changelog entry after 5.23.3 (2026-03-15, the release that
+introduced the current parenthetical-pattern regex) touches `EarningsRelease` scale or row-type
+logic at all:
+
+1. **Row-type misclassification** (Avery Dennison, CIK 8818, accession `0000008818-26-000075`).
+   Table-level scale *is* correctly detected as `MILLIONS` (`inc.scale == Scale.MILLIONS`,
+   confirmed live). But `get_key_metrics()` only scales a row when
+   `get_row_type(label, position) == RowType.AMOUNT`; the "Net sales" row (revenue, position 0)
+   comes back `RowType.PERCENTAGE` instead of `AMOUNT`, so it's skipped while the very next
+   `AMOUNT`-classified row (net income) in the same table scales correctly — reproduced exactly
+   this shape live: `revenue_gaap=2298.5` (unscaled) next to correctly-scaled
+   `net_income_gaap=168100000.0` in one row. `_classify_row_type("Net sales", "")` called
+   directly returns `AMOUNT` as expected — the label text itself doesn't match any PERCENTAGE
+   pattern (`margin`, `as a percentage`, etc.) — so the bug is upstream of that function, in how
+   `_extract_tables()` builds the positional `row_types` list: it pulls per-row
+   `parent_contexts` from `df.attrs['_row_parent_contexts']` (set by `_extract_clean_dataframe`,
+   a separate table-hierarchy-detection routine), and this document's row-hierarchy detection
+   appears to mis-assign a nearby percentage row's parent context onto the revenue row.
+
+2. **Scale-detection miss** (Louisiana-Pacific Corp, CIK 60519, ticker `LPX` — mislabeled "L.B.
+   Foster" earlier; this CIK had the most suspicious rows, 32/55). The source document states
+   `"(dollar amounts in millions, except per share amounts)"` directly above the income
+   statement table (confirmed by grepping the raw cached HTML) — but LPX's table-level
+   `inc.scale` still resolves to `Scale.UNITS`, so *every* AMOUNT row in the table is wrong, not
+   just revenue (explaining why this CIK has far more bad rows than Avery Dennison's single-row
+   miss). Root cause: the document-level `detected_scale` regex
+   (`\((?:dollars |amounts |figures )?in\s+millions`) requires exactly one of three literal
+   prefix words directly after `"("` — `"(dollar amounts in millions"` has *two* words
+   ("dollar" + "amounts") before "in millions", and "dollar" (singular) isn't one of the three
+   allowed prefixes anyway, so it doesn't match. The table-level `_detect_table_scale()` has a
+   looser fallback (substring `"in millions"` in up-to-3 preceding sibling nodes), which should
+   catch this phrasing — but evidently the caption paragraph isn't within that 3-sibling/DOM-
+   proximity window for this document's actual markup structure, so it falls through to the
+   equally-blind document-level regex and lands on `UNITS`. This is the same brittle-regex defect
+   *class* edgartools itself fixed for a different class (`ConceptReport.currency_scaling`,
+   changelog 5.31.2, GH #807 — "narrow text match... silently fell through to the default of 1"
+   for phrasing like `"Dollars in Millions"`) — but that fix was never applied to
+   `EarningsRelease`.
+
+Both are genuine, reproducible defects in the third-party `edgartools` package we depend on via
+PyPI (`edgartools>=5.29.0`, CLAUDE.md) — not in this repo's parser or orchestrator code, and not
+fixable by upgrading (no release since 5.23.3 touches this path).
+
+**Not yet decided:** whether this blocks the full-universe `load_history` run (Task #35), needs
+a corrective heuristic in this repo's parser layer (e.g. a plausibility check comparing
+`revenue_gaap` against the company's own other filings, or against `net_income_gaap` magnitude in
+the same row, to catch an unscaled outlier), an upstream edgartools issue report (both defects are
+precisely reproducible with a two-line repro against real cached bytes — worth filing regardless
+of what we decide to do locally), or is accepted as a known, tracked limitation of F5 for now.
+Needs a decision before Task #35/#36 proceed.
+
+### Fix implemented for defect #1 (row-classification mismatch) — 2026-08-05
+
+Decision: build a repo-side correction for defect #1 only (mechanically well-understood and
+safely correctable — edgartools already tells us the document's real scale via `metrics['scale']`,
+it just fails to apply it to one misclassified row). Explicitly **not** attempting to fix defect
+#2 (scale-detection-miss, LPX-shaped) — that requires an independent secondary scale-detection
+pass with no reliable in-row signal to correct from, materially bigger scope and higher
+false-positive risk than reapplying a scale edgartools already detected. Filing an upstream
+edgartools issue for both defects is still worthwhile (two-line repros in hand) but not done as
+part of this pass.
+
+`edgar_warehouse/parsers/earnings_release.py`: added `_correct_scale_mismatch()`, applied to
+`revenue_gaap` and `net_income_gaap`. When `metrics['scale']` is a real non-UNITS scale (meaning
+edgartools *did* detect the table's scale) and a value's magnitude is implausibly below that
+scale's unit (e.g. `2298.5` when scale is MILLIONS), it's corrected by reapplying the same
+multiplier edgartools itself determined for the table — not a guessed/independent scale. A
+correction is logged (`earnings_release_magnitude_corrected`, includes accession/field/raw/scale/
+corrected) so every correction stays auditable. When `scale` is UNITS or absent (defect #2's
+shape, or older/test metrics dicts without a `scale` key), values are left untouched — no
+signal to safely correct from, and guessing would risk introducing new wrong values.
+
+**Validation:**
+- `tests/unit/test_earnings_release_scale_correction.py` (4 new tests): reproduces the exact live
+  Avery Dennison shape (revenue unscaled, net_income scaled, same row) → revenue corrected,
+  net_income untouched; already-correctly-scaled values → untouched (no double-scaling); LPX's
+  scale-UNITS shape → untouched (defect #2 correctly left alone, not guessed at); missing
+  `scale` key (matches this repo's existing `test_earnings_release_guidance_wiring.py` mock
+  shape) → untouched, backward compatible. Confirmed via `git stash` that the first test fails
+  with the exact expected pre-fix value (`2298.5 != 2298500000.0`) before the fix and passes
+  after.
+- Full suite (`tests/unit tests/application`): 1015 passed, 4 skipped, no failures, no
+  regressions.
+
+Not yet committed/PR'd/deployed/re-verified against a live re-run — awaiting go-ahead.
