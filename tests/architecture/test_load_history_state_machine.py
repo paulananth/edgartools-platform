@@ -362,6 +362,20 @@ def test_stage0_company_identity_command_shape(definition: dict) -> None:
     assert "'--cik-limit'" in cmd
 
 
+def test_stage0_company_identity_uses_large_task_definition(definition: dict) -> None:
+    """Regression guard (live prod OOM, 2026-08-05): this windowed form (no
+    explicit --cik-list) takes bootstrap_fundamentals.py's full-hydrate
+    branch -- it downloads and opens the ENTIRE canonical silver.duckdb
+    before resolving its own tiny CIK window. As canonical has grown (6.8M-
+    row sec_thirteenf_holding, 4.7M-row sec_company_filing), this OOM-killed
+    (exit 137) on medium's 4096MB across all 4 attempts for a real window.
+    Must run on the large (8192MB) task definition, same OOM-class fix as
+    gold-build-memory-reliability ticket 03's run_wh."""
+    state = definition["States"]["Stage0CompanyIdentity"]
+    inner = state["ItemProcessor"]["States"]["RunCompanyIdentityWindow"]
+    assert inner["Parameters"]["TaskDefinition"] == "arn:wh-large"
+
+
 def test_stage0_company_identity_is_strict_not_lenient(definition: dict) -> None:
     """Unlike Branch B's lenient AD-13 pattern (Catch -> proceed anyway), a
     company-identity failure must abort the run: IS_INSIDER derivation
