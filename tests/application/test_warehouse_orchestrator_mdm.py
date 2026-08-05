@@ -1229,6 +1229,111 @@ def test_merge_treats_every_raw_object_fetch_context_column_as_non_conflicting(t
     assert result.rows_updated.get("sec_raw_object", 0) == 0
 
 
+def test_merge_treats_filing_attachment_raw_object_id_drift_as_non_conflicting(tmp_path):
+    """Regression (Ticket 97): sec_filing_attachment declares no
+    authority_column (no timestamp column exists in its DDL to add one to
+    without a schema migration), so a raw_object_id difference on refetch --
+    SEC serves slightly different bytes for "the same" document over time,
+    the same phenomenon sec_raw_object's own provenance_columns handles --
+    was unconditionally ambiguous. Production hit exactly this: a 20-CIK
+    sample backfill retry produced 147 such conflicts, 100% on raw_object_id
+    alone. raw_object_id is declared provenance for this table; a same-key
+    row that only differs there must merge as unchanged, not abort."""
+    from edgar_warehouse.silver_protection import merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+    ddl = (
+        "CREATE TABLE sec_filing_attachment ("
+        "accession_number TEXT, sequence_number TEXT, document_name TEXT, "
+        "document_type TEXT, document_description TEXT, document_url TEXT, "
+        "is_primary BOOLEAN, raw_object_id TEXT, last_sync_run_id TEXT, "
+        "PRIMARY KEY (accession_number, document_name))"
+    )
+    _make_duckdb(
+        canonical,
+        ddl,
+        [
+            "INSERT INTO sec_filing_attachment VALUES ("
+            "'0000764180-23-000066', '1', 'a2023defa14amay2023.htm', "
+            "'DEF 14A', 'Proxy', 'https://sec.gov/a2023defa14amay2023.htm', "
+            "true, 'sha256-original', 'run-1')"
+        ],
+    )
+    # Candidate refetched the identical logical document; SEC served
+    # slightly different bytes, so the content hash differs.
+    _make_duckdb(
+        candidate,
+        ddl,
+        [
+            "INSERT INTO sec_filing_attachment VALUES ("
+            "'0000764180-23-000066', '1', 'a2023defa14amay2023.htm', "
+            "'DEF 14A', 'Proxy', 'https://sec.gov/a2023defa14amay2023.htm', "
+            "true, 'sha256-refetched', 'run-2')"
+        ],
+    )
+
+    result = merge_candidate_into_canonical(candidate, canonical, output)
+
+    assert result.rows_unchanged.get("sec_filing_attachment", 0) == 1
+    assert result.rows_updated.get("sec_filing_attachment", 0) == 0
+    conn = duckdb.connect(str(output))
+    row = conn.execute(
+        "SELECT raw_object_id FROM sec_filing_attachment "
+        "WHERE accession_number = ? AND document_name = ?",
+        ["0000764180-23-000066", "a2023defa14amay2023.htm"],
+    ).fetchone()
+    conn.close()
+    # Canonical's first-seen raw_object_id is preserved, not overwritten.
+    assert row == ("sha256-original",)
+
+
+def test_merge_still_flags_filing_attachment_genuine_content_conflict(tmp_path):
+    """The raw_object_id exclusion (Ticket 97) must not become a blanket
+    exemption for this table: a same-key row differing on a real business
+    column (document_type here) is still a genuine ambiguous conflict and
+    must still abort the merge."""
+    from edgar_warehouse.silver_protection import SemanticMergeConflictError, merge_candidate_into_canonical
+
+    canonical = tmp_path / "canonical.duckdb"
+    candidate = tmp_path / "candidate.duckdb"
+    output = tmp_path / "output.duckdb"
+    ddl = (
+        "CREATE TABLE sec_filing_attachment ("
+        "accession_number TEXT, sequence_number TEXT, document_name TEXT, "
+        "document_type TEXT, document_description TEXT, document_url TEXT, "
+        "is_primary BOOLEAN, raw_object_id TEXT, last_sync_run_id TEXT, "
+        "PRIMARY KEY (accession_number, document_name))"
+    )
+    _make_duckdb(
+        canonical,
+        ddl,
+        [
+            "INSERT INTO sec_filing_attachment VALUES ("
+            "'acc-1', '1', 'doc.htm', 'EX-99.1', 'Exhibit', "
+            "'https://sec.gov/doc.htm', true, 'sha256-x', 'run-1')"
+        ],
+    )
+    _make_duckdb(
+        candidate,
+        ddl,
+        [
+            "INSERT INTO sec_filing_attachment VALUES ("
+            "'acc-1', '1', 'doc.htm', 'EX-99.2', 'Exhibit', "
+            "'https://sec.gov/doc.htm', true, 'sha256-x', 'run-2')"
+        ],
+    )
+
+    with pytest.raises(SemanticMergeConflictError) as exc_info:
+        merge_candidate_into_canonical(candidate, canonical, output)
+
+    conflicts = exc_info.value.conflicts
+    assert len(conflicts) == 1
+    assert conflicts[0].table_name == "sec_filing_attachment"
+    assert conflicts[0].differing_columns == ("document_type",)
+
+
 def test_merge_raises_row_level_conflict_report_when_ambiguous(tmp_path):
     from edgar_warehouse.silver_protection import SemanticMergeConflictError, merge_candidate_into_canonical
 
