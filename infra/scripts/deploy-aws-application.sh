@@ -2224,7 +2224,19 @@ compute_windows["Catch"] = sec_fetch_task_catch()
 # directly (each is its own `python3 -` subprocess), so a shape change here
 # (command flags, failure-handling policy, ItemReader key expression) must be
 # mirrored there too.
-per_window_company_identity = ecs_state(wh_medium_arn,
+# wh_large_arn, not wh_medium_arn (2026-08-05, live prod OOM): this windowed form
+# (no explicit --cik-list) takes bootstrap_fundamentals.py's full-hydrate branch
+# (`if not (mode == "company-identity" and raw_cik_list): _hydrate_silver_database_
+# from_storage(context)`) -- it downloads and opens the ENTIRE canonical silver.duckdb
+# before resolving its own tiny CIK window via db.get_tracked_ciks(). As canonical has
+# grown (6.8M-row sec_thirteenf_holding, 4.7M-row sec_company_filing), this now OOMs
+# (exit 137, "container killed due to memory usage") on medium's 4096MB -- confirmed
+# live: window_offset=0/window_limit=500 failed identically across all 4 attempts on
+# task-def edgartools-prod-medium:144. Same OOM class/fix as run_wh above (gold-build-
+# memory-reliability ticket 03) -- bumping to large's 8192MB unblocks this immediately;
+# whether the full-hydrate-for-a-tiny-window shape itself should change is a separate,
+# structural question (this command only needs the tracked-CIK list, not 13F holdings).
+per_window_company_identity = ecs_state(wh_large_arn,
     "States.Array('bootstrap-fundamentals', '--mode', 'company-identity', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
     is_end=True)
 
