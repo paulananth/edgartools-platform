@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from edgar_warehouse.loaders.common import parse_date, safe_int, safe_str
+
+
+def filter_rows_by_min_filing_date(
+    rows: list[dict[str, Any]], min_filing_date: date | None,
+) -> list[dict[str, Any]]:
+    """Drop filing rows older than ``min_filing_date`` (general filing-
+    discovery lookback). ``None`` disables filtering (full history). Rows
+    with an unparseable/missing filing_date are kept -- an unknown date is
+    not evidence a filing is out of range."""
+    if min_filing_date is None:
+        return rows
+    return [
+        row for row in rows
+        if row.get("filing_date") is None or row["filing_date"] >= min_filing_date
+    ]
 
 
 def stage_company_loader(

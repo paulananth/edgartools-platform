@@ -2121,12 +2121,12 @@ total_cik_limit_default = {
 # fast without this flag; this is only for callers who want to skip fetch entirely.)
 artifact_policy_check = {
     "Type": "Choice",
-    "Comment": "Route to ComputeWindows directly when caller supplied artifact_policy; otherwise inject the all_attachments default.",
+    "Comment": "Route to FilingLookbackYearsCheck directly when caller supplied artifact_policy; otherwise inject the all_attachments default.",
     "Choices": [
         {
             "Variable": "$.artifact_policy",
             "IsPresent": True,
-            "Next": "ComputeWindows",
+            "Next": "FilingLookbackYearsCheck",
         }
     ],
     "Default": "ArtifactPolicyDefault",
@@ -2138,6 +2138,41 @@ artifact_policy_default = {
                "the key, preserving artifact capture for brand-new CIKs loaded via load_history.",
     "Result": "all_attachments",
     "ResultPath": "$.artifact_policy",
+    "Next": "FilingLookbackYearsCheck",
+}
+
+# (2d) FilingLookbackYearsCheck → FilingLookbackYearsDefault → ComputeWindows
+# Same backward-compat pattern as WindowSizeCheck/ArtifactPolicyCheck above, for an
+# optional $.filing_lookback_years SM input field passed through to per-window
+# bootstrap-next (see `per_window` below). Unlike artifact_policy's default (which
+# preserves full-artifact capture), the default here is 2 years -- unlike the CLI/code
+# level default of 0 (disabled, used by every OTHER caller: daily_incremental,
+# targeted_resync, bootstrap, etc., none of which pass this flag and are therefore
+# unaffected), load_history's own default is intentionally bounded per an explicit
+# operator decision (2026-08-05): general filing discovery (10-K/10-Q/8-K/DEF 14A/13F/
+# ADV/etc) should not silently pull a company's entire multi-decade filing history on
+# every load_history run. Still fully overridable per-execution via
+# {"filing_lookback_years": N} (0 = full history, an explicit opt-in).
+filing_lookback_years_check = {
+    "Type": "Choice",
+    "Comment": "Route to ComputeWindows directly when caller supplied filing_lookback_years; otherwise inject the 2-year default.",
+    "Choices": [
+        {
+            "Variable": "$.filing_lookback_years",
+            "IsPresent": True,
+            "Next": "ComputeWindows",
+        }
+    ],
+    "Default": "FilingLookbackYearsDefault",
+}
+
+filing_lookback_years_default = {
+    "Type": "Pass",
+    "Comment": "Inject default filing_lookback_years=2 when caller passed {} or omitted the key -- "
+               "load_history-specific default, bounding general filing discovery. Pass "
+               "{\"filing_lookback_years\": 0} explicitly for full history.",
+    "Result": 2,
+    "ResultPath": "$.filing_lookback_years",
     "Next": "ComputeWindows",
 }
 
@@ -2246,7 +2281,7 @@ stage0_company_identity = {
 # write_ownership_mdm_gold_definition's batch_map (Mode: DISTRIBUTED, ExecutionType:
 # STANDARD) elsewhere in this script.
 per_window = ecs_state(wh_medium_arn,
-    "States.Array('bootstrap-next', '--silver-only', '--cik-limit', States.Format('{}', $.window_limit), '--cik-offset', States.Format('{}', $.window_offset), '--tracking-status-filter', 'active,bootstrap_pending', '--artifact-policy', States.Format('{}', $.artifact_policy), '--run-id', $$.Execution.Name)",
+    "States.Array('bootstrap-next', '--silver-only', '--cik-limit', States.Format('{}', $.window_limit), '--cik-offset', States.Format('{}', $.window_offset), '--tracking-status-filter', 'active,bootstrap_pending', '--artifact-policy', States.Format('{}', $.artifact_policy), '--filing-lookback-years', States.Format('{}', $.filing_lookback_years), '--run-id', $$.Execution.Name)",
     is_end=True)
 
 windowed_bootstrap = {
@@ -2269,6 +2304,7 @@ windowed_bootstrap = {
         "window_offset.$": "$$.Map.Item.Value.window_offset",
         "window_limit.$": "$$.Map.Item.Value.window_limit",
         "artifact_policy.$": "$.artifact_policy",
+        "filing_lookback_years.$": "$.filing_lookback_years",
     },
     "ItemProcessor": {
         "ProcessorConfig": {
@@ -2645,6 +2681,8 @@ definition = {
         "TotalCikLimitDefault": total_cik_limit_default,
         "ArtifactPolicyCheck":   artifact_policy_check,
         "ArtifactPolicyDefault": artifact_policy_default,
+        "FilingLookbackYearsCheck":   filing_lookback_years_check,
+        "FilingLookbackYearsDefault": filing_lookback_years_default,
         "ComputeWindows":    compute_windows,
         "Stage0CompanyIdentity": stage0_company_identity,
         "Stage1Parallel":    stage1_parallel,

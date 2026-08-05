@@ -1721,6 +1721,7 @@ class SilverDatabase:
         raw_object_id: str,
         load_mode: str,
         recent_limit: int | None = None,
+        filing_min_date: Any = None,
     ) -> dict[str, Any]:
         """Stage one company's full submission into silver: reset lists, run loaders, merge all tables."""
         with self._shard_advisory_lock():
@@ -1732,6 +1733,7 @@ class SilverDatabase:
                 raw_object_id=raw_object_id,
                 load_mode=load_mode,
                 recent_limit=recent_limit,
+                filing_min_date=filing_min_date,
             )
 
     def _stage_submission_locked(
@@ -1744,8 +1746,10 @@ class SilverDatabase:
         raw_object_id: str,
         load_mode: str,
         recent_limit: int | None = None,
+        filing_min_date: Any = None,
     ) -> dict[str, Any]:
         from edgar_warehouse.loaders.bronze_submission_extractors import (
+            filter_rows_by_min_filing_date,
             stage_address_loader,
             stage_company_loader,
             stage_former_name_loader,
@@ -1758,8 +1762,11 @@ class SilverDatabase:
         address_rows = stage_address_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
         former_name_rows = stage_former_name_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
         manifest_rows = stage_manifest_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
-        recent_rows = stage_recent_filing_loader(
-            main_payload, cik, sync_run_id, raw_object_id, load_mode, recent_limit=recent_limit
+        recent_rows = filter_rows_by_min_filing_date(
+            stage_recent_filing_loader(
+                main_payload, cik, sync_run_id, raw_object_id, load_mode, recent_limit=recent_limit
+            ),
+            filing_min_date,
         )
 
         self._conn.execute("DELETE FROM sec_company_former_name WHERE cik = ?", [cik])
@@ -1780,8 +1787,11 @@ class SilverDatabase:
         all_filing_rows = list(recent_rows)
         pagination_accessions: list[str] = []
         for _file_name, pagination_payload in pagination_payloads:
-            pagination_rows = stage_pagination_filing_loader(
-                pagination_payload, cik, sync_run_id, raw_object_id, load_mode
+            pagination_rows = filter_rows_by_min_filing_date(
+                stage_pagination_filing_loader(
+                    pagination_payload, cik, sync_run_id, raw_object_id, load_mode
+                ),
+                filing_min_date,
             )
             all_filing_rows.extend(pagination_rows)
             pagination_accessions.extend(

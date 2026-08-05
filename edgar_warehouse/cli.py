@@ -848,6 +848,22 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     bootstrap_next.add_argument(
+        "--filing-lookback-years",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Years of general filing history (10-K/10-Q/8-K/DEF 14A/13F/ADV/"
+            "etc) to bronze-discover at all -- unlike --ownership-lookback-"
+            "years/--item-502-lookback-years, which only bound which "
+            "already-discovered filings get artifact-fetched/parsed, this "
+            "bounds sec_company_filing itself: filings older than the "
+            "window are never written. Default: 0 (disabled, full history) "
+            "-- opt in explicitly. Also settable via "
+            "WAREHOUSE_FILING_LOOKBACK_YEARS."
+        ),
+    )
+    bootstrap_next.add_argument(
         "--force",
         action="store_true",
         default=False,
