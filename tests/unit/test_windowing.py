@@ -64,6 +64,10 @@ def test_compute_windows_output():
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage",
         ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._sync_reference_data",
+            return_value={"raw_writes": [], "rows_written": 0, "rows_skipped": 0},
+        ),
     ):
         from edgar_warehouse.application.warehouse_orchestrator import _execute_warehouse_bronze_capture
         import argparse
@@ -449,6 +453,10 @@ def test_compute_windows_total_cik_limit_bounds_universe():
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage",
         ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._sync_reference_data",
+            return_value={"raw_writes": [], "rows_written": 0, "rows_skipped": 0},
+        ),
     ):
         from edgar_warehouse.application.warehouse_orchestrator import _capture_bronze_raw
         mock_context.runtime_mode = "bronze_capture"
@@ -471,7 +479,10 @@ def test_compute_windows_total_cik_limit_bounds_universe():
             sync_run_id="test-run-limit",
         )
 
-    from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
+    from edgar_warehouse.infrastructure.dataset_path_catalog import (
+        default_capture_spec_factory,
+        default_path_resolver,
+    )
     windows_rel = default_path_resolver().cik_windows_path("test-run-limit")
     snapshot_rel = default_path_resolver().cik_snapshot_path("test-run-limit")
 
@@ -483,6 +494,18 @@ def test_compute_windows_total_cik_limit_bounds_universe():
     snapshot_lines = [line for line in written[snapshot_rel].splitlines() if line.strip()]
     assert len(snapshot_lines) == 4, f"Expected snapshot capped to 4 CIKs, got {len(snapshot_lines)}"
     assert [json.loads(line)["cik"] for line in snapshot_lines] == [100, 200, 300, 400]
+
+    # Company Identity Hydrate Elimination map, ticket 03: compute-windows now
+    # also pre-batches the same (capped) ordered CIK list for
+    # Stage0CompanyIdentity's delta-then-reduce Map, using the identical
+    # window_size step so the Map's actual batches and the reducer's declared
+    # batches (via metrics["_identity_refresh_batches"]) can never diverge.
+    batches_rel = default_capture_spec_factory().cik_universe_batches("test-run-limit").relative_path
+    batches_lines = [line for line in written[batches_rel].splitlines() if line.strip()]
+    assert len(batches_lines) == 2, f"Expected 2 batches for 4 (capped) CIKs / size=3, got {len(batches_lines)}"
+    assert json.loads(batches_lines[0])["cik_list"] == "100,200,300"
+    assert json.loads(batches_lines[1])["cik_list"] == "400"
+    assert metrics["_identity_refresh_batches"] == [[100, 200, 300], [400]]
 
     assert metrics["cik_count"] == 4
     assert metrics["window_count"] == 2
@@ -568,4 +591,98 @@ def test_write_run_summary_empty_windows_raises():
     err = str(exc_info.value)
     assert windows_rel in err or "cik_windows.jsonl" in err, (
         f"Error should name the S3 key, got: {err}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Company Identity Hydrate Elimination map, ticket 03: compute-windows joins
+# compute-identity-refresh-window's persist_run_manifest publish special-case
+# (warehouse_orchestrator.py:656) instead of the normal full-canonical
+# publish, so its reference-data sync and pre-batched CIK universe are
+# captured as an immutable run manifest + reference snapshot for
+# ReduceIdentityRefresh to merge -- exercised end-to-end (real local
+# SilverDatabase + StorageLocation, not just the _capture_bronze_raw-level
+# metrics assertions above) because a wiring gap here would silently drop
+# company_tickers/company_tickers_exchange data for every load_history run.
+# ---------------------------------------------------------------------------
+
+
+def test_compute_windows_publishes_identity_refresh_run_manifest_not_full_canonical(
+    tmp_path, monkeypatch,
+) -> None:
+    import json
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from edgar_warehouse.application import warehouse_orchestrator
+    from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
+    from edgar_warehouse.infrastructure.object_storage import StorageLocation
+    from edgar_warehouse.silver_store import SilverDatabase
+
+    monkeypatch.setenv("WAREHOUSE_IMAGE_REF", "sha256:test-image")
+
+    context = WarehouseCommandContext(
+        bronze_root=StorageLocation(str(tmp_path / "bronze")),
+        storage_root=StorageLocation(str(tmp_path / "warehouse")),
+        silver_root=StorageLocation(str(tmp_path / "silver")),
+        snowflake_export_root=None,
+        environment_name="test",
+        identity="tester@example.com",
+        runtime_mode="bronze_capture",
+    )
+
+    # open_silver_database() (called inside _execute_warehouse_bronze_capture)
+    # appends "silver/sec/silver.duckdb" to the silver_root, so seed at that
+    # same resolved path, not silver_root's own base directory.
+    db = SilverDatabase(context.silver_root.join("silver", "sec", "silver.duckdb"))
+    try:
+        for cik in (100, 200, 300):
+            db.upsert_company_sync_state({"cik": cik, "tracking_status": "active"})
+    finally:
+        db.close()
+
+    company_tickers_payload = b'{"0":{"cik_str":100,"ticker":"AAA","title":"A Co"}}'
+    exchange_payload = b'{"fields":["cik","name","ticker","exchange"],"data":[]}'
+
+    def fake_download(*, url: str, identity: str) -> bytes:
+        del identity
+        if url.endswith("/company_tickers.json"):
+            return company_tickers_payload
+        if url.endswith("/company_tickers_exchange.json"):
+            return exchange_payload
+        raise AssertionError(f"unexpected reference URL: {url}")
+
+    with patch.object(warehouse_orchestrator, "_download_sec_bytes", side_effect=fake_download):
+        warehouse_orchestrator._execute_warehouse_bronze_capture(
+            context=context,
+            command_name="compute-windows",
+            arguments={"window_size": 2, "run_id": "cw-manifest-run"},
+        )
+
+    from edgar_warehouse.application.identity_refresh_publication import (
+        reference_snapshot_path,
+        run_manifest_path,
+    )
+
+    manifest_path = Path(context.storage_root.join(run_manifest_path("cw-manifest-run")))
+    assert manifest_path.exists(), (
+        "compute-windows must persist an identity-refresh run manifest, "
+        "mirroring compute-identity-refresh-window"
+    )
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["run_id"] == "cw-manifest-run"
+    assert manifest["image_identity"] == "sha256:test-image"
+    # 3 tracked CIKs / window_size=2 -> 2 batches: [100, 200], [300]
+    assert [b["ciks"] for b in manifest["batches"]] == [[100, 200], [300]]
+
+    snapshot_path = Path(context.storage_root.join(reference_snapshot_path("cw-manifest-run")))
+    assert snapshot_path.exists(), "reference snapshot must be captured for the reducer to merge"
+
+    # The normal full-canonical publish must NOT have also run for this
+    # command -- compute-windows' only durable data-layer write this run is
+    # the reference snapshot above, exactly like compute-identity-refresh-window.
+    canonical_silver = Path(context.storage_root.join("silver", "sec", "silver.duckdb"))
+    assert not canonical_silver.exists(), (
+        "compute-windows must not publish to canonical silver directly -- "
+        "ReduceIdentityRefresh is the sole merger, exactly once"
     )

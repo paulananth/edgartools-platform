@@ -2186,7 +2186,17 @@ filing_lookback_years_default = {
 # --total-cik-limit (optional CIK-scoping bound, see TotalCikLimitCheck/Default above) is always
 # passed explicitly (0 = no limit) since WindowSizeCheck/TotalCikLimitCheck guarantee both
 # $.window_size and $.total_cik_limit are present by the time this state runs.
-compute_windows = ecs_state(wh_medium_arn,
+# wh_large_arn, not wh_medium_arn (Company Identity Hydrate Elimination map,
+# ticket 03): ComputeWindows already hydrated the full canonical silver.duckdb
+# before this change (unchanged behavior); it now ALSO calls persist_run_manifest
+# (see the compute-windows handler and its publish special-case in
+# warehouse_orchestrator.py), which reads that same ~1GB+-and-growing canonical
+# file fully into a Python bytes object for its immutable reference snapshot --
+# an added working-set cost on top of the hydrate's own, on the exact canonical
+# file whose growth already caused Stage0CompanyIdentity's live OOM. Belt-and-
+# suspenders headroom, matching the same OOM-class precedent applied there and
+# in gold-build-memory-reliability ticket 03's run_wh.
+compute_windows = ecs_state(wh_large_arn,
     "States.Array('compute-windows', '--window-size', States.Format('{}', $.window_size), '--total-cik-limit', States.Format('{}', $.total_cik_limit), '--run-id', $$.Execution.Name)",
     next_state="Stage0CompanyIdentity")
 # ComputeWindows publishes its durable window manifest to S3; its ECS result is
@@ -2207,42 +2217,55 @@ compute_windows["Catch"] = sec_fetch_task_catch()
 # (run_all() calls run_companies()), so a separate --entity-type company
 # call would just redo that work.
 #
-# Same windowed/DISTRIBUTED Map shape as Branch A/B (per-window
-# bootstrap-fundamentals --mode company-identity, reading the same
-# cik_windows.jsonl ComputeWindows just wrote), same MaxConcurrency=1 (all
-# Branch A/B/Company-Identity stages write the same S3-backed unified silver
-# DuckDB file -- concurrent writers risk a lost publish). Unlike Branch B's
-# lenient AD-13 pattern (Stage1BEntityFacts/PerFiling/ThirteenF Catch and
-# proceed on failure), this stage is STRICT like Branch A
-# (ToleratedFailurePercentage=0, no Catch): silently proceeding past a
-# company-identity failure would let ownership/MDM run against unresolved
-# company data, the exact coupling problem this pipeline exists to untangle.
+# Delta-then-reduce DISTRIBUTED Map (Company Identity Hydrate Elimination map,
+# ticket 03 -- superseding this stage's original windowed/offset-limit shape),
+# mirroring write_warehouse_mdm_gold_definition's daily_incremental
+# Stage0CompanyIdentityBounded/ReduceIdentityRefresh pair exactly: ComputeWindows
+# now pre-batches the same ordered CIK list into cik_batches.jsonl (see its
+# handler in warehouse_orchestrator.py) and declares those batches in a run
+# manifest; each Map item runs bootstrap-fundamentals --mode company-identity
+# with an explicit --cik-list + --identity-refresh-run-id, which persists only
+# an immutable per-batch delta (bootstrap_fundamentals.py's identity_refresh_run_id
+# branch) instead of hydrating the full canonical silver.duckdb and merging into
+# it per window. A single ReduceIdentityRefresh state (below) merges the
+# reference snapshot and every batch delta into canonical exactly once, before
+# Stage1Parallel -- replacing 53 separate full-canonical hydrate+merge round
+# trips (the live 2026-08-05 OOM's root cause) with one.
+#
+# Same MaxConcurrency=1 as before (all Branch A/B/Company-Identity stages write
+# the same S3-backed unified silver DuckDB file -- concurrent writers risk a
+# lost publish). Unlike Branch B's lenient AD-13 pattern (Stage1BEntityFacts/
+# PerFiling/ThirteenF Catch and proceed on failure), this stage is STRICT like
+# Branch A (ToleratedFailurePercentage=0, no Catch on the Map itself):
+# silently proceeding past a company-identity failure would let ownership/MDM
+# run against unresolved company data, the exact coupling problem this
+# pipeline exists to untangle.
+#
+# Known, accepted regression from this restructuring (ticket 03's decision 4,
+# deferred -- no CLI-level partial-resume shipped yet): a Stage0 failure now
+# means NO batch's delta has reached canonical (ReduceIdentityRefresh never
+# ran), so the entire Stage0 stage must re-run from scratch on retry --
+# strictly worse than the old windowed shape, where each window published
+# directly and a later window's failure left earlier windows' data durably in
+# canonical. Verified AWS Step Functions Distributed Map redrive does NOT
+# rescue this (ticket 04): this repo's sec_fetch_task_catch() routes every
+# failure to a terminal Fail state, which AWS's own redrive semantics
+# explicitly exclude from resumption.
 #
 # NOTE: write_warehouse_mdm_gold_definition's daily_incremental branch below
-# builds an identical Stage0CompanyIdentity Map (ticket 06 reuses this exact
-# shape) in a separate Python heredoc -- these two functions can't share code
-# directly (each is its own `python3 -` subprocess), so a shape change here
-# (command flags, failure-handling policy, ItemReader key expression) must be
-# mirrored there too.
-# wh_large_arn, not wh_medium_arn (2026-08-05, live prod OOM): this windowed form
-# (no explicit --cik-list) takes bootstrap_fundamentals.py's full-hydrate branch
-# (`if not (mode == "company-identity" and raw_cik_list): _hydrate_silver_database_
-# from_storage(context)`) -- it downloads and opens the ENTIRE canonical silver.duckdb
-# before resolving its own tiny CIK window via db.get_tracked_ciks(). As canonical has
-# grown (6.8M-row sec_thirteenf_holding, 4.7M-row sec_company_filing), this now OOMs
-# (exit 137, "container killed due to memory usage") on medium's 4096MB -- confirmed
-# live: window_offset=0/window_limit=500 failed identically across all 4 attempts on
-# task-def edgartools-prod-medium:144. Same OOM class/fix as run_wh above (gold-build-
-# memory-reliability ticket 03) -- bumping to large's 8192MB unblocks this immediately;
-# whether the full-hydrate-for-a-tiny-window shape itself should change is a separate,
-# structural question (this command only needs the tracked-CIK list, not 13F holdings).
-per_window_company_identity = ecs_state(wh_large_arn,
-    "States.Array('bootstrap-fundamentals', '--mode', 'company-identity', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
+# builds the Stage0CompanyIdentityBounded/ReduceIdentityRefresh pair this shape
+# was copied from -- these two functions can't share code directly (each is
+# its own `python3 -` subprocess), so a shape change here (command flags,
+# failure-handling policy, ItemReader key expression) must be mirrored there too.
+per_batch_company_identity = ecs_state(wh_large_arn,
+    "States.Array('bootstrap-fundamentals', '--mode', 'company-identity', "
+    "'--cik-list', $.cik_list, '--identity-refresh-run-id', $.identity_refresh_run_id, "
+    "'--run-id', $.identity_refresh_run_id)",
     is_end=True)
 
 stage0_company_identity = {
     "Type": "Map",
-    "Comment": "Stage 0: Company Identity capture (MaxConcurrency=1, strict) -- runs before ownership/ADV so IS_INSIDER derivation sees resolved Company entities.",
+    "Comment": "Stage 0: Company Identity capture, delta-then-reduce (MaxConcurrency=1, strict) -- runs before ownership/ADV so IS_INSIDER derivation sees resolved Company entities.",
     "MaxConcurrency": 1,
     "ToleratedFailurePercentage": 0,
     "ItemReader": {
@@ -2250,21 +2273,51 @@ stage0_company_identity = {
         "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
         "Parameters": {
             "Bucket": bronze_bucket_name,
-            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)",
+            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_batches.jsonl', $$.Execution.Name)",
         },
+    },
+    # ItemSelector is evaluated in the parent Map execution. Copy the parent
+    # run's identity into each child input before the DISTRIBUTED processor
+    # starts -- inside a child, $$.Execution.Name is the CHILD execution name,
+    # not the parent's, and bootstrap_fundamentals.py hard-fails when
+    # --run-id doesn't match --identity-refresh-run-id (bootstrap_fundamentals.py:86-88).
+    "ItemSelector": {
+        "cik_list.$": "$$.Map.Item.Value.cik_list",
+        "identity_refresh_run_id.$": "$$.Execution.Name",
     },
     "ItemProcessor": {
         "ProcessorConfig": {
             "Mode": "DISTRIBUTED",
             "ExecutionType": "STANDARD",
         },
-        "StartAt": "RunCompanyIdentityWindow",
-        "States": {"RunCompanyIdentityWindow": per_window_company_identity},
+        "StartAt": "RunCompanyIdentityBatch",
+        "States": {"RunCompanyIdentityBatch": per_batch_company_identity},
     },
     "ResultPath": None,
-    "Next": "Stage1Parallel",
+    "Next": "ReduceIdentityRefresh",
     "Catch": sec_fetch_task_catch(),
 }
+
+# large, not medium: this reducer merges the reference snapshot plus every
+# Stage0CompanyIdentity batch delta (up to ~53 at load_history scale) into
+# canonical sequentially in one task -- same OOM class release-readiness
+# ticket 83 already found and fixed for daily_incremental's identical reducer
+# (belt-and-suspenders headroom over the code-level peak-disk fix, PR #360).
+reduce_identity_refresh = ecs_state(wh_large_arn,
+    "States.Array('reduce-identity-refresh', '--run-id', $$.Execution.Name, '--max-attempts', '3')",
+    next_state="Stage1Parallel")
+# D-15 bug class (see test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_
+# via_result_path_null's docstring): an ecs:runTask.sync Task without
+# ResultPath=null replaces $ entirely with its own ECS result, destroying
+# $.artifact_policy/$.filing_lookback_years that Stage1Parallel's
+# WindowedBootstrap ItemSelector reads immediately after this state.
+reduce_identity_refresh["ResultPath"] = None
+# The command performs the bounded reducer-only retry itself (--max-attempts).
+# Step Functions must not create an additional retry envelope with a
+# different budget or accidentally re-enter Map work.
+reduce_identity_refresh["Retry"] = [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 1,
+                                      "BackoffRate": 1.0, "MaxAttempts": 1}]
+reduce_identity_refresh["Catch"] = sec_fetch_task_catch()
 
 # (4) Stage1Parallel: Branch A ownership bootstrap. Branch B fundamentals is
 # intentionally sequenced after this state because all Branch B modes now write
@@ -2697,6 +2750,7 @@ definition = {
         "FilingLookbackYearsDefault": filing_lookback_years_default,
         "ComputeWindows":    compute_windows,
         "Stage0CompanyIdentity": stage0_company_identity,
+        "ReduceIdentityRefresh": reduce_identity_refresh,
         "Stage1Parallel":    stage1_parallel,
         "Stage1BEntityFacts": fundamentals_entity_facts,
         "Stage1BPerFiling":  fundamentals_per_filing,
@@ -2995,28 +3049,33 @@ if workflow_name != "daily_incremental":
         },
     }
 else:
-    # Stage0CompanyIdentity: Company Identity Pipeline wayfinder map, ticket 06.
-    # Reuses ticket 05's exact windowed capture shape (a strict, MaxConcurrency=1
-    # Map calling bootstrap-fundamentals --mode company-identity over windows
-    # ComputeWindows just wrote), ahead of the existing RunWarehouseTask/MDM
-    # chain, so company data is current before the existing
-    # mdm-run(--entity-type all) resolves companies as part of its sweep
-    # (run_all() calls run_companies()) -- no separate --entity-type company
-    # call needed. daily_incremental had zero prod executions ever (confirmed
-    # via list-executions), so this is a clean restructure, not a migration
-    # of live behavior.
+    # Stage0CompanyIdentityBounded: Company Identity Pipeline wayfinder map,
+    # ticket 06. A strict, MaxConcurrency=1, delta-then-reduce Map --
+    # bootstrap-fundamentals --mode company-identity over explicit
+    # --cik-list batches (compute-identity-refresh-window's cik_batches.jsonl),
+    # each persisting only an immutable delta, merged into canonical exactly
+    # once by ReduceIdentityRefresh below -- ahead of the existing
+    # RunWarehouseTask/MDM chain, so company data is current before the
+    # existing mdm-run(--entity-type all) resolves companies as part of its
+    # sweep (run_all() calls run_companies()) -- no separate --entity-type
+    # company call needed. daily_incremental had zero prod executions ever
+    # (confirmed via list-executions) as of ticket 06, so this was a clean
+    # restructure, not a migration of live behavior.
     #
     # No SeedUniverse/MdmSeedUniverse here, matching daily_incremental's
     # existing choice to skip seed-universe entirely -- it processes the
     # already-tracked universe for daily updates, not newly-discovered CIKs.
-    # window_size/total_cik_limit are fixed literals (not SM-input-
-    # configurable like load_history's WindowSizeCheck/TotalCikLimitCheck):
-    # daily_incremental is a scheduled job that always runs the same shape,
-    # unlike load_history's operator-triggered, variously-scoped ad-hoc runs.
+    # batch_size is a fixed literal (not SM-input-configurable like
+    # load_history's WindowSizeCheck/TotalCikLimitCheck): daily_incremental is
+    # a scheduled job that always runs the same shape, unlike load_history's
+    # operator-triggered, variously-scoped ad-hoc runs.
     #
-    # NOTE: write_load_history_definition's Stage0CompanyIdentity (see its
-    # per_window_company_identity comment) builds this exact same shape in a
-    # separate Python heredoc -- keep the two in sync on any change.
+    # NOTE: write_load_history_definition's Stage0CompanyIdentity (Company
+    # Identity Hydrate Elimination map, ticket 03) was restructured to this
+    # same delta-then-reduce shape -- these two functions can't share code
+    # directly (each is its own `python3 -` subprocess), so a shape change
+    # here (command flags, failure-handling policy, ItemReader key
+    # expression) must be mirrored there too.
     #
     # refresh_mode (release-readiness ticket 45/49, "Decide whether/how to
     # narrow daily_incremental's Stage 0"): the full-universe ComputeWindows ->
