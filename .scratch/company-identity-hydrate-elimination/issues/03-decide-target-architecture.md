@@ -1,7 +1,7 @@
 # Decide the target architecture for Stage0CompanyIdentity's windowed silver read/write
 
 Type: grilling
-Status: claimed
+Status: resolved
 Blocked by: 01, 02, 04
 
 ## Question
@@ -59,16 +59,23 @@ ticket can be marked `resolved`:
    its own wayfinder ticket — no open design question about *whether* to
    fix it, only a small, already-sketched-in-ticket-01 implementation
    choice left to the engineer doing the fix.
-3. **Failure isolation: do not accept the tradeoff on faith.** Per the
-   operator's explicit instruction, this ticket cannot resolve to
-   delta-then-reduce as a locked answer until ticket 04 verifies (with
-   primary-source evidence, not "plausible") that AWS Step Functions
-   Distributed Map redrive actually provides safe, batch-level
-   resumability for this exact manifest/delta shape. If ticket 04 finds
-   redrive does NOT cleanly apply, this ticket reopens the failure-
-   isolation question (design an explicit partial-promotion mechanism, or
-   a different mitigation ticket 04's own Q4 may surface) before final
-   answer.
+3. **Failure isolation: verified redrive does not apply (ticket 04) —
+   fallback locked.** Ticket 04 confirmed, against AWS's primary
+   documentation, that Step Functions Distributed Map redrive excludes
+   errors routed to a terminal `Fail` state via `Catch` — exactly this
+   repo's `sec_fetch_task_catch()` wiring (added by release-readiness
+   ticket 86 to release the `sec_fetch_active` lease promptly). Redrive
+   is therefore not usable here, and dropping that `Catch` to make redrive
+   eligible would reintroduce ticket 86's 18h stale-lease-wedging
+   regression — not an acceptable trade. **Decision: build an explicit
+   CLI-level partial-resume path** on top of the existing manifest/outcome
+   contract (`identity_refresh_publication.py`) — e.g. a
+   `--resume-failed-batches`-shaped input that lets an operator re-run
+   `reduce_identity_refresh` (or the batch stage) against only the
+   batches a prior run's manifest shows as not-`succeeded`, reusing each
+   already-durable delta rather than redoing successful work. This
+   sidesteps SFN's own redrive mechanism entirely and does not touch
+   ticket 86's Catch/lease-release fix.
 4. **Scope: `load_history` only.** `daily_incremental`'s Stage0
    CompanyIdentity is only ever exercised in its already-bounded
    (CIK-list + `identity_refresh_run_id`) form in production — its
@@ -79,7 +86,35 @@ ticket can be marked `resolved`:
    definition` mean the two Stage0CompanyIdentity definitions may drift
    apart as a result — accepted, not treated as a defect of this decision.
 
-**Not yet locked:** the concrete implementation shape (exact CLI flags,
-state-machine wiring, redrive-triggering mechanism if needed) — that's
-implementation detail for the follow-up session per this map's Notes, not
-this ticket's job to specify.
+## Answer
+
+**Locked architecture for `load_history`'s Stage0CompanyIdentity:**
+
+1. Selective/minimal-table hydrate (load only `sec_company`,
+   `sec_company_filing`, `sec_company_address`, `sec_company_former_name`,
+   `sec_raw_object` — skip `sec_thirteenf_holding`/`sec_financial_fact`/etc)
+   to fix the OOM's actual root cause (peak memory during hydration).
+2. Restructure Stage0's windowed capture to delta-then-reduce, mirroring
+   `daily_incremental`'s bounded Identity Refresh: each window emits an
+   explicit CIK-list batch (not offset/limit windowing) and produces a
+   small immutable delta via `persist_batch_outcome`; a single
+   `reduce_identity_refresh`-shaped step folds all deltas into canonical
+   once, gated ahead of `Stage1Parallel` the same way today's Map is.
+3. **Prerequisite, standalone fix (ships first, independently):** fix
+   `reduce_identity_refresh`'s per-candidate local-disk accumulation —
+   intermediate `merged-{index}.duckdb` files are never deleted between
+   candidates (ticket 01's Q5) — before restructuring Stage0 onto this
+   path, since load_history's ~53-54-candidate scale would otherwise hit
+   an un-exercised tens-to-100+GB local-disk regime.
+4. **Failure-isolation mitigation:** an explicit CLI-level partial-resume
+   path on the manifest/outcome contract (not SFN redrive, which ticket 04
+   verified does not apply to this repo's Catch-to-Fail wiring; not a
+   change to ticket 86's lease-release Catch).
+5. Scope: `load_history` only — `daily_incremental`'s Stage0CompanyIdentity
+   is out of scope for this decision (see Progress note 4).
+
+**Not locked here (implementation detail for the follow-up session, per
+this map's Notes — decision only, execution separate):** exact CLI flag
+names/shapes, state-machine wiring specifics, the precise mechanics of the
+partial-resume path, and the concrete fix for the disk-accumulation bug
+(reuse-one-output-path vs. delete-after-each-merge).
