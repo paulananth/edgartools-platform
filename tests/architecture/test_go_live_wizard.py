@@ -55,6 +55,20 @@ def run_wizard(
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     proc_env = os.environ.copy()
+    # go-live.sh treats AWS_PROFILE/AWS_REGION/AWS_DEFAULT_REGION as implicit
+    # overrides of its "aws-admin-<env>"/"us-east-1" defaults (go-live.sh:40,42),
+    # so inheriting them from the calling shell verbatim makes this test's
+    # assertions depend on whatever AWS CLI profile/region the developer or CI
+    # runner happens to have exported -- confirmed live: with AWS_PROFILE set
+    # to a real deploy profile (as this repo's own CLAUDE.md workflow commands
+    # routinely export), test_plan_prints_preview_only_aws_ordered_commands
+    # failed asserting on 'aws-admin-dev' while the wizard actually printed
+    # the ambient profile. No test in this file relies on inheriting these, so
+    # strip them unconditionally before any explicit `env` override is applied
+    # below (a test that wants a specific profile passes it via `env=`).
+    proc_env.pop("AWS_PROFILE", None)
+    proc_env.pop("AWS_REGION", None)
+    proc_env.pop("AWS_DEFAULT_REGION", None)
     proc_env.setdefault("GO_LIVE_NO_GUM", "1")
     proc_env.setdefault("GO_LIVE_AWS_ACCOUNT_ID", TEST_ACCOUNT_ID)
     proc_env.setdefault("FAKE_AWS_ACCOUNT_ID", TEST_ACCOUNT_ID)
