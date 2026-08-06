@@ -197,7 +197,26 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
         # canonical's first-observed value can safely stay authoritative
         # without contest, the same way sec_raw_object's own recurrence
         # class is handled.
-        provenance_columns=frozenset({"raw_object_id"}),
+        #
+        # document_url is the same class of drift, confirmed live
+        # (2026-08-06): accession 0001137439-25-001001 (a DEFA14A jointly
+        # associated with 18 CIKs) produced 51 conflicts, 100% on this
+        # column. bronze_filing_artifacts.py resolves each accession via
+        # get_filing_by_cik_and_accession(cik, accession_number) using
+        # whichever CIK the current candidate's own sec_filing row
+        # associates with the accession -- and SEC serves a distinct SGML
+        # header (and therefore a distinct document_url, which embeds the
+        # querying CIK's own path segment) per associated CIK for a
+        # multi-registrant filing. Verified directly against live SEC data:
+        # fetching the same document via edgar.Company(cik) for 4 different
+        # CIKs associated with this accession returned 4 different
+        # document_url strings differing only in the CIK path segment,
+        # while every other attachment field (sequence_number,
+        # document_type, description, is_primary) and the actual byte
+        # content (raw_object_id) were identical. Not a data-integrity
+        # issue -- the content-identity signal (raw_object_id) is
+        # unaffected and already provenance above.
+        provenance_columns=frozenset({"raw_object_id", "document_url"}),
     ),
     "sec_filing_text": ProtectedTablePolicy(
         "sec_filing_text", ("accession_number", "text_version"), authority_column="extracted_at"
