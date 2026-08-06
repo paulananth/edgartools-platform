@@ -337,7 +337,7 @@ IMAGE_REF_FILE=infra/aws-prod-image.txt
 bash infra/scripts/publish-warehouse-image-via-wsl.sh \
   --aws-profile sec_platform_deployer \
   --aws-region us-east-1 \
-  --ecr-repository edgartools-prod-warehouse \
+  --ecr-repository edgartools-prod-images \
   --image-tag "$(git rev-parse HEAD)" \
   --output-file "$IMAGE_REF_FILE"
 
@@ -358,7 +358,7 @@ EventBridge schedules; schedule activation remains an explicit operator action.
 The image reference in the summary is a verified `@digest` reference, for example:
 
 ```
-123456789012.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse@sha256:abc123...
+123456789012.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:abc123... (tagged warehouse-sha-<...>)
 ```
 
 ### macOS / Colima — publish once, then deploy once
@@ -390,7 +390,7 @@ IMAGE_REF_FILE="/tmp/edgartools-prod-warehouse-${IMAGE_TAG}.txt"
 AWS_PROFILE=sec_platform_deployer \
 bash infra/scripts/publish-warehouse-image.sh \
   --aws-region us-east-1 \
-  --ecr-repository edgartools-prod-warehouse \
+  --ecr-repository edgartools-prod-images \
   --role warehouse \
   --image-tag "$IMAGE_TAG" \
   --mode docker \

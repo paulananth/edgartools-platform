@@ -22,4 +22,4 @@ def test_ecr_cleanup_retains_tagged_and_active_task_images() -> None:
     assert "'--family-prefix', family" in script
     assert "'--family-name', family" not in script
     assert 'if image_in_use "$full_repo" "$digest"; then' in script
-    assert "if tags:" in script
+    assert "keep   = bool(tags)" in script

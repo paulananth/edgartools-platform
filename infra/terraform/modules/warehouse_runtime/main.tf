@@ -14,6 +14,14 @@ locals {
 }
 
 resource "aws_ecr_repository" "warehouse" {
+  # Superseded by aws_ecr_repository.images (single shared repo for
+  # warehouse/mdm x final/deps, role encoded in the tag instead of the repo
+  # name -- see the "Image management" section of CLAUDE.md). Left in place,
+  # unreferenced by any script or task definition after that rewire, as a
+  # read-only rollback archive for previously-pushed images. Do not rename
+  # or delete: ECR repository `name` is ForceNew in this provider, so
+  # changing it here would destroy and recreate the repo rather than rename
+  # it in place.
   name         = "${local.name_prefix}-warehouse"
   force_delete = var.ecr_force_delete
   # MUTABLE, not IMMUTABLE: :dev is deliberately overwritten on every build
@@ -40,6 +48,49 @@ resource "aws_ecr_lifecycle_policy" "warehouse" {
   # immutable sha-* tags. Expiring tagged images by repository count can make
   # a still-registered task definition unlaunchable. Clean up only untagged
   # manifests; tagged rollback and task-definition images remain durable.
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Expire only untagged images beyond the newest 20"
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "imageCountMoreThan"
+          countNumber = 20
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
+# Single shared image repository for both runtimes (warehouse, mdm) and both
+# build stages (deps, final) -- role/stage is encoded in the tag prefix
+# (warehouse-*, mdm-*, warehouse-deps-*, mdm-deps-*) instead of the repo name.
+# Replaces the 4-repo split (warehouse/mdm x final/deps); see CLAUDE.md's
+# "Image management" section.
+resource "aws_ecr_repository" "images" {
+  name         = "${local.name_prefix}-images"
+  force_delete = var.ecr_force_delete
+  # MUTABLE for the same reason as aws_ecr_repository.warehouse above:
+  # role-prefixed :dev/:prod tags (warehouse-dev, mdm-prod, ...) are
+  # deliberately overwritten on every build.
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = merge(local.tags, { Name = "${local.name_prefix}-images" })
+}
+
+resource "aws_ecr_lifecycle_policy" "images" {
+  repository = aws_ecr_repository.images.name
+
+  # Same policy as aws_ecr_repository.warehouse: only untagged manifests are
+  # ever expired. Every tagged image (any role/stage prefix) stays durable.
   policy = jsonencode({
     rules = [
       {

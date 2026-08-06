@@ -2,15 +2,11 @@
 # Clean up unused ECR images before a deploy.
 # Called automatically by deploy-aws-application.sh before every build/deploy.
 #
-# RETENTION POLICY:
-#   Final image repos (warehouse, mdm):
-#     KEEP  every tagged image          — sha tags are immutable task/rollback anchors
-#     KEEP  every active ECS digest     — even if its tag was removed or moved
-#     DELETE untagged, inactive images
-#
-#   Deps repos (warehouse-deps, mdm-deps):
-#     KEEP  every tagged image
-#     DELETE untagged images
+# RETENTION POLICY (single shared repo -- warehouse/mdm x final/deps, role
+# encoded in the tag prefix, e.g. warehouse-sha-*, mdm-deps-*):
+#   KEEP  every tagged image          — role-prefixed tags are immutable task/rollback anchors
+#   KEEP  every active ECS digest     — even if its tag was removed or moved
+#   DELETE untagged, inactive images
 #
 # Usage:
 #   bash infra/scripts/cleanup-ecr-images.sh               # dry run (shows what would go)
@@ -23,7 +19,6 @@ ENVIRONMENT="dev"
 AWS_REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
 AWS_PROFILE_NAME="${AWS_PROFILE:-}"
 DRY_RUN=true
-KEEP_SHA_COUNT=2
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -31,7 +26,6 @@ while [[ $# -gt 0 ]]; do
     --region)   AWS_REGION="${2:?}"; shift 2 ;;
     --profile)  AWS_PROFILE_NAME="${2:?}"; shift 2 ;;
     --apply)    DRY_RUN=false; shift ;;
-    --keep-sha) KEEP_SHA_COUNT="${2:?}"; shift 2 ;;
     *) echo "Unknown flag: $1" >&2; exit 2 ;;
   esac
 done
@@ -121,11 +115,11 @@ image_in_use() {
 
 # ── Process one repository ────────────────────────────────────────────────────
 cleanup_repo() {
-  local repo="$1" mode="$2"
+  local repo="$1"
   local full_repo="${ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${repo}"
 
   echo ""
-  log "Repository: ${repo}  (mode=${mode})"
+  log "Repository: ${repo}"
 
   local images_json
   images_json=$(aws_ ecr describe-images \
@@ -139,43 +133,24 @@ cleanup_repo() {
   echo "$images_json" > "$img_tmp"
 
   # Parse decisions — output: digest<TAB>size<TAB>pushed<TAB>keep<TAB>tag_str
+  # Every tagged image (any role prefix: warehouse-*, mdm-*, warehouse-deps-*,
+  # mdm-deps-*) is kept unconditionally — role-prefixed sha/deps tags are
+  # immutable rollback anchors. Only untagged, inactive manifests are deleted.
   local decisions
-  decisions=$(MODE="$mode" KEEP_N="$KEEP_SHA_COUNT" python3 -c "
-import json, sys, os
-
-mode   = os.environ.get('MODE', 'final')
-keep_n = int(os.environ.get('KEEP_N', '2'))
+  decisions=$(python3 -c "
+import json
 
 with open('$img_tmp') as f:
     images = json.load(f)
 
 images.sort(key=lambda x: x.get('pushed',''), reverse=True)
 
-keep_digests = set()
-if mode == 'final':
-    # Ordering remains useful for display, but every tagged image is durable.
-    sha_imgs = [img for img in images
-                if img.get('tags') and any(t.startswith('sha-') for t in img.get('tags',[]))]
-    for img in sha_imgs[:keep_n]:
-        keep_digests.add(img['digest'])
-elif mode == 'deps':
-    # Deps images are build-time base layers; ECS task defs don't reference them.
-    # Keep the 2 newest deps-* tagged images (active + 1 rollback).
-    deps_imgs = [img for img in images
-                 if img.get('tags') and any(t.startswith('deps-') for t in img.get('tags',[]))]
-    for img in deps_imgs[:keep_n]:
-        keep_digests.add(img['digest'])
-
 for img in images:
     tags   = img.get('tags') or []
     digest = img['digest']
     size   = img.get('size') or 0
     pushed = img.get('pushed','')[:10]
-    keep   = False
-    if tags:
-        keep = True
-    if digest in keep_digests:
-        keep = True
+    keep   = bool(tags)
     tag_str = ' '.join(tags) if tags else '<untagged>'
     print(f'{digest}\t{size}\t{pushed}\t{keep}\t{tag_str}')
 " 2>/dev/null)
@@ -243,10 +218,7 @@ echo "  Keep: every tagged image + every digest referenced by active ECS tasks"
 [[ "$DRY_RUN" == "true" ]] && echo "  (DRY RUN — pass --apply to delete)"
 printf '%.0s─' $(seq 1 62); echo
 
-cleanup_repo "${NAME_PREFIX}-warehouse"      final
-cleanup_repo "${NAME_PREFIX}-mdm"            final
-cleanup_repo "${NAME_PREFIX}-warehouse-deps" deps
-cleanup_repo "${NAME_PREFIX}-mdm-deps"       deps
+cleanup_repo "${NAME_PREFIX}-images"
 
 echo ""
 if [[ "$DRY_RUN" == "false" ]]; then

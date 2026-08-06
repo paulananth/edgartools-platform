@@ -244,12 +244,14 @@ The deploy script can:
 - Discover passive resources from Terraform outputs.
 - Deploy MDM task definitions/state machines when `--enable-mdm` is used and MDM secret ARNs exist.
 
-Standalone image publish:
+Standalone image publish. One shared repo (`edgartools-<env>-images`) holds
+both warehouse and mdm images (final and deps); role is encoded in the tag
+prefix, applied automatically from `--role`:
 
 ```bash
 bash infra/scripts/publish-warehouse-image.sh \
   --aws-region us-east-1 \
-  --ecr-repository edgartools-dev-warehouse \
+  --ecr-repository edgartools-dev-images \
   --role warehouse \
   --image-tag sha-$(git rev-parse --short=12 HEAD) \
   --mode docker \
@@ -257,13 +259,15 @@ bash infra/scripts/publish-warehouse-image.sh \
   --also-tag dev
 ```
 
-Use `--role mdm` with repository `edgartools-<env>-mdm` when publishing the separate MDM image.
+Use `--role mdm` with the same `--ecr-repository edgartools-<env>-images` when
+publishing the separate MDM image — it lands as `mdm-*` tags instead of
+`warehouse-*`.
 
-Image tags:
+Image tags (role-prefixed: `warehouse-*` / `mdm-*`):
 
-- `dev`: mutable latest dev image.
-- `sha-<hash>`: immutable rollback/audit tag.
-- `prod`: manually promoted production tag.
+- `warehouse-dev` / `mdm-dev`: mutable latest dev image, per role.
+- `warehouse-sha-<hash>` / `mdm-sha-<hash>`: immutable rollback/audit tag, per role.
+- `warehouse-prod` / `mdm-prod`: manually promoted production tag, per role.
 
 ## Warehouse Commands
 

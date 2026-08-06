@@ -26,7 +26,9 @@ Options:
   --name-prefix <prefix>            Resource prefix. Default: edgartools-<env>.
   --cluster-name <name>             ECS cluster name.
   --cluster-arn <arn>               ECS cluster ARN.
-  --ecr-repository-url <url>        ECR repository URL.
+  --ecr-repository-url <url>        ECR repository URL. Default: <account>.dkr.ecr.<region>.amazonaws.com/<prefix>-images
+                                    (single shared repo for warehouse/mdm x final/deps; role lives
+                                    in the image tag, e.g. warehouse-<tag>/mdm-<tag>).
   --public-subnet-ids <ids>         Comma-separated subnet IDs for Fargate awsvpc config.
   --security-group-id <id>          ECS task security group ID.
   --security-group-ids <ids>        Comma-separated ECS task security group IDs.
@@ -67,7 +69,8 @@ Options:
   --mdm-image-ref <ref>             Existing MDM image ref. Required when MDM is
                                     deployed and --build-mdm-image is not set.
                                     Never silently defaults to the warehouse image.
-  --mdm-ecr-repository-url <url>    ECR repository URL for built MDM image. Default: <account>.dkr.ecr.<region>.amazonaws.com/<prefix>-mdm.
+  --mdm-ecr-repository-url <url>    ECR repository URL for built MDM image. Default: same shared
+                                    <prefix>-images repo as --ecr-repository-url (mdm-* tags).
   --build-mdm-image                 Build and push a separate MDM image when MDM is deployed.
   --mdm-database-source <snowflake-postgres>
                                     Source of the MDM_DATABASE_URL secret. Only snowflake-postgres
@@ -615,9 +618,11 @@ fi
 CLUSTER_ARN="$(first_nonempty "$CLUSTER_ARN" "$(manifest_value cluster.arn)")"
 CLUSTER_NAME="$(first_nonempty "$CLUSTER_NAME" "$(manifest_value cluster.name)")"
 
-# ECR — naming convention: <account>.dkr.ecr.<region>.amazonaws.com/<prefix>-warehouse
+# ECR — single shared repo for all roles/stages: <account>.dkr.ecr.<region>.amazonaws.com/<prefix>-images
+# Role (warehouse/mdm) and stage (final/deps) are encoded in the image tag
+# (warehouse-*, mdm-*, warehouse-deps-*, mdm-deps-*), not the repository name.
 ECR_REPOSITORY_URL="$(first_nonempty "$ECR_REPOSITORY_URL" "$(manifest_value ecr_repository_url)" \
-  "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION_NAME}.amazonaws.com/${NAME_PREFIX}-warehouse")"
+  "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION_NAME}.amazonaws.com/${NAME_PREFIX}-images")"
 
 # S3 buckets — naming convention is environment-dependent (dev appends
 # ${ACCOUNT_ID}, prod does not), so resolve_bucket_name checks which name
@@ -679,9 +684,10 @@ if is_empty "$CLUSTER_NAME" && ! is_empty "$CLUSTER_ARN"; then
   CLUSTER_NAME="${CLUSTER_ARN##*/}"
 fi
 
-# MDM ECR — naming convention
+# MDM ECR — same shared repo as the warehouse image; role lives in the tag
+# (mdm-* vs warehouse-*), not the repository name.
 if is_empty "$MDM_ECR_REPOSITORY_URL"; then
-  MDM_ECR_REPOSITORY_URL="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION_NAME}.amazonaws.com/${NAME_PREFIX}-mdm"
+  MDM_ECR_REPOSITORY_URL="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION_NAME}.amazonaws.com/${NAME_PREFIX}-images"
 fi
 if is_empty "$PUBLIC_SUBNET_IDS_JSON" || json_array_is_empty "$PUBLIC_SUBNET_IDS_JSON"; then
   PUBLIC_SUBNET_IDS_JSON="$(
@@ -862,7 +868,7 @@ ECR_REPOSITORY_NAME="${ECR_REPOSITORY_URL##*/}"
 MDM_ECR_REPOSITORY_NAME="${MDM_ECR_REPOSITORY_URL##*/}"
 
 # ── Clean up stale ECR images before every deploy ────────────────────────────
-log "Cleaning up stale ECR images (keeps :dev + 2 newest :sha-* per repo)"
+log "Cleaning up stale ECR images (keeps every tagged image + active task digests)"
 bash "${SCRIPT_DIR}/cleanup-ecr-images.sh" \
   --env "$ENVIRONMENT" \
   --region "$AWS_REGION_NAME" \
@@ -930,19 +936,43 @@ if [[ "$BUILD_MDM_IMAGE" == "true" ]]; then
   MDM_IMAGE_REF="$(tr -d '\r\n' < "$mdm_image_output_file")"
 fi
 
+image_ref_has_tag_prefix() {
+  # Both roles now share one ECR repo, so the repo URL can no longer tell
+  # warehouse and mdm images apart -- resolve the digest's own tag list and
+  # check for the expected role prefix (warehouse-*/mdm-*) instead.
+  local image_ref="$1" prefix="$2" repo_name digest tags_json
+  repo_name="${image_ref%%@*}"
+  repo_name="${repo_name##*/}"
+  digest="${image_ref##*@}"
+  [[ "$digest" == "$image_ref" ]] && return 1  # not digest-addressed; can't check tags
+  tags_json="$(aws_cli ecr describe-images \
+    --repository-name "$repo_name" \
+    --image-ids "imageDigest=${digest}" \
+    --query 'imageDetails[0].imageTags' --output json 2>/dev/null || echo 'null')"
+  [[ "$tags_json" == "null" ]] && return 1
+  python3 -c "
+import json, sys
+tags = json.loads(sys.argv[1]) or []
+sys.exit(0 if any(t.startswith(sys.argv[2] + '-') for t in tags) else 1)
+" "$tags_json" "$prefix"
+}
+
 if [[ "$DEPLOY_MDM" == "true" ]]; then
   if is_empty "$MDM_IMAGE_REF"; then
     fail "MDM deploy requires a distinct MDM image. Pass --mdm-image-ref <mdm-digest> or --build-mdm-image. Refusing to reuse the warehouse image (warehouse and MDM have different dependency sets)."
   fi
   if [[ "$MDM_IMAGE_REF" == "$IMAGE_REF" ]]; then
-    fail "MDM image_ref equals warehouse image_ref (${IMAGE_REF}). Pass a distinct --mdm-image-ref from the edgartools-*-mdm repository. Mixing roles breaks Ticket 20 / MDM runtimes."
+    fail "MDM image_ref equals warehouse image_ref (${IMAGE_REF}). Pass a distinct --mdm-image-ref. Mixing roles breaks Ticket 20 / MDM runtimes."
   fi
-  # Repository name guard: warehouse vs mdm repos must differ when digests are present.
-  if [[ "$IMAGE_REF" == *"/edgartools-"*"-warehouse"* ]] && [[ "$MDM_IMAGE_REF" == *"/edgartools-"*"-warehouse"* ]]; then
-    fail "MDM image_ref still points at a warehouse ECR repository (${MDM_IMAGE_REF}). Use edgartools-<env>-mdm@sha256:…"
+  # Role guard: confirm each digest actually carries the expected role-prefixed
+  # tag (warehouse-*/mdm-*) in the shared images repo, catching an accidental
+  # image_ref/mdm_image_ref swap. Skipped for non-digest refs (e.g. :dev),
+  # where the tag itself already states its role.
+  if ! image_ref_has_tag_prefix "$IMAGE_REF" "warehouse"; then
+    fail "Warehouse image_ref (${IMAGE_REF}) has no warehouse-* tag in ECR. Looks like an MDM image was passed as --image-ref."
   fi
-  if [[ "$MDM_IMAGE_REF" == *"/edgartools-"*"-mdm"* ]] && [[ "$IMAGE_REF" == *"/edgartools-"*"-mdm"* ]]; then
-    fail "Warehouse image_ref points at an MDM ECR repository (${IMAGE_REF}). Use edgartools-<env>-warehouse@sha256:…"
+  if ! image_ref_has_tag_prefix "$MDM_IMAGE_REF" "mdm"; then
+    fail "MDM image_ref (${MDM_IMAGE_REF}) has no mdm-* tag in ECR. Looks like a warehouse image was passed as --mdm-image-ref."
   fi
 fi
 

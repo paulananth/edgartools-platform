@@ -9,19 +9,26 @@ Usage:
 
 Required:
   --aws-region <region>          AWS region for ECR.
-  --ecr-repository <name>        ECR repository name, for example edgartools-dev-warehouse.
+  --ecr-repository <name>        ECR repository name, for example edgartools-dev-images. One
+                                  shared repository holds warehouse, mdm, and their deps images --
+                                  role is encoded in the tag, not the repository name (see --role).
 
 Optional:
   --role <role>                  warehouse, mdm, deps-warehouse, or deps-mdm. Default: warehouse.
-  --image-tag <tag>              Image tag. Defaults to git SHA for final images and lock hash for deps images.
+                                  Also determines the tag prefix (warehouse-*/mdm-*) applied to
+                                  --image-tag, --also-tag, --cache-tag, and --cache-from-tag values
+                                  so the two roles never collide on a tag within the shared repo.
+  --image-tag <tag>              Image tag (before role-prefixing). Defaults to git SHA for final
+                                  images and lock hash for deps images.
   --aws-profile <profile>        AWS CLI profile name.
   --context <path>               Docker build context. Default: repo root.
   --dockerfile <path>            Override Dockerfile path.
   --platform <platform>          Target platform. Default: linux/amd64.
   --mode <auto|docker|buildx>    Build mode. auto defaults to docker on macOS Colima and buildx on Linux/Windows.
                                   Aliases: macos-docker, linux-buildx, windows-buildx, linux.
-  --deps-repository <name>       Dependency image ECR repository for final images.
-  --deps-tag <tag>               Dependency image tag. Default: lock hash.
+  --deps-repository <name>       Dependency image ECR repository for final images. Default: same
+                                  as --ecr-repository (deps images share the repo too).
+  --deps-tag <tag>               Dependency image tag (before role-prefixing). Default: lock hash.
   --dependency-image <ref>       Explicit dependency image ref for final image build.
   --build-deps                   Build missing dependency image. Default.
   --skip-deps-build              Fail if dependency image is missing.
@@ -268,10 +275,12 @@ cleanup_local_images() {
         docker rmi "${DEPENDENCY_IMAGE}" >/dev/null 2>&1 || true
     fi
 
-    # Remove old sha-* tags for this repo (keep only the newest one)
+    # Remove old <role>-sha-* tags for this role (keep only the newest one).
+    # Tags are role-prefixed (warehouse-sha-*, mdm-sha-*) since the shared
+    # repo holds both roles, so scope the prune to the current ROLE_PREFIX.
     local sha_tags old_tags
     sha_tags=$(docker images --format "{{.Tag}}" "${repo}" 2>/dev/null \
-        | grep '^sha-' | sort -r || true)
+        | grep "^${ROLE_PREFIX}-sha-" | sort -r || true)
     old_tags=$(echo "$sha_tags" | tail -n +2 || true)
     while IFS= read -r tag; do
         [[ -z "$tag" ]] && continue
@@ -403,7 +412,7 @@ publish_crane() {
 }
 
 build_dependency_image_if_needed() {
-    local deps_role deps_args=()
+    local deps_role deps_args=() deps_tag_input
     case "${ROLE}" in
         warehouse) deps_role="deps-warehouse" ;;
         mdm) deps_role="deps-mdm" ;;
@@ -414,9 +423,14 @@ build_dependency_image_if_needed() {
         return 0
     fi
 
-    DEPS_REPOSITORY="${DEPS_REPOSITORY:-${ECR_REPOSITORY}-deps}"
+    # Deps images live in the same shared repo as the final image now; the
+    # role prefix on the tag (applied below and, for the recursive build, by
+    # the child invocation's own role_defaults) is what keeps warehouse and
+    # mdm deps images from colliding.
+    DEPS_REPOSITORY="${DEPS_REPOSITORY:-${ECR_REPOSITORY}}"
     DEPS_DOCKERFILE="${DEPS_DOCKERFILE:-${REPO_ROOT}/Dockerfile.${deps_role#deps-}-deps}"
-    DEPS_TAG="${DEPS_TAG:-$(dependency_hash_tag "${DEPS_DOCKERFILE}")}"
+    deps_tag_input="${DEPS_TAG:-$(dependency_hash_tag "${DEPS_DOCKERFILE}")}"
+    DEPS_TAG="${ROLE_PREFIX}-${deps_tag_input}"
     DEPENDENCY_IMAGE="${REGISTRY}/${DEPS_REPOSITORY}:${DEPS_TAG}"
 
     ensure_ecr_repository "${DEPS_REPOSITORY}"
@@ -433,7 +447,7 @@ build_dependency_image_if_needed() {
         --aws-region "${AWS_REGION}"
         --ecr-repository "${DEPS_REPOSITORY}"
         --role "${deps_role}"
-        --image-tag "${DEPS_TAG}"
+        --image-tag "${deps_tag_input}"
         --mode "${REQUESTED_MODE}"
         --platform "${PLATFORM}"
         --context "${BUILD_CONTEXT}"
@@ -455,15 +469,19 @@ role_defaults() {
     case "${ROLE}" in
         warehouse)
             DOCKERFILE_PATH="${DOCKERFILE_PATH:-${REPO_ROOT}/Dockerfile}"
+            ROLE_PREFIX="warehouse"
             ;;
         mdm)
             DOCKERFILE_PATH="${DOCKERFILE_PATH:-${REPO_ROOT}/Dockerfile.mdm-neo4j}"
+            ROLE_PREFIX="mdm"
             ;;
         deps-warehouse)
             DOCKERFILE_PATH="${DOCKERFILE_PATH:-${REPO_ROOT}/Dockerfile.warehouse-deps}"
+            ROLE_PREFIX="warehouse"
             ;;
         deps-mdm)
             DOCKERFILE_PATH="${DOCKERFILE_PATH:-${REPO_ROOT}/Dockerfile.mdm-deps}"
+            ROLE_PREFIX="mdm"
             ;;
         *)
             fail "--role must be one of warehouse, mdm, deps-warehouse, deps-mdm"
@@ -475,6 +493,7 @@ AWS_PROFILE_NAME=""
 AWS_REGION=""
 ECR_REPOSITORY=""
 ROLE="warehouse"
+ROLE_PREFIX=""
 IMAGE_TAG=""
 BUILD_CONTEXT=""
 DOCKERFILE_PATH=""
@@ -551,6 +570,17 @@ if [[ -z "${IMAGE_TAG}" ]]; then
         *) IMAGE_TAG="$(git_image_tag)" ;;
     esac
 fi
+
+# Role-prefix every tag pushed to the shared repo (warehouse-*, mdm-*) so
+# warehouse and mdm images never collide on tag names within one repository.
+# Applies uniformly whether IMAGE_TAG came from a default above or an
+# explicit --image-tag.
+IMAGE_TAG="${ROLE_PREFIX}-${IMAGE_TAG}"
+for _tag_index in "${!ALSO_TAGS[@]}"; do
+    ALSO_TAGS[_tag_index]="${ROLE_PREFIX}-${ALSO_TAGS[_tag_index]}"
+done
+[[ -n "${CACHE_TAG}" ]] && CACHE_TAG="${ROLE_PREFIX}-${CACHE_TAG}"
+[[ -n "${CACHE_FROM_TAG}" ]] && CACHE_FROM_TAG="${ROLE_PREFIX}-${CACHE_FROM_TAG}"
 
 ensure_ecr_repository "${ECR_REPOSITORY}"
 build_dependency_image_if_needed

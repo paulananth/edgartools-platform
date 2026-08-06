@@ -33,6 +33,11 @@ output "ecr_repository_url" {
   value       = module.runtime.ecr_repository_url
 }
 
+output "images_repository_url" {
+  description = "Dev single shared ECR repository URL (all roles/stages, tag-prefixed)."
+  value       = module.runtime.images_repository_url
+}
+
 output "cluster_name" {
   description = "Dev ECS cluster name."
   value       = module.runtime.cluster_name
