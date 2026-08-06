@@ -13,8 +13,16 @@ rename is a *replace*, not a drift.
 That test reads prod's real `main.tf` rather than asserting against a
 hardcoded list, so it fails if either side moves -- template drifts from prod,
 or prod is changed without the template following. Prod's root is never
-written to by the generator; this is the cheap, offline, credential-free
-substitute for the `terraform plan` that would otherwise be the only proof.
+written to by the generator.
+
+Scope of that proof, precisely: it covers the *naming* half only -- the
+identifiers that are Snowflake resource identity. It is deliberately **not** a
+stand-in for a full `terraform plan` against prod's state, because the template
+and prod's live root are not address-identical: the template's `mdm_dashboard`
+module is `count`-gated (so it addresses as `module.mdm_dashboard[0]`) while
+prod's is unconditional (`module.mdm_dashboard`). See
+`test_template_mdm_dashboard_count_diverges_from_live_prod`, which pins that
+divergence rather than leaving it to be rediscovered.
 """
 
 from __future__ import annotations
@@ -101,6 +109,10 @@ def test_generating_prod_reproduces_live_prod_identifiers(mod):
 
     files = _generated(mod, _base_config(env_name="prod"))
     generated = _parse_locals(files["infra/terraform/snowflake/accounts/prod/main.tf"])
+    # Same guard on the generated side: without it a truncated parse would
+    # surface as a bare KeyError below rather than as this test's actual claim.
+    missing = [name for name in IDENTITY_LOCALS if name not in generated]
+    assert not missing, f"generated main.tf no longer defines: {missing}"
 
     for name in IDENTITY_LOCALS:
         assert generated[name] == live[name], (
@@ -368,6 +380,32 @@ def test_mdm_graph_review_dashboard_defaults_off(mod):
         variables,
         re.DOTALL,
     )
+
+
+def test_template_mdm_dashboard_count_diverges_from_live_prod(mod):
+    """Pin the one known structural divergence from prod's live root.
+
+    The template `count`-gates `mdm_dashboard`; prod's live root declares it
+    unconditionally. So generating slug `prod` yields the Terraform address
+    `module.mdm_dashboard[0]` where prod's state holds `module.mdm_dashboard`.
+    Harmless today -- nothing regenerates prod -- but it is why the parity test
+    above covers naming only, and why `accounts/prod` must not be regenerated
+    from this template without a `terraform state mv` first. Asserted rather
+    than merely commented so removing the `count` cannot silently invalidate
+    that reasoning.
+    """
+    live_main = LIVE_PROD_MAIN_TF.read_text()
+    live_block = live_main.split('module "mdm_dashboard"', 1)[1].split("\n}", 1)[0]
+    assert "count" not in live_block, (
+        "live prod's mdm_dashboard now has a count -- the divergence this test "
+        "documents may be resolved; re-check the parity test's scope note"
+    )
+
+    generated = _generated(mod, _base_config(env_name="prod"))[
+        "infra/terraform/snowflake/accounts/prod/main.tf"
+    ]
+    generated_block = generated.split('module "mdm_dashboard"', 1)[1].split("\n}", 1)[0]
+    assert "count" in generated_block
 
 
 def test_mdm_graph_review_dashboard_can_be_enabled(mod):
