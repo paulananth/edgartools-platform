@@ -11,7 +11,7 @@ from typing import Any
 from bs4 import BeautifulSoup
 
 from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory
-from edgar_warehouse.infrastructure.object_storage import read_bytes
+from edgar_warehouse.infrastructure.object_storage import object_exists, read_bytes
 
 
 def _resolve_primary_storage_path(
@@ -22,7 +22,11 @@ def _resolve_primary_storage_path(
     A raw_object DB row is not proof the S3 object it points at still exists
     (release-readiness ticket 88 -- confirmed live for a real accession).
     Verifies via one S3 LIST of the accession's document prefix before
-    trusting the row, same guard `fetch_filing_artifacts` applies.
+    trusting the row, same guard `fetch_filing_artifacts` applies -- falling
+    back to a direct existence check on the row's own storage_path when it
+    isn't in that LIST, since sec_raw_object legitimately deduplicates
+    identical content across different accessions' prefixes (see
+    bronze_filing_artifacts.py's _raw_object_still_present).
     """
     attachments = db.get_filing_attachments(accession_number)
     primary = next((row for row in attachments if row.get("is_primary")), None)
@@ -38,9 +42,10 @@ def _resolve_primary_storage_path(
             )
         )
     )
-    if raw_object["storage_path"] not in existing_keys:
+    storage_path = raw_object["storage_path"]
+    if storage_path not in existing_keys and not object_exists(storage_path):
         return None, None
-    return raw_object["storage_path"], primary["document_name"]
+    return storage_path, primary["document_name"]
 
 
 def extract_text_for_accession(

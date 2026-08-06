@@ -8,11 +8,13 @@ re-fetching rather than crashing or silently returning a dangling reference.
 
 from __future__ import annotations
 
+import hashlib
 import tempfile
 import unittest
 from types import SimpleNamespace
 
 from edgar_warehouse.bronze_filing_artifacts import fetch_filing_artifacts
+from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 from tests.unit.test_artifact_fetch_concurrency import (
     _ArtifactDb,
@@ -139,6 +141,69 @@ class VerifyS3PresenceTests(unittest.TestCase):
             self.assertEqual(second["network_fetches"], 1 + 2)  # get_filing + 2 document fetches
             for record in second["raw_writes"]:
                 self.assertTrue(os.path.exists(record["path"]))
+
+
+    def test_cross_accession_deduplicated_object_still_counts_as_present(self) -> None:
+        """Regression: silver_protection.py's sec_raw_object merge policy
+        intentionally deduplicates identical content across DIFFERENT
+        accessions (shared boilerplate like report.css/Show.js -- confirmed
+        live to affect ~17% of all sec_filing_attachment rows in prod). The
+        S3-presence check (ticket 88) must not assume a raw_object's
+        storage_path lives under *this* accession's own glob-matched
+        prefix -- a cross-accession-deduplicated object that genuinely
+        exists in S3 must still be recognized as a cache hit, not trigger a
+        wasted real SEC re-fetch."""
+        with tempfile.TemporaryDirectory() as tmp:
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+            db = _ArtifactDb()
+            capture_specs = default_capture_spec_factory()
+
+            # The shared object's real bytes live under a DIFFERENT accession's
+            # prefix -- exactly what sec_raw_object's content-hash dedup produces.
+            other_spec = capture_specs.filing_document(
+                cik=320193,
+                accession_number="0000320193-24-000099",
+                document_name="doc0.htm",
+                is_primary=False,
+            )
+            shared_bytes = b"shared-boilerplate-content"
+            storage_path = context.bronze_root.write_immutable_bytes(
+                other_spec.relative_path, shared_bytes
+            )
+            raw_object_id = hashlib.sha256(shared_bytes).hexdigest()
+            db.raw_objects[raw_object_id] = {
+                "raw_object_id": raw_object_id,
+                "storage_path": storage_path,
+                "source_url": "https://www.sec.gov/Archives/edgar/data/320193/doc0.htm",
+                "source_type": "attachment",
+            }
+
+            # This accession's own sec_filing_attachment row references that
+            # raw_object_id -- nothing was ever written under this accession's
+            # own prefix.
+            db.attachments = [
+                {
+                    "accession_number": "0000320193-24-000001",
+                    "document_name": "doc0.htm",
+                    "raw_object_id": raw_object_id,
+                    "is_primary": False,
+                }
+            ]
+
+            def _must_not_call_sec(accession: str):
+                raise AssertionError("a genuine cache hit must not call get_filing")
+
+            result = fetch_filing_artifacts(
+                context=context,
+                db=db,
+                accession_number="0000320193-24-000001",
+                sync_run_id="run-1",
+                download_bytes=_payload_downloader({}),
+                get_filing=_must_not_call_sec,
+            )
+            self.assertEqual(result["network_fetches"], 0)
+            self.assertEqual(result["attachment_count"], 1)
+            self.assertEqual(result["raw_writes"][0]["path"], storage_path)
 
 
 if __name__ == "__main__":
