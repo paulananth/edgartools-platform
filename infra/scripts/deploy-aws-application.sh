@@ -3261,7 +3261,15 @@ else:
         "End": True,
     }
 
-    release_lease = ecs_state(wh_medium_arn,
+    # large, not medium (release-readiness ticket 89): a real prod run's
+    # ReleaseLease OOM-killed (exit 137) on medium's 4096MB on all 4
+    # attempts, right after ReduceIdentityRefresh/GoldRefresh had just made
+    # canonical heavier within the same run -- same root cause ticket 83
+    # already fixed for ReduceIdentityRefresh above. The Catch below only
+    # stops that from failing an otherwise-successful gold build; it does
+    # not make the release succeed, so every retry left the lease
+    # permanently held with no visible error (execution still SUCCEEDED).
+    release_lease = ecs_state(wh_large_arn,
         "States.Array('release-identity-refresh-lease', '--run-id', $$.Execution.Name)",
         is_end=True, retry_secs=30)
     release_lease["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseLeaseFailedNonFatal"}]
