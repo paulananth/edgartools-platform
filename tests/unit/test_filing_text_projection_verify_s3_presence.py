@@ -6,11 +6,13 @@ an opaque s3fs/fsspec error, which is what happened live in prod.
 
 from __future__ import annotations
 
+import hashlib
 import tempfile
 import unittest
 from types import SimpleNamespace
 
 from edgar_warehouse.filing_text_projection import extract_text_for_accession
+from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 from tests.unit.test_artifact_fetch_concurrency import (
     _ArtifactDb,
@@ -132,6 +134,66 @@ class ExtractTextS3PresenceTests(unittest.TestCase):
                 fas.refresh_filing_artifacts = original
 
             self.assertIn("Fresh content after repair", open(row["text_storage_path"]).read())
+
+
+    def test_cross_accession_deduplicated_primary_object_not_treated_as_missing(self) -> None:
+        """Regression, same bug shape as bronze_filing_artifacts's own test:
+        a primary document's raw_object legitimately deduplicated under a
+        different accession's S3 prefix must resolve without triggering the
+        self-heal re-fetch path at all."""
+        with tempfile.TemporaryDirectory() as bronze_tmp, tempfile.TemporaryDirectory() as storage_tmp:
+            context = SimpleNamespace(
+                bronze_root=StorageLocation(bronze_tmp),
+                storage_root=StorageLocation(storage_tmp),
+                identity="tester@example.com",
+            )
+            db = _TextDb()
+            capture_specs = default_capture_spec_factory()
+
+            other_spec = capture_specs.filing_document(
+                cik=320193,
+                accession_number="0000320193-24-000098",
+                document_name="primary.htm",
+                is_primary=True,
+            )
+            shared_bytes = b"<html><body>Shared primary content</body></html>"
+            storage_path = context.bronze_root.write_immutable_bytes(
+                other_spec.relative_path, shared_bytes
+            )
+            raw_object_id = hashlib.sha256(shared_bytes).hexdigest()
+            db.raw_objects[raw_object_id] = {
+                "raw_object_id": raw_object_id,
+                "storage_path": storage_path,
+                "source_url": "https://www.sec.gov/Archives/edgar/data/320193/primary.htm",
+                "source_type": "filing_document",
+            }
+            db.attachments = [
+                {
+                    "accession_number": "0000320193-24-000006",
+                    "document_name": "primary.htm",
+                    "raw_object_id": raw_object_id,
+                    "is_primary": True,
+                }
+            ]
+
+            import edgar_warehouse.infrastructure.filing_artifact_service as fas
+
+            def _must_not_refetch(*, context, db, accession_number, sync_run_id, force):
+                raise AssertionError("a genuine cache hit must not self-heal via re-fetch")
+
+            original = fas.refresh_filing_artifacts
+            fas.refresh_filing_artifacts = _must_not_refetch
+            try:
+                row = extract_text_for_accession(
+                    context=context,
+                    db=db,
+                    accession_number="0000320193-24-000006",
+                    sync_run_id="run-1",
+                )
+            finally:
+                fas.refresh_filing_artifacts = original
+
+            self.assertIn("Shared primary content", open(row["text_storage_path"]).read())
 
 
 if __name__ == "__main__":

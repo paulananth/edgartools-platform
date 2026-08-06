@@ -20,6 +20,7 @@ import edgar
 from edgar_warehouse.infrastructure.dataset_path_catalog import (
     default_capture_spec_factory,
 )
+from edgar_warehouse.infrastructure.object_storage import object_exists
 
 # Ticket 96: edgar.get_by_accession_number's whole-market quarterly-index scan
 # inherits httpx's bare 5s default timeout (edgartools' shared HTTP_MGR client
@@ -92,6 +93,29 @@ def _emit_artifact_event(event: str, **payload: Any) -> None:
 
 def _elapsed_ms(started_at: float) -> int:
     return int((time.monotonic() - started_at) * 1000)
+
+
+def _raw_object_still_present(storage_path: str | None, *, existing_bronze_keys: set[str]) -> bool:
+    """Confirm a raw_object's S3 content is actually present -- Ticket 88, corrected scope.
+
+    ``existing_bronze_keys`` is a per-accession glob (cheap, one LIST call,
+    same cost regardless of attachment count) and covers the common case: a
+    document captured under its own accession's prefix. But sec_raw_object
+    intentionally deduplicates identical content across *different*
+    accessions (silver_protection.py's provenance_columns design -- shared
+    boilerplate like report.css/Show.js is the dominant case, confirmed live
+    to affect ~17% of all sec_filing_attachment rows). A storage_path that
+    legitimately lives under a sibling accession's prefix will never appear
+    in this accession's own glob result, so falling back to a direct,
+    single-object existence check (not another LIST) is required before
+    concluding the object is actually missing and paying for a full,
+    unnecessary SEC re-fetch.
+    """
+    if not storage_path:
+        return False
+    if storage_path in existing_bronze_keys:
+        return True
+    return object_exists(storage_path)
 
 
 class TransientFilingContentError(RuntimeError):
@@ -281,10 +305,19 @@ def fetch_filing_artifacts(
             existing_raw = db.get_raw_object(str(row["raw_object_id"]))
         if existing_raw is None and prior_raw is not None:
             existing_raw = prior_raw
-        if existing_raw is not None and existing_raw.get("storage_path") not in existing_bronze_keys:
+        if (
+            not force
+            and existing_raw is not None
+            and not _raw_object_still_present(
+                existing_raw.get("storage_path"), existing_bronze_keys=existing_bronze_keys
+            )
+        ):
             # Ticket 88: DB row present but its S3 object isn't -- treat as a
             # real miss so the pending-fetch path below re-downloads it,
-            # rather than trusting a dangling pointer.
+            # rather than trusting a dangling pointer. Gated on `not force`:
+            # already_downloaded is unconditionally False under force anyway,
+            # so there's no reason to pay for (or risk) the presence check
+            # when its result will be discarded.
             existing_raw = None
         already_downloaded = (not force) and existing_raw is not None
         if already_downloaded:
@@ -426,7 +459,9 @@ def _split_existing_attachment_rows(
         raw_object = db.get_raw_object(str(raw_object_id)) if raw_object_id else None
         # Ticket 88: a DB row referencing an S3 key that isn't actually present
         # is functionally the same as no row at all -- both need a real fetch.
-        if raw_object is not None and raw_object.get("storage_path") not in existing_bronze_keys:
+        if raw_object is not None and not _raw_object_still_present(
+            raw_object.get("storage_path"), existing_bronze_keys=existing_bronze_keys
+        ):
             raw_object = None
         if raw_object is None:
             missing_rows.append(row)

@@ -458,6 +458,27 @@ def read_bytes(storage_path: str) -> bytes:
         return handle.read()
 
 
+def object_exists(storage_path: str) -> bool:
+    """Targeted existence check for one absolute storage path.
+
+    Callers that already have a candidate storage_path (e.g. from a
+    sec_raw_object row) and only need to confirm it's still really there --
+    as opposed to `StorageLocation.find_existing`'s glob search, which
+    requires knowing the object's containing accession/CIK prefix in
+    advance and cannot find an object legitimately stored under a
+    *different* accession's prefix (content-hash dedup, see
+    silver_protection.py's sec_raw_object provenance_columns).
+    """
+    protocol = _protocol_for_uri(storage_path)
+    if protocol is None:
+        return Path(storage_path).exists()
+    _assert_protocol_allowed(protocol)
+    import fsspec
+
+    fs = fsspec.filesystem(protocol, **_remote_storage_options(storage_path))
+    return bool(fs.exists(storage_path))
+
+
 def write_uri_bytes(storage_path: str, payload: bytes) -> str:
     """Write bytes to an absolute local path or remote URI (e.g. s3://bucket/key)."""
     protocol = _protocol_for_uri(storage_path)
