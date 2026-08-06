@@ -26,9 +26,9 @@ jobs:
       matrix:
         include:
           - role: warehouse
-            ecr_repository: edgartools-dev-warehouse
+            ecr_repository: edgartools-dev-images
           - role: mdm
-            ecr_repository: edgartools-dev-mdm
+            ecr_repository: edgartools-dev-images
 
     outputs:
       warehouse-image: ${{ steps.meta.outputs.image-ref }}
@@ -66,4 +66,7 @@ jobs:
             --mode buildx \
             --cache-tag buildcache \
             --also-tag dev
-          echo "image-ref=${{ env.AWS_ACCOUNT }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ matrix.ecr_repository }}:${TAG}" >> "$GITHUB_OUTPUT"
+          # publish-warehouse-image.sh applies the --role-derived prefix
+          # (warehouse-*/mdm-*) internally; mirror that here so this output
+          # matches what actually got pushed.
+          echo "image-ref=${{ env.AWS_ACCOUNT }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ matrix.ecr_repository }}:${{ matrix.role }}-${TAG}" >> "$GITHUB_OUTPUT"

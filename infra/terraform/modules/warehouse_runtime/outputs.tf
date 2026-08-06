@@ -9,8 +9,13 @@ output "cluster_arn" {
 }
 
 output "ecr_repository_url" {
-  description = "Warehouse ECR repository URL."
+  description = "Legacy per-role warehouse ECR repository URL. Superseded by images_repository_url; kept wired to the original resource so nothing that still reads it breaks silently."
   value       = aws_ecr_repository.warehouse.repository_url
+}
+
+output "images_repository_url" {
+  description = "Single shared ECR repository URL for all images (warehouse/mdm x final/deps, role encoded in the tag prefix)."
+  value       = aws_ecr_repository.images.repository_url
 }
 
 output "edgar_identity_secret_arn" {

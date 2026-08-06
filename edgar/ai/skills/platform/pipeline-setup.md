@@ -269,7 +269,7 @@ Windows (Git Bash + WSL):
 bash infra/scripts/publish-warehouse-image-via-wsl.sh \
   --aws-profile sec_platform_deployer \
   --aws-region <region> \
-  --ecr-repository edgartools-prod-warehouse \
+  --ecr-repository edgartools-prod-images \
   --image-tag "$(git rev-parse HEAD)" \
   --output-file infra/aws-prod-image.txt
 
@@ -366,8 +366,8 @@ Run these to verify each layer is operational.
 # Warehouse CLI is installed and reachable
 edgar-warehouse --help
 
-# ECR image exists in AWS
-aws ecr describe-images --repository-name edgartools-prod-warehouse
+# ECR image exists in AWS (single shared repo; warehouse-* / mdm-* tags distinguish role)
+aws ecr describe-images --repository-name edgartools-prod-images
 
 # S3 bronze data exists
 aws s3 ls s3://<bronze-bucket>/snowflake_exports/ --human-readable | tail -5

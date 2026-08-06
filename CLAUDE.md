@@ -948,7 +948,7 @@ bash infra/scripts/deploy-snowflake-stack.sh \
 # Docker image publish (Linux / CI with buildx registry cache)
 bash infra/scripts/publish-warehouse-image.sh \
   --aws-region <region> \
-  --ecr-repository edgartools-dev-warehouse \
+  --ecr-repository edgartools-dev-images \
   --role warehouse \
   --image-tag $(git rev-parse HEAD) \
   --mode buildx \
@@ -963,7 +963,7 @@ aws ecr get-login-password --region us-east-1 \
     690839588395.dkr.ecr.us-east-1.amazonaws.com
 bash infra/scripts/publish-warehouse-image.sh \
   --aws-region us-east-1 \
-  --ecr-repository edgartools-dev-warehouse \
+  --ecr-repository edgartools-dev-images \
   --role warehouse \
   --image-tag sha-$(git rev-parse --short=12 HEAD) \
   --mode docker \
@@ -1035,31 +1035,43 @@ Use AWS ECR only for deployable images. Do not add non-AWS registry targets,
 SDKs, ODBC drivers, or deployment steps back into this repo unless the platform
 architecture changes explicitly.
 
-| Image | Dockerfile | Installs | Runs |
-|-------|------------|----------|------|
-| `edgartools-dev-warehouse-deps` | `Dockerfile.warehouse-deps` | locked `.[s3]` deps via `uv` | dependency base image |
-| `edgartools-dev-warehouse` | `Dockerfile` | source copy on warehouse deps | warehouse ECS tasks |
-| `edgartools-dev-mdm-deps` | `Dockerfile.mdm-deps` | locked `.[s3,mdm-runtime]` deps via `uv`; no API/admin packages | MDM Step Functions dependency base image |
-| `edgartools-dev-mdm` | `Dockerfile.mdm-neo4j` | source copy on MDM deps | MDM ECS tasks/API |
+**One shared ECR repository per environment** (`edgartools-<env>-images`)
+holds all four image kinds. Role and build stage are encoded entirely in the
+**tag prefix** (`warehouse-*` / `mdm-*` / `warehouse-deps-*` / `mdm-deps-*`),
+not the repository name — `publish-warehouse-image.sh` applies this prefix
+automatically based on `--role`, so callers keep passing plain tags
+(`sha-<hash>`, `dev`, `deps-<hash>`) and only `--ecr-repository` changes.
+(Superseded, pre-consolidation repos — `edgartools-<env>-warehouse`,
+`-mdm`, `-warehouse-deps`, `-mdm-deps` — are left in place as a read-only
+rollback archive; nothing pushes to them anymore.)
+
+| Image kind | Tag prefix | Dockerfile | Installs | Runs |
+|------------|------------|------------|----------|------|
+| warehouse deps | `warehouse-deps-*` | `Dockerfile.warehouse-deps` | locked `.[s3]` deps via `uv` | dependency base image |
+| warehouse final | `warehouse-*` | `Dockerfile` | source copy on warehouse deps | warehouse ECS tasks |
+| mdm deps | `mdm-deps-*` | `Dockerfile.mdm-deps` | locked `.[s3,mdm-runtime]` deps via `uv`; no API/admin packages | MDM Step Functions dependency base image |
+| mdm final | `mdm-*` | `Dockerfile.mdm-neo4j` | source copy on MDM deps | MDM ECS tasks/API |
 
 **Tagging strategy**
 
 | Tag | Meaning |
 |-----|---------|
-| `:dev` | Mutable latest dev image |
-| `:sha-<hash>` | Immutable rollback/audit image |
-| `:prod` | Manually promoted production image |
+| `warehouse-dev` / `mdm-dev` | Mutable latest dev image, per role |
+| `warehouse-sha-<hash>` / `mdm-sha-<hash>` | Immutable rollback/audit image, per role |
+| `warehouse-prod` / `mdm-prod` | Manually promoted production image, per role |
+| `warehouse-deps-<hash>` / `mdm-deps-<hash>` | Dependency base image, keyed by lockfile hash |
 
 **Manual AWS build and deploy — complete recipe (macOS Colima)**
 
 CI (GitHub Actions `deploy.yml`, the "Deploy" workflow — `build-images.yml`
 no longer exists) builds and pushes the DEV images automatically on every push
-to `main` in ~30-45s via buildx registry cache, retagging `:dev` each time.
-It does NOT promote to the prod ECR repos or register task definitions — prod
-promotion (docker tag/push to `edgartools-prod-*` + `deploy-aws-application.sh`)
-is still manual. Use the steps below for prod promotion, ad-hoc builds, or when
-CI is unavailable; for a dev image of current `main`, prefer CI's digest
-(`gh run list --workflow deploy.yml`) over rebuilding locally.
+to `main` in ~30-45s via buildx registry cache, retagging `warehouse-dev`/
+`mdm-dev` each time. It does NOT promote to prod or register task
+definitions — prod promotion (build/push under `edgartools-prod-images` +
+`deploy-aws-application.sh`) is still manual. Use the steps below for prod
+promotion, ad-hoc builds, or when CI is unavailable; for a dev image of
+current `main`, prefer CI's digest (`gh run list --workflow deploy.yml`) over
+rebuilding locally.
 
 ```bash
 # 1. Start Colima and point Docker CLI at it (do once per terminal session).
@@ -1071,44 +1083,43 @@ aws ecr get-login-password --region us-east-1 \
   | docker login --username AWS --password-stdin \
     690839588395.dkr.ecr.us-east-1.amazonaws.com
 
-# NOTE: ECR repositories must have MUTABLE tags for :dev to be overwritten.
-# If you see "tag is immutable" on push, run once per affected repo:
+# NOTE: the ECR repository must have MUTABLE tags for warehouse-dev/mdm-dev
+# to be overwritten. If you see "tag is immutable" on push, run once:
 #   aws ecr put-image-tag-mutability --region us-east-1 \
-#     --repository-name edgartools-dev-warehouse --image-tag-mutability MUTABLE
-#   aws ecr put-image-tag-mutability --region us-east-1 \
-#     --repository-name edgartools-dev-mdm --image-tag-mutability MUTABLE
+#     --repository-name edgartools-dev-images --image-tag-mutability MUTABLE
 
-# 3a. Build and push the warehouse image.
+# 3a. Build and push the warehouse image (tags as warehouse-sha-<hash>, warehouse-dev).
 bash infra/scripts/publish-warehouse-image.sh \
   --aws-region us-east-1 \
-  --ecr-repository edgartools-dev-warehouse \
+  --ecr-repository edgartools-dev-images \
   --role warehouse \
   --image-tag sha-$(git rev-parse --short=12 HEAD) \
   --mode docker \
   --cache-from-tag dev \
   --also-tag dev
 
-# 3b. Build and push the MDM image (when edgar_warehouse/mdm/** changed).
+# 3b. Build and push the MDM image (tags as mdm-sha-<hash>, mdm-dev; when edgar_warehouse/mdm/** changed).
 bash infra/scripts/publish-warehouse-image.sh \
   --aws-region us-east-1 \
-  --ecr-repository edgartools-dev-mdm \
+  --ecr-repository edgartools-dev-images \
   --role mdm \
   --image-tag sha-$(git rev-parse --short=12 HEAD) \
   --mode docker \
   --cache-from-tag dev \
   --also-tag dev
 
-# 4. Capture the digest refs that step 3 printed (used for deploy).
+# 4. Capture the digest refs that step 3 printed (used for deploy). Query by
+#    tag prefix since the repo now holds both roles.
 WAREHOUSE_REF=$(aws ecr describe-images \
   --region us-east-1 \
-  --repository-name edgartools-dev-warehouse \
-  --query "sort_by(imageDetails,&imagePushedAt)[-1].imageDigest" \
-  --output text | xargs -I{} echo "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse@{}")
+  --repository-name edgartools-dev-images \
+  --query "sort_by(imageDetails[?contains(imageTags[0], 'warehouse-sha-')],&imagePushedAt)[-1].imageDigest" \
+  --output text | xargs -I{} echo "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-images@{}")
 MDM_REF=$(aws ecr describe-images \
   --region us-east-1 \
-  --repository-name edgartools-dev-mdm \
-  --query "sort_by(imageDetails,&imagePushedAt)[-1].imageDigest" \
-  --output text | xargs -I{} echo "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@{}")
+  --repository-name edgartools-dev-images \
+  --query "sort_by(imageDetails[?contains(imageTags[0], 'mdm-sha-')],&imagePushedAt)[-1].imageDigest" \
+  --output text | xargs -I{} echo "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-images@{}")
 
 # 5. Deploy ECS task definitions and Step Functions state machines.
 bash infra/scripts/deploy-aws-application.sh \
@@ -1124,30 +1135,31 @@ bash infra/scripts/deploy-aws-application.sh \
 ```bash
 # Look up current deps tags from ECR (avoids stale hardcoded values)
 WH_DEPS=$(aws ecr describe-images --region us-east-1 \
-  --repository-name edgartools-dev-warehouse-deps \
-  --query "sort_by(imageDetails,&imagePushedAt)[-1].imageTags[0]" --output text)
+  --repository-name edgartools-dev-images \
+  --query "sort_by(imageDetails[?contains(imageTags[0], 'warehouse-deps-')],&imagePushedAt)[-1].imageTags[0]" --output text)
 MDM_DEPS=$(aws ecr describe-images --region us-east-1 \
-  --repository-name edgartools-dev-mdm-deps \
-  --query "sort_by(imageDetails,&imagePushedAt)[-1].imageTags[0]" --output text)
+  --repository-name edgartools-dev-images \
+  --query "sort_by(imageDetails[?contains(imageTags[0], 'mdm-deps-')],&imagePushedAt)[-1].imageTags[0]" --output text)
 
 ECR="690839588395.dkr.ecr.us-east-1.amazonaws.com"
 SHA_TAG="sha-$(git rev-parse --short=12 HEAD)"
+REPO="edgartools-dev-images"
 
 # Rebuild warehouse directly
-docker pull "${ECR}/edgartools-dev-warehouse-deps:${WH_DEPS}"
+docker pull "${ECR}/${REPO}:${WH_DEPS}"
 docker build --platform linux/amd64 \
-  --build-arg "DEPENDENCY_IMAGE=${ECR}/edgartools-dev-warehouse-deps:${WH_DEPS}" \
-  -f Dockerfile -t "${ECR}/edgartools-dev-warehouse:${SHA_TAG}" -t "${ECR}/edgartools-dev-warehouse:dev" .
-docker push "${ECR}/edgartools-dev-warehouse:${SHA_TAG}"
-docker push "${ECR}/edgartools-dev-warehouse:dev"
+  --build-arg "DEPENDENCY_IMAGE=${ECR}/${REPO}:${WH_DEPS}" \
+  -f Dockerfile -t "${ECR}/${REPO}:warehouse-${SHA_TAG}" -t "${ECR}/${REPO}:warehouse-dev" .
+docker push "${ECR}/${REPO}:warehouse-${SHA_TAG}"
+docker push "${ECR}/${REPO}:warehouse-dev"
 
 # Rebuild MDM directly
-docker pull "${ECR}/edgartools-dev-mdm-deps:${MDM_DEPS}"
+docker pull "${ECR}/${REPO}:${MDM_DEPS}"
 docker build --platform linux/amd64 \
-  --build-arg "DEPENDENCY_IMAGE=${ECR}/edgartools-dev-mdm-deps:${MDM_DEPS}" \
-  -f Dockerfile.mdm-neo4j -t "${ECR}/edgartools-dev-mdm:${SHA_TAG}" -t "${ECR}/edgartools-dev-mdm:dev" .
-docker push "${ECR}/edgartools-dev-mdm:${SHA_TAG}"
-docker push "${ECR}/edgartools-dev-mdm:dev"
+  --build-arg "DEPENDENCY_IMAGE=${ECR}/${REPO}:${MDM_DEPS}" \
+  -f Dockerfile.mdm-neo4j -t "${ECR}/${REPO}:mdm-${SHA_TAG}" -t "${ECR}/${REPO}:mdm-dev" .
+docker push "${ECR}/${REPO}:mdm-${SHA_TAG}"
+docker push "${ECR}/${REPO}:mdm-dev"
 ```
 
 **When to rebuild which image**
@@ -1176,13 +1188,14 @@ docker images --format "{{.Repository}}:{{.Tag}}\t{{.Size}}"
 docker image prune -f
 docker builder prune -f
 
-# 3. Remove old named images — keep only :dev and the latest :sha-* per repo.
-#    List old tags from the output above and delete explicitly:
-ECR="690839588395.dkr.ecr.us-east-1.amazonaws.com"
+# 3. Remove old named images — keep only warehouse-dev/mdm-dev and each
+#    role's latest sha-* tag. List old tags from the output above and delete
+#    explicitly:
+ECR="690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-images"
 docker rmi \
-  "${ECR}/edgartools-dev-warehouse:sha-<old>" \
-  "${ECR}/edgartools-dev-mdm:sha-<old>" \
-  "${ECR}/edgartools-dev-warehouse-deps:deps-<old>" \
+  "${ECR}:warehouse-sha-<old>" \
+  "${ECR}:mdm-sha-<old>" \
+  "${ECR}:warehouse-deps-<old>" \
   # ... add any debug/ad-hoc tags (routerfix-*, hydratefix-*, etc.)
 
 # 4. Nuclear option — wipe everything (forces full re-pull of base + deps on next build)
@@ -1190,19 +1203,19 @@ docker system prune -af   # WARNING: removes ALL local images, not just ours
 ```
 
 **What to keep:**
-- `:dev` tag for each repo — used as build cache source (`--cache-from-tag dev`)
-- Latest `:sha-<hash>` per repo — rollback anchor
-- `:deps-<hash>` for warehouse-deps and mdm-deps — slow to rebuild; only remove if `uv.lock` changed
+- `warehouse-dev` / `mdm-dev` — used as build cache source (`--cache-from-tag dev`, per role)
+- Latest `warehouse-sha-<hash>` / `mdm-sha-<hash>` — rollback anchor, per role
+- Latest `warehouse-deps-<hash>` / `mdm-deps-<hash>` — slow to rebuild; only remove if `uv.lock` changed
 - `public.ecr.aws/docker/library/python:3.12-slim-bookworm` — base layer cache
 
 **Rollback to a previous SHA**
 
 ```bash
-ECR=<account>.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-warehouse
-SHA=sha-abc1234
+ECR=<account>.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-images
+SHA=warehouse-sha-abc1234   # or mdm-sha-abc1234 for the mdm role
 docker pull $ECR:$SHA
-docker tag  $ECR:$SHA $ECR:dev
-docker push $ECR:dev
+docker tag  $ECR:$SHA $ECR:warehouse-dev
+docker push $ECR:warehouse-dev
 ```
 
 ## Key Large Files (Read in Chunks)
