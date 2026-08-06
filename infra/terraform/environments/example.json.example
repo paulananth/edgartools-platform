@@ -1,0 +1,41 @@
+{
+  "_comment": [
+    "Environment config consumed by infra/scripts/generate-snowflake-env.py.",
+    "Copy to <slug>.json and fill in. Real configs are gitignored because they",
+    "carry Snowflake account identifiers, which this repo never commits (see",
+    "CLAUDE.md, 'SnowCLI connection naming').",
+    "",
+    "env_name is the free-form slug decided by wayfinder ticket 01: it names the",
+    "generated Terraform directories, the S3 state keys, and (uppercased, with",
+    "hyphens mapped to underscores) the Snowflake role/warehouse/database",
+    "identifiers. It is deliberately NOT derived from the Snowflake account name,",
+    "so the environment survives an account rename or migration.",
+    "",
+    "The native_pull block holds the AWS-side precondition values from wayfinder",
+    "ticket 04. Do not hand-derive them -- read them straight off",
+    "`terraform output -json` against infra/terraform/access/aws/accounts/<env>,",
+    "which already surfaces all four together. Omit the whole block if the AWS",
+    "side is not stood up yet; the environment still applies, just without its",
+    "source layer, and you can fill it in and re-apply later."
+  ],
+
+  "env_name": "example",
+  "tfstate_bucket": "edgartools-example-tfstate-000000000000",
+  "aws_region": "us-east-1",
+
+  "snowflake": {
+    "organization_name": "REPLACE-ME",
+    "account_name": "REPLACE-ME",
+    "user": "REPLACE-ME",
+    "authenticator": "snowflake",
+    "admin_role": "ACCOUNTADMIN"
+  },
+
+  "mdm_graph_review_dashboard_enabled": false,
+
+  "native_pull": {
+    "snowflake_storage_role_arn": "arn:aws:iam::000000000000:role/edgartools-example-snowflake-s3",
+    "snowflake_export_root_url": "s3://edgartools-example-snowflake-export-000000000000/warehouse/artifacts/snowflake_exports/",
+    "snowflake_manifest_sns_topic_arn": "arn:aws:sns:us-east-1:000000000000:edgartools-example-snowflake-manifest-events"
+  }
+}

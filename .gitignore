@@ -32,6 +32,11 @@ infra/terraform/**/tfplan
 infra/terraform/**/backend.hcl
 !infra/terraform/**/backend.hcl.example
 
+# Generated-environment configs carry Snowflake account identifiers, which this
+# repo never commits. Only the template is tracked.
+infra/terraform/environments/*.json
+!infra/terraform/environments/*.json.example
+
 # dbt profiles contain Snowflake credentials
 infra/snowflake/dbt/**/profiles.yml
 !infra/snowflake/dbt/**/profiles.yml.example

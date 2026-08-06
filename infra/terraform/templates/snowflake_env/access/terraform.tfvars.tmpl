@@ -1,0 +1,12 @@
+snowflake_organization_name = "{{SNOWFLAKE_ORG}}"
+snowflake_account_name      = "{{SNOWFLAKE_ACCOUNT}}"
+snowflake_user              = "{{SNOWFLAKE_USER}}"
+snowflake_authenticator     = "{{SNOWFLAKE_AUTHENTICATOR}}"
+snowflake_admin_role        = "{{SNOWFLAKE_ADMIN_ROLE}}"
+
+# Derived from the provisioning root's own backend.hcl by the generator -- never
+# hand-entered a second time. Two independently typed copies of this bucket/key
+# pair is exactly how the dev go-live blockers (CLAUDE.md 5-whys #1) happened.
+provisioning_state_bucket = "{{TFSTATE_BUCKET}}"
+provisioning_state_key    = "snowflake/{{ENV_NAME}}/terraform.tfstate"
+provisioning_state_region = "{{AWS_REGION}}"
