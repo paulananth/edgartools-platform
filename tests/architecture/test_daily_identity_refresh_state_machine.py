@@ -167,6 +167,26 @@ def test_reduce_identity_refresh_runs_on_the_large_task_definition(daily_increme
     assert reducer["Parameters"]["TaskDefinition"] == _FAKE_LARGE_ARN
 
 
+def test_release_lease_runs_on_the_large_task_definition(daily_incremental_definition) -> None:
+    """Release-readiness ticket 89: ReleaseLease's existing Catch (see
+    test_release_lease_failure_is_non_fatal) only stops a release failure
+    from marking an otherwise-successful gold build FAILED -- it does not
+    make the release succeed. Confirmed live in prod (2026-08-06): a real
+    run's ReleaseLease task OOM-killed (exit 137) on medium (4096MB) on
+    all 4 attempts, identically to ticket 83's ReduceIdentityRefresh
+    failure and for the same reason -- it hydrates the full canonical
+    silver.duckdb (1.27GB and growing) for what is otherwise a single-row
+    UPDATE, right after ReduceIdentityRefresh/GoldRefresh just made
+    canonical heavier within the same run. Every retry hit the Catch and
+    left daily_identity_refresh permanently held with released_at NULL,
+    silently -- the execution still reported SUCCEEDED. Must run on large
+    (8192MB), the same fix ticket 83 already applied to ReduceIdentityRefresh
+    immediately above it -- confirmed to fail against the pre-fix
+    wh_medium_arn wiring."""
+    release_lease = daily_incremental_definition["States"]["ReleaseLease"]
+    assert release_lease["Parameters"]["TaskDefinition"] == _FAKE_LARGE_ARN
+
+
 def test_daily_incremental_enforces_the_eighteen_hour_execution_bound(
     daily_incremental_definition,
 ) -> None:

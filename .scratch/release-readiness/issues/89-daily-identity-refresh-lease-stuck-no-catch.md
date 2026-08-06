@@ -1,7 +1,7 @@
 # 89 — `daily_identity_refresh` lease has no release-on-failure, currently stuck
 
 Type: task
-Status: open
+Status: resolved (2026-08-06)
 
 ## Question
 
@@ -79,3 +79,78 @@ to unblock immediately.
 actually reaches `RunWarehouseTask` (not just `NotifyDeferred`); the Catch
 fix is implemented, tested, deployed, and live-verified the same way ticket
 86 was (a real failure releases the lease with zero manual intervention).
+
+## Answer (2026-08-06)
+
+The original hypothesis ("no `Catch` on whatever acquires the lease") was
+**stale by the time this was picked back up** -- re-checking live state
+first (per this repo's own "verify before trusting a snapshot" discipline)
+found something different: a `Catch` already existed on `ReleaseLease`
+(`ReleaseLeaseFailedNonFatal`, "release is best-effort" -- likely landed as
+part of some other pass between this ticket being filed and worked). But
+the lease was **still held**, `released_at: NULL`, acquired
+2026-08-04T11:11:01 EDT -- over 44h earlier, well past the 20h stale-reclaim
+window `acquire_pipeline_run_lease` is supposed to provide.
+
+Traced the actual execution that acquired it
+(`daily-incremental-ticket89-unblocked-1785856213`, status `SUCCEEDED`,
+started 2026-08-04T11:10:16 EDT, stopped 16:00:57 EDT -- an earlier
+session's own immediate-unblock-and-retest, from before this session's
+compaction). Its `ReleaseLease` step ran for 15 minutes and hit
+`States.TaskFailed` **four times in a row** -- every attempt -- each with
+`ExitCode 137, "OutOfMemoryError: container killed due to memory usage"`,
+on `edgartools-prod-medium` (4096MB). After retries exhausted, the existing
+Catch routed to `ReleaseLeaseFailedNonFatal` and the *execution* reported
+`SUCCEEDED` -- so the lease being permanently stuck was **completely
+invisible** in Step Functions' own status; only a direct read of
+`pipeline_run_lease` in canonical S3 exposed it.
+
+Root cause: `release-identity-refresh-lease`'s own handler
+(`warehouse_orchestrator.py:2742-2749`) is a single `UPDATE
+pipeline_run_lease ...` statement -- trivial by itself. But every command in
+this dispatcher, `release-identity-refresh-lease` included, is not on the
+one exception path (`bootstrap-batch` with a remote shard manifest,
+`_execute_warehouse_bronze_capture` line 414-418) and so unconditionally
+hits `_hydrate_silver_database_from_storage` -- downloading and opening the
+**entire canonical silver.duckdb** (confirmed live: 1273.8MB and growing,
+containing the 6.8M-row `sec_thirteenf_holding` table etc.) before it ever
+reaches its own one-line UPDATE. `ReduceIdentityRefresh`, immediately
+before `ReleaseLease` in the same state machine, was already moved
+`medium -> large` for this *exact* reason under ticket 83
+("OOM-killed on medium's 4096MB mid-merge on the largest protected table").
+`ReleaseLease` runs right after `ReduceIdentityRefresh`/`GoldRefresh` have
+just made canonical heavier within the same run -- so by the time it
+hydrates, it's paying that same cost against the freshest, heaviest version
+of canonical, on the smaller profile ticket 83 already proved insufficient.
+This is the same class of waste as the open
+`bootstrap-fundamentals --mode company-identity` wayfinder map (full-hydrate
+for an operation that needs almost nothing from canonical) -- not fixed
+structurally here, out of scope for this ticket; see that map for the
+root-cause elimination effort.
+
+**Fix (mirrors ticket 83's own precedent exactly):** `ReleaseLease` moved
+`wh_medium_arn -> wh_large_arn` in `deploy-aws-application.sh`. Regression
+test added
+(`tests/architecture/test_daily_identity_refresh_state_machine.py::test_release_lease_runs_on_the_large_task_definition`),
+confirmed to fail against the pre-fix wiring and pass after. Full
+`tests/unit/` + `tests/architecture/` suite: 1049 passed, 4 skipped, only
+the pre-existing unrelated `test_go_live_wizard.py` failure (already
+failing on `main`, unrelated to this change).
+
+**Immediate unblock:** the stuck lease
+(`daily-incremental-ticket89-unblocked-1785856213`) was cleared via a
+one-off `release-identity-refresh-lease` ECS task run on the `large`
+profile (not `medium`, since `medium` reliably OOMs on this operation) --
+confirmed via a fresh read of `pipeline_run_lease` that `status='idle'` and
+`released_at` is set. Deployed to prod and live-verified: see the commit
+that closes this ticket for the exact digests/task-definition revisions.
+
+**Still open, deliberately out of scope here:** Open question 2 from the
+original ticket ("does the 20h stale-reclaim actually fire unattended, or
+does nothing ever trigger it?") is now moot for *this* incident (the fix
+prevents the OOM that caused it), but the underlying scheduling gap is
+real and separate: `--configure-daily-incremental-schedule` is off by
+default (CLAUDE.md) and was not enabled as part of this ticket, so no
+recurring trigger exists to exercise the stale-reclaim path at all if a
+*future*, different failure mode wedges this lease again. Worth a
+follow-up if/when the recurring schedule is turned on for real.
