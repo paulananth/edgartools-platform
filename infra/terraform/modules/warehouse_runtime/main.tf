@@ -13,70 +13,21 @@ locals {
   )
 }
 
-resource "aws_ecr_repository" "warehouse" {
-  # Superseded by aws_ecr_repository.images (single shared repo for
-  # warehouse/mdm x final/deps, role encoded in the tag instead of the repo
-  # name -- see the "Image management" section of CLAUDE.md). Left in place,
-  # unreferenced by any script or task definition after that rewire, as a
-  # read-only rollback archive for previously-pushed images. Do not rename
-  # or delete: ECR repository `name` is ForceNew in this provider, so
-  # changing it here would destroy and recreate the repo rather than rename
-  # it in place.
-  name         = "${local.name_prefix}-warehouse"
-  force_delete = var.ecr_force_delete
-  # MUTABLE, not IMMUTABLE: :dev is deliberately overwritten on every build
-  # (see repo docs' "Tagging strategy" table -- ":dev" is the mutable latest
-  # dev image). IMMUTABLE here broke every push to :dev after the first one,
-  # since ECR refuses to overwrite an immutable tag -- this is what took the
-  # Deploy GitHub Actions workflow down on every run from PR #107 onward
-  # until fixed directly via `aws ecr put-image-tag-mutability`. Declaring it
-  # MUTABLE here too (not just live) so `terraform apply` doesn't silently
-  # revert that fix back to IMMUTABLE the next time state is reconciled.
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = merge(local.tags, { Name = "${local.name_prefix}-warehouse" })
-}
-
-resource "aws_ecr_lifecycle_policy" "warehouse" {
-  repository = aws_ecr_repository.warehouse.name
-
-  # ECS task definitions pin image digests that are also retained under
-  # immutable sha-* tags. Expiring tagged images by repository count can make
-  # a still-registered task definition unlaunchable. Clean up only untagged
-  # manifests; tagged rollback and task-definition images remain durable.
-  policy = jsonencode({
-    rules = [
-      {
-        rulePriority = 1
-        description  = "Expire only untagged images beyond the newest 20"
-        selection = {
-          tagStatus   = "untagged"
-          countType   = "imageCountMoreThan"
-          countNumber = 20
-        }
-        action = {
-          type = "expire"
-        }
-      }
-    ]
-  })
-}
-
 # Single shared image repository for both runtimes (warehouse, mdm) and both
 # build stages (deps, final) -- role/stage is encoded in the tag prefix
 # (warehouse-*, mdm-*, warehouse-deps-*, mdm-deps-*) instead of the repo name.
-# Replaces the 4-repo split (warehouse/mdm x final/deps); see CLAUDE.md's
-# "Image management" section.
+# Replaces the original 4-repo split (warehouse/mdm x final/deps) -- those
+# repos and their aws_ecr_repository.warehouse Terraform resource have been
+# deleted after every ECS task definition was confirmed re-pointed here; see
+# CLAUDE.md's "Image management" section.
 resource "aws_ecr_repository" "images" {
   name         = "${local.name_prefix}-images"
   force_delete = var.ecr_force_delete
-  # MUTABLE for the same reason as aws_ecr_repository.warehouse above:
-  # role-prefixed :dev/:prod tags (warehouse-dev, mdm-prod, ...) are
-  # deliberately overwritten on every build.
+  # MUTABLE, not IMMUTABLE: role-prefixed :dev/:prod tags (warehouse-dev,
+  # mdm-prod, ...) are deliberately overwritten on every build. IMMUTABLE
+  # broke every push to :dev after the first one for the predecessor repo
+  # (see PR #107 incident, TODOS.md) -- declaring it MUTABLE here too so
+  # `terraform apply` can't silently revert that.
   image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {
@@ -89,8 +40,10 @@ resource "aws_ecr_repository" "images" {
 resource "aws_ecr_lifecycle_policy" "images" {
   repository = aws_ecr_repository.images.name
 
-  # Same policy as aws_ecr_repository.warehouse: only untagged manifests are
-  # ever expired. Every tagged image (any role/stage prefix) stays durable.
+  # ECS task definitions pin image digests that are also retained under
+  # immutable role-prefixed sha tags. Expiring tagged images by count can
+  # make a still-registered task definition unlaunchable, so only untagged
+  # manifests are ever expired -- every tagged image stays durable.
   policy = jsonencode({
     rules = [
       {

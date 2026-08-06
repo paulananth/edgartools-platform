@@ -28,11 +28,6 @@ output "snowflake_export_bucket_arn" {
   value       = module.storage.snowflake_export_bucket_arn
 }
 
-output "ecr_repository_url" {
-  description = "Dev ECR repository URL."
-  value       = module.runtime.ecr_repository_url
-}
-
 output "images_repository_url" {
   description = "Dev single shared ECR repository URL (all roles/stages, tag-prefixed)."
   value       = module.runtime.images_repository_url
