@@ -678,6 +678,11 @@ def test_old_env_flag_is_gone(tmp_path: Path) -> None:
         explicit_flags=False,
     )
     assert result.returncode != 0
+    # Assert on the reason, not just the exit code: if this call ever loses
+    # explicit_flags=False, the helper would append --env-name alongside --env,
+    # --env would still be rejected as an unknown argument, and a bare
+    # returncode check would keep passing for entirely the wrong reason.
+    assert "Unknown argument: --env" in result.stdout + result.stderr
 
 
 def test_arbitrary_slug_is_accepted_not_just_dev_or_prod(tmp_path: Path) -> None:
