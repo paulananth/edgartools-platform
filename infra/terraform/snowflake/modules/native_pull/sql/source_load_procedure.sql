@@ -23,6 +23,9 @@ const targetTables = new Map([
   ["PRIVATE_FUNDS", `${databaseName}.${sourceSchema}.PRIVATE_FUNDS`],
   ["FILING_DETAIL", `${databaseName}.${sourceSchema}.FILING_DETAIL`],
   ["TICKER_REFERENCE", `${databaseName}.${sourceSchema}.TICKER_REFERENCE`],
+  // Branch B fundamentals tables.  The dimensional tables use FACT_KEY and the
+  // passthrough tables use composite natural keys, all handled by the same
+  // MERGE generator below.
   ["SEC_FINANCIAL_FACT", `${databaseName}.${sourceSchema}.SEC_FINANCIAL_FACT`],
   ["SEC_THIRTEENF_HOLDING", `${databaseName}.${sourceSchema}.SEC_THIRTEENF_HOLDING`],
   ["SEC_FINANCIAL_DERIVED", `${databaseName}.${sourceSchema}.SEC_FINANCIAL_DERIVED`],
@@ -32,8 +35,18 @@ const targetTables = new Map([
   ["SEC_SUBSIDIARY_EVIDENCE", `${databaseName}.${sourceSchema}.SEC_SUBSIDIARY_EVIDENCE`],
   ["SEC_AUDITOR_REPORT_EVIDENCE", `${databaseName}.${sourceSchema}.SEC_AUDITOR_REPORT_EVIDENCE`],
   ["SEC_EMPLOYMENT_EVENT", `${databaseName}.${sourceSchema}.SEC_EMPLOYMENT_EVENT`],
+  // Firm Roster completeness cross-check (ticket 03) — passthrough exports
+  ["SEC_ADV_FIRM_ROSTER", `${databaseName}.${sourceSchema}.SEC_ADV_FIRM_ROSTER`],
+  ["SEC_ADV_PRIVATE_FUND", `${databaseName}.${sourceSchema}.SEC_ADV_PRIVATE_FUND`],
   // ERDP-03 Explore export (gold-refresh may emit empty parquet; table must still load)
-  ["EARNINGS_CALENDAR", `${databaseName}.${sourceSchema}.EARNINGS_CALENDAR`]
+  ["EARNINGS_CALENDAR", `${databaseName}.${sourceSchema}.EARNINGS_CALENDAR`],
+  // ERDP-02 / ERDP-01 Explore exports. Missing here means LOAD_EXPORTS_FOR_RUN
+  // throws "Unsupported source table" the first time either appears in a run
+  // manifest -- found 2026-07-27 while landing ERDP-01: GUIDANCE_FACTS (#277)
+  // was already merged and had never actually loaded into EDGARTOOLS_SOURCE.
+  ["GUIDANCE_FACTS", `${databaseName}.${sourceSchema}.GUIDANCE_FACTS`],
+  ["CONSENSUS_ESTIMATES", `${databaseName}.${sourceSchema}.CONSENSUS_ESTIMATES`],
+  ["TRANSCRIPT_EVENTS", `${databaseName}.${sourceSchema}.TRANSCRIPT_EVENTS`]
 ]);
 
 const mergeKeys = new Map([
@@ -55,7 +68,16 @@ const mergeKeys = new Map([
   ["SEC_SUBSIDIARY_EVIDENCE", ["ACCESSION_NUMBER", "DOCUMENT_NAME", "ROW_ORDINAL"]],
   ["SEC_AUDITOR_REPORT_EVIDENCE", ["ACCESSION_NUMBER", "EVIDENCE_FINGERPRINT"]],
   ["SEC_EMPLOYMENT_EVENT", ["ACCESSION_NUMBER", "EVENT_INDEX"]],
-  ["EARNINGS_CALENDAR", ["FACT_KEY"]]
+  // SEC_ADV_PRIVATE_FUND deliberately keys on its real silver PK, not
+  // (ADVISER_CRD_NUMBER, DATASET_PERIOD) -- that pair is not row-unique here
+  // (one CRD reports many FUND_INDEX rows per period) and would throw
+  // "Duplicate row detected" the first time a firm reports >1 fund.
+  ["SEC_ADV_FIRM_ROSTER", ["ADVISER_CRD_NUMBER", "DATASET_PERIOD"]],
+  ["SEC_ADV_PRIVATE_FUND", ["ACCESSION_NUMBER", "FUND_INDEX"]],
+  ["EARNINGS_CALENDAR", ["FACT_KEY"]],
+  ["GUIDANCE_FACTS", ["FACT_KEY"]],
+  ["CONSENSUS_ESTIMATES", ["FACT_KEY"]],
+  ["TRANSCRIPT_EVENTS", ["EVENT_KEY"]]
 ]);
 
 function q(value) {
@@ -280,22 +302,30 @@ try {
     status: "succeeded",
     workflow_name: WORKFLOW_NAME,
     run_id: RUN_ID,
-    row_count: totalRows,
-    tables_loaded: stagedTables.length
+    environment: environmentName,
+    business_date: businessDate,
+    tables_loaded: stagedTables.length,
+    source_row_count: totalRows
   };
 } catch (error) {
-  exec("ROLLBACK");
+  try {
+    exec("ROLLBACK");
+  } catch (rollbackError) {
+    // Ignore rollback failures when no transaction is active.
+  }
+
   upsertStatus(
     environmentName,
     businessDate,
     manifestCompletedAt,
     "failed",
-    "failed",
+    "pending",
     "failed",
     null,
     null,
     error.message
   );
+
   throw error;
 }
 $$;

@@ -1,0 +1,89 @@
+locals {
+  environment               = "{{ENV_NAME}}"
+  database_name             = var.expected_database_name
+  source_schema_name        = "EDGARTOOLS_SOURCE"
+  gold_schema_name          = "EDGARTOOLS_GOLD"
+  deployer_role_name        = "EDGARTOOLS_{{ENV_UPPER}}_DEPLOYER"
+  loader_role_name          = "EDGARTOOLS_{{ENV_UPPER}}_LOADER"
+  reader_role_name          = "EDGARTOOLS_{{ENV_UPPER}}_READER"
+  dashboard_owner_role_name = "EDGARTOOLS_{{ENV_UPPER}}_DASHBOARD_OWNER"
+  refresh_warehouse_name    = "EDGARTOOLS_{{ENV_UPPER}}_REFRESH_WH"
+  reader_warehouse_name     = "EDGARTOOLS_{{ENV_UPPER}}_READER_WH"
+  native_pull_enabled       = var.snowflake_storage_role_arn != null && var.snowflake_export_root_url != null && var.snowflake_manifest_sns_topic_arn != null
+  storage_external_id       = coalesce(var.snowflake_storage_external_id, "edgartools-${local.environment}-snowflake-native-pull")
+}
+
+module "baseline" {
+  source = "../../modules/account_baseline"
+
+  environment                    = local.environment
+  database_name                  = local.database_name
+  source_schema_name             = local.source_schema_name
+  gold_schema_name               = local.gold_schema_name
+  deployer_role_name             = local.deployer_role_name
+  loader_role_name               = local.loader_role_name
+  reader_role_name               = local.reader_role_name
+  dashboard_owner_role_name      = local.dashboard_owner_role_name
+  refresh_warehouse_name         = local.refresh_warehouse_name
+  reader_warehouse_name          = local.reader_warehouse_name
+  refresh_warehouse_size         = var.refresh_warehouse_size
+  reader_warehouse_size          = var.reader_warehouse_size
+  warehouse_auto_suspend_seconds = var.warehouse_auto_suspend_seconds
+  data_retention_time_in_days    = var.data_retention_time_in_days
+}
+
+module "dashboard" {
+  source = "../../modules/dashboard"
+
+  environment           = local.environment
+  database_name         = module.baseline.database_name
+  gold_schema_name      = module.baseline.schema_names.gold
+  reader_role_name      = module.baseline.role_names.reader
+  reader_warehouse_name = module.baseline.warehouse_names.reader
+}
+
+module "mdm_dashboard" {
+  # Hosted MDM/graph review dashboard (GH-252). A second instance of the same
+  # generic dashboard module, reading the MDM_GRAPH_REVIEW review contract
+  # (infra/snowflake/sql/graph_review/01_graph_review_contract.sql) rather than
+  # the gold schema.
+  #
+  # Disabled by default for a newly generated environment: that contract's
+  # fail-closed views depend on generation-scoped GRAPH_ACTIVE_POINTER /
+  # GRAPH_GENERATION tables, which only exist after a
+  # `mdm sync-graph --generation-id ...` plus `graph-activate` run. Enabling
+  # this before those exist makes the first apply fail. Flip
+  # mdm_graph_review_dashboard_enabled to true once the environment has had a
+  # generation-scoped graph sync -- see CLAUDE.md's "Dev Terraform/Snowflake
+  # go-live blockers" entry for what happens when it hasn't.
+  count = var.mdm_graph_review_dashboard_enabled ? 1 : 0
+
+  source = "../../modules/dashboard"
+
+  environment           = local.environment
+  database_name         = module.baseline.database_name
+  gold_schema_name      = "MDM_GRAPH_REVIEW"
+  reader_role_name      = "EDGARTOOLS_GRAPH_REVIEW_READER"
+  reader_warehouse_name = module.baseline.warehouse_names.reader
+  dashboard_schema_name = "MDM_GRAPH_REVIEW_DASHBOARD"
+  streamlit_name        = "MDM_GRAPH_DASHBOARD"
+  streamlit_title       = "EdgarTools MDM Graph Review"
+}
+
+module "native_pull" {
+  count = local.native_pull_enabled ? 1 : 0
+
+  source = "../../modules/native_pull"
+
+  environment            = local.environment
+  database_name          = module.baseline.database_name
+  source_schema_name     = module.baseline.schema_names.source
+  gold_schema_name       = module.baseline.schema_names.gold
+  refresh_warehouse_name = module.baseline.warehouse_names.refresh
+  storage_role_arn       = var.snowflake_storage_role_arn
+  storage_external_id    = local.storage_external_id
+  export_root_url        = var.snowflake_export_root_url
+  manifest_sns_topic_arn = var.snowflake_manifest_sns_topic_arn
+
+  depends_on = [module.baseline]
+}

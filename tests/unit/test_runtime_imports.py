@@ -71,7 +71,10 @@ class RuntimeImportTests(unittest.TestCase):
         subparsers_action = next(
             action for action in parser._actions if action.__class__.__name__ == "_SubParsersAction"
         )
-        warehouse_cli_commands = set(subparsers_action.choices) - {"mdm"}
+        # gold-verify-live (like mdm) bypasses the warehouse orchestrator entirely --
+        # it's a standalone direct-Snowflake row-count check (edgar_warehouse.serving.
+        # gold_verify), never registered in COMMAND_REGISTRY.
+        warehouse_cli_commands = set(subparsers_action.choices) - {"mdm", "gold-verify-live"}
         self.assertEqual(
             set(commands.COMMAND_REGISTRY),
             warehouse_cli_commands,
@@ -92,7 +95,9 @@ class RuntimeImportTests(unittest.TestCase):
         subparsers_action = next(
             action for action in parser._actions if action.__class__.__name__ == "_SubParsersAction"
         )
-        all_commands = set(subparsers_action.choices) - {"mdm"}
+        # gold-verify-live never calls _planned_writes -- it doesn't go through
+        # _execute_warehouse_bronze_capture at all (see the skip comment below).
+        all_commands = set(subparsers_action.choices) - {"mdm", "gold-verify-live"}
 
         resolver = catalog.default_path_resolver()
         missing = []
@@ -135,7 +140,10 @@ class RuntimeImportTests(unittest.TestCase):
         # - migrate-silver-shards is a standalone one-time operational command whose
         #   execute() calls run_migration() directly on local file paths, never
         #   through execute_standard_command/_execute_warehouse/_resolve_scope
-        skip = {"mdm", "migrate-silver-shards"}
+        # - gold-verify-live is a standalone direct-Snowflake row-count check
+        #   (edgar_warehouse.serving.gold_verify) -- never touches the warehouse
+        #   orchestrator, bronze/silver roots, or manifest machinery at all
+        skip = {"mdm", "migrate-silver-shards", "gold-verify-live"}
         all_commands = set(subparsers_action.choices) - skip
 
         missing = []

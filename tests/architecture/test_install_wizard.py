@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "infra" / "scripts" / "go-live.sh"
+SCRIPT = REPO_ROOT / "infra" / "scripts" / "install.sh"
 # Relative to REPO_ROOT (both subprocess.run calls below set cwd=REPO_ROOT) rather
 # than an absolute path: on Windows, Git Bash's MSYS layer doesn't reliably resolve
 # an absolute `C:/...`-style path passed as a bash argv element, even in POSIX
@@ -15,6 +15,11 @@ SCRIPT = REPO_ROOT / "infra" / "scripts" / "go-live.sh"
 # ambiguity entirely and behaves identically on Linux, macOS, and Windows Git Bash.
 SCRIPT_ARG = SCRIPT.relative_to(REPO_ROOT).as_posix()
 TEST_ACCOUNT_ID = "123456789012"
+# Environments are now operator-chosen slugs with no default, so tests must
+# name one. "dev" is kept as the value so existing path/prefix assertions
+# (workspace/setup/dev/..., edgartools-dev-*) stay meaningful.
+DEFAULT_TEST_ENV = "dev"
+DEFAULT_TEST_SNOW_CONNECTION = "snowconn"
 
 
 def _resolve_bash() -> str:
@@ -27,7 +32,7 @@ def _resolve_bash() -> str:
     # System32\bash.exe whenever WSL is installed -- even when Git Bash
     # appears earlier in the PATH string. WSL interop only forwards env vars
     # listed in WSLENV (empty by default), so every env-var-based test double
-    # in this file (GO_LIVE_CALL_LOG, GO_LIVE_NO_GUM, fake tools prepended to
+    # in this file (INSTALL_CALL_LOG, INSTALL_NO_GUM, fake tools prepended to
     # PATH) silently vanishes and the script falls back to unexpected
     # defaults instead of failing loudly. Explicitly prefer a real Git
     # Bash/MSYS bash.exe over the WSL stub, searching PATH in its own order
@@ -53,10 +58,11 @@ def run_wizard(
     input_text: str = "y\n",
     env: dict[str, str] | None = None,
     check: bool = True,
+    explicit_flags: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     proc_env = os.environ.copy()
-    # go-live.sh treats AWS_PROFILE/AWS_REGION/AWS_DEFAULT_REGION as implicit
-    # overrides of its "aws-admin-<env>"/"us-east-1" defaults (go-live.sh:40,42),
+    # install.sh treats AWS_PROFILE/AWS_REGION/AWS_DEFAULT_REGION as implicit
+    # overrides of its "aws-admin-<env>"/"us-east-1" defaults (install.sh:40,42),
     # so inheriting them from the calling shell verbatim makes this test's
     # assertions depend on whatever AWS CLI profile/region the developer or CI
     # runner happens to have exported -- confirmed live: with AWS_PROFILE set
@@ -69,11 +75,22 @@ def run_wizard(
     proc_env.pop("AWS_PROFILE", None)
     proc_env.pop("AWS_REGION", None)
     proc_env.pop("AWS_DEFAULT_REGION", None)
-    proc_env.setdefault("GO_LIVE_NO_GUM", "1")
-    proc_env.setdefault("GO_LIVE_AWS_ACCOUNT_ID", TEST_ACCOUNT_ID)
+    proc_env.setdefault("INSTALL_NO_GUM", "1")
+    proc_env.setdefault("INSTALL_AWS_ACCOUNT_ID", TEST_ACCOUNT_ID)
     proc_env.setdefault("FAKE_AWS_ACCOUNT_ID", TEST_ACCOUNT_ID)
     if env:
         proc_env.update(env)
+    # --env-name and --snow-connection became required for every non-wizard
+    # command (wayfinder ticket 03): the dev default and the derived connection
+    # name are both gone. Supply them here so each test keeps exercising what it
+    # was written to exercise; tests that assert on their absence pass
+    # explicit_flags=False.
+    args = list(args)
+    if explicit_flags and args and not args[0].startswith("-"):
+        if "--env-name" not in args:
+            args += ["--env-name", DEFAULT_TEST_ENV]
+        if "--snow-connection" not in args:
+            args += ["--snow-connection", DEFAULT_TEST_SNOW_CONNECTION]
     # Deliberately NOT text=True for the subprocess call itself: on Windows,
     # subprocess's text/universal-newlines mode translates \n in `input` to
     # \r\n before writing to the child's stdin. bash's `read -r` terminates
@@ -110,7 +127,7 @@ def make_fake_tools(tmp_path: Path) -> tuple[Path, Path]:
     call_log = tmp_path / "calls.log"
     tool = """#!/usr/bin/env bash
 set -euo pipefail
-echo "$(basename "$0") $*" >> "${GO_LIVE_CALL_LOG}"
+echo "$(basename "$0") $*" >> "${INSTALL_CALL_LOG}"
 case "$(basename "$0")" in
   aws)
     if [[ "$*" == *"get-caller-identity"* && "$*" == *"--query Account"* ]]; then
@@ -142,11 +159,14 @@ exit 0
     return fakebin, call_log
 
 
-def test_go_live_script_has_valid_bash_syntax() -> None:
+def test_install_script_has_valid_bash_syntax() -> None:
     subprocess.run([BASH, "-n", SCRIPT_ARG], cwd=REPO_ROOT, check=True)
 
 
-def test_default_env_is_dev_and_decline_exits_without_mutation(tmp_path: Path) -> None:
+def test_declining_the_environment_exits_without_mutation(tmp_path: Path) -> None:
+    # Was test_default_env_is_dev_*: there is no default environment any more
+    # (wayfinder ticket 03). run_wizard supplies --env-name dev, so what this
+    # still verifies is the decline path, not a default.
     workspace = tmp_path / "workspace"
 
     result = run_wizard("plan", "--workspace", str(workspace), input_text="n\n")
@@ -160,16 +180,18 @@ def test_default_env_is_dev_and_decline_exits_without_mutation(tmp_path: Path) -
 
 def test_single_command_launches_tui_preview_plan(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
-    input_text = "\n\n\n\n\n\n\ny\n"
+    # operation, env slug, aws profile, deployer profile, region, snow connection,
+    # workspace, confirm. Env and connection must be typed: neither has a default.
+    input_text = "\n".join(["", "dev", "", "", "", "snowconn", "", "y", ""])
 
     result = run_wizard("--workspace", str(workspace), input_text=input_text)
 
     combined = result.stdout + result.stderr
-    assert "EdgarTools go-live TUI" in combined
-    assert "Run with one command: bash infra/scripts/go-live.sh" in combined
+    assert "EdgarTools install TUI" in combined
+    assert "Run with one command: bash infra/scripts/install.sh" in combined
     assert "Select operation" in combined
     assert "AWS admin/provisioning profile" in combined
-    assert "Ordered go-live plan for dev:" in combined
+    assert "Ordered install plan for dev:" in combined
     assert "[preview only]" in combined
     assert not workspace.exists()
 
@@ -189,10 +211,11 @@ echo "$*" >> "${BREW_LOG}"
     )
     brew.chmod(0o755)
     workspace = tmp_path / "workspace"
-    input_text = "n\n\n\n\n\n\n\n\ny\n"
+    # Leading "n" declines the gum install; the rest is the prompt sequence above.
+    input_text = "\n".join(["n", "", "dev", "", "", "", "snowconn", "", "y", ""])
     env = {
         "PATH": f"{fakebin}{os.pathsep}/usr/bin:/bin:/usr/sbin:/sbin",
-        "GO_LIVE_NO_GUM": "0",
+        "INSTALL_NO_GUM": "0",
         "BREW_LOG": str(brew_log),
     }
 
@@ -202,7 +225,7 @@ echo "$*" >> "${BREW_LOG}"
     assert "gum is not installed" in combined
     assert "Install gum now with Homebrew?" in combined
     assert "Continuing with the plain Bash fallback." in combined
-    assert "Ordered go-live plan for dev:" in combined
+    assert "Ordered install plan for dev:" in combined
     assert not brew_log.exists()
 
 
@@ -232,13 +255,24 @@ case "$1" in
     ;;
   input)
     value=""
+    prompt=""
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --value) value="${{2:-}}"; shift 2 ;;
+        --prompt) prompt="${{2:-}}"; shift 2 ;;
         *) shift ;;
       esac
     done
-    echo "$value"
+    # The environment slug and the Snowflake connection have no defaults to echo
+    # back (wayfinder ticket 03 removed both), so stand in for what an operator
+    # would type.
+    if [[ -z "$value" && "$prompt" == *"Environment slug"* ]]; then
+      echo "dev"
+    elif [[ -z "$value" && "$prompt" == *"Snowflake connection"* ]]; then
+      echo "snowconn"
+    else
+      echo "$value"
+    fi
     ;;
   confirm)
     exit 0
@@ -253,8 +287,8 @@ chmod +x "{fakebin / 'gum'}"
     brew.chmod(0o755)
     env = {
         "PATH": f"{fakebin}{os.pathsep}/usr/bin:/bin:/usr/sbin:/sbin",
-        "GO_LIVE_NO_GUM": "0",
-        "GO_LIVE_FORCE_GUM": "1",
+        "INSTALL_NO_GUM": "0",
+        "INSTALL_FORCE_GUM": "1",
         "BREW_LOG": str(brew_log),
         "GUM_LOG": str(gum_log),
     }
@@ -263,11 +297,14 @@ chmod +x "{fakebin / 'gum'}"
 
     combined = result.stdout + result.stderr
     assert "gum installed; continuing with the gum TUI." in combined
-    assert "Ordered go-live plan for dev:" in combined
+    assert "Ordered install plan for dev:" in combined
     assert "install gum" in brew_log.read_text(encoding="utf-8")
     log = gum_log.read_text(encoding="utf-8")
     assert "choose --header Select operation --selected plan" in log
-    assert "choose --header Select environment --selected dev" in log
+    # Environments are operator-chosen slugs now, so this is a free-text input
+    # rather than a dev|prod pick-list (wayfinder ticket 03).
+    assert "input --prompt Environment slug:" in log
+    assert "choose --header Select environment" not in log
     assert "input --prompt AWS admin/provisioning profile:" in log
     assert "confirm Continue with selected environment dev?" in log
 
@@ -277,7 +314,7 @@ def test_tui_makes_all_core_config_selectable(tmp_path: Path) -> None:
     input_text = "\n".join(
         [
             "3",
-            "2",
+            "prod",
             "aws-admin-custom",
             "deployer-custom",
             "us-west-2",
@@ -296,7 +333,7 @@ def test_tui_makes_all_core_config_selectable(tmp_path: Path) -> None:
     assert "AWS deployer profile: deployer-custom" in combined
     assert "AWS region: us-west-2" in combined
     assert "Snowflake connection: snow-prod-custom" in combined
-    assert "Ordered go-live plan for prod:" in combined
+    assert "Ordered install plan for prod:" in combined
     assert "AWS_PROFILE='aws-admin-custom' AWS_DEFAULT_REGION='us-west-2' terraform apply" in combined
     assert "SNOW_CONNECTION='snow-prod-custom' bash infra/scripts/deploy-snowflake-stack.sh" in combined
     assert not workspace.exists()
@@ -308,7 +345,7 @@ def test_plan_prints_preview_only_aws_ordered_commands(tmp_path: Path) -> None:
     result = run_wizard("plan", "--workspace", str(workspace))
 
     out = result.stdout
-    assert "Ordered go-live plan for dev:" in out
+    assert "Ordered install plan for dev:" in out
     assert "No real infrastructure will be deployed unless you confirm an apply stage." in out
     assert "[preview only] AWS_PROFILE='aws-admin-dev' AWS_DEFAULT_REGION='us-east-1' terraform apply" in out
     assert "AWS: Terraform state bucket" in out
@@ -328,7 +365,7 @@ def test_plan_prints_preview_only_aws_ordered_commands(tmp_path: Path) -> None:
     assert "-D database=EDGARTOOLS_DEV" in out
     assert "Data: bounded smoke only" in out
     assert "bootstrap-next --limit 100" in out
-    assert "Current go-live notes and issues:" in out
+    assert "Current install notes and issues:" in out
     assert "batch_size" in out
     assert "shard-manifest.json" in out
     assert "Blocker 4" in out
@@ -338,7 +375,7 @@ def test_plan_prints_preview_only_aws_ordered_commands(tmp_path: Path) -> None:
 
 
 def test_prod_plan_uses_canonical_names_and_maintained_delegates(tmp_path: Path) -> None:
-    result = run_wizard("plan", "--env", "prod", "--workspace", str(tmp_path / "workspace"))
+    result = run_wizard("plan", "--env-name", "prod", "--snow-connection", "snowconn", "--workspace", str(tmp_path / "workspace"))
 
     out = result.stdout
     assert "EDGARTOOLS_PROD" in out
@@ -355,18 +392,20 @@ def test_prod_apply_rejects_wrong_aws_account_before_any_stage(tmp_path: Path) -
     fakebin, call_log = make_fake_tools(tmp_path)
     env = {
         "PATH": f"{fakebin}{os.pathsep}{os.environ['PATH']}",
-        "GO_LIVE_CALL_LOG": str(call_log),
+        "INSTALL_CALL_LOG": str(call_log),
     }
 
     result = run_wizard(
         "deploy",
         "--apply",
-        "--env",
+        "--env-name",
         "prod",
+        "--snow-connection",
+        "snowconn",
         "--workspace",
         str(tmp_path / "workspace"),
         input_text="y\n",
-        env={**env, "GO_LIVE_AWS_ACCOUNT_ID": "210987654321"},
+        env={**env, "INSTALL_AWS_ACCOUNT_ID": "210987654321"},
         check=False,
     )
 
@@ -396,7 +435,7 @@ def test_doctor_init_plan_do_not_call_state_changing_commands(tmp_path: Path) ->
     workspace = tmp_path / "workspace"
     env = {
         "PATH": f"{fakebin}{os.pathsep}{os.environ['PATH']}",
-        "GO_LIVE_CALL_LOG": str(call_log),
+        "INSTALL_CALL_LOG": str(call_log),
     }
 
     run_wizard("doctor", "--workspace", str(workspace), env=env, check=False)
@@ -422,7 +461,7 @@ def test_deploy_preview_and_declined_apply_do_not_execute_stages(tmp_path: Path)
     workspace = tmp_path / "workspace"
     env = {
         "PATH": f"{fakebin}{os.pathsep}{os.environ['PATH']}",
-        "GO_LIVE_CALL_LOG": str(call_log),
+        "INSTALL_CALL_LOG": str(call_log),
     }
 
     preview = run_wizard("deploy", "--workspace", str(workspace), env=env)
@@ -468,7 +507,7 @@ def test_report_redacts_sensitive_values_from_state_and_commands(tmp_path: Path)
     )
     env = {
         "PATH": f"{fakebin}{os.pathsep}{os.environ['PATH']}",
-        "GO_LIVE_CALL_LOG": str(call_log),
+        "INSTALL_CALL_LOG": str(call_log),
     }
 
     run_wizard("report", "--workspace", str(workspace), "--report-file", str(report_file), env=env, check=False)
@@ -512,8 +551,8 @@ exit 0
 
     env = {
         "PATH": f"{fakebin}{os.pathsep}{os.environ['PATH']}",
-        "GO_LIVE_FORCE_GUM": "1",
-        "GO_LIVE_NO_GUM": "0",
+        "INSTALL_FORCE_GUM": "1",
+        "INSTALL_NO_GUM": "0",
         "GUM_LOG": str(gum_log),
     }
 
@@ -543,13 +582,23 @@ case "$1" in
     ;;
   input)
     value=""
+    prompt=""
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --value) value="${2:-}"; shift 2 ;;
+        --prompt) prompt="${2:-}"; shift 2 ;;
         *) shift ;;
       esac
     done
-    echo "$value"
+    # Env slug and Snowflake connection have no defaults to echo back
+    # (wayfinder ticket 03 removed both); stand in for an operator's typing.
+    if [[ -z "$value" && "$prompt" == *"Environment slug"* ]]; then
+      echo "dev"
+    elif [[ -z "$value" && "$prompt" == *"Snowflake connection"* ]]; then
+      echo "snowconn"
+    else
+      echo "$value"
+    fi
     ;;
   confirm)
     exit 0
@@ -563,16 +612,224 @@ esac
 
     env = {
         "PATH": f"{fakebin}{os.pathsep}{os.environ['PATH']}",
-        "GO_LIVE_FORCE_GUM": "1",
-        "GO_LIVE_NO_GUM": "0",
+        "INSTALL_FORCE_GUM": "1",
+        "INSTALL_NO_GUM": "0",
         "GUM_LOG": str(gum_log),
     }
 
     result = run_wizard("--workspace", str(tmp_path / "workspace"), input_text="", env=env)
 
-    assert "Ordered go-live plan for dev:" in result.stdout
+    assert "Ordered install plan for dev:" in result.stdout
     log = gum_log.read_text(encoding="utf-8")
     assert "choose --header Select operation" in log
-    assert "choose --header Select environment" in log
+    # Environments are operator-chosen slugs now, so this is a free-text input
+    # rather than a dev|prod pick-list (wayfinder ticket 03).
+    assert "input --prompt Environment slug:" in log
+    assert "choose --header Select environment" not in log
     assert "input --prompt AWS admin/provisioning profile:" in log
     assert "confirm Continue with selected environment dev?" in log
+
+
+# ---------------------------------------------------------------------------
+# Wayfinder snowflake-env-provisioning ticket 03: --env <dev|prod> became
+# --env-name <slug>, and --snow-connection became required with no derived
+# default. These pin the new contract; the tests above only prove the old one
+# stopped being required.
+# ---------------------------------------------------------------------------
+
+
+def test_env_name_is_required_for_non_wizard_commands(tmp_path: Path) -> None:
+    result = run_wizard(
+        "plan",
+        "--snow-connection",
+        "snowconn",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        check=False,
+        explicit_flags=False,
+    )
+    assert result.returncode != 0
+    assert "--env-name is required" in result.stdout + result.stderr
+
+
+def test_snow_connection_is_required_and_never_derived(tmp_path: Path) -> None:
+    """Deriving it is what let install.sh and deploy-snowflake-stack.sh disagree
+    about the default connection for the same environment."""
+    result = run_wizard(
+        "plan",
+        "--env-name",
+        "prod",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        check=False,
+        explicit_flags=False,
+    )
+    assert result.returncode != 0
+    assert "--snow-connection is required" in result.stdout + result.stderr
+
+
+def test_old_env_flag_is_gone(tmp_path: Path) -> None:
+    """Clean breaking rename -- no back-compat alias (dev is decommissioned, so
+    prod's call sites were the only ones to update)."""
+    result = run_wizard(
+        "plan",
+        "--env",
+        "prod",
+        "--snow-connection",
+        "snowconn",
+        check=False,
+        explicit_flags=False,
+    )
+    assert result.returncode != 0
+    # Assert on the reason, not just the exit code: if this call ever loses
+    # explicit_flags=False, the helper would append --env-name alongside --env,
+    # --env would still be rejected as an unknown argument, and a bare
+    # returncode check would keep passing for entirely the wrong reason.
+    assert "Unknown argument: --env" in result.stdout + result.stderr
+
+
+def test_arbitrary_slug_is_accepted_not_just_dev_or_prod(tmp_path: Path) -> None:
+    """The whole point of ticket 03: a third environment fits neither bucket."""
+    result = run_wizard(
+        "plan",
+        "--env-name",
+        "eu-prod",
+        "--snow-connection",
+        "some-connection",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        explicit_flags=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "Ordered install plan for eu-prod:" in combined
+    assert "EDGARTOOLS_EU-PROD" not in combined  # hyphen must not leak untouched
+
+
+def test_malformed_slug_is_rejected(tmp_path: Path) -> None:
+    for bad in ("BAD_Env", "1prod", "eu--prod", "eu-prod-"):
+        result = run_wizard(
+            "plan",
+            "--env-name",
+            bad,
+            "--snow-connection",
+            "snowconn",
+            check=False,
+            explicit_flags=False,
+        )
+        assert result.returncode != 0, bad
+        assert "not a valid environment slug" in result.stdout + result.stderr, bad
+
+
+def test_snowflake_delegates_get_env_name_and_aws_delegates_keep_env(
+    tmp_path: Path,
+) -> None:
+    """install threads one identifier to two different flag names.
+
+    The Snowflake-side scripts were renamed by ticket 03; the AWS-side ones were
+    deliberately not (AWS provisioning is this map's documented precondition, and
+    ticket 04 recorded their enum as the deferred gap). Getting this split wrong
+    silently breaks either half.
+    """
+    result = run_wizard(
+        "plan",
+        "--env-name",
+        "prod",
+        "--snow-connection",
+        "edgartools-prod",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        explicit_flags=False,
+    )
+    combined = result.stdout + result.stderr
+
+    assert "deploy-snowflake-stack.sh --env-name prod" in combined
+    assert "bootstrap-prod-mdm.sh --env-name prod" in combined
+    assert "deploy-aws-application.sh --env prod" in combined
+    assert "run-aws-mdm-e2e.sh --env prod" in combined
+
+
+# ---------------------------------------------------------------------------
+# Wayfinder snowflake-env-provisioning ticket 05: the run order is install.sh's
+# existing sequence plus a Neo4j Native App install stage. Nothing installed the
+# app before -- the grants SQL only GRANTs against one it assumes exists -- so a
+# brand-new account could never complete the graph half of a go-live.
+# ---------------------------------------------------------------------------
+
+
+def _plan_stage_titles(tmp_path: Path) -> list[str]:
+    result = run_wizard(
+        "plan",
+        "--env-name",
+        "prod",
+        "--snow-connection",
+        "edgartools-prod",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        explicit_flags=False,
+    )
+    titles = []
+    for line in (result.stdout + result.stderr).splitlines():
+        stripped = line.strip()
+        if stripped and stripped[0].isdigit() and ". " in stripped:
+            number, _, title = stripped.partition(". ")
+            if number.isdigit():
+                titles.append(title)
+    return titles
+
+
+def test_neo4j_install_stage_exists(tmp_path: Path) -> None:
+    assert "Snowflake: Neo4j Native App install" in _plan_stage_titles(tmp_path)
+
+
+def test_neo4j_install_runs_early_and_before_the_grants_stage(tmp_path: Path) -> None:
+    """Placement is the decision, not an accident.
+
+    Installing needs a one-time ORGADMIN acceptance of the Marketplace terms in
+    Snowsight, which has no SQL equivalent (ticket 02). Running it second means
+    that human step overlaps the stages that don't depend on it, rather than
+    stalling the wizard midway. It must still precede the stage that GRANTs
+    against the application.
+    """
+    titles = _plan_stage_titles(tmp_path)
+    install = titles.index("Snowflake: Neo4j Native App install")
+    grants = titles.index("Snowflake Postgres / graph prerequisites")
+
+    assert install == 1, f"expected stage 2, got stage {install + 1}"
+    assert install < grants
+
+
+def test_neo4j_install_stage_delegates_to_the_script(tmp_path: Path) -> None:
+    result = run_wizard(
+        "plan",
+        "--env-name",
+        "prod",
+        "--snow-connection",
+        "edgartools-prod",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        explicit_flags=False,
+    )
+    combined = result.stdout + result.stderr
+    assert (
+        "bash infra/scripts/install-neo4j-graph-app.sh --snow-connection edgartools-prod"
+        in combined
+    )
+
+
+def test_plan_is_preview_only_and_installs_nothing(tmp_path: Path) -> None:
+    """The new stage is state-changing, so it must stay behind the same
+    preview/confirm gate as every other stage."""
+    result = run_wizard(
+        "plan",
+        "--env-name",
+        "prod",
+        "--snow-connection",
+        "edgartools-prod",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        explicit_flags=False,
+    )
+    combined = result.stdout + result.stderr
+    for line in combined.splitlines():
+        if "install-neo4j-graph-app.sh" in line:
+            assert "[preview only]" in line

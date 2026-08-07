@@ -4,24 +4,24 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage:
-  go-live.sh [wizard|doctor|init|plan|deploy|report] [options]
+  install.sh [wizard|doctor|init|plan|deploy|report] [options]
 
 Commands:
   wizard   Interactive TUI wizard. This is the default when no command is provided.
   doctor   Run read-only local, AWS CLI, SnowCLI, Terraform, Docker, and config checks.
-  init     Create only ignored local wizard state/templates under .edgartools-go-live/.
-  plan     Print the ordered go-live plan and exact commands as preview-only.
+  init     Create only ignored local wizard state/templates under .edgartools-install/.
+  plan     Print the ordered install plan and exact commands as preview-only.
   deploy   Preview the plan. Use --apply to enable per-stage confirmation and execution.
-  report   Write and print a sanitized go-live report.
+  report   Write and print a sanitized install report.
 
 Options:
-  --env <dev|prod>                Environment. Default: dev.
+  --env-name <slug>               Environment slug (e.g. prod, eu-prod). Required.
   --aws-profile <profile>         AWS admin/provisioning profile. Default: AWS_PROFILE or aws-admin-<env>.
-  --aws-account-id <id>           Expected 12-digit AWS account ID. Required (or GO_LIVE_AWS_ACCOUNT_ID).
+  --aws-account-id <id>           Expected 12-digit AWS account ID. Required (or INSTALL_AWS_ACCOUNT_ID).
   --deployer-profile <profile>    AWS application deployer profile. Default: sec_platform_deployer.
   --aws-region <region>           AWS region. Default: AWS_REGION, AWS_DEFAULT_REGION, or us-east-1.
-  --snow-connection <name>        SnowCLI connection. Default: snowconn for dev, edgartools-prod for prod.
-  --workspace <path>              Local ignored wizard workspace. Default: .edgartools-go-live.
+  --snow-connection <name>        SnowCLI connection name from ~/.snowflake/config.toml. Required (never derived from --env-name).
+  --workspace <path>              Local ignored wizard workspace. Default: .edgartools-install.
   --report-file <path>            Report path for the report command.
   --apply                         deploy only: enable real commands, each behind a yes/no prompt.
   -h, --help                      Show this help.
@@ -36,15 +36,15 @@ fail() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-ENVIRONMENT="dev"
+ENVIRONMENT=""
 AWS_PROFILE_NAME="${AWS_PROFILE:-}"
-DEPLOYER_PROFILE="${GO_LIVE_DEPLOYER_PROFILE:-sec_platform_deployer}"
+DEPLOYER_PROFILE="${INSTALL_DEPLOYER_PROFILE:-sec_platform_deployer}"
 AWS_REGION_NAME="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
 SNOW_CONNECTION=""
 WORKSPACE=""
 REPORT_FILE=""
 APPLY=false
-EXPECTED_AWS_ACCOUNT_ID="${GO_LIVE_AWS_ACCOUNT_ID:-}"
+EXPECTED_AWS_ACCOUNT_ID="${INSTALL_AWS_ACCOUNT_ID:-}"
 CANONICAL_PROD_DATABASE="EDGARTOOLS_PROD"
 
 COMMAND="wizard"
@@ -70,7 +70,7 @@ fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env) ENVIRONMENT="${2:?}"; shift 2 ;;
+    --env-name) ENVIRONMENT="${2:?}"; shift 2 ;;
     --aws-profile) AWS_PROFILE_NAME="${2:?}"; shift 2 ;;
     --aws-account-id) EXPECTED_AWS_ACCOUNT_ID="${2:?}"; shift 2 ;;
     --deployer-profile) DEPLOYER_PROFILE="${2:?}"; shift 2 ;;
@@ -84,36 +84,56 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-case "$ENVIRONMENT" in
-  dev|prod) ;;
-  *) fail "--env must be dev or prod" ;;
-esac
+# The wizard prompts interactively for the environment and connection, so it is
+# the one command allowed to start without them; every other command must be
+# given both explicitly. --snow-connection is never derived from --env-name:
+# deriving it is what let install.sh and deploy-snowflake-stack.sh disagree about
+# the default connection for the same environment (CLAUDE.md, "SnowCLI connection
+# naming").
+# Environment identifier is a free-form operator-chosen slug (wayfinder ticket
+# 01), not a closed dev|prod enum. Defined as a function because the wizard
+# collects the slug interactively, after this point, and must validate it too --
+# otherwise an empty or malformed answer flows into RESOURCE_PREFIX and
+# SNOWFLAKE_DATABASE as "edgartools-" / "EDGARTOOLS_".
+validate_env_slug() {
+  case "$1" in
+    "") fail "--env-name is required" ;;
+    *--*) fail "--env-name '$1' is not a valid environment slug: hyphen-separated words must be non-empty" ;;
+    *[!a-z0-9-]*|-*|*-|[!a-z]*) fail "--env-name '$1' is not a valid environment slug: use lowercase letters and digits in hyphen-separated words, starting with a letter (e.g. 'prod', 'eu-prod')" ;;
+  esac
+}
+
+# The wizard prompts for both, so it alone may start without them; it validates
+# the answers via validate_env_slug/the check below once collected.
+if [[ "$COMMAND" != "wizard" ]]; then
+  validate_env_slug "$ENVIRONMENT"
+  # Never derived from --env-name: deriving it is what let install.sh and
+  # deploy-snowflake-stack.sh disagree about the default connection for the same
+  # environment (CLAUDE.md, "SnowCLI connection naming").
+  [[ -n "$SNOW_CONNECTION" ]] || fail "--snow-connection is required (no default is derived from --env-name)"
+elif [[ -n "$ENVIRONMENT" ]]; then
+  validate_env_slug "$ENVIRONMENT"
+fi
 
 if [[ "$APPLY" == "true" && "$COMMAND" != "deploy" && "$COMMAND" != "wizard" ]]; then
   fail "--apply is only valid with deploy or wizard"
 fi
 
-EVENTS_FILE="${TMPDIR:-/tmp}/go-live-events-$$.tsv"
+EVENTS_FILE="${TMPDIR:-/tmp}/install-events-$$.tsv"
 trap 'rm -f "${EVENTS_FILE}"' EXIT
-
-default_snow_connection_for_env() {
-  case "$1" in
-    dev) printf '%s\n' "snowconn" ;;
-    prod) printf '%s\n' "edgartools-prod" ;;
-    *) printf '%s\n' "edgartools-$1" ;;
-  esac
-}
 
 refresh_config() {
   if [[ -z "$AWS_PROFILE_NAME" ]]; then
     AWS_PROFILE_NAME="aws-admin-${ENVIRONMENT}"
   fi
-  if [[ -z "$SNOW_CONNECTION" ]]; then
-    SNOW_CONNECTION="$(default_snow_connection_for_env "$ENVIRONMENT")"
-  fi
-  WORKSPACE="${WORKSPACE:-${REPO_ROOT}/.edgartools-go-live}"
+  WORKSPACE="${WORKSPACE:-${REPO_ROOT}/.edgartools-install}"
   STATE_FILE="${WORKSPACE}/state.json"
-  ENV_UPPER="$(printf '%s' "$ENVIRONMENT" | tr '[:lower:]' '[:upper:]')"
+  # Hyphens are legal in a slug and in AWS resource names, but NOT in an
+  # unquoted Snowflake identifier -- so the Snowflake side maps them to
+  # underscores ("eu-prod" -> EDGARTOOLS_EU_PROD) while RESOURCE_PREFIX keeps
+  # the hyphen. Same mapping as generate-snowflake-env.py's snowflake_segment();
+  # for a slug with no hyphens (e.g. "prod") this is a no-op.
+  ENV_UPPER="$(printf '%s' "$ENVIRONMENT" | tr '[:lower:]-' '[:upper:]_')"
   RESOURCE_PREFIX="edgartools-${ENVIRONMENT}"
   SNOWFLAKE_DATABASE="EDGARTOOLS_${ENV_UPPER}"
 }
@@ -133,14 +153,14 @@ require_expected_aws_target() {
 }
 
 use_gum() {
-  [[ "${GO_LIVE_NO_GUM:-}" == "1" ]] && return 1
+  [[ "${INSTALL_NO_GUM:-}" == "1" ]] && return 1
   command -v gum >/dev/null 2>&1 || return 1
-  [[ "${GO_LIVE_FORCE_GUM:-}" == "1" ]] && return 0
+  [[ "${INSTALL_FORCE_GUM:-}" == "1" ]] && return 0
   [[ -t 0 && -t 1 ]]
 }
 
 offer_gum_install() {
-  [[ "${GO_LIVE_NO_GUM:-}" == "1" ]] && return 0
+  [[ "${INSTALL_NO_GUM:-}" == "1" ]] && return 0
   command -v gum >/dev/null 2>&1 && return 0
 
   echo "gum is not installed. gum enables the richer terminal UI for this wizard."
@@ -239,7 +259,7 @@ prompt_value() {
 
 show_startup() {
   cat <<EOF
-Go-live wizard
+Install wizard
 selected environment: ${ENVIRONMENT}
 AWS profile: ${AWS_PROFILE_NAME}
 AWS deployer profile: ${DEPLOYER_PROFILE}
@@ -264,8 +284,8 @@ run_tui_wizard() {
 
   offer_gum_install
 
-  echo "EdgarTools go-live TUI"
-  echo "Run with one command: bash infra/scripts/go-live.sh"
+  echo "EdgarTools install TUI"
+  echo "Run with one command: bash infra/scripts/install.sh"
   echo "Default action is preview-only plan; deploy apply requires explicit selection and per-stage confirmations."
   echo
 
@@ -274,13 +294,11 @@ run_tui_wizard() {
 
   old_env="$ENVIRONMENT"
   old_aws_default="aws-admin-${old_env}"
-  old_snow_default="$(default_snow_connection_for_env "$old_env")"
-  ENVIRONMENT="$(choose_one "Select environment" "$ENVIRONMENT" "dev" "prod")"
+  # Free-text, not a dev|prod pick-list: environments are operator-chosen slugs.
+  ENVIRONMENT="$(prompt_value "Environment slug" "$ENVIRONMENT")"
+  validate_env_slug "$ENVIRONMENT"
   if [[ "$AWS_PROFILE_NAME" == "$old_aws_default" ]]; then
     AWS_PROFILE_NAME="aws-admin-${ENVIRONMENT}"
-  fi
-  if [[ "$SNOW_CONNECTION" == "$old_snow_default" ]]; then
-    SNOW_CONNECTION="$(default_snow_connection_for_env "$ENVIRONMENT")"
   fi
   refresh_config
 
@@ -291,6 +309,7 @@ run_tui_wizard() {
   fi
   AWS_REGION_NAME="$(prompt_value "AWS region" "$AWS_REGION_NAME")"
   SNOW_CONNECTION="$(prompt_value "Snowflake connection" "$SNOW_CONNECTION")"
+  [[ -n "$SNOW_CONNECTION" ]] || fail "Snowflake connection is required (no default is derived from the environment slug)"
   WORKSPACE="$(prompt_value "Local wizard workspace" "$WORKSPACE")"
 
   if [[ "$COMMAND" == "report" ]]; then
@@ -389,7 +408,7 @@ print(value)
 PY
 }
 
-known_go_live_notes_markdown() {
+known_install_notes_markdown() {
   cat <<'EOF'
 - `bronze_seed_silver_gold` now needs the Step Functions `batch_size` input defaulted and stringified before ECS `ContainerOverrides.Command`; older deployed definitions can fail immediately in `SeedFromBronze`.
 - Fresh silver stores may not contain the legacy `sec_tracked_universe` table; table-count reporting must treat that missing table as zero so `seed-bronze-batches` can finish after writing the CIK batch manifest.
@@ -397,7 +416,7 @@ known_go_live_notes_markdown() {
 - `bootstrap-batch`'s idempotency check only consulted the silver checkpoint table, not S3 bronze existence directly -- on a fresh silver DB this caused real per-CIK SEC API calls during `BatchSilver` despite the bronze already existing in S3 (confirmed live: ~1 batch/hour with live `sec_pull_started` events). Fixed via a CIK-prefix glob fallback (`StorageLocation.find_existing`) and PR95's `merge_filings` bulk-upsert path. Always publish and deploy a fresh warehouse image that contains PR95 before using the one-click stage, and verify a `bronze_seed_silver_gold` run's first batch shows zero `sec_pull_started` events in CloudWatch within minutes of starting -- don't wait an hour to check.
 - Do not treat `BatchSilver` succeeding as proof the whole chain works: the first time this chain ever reached `MdmRun` in prod, it failed separately (read-side shard-manifest-missing bug, distinct from the write-side bug above). Do not flip Blocker 4 / hosted graph E2E to PASS until `SeedFromBronze`, `BatchSilver`, `MdmRun`, `MdmBackfill`, `MdmSync`, `MdmVerify`, and `GoldRefresh` all succeed in prod and the run shows zero `sec_pull_started` events during `BatchSilver`.
 - **Do not redrive a failed `bronze_seed_silver_gold` execution after deploying a fix.** AWS Step Functions pins a redriven execution to the exact task-definition revision that was active when that execution last reached the failed state -- it does NOT pick up newly deployed revisions. Confirmed live: redriving after deploying a fix still ran the OLD task-definition revision and reproduced the OLD failure. Always start a fresh execution to pick up a new image/fix; only redrive when no relevant image has changed since the failure (e.g. a transient network blip) and you want to skip re-running already-succeeded `BatchSilver` batches.
-- `deploy-aws-application.sh --enable-mdm` silently defaults MDM task definitions to the *warehouse* image ref when `--mdm-image-ref` is omitted -- they need different images (MDM installs `.[s3,mdm-runtime]`, warehouse installs `.[s3]`). Always pass `--mdm-image-ref` explicitly; the go-live wizard's stages now do this automatically by publishing and resolving both image refs separately.
+- `deploy-aws-application.sh --enable-mdm` silently defaults MDM task definitions to the *warehouse* image ref when `--mdm-image-ref` is omitted -- they need different images (MDM installs `.[s3,mdm-runtime]`, warehouse installs `.[s3]`). Always pass `--mdm-image-ref` explicitly; the install wizard's stages now do this automatically by publishing and resolving both image refs separately.
 - `cleanup-ecr-images.sh` only protects image digests referenced by *currently active* ECS task definitions. If you redeploy with a stale cached image ref (e.g. from an old `infra/aws-<env>-application.json` or a manually-typed digest) and then run cleanup, the digest you're about to deploy can be deleted out from under you if it isn't the one already active. Always redeploy with a freshly published or freshly verified-present image ref before running ECR cleanup, not after assuming an old digest is still around.
 - `sec_platform_runner_step_functions` needs `states:RedriveExecution` (in addition to `StartExecution`/`DescribeExecution`/`StopExecution`) for redrive to work at all -- this was missing and is now in Terraform (`infra/terraform/access/aws/modules/runtime_access/main.tf`). If a redrive call fails with an IAM authorization error, check this policy is actually applied (`terraform apply` in `infra/terraform/access/aws/accounts/<env>/`, not a CLI-only patch that can drift from source).
 EOF
@@ -632,6 +651,11 @@ AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform plan
 AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform apply"
 
   add_stage \
+    "Snowflake: Neo4j Native App install" \
+    "Installs the Neo4j Graph Analytics Native App, which nothing in this repo previously did: infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql (run by the 'Snowflake Postgres / graph prerequisites' stage below) only GRANTs against an application it assumes already exists, so every prior install silently depended on someone having installed it out of band -- an assumption that does not hold for a brand-new account. Placed this early deliberately (wayfinder ticket 05): installing requires a one-time, per-organization ORGADMIN acceptance of the Snowflake Provider and Consumer Terms in Snowsight, which wayfinder ticket 02 established has no SQL or API equivalent. Running it here means that human step is in flight while the AWS and Snowflake stages that do not depend on it proceed, instead of stalling the wizard mid-run. Idempotent: exits cleanly if the application is already installed. The Marketplace listing is resolved at run time rather than hardcoded, because ticket 02's candidate global name was transcribed from a guide URL rather than read off SHOW AVAILABLE LISTINGS and is explicitly unverified. NOTE: this stage is necessary but not sufficient for the graph half of a brand-new environment -- the later grants stage grants against {{ database }}.NEO4J_GRAPH_MIGRATION, a schema that mdm sync-graph does not create until stage 13, so on a genuinely new account the grants stage still runs ahead of its own prerequisite. See wayfinder ticket 07." \
+    "bash infra/scripts/install-neo4j-graph-app.sh --snow-connection ${SNOW_CONNECTION}"
+
+  add_stage \
     "AWS: passive infrastructure" \
     "VPC, S3 bronze/warehouse/export buckets, S3 endpoint, ECR, ECS cluster, CloudWatch logs, SNS, KMS, and empty Secrets Manager containers." \
     "cd infra/terraform/accounts/${ENVIRONMENT}
@@ -673,7 +697,18 @@ AWS_PROFILE=${deployer_q} bash infra/scripts/deploy-aws-application.sh --env ${E
   add_stage \
     "Snowflake: native-pull foundation" \
     "baseline database/schemas/warehouses plus native-pull integration, stage, source tables, pipe, stream, procedures, task, and access grants." \
-    "SNOW_CONNECTION=${snow_q} bash infra/scripts/deploy-snowflake-stack.sh --env ${ENVIRONMENT} --snow-connection ${SNOW_CONNECTION} --run-validation"
+    "SNOW_CONNECTION=${snow_q} bash infra/scripts/deploy-snowflake-stack.sh --env-name ${ENVIRONMENT} --snow-connection ${SNOW_CONNECTION} --run-validation"
+
+  add_stage \
+    "AWS/silver: seed-universe (full/unscoped)" \
+    "Full, unscoped edgar-warehouse seed-universe run -- an AWS/silver-layer concern, not a Snowflake-specific step, but placed here (after native-pull foundation, before the MDM+graph stage) because both ends of that window are hard constraints (wayfinder snowflake-account-cutover ticket 06): Snowpipe (created by native-pull foundation above) only auto-ingests S3 objects created after the pipe exists, so this cannot run earlier; 'mdm seed-universe' inside the MDM+graph stage below errors ('silver universe empty; warehouse seed-universe must run first') unless this ran first, so it cannot run later. Deliberately unscoped (no --limit, unlike the old bounded call this replaces in the smoke-test stage): --limit truncates which newly-discovered CIKs get queued into bootstrap_pending tracking status after the already-active-CIK filter, silently dropping genuinely-new companies past the first N. WAREHOUSE_RUNTIME_MODE=bronze_capture (not infrastructure_validation, the smoke-test stage's mode) is required here -- infrastructure_validation never calls the real reference-data sync at all, only writes a placeholder manifest. This is a one-time initial-state establishment for a new account, not an ongoing mechanism: ordinary freshness continues afterward via the existing recurring silver-layer cadence (e.g. daily_incremental), independent of which Snowflake account is live." \
+    "EDGAR_IDENTITY=\"\${EDGAR_IDENTITY:?set EDGAR_IDENTITY with contact email}\" WAREHOUSE_ENVIRONMENT=${ENVIRONMENT} WAREHOUSE_RUNTIME_MODE=bronze_capture uv run --extra s3 edgar-warehouse seed-universe"
+
+  add_stage \
+    "Snowflake: MDM export targets" \
+    "Creates the 5 MDM golden-record export target tables (MDM_COMPANY_ENTITY, MDM_ADVISER, MDM_PERSON, MDM_SECURITY, MDM_FUND) that edgar_warehouse/mdm/export.py's MDMExporter.export_pending() MERGEs into -- no Terraform equivalent creates these (wayfinder snowflake-account-cutover ticket 07). Must run before the next stage: company.sql (dbt) reads {{ source('mdm_export', 'MDM_COMPANY_ENTITY') }}, so a brand-new account's first dbt run would fail without this table already existing. 07_mdm_export_targets.sql uses Snowflake session variables (SET x = ...; then \$x in the SQL body), not Jinja {{ }} templating, so its required SET statements are piped in via stdin ahead of the file's own content rather than passed as -D flags." \
+    "{ printf '%s\n' \"SET database_name = '${db_name}';\" \"SET gold_schema_name = 'EDGARTOOLS_GOLD';\" \"SET deployer_role_name = 'ACCOUNTADMIN';\" \"SET loader_role_name = 'EDGARTOOLS_${ENV_UPPER}_LOADER';\"
+cat infra/snowflake/sql/bootstrap/07_mdm_export_targets.sql; } | snow sql --connection ${SNOW_CONNECTION} -i"
 
   add_stage \
     "Snowflake: dbt gold" \
@@ -684,15 +719,23 @@ uv run --with dbt-snowflake dbt run --target ${ENVIRONMENT}
 uv run --with dbt-snowflake dbt test --target ${ENVIRONMENT}"
 
   add_stage \
+    "Snowflake: loader role ownership" \
+    "Creates EDGARTOOLS_${ENV_UPPER}_LOADER (if the access-control Terraform root did not already) and transfers ownership of the EDGARTOOLS_GOLD dynamic tables plus the 3 manifest-pipeline procedures (LOAD_EXPORTS_FOR_RUN, REFRESH_AFTER_LOAD, PROCESS_RUN_MANIFEST_STREAM) onto it -- REFRESH_AFTER_LOAD's ALTER DYNAMIC TABLE ... REFRESH requires the direct owner role, so this must run after this stage's own dbt gold prerequisite (the dynamic tables must exist before ownership of them can be granted) and before any gold-refresh (both the standalone stage and bronze_seed_silver_gold's internal one, both later in this sequence). 08_loader_role.sql also uses Snowflake session variables, piped the same way as the MDM export targets stage above. On a genuinely brand-new account, dbt gold above already runs as this loader role (profiles.yml's prod target), so the GRANT OWNERSHIP statements here are harmless idempotent re-grants to the already-current owner; they become real ownership transfers only when re-run against an account with pre-existing drift." \
+    "{ printf '%s\n' \"SET database_name = '${db_name}';\" \"SET source_schema_name = 'EDGARTOOLS_SOURCE';\" \"SET gold_schema_name = 'EDGARTOOLS_GOLD';\" \"SET admin_role_name = 'ACCOUNTADMIN';\" \"SET loader_role_name = 'EDGARTOOLS_${ENV_UPPER}_LOADER';\" \"SET loader_default_grantee = 'ACCOUNTADMIN';\" \"SET refresh_warehouse_name = 'EDGARTOOLS_${ENV_UPPER}_REFRESH_WH';\" \"SET source_load_procedure_name = 'LOAD_EXPORTS_FOR_RUN';\" \"SET refresh_procedure_name = 'REFRESH_AFTER_LOAD';\" \"SET stream_processor_procedure_name = 'PROCESS_RUN_MANIFEST_STREAM';\" \"SET manifest_stream_name = 'SNOWFLAKE_RUN_MANIFEST_STREAM';\" \"SET status_table_name = 'SNOWFLAKE_REFRESH_STATUS';\"
+cat infra/snowflake/sql/bootstrap/08_loader_role.sql; } | snow sql --connection ${SNOW_CONNECTION} -i"
+
+  add_stage \
     "Snowflake: Streamlit dashboard" \
     "Uploads the Streamlit dashboard artifacts to the Snowflake dashboard stage." \
     "SNOW_CONNECTION=${snow_q} DASHBOARD_DATABASE=${db_name} bash infra/snowflake/streamlit/deploy.sh"
 
   add_stage \
     "Snowflake Postgres / graph prerequisites" \
-    "Delegates Snowflake Postgres credential rotation, migration, and AWS secret bootstrap to the maintained bootstrap script, then grants the hosted graph app against the selected database." \
-    "bash infra/scripts/bootstrap-prod-mdm.sh --env ${ENVIRONMENT} --snow-connection ${SNOW_CONNECTION} --instance-name ${mdm_instance_name_q} --aws-profile ${AWS_PROFILE_NAME} --aws-region ${AWS_REGION_NAME} --name-prefix edgartools-${ENVIRONMENT}
-snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --filename infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql -D database=${db_name}"
+    "Creates the MDM schema and its Snowflake Postgres network policy/instance (wayfinder snowflake-account-cutover ticket 03), then delegates credential rotation, migration, and AWS secret bootstrap to the maintained bootstrap script. Finishes wiring the mdm_schema_name/mdm_network_policy_name/mdm_network_rule_name values this function already computed but, before this change, never referenced. The Neo4j grants SQL that used to run here has moved to the first line of the 'MDM + graph: connectivity...' stage below (wayfinder ticket 01): it grants against {{ database }}.NEO4J_GRAPH_MIGRATION, a schema mdm sync-graph doesn't create until that later stage runs, so it needs to run there, not here." \
+    "snow sql --connection ${SNOW_CONNECTION} -q \"CREATE SCHEMA IF NOT EXISTS ${mdm_schema_name};\"
+snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --filename infra/snowflake/postgres/mdm_create_network_policy.sql -D schema=${mdm_schema_name} -D network_rule_name=${mdm_network_rule_name} -D network_policy_name=${mdm_network_policy_name}
+snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --filename infra/snowflake/postgres/mdm_create_instance.sql -D instance_name=${mdm_instance_name} -D network_policy=${mdm_network_policy_name} -D comment_env=${ENVIRONMENT}
+bash infra/scripts/bootstrap-prod-mdm.sh --env-name ${ENVIRONMENT} --snow-connection ${SNOW_CONNECTION} --instance-name ${mdm_instance_name_q} --aws-profile ${AWS_PROFILE_NAME} --aws-region ${AWS_REGION_NAME} --name-prefix edgartools-${ENVIRONMENT}"
 
   add_stage \
     "AWS: bronze_seed_silver_gold (one-click data refresh)" \
@@ -732,7 +775,7 @@ echo \"bronze_seed_silver_gold SUCCEEDED. Do not treat this alone as Blocker 4 /
 
   add_stage \
     "Snowflake: standalone gold-refresh" \
-    "Explicitly triggers the dedicated edgartools-${ENVIRONMENT}-gold-refresh Step Function and polls to a terminal state. The bronze_seed_silver_gold stage above runs a GoldRefresh step internally, but that is not a substitute for this: found 2026-07-26 in prod that the standalone gold-refresh state machine had ZERO executions ever (go-live.sh never called it directly), and separately that Snowflake's REFRESH_AFTER_LOAD stored procedure only refreshes a hardcoded table allowlist -- several newer gold tables (EXECUTIVE_RECORDS, EARNINGS_RELEASES, INSTITUTIONAL_HOLDINGS, ACCOUNTING_FLAGS, FINANCIAL_FACTS, FINANCIAL_DERIVED, FINANCIAL_FACTORS) were missing from that list and so never refreshed past their empty initialize=ON_CREATE run, even though their EDGARTOOLS_SOURCE data was current. Both gaps are fixed (04_refresh_wrapper.sql updated and reapplied to prod), but this stage exists so a stale gold layer surfaces as an explicit, auditable go-live step instead of silently depending on a side effect of the combined pipeline." \
+    "Explicitly triggers the dedicated edgartools-${ENVIRONMENT}-gold-refresh Step Function, polls to a terminal state, then runs gold-verify-live -- a direct-Snowflake row-count check across every EDGARTOOLS_GOLD dynamic table that fails this stage (non-zero exit) if any expected table is empty (wayfinder snowflake-env-provisioning ticket 06 / snowflake-account-cutover ticket 06). This replaces a manual echo reminder to check row counts by hand with an automated, fail-closed gate -- appended here rather than as a separate final stage so an empty gold layer is caught before the MDM+graph stages below spend time on identity resolution/graph sync against it. The bronze_seed_silver_gold stage above runs a GoldRefresh step internally, but that is not a substitute for this: found 2026-07-26 in prod that the standalone gold-refresh state machine had ZERO executions ever (install.sh never called it directly), and separately that Snowflake's REFRESH_AFTER_LOAD stored procedure only refreshes a hardcoded table allowlist -- several newer gold tables (EXECUTIVE_RECORDS, EARNINGS_RELEASES, INSTITUTIONAL_HOLDINGS, ACCOUNTING_FLAGS, FINANCIAL_FACTS, FINANCIAL_DERIVED, FINANCIAL_FACTORS) were missing from that list and so never refreshed past their empty initialize=ON_CREATE run, even though their EDGARTOOLS_SOURCE data was current. Both gaps are fixed (04_refresh_wrapper.sql updated and reapplied to prod), but this stage exists so a stale gold layer surfaces as an explicit, auditable install step instead of silently depending on a side effect of the combined pipeline." \
     "account_id=\"\$(aws --profile ${deployer_q} sts get-caller-identity --query Account --output text)\"
 state_machine_arn=\"arn:aws:states:${AWS_REGION_NAME}:\${account_id}:stateMachine:edgartools-${ENVIRONMENT}-gold-refresh\"
 execution_name=\"gold-refresh-\$(date +%s)\"
@@ -750,12 +793,26 @@ while true; do
     *) sleep 30 ;;
   esac
 done
-echo \"gold-refresh SUCCEEDED. Snowflake ingestion of the export manifest (Snowpipe + SNOWFLAKE_RUN_MANIFEST_TASK + REFRESH_AFTER_LOAD) typically completes within a couple of minutes after this -- verify row counts in EDGARTOOLS_GOLD before treating gold as current.\""
+echo \"gold-refresh SUCCEEDED. Snowflake ingestion of the export manifest (Snowpipe + SNOWFLAKE_RUN_MANIFEST_TASK + REFRESH_AFTER_LOAD) is asynchronous from here -- polling gold-verify-live itself rather than sleeping a fixed duration, since REFRESH_AFTER_LOAD refreshes 21 dynamic tables sequentially (up to 900s each per its own timeout) and some (e.g. sec_thirteenf_holding, multi-million rows) are genuinely slow.\"
+verify_attempts=20
+verify_delay=60
+for ((attempt=1; attempt<=verify_attempts; attempt++)); do
+  if uv run --extra snowflake edgar-warehouse gold-verify-live; then
+    break
+  fi
+  if [[ \"\${attempt}\" -eq \"\${verify_attempts}\" ]]; then
+    echo \"gold-verify-live still failing after \${verify_attempts} attempts (~\$((verify_attempts * verify_delay / 60)) minutes) -- treating as a real failure, not a slow refresh.\" >&2
+    exit 1
+  fi
+  echo \"gold-verify-live attempt \${attempt}/\${verify_attempts} not yet passing -- refresh may still be in progress, retrying in \${verify_delay}s.\"
+  sleep \"\${verify_delay}\"
+done"
 
   add_stage \
     "MDM + graph: connectivity, migrations, sync, verification" \
-    "Runs bounded MDM connectivity, migrations, graph sync, and graph verification commands." \
-    "uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm check-connectivity
+    "Grants the hosted Neo4j Graph Analytics app against the selected database, then runs bounded MDM connectivity, migrations, graph sync, and graph verification commands. The grants line runs first here (moved from the 'Snowflake Postgres / graph prerequisites' stage above, wayfinder ticket 01) because it targets {{ database }}.NEO4J_GRAPH_MIGRATION, and 'mdm sync-graph' below is what creates that schema -- mdm sync-graph itself needs zero grants to create the schema, but 'mdm verify-graph' at the end of this stage needs the grants already applied to run its Native App checks." \
+    "snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --filename infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql -D database=${db_name}
+uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm check-connectivity
 uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm migrate
 uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm seed-universe --tracking-status bootstrap_pending
 uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm run --entity-type all --limit 100
@@ -770,9 +827,8 @@ bash infra/scripts/run-aws-mdm-e2e.sh --env ${ENVIRONMENT} --aws-profile ${DEPLO
 
   add_stage \
     "Data: bounded smoke only" \
-    "Runs bounded smoke commands only; unbounded bootstrap is not part of the default go-live path." \
-    "EDGAR_IDENTITY=\"\${EDGAR_IDENTITY:?set EDGAR_IDENTITY with contact email}\" WAREHOUSE_ENVIRONMENT=${ENVIRONMENT} WAREHOUSE_RUNTIME_MODE=infrastructure_validation uv run --extra s3 edgar-warehouse seed-universe --limit 100
-EDGAR_IDENTITY=\"\${EDGAR_IDENTITY:?set EDGAR_IDENTITY with contact email}\" WAREHOUSE_ENVIRONMENT=${ENVIRONMENT} WAREHOUSE_RUNTIME_MODE=infrastructure_validation uv run --extra s3 edgar-warehouse bootstrap-next --limit 100"
+    "Runs a bounded smoke command only; unbounded bootstrap is not part of the default install path. The seed-universe smoke call that used to run here is gone (wayfinder snowflake-account-cutover ticket 06): the new unscoped 'AWS/silver: seed-universe' stage above already seeds the real universe, and re-running it here in infrastructure_validation mode would only write a second, pointless placeholder manifest." \
+    "EDGAR_IDENTITY=\"\${EDGAR_IDENTITY:?set EDGAR_IDENTITY with contact email}\" WAREHOUSE_ENVIRONMENT=${ENVIRONMENT} WAREHOUSE_RUNTIME_MODE=infrastructure_validation uv run --extra s3 edgar-warehouse bootstrap-next --limit 100"
 }
 
 print_command_block() {
@@ -786,15 +842,15 @@ print_command_block() {
 print_plan() {
   local i
   build_stages
-  echo "Ordered go-live plan for ${ENVIRONMENT}:"
+  echo "Ordered install plan for ${ENVIRONMENT}:"
   for i in "${!STAGE_NAMES[@]}"; do
     printf '\n%d. %s\n' "$((i + 1))" "${STAGE_NAMES[$i]}"
     printf '   %s\n' "${STAGE_DESCRIPTIONS[$i]}"
     print_command_block "${STAGE_COMMANDS[$i]}"
   done
   echo
-  echo "Current go-live notes and issues:"
-  known_go_live_notes_markdown | sed 's/^/  /'
+  echo "Current install notes and issues:"
+  known_install_notes_markdown | sed 's/^/  /'
 }
 
 record_event() {
@@ -804,12 +860,12 @@ record_event() {
 
 write_state() {
   ensure_workspace
-  GO_LIVE_ENVIRONMENT="$ENVIRONMENT" \
-  GO_LIVE_AWS_PROFILE="$AWS_PROFILE_NAME" \
-  GO_LIVE_DEPLOYER_PROFILE="$DEPLOYER_PROFILE" \
-  GO_LIVE_AWS_REGION="$AWS_REGION_NAME" \
-  GO_LIVE_SNOW_CONNECTION="$SNOW_CONNECTION" \
-  GO_LIVE_MODE="$COMMAND" \
+  INSTALL_ENVIRONMENT="$ENVIRONMENT" \
+  INSTALL_AWS_PROFILE="$AWS_PROFILE_NAME" \
+  INSTALL_DEPLOYER_PROFILE="$DEPLOYER_PROFILE" \
+  INSTALL_AWS_REGION="$AWS_REGION_NAME" \
+  INSTALL_SNOW_CONNECTION="$SNOW_CONNECTION" \
+  INSTALL_MODE="$COMMAND" \
   python3 - "$STATE_FILE" "$EVENTS_FILE" <<'PY'
 import datetime as _dt
 import json
@@ -827,12 +883,12 @@ if events_path.exists():
             events.append({"stage": parts[0], "status": parts[1], "detail": parts[2]})
 state = {
     "updated_at": _dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-    "environment": os.environ["GO_LIVE_ENVIRONMENT"],
-    "aws_profile": os.environ["GO_LIVE_AWS_PROFILE"],
-    "aws_deployer_profile": os.environ["GO_LIVE_DEPLOYER_PROFILE"],
-    "aws_region": os.environ["GO_LIVE_AWS_REGION"],
-    "snowflake_connection": os.environ["GO_LIVE_SNOW_CONNECTION"],
-    "last_command": os.environ["GO_LIVE_MODE"],
+    "environment": os.environ["INSTALL_ENVIRONMENT"],
+    "aws_profile": os.environ["INSTALL_AWS_PROFILE"],
+    "aws_deployer_profile": os.environ["INSTALL_DEPLOYER_PROFILE"],
+    "aws_region": os.environ["INSTALL_AWS_REGION"],
+    "snowflake_connection": os.environ["INSTALL_SNOW_CONNECTION"],
+    "last_command": os.environ["INSTALL_MODE"],
     "events": events,
 }
 state_path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -860,7 +916,7 @@ run_init() {
   copy_templates_to_workspace
   record_event "init" "completed" "created ignored wizard workspace and copied example templates"
   write_state
-  echo "Initialized ignored go-live workspace: ${WORKSPACE}"
+  echo "Initialized ignored install workspace: ${WORKSPACE}"
 }
 
 run_deploy() {
@@ -933,7 +989,7 @@ PY
 
 generate_report() {
   local i line
-  echo "# EdgarTools Go-Live Report"
+  echo "# EdgarTools Install Report"
   echo
   echo "Generated: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   echo
@@ -964,7 +1020,7 @@ generate_report() {
   state_skipped_markdown
   echo
   echo "## Current Notes and Issues"
-  known_go_live_notes_markdown
+  known_install_notes_markdown
   echo
   echo "## Remediation"
   echo "- Run doctor until fail statuses are resolved."
@@ -978,10 +1034,10 @@ run_report() {
   local default_report raw_report
   ensure_workspace
   run_checks
-  default_report="${WORKSPACE}/reports/go-live-${ENVIRONMENT}-$(date -u '+%Y%m%dT%H%M%SZ').md"
+  default_report="${WORKSPACE}/reports/install-${ENVIRONMENT}-$(date -u '+%Y%m%dT%H%M%SZ').md"
   REPORT_FILE="${REPORT_FILE:-$default_report}"
   mkdir -p "$(dirname "$REPORT_FILE")"
-  raw_report="${TMPDIR:-/tmp}/go-live-report-$$.md"
+  raw_report="${TMPDIR:-/tmp}/install-report-$$.md"
   generate_report > "$raw_report"
   redact_text < "$raw_report" | tee "$REPORT_FILE"
   rm -f "$raw_report"
@@ -1005,7 +1061,7 @@ if [[ "$COMMAND" == "wizard" ]]; then
   run_tui_wizard
 fi
 
-[[ "$EXPECTED_AWS_ACCOUNT_ID" =~ ^[0-9]{12}$ ]] || fail "--aws-account-id (or GO_LIVE_AWS_ACCOUNT_ID) must provide a 12-digit AWS account ID"
+[[ "$EXPECTED_AWS_ACCOUNT_ID" =~ ^[0-9]{12}$ ]] || fail "--aws-account-id (or INSTALL_AWS_ACCOUNT_ID) must provide a 12-digit AWS account ID"
 
 show_startup
 confirm_environment

@@ -122,6 +122,16 @@ GRANT OWNERSHIP ON DYNAMIC TABLE EARNINGS_CALENDAR TO ROLE IDENTIFIER($loader_ro
 GRANT OWNERSHIP ON DYNAMIC TABLE GUIDANCE_FACTS TO ROLE IDENTIFIER($loader_role_name) COPY CURRENT GRANTS;
 GRANT OWNERSHIP ON DYNAMIC TABLE CONSENSUS_ESTIMATES TO ROLE IDENTIFIER($loader_role_name) COPY CURRENT GRANTS;
 GRANT OWNERSHIP ON DYNAMIC TABLE TRANSCRIPT_EVENTS TO ROLE IDENTIFIER($loader_role_name) COPY CURRENT GRANTS;
+-- Found while implementing the snowflake-account-cutover map's gold-verify-
+-- live check (wayfinder ticket 06): this table shipped after the block
+-- above and was missing from this list. Defensive, not strictly required on
+-- a brand-new account -- profiles.yml's prod dbt target already runs as
+-- $loader_role_name by default, so dbt creates it already correctly owned --
+-- but REFRESH_AFTER_LOAD throws on its FIRST ownership failure and aborts
+-- the whole refresh loop, so a wrong owner here (e.g. DBT_SNOWFLAKE_ROLE
+-- overridden in the environment) would silently break every other table's
+-- refresh too, not just this one.
+GRANT OWNERSHIP ON DYNAMIC TABLE ADV_FUND_COUNT_RECONCILIATION TO ROLE IDENTIFIER($loader_role_name) COPY CURRENT GRANTS;
 
 -- Re-parent ownership of the 3 manifest-pipeline procedures onto the loader
 -- role so EXECUTE AS OWNER runs as EDGARTOOLS_PROD_LOADER consistently. Signatures

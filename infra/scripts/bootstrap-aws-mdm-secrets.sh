@@ -9,7 +9,7 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage:
-  bootstrap-aws-mdm-secrets.sh --env <dev|prod> [options]
+  bootstrap-aws-mdm-secrets.sh --env-name <slug> [options]
 
 Writes the MDM_DATABASE_URL secret for the Snowflake Postgres cutover.
 
@@ -19,10 +19,10 @@ Provide the DSN with one of:
   --host <host> --username <user> --password-stdin
 
 Options:
-  --env <dev|prod>              Environment. Required.
+  --env-name <slug>             Environment slug (e.g. prod, eu-prod). Required.
   --aws-profile <profile>       AWS CLI profile. Default: AWS_PROFILE env var or instance role.
   --aws-region <region>         AWS region. Default: us-east-1.
-  --name-prefix <prefix>        Resource prefix. Default: edgartools-<env>.
+  --name-prefix <prefix>        Resource prefix. Default: edgartools-<env-name>.
   --secret-id <id-or-arn>       Secret to write. Default: <name-prefix>/mdm/postgres_dsn.
   --dsn <dsn>                   Full PostgreSQL DSN. Prefer --dsn-stdin for credentials.
   --dsn-stdin                   Read the full PostgreSQL DSN from stdin.
@@ -63,7 +63,7 @@ DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env) ENVIRONMENT="${2:?}"; shift 2 ;;
+    --env-name) ENVIRONMENT="${2:?}"; shift 2 ;;
     --aws-profile) AWS_PROFILE_NAME="${2:?}"; shift 2 ;;
     --aws-region) AWS_REGION_NAME="${2:?}"; shift 2 ;;
     --name-prefix) NAME_PREFIX="${2:?}"; shift 2 ;;
@@ -82,7 +82,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ "$ENVIRONMENT" == "dev" || "$ENVIRONMENT" == "prod" ]] || { usage >&2; exit 2; }
+[[ -n "$ENVIRONMENT" ]] || { echo "ERROR: --env-name is required" >&2; usage >&2; exit 2; }
+# Environment identifier is a free-form operator-chosen slug (wayfinder ticket 01),
+# not a closed dev|prod enum -- a third independent environment fits neither bucket.
+# Shape is validated here so a typo fails loudly rather than silently creating
+# oddly-named AWS secrets.
+[[ "$ENVIRONMENT" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || {
+  echo "ERROR: --env-name '${ENVIRONMENT}' is not a valid environment slug: use lowercase" >&2
+  echo "       letters and digits in hyphen-separated words, starting with a letter" >&2
+  echo "       (e.g. 'prod', 'eu-prod')." >&2
+  exit 2
+}
 NAME_PREFIX="${NAME_PREFIX:-edgartools-${ENVIRONMENT}}"
 SECRET_ID="${SECRET_ID:-${NAME_PREFIX}/mdm/postgres_dsn}"
 

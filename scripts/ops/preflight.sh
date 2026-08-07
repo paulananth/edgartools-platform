@@ -194,7 +194,7 @@ print(rows[0].get('notification_channel','') if rows else '')
 " 2>/dev/null || echo "")
     check "SNOWFLAKE_RUN_MANIFEST_PIPE exists (channel: ${PIPE_CHANNEL:-none})" \
       "$([[ -n "$PIPE_CHANNEL" ]] && echo PASS || echo FAIL)" \
-      "Re-deploy Snowflake stack: bash infra/scripts/deploy-snowflake-stack.sh --env ${ENVIRONMENT}"
+      "Re-deploy Snowflake stack: bash infra/scripts/deploy-snowflake-stack.sh --env-name ${ENVIRONMENT} --snow-connection <name>"
 
     # Source COMPANY count
     COMPANY_COUNT=$(snow sql --connection "$SNOW_CONN" \

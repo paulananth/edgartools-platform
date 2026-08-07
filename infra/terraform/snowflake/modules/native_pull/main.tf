@@ -313,6 +313,195 @@ locals {
         { name = "INGESTED_AT", type = "TIMESTAMP_TZ" },
       ]
     }
+    SEC_SUBSIDIARY_EVIDENCE = {
+      comment = "Subsidiary exhibit evidence for HAS_PARENT_COMPANY. Passthrough from silver sec_subsidiary_evidence."
+      columns = [
+        { name = "ACCESSION_NUMBER", type = "STRING", nullable = false },
+        { name = "REGISTRANT_CIK", type = "NUMBER(38,0)" },
+        { name = "DOCUMENT_NAME", type = "STRING", nullable = false },
+        { name = "DOCUMENT_TYPE", type = "STRING" },
+        { name = "ROW_ORDINAL", type = "NUMBER(38,0)", nullable = false },
+        { name = "LEGAL_NAME", type = "STRING" },
+        { name = "JURISDICTION", type = "STRING" },
+        { name = "PARENT_SCOPE", type = "STRING" },
+        { name = "IMMEDIATE_PARENT_KNOWN", type = "BOOLEAN" },
+        { name = "EFFECTIVE_DATE", type = "DATE" },
+        { name = "ROW_LOCATOR", type = "STRING" },
+        { name = "SOURCE_SHA256", type = "STRING" },
+        { name = "PARSER_VERSION", type = "STRING" },
+      ]
+    }
+    SEC_AUDITOR_REPORT_EVIDENCE = {
+      comment = "Auditor report evidence for AUDITED_BY. Passthrough from silver sec_auditor_report_evidence."
+      columns = [
+        { name = "ACCESSION_NUMBER", type = "STRING", nullable = false },
+        { name = "REGISTRANT_CIK", type = "NUMBER(38,0)" },
+        { name = "FORM_TYPE", type = "STRING" },
+        { name = "DOCUMENT_NAME", type = "STRING" },
+        { name = "AUDITED_PERIOD_END", type = "DATE" },
+        { name = "REPORT_DATE", type = "DATE" },
+        { name = "PRINCIPAL_FIRM_NAME", type = "STRING" },
+        { name = "PRINCIPAL_FIRM_LOCATION", type = "STRING" },
+        { name = "PCAOB_FIRM_ID", type = "STRING" },
+        { name = "EVIDENCE_SOURCE", type = "STRING" },
+        { name = "RAW_LOCATOR", type = "STRING" },
+        { name = "SOURCE_SHA256", type = "STRING" },
+        { name = "EVIDENCE_FINGERPRINT", type = "STRING", nullable = false },
+        { name = "FORM_AP_FILING_ID", type = "STRING" },
+        { name = "ORIGINAL_FORM_AP_FILING_ID", type = "STRING" },
+        { name = "LATEST_AMENDMENT", type = "BOOLEAN" },
+        { name = "PARSER_VERSION", type = "STRING" },
+      ]
+    }
+    SEC_EMPLOYMENT_EVENT = {
+      comment = "Employment / Item 5.02 events for EMPLOYED_BY. Passthrough from silver sec_employment_event."
+      columns = [
+        { name = "ACCESSION_NUMBER", type = "STRING", nullable = false },
+        { name = "EVENT_INDEX", type = "NUMBER(38,0)", nullable = false },
+        { name = "CIK", type = "NUMBER(38,0)", nullable = false },
+        { name = "EVENT_TYPE", type = "STRING" },
+        { name = "PERSON_NAME", type = "STRING" },
+        { name = "EXEC_ROLE", type = "STRING" },
+        { name = "PREVIOUS_ROLE", type = "STRING" },
+        { name = "COMPENSATION_AMOUNT", type = "FLOAT" },
+        { name = "EFFECTIVE_DATE", type = "DATE" },
+        { name = "PARSER_VERSION", type = "STRING" },
+      ]
+    }
+    SEC_ADV_FIRM_ROSTER = {
+      comment = "SEC Firm Roster CSV aggregate private-fund counts, full-universe monthly snapshot. Passthrough from silver sec_adv_firm_roster."
+      columns = [
+        { name = "ADVISER_CRD_NUMBER", type = "STRING", nullable = false },
+        { name = "DATASET_PERIOD", type = "STRING", nullable = false },
+        { name = "PRIVATE_FUNDS_REPORTED", type = "BOOLEAN" },
+        { name = "PRIVATE_FUND_COUNT_7B1", type = "NUMBER(38,0)" },
+        { name = "ANY_HEDGE_FUNDS", type = "BOOLEAN" },
+        { name = "HEDGE_FUND_COUNT", type = "NUMBER(38,0)" },
+        { name = "ANY_PE_FUNDS", type = "BOOLEAN" },
+        { name = "PE_FUND_COUNT", type = "NUMBER(38,0)" },
+        { name = "TOTAL_GROSS_ASSETS_PRIVATE_FUNDS", type = "NUMBER(28,2)" },
+        { name = "PRIVATE_FUND_COUNT_7B2", type = "NUMBER(38,0)" },
+        { name = "SOURCE_SHA256", type = "STRING" },
+        { name = "PARSER_VERSION", type = "STRING" },
+      ]
+    }
+    SEC_ADV_PRIVATE_FUND = {
+      comment = "CRD-keyed passthrough of silver sec_adv_private_fund, for the Firm Roster completeness cross-check (dimensional PRIVATE_FUNDS is CIK-keyed only)."
+      columns = [
+        { name = "ACCESSION_NUMBER", type = "STRING", nullable = false },
+        { name = "FUND_INDEX", type = "NUMBER(38,0)", nullable = false },
+        { name = "FILING_ID", type = "STRING" },
+        { name = "ADVISER_CRD_NUMBER", type = "STRING" },
+        { name = "PRIVATE_FUND_ID", type = "STRING" },
+        { name = "REFERENCE_ID", type = "STRING" },
+        { name = "SCHEDULE_SECTION", type = "STRING" },
+        { name = "REPORTING_ROLE", type = "STRING" },
+        { name = "FILING_ACTION", type = "STRING" },
+        { name = "FUND_NAME", type = "STRING" },
+        { name = "FUND_TYPE", type = "STRING" },
+        { name = "JURISDICTION", type = "STRING" },
+        { name = "AUM_AMOUNT", type = "NUMBER(28,2)" },
+        { name = "EFFECTIVE_DATE", type = "DATE" },
+        { name = "SOURCE_DATASET_PERIOD", type = "STRING" },
+        { name = "SOURCE_SHA256", type = "STRING" },
+        { name = "PARSER_VERSION", type = "STRING" },
+      ]
+    }
+    EARNINGS_CALENDAR = {
+      comment = "ERDP-03 forward earnings calendar (Explore). Grain fact_key; natural key cik/fy/fq/source/as_of."
+      columns = [
+        { name = "FACT_KEY", type = "NUMBER(38,0)", nullable = false },
+        { name = "CIK", type = "NUMBER(38,0)", nullable = false },
+        { name = "TICKER", type = "STRING" },
+        { name = "COMPANY_KEY", type = "NUMBER(38,0)" },
+        { name = "FISCAL_YEAR", type = "NUMBER(38,0)", nullable = false },
+        { name = "FISCAL_QUARTER", type = "NUMBER(38,0)", nullable = false },
+        { name = "EXPECTED_DATE", type = "DATE", nullable = false },
+        { name = "EXPECTED_TIME", type = "STRING" },
+        { name = "TIMEZONE", type = "STRING" },
+        { name = "SESSION", type = "STRING", nullable = false },
+        { name = "STATUS", type = "STRING", nullable = false },
+        { name = "PERIOD_END", type = "DATE" },
+        { name = "ACCESSION_NUMBER", type = "STRING" },
+        { name = "SOURCE_SYSTEM", type = "STRING", nullable = false },
+        { name = "SOURCE_REF", type = "STRING" },
+        { name = "AS_OF", type = "DATE", nullable = false },
+        { name = "INGESTED_AT", type = "TIMESTAMP_TZ", nullable = false },
+      ]
+    }
+    GUIDANCE_FACTS = {
+      comment = "ERDP-02 structured guidance values (Explore). Grain fact_key; natural key cik/metric/fy/fq/as_of/accession/is_non_gaap/source."
+      columns = [
+        { name = "FACT_KEY", type = "NUMBER(38,0)", nullable = false },
+        { name = "CIK", type = "NUMBER(38,0)", nullable = false },
+        { name = "TICKER", type = "STRING" },
+        { name = "COMPANY_KEY", type = "NUMBER(38,0)" },
+        { name = "ACCESSION_NUMBER", type = "STRING" },
+        { name = "METRIC", type = "STRING", nullable = false },
+        { name = "PERIOD_TYPE", type = "STRING", nullable = false },
+        { name = "FISCAL_YEAR", type = "NUMBER(38,0)", nullable = false },
+        { name = "FISCAL_QUARTER", type = "NUMBER(38,0)", nullable = false },
+        { name = "PERIOD_END", type = "DATE" },
+        { name = "VALUE_LOW", type = "FLOAT" },
+        { name = "VALUE_MID", type = "FLOAT" },
+        { name = "VALUE_HIGH", type = "FLOAT" },
+        { name = "UNIT", type = "STRING" },
+        { name = "CURRENCY", type = "STRING" },
+        { name = "IS_NON_GAAP", type = "BOOLEAN", nullable = false },
+        { name = "AS_OF", type = "DATE", nullable = false },
+        { name = "SOURCE_SYSTEM", type = "STRING", nullable = false },
+        { name = "SOURCE_REF", type = "STRING" },
+        { name = "EXCERPT", type = "STRING" },
+        { name = "CONFIDENCE", type = "STRING", nullable = false },
+        { name = "PARSER_VERSION", type = "STRING" },
+        { name = "INGESTED_AT", type = "TIMESTAMP_TZ", nullable = false },
+      ]
+    }
+    CONSENSUS_ESTIMATES = {
+      comment = "ERDP-01 consensus estimates (Explore). Grain fact_key; natural key cik/metric/period_type/fy/fq/statistic/as_of/source."
+      columns = [
+        { name = "FACT_KEY", type = "NUMBER(38,0)", nullable = false },
+        { name = "CIK", type = "NUMBER(38,0)", nullable = false },
+        { name = "TICKER", type = "STRING" },
+        { name = "COMPANY_KEY", type = "NUMBER(38,0)" },
+        { name = "METRIC", type = "STRING", nullable = false },
+        { name = "PERIOD_TYPE", type = "STRING", nullable = false },
+        { name = "FISCAL_YEAR", type = "NUMBER(38,0)" },
+        { name = "FISCAL_QUARTER", type = "NUMBER(38,0)" },
+        { name = "PERIOD_END", type = "DATE" },
+        { name = "ESTIMATE_VALUE", type = "FLOAT", nullable = false },
+        { name = "UNIT", type = "STRING", nullable = false },
+        { name = "CURRENCY", type = "STRING" },
+        { name = "STATISTIC", type = "STRING", nullable = false },
+        { name = "AS_OF", type = "DATE", nullable = false },
+        { name = "SOURCE_SYSTEM", type = "STRING", nullable = false },
+        { name = "SOURCE_REF", type = "STRING" },
+        { name = "INGESTED_AT", type = "TIMESTAMP_TZ", nullable = false },
+      ]
+    }
+    TRANSCRIPT_EVENTS = {
+      comment = "ERDP-04 transcript event pointers (Explore). Grain event_key; natural key cik/event_id/source_system."
+      columns = [
+        { name = "EVENT_KEY", type = "NUMBER(38,0)", nullable = false },
+        { name = "CIK", type = "NUMBER(38,0)", nullable = false },
+        { name = "TICKER", type = "STRING" },
+        { name = "COMPANY_KEY", type = "NUMBER(38,0)" },
+        { name = "EVENT_ID", type = "STRING", nullable = false },
+        { name = "EVENT_TYPE", type = "STRING", nullable = false },
+        { name = "FISCAL_YEAR", type = "NUMBER(38,0)" },
+        { name = "FISCAL_QUARTER", type = "NUMBER(38,0)" },
+        { name = "EVENT_DATE", type = "DATE", nullable = false },
+        { name = "ACCESSION_NUMBER", type = "STRING" },
+        { name = "STORAGE_URI", type = "STRING", nullable = false },
+        { name = "CONTENT_SHA256", type = "STRING" },
+        { name = "CHAR_COUNT", type = "NUMBER(38,0)" },
+        { name = "LANGUAGE", type = "STRING", nullable = false },
+        { name = "SOURCE_SYSTEM", type = "STRING", nullable = false },
+        { name = "SOURCE_URL", type = "STRING" },
+        { name = "AS_OF", type = "DATE", nullable = false },
+        { name = "INGESTED_AT", type = "TIMESTAMP_TZ", nullable = false },
+      ]
+    }
   }
 
   manifest_copy_statement = trimspace(<<-SQL

@@ -35,9 +35,9 @@ readonly RUNNER_STEP_FUNCTIONS_ROLE_NAME="sec_platform_runner_step_functions"
 
 usage() {
   cat <<EOF
-Usage: $SCRIPT_NAME <env> [region] [--no-key]
+Usage: $SCRIPT_NAME <env-name> [region] [--no-key]
 
-  env       : dev | prod
+  env-name  : environment slug (e.g. prod, eu-prod)
   region    : AWS region (default: $DEFAULT_REGION)
   --no-key  : Skip access key creation
 
@@ -95,7 +95,12 @@ if [[ $# -ge 2 && "$2" == --* ]]; then
   REGION="$DEFAULT_REGION"
 fi
 
-[[ "$ENV" == "dev" || "$ENV" == "prod" ]] || fail "env must be 'dev' or 'prod', got: $ENV"
+# Environment identifier is a free-form operator-chosen slug (wayfinder ticket 01),
+# not a closed dev|prod enum. It feeds resource names ($NAME_PREFIX,
+# $TFSTATE_BUCKET) and S3 state keys, so shape is enforced rather than accepting
+# anything and creating oddly-named IAM policies and buckets.
+[[ "$ENV" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || fail \
+  "env-name must be a slug of lowercase letters and digits in hyphen-separated words, starting with a letter (e.g. 'prod', 'eu-prod'), got: $ENV"
 
 readonly ENV
 readonly REGION

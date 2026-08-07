@@ -28,7 +28,7 @@ The dbt project is responsible for:
 Use the deploy wrapper to coordinate AWS Terraform, Snowflake Terraform, dbt, and dashboard upload:
 
 ```bash
-bash infra/scripts/deploy-snowflake-stack.sh --env dev
+bash infra/scripts/deploy-snowflake-stack.sh --env-name <slug> --snow-connection <name>
 ```
 
 The validation helper can still be run directly after deployment to emit a structured artifact and
