@@ -85,6 +85,11 @@ This is the manual, once-per-organization step that cannot be scripted
 (wayfinder ticket 02): sign in to Snowsight as ORGADMIN, go to
 Admin » Terms, and accept the Snowflake Provider and Consumer Terms.
 Snowflake documents no SQL or API equivalent. Re-run this script afterward.
+
+If the terms are already accepted, check the simpler causes first: this hint
+is also printed when the connection name itself is wrong or unreachable, since
+a broken connection and an unavailable listing are indistinguishable here.
+Confirm with: snow sql --connection <name> -q 'SELECT CURRENT_ACCOUNT()'
 HINT
 }
 
