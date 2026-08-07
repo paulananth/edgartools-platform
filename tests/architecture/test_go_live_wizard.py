@@ -15,6 +15,11 @@ SCRIPT = REPO_ROOT / "infra" / "scripts" / "go-live.sh"
 # ambiguity entirely and behaves identically on Linux, macOS, and Windows Git Bash.
 SCRIPT_ARG = SCRIPT.relative_to(REPO_ROOT).as_posix()
 TEST_ACCOUNT_ID = "123456789012"
+# Environments are now operator-chosen slugs with no default, so tests must
+# name one. "dev" is kept as the value so existing path/prefix assertions
+# (workspace/setup/dev/..., edgartools-dev-*) stay meaningful.
+DEFAULT_TEST_ENV = "dev"
+DEFAULT_TEST_SNOW_CONNECTION = "snowconn"
 
 
 def _resolve_bash() -> str:
@@ -53,6 +58,7 @@ def run_wizard(
     input_text: str = "y\n",
     env: dict[str, str] | None = None,
     check: bool = True,
+    explicit_flags: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     proc_env = os.environ.copy()
     # go-live.sh treats AWS_PROFILE/AWS_REGION/AWS_DEFAULT_REGION as implicit
@@ -74,6 +80,17 @@ def run_wizard(
     proc_env.setdefault("FAKE_AWS_ACCOUNT_ID", TEST_ACCOUNT_ID)
     if env:
         proc_env.update(env)
+    # --env-name and --snow-connection became required for every non-wizard
+    # command (wayfinder ticket 03): the dev default and the derived connection
+    # name are both gone. Supply them here so each test keeps exercising what it
+    # was written to exercise; tests that assert on their absence pass
+    # explicit_flags=False.
+    args = list(args)
+    if explicit_flags and args and not args[0].startswith("-"):
+        if "--env-name" not in args:
+            args += ["--env-name", DEFAULT_TEST_ENV]
+        if "--snow-connection" not in args:
+            args += ["--snow-connection", DEFAULT_TEST_SNOW_CONNECTION]
     # Deliberately NOT text=True for the subprocess call itself: on Windows,
     # subprocess's text/universal-newlines mode translates \n in `input` to
     # \r\n before writing to the child's stdin. bash's `read -r` terminates
@@ -160,7 +177,9 @@ def test_default_env_is_dev_and_decline_exits_without_mutation(tmp_path: Path) -
 
 def test_single_command_launches_tui_preview_plan(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
-    input_text = "\n\n\n\n\n\n\ny\n"
+    # operation, env slug, aws profile, deployer profile, region, snow connection,
+    # workspace, confirm. Env and connection must be typed: neither has a default.
+    input_text = "\n".join(["", "dev", "", "", "", "snowconn", "", "y", ""])
 
     result = run_wizard("--workspace", str(workspace), input_text=input_text)
 
@@ -189,7 +208,8 @@ echo "$*" >> "${BREW_LOG}"
     )
     brew.chmod(0o755)
     workspace = tmp_path / "workspace"
-    input_text = "n\n\n\n\n\n\n\n\ny\n"
+    # Leading "n" declines the gum install; the rest is the prompt sequence above.
+    input_text = "\n".join(["n", "", "dev", "", "", "", "snowconn", "", "y", ""])
     env = {
         "PATH": f"{fakebin}{os.pathsep}/usr/bin:/bin:/usr/sbin:/sbin",
         "GO_LIVE_NO_GUM": "0",
@@ -232,13 +252,24 @@ case "$1" in
     ;;
   input)
     value=""
+    prompt=""
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --value) value="${{2:-}}"; shift 2 ;;
+        --prompt) prompt="${{2:-}}"; shift 2 ;;
         *) shift ;;
       esac
     done
-    echo "$value"
+    # The environment slug and the Snowflake connection have no defaults to echo
+    # back (wayfinder ticket 03 removed both), so stand in for what an operator
+    # would type.
+    if [[ -z "$value" && "$prompt" == *"Environment slug"* ]]; then
+      echo "dev"
+    elif [[ -z "$value" && "$prompt" == *"Snowflake connection"* ]]; then
+      echo "snowconn"
+    else
+      echo "$value"
+    fi
     ;;
   confirm)
     exit 0
@@ -267,7 +298,10 @@ chmod +x "{fakebin / 'gum'}"
     assert "install gum" in brew_log.read_text(encoding="utf-8")
     log = gum_log.read_text(encoding="utf-8")
     assert "choose --header Select operation --selected plan" in log
-    assert "choose --header Select environment --selected dev" in log
+    # Environments are operator-chosen slugs now, so this is a free-text input
+    # rather than a dev|prod pick-list (wayfinder ticket 03).
+    assert "input --prompt Environment slug:" in log
+    assert "choose --header Select environment" not in log
     assert "input --prompt AWS admin/provisioning profile:" in log
     assert "confirm Continue with selected environment dev?" in log
 
@@ -277,7 +311,7 @@ def test_tui_makes_all_core_config_selectable(tmp_path: Path) -> None:
     input_text = "\n".join(
         [
             "3",
-            "2",
+            "prod",
             "aws-admin-custom",
             "deployer-custom",
             "us-west-2",
@@ -338,7 +372,7 @@ def test_plan_prints_preview_only_aws_ordered_commands(tmp_path: Path) -> None:
 
 
 def test_prod_plan_uses_canonical_names_and_maintained_delegates(tmp_path: Path) -> None:
-    result = run_wizard("plan", "--env", "prod", "--workspace", str(tmp_path / "workspace"))
+    result = run_wizard("plan", "--env-name", "prod", "--snow-connection", "snowconn", "--workspace", str(tmp_path / "workspace"))
 
     out = result.stdout
     assert "EDGARTOOLS_PROD" in out
@@ -361,8 +395,10 @@ def test_prod_apply_rejects_wrong_aws_account_before_any_stage(tmp_path: Path) -
     result = run_wizard(
         "deploy",
         "--apply",
-        "--env",
+        "--env-name",
         "prod",
+        "--snow-connection",
+        "snowconn",
         "--workspace",
         str(tmp_path / "workspace"),
         input_text="y\n",
@@ -543,13 +579,23 @@ case "$1" in
     ;;
   input)
     value=""
+    prompt=""
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --value) value="${2:-}"; shift 2 ;;
+        --prompt) prompt="${2:-}"; shift 2 ;;
         *) shift ;;
       esac
     done
-    echo "$value"
+    # Env slug and Snowflake connection have no defaults to echo back
+    # (wayfinder ticket 03 removed both); stand in for an operator's typing.
+    if [[ -z "$value" && "$prompt" == *"Environment slug"* ]]; then
+      echo "dev"
+    elif [[ -z "$value" && "$prompt" == *"Snowflake connection"* ]]; then
+      echo "snowconn"
+    else
+      echo "$value"
+    fi
     ;;
   confirm)
     exit 0
@@ -573,6 +619,122 @@ esac
     assert "Ordered go-live plan for dev:" in result.stdout
     log = gum_log.read_text(encoding="utf-8")
     assert "choose --header Select operation" in log
-    assert "choose --header Select environment" in log
+    # Environments are operator-chosen slugs now, so this is a free-text input
+    # rather than a dev|prod pick-list (wayfinder ticket 03).
+    assert "input --prompt Environment slug:" in log
+    assert "choose --header Select environment" not in log
     assert "input --prompt AWS admin/provisioning profile:" in log
     assert "confirm Continue with selected environment dev?" in log
+
+
+# ---------------------------------------------------------------------------
+# Wayfinder snowflake-env-provisioning ticket 03: --env <dev|prod> became
+# --env-name <slug>, and --snow-connection became required with no derived
+# default. These pin the new contract; the tests above only prove the old one
+# stopped being required.
+# ---------------------------------------------------------------------------
+
+
+def test_env_name_is_required_for_non_wizard_commands(tmp_path: Path) -> None:
+    result = run_wizard(
+        "plan",
+        "--snow-connection",
+        "snowconn",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        check=False,
+        explicit_flags=False,
+    )
+    assert result.returncode != 0
+    assert "--env-name is required" in result.stdout + result.stderr
+
+
+def test_snow_connection_is_required_and_never_derived(tmp_path: Path) -> None:
+    """Deriving it is what let go-live.sh and deploy-snowflake-stack.sh disagree
+    about the default connection for the same environment."""
+    result = run_wizard(
+        "plan",
+        "--env-name",
+        "prod",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        check=False,
+        explicit_flags=False,
+    )
+    assert result.returncode != 0
+    assert "--snow-connection is required" in result.stdout + result.stderr
+
+
+def test_old_env_flag_is_gone(tmp_path: Path) -> None:
+    """Clean breaking rename -- no back-compat alias (dev is decommissioned, so
+    prod's call sites were the only ones to update)."""
+    result = run_wizard(
+        "plan",
+        "--env",
+        "prod",
+        "--snow-connection",
+        "snowconn",
+        check=False,
+        explicit_flags=False,
+    )
+    assert result.returncode != 0
+
+
+def test_arbitrary_slug_is_accepted_not_just_dev_or_prod(tmp_path: Path) -> None:
+    """The whole point of ticket 03: a third environment fits neither bucket."""
+    result = run_wizard(
+        "plan",
+        "--env-name",
+        "eu-prod",
+        "--snow-connection",
+        "some-connection",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        explicit_flags=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "Ordered go-live plan for eu-prod:" in combined
+    assert "EDGARTOOLS_EU-PROD" not in combined  # hyphen must not leak untouched
+
+
+def test_malformed_slug_is_rejected(tmp_path: Path) -> None:
+    for bad in ("BAD_Env", "1prod", "eu--prod", "eu-prod-"):
+        result = run_wizard(
+            "plan",
+            "--env-name",
+            bad,
+            "--snow-connection",
+            "snowconn",
+            check=False,
+            explicit_flags=False,
+        )
+        assert result.returncode != 0, bad
+        assert "not a valid environment slug" in result.stdout + result.stderr, bad
+
+
+def test_snowflake_delegates_get_env_name_and_aws_delegates_keep_env(
+    tmp_path: Path,
+) -> None:
+    """go-live threads one identifier to two different flag names.
+
+    The Snowflake-side scripts were renamed by ticket 03; the AWS-side ones were
+    deliberately not (AWS provisioning is this map's documented precondition, and
+    ticket 04 recorded their enum as the deferred gap). Getting this split wrong
+    silently breaks either half.
+    """
+    result = run_wizard(
+        "plan",
+        "--env-name",
+        "prod",
+        "--snow-connection",
+        "edgartools-prod",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        explicit_flags=False,
+    )
+    combined = result.stdout + result.stderr
+
+    assert "deploy-snowflake-stack.sh --env-name prod" in combined
+    assert "bootstrap-prod-mdm.sh --env-name prod" in combined
+    assert "deploy-aws-application.sh --env prod" in combined
+    assert "run-aws-mdm-e2e.sh --env prod" in combined

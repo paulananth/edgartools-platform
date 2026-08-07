@@ -69,7 +69,7 @@ This keeps AWS `terraform apply` limited to passive cloud infrastructure.
    Snowflake database objects:
 
    ```bash
-   bash infra/scripts/deploy-snowflake-stack.sh --env dev
+   bash infra/scripts/deploy-snowflake-stack.sh --env-name <slug> --snow-connection <name>
    ```
 
 4. Prepare and apply `infra/terraform/access/snowflake/accounts/<env>` after

@@ -403,7 +403,7 @@ edgar-warehouse mdm check-connectivity --neo4j
 | `edgar-warehouse bootstrap` fails with "requires seeded tracked universe" | Neither MDM nor DuckDB has universe data | Run `edgar-warehouse mdm seed-universe` (with MDM) or `edgar-warehouse seed-universe` (without MDM) first |
 | `sqlcmd` not found on Windows in `run-neo4j-e2e.sh` | MSSQL tools not installed | `winget install Microsoft.SQLCmdUtils` |
 | `mdm_db_master_user_secret_arn` missing from Terraform output | `mdm_enabled = false` in tfvars | Add `mdm_enabled = true` to `terraform.tfvars` and re-apply |
-| `postgres_dsn` secret has empty value in ECS | `bootstrap-aws-mdm-secrets.sh` not run | Run `bash infra/scripts/bootstrap-aws-mdm-secrets.sh --env dev ...` after Terraform apply |
+| `postgres_dsn` secret has empty value in ECS | `bootstrap-aws-mdm-secrets.sh` not run | Run `bash infra/scripts/bootstrap-aws-mdm-secrets.sh --env-name <slug> ...` after Terraform apply |
 | `mdm-seed-universe` Step Functions state machine not found | Deployed without `--enable-mdm` | Re-run `deploy-aws-application.sh --enable-mdm` with valid MDM secret ARNs |
 | `mdm seed-universe` ECS task uses default EDGAR identity | `EDGAR_IDENTITY` secret not populated | Populate `edgar-identity` secret: `aws secretsmanager put-secret-value --secret-id edgartools-dev-edgar-identity --secret-string "Name email"` |
 

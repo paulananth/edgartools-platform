@@ -25,10 +25,10 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage:
-  bootstrap-prod-mdm.sh --env <dev|prod> --snow-connection <name> --instance-name <NAME> [options]
+  bootstrap-prod-mdm.sh --env-name <slug> --snow-connection <name> --instance-name <NAME> [options]
 
 Required:
-  --env <dev|prod>              Environment. Selects AWS secret/name prefix default.
+  --env-name <slug>             Environment slug (e.g. prod, eu-prod). Selects AWS secret/name prefix default.
   --snow-connection <name>      SnowCLI connection name (e.g. edgartools-prod).
   --instance-name <NAME>        Snowflake Postgres instance name (e.g. EDGARTOOLS_PROD_MDM).
 
@@ -66,7 +66,7 @@ DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env) ENVIRONMENT="${2:?}"; shift 2 ;;
+    --env-name) ENVIRONMENT="${2:?}"; shift 2 ;;
     --snow-connection) SNOW_CONNECTION="${2:?}"; shift 2 ;;
     --instance-name) INSTANCE_NAME="${2:?}"; shift 2 ;;
     --aws-profile) AWS_PROFILE_NAME="${2:?}"; shift 2 ;;
@@ -81,7 +81,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ "$ENVIRONMENT" == "dev" || "$ENVIRONMENT" == "prod" ]] || { echo "ERROR: --env must be dev or prod" >&2; usage >&2; exit 2; }
+[[ -n "$ENVIRONMENT" ]] || { echo "ERROR: --env-name is required" >&2; usage >&2; exit 2; }
+# Environment identifier is a free-form operator-chosen slug (wayfinder ticket 01),
+# not a closed dev|prod enum -- a third independent environment fits neither bucket.
+[[ "$ENVIRONMENT" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || {
+  echo "ERROR: --env-name '${ENVIRONMENT}' is not a valid environment slug: use lowercase" >&2
+  echo "       letters and digits in hyphen-separated words, starting with a letter" >&2
+  echo "       (e.g. 'prod', 'eu-prod')." >&2
+  exit 2
+}
 [[ -n "$SNOW_CONNECTION" ]] || { echo "ERROR: --snow-connection is required" >&2; exit 2; }
 [[ -n "$INSTANCE_NAME" ]] || { echo "ERROR: --instance-name is required" >&2; exit 2; }
 NAME_PREFIX="${NAME_PREFIX:-edgartools-${ENVIRONMENT}}"
@@ -292,7 +300,7 @@ log "Rotating application access and writing ${NAME_PREFIX}/mdm/postgres_dsn"
 # (ambient/instance-role credentials), which is the common case -- mirrors the
 # same conditional-inclusion pattern this script's own aws_cli() already uses.
 SECRETS_SCRIPT_ARGS=(
-  --env "$ENVIRONMENT" --aws-region "$AWS_REGION_NAME" --name-prefix "$NAME_PREFIX"
+  --env-name "$ENVIRONMENT" --aws-region "$AWS_REGION_NAME" --name-prefix "$NAME_PREFIX"
   --host "$HOST" --username application --database "$DATABASE" --password-stdin
 )
 [[ -n "$AWS_PROFILE_NAME" ]] && SECRETS_SCRIPT_ARGS+=(--aws-profile "$AWS_PROFILE_NAME")

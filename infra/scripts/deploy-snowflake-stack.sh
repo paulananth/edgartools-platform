@@ -7,8 +7,8 @@ usage() {
 Usage: bash infra/scripts/deploy-snowflake-stack.sh [options]
 
 Options:
-  --env <dev|prod>           Target environment. Default: dev
-  --snow-connection <name>   SnowCLI connection used for all snow sql operations.
+  --env-name <slug>          Target environment slug (e.g. prod, eu-prod). Required.
+  --snow-connection <name>   SnowCLI connection used for all snow sql operations. Required.
   --run-validation           Run SnowCLI-based native-pull validation artifact generation.
   --run-dbt                  Run dbt deps/run/test.
   --upload-dashboard         Upload dashboard artifacts.
@@ -39,7 +39,7 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
 }
 
-ENVIRONMENT="dev"
+ENVIRONMENT=""
 SNOW_CONNECTION=""
 RUN_VALIDATION=0
 RUN_DBT=0
@@ -47,7 +47,7 @@ UPLOAD_DASHBOARD=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env)
+    --env-name)
       ENVIRONMENT="${2:-}"
       shift 2
       ;;
@@ -81,14 +81,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-case "$ENVIRONMENT" in
-  dev|prod) ;;
-  *)
-    die "--env must be dev or prod"
-    ;;
-esac
+[[ -n "$ENVIRONMENT" ]] || die "--env-name is required"
+# Environment identifier is a free-form operator-chosen slug (wayfinder ticket 01),
+# not a closed dev|prod enum. Shape is checked here; the Terraform roots this
+# script actually reads are checked for existence below, once REPO_ROOT is known.
+[[ "$ENVIRONMENT" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || die \
+  "--env-name '${ENVIRONMENT}' is not a valid environment slug: use lowercase letters and digits in hyphen-separated words, starting with a letter (e.g. 'prod', 'eu-prod')."
 
-SNOW_CONNECTION="${SNOW_CONNECTION:-edgartools-${ENVIRONMENT}}"
+# Required, never derived from the environment name. Deriving it is what let
+# go-live.sh and this script disagree about the default connection for the same
+# environment (CLAUDE.md, "SnowCLI connection naming").
+[[ -n "$SNOW_CONNECTION" ]] || die "--snow-connection is required (no default is derived from --env-name)"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -162,6 +165,30 @@ SNOWFLAKE_ROOT="${REPO_ROOT}/infra/terraform/snowflake/accounts/${ENVIRONMENT}"
 SNOWFLAKE_ACCESS_ROOT="${REPO_ROOT}/infra/terraform/access/snowflake/accounts/${ENVIRONMENT}"
 DBT_ROOT="${REPO_ROOT}/infra/snowflake/dbt/edgartools_gold"
 VALIDATION_ARTIFACT="${REPO_ROOT}/infra/snowflake/sql/${ENVIRONMENT}_native_pull_handshake.json"
+
+# Replacing the dev|prod enum with a slug means the environment is valid iff the
+# Terraform roots this script reads actually exist -- so adding environment N+1
+# never requires editing this script again. Each root is checked separately and
+# named in its own error: they do not all come from the same place.
+#
+# The two Snowflake roots are what infra/scripts/generate-snowflake-env.py emits
+# (wayfinder ticket 01). The AWS access root is NOT -- it is the AWS-side
+# precondition (wayfinder ticket 04), stood up separately. Checking it here, by
+# name, is the point: a shared "Snowflake roots exist" check would pass and then
+# die inside terraform with something far less obvious.
+for _root_spec in \
+  "${SNOWFLAKE_ROOT}|Snowflake provisioning root|generate-snowflake-env.py (wayfinder ticket 01)" \
+  "${SNOWFLAKE_ACCESS_ROOT}|Snowflake access root|generate-snowflake-env.py (wayfinder ticket 01)" \
+  "${AWS_ROOT}|AWS access root|the AWS side, which is a precondition this script does not create (wayfinder ticket 04)"
+do
+  _root_path="${_root_spec%%|*}"
+  _root_rest="${_root_spec#*|}"
+  _root_label="${_root_rest%%|*}"
+  _root_source="${_root_rest#*|}"
+  [[ -d "$_root_path" ]] || die \
+    "${_root_label} for environment '${ENVIRONMENT}' does not exist: ${_root_path#${REPO_ROOT}/} -- create it with ${_root_source}"
+done
+unset _root_spec _root_path _root_rest _root_label _root_source
 
 mkdir -p "${TMP_DIR}"
 AWS_BOOTSTRAP_OVERLAY="$(mktemp "${TMP_DIR}/aws-bootstrap-${ENVIRONMENT}-XXXXXX.tfvars.json")"

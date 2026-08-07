@@ -393,9 +393,9 @@ The wrapper coordinates:
 Useful flags:
 
 ```bash
-bash infra/scripts/deploy-snowflake-stack.sh --env prod --run-validation
-bash infra/scripts/deploy-snowflake-stack.sh --env prod --run-dbt
-bash infra/scripts/deploy-snowflake-stack.sh --env prod --upload-dashboard
+bash infra/scripts/deploy-snowflake-stack.sh --env-name prod --snow-connection edgartools-prod --run-validation
+bash infra/scripts/deploy-snowflake-stack.sh --env-name prod --snow-connection edgartools-prod --run-dbt
+bash infra/scripts/deploy-snowflake-stack.sh --env-name prod --snow-connection edgartools-prod --upload-dashboard
 ```
 
 Native-pull gotchas:

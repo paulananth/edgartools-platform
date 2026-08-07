@@ -516,7 +516,7 @@ upload run only when their flags are passed.
 ```bash
 # Run from the repo root
 bash infra/scripts/deploy-snowflake-stack.sh \
-  --env prod \
+  --env-name prod \
   --snow-connection edgartools-prod
 ```
 
@@ -534,9 +534,9 @@ The wrapper performs these stages in order:
 Validation, dbt, and dashboard upload are opt-in:
 
 ```bash
-bash infra/scripts/deploy-snowflake-stack.sh --env prod --run-validation
-bash infra/scripts/deploy-snowflake-stack.sh --env prod --run-dbt
-bash infra/scripts/deploy-snowflake-stack.sh --env prod --upload-dashboard
+bash infra/scripts/deploy-snowflake-stack.sh --env-name prod --snow-connection edgartools-prod --run-validation
+bash infra/scripts/deploy-snowflake-stack.sh --env-name prod --snow-connection edgartools-prod --run-dbt
+bash infra/scripts/deploy-snowflake-stack.sh --env-name prod --snow-connection edgartools-prod --upload-dashboard
 ```
 
 ---

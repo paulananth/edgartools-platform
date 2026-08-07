@@ -15,7 +15,7 @@ Commands:
   report   Write and print a sanitized go-live report.
 
 Options:
-  --env <dev|prod>                Environment. Default: dev.
+  --env-name <slug>               Environment slug (e.g. prod, eu-prod). Required.
   --aws-profile <profile>         AWS admin/provisioning profile. Default: AWS_PROFILE or aws-admin-<env>.
   --aws-account-id <id>           Expected 12-digit AWS account ID. Required (or GO_LIVE_AWS_ACCOUNT_ID).
   --deployer-profile <profile>    AWS application deployer profile. Default: sec_platform_deployer.
@@ -36,7 +36,7 @@ fail() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-ENVIRONMENT="dev"
+ENVIRONMENT=""
 AWS_PROFILE_NAME="${AWS_PROFILE:-}"
 DEPLOYER_PROFILE="${GO_LIVE_DEPLOYER_PROFILE:-sec_platform_deployer}"
 AWS_REGION_NAME="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
@@ -70,7 +70,7 @@ fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env) ENVIRONMENT="${2:?}"; shift 2 ;;
+    --env-name) ENVIRONMENT="${2:?}"; shift 2 ;;
     --aws-profile) AWS_PROFILE_NAME="${2:?}"; shift 2 ;;
     --aws-account-id) EXPECTED_AWS_ACCOUNT_ID="${2:?}"; shift 2 ;;
     --deployer-profile) DEPLOYER_PROFILE="${2:?}"; shift 2 ;;
@@ -84,10 +84,36 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-case "$ENVIRONMENT" in
-  dev|prod) ;;
-  *) fail "--env must be dev or prod" ;;
-esac
+# The wizard prompts interactively for the environment and connection, so it is
+# the one command allowed to start without them; every other command must be
+# given both explicitly. --snow-connection is never derived from --env-name:
+# deriving it is what let go-live.sh and deploy-snowflake-stack.sh disagree about
+# the default connection for the same environment (CLAUDE.md, "SnowCLI connection
+# naming").
+# Environment identifier is a free-form operator-chosen slug (wayfinder ticket
+# 01), not a closed dev|prod enum. Defined as a function because the wizard
+# collects the slug interactively, after this point, and must validate it too --
+# otherwise an empty or malformed answer flows into RESOURCE_PREFIX and
+# SNOWFLAKE_DATABASE as "edgartools-" / "EDGARTOOLS_".
+validate_env_slug() {
+  case "$1" in
+    "") fail "--env-name is required" ;;
+    *--*) fail "--env-name '$1' is not a valid environment slug: hyphen-separated words must be non-empty" ;;
+    *[!a-z0-9-]*|-*|*-|[!a-z]*) fail "--env-name '$1' is not a valid environment slug: use lowercase letters and digits in hyphen-separated words, starting with a letter (e.g. 'prod', 'eu-prod')" ;;
+  esac
+}
+
+# The wizard prompts for both, so it alone may start without them; it validates
+# the answers via validate_env_slug/the check below once collected.
+if [[ "$COMMAND" != "wizard" ]]; then
+  validate_env_slug "$ENVIRONMENT"
+  # Never derived from --env-name: deriving it is what let go-live.sh and
+  # deploy-snowflake-stack.sh disagree about the default connection for the same
+  # environment (CLAUDE.md, "SnowCLI connection naming").
+  [[ -n "$SNOW_CONNECTION" ]] || fail "--snow-connection is required (no default is derived from --env-name)"
+elif [[ -n "$ENVIRONMENT" ]]; then
+  validate_env_slug "$ENVIRONMENT"
+fi
 
 if [[ "$APPLY" == "true" && "$COMMAND" != "deploy" && "$COMMAND" != "wizard" ]]; then
   fail "--apply is only valid with deploy or wizard"
@@ -96,24 +122,18 @@ fi
 EVENTS_FILE="${TMPDIR:-/tmp}/go-live-events-$$.tsv"
 trap 'rm -f "${EVENTS_FILE}"' EXIT
 
-default_snow_connection_for_env() {
-  case "$1" in
-    dev) printf '%s\n' "snowconn" ;;
-    prod) printf '%s\n' "edgartools-prod" ;;
-    *) printf '%s\n' "edgartools-$1" ;;
-  esac
-}
-
 refresh_config() {
   if [[ -z "$AWS_PROFILE_NAME" ]]; then
     AWS_PROFILE_NAME="aws-admin-${ENVIRONMENT}"
   fi
-  if [[ -z "$SNOW_CONNECTION" ]]; then
-    SNOW_CONNECTION="$(default_snow_connection_for_env "$ENVIRONMENT")"
-  fi
   WORKSPACE="${WORKSPACE:-${REPO_ROOT}/.edgartools-go-live}"
   STATE_FILE="${WORKSPACE}/state.json"
-  ENV_UPPER="$(printf '%s' "$ENVIRONMENT" | tr '[:lower:]' '[:upper:]')"
+  # Hyphens are legal in a slug and in AWS resource names, but NOT in an
+  # unquoted Snowflake identifier -- so the Snowflake side maps them to
+  # underscores ("eu-prod" -> EDGARTOOLS_EU_PROD) while RESOURCE_PREFIX keeps
+  # the hyphen. Same mapping as generate-snowflake-env.py's snowflake_segment();
+  # for a slug with no hyphens (e.g. "prod") this is a no-op.
+  ENV_UPPER="$(printf '%s' "$ENVIRONMENT" | tr '[:lower:]-' '[:upper:]_')"
   RESOURCE_PREFIX="edgartools-${ENVIRONMENT}"
   SNOWFLAKE_DATABASE="EDGARTOOLS_${ENV_UPPER}"
 }
@@ -274,13 +294,11 @@ run_tui_wizard() {
 
   old_env="$ENVIRONMENT"
   old_aws_default="aws-admin-${old_env}"
-  old_snow_default="$(default_snow_connection_for_env "$old_env")"
-  ENVIRONMENT="$(choose_one "Select environment" "$ENVIRONMENT" "dev" "prod")"
+  # Free-text, not a dev|prod pick-list: environments are operator-chosen slugs.
+  ENVIRONMENT="$(prompt_value "Environment slug" "$ENVIRONMENT")"
+  validate_env_slug "$ENVIRONMENT"
   if [[ "$AWS_PROFILE_NAME" == "$old_aws_default" ]]; then
     AWS_PROFILE_NAME="aws-admin-${ENVIRONMENT}"
-  fi
-  if [[ "$SNOW_CONNECTION" == "$old_snow_default" ]]; then
-    SNOW_CONNECTION="$(default_snow_connection_for_env "$ENVIRONMENT")"
   fi
   refresh_config
 
@@ -291,6 +309,7 @@ run_tui_wizard() {
   fi
   AWS_REGION_NAME="$(prompt_value "AWS region" "$AWS_REGION_NAME")"
   SNOW_CONNECTION="$(prompt_value "Snowflake connection" "$SNOW_CONNECTION")"
+  [[ -n "$SNOW_CONNECTION" ]] || fail "Snowflake connection is required (no default is derived from the environment slug)"
   WORKSPACE="$(prompt_value "Local wizard workspace" "$WORKSPACE")"
 
   if [[ "$COMMAND" == "report" ]]; then
@@ -673,7 +692,7 @@ AWS_PROFILE=${deployer_q} bash infra/scripts/deploy-aws-application.sh --env ${E
   add_stage \
     "Snowflake: native-pull foundation" \
     "baseline database/schemas/warehouses plus native-pull integration, stage, source tables, pipe, stream, procedures, task, and access grants." \
-    "SNOW_CONNECTION=${snow_q} bash infra/scripts/deploy-snowflake-stack.sh --env ${ENVIRONMENT} --snow-connection ${SNOW_CONNECTION} --run-validation"
+    "SNOW_CONNECTION=${snow_q} bash infra/scripts/deploy-snowflake-stack.sh --env-name ${ENVIRONMENT} --snow-connection ${SNOW_CONNECTION} --run-validation"
 
   add_stage \
     "Snowflake: dbt gold" \
@@ -691,7 +710,7 @@ uv run --with dbt-snowflake dbt test --target ${ENVIRONMENT}"
   add_stage \
     "Snowflake Postgres / graph prerequisites" \
     "Delegates Snowflake Postgres credential rotation, migration, and AWS secret bootstrap to the maintained bootstrap script, then grants the hosted graph app against the selected database." \
-    "bash infra/scripts/bootstrap-prod-mdm.sh --env ${ENVIRONMENT} --snow-connection ${SNOW_CONNECTION} --instance-name ${mdm_instance_name_q} --aws-profile ${AWS_PROFILE_NAME} --aws-region ${AWS_REGION_NAME} --name-prefix edgartools-${ENVIRONMENT}
+    "bash infra/scripts/bootstrap-prod-mdm.sh --env-name ${ENVIRONMENT} --snow-connection ${SNOW_CONNECTION} --instance-name ${mdm_instance_name_q} --aws-profile ${AWS_PROFILE_NAME} --aws-region ${AWS_REGION_NAME} --name-prefix edgartools-${ENVIRONMENT}
 snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --filename infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql -D database=${db_name}"
 
   add_stage \
