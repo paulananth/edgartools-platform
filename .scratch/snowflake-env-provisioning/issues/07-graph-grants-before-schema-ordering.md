@@ -1,7 +1,7 @@
 # Resolve graph grants running before the schema they grant on exists
 
 Type: grilling
-Status: open
+Status: resolved (superseded)
 
 ## Question
 
@@ -57,3 +57,14 @@ than it looks and only the `ALL TABLES`/`ALL VIEWS` grants are misplaced.
 Not blocking Ticket 05's install stage, which is correct and independently
 necessary — this is the second half of the same "brand-new account" ordering
 story.
+
+## Answer
+
+Out of scope for this map — this question sits inside "repopulating a
+brand-new account end to end," which is the destination of a separate,
+broader map: [Repopulate this product's Snowflake-side state on a
+brand-new account](../../snowflake-account-cutover/map.md). Resolved there
+as [its Ticket 01](../../snowflake-account-cutover/issues/01-graph-grants-before-schema-ordering.md):
+move the grants SQL, unsplit, to the first line of the "MDM + graph:
+connectivity, migrations, sync, verification" stage, rather than any of the
+three options originally proposed here.

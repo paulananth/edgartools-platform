@@ -65,7 +65,14 @@ const goldTables = [
   "EARNINGS_CALENDAR",
   "GUIDANCE_FACTS",
   "CONSENSUS_ESTIMATES",
-  "TRANSCRIPT_EVENTS"
+  "TRANSCRIPT_EVENTS",
+  // Found while implementing the snowflake-account-cutover map's gold-verify-
+  // live check (wayfinder ticket 06): ADV_FUND_COUNT_RECONCILIATION
+  // (.scratch/adv-firm-roster-crosscheck/) shipped after this allowlist gap
+  // was fixed for the tables above and was never added here -- same
+  // isolated-DAG-branch hazard, source()-only, no ref() edges into any
+  // other gold model.
+  "ADV_FUND_COUNT_RECONCILIATION"
 ];
 const pollIntervalSeconds = 5;
 const timeoutSeconds = 900;

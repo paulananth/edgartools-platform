@@ -2,6 +2,59 @@
 
 This guide walks from zero to the AWS/Snowflake gold layer.
 
+## Quick Path — install.sh (recommended)
+
+`infra/scripts/install.sh` (renamed from `go-live.sh`; wayfinder
+snowflake-account-cutover map, Ticket 05) is the maintained, stage-driven
+wizard that runs everything below in the correct order, with preview-first
+safety and per-stage confirmation. Prefer this over the manual walkthrough
+further down — the manual section exists for troubleshooting a specific
+stage, not as the primary path, and can silently drift from what the
+script actually does (this repo has been bitten by that kind of drift more
+than once; see CLAUDE.md's manifest-pipeline and bootstrap-SQL 5-whys
+sections).
+
+```bash
+# Read-only environment checks (AWS CLI, SnowCLI, Terraform, Docker, config)
+bash infra/scripts/install.sh doctor --env-name prod --snow-connection edgartools-prod \
+  --aws-account-id <12-digit-account-id>
+
+# Print the ordered stage plan and exact commands, preview-only -- nothing runs
+bash infra/scripts/install.sh plan --env-name prod --snow-connection edgartools-prod \
+  --aws-account-id <12-digit-account-id>
+
+# Interactive TUI wizard (default command) -- prompts for environment/connection,
+# then walks every stage with a yes/no confirmation before each real command
+bash infra/scripts/install.sh
+
+# Non-interactive: preview only, or add --apply to enable per-stage confirmation and execution
+bash infra/scripts/install.sh deploy --env-name prod --snow-connection edgartools-prod \
+  --aws-account-id <12-digit-account-id> [--apply]
+
+# Write a sanitized report of what ran (or would run)
+bash infra/scripts/install.sh report --env-name prod --snow-connection edgartools-prod \
+  --aws-account-id <12-digit-account-id>
+```
+
+The stage sequence (18 stages as of the snowflake-account-cutover map):
+AWS Terraform state bucket → Neo4j Native App install → AWS passive
+infrastructure → AWS access roles/policies → ECR image publish → ECS task
+definitions/Step Functions → Snowflake native-pull foundation → an
+unscoped `seed-universe` run → Snowflake MDM export targets → dbt gold →
+Snowflake loader role ownership → Streamlit dashboard → Snowflake Postgres
+/ graph prerequisites → `bronze_seed_silver_gold` → standalone gold-refresh
+(with an automated `gold-verify-live` row-count gate) → MDM+graph
+connectivity/sync/verification → AWS MDM E2E checks → a bounded data
+smoke test. Run `bash infra/scripts/install.sh plan --env-name <slug>
+--snow-connection <name> --aws-account-id <id>` against your target
+environment for the exact, current commands — the list above is a
+summary, not a substitute for the live plan output.
+
+`--env-name` is a free-form operator-chosen slug (e.g. `prod`, `eu-prod`),
+not a closed `dev`/`prod` enum, and `--snow-connection` is always required
+explicitly (never derived from `--env-name` — see CLAUDE.md's "SnowCLI
+connection naming" note for why).
+
 ## Architecture Overview
 
 ```
@@ -119,6 +172,14 @@ test "$ACCOUNT_ID" = "690839588395" || {
 Use the same verified profile for the environment's state bootstrap, passive-infrastructure root, and AWS-access root. See [AWS account and profile selection](aws-authentication.md) for SSO configuration, dev/prod examples, troubleshooting, and the mandatory retired-account guard.
 
 ---
+
+## Manual / Under the Hood
+
+Everything from here down is the same procedure `install.sh` runs for you,
+broken out stage by stage as raw commands. Reach for this section when a
+specific `install.sh` stage fails and you need to run its underlying
+commands by hand to diagnose or retry it — not as the primary path for a
+new environment.
 
 ## Step 1 — Terraform: Bootstrap State Bucket
 

@@ -194,6 +194,32 @@ def _handle_gold_refresh(args: argparse.Namespace) -> int:
     return run_command("gold-refresh", args)
 
 
+def _handle_gold_verify_live(args: argparse.Namespace) -> int:
+    import json
+    import sys
+
+    from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
+    from edgar_warehouse.serving.gold_verify import verify_gold_live
+
+    settings = SnowflakeConnectionSettings.from_env()
+    connection = settings.connect()
+    try:
+        result = verify_gold_live(connection, database=settings.database)
+    finally:
+        connection.close()
+
+    print(json.dumps(result.payload, indent=2, sort_keys=True))
+    if not result.passed:
+        print(
+            f"gold-verify-live: {len(result.empty_tables)} of {len(result.row_counts)} "
+            "expected EDGARTOOLS_GOLD tables are empty or unreachable: "
+            + ", ".join(result.empty_tables),
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
 def _handle_compute_windows(args: argparse.Namespace) -> int:
     if getattr(args, "window_size", None) is not None and args.window_size <= 0:
         import sys
@@ -901,6 +927,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(gold_refresh)
     gold_refresh.set_defaults(handler=_handle_gold_refresh)
+
+    gold_verify_live = subparsers.add_parser(
+        "gold-verify-live",
+        help="Query row counts across every EDGARTOOLS_GOLD dynamic table via a direct Snowflake "
+             "connection and fail (non-zero exit) if any expected table is empty. Independent of "
+             "the bronze/silver/manifest pipeline -- run any time after gold-refresh to confirm "
+             "gold actually populated, not just that the dynamic tables compile.",
+    )
+    gold_verify_live.set_defaults(handler=_handle_gold_verify_live)
 
     compute_windows = subparsers.add_parser(
         "compute-windows",

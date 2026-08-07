@@ -6,7 +6,7 @@
 # Implements the stage added by wayfinder ticket 05 of the
 # snowflake-env-provisioning map. Until now nothing in this repo installed the
 # app: infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql only GRANTs
-# against an application it assumes already exists, so go-live.sh silently
+# against an application it assumes already exists, so install.sh silently
 # depended on someone having installed it out of band. That assumption does not
 # hold for a brand-new account, which is the case this map exists to serve.
 #
@@ -94,7 +94,7 @@ HINT
 }
 
 # --- Idempotency -------------------------------------------------------------
-# Re-running go-live.sh must not fail on an already-installed app. Checked
+# Re-running install.sh must not fail on an already-installed app. Checked
 # first so the expensive/permission-sensitive listing resolution is skipped
 # entirely on the common re-run path.
 log "Checking whether application ${APP_NAME} already exists"
@@ -178,7 +178,7 @@ else
 fi
 
 # --- Install -----------------------------------------------------------------
-# BACKGROUND_INSTALL is deliberately not used: go-live.sh runs its stages
+# BACKGROUND_INSTALL is deliberately not used: install.sh runs its stages
 # sequentially and the grants stage later in the run needs the application to
 # actually exist, so a non-blocking install would just move the failure.
 INSTALL_SQL="CREATE APPLICATION ${APP_NAME} FROM LISTING '${LISTING_GLOBAL_NAME}';"
@@ -199,7 +199,7 @@ if ! snow sql --connection "$SNOW_CONNECTION" -q "$INSTALL_SQL"; then
 fi
 
 # Confirm rather than trusting the statement's exit code: the grants stage that
-# runs later in go-live.sh depends on this object existing.
+# runs later in install.sh depends on this object existing.
 log "Verifying ${APP_NAME} is present"
 VERIFY_JSON="$(snow_json "SHOW APPLICATIONS LIKE '${APP_NAME}'")" || VERIFY_JSON=""
 printf '%s' "$VERIFY_JSON" | python3 -c "import json,sys; sys.exit(0 if json.load(sys.stdin) else 1)" 2>/dev/null \

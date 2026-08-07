@@ -89,7 +89,7 @@ done
   "--env-name '${ENVIRONMENT}' is not a valid environment slug: use lowercase letters and digits in hyphen-separated words, starting with a letter (e.g. 'prod', 'eu-prod')."
 
 # Required, never derived from the environment name. Deriving it is what let
-# go-live.sh and this script disagree about the default connection for the same
+# install.sh and this script disagree about the default connection for the same
 # environment (CLAUDE.md, "SnowCLI connection naming").
 [[ -n "$SNOW_CONNECTION" ]] || die "--snow-connection is required (no default is derived from --env-name)"
 

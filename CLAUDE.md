@@ -1022,21 +1022,22 @@ this repo (always a placeholder like `<account_locator.region.cloud>` above) —
 project-level convention is the **connection name**, resolved from
 `~/.snowflake/config.toml`. **`--snow-connection` is required and never derived** from the
 environment name — as of wayfinder ticket 03 (snowflake-env-provisioning map), both
-`go-live.sh` and `deploy-snowflake-stack.sh` fail closed without it. This replaced two
-*disagreeing* derivations of the same default (`go-live.sh` mapped dev to `snowconn`,
+`install.sh` (renamed from `go-live.sh` per the snowflake-account-cutover map's Ticket 05)
+and `deploy-snowflake-stack.sh` fail closed without it. This replaced two
+*disagreeing* derivations of the same default (`install.sh` mapped dev to `snowconn`,
 while `deploy-snowflake-stack.sh` string-built `edgartools-${ENVIRONMENT}`, i.e.
 `edgartools-dev`), which is why neither derives one now. Prod's connection is
 `edgartools-prod`; pass it explicitly.
 
 **Environment identifier.** The same ticket replaced `--env <dev|prod>` with
-`--env-name <slug>` across `go-live.sh`, `deploy-snowflake-stack.sh`,
+`--env-name <slug>` across `install.sh`, `deploy-snowflake-stack.sh`,
 `bootstrap-prod-mdm.sh`, `bootstrap-aws-mdm-secrets.sh`, and `create-deployer.sh`
 (positional). A slug is lowercase letters/digits in hyphen-separated words
 (`prod`, `eu-prod`); hyphens map to underscores for Snowflake identifiers
 (`eu-prod` → `EDGARTOOLS_EU_PROD`). There is **no `--env` back-compat alias** — the
 rename was clean, since dev is decommissioned and prod was the only live caller.
 The AWS-side scripts (`deploy-aws-application.sh`, `run-aws-mdm-e2e.sh`) deliberately
-still take `--env`; `go-live.sh` threads one identifier to both flag names.
+still take `--env`; `install.sh` threads one identifier to both flag names.
 
 ## Image management
 

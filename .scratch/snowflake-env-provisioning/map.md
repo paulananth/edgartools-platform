@@ -68,12 +68,11 @@ environment later without code changes.
 ## Not yet specified
 
 (none — every fog item identified while charting this map has either resolved
-into a decision above or graduated to Out of scope. Ticket 07 is a *new* open
-ticket surfaced during implementation, not residual fog: it is stated precisely
-enough to work.)
+into a decision above or graduated to Out of scope.)
 
 ## Out of scope
 
+- [Resolve graph grants running before the schema they grant on exists](issues/07-graph-grants-before-schema-ordering.md) — surfaced during Ticket 05's implementation, but sits inside "repopulating a brand-new account end to end," which is past this map's narrower "stand up an empty infra shell" destination. Closed with a pointer to the [Repopulate this product's Snowflake-side state on a brand-new account](../snowflake-account-cutover/map.md) map, where it was resolved as that map's Ticket 01.
 - AWS-side infrastructure provisioning (S3 buckets, IAM roles, SNS topics,
   Step Functions/ECS) for source ingestion — documented as a precondition,
   not built by this effort.
