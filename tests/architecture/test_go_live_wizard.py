@@ -163,7 +163,10 @@ def test_go_live_script_has_valid_bash_syntax() -> None:
     subprocess.run([BASH, "-n", SCRIPT_ARG], cwd=REPO_ROOT, check=True)
 
 
-def test_default_env_is_dev_and_decline_exits_without_mutation(tmp_path: Path) -> None:
+def test_declining_the_environment_exits_without_mutation(tmp_path: Path) -> None:
+    # Was test_default_env_is_dev_*: there is no default environment any more
+    # (wayfinder ticket 03). run_wizard supplies --env-name dev, so what this
+    # still verifies is the decline path, not a default.
     workspace = tmp_path / "workspace"
 
     result = run_wizard("plan", "--workspace", str(workspace), input_text="n\n")
@@ -743,3 +746,90 @@ def test_snowflake_delegates_get_env_name_and_aws_delegates_keep_env(
     assert "bootstrap-prod-mdm.sh --env-name prod" in combined
     assert "deploy-aws-application.sh --env prod" in combined
     assert "run-aws-mdm-e2e.sh --env prod" in combined
+
+
+# ---------------------------------------------------------------------------
+# Wayfinder snowflake-env-provisioning ticket 05: the run order is go-live.sh's
+# existing sequence plus a Neo4j Native App install stage. Nothing installed the
+# app before -- the grants SQL only GRANTs against one it assumes exists -- so a
+# brand-new account could never complete the graph half of a go-live.
+# ---------------------------------------------------------------------------
+
+
+def _plan_stage_titles(tmp_path: Path) -> list[str]:
+    result = run_wizard(
+        "plan",
+        "--env-name",
+        "prod",
+        "--snow-connection",
+        "edgartools-prod",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        explicit_flags=False,
+    )
+    titles = []
+    for line in (result.stdout + result.stderr).splitlines():
+        stripped = line.strip()
+        if stripped and stripped[0].isdigit() and ". " in stripped:
+            number, _, title = stripped.partition(". ")
+            if number.isdigit():
+                titles.append(title)
+    return titles
+
+
+def test_neo4j_install_stage_exists(tmp_path: Path) -> None:
+    assert "Snowflake: Neo4j Native App install" in _plan_stage_titles(tmp_path)
+
+
+def test_neo4j_install_runs_early_and_before_the_grants_stage(tmp_path: Path) -> None:
+    """Placement is the decision, not an accident.
+
+    Installing needs a one-time ORGADMIN acceptance of the Marketplace terms in
+    Snowsight, which has no SQL equivalent (ticket 02). Running it second means
+    that human step overlaps the stages that don't depend on it, rather than
+    stalling the wizard midway. It must still precede the stage that GRANTs
+    against the application.
+    """
+    titles = _plan_stage_titles(tmp_path)
+    install = titles.index("Snowflake: Neo4j Native App install")
+    grants = titles.index("Snowflake Postgres / graph prerequisites")
+
+    assert install == 1, f"expected stage 2, got stage {install + 1}"
+    assert install < grants
+
+
+def test_neo4j_install_stage_delegates_to_the_script(tmp_path: Path) -> None:
+    result = run_wizard(
+        "plan",
+        "--env-name",
+        "prod",
+        "--snow-connection",
+        "edgartools-prod",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        explicit_flags=False,
+    )
+    combined = result.stdout + result.stderr
+    assert (
+        "bash infra/scripts/install-neo4j-graph-app.sh --snow-connection edgartools-prod"
+        in combined
+    )
+
+
+def test_plan_is_preview_only_and_installs_nothing(tmp_path: Path) -> None:
+    """The new stage is state-changing, so it must stay behind the same
+    preview/confirm gate as every other stage."""
+    result = run_wizard(
+        "plan",
+        "--env-name",
+        "prod",
+        "--snow-connection",
+        "edgartools-prod",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        explicit_flags=False,
+    )
+    combined = result.stdout + result.stderr
+    for line in combined.splitlines():
+        if "install-neo4j-graph-app.sh" in line:
+            assert "[preview only]" in line

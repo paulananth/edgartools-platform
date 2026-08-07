@@ -651,6 +651,11 @@ AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform plan
 AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform apply"
 
   add_stage \
+    "Snowflake: Neo4j Native App install" \
+    "Installs the Neo4j Graph Analytics Native App, which nothing in this repo previously did: infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql (run by the 'Snowflake Postgres / graph prerequisites' stage below) only GRANTs against an application it assumes already exists, so every prior go-live silently depended on someone having installed it out of band -- an assumption that does not hold for a brand-new account. Placed this early deliberately (wayfinder ticket 05): installing requires a one-time, per-organization ORGADMIN acceptance of the Snowflake Provider and Consumer Terms in Snowsight, which wayfinder ticket 02 established has no SQL or API equivalent. Running it here means that human step is in flight while the AWS and Snowflake stages that do not depend on it proceed, instead of stalling the wizard mid-run. Idempotent: exits cleanly if the application is already installed. The Marketplace listing is resolved at run time rather than hardcoded, because ticket 02's candidate global name was transcribed from a guide URL rather than read off SHOW AVAILABLE LISTINGS and is explicitly unverified." \
+    "bash infra/scripts/install-neo4j-graph-app.sh --snow-connection ${SNOW_CONNECTION}"
+
+  add_stage \
     "AWS: passive infrastructure" \
     "VPC, S3 bronze/warehouse/export buckets, S3 endpoint, ECR, ECS cluster, CloudWatch logs, SNS, KMS, and empty Secrets Manager containers." \
     "cd infra/terraform/accounts/${ENVIRONMENT}
