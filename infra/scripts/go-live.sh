@@ -20,7 +20,7 @@ Options:
   --aws-account-id <id>           Expected 12-digit AWS account ID. Required (or GO_LIVE_AWS_ACCOUNT_ID).
   --deployer-profile <profile>    AWS application deployer profile. Default: sec_platform_deployer.
   --aws-region <region>           AWS region. Default: AWS_REGION, AWS_DEFAULT_REGION, or us-east-1.
-  --snow-connection <name>        SnowCLI connection. Default: snowconn for dev, edgartools-prod for prod.
+  --snow-connection <name>        SnowCLI connection name from ~/.snowflake/config.toml. Required (never derived from --env-name).
   --workspace <path>              Local ignored wizard workspace. Default: .edgartools-go-live.
   --report-file <path>            Report path for the report command.
   --apply                         deploy only: enable real commands, each behind a yes/no prompt.
