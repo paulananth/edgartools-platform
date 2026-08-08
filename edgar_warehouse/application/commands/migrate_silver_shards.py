@@ -45,14 +45,13 @@ CIK_DIRECT_TABLES = [
     "sec_company_filing",
     "sec_current_filing_feed",
     "sec_raw_object",
-    "sec_adv_filing",
     "sec_reconcile_finding",
 ]
 
 # Tables that need a JOIN to sec_company_filing to resolve the issuer CIK.
 # Tuple format: (table_name, join_table, join_condition)
-# For all ownership tables: join on accession_number -> sec_company_filing.cik
-# For ADV sub-tables: join on accession_number -> sec_adv_filing.cik
+# ADV sub-tables (sec_adv_office/disclosure_event/private_fund) are NOT here --
+# see GLOBAL_TABLES below for why.
 ACCESSION_JOIN_TABLES: list[tuple[str, str, str]] = [
     (
         "sec_ownership_reporting_owner",
@@ -70,21 +69,6 @@ ACCESSION_JOIN_TABLES: list[tuple[str, str, str]] = [
         "o.accession_number = f.accession_number",
     ),
     (
-        "sec_adv_office",
-        "sec_adv_filing",
-        "o.accession_number = f.accession_number",
-    ),
-    (
-        "sec_adv_disclosure_event",
-        "sec_adv_filing",
-        "o.accession_number = f.accession_number",
-    ),
-    (
-        "sec_adv_private_fund",
-        "sec_adv_filing",
-        "o.accession_number = f.accession_number",
-    ),
-    (
         "sec_filing_attachment",
         "sec_company_filing",
         "o.accession_number = f.accession_number",
@@ -97,12 +81,29 @@ ACCESSION_JOIN_TABLES: list[tuple[str, str, str]] = [
 ]
 
 # Tables replicated to ALL 4 shards (no CIK-based routing)
+#
+# sec_adv_filing + its 3 accession-joined children (sec_adv_office,
+# sec_adv_disclosure_event, sec_adv_private_fund) are here, not CIK-routed:
+# confirmed live 2026-08-08 against real prod data that sec_adv_filing.cik is
+# NULL for 58,598 of 58,599 rows (investment advisers are identified by
+# crd_number via IAPD, not a traditional SEC CIK -- only 1 row, a genuine
+# public-company-linked ADV filing, has a real cik). A CIK-range `WHERE cik >=
+# ... AND cik <= ...` filter never matches NULL, so routing these by CIK
+# silently drops nearly all of them -- and since Layer 1/2 verification below
+# only covers CIK_KEYED_TABLES (= CIK_DIRECT_TABLES), that loss would not have
+# been caught for the 3 join-children (all filtered on the joined table's
+# `f.cik`, i.e. sec_adv_filing.cik, so they'd lose the identical rows via the
+# identical root cause). Global replication has no such failure mode.
 GLOBAL_TABLES = [
     "sec_sync_run",
     "sec_source_checkpoint",
     "sec_daily_index_checkpoint",
     "stg_daily_index_filing",
     "sec_parse_run",
+    "sec_adv_filing",
+    "sec_adv_office",
+    "sec_adv_disclosure_event",
+    "sec_adv_private_fund",
 ]
 
 # Legacy table — best-effort replication if it exists in source
