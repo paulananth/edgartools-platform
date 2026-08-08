@@ -13,8 +13,11 @@ Graph sync runs last.
 from __future__ import annotations
 
 import json
+import os
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any, Iterable, Optional
@@ -22,6 +25,7 @@ from typing import Any, Iterable, Optional
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from edgar_warehouse.mdm.database import get_session
 from edgar_warehouse.mdm.graph import GraphSyncEngine
 from edgar_warehouse.mdm.observability import elapsed_ms, emit_mdm_event
 from edgar_warehouse.mdm.resolvers import (
@@ -31,6 +35,15 @@ from edgar_warehouse.mdm.resolvers import (
 )
 from edgar_warehouse.mdm.resolvers.base import ResolverContext, SilverReader
 from edgar_warehouse.mdm.rules import MDMRuleEngine
+
+# Company resolution is network-round-trip-bound against MDM's Postgres store
+# (~68ms/call measured live, us-east-1 ECS tasks against a us-west-2 Snowflake
+# Postgres endpoint -- see pipeline-throughput-architecture map's MDM addendum),
+# not CPU-bound, so bounded thread concurrency hides that latency instead of
+# fighting it. Default 8 stays comfortably under SQLAlchemy's default pool
+# budget (pool_size=5 + max_overflow=10 = 15), leaving headroom for the
+# pipeline's own primary session.
+_COMPANY_RESOLVE_MAX_WORKERS = int(os.environ.get("MDM_COMPANY_RESOLVE_CONCURRENCY", "8"))
 
 RELATIONSHIP_TYPES = (
     # ── Existing (ownership + ADV) ────────────────────────────────────────────
@@ -70,6 +83,21 @@ class PipelineStats:
     sent_to_review: int = 0
     relationships_written: int = 0
     relationship_counts_by_type: dict[str, dict[str, int | None]] = field(default_factory=dict)
+
+
+def _first_per_key(rows: list[dict], key_field: str) -> dict[Any, dict]:
+    """Bulk-prefetch helper: keep only the first row seen per key_field value.
+
+    Used to replicate a per-row ``ORDER BY ... LIMIT 1`` query's semantics
+    (first-seen-wins for a given key) against a single bulk-fetched,
+    pre-sorted row set instead of one query per key.
+    """
+    out: dict[Any, dict] = {}
+    for row in rows:
+        key = row[key_field]
+        if key not in out:
+            out[key] = row
+    return out
 
 
 def _derive_role(row: dict) -> str:
@@ -176,8 +204,18 @@ class MDMPipeline:
         Full-universe loads leave ``issuer_ciks`` unset. Ticket 21 insider path
         only needs missing **issuer** shells for the CIKs under test — pass
         those CIKs here; never re-walk the whole sec_company table for insiders.
+
+        Each row resolves on its own worker thread and its own SQLAlchemy
+        session (bounded by ``_COMPANY_RESOLVE_MAX_WORKERS``), committing
+        independently. This is safe here specifically because
+        ``CompanyResolver._existing_candidates`` scopes its match-candidate
+        lookup to the row's own CIK (``MdmCompany.cik == cik``) -- concurrent
+        rows never share mutable match state, and CIK-exact re-matching makes
+        a resumed/retried run idempotent (an already-resolved CIK reuses its
+        existing entity_id instead of duplicating it). Ticker/tracking lookups
+        are prefetched in bulk up front instead of two extra per-row silver
+        reads inside the loop.
         """
-        ctx = self._ctx()
         resolver = CompanyResolver()
         ciks = self._normalize_issuer_ciks(issuer_ciks)
         sql = "SELECT * FROM sec_company"
@@ -189,23 +227,74 @@ class MDMPipeline:
         if limit:
             sql += f" LIMIT {int(limit)}"
         rows = self.silver.fetch(sql, params or None)
+
+        ticker_rows = self.silver.fetch(
+            "SELECT cik, ticker, exchange FROM sec_company_ticker "
+            "ORDER BY cik, source_rank NULLS LAST"
+        )
+        ticker_by_cik = _first_per_key(ticker_rows, "cik")
+        tracking_rows = self.silver.fetch(
+            "SELECT cik, tracking_status FROM sec_company_sync_state"
+        )
+        tracking_by_cik = {row["cik"]: row for row in tracking_rows}
+
+        rule_engine = self.engine
+        sql_engine = self.session.get_bind()
+        silver = self.silver
+        run_id = self.run_id
         processed = 0
+        lock = threading.Lock()
         started_at = time.monotonic()
-        for row in rows:
-            ticker = self._first(self.silver.fetch(
-                "SELECT ticker, exchange FROM sec_company_ticker "
-                "WHERE cik = ? ORDER BY source_rank NULLS LAST LIMIT 1",
-                [row["cik"]],
-            ))
-            tracking = self._first(self.silver.fetch(
-                "SELECT tracking_status FROM sec_company_sync_state WHERE cik = ?",
-                [row["cik"]],
-            ))
-            resolver.resolve_one(ctx, "edgar_cik", row, ticker, tracking)
-            processed += 1
-            if processed % 500 == 0:
-                emit_mdm_event("mdm_progress", domain="company", processed=processed, elapsed_ms=elapsed_ms(started_at))
-        self.session.commit()
+
+        # SQLite (test/stub backend only -- MDM production is always Postgres,
+        # see database.py's MDM_DATABASE_URL) doesn't support genuinely
+        # concurrent connections the way Postgres does: SQLAlchemy's SQLite
+        # dialect commonly binds every session in-process to the same
+        # underlying DBAPI connection (StaticPool, used for :memory: fixtures
+        # so all sessions see the same data), and that one connection cannot
+        # run two simultaneous transactions -- concurrent worker sessions
+        # deadlock against it. Real per-worker connection concurrency is a
+        # property Postgres provides that SQLite here does not, so cap workers
+        # at 1 (still runs through the same worker-thread code path, just
+        # strictly one task at a time) whenever the bound engine is SQLite.
+        max_workers = (
+            1 if sql_engine.dialect.name == "sqlite" else _COMPANY_RESOLVE_MAX_WORKERS
+        )
+
+        def _resolve_row(row: dict) -> None:
+            worker_session = get_session(sql_engine)
+            try:
+                worker_ctx = ResolverContext(
+                    session=worker_session,
+                    engine=rule_engine,
+                    silver=silver,
+                    run_id=run_id,
+                )
+                ticker = ticker_by_cik.get(row["cik"])
+                tracking = tracking_by_cik.get(row["cik"])
+                resolver.resolve_one(worker_ctx, "edgar_cik", row, ticker, tracking)
+                worker_session.commit()
+            finally:
+                worker_session.close()
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(_resolve_row, row) for row in rows]
+            try:
+                for future in as_completed(futures):
+                    future.result()
+                    with lock:
+                        processed += 1
+                        if processed % 500 == 0:
+                            emit_mdm_event(
+                                "mdm_progress",
+                                domain="company",
+                                processed=processed,
+                                elapsed_ms=elapsed_ms(started_at),
+                            )
+            except Exception:
+                for f in futures:
+                    f.cancel()
+                raise
         return processed
 
     def run_advisers(self, limit: Optional[int] = None) -> int:
