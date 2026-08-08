@@ -61,13 +61,13 @@ executes the micro-fixes this map's evidence builds on.
 
 ## Not yet specified
 
-- Whether the underlying storage model -- one DuckDB file per silver
-  shard, mutated via full-file copy + reattach -- is still the right
-  primitive at current/projected data scale (1GB+ canonical file today),
-  or whether pipeline speed ultimately requires moving off it entirely.
-  Too large to ticket before [Profile the real bottleneck breakdown across
-  pipeline stages](issues/01-profile-pipeline-stage-bottleneck-breakdown.md)
-  shows whether storage I/O is actually the dominant cost.
+- ~~Whether the underlying storage model -- one DuckDB file per silver
+  shard...~~ superseded by events: CIK-range sharding (4 shards) was
+  activated directly in prod 2026-08-08, outside this map's ticket flow,
+  under explicit user urgency mid-cutover. The narrower follow-on question
+  -- whether *batch scheduling* also needs to become shard-aware now that
+  the storage itself is sharded -- is ticketed as
+  [Decide shard-aware batch scheduling](issues/12-decide-shard-aware-batch-scheduling.md).
 - Whether ECS task memory/CPU sizing itself (as opposed to task *count* or
   intra-task concurrency) is a limiting factor -- folded into ticket 01's
   profiling pass rather than ticketed separately for now. Ticket 01's
