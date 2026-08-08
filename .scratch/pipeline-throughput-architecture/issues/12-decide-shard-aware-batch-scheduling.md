@@ -25,15 +25,24 @@ against a single ~745MB shard (`shard-0`). Confirmed active via
 
 But sharding has **not** actually distributed concurrent writers across
 independent files yet, because `BatchSilver`'s `ItemReader` consumes
-`cik_batches.jsonl` in the order it was written -- ascending CIK. Pulled the
-real batch list for this run: the first 6 batches sampled span CIK 1,750
-through 71,691, all of which fall inside `shard-0`'s boundary
-(`cik_min=0, cik_max=1,384,293` -- one of 4 quartile-derived bands, computed
-via `approx_quantile` over `sec_company.cik`, see ticket 11's sibling
-migration work). Because low CIKs (older, pre-2000s registrants) are
-numerically sparse but data-dense, shard-0 alone will absorb a long,
-possibly majority, stretch of this 679-batch run before any batch even
-touches shard-1/2/3.
+`cik_batches.jsonl` in the order it was written -- ascending CIK. Parsed the
+full 679-batch list for this run and located the exact crossing point:
+`shard-0`'s boundary (`cik_min=0, cik_max=1,384,293` -- one of 4
+quartile-derived bands, computed via `approx_quantile` over
+`sec_company.cik`, see ticket 11's sibling migration work) is crossed
+between **batch 131 and 132**, i.e. the first **~19% of the run (131/679
+batches)** executes entirely inside shard-0 before any batch touches
+shard-1. (Initial note in this ticket estimated "possibly a majority" from
+a 6-batch sample taken early in the run -- corrected here against the full
+batch list: quartile-derived shard boundaries mean each shard gets roughly
+its proportional ~25% share of batches, not a majority concentration in
+shard-0. Still a real problem, just smaller than first estimated.) For that
+first ~131-batch stretch, every `MaxConcurrency=2` pair races the identical
+shard-0 file; the same will repeat for each of the other three ~25%
+stretches once the run reaches them, just against a different shard file
+each time -- concurrent slots are never actually spread across *different*
+shards simultaneously under CIK-ascending ordering, regardless of shard
+count.
 
 Two of the four completed batches had **overlapping `silver_publish`
 windows** against the same shard-0 file (`12:48:11.23-12:48:19.92` and
