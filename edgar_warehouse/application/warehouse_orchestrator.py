@@ -1826,6 +1826,7 @@ def _capture_bronze_raw(
             fetch_date=now.date(),
             sync_run_id=sync_run_id,
             batch_size=batch_size,
+            shard_aware=True,
         )
         batch_count = -(-len(rows) // batch_size)  # ceiling division
         _emit_pipeline_event(
@@ -4909,6 +4910,7 @@ def _write_cik_universe_batches(
     fetch_date: date,
     sync_run_id: str,
     batch_size: int = 100,
+    shard_aware: bool = False,
 ) -> str:
     """Write the CIK universe as pre-batched JSON Lines to the bronze root.
 
@@ -4918,16 +4920,83 @@ def _write_cik_universe_batches(
     Path uses run_id only (no date component) so the Step Function can construct
     the key deterministically from $$.Execution.Name without date extraction.
 
+    ``shard_aware`` (ticket 12, pipeline-throughput-architecture): when True,
+    split ``rows`` by shard band first and round-robin interleave each
+    shard's batches before writing, so consecutive lines cycle across shard
+    files instead of exhausting one shard before touching the next -- lets a
+    Distributed Map's concurrent slots land on different shard files rather
+    than repeatedly racing the same one. Only the ``seed-bronze-batches``
+    caller opts in; the other callers of this function have their own
+    ordering dependents (e.g. a downstream reducer that re-derives the same
+    batch boundaries) and must keep today's plain ascending-order behavior.
+    Falls back to plain ascending batching -- identical to ``shard_aware=False``
+    -- when remote storage isn't in use or no shard manifest exists yet,
+    mirroring the read-side fallback (``shard_manifest_missing_monolith_fallback``).
+
     Returns the full S3/local path to the JSON Lines file.
     """
     relative_path = default_capture_spec_factory().cik_universe_batches(sync_run_id).relative_path
-    lines = []
     ciks = [str(row["cik"]) for row in rows]
-    for i in range(0, len(ciks), batch_size):
-        batch = ciks[i : i + batch_size]
-        lines.append(json.dumps({"cik_list": ",".join(batch)}))
+
+    per_shard_ciks = _shard_partition_ciks(context, ciks) if shard_aware else None
+    if per_shard_ciks is None:
+        batches = [ciks[i : i + batch_size] for i in range(0, len(ciks), batch_size)]
+    else:
+        per_shard_batches = [
+            [shard_ciks[i : i + batch_size] for i in range(0, len(shard_ciks), batch_size)]
+            for shard_ciks in per_shard_ciks
+        ]
+        batches = _interleave_round_robin(per_shard_batches)
+
+    lines = [json.dumps({"cik_list": ",".join(batch)}) for batch in batches]
     content = "\n".join(lines) + ("\n" if lines else "")
     return context.bronze_root.write_text(relative_path, content)
+
+
+def _shard_partition_ciks(
+    context: WarehouseCommandContext, ciks: list[str]
+) -> list[list[str]] | None:
+    """Split ``ciks`` (already sorted ascending) into per-shard sublists.
+
+    Returns None -- caller should fall back to plain ascending batching --
+    when remote storage isn't in use or no shard manifest exists yet.
+    Ordering within each shard's sublist is preserved (still ascending),
+    only the shard-to-shard grouping changes.
+    """
+    if not context.storage_root.is_remote:
+        return None
+
+    from edgar_warehouse.application.sharding.shard_manifest import band_for_cik
+
+    try:
+        manifest = _read_shard_manifest(context)
+    except (FileNotFoundError, OSError):
+        _emit_pipeline_event(
+            "shard_manifest_missing_monolith_fallback",
+            command="seed-bronze-batches",
+        )
+        return None
+
+    shard_count = int(manifest["shard_count"])
+    per_shard_ciks: list[list[str]] = [[] for _ in range(shard_count)]
+    for cik in ciks:
+        shard_index = band_for_cik(manifest, int(cik))
+        per_shard_ciks[shard_index].append(cik)
+    return per_shard_ciks
+
+
+def _interleave_round_robin(per_shard_batches: list[list[list[str]]]) -> list[list[str]]:
+    """Round-robin flatten per-shard batch lists (ticket 12): shard0-batch1,
+    shard1-batch1, ..., shard0-batch2, ... A shard whose batches are
+    exhausted is simply skipped in later rounds -- no special-casing needed.
+    """
+    result: list[list[str]] = []
+    max_len = max((len(shard_batches) for shard_batches in per_shard_batches), default=0)
+    for round_index in range(max_len):
+        for shard_batches in per_shard_batches:
+            if round_index < len(shard_batches):
+                result.append(shard_batches[round_index])
+    return result
 
 
 def _list_bronze_submission_ciks(context: WarehouseCommandContext) -> list[str]:
