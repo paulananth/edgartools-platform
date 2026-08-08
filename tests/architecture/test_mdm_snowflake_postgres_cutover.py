@@ -80,9 +80,9 @@ def test_bronze_seed_state_machine_defaults_and_stringifies_batch_size() -> None
 def test_bronze_seed_state_machine_runs_batch_silver_with_bounded_parallelism() -> None:
     text = _read(DEPLOY_SCRIPT)
 
-    assert '"MaxConcurrency": 4' in text
-    assert "First-load recovery from cached bronze. Runs four batches at a time" in text
-    assert "Validated end-to-end in prod at MaxConcurrency=4" in text
+    assert '"MaxConcurrency": 2' in text
+    assert "First-load recovery from cached bronze. Lowered 4->2 2026-08-08" in text
+    assert "72 PromotionConflictError retries" in text
     assert "sequential bootstrap-batch uses bronze SHA256 cache" in text
 
 
@@ -102,7 +102,7 @@ def test_bronze_seed_exposes_fail_closed_ticket20_release_path() -> None:
 
     assert '"StartAt": "ReleaseModeCheck"' in text
     assert '"StrictBatchSilver": strict_batch_map' in text
-    assert '"MaxConcurrency": 4' in text
+    assert '"MaxConcurrency": 2' in text
     assert "'--release-mode', '--candidate-manifest'" in text
     assert "'reconcile-relationship-release'" in text
     assert "'--insider-coverage'" in text
