@@ -1,5 +1,5 @@
 Type: research
-Status: open
+Status: resolved
 
 ## Question
 
@@ -65,3 +65,58 @@ doesn't hold here: fan-out parallelizes *across* batches, but each
 concurrent worker still pays the full ~65s copy-in/publish-out round trip
 against the *same* growing canonical file — more workers means more
 concurrent full-file S3 round trips, not a smaller per-batch cost.
+
+## Answer (2026-08-08, live evidence from the just-completed medium/20 run)
+
+**"Leave it" still holds, but not for ticket 05's original reason — the
+question this ticket asked is now moot.** CIK-range sharding (implemented
+directly out of the wayfinder ticket flow, mid-cutover, under explicit
+"this cannot wait" instruction — see ticket 12's context) already replaced
+the exact cost mechanism this ticket was investigating: the copy-in/
+merge/upload round trip is no longer O(one growing >1.6GB monolithic
+canonical file) — it's O(one ~80-800MB shard), and every `BatchSilver`
+task now touches exactly one shard, not the whole canonical DB.
+
+Pulled a real end-to-end task trace from the just-completed
+`bronze-seed-silver-gold-medium-20-retry-1786214600` run (task
+`12ccb0199ee141eb9a6b6597d52163dc`, run_id `fd28cdcc-...`, a 14-CIK batch
+against `shard-2.duckdb`, 249,835,520 bytes / ~238MB) via CloudWatch Logs +
+`ecs describe-tasks`:
+
+| Phase | Duration | Compare to ticket 11's original (100-CIK, pre-shard) estimate |
+|---|---|---|
+| ECS provisioning (created → pull started) | 15.3s | not itemized originally |
+| Image pull | 13.2s | not itemized originally |
+| Pull stopped → container started | 5.3s | (these three ≈ old "~33s container start") |
+| Container started → shard hydrated | 11.3s | was "copy canonical DB locally + ATTACH ~20s", now downloading one shard (238MB) instead of the whole >1GB+ file |
+| Bronze capture | 1.9s | was 54s/100 CIKs (≈7.6s at this batch's 14-CIK scale) — still faster even scaled down, all cache hits |
+| Silver apply | 0.4s | was 9s/100 CIKs (≈1.3s scaled) |
+| **`silver_publish` (merge across 21 tables + upload)** | **3.2s** | **was ~31s (merge) + ~45s (upload) = 76s combined, unscaled — now one order of magnitude smaller even before accounting for the smaller batch size** |
+| Teardown (publish complete → task stopped) | 25.5s | not itemized originally |
+| **Total task wall time** | **77.4s** | **was ~3m38s (218s) for one 100-CIK batch, before teardown** |
+
+The merge loop itself still does a full pass over all 21 protected tables
+regardless of batch relevance (the same behavior this ticket originally
+flagged) — but "full pass over a table" now means a full pass over that
+table's rows *within one ~238MB shard*, not within the >1.6GB+ monolith.
+The absolute cost dropped in proportion to the file-size reduction sharding
+already delivered, independent of anything ticket 05 decided about the
+merge function's internal structure.
+
+**No further storage-path work is justified for `BatchSilver`.** The
+remaining ~46s of this task's 77.4s (provisioning + pull + teardown) is
+fixed ECS/Fargate task-lifecycle overhead, not merge-storage cost — that's
+exactly the "61% of each task is fixed overhead that parallelizes for free"
+lever tickets 12 and 13 already used to justify `MaxConcurrency=20`, not a
+new axis this ticket needs to open. If `BatchSilver` throughput ever needs
+to scale further, the lever is more shards or higher `MaxConcurrency` (see
+this map's "Not yet specified" entry on scaling beyond today's 4 shards),
+not revisiting `merge_candidate_into_canonical`'s storage path a second
+time.
+
+**Related smaller finding (unresolved, still true, still not worth its own
+ticket):** the dead `run_seed_universe_command` function in
+`warehouse_orchestrator.py` (calls undefined `_resolve_seed_document`/
+`_resolve_seed_limit`, unreachable via `command_router.py`) was not touched
+by this investigation — leaving it as a one-line note for whoever next
+edits that file, per the original ticket's own assessment.
