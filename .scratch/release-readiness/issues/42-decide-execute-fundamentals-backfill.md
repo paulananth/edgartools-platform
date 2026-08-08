@@ -487,6 +487,31 @@ implied.
 Deployed to prod (`edgartools-prod-large:136`) and re-ran the 20-CIK per-filing sample a third
 time: **exited 0**, `silver_database_uploaded: true` — first successful publish of corrected F5
 data. Confirmed live in the freshly-published canonical: Avery Dennison's `revenue_gaap` and
+
+### Promotion-race verification across the sample tasks — 2026-08-08
+
+Checked whether any of this ticket's concurrent-in-time sample tasks could have raced on the
+canonical `silver.duckdb` promote and silently lost a write. Pulled real CloudWatch timestamps
+for every run mentioned above:
+
+| Run | Publish window (UTC) | Outcome |
+|---|---|---|
+| `ticket42-sample-artifacts-retry4-postticket97` (F4/F9) | 02:26:33–02:29:11, 2026-08-05 | published |
+| `ticket42-perfiling-sample` (F5, ECS `bc905b97...`) | hydrate 10:08:29 → upload 10:18:45, 2026-08-05 | published |
+| `ticket42-perfiling-scalefix` (ECS `a933daee...`) | started 10:16:40, 2026-08-05 | **failed before publish** — self-aborted on `SemanticMergeConflictError` (a content-conflict check, not a concurrency race); confirmed via logs no `silver_database_uploaded` event fired |
+| `ticket42-perfiling-nullfix` (ECS `3fab2f14...`) | started 10:36:40, 2026-08-05 | **failed before publish** — same `SemanticMergeConflictError` |
+| Final corrected F5 run (`edgartools-prod-large:136`, post-ticket-98) | 2026-08-05, later same day | published |
+
+`scalefix` started only 9m14s after `perfiling-sample`'s upload began (10:16:40 vs.
+10:08:29–10:18:45) — the one pair close enough in time to matter. But neither `scalefix` nor
+`nullfix` ever reached the promote step at all; both self-aborted on `SemanticMergeConflictError`
+first. Every run that *did* successfully publish (retry4, perfiling-sample, and the final
+ticket-98 run) is separated from every other successful publish by hours, run one at a time by
+the operator, not launched concurrently. **Conclusion: no promotion-race exposure occurred during
+this ticket's sample tasks** — not because the race-safe retry logic was exercised and held, but
+because no two publish-capable tasks ever actually overlapped in this ticket's run history.
+Task #35 (full-universe `load_history`) remains the first real test of concurrent-write behavior
+at scale for F4/F9/F5/F11, same as any other `load_history` execution.
 Oxford Industries' `net_income_gaap` (the two specific defect cases found during this
 investigation) are now cleanly `NULL` with fresh `ingested_at` timestamps, not the earlier wrong
 or corrupted values. 104 rows remain flagged suspicious across the 20-CIK sample — confirmed
