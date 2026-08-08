@@ -181,3 +181,65 @@ bottleneck, not yet observed above 2 concurrent tasks), that's roughly
   "Not yet specified" fog on the map rather than ticketed now (not sharp
   enough to spec until `MaxConcurrency=4` has real running evidence behind
   it).
+
+## Addendum: empirical test of MaxConcurrency=16 and 20 (2026-08-08, later same day)
+
+Implemented and deployed the `MaxConcurrency=4` decision above, then the user
+asked to empirically test `MaxConcurrency=16` directly in prod -- explicitly
+to confirm or refute the pigeonhole rejection above rather than leave it
+theoretical.
+
+**Result: the pigeonhole/shard-contention concern was empirically refuted, but
+a completely different, unrelated hard limit was hit instead.**
+
+Live-patched `bronze_seed_silver_gold`'s `BatchSilver` to `MaxConcurrency=16`
+on `wh_large_arn` (2 vCPU/task) and ran it against a fresh 680-batch
+execution. Result: **zero `PromotionConflictError`s across 216 successfully
+completed batches** (real throughput ~7.5s/batch vs `MaxConcurrency=4`'s
+23.7s/batch, a 3.2x gain) -- multiple slots landing on the same shard file
+under the round-robin interleave did not reproduce the retry-storm pattern
+this ticket predicted. Real task-lifecycle jitter (ECS launch variance,
+cache-hit variance) staggers same-shard publish windows enough in practice,
+even at 4-way-per-shard concurrency.
+
+But the execution then **failed outright** at batch 217/680:
+`ECS.AmazonECSException`, `"You've reached the limit on the number of vCPUs
+you can run concurrently"`. Root cause: the AWS account's Fargate On-Demand
+vCPU quota (`L-3032A538`, confirmed via `get-service-quota`) is **30 vCPU**,
+and `MaxConcurrency=16` on `wh_large_arn` (2 vCPU/task) demands up to 32
+vCPU -- 2 over the ceiling. `BatchSilver`'s `ToleratedFailurePercentage=0`
+meant that single quota failure cascaded into aborting the other 15 in-flight
+tasks and failing the whole execution (216 succeeded, 1 failed, 15 aborted,
+448 never started).
+
+**Fix: switch the task profile, not just `MaxConcurrency`.** Re-ran at
+`MaxConcurrency=20` on `wh_medium_arn` (1 vCPU/task) instead of
+`wh_large_arn` -- 20 vCPU total, comfortably under the 30 vCPU quota with 10
+vCPU of margin. Memory case was already solid: ticket 13 had measured real
+peak memory of 765MB/8192MB (~9%) on `wh_large_arn` post-sharding, well
+under `wh_medium_arn`'s 4096MB. The one real unknown was CPU throttling --
+`wh_large_arn`'s measured peak CPU (1556/2048 units, ~76%, ~1.5 vCPU
+equivalent) exceeds `wh_medium_arn`'s 1024-unit (1 vCPU) ceiling, so tasks
+were expected to run measurably slower per-task.
+
+Live result (`bronze-seed-silver-gold-medium-20-retry-1786214600`): **680/680
+BatchSilver batches succeeded, 0 failures.** CloudWatch confirmed the
+predicted CPU throttling is real (`CpuUtilized` samples ran 57-93% of
+`wh_medium_arn`'s 1024-unit ceiling, i.e. frequently saturated) but it did
+not become the bottleneck -- aggregate throughput measured ~4.6s/batch,
+*faster* than the crashed `MaxConcurrency=16`/`wh_large_arn` run's 7.5s/batch,
+because 20-way concurrency more than offset the per-task CPU slowdown.
+
+**Updated decision: `BatchSilver` now runs at `MaxConcurrency=20` on
+`wh_medium_arn`** (implemented in `deploy-aws-application.sh`, both the
+task-definition ARN passed to `ecs_state` and `batch_map`'s
+`MaxConcurrency`). This supersedes this ticket's original `MaxConcurrency=4`
+decision and its "reject 16" reasoning -- the shard-contention risk that
+motivated rejecting 16 was real to worry about but did not materialize; the
+actual ceiling in this account is the Fargate vCPU quota, not shard
+contention. Two paths remain open for scaling further, left as fog rather
+than ticketed: (a) request a Fargate vCPU quota increase and re-test higher
+`MaxConcurrency` on `wh_medium_arn` (up to ~28-30 with reasonable margin), or
+(b) re-shard to more than 4 shards if per-shard contention ever does become
+measurable at higher concurrency (still unverified at any tested
+concurrency level, including this 20-way medium run).
