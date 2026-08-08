@@ -59,15 +59,17 @@ executes the micro-fixes this map's evidence builds on.
 
 9. [Decide cross-command SEC fetch mutual exclusion](issues/09-decide-cross-command-sec-fetch-mutual-exclusion.md) — resolved (grilling): **hard mutual exclusion**. Ruled out "accept the risk" with real data, not judgment — found `bootstrap` and `daily-incremental` actually overlapped for **4.16 hours** in prod on 2026-07-30, both jointly over SEC's ceiling. Chose hard exclusion over a shared rate budget: reuse the existing `pipeline_run_lease` primitive under a new shared lease name, same reasoning ticket 03 used to avoid building new distributed coordination. Scope: the 5 commands from ticket 06. Accepted tradeoff: commands wait for each other. Implementation split to [release-readiness ticket 80](../../release-readiness/issues/80-implement-cross-command-sec-fetch-lease.md).
 
+12. [Decide shard-aware batch scheduling](issues/12-decide-shard-aware-batch-scheduling.md) — resolved (grilling): round-robin interleave `cik_batches.jsonl` across the 4 shards inside `_write_cik_universe_batches` (falls back to today's ascending order if `shard-manifest.json` is missing), bundled with raising `bronze_seed_silver_gold`'s `BatchSilver` `MaxConcurrency` 2→4 to exactly match shard count — the clean, non-contending case. A fresh full-phase timeline showed the actual race window (`silver_publish`) is already down to ~4s of a 97.4s per-task budget thanks to sharding alone; the real lever is that 61% of each task (32.3s launch + 26.9s teardown) is fixed overhead that parallelizes for free, which is what raising `MaxConcurrency` captures and interleaving is what makes it safe to raise. Rejected `MaxConcurrency=16` (4x shard count): pigeonhole guarantees ~4-way contention per shard, reproducing a smaller version of the original retry-storm, untested at that scale. Projected ~12.3h → ~6h for the `BatchSilver` stage, unverified assumption of near-linear scaling. Decision-spec only, not implemented this session; does not affect the currently-running execution.
+
 ## Not yet specified
 
-- ~~Whether the underlying storage model -- one DuckDB file per silver
-  shard...~~ superseded by events: CIK-range sharding (4 shards) was
-  activated directly in prod 2026-08-08, outside this map's ticket flow,
-  under explicit user urgency mid-cutover. The narrower follow-on question
-  -- whether *batch scheduling* also needs to become shard-aware now that
-  the storage itself is sharded -- is ticketed as
-  [Decide shard-aware batch scheduling](issues/12-decide-shard-aware-batch-scheduling.md).
+- Whether scaling `BatchSilver` throughput beyond `MaxConcurrency=4` is
+  worth pursuing, and if so via re-sharding to more than 4 shards (so a
+  higher `MaxConcurrency` still maps 1:1 to distinct shard files) rather
+  than overloading today's 4 shards. Deliberately left unticketed by
+  [Decide shard-aware batch scheduling](issues/12-decide-shard-aware-batch-scheduling.md)
+  until `MaxConcurrency=4` has real running evidence behind it -- not sharp
+  enough to spec yet.
 - Whether ECS task memory/CPU sizing itself (as opposed to task *count* or
   intra-task concurrency) is a limiting factor -- folded into ticket 01's
   profiling pass rather than ticketed separately for now. Ticket 01's
