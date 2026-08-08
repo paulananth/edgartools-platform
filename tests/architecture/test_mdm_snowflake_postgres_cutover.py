@@ -80,9 +80,9 @@ def test_bronze_seed_state_machine_defaults_and_stringifies_batch_size() -> None
 def test_bronze_seed_state_machine_runs_batch_silver_with_bounded_parallelism() -> None:
     text = _read(DEPLOY_SCRIPT)
 
-    assert '"MaxConcurrency": 2' in text
-    assert "First-load recovery from cached bronze. Lowered 4->2 2026-08-08" in text
-    assert "72 PromotionConflictError retries" in text
+    assert '"MaxConcurrency": 4' in text
+    assert "First-load recovery from cached bronze. Raised 2->4 2026-08-08" in text
+    assert "72-PromotionConflictError retry storm" in text
     assert "sequential bootstrap-batch uses bronze SHA256 cache" in text
 
 
