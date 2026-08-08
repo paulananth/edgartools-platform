@@ -63,14 +63,18 @@ executes the micro-fixes this map's evidence builds on.
 
 13. [Decide BatchSilver task sizing](issues/13-decide-batchsilver-task-sizing.md) — resolved: **leave it, standardize on the existing three task profiles**. Real Container Insights numbers post-sharding showed BatchSilver's `large` tasks peak at only ~765MB of 8192MB allocated (~9%) but ~76% of allocated CPU — genuinely memory-over-provisioned, not CPU-over-provisioned. Almost implemented the wrong fix live (shrinking the *shared* `large` profile's memory), which would have undone a documented, unrelated `daily_incremental` OOM fix for the profile's other 6 callers — caught via `AskUserQuestion` before applying. Priced the correct fix (a dedicated smaller profile for BatchSilver only) at real Fargate rates: ~15% cheaper per task-hour, but only ~$0.43 total savings across one full Stage-14-class run — not worth a fourth task profile's added surface area. Left the other 6 callers' own real memory usage as fog (never measured the same way).
 
+11. [Profile BatchSilver per-batch merge overhead](issues/11-profile-batchsilver-per-batch-merge-overhead.md) — resolved (research, using real evidence from the just-completed medium/20 run): the question is moot. Sharding already replaced the O(canonical file size) copy-in/merge/upload cost this ticket was investigating with O(one shard, ~80-800MB) — a real end-to-end task trace showed `silver_publish` (merge across 21 tables + upload) dropped to 3.2s, versus the original ~76s (merge + upload, unscaled) pre-sharding estimate. Total task wall time is now 77.4s (14-CIK batch) versus the original ~3m38s (100-CIK batch) estimate, and the remaining time is fixed ECS/Fargate task-lifecycle overhead (provisioning + image pull + teardown, ~46s), not merge-storage cost — the same lever tickets 12/13 already used to justify `MaxConcurrency=20`. No further storage-path work is justified for this caller. This was the map's last open ticket.
+
 ## Not yet specified
 
-- Whether scaling `BatchSilver` throughput beyond `MaxConcurrency=4` is
-  worth pursuing, and if so via re-sharding to more than 4 shards (so a
-  higher `MaxConcurrency` still maps 1:1 to distinct shard files) rather
-  than overloading today's 4 shards. Deliberately left unticketed by
-  [Decide shard-aware batch scheduling](issues/12-decide-shard-aware-batch-scheduling.md)
-  until `MaxConcurrency=4` has real running evidence behind it -- not sharp
+- Whether scaling `BatchSilver` throughput beyond today's `MaxConcurrency=20`
+  (on `wh_medium_arn`, 20/30 vCPU quota used) is worth pursuing, and via
+  which lever: requesting a Fargate vCPU quota increase (more headroom at 1
+  vCPU/task), or re-sharding to more than 4 shards (untested whether
+  per-shard contention becomes measurable at higher concurrency -- it did
+  not at 20-way with today's 4 shards). Deliberately left unticketed by
+  [Decide shard-aware batch scheduling](issues/12-decide-shard-aware-batch-scheduling.md)'s
+  addendum until there's a concrete reason to push past 20 -- not sharp
   enough to spec yet.
 - `load_history`'s own non-SEC-fetch, non-`bootstrap-batch` stage-by-stage
   breakdown (Stage 0/1B's other per-window costs) -- still unprofiled.
