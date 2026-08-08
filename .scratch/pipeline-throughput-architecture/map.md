@@ -74,11 +74,8 @@ executes the micro-fixes this map's evidence builds on.
   resolution found no evidence of CPU/memory throttling (no OOM, no visible
   stalls) but did not pull Container Insights metrics directly -- still
   genuinely unmeasured.
-- `load_history`/`bootstrap-batch`'s own *non-SEC-fetch* stage-by-stage
-  breakdown (its per-batch parse/write/silver-merge costs, as opposed to
-  the SEC-fetch loop ticket 06 already covers) -- still unprofiled. Lower
-  priority since `bootstrap-batch` already has fan-out parallelism for
-  whatever this breakdown would reveal.
+- `load_history`'s own non-SEC-fetch, non-`bootstrap-batch` stage-by-stage
+  breakdown (Stage 0/1B's other per-window costs) -- still unprofiled.
 
 ## Out of scope
 
