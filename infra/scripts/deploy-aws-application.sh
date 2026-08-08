@@ -3856,8 +3856,8 @@ batch = ecs_state(wh_large_arn,
 
 batch_map = {
     "Type": "Map",
-    "MaxConcurrency": 4,
-    "Comment": "First-load recovery from cached bronze. Runs four batches at a time to use the PR95 bulk merge optimization. Validated end-to-end in prod at MaxConcurrency=4 (run bronze-seed-silver-gold-1782384165, 2026-06-25: 81/81 BatchSilver batches succeeded, zero sec_pull_started, full chain through GoldRefresh SUCCEEDED), confirming the earlier MaxConcurrency=2 PASS (run bronze-seed-silver-gold-1782351277, 2026-06-24/25).",
+    "MaxConcurrency": 2,
+    "Comment": "First-load recovery from cached bronze. Lowered 4->2 2026-08-08 (same fix as silver_mdm_gold's strict batch Map, 2026-07-22): all N concurrent batches merge into and publish the same canonical silver.duckdb via an ETag-guarded promote, so N-way concurrency is an N-way race on that one object. Confirmed live: one batch needed 72 PromotionConflictError retries in an 8-minute window at MaxConcurrency=4 against a ~1.6GB canonical file -- every retry re-downloads/re-merges/re-uploads the whole file, and this was the dominant driver of silver_publish climbing from ~95s to 2-6+ minutes per batch. No data loss at MaxConcurrency=4 (the retry loop is race-safe by construction), just retry-storm cost that was never worth paying. Originally validated end-to-end at MaxConcurrency=4 (run bronze-seed-silver-gold-1782384165, 2026-06-25: 81/81 BatchSilver batches succeeded, zero sec_pull_started, full chain through GoldRefresh SUCCEEDED) and MaxConcurrency=2 (run bronze-seed-silver-gold-1782351277, 2026-06-24/25) -- both passed then, when canonical was far smaller.",
     "ToleratedFailurePercentage": 0,
     "ItemReader": {
         "Resource": "arn:aws:states:::s3:getObject",
