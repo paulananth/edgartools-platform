@@ -3842,7 +3842,15 @@ seed_from_bronze = ecs_state(wh_medium_arn,
 # prevents ownership XML fetches; --parser-policy skip prevents each chunk from
 # re-parsing the full configured-form corpus. Parse cached artifacts later
 # through a targeted operator run if ownership tables need refresh.
-batch = ecs_state(wh_medium_arn,
+#
+# wh_large_arn, not wh_medium_arn (confirmed live 2026-08-08, same OOM class as
+# the daily_incremental gold-build fix above): each batch's canonical-silver
+# merge (merge_candidate_into_canonical) copies and re-opens the whole growing
+# silver.duckdb -- exit 137 OutOfMemoryError on medium (4096MB) once the
+# canonical DB passed ~1GB (sec_thirteenf_holding alone at 6.8M rows). This
+# state's Map Comment records a 2026-06-25 81/81 PASS on medium, from before
+# that growth -- medium was sufficient then, not now.
+batch = ecs_state(wh_large_arn,
     "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'skip', '--parser-policy', 'skip', '--run-id', $$.Execution.Name)",
     is_end=True)
 
