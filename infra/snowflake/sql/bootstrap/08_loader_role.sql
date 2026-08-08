@@ -57,39 +57,49 @@ CREATE ROLE IF NOT EXISTS IDENTIFIER($loader_role_name)
 
 GRANT ROLE IDENTIFIER($loader_role_name) TO ROLE IDENTIFIER($loader_default_grantee);
 
+-- Snowflake's IDENTIFIER() accepts a single bind/session variable or string
+-- literal, not a general expression -- `IDENTIFIER($a || '.' || $b)` is a
+-- SQL compilation error ("unexpected '||'"), confirmed live 2026-08-07
+-- against a brand-new account. Precompute the qualified names once instead
+-- of concatenating inline at each call site.
+SET source_schema_qualified = $database_name || '.' || $source_schema_name;
+SET gold_schema_qualified = $database_name || '.' || $gold_schema_name;
+SET manifest_stream_qualified = $database_name || '.' || $source_schema_name || '.' || $manifest_stream_name;
+SET status_table_qualified = $database_name || '.' || $source_schema_name || '.' || $status_table_name;
+
 GRANT USAGE ON DATABASE IDENTIFIER($database_name) TO ROLE IDENTIFIER($loader_role_name);
-GRANT USAGE ON SCHEMA IDENTIFIER($database_name || '.' || $source_schema_name) TO ROLE IDENTIFIER($loader_role_name);
-GRANT USAGE ON SCHEMA IDENTIFIER($database_name || '.' || $gold_schema_name) TO ROLE IDENTIFIER($loader_role_name);
+GRANT USAGE ON SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT USAGE ON SCHEMA IDENTIFIER($gold_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
 GRANT USAGE ON WAREHOUSE IDENTIFIER($refresh_warehouse_name) TO ROLE IDENTIFIER($loader_role_name);
 
 -- Object-creation privileges mirroring what a deployer role needs to run
 -- 01_source_stage.sql / 02_refresh_status.sql / 03_source_load_wrapper.sql /
 -- 04_refresh_wrapper.sql end to end with $deployer_role_name = EDGARTOOLS_PROD_LOADER.
-GRANT CREATE TABLE ON SCHEMA IDENTIFIER($database_name || '.' || $source_schema_name) TO ROLE IDENTIFIER($loader_role_name);
-GRANT CREATE STAGE ON SCHEMA IDENTIFIER($database_name || '.' || $source_schema_name) TO ROLE IDENTIFIER($loader_role_name);
-GRANT CREATE STREAM ON SCHEMA IDENTIFIER($database_name || '.' || $source_schema_name) TO ROLE IDENTIFIER($loader_role_name);
-GRANT CREATE TASK ON SCHEMA IDENTIFIER($database_name || '.' || $source_schema_name) TO ROLE IDENTIFIER($loader_role_name);
-GRANT CREATE PIPE ON SCHEMA IDENTIFIER($database_name || '.' || $source_schema_name) TO ROLE IDENTIFIER($loader_role_name);
-GRANT CREATE PROCEDURE ON SCHEMA IDENTIFIER($database_name || '.' || $source_schema_name) TO ROLE IDENTIFIER($loader_role_name);
-GRANT CREATE FILE FORMAT ON SCHEMA IDENTIFIER($database_name || '.' || $source_schema_name) TO ROLE IDENTIFIER($loader_role_name);
-GRANT CREATE VIEW ON SCHEMA IDENTIFIER($database_name || '.' || $source_schema_name) TO ROLE IDENTIFIER($loader_role_name);
-GRANT CREATE DYNAMIC TABLE ON SCHEMA IDENTIFIER($database_name || '.' || $gold_schema_name) TO ROLE IDENTIFIER($loader_role_name);
-GRANT CREATE PROCEDURE ON SCHEMA IDENTIFIER($database_name || '.' || $gold_schema_name) TO ROLE IDENTIFIER($loader_role_name);
-GRANT CREATE TASK ON SCHEMA IDENTIFIER($database_name || '.' || $gold_schema_name) TO ROLE IDENTIFIER($loader_role_name);
+GRANT CREATE TABLE ON SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT CREATE STAGE ON SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT CREATE STREAM ON SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT CREATE TASK ON SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT CREATE PIPE ON SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT CREATE PROCEDURE ON SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT CREATE FILE FORMAT ON SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT CREATE VIEW ON SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT CREATE DYNAMIC TABLE ON SCHEMA IDENTIFIER($gold_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT CREATE PROCEDURE ON SCHEMA IDENTIFIER($gold_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT CREATE TASK ON SCHEMA IDENTIFIER($gold_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
 -- Added for ticket 05's MDM_COMPANY compat view
 -- (.scratch/unified-company-dimension/issues/05-implement-unified-company-dimension.md),
 -- the first plain (non-dynamic-table) view dbt has needed to create directly
 -- in EDGARTOOLS_GOLD -- confirmed live 2026-07-29 that this role had no
 -- CREATE VIEW grant there (only CREATE DYNAMIC TABLE), so `dbt run` failed
 -- with "must have CREATE VIEW granted on SCHEMA ... EDGARTOOLS_GOLD".
-GRANT CREATE VIEW ON SCHEMA IDENTIFIER($database_name || '.' || $gold_schema_name) TO ROLE IDENTIFIER($loader_role_name);
+GRANT CREATE VIEW ON SCHEMA IDENTIFIER($gold_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
 
 -- Manifest pipeline reads: every EDGARTOOLS_SOURCE table (current + future),
 -- the manifest stream, and the per-run status table it writes to.
-GRANT SELECT ON ALL TABLES IN SCHEMA IDENTIFIER($database_name || '.' || $source_schema_name) TO ROLE IDENTIFIER($loader_role_name);
-GRANT SELECT ON FUTURE TABLES IN SCHEMA IDENTIFIER($database_name || '.' || $source_schema_name) TO ROLE IDENTIFIER($loader_role_name);
-GRANT SELECT ON IDENTIFIER($database_name || '.' || $source_schema_name || '.' || $manifest_stream_name) TO ROLE IDENTIFIER($loader_role_name);
-GRANT SELECT, UPDATE ON IDENTIFIER($database_name || '.' || $source_schema_name || '.' || $status_table_name) TO ROLE IDENTIFIER($loader_role_name);
+GRANT SELECT ON ALL TABLES IN SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT SELECT ON FUTURE TABLES IN SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT SELECT ON IDENTIFIER($manifest_stream_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT SELECT, UPDATE ON IDENTIFIER($status_table_qualified) TO ROLE IDENTIFIER($loader_role_name);
 
 -- Re-parent ownership of the EDGARTOOLS_GOLD dynamic tables onto the loader
 -- role. COPY CURRENT GRANTS keeps every existing downstream grant (reader

@@ -4499,19 +4499,42 @@ def _capture_submission_bronze_snapshots(
 
     main_cache_by_cik: dict[int, dict[str, Any]] = {}
     pending_main_ciks: list[int] = []
-    for cik in ciks:
-        cached = (
-            None
-            if force
-            else _resolve_submissions_main_cached_snapshot(
-                context=context, db=db, cik=cik, fetch_date=fetch_date
-            )
+    if force:
+        pending_main_ciks = list(ciks)
+    else:
+        # Phase 1 (main thread, DB-only, fast): resolve checkpoint refs for
+        # every CIK -- a plain SELECT, must stay single-threaded (SilverDatabase
+        # wraps one shared duckdb connection, ticket 03). Phase 2 (worker pool):
+        # the actual file read/verify. Ticket 11 follow-up
+        # (pipeline-throughput-architecture): this used to run every cache-hit
+        # read sequentially on the main thread even though it's pure S3 I/O with
+        # no external rate limit -- unlike a genuine SEC fetch there's no reason
+        # to serialize it, and bootstrap-batch's --artifact-policy skip guarantees
+        # every CIK is a cache hit in exactly the pipeline this cost the most in.
+        main_checkpoint_by_cik = {
+            cik: _resolve_submissions_main_checkpoint_only(db=db, cik=cik, fetch_date=fetch_date)
+            for cik in ciks
+        }
+        main_cache_results, main_cache_errors = _dispatch_to_worker_pool(
+            ciks,
+            worker_count_hint,
+            lambda cik: _read_submissions_main_cached_payload(
+                context=context,
+                cik=cik,
+                fetch_date=fetch_date,
+                checkpoint=main_checkpoint_by_cik[cik],
+            ),
         )
-        if cached is not None:
-            main_cache_by_cik[cik] = cached
-            _bump_main_progress()
-        else:
-            pending_main_ciks.append(cik)
+        if main_cache_errors:
+            first_failed_cik = min(main_cache_errors, key=ciks.index)
+            raise main_cache_errors[first_failed_cik]
+        for cik in ciks:
+            cached = main_cache_results.get(cik)
+            if cached is not None:
+                main_cache_by_cik[cik] = cached
+                _bump_main_progress()
+            else:
+                pending_main_ciks.append(cik)
 
     main_fetch_results, main_fetch_errors = _dispatch_to_worker_pool(
         pending_main_ciks,
@@ -4532,16 +4555,36 @@ def _capture_submission_bronze_snapshots(
 
     pagination_cache_by_key: dict[tuple[int, str], dict[str, Any]] = {}
     pending_pagination_keys: list[tuple[int, str]] = []
-    for cik in ciks:
-        for file_name in pagination_manifest_by_cik[cik]:
-            key = (cik, file_name)
-            cached = (
-                None
-                if force
-                else _resolve_submissions_pagination_cached_snapshot(
-                    context=context, db=db, cik=cik, file_name=file_name, fetch_date=fetch_date,
-                )
+    all_pagination_keys = [
+        (cik, file_name) for cik in ciks for file_name in pagination_manifest_by_cik[cik]
+    ]
+    if force:
+        pending_pagination_keys = list(all_pagination_keys)
+    else:
+        # Same checkpoint/read split as the main-submissions wave above (ticket
+        # 11 follow-up).
+        pagination_checkpoint_by_key = {
+            key: _resolve_submissions_pagination_checkpoint_only(
+                db=db, cik=key[0], file_name=key[1], fetch_date=fetch_date,
             )
+            for key in all_pagination_keys
+        }
+        pagination_cache_results, pagination_cache_errors = _dispatch_to_worker_pool(
+            all_pagination_keys,
+            worker_count_hint,
+            lambda key: _read_submissions_pagination_cached_payload(
+                context=context,
+                cik=key[0],
+                file_name=key[1],
+                fetch_date=fetch_date,
+                checkpoint=pagination_checkpoint_by_key[key],
+            ),
+        )
+        if pagination_cache_errors:
+            first_failed_key = min(pagination_cache_errors, key=all_pagination_keys.index)
+            raise pagination_cache_errors[first_failed_key]
+        for key in all_pagination_keys:
+            cached = pagination_cache_results.get(key)
             if cached is not None:
                 pagination_cache_by_key[key] = cached
             else:
@@ -4555,10 +4598,7 @@ def _capture_submission_bronze_snapshots(
         ),
     )
     if pagination_fetch_errors:
-        ordered_keys = [
-            (cik, file_name) for cik in ciks for file_name in pagination_manifest_by_cik[cik]
-        ]
-        first_failed_key = min(pagination_fetch_errors, key=ordered_keys.index)
+        first_failed_key = min(pagination_fetch_errors, key=all_pagination_keys.index)
         raise pagination_fetch_errors[first_failed_key]
 
     pagination_snapshot_by_key: dict[tuple[int, str], dict[str, Any]] = {
@@ -4958,6 +4998,64 @@ def _resolve_submissions_main_cached_snapshot(
     )
 
 
+def _resolve_submissions_main_checkpoint_only(
+    *,
+    db: "SilverDatabase",
+    cik: int,
+    fetch_date: date,
+) -> "tuple[str, str] | None":
+    """DB-only half of the main-submissions cache check (ticket 11 follow-up,
+    pipeline-throughput-architecture): a single checkpoint SELECT. Must stay on
+    the main thread -- ``SilverDatabase`` wraps one shared duckdb connection that
+    is not safe for concurrent use (ticket 03). Returns (bronze_path, last_sha256)
+    or None; the actual file read/verify is done separately in
+    ``_read_submissions_main_cached_payload`` so it can run in the worker pool.
+    """
+    capture_spec = default_capture_spec_factory().submissions_main(cik, fetch_date)
+    checkpoint = db.get_source_checkpoint(capture_spec.source_name, f"cik:{cik}")
+    if checkpoint is None:
+        return None
+    bronze_path: str | None = checkpoint.get("bronze_path")
+    last_sha256: str | None = checkpoint.get("last_sha256")
+    if not bronze_path or not last_sha256:
+        return None
+    return (bronze_path, last_sha256)
+
+
+def _read_submissions_main_cached_payload(
+    *,
+    context: WarehouseCommandContext,
+    cik: int,
+    fetch_date: date,
+    checkpoint: "tuple[str, str] | None",
+) -> "dict[str, Any] | None":
+    """I/O-only: read+verify a pre-resolved checkpoint, or fall back to a glob
+    search. No ``db`` access -- safe to run concurrently, unlike the checkpoint
+    lookup itself (ticket 11 follow-up). Mirrors
+    ``_resolve_submissions_main_cached_snapshot``'s checkpoint-then-glob order.
+    """
+    capture_spec = default_capture_spec_factory().submissions_main(cik, fetch_date)
+    if checkpoint is not None:
+        bronze_path, last_sha256 = checkpoint
+        cached = _read_bronze_by_checkpoint(
+            bronze_path=bronze_path,
+            last_sha256=last_sha256,
+            source_name=capture_spec.source_name,
+            source_url=capture_spec.source_url or "",
+            relative_path=capture_spec.relative_path,
+            cik=cik,
+        )
+        if cached is not None:
+            return cached
+    return _read_bronze_by_glob_if_present(
+        bronze_root=context.bronze_root,
+        source_name=capture_spec.source_name,
+        source_url=capture_spec.source_url or "",
+        relative_glob=default_path_resolver().submissions_main_glob(cik),
+        cik=cik,
+    )
+
+
 def _fetch_submissions_main_snapshot(
     *,
     context: WarehouseCommandContext,
@@ -5023,6 +5121,58 @@ def _resolve_submissions_pagination_cached_snapshot(
     )
     if cached is not None:
         return cached
+    return _read_bronze_by_glob_if_present(
+        bronze_root=context.bronze_root,
+        source_name=capture_spec.source_name,
+        source_url=capture_spec.source_url or "",
+        relative_glob=default_path_resolver().submissions_pagination_glob(cik, file_name),
+        cik=cik,
+    )
+
+
+def _resolve_submissions_pagination_checkpoint_only(
+    *,
+    db: "SilverDatabase",
+    cik: int,
+    file_name: str,
+    fetch_date: date,
+) -> "tuple[str, str] | None":
+    """DB-only half of the pagination cache check. See
+    ``_resolve_submissions_main_checkpoint_only`` (ticket 11 follow-up)."""
+    capture_spec = default_capture_spec_factory().submissions_pagination(cik, file_name, fetch_date)
+    checkpoint = db.get_source_checkpoint(capture_spec.source_name, f"file:{file_name}")
+    if checkpoint is None:
+        return None
+    bronze_path: str | None = checkpoint.get("bronze_path")
+    last_sha256: str | None = checkpoint.get("last_sha256")
+    if not bronze_path or not last_sha256:
+        return None
+    return (bronze_path, last_sha256)
+
+
+def _read_submissions_pagination_cached_payload(
+    *,
+    context: WarehouseCommandContext,
+    cik: int,
+    file_name: str,
+    fetch_date: date,
+    checkpoint: "tuple[str, str] | None",
+) -> "dict[str, Any] | None":
+    """I/O-only pagination cache read/glob-fallback. See
+    ``_read_submissions_main_cached_payload`` (ticket 11 follow-up)."""
+    capture_spec = default_capture_spec_factory().submissions_pagination(cik, file_name, fetch_date)
+    if checkpoint is not None:
+        bronze_path, last_sha256 = checkpoint
+        cached = _read_bronze_by_checkpoint(
+            bronze_path=bronze_path,
+            last_sha256=last_sha256,
+            source_name=capture_spec.source_name,
+            source_url=capture_spec.source_url or "",
+            relative_path=capture_spec.relative_path,
+            cik=cik,
+        )
+        if cached is not None:
+            return cached
     return _read_bronze_by_glob_if_present(
         bronze_root=context.bronze_root,
         source_name=capture_spec.source_name,
@@ -5123,6 +5273,44 @@ def _read_bronze_by_glob_if_present(
     }
 
 
+def _read_bronze_by_checkpoint(
+    *,
+    bronze_path: str,
+    last_sha256: str,
+    source_name: str,
+    source_url: str,
+    relative_path: str,
+    cik: int | None = None,
+) -> "dict[str, Any] | None":
+    """I/O-only half of ``_read_bronze_if_cached``: read+verify an already-resolved
+    checkpoint (bronze_path, last_sha256). No ``db`` access, so unlike the checkpoint
+    lookup itself this is safe to run concurrently across worker threads (ticket 11
+    follow-up: pipeline-throughput-architecture). Returns None on a missing/corrupt file.
+    """
+    try:
+        payload_bytes = read_bytes(bronze_path)
+    except Exception:
+        return None
+    if hashlib.sha256(payload_bytes).hexdigest() != last_sha256:
+        return None
+    record: dict[str, Any] = {
+        "layer": "bronze_raw",
+        "path": bronze_path,
+        "relative_path": relative_path,   # caller's spec — semantically correct
+        "sha256": last_sha256,
+        "size_bytes": len(payload_bytes),
+        "source_name": source_name,
+        "source_url": source_url,          # caller's spec — not stored in checkpoint
+        "cached": True,
+    }
+    if cik is not None:
+        record["cik"] = cik
+    return {
+        "payload": _decode_json_bytes(payload_bytes, source_url),
+        "write_record": record,
+    }
+
+
 def _read_bronze_if_cached(
     *,
     bronze_root: "StorageLocation",
@@ -5149,28 +5337,14 @@ def _read_bronze_if_cached(
     last_sha256: str | None = checkpoint.get("last_sha256")
     if not bronze_path or not last_sha256:
         return None
-    try:
-        payload_bytes = read_bytes(bronze_path)
-    except Exception:
-        return None
-    if hashlib.sha256(payload_bytes).hexdigest() != last_sha256:
-        return None
-    record: dict[str, Any] = {
-        "layer": "bronze_raw",
-        "path": bronze_path,
-        "relative_path": relative_path,   # caller's spec — semantically correct
-        "sha256": last_sha256,
-        "size_bytes": len(payload_bytes),
-        "source_name": source_name,
-        "source_url": source_url,          # caller's spec — not stored in checkpoint
-        "cached": True,
-    }
-    if cik is not None:
-        record["cik"] = cik
-    return {
-        "payload": _decode_json_bytes(payload_bytes, source_url),
-        "write_record": record,
-    }
+    return _read_bronze_by_checkpoint(
+        bronze_path=bronze_path,
+        last_sha256=last_sha256,
+        source_name=source_name,
+        source_url=source_url,
+        relative_path=relative_path,
+        cik=cik,
+    )
 
 
 def _capture_reconcile_snapshot(
