@@ -293,6 +293,67 @@ class SubmissionsFetchConcurrencyTests(unittest.TestCase):
         self.assertEqual(snapshots[0]["main_write_record"]["sha256"], sha256)
         self.assertEqual(progress_calls, [1])
 
+    def test_cache_hit_reads_run_concurrently(self) -> None:
+        """Ticket 11 follow-up (pipeline-throughput-architecture): when every
+        CIK is a cache hit -- exactly bootstrap-batch's --artifact-policy skip
+        scenario -- the file reads must run through the worker pool, not
+        sequentially on the main thread. Only the db.get_source_checkpoint
+        lookup (asserted on the main thread by test_db_access_stays_on_main_thread)
+        needs to serialize; the S3 read itself has no such constraint."""
+        ciks = [6001, 6002, 6003, 6004, 6005, 6006]
+        payloads: dict[int, bytes] = {cik: _main_payload(cik) for cik in ciks}
+        checkpoints: dict[tuple[str, str], dict] = {}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            for cik in ciks:
+                bronze_path = Path(tmp) / "submissions" / f"CIK{cik:010d}.json"
+                bronze_path.parent.mkdir(parents=True, exist_ok=True)
+                bronze_path.write_bytes(payloads[cik])
+                checkpoints[("submissions_main", f"cik:{cik}")] = {
+                    "bronze_path": str(bronze_path),
+                    "last_sha256": hashlib.sha256(payloads[cik]).hexdigest(),
+                }
+
+            db = _SubmissionsDb(checkpoints=checkpoints)
+            context = SimpleNamespace(
+                bronze_root=StorageLocation(tmp), identity="tester@example.com"
+            )
+
+            read_delay = 0.05
+            real_read_bytes = warehouse_orchestrator.read_bytes
+
+            def _delayed_read_bytes(path: str) -> bytes:
+                time.sleep(read_delay)
+                return real_read_bytes(path)
+
+            with patch.dict(
+                os.environ, {"WAREHOUSE_SUBMISSIONS_FETCH_CONCURRENCY": "5"}
+            ), patch.object(
+                warehouse_orchestrator,
+                "_download_sec_bytes",
+                side_effect=AssertionError("every CIK here is a cache hit; must not hit the network"),
+            ), patch.object(
+                warehouse_orchestrator, "read_bytes", side_effect=_delayed_read_bytes
+            ):
+                started = time.monotonic()
+                snapshots = warehouse_orchestrator._capture_submission_bronze_snapshots(
+                    context=context,
+                    db=db,
+                    ciks=ciks,
+                    include_pagination=False,
+                    fetch_date=date(2026, 8, 3),
+                    force=False,
+                )
+                elapsed = time.monotonic() - started
+
+        # Sequential would cost len(ciks) * read_delay = 0.30s; concurrent
+        # (pool=5, 6 items) costs ceil(6/5) * read_delay = 2 * 0.05 = 0.10s.
+        # Assert well under the sequential floor, generous for CI jitter.
+        self.assertLess(elapsed, len(ciks) * read_delay * 0.7)
+        self.assertEqual(len(snapshots), len(ciks))
+        for snapshot in snapshots:
+            self.assertTrue(snapshot["main_write_record"]["cached"])
+
 
 if __name__ == "__main__":
     unittest.main()
