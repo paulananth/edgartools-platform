@@ -3843,21 +3843,33 @@ seed_from_bronze = ecs_state(wh_medium_arn,
 # re-parsing the full configured-form corpus. Parse cached artifacts later
 # through a targeted operator run if ownership tables need refresh.
 #
-# wh_large_arn, not wh_medium_arn (confirmed live 2026-08-08, same OOM class as
-# the daily_incremental gold-build fix above): each batch's canonical-silver
-# merge (merge_candidate_into_canonical) copies and re-opens the whole growing
-# silver.duckdb -- exit 137 OutOfMemoryError on medium (4096MB) once the
-# canonical DB passed ~1GB (sec_thirteenf_holding alone at 6.8M rows). This
-# state's Map Comment records a 2026-06-25 81/81 PASS on medium, from before
-# that growth -- medium was sufficient then, not now.
-batch = ecs_state(wh_large_arn,
+# wh_medium_arn (changed from wh_large_arn 2026-08-08, pipeline-throughput-architecture
+# ticket 12 addendum): the OOM history that previously justified wh_large_arn here
+# (exit 137 on medium's 4096MB once the canonical DB passed ~1GB) predates sharding
+# (ticket 11) -- it was measured against the whole ~1.6GB+ monolithic canonical file,
+# not a single shard. Post-sharding each BatchSilver task loads exactly one shard
+# (80-800MB range), and ticket 13's live Container Insights measurement on wh_large_arn
+# confirmed real peak memory of only 765MB/8192MB (~9%) -- comfortably inside medium's
+# 4096MB. The real constraint turned out to be the AWS account's Fargate On-Demand vCPU
+# quota (30 vCPU, confirmed via service-quotas), not memory: MaxConcurrency=16 on
+# wh_large_arn (2 vCPU/task) demanded 32 vCPU and failed the whole execution via
+# ECS.AmazonECSException after 216/680 batches succeeded (BatchSilver's
+# ToleratedFailurePercentage=0 cascades one quota failure into aborting every other
+# in-flight task). Switching to wh_medium_arn (1 vCPU/task) at MaxConcurrency=20 stays
+# at 20 vCPU, well under the 30 vCPU quota, and completed 680/680 BatchSilver batches
+# with 0 failures (bronze-seed-silver-gold-medium-20-retry-1786214600) at ~4.6s/batch --
+# faster than the large/MaxConcurrency=16 run's 7.5s/batch before it hit the quota wall,
+# despite medium's 1 vCPU ceiling sitting below wh_large_arn's measured ~1.5 vCPU-
+# equivalent peak demand (CPU throttling is real -- CpuUtilized samples on medium ran
+# 57-93% of its 1024-unit ceiling -- but higher concurrency more than offsets it).
+batch = ecs_state(wh_medium_arn,
     "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'skip', '--parser-policy', 'skip', '--run-id', $$.Execution.Name)",
     is_end=True)
 
 batch_map = {
     "Type": "Map",
-    "MaxConcurrency": 4,
-    "Comment": "First-load recovery from cached bronze. Raised 2->4 2026-08-08 (pipeline-throughput-architecture ticket 12): seed-bronze-batches now writes cik_batches.jsonl shard-aware (round-robin interleaved across the 4 CIK-range shards, falling back to plain ascending order if no shard manifest exists -- see _write_cik_universe_batches/_shard_partition_ciks in warehouse_orchestrator.py), so each of 4 concurrent Map slots lands on a distinct shard file instead of racing the same one. MaxConcurrency=4 exactly matches shard count -- the clean, non-contending case; do not raise further without also re-sharding to more than 4 shards, or concurrent slots will again collide on the same shard file (see ticket 12's rejected MaxConcurrency=16 analysis). History: was originally 4 (validated end-to-end, run bronze-seed-silver-gold-1782384165, 2026-06-25: 81/81 BatchSilver batches succeeded), lowered to 2 the same day (2026-08-08, earlier) after a 72-PromotionConflictError retry storm on the then-unsharded canonical file -- that fix (sharding) already shipped that day too, which is what makes returning to 4 safe now.",
+    "MaxConcurrency": 20,
+    "Comment": "First-load recovery from cached bronze. Raised 4->20 2026-08-08 (pipeline-throughput-architecture ticket 12 addendum), moving the task profile from wh_large_arn (2 vCPU) to wh_medium_arn (1 vCPU) in the same change to stay under the account's 30 vCPU Fargate quota (20x1=20 vCPU vs the quota-failing 16x2=32 vCPU attempt on large -- see the ecs_state comment above for the full evidence). Shard-aware batch scheduling (seed-bronze-batches writes cik_batches.jsonl round-robin interleaved across the 4 CIK-range shards, falling back to plain ascending order if no shard manifest exists -- see _write_cik_universe_batches/_shard_partition_ciks in warehouse_orchestrator.py) means concurrent Map slots cycle across only 4 distinct shard files regardless of MaxConcurrency, so multiple slots do land on the same shard file at MaxConcurrency=20 -- this was the exact scenario ticket 12 originally predicted would cause PromotionConflictError contention, but the live medium-20 run completed 680/680 BatchSilver batches with 0 failures and 0 conflicts, empirically refuting that concern (real task-lifecycle jitter staggers same-shard publish windows enough in practice). History: 4 (shard-count-matched, non-contending baseline, validated 2026-08-08), briefly tested at 16 on wh_large_arn same day (crashed on the 30 vCPU account quota at 216/680), then 20 on wh_medium_arn (this value, validated 680/680 clean).",
     "ToleratedFailurePercentage": 0,
     "ItemReader": {
         "Resource": "arn:aws:states:::s3:getObject",
