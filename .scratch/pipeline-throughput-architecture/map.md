@@ -59,7 +59,9 @@ executes the micro-fixes this map's evidence builds on.
 
 9. [Decide cross-command SEC fetch mutual exclusion](issues/09-decide-cross-command-sec-fetch-mutual-exclusion.md) — resolved (grilling): **hard mutual exclusion**. Ruled out "accept the risk" with real data, not judgment — found `bootstrap` and `daily-incremental` actually overlapped for **4.16 hours** in prod on 2026-07-30, both jointly over SEC's ceiling. Chose hard exclusion over a shared rate budget: reuse the existing `pipeline_run_lease` primitive under a new shared lease name, same reasoning ticket 03 used to avoid building new distributed coordination. Scope: the 5 commands from ticket 06. Accepted tradeoff: commands wait for each other. Implementation split to [release-readiness ticket 80](../../release-readiness/issues/80-implement-cross-command-sec-fetch-lease.md).
 
-12. [Decide shard-aware batch scheduling](issues/12-decide-shard-aware-batch-scheduling.md) — resolved (grilling): round-robin interleave `cik_batches.jsonl` across the 4 shards inside `_write_cik_universe_batches` (falls back to today's ascending order if `shard-manifest.json` is missing), bundled with raising `bronze_seed_silver_gold`'s `BatchSilver` `MaxConcurrency` 2→4 to exactly match shard count — the clean, non-contending case. A fresh full-phase timeline showed the actual race window (`silver_publish`) is already down to ~4s of a 97.4s per-task budget thanks to sharding alone; the real lever is that 61% of each task (32.3s launch + 26.9s teardown) is fixed overhead that parallelizes for free, which is what raising `MaxConcurrency` captures and interleaving is what makes it safe to raise. Rejected `MaxConcurrency=16` (4x shard count): pigeonhole guarantees ~4-way contention per shard, reproducing a smaller version of the original retry-storm, untested at that scale. Projected ~12.3h → ~6h for the `BatchSilver` stage, unverified assumption of near-linear scaling. Decision-spec only, not implemented this session; does not affect the currently-running execution.
+12. [Decide shard-aware batch scheduling](issues/12-decide-shard-aware-batch-scheduling.md) — resolved (grilling): round-robin interleave `cik_batches.jsonl` across the 4 shards inside `_write_cik_universe_batches` (falls back to today's ascending order if `shard-manifest.json` is missing), bundled with raising `bronze_seed_silver_gold`'s `BatchSilver` `MaxConcurrency` 2→4 to exactly match shard count — the clean, non-contending case. A fresh full-phase timeline showed the actual race window (`silver_publish`) is already down to ~4s of a 97.4s per-task budget thanks to sharding alone; the real lever is that 61% of each task (32.3s launch + 26.9s teardown) is fixed overhead that parallelizes for free, which is what raising `MaxConcurrency` captures and interleaving is what makes it safe to raise. Rejected `MaxConcurrency=16` (4x shard count): pigeonhole guarantees ~4-way contention per shard, reproducing a smaller version of the original retry-storm, untested at that scale. Projected ~12.3h → ~6h for the `BatchSilver` stage, unverified assumption of near-linear scaling. Implemented and deployed live same day: confirmed via CloudWatch that all 4 concurrent slots land on 4 distinct shards simultaneously, zero conflicts.
+
+13. [Decide BatchSilver task sizing](issues/13-decide-batchsilver-task-sizing.md) — resolved: **leave it, standardize on the existing three task profiles**. Real Container Insights numbers post-sharding showed BatchSilver's `large` tasks peak at only ~765MB of 8192MB allocated (~9%) but ~76% of allocated CPU — genuinely memory-over-provisioned, not CPU-over-provisioned. Almost implemented the wrong fix live (shrinking the *shared* `large` profile's memory), which would have undone a documented, unrelated `daily_incremental` OOM fix for the profile's other 6 callers — caught via `AskUserQuestion` before applying. Priced the correct fix (a dedicated smaller profile for BatchSilver only) at real Fargate rates: ~15% cheaper per task-hour, but only ~$0.43 total savings across one full Stage-14-class run — not worth a fourth task profile's added surface area. Left the other 6 callers' own real memory usage as fog (never measured the same way).
 
 ## Not yet specified
 
@@ -70,14 +72,16 @@ executes the micro-fixes this map's evidence builds on.
   [Decide shard-aware batch scheduling](issues/12-decide-shard-aware-batch-scheduling.md)
   until `MaxConcurrency=4` has real running evidence behind it -- not sharp
   enough to spec yet.
-- Whether ECS task memory/CPU sizing itself (as opposed to task *count* or
-  intra-task concurrency) is a limiting factor -- folded into ticket 01's
-  profiling pass rather than ticketed separately for now. Ticket 01's
-  resolution found no evidence of CPU/memory throttling (no OOM, no visible
-  stalls) but did not pull Container Insights metrics directly -- still
-  genuinely unmeasured.
 - `load_history`'s own non-SEC-fetch, non-`bootstrap-batch` stage-by-stage
   breakdown (Stage 0/1B's other per-window costs) -- still unprofiled.
+- Whether the other 6 commands sharing the `large` task profile
+  (`daily_incremental`, `bootstrap`, `bootstrap_full`, `targeted_resync`,
+  `full_reconcile`, `gold_refresh`) are themselves correctly sized on
+  memory -- [Decide BatchSilver task sizing](issues/13-decide-batchsilver-task-sizing.md)
+  pulled real numbers for BatchSilver only and explicitly left this open.
+  Not sharp enough to ticket per-command until each is measured the same
+  way -- likely low-value anyway given ticket 13's finding that Fargate
+  memory is cheap in absolute terms regardless.
 
 ## Out of scope
 
