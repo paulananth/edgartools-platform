@@ -45,6 +45,24 @@ from edgar_warehouse.mdm.rules import MDMRuleEngine
 # pipeline's own primary session.
 _COMPANY_RESOLVE_MAX_WORKERS = int(os.environ.get("MDM_COMPANY_RESOLVE_CONCURRENCY", "8"))
 
+# Progress-log cadence for the per-row resolve loops below (run_companies,
+# run_securities, run_persons). A fixed interval is too chatty for large
+# domains (62,190 companies emitted 124 log lines at the old hardcoded-500
+# default) and too sparse for small ones -- scale with the domain's own row
+# count instead, floored at a configurable minimum so short runs (tests,
+# --limit smoke checks) still get periodic progress signal.
+_PROGRESS_LOG_MIN_INTERVAL = int(os.environ.get("MDM_PROGRESS_LOG_INTERVAL", "1000"))
+
+
+def _progress_log_interval(total_rows: int) -> int:
+    """Row interval between mdm_progress log events for a resolve loop.
+
+    ``max(configured minimum, total_rows // 8)`` -- roughly 8 progress log
+    lines per domain regardless of size, never below the configured floor.
+    Override the floor with ``MDM_PROGRESS_LOG_INTERVAL``.
+    """
+    return max(_PROGRESS_LOG_MIN_INTERVAL, total_rows // 8) if total_rows else _PROGRESS_LOG_MIN_INTERVAL
+
 RELATIONSHIP_TYPES = (
     # ── Existing (ownership + ADV) ────────────────────────────────────────────
     "IS_INSIDER",
@@ -245,6 +263,7 @@ class MDMPipeline:
         processed = 0
         lock = threading.Lock()
         started_at = time.monotonic()
+        log_interval = _progress_log_interval(len(rows))
 
         # SQLite (test/stub backend only -- MDM production is always Postgres,
         # see database.py's MDM_DATABASE_URL) doesn't support genuinely
@@ -284,7 +303,7 @@ class MDMPipeline:
                     future.result()
                     with lock:
                         processed += 1
-                        if processed % 500 == 0:
+                        if processed % log_interval == 0:
                             emit_mdm_event(
                                 "mdm_progress",
                                 domain="company",
@@ -328,11 +347,12 @@ class MDMPipeline:
         rows = self.silver.fetch(sql)
         processed = 0
         started_at = time.monotonic()
+        log_interval = _progress_log_interval(len(rows))
         for row in rows:
             issuer_entity_id = self._company_entity_id(row.get("issuer_cik"))
             resolver.resolve_one(ctx, "ownership_filing", row, issuer_entity_id)
             processed += 1
-            if processed % 500 == 0:
+            if processed % log_interval == 0:
                 emit_mdm_event("mdm_progress", domain="security", processed=processed, elapsed_ms=elapsed_ms(started_at))
         self.session.commit()
         return processed
@@ -371,13 +391,14 @@ class MDMPipeline:
         company_ciks = self._company_cik_set()
         processed = 0
         started_at = time.monotonic()
+        log_interval = _progress_log_interval(len(rows))
         for row in rows:
             if row.get("owner_cik") in company_ciks:
                 continue
             resolver.resolve_one(ctx, "ownership_filing", row,
                                  issuer_cik=row.get("issuer_cik"))
             processed += 1
-            if processed % 500 == 0:
+            if processed % log_interval == 0:
                 emit_mdm_event("mdm_progress", domain="person", processed=processed, elapsed_ms=elapsed_ms(started_at))
         self.session.commit()
         return processed
