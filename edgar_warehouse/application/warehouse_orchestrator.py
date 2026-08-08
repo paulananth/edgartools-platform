@@ -1840,6 +1840,42 @@ def _capture_bronze_raw(
         metrics["cik_count"] = len(rows)
         return raw_writes, metrics
 
+    if command_name == "compute-remaining-batches":
+        # pipeline-resumability ticket 02: automatic resume-batch filtering
+        # for the default (non-release_mode) BatchSilver path, ahead of the
+        # Map so already-done batches never launch a Fargate task just to
+        # self-skip. Reuses the frozen original run's cik_batches.jsonl
+        # (never regenerated -- the candidate set a resume may use) plus its
+        # accumulated default_batch_done markers.
+        from edgar_warehouse.application.batch_silver_resume import (
+            compute_remaining_batches,
+        )
+
+        resume_ledger_run_id = str(arguments.get("resume_ledger_run_id") or "").strip()
+        if not resume_ledger_run_id:
+            raise WarehouseRuntimeError("compute-remaining-batches requires --resume-ledger-run-id")
+        # Raises ResumeRunNotFoundError (a WarehouseRuntimeError) when the
+        # pointer is bogus/missing/empty -- propagates out of run_command as
+        # a nonzero exit, which is what makes this fail closed rather than
+        # silently producing an empty Map indistinguishable from "all done."
+        remaining, counts = compute_remaining_batches(
+            bronze_root=context.bronze_root.root,
+            resume_ledger_run_id=resume_ledger_run_id,
+        )
+        body = "".join(json.dumps(row, sort_keys=True) + "\n" for row in remaining)
+        relative_path = default_path_resolver().cik_universe_batches_path(sync_run_id)
+        cik_universe_path = context.bronze_root.write_text(relative_path, body)
+        _emit_pipeline_event(
+            "compute_remaining_batches_completed",
+            resume_ledger_run_id=resume_ledger_run_id,
+            run_id=sync_run_id,
+            **counts,
+        )
+        metrics.update(counts)
+        metrics["resume_ledger_run_id"] = resume_ledger_run_id
+        metrics["cik_universe_path"] = cik_universe_path
+        return raw_writes, metrics
+
     if command_name == "bootstrap-batch":
         cik_list = list(arguments.get("cik_list") or [])
         include_pagination = bool(arguments.get("include_pagination", True))
@@ -1964,6 +2000,32 @@ def _capture_bronze_raw(
         metrics["rows_inserted"] += result["rows_written"]
         metrics["rows_skipped"] += result["rows_skipped"]
         _merge_capture_network_metrics(metrics, result)
+        if not release_mode:
+            # pipeline-resumability ticket 02: default-path done marker, a
+            # weaker-guarantee sibling of release_mode's own
+            # release_batch_done_marker below. Written under
+            # resume_ledger_run_id (defaults to this run's own sync_run_id
+            # when unset) rather than sync_run_id itself, so a LATER,
+            # separate execution can resume this exact run's ledger by
+            # passing --resume-ledger-run-id <this run's id> without
+            # colliding with sync_run_id's other uses (promotion, manifest
+            # paths, leases) -- see ticket 02's "Resolve --run-id vs.
+            # effective_run_id" note.
+            from edgar_warehouse.application.batch_silver_resume import (
+                write_default_batch_done_marker,
+            )
+
+            resume_ledger_run_id = (
+                str(arguments.get("resume_ledger_run_id") or "").strip() or sync_run_id
+            )
+            marker_path = write_default_batch_done_marker(
+                bronze_root=context.bronze_root.root,
+                ciks=cik_list,
+                resume_ledger_run_id=resume_ledger_run_id,
+                completed_at=now.isoformat().replace("+00:00", "Z"),
+            )
+            metrics["default_batch_done_marker_path"] = marker_path
+            metrics["resume_ledger_run_id"] = resume_ledger_run_id
         if release_mode:
             from edgar_warehouse.application.relationship_bulk_load import (
                 CandidateOutcome,
@@ -6359,6 +6421,11 @@ def _resolve_scope(
     if command_name == "seed-bronze-batches":
         return {
             "batch_size": arguments.get("batch_size") or 100,
+        }
+
+    if command_name == "compute-remaining-batches":
+        return {
+            "resume_ledger_run_id": arguments.get("resume_ledger_run_id") or "",
         }
 
     if command_name == "parse-ownership-bronze":

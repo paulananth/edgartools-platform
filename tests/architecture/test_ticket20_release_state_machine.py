@@ -42,7 +42,17 @@ def test_strict_ticket20_path_generates_valid_fail_closed_definition(tmp_path: P
     states = definition["States"]
 
     assert definition["StartAt"] == "ReleaseModeCheck"
-    assert states["ReleaseModeCheck"]["Default"] == "BatchSizeCheck"
+    # pipeline-resumability ticket 02: the default (non-strict) path now
+    # routes through resume_from_run_id normalization before BatchSizeCheck.
+    assert states["ReleaseModeCheck"]["Default"] == "ResumeFromRunIdPresenceCheck"
+    assert states["ResumeFromRunIdPresenceCheck"]["Default"] == "ResumeFromRunIdDefault"
+    assert states["ResumeFromRunIdDefault"]["Next"] == "ResumeFromRunIdCheck"
+    assert states["ResumeFromRunIdCheck"]["Default"] == "BatchSizeCheck"
+    assert (
+        states["ResumeFromRunIdCheck"]["Choices"][0]["Next"] == "ComputeRemainingBatches"
+    )
+    assert states["ComputeRemainingBatches"]["Next"] == "BatchSilver"
+    assert "Retry" not in states["ComputeRemainingBatches"]
     clauses = states["StrictManifestCheck"]["Choices"][0]["And"]
     required_inputs = {
         "$.attestations.warehouse",

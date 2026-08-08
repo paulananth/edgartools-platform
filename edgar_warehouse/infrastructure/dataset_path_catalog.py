@@ -363,7 +363,12 @@ class WarehousePathResolver:
                 "silver": self._render("manifest.default.silver.path", **default_tokens),
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }
-        if command_name in ("compute-windows", "write-run-summary", "compute-identity-refresh-window"):
+        if command_name in (
+            "compute-windows",
+            "write-run-summary",
+            "compute-identity-refresh-window",
+            "compute-remaining-batches",
+        ):
             # These commands write JSONL/JSON manifests to bronze; no gold or silver manifests.
             return {
                 "bronze": self._render("manifest.default.bronze.path", **default_tokens),
