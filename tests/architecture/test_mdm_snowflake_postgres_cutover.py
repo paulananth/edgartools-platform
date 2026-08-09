@@ -128,6 +128,7 @@ def test_bronze_seed_state_machine_supports_resume_from_run_id() -> None:
     assert '"resume_from_run_id.$": "$.resume_from_run_id"' in text
     assert (
         "States.Array('mdm', 'run', '--entity-type', 'all', "
+        "'--run-id', $$.Execution.Name, "
         "'--resume-ledger-run-id', $.resume_from_run_id)"
     ) in text
 

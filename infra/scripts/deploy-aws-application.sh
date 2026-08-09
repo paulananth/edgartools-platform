@@ -3992,13 +3992,18 @@ strict_batch_map = {
 # INVARIANT: No --limit on MDM commands here. bronze_seed_silver_gold is always a full
 # bulk run (all CIKs found in bronze), not an incremental daily update.
 #
-# --resume-ledger-run-id (pipeline-resumability ticket 02): resume_from_run_id
-# is guaranteed present by this point (resume_from_run_id_presence_check/
-# _default above run before BatchSilver, and MdmRun inherits $ unmodified --
-# BatchSilver's Map has ResultPath: None). Only run_companies (company
-# resolution) honors this today; other --entity-type all sub-steps ignore it
-# until mdm-run-throughput's own concurrency work makes them resumable too.
-mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all', '--resume-ledger-run-id', $.resume_from_run_id)", next_state="MdmBackfill")
+# --run-id / --resume-ledger-run-id (pipeline-resumability ticket 02):
+# resume_from_run_id is guaranteed present by this point
+# (resume_from_run_id_presence_check/_default above run before BatchSilver,
+# and MdmRun inherits $ unmodified -- BatchSilver's Map has ResultPath:
+# None). --run-id is this execution's own identity (mirrors bootstrap-
+# batch's identical two-flag shape): when resume_from_run_id is empty
+# (fresh run), run_companies uses --run-id as the snapshot/outcome
+# namespace and creates it; when resume_from_run_id is set, --run-id is
+# unused for this purpose. Only run_companies (company resolution) honors
+# either flag today; other --entity-type all sub-steps ignore them until
+# mdm-run-throughput's own concurrency work makes them resumable too.
+mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all', '--run-id', $$.Execution.Name, '--resume-ledger-run-id', $.resume_from_run_id)", next_state="MdmBackfill")
 mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmExport")
 # MdmExport precedes MdmSync (data-architecture Issue 3) — see write_load_history_definition.
 mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="MdmSync")

@@ -427,7 +427,7 @@ class TestMissingSilverSourceFailsBeforeSession:
             def __init__(self, *, session, silver):
                 assert session is fake_session
 
-            def run_all(self, limit=None):
+            def run_all(self, limit=None, *, resume_ledger_run_id=None, run_id=None):
                 assert limit == 10
                 return SimpleNamespace(
                     companies_processed=0,
