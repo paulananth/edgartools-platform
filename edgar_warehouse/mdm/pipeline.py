@@ -17,6 +17,7 @@ import os
 import sys
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -25,6 +26,7 @@ from typing import Any, Iterable, Optional
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.mdm.database import get_session
 from edgar_warehouse.mdm.graph import GraphSyncEngine
 from edgar_warehouse.mdm.observability import elapsed_ms, emit_mdm_event
@@ -216,6 +218,8 @@ class MDMPipeline:
         limit: Optional[int] = None,
         *,
         issuer_ciks: Optional[Iterable[int]] = None,
+        resume_ledger_run_id: Optional[str] = None,
+        run_id: Optional[str] = None,
     ) -> int:
         """Resolve companies from silver.
 
@@ -233,18 +237,88 @@ class MDMPipeline:
         existing entity_id instead of duplicating it). Ticker/tracking lookups
         are prefetched in bulk up front instead of two extra per-row silver
         reads inside the loop.
+
+        pipeline-resumability ticket 02: ``resume_ledger_run_id`` (mirrors
+        bootstrap-batch's own ``--resume-ledger-run-id``) resumes a prior
+        full-universe attempt instead of re-resolving all ~62K companies from
+        scratch -- a frozen CIK snapshot (written once, at the first attempt
+        under ``run_id``) plus batched succeeded-CIK outcome flushes let a
+        resumed call skip already-done CIKs. Only valid for the unscoped,
+        unlimited full-universe path (``issuer_ciks``/``limit`` both unset)
+        -- combining resume with either has undefined semantics (does
+        ``limit`` bound the frozen set or the remaining set?) so both are
+        rejected together with ``resume_ledger_run_id``. Fails closed
+        (``ResumeRunNotFoundError``) when ``resume_ledger_run_id`` is
+        explicitly given but no snapshot exists for it -- distinct from a
+        first attempt under ``run_id`` alone, which creates the snapshot.
         """
+        from edgar_warehouse.mdm.company_resume import (
+            ResumeRunNotFoundError,
+            read_snapshot,
+            read_succeeded_ciks,
+            write_outcome_batch,
+            write_snapshot,
+        )
+
         resolver = CompanyResolver()
         ciks = self._normalize_issuer_ciks(issuer_ciks)
-        sql = "SELECT * FROM sec_company"
-        params: list[Any] = []
-        if ciks is not None:
-            placeholders = ", ".join("?" for _ in ciks)
-            sql += f" WHERE cik IN ({placeholders})"
-            params.extend(ciks)
-        if limit:
-            sql += f" LIMIT {int(limit)}"
-        rows = self.silver.fetch(sql, params or None)
+
+        explicit_resume_id = str(resume_ledger_run_id or "").strip()
+        own_run_id = str(run_id or "").strip()
+        effective_run_id = explicit_resume_id or own_run_id
+
+        if explicit_resume_id and (limit or ciks is not None):
+            raise WarehouseRuntimeError(
+                "run_companies: resume_ledger_run_id is only supported for the "
+                "full-universe run (no limit, no issuer_ciks scoping)"
+            )
+
+        bronze_root = os.environ.get("WAREHOUSE_BRONZE_ROOT", "").strip()
+        resumable = bool(effective_run_id) and ciks is None and not limit and bool(bronze_root)
+        if explicit_resume_id and not bronze_root:
+            raise WarehouseRuntimeError(
+                "run_companies: resume_ledger_run_id requires WAREHOUSE_BRONZE_ROOT to be set"
+            )
+
+        already_succeeded: set[int] = set()
+        if resumable:
+            if explicit_resume_id:
+                snapshot_ciks = read_snapshot(bronze_root=bronze_root, run_id=effective_run_id)
+                already_succeeded = read_succeeded_ciks(
+                    bronze_root=bronze_root, run_id=effective_run_id
+                )
+            else:
+                try:
+                    snapshot_ciks = read_snapshot(bronze_root=bronze_root, run_id=effective_run_id)
+                    already_succeeded = read_succeeded_ciks(
+                        bronze_root=bronze_root, run_id=effective_run_id
+                    )
+                except ResumeRunNotFoundError:
+                    # First attempt under this run_id: query live, freeze the
+                    # candidate set now so any later resume reuses it verbatim.
+                    snapshot_rows = self.silver.fetch("SELECT cik FROM sec_company")
+                    snapshot_ciks = [int(row["cik"]) for row in snapshot_rows]
+                    write_snapshot(
+                        bronze_root=bronze_root, run_id=effective_run_id, ciks=snapshot_ciks
+                    )
+            remaining_ciks = [cik for cik in snapshot_ciks if cik not in already_succeeded]
+            if remaining_ciks:
+                placeholders = ", ".join("?" for _ in remaining_ciks)
+                rows = self.silver.fetch(
+                    f"SELECT * FROM sec_company WHERE cik IN ({placeholders})", remaining_ciks
+                )
+            else:
+                rows = []
+        else:
+            sql = "SELECT * FROM sec_company"
+            params: list[Any] = []
+            if ciks is not None:
+                placeholders = ", ".join("?" for _ in ciks)
+                sql += f" WHERE cik IN ({placeholders})"
+                params.extend(ciks)
+            if limit:
+                sql += f" LIMIT {int(limit)}"
+            rows = self.silver.fetch(sql, params or None)
 
         ticker_rows = self.silver.fetch(
             "SELECT cik, ticker, exchange FROM sec_company_ticker "
@@ -259,11 +333,12 @@ class MDMPipeline:
         rule_engine = self.engine
         sql_engine = self.session.get_bind()
         silver = self.silver
-        run_id = self.run_id
+        pipeline_run_id = self.run_id
         processed = 0
         lock = threading.Lock()
         started_at = time.monotonic()
         log_interval = _progress_log_interval(len(rows))
+        pending_flush: list[int] = []
 
         # SQLite (test/stub backend only -- MDM production is always Postgres,
         # see database.py's MDM_DATABASE_URL) doesn't support genuinely
@@ -280,29 +355,42 @@ class MDMPipeline:
             1 if sql_engine.dialect.name == "sqlite" else _COMPANY_RESOLVE_MAX_WORKERS
         )
 
-        def _resolve_row(row: dict) -> None:
+        def _resolve_row(row: dict) -> int:
             worker_session = get_session(sql_engine)
             try:
                 worker_ctx = ResolverContext(
                     session=worker_session,
                     engine=rule_engine,
                     silver=silver,
-                    run_id=run_id,
+                    run_id=pipeline_run_id,
                 )
                 ticker = ticker_by_cik.get(row["cik"])
                 tracking = tracking_by_cik.get(row["cik"])
                 resolver.resolve_one(worker_ctx, "edgar_cik", row, ticker, tracking)
                 worker_session.commit()
+                return int(row["cik"])
             finally:
                 worker_session.close()
+
+        def _flush_pending() -> None:
+            if resumable and pending_flush:
+                write_outcome_batch(
+                    bronze_root=bronze_root,
+                    run_id=effective_run_id,
+                    batch_id=uuid.uuid4().hex,
+                    ciks=pending_flush,
+                )
+                pending_flush.clear()
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(_resolve_row, row) for row in rows]
             try:
                 for future in as_completed(futures):
-                    future.result()
+                    resolved_cik = future.result()
                     with lock:
                         processed += 1
+                        if resumable:
+                            pending_flush.append(resolved_cik)
                         if processed % log_interval == 0:
                             emit_mdm_event(
                                 "mdm_progress",
@@ -310,10 +398,15 @@ class MDMPipeline:
                                 processed=processed,
                                 elapsed_ms=elapsed_ms(started_at),
                             )
+                            _flush_pending()
             except Exception:
                 for f in futures:
                     f.cancel()
+                with lock:
+                    _flush_pending()
                 raise
+            with lock:
+                _flush_pending()
         return processed
 
     def run_advisers(self, limit: Optional[int] = None) -> int:
@@ -1225,9 +1318,21 @@ class MDMPipeline:
             self.session.commit()
         return updated
 
-    def run_all(self, limit: Optional[int] = None) -> PipelineStats:
+    def run_all(
+        self,
+        limit: Optional[int] = None,
+        *,
+        resume_ledger_run_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+    ) -> PipelineStats:
         stats = PipelineStats()
-        stats.companies_processed = self.run_companies(limit=limit)
+        # pipeline-resumability ticket 02: only the company step supports
+        # resume today (run_securities/run_persons are still single-commit-
+        # at-end, see mdm-run-throughput map) -- resume_ledger_run_id/run_id
+        # are scoped to run_companies alone, not threaded to the other steps.
+        stats.companies_processed = self.run_companies(
+            limit=limit, resume_ledger_run_id=resume_ledger_run_id, run_id=run_id
+        )
         stats.advisers_processed = self.run_advisers(limit=limit)
         stats.securities_processed = self.run_securities(limit=limit)
         stats.persons_processed = self.run_persons(limit=limit)
