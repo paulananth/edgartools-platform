@@ -33,28 +33,34 @@ Snowflake targets:
 - Graph schema: `NEO4J_GRAPH_MIGRATION`
 - Native App: `Neo4j_Graph_Analytics`
 - Native App database role: `NEO4J_GRAPH_ANALYTICS_MIGRATION_ROLE`
-- Runtime role (mirror writer, `mdm export`): `EDGARTOOLS_PROD_LOADER` --
-  **not** `EDGARTOOLS_PROD_DEPLOYER` as originally documented here. See the
-  2026-08-09 Recovery Notes entry: the deployer role was never actually
-  granted MDM-schema access in prod, and the export path authenticates as
-  `EDGARTOOLS_PROD_LOADER` (`edgar_warehouse.mdm.export.py`'s
-  `MDM_SNOWFLAKE_SECRET_JSON` secret's `ROLE` field).
-- Runtime role (graph sync, `mdm sync-graph`): `EDGARTOOLS_PROD_DEPLOYER`.
+- Runtime role (mirror writer + graph sync + verify: `mdm export`,
+  `mdm sync-graph`, `mdm verify-graph`): `EDGARTOOLS_PROD_LOADER` for all
+  three -- **not** `EDGARTOOLS_PROD_DEPLOYER` as originally documented here.
+  All three commands read the exact same `MDM_SNOWFLAKE_SECRET_JSON` secret
+  (`edgar_warehouse.mdm.export.SnowflakeConnectionSettings.from_env()` and
+  `edgar_warehouse.mdm.snowflake_graph.SnowflakeGraphSyncExecutor.from_env()`
+  both resolve the same secret's `ROLE` field), so there is only ever one
+  runtime role for this whole path, not a split mirror-writer/graph-sync
+  pair. See the 2026-08-09 Recovery Notes entries.
 - Compute pool selector: `CPU_X64_XS`
 
-`EDGARTOOLS_PROD_LOADER` needs:
+`EDGARTOOLS_PROD_LOADER` needs, on `EDGARTOOLS_PROD.MDM`:
 
-- Usage on `EDGARTOOLS_PROD.MDM`.
-- Select, insert, update, delete on current and future
-  `EDGARTOOLS_PROD.MDM` tables (granted by
+- Usage on the schema.
+- Select, insert, update, delete on current and future tables (granted by
   `infra/snowflake/sql/bootstrap/09_mdm_mirror_schema.sql`).
 
-`EDGARTOOLS_PROD_DEPLOYER` needs:
+`EDGARTOOLS_PROD_LOADER` needs, on `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION`
+(granted by `infra/snowflake/sql/bootstrap/10_graph_schema.sql`):
 
-- Select on current and future `EDGARTOOLS_PROD.MDM` tables/views (read-only,
-  for graph sync).
-- Usage, create-table, and create-view on
-  `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION`.
+- **`CREATE SCHEMA` on the parent `EDGARTOOLS_PROD` database itself** --
+  Snowflake gotcha: `mdm sync-graph`'s `CREATE SCHEMA IF NOT EXISTS` still
+  evaluates the `CREATE SCHEMA` privilege *before* checking whether the
+  schema already exists. Pre-creating the schema as `ACCOUNTADMIN` does
+  **not** let a role without this grant skip the check -- the database-level
+  grant is required regardless of whether the schema is already there.
+- Usage, create-table, and create-view on the schema itself.
+- Select, insert, update, delete on current and future tables in it.
 - Native App `app_user` and `app_admin` application roles for strict local
   verification.
 
@@ -98,7 +104,16 @@ After the first load, verify:
 
 ## Graph Deploy And Verify
 
-After mirror bootstrap:
+Before the first `mdm sync-graph` against a rebuilt/new environment, apply
+the graph schema bootstrap (idempotent, safe to re-run):
+
+```bash
+snow sql --connection edgartools-prod -f infra/snowflake/sql/bootstrap/10_graph_schema.sql
+sed 's/{{ database }}/EDGARTOOLS_PROD/g' infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql \
+  | snow sql --connection edgartools-prod -f /dev/stdin
+```
+
+After mirror bootstrap and graph schema bootstrap:
 
 1. Run bounded graph materialization:
    `mdm sync-graph --limit 100 --target-database EDGARTOOLS_PROD --target-schema NEO4J_GRAPH_MIGRATION --mdm-database EDGARTOOLS_PROD --mdm-schema MDM`.
@@ -171,3 +186,44 @@ schema USAGE + current/future table SELECT/INSERT/UPDATE/DELETE.
 does not survive an account rebuild, however carefully it was documented in
 prose. If a runbook says "run this once," it needs a script next to it, not
 just a description of what an operator did.
+
+### 2026-08-09: same failure class, one step further down the pipeline
+
+Completing Stage 14 after the MDM mirror fix above hit an identical failure
+at the next stage: `mdm sync-graph` failed with `SQL compilation error:
+Insufficient privileges to operate on database 'EDGARTOOLS_PROD'. Your
+primary role EDGARTOOLS_PROD_LOADER must have CREATE SCHEMA granted on
+DATABASE EDGARTOOLS_PROD.` `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION` -- the
+graph destination schema -- had also never been re-created after the
+cutover, for the same root cause as the MDM mirror: no committed script.
+
+Two grants were needed, discovered one at a time:
+
+1. Pre-created the schema as `ACCOUNTADMIN` and granted `EDGARTOOLS_PROD_LOADER`
+   `USAGE`/`CREATE TABLE`/`CREATE VIEW` + DML on it -- re-ran `sync-graph`,
+   **same error, unchanged**.
+2. Root cause was narrower than it looked: Snowflake evaluates the
+   `CREATE SCHEMA` privilege for `CREATE SCHEMA IF NOT EXISTS` *before*
+   checking whether the schema already exists. Pre-creating the schema does
+   not help a role that lacks `CREATE SCHEMA` on the parent database --
+   `EDGARTOOLS_PROD_LOADER` needed `GRANT CREATE SCHEMA ON DATABASE
+   EDGARTOOLS_PROD` directly. Once granted, `sync-graph` succeeded.
+
+Also corrected a second inaccuracy in this doc's original "Required
+Production Objects" list: `mdm sync-graph`/`mdm verify-graph` were documented
+as running under `EDGARTOOLS_PROD_DEPLOYER`. They don't -- both read the same
+`MDM_SNOWFLAKE_SECRET_JSON` secret as `mdm export`, so all three commands run
+as whatever role that one secret specifies (`EDGARTOOLS_PROD_LOADER`). There
+is no split mirror-writer/graph-sync role pair in this account; there never
+was, in code.
+
+Fixed by writing `infra/snowflake/sql/bootstrap/10_graph_schema.sql`
+(idempotent, mirrors `09_mdm_mirror_schema.sql`'s shape) and re-applying
+`infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql` (already
+idempotent, just needed a re-run now that the schema exists).
+
+**Lesson (sharper version of the one above):** when a pipeline has N
+sequential stages and stage K's provisioning was undocumented/uncommitted,
+assume stage K+1's is too until proven otherwise -- the same account rebuild
+that wiped one manual step almost certainly wiped every manual step in the
+same family. Check the whole chain, not just the first failure.

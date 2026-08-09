@@ -637,6 +637,26 @@ of a lost manual session, and to correct the stale `EDGARTOOLS_PROD_DEPLOYER` ro
 survive an account rebuild, however carefully it was documented in prose — "run this once"
 in a runbook needs a script next to it, not just a description of what an operator did.
 
+**Follow-up (2026-08-09, same day):** completing Stage 14 past this fix hit an identical
+failure one step later — `mdm sync-graph` against `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION`
+(the graph destination schema, also never re-provisioned after the cutover), same root
+cause, same missing-script pattern. Two distinct grants were needed for
+`EDGARTOOLS_PROD_LOADER`, not one: schema-level USAGE/CREATE TABLE/CREATE VIEW/DML (same
+shape as the MDM fix above) *and* `CREATE SCHEMA` on the parent `EDGARTOOLS_PROD` database
+itself — a real Snowflake gotcha: `CREATE SCHEMA IF NOT EXISTS` evaluates the `CREATE
+SCHEMA` privilege *before* checking whether the schema already exists, so pre-creating the
+schema as `ACCOUNTADMIN` doesn't let a role without that database-level grant skip the
+check. Also corrected a second doc inaccuracy: `mdm sync-graph`/`mdm verify-graph` were
+documented as running under `EDGARTOOLS_PROD_DEPLOYER` — they don't; both read the exact
+same `MDM_SNOWFLAKE_SECRET_JSON` secret as `mdm export`, so all three commands share one
+runtime role (`EDGARTOOLS_PROD_LOADER`), not a split pair. Fixed the same way: committed
+`infra/snowflake/sql/bootstrap/10_graph_schema.sql` (idempotent, same shape as
+`09_mdm_mirror_schema.sql`) and re-applied the already-idempotent
+`infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`. **Sharper lesson:** when one
+stage's provisioning turns out to have been an uncommitted manual step, assume every later
+stage in the same pipeline family is too until proven otherwise — check the whole chain
+before declaring victory on the first fix.
+
 ## Dev Terraform/Snowflake go-live blockers 5-whys (partially resolved 2026-07-27)
 
 **Problem:** Resuming a paused live `terraform apply` for the dev Snowflake stack
