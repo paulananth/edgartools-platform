@@ -33,13 +33,26 @@ Snowflake targets:
 - Graph schema: `NEO4J_GRAPH_MIGRATION`
 - Native App: `Neo4j_Graph_Analytics`
 - Native App database role: `NEO4J_GRAPH_ANALYTICS_MIGRATION_ROLE`
-- Runtime role: `EDGARTOOLS_PROD_DEPLOYER`
+- Runtime role (mirror writer, `mdm export`): `EDGARTOOLS_PROD_LOADER` --
+  **not** `EDGARTOOLS_PROD_DEPLOYER` as originally documented here. See the
+  2026-08-09 Recovery Notes entry: the deployer role was never actually
+  granted MDM-schema access in prod, and the export path authenticates as
+  `EDGARTOOLS_PROD_LOADER` (`edgar_warehouse.mdm.export.py`'s
+  `MDM_SNOWFLAKE_SECRET_JSON` secret's `ROLE` field).
+- Runtime role (graph sync, `mdm sync-graph`): `EDGARTOOLS_PROD_DEPLOYER`.
 - Compute pool selector: `CPU_X64_XS`
 
-The runtime role needs:
+`EDGARTOOLS_PROD_LOADER` needs:
 
 - Usage on `EDGARTOOLS_PROD.MDM`.
-- Select on current and future `EDGARTOOLS_PROD.MDM` tables/views.
+- Select, insert, update, delete on current and future
+  `EDGARTOOLS_PROD.MDM` tables (granted by
+  `infra/snowflake/sql/bootstrap/09_mdm_mirror_schema.sql`).
+
+`EDGARTOOLS_PROD_DEPLOYER` needs:
+
+- Select on current and future `EDGARTOOLS_PROD.MDM` tables/views (read-only,
+  for graph sync).
 - Usage, create-table, and create-view on
   `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION`.
 - Native App `app_user` and `app_admin` application roles for strict local
@@ -50,14 +63,31 @@ tables/views, and create-table in `NEO4J_GRAPH_MIGRATION`.
 
 ## First-Time Mirror Bootstrap
 
-Use this only when `EDGARTOOLS_PROD.MDM` has no current MDM mirror tables.
+Use this whenever `EDGARTOOLS_PROD.MDM` has no current MDM mirror tables --
+including after a Snowflake account rebuild/cutover, not just the very first
+time. This step is **not** covered by any Terraform root or by
+`deploy-aws-application.sh`/`deploy-snowflake-stack.sh` -- it must be run
+explicitly.
 
-The bootstrap reflects the existing Snowflake Postgres MDM schema and loads the
-repo's MDM relational tables into the Snowflake mirror schema. It replaces only
-the dedicated mirror tables in `EDGARTOOLS_PROD.MDM`.
+Run:
 
-Expected source table set comes from
-`edgar_warehouse.mdm.migrations.runtime.MDM_TABLES`.
+```bash
+MDM_DATABASE_URL=sqlite:///:memory: uv run python \
+    infra/scripts/generate_mdm_mirror_ddl.py > /tmp/mdm_mirror_bootstrap.sql
+snow sql --connection edgartools-prod -f /tmp/mdm_mirror_bootstrap.sql
+```
+
+or apply the committed snapshot directly:
+`snow sql --connection edgartools-prod -f infra/snowflake/sql/bootstrap/09_mdm_mirror_schema.sql`.
+
+The generator reflects `edgar_warehouse.mdm.database`'s SQLAlchemy models --
+the same models the Postgres MDM instance is built from -- for exactly the
+19 tables in `edgar_warehouse.mdm.migrations.runtime.MDM_TABLES`, and emits
+`CREATE TABLE IF NOT EXISTS` DDL plus the DML grants
+`EDGARTOOLS_PROD_LOADER` needs. It creates the schema and table *shape* only
+(zero rows) -- `mdm export` populates it on its next run from whatever is
+pending in the Postgres MDM instance's `mdm_change_log`; there is no
+row-level Postgres-to-Snowflake copy step.
 
 After the first load, verify:
 
@@ -109,3 +139,35 @@ If first-time mirror bootstrap fails after creating mirror tables, rerun the
 same first-time mirror bootstrap before rerunning graph sync. Do not proceed to
 AWS MDM E2E or launch-matrix reconciliation until strict local verification
 passes again.
+
+### 2026-08-09: schema lost on account cutover, no script to recreate it
+
+The 2026-06-22 first-time load above was a one-off, uncommitted manual shell
+session -- it had no script. When the platform's Snowflake account was
+rebuilt for the go-live cutover (Cutover Stages 1-13), every other piece
+(gold, source, loader role, dashboards, Neo4j app) was re-provisioned via
+Terraform/bootstrap SQL, but this step had nothing to re-run. `EDGARTOOLS_PROD.MDM`
+came back as an empty, `ACCOUNTADMIN`-owned schema (created 2026-08-07, zero
+tables, zero grants to any application role), and the next `mdm export`
+failed: `SQL compilation error: Object 'EDGARTOOLS_PROD.MDM.MDM_ENTITY' does
+not exist or not authorized.`
+
+A second, independent gap compounded it: even if the tables had existed,
+`EDGARTOOLS_PROD_LOADER` -- the role `mdm export`'s mirror writer actually
+authenticates as -- had zero grants on the MDM schema. The "Required
+Production Objects" grants above were only ever written for
+`EDGARTOOLS_PROD_DEPLOYER`; nothing carried them over when the export path
+was standardized onto `EDGARTOOLS_PROD_LOADER`.
+
+Fixed by writing `infra/scripts/generate_mdm_mirror_ddl.py` (reflects the
+schema straight from `edgar_warehouse.mdm.database`'s SQLAlchemy models, so
+it can't drift from what Postgres actually has) and committing its output as
+`infra/snowflake/sql/bootstrap/09_mdm_mirror_schema.sql` -- the first-time
+mirror bootstrap is no longer a lost, unrepeatable manual session. Applied
+live to prod 2026-08-09: 19 tables created, `EDGARTOOLS_PROD_LOADER` granted
+schema USAGE + current/future table SELECT/INSERT/UPDATE/DELETE.
+
+**Lesson:** any provisioning step that isn't Terraform or a committed script
+does not survive an account rebuild, however carefully it was documented in
+prose. If a runbook says "run this once," it needs a script next to it, not
+just a description of what an operator did.
