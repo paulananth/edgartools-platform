@@ -1174,6 +1174,28 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         self.assertEqual(args.candidate_manifest, "s3://bucket/candidates.json")
         self.assertEqual(args.repair_manifest, "s3://bucket/repairs.json")
 
+    def test_bootstrap_batch_cli_accepts_resume_ledger_run_id(self) -> None:
+        default_args = cli.build_parser().parse_args(["bootstrap-batch", "--cik-list", "1001"])
+        self.assertIsNone(default_args.resume_ledger_run_id)
+
+        args = cli.build_parser().parse_args([
+            "bootstrap-batch", "--cik-list", "1001",
+            "--resume-ledger-run-id", "original-run-1",
+        ])
+        self.assertEqual(args.resume_ledger_run_id, "original-run-1")
+
+    def test_compute_remaining_batches_is_a_deployed_cli_command(self) -> None:
+        args = cli.build_parser().parse_args([
+            "compute-remaining-batches",
+            "--resume-ledger-run-id", "original-run-1",
+            "--run-id", "resume-run-2",
+        ])
+        self.assertEqual(args.resume_ledger_run_id, "original-run-1")
+        self.assertEqual(args.run_id, "resume-run-2")
+
+        with self.assertRaises(SystemExit):
+            cli.build_parser().parse_args(["compute-remaining-batches"])
+
     def test_release_relationship_source_import_is_a_deployed_cli_command(self) -> None:
         args = cli.build_parser().parse_args([
             "ingest-relationship-sources",

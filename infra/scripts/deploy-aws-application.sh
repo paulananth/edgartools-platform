@@ -3788,7 +3788,7 @@ release_mode_check = {
         "BooleanEquals": True,
         "Next": "StrictManifestCheck",
     }],
-    "Default": "BatchSizeCheck",
+    "Default": "ResumeFromRunIdPresenceCheck",
 }
 
 def non_empty_string_clauses(variable):
@@ -3797,6 +3797,47 @@ def non_empty_string_clauses(variable):
         {"Variable": variable, "IsString": True},
         {"Not": {"Variable": variable, "StringEquals": ""}},
     ]
+
+# pipeline-resumability ticket 02: resume_from_run_id must be normalized to
+# always-present before BatchSilver's Map runs its ItemSelector (below), which
+# references $.resume_from_run_id directly -- a Choice IsPresent check
+# tolerates a missing key, but a direct JSONPath reference inside an
+# ItemSelector does not (States.Runtime error), so every branch converges
+# through this presence/default pair first, same shape as batch_size_check/
+# batch_size_default just above.
+resume_from_run_id_presence_check = {
+    "Type": "Choice",
+    "Comment": "Inject a default empty resume_from_run_id when the caller omitted it.",
+    "Choices": [{
+        "Variable": "$.resume_from_run_id",
+        "IsPresent": True,
+        "Next": "ResumeFromRunIdCheck",
+    }],
+    "Default": "ResumeFromRunIdDefault",
+}
+
+resume_from_run_id_default = {
+    "Type": "Pass",
+    "Comment": "Inject default resume_from_run_id='' when caller passed {} or omitted the key.",
+    "Result": "",
+    "ResultPath": "$.resume_from_run_id",
+    "Next": "ResumeFromRunIdCheck",
+}
+
+resume_from_run_id_check = {
+    "Type": "Choice",
+    "Comment": (
+        "Route to ComputeRemainingBatches (reuse the ORIGINAL run's frozen "
+        "cik_batches.jsonl, filtered to not-yet-done batches) instead of "
+        "SeedFromBronze (which would re-derive candidates from live bronze) "
+        "when resuming a prior BatchSilver run."
+    ),
+    "Choices": [{
+        "And": non_empty_string_clauses("$.resume_from_run_id"),
+        "Next": "ComputeRemainingBatches",
+    }],
+    "Default": "BatchSizeCheck",
+}
 
 strict_manifest_check = {
     "Type": "Choice",
@@ -3837,6 +3878,21 @@ seed_from_bronze = ecs_state(wh_medium_arn,
     "States.Array('seed-bronze-batches', '--run-id', $$.Execution.Name, '--batch-size', States.Format('{}', $.batch_size))",
     next_state="BatchSilver", retry_secs=60)
 
+# pipeline-resumability ticket 02: reuses the ORIGINAL run's frozen
+# cik_batches.jsonl (never regenerated from live bronze on resume) plus its
+# accumulated default_batch_done markers, and writes the filtered remainder
+# to THIS execution's own cik_batches.jsonl path -- so BatchSilver's
+# ItemReader below needs no branching, it always reads from
+# runs/{$$.Execution.Name}/cik_batches.jsonl regardless of which state
+# populated it. No Retry: a bad/missing --resume-ledger-run-id pointer is a
+# deterministic failure (retrying won't make the manifest exist), matching
+# strict mode's own "fail once, no blind retry" reasoning for
+# non-transient input errors.
+compute_remaining_batches = ecs_state(wh_medium_arn,
+    "States.Array('compute-remaining-batches', '--resume-ledger-run-id', $.resume_from_run_id, '--run-id', $$.Execution.Name)",
+    next_state="BatchSilver", retry_secs=60)
+compute_remaining_batches.pop("Retry", None)
+
 # INVARIANT: bronze_seed_silver_gold must make ZERO SEC API calls and must not
 # fan out parser work inside each BatchSilver chunk. --artifact-policy skip
 # prevents ownership XML fetches; --parser-policy skip prevents each chunk from
@@ -3863,7 +3919,7 @@ seed_from_bronze = ecs_state(wh_medium_arn,
 # equivalent peak demand (CPU throttling is real -- CpuUtilized samples on medium ran
 # 57-93% of its 1024-unit ceiling -- but higher concurrency more than offsets it).
 batch = ecs_state(wh_medium_arn,
-    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'skip', '--parser-policy', 'skip', '--run-id', $$.Execution.Name)",
+    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'skip', '--parser-policy', 'skip', '--run-id', $$.Execution.Name, '--resume-ledger-run-id', $.resume_from_run_id)",
     is_end=True)
 
 batch_map = {
@@ -3878,6 +3934,14 @@ batch_map = {
             "Bucket": bronze_bucket_name,
             "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_batches.jsonl', $$.Execution.Name)",
         },
+    },
+    # pipeline-resumability ticket 02: threads resume_from_run_id (guaranteed
+    # present -- see resume_from_run_id_presence_check/_default above) into
+    # each child so RunBatch's --resume-ledger-run-id writes done markers
+    # under the resumed run's namespace, not this fresh execution's own.
+    "ItemSelector": {
+        "cik_list.$": "$$.Map.Item.Value.cik_list",
+        "resume_from_run_id.$": "$.resume_from_run_id",
     },
     "ItemProcessor": {
         "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
@@ -3927,7 +3991,14 @@ strict_batch_map = {
 
 # INVARIANT: No --limit on MDM commands here. bronze_seed_silver_gold is always a full
 # bulk run (all CIKs found in bronze), not an incremental daily update.
-mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="MdmBackfill")
+#
+# --resume-ledger-run-id (pipeline-resumability ticket 02): resume_from_run_id
+# is guaranteed present by this point (resume_from_run_id_presence_check/
+# _default above run before BatchSilver, and MdmRun inherits $ unmodified --
+# BatchSilver's Map has ResultPath: None). Only run_companies (company
+# resolution) honors this today; other --entity-type all sub-steps ignore it
+# until mdm-run-throughput's own concurrency work makes them resumable too.
+mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all', '--resume-ledger-run-id', $.resume_from_run_id)", next_state="MdmBackfill")
 mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmExport")
 # MdmExport precedes MdmSync (data-architecture Issue 3) — see write_load_history_definition.
 mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="MdmSync")
@@ -4024,7 +4095,13 @@ definition = {
         "(2) sequential bootstrap-batch uses bronze SHA256 cache for submissions + runs artifact pipeline, "
         "(3) MDM entity resolution + Neo4j sync, "
         "(4) gold build + Snowflake export manifest. "
-        "Trigger with: {} or {\"batch_size\": 100}"
+        "Trigger with: {} or {\"batch_size\": 100}. "
+        "pipeline-resumability ticket 02: pass {\"resume_from_run_id\": \"<prior "
+        "execution name>\"} to resume a stopped/failed run instead of a full "
+        "restart -- BatchSilver skips already-done batches (default_batch_done "
+        "markers) and MdmRun's company step skips already-resolved CIKs "
+        "(company_done markers), both keyed under the original run's namespace. "
+        "Fails closed if the pointed-at run has no frozen manifest/snapshot."
     ),
     "StartAt": "ReleaseModeCheck",
     "States": {
@@ -4044,6 +4121,10 @@ definition = {
         "StrictMdmActivate": strict_mdm_activate,
         "StrictMdmVerify": strict_mdm_verify,
         "StrictGoldRefresh": strict_gold,
+        "ResumeFromRunIdPresenceCheck": resume_from_run_id_presence_check,
+        "ResumeFromRunIdDefault": resume_from_run_id_default,
+        "ResumeFromRunIdCheck": resume_from_run_id_check,
+        "ComputeRemainingBatches": compute_remaining_batches,
         "BatchSizeCheck": batch_size_check,
         "BatchSizeDefault": batch_size_default,
         "SeedFromBronze": seed_from_bronze,

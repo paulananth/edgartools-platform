@@ -89,13 +89,47 @@ def test_bronze_seed_state_machine_runs_batch_silver_with_bounded_parallelism() 
 
 def test_cached_bronze_batch_silver_skips_artifact_fetch_and_parser_pipeline() -> None:
     text = _read(DEPLOY_SCRIPT)
-    expected = (
+    # silver_mdm_gold's BatchSilver reprocessing Map -- unaffected by
+    # pipeline-resumability ticket 02, which scopes resume to
+    # bronze_seed_silver_gold only.
+    silver_mdm_gold_expected = (
         "States.Array('bootstrap-batch', '--cik-list', $.cik_list, "
         "'--artifact-policy', 'skip', '--parser-policy', 'skip', "
         "'--run-id', $$.Execution.Name)"
     )
+    assert text.count(silver_mdm_gold_expected) == 1
 
-    assert text.count(expected) == 2
+    # bronze_seed_silver_gold's own BatchSilver -- ticket 02 threads
+    # --resume-ledger-run-id through so a resumed run's done markers land
+    # under the original run's namespace, not this fresh execution's own.
+    bronze_seed_silver_gold_expected = (
+        "States.Array('bootstrap-batch', '--cik-list', $.cik_list, "
+        "'--artifact-policy', 'skip', '--parser-policy', 'skip', "
+        "'--run-id', $$.Execution.Name, "
+        "'--resume-ledger-run-id', $.resume_from_run_id)"
+    )
+    assert text.count(bronze_seed_silver_gold_expected) == 1
+
+
+def test_bronze_seed_state_machine_supports_resume_from_run_id() -> None:
+    """pipeline-resumability ticket 02: automatic resume for BatchSilver + MdmRun."""
+    text = _read(DEPLOY_SCRIPT)
+
+    assert '"Default": "ResumeFromRunIdPresenceCheck"' in text
+    assert '"ResumeFromRunIdPresenceCheck": resume_from_run_id_presence_check' in text
+    assert '"ResumeFromRunIdDefault": resume_from_run_id_default' in text
+    assert '"ResumeFromRunIdCheck": resume_from_run_id_check' in text
+    assert '"ComputeRemainingBatches": compute_remaining_batches' in text
+    assert (
+        "States.Array('compute-remaining-batches', '--resume-ledger-run-id', "
+        "$.resume_from_run_id, '--run-id', $$.Execution.Name)"
+    ) in text
+    assert "compute_remaining_batches.pop(\"Retry\", None)" in text
+    assert '"resume_from_run_id.$": "$.resume_from_run_id"' in text
+    assert (
+        "States.Array('mdm', 'run', '--entity-type', 'all', "
+        "'--resume-ledger-run-id', $.resume_from_run_id)"
+    ) in text
 
 
 def test_bronze_seed_exposes_fail_closed_ticket20_release_path() -> None:

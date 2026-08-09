@@ -170,6 +170,10 @@ def _handle_bootstrap_batch(args: argparse.Namespace) -> int:
     return run_command("bootstrap-batch", args)
 
 
+def _handle_compute_remaining_batches(args: argparse.Namespace) -> int:
+    return run_command("compute-remaining-batches", args)
+
+
 def _handle_ingest_relationship_sources(args: argparse.Namespace) -> int:
     return run_command("ingest-relationship-sources", args)
 
@@ -729,8 +733,37 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Re-fetch only accessions authorized by --repair-manifest in release mode",
     )
+    bootstrap_batch.add_argument(
+        "--resume-ledger-run-id",
+        default=None,
+        help=(
+            "Namespace for this batch's default-path done marker (pipeline-"
+            "resumability ticket 02). Defaults to --run-id when omitted, so "
+            "every run writes markers under its own id; a resumed execution "
+            "passes the ORIGINAL run's id here to accumulate against the "
+            "same ledger instead of starting a fresh, empty one."
+        ),
+    )
     _add_run_id_arg(bootstrap_batch)
     bootstrap_batch.set_defaults(handler=_handle_bootstrap_batch)
+
+    compute_remaining_batches = subparsers.add_parser(
+        "compute-remaining-batches",
+        help=(
+            "pipeline-resumability ticket 02: filter a prior run's frozen "
+            "cik_batches.jsonl down to batches with no default-path done "
+            "marker yet, and write the result as this run's own "
+            "cik_batches.jsonl. Fails closed if --resume-ledger-run-id has "
+            "no readable, non-empty manifest."
+        ),
+    )
+    compute_remaining_batches.add_argument(
+        "--resume-ledger-run-id",
+        required=True,
+        help="The ORIGINAL run id whose frozen cik_batches.jsonl and done markers to resume from",
+    )
+    _add_run_id_arg(compute_remaining_batches)
+    compute_remaining_batches.set_defaults(handler=_handle_compute_remaining_batches)
 
     ingest_relationship_sources = subparsers.add_parser(
         "ingest-relationship-sources",
