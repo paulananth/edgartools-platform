@@ -49,6 +49,27 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
             "companies). Repeatable."
         ),
     )
+    run.add_argument(
+        "--run-id",
+        default=None,
+        help=(
+            "This invocation's own physical identity (pipeline-resumability "
+            "ticket 02) -- e.g. $$.Execution.Name. Used as the company-step "
+            "resume snapshot/outcome namespace when --resume-ledger-run-id "
+            "is not given (a fresh full-universe run)."
+        ),
+    )
+    run.add_argument(
+        "--resume-ledger-run-id",
+        default=None,
+        help=(
+            "Resume the company step of a prior full-universe run instead of "
+            "re-resolving all companies from scratch (pipeline-resumability "
+            "ticket 02) -- the ORIGINAL run's --run-id. Only valid for "
+            "--entity-type all/company with no --limit/--cik; fails closed "
+            "if no frozen CIK snapshot exists for it."
+        ),
+    )
     run.set_defaults(handler=_logged_handler("run", _handle_run))
 
     cov = mdm_sub.add_parser("coverage-report", help="Report silver vs MDM entity counts per domain")
@@ -752,12 +773,19 @@ def _handle_run(args) -> int:
     session = _session()
     try:
         pipeline = MDMPipeline(session=session, silver=silver)
+        resume_ledger_run_id = getattr(args, "resume_ledger_run_id", None)
+        run_id = getattr(args, "run_id", None)
         if args.entity_type == "all":
-            stats = pipeline.run_all(limit=args.limit)
+            stats = pipeline.run_all(
+                limit=args.limit, resume_ledger_run_id=resume_ledger_run_id, run_id=run_id,
+            )
             print(json.dumps(stats.__dict__, indent=2, sort_keys=True))
             return 0
         if args.entity_type == "company":
-            n = pipeline.run_companies(limit=args.limit, issuer_ciks=args.cik)
+            n = pipeline.run_companies(
+                limit=args.limit, issuer_ciks=args.cik,
+                resume_ledger_run_id=resume_ledger_run_id, run_id=run_id,
+            )
             print(f"companies: {n}")
         if args.entity_type == "adviser":
             n = pipeline.run_advisers(limit=args.limit)
