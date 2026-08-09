@@ -334,6 +334,7 @@ def resolve_funds_bulk(
         )
     }
     existing_funds = list(session.scalars(select(MdmFund)))
+    existing_funds_by_entity_id = {row.entity_id: row for row in existing_funds}
     by_pfid = {
         str(row.private_fund_id): row
         for row in existing_funds
@@ -367,11 +368,22 @@ def resolve_funds_bulk(
         if adviser_entity_id is None:
             adviser_entity_id = adviser_by_accession.get(str(row.get("accession_number")))
         name = engine.normalize_name(row.get("fund_name")) or "Unknown Fund"
-        fund = by_pfid.get(pfid) if pfid else by_adviser_name.get((adviser_entity_id, name))
+        # Check the row's own deterministic entity_id first. A fund without
+        # a private_fund_id dedups on (adviser_entity_id, name), but
+        # adviser_entity_id can flip from None to a real id on a later run
+        # once that adviser becomes resolvable -- the stored fund is then
+        # keyed under the old (None, name) pair and this lookup misses it,
+        # even though identity(row) (and so entity_id) is unchanged. Without
+        # this check the code below re-attempts an insert under the same
+        # primary key and crashes with a duplicate-key IntegrityError.
+        candidate_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, identity(row)))
+        fund = existing_funds_by_entity_id.get(candidate_entity_id)
+        if fund is None:
+            fund = by_pfid.get(pfid) if pfid else by_adviser_name.get((adviser_entity_id, name))
         entity_id = (
             fund.entity_id
             if fund is not None
-            else str(uuid.uuid5(uuid.NAMESPACE_URL, identity(row)))
+            else candidate_entity_id
         )
         effective_date = _as_date(row.get("effective_date"))
         attrs = {
