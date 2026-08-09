@@ -1,6 +1,27 @@
 # resolve_funds_bulk dedup key unstable once adviser resolves later than the fund
 
-Status: open (confirmed root cause, not fixed)
+Status: resolved (2026-08-09, PR #385, merged to main at ee62a968)
+
+## Resolution
+
+`resolve_funds_bulk` now checks each source row's own identity-derived
+`entity_id` against already-stored `MdmFund` rows first, before falling
+back to the nullable `(adviser_entity_id, name)` fuzzy match. This makes
+re-processing the same source row idempotent regardless of when its
+adviser resolves. Regression test
+`test_fund_bulk_resolution_survives_adviser_resolving_after_the_fund`
+(`tests/mdm/test_adv_bulk_resolution.py`) reproduces the exact prod
+`IntegrityError` against the pre-fix code and passes against the fix. Full
+`tests/mdm/` suite: 469 passed.
+
+`resolve_advisers_bulk`'s structurally similar dedup pair was
+**deliberately left unchanged** after review: its cik-based fallback uses
+`unclaimed_by_cik.pop()`, a claim-consumed invariant an entity_id-first
+check would bypass, and no adviser-side crash has ever been observed.
+Applying the same defensive pattern there would trade a demonstrated fix
+for touching an invariant with no evidence it's broken -- flag as a
+candidate for its own investigation only if an adviser-side duplicate-key
+crash is ever actually seen.
 
 ## Symptom
 
