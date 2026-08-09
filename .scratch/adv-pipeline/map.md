@@ -137,6 +137,18 @@ is execution needed to unblock a later decision, not the destination itself).
   counts; mismatches surface as a queryable gold view and a dashboard panel, never
   gating MDM/graph sync; fetch mirrors `daily_incremental`'s monthly local-check-first
   pattern, reconciliation recomputes on the gold table's normal refresh schedule.
+- [09 — Office/Disclosure Bulk-Parser Extension Spec](issues/09-office-disclosure-parser-extension-spec.md)
+  — implementation-ready spec closing ticket 07's research: extend
+  `sec_adv_disclosure_event` with monetary/resolution/status/case-number columns plus
+  a raw-fields JSON catch-all; new `sec_adv_disclosure_affiliate` table (cardinality
+  fact-checked against the real archive — 13.7% of disclosure events have multiple
+  affiliates, ruling out inline columns); `sec_adv_office` gets a new source
+  (`Schedule_D_1F`) with its existing column set unchanged; gold model
+  `adviser_disclosures.sql` gets the new columns passed through; reprocess
+  already-fetched archives (not prospective-only) to backfill the current rolling
+  window; tests must use real archive fixtures, not hand-rolled synthetic CSVs.
+  Surfaced by and closes the `ADVISER_DISCLOSURES` go-live blocker from
+  `snowflake-account-cutover` ticket 08.
 
 ## Not yet specified
 
@@ -158,10 +170,13 @@ is execution needed to unblock a later decision, not the destination itself).
 
 ## Handoff
 
-The frontier is empty — all 8 tickets are resolved and the way to this map's destination
-is clear. Per the Destination's stated handoff, `/to-spec` has produced two
-`ready-for-agent` specs covering the remaining build work (ticket 06 decisions 2–4 and
-ticket 08's full design):
+The frontier is empty — all 9 tickets are resolved and the way to this map's destination
+is clear. Ticket 09 (2026-08-09) is a freshly-resolved implementation-ready spec, not yet
+handed to `/to-spec` — surfaced by and directly closes the `ADVISER_DISCLOSURES` go-live
+blocker on the `snowflake-account-cutover` map (its ticket 08). Per the Destination's
+stated handoff, `/to-spec` has so far produced two `ready-for-agent` specs covering the
+remaining build work (ticket 06 decisions 2–4 and ticket 08's full design); ticket 09
+should get the same treatment next:
 
 - [Wire `fetch-adv-bulk` into `load_history` and `daily_incremental`](../adv-fetch-pipeline-wiring/spec.md)
   — **done.** Both tickets (`01-wire-stage-into-load-history`,

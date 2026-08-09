@@ -1,6 +1,25 @@
 # 6 empty gold tables blocking gold-verify-live (Stage 15 follow-up)
 
-Status: open
+Status: resolved (2026-08-09)
+
+## Resolution
+
+Disposition settled per-table via a short wayfinder grilling session
+(2026-08-09), no fog found for the go-live-triage question itself (per
+wayfinder's own no-fog rule, decided directly rather than charted):
+
+| Table | Disposition |
+|---|---|
+| `ACCOUNTING_FLAGS` | Already tracked — task #35 (full-universe `bootstrap-fundamentals` via `load_history`). No new action. |
+| `GUIDANCE_FACTS` / `EARNINGS_CALENDAR` | Same producer/fix as `ACCOUNTING_FLAGS` — populated by the same `bootstrap-fundamentals` full-universe run once task #35 executes. Closes automatically, no separate action. |
+| `CONSENSUS_ESTIMATES` / `TRANSCRIPT_EVENTS` | Intentionally pilot-scoped by design (ERDP-01/ERDP-04). **Action needed:** exclude both from `gold-verify-live`'s required-table list (`edgar_warehouse/serving/gold_verify.py`'s `GOLD_LIVE_TABLES`) — not yet implemented, small follow-up. |
+| `ADVISER_DISCLOSURES` | Real gap, confirmed **not** "no producer code" (that earlier claim in this file was wrong) — a real gold builder (`_build_fact_adv_disclosure`) and dbt model already exist; the actual gap is one layer upstream: nothing in production writes to the silver table `sec_adv_disclosure_event` it reads from. This is the *same* gap the `adv-pipeline` map's ticket 07 had already researched (parser-extension problem, not missing-data — confirmed real DRP disclosure data exists in the bulk archive) but never spec'd for implementation. Turned into an implementation-ready spec: [adv-pipeline ticket 09 — Office/Disclosure Bulk-Parser Extension Spec](../../adv-pipeline/issues/09-office-disclosure-parser-extension-spec.md). |
+
+Two small follow-ups remain before this table set is fully closed:
+excluding the 2 pilot tables from `gold-verify-live` (mechanical, not yet
+done), and implementing adv-pipeline ticket 09 (spec'd, ready for
+`/to-spec` + build, not yet done). Both are tracked at their respective
+locations, not re-tracked here.
 
 ## Context
 
