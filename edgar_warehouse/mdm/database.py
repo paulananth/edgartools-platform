@@ -107,9 +107,29 @@ def _default_relationship_id(context) -> str:
     )
 
 
+# SQLAlchemy's QueuePool defaults (pool_size=5, max_overflow=10 -> 15
+# total) were sized before MDMPipeline's resolve loops (run_companies,
+# run_securities, run_persons) each opened their own bounded worker-thread
+# pool of concurrent sessions against this same engine -- see pipeline.py's
+# _RESOLVE_MAX_WORKERS. 16 workers + the pipeline's own primary session
+# already exceeds the old 15-connection ceiling, so the pool budget must
+# scale with the resolve concurrency, not stay fixed. Defaults sized for
+# up to ~20 concurrent workers with headroom for the primary session.
+_DB_POOL_SIZE = int(os.environ.get("MDM_DB_POOL_SIZE", "15"))
+_DB_MAX_OVERFLOW = int(os.environ.get("MDM_DB_MAX_OVERFLOW", "15"))
+
+
 def get_engine(url: str | None = None) -> Engine:
     url = url or os.environ["MDM_DATABASE_URL"]
     kwargs: dict = {"pool_pre_ping": True}
+    if not url.startswith("sqlite"):
+        # SQLite's default pool classes (SingletonThreadPool/NullPool) --
+        # used by local/test sqlite:// URLs passed through this same
+        # function -- don't accept QueuePool-only kwargs like max_overflow.
+        # Real production MDM is always Postgres (see database module
+        # docstring), where these matter.
+        kwargs["pool_size"] = _DB_POOL_SIZE
+        kwargs["max_overflow"] = _DB_MAX_OVERFLOW
     if url.startswith("mssql"):
         kwargs["fast_executemany"] = True
     engine = create_engine(url, **kwargs)

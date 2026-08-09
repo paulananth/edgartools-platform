@@ -18,6 +18,7 @@ import sys
 import threading
 import time
 import uuid
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -38,14 +39,25 @@ from edgar_warehouse.mdm.resolvers import (
 from edgar_warehouse.mdm.resolvers.base import ResolverContext, SilverReader
 from edgar_warehouse.mdm.rules import MDMRuleEngine
 
-# Company resolution is network-round-trip-bound against MDM's Postgres store
-# (~68ms/call measured live, us-east-1 ECS tasks against a us-west-2 Snowflake
-# Postgres endpoint -- see pipeline-throughput-architecture map's MDM addendum),
-# not CPU-bound, so bounded thread concurrency hides that latency instead of
-# fighting it. Default 8 stays comfortably under SQLAlchemy's default pool
-# budget (pool_size=5 + max_overflow=10 = 15), leaving headroom for the
-# pipeline's own primary session.
-_COMPANY_RESOLVE_MAX_WORKERS = int(os.environ.get("MDM_COMPANY_RESOLVE_CONCURRENCY", "8"))
+# All three per-row resolve loops (run_companies, run_securities,
+# run_persons) are network-round-trip-bound against MDM's Postgres store
+# (~68ms/call measured live, us-east-1 ECS tasks against a us-west-2
+# Snowflake Postgres endpoint -- see pipeline-throughput-architecture map's
+# MDM addendum), not CPU-bound, so bounded thread concurrency hides that
+# latency instead of fighting it. Shared default of 16 (mdm-run-throughput
+# map); each domain can override independently. database.py's connection
+# pool budget (MDM_DB_POOL_SIZE/MDM_DB_MAX_OVERFLOW) is sized to cover this
+# default plus the pipeline's own primary session -- raise both together.
+_RESOLVE_MAX_WORKERS = int(os.environ.get("MDM_RESOLVE_CONCURRENCY", "16"))
+_COMPANY_RESOLVE_MAX_WORKERS = int(
+    os.environ.get("MDM_COMPANY_RESOLVE_CONCURRENCY", str(_RESOLVE_MAX_WORKERS))
+)
+_SECURITY_RESOLVE_MAX_WORKERS = int(
+    os.environ.get("MDM_SECURITY_RESOLVE_CONCURRENCY", str(_RESOLVE_MAX_WORKERS))
+)
+_PERSON_RESOLVE_MAX_WORKERS = int(
+    os.environ.get("MDM_PERSON_RESOLVE_CONCURRENCY", str(_RESOLVE_MAX_WORKERS))
+)
 
 # Progress-log cadence for the per-row resolve loops below (run_companies,
 # run_securities, run_persons). A fixed interval is too chatty for large
@@ -419,8 +431,104 @@ class MDMPipeline:
             limit=limit,
         )
 
+    def _run_grouped_concurrent(
+        self,
+        keyed_rows: list[tuple[Any, dict]],
+        process_row_fn,
+        *,
+        domain: str,
+        max_workers: int,
+        log_interval: int,
+    ) -> int:
+        """Partition rows into groups by their caller-supplied key; each
+        group's rows resolve sequentially on one worker (its own session),
+        while different groups run concurrently across a bounded thread
+        pool -- the same shape as run_companies' per-row concurrency, just
+        applied per-group instead of per-row.
+
+        Correctness depends entirely on the caller's key capturing the
+        FULL set of shared match state a resolver's ``_existing_candidates``
+        touches: two rows that could ever race on the same underlying
+        entity MUST land in the same group. See run_securities/run_persons
+        for the specific groupings and why they're safe.
+
+        Mirrors run_companies' session-per-worker pattern (never touches
+        ``self.session`` from a worker thread -- Session objects are not
+        thread-safe) and its SQLite StaticPool guard (worker sessions can't
+        get genuine connection concurrency there, so cap at 1).
+        """
+        groups: dict[Any, list[dict]] = defaultdict(list)
+        for key, row in keyed_rows:
+            groups[key].append(row)
+
+        sql_engine = self.session.get_bind()
+        rule_engine = self.engine
+        silver = self.silver
+        pipeline_run_id = self.run_id
+        processed = 0
+        lock = threading.Lock()
+        started_at = time.monotonic()
+
+        effective_max_workers = (
+            1 if sql_engine.dialect.name == "sqlite" else max_workers
+        )
+
+        def _process_group(group_rows: list[dict]) -> None:
+            nonlocal processed
+            worker_session = get_session(sql_engine)
+            try:
+                worker_ctx = ResolverContext(
+                    session=worker_session,
+                    engine=rule_engine,
+                    silver=silver,
+                    run_id=pipeline_run_id,
+                )
+                for row in group_rows:
+                    process_row_fn(worker_ctx, row)
+                    with lock:
+                        processed += 1
+                        if processed % log_interval == 0:
+                            emit_mdm_event(
+                                "mdm_progress",
+                                domain=domain,
+                                processed=processed,
+                                elapsed_ms=elapsed_ms(started_at),
+                            )
+                worker_session.commit()
+            finally:
+                worker_session.close()
+
+        with ThreadPoolExecutor(max_workers=effective_max_workers) as executor:
+            futures = [
+                executor.submit(_process_group, group_rows)
+                for group_rows in groups.values()
+            ]
+            try:
+                for future in as_completed(futures):
+                    future.result()
+            except Exception:
+                for f in futures:
+                    f.cancel()
+                raise
+        return processed
+
     def run_securities(self, limit: Optional[int] = None) -> int:
-        ctx = self._ctx()
+        """Resolve ownership-transaction security titles into MDM entities.
+
+        Runs on a bounded thread pool, grouped by canonical title.
+        ``SecurityResolver._existing_candidates`` always scopes its exact
+        match to ``canonical_title`` -- issuer-scoped when the issuer is
+        known, NULL-issuer-scoped otherwise -- but ``resolve_one`` also has
+        an "upgrade a NULL-issuer security" path that lets two *different*
+        issuers sharing the same title interact (the second issuer's row
+        can claim/upgrade an entity the first created). So canonical_title
+        alone, not (issuer, title), is the real concurrency boundary: two
+        rows with the same title must never resolve on different workers,
+        regardless of issuer. Rows with no title never dedup at all (an
+        empty canonical title always creates a brand-new entity), so each
+        gets its own singleton group instead of serializing behind a
+        shared key that carries no real match risk.
+        """
         resolver = SecurityResolver()
         sql = """
             SELECT DISTINCT t.accession_number, t.owner_index, t.txn_index,
@@ -438,17 +546,38 @@ class MDMPipeline:
         if limit:
             sql += f" LIMIT {int(limit)}"
         rows = self.silver.fetch(sql)
-        processed = 0
-        started_at = time.monotonic()
-        log_interval = _progress_log_interval(len(rows))
-        for row in rows:
-            issuer_entity_id = self._company_entity_id(row.get("issuer_cik"))
+
+        # Companies are fully resolved before run_securities executes
+        # (run_all's dependency order) and never mutated again during this
+        # phase, so a single bulk prefetch is a stable, safe substitute for
+        # a live self.session query -- which worker threads below must
+        # never issue, since Session objects aren't thread-safe.
+        issuer_ciks = {
+            row.get("issuer_cik") for row in rows if row.get("issuer_cik") is not None
+        }
+        company_entity_id_by_cik = self._company_entity_ids(issuer_ciks)
+
+        keyed_rows: list[tuple[Any, dict]] = []
+        for i, row in enumerate(rows):
+            title = row.get("security_title") or ""
+            # Must match SecurityResolver.resolve_one's own canonicalization
+            # exactly, or grouping stops matching the resolver's real match
+            # boundary and the concurrency safety argument above breaks.
+            canonical = " ".join(w.capitalize() for w in title.split()) if title else ""
+            key = canonical if canonical else f"__no_title__{i}"
+            keyed_rows.append((key, row))
+
+        def _process(ctx: ResolverContext, row: dict) -> None:
+            issuer_entity_id = company_entity_id_by_cik.get(row.get("issuer_cik"))
             resolver.resolve_one(ctx, "ownership_filing", row, issuer_entity_id)
-            processed += 1
-            if processed % log_interval == 0:
-                emit_mdm_event("mdm_progress", domain="security", processed=processed, elapsed_ms=elapsed_ms(started_at))
-        self.session.commit()
-        return processed
+
+        return self._run_grouped_concurrent(
+            keyed_rows,
+            _process,
+            domain="security",
+            max_workers=_SECURITY_RESOLVE_MAX_WORKERS,
+            log_interval=_progress_log_interval(len(rows)),
+        )
 
     def run_persons(
         self,
@@ -461,6 +590,22 @@ class MDMPipeline:
         Ticket 21: persons are the only entity load needed for IS_INSIDER —
         companies are assumed already resolved and are never re-run here.
         Optional ``issuer_ciks`` scopes to ownership rows for those issuers only.
+
+        Rows with a real ``owner_cik`` run on a bounded thread pool, grouped
+        by ``owner_cik`` -- ``PersonResolver._existing_candidates`` scopes
+        strictly to ``owner_cik`` when present, the same true natural-key
+        shape as company, so different CIKs never share match state.
+        Multiple rows for the *same* CIK still run on one worker/session so
+        they can't race and create duplicate entities for that person.
+
+        Rows with ``owner_cik IS NULL`` fall back to an UNSCOPED fuzzy name
+        match across the entire mdm_person table (no CIK filter is applied
+        at all in that case) -- concurrent workers there could each miss a
+        sibling's still-uncommitted near-duplicate and create duplicates a
+        sequential run would have merged. These rows are NOT safe to
+        parallelize; they run single-threaded, strictly after the
+        CIK-scoped batch has fully committed, so the full-table scan sees a
+        stable, complete snapshot instead of racing in-flight writes.
         """
         ctx = self._ctx()
         resolver = PersonResolver()
@@ -482,12 +627,28 @@ class MDMPipeline:
             sql += f" LIMIT {int(limit)}"
         rows = self.silver.fetch(sql, params or None)
         company_ciks = self._company_cik_set()
-        processed = 0
-        started_at = time.monotonic()
+
+        eligible_rows = [r for r in rows if r.get("owner_cik") not in company_ciks]
+        cik_rows = [r for r in eligible_rows if r.get("owner_cik") is not None]
+        unscoped_rows = [r for r in eligible_rows if r.get("owner_cik") is None]
+
         log_interval = _progress_log_interval(len(rows))
-        for row in rows:
-            if row.get("owner_cik") in company_ciks:
-                continue
+
+        def _process(worker_ctx: ResolverContext, row: dict) -> None:
+            resolver.resolve_one(worker_ctx, "ownership_filing", row,
+                                  issuer_cik=row.get("issuer_cik"))
+
+        keyed_rows = [(row.get("owner_cik"), row) for row in cik_rows]
+        processed = self._run_grouped_concurrent(
+            keyed_rows,
+            _process,
+            domain="person",
+            max_workers=_PERSON_RESOLVE_MAX_WORKERS,
+            log_interval=log_interval,
+        )
+
+        started_at = time.monotonic()
+        for row in unscoped_rows:
             resolver.resolve_one(ctx, "ownership_filing", row,
                                  issuer_cik=row.get("issuer_cik"))
             processed += 1
@@ -1327,9 +1488,14 @@ class MDMPipeline:
     ) -> PipelineStats:
         stats = PipelineStats()
         # pipeline-resumability ticket 02: only the company step supports
-        # resume today (run_securities/run_persons are still single-commit-
-        # at-end, see mdm-run-throughput map) -- resume_ledger_run_id/run_id
-        # are scoped to run_companies alone, not threaded to the other steps.
+        # resume today -- resume_ledger_run_id/run_id are scoped to
+        # run_companies alone, not threaded to the other steps. Securities
+        # and persons now run concurrently too (mdm-run-throughput map,
+        # grouped by canonical_title / owner_cik respectively -- see
+        # run_securities/run_persons docstrings), but neither writes a
+        # resumable CIK snapshot/outcome ledger the way company does, so a
+        # restart still re-resolves them from scratch (idempotently safe,
+        # just not skip-ahead).
         stats.companies_processed = self.run_companies(
             limit=limit, resume_ledger_run_id=resume_ledger_run_id, run_id=run_id
         )
@@ -1382,6 +1548,20 @@ class MDMPipeline:
         return self.session.scalar(
             select(MdmCompany.entity_id).where(MdmCompany.cik == int(cik))
         )
+
+    def _company_entity_ids(self, ciks: Iterable[Any]) -> dict[int, str]:
+        """Bulk cik->entity_id prefetch -- the multi-row counterpart to
+        ``_company_entity_id``, used by callers (run_securities) that must
+        avoid a live ``self.session`` query from a worker thread."""
+        ciks_int = {int(c) for c in ciks if c is not None}
+        if not ciks_int:
+            return {}
+        from edgar_warehouse.mdm.database import MdmCompany
+        from sqlalchemy import select
+        rows = self.session.execute(
+            select(MdmCompany.cik, MdmCompany.entity_id).where(MdmCompany.cik.in_(ciks_int))
+        ).all()
+        return {int(cik): entity_id for cik, entity_id in rows}
 
     def _person_entity_id(self, owner_cik, owner_name) -> Optional[str]:
         from edgar_warehouse.mdm.database import MdmPerson
