@@ -77,6 +77,19 @@ GRANT USAGE ON WAREHOUSE IDENTIFIER($refresh_warehouse_name) TO ROLE IDENTIFIER(
 -- 04_refresh_wrapper.sql end to end with $deployer_role_name = EDGARTOOLS_PROD_LOADER.
 GRANT CREATE TABLE ON SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
 GRANT CREATE STAGE ON SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+-- USAGE on every pre-existing, Terraform-owned (ACCOUNTADMIN) stage/file
+-- format in this schema -- distinct from CREATE STAGE above, which only
+-- covers objects the loader role creates itself. Missing these made
+-- LOAD_EXPORTS_FOR_RUN's COPY INTO fail one object at a time ("Stage ...
+-- does not exist or not authorized", then "File format ... does not exist
+-- or not authorized") across successive task retries, found 2026-08-09
+-- alongside the SNOWFLAKE_REFRESH_STATUS INSERT gap below. Granted broadly
+-- (ALL + FUTURE) rather than by exact name, since this same class of gap
+-- kept resurfacing one object at a time.
+GRANT USAGE ON ALL STAGES IN SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT USAGE ON FUTURE STAGES IN SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT USAGE ON ALL FILE FORMATS IN SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT USAGE ON FUTURE FILE FORMATS IN SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
 GRANT CREATE STREAM ON SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
 GRANT CREATE TASK ON SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
 GRANT CREATE PIPE ON SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
@@ -96,10 +109,31 @@ GRANT CREATE VIEW ON SCHEMA IDENTIFIER($gold_schema_qualified) TO ROLE IDENTIFIE
 
 -- Manifest pipeline reads: every EDGARTOOLS_SOURCE table (current + future),
 -- the manifest stream, and the per-run status table it writes to.
-GRANT SELECT ON ALL TABLES IN SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
-GRANT SELECT ON FUTURE TABLES IN SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+-- The status table needs INSERT too, not just SELECT/UPDATE: 03_source_load_
+-- wrapper.sql's upsertStatus() does a MERGE ... WHEN NOT MATCHED THEN INSERT,
+-- which always fires for a brand-new (environment, workflow, run_id) triple --
+-- i.e. every run on a freshly bootstrapped environment. Without INSERT here,
+-- LOAD_EXPORTS_FOR_RUN fails "Insufficient privileges ... INSERT granted on
+-- TABLE ... SNOWFLAKE_REFRESH_STATUS" on its very first invocation, and
+-- SNOWFLAKE_RUN_MANIFEST_TASK auto-suspends (SUSPENDED_DUE_TO_ERRORS) right
+-- after -- silently stopping ALL gold-table refreshes account-wide, since
+-- nothing else calls this procedure. Found 2026-08-09 when gold-verify-live
+-- (wayfinder snowflake-account-cutover ticket 06) caught it: every one of
+-- 21 EDGARTOOLS_GOLD tables was empty despite prior gold-refresh runs
+-- reporting success (that command only writes the S3 export manifest --
+-- Snowflake ingestion is a separate, async step this bug had silently
+-- broken since the task's very first tick after the account rebuild).
+-- LOAD_EXPORTS_FOR_RUN itself INSERTs the newly loaded export rows straight
+-- into the EDGARTOOLS_SOURCE tables (not just a staging table) -- read-only
+-- SELECT was never sufficient for the manifest pipeline's actual write
+-- path. Found the same day as the two gaps above: after fixing those, the
+-- task got one step further and failed with "Insufficient privileges ...
+-- INSERT granted on TABLE ... COMPANY" (and by extension, every other
+-- EDGARTOOLS_SOURCE table this same procedure loads).
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT SELECT, INSERT, UPDATE, DELETE ON FUTURE TABLES IN SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
 GRANT SELECT ON IDENTIFIER($manifest_stream_qualified) TO ROLE IDENTIFIER($loader_role_name);
-GRANT SELECT, UPDATE ON IDENTIFIER($status_table_qualified) TO ROLE IDENTIFIER($loader_role_name);
+GRANT SELECT, INSERT, UPDATE ON IDENTIFIER($status_table_qualified) TO ROLE IDENTIFIER($loader_role_name);
 
 -- Re-parent ownership of the EDGARTOOLS_GOLD dynamic tables onto the loader
 -- role. COPY CURRENT GRANTS keeps every existing downstream grant (reader

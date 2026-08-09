@@ -159,7 +159,7 @@ run_hosted_graph_preflight() {
     echo "  Native App compute pool: ${NATIVE_APP_COMPUTE_POOL}"
   fi
 
-  if ! (cd "$REPO_ROOT" && env "${env_args[@]}" "${cmd[@]}"); then
+  if ! (cd "$REPO_ROOT" && env "${env_args[@]+"${env_args[@]}"}" "${cmd[@]}"); then
     echo "ERROR: hosted graph preflight failed; AWS Step Functions executions were not started." >&2
     return 1
   fi
