@@ -86,6 +86,23 @@ Claude and Codex may work on this repository independently, but they must not sh
 - If overlap is unavoidable, stop and ask for an ownership decision instead of merging assumptions.
 - Do not overwrite, revert, stage, or commit changes created by the other runtime unless explicitly instructed.
 
+## Git/GitHub commit and PR text with backticks
+
+**Never build a `git commit -m`/`gh pr create --body`/`gh pr edit --body` string via an
+inline bash heredoc (`"$(cat <<'EOF' ... EOF)"`) when the text contains backticks or code
+spans.** Write the message to a scratch file first (e.g. with a file-write tool), then pass
+it with `git commit -F <file>` or `gh pr create --body-file <file>` /
+`gh pr edit --body-file <file>`.
+
+**Why:** backtick-quoted spans inside the heredoc body (e.g. `` `EDGARTOOLS_PROD.MDM` ``)
+have been observed to get interpreted as command substitution in this environment even
+with a quoted heredoc delimiter (`<<'EOF'`), which should disable that. The stray commands
+mostly fail harmlessly, but their empty output gets silently spliced into the message and
+the heredoc terminator itself can leak into the final text — producing a mangled commit
+message or PR body that looks fine at a glance. This happened twice in one session (a
+commit message, then a PR body) before being caught. File-based input sidesteps the
+problem entirely.
+
 ## Quick Navigation
 
 | Need | Location |
@@ -566,6 +583,59 @@ executes as. For any Streamlit-in-Snowflake app whose access-control story matte
 `SHOW STREAMLITS ... ` for the `owner` column before trusting a "dedicated read role"
 claim; Terraform-created objects in this repo default to the admin role as owner unless
 something has deliberately re-created them otherwise.
+
+## MDM Snowflake mirror schema lost on cutover 5-whys (resolved 2026-08-09)
+
+**Problem:** Stage 14's `bronze_seed_silver_gold` execution (started 2026-08-08, ran
+company/security/person resolution + all 11 relationship types successfully over ~16h)
+failed at the `MdmExport` state: `snowflake.connector.errors.ProgrammingError: 002003
+(42S02): SQL compilation error: Object 'EDGARTOOLS_PROD.MDM.MDM_ENTITY' does not exist or
+not authorized.`
+
+1. Symptom: `mdm export`'s mirror write (`_build_snowflake_mirror_writer`, targets schema
+   `MDM` deliberately, distinct from the `EDGARTOOLS_GOLD` golden-record target — see
+   `edgar_warehouse/mdm/export.py`'s docstring) failed on its very first MERGE statement.
+2. Why? `SHOW SCHEMAS LIKE 'MDM' IN DATABASE EDGARTOOLS_PROD` showed the schema exists but
+   was created **2026-08-07**, owned by `ACCOUNTADMIN`, with **zero tables** —
+   `docs/prod-mdm-snowflake-graph-first-load.md` documents a first-time load of 19 tables
+   completed 2026-06-22, but that load is gone.
+3. Why is it gone? That 2026-06-22 first-time load was a one-off, uncommitted manual shell
+   session (per the runbook's own "non-printing shell process" language) — it had no
+   script. When the platform's Snowflake account was rebuilt for this go-live cutover
+   (Stages 1–13, all Terraform/scripted), every other piece re-provisioned automatically,
+   but this step had nothing to re-run.
+4. Why did the role even matter? A second, independent gap: `EDGARTOOLS_PROD_LOADER` (the
+   role `mdm export`'s mirror writer actually authenticates as, per the
+   `MDM_SNOWFLAKE_SECRET_JSON` secret's `ROLE` field) had **zero grants** on the MDM schema
+   even before checking table existence — `docs/prod-mdm-snowflake-graph-first-load.md`'s
+   "Required Production Objects" grants were only ever written for
+   `EDGARTOOLS_PROD_DEPLOYER`, and nothing carried them over when the export path was
+   standardized onto `EDGARTOOLS_PROD_LOADER` (see the manifest-pipeline-ownership incident
+   above for that same standardization).
+5. **Root cause:** the MDM Snowflake mirror bootstrap (schema + 19 tables + grants to the
+   correct role) was documented in prose but never captured as a committed, re-runnable
+   script — so it silently did not survive the account cutover, unlike every Terraform- or
+   bootstrap-SQL-backed piece of the same cutover.
+
+**Resolution:** wrote `infra/scripts/generate_mdm_mirror_ddl.py`, which reflects the schema
+straight from `edgar_warehouse.mdm.database`'s SQLAlchemy models (the same models the
+Postgres MDM instance is built from) for exactly the 19 tables in
+`edgar_warehouse.mdm.migrations.runtime.MDM_TABLES`, and emits `CREATE TABLE IF NOT EXISTS`
+DDL (`NOW()` defaults rewritten to `CURRENT_TIMESTAMP()` — Snowflake rejects `NOW()` in a
+column `DEFAULT` clause specifically, "Unknown functions NOW, NOW, NOW", even though `NOW()`
+works fine as an ordinary function call) plus additive grants
+(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL/FUTURE TABLES ... TO ROLE EDGARTOOLS_PROD_LOADER`
+— deliberately not `GRANT OWNERSHIP ... REVOKE CURRENT GRANTS`, see the
+manifest-pipeline-ownership incident for why that pattern silently strips unrelated grants).
+Output committed as `infra/snowflake/sql/bootstrap/09_mdm_mirror_schema.sql`. Applied live
+2026-08-09: 19 tables created, `EDGARTOOLS_PROD_LOADER` granted schema USAGE +
+current/future SELECT/INSERT/UPDATE/DELETE; a manual one-off `mdm export` ECS task confirmed
+the fix. `docs/prod-mdm-snowflake-graph-first-load.md` updated to point at the script instead
+of a lost manual session, and to correct the stale `EDGARTOOLS_PROD_DEPLOYER` role reference.
+
+**Lesson:** any provisioning step that isn't Terraform or a committed script does not
+survive an account rebuild, however carefully it was documented in prose — "run this once"
+in a runbook needs a script next to it, not just a description of what an operator did.
 
 ## Dev Terraform/Snowflake go-live blockers 5-whys (partially resolved 2026-07-27)
 
