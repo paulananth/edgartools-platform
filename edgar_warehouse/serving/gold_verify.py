@@ -29,13 +29,22 @@ from typing import Any
 # not yet reflected there. This list is grep-derived from the live dbt
 # models directory, the authoritative source, not copied from those older
 # references.
+# CONSENSUS_ESTIMATES and TRANSCRIPT_EVENTS are intentionally excluded here.
+# Both are pilot-scoped "Explore" products (ERDP-01 / ERDP-04,
+# edgar_warehouse/explore/consensus_estimates.py / transcript_events.py) with
+# no automated pipeline populating them -- transcript_events.py locks its
+# pilot universe to a single CIK (Apple) requiring a manual IR-website
+# pointer/upload, and consensus_estimates.py requires an explicit pilot
+# loader run. Empty is their expected steady state until an operator runs
+# the pilot loader by hand, so they must not gate go-live (snowflake-
+# account-cutover map, ticket 08's disposition). See GOLD_PILOT_TABLES below
+# for the excluded set.
 GOLD_LIVE_TABLES: tuple[str, ...] = (
     "ACCOUNTING_FLAGS",
     "ADVISER_DISCLOSURES",
     "ADVISER_OFFICES",
     "ADV_FUND_COUNT_RECONCILIATION",
     "COMPANY",
-    "CONSENSUS_ESTIMATES",
     "EARNINGS_CALENDAR",
     "EARNINGS_RELEASES",
     "EXECUTIVE_RECORDS",
@@ -50,6 +59,12 @@ GOLD_LIVE_TABLES: tuple[str, ...] = (
     "OWNERSHIP_HOLDINGS",
     "PRIVATE_FUNDS",
     "TICKER_REFERENCE",
+)
+
+# Pilot-scoped gold tables deliberately excluded from GOLD_LIVE_TABLES -- not
+# checked by verify_gold_live at all, not even on a non-blocking basis.
+GOLD_PILOT_TABLES: tuple[str, ...] = (
+    "CONSENSUS_ESTIMATES",
     "TRANSCRIPT_EVENTS",
 )
 

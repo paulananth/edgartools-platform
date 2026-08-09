@@ -1,4 +1,8 @@
-from edgar_warehouse.serving.gold_verify import GOLD_LIVE_TABLES, verify_gold_live
+from edgar_warehouse.serving.gold_verify import (
+    GOLD_LIVE_TABLES,
+    GOLD_PILOT_TABLES,
+    verify_gold_live,
+)
 
 
 class FakeCursor:
@@ -83,6 +87,23 @@ def test_queries_use_the_given_database_and_schema():
         'SELECT COUNT(*) FROM "EDGARTOOLS_PROD"."EDGARTOOLS_GOLD"."COMPANY"' in sql
         for sql in cursor.executed
     )
+
+
+def test_pilot_tables_are_excluded_and_never_checked():
+    # CONSENSUS_ESTIMATES/TRANSCRIPT_EVENTS are intentionally pilot-scoped
+    # with no automated producer -- verify_gold_live must never require them
+    # to be non-empty, even when they're absent from Snowflake entirely.
+    assert set(GOLD_PILOT_TABLES) == {"CONSENSUS_ESTIMATES", "TRANSCRIPT_EVENTS"}
+    assert set(GOLD_PILOT_TABLES).isdisjoint(GOLD_LIVE_TABLES)
+
+    counts = {table: 5 for table in GOLD_LIVE_TABLES}
+    connection = FakeConnection(FakeCursor(counts, errors=set(GOLD_PILOT_TABLES)))
+
+    result = verify_gold_live(connection, database="EDGARTOOLS_PROD")
+
+    assert result.passed is True
+    assert set(result.row_counts) == set(GOLD_LIVE_TABLES)
+    assert set(result.row_counts).isdisjoint(GOLD_PILOT_TABLES)
 
 
 def test_payload_shape():
