@@ -86,6 +86,23 @@ Claude and Codex may work on this repository independently, but they must not sh
 - If overlap is unavoidable, stop and ask for an ownership decision instead of merging assumptions.
 - Do not overwrite, revert, stage, or commit changes created by the other runtime unless explicitly instructed.
 
+## Git/GitHub commit and PR text with backticks
+
+**Never build a `git commit -m`/`gh pr create --body`/`gh pr edit --body` string via an
+inline bash heredoc (`"$(cat <<'EOF' ... EOF)"`) when the text contains backticks or code
+spans.** Write the message to a scratch file first (e.g. with a file-write tool), then pass
+it with `git commit -F <file>` or `gh pr create --body-file <file>` /
+`gh pr edit --body-file <file>`.
+
+**Why:** backtick-quoted spans inside the heredoc body (e.g. `` `EDGARTOOLS_PROD.MDM` ``)
+have been observed to get interpreted as command substitution in this environment even
+with a quoted heredoc delimiter (`<<'EOF'`), which should disable that. The stray commands
+mostly fail harmlessly, but their empty output gets silently spliced into the message and
+the heredoc terminator itself can leak into the final text — producing a mangled commit
+message or PR body that looks fine at a glance. This happened twice in one session (a
+commit message, then a PR body) before being caught. File-based input sidesteps the
+problem entirely.
+
 ## Quick Navigation
 
 | Need | Location |
