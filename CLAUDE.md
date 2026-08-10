@@ -912,14 +912,16 @@ Stage 3 — Gold refresh (single ECS task)
   • SNOWFLAKE_RUN_MANIFEST_TASK picks up the manifest and refreshes EDGARTOOLS_GOLD within 1 min
 ```
 
-**A separate, standalone state machine, `edgartools-prod-bootstrap-batched`,
-does run CIK batches with real parallelism** (`BatchBootstrap` Map,
-`MaxConcurrency=3`) — but it is not part of `load_history`'s call graph at
-all, and as of this writing has **zero executions ever** in prod (confirmed
-via `list-executions`). Treat it as deployed-but-unverified infrastructure,
-not an active throughput lever, until someone actually runs it.
+**`edgartools-prod-bootstrap-batched` (formerly a separate, standalone state
+machine running CIK batches with real parallelism via a `BatchBootstrap`
+Map, `MaxConcurrency=3`) was deleted (state-machine-consolidation wayfinder
+map, ticket 03)** — it was never part of `load_history`'s call graph, had
+**zero executions ever** in prod, and was architecturally superseded by
+`load_history`'s sequential-windowed design, which was built specifically
+to fix a `silver.duckdb` consistency race inherent to
+`bootstrap_batched`'s concurrent-writer/`cik_batches.jsonl` architecture.
 
-There is a second, genuinely-parallel batch pipeline in prod:
+There is a genuinely-parallel batch pipeline in prod:
 `edgartools-prod-silver-mdm-gold` (`BatchSilver` Map, `MaxConcurrency=3`,
 runs `bootstrap-batch --artifact-policy skip`) — this is what the
 `BOOTSTRAP_BATCH_CONCURRENCY`/`bootstrap-batch` invariants below actually
@@ -995,12 +997,15 @@ reachability to the current Snowflake-hosted instance has not been re-verified.)
 
 The `bootstrap-batch`/`BOOTSTRAP_BATCH_CONCURRENCY` bullets below govern
 `edgartools-prod-silver-mdm-gold` (`BatchSilver` Map, confirmed live at
-`MaxConcurrency=3`, runs `bootstrap-batch --artifact-policy skip`) and the
-standalone `edgartools-prod-bootstrap-batched` (`BatchBootstrap` Map, also
-`MaxConcurrency=3`, but **zero executions ever** in prod — unverified,
-don't treat it as an active lever). Neither is `load_history`, which runs
-`bootstrap-next` (a different command) per window at `MaxConcurrency=1` and
-is not controlled by `BOOTSTRAP_BATCH_CONCURRENCY` at all.
+`MaxConcurrency=3`, runs `bootstrap-batch --artifact-policy skip`) — the
+standalone `edgartools-prod-bootstrap-batched` machine that used to also
+run `bootstrap-batch` was deleted (zero executions ever; superseded by
+`load_history`'s sequential-windowed design — see the "Phased Pipeline"
+note above and state-machine-consolidation wayfinder map ticket 03).
+Neither `silver_mdm_gold` nor `bootstrap-batch` is `load_history`, which
+runs `bootstrap-next` (a different command) per window at
+`MaxConcurrency=1` and is not controlled by `BOOTSTRAP_BATCH_CONCURRENCY`
+at all.
 
 - `bootstrap-batch` must NOT be in `GOLD_AFFECTING_COMMANDS` — enforced in `warehouse_orchestrator.py:79`
 - `gold-refresh` must be in `GOLD_AFFECTING_COMMANDS` — it is the sole gold builder in the phased pipeline

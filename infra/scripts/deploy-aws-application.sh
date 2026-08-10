@@ -84,8 +84,6 @@ Options:
   --mdm-graph-limit <n>             Default limit for mdm graph backfill/sync. Default: 200; 0 means no default limit.
   --mdm-seed-universe-tracking-status <status>
                                     tracking_status baked into mdm_seed_universe state machine. Default: bootstrap_pending.
-  --mdm-seed-from-silver-tracking-status <status>
-                                    tracking_status filter for mdm_seed_from_silver (migrate silver→MDM). Default: bootstrap_pending.
   --mdm-graph-rule-version <v>      Default rule_version baked into generation_build state machine. Default: v1.
   --mdm-graph-schema-version <v>    Default schema_version baked into generation_build state machine. Default: v1.
   --mdm-generation-partition-concurrency <n>
@@ -198,7 +196,6 @@ MDM_SILVER_DUCKDB=""
 MDM_RUN_LIMIT=100
 MDM_GRAPH_LIMIT=200
 MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"
-MDM_SEED_FROM_SILVER_TRACKING_STATUS="bootstrap_pending"
 MDM_GRAPH_RULE_VERSION="v1"
 MDM_GRAPH_SCHEMA_VERSION="v1"
 MDM_GENERATION_PARTITION_CONCURRENCY=8
@@ -257,7 +254,6 @@ while [[ $# -gt 0 ]]; do
     --mdm-run-limit) MDM_RUN_LIMIT="${2:?}"; shift 2 ;;
     --mdm-graph-limit) MDM_GRAPH_LIMIT="${2:?}"; shift 2 ;;
     --mdm-seed-universe-tracking-status) MDM_SEED_UNIVERSE_TRACKING_STATUS="${2:?}"; shift 2 ;;
-    --mdm-seed-from-silver-tracking-status) MDM_SEED_FROM_SILVER_TRACKING_STATUS="${2:?}"; shift 2 ;;
     --mdm-graph-rule-version) MDM_GRAPH_RULE_VERSION="${2:?}"; shift 2 ;;
     --mdm-graph-schema-version) MDM_GRAPH_SCHEMA_VERSION="${2:?}"; shift 2 ;;
     --mdm-generation-partition-concurrency) MDM_GENERATION_PARTITION_CONCURRENCY="${2:?}"; shift 2 ;;
@@ -1201,7 +1197,7 @@ task_definition_for_profile() {
 
 task_definition_for_mdm_workflow() {
   case "$1" in
-    mdm_migrate|mdm_check_connectivity|mdm_verify_graph|mdm_counts|mdm_seed_universe|mdm_seed_from_silver) printf '%s\n' "$TASK_DEF_MDM_SMALL_ARN" ;;
+    mdm_migrate|mdm_check_connectivity|mdm_verify_graph|mdm_counts|mdm_seed_universe) printf '%s\n' "$TASK_DEF_MDM_SMALL_ARN" ;;
     mdm_run|mdm_backfill_relationships|mdm_sync_graph) printf '%s\n' "$TASK_DEF_MDM_MEDIUM_ARN" ;;
     *) fail "unknown MDM workflow: $1" ;;
   esac
@@ -1287,7 +1283,6 @@ mdm_workflow_command_expression() {
     mdm_verify_graph) printf '%s\n' "States.Array('mdm', 'verify-graph')" ;;
     mdm_counts) printf '%s\n' "States.Array('mdm', 'counts')" ;;
     mdm_seed_universe) printf '%s\n' "States.Array('mdm', 'seed-universe', '--tracking-status', '${MDM_SEED_UNIVERSE_TRACKING_STATUS}')" ;;
-    mdm_seed_from_silver) printf '%s\n' "States.Array('mdm', 'seed-from-silver', '--tracking-status', '${MDM_SEED_FROM_SILVER_TRACKING_STATUS}')" ;;
     *) fail "unknown MDM workflow: $1" ;;
   esac
 }
@@ -1749,111 +1744,12 @@ pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", en
 PY
 }
 
-write_bootstrap_batched_definition() {
-  local output_file="$1" seed_task_definition_arn="$2" batch_task_definition_arn="$3"
-  python3 - "$output_file" "$CLUSTER_ARN" "$seed_task_definition_arn" "$batch_task_definition_arn" \
-    "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
-    "$BOOTSTRAP_BATCH_CONCURRENCY" <<'PY'
-import json
-import pathlib
-import sys
-
-(
-    output_file,
-    cluster_arn,
-    seed_task_definition_arn,
-    batch_task_definition_arn,
-    container_name,
-    bronze_bucket_name,
-    subnet_json,
-    security_group_json,
-    batch_concurrency,
-) = sys.argv[1:]
-
-subnets = json.loads(subnet_json)
-security_groups = json.loads(security_group_json)
-
-def run_task_state(task_definition_arn, command_expression, interval_seconds):
-    return {
-        "Type": "Task",
-        "Resource": "arn:aws:states:::ecs:runTask.sync",
-        "Parameters": {
-            "LaunchType": "FARGATE",
-            "Cluster": cluster_arn,
-            "TaskDefinition": task_definition_arn,
-            "PropagateTags": "TASK_DEFINITION",
-            "NetworkConfiguration": {
-                "AwsvpcConfiguration": {
-                    "AssignPublicIp": "ENABLED",
-                    "SecurityGroups": security_groups,
-                    "Subnets": subnets,
-                },
-            },
-            "Overrides": {
-                "ContainerOverrides": [{
-                    "Name": container_name,
-                    "Command.$": command_expression,
-                }],
-            },
-        },
-        "Retry": [{
-            "ErrorEquals": ["States.TaskFailed"],
-            "IntervalSeconds": interval_seconds,
-            "BackoffRate": 2.0,
-            "MaxAttempts": 2,
-        }],
-    }
-
-seed = run_task_state(
-    seed_task_definition_arn,
-    "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
-    60,
-)
-seed["Next"] = "BatchBootstrap"
-
-batch = run_task_state(
-    batch_task_definition_arn,
-    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--run-id', $$.Execution.Name)",
-    120,
-)
-batch["End"] = True
-
-definition = {
-    "Comment": "Seed CIK universe then bootstrap companies in parallel batches of 100.",
-    "StartAt": "SeedUniverse",
-    "States": {
-        "SeedUniverse": seed,
-        "BatchBootstrap": {
-            "Type": "Map",
-            "MaxConcurrency": int(batch_concurrency),
-            "ToleratedFailurePercentage": 10,
-            "ItemReader": {
-                "Resource": "arn:aws:states:::s3:getObject",
-                "ReaderConfig": {
-                    "InputType": "JSONL",
-                    "MaxItems": 100000,
-                },
-                "Parameters": {
-                    "Bucket": bronze_bucket_name,
-                    "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_batches.jsonl', $$.Execution.Name)",
-                },
-            },
-            "ItemProcessor": {
-                "ProcessorConfig": {
-                    "Mode": "DISTRIBUTED",
-                    "ExecutionType": "STANDARD",
-                },
-                "StartAt": "RunBatch",
-                "States": {"RunBatch": batch},
-            },
-            "End": True,
-        },
-    },
-}
-
-pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
-PY
-}
+# state-machine-consolidation wayfinder map, ticket 03: write_bootstrap_batched_definition
+# and the bootstrap_batched state machine were removed here. bootstrap_batched had zero
+# executions ever and was architecturally superseded by load_history's sequential-windowed
+# design (see the comment below), which was built specifically to fix a silver.duckdb
+# consistency race inherent to bootstrap_batched's concurrent-writer/DISTRIBUTED-Map
+# architecture. See .scratch/state-machine-consolidation/issues/03-decide-bootstrap-batched-deletion.md.
 
 # Phased pipeline: seed → compute windows → sequential windowed bootstrap → MDM chain → gold → run summary.
 # Replaces the original DISTRIBUTED Map over cik_batches.jsonl with an INLINE Map (MaxConcurrency=1)
@@ -4352,19 +4248,6 @@ print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
 done
 
-bootstrap_definition_file="$(json_file sfn-bootstrap-batched)"
-write_bootstrap_batched_definition "$bootstrap_definition_file" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MEDIUM_ARN"
-bootstrap_state_machine_arn="$(upsert_state_machine bootstrap_batched "$bootstrap_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
-if [[ "$first_workflow" != "true" ]]; then
-  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-fi
-python3 - "bootstrap_batched" "$bootstrap_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
-import json
-import sys
-
-print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
-PY
-
 if [[ "$DEPLOY_MDM" == "true" ]]; then
   # load_history: the recommended way to load 100+ companies.
   # Chains seed → parallel bronze+silver batches → MDM → gold-refresh once.
@@ -4708,7 +4591,7 @@ import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
 
-  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts mdm_seed_universe mdm_seed_from_silver; do
+  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts mdm_seed_universe; do
     task_definition_arn="$(task_definition_for_mdm_workflow "$workflow")"
     command_expression="$(mdm_workflow_command_expression "$workflow")"
     limit_command_expression="$(mdm_workflow_limit_command_expression "$workflow")"
