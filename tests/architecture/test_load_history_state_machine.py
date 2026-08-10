@@ -289,7 +289,6 @@ def test_execution_routing_survives_compute_windows_to_windowed_bootstrap(
         "SeedUniverse",
         "MdmSeedUniverse",
         "ComputeWindows",
-        "Stage0CompanyIdentity",
         "Stage1Parallel",
     ):
         state = states[state_name]
@@ -338,137 +337,6 @@ def test_load_history_has_one_final_gold_refresh_after_mdm_verify(definition: di
 
     order = _linear_order(definition)
     assert order.index("MdmVerify") < order.index("GoldRefresh")
-
-
-# -- Company Identity Pipeline wayfinder map, ticket 05: Stage0CompanyIdentity ---
-
-
-def test_stage0_company_identity_runs_after_compute_windows_before_stage1_parallel(
-    definition: dict,
-) -> None:
-    order = _linear_order(definition)
-    assert "ComputeWindows" in order
-    assert "Stage0CompanyIdentity" in order
-    assert "Stage1Parallel" in order
-    assert order.index("ComputeWindows") < order.index("Stage0CompanyIdentity")
-    assert order.index("Stage0CompanyIdentity") < order.index("Stage1Parallel")
-
-
-def test_reduce_identity_refresh_runs_between_stage0_and_stage1_parallel(
-    definition: dict,
-) -> None:
-    """Company Identity Hydrate Elimination map, ticket 03: a single reducer
-    merges the reference snapshot plus every Stage0CompanyIdentity batch
-    delta into canonical exactly once, replacing the old per-window
-    hydrate+merge round trip."""
-    states = definition["States"]
-    assert states["Stage0CompanyIdentity"]["Next"] == "ReduceIdentityRefresh"
-    reduce_state = states["ReduceIdentityRefresh"]
-    assert reduce_state["Next"] == "Stage1Parallel"
-    cmd = _command_of_state(reduce_state)
-    assert "'reduce-identity-refresh'" in cmd
-    assert "'--run-id', $$.Execution.Name" in cmd
-    assert "'--max-attempts', '3'" in cmd
-    assert reduce_state["Parameters"]["TaskDefinition"] == "arn:wh-large"
-
-
-def test_reduce_identity_refresh_preserves_execution_scoped_state_for_stage1_parallel(
-    definition: dict,
-) -> None:
-    """D-15 bug class: ecs:runTask.sync without ResultPath=null replaces $
-    entirely with the ECS task result, which would destroy
-    $.artifact_policy/$.filing_lookback_years before Stage1Parallel's
-    WindowedBootstrap ItemSelector reads them."""
-    reduce_state = definition["States"]["ReduceIdentityRefresh"]
-    assert reduce_state["ResultPath"] is None
-
-
-def test_reduce_identity_refresh_does_not_add_a_step_functions_retry_envelope(
-    definition: dict,
-) -> None:
-    """The command performs its own bounded reducer-only retry (--max-attempts
-    3); Step Functions must not layer a second, differently-budgeted retry on
-    top or accidentally re-enter Map work on a promotion-conflict retry."""
-    reduce_state = definition["States"]["ReduceIdentityRefresh"]
-    assert reduce_state["Retry"] == [
-        {"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 1, "BackoffRate": 1.0, "MaxAttempts": 1}
-    ]
-
-
-def test_stage0_company_identity_command_shape(definition: dict) -> None:
-    """Company Identity Hydrate Elimination map, ticket 03: delta-then-reduce,
-    not windowed offset/limit -- an explicit --cik-list (from ComputeWindows'
-    cik_batches.jsonl via ItemSelector) plus --identity-refresh-run-id, so
-    bootstrap_fundamentals.py takes its no-hydrate branch instead of loading
-    the entire canonical silver.duckdb per batch."""
-    cmd = _command_of(definition, "Stage0CompanyIdentity")
-    assert "'bootstrap-fundamentals'" in cmd
-    assert "'--mode', 'company-identity'" in cmd
-    assert "'--cik-list'" in cmd
-    assert "'--identity-refresh-run-id'" in cmd
-    assert "'--cik-offset'" not in cmd
-    assert "'--cik-limit'" not in cmd
-
-
-def test_stage0_company_identity_item_selector_wires_parent_run_id(definition: dict) -> None:
-    """Inside a DISTRIBUTED child, $$.Execution.Name is the CHILD execution
-    name, not the parent's -- ReduceIdentityRefresh (and bootstrap_fundamentals.py's
-    own --run-id/--identity-refresh-run-id match check, :86-88) need the PARENT
-    run id, so it must be threaded in via ItemSelector at the parent Map level,
-    not read directly inside each per-batch task."""
-    state = definition["States"]["Stage0CompanyIdentity"]
-    assert state["ItemSelector"] == {
-        "cik_list.$": "$$.Map.Item.Value.cik_list",
-        "identity_refresh_run_id.$": "$$.Execution.Name",
-    }
-
-
-def test_stage0_company_identity_uses_large_task_definition(definition: dict) -> None:
-    """Kept on large (not downgraded to medium alongside the hydrate
-    elimination): load_history's batches are 500 CIKs of full submissions
-    history with include_pagination=True, unlike daily_incremental's bounded
-    daily deltas -- a downgrade should be a separate, measured follow-up."""
-    state = definition["States"]["Stage0CompanyIdentity"]
-    inner = state["ItemProcessor"]["States"]["RunCompanyIdentityBatch"]
-    assert inner["Parameters"]["TaskDefinition"] == "arn:wh-large"
-
-
-def test_stage0_company_identity_is_strict_not_lenient(definition: dict) -> None:
-    """Unlike Branch B's lenient AD-13 pattern (Catch -> proceed anyway), a
-    company-identity failure must abort the run: IS_INSIDER derivation
-    depends on resolved Company entities, so silently proceeding with
-    unresolved company data would defeat this pipeline's purpose.
-
-    release-readiness ticket 86 added a Catch here (a real failure
-    previously wedged sec_fetch_active for 16h instead of releasing it),
-    but strictness is preserved -- the Catch releases the lease and then
-    still fails the execution (SecFetchTaskFailed, a Fail state), it does
-    not route to Stage1Parallel or any other "proceed anyway" state."""
-    state = definition["States"]["Stage0CompanyIdentity"]
-    assert state["Type"] == "Map"
-    assert state["MaxConcurrency"] == 1
-    assert state["ToleratedFailurePercentage"] == 0
-    catch = state["Catch"]
-    assert len(catch) == 1
-    assert catch[0]["ErrorEquals"] == ["States.ALL"]
-    assert catch[0]["Next"] == "ReleaseSecFetchLeaseAfterFailure"
-    assert definition["States"]["ReleaseSecFetchLeaseAfterFailure"]["Next"] == "SecFetchTaskFailed"
-    assert definition["States"]["SecFetchTaskFailed"]["Type"] == "Fail"
-
-
-def test_stage0_company_identity_reads_cik_batches_manifest(definition: dict) -> None:
-    """Reads cik_batches.jsonl (ComputeWindows' pre-batched partition of the
-    same ordered CIK list Branch A's cik_windows.jsonl also derives from),
-    not cik_windows.jsonl directly -- delta-then-reduce batches are CIK lists,
-    not {offset, limit} window descriptors."""
-    state = definition["States"]["Stage0CompanyIdentity"]
-    key_expr = state["ItemReader"]["Parameters"]["Key.$"]
-    assert "cik_batches.jsonl" in key_expr
-    branch_a_key_expr = (
-        definition["States"]["Stage1Parallel"]["Branches"][0]["States"]
-        ["WindowedBootstrap"]["ItemReader"]["Parameters"]["Key.$"]
-    )
-    assert key_expr != branch_a_key_expr
 
 
 # -- Issue 1 / 4: Branch B sequencing -----------------------------------------
@@ -1014,15 +882,17 @@ def test_sec_fetch_lease_read_result_key_matches_the_real_path_resolver(definiti
 
 def test_load_history_sec_fetch_lease_spans_the_whole_windowed_pipeline(definition: dict) -> None:
     """The lease must be held across SeedUniverse, MdmSeedUniverse,
-    Stage0CompanyIdentity, Stage1Parallel/Stage1B, and the ADV/firm-roster
-    chain -- i.e. acquired strictly before all of them and released strictly
-    after all of them, with no path that reaches MdmRun without passing
-    through ReleaseSecFetchLease first."""
+    Stage1Parallel/Stage1B, and the ADV/firm-roster chain -- i.e. acquired
+    strictly before all of them and released strictly after all of them,
+    with no path that reaches MdmRun without passing through
+    ReleaseSecFetchLease first. (Stage0CompanyIdentity/ReduceIdentityRefresh
+    removed -- stage0-stage1-consolidation wayfinder map, ticket 02/04 --
+    Stage1Parallel's WindowedBootstrap now covers the identity capture they
+    used to do as a byproduct of its own submissions capture.)"""
     order = _linear_order(definition)
     assert order.index("AcquireSecFetchLease") < order.index("SeedUniverse")
     assert order.index("SeedUniverse") < order.index("MdmSeedUniverse")
-    assert order.index("MdmSeedUniverse") < order.index("Stage0CompanyIdentity")
-    assert order.index("Stage0CompanyIdentity") < order.index("Stage1Parallel")
+    assert order.index("MdmSeedUniverse") < order.index("Stage1Parallel")
     assert "ReleaseSecFetchLease" in order
     assert order.index("Stage1Parallel") < order.index("ReleaseSecFetchLease")
     assert order.index("ReleaseSecFetchLease") < order.index("MdmRun")
@@ -1030,13 +900,15 @@ def test_load_history_sec_fetch_lease_spans_the_whole_windowed_pipeline(definiti
 
 def test_load_history_previously_uncaught_states_release_lease_on_failure(definition: dict) -> None:
     """release-readiness ticket 86: SeedUniverse/MdmSeedUniverse/
-    ComputeWindows/Stage0CompanyIdentity/Stage1Parallel had no Catch at all
-    -- a real failure in any of them wedged sec_fetch_active for the full
-    16h stale-reclaim window. Deliberately excludes Stage1BEntityFacts/
-    Stage1BPerFiling/Stage1BThirteenF, which AD-13 already routes forward
-    on failure (still reaching ReleaseSecFetchLease on the happy path), and
+    ComputeWindows/Stage1Parallel had no Catch at all -- a real failure in
+    any of them wedged sec_fetch_active for the full 16h stale-reclaim
+    window. Deliberately excludes Stage1BEntityFacts/Stage1BPerFiling/
+    Stage1BThirteenF, which AD-13 already routes forward on failure (still
+    reaching ReleaseSecFetchLease on the happy path), and
     FetchAdvBulk/IngestFirmRosterSources etc., which already had their own
-    Catch (adv_bulk_fetch_catch, unchanged by this ticket)."""
+    Catch (adv_bulk_fetch_catch, unchanged by this ticket). (Stage0Company
+    Identity/ReduceIdentityRefresh no longer exist in this state machine --
+    stage0-stage1-consolidation wayfinder map, ticket 02/04.)"""
     states = definition["States"]
     expected_catch = [
         {"ErrorEquals": ["States.ALL"], "ResultPath": "$.sec_fetch_task_error", "Next": "ReleaseSecFetchLeaseAfterFailure"}
@@ -1045,8 +917,6 @@ def test_load_history_previously_uncaught_states_release_lease_on_failure(defini
         "SeedUniverse",
         "MdmSeedUniverse",
         "ComputeWindows",
-        "Stage0CompanyIdentity",
-        "ReduceIdentityRefresh",
         "Stage1Parallel",
     ):
         assert states[previously_uncaught_state]["Catch"] == expected_catch
