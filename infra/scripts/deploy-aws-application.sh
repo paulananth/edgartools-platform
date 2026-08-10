@@ -2386,7 +2386,22 @@ reduce_identity_refresh["Catch"] = sec_fetch_task_catch()
 # concurrently). Matches the already-working DISTRIBUTED pattern used by
 # write_ownership_mdm_gold_definition's batch_map (Mode: DISTRIBUTED, ExecutionType:
 # STANDARD) elsewhere in this script.
-per_window = ecs_state(wh_medium_arn,
+#
+# wh_large_arn, not wh_medium_arn (2026-08-10, live full-universe task #35): a 500-CIK
+# window's `bootstrap-next --silver-only` OOM'd (exit 137) twice in a row on wh_medium_arn
+# (4096MB), exhausting the Map's retry budget and failing the whole load_history execution.
+# Root cause: _capture_submission_bronze_snapshots eagerly materializes every CIK's full
+# submissions.json + all pagination-file payloads into one list before any of it is applied
+# to silver, and nothing is released as each snapshot is consumed -- the list (and every
+# payload in it) stays alive through the entire silver-apply loop and the subsequent
+# artifact-fetch phase. CloudWatch confirmed a steady ~600MB -> ~2.4GB climb over the task's
+# ~80-minute lifetime, not a spike -- consistent with accumulation, not a one-time buffer.
+# This is a stopgap matching the ComputeWindows/Stage0CompanyIdentity/gold-refresh/
+# seed-universe precedent above, not a fix for the underlying accumulation -- the real fix
+# (stream bronze-capture into silver-apply per CIK instead of materializing the whole
+# window first) is tracked separately, since it requires restructuring the wave-based
+# concurrent-fetch design without losing its throughput.
+per_window = ecs_state(wh_large_arn,
     "States.Array('bootstrap-next', '--silver-only', '--cik-limit', States.Format('{}', $.window_limit), '--cik-offset', States.Format('{}', $.window_offset), '--tracking-status-filter', 'active,bootstrap_pending', '--artifact-policy', States.Format('{}', $.artifact_policy), '--filing-lookback-years', States.Format('{}', $.filing_lookback_years), '--run-id', $$.Execution.Name)",
     is_end=True)
 
