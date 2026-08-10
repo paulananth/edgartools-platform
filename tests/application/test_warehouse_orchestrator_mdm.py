@@ -32,7 +32,12 @@ def test_hydrate_silver_database_from_remote_storage(tmp_path):
         identity="dev@example.com",
         runtime_mode="bronze_capture",
     )
-    with patch.object(warehouse_orchestrator, "read_bytes", return_value=b"duckdb-bytes"):
+    def fake_download_file(relative_path, local_path, chunk_size=8 * 1024 * 1024):
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(b"duckdb-bytes")
+        return str(local_path)
+
+    with patch.object(StorageLocation, "download_file", side_effect=fake_download_file):
         warehouse_orchestrator._hydrate_silver_database_from_storage(context)
 
     assert (Path(context.silver_root.join("silver", "sec", "silver.duckdb"))).read_bytes() == b"duckdb-bytes"
