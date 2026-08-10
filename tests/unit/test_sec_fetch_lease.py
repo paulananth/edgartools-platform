@@ -257,6 +257,113 @@ def test_acquire_sec_fetch_lease_command_uses_16h_staleness_not_the_20h_default(
         db.close()
 
 
+def test_lease_command_context_repoints_storage_and_silver_root_to_leases_subpath(tmp_path) -> None:
+    """Root-cause fix for task #35's OOM: lease commands must never hydrate
+    or publish the full canonical silver.duckdb (1.5GB+ and growing) just to
+    touch the tiny pipeline_run_lease table. _lease_command_context() must
+    repoint storage_root/silver_root at an isolated "leases" subpath, and
+    must leave every other field (bronze_root, snowflake_export_root, etc)
+    untouched."""
+    context = _context(tmp_path)
+
+    leased = warehouse_orchestrator._lease_command_context(context)
+
+    assert leased.storage_root.root == f"{context.storage_root.root}/leases"
+    assert leased.silver_root.root == f"{context.silver_root.root}/leases"
+    assert leased.bronze_root is context.bronze_root
+    assert leased.snowflake_export_root is context.snowflake_export_root
+    assert leased.environment_name == context.environment_name
+    assert leased.identity == context.identity
+    assert leased.runtime_mode == context.runtime_mode
+
+
+def test_acquire_sec_fetch_lease_end_to_end_never_touches_main_silver_database(tmp_path) -> None:
+    """Full run_command()-level path (not just the _capture_bronze_raw SQL
+    block covered above): acquiring the lease must not create or touch
+    <silver_root>/silver/sec/silver.duckdb at all -- only the isolated
+    <silver_root>/leases/silver/sec/silver.duckdb."""
+    from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
+
+    context = _context(tmp_path)
+    main_db_path = Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
+    lease_db_path = Path(f"{context.silver_root.root}/leases").joinpath("silver", "sec", "silver.duckdb")
+
+    assert "acquire-sec-fetch-lease" in warehouse_orchestrator.LEASE_ONLY_COMMANDS
+    payload = warehouse_orchestrator._execute_warehouse_bronze_capture(
+        context=context,
+        command_name="acquire-sec-fetch-lease",
+        arguments={"run_id": "e2e-run"},
+    )
+
+    assert payload["status"] == "ok"
+    assert not main_db_path.exists()
+    assert lease_db_path.exists()
+
+    lease_result_rel = default_path_resolver().sec_fetch_lease_path("e2e-run")
+    result = json.loads(Path(context.bronze_root.join(lease_result_rel)).read_text())
+    assert result == {"lease_acquired": True, "held_by_run_id": "e2e-run"}
+
+
+def test_release_sec_fetch_lease_end_to_end_uses_leases_subpath_too(tmp_path) -> None:
+    context = _context(tmp_path)
+    main_db_path = Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
+
+    warehouse_orchestrator._execute_warehouse_bronze_capture(
+        context=context,
+        command_name="acquire-sec-fetch-lease",
+        arguments={"run_id": "e2e-run"},
+    )
+    payload = warehouse_orchestrator._execute_warehouse_bronze_capture(
+        context=context,
+        command_name="release-sec-fetch-lease",
+        arguments={"run_id": "e2e-run"},
+    )
+
+    assert not main_db_path.exists()
+    assert payload["status"] == "ok"
+
+    # The lease must actually be free afterward -- re-open the isolated
+    # lease store (not the main silver.duckdb) and check directly.
+    from edgar_warehouse.silver_store import SilverDatabase
+
+    lease_db_path = Path(f"{context.silver_root.root}/leases").joinpath("silver", "sec", "silver.duckdb")
+    db = SilverDatabase(str(lease_db_path))
+    try:
+        held = db.get_pipeline_run_lease(_LEASE_NAME)
+        assert held["status"] == "idle"
+    finally:
+        db.close()
+
+
+def test_non_lease_command_does_not_get_repointed(tmp_path, monkeypatch) -> None:
+    """Sanity check: only the four lease commands get repointed -- a normal
+    data-writing command must still hydrate/publish the real silver.duckdb,
+    not silently get redirected to the leases subpath too."""
+    context = _context(tmp_path)
+    calls: list[str] = []
+    original = warehouse_orchestrator._lease_command_context
+
+    def spy(ctx):
+        calls.append("called")
+        return original(ctx)
+
+    monkeypatch.setattr(warehouse_orchestrator, "_lease_command_context", spy)
+
+    assert "bootstrap-next" not in warehouse_orchestrator.LEASE_ONLY_COMMANDS
+    try:
+        warehouse_orchestrator._execute_warehouse_bronze_capture(
+            context=context,
+            command_name="bootstrap-next",
+            arguments={"run_id": "e2e-run", "cik_list": []},
+        )
+    except Exception:
+        # bootstrap-next may fail for reasons unrelated to this test (e.g. no
+        # CIKs resolved) -- only the repoint-guard behavior is under test.
+        pass
+
+    assert calls == []
+
+
 def test_sec_fetch_lease_is_independent_of_identity_refresh_lease(tmp_path) -> None:
     """The two leases must never collide -- holding one must not block the
     other, and they must be distinct rows/names entirely."""

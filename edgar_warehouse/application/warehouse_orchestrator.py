@@ -164,6 +164,46 @@ SEC_FETCH_LEASE_NAME = "sec_fetch_active"
 # process (the 18h Identity Backstop Sweep bound).
 SEC_FETCH_LEASE_STALE_AFTER_SECONDS = 16 * 3600
 
+# These four commands touch nothing but the pipeline_run_lease table (a
+# handful of rows). Routing them through the normal hydrate/merge/publish
+# path against the full canonical silver.duckdb (1.5GB+ as of 2026-08 and
+# growing) downloads and re-uploads the entire monolith, plus a full
+# protected-table merge scan across all 31 tables, just to flip one row --
+# confirmed live to OOM a 4096MB task (task #35's first load_history
+# attempt, 2026-08-09): hydration and the merge scan of every other table
+# succeeded, and the kill landed during/after re-uploading the merged
+# canonical file. _lease_command_context() repoints these commands at a
+# separate, tiny silver.duckdb under a "leases" prefix instead -- same
+# schema (SilverDatabase creates every table, just empty ones here), same
+# acquire/release/get/mark SQL (edgar_warehouse/silver_store.py, unchanged),
+# so the lease's atomicity and stale-reclaim semantics are identical; only
+# the file being downloaded/merged/uploaded is now KB instead of GB.
+LEASE_ONLY_COMMANDS = frozenset(
+    {
+        "acquire-sec-fetch-lease",
+        "release-sec-fetch-lease",
+        "acquire-identity-refresh-lease",
+        "release-identity-refresh-lease",
+    }
+)
+
+
+def _lease_command_context(context: WarehouseCommandContext) -> WarehouseCommandContext:
+    """Repoint storage_root/silver_root at a small, lease-only silver.duckdb.
+
+    Every other root (bronze_root, snowflake_export_root) is left untouched
+    -- lease commands don't touch bronze or Snowflake export at all, and
+    lease_result.json still needs to land in the normal bronze location the
+    Step Functions Choice state reads it from.
+    """
+    import dataclasses
+
+    return dataclasses.replace(
+        context,
+        storage_root=StorageLocation(f"{context.storage_root.root}/leases"),
+        silver_root=StorageLocation(f"{context.silver_root.root}/leases"),
+    )
+
 # load_history's tracking-status contract (data-architecture Issue 2): compute-windows,
 # bootstrap-next (via the explicit --tracking-status-filter the load_history state machine
 # passes), and bootstrap-fundamentals's CIK resolution must all query the SAME combined status
@@ -396,6 +436,9 @@ def _execute_warehouse_bronze_capture(
     command_name: str,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
+    if command_name in LEASE_ONLY_COMMANDS:
+        context = _lease_command_context(context)
+
     now = datetime.now(UTC)
     run_id = _resolve_run_id(arguments)
     command_path = command_name.replace("_", "-")

@@ -486,6 +486,42 @@ def test_acquire_identity_refresh_lease_command_writes_success_to_s3(tmp_path) -
         db.close()
 
 
+def test_acquire_identity_refresh_lease_end_to_end_never_touches_main_silver_database(tmp_path) -> None:
+    """Same root cause and fix as the sec_fetch_active lease (task #35's
+    OOM, see tests/unit/test_sec_fetch_lease.py): acquire/release-identity-
+    refresh-lease must also be repointed at the isolated leases subpath by
+    _execute_warehouse_bronze_capture, not just acquire/release-sec-fetch-
+    lease -- both pairs share the exact same dispatch-before-hydrate bug."""
+    from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
+
+    context = _context(tmp_path)
+    main_db_path = Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
+    lease_db_path = Path(f"{context.silver_root.root}/leases").joinpath("silver", "sec", "silver.duckdb")
+
+    assert "acquire-identity-refresh-lease" in warehouse_orchestrator.LEASE_ONLY_COMMANDS
+    assert "release-identity-refresh-lease" in warehouse_orchestrator.LEASE_ONLY_COMMANDS
+
+    payload = warehouse_orchestrator._execute_warehouse_bronze_capture(
+        context=context,
+        command_name="acquire-identity-refresh-lease",
+        arguments={"mode": "daily", "run_id": "e2e-run"},
+    )
+    assert payload["status"] == "ok"
+    assert not main_db_path.exists()
+    assert lease_db_path.exists()
+
+    lease_result_rel = default_path_resolver().identity_refresh_lease_path("e2e-run")
+    result = json.loads(Path(context.bronze_root.join(lease_result_rel)).read_text())
+    assert result["lease_acquired"] is True
+
+    warehouse_orchestrator._execute_warehouse_bronze_capture(
+        context=context,
+        command_name="release-identity-refresh-lease",
+        arguments={"run_id": "e2e-run"},
+    )
+    assert not main_db_path.exists()
+
+
 def test_pipeline_run_lease_backstop_overdue_persists_until_a_backstop_run_releases(tmp_path) -> None:
     """A deferred 'backstop' acquire marks backstop_overdue; only a subsequent
     'backstop'-mode release clears it -- an intervening 'daily' release must not
