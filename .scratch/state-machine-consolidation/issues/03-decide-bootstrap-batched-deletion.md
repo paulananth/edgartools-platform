@@ -96,3 +96,21 @@ directly):
    not bundled silently into a routine `deploy-aws-application.sh` run.
 8. Run the full test suite green before merging, per this repo's standing
    convention for any change touching production orchestration.
+
+## Implementation status (2026-08-10)
+
+Code-side checklist (items 1-4, 8) landed in
+[PR #397](https://github.com/paulananth/edgartools-platform/pull/397),
+merged to `main`. Live AWS deletion (items 5-7) completed the same day:
+rollback snapshot captured to
+`.scratch/state-machine-consolidation/rollback-snapshots/bootstrap-batched-definition-snapshot-20260810.json`,
+zero running executions confirmed first,
+`edgartools-prod-bootstrap-batched` deleted via
+`aws stepfunctions delete-state-machine` (confirmed `DELETING`), and its
+ARN entry removed from `infra/aws-dev-application.json` (the only one of
+the two registry files tracked in git — `infra/aws-prod-application.json`
+is gitignored, edited locally only). Live-checked
+`edgartools-dev-bootstrap-batched` first: it no longer exists at all
+(`StateMachineDoesNotExist`), consistent with CLAUDE.md's note that
+AWS-side dev infrastructure, including Step Functions, was decommissioned
+before this ticket. Ticket fully closed out.
