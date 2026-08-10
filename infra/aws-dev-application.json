@@ -35,7 +35,6 @@
     "catch_up_daily_form_index": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-catch-up-daily-form-index",
     "gold_refresh": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-gold-refresh",
     "seed_universe": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-seed-universe",
-    "bootstrap_batched": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-bootstrap-batched",
     "load_history": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-load-history",
     "bootstrap": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-bootstrap",
     "daily_incremental": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-daily-incremental",
@@ -50,8 +49,7 @@
     "mdm_sync_graph": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-mdm-sync-graph",
     "mdm_verify_graph": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-mdm-verify-graph",
     "mdm_counts": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-mdm-counts",
-    "mdm_seed_universe": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-mdm-seed-universe",
-    "mdm_seed_from_silver": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-mdm-seed-from-silver"
+    "mdm_seed_universe": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-mdm-seed-universe"
   },
   "mdm": {
     "image_ref": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:12c2c45e1e3abdbeb82df5a5f93c3c8ffa7cb78cfa17ba1ba11a23f40b7e30ee",

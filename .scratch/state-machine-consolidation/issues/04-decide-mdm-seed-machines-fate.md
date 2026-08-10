@@ -108,3 +108,22 @@ share the same eventual implementation window (both are AWS-destructive
 cleanup items gated on an explicit go-ahead, not routine deploy output) —
 worth batching into one implementation pass when that's requested, though
 this map itself only decides, per the Destination.
+
+## Implementation status (2026-08-10)
+
+Batched into the same implementation pass as ticket 03, as anticipated
+above. Code-side checklist (items 1-4, 7) landed in
+[PR #397](https://github.com/paulananth/edgartools-platform/pull/397),
+merged to `main`. Live AWS deletion (items 5-6) completed the same day:
+rollback snapshot captured to
+`.scratch/state-machine-consolidation/rollback-snapshots/mdm-seed-from-silver-definition-snapshot-20260810.json`,
+zero running executions confirmed first,
+`edgartools-prod-mdm-seed-from-silver` deleted via
+`aws stepfunctions delete-state-machine` (confirmed `DELETING`), and its
+ARN entry removed from `infra/aws-dev-application.json` (the only one of
+the two registry files tracked in git). Live-checked
+`edgartools-dev-mdm-seed-from-silver` first: it no longer exists at all
+(`StateMachineDoesNotExist`), consistent with CLAUDE.md's note that
+AWS-side dev infrastructure, including Step Functions, was decommissioned
+before this ticket. `mdm_seed_universe` was left fully untouched, per the
+keep decision above. Ticket fully closed out.
