@@ -233,7 +233,10 @@ class EdgartoolsFilingGatewayTests(unittest.TestCase):
         self.assertEqual(len(result["raw_writes"]), 1)
         self.assertNotIn("cached", result["raw_writes"][0])
 
-    def test_exact_raw_bytes_reuse_bronze_but_different_bytes_fail_closed(self) -> None:
+    def test_exact_raw_bytes_reuse_bronze_register_only_no_refetch(self) -> None:
+        """Register-only pass (fresh DB, bronze already has the exact bytes):
+        the bronze-recovery path (2026-08-10) must read the existing object
+        back rather than calling download_bytes again."""
         accession = "0000320193-26-000013"
         url = "https://www.sec.gov/Archives/edgar/data/320193/primary.xml"
         primary = _FakeAttachment(
@@ -252,18 +255,42 @@ class EdgartoolsFilingGatewayTests(unittest.TestCase):
             )
             artifact_path = first["raw_writes"][0]["path"]
             os.utime(artifact_path, ns=(1_000_000_000, 1_000_000_000))
-            bronze_filing_artifacts.fetch_filing_artifacts(
+            register_only_download = Mock(side_effect=AssertionError("must not re-fetch a bronze-recovered document"))
+            second = bronze_filing_artifacts.fetch_filing_artifacts(
                 context=context, db=_ArtifactDb(), accession_number=accession,
-                sync_run_id="register-only", download_bytes=Mock(return_value=exact),
+                sync_run_id="register-only", download_bytes=register_only_download,
                 get_filing=Mock(return_value=filing), force=False,
             )
             self.assertEqual(Path(artifact_path).read_bytes(), exact)
             self.assertEqual(Path(artifact_path).stat().st_mtime_ns, 1_000_000_000)
+            self.assertEqual(second["bronze_recovered_count"], 1)
+            register_only_download.assert_not_called()
+
+    def test_exact_raw_bytes_force_repair_with_different_bytes_fail_closed(self) -> None:
+        """force=True is a repair run -- bronze-recovery is deliberately
+        gated on `not force`, so a genuine re-fetch always happens and a real
+        content mismatch still fails closed exactly as before."""
+        accession = "0000320193-26-000014"
+        url = "https://www.sec.gov/Archives/edgar/data/320193/primary.xml"
+        primary = _FakeAttachment(
+            sequence_number="1", document="primary.xml", document_type="4",
+            description="Primary", url=url, content=AssertionError("must not read content"),
+        )
+        filing = _FakeFiling(_FakeAttachments([primary]))
+        exact = b"<ownershipDocument>exact raw SEC bytes</ownershipDocument>"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
+            bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context, db=_ArtifactDb(), accession_number=accession,
+                sync_run_id="first", download_bytes=Mock(return_value=exact),
+                get_filing=Mock(return_value=filing), force=False,
+            )
             with self.assertRaises(WarehouseRuntimeError):
                 bronze_filing_artifacts.fetch_filing_artifacts(
                     context=context, db=_ArtifactDb(), accession_number=accession,
                     sync_run_id="conflict", download_bytes=Mock(return_value=exact + b"!"),
-                    get_filing=Mock(return_value=filing), force=False,
+                    get_filing=Mock(return_value=filing), force=True,
                 )
 
 

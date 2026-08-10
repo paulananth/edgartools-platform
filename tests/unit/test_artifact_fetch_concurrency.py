@@ -250,7 +250,15 @@ class ArtifactFetchConcurrencyTests(unittest.TestCase):
         immutable-content conflict (ticket 74's exact failure mode: a stale
         object already exists at the same key with different bytes). The
         resulting exception must classify identically to today's sequential
-        behavior, and sec_filing_attachment must never see a partial merge."""
+        behavior, and sec_filing_attachment must never see a partial merge.
+
+        force=True (an operator repair run): the bronze-recovery path
+        (fetch_filing_artifacts's no-DB-row fast path added for the
+        crash-retry case) is deliberately gated on `not force`, so this run
+        goes through the real fetch+write path for every document, exactly
+        as it always has -- forcing the genuine write_immutable_bytes
+        conflict this test exists to exercise, not a mocked stand-in.
+        """
         accession = "0000320193-26-000006"
         n = 5
         cik = 320193
@@ -283,7 +291,7 @@ class ArtifactFetchConcurrencyTests(unittest.TestCase):
                         sync_run_id="run-1",
                         download_bytes=_payload_downloader(payloads),
                         get_filing=lambda acc: _make_filing(n),
-                        force=False,
+                        force=True,
                     )
 
         self.assertIn("already exists with different content", str(ctx.exception))
@@ -292,6 +300,60 @@ class ArtifactFetchConcurrencyTests(unittest.TestCase):
         # Fail-closed: no partial merge into sec_filing_attachment, matching
         # the sequential loop's invariant exactly.
         self.assertEqual(db.merged_rows, [])
+
+    def test_stale_object_with_no_db_row_is_bronze_recovered_not_flagged(self) -> None:
+        """Companion to the force=True test above: under the ordinary
+        force=False path, content already sitting at a document's canonical
+        bronze key with no DB row is now trusted and recovered rather than
+        re-fetched -- a deliberate behavior change (bronze-recovery ticket,
+        2026-08-10). In real production this is safe because
+        write_immutable_bytes is the only writer to a canonical bronze key
+        and enforces content-identity atomically at write time, so "content
+        exists at this key" already implies "this is the one accepted
+        payload for it" -- the only way this test's synthetic
+        `storage.write_bytes` bypass could happen for real is out-of-band
+        drift (ticket 87/93), which is already tolerated elsewhere in this
+        pipeline (isolated per-document, not fatal). The tradeoff: this path
+        no longer re-detects that drift itself -- it now surfaces via the
+        `artifact_bronze_recovered` event instead of a raised conflict."""
+        accession = "0000320193-26-000006"
+        n = 5
+        cik = 320193
+        recovered_document = "doc2.htm"
+        payloads = {f"doc{i}.htm": f"content-{i}".encode() for i in range(n)}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            storage = StorageLocation(tmp)
+            specs = default_capture_spec_factory()
+            existing_spec = specs.filing_document(
+                cik=cik, accession_number=accession, document_name=recovered_document, is_primary=False,
+            )
+            existing_bytes = b"already-captured-content"
+            storage.write_bytes(existing_spec.relative_path, existing_bytes)
+
+            db = _ArtifactDb(cik=cik, form="10-K")
+            context = SimpleNamespace(bronze_root=storage, identity="tester@example.com")
+            fetched_documents: list[str] = []
+
+            def _download(url: str, identity: str) -> bytes:
+                name = url.rsplit("/", 1)[-1]
+                fetched_documents.append(name)
+                return payloads[name]
+
+            result = bronze_filing_artifacts.fetch_filing_artifacts(
+                context=context,
+                db=db,
+                accession_number=accession,
+                sync_run_id="run-1",
+                download_bytes=_download,
+                get_filing=lambda acc: _make_filing(n),
+                force=False,
+            )
+
+        self.assertNotIn(recovered_document, fetched_documents)
+        self.assertEqual(result["bronze_recovered_count"], 1)
+        self.assertEqual(result["attachment_count"], n)
+        self.assertEqual(len(db.merged_rows), n)
 
     def test_worker_pool_bounded_by_pending_document_count(self) -> None:
         """A single-document accession (the common case -- most ownership
