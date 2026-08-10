@@ -597,6 +597,17 @@ def test_compute_windows_uses_large_task_definition(definition: dict) -> None:
     assert definition["States"]["ComputeWindows"]["Parameters"]["TaskDefinition"] == "arn:wh-large"
 
 
+def test_seed_universe_uses_large_task_definition(definition: dict) -> None:
+    """2026-08-09: task #35's first full-universe load_history execution
+    OOM'd (exit 137) on SeedUniverse running wh_medium_arn -- seed-universe's
+    run_command() dispatch unconditionally hydrates the full canonical
+    silver.duckdb (1.5GB+ and growing, the same file whose growth already
+    caused ComputeWindows/Stage0CompanyIdentity's OOMs above) before its own
+    db.get_active_ciks()/tracking-status logic runs. Moved to wh_large_arn to
+    match that established precedent."""
+    assert definition["States"]["SeedUniverse"]["Parameters"]["TaskDefinition"] == "arn:wh-large"
+
+
 def test_compute_windows_command_includes_total_cik_limit(definition: dict) -> None:
     """ComputeWindows always passes an explicit --total-cik-limit (0 = no limit sentinel
     when the caller omits $.total_cik_limit) so operators can bound a load_history run to

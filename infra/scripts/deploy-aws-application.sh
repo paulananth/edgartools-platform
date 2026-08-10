@@ -2046,7 +2046,18 @@ invalid_force_input = {
 # touch MDM (data-architecture Issue 2: this state's old comment claimed it "enrols CIKs
 # into MDM", which was never true — it calls warehouse `seed-universe`, not
 # `mdm seed-universe`). MDM enrollment is the next state, MdmSeedUniverse.
-seed = ecs_state(wh_medium_arn,
+# wh_large_arn, not wh_medium_arn (2026-08-09, same OOM class as Stage0CompanyIdentity/
+# ComputeWindows above and gold-build-memory-reliability ticket 03's run_wh): live-observed
+# exit 137 "OutOfMemoryError: container killed due to memory usage" on wh_medium_arn (4096MB)
+# during task #35's full-universe load_history run -- seed-universe's run_command() dispatch
+# unconditionally hydrates the full canonical silver.duckdb (1.5GB+ and growing, same file
+# whose growth already caused the other three incidents) before its own db.get_active_ciks()/
+# _seed_silver_tracking_status() logic runs. Unlike the acquire/release-*-lease commands fixed
+# the same day (edgar_warehouse/application/warehouse_orchestrator.py's LEASE_ONLY_COMMANDS),
+# seed-universe genuinely needs the real canonical universe data, so it can't be repointed at
+# an isolated store -- more headroom is the correct fix here, matching the established
+# precedent for every other command that legitimately needs the full file.
+seed = ecs_state(wh_large_arn,
     "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
     next_state="MdmSeedUniverse", retry_secs=60)
 # ResultPath: null passes the original SM input (e.g. {"window_size": 25}) unchanged to the
@@ -3046,7 +3057,11 @@ def sec_fetch_task_catch():
 # All workflows except daily_incremental seed the universe first so any
 # bootstrap_pending CIKs are enrolled before the main pipeline step runs.
 if workflow_name != "daily_incremental":
-    seed_universe = ecs_state(wh_medium_arn,
+    # wh_large_arn, not wh_medium_arn -- same seed-universe OOM fixed in
+    # write_load_history_definition (2026-08-09, task #35's live exit-137 on
+    # wh_medium_arn); identical command, identical unconditional full-canonical-
+    # silver.duckdb hydrate, so this state machine is equally exposed.
+    seed_universe = ecs_state(wh_large_arn,
         "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
         next_state="RunWarehouseTask", retry_secs=60)
     # sec_fetch_active lease (release-readiness ticket 84): SeedUniverse
@@ -3677,7 +3692,11 @@ mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next
 # parity but must never block gold-refresh, so a verify failure falls through.
 gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
 
-seed_universe = ecs_state(wh_medium_arn,
+# wh_large_arn, not wh_medium_arn -- same seed-universe OOM fixed in
+# write_load_history_definition (2026-08-09, task #35's live exit-137 on
+# wh_medium_arn); identical command, identical unconditional full-canonical-
+# silver.duckdb hydrate, so this state machine is equally exposed.
+seed_universe = ecs_state(wh_large_arn,
     "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
     next_state="SeedSilverBatches", retry_secs=60)
 
