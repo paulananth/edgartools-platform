@@ -479,10 +479,7 @@ def test_compute_windows_total_cik_limit_bounds_universe():
             sync_run_id="test-run-limit",
         )
 
-    from edgar_warehouse.infrastructure.dataset_path_catalog import (
-        default_capture_spec_factory,
-        default_path_resolver,
-    )
+    from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
     windows_rel = default_path_resolver().cik_windows_path("test-run-limit")
     snapshot_rel = default_path_resolver().cik_snapshot_path("test-run-limit")
 
@@ -495,17 +492,13 @@ def test_compute_windows_total_cik_limit_bounds_universe():
     assert len(snapshot_lines) == 4, f"Expected snapshot capped to 4 CIKs, got {len(snapshot_lines)}"
     assert [json.loads(line)["cik"] for line in snapshot_lines] == [100, 200, 300, 400]
 
-    # Company Identity Hydrate Elimination map, ticket 03: compute-windows now
-    # also pre-batches the same (capped) ordered CIK list for
-    # Stage0CompanyIdentity's delta-then-reduce Map, using the identical
-    # window_size step so the Map's actual batches and the reducer's declared
-    # batches (via metrics["_identity_refresh_batches"]) can never diverge.
-    batches_rel = default_capture_spec_factory().cik_universe_batches("test-run-limit").relative_path
-    batches_lines = [line for line in written[batches_rel].splitlines() if line.strip()]
-    assert len(batches_lines) == 2, f"Expected 2 batches for 4 (capped) CIKs / size=3, got {len(batches_lines)}"
-    assert json.loads(batches_lines[0])["cik_list"] == "100,200,300"
-    assert json.loads(batches_lines[1])["cik_list"] == "400"
-    assert metrics["_identity_refresh_batches"] == [[100, 200, 300], [400]]
+    # stage0-stage1-consolidation wayfinder map, ticket 02/04: compute-windows
+    # no longer pre-batches cik_batches.jsonl or declares
+    # metrics["_identity_refresh_batches"] -- Stage0CompanyIdentity/
+    # ReduceIdentityRefresh, their only consumers, were removed from
+    # load_history entirely.
+    assert "_identity_refresh_batches" not in metrics
+    assert "cik_universe_path" not in metrics
 
     assert metrics["cik_count"] == 4
     assert metrics["window_count"] == 2
@@ -595,22 +588,25 @@ def test_write_run_summary_empty_windows_raises():
 
 
 # ---------------------------------------------------------------------------
-# Company Identity Hydrate Elimination map, ticket 03: compute-windows joins
-# compute-identity-refresh-window's persist_run_manifest publish special-case
-# (warehouse_orchestrator.py:656) instead of the normal full-canonical
-# publish, so its reference-data sync and pre-batched CIK universe are
-# captured as an immutable run manifest + reference snapshot for
-# ReduceIdentityRefresh to merge -- exercised end-to-end (real local
-# SilverDatabase + StorageLocation, not just the _capture_bronze_raw-level
-# metrics assertions above) because a wiring gap here would silently drop
-# company_tickers/company_tickers_exchange data for every load_history run.
+# stage0-stage1-consolidation wayfinder map, ticket 02/04: compute-windows no
+# longer joins compute-identity-refresh-window's persist_run_manifest publish
+# special-case (warehouse_orchestrator.py:699) -- Stage0CompanyIdentity/
+# ReduceIdentityRefresh, the only thing that used to merge that run manifest
+# + reference snapshot into canonical, were removed from load_history
+# entirely (Stage1Parallel's WindowedBootstrap already writes the identical
+# sec_company rows as a byproduct of its own capture). compute-windows now
+# falls through to the normal full-canonical publish, so its once-per-run
+# reference-data sync (company_tickers/company_tickers_exchange) lands in
+# canonical on its own. Exercised end-to-end (real local SilverDatabase +
+# StorageLocation, not just the _capture_bronze_raw-level metrics assertions
+# above) because a wiring gap here would silently drop that data for every
+# load_history run -- exactly the gap found while planning this removal.
 # ---------------------------------------------------------------------------
 
 
-def test_compute_windows_publishes_identity_refresh_run_manifest_not_full_canonical(
+def test_compute_windows_publishes_reference_data_directly_to_canonical(
     tmp_path, monkeypatch,
 ) -> None:
-    import json
     from pathlib import Path
     from unittest.mock import patch
 
@@ -652,37 +648,61 @@ def test_compute_windows_publishes_identity_refresh_run_manifest_not_full_canoni
             return exchange_payload
         raise AssertionError(f"unexpected reference URL: {url}")
 
-    with patch.object(warehouse_orchestrator, "_download_sec_bytes", side_effect=fake_download):
+    # _publish_silver_database_if_remote no-ops (returns None) for a
+    # non-remote StorageLocation -- this test's tmp_path storage_root -- so
+    # it can't itself prove the normal (not special-cased) publish path ran.
+    # Spy on it directly: this is the actual code change under test (removing
+    # "compute-windows" from warehouse_orchestrator.py:699's special-case
+    # tuple), independent of what a remote (S3) canonical would do with it.
+    with (
+        patch.object(warehouse_orchestrator, "_download_sec_bytes", side_effect=fake_download),
+        patch.object(
+            warehouse_orchestrator,
+            "_publish_silver_database_with_retry",
+            wraps=warehouse_orchestrator._publish_silver_database_with_retry,
+        ) as publish_spy,
+    ):
         warehouse_orchestrator._execute_warehouse_bronze_capture(
             context=context,
             command_name="compute-windows",
-            arguments={"window_size": 2, "run_id": "cw-manifest-run"},
+            arguments={"window_size": 2, "run_id": "cw-direct-publish-run"},
         )
+
+    assert publish_spy.call_count == 1, (
+        "compute-windows must take the normal full-canonical publish path "
+        "now that ReduceIdentityRefresh no longer exists to merge its "
+        "reference sync -- the special no-publish case must not run for it"
+    )
 
     from edgar_warehouse.application.identity_refresh_publication import (
         reference_snapshot_path,
         run_manifest_path,
     )
 
-    manifest_path = Path(context.storage_root.join(run_manifest_path("cw-manifest-run")))
-    assert manifest_path.exists(), (
-        "compute-windows must persist an identity-refresh run manifest, "
-        "mirroring compute-identity-refresh-window"
+    manifest_path = Path(context.storage_root.join(run_manifest_path("cw-direct-publish-run")))
+    assert not manifest_path.exists(), (
+        "compute-windows must no longer persist an identity-refresh run "
+        "manifest -- ReduceIdentityRefresh, its only consumer, was removed"
     )
-    manifest = json.loads(manifest_path.read_text())
-    assert manifest["run_id"] == "cw-manifest-run"
-    assert manifest["image_identity"] == "sha256:test-image"
-    # 3 tracked CIKs / window_size=2 -> 2 batches: [100, 200], [300]
-    assert [b["ciks"] for b in manifest["batches"]] == [[100, 200], [300]]
+    snapshot_path = Path(context.storage_root.join(reference_snapshot_path("cw-direct-publish-run")))
+    assert not snapshot_path.exists(), (
+        "compute-windows must no longer persist a reference snapshot -- "
+        "nothing merges it into canonical anymore"
+    )
 
-    snapshot_path = Path(context.storage_root.join(reference_snapshot_path("cw-manifest-run")))
-    assert snapshot_path.exists(), "reference snapshot must be captured for the reducer to merge"
-
-    # The normal full-canonical publish must NOT have also run for this
-    # command -- compute-windows' only durable data-layer write this run is
-    # the reference snapshot above, exactly like compute-identity-refresh-window.
-    canonical_silver = Path(context.storage_root.join("silver", "sec", "silver.duckdb"))
-    assert not canonical_silver.exists(), (
-        "compute-windows must not publish to canonical silver directly -- "
-        "ReduceIdentityRefresh is the sole merger, exactly once"
+    # The reference-data sync's rows must actually be present in the local
+    # working silver db that a real (remote) publish would merge into
+    # canonical -- the correctness gap this test guards: with no reducer
+    # left, this sync must be readable from the working db it wrote to, or
+    # it would be silently lost once nothing else consumes it.
+    working_db = SilverDatabase(context.silver_root.join("silver", "sec", "silver.duckdb"))
+    try:
+        rows = working_db._conn.execute(
+            "SELECT cik, ticker FROM sec_company_ticker ORDER BY cik"
+        ).fetchall()
+    finally:
+        working_db.close()
+    assert rows == [(100, "AAA")], (
+        "compute-windows' reference-data sync must be readable back from "
+        "the working silver db after the run"
     )
