@@ -608,6 +608,22 @@ def test_seed_universe_uses_large_task_definition(definition: dict) -> None:
     assert definition["States"]["SeedUniverse"]["Parameters"]["TaskDefinition"] == "arn:wh-large"
 
 
+def test_windowed_bootstrap_uses_large_task_definition(definition: dict) -> None:
+    """2026-08-10: task #35's full-universe load_history execution OOM'd
+    (exit 137) twice on WindowedBootstrap's RunWindow (bootstrap-next
+    --silver-only, a 500-CIK window) running wh_medium_arn, exhausting the
+    Map's retry budget and failing the whole execution. CloudWatch showed a
+    steady ~600MB -> ~2.4GB climb over the task's ~80-minute lifetime
+    (accumulation in _capture_submission_bronze_snapshots, not a one-time
+    buffer spike) -- moved to wh_large_arn as a stopgap matching the
+    ComputeWindows/Stage0CompanyIdentity/gold-refresh/seed-universe
+    precedent above, while the underlying accumulation is tracked
+    separately."""
+    branch_a_states = definition["States"]["Stage1Parallel"]["Branches"][0]["States"]
+    run_window = branch_a_states["WindowedBootstrap"]["ItemProcessor"]["States"]["RunWindow"]
+    assert run_window["Parameters"]["TaskDefinition"] == "arn:wh-large"
+
+
 def test_compute_windows_command_includes_total_cik_limit(definition: dict) -> None:
     """ComputeWindows always passes an explicit --total-cik-limit (0 = no limit sentinel
     when the caller omits $.total_cik_limit) so operators can bound a load_history run to
