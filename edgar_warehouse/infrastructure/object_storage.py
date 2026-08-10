@@ -166,6 +166,28 @@ class StorageLocation:
         shutil.copy2(str(local_path), str(destination_path))
         return str(destination_path)
 
+    def download_file(self, relative_path: str, local_path: "Path", chunk_size: int = 8 * 1024 * 1024) -> str:
+        """Stream storage to a local file without loading it fully into memory.
+
+        Mirrors ``upload_file``'s streaming pattern in the opposite direction.
+        Raises ``FileNotFoundError`` if the source object does not exist.
+        """
+        import shutil
+        relative = sanitize_relative_path(relative_path)
+        source = self.join(relative)
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        if self.is_remote:
+            protocol = _protocol_for_uri(self.root)
+            _assert_protocol_allowed(protocol)
+            import fsspec
+            fs = fsspec.filesystem(protocol, **_remote_storage_options(source))
+            with fs.open(source, "rb") as src, local_path.open("wb") as dst:
+                shutil.copyfileobj(src, dst, length=chunk_size)
+            return str(local_path)
+        source_path = Path(source)
+        shutil.copy2(str(source_path), str(local_path))
+        return str(local_path)
+
     def list_child_names(self, relative_path: str) -> list[str]:
         """List immediate child names (files or directories) under relative_path.
 

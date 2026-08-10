@@ -945,11 +945,9 @@ def _hydrate_silver_database_from_storage(context: WarehouseCommandContext) -> N
     # successfully hydrated", never leftover state from an earlier run.
     _protected_fingerprint_sidecar_path(local_path).unlink(missing_ok=True)
     try:
-        payload = read_bytes(remote_path)
+        context.storage_root.download_file("silver/sec/silver.duckdb", local_path)
     except (FileNotFoundError, OSError):
         return
-    local_path.parent.mkdir(parents=True, exist_ok=True)
-    local_path.write_bytes(payload)
     # Snapshot the hydration-time fingerprint before any caller opens the
     # database and runs schema DDL, so the sidecar reflects exactly what was
     # downloaded from canonical -- the baseline every later publish attempt
@@ -968,7 +966,7 @@ def _hydrate_silver_database_from_storage(context: WarehouseCommandContext) -> N
         "silver_database_hydrated",
         path=remote_path,
         local_path=str(local_path),
-        size_bytes=len(payload),
+        size_bytes=local_path.stat().st_size,
     )
 
 
@@ -1172,18 +1170,16 @@ def _hydrate_shard_for_window(
     remote_path = context.storage_root.join(relative_path)
 
     try:
-        payload = read_bytes(remote_path)
+        context.storage_root.download_file(relative_path, local_path)
     except (FileNotFoundError, OSError):
         return None
 
-    local_path.parent.mkdir(parents=True, exist_ok=True)
-    local_path.write_bytes(payload)
     _emit_pipeline_event(
         "silver_shard_hydrated",
         shard_index=shard_index,
         path=remote_path,
         local_path=str(local_path),
-        size_bytes=len(payload),
+        size_bytes=local_path.stat().st_size,
     )
     return str(local_path)
 

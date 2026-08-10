@@ -73,7 +73,8 @@ def test_shard_file_size_within_limit(tmp_path) -> None:
 
 def test_hydrate_downloads_only_overlapping_shard() -> None:
     """STORE-02: bootstrap task downloads only the shard(s) whose CIK band overlaps its window."""
-    from unittest.mock import MagicMock, patch
+    from pathlib import Path
+    from unittest.mock import MagicMock
 
     from edgar_warehouse.application.warehouse_orchestrator import _hydrate_shard_for_window
 
@@ -92,16 +93,19 @@ def test_hydrate_downloads_only_overlapping_shard() -> None:
 
     fake_bytes = b"fake-shard-content"
 
-    with patch(
-        "edgar_warehouse.application.warehouse_orchestrator.read_bytes",
-        return_value=fake_bytes,
-    ) as mock_read:
-        result = _hydrate_shard_for_window(context, shard_index=1)
+    def fake_download_file(relative_path, local_path, chunk_size=8 * 1024 * 1024):
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        Path(local_path).write_bytes(fake_bytes)
+        return str(local_path)
 
-    # Must have called read_bytes exactly once
-    assert mock_read.call_count == 1
-    # The path used must reference shard-1.duckdb, not shard-0.duckdb or silver.duckdb
-    called_path: str = mock_read.call_args[0][0]
+    storage_root.download_file.side_effect = fake_download_file
+
+    result = _hydrate_shard_for_window(context, shard_index=1)
+
+    # Must have called download_file exactly once
+    assert storage_root.download_file.call_count == 1
+    # The relative path used must reference shard-1.duckdb, not shard-0.duckdb or silver.duckdb
+    called_path: str = storage_root.download_file.call_args[0][0]
     assert "shard-1.duckdb" in called_path, f"Expected shard-1.duckdb in path, got: {called_path}"
     assert "shard-0.duckdb" not in called_path
     assert "silver.duckdb" not in called_path
@@ -313,14 +317,23 @@ def test_bootstrap_chunk_uses_shard_aware_hydrate() -> None:
     context.runtime_mode = "bronze_capture"
     context.environment_name = "test"
 
+    from pathlib import Path
+
     manifest_bytes = json.dumps(DEV_MANIFEST).encode()
     local_shard_path = "/tmp/silver/sec/shards/shard-1.duckdb"
+
+    def fake_download_file(relative_path, local_path, chunk_size=8 * 1024 * 1024):
+        Path(local_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(local_path).write_bytes(b"shard-content")
+        return str(local_path)
+
+    storage_root.download_file.side_effect = fake_download_file
 
     # Patch everything that touches external I/O
     with (
         patch(
             "edgar_warehouse.application.warehouse_orchestrator.read_bytes",
-            side_effect=[manifest_bytes, b"shard-content"],
+            side_effect=[manifest_bytes],
         ) as mock_read_bytes,
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage",

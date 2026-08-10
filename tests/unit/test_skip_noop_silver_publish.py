@@ -54,9 +54,14 @@ def _hydrate(context, canonical_bytes):
         _hydrate_silver_database_from_storage,
     )
 
+    def fake_download_file(relative_path, local_path, chunk_size=8 * 1024 * 1024):
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(canonical_bytes)
+        return str(local_path)
+
     with patch(
-        "edgar_warehouse.application.warehouse_orchestrator.read_bytes",
-        return_value=canonical_bytes,
+        "edgar_warehouse.infrastructure.object_storage.StorageLocation.download_file",
+        side_effect=fake_download_file,
     ):
         _hydrate_silver_database_from_storage(context)
 
