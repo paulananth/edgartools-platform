@@ -84,7 +84,7 @@ for the pipeline it's attached to, or exists purely to check state.
 
 | Pipeline | Status | Entry points | Source access | Main data points | Outputs |
 | --- | --- | --- | --- | --- | --- |
-| Reference snapshot and warehouse CIK batching | Automated | `edgar-warehouse seed-universe` | Direct SEC fetch of `company_tickers.json` and `company_tickers_exchange.json`. | CIK, ticker, exchange, source rank, source checkpoint, company sync state. | Bronze reference JSON, `sec_company_ticker`, `sec_company_sync_state`, `cik_batches.jsonl`, optional Snowflake `TICKER_REFERENCE` export. Automated in AWS workflows (`load_history`, `bootstrap_batched`, others) as a bronze/reference prerequisite. Seeds warehouse CIK tracking in `sec_company_sync_state`; writes no MDM state. |
+| Reference snapshot and warehouse CIK batching | Automated | `edgar-warehouse seed-universe` | Direct SEC fetch of `company_tickers.json` and `company_tickers_exchange.json`. | CIK, ticker, exchange, source rank, source checkpoint, company sync state. | Bronze reference JSON, `sec_company_ticker`, `sec_company_sync_state`, `cik_batches.jsonl`, optional Snowflake `TICKER_REFERENCE` export. Automated in AWS workflows (`load_history`, others) as a bronze/reference prerequisite. Seeds warehouse CIK tracking in `sec_company_sync_state`; writes no MDM state. |
 | MDM tracked-universe seeding | Automated + Prerequisite | `edgar-warehouse mdm seed-universe` | edgartools-mediated `edgar.get_company_tickers()`. | CIK, ticker, exchange, MDM entity shell, tracking status. | `mdm_entity`, `mdm_company`. Used by explicit MDM workflows and the MDM chain; warehouse bootstrap scope comes from `sec_company_sync_state`. |
 | Window computation | Automated | `compute-windows`, `write-run-summary` | Silver `sec_company_sync_state` CIK list and prior bronze window files. | Window offset/limit, CIK snapshot, window count, CIK count. | `cik_windows.jsonl`, `cik_snapshot.jsonl`, `run-summary.json`. |
 | Submissions bootstrap | Automated | `bootstrap`, `bootstrap-full`, `bootstrap-next`, `bootstrap-batch` | Direct SEC submissions JSON unless cached bronze is available. Scope comes from explicit CIKs or silver `sec_company_sync_state.tracking_status`. | Company profile, addresses, former names, submission pagination files, filing metadata. | Bronze submissions JSON, `sec_company`, `sec_company_address`, `sec_company_former_name`, `sec_company_submission_file`, `sec_company_filing`, `sec_company_sync_state`, `discovery_checkpoint`. |
@@ -246,7 +246,6 @@ completed.
 
 | State machine/workflow | Shape |
 | --- | --- |
-| `bootstrap_batched` | `seed-universe` -> parallel `bootstrap-batch`. |
 | `load_history` | `seed-universe` (warehouse reference + `sec_company_sync_state`) -> window size default -> `compute-windows` (tracking_status active-or-bootstrap_pending from silver) -> Stage1Parallel { Branch A `bootstrap-next` (same tracking-status filter as compute-windows, explicit) } -> `bootstrap-fundamentals --mode entity-facts` -> `bootstrap-fundamentals --mode per-filing` -> `bootstrap-fundamentals --mode thirteenf` (all Branch B modes post-Branch-A, sequential — they write the same SEC silver DuckDB artifact) -> MDM chain -> `gold-refresh` -> run summary. |
 | `bootstrap` | Optional seed -> `bootstrap` -> MDM chain -> `gold-refresh`. |
 | `daily_incremental` | `daily-incremental` -> MDM chain -> `gold-refresh`. |
@@ -254,7 +253,7 @@ completed.
 | `bronze_seed_silver_gold` | List CIKs from existing S3 bronze -> cached `bootstrap-batch` -> MDM chain -> `gold-refresh`; intended for cold-start/recovery from bronze. |
 | `mdm_gold` | MDM chain -> `gold-refresh`; no bronze/silver capture step. |
 | `ownership_mdm_gold` | `parse-ownership-bronze` -> MDM chain -> `gold-refresh`. |
-| MDM utility workflows | `mdm migrate`, `check-connectivity`, `run`, `backfill-relationships`, `sync-graph`, `verify-graph`, `counts`, `seed-universe`, `seed-from-silver`. Note: `mdm export` has no standalone utility workflow of its own today — it only runs embedded in the MDM chains above. |
+| MDM utility workflows | `mdm migrate`, `check-connectivity`, `run`, `backfill-relationships`, `sync-graph`, `verify-graph`, `counts`, `seed-universe`. Note: `mdm export` has no standalone utility workflow of its own today — it only runs embedded in the MDM chains above. `seed-from-silver` retains its CLI command but no longer has a dedicated state machine (state-machine-consolidation wayfinder map, ticket 04 — zero callers of any kind, its original AWS-RDS-VPC-access rationale is stale post-Snowflake-Postgres-migration); run it via a one-off `aws ecs run-task` or locally if ever needed. |
 
 Snowflake native pull is deployed by `infra/scripts/deploy-snowflake-stack.sh`.
 It coordinates AWS access, Snowflake storage integration/stage/source tables,

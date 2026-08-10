@@ -28,7 +28,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEPLOY_SCRIPT = REPO_ROOT / "infra" / "scripts" / "deploy-aws-application.sh"
 
 _START_MARKER = "mdm_workflow_command_expression() {\n"
-_END_MARKER = "\nwrite_bootstrap_batched_definition() {"
+_END_MARKER = "\nwrite_load_history_definition() {"
 
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 

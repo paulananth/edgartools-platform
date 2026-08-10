@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: resolved
 
 ## Question
 
@@ -45,3 +45,93 @@ consolidation.
 Depends on nothing (can run in parallel with ticket 01), but its answer is
 what makes ticket 01's "should this be deleted or kept" verdicts
 implementable.
+
+## Pre-grill fact-finding
+
+Checked `scripts/ops/trigger.sh` (a real, live operator script): its
+`case` statement maps short names (`silver`, `mdm-gold`, `ownership`,
+etc.) to literal `${NAME_PREFIX}-<machine>` ARNs today — any mechanism
+that changes ARN count/naming must update it. Checked the 8 standalone
+single-stage MDM machines' live execution counts: all 8 have real recent
+executions (2-5 each) — genuinely used, not dead weight. Checked the code
+structure: only `silver_mdm_gold` and `bronze_seed_silver_gold` have
+dedicated bash functions (`write_silver_mdm_gold_definition`,
+`write_bronze_seed_silver_gold_definition`); `mdm_gold`,
+`ownership_mdm_gold`, and `residual_holds_graph` are inline Python heredoc
+blocks directly inside the deploy-orchestration function — messier than
+the ticket's "5 heredoc functions" framing implied.
+
+## Grilling progress + `/gof-refactor-reviewer` correction
+
+First round: user chose option 2 (fewer deployed machines, parameterized
+entry point) over the lower-risk option 1, then chose the most flexible
+selection model — a fully composable design where execution input carries
+an arbitrary ordered stage list (`{"stages": [...]}`), dispatched via a
+generic stage-name-to-state mechanism, covering all 13 machines (5
+composed + 8 standalone) as different inputs to one unified machine; plus
+folding the 8 standalone machines into the same consolidation and
+redesigning `trigger.sh` to expose stage composition directly.
+
+Ran `/gof-refactor-reviewer` on this decision before locking it in (per
+this repo's own CLAUDE.md convention of consulting it before non-trivial
+structural work). Findings:
+
+1. **Real, evidenced duplication risk — confirmed via `git log
+   -S"MdmVerify"`.** Commit `3aa92fe9` (2026-05-15) fixed a real bug in
+   `silver_mdm_gold`'s tail (`--limit` was silently dropping 5,100+
+   companies) in the **same commit** that hand-copied a fresh
+   `MdmRun/MdmBackfill/MdmSync/MdmVerify/GoldRefresh` block for the
+   brand-new `ownership_mdm_gold` machine. The new copy happened to get
+   the fix because one person wrote both at once — nothing guarantees a
+   future fix propagates to all 5 copies. Justifies extracting the tail
+   into one shared Python helper (small, mechanical, no new runtime
+   concept).
+2. **No evidence supports full composability.** The 13 known combinations
+   have been a closed, stable set since the composed machines were
+   created (May 2–14, 2026) — zero new combinations added in the ~3
+   months since. Rule 0 ("leave it" unless there's evidence of *repeated*
+   change) doesn't clear the bar for a generic stage-dispatch engine
+   (new routing mechanism, cross-stage input/output contract, tests for
+   compositions that don't exist) when named presets achieve the same
+   ARN-count reduction and duplication fix with far less new machinery.
+
+Presented this back to the user (per grilling's "restate once, then let
+them decide" rule) — they revised the mechanism to named presets.
+
+## Answer
+
+1. **Shared-tail extraction (justified by real evidence — finding 1
+   above):** pull `MdmRun→MdmBackfill→MdmSync→MdmVerify(→GoldRefresh)`
+   into one Python helper function in `infra/scripts/deploy-aws-
+   application.sh`, parameterized on the ARNs/limits that already vary
+   across the 5 current copies. All 5 call sites (including the 3
+   currently-inline blocks — `mdm_gold`, `ownership_mdm_gold`,
+   `residual_holds_graph` — which should also become named functions as
+   part of this, matching `silver_mdm_gold`/`bronze_seed_silver_gold`'s
+   existing shape) use it instead of hand-duplicating the tail.
+2. **Consolidation mechanism: named presets, not full composability.**
+   Collapse the 5 composed + 8 standalone machines into fewer deployed
+   machines (exact count left to implementation — could be one machine
+   with a mode-keyed Choice state, or a smaller number grouped by
+   family), with execution input carrying a fixed `mode`/preset name
+   (e.g. `{"mode": "silver_mdm_gold"}`) that a Choice state (or Pass-state
+   lookup) routes to one of ~13 known, fixed sequences — mechanically
+   extracted from the current 13 generators onto the shared-tail helper
+   from point 1. No generic stage-name-to-state dispatch engine.
+3. **Standalone machines: fold into the same consolidation** (unchanged
+   from the first grilling round) — all 8 single-stage MDM machines join
+   the same named-preset design as single-stage presets.
+4. **`trigger.sh`: keep the short-name UX identical.** With named presets
+   (not raw composition), there's nothing new to expose — this reverts to
+   the lower-risk original recommendation: `./scripts/ops/trigger.sh
+   silver-active` etc. keep working exactly as today, only the `case`
+   statement's `SM`/`INPUT` values change (all pointing at the collapsed
+   ARN(s) now, `INPUT` gaining the `mode` field). Operators see zero
+   behavior change.
+
+**Not locked here (implementation detail, per this map's Destination —
+"someone can implement without further architecture debate," not
+"every detail is pre-decided"):** exact final deployed-machine count
+(fully collapsed to one vs. grouped by family), the precise Choice-state/
+Pass-state ASL shape, and the shared-tail helper's exact parameter
+signature.

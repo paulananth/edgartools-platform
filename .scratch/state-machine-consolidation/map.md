@@ -58,33 +58,13 @@ split: this map decides, `release-readiness` tickets implement.
 
 ## Decisions so far
 
-(none yet)
+- [Confirm dead vs. dormant state machines](issues/01-confirm-dead-state-machines.md) — Per-machine verdict on all 9 zero-execution machines: **6 intentionally dormant** (`bootstrap_full`, `full_reconcile`, `load_daily_form_index_for_date`, `catch_up_daily_form_index`, `mdm_gold`, `silver_mdm_gold` — real, current, several actively touched within days of this ticket, one the same day) — none are deletion candidates. **1 dead** (`bootstrap_batched` — `load_history`'s own code comment documents it was built specifically to fix a `silver.duckdb` consistency race in `bootstrap_batched`'s architecture; superseded, safe removal candidate). **2 uncertain** (`mdm_seed_universe`, `mdm_seed_from_silver` — both built solely for since-migrated-off AWS-RDS VPC access; neither has had an explicit keep/retire call). Graduated into tickets 03 and 04.
+- [Decide consolidation mechanism for shared MDM tail](issues/02-decide-consolidation-mechanism-for-shared-mdm-tail.md) — Locked: (1) extract the duplicated `MdmRun→MdmBackfill→MdmSync→MdmVerify(→GoldRefresh)` tail into one shared Python helper — justified by real evidence (`git log -S"MdmVerify"` found a real bug fix and a fresh hand-copy of the tail landing in the same 2026-05-15 commit, a genuine drift risk); (2) collapse the 5 composed + 8 standalone machines into fewer deployed machines via **named presets** (a `mode`-keyed Choice state over ~13 fixed sequences), not the fully composable generic stage-dispatcher first floated — an on-session `/gof-refactor-reviewer` pass found no evidence supporting full composability (the 13 combinations have been a closed, stable set for ~3 months); (3) `trigger.sh` keeps its short-name UX unchanged, only its ARN/input mapping changes.
+- [Decide whether to delete `bootstrap_batched`](issues/03-decide-bootstrap-batched-deletion.md) — Delete outright now, no grace period — evidence is already fully determined (zero executions ever, `load_history` supersedes it by design). Found a real landmine while scoping: `tests/architecture/test_mdm_sync_graph_limit_per_type.py` uses the function's name as a text-slice marker for an unrelated test, so deletion requires updating that marker too. Full 8-item checklist written, including the explicit `delete-state-machine` step (not automatic from a routine redeploy) and a rollback snapshot first.
+- [Decide keep-or-retire for `mdm_seed_universe` and `mdm_seed_from_silver`](issues/04-decide-mdm-seed-machines-fate.md) — Split verdict, user-confirmed: **keep** `mdm_seed_universe` (preserves a real, currently-only-here `--tracking-status`/`--limit` override capability, free to generate via the shared single-workflow loop, no code change needed); **retire** `mdm_seed_from_silver` (zero callers of any kind anywhere in the repo, its original AWS-RDS-VPC-access rationale is fully stale post-Snowflake-Postgres-migration; CLI command stays runnable ad hoc). 7-item retirement checklist written, sharing ticket 03's rollback-snapshot-then-explicit-delete pattern.
 
 ## Not yet specified
 
-- Whether any of the 9 zero-execution machines are provisioned-for-a-
-  future-use-not-yet-triggered (e.g. `bootstrap_full`/`full_reconcile`/
-  the two `daily_form_index` machines might be intentional disaster-
-  recovery/backfill tooling nobody has needed yet) versus genuinely
-  obsolete leftovers -- ticket 01 investigates before any deletion
-  decision is made.
-- The actual consolidation mechanism for the composed-machine family
-  (`mdm_gold`/`ownership_mdm_gold`/`silver_mdm_gold`/
-  `bronze_seed_silver_gold`/`residual_holds_graph`): shared Python helper
-  functions generating still-5-separate deployed machines (lower risk,
-  fixes the code-duplication half of the problem but not the count) vs.
-  collapsing to fewer actually-deployed machines with a parameterized
-  entry stage (bigger change: touches how operators/EventBridge/other
-  automation currently target these ARNs by name) -- ticket 02 grills this.
-- Whether the 8 standalone single-stage MDM machines (`mdm_run`,
-  `mdm_backfill_relationships`, `mdm_sync_graph`, `mdm_verify_graph`,
-  `mdm_counts`, `generation_build`, `mdm_migrate`,
-  `mdm_check_connectivity`) should keep existing independently once the
-  composed machines are consolidated -- they may be legitimate operator
-  debugging/rerun tools (run just one stage without the rest), a genuine
-  redundancy with the composed machines, or both depending on the stage.
-  Not yet specifiable as a sharp ticket until ticket 02 resolves the
-  consolidation mechanism.
 - Whether ticket 84/86's `sec_fetch_active` cross-command lease wiring
   (release-readiness, a separate concurrent effort) constrains or
   interacts with any consolidation here -- the 5 SEC-fetching machines it
