@@ -20,7 +20,7 @@ import edgar
 from edgar_warehouse.infrastructure.dataset_path_catalog import (
     default_capture_spec_factory,
 )
-from edgar_warehouse.infrastructure.object_storage import object_exists
+from edgar_warehouse.infrastructure.object_storage import object_exists, read_bytes
 
 # Ticket 96: edgar.get_by_accession_number's whole-market quarterly-index scan
 # inherits httpx's bare 5s default timeout (edgartools' shared HTTP_MGR client
@@ -195,13 +195,20 @@ def fetch_filing_artifacts(
     # still exists (confirmed live: 494 of Apple's 1,044 rows pointed at objects
     # that were never durably present). One LIST per accession (not a HEAD per
     # attachment, matching ticket 75's precedent) so trusting a cache hit costs
-    # the same regardless of attachment count. Only meaningful when there is a
-    # cache to verify -- under force, or with no existing rows, no DB row is
-    # ever trusted as a cache hit anyway, so skip the LIST entirely (a cold
-    # load_history accession must not pay it -- see the artifact-throttle 5-whys
-    # this same file already documents).
+    # the same regardless of attachment count.
+    #
+    # Bronze-recovery: this LIST must run even when existing_rows is empty --
+    # confirmed live 2026-08-10, a prior run can durably write bronze content
+    # for an accession and then crash (OOM) before its silver DB bookkeeping
+    # merges back to canonical, leaving zero existing_rows on the next retry
+    # despite the content already being captured. Without this LIST available
+    # to the per-document loop below, that retry re-fetches every such
+    # document from SEC even though it's already in bronze -- burning
+    # rate-limited SEC request budget on content that must not be re-fetched
+    # per CLAUDE.md's "SEC data idempotency" policy. Still skipped under
+    # force (a repair overwrite must not trust any cache, DB- or S3-backed).
     existing_bronze_keys: set[str] = set()
-    if existing_rows and not force:
+    if not force:
         existing_bronze_keys = set(
             context.bronze_root.find_existing(
                 capture_specs.filing_document_glob(cik=cik, accession_number=accession_number)
@@ -296,6 +303,7 @@ def fetch_filing_artifacts(
     # through the worker pool below.
     cache_hit_by_index: dict[int, tuple[dict[str, Any], dict[str, Any]]] = {}
     pending: list[dict[str, Any]] = []
+    bronze_recovery: list[dict[str, Any]] = []
     for index, row in enumerate(attachment_rows):
         document_name = row["document_name"]
         document_url = row["document_url"]
@@ -337,28 +345,62 @@ def fetch_filing_artifacts(
             document_name=document_name,
             is_primary=bool(row.get("is_primary")),
         )
+        source_type = "filing_document" if row.get("is_primary") else "attachment"
+
+        # Bronze-recovery: no DB row references this document (fresh
+        # accession, or a prior run's silver bookkeeping never merged back
+        # after a crash), but its content may already be durably in bronze.
+        # Reading it back from S3 avoids an unnecessary SEC re-fetch --
+        # required by the idempotency policy, not just an optimization.
+        # Gated on a non-empty existing_bronze_keys: a genuinely cold
+        # accession has nothing under its own prefix, so there is nothing to
+        # recover and this must not pay _raw_object_still_present's
+        # per-object HEAD fallback (the exact cost the old existing_rows gate
+        # was written to avoid -- see the artifact-throttle 5-whys).
+        if not force and existing_bronze_keys:
+            candidate_storage_path = context.bronze_root.join(artifact_spec.relative_path)
+            if _raw_object_still_present(
+                candidate_storage_path, existing_bronze_keys=existing_bronze_keys
+            ):
+                bronze_recovery.append(
+                    {
+                        "index": index,
+                        "row": row,
+                        "document_url": document_url,
+                        "storage_path": candidate_storage_path,
+                        "relative_path": artifact_spec.relative_path,
+                        "source_type": source_type,
+                    }
+                )
+                continue
+
         pending.append(
             {
                 "index": index,
                 "row": row,
                 "document_url": document_url,
                 "relative_path": artifact_spec.relative_path,
-                "source_type": "filing_document" if row.get("is_primary") else "attachment",
+                "source_type": source_type,
             }
         )
 
     # Real fetches run concurrently. Each worker does network I/O + the
     # immutable S3 write only — no DuckDB access, since a single
     # SilverDatabase connection is not safe for concurrent use (ticket 03).
-    # Results are collected here and every db.upsert_raw_object call happens
-    # back on this thread, in the loop below.
+    # Bronze-recovery reads share the same pool (cheap S3 GETs, no SEC rate
+    # limit involved) so a mixed accession doesn't pay for two sequential
+    # dispatch rounds. Results are collected here and every db.upsert_raw_object
+    # call happens back on this thread, in the loop below.
     fetch_results: dict[int, dict[str, Any]] = {}
+    bronze_results: dict[int, dict[str, Any]] = {}
     fetch_errors: dict[int, BaseException] = {}
-    if pending:
-        worker_count = min(len(pending), _artifact_fetch_concurrency())
+    dispatch_count = len(pending) + len(bronze_recovery)
+    if dispatch_count:
+        worker_count = min(dispatch_count, _artifact_fetch_concurrency())
         with ThreadPoolExecutor(max_workers=worker_count) as executor:
-            future_to_task = {
-                executor.submit(
+            future_to_task: dict[Any, tuple[str, dict[str, Any]]] = {}
+            for task in pending:
+                future = executor.submit(
                     _fetch_and_store_attachment,
                     context=context,
                     download_bytes=download_bytes,
@@ -369,17 +411,34 @@ def fetch_filing_artifacts(
                     source_type=task["source_type"],
                     cik=cik,
                     form=filing.get("form"),
-                ): task
-                for task in pending
-            }
+                )
+                future_to_task[future] = ("fetch", task)
+            for task in bronze_recovery:
+                future = executor.submit(
+                    _recover_from_bronze,
+                    storage_path=task["storage_path"],
+                    relative_path=task["relative_path"],
+                    source_type=task["source_type"],
+                    source_url=task["document_url"],
+                    accession_number=accession_number,
+                    cik=cik,
+                    form=filing.get("form"),
+                )
+                future_to_task[future] = ("bronze", task)
             for future in as_completed(future_to_task):
-                task = future_to_task[future]
+                kind, task = future_to_task[future]
                 try:
-                    fetch_results[task["index"]] = future.result()
+                    result = future.result()
                 except BaseException as exc:  # noqa: BLE001 — re-raised below, want the original type
                     fetch_errors[task["index"]] = exc
+                    continue
+                if kind == "fetch":
+                    fetch_results[task["index"]] = result
+                else:
+                    bronze_results[task["index"]] = result
 
     network_fetches += len(fetch_results)
+    bronze_recovered_count = len(bronze_results)
     applied_by_index: dict[int, tuple[dict[str, Any], dict[str, Any]]] = {}
     for task in pending:
         index = task["index"]
@@ -417,6 +476,26 @@ def fetch_filing_artifacts(
                 }
             )
 
+    for task in bronze_recovery:
+        index = task["index"]
+        storage_record = bronze_results.get(index)
+        if storage_record is None:
+            continue
+        row = task["row"]
+        db.upsert_raw_object(
+            {key: value for key, value in storage_record.items() if key != "relative_path"}
+        )
+        raw_record = {
+            "raw_object_id": storage_record["raw_object_id"],
+            "path": storage_record["storage_path"],
+            "relative_path": storage_record["relative_path"],
+            "source_url": storage_record["source_url"],
+            "source_type": storage_record["source_type"],
+        }
+        hydrated = dict(row)
+        hydrated["raw_object_id"] = raw_record["raw_object_id"]
+        applied_by_index[index] = (hydrated, raw_record)
+
     if fetch_errors:
         # Fail closed exactly as the sequential loop did: no partial merge.
         # Raise the original exception for the earliest-in-order failing
@@ -441,6 +520,7 @@ def fetch_filing_artifacts(
         "attachment_count": len(hydrated_rows),
         "raw_writes": raw_writes,
         "network_fetches": network_fetches,
+        "bronze_recovered_count": bronze_recovered_count,
         "network_gateway": FILING_DOCUMENT_NETWORK_GATEWAY,
     }
     if repair_audit:
@@ -575,6 +655,53 @@ def _store_raw_artifact_bytes(
         "byte_size": len(payload),
         "sha256": sha256,
         "fetched_at": fetched_at,
+        "http_status": 200,
+        "relative_path": relative_path,
+    }
+
+
+def _recover_from_bronze(
+    *,
+    storage_path: str,
+    relative_path: str,
+    source_type: str,
+    source_url: str,
+    cik: int,
+    accession_number: str,
+    form: str | None,
+) -> dict[str, Any]:
+    """Recover an already-captured document from bronze storage, no SEC call.
+
+    Storage-only — no DuckDB access — safe to call from a worker thread,
+    matching ``_fetch_and_store_attachment``'s contract. Used when bronze
+    already durably has this document's bytes but no DB row references them
+    yet (see ``fetch_filing_artifacts``'s bronze-recovery path): reads the
+    existing object instead of re-fetching from SEC, so a retried run doesn't
+    burn rate-limited SEC request budget on content it already captured.
+    """
+    started_at = time.monotonic()
+    payload = read_bytes(storage_path)
+    sha256 = hashlib.sha256(payload).hexdigest()
+    content_type = mimetypes.guess_type(relative_path)[0] or "application/octet-stream"
+    _emit_artifact_event(
+        "artifact_bronze_recovered",
+        accession_number=accession_number,
+        document_name=relative_path.rsplit("/", 1)[-1],
+        bytes=len(payload),
+        duration_ms=_elapsed_ms(started_at),
+    )
+    return {
+        "raw_object_id": sha256,
+        "source_type": source_type,
+        "cik": cik,
+        "accession_number": accession_number,
+        "form": form,
+        "source_url": source_url,
+        "storage_path": storage_path,
+        "content_type": content_type,
+        "byte_size": len(payload),
+        "sha256": sha256,
+        "fetched_at": datetime.now(UTC),
         "http_status": 200,
         "relative_path": relative_path,
     }

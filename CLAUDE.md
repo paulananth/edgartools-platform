@@ -244,6 +244,72 @@ unchanged for explicit `--start-date`/`--end-date` ranges and can also be select
 `--recurring-index-lookback-days 0`. An immutable-RC production run must still prove the
 full chain completes inside the six-hour bound.
 
+## Bronze-recovery-with-no-DB-row 5-whys (resolved 2026-08-10)
+
+**Problem:** Ticket 42's full-universe `load_history` backfill (task 35, `retry4`), window 1/53,
+was live-observed re-fetching full document bytes from SEC for accessions whose bronze content
+was already durably in S3 from **2026-08-06** — 4 days before the task started. Confirmed
+systemic (sampled 4 accessions, all re-fetched despite unchanged S3 `LastModified`), not a
+one-off.
+
+1. Symptom: `sec_pull_completed` events with real byte payloads for documents whose bronze S3
+   object timestamp never changed across the fetch (write layer correctly deduped the write;
+   the wasteful part was the read).
+2. Why re-fetch content that's already in bronze? `fetch_filing_artifacts`
+   (`edgar_warehouse/bronze_filing_artifacts.py`) only treated an accession/document as
+   "already loaded" if the **silver DuckDB** already had a `sec_filing_attachment`/
+   `sec_raw_object` row for it — never by checking bronze S3 existence directly.
+3. Why did silver lack rows for content bronze already had? This task's local silver.duckdb was
+   freshly re-hydrated from canonical S3 at task start; canonical had no rows for these
+   accessions.
+4. Why would bronze have the file but canonical silver not have the row? Bronze S3 writes are
+   durable and immediate per-document; silver DB rows only become part of canonical once a run
+   reaches its merge/publish step. These Aug-6 bronze objects were almost certainly written by
+   an earlier attempt (of this same `load_history` execution, or another command) that captured
+   bronze but never got its silver mutations merged back before crashing (OOM) or exiting.
+5. **Root cause:** the idempotency check was keyed on silver-row state, not bronze-object state,
+   so it couldn't distinguish "genuinely never fetched" from "fetched and stored, but the
+   bookkeeping that would prove it never survived a crash." This is the mirror image of the
+   already-known [ticket 88](.scratch/release-readiness/issues/88-missing-s3-object-for-cached-accession-text-extraction.md)
+   gap (DB row present, S3 object missing) — this is the reverse case (S3 object present, DB row
+   missing), previously unhandled. Every retry re-paid the full SEC network cost for any
+   accession caught in this gap, directly contradicting this file's own "SEC data idempotency"
+   policy above.
+
+**Fix:** `fetch_filing_artifacts`'s per-accession bronze-key `find_existing` LIST (ticket 88's
+existing mechanism) now always runs when not `force` (previously gated on `existing_rows`, which
+is exactly the state that's missing in this bug). The per-document loop checks this LIST (via the
+existing `_raw_object_still_present` helper, reused as-is) before dispatching a document to the
+real-fetch pool; a match routes to a new `_recover_from_bronze` worker that reads the object back
+from S3 (cheap, no SEC rate limit) instead of calling `download_bytes`, and still writes the
+`sec_raw_object`/`sec_filing_attachment` DB rows so the retry's own bookkeeping gap is closed
+going forward. Gated on a non-empty `existing_bronze_keys` before the check runs at all, so a
+genuinely cold accession (nothing under its prefix) doesn't pay the `object_exists` HEAD fallback
+— preserving the original gate's cost-avoidance intent for the common case.
+
+**Deliberate behavior change, not just an optimization (weighed with a second-opinion review
+before shipping):** in production, `write_immutable_bytes` is the *only* writer to a canonical
+bronze document key and enforces content-identity atomically at write time (S3 conditional PUT
+with `IfNoneMatch: *`), so "content exists at this key" already implies "this is the one accepted
+payload for it." The only way stored content could legitimately differ from what SEC would serve
+now is out-of-band SEC-side drift (already characterized as benign and already tolerated
+elsewhere in this same pipeline — see "INSTITUTIONAL_HOLDS" ticket 87/93 above: single
+trailing-newline drift, isolated per-document, never fatal). This fix means that specific,
+already-tolerated drift class is no longer independently re-detected via the no-DB-row path — it
+now surfaces as an `artifact_bronze_recovered` event instead of a raised conflict. Two tests were
+rewritten (not deleted) to reflect this: `test_partial_failure_immutable_conflict_no_partial_merge`
+now runs under `force=True` (bronze-recovery is deliberately gated on `not force`, so an operator
+repair run still exercises the genuine `write_immutable_bytes` conflict), and a new
+`test_stale_object_with_no_db_row_is_bronze_recovered_not_flagged` documents the new
+`force=False` contract explicitly. New coverage:
+`tests/unit/test_bronze_recovery_no_db_row.py`. Full suite green: 1474 passed, 4 skipped.
+Path-format equality between `StorageLocation.join()` and `find_existing()` (the fix depends on
+both producing byte-identical strings) verified live against the real prod bronze bucket before
+deploying, not just local tempdir tests.
+
+**Not yet deployed as of this entry** — see task 35's own status for the redeploy + `retry5`
+restart this fix was written to unblock.
+
 ## Artifact-throttle 5-whys (resolved 2026-07-12)
 
 **Problem:** A 20-CIK `load_history` re-run spent ~20+ min (est. ~93 min floor) in
