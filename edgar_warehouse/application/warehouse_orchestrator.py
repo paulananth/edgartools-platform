@@ -1744,12 +1744,13 @@ def _capture_bronze_raw(
         if len(limited_ciks) < len(universe_rows):
             allowed = set(limited_ciks)
             universe_rows = [row for row in universe_rows if int(row["cik"]) in allowed]
-        # Exclude companies already fully bootstrapped. Silver sync state owns
-        # pipeline tracking status; MDM is only used by explicit MDM commands.
-        active_ciks = set(
-            row["cik"]
-            for row in db.get_active_ciks()
-        )
+        # Exclude companies already fully bootstrapped. MDM is the system of
+        # record for company information (seed-universe-narrow-hydrate ticket
+        # 05) -- its mdm_company.tracking_status mirrors silver's, kept
+        # current by MdmSeedUniverse, and querying it (small, indexed
+        # Postgres) needs no silver/duckdb hydrate at all, unlike the
+        # previous db.get_active_ciks() silver read this replaced.
+        active_ciks = set(_get_mdm_tracked_ciks("active"))
         if active_ciks:
             before = len(universe_rows)
             universe_rows = [row for row in universe_rows if int(row["cik"]) not in active_ciks]
@@ -1758,7 +1759,7 @@ def _capture_bronze_raw(
                 total_ciks=before,
                 new_ciks=len(universe_rows),
                 skipped_active=before - len(universe_rows),
-                skipped_silver_active=len(active_ciks),
+                skipped_mdm_active=len(active_ciks),
             )
         if arguments.get("limit") is not None:
             universe_rows = universe_rows[: int(arguments["limit"])]
