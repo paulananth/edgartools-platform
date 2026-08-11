@@ -429,6 +429,27 @@ class StorageLocation:
             new_version=new_version,
         )
 
+    def stage_and_promote(
+        self,
+        canonical_relative_path: str,
+        payload: bytes,
+        *,
+        expected_etag: str | None,
+    ) -> "PromotionResult":
+        """Write ``payload`` to a fresh staging key, then promote it onto
+        ``canonical_relative_path`` guarded by ``expected_etag``.
+
+        Extracted (decoupled-bronze-pipeline ticket 09's Answer) from what
+        was three call sites independently writing this same two-step
+        sequence by hand -- one of which (``_publish_shard_if_remote``) had
+        drifted to a blind overwrite with no ETag guard at all (ticket 01's
+        finding). A single shared helper means that gap can't recur at a
+        fourth call site. See ``promote_staged`` for the concurrency
+        contract this preserves.
+        """
+        staged_relative = self.write_staged_bytes(canonical_relative_path, payload)
+        return self.promote_staged(staged_relative, canonical_relative_path, expected_etag=expected_etag)
+
     def delete_object(self, relative_path: str) -> None:
         """Delete one object. Best-effort: missing objects are not an error.
 
