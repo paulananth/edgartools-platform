@@ -8,9 +8,9 @@
 #   silver-active      silver_mdm_gold with tracking_status_filter=active
 #   silver-pending     silver_mdm_gold with tracking_status_filter=bootstrap_pending
 #   gold               gold_refresh      (rebuild gold from current silver)
-#   mdm-run            standalone mdm_run
-#   mdm-verify         standalone mdm_verify_graph
-#   mdm-sync           standalone mdm_sync_graph
+#   mdm-run            mdm_utility mode=mdm_run
+#   mdm-verify         mdm_utility mode=mdm_verify_graph
+#   mdm-sync           mdm_utility mode=mdm_sync_graph
 #
 # Usage:
 #   ./scripts/ops/trigger.sh recent
@@ -76,9 +76,9 @@ case "$PIPELINE" in
     LABEL="gold_refresh"
     ;;
   mdm-run)
-    SM="${BASE}:${NAME_PREFIX}-mdm-run"
-    INPUT='{}'
-    LABEL="mdm_run"
+    SM="${BASE}:${NAME_PREFIX}-mdm-utility"
+    INPUT='{"mode": "mdm_run"}'
+    LABEL="mdm_run (mdm_utility mode=mdm_run)"
     ;;
   mdm-gold)
     SM="${BASE}:${NAME_PREFIX}-mdm-gold"
@@ -91,14 +91,14 @@ case "$PIPELINE" in
     LABEL="ownership_mdm_gold (parse bronze XMLs → MDM persons → Neo4j → gold)"
     ;;
   mdm-verify)
-    SM="${BASE}:${NAME_PREFIX}-mdm-verify-graph"
-    INPUT='{}'
-    LABEL="mdm_verify_graph"
+    SM="${BASE}:${NAME_PREFIX}-mdm-utility"
+    INPUT='{"mode": "mdm_verify_graph"}'
+    LABEL="mdm_verify_graph (mdm_utility mode=mdm_verify_graph)"
     ;;
   mdm-sync)
-    SM="${BASE}:${NAME_PREFIX}-mdm-sync-graph"
-    INPUT='{}'
-    LABEL="mdm_sync_graph"
+    SM="${BASE}:${NAME_PREFIX}-mdm-utility"
+    INPUT='{"mode": "mdm_sync_graph"}'
+    LABEL="mdm_sync_graph (mdm_utility mode=mdm_sync_graph)"
     ;;
   *)
     echo "Unknown pipeline: $PIPELINE" >&2

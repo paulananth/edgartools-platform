@@ -135,3 +135,137 @@ them decide" rule) — they revised the mechanism to named presets.
 (fully collapsed to one vs. grouped by family), the precise Choice-state/
 Pass-state ASL shape, and the shared-tail helper's exact parameter
 signature.
+
+## Addendum (2026-08-10): the tails are not one shape — this narrows the extraction
+
+Started implementing the shared-tail helper (point 1 above) and read all
+five machines' actual tail definitions in full before writing it. The
+"small, mechanical, no new runtime concept" framing does not survive
+contact with the real code — there are **six distinct tail shapes**, not
+one shape with minor parameter variation:
+
+| Machine | Export/Sync task ARN | Sync args | Verify args | Verify Catch→GoldRefresh | GoldRefresh | Retry MaxAttempts |
+|---|---|---|---|---|---|---|
+| `mdm_gold` | mdm_medium | `--limit {graph_limit}` | none | no | yes | 2 |
+| `ownership_mdm_gold` | mdm_medium | none | none | no | yes | 2 |
+| `silver_mdm_gold` | mdm_medium | none | none | **yes** | yes | 3 |
+| `bronze_seed_silver_gold` (default path) | mdm_medium | none | none | **yes** | yes | 3 |
+| `bronze_seed_silver_gold` (**release-mode/"strict" path**) | mdm_medium | different sequence entirely: `StrictMdmExport→StrictMdmSync→StrictMdmSyncIdempotency→StrictMdmVerifyCandidate→StrictMdmVerify→StrictGoldRefresh` — states with no equivalent anywhere else (idempotency check, candidate-verify-before-verify) | n/a | n/a | 3 |
+| `residual_holds_graph` | **mdm_large** | `--generation-id`, `--limit-per-type 200000` | `--skip-native-app`, `--generation-id` | no | **no GoldRefresh at all** | 2 |
+
+`bronze_seed_silver_gold` alone contributes two of the six shapes — it
+branches into an entirely separate Ticket-20 "strict" release tail via a
+`release_mode_check` Choice state, on top of everything else already
+known about it (the un-leased real-SEC-fetch gap flagged in this map's
+own map.md fog item). Four of the six shapes carry load-bearing comments
+explaining *why* they differ (verify-must-not-block-gold on a repeat
+gold-refresh cadence; full-graph materialization not type-filtered, after
+a real parity failure it was written to fix; OOM-driven task-size split;
+`--limit` intentionally omitted where a full bulk re-run would otherwise
+silently under-process).
+
+Re-reading the original evidence (`git log -S"MdmVerify"`, commit
+`3aa92fe9`) against this: the actual drift-risk incident was about
+**MdmExport-before-MdmSync ordering**, not the whole tail's flags/Catch/
+retry shape — the fresh `ownership_mdm_gold` copy landed correctly
+ordered because one person wrote both changes in the same commit, and
+that's the specific thing a shared helper should guarantee going forward.
+
+**Revised scope for the shared-tail helper:** cover the
+`MdmExport → MdmSync → MdmVerify` sequencing skeleton only — a function
+that emits the three states in the correct order, taking per-call command
+expressions, task-def ARNs, and an optional `GoldRefresh` append as
+parameters. Everything else (limit flags, generation-id flags, the
+verify Catch fallthrough, retry counts, and `bronze_seed_silver_gold`'s
+entire strict-mode branch) stays at the call site, next to the comments
+that explain it. This still eliminates the real drift risk the git
+evidence proved, without inventing a six-parameter abstraction that
+would just be the five shapes with a dispatch table in front.
+
+**Open question this raises, not yet answered:** given each of the 13
+target presets needs its own flags, own task-def ARNs, own Catch wiring,
+and (for `bronze_seed_silver_gold`) an entire second branch, is the
+named-preset collapse (point 2 above) still worth it? A single machine
+hosting 13 near-independent state subgraphs behind a `mode` Choice drops
+the ARN count but doesn't reduce complexity, and worsens redeploy blast
+radius (one definition change now risks every MDM operator path at
+once) — the concern flagged when this map was parked, now with concrete
+weight behind it. Taken back to the user before writing any Choice-state
+code; awaiting their call on scope.
+
+## Re-grilling resolution (2026-08-10)
+
+User chose to re-open this as a fresh grilling round rather than pick
+between the two pre-set options above. Two more scoping corrections
+surfaced during that round, both folded into `CONTEXT.md`'s new
+"Deployment orchestration (Step Functions)" glossary section:
+
+- `generation_build` was miscategorized as one of the "8 standalone
+  single-stage MDM machines" in this ticket's original text — it's
+  actually a bespoke partition-plan/fan-out-build/fan-in-verify/activate
+  pipeline (its own Distributed Map), structurally closer to the composed-5
+  than to a single-command wrapper. No sibling machine shares its shape,
+  so there's nothing to deduplicate — excluded entirely.
+- `mdm_seed_universe` is one of the 8 uniform loop-generated machines by
+  code, but ticket 04 already locked "keep it exactly as-is, no code
+  change" — folding it into a new consolidated machine would silently
+  reopen a closed decision. Excluded.
+
+That leaves exactly **7 genuinely uniform MDM Utility Machines**
+(`mdm_migrate`, `mdm_check_connectivity`, `mdm_run`,
+`mdm_backfill_relationships`, `mdm_sync_graph`, `mdm_verify_graph`,
+`mdm_counts`) — all sharing 100% of their generation code
+(`write_mdm_workflow_definition`) already, differing only in which
+command/task-def is passed in.
+
+**Final locked scope:**
+1. **MDM Pipeline Machines (the composed 5):** sequencing-skeleton-only
+   extraction (`wire_mdm_tail()`), kept as 5 separate deployed machines —
+   the "full shared tail" and "collapse into fewer machines" ideas from
+   this ticket's original Answer are both dropped for this group.
+2. **MDM Utility Machines (the real 7):** collapsed into one consolidated
+   deployed machine (`mdm_utility`), selected via `{"mode": "<name>"}`,
+   each mode's existing override chain (limit / relationship_type /
+   limit_per_type) preserved verbatim.
+3. `trigger.sh`: unchanged short-name UX, `mdm-run`/`mdm-verify`/
+   `mdm-sync` now route through `mdm_utility` with the mode set internally.
+
+## Implementation status (2026-08-10)
+
+Fully implemented, code-only (per this session's earlier "code-only now,
+deploy later" decision — no `deploy-aws-application.sh` run, no live AWS
+changes):
+
+- `infra/scripts/mdm_tail_helper.py` (new): `wire_mdm_tail()`, the shared
+  sequencing skeleton. Unit-tested in isolation
+  (`tests/unit/test_mdm_tail_helper.py`, 7 tests).
+- All 5 MDM Pipeline Machines (`mdm_gold`, `ownership_mdm_gold`,
+  `silver_mdm_gold`, `bronze_seed_silver_gold`'s default path,
+  `residual_holds_graph`) now call `wire_mdm_tail()` instead of hand-typing
+  `Next` pointers. `bronze_seed_silver_gold`'s separate "strict" release-mode
+  branch is untouched — confirmed via
+  `tests/architecture/test_mdm_pipeline_machine_tails.py`.
+- New `write_mdm_utility_definition()` generates the consolidated
+  `mdm_utility` machine (mode-keyed `Choice` state, `UnknownMode` `Fail`
+  default, each of the 7 modes' state names prefixed to avoid collisions).
+  Structurally verified in
+  `tests/architecture/test_mdm_utility_state_machine.py` (8 tests) —
+  including that `generation_build`/`mdm_seed_universe` are *not* present.
+- `mdm_seed_universe` kept as its own standalone deployed machine, generated
+  the same way as before (unchanged call to `write_mdm_workflow_definition`).
+- `scripts/ops/trigger.sh` updated: `mdm-run`/`mdm-verify`/`mdm-sync` now
+  target `${NAME_PREFIX}-mdm-utility` with `{"mode": "..."}` input; every
+  other pipeline name/behavior unchanged.
+- Fixed two pre-existing tests broken by the refactor (not new failures —
+  the refactor legitimately changed the source shape they were checking):
+  `test_ticket20_release_state_machine.py` needed `SCRIPT_DIR` set in its
+  driver env (new `sys.path.insert` dependency); `test_residual_holds_graph_state_machine.py`'s
+  order check grepped for literal `"MdmExport"`/`"MdmSync"`/`"MdmVerify"`
+  dict-key strings that no longer exist in that source region by design
+  (they're now built inside `wire_mdm_tail`) — rewritten to check the head
+  states' literal order plus the `wire_mdm_tail(...)` call's positional
+  argument order instead.
+- Full suite green: 1974 passed, 4 skipped.
+
+Not yet done: committing this, and (per the standing code-only decision)
+any live AWS deployment.

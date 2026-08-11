@@ -1744,6 +1744,220 @@ pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", en
 PY
 }
 
+# state-machine-consolidation wayfinder map, ticket 02 (re-grilled 2026-08-10
+# after CONTEXT.md's "MDM Utility Machine" naming was locked): consolidates
+# the 7 genuinely-uniform single-command MDM CLI wrappers -- mdm_migrate,
+# mdm_check_connectivity, mdm_run, mdm_backfill_relationships, mdm_sync_graph,
+# mdm_verify_graph, mdm_counts -- into one deployed machine, selected via
+# execution input {"mode": "<workflow>"}. Each mode's override chain (limit /
+# relationship_type / limit_per_type) is copied verbatim from
+# write_mdm_workflow_definition's own branching, just with every state name
+# prefixed by the workflow name so all 7 can coexist in one flat States dict.
+# generation_build (a bespoke partition-fan-out pipeline, not a single-command
+# wrapper) and mdm_seed_universe (kept as its own standalone machine per
+# ticket 04) are deliberately excluded -- see CONTEXT.md's "Graph Generation
+# Build Machine" / "MDM Utility Machine" entries.
+write_mdm_utility_definition() {
+  local output_file="$1"
+  local workflows_json="[" first="true" workflow task_arn default_cmd limit_cmd relationship_cmd relationship_limit_cmd limit_per_type_cmd entry
+
+  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts; do
+    task_arn="$(task_definition_for_mdm_workflow "$workflow")"
+    default_cmd="$(mdm_workflow_command_expression "$workflow")"
+    limit_cmd="$(mdm_workflow_limit_command_expression "$workflow")"
+    relationship_cmd="$(mdm_workflow_relationship_command_expression "$workflow")"
+    relationship_limit_cmd="$(mdm_workflow_relationship_limit_command_expression "$workflow")"
+    limit_per_type_cmd="$(mdm_workflow_limit_per_type_command_expression "$workflow")"
+    entry="$(python3 - "$workflow" "$task_arn" "$default_cmd" "$limit_cmd" "$relationship_cmd" "$relationship_limit_cmd" "$limit_per_type_cmd" <<'PY'
+import json, sys
+(name, task_arn, default_cmd, limit_cmd, relationship_cmd, relationship_limit_cmd, limit_per_type_cmd) = sys.argv[1:]
+print(json.dumps({
+    "name": name, "task_arn": task_arn, "default_cmd": default_cmd,
+    "limit_cmd": limit_cmd, "relationship_cmd": relationship_cmd,
+    "relationship_limit_cmd": relationship_limit_cmd, "limit_per_type_cmd": limit_per_type_cmd,
+}))
+PY
+)"
+    if [[ "$first" != "true" ]]; then workflows_json+=","; fi
+    first="false"
+    workflows_json+="$entry"
+  done
+  workflows_json+="]"
+
+  python3 - "$output_file" "$CLUSTER_ARN" "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" "$workflows_json" <<'PY'
+import json
+import pathlib
+import sys
+
+(output_file, cluster_arn, container_name, subnet_json, security_group_json, workflows_json) = sys.argv[1:]
+
+subnets = json.loads(subnet_json)
+security_groups = json.loads(security_group_json)
+workflows = json.loads(workflows_json)
+
+
+def run_task_state(task_def_arn, command_expression):
+    return {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::ecs:runTask.sync",
+        "Parameters": {
+            "LaunchType": "FARGATE",
+            "Cluster": cluster_arn,
+            "TaskDefinition": task_def_arn,
+            "PropagateTags": "TASK_DEFINITION",
+            "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                    "AssignPublicIp": "ENABLED",
+                    "SecurityGroups": security_groups,
+                    "Subnets": subnets,
+                },
+            },
+            "Overrides": {
+                "ContainerOverrides": [{
+                    "Name": container_name,
+                    "Command.$": command_expression,
+                }],
+            },
+        },
+        "Retry": [{
+            "ErrorEquals": ["States.TaskFailed"],
+            "IntervalSeconds": 60,
+            "BackoffRate": 2.0,
+            "MaxAttempts": 2,
+        }],
+        "End": True,
+    }
+
+
+def build_workflow_states(w):
+    """Mirrors write_mdm_workflow_definition's own branching logic exactly,
+    namespaced under an f'{name}_' state-name prefix so all 7 workflows can
+    coexist in one machine's flat States dict without name collisions."""
+    name = w["name"]
+    prefix = lambda s: f"{name}_{s}"
+    task_arn = w["task_arn"]
+    default_cmd, limit_cmd = w["default_cmd"], w["limit_cmd"]
+    relationship_cmd, relationship_limit_cmd = w["relationship_cmd"], w["relationship_limit_cmd"]
+    limit_per_type_cmd = w["limit_per_type_cmd"]
+
+    if relationship_cmd and relationship_limit_cmd:
+        states = {
+            prefix("HasRelationshipTypeAndLimitOverride"): {
+                "Type": "Choice",
+                "Choices": [{
+                    "And": [
+                        {"Variable": "$.relationship_type", "IsPresent": True},
+                        {"Variable": "$.relationship_type", "IsString": True},
+                        {"Variable": "$.limit", "IsPresent": True},
+                        {"Variable": "$.limit", "IsNumeric": True},
+                    ],
+                    "Next": prefix("RunMdmTaskWithRelationshipTypeAndLimit"),
+                }],
+                "Default": prefix("HasRelationshipTypeOverride"),
+            },
+            prefix("HasRelationshipTypeOverride"): {
+                "Type": "Choice",
+                "Choices": [{
+                    "And": [
+                        {"Variable": "$.relationship_type", "IsPresent": True},
+                        {"Variable": "$.relationship_type", "IsString": True},
+                    ],
+                    "Next": prefix("RunMdmTaskWithRelationshipType"),
+                }],
+                "Default": prefix("HasLimitOverride"),
+            },
+            prefix("HasLimitOverride"): {
+                "Type": "Choice",
+                "Choices": [{
+                    "And": [
+                        {"Variable": "$.limit", "IsPresent": True},
+                        {"Variable": "$.limit", "IsNumeric": True},
+                    ],
+                    "Next": prefix("RunMdmTaskWithLimit"),
+                }],
+                "Default": prefix("RunMdmTaskDefault"),
+            },
+            prefix("RunMdmTaskDefault"): run_task_state(task_arn, default_cmd),
+            prefix("RunMdmTaskWithLimit"): run_task_state(task_arn, limit_cmd),
+            prefix("RunMdmTaskWithRelationshipType"): run_task_state(task_arn, relationship_cmd),
+            prefix("RunMdmTaskWithRelationshipTypeAndLimit"): run_task_state(task_arn, relationship_limit_cmd),
+        }
+        start_at = prefix("HasRelationshipTypeAndLimitOverride")
+    elif limit_cmd:
+        states = {
+            prefix("HasLimitOverride"): {
+                "Type": "Choice",
+                "Choices": [{
+                    "And": [
+                        {"Variable": "$.limit", "IsPresent": True},
+                        {"Variable": "$.limit", "IsNumeric": True},
+                    ],
+                    "Next": prefix("RunMdmTaskWithLimit"),
+                }],
+                "Default": prefix("RunMdmTaskDefault"),
+            },
+            prefix("RunMdmTaskDefault"): run_task_state(task_arn, default_cmd),
+            prefix("RunMdmTaskWithLimit"): run_task_state(task_arn, limit_cmd),
+        }
+        start_at = prefix("HasLimitOverride")
+    else:
+        states = {prefix("RunMdmTask"): run_task_state(task_arn, default_cmd)}
+        start_at = prefix("RunMdmTask")
+
+    if limit_per_type_cmd:
+        states[prefix("HasLimitPerTypeOverride")] = {
+            "Type": "Choice",
+            "Choices": [{
+                "And": [
+                    {"Variable": "$.limit_per_type", "IsPresent": True},
+                    {"Variable": "$.limit_per_type", "IsNumeric": True},
+                ],
+                "Next": prefix("RunMdmTaskWithLimitPerType"),
+            }],
+            "Default": start_at,
+        }
+        states[prefix("RunMdmTaskWithLimitPerType")] = run_task_state(task_arn, limit_per_type_cmd)
+        start_at = prefix("HasLimitPerTypeOverride")
+
+    return states, start_at
+
+
+all_states = {}
+mode_choice_rules = []
+for w in workflows:
+    states, start_at = build_workflow_states(w)
+    all_states.update(states)
+    mode_choice_rules.append({"Variable": "$.mode", "StringEquals": w["name"], "Next": start_at})
+
+all_states["SelectMode"] = {
+    "Type": "Choice",
+    "Comment": "Route to the named MDM Utility Machine mode (state-machine-consolidation wayfinder map, ticket 02).",
+    "Choices": mode_choice_rules,
+    "Default": "UnknownMode",
+}
+all_states["UnknownMode"] = {
+    "Type": "Fail",
+    "Error": "UnknownMdmUtilityMode",
+    "Cause": "Execution input must include a recognized mode: " + ", ".join(sorted(w["name"] for w in workflows)),
+}
+
+definition = {
+    "Comment": (
+        "Consolidated MDM Utility Machine (state-machine-consolidation wayfinder "
+        "map, ticket 02): one deployed machine covering the 7 single-command MDM "
+        "CLI wrappers (mdm_migrate, mdm_check_connectivity, mdm_run, "
+        "mdm_backfill_relationships, mdm_sync_graph, mdm_verify_graph, mdm_counts), "
+        "selected via execution input {\"mode\": \"<name>\"}. Each mode's override "
+        "chain (limit / relationship_type / limit_per_type) is unchanged from the "
+        "former per-workflow deployed machines."
+    ),
+    "StartAt": "SelectMode",
+    "States": all_states,
+}
+pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
 # state-machine-consolidation wayfinder map, ticket 03: write_bootstrap_batched_definition
 # and the bootstrap_batched state machine were removed here. bootstrap_batched had zero
 # executions ever and was architecturally superseded by load_history's sequential-windowed
@@ -3422,13 +3636,15 @@ write_silver_mdm_gold_definition() {
   python3 - "$output_file" "$CLUSTER_ARN" \
     "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
-    "$BOOTSTRAP_BATCH_CONCURRENCY" "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" <<'PY'
+    "$BOOTSTRAP_BATCH_CONCURRENCY" "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$SCRIPT_DIR" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
  container_name, bronze_bucket_name, subnet_json, security_group_json,
- batch_concurrency, mdm_run_limit, mdm_graph_limit) = sys.argv[1:]
+ batch_concurrency, mdm_run_limit, mdm_graph_limit, script_dir) = sys.argv[1:]
+sys.path.insert(0, script_dir)
+from mdm_tail_helper import wire_mdm_tail
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
@@ -3506,14 +3722,17 @@ batch_map = {
 # MDM_RUN_LIMIT (incremental default 100) is intentionally NOT used here.
 mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="MdmBackfill")
 mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmExport")
-# MdmExport precedes MdmSync (data-architecture Issue 3) — see write_load_history_definition.
-mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="MdmSync")
-mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="MdmVerify")
-mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh")
+mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", is_end=True)
+mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", is_end=True)
+mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", is_end=True)
 mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
 # verify-graph is validation-only per docs/data-architecture.md: it reports
 # parity but must never block gold-refresh, so a verify failure falls through.
 gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
+# MdmExport-before-MdmSync ordering (data-architecture Issue 3) is enforced
+# by wire_mdm_tail (state-machine-consolidation wayfinder map, ticket 02) —
+# see infra/scripts/mdm_tail_helper.py.
+mdm_tail = wire_mdm_tail(mdm_export, mdm_sync, mdm_verify, gold_state=gold)
 
 # wh_large_arn, not wh_medium_arn -- same seed-universe OOM fixed in
 # write_load_history_definition (2026-08-09, task #35's live exit-137 on
@@ -3540,10 +3759,7 @@ definition = {
         "BatchSilver":  batch_map,
         "MdmRun":       mdm_run,
         "MdmBackfill":  mdm_backfill,
-        "MdmExport":    mdm_export,
-        "MdmSync":      mdm_sync,
-        "MdmVerify":    mdm_verify,
-        "GoldRefresh":  gold,
+        **mdm_tail,
     },
 }
 pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
@@ -3568,13 +3784,15 @@ write_bronze_seed_silver_gold_definition() {
     "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" \
     "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
-    "$BOOTSTRAP_BATCH_CONCURRENCY" "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" <<'PY'
+    "$BOOTSTRAP_BATCH_CONCURRENCY" "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$SCRIPT_DIR" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
  container_name, bronze_bucket_name, warehouse_bucket_name, subnet_json, security_group_json,
- batch_concurrency, mdm_run_limit, mdm_graph_limit) = sys.argv[1:]
+ batch_concurrency, mdm_run_limit, mdm_graph_limit, script_dir) = sys.argv[1:]
+sys.path.insert(0, script_dir)
+from mdm_tail_helper import wire_mdm_tail
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
@@ -3847,14 +4065,19 @@ strict_batch_map = {
 # mdm-run-throughput's own concurrency work makes them resumable too.
 mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all', '--run-id', $$.Execution.Name, '--resume-ledger-run-id', $.resume_from_run_id)", next_state="MdmBackfill")
 mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmExport")
-# MdmExport precedes MdmSync (data-architecture Issue 3) — see write_load_history_definition.
-mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="MdmSync")
-mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="MdmVerify")
-mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh")
+mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", is_end=True)
+mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", is_end=True)
+mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", is_end=True)
 mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
 # verify-graph is validation-only per docs/data-architecture.md: it reports
 # parity but must never block gold-refresh, so a verify failure falls through.
 gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
+# MdmExport-before-MdmSync ordering (data-architecture Issue 3) is enforced
+# by wire_mdm_tail (state-machine-consolidation wayfinder map, ticket 02) —
+# see infra/scripts/mdm_tail_helper.py. The separate "strict" release-mode
+# branch below (Strict*) is untouched -- it has no sibling machine sharing
+# its shape, so there is nothing to deduplicate.
+mdm_tail = wire_mdm_tail(mdm_export, mdm_sync, mdm_verify, gold_state=gold)
 
 # Ticket 21 chain (release_mode):
 #   StrictBatchSilver -> StrictMdmRun -> Backfill -> Idempotency
@@ -3978,10 +4201,7 @@ definition = {
         "BatchSilver":  batch_map,
         "MdmRun":       mdm_run,
         "MdmBackfill":  mdm_backfill,
-        "MdmExport":    mdm_export,
-        "MdmSync":      mdm_sync,
-        "MdmVerify":    mdm_verify,
-        "GoldRefresh":  gold,
+        **mdm_tail,
     },
 }
 pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
@@ -4296,12 +4516,14 @@ PY
   python3 - "$mdm_gold_file" "$CLUSTER_ARN" \
     "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_LARGE_ARN" \
     "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
-    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" <<'PY'
+    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$SCRIPT_DIR" <<'PY'
 import json, pathlib, sys
 (output_file, cluster_arn,
  mdm_medium_arn, mdm_small_arn, wh_large_arn,
  container_name, subnet_json, security_group_json,
- mdm_run_limit, mdm_graph_limit) = sys.argv[1:]
+ mdm_run_limit, mdm_graph_limit, script_dir) = sys.argv[1:]
+sys.path.insert(0, script_dir)
+from mdm_tail_helper import wire_mdm_tail
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
 mdm_limit   = str(mdm_run_limit)
@@ -4319,17 +4541,23 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
     else: s["Next"] = next_state
     return s
 
+tail = wire_mdm_tail(
+    ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", is_end=True),
+    ecs_state(mdm_medium_arn, f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')", is_end=True),
+    ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", is_end=True),
+    gold_state=ecs_state(wh_large_arn, "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60),
+)
+
 definition = {
     "Comment": "MDM entity resolution + Neo4j sync + gold-refresh. No silver batch step — run after bronze+silver are complete.",
     "StartAt": "MdmRun",
     "States": {
         "MdmRun":      ecs_state(mdm_medium_arn, f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')", next_state="MdmBackfill"),
         "MdmBackfill": ecs_state(mdm_medium_arn, f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')", next_state="MdmExport"),
-        # MdmExport precedes MdmSync (data-architecture Issue 3) — see write_load_history_definition.
-        "MdmExport":   ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="MdmSync"),
-        "MdmSync":     ecs_state(mdm_medium_arn, f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')", next_state="MdmVerify"),
-        "MdmVerify":   ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh"),
-        "GoldRefresh": ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60),
+        # MdmExport-before-MdmSync ordering (data-architecture Issue 3) is
+        # enforced by wire_mdm_tail (state-machine-consolidation wayfinder
+        # map, ticket 02) — see infra/scripts/mdm_tail_helper.py.
+        **tail,
     },
 }
 pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
@@ -4347,12 +4575,14 @@ PY
   ownership_mdm_gold_file="$(json_file sfn-ownership-mdm-gold)"
   python3 - "$ownership_mdm_gold_file" "$CLUSTER_ARN" \
     "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
-    "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" <<'PY'
+    "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" "$SCRIPT_DIR" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
- container_name, subnet_json, security_group_json) = sys.argv[1:]
+ container_name, subnet_json, security_group_json, script_dir) = sys.argv[1:]
+sys.path.insert(0, script_dir)
+from mdm_tail_helper import wire_mdm_tail
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
@@ -4382,6 +4612,13 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
         s["Next"] = next_state
     return s
 
+tail = wire_mdm_tail(
+    ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", is_end=True),
+    ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", is_end=True),
+    ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", is_end=True),
+    gold_state=ecs_state(wh_large_arn, "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60),
+)
+
 definition = {
     "Comment": (
         "Ticket 21 insider path: optional parse-ownership-bronze, then PERSON-only "
@@ -4403,11 +4640,10 @@ definition = {
             "States.Array('mdm', 'derive-relationships', '--relationship-type', 'IS_INSIDER', '--target-per-type', '100000')",
             next_state="MdmExport",
         ),
-        # MdmExport precedes MdmSync (data-architecture Issue 3) — see write_load_history_definition.
-        "MdmExport":   ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="MdmSync"),
-        "MdmSync":     ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", next_state="MdmVerify"),
-        "MdmVerify":   ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", next_state="GoldRefresh"),
-        "GoldRefresh": ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60),
+        # MdmExport-before-MdmSync ordering (data-architecture Issue 3) is
+        # enforced by wire_mdm_tail (state-machine-consolidation wayfinder
+        # map, ticket 02) — see infra/scripts/mdm_tail_helper.py.
+        **tail,
     },
 }
 pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
@@ -4429,12 +4665,14 @@ PY
   residual_holds_graph_file="$(json_file sfn-residual-holds-graph)"
   python3 - "$residual_holds_graph_file" "$CLUSTER_ARN" \
     "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_LARGE_ARN" \
-    "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" <<'PY'
+    "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" "$SCRIPT_DIR" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  mdm_small_arn, mdm_large_arn,
- container_name, subnet_json, security_group_json) = sys.argv[1:]
+ container_name, subnet_json, security_group_json, script_dir) = sys.argv[1:]
+sys.path.insert(0, script_dir)
+from mdm_tail_helper import wire_mdm_tail
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
@@ -4507,39 +4745,41 @@ definition = {
             next_state="MdmExport",
             retry_secs=180,
         ),
-        "MdmExport": ecs_state(
-            mdm_large_arn,
-            "States.Array('mdm', 'export')",
-            next_state="MdmSync",
-        ),
-        # Full-graph materialization (not residual types only). A type-filtered
-        # sync produced incomplete candidate gen 69e139b0… (company/person/security
-        # + HOLDS only) while verify without --generation-id checked the *active*
-        # Ticket 20 gen against full MDM — parity failed on IS_INSIDER/HOLDS
-        # (residual-holds-20260725T222735Z). Use Execution.Name as generation_id
-        # so verify scopes the candidate; empty type filters = all MDM types.
-        "MdmSync": ecs_state(
-            mdm_large_arn,
-            (
-                "States.Array("
-                "'mdm', 'sync-graph', "
-                "'--generation-id', $$.Execution.Name, "
-                "'--limit-per-type', '200000'"
-                ")"
+        # MdmExport-before-MdmSync ordering (data-architecture Issue 3) is
+        # enforced by wire_mdm_tail (state-machine-consolidation wayfinder
+        # map, ticket 02) — see infra/scripts/mdm_tail_helper.py. No
+        # GoldRefresh here: this machine does not claim Ticket 20 GO.
+        **wire_mdm_tail(
+            ecs_state(mdm_large_arn, "States.Array('mdm', 'export')", is_end=True),
+            # Full-graph materialization (not residual types only). A type-filtered
+            # sync produced incomplete candidate gen 69e139b0… (company/person/security
+            # + HOLDS only) while verify without --generation-id checked the *active*
+            # Ticket 20 gen against full MDM — parity failed on IS_INSIDER/HOLDS
+            # (residual-holds-20260725T222735Z). Use Execution.Name as generation_id
+            # so verify scopes the candidate; empty type filters = all MDM types.
+            ecs_state(
+                mdm_large_arn,
+                (
+                    "States.Array("
+                    "'mdm', 'sync-graph', "
+                    "'--generation-id', $$.Execution.Name, "
+                    "'--limit-per-type', '200000'"
+                    ")"
+                ),
+                is_end=True,
+                retry_secs=180,
             ),
-            next_state="MdmVerify",
-            retry_secs=180,
-        ),
-        "MdmVerify": ecs_state(
-            mdm_small_arn,
-            (
-                "States.Array("
-                "'mdm', 'verify-graph', '--skip-native-app', "
-                "'--generation-id', $$.Execution.Name"
-                ")"
+            ecs_state(
+                mdm_small_arn,
+                (
+                    "States.Array("
+                    "'mdm', 'verify-graph', '--skip-native-app', "
+                    "'--generation-id', $$.Execution.Name"
+                    ")"
+                ),
+                is_end=True,
+                retry_secs=60,
             ),
-            is_end=True,
-            retry_secs=60,
         ),
     },
 }
@@ -4591,24 +4831,34 @@ import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
 
-  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts mdm_seed_universe; do
-    task_definition_arn="$(task_definition_for_mdm_workflow "$workflow")"
-    command_expression="$(mdm_workflow_command_expression "$workflow")"
-    limit_command_expression="$(mdm_workflow_limit_command_expression "$workflow")"
-    relationship_command_expression="$(mdm_workflow_relationship_command_expression "$workflow")"
-    relationship_limit_command_expression="$(mdm_workflow_relationship_limit_command_expression "$workflow")"
-    limit_per_type_command_expression="$(mdm_workflow_limit_per_type_command_expression "$workflow")"
-    definition_file="$(json_file "sfn-${workflow}")"
-    write_mdm_workflow_definition "$definition_file" "$task_definition_arn" "$command_expression" "$limit_command_expression" "$relationship_command_expression" "$relationship_limit_command_expression" "$limit_per_type_command_expression"
-    state_machine_arn="$(upsert_state_machine "$workflow" "$definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
-    printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-    python3 - "$workflow" "$state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
-import json
-import sys
-
+  # mdm_seed_universe: kept as its own standalone deployed machine (state-
+  # machine-consolidation wayfinder map, ticket 04) -- it preserves a real,
+  # currently-only-here --tracking-status/--limit override capability, and
+  # is free to generate via write_mdm_workflow_definition as-is.
+  mdm_seed_universe_task_definition_arn="$(task_definition_for_mdm_workflow mdm_seed_universe)"
+  mdm_seed_universe_command_expression="$(mdm_workflow_command_expression mdm_seed_universe)"
+  mdm_seed_universe_limit_command_expression="$(mdm_workflow_limit_command_expression mdm_seed_universe)"
+  mdm_seed_universe_definition_file="$(json_file sfn-mdm-seed-universe)"
+  write_mdm_workflow_definition "$mdm_seed_universe_definition_file" "$mdm_seed_universe_task_definition_arn" "$mdm_seed_universe_command_expression" "$mdm_seed_universe_limit_command_expression" "" "" ""
+  mdm_seed_universe_arn="$(upsert_state_machine mdm_seed_universe "$mdm_seed_universe_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
+  python3 - "mdm_seed_universe" "$mdm_seed_universe_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
-  done
+
+  # mdm_utility: consolidated MDM Utility Machine covering the 7 genuinely-
+  # uniform single-command MDM CLI wrappers (state-machine-consolidation
+  # wayfinder map, ticket 02) -- see write_mdm_utility_definition's own
+  # comment for the full excluded-machines rationale.
+  mdm_utility_definition_file="$(json_file sfn-mdm-utility)"
+  write_mdm_utility_definition "$mdm_utility_definition_file"
+  mdm_utility_arn="$(upsert_state_machine mdm_utility "$mdm_utility_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
+  python3 - "mdm_utility" "$mdm_utility_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+import json, sys
+print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
+PY
 fi
 printf '\n}\n' >> "$WORKFLOW_ARNS_FILE"
 
