@@ -36,5 +36,5 @@ def execute_standard_command(command_name: str, args: Any) -> int:
         )
         return 2
 
-    print(json.dumps(payload, indent=2, sort_keys=True))
+    warehouse_orchestrator._print_command_result(payload)
     return 0

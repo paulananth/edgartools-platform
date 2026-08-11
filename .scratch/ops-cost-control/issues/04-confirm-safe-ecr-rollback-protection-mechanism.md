@@ -36,3 +36,18 @@ build-cache policy.
 Any missing, ambiguous, unpaginated, unresolved, or changed evidence aborts the
 operation. ECR and ECS do not automatically provide the cross-service rollback
 protection this cleanup requires.
+
+**Correction (2026-08-11, caught while working ticket 05):** this research
+(dated 2026-08-01) and the linked doc's "Repository scope" table assume the
+pre-consolidation split — two final repos (`edgartools-prod-warehouse`,
+`edgartools-prod-mdm`) plus two `-deps` repos. That split no longer exists:
+CLAUDE.md's "Image management" section and
+`infra/terraform/modules/warehouse_runtime/main.tf:16-22` confirm all four
+image kinds now share one repository (`edgartools-prod-images`), with
+role/stage encoded in the tag prefix (`warehouse-*`/`mdm-*`/`warehouse-deps-*`/
+`mdm-deps-*`) instead of the repository name. The hybrid contract's
+*mechanism* (durable cohort registry, ECR mirror tags, ECS/Step Functions
+reconciliation, fail-closed conditions) is unaffected by this — only the
+"repository scope" framing needs to shift from per-repository to
+per-tag-prefix within the single shared repo. Not re-litigated here; ticket
+05 carries the corrected scope forward.

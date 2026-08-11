@@ -63,8 +63,12 @@ resource "aws_ecr_lifecycle_policy" "images" {
 }
 
 resource "aws_cloudwatch_log_group" "ecs" {
-  name              = "/aws/ecs/${local.name_prefix}-warehouse"
-  retention_in_days = 30
+  name = "/aws/ecs/${local.name_prefix}-warehouse"
+  # Operational Forensics Window (ops-cost-control map): seven days across
+  # every production CloudWatch log group. Keep in sync with the Step
+  # Functions and Container Insights groups, both set the same way by
+  # ensure_log_group() in deploy-aws-application.sh.
+  retention_in_days = 7
 
   tags = local.tags
 }
