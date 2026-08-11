@@ -793,10 +793,12 @@ from edgar_warehouse.mdm.snowflake_graph import (  # noqa: E402
 
 class _FakeActivationCursor:
     def __init__(self, *, generation_status: dict[str, str], active_generation_id: str | None,
-                 cleanup_candidates: list[tuple] | None = None) -> None:
+                 cleanup_candidates: list[tuple] | None = None,
+                 generation_created_at: dict[str, str] | None = None) -> None:
         self.generation_status = generation_status
         self.active_generation_id = active_generation_id
         self.cleanup_candidates = cleanup_candidates or []
+        self.generation_created_at = generation_created_at or {}
         self.executed: list[str] = []
         self.closed = False
         self._pending: list[tuple] = []
@@ -808,6 +810,13 @@ class _FakeActivationCursor:
             for generation_id, status in self.generation_status.items():
                 if f"'{generation_id}'".upper() in upper:
                     self._pending = [(status,)]
+                    break
+            else:
+                self._pending = []
+        elif upper.startswith("SELECT CREATED_AT FROM"):
+            for generation_id, created_at in self.generation_created_at.items():
+                if f"'{generation_id}'".upper() in upper:
+                    self._pending = [(created_at,)]
                     break
             else:
                 self._pending = []
@@ -885,6 +894,91 @@ def test_activation_refuses_unknown_generation_id():
     else:  # pragma: no cover - assertion guard
         raise AssertionError("expected activation of an unknown generation to raise")
     assert "MERGE" not in "\n".join(connection.fake_cursor.executed).upper()
+
+
+def test_activation_refuses_an_older_generation_than_the_currently_active_one():
+    # decoupled-bronze-pipeline map, ticket 13: an out-of-order activation
+    # call (e.g. two SQS messages for different generations delivered out
+    # of order) must not regress the active pointer to a stale generation.
+    connection = _FakeActivationConnection(
+        generation_status={"gen-older": "verified"},
+        active_generation_id="gen-newer",
+        generation_created_at={
+            "gen-older": "2026-08-01T00:00:00Z",
+            "gen-newer": "2026-08-10T00:00:00Z",
+        },
+    )
+
+    try:
+        activate_graph_generation(
+            connection, target_database="EDGARTOOLS_DEV", generation_id="gen-older"
+        )
+    except SnowflakeGraphActivationError as exc:
+        assert "gen-older" in str(exc)
+        assert "gen-newer" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("expected activation of an older generation to raise")
+
+    # The status guard passed (it's 'verified'); only the ordering guard
+    # should have blocked this -- confirm no MERGE/UPDATE ever ran.
+    combined = "\n".join(connection.fake_cursor.executed)
+    assert "MERGE" not in combined.upper()
+    assert "UPDATE" not in combined.upper()
+
+
+def test_activation_accepts_a_newer_generation_than_the_currently_active_one():
+    connection = _FakeActivationConnection(
+        generation_status={"gen-newer": "verified"},
+        active_generation_id="gen-older",
+        generation_created_at={
+            "gen-older": "2026-08-01T00:00:00Z",
+            "gen-newer": "2026-08-10T00:00:00Z",
+        },
+    )
+
+    result = activate_graph_generation(
+        connection, target_database="EDGARTOOLS_DEV", generation_id="gen-newer"
+    )
+
+    assert result.generation_id == "gen-newer"
+    combined = "\n".join(connection.fake_cursor.executed)
+    assert "MERGE INTO EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION.GRAPH_ACTIVE_POINTER" in combined
+
+
+def test_activation_ordering_guard_does_not_apply_when_no_generation_is_active_yet():
+    # First-ever activation: there's nothing to be "newer than".
+    connection = _FakeActivationConnection(
+        generation_status={"gen-first": "verified"},
+        active_generation_id=None,
+    )
+
+    result = activate_graph_generation(
+        connection, target_database="EDGARTOOLS_DEV", generation_id="gen-first"
+    )
+
+    assert result.previous_generation_id is None
+    combined = "\n".join(connection.fake_cursor.executed)
+    assert "MERGE INTO EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION.GRAPH_ACTIVE_POINTER" in combined
+
+
+def test_rollback_to_an_older_generation_is_not_blocked_by_the_ordering_guard():
+    # Rollback deliberately targets an older, retained generation -- the
+    # activation-only ordering guard must not apply here.
+    connection = _FakeActivationConnection(
+        generation_status={"gen-older-retired": "retired"},
+        active_generation_id="gen-newer",
+        generation_created_at={
+            "gen-older-retired": "2026-08-01T00:00:00Z",
+            "gen-newer": "2026-08-10T00:00:00Z",
+        },
+    )
+
+    result = rollback_graph_generation(
+        connection, target_database="EDGARTOOLS_DEV", generation_id="gen-older-retired"
+    )
+
+    assert result.generation_id == "gen-older-retired"
+    assert result.previous_generation_id == "gen-newer"
 
 
 def test_rollback_accepts_a_retired_generation_but_refuses_a_failed_one():

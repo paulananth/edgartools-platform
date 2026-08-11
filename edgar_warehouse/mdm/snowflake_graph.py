@@ -978,6 +978,16 @@ def _active_generation_id(cursor: Any, context: dict[str, Any]) -> str | None:
     return rows[0]["ACTIVE_GENERATION_ID"] if rows else None
 
 
+def _generation_created_at(cursor: Any, context: dict[str, Any], generation_id: str) -> Any:
+    rows = _fetch_rows(
+        cursor,
+        f"SELECT CREATED_AT FROM {_fq(context, 'GRAPH_GENERATION')} "
+        f"WHERE GENERATION_ID = {_sql_literal(generation_id)}",
+        ("CREATED_AT",),
+    )
+    return rows[0]["CREATED_AT"] if rows else None
+
+
 def _flip_active_pointer(
     connection: Any,
     *,
@@ -986,6 +996,7 @@ def _flip_active_pointer(
     generation_id: str,
     required_statuses: tuple[str, ...],
     operation_name: str,
+    enforce_monotonic: bool,
 ) -> SnowflakeGraphActivationResult:
     context = _activation_context(target_database, target_schema)
     cursor = connection.cursor()
@@ -1004,6 +1015,24 @@ def _flip_active_pointer(
                 f"{required_statuses!r}; refusing to {operation_name}"
             )
         previous_generation_id = _active_generation_id(cursor, context)
+        # Ordering guard (decoupled-bronze-pipeline map, ticket 13): once
+        # graph sync becomes an automatic per-event consumer over SQS
+        # standard queues (no delivery-order guarantee), two activation
+        # calls for different generations could otherwise arrive out of
+        # order and silently regress the active pointer to a stale
+        # generation. Uses CREATED_AT, not GENERATION_ID's own text (an
+        # opaque, caller-supplied string with no guaranteed sort order).
+        # Applies to activate only -- rollback deliberately targets an
+        # older, retained generation and has its own status-based guard.
+        if enforce_monotonic and previous_generation_id is not None:
+            target_created_at = _generation_created_at(cursor, context, generation_id)
+            previous_created_at = _generation_created_at(cursor, context, previous_generation_id)
+            if previous_created_at is not None and target_created_at is not None and target_created_at <= previous_created_at:
+                raise SnowflakeGraphActivationError(
+                    f"generation {generation_id!r} (created {target_created_at}) is not newer than "
+                    f"the active generation {previous_generation_id!r} (created {previous_created_at}); "
+                    f"refusing to {operation_name}"
+                )
         _execute_sql_script(cursor, render_activate_generation(context, generation_id))
     finally:
         cursor.close()
@@ -1030,6 +1059,7 @@ def activate_graph_generation(
         generation_id=generation_id,
         required_statuses=("verified",),
         operation_name="activate",
+        enforce_monotonic=True,
     )
 
 
@@ -1052,6 +1082,7 @@ def rollback_graph_generation(
         generation_id=generation_id,
         required_statuses=RETAINABLE_GENERATION_STATUSES,
         operation_name="roll back",
+        enforce_monotonic=False,
     )
 
 
