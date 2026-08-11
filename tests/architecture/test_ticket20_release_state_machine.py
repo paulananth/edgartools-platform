@@ -27,6 +27,7 @@ def _definition(tmp_path: Path) -> dict:
         "BOOTSTRAP_BATCH_CONCURRENCY=4\n"
         "MDM_RUN_LIMIT=100\n"
         "MDM_GRAPH_LIMIT=100\n"
+        f'SCRIPT_DIR="{(REPO_ROOT / "infra" / "scripts").as_posix()}"\n'
         f'source "{function_path}"\n'
         f'write_bronze_seed_silver_gold_definition "{output_path}" '
         '"arn:warehouse-medium" "arn:mdm-small" "arn:mdm-medium" "arn:warehouse-large"\n',

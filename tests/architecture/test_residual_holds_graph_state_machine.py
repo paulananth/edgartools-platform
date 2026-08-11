@@ -85,8 +85,18 @@ def test_residual_holds_graph_uses_mdm_large_for_heavy_stages() -> None:
 
 
 def test_residual_holds_graph_order() -> None:
+    # state-machine-consolidation wayfinder map, ticket 02: MdmExport/
+    # MdmSync/MdmVerify are no longer literal dict-key strings in this
+    # source block -- they're built by the shared wire_mdm_tail() helper
+    # (infra/scripts/mdm_tail_helper.py, unit-tested in
+    # tests/unit/test_mdm_tail_helper.py) from three positional ecs_state(...)
+    # arguments in Export/Sync/Verify order. The real generated-JSON
+    # Next-pointer chain (including this ordering) is verified end-to-end by
+    # tests/architecture/test_residual_holds_graph_tail.py -- this test
+    # keeps checking source-level ordering, just via the new shape: the head
+    # states' literal keys, then the wire_mdm_tail(...) call's three
+    # positional export/sync/verify command arguments in the mandated order.
     src = _extract_residual_definition_source()
-    # Order by first occurrence of state name keys in the definition string
     order = []
     for name in (
         "MdmSecurities",
@@ -95,9 +105,6 @@ def test_residual_holds_graph_order() -> None:
         "MdmHolds",
         "MdmCompanyHolds",
         "MdmInstitutionalHolds",
-        "MdmExport",
-        "MdmSync",
-        "MdmVerify",
     ):
         idx = src.find(f'"{name}"')
         assert idx >= 0, f"state {name} missing"
@@ -110,7 +117,14 @@ def test_residual_holds_graph_order() -> None:
         "MdmHolds",
         "MdmCompanyHolds",
         "MdmInstitutionalHolds",
-        "MdmExport",
-        "MdmSync",
-        "MdmVerify",
     ]
+
+    wire_tail_idx = src.index("wire_mdm_tail(")
+    assert order[-1][0] < wire_tail_idx, "wire_mdm_tail(...) must come after the head states"
+
+    export_idx = src.index("'mdm', 'export'", wire_tail_idx)
+    sync_idx = src.index("'mdm', 'sync-graph'", wire_tail_idx)
+    verify_idx = src.index("'mdm', 'verify-graph'", wire_tail_idx)
+    assert wire_tail_idx < export_idx < sync_idx < verify_idx, (
+        "wire_mdm_tail(...) positional args must be export, sync, verify in that order"
+    )
