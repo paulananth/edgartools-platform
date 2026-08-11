@@ -251,6 +251,42 @@ def _emit_pipeline_event(event: str, **payload: Any) -> None:
     print(json.dumps(document, sort_keys=True), file=sys.stderr, flush=True)
 
 
+# Cap on how many `raw_writes` entries a command result prints to stdout.
+# `raw_writes` carries one write receipt per document (path, sha256,
+# raw_object_id, cik, cached) and can run into the thousands for a single
+# bootstrap window. The full list is already durable elsewhere -- one row per
+# run in `pipeline_run.raw_writes_json` (SilverDatabase.complete_pipeline_run)
+# inside the published silver database, plus the underlying S3 objects
+# themselves -- so printing it in full to stdout only duplicated data ECS was
+# already routing to CloudWatch, and was the single largest contributor to
+# production log volume (ops-cost-control ticket 01: 61.9M bytes, 71% of all
+# records in one measured 14-hour window).
+COMMAND_RESULT_RAW_WRITES_LOG_SAMPLE = 5
+
+
+def _command_result_for_log(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of a command result payload that is safe to print to stdout.
+
+    Every other field in a command result payload is already bounded (a
+    handful of layer manifest paths, per-table row counts) -- `raw_writes` is
+    the one field whose size scales with documents processed, so it's the
+    only one summarized here.
+    """
+    raw_writes = payload.get("raw_writes")
+    if not isinstance(raw_writes, list) or len(raw_writes) <= COMMAND_RESULT_RAW_WRITES_LOG_SAMPLE:
+        return payload
+    summarized = dict(payload)
+    summarized["raw_writes"] = raw_writes[:COMMAND_RESULT_RAW_WRITES_LOG_SAMPLE]
+    summarized["raw_writes_total_count"] = len(raw_writes)
+    summarized["raw_writes_sample_size"] = COMMAND_RESULT_RAW_WRITES_LOG_SAMPLE
+    return summarized
+
+
+def _print_command_result(payload: dict[str, Any]) -> None:
+    """Print a command result payload, bounding its `raw_writes` field first."""
+    print(json.dumps(_command_result_for_log(payload), indent=2, sort_keys=True))
+
+
 def run_command(command_name: str, args: Any) -> int:
     """Execute a warehouse command and emit a JSON result payload."""
     arguments = _namespace_to_payload(args)
@@ -263,7 +299,7 @@ def run_command(command_name: str, args: Any) -> int:
         print(json.dumps(_error_payload(command_name, arguments, str(exc), runtime_mode=runtime_mode), indent=2, sort_keys=True))
         return 2
 
-    print(json.dumps(payload, indent=2, sort_keys=True))
+    _print_command_result(payload)
     return 0
 
 

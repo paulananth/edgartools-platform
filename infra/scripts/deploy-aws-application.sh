@@ -171,6 +171,12 @@ EXECUTION_ROLE_ARN=""
 TASK_ROLE_ARN=""
 STEP_FUNCTIONS_ROLE_ARN=""
 LOG_GROUP_NAME=""
+# Operational Forensics Window (ops-cost-control map): seven days across
+# every production CloudWatch log group this script manages the retention
+# of. Keep in sync with aws_cloudwatch_log_group.ecs's retention_in_days in
+# infra/terraform/modules/warehouse_runtime/main.tf, which owns the one log
+# group Terraform creates directly.
+OPERATIONAL_FORENSICS_LOG_RETENTION_DAYS=7
 IMAGE_TAG=""
 IMAGE_REF=""
 MDM_IMAGE_REF=""
@@ -1326,17 +1332,23 @@ mdm_workflow_limit_per_type_command_expression() {
   esac
 }
 
+# Idempotently ensures a CloudWatch log group exists with a given retention.
+# Called on every deploy so retention can't silently drift back to the AWS
+# default (never expire) or an old hardcoded value -- see the Operational
+# Forensics Window note in warehouse_runtime/main.tf's aws_cloudwatch_log_group.ecs.
+# retention_days has no default: every caller must state its own retention
+# explicitly rather than inherit a value tuned for a different log group.
 ensure_log_group() {
-  local log_group_name="$1" log_group_arn
+  local log_group_name="$1" retention_days="${2:?ensure_log_group requires retention_days}" log_group_arn
   if aws_cli logs describe-log-groups --log-group-name-prefix "$log_group_name" --query "logGroups[?logGroupName=='${log_group_name}'].logGroupName | [0]" --output text 2>/dev/null | grep -qx "$log_group_name"; then
-    log "Step Functions log group exists: ${log_group_name}"
+    log "Log group exists: ${log_group_name}"
   else
-    log "Creating Step Functions log group ${log_group_name}"
+    log "Creating log group ${log_group_name}"
     aws_cli logs create-log-group \
       --log-group-name "$log_group_name" \
       --tags Environment="$ENVIRONMENT",ManagedBy=operator-script,Project=edgartools >/dev/null
   fi
-  aws_cli logs put-retention-policy --log-group-name "$log_group_name" --retention-in-days 30 >/dev/null
+  aws_cli logs put-retention-policy --log-group-name "$log_group_name" --retention-in-days "$retention_days" >/dev/null
   log_group_arn="$(aws_cli logs describe-log-groups --log-group-name-prefix "$log_group_name" --query "logGroups[?logGroupName=='${log_group_name}'].arn | [0]" --output text)"
   if [[ "$log_group_arn" != *":*" ]]; then
     log_group_arn="${log_group_arn}:*"
@@ -4424,9 +4436,20 @@ upsert_state_machine() {
 
 require_runner_role_name "$STEP_FUNCTIONS_ROLE_ARN" "$RUNNER_STEP_FUNCTIONS_ROLE_NAME" "--step-functions-role-arn"
 STEP_FUNCTIONS_LOG_GROUP_NAME="/aws/states/${NAME_PREFIX}-warehouse"
-STEP_FUNCTIONS_LOG_GROUP_ARN="$(ensure_log_group "$STEP_FUNCTIONS_LOG_GROUP_NAME")"
+STEP_FUNCTIONS_LOG_GROUP_ARN="$(ensure_log_group "$STEP_FUNCTIONS_LOG_GROUP_NAME" "$OPERATIONAL_FORENSICS_LOG_RETENTION_DAYS")"
 LOGGING_CONFIGURATION_FILE="$(json_file step-functions-logging)"
 write_logging_configuration "$LOGGING_CONFIGURATION_FILE" "$STEP_FUNCTIONS_LOG_GROUP_ARN"
+
+# Container Insights auto-creates this log group (deterministic name, keyed
+# off the cluster name) the first time a task runs on a cluster with the
+# containerInsights setting enabled -- see aws_ecs_cluster.warehouse in
+# infra/terraform/modules/warehouse_runtime/main.tf. Nothing else asserts its
+# retention, so left alone it silently reverts to "never expire" the moment
+# anything (a cluster recreate, a manual reset) touches it. ensure_log_group
+# is idempotent whether or not the group already exists, so it's safe to call
+# unconditionally on every deploy.
+CONTAINER_INSIGHTS_LOG_GROUP_NAME="/aws/ecs/containerinsights/${CLUSTER_NAME}/performance"
+ensure_log_group "$CONTAINER_INSIGHTS_LOG_GROUP_NAME" "$OPERATIONAL_FORENSICS_LOG_RETENTION_DAYS" >/dev/null
 
 WORKFLOW_ARNS_FILE="$(json_file workflow-arns)"
 printf '{\n' > "$WORKFLOW_ARNS_FILE"
