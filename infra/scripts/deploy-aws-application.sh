@@ -2795,11 +2795,20 @@ gold = ecs_state(wh_large_arn,
     next_state="WriteRunSummary", retry_secs=60)
 
 # (9) WriteRunSummary: terminal task that reads cik_windows.jsonl + cik_snapshot.jsonl from S3
-# to derive window_count and cik_count, then writes run-summary.json.
-# Uses --from-windows-key so the command resolves counts from S3 manifests; the SM does NOT
-# carry $.WindowCount / $.CikCount through state (those values live only in the S3 manifests).
+# to derive window_count and cik_count, then writes run-summary.json. The command resolves
+# both S3 keys itself from --run-id via the canonical path resolver (matching how
+# ComputeWindows wrote them) -- the SM does NOT carry $.WindowCount / $.CikCount through
+# state (those values live only in the S3 manifests) and no longer hand-builds the manifest
+# key here either. Previously this state built the cik_windows.jsonl key inline via
+# States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', ...)
+# and passed it as --from-windows-key; that literal duplicated the "warehouse/bronze/"
+# prefix already present in WAREHOUSE_BRONZE_ROOT, producing a key that could never
+# resolve (root cause of ticket 42's retry5 terminal failure, live-verified against S3).
+# Fixed at the source instead of patching the literal: write-run-summary now derives the
+# key itself, the same way cik_snapshot_path already did, so there is exactly one place
+# that owns this template (edgar_warehouse/config/warehouse_paths.properties).
 write_run_summary = ecs_state(wh_medium_arn,
-    "States.Array('write-run-summary', '--run-id', $$.Execution.Name, '--from-windows-key', States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name))",
+    "States.Array('write-run-summary', '--run-id', $$.Execution.Name)",
     is_end=True)
 
 definition = {
