@@ -20,6 +20,10 @@ _Avoid_: Granting write/ownership privileges, treating "dashboard" and "report" 
 
 ### Data plane (ingest and engagement)
 
+**Staged Warehouse Object**:
+An immutable, random-token-scoped warehouse object written before ETag-guarded promotion to a canonical silver key; it is operational scratch data, not bronze evidence or a release input after successful promotion.
+_Avoid_: Canonical silver, bronze archive, release evidence
+
 **Runtime System of Engagement**:
 Silver warehouse state (typed tables after parse) is where ingest jobs decide whether work is already done and what to mutate next.
 _Avoid_: Bronze as default SoE, edgartools local disk cache as shared SoE, agent queries against DuckDB silver

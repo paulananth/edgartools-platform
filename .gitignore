@@ -88,6 +88,9 @@ infra/snowflake/sql/*_native_pull_handshake.json
 
 # Local Terraform state backups (may contain secrets) — never commit
 infra/.aws-tfstate-backups/
+infra/.s3-staging-cleanup-evidence/
+infra/.bronze-historic-review-manifests/
+infra/.bronze-historic-delete-evidence/
 
 # GH-247: local dashboard-release evidence artifacts (deploy.sh) — secret-free
 # but not meant to be version-controlled; the live record is the JSON PUT to

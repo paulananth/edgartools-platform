@@ -66,3 +66,30 @@ pre-existing findings in `warehouse_orchestrator.py` (including unresolved
 is clean. Remaining acceptance work is immutable-image deployment and a
 controlled production partial/resume/repair-evidence run. Status remains
 claimed until that evidence exists.
+
+## Comments
+
+### 2026-08-01 production observation — `daily-rc-81c0e04168fb-20260801T141043Z`
+
+The immutable-image full-chain execution remained `RUNNING` at 13:54 EDT with
+no Step Functions redrive. The bounded company-identity map completed in about
+17 minutes, confirming the former repeated full-Silver publication loop is no
+longer the dominant stage. The single `ReduceIdentityRefresh` publication still
+took about 72 minutes.
+
+The warehouse task entered Daily-Artifact with 5,097 configured candidates.
+Its durable run state contained 494 immutable `succeeded` outcomes and one
+`terminal_repair_required` outcome at 13:54 EDT, with no repair attestation.
+The terminal outcome is the known byte-exact conflict for accession
+`0000905148-26-003370`; the task continued processing later candidates rather
+than losing completed work or immediately restarting the whole batch. This is
+positive live evidence for per-accession disposition, but the execution must
+still fail closed at publication while that terminal outcome is unresolved.
+
+Observed artifact throughput was roughly 18 accessions per minute. At that
+rate, artifact processing alone projects to roughly 4.7 hours; combined with
+about 3.3 hours already spent before artifact processing, the six-hour
+full-chain gate cannot be met by this execution even before downstream stages.
+Keep this item claimed: completion still requires an explicit repair
+attestation followed by a same-run retry proving the 494+ completed accessions
+are skipped rather than refetched.
