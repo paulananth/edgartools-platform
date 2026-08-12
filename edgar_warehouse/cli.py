@@ -1087,16 +1087,9 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Write run-summary.json to S3 at the end of a windowed bootstrap run. "
             "Derives window_count and cik_count from the S3 cik_windows.jsonl and "
-            "cik_snapshot.jsonl manifests written by compute-windows."
-        ),
-    )
-    write_run_summary.add_argument(
-        "--from-windows-key",
-        type=str,
-        required=True,
-        help=(
-            "S3 key of the cik_windows.jsonl manifest for this run "
-            "(e.g. reference/cik_universe/runs/{run_id}/cik_windows.jsonl)."
+            "cik_snapshot.jsonl manifests written by compute-windows, resolving both "
+            "keys internally from --run-id (the canonical path resolver, not a "
+            "caller-supplied key)."
         ),
     )
     _add_run_id_arg(write_run_summary)

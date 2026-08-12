@@ -315,19 +315,16 @@ def test_write_run_summary_output():
         ),
     ):
         from edgar_warehouse.application.warehouse_orchestrator import _capture_bronze_raw
-        from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
         fake_db = MagicMock()
-        windows_rel = default_path_resolver().cik_windows_path("run-abc")
         raw_writes, metrics = _capture_bronze_raw(
             context=mock_context,
             db=fake_db,
             command_name="write-run-summary",
             arguments={
-                "from_windows_key": windows_rel,
                 "run_id": "run-abc",
                 "include_reference_refresh": False,
             },
-            scope={"from_windows_key": windows_rel},
+            scope={},
             now=__import__("datetime").datetime(2026, 1, 1, tzinfo=__import__("datetime").timezone.utc),
             sync_run_id="run-abc",
         )
@@ -349,26 +346,24 @@ def test_write_run_summary_output():
     )
 
 
-def test_write_run_summary_missing_from_windows_key():
-    """write-run-summary exits non-zero when --from-windows-key is missing."""
+def test_write_run_summary_run_id_only():
+    """write-run-summary accepts --run-id alone; --from-windows-key no longer exists.
+
+    Regression guard for ticket 42's retry5 failure: the ASL used to hand-build
+    a --from-windows-key S3 path that duplicated WAREHOUSE_BRONZE_ROOT's own
+    "warehouse/bronze" prefix. The fix removed the flag entirely -- the
+    handler now derives the key itself from --run-id via the canonical path
+    resolver, so there is exactly one place that owns this path template.
+    """
     from edgar_warehouse.cli import build_parser
-    import sys
-    from io import StringIO
 
     parser = build_parser()
-    # --from-windows-key is required; argparse should exit non-zero without it
-    try:
-        args = parser.parse_args(["write-run-summary", "--run-id", "test"])
-        # If argparse doesn't raise (shouldn't happen with required=True), call handler
-        old_stderr = sys.stderr
-        sys.stderr = StringIO()
-        try:
-            result = args.handler(args)
-        finally:
-            sys.stderr = old_stderr
-        assert result != 0, "Expected non-zero exit when --from-windows-key is missing"
-    except SystemExit as exc:
-        assert exc.code != 0, f"Expected non-zero exit code, got {exc.code}"
+    args = parser.parse_args(["write-run-summary", "--run-id", "test"])
+    assert args.run_id == "test"
+    assert not hasattr(args, "from_windows_key")
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["write-run-summary", "--run-id", "test", "--from-windows-key", "x"])
 
 
 # ---------------------------------------------------------------------------
@@ -572,11 +567,10 @@ def test_write_run_summary_empty_windows_raises():
                 db=fake_db,
                 command_name="write-run-summary",
                 arguments={
-                    "from_windows_key": windows_rel,
                     "run_id": "run-empty",
                     "include_reference_refresh": False,
                 },
-                scope={"from_windows_key": windows_rel},
+                scope={},
                 now=__import__("datetime").datetime(2026, 1, 1, tzinfo=__import__("datetime").timezone.utc),
                 sync_run_id="run-empty",
             )

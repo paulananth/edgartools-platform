@@ -2932,24 +2932,25 @@ def _capture_bronze_raw(
         return raw_writes, metrics
 
     if command_name == "write-run-summary":
-        from_windows_key = str(arguments.get("from_windows_key") or "").strip()
-        if not from_windows_key:
-            raise WarehouseRuntimeError(
-                "--from-windows-key is required for write-run-summary"
-            )
-        # Read cik_windows.jsonl via the supplied --from-windows-key
-        windows_full_path = context.bronze_root.join(from_windows_key)
+        # Derive both manifest paths from sync_run_id via the canonical resolver --
+        # the single source of truth for these keys (matches compute-windows' own
+        # write path). Previously this key was hand-built in the calling ASL and
+        # passed in as --from-windows-key, which drifted out of sync with
+        # WAREHOUSE_BRONZE_ROOT's own "warehouse/bronze" prefix and produced a
+        # doubled-prefix key that could never resolve.
+        windows_rel = default_path_resolver().cik_windows_path(sync_run_id)
+        windows_full_path = context.bronze_root.join(windows_rel)
         try:
             windows_bytes = read_bytes(windows_full_path)
         except (FileNotFoundError, OSError) as exc:
             raise WarehouseRuntimeError(
-                f"write-run-summary: cik_windows.jsonl not found at S3 key '{from_windows_key}'"
+                f"write-run-summary: cik_windows.jsonl not found at S3 key '{windows_rel}'"
             ) from exc
         windows_text = windows_bytes.decode("utf-8")
         window_lines = [line for line in windows_text.splitlines() if line.strip()]
         if not window_lines:
             raise WarehouseRuntimeError(
-                f"write-run-summary: cik_windows.jsonl at '{from_windows_key}' is empty"
+                f"write-run-summary: cik_windows.jsonl at '{windows_rel}' is empty"
             )
         window_count = len(window_lines)
         # Derive cik_snapshot.jsonl path from the same run prefix
@@ -6528,9 +6529,7 @@ def _resolve_scope(
         }
 
     if command_name == "write-run-summary":
-        return {
-            "from_windows_key": arguments.get("from_windows_key"),
-        }
+        return {}
 
     if command_name == "verify-pipeline-run":
         return {
