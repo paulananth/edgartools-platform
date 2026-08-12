@@ -19,3 +19,13 @@ preserve documented memory floors for gold and residual-holds/security work.
 Where two profiles are correct and stable, prefer the one that materially
 shortens end-to-end completion on the accepted cost frontier; do not downsize
 solely because the smaller profile is cheaper.
+
+The full-canonical SeedUniverse stage is already fixed at warehouse `large`
+after a live 4-GiB OOM; the dormant batched workflow's medium reference has no
+production execution evidence and is not counterevidence. This decision may
+refine bounded seed and parsing utilities, but it cannot lower
+`warehouse.full_canonical_seed` without a new three-canary high-risk evidence
+cohort. Keep `mdm-large` operational until the accepted representative,
+non-zero-data `mdm-medium` canaries pass; after acceptance, its normal binding,
+registration, bake protection, rollback, and emergency-use rules follow
+**Decide Warehouse Versus MDM Profile Families**.

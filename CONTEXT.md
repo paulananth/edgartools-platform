@@ -96,6 +96,164 @@ _Avoid_: Process-local telemetry as recovery state, overwriting failures, full-t
 An immutable operator record that binds an immutable-content conflict, checksum evidence, repair action, and operator identity to one original manifest candidate before its bounded replay. It does not override the immutable-object guard.
 _Avoid_: Accepting a mismatch silently, replacing an object without evidence, treating a new selection as repair
 
+### Production workload sizing
+
+**Workload Class**:
+One production operation evaluated under a declared input shape and execution behavior; it is the unit that receives a sizing decision independently of other commands sharing an ECS task family.
+_Avoid_: ECS family, task-definition revision, treating standalone gold and combined daily/gold as one workload
+
+**Representative Input Envelope**:
+The declared records, bytes, partitions, relationship types, or other workload dimensions that a sizing result is expected to cover, including the largest known normal-production case.
+_Avoid_: Unbounded representative run, tiny smoke-test input as full-load evidence, workload size inferred only from duration
+
+**Sizing Evidence Identity**:
+The immutable binding of a Workload Class and Representative Input Envelope to its image digest, task-definition resources, execution/task identifiers, metric window, and correctness result.
+_Avoid_: Family-level peak without task identity, mutable image tag, utilization detached from command and input
+
+**Sizing Canary**:
+A controlled execution of a Workload Class on an adjacent task profile that tests correctness, completion time, retries, resource headroom, and output parity before a sizing change is adopted.
+_Avoid_: Configuration-only estimate, production rollout without comparison, successful exit without output validation
+
+**Sizing Safety Floor**:
+The lowest task profile permitted for a Workload Class by failure history and representative resource evidence; crossing it requires new Sizing Canary evidence rather than a utilization estimate.
+_Avoid_: Current profile, family-wide minimum, ignoring an OOM because sampled memory looked low
+
+**Operational Profile**:
+The task profile currently authorized for a Workload Class while a lower-profile candidate remains unproven; it may be higher than the Sizing Safety Floor during canary evaluation.
+_Avoid_: Lowest theoretically possible profile, mutable family default, treating a canary candidate as adopted
+
+**Downgrade Candidate**:
+A Workload Class whose current evidence has enough adjacent-profile headroom to justify a Sizing Canary, but not enough evidence to call the current profile over-sized.
+_Avoid_: Proven over-sized workload, automatic profile reduction from low average utilization
+
+**Sizing Canary Definition**:
+An unscheduled temporary workflow cloned from the current production definition with only the candidate task-profile references changed, used to gather Sizing Canary evidence without rewiring live workflows.
+_Avoid_: Scheduled canary, editing the live workflow before validation, unrelated orchestration changes in a sizing test
+
+**Sizing Promotion**:
+The recorded replacement of only the workload-stage profile references covered by accepted Sizing Canary evidence, followed by exact live-reference verification.
+_Avoid_: Family-wide update, promotion inferred from task-definition registration, unverified sequential rewrite
+
+**Configuration Rollback**:
+Restoration of the exact pre-change workflow definitions and task-profile references while preserving the application images and code identity.
+_Avoid_: Code rollback, latest revision, rebuilding an approximation of the prior configuration
+
+**Code Rollback**:
+Restoration of an independently attested prior application-image cohort and its compatible workflow definitions.
+_Avoid_: Configuration rollback, canonically identical task-definition copy, adjacent revision treated as known-good
+
+**Canary Acceptance Gate**:
+The complete correctness, output-parity, retry, resource-headroom, completion-time, cost, and evidence test a Sizing Canary must pass before Sizing Promotion.
+_Avoid_: Exit-zero gate, utilization-only approval, averaging away a failed attempt
+
+**Hard Sizing Failure**:
+A canary or promoted-profile result that invalidates the candidate immediately, including memory exhaustion, incorrect or incomplete output, workload-attributable failure, or missing required evidence.
+_Avoid_: Advisory utilization drift, unrelated infrastructure interruption counted as workload failure, failed attempt counted toward acceptance
+
+**Sizing Evidence Drift**:
+A change to a Workload Class identity, execution behavior, task resources, or Representative Input Envelope that makes its prior sizing evidence stale for promotion and cleanup decisions.
+_Avoid_: Routine utilization variation inside the accepted envelope, family-level aggregate treated as identity drift, silently reusing evidence across images
+
+**Sizing Bake Window**:
+The post-promotion period during which the exact Configuration Rollback remains protected and the promoted Workload Class receives heightened task-bound monitoring.
+_Avoid_: Fixed clock interval without representative executions, deleting the pre-change configuration immediately after promotion
+
+**Sizing Drift Gate**:
+The fail-closed evaluation of task-bound identity, correctness, utilization, completion time, retries, cost, and telemetry completeness after Sizing Promotion.
+_Avoid_: Family-average alarm as rollback proof, missing data treated as healthy, utilization alert that autonomously changes application code
+
+**Workload Profile Contract**:
+The versioned repository authority that binds every production Workload Class to one Runtime Variant and Resource Tier while preserving its sizing safety constraints.
+_Avoid_: Shell case statement, task ARN embedded by a state-machine generator, workflow name treated as the sizing authority
+
+**Runtime Variant**:
+The warehouse or MDM execution surface that determines an ECS task's image, dependency set, IAM boundary, logging identity, and task-definition family independently of its Resource Tier.
+_Avoid_: Resource Tier, image selected from workload size, warehouse and MDM dependency surfaces treated as interchangeable
+
+**Resource Tier**:
+The shared small, medium, or large CPU-and-memory specification used consistently across Runtime Variants.
+_Avoid_: Runtime Variant, family-specific meaning for the same tier name, task-definition revision
+
+**Workload Profile Binding**:
+The resolved pair of Runtime Variant and Resource Tier for one Workload Class, emitted into a generated workflow only through the Workload Profile Contract.
+_Avoid_: Direct task-definition ARN choice, profile inferred from command spelling, family-wide assignment without workload identity
+
+**Candidate Profile Overlay**:
+A temporary, explicit replacement Resource Tier for one Workload Class used only by a Sizing Canary Definition while the production Workload Profile Contract remains unchanged.
+_Avoid_: Production binding edit before acceptance, workflow-input override, implicit fallback profile
+
+**Emergency Sizing Override**:
+An operator-attested, expiring production upsize that preserves the Workload Class and Runtime Variant while temporarily replacing its operational Resource Tier.
+_Avoid_: Emergency downsize, untracked environment variable, permanent configuration outside the Workload Profile Contract
+
+**Resolved Profile Manifest**:
+The immutable deployment output binding a Workload Profile Contract version and hash to exact task-definition ARNs, image digests, generated workflow paths, and any active Emergency Sizing Override.
+_Avoid_: Source contract containing live ARNs, mutable latest-profile report, deployment output without contract identity
+
+**Release Runtime Cohort**:
+The paired immutable warehouse and MDM runtime identities that constitute one production release, even when each image is built independently.
+_Avoid_: Mutable latest pair, independently selected production images, one runtime changed without a new release identity
+
+**Contract Revision**:
+The monotonically increasing identity of one complete Workload Profile Contract decision, changed whenever a tier resource, workload binding, safety floor, risk class, or required evidence reference changes.
+_Avoid_: Schema version used for a sizing decision, mutable profile mapping without new identity, deployment revision
+
+**Execution Control Contract**:
+The versioned repository authority that binds every production workflow state to one Execution Control Class and makes its concurrency, retry, timeout, and failure semantics explicit.
+_Avoid_: Generator-local default, state-name convention, environment-specific override, controls inferred from a neighboring workflow
+
+**Execution Control Class**:
+A named policy for one workflow state's concurrency limit, retry ownership, time bound, and Failure Disposition, independent of its Workload Class and Resource Tier.
+_Avoid_: Task profile, workflow-wide implicit default, copied Retry block
+
+**Stage Criticality**:
+The declared role of a workflow stage as required, advisory, cleanup, or reconciliation, which determines whether and how its failure may continue toward a Workflow Completeness Gate.
+_Avoid_: Criticality inferred from state order, every Catch treated as optional, cleanup failure treated as data success
+
+**Failure Disposition**:
+The explicit outcome required after a stage failure: fail, clean up then fail, record and gate, reconcile and gate, or warn for recoverable cleanup only.
+_Avoid_: Catch and continue silently, swallowed validation error, successful execution with unknown completeness
+
+**Workflow Completeness Gate**:
+The terminal decision that all required outputs are durable and usable after any advisory or reconciliation path before the workflow may report success.
+_Avoid_: Exit zero, Map completion alone, downstream stage reached after a swallowed failure
+
+**Concurrency Budget**:
+The account-wide vCPU capacity available to overlapping production tasks after a protected reserve, used with correctness and measured-throughput caps to determine Effective Concurrency.
+_Avoid_: Raw service quota, one global MaxConcurrency, hardcoded account limit, consuming recovery headroom
+
+**Effective Concurrency**:
+The lowest of a loop's correctness cap, measured-throughput cap, and currently available Concurrency Budget.
+_Avoid_: Highest valid Step Functions value, task count detached from Resource Tier, concurrency copied from another loop
+
+**Retry Owner**:
+The single layer authorized to repeat a failed operation for a declared transient failure class while preserving bounded attempts, idempotency, and evidence.
+_Avoid_: Command and workflow both retrying, retrying unknown failure, whole-pipeline retry for one recoverable record
+
+**Execution Time Budget**:
+The evidence-derived maximum duration authorized for one workflow state or complete workflow, including its declared retry and orchestration headroom.
+_Avoid_: Unlimited wait, universal timeout copied across workloads, timeout inferred from a scheduler interval
+
+**Reconciling Collector Map**:
+A Map allowed to collect failed item outcomes without immediately stopping only because every item has a durable disposition and a final Workflow Completeness Gate prevents unresolved required work from succeeding.
+_Avoid_: Best-effort required data, tolerated failure without an outcome ledger, successful parent with unresolved items
+
+**Concurrency Admission**:
+The atomic decision that enough Concurrency Budget exists for a fan-out stage to start without consuming protected recovery capacity.
+_Avoid_: Launch then throttle, racy running-task count, silent concurrency reduction
+
+**Capacity Reservation**:
+The expiring vCPU claim held by one admitted fan-out stage until every success, failure, or stale-recovery path releases it.
+_Avoid_: Raw task count, permanent quota allocation, reservation without execution identity or expiry
+
+**Fan-out Operating Range**:
+The authorized task-concurrency interval for a parallel-safe production loop after correctness, throughput, and Concurrency Admission checks; correctness-bound loops may declare a lower explicit cap.
+_Avoid_: Global concurrency minimum, forcing serial writers into parallel execution, task count detached from Resource Tier
+
+**Admitted vCPU Ceiling**:
+The hard account-level bound on active Capacity Reservations after preserving the required service-quota reserve and accounting for unreserved work.
+_Avoid_: Raw Fargate quota, per-workflow task count, assuming unused snapshot capacity is still available
+
 ### Agent decision support
 
 **Agent Decision Surface**:

@@ -4,8 +4,8 @@ Label: `wayfinder:map`
 
 ## Destination
 
-After Claude's current work completes, produce an evidence-backed optimization
-policy and rollout handoff for the `edgartools-prod` ECS and Step Functions
+Produce an evidence-backed optimization policy and rollout handoff for the
+`edgartools-prod` ECS and Step Functions
 portfolio. Every workflow must have a keep, merge, reshape, reschedule, or
 retire rationale; every loop must expose its item unit, record funnel,
 concurrency, retries, duration, and unit cost; and every ECS stage must select
@@ -14,12 +14,18 @@ end-to-end completion speed, cost, canary, and rollback gates.
 
 ## Notes
 
+- Latest Claude handoff after the 2026-08-11 PR #401 resync: read
+  [`HANDOFF-codex-to-claude-2026-08-11-2000.md`](HANDOFF-codex-to-claude-2026-08-11-2000.md)
+  before continuing Ticket 11 or treating the historical 26-workflow inventory
+  as current. It links to the full earlier decision handoff.
 - This map is planning-only. It does not change ECS, Step Functions, task
   definitions, deployment scripts, or Claude's work.
-- Scope is AWS account `690839588395`, region `us-east-1`, cluster
-  `edgartools-prod-warehouse`, and `edgartools-prod-*` workflows.
-- Wait for Claude's explicit completion/handoff before treating the deployed
-  ECS/workflow inventory as canonical. Re-query live state after handoff.
+- Scope is the operator-selected production AWS account, configured region,
+  production ECS cluster, and production Step Functions portfolio. Live
+  identities belong in generated manifests and evidence, not source policy.
+- The operator confirmed Claude's handoff complete on 2026-08-09. The canonical
+  post-handoff inventory is linked from **Confirm Post-Claude ECS Baseline and
+  Ownership Boundary**; re-query live state before any rollout or cleanup.
 - A **workload class** is the operation; a **task profile** is its CPU/memory
   reservation; an **execution** is one launched Fargate task or Step Functions
   run. A task-definition revision is not itself a running cost center.
@@ -51,11 +57,13 @@ end-to-end completion speed, cost, canary, and rollback gates.
 - Before implementation, use `/gof-refactor-reviewer`, then repository test and
   code-review gates.
 
-### Live baseline captured 2026-08-08/09
+### Live baseline captured after handoff on 2026-08-09
 
 - The cluster has no ECS services; Fargate spend comes from standalone tasks.
-- One task was running: `edgartools-prod-mdm-medium:138`, `1 vCPU / 4 GiB`,
-  command `mdm run --entity-type all`.
+- No ECS service, running task, or pending task was present at the baseline
+  capture. A later Ticket 07 read-only recheck found one running 1-vCPU medium
+  task, demonstrating why admission must use live reservations rather than the
+  baseline snapshot.
 - Production profiles: `small` `512/1024`, `medium` `1024/4096`, `large`
   `2048/8192`, with corresponding MDM families.
 - Latest Container Insights observations in the 2026-08-01 through 2026-08-09
@@ -64,10 +72,14 @@ end-to-end completion speed, cost, canary, and rollback gates.
   / memory ~9%.
 - These identify candidates, not automatic downgrades: historical notes record
   OOM failures for full-universe/security workloads at lower memory sizes.
-- Live prod task-definition profiles currently referenced by Step Functions are
-  `small:159` (`512/1024`), `medium:164` (`1024/4096`), `large:157`
-  (`2048/8192`), `mdm-small:137` (`512/1024`), `mdm-medium:138`
-  (`1024/4096`), and `mdm-large:72` (`2048/8192`).
+- A later Ticket 09 read-only recheck confirmed that the three active
+  full-canonical SeedUniverse states use warehouse large after a live medium
+  OOM. The dormant batched workflow remains on medium without production
+  execution evidence and is not sizing evidence.
+- Live prod task-definition profiles referenced by all 26 Step Functions are
+  `small:166` (`512/1024`), `medium:170` (`1024/4096`), `large:163`
+  (`2048/8192`), `mdm-small:143` (`512/1024`), `mdm-medium:143`
+  (`1024/4096`), and `mdm-large:77` (`2048/8192`).
 - Step Functions pin those revision ARNs directly. The same workload family is
   selected through multiple code paths: `workflow_profile()`,
   `task_definition_for_mdm_workflow()`, and separate state-machine generators.
@@ -83,6 +95,16 @@ end-to-end completion speed, cost, canary, and rollback gates.
 <!-- Closed ticket decisions: one-line gist and link; detail stays in the ticket. -->
 
 - [Decide the Workflow Value Test and Optimization Objective](issues/10-decide-workflow-value-and-optimization-objective.md) — Correctness/recovery and end-to-end completion speed are co-primary; retain workflows only for evidenced output or operator value, then optimize cost from measured baselines.
+- [Confirm Post-Claude ECS Baseline and Ownership Boundary](issues/01-confirm-post-claude-ecs-baseline.md) — Handoff is complete; 26 workflows consistently reference six immutable task definitions, while 466 additional active revisions require guarded reference and rollback review before cleanup.
+- [Reconcile Prod Task Definitions and Step Functions References](issues/05-reconcile-prod-task-definitions-and-step-function-references.md) — The live six-revision cohort is internally consistent; 458 revisions are provisional retirement candidates, but cleanup waits for an explicit protected rollback cohort and fresh exact-ARN reference audit.
+- [Validate the Proposed Rollback Cohort Evidence](issues/21-validate-proposed-rollback-cohort-evidence.md) — Reject the pre-handoff image pair as known-good: its only exact-window execution failed before graph/gold, while canonically identical prior copies of the current six definitions remain viable control-plane recovery candidates pending operator designation.
+- [Measure ECS Utilization by Workload Class](issues/02-measure-utilization-by-workload-class.md) — Task-bound evidence validates BatchSilver medium/20 and large for combined daily/full-universe work; MDM medium remains necessary, while MDM large and standalone gold need representative medium canaries before resizing.
+- [Decide Sizing Safety Floors and Utilization Bands](issues/03-decide-workload-to-profile-policy.md) — Classify immutable workload/input identities with asymmetric CPU/memory bands, a 5% p95 speed guardrail, two normal or three high-risk canaries, and explicit floors that retain large for combined daily work and pending residual/gold canaries.
+- [Decide ECS Sizing Canary, Rollback, and Drift Gates](issues/04-decide-canary-and-drift-gates.md) — Isolate stage-scoped canaries, require correctness plus speed and material cost improvement, preserve exact configuration rollback through a workload-counted bake window, and fail closed on hard failures, identity drift, or missing task-bound evidence.
+- [Decide a Single Prod Workload-to-Profile Contract](issues/06-decide-single-prod-workload-profile-contract.md) — Use one portable, versioned workload-class registry and fail-closed resolver, separate runtime from shared resource tiers, and switch all generated ECS states atomically without dual profile authority.
+- [Standardize Step Functions Concurrency and Failure Controls](issues/07-standardize-step-function-concurrency-and-failure-controls.md) — Target 8-20 only for parallel-safe fan-out, retain evidence-backed correctness caps below 8, enforce the smaller of a 32-vCPU ceiling and the live quota after 20% reserve, and fail closed on retries, timeouts, tolerated failures, completeness, admission, or definition drift.
+- [Decide Warehouse Versus MDM Profile Families](issues/09-decide-warehouse-vs-mdm-profile-families.md) — Retain isolated warehouse and MDM Runtime Variants over shared resource tiers, pair their exact identities in every production release, keep full-canonical seed on warehouse large, and retire MDM large only after accepted non-zero-data medium canaries and bake protection.
+- [Inventory Every Production Workflow and Consumer](issues/11-inventory-every-production-workflow-and-consumer.md) — Independent re-verification confirmed the draft (26→25 live machines, 8 not 9 zero-execution workflows), sharpened the graph-candidate gap, and surfaced a real production failure-masking mechanism plus a Step-Functions-bypass blind spot; operator decided: deregister the 7 orphaned MDM machines, accept the SFN-bypass path, add visibility (not blocking) to the `MdmVerify` mask, and default dormant workflows to retirement candidates.
 
 ## Not yet specified
 
