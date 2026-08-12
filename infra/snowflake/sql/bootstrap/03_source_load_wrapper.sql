@@ -70,7 +70,16 @@ const mergeKeys = new Map([
   ["ADVISER_DISCLOSURES", ["FACT_KEY"]],
   ["PRIVATE_FUNDS", ["FACT_KEY"]],
   ["FILING_DETAIL", ["FILING_KEY"]],
-  ["TICKER_REFERENCE", ["CIK"]],
+  // CIK alone is not unique here: build_ticker_reference_table() (edgar_warehouse/
+  // serving/gold_models.py) deliberately preserves one row per SEC ticker symbol,
+  // not one row per CIK -- dual-class issuers (e.g. Alphabet: GOOG + GOOGL, both
+  // CIK 1652044) legitimately export 2+ rows sharing a CIK. A CIK-only MERGE key
+  // makes any such issuer's row order-dependent "Duplicate row detected during DML
+  // action" on every gold_refresh that includes it (root cause of SNOWFLAKE_RUN_
+  // MANIFEST_TASK's SUSPENDED_DUE_TO_ERRORS incident starting 2026-08-09 -- see
+  // CLAUDE.md's PROCESS_RUN_MANIFEST_STREAM history). Key on the table's real
+  // grain instead.
+  ["TICKER_REFERENCE", ["CIK", "TICKER"]],
   ["SEC_FINANCIAL_FACT", ["CIK", "ACCESSION_NUMBER", "CONCEPT", "FISCAL_PERIOD", "SEGMENT", "PERIOD_END", "PERIOD_START"]],
   ["SEC_THIRTEENF_HOLDING", ["CIK", "ACCESSION_NUMBER", "HOLDING_INDEX"]],
   ["SEC_FINANCIAL_DERIVED", ["CIK", "ACCESSION_NUMBER", "FISCAL_PERIOD", "PERIOD_END"]],
