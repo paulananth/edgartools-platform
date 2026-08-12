@@ -116,3 +116,37 @@ payload value for both `--identity-refresh-run-id` and `--run-id`. The workflow
 regression now asserts the exact value source, not merely the flag's presence.
 The ticket remains claimed until a new immutable-image production run proves
 complete batch coverage and exactly one canonical publication.
+
+## Live analysis of the corrected acceptance run (2026-08-01)
+
+Execution `daily-rc-81c0e04168fb-20260801T141043Z` is still running on immutable
+warehouse digest `sha256:6c3241170918bcece71fe3156c7d8e58ba15f4dd7fd0c7936abd6f9273878fd6`.
+At 11:31 EDT it had completed:
+
+- lease acquisition in 2m49s;
+- reference/window computation in 10m08s; and
+- all three declared company-identity batches (500, 500, and 324 CIKs; 1,324
+  total) in 17m18s.
+
+The run then entered `ReduceIdentityRefresh` at 10:41:01 EDT. Its medium ECS
+task remained RUNNING and connected more than 50 minutes later, with no exit
+reason, no application log event, no completed manifest, and no canonical
+object version newer than the reducer baseline. This is not a terminal failure,
+but the current observability cannot distinguish slow merge work from an
+internal stall.
+
+The immutable input set is complete: one 1,071,394,816-byte reference snapshot
+and three deltas of 88,616,960, 37,761,024, and 8,138,752 bytes, plus outcomes
+and the run manifest. Code inspection identifies deterministic amplification:
+the reducer first downloads and checksums every immutable input, then downloads
+each input again during merge; it also downloads the 1.07 GB canonical baseline
+and invokes the single-candidate merge primitive four times (reference plus
+three deltas). Each invocation copies the full current canonical database to a
+new output before performing table-level merge work. The CLI emits only a final
+success JSON or terminal error, so none of these phases is observable while it
+runs.
+
+This does not invalidate the run-scoped single-publication contract, and the
+current execution should continue to its terminal outcome. The newly sharp
+optimization and observability work is tracked separately by ticket 99 rather
+than broadening this acceptance ticket silently.
