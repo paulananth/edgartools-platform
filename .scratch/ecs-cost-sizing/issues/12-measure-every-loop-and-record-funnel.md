@@ -1,7 +1,7 @@
 # Measure Every Loop and Record Funnel
 
 Type: research
-Status: open
+Status: claimed
 Blocked by: 01
 
 ## Question
