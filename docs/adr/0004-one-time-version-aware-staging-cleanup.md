@@ -1,0 +1,3 @@
+# One-time version-aware cleanup for abandoned warehouse staging objects
+
+The production warehouse bucket accumulated 285.76 GB of abandoned `_staging/` copies because successful canonical promotion intentionally leaves the staged copy available for inspection. We will use a one-time, default-dry-run script that selects only `warehouse/_staging/` object versions older than 24 hours, deletes exact VersionIds only after explicit confirmation, and preserves pre/delete/post evidence under `warehouse/release-evidence/staging-cleanup/`. It deliberately does not change bronze retention, add a recurring lifecycle policy, or block solely because an execution is running.
