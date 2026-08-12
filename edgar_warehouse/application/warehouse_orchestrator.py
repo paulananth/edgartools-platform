@@ -1089,9 +1089,8 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
         payload = source_path.read_bytes()
 
     size_bytes = len(payload)
-    staged_relative = context.storage_root.write_staged_bytes(relative_path, payload)
-    promotion = context.storage_root.promote_staged(
-        staged_relative, relative_path, expected_etag=baseline.etag
+    promotion = context.storage_root.stage_and_promote(
+        relative_path, payload, expected_etag=baseline.etag
     )
     return {
         "layer": "silver_database",
@@ -1249,25 +1248,43 @@ def _publish_shard_if_remote(
     context: WarehouseCommandContext,
     shard_index: int,
 ) -> dict[str, Any] | None:
-    """Upload the modified shard-{shard_index}.duckdb to remote storage.
+    """Publish the modified shard-{shard_index}.duckdb to remote storage.
+
+    ETag-guarded via the shared ``stage_and_promote`` primitive (decoupled-
+    bronze-pipeline ticket 01/09's identified gap: this previously called
+    ``upload_file`` directly -- a blind overwrite with no version check at
+    all, unlike ``_publish_silver_database_if_remote``'s already-guarded
+    monolith path). A concurrent writer to the same shard between this
+    call's baseline read and its promote now raises
+    ``PromotionConflictError`` instead of silently last-writer-wins.
+
+    Deliberately no retry-on-conflict here (unlike
+    ``_publish_silver_database_with_retry``): each shard is owned by
+    exactly one writer in the sharded architecture (partitioned by CIK
+    range), so a conflict here signals a genuine invariant violation, not
+    an expected race to paper over by retrying.
 
     Parameters
     ----------
     context:
         The warehouse command context.
     shard_index:
-        The zero-based shard index to upload.
+        The zero-based shard index to publish.
 
     Returns
     -------
     dict | None
         A write-record dict (``layer``, ``shard_index``, ``path``,
-        ``size_bytes``) if uploaded, or ``None`` if storage is local.
+        ``size_bytes``, ``source_version``, ``canonical_version``) if
+        published, or ``None`` if storage is local.
 
     Raises
     ------
     WarehouseRuntimeError
         If the local shard file does not exist.
+    PromotionConflictError
+        If the shard's canonical object changed since this call's baseline
+        read.
     """
     if not context.storage_root.is_remote:
         return None
@@ -1281,12 +1298,18 @@ def _publish_shard_if_remote(
         )
 
     relative_path = default_path_resolver().shard_path(shard_index)
-    destination = context.storage_root.upload_file(relative_path, local_path)
+    baseline = context.storage_root.read_object_version(relative_path)
+    payload = local_path.read_bytes()
+    promotion = context.storage_root.stage_and_promote(
+        relative_path, payload, expected_etag=baseline.etag
+    )
     return {
         "layer": "silver_shard",
         "shard_index": shard_index,
-        "path": destination,
-        "size_bytes": local_path.stat().st_size,
+        "path": promotion.canonical_path,
+        "size_bytes": len(payload),
+        "source_version": baseline.etag,
+        "canonical_version": promotion.new_version.etag,
     }
 
 
