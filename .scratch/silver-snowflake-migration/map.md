@@ -83,13 +83,9 @@ debate — this map does not implement it.
 <!-- Closed ticket decisions: one-line gist and link; detail stays in the ticket. -->
 
 - [Design the Snowflake-Native Silver Layer's Model Structure](issues/01-design-snowflake-native-silver-model-structure.md) — new append-only `EDGARTOOLS_SILVER_LANDING` schema (reuses SOURCE's native-pull apparatus, simplified to plain INSERT); final silver tables are uniformly `dynamic_table` (current-state, window-function collapse) rather than a per-table incremental/snapshot mix — chosen specifically because it needs zero new dbt-run trigger infrastructure, unlike `incremental` models; CIK-partitioning and the operational/lease tables' disposition are explicitly deferred to Tickets 06 and 02 respectively.
+- [Decide the Concurrent-Writer Model for Snowflake-Native Silver](issues/02-decide-concurrent-writer-model.md) — there's no promotion-race conflict class left to replace at all (append-only per-row INSERT, confirmed-disjoint CIK windows); the whole ETag/promote-with-retry/candidate-canonical-merge apparatus retires outright. `sec_fetch_active`/`pipeline_run_lease` is a separate, unrelated mechanism and stays. `parse_sequence` is a row-level Snowflake `SEQUENCE`. `MaxConcurrency:1` stays for now, pending live-tested (not assumed) evidence at rollout.
 
 ## Not yet specified
-
-- How Snowflake's native transactional guarantees interact with concurrent
-  Distributed Map batches writing to the same append-only landing tables —
-  can't be specified sharply until Ticket 02's concurrent-writer model is
-  decided (now unblocked by Ticket 01).
 - Snowflake compute cost (warehouse sizing/credits) for work that's
   currently ~free local DuckDB CPU — not estimable until the model
   structure and expected refresh cadence/pattern are decided.
