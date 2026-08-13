@@ -74,6 +74,8 @@ from edgar_warehouse.infrastructure.edgartools_sec_gateway import (
     download_bytes as _gateway_download_bytes,
 )
 from edgar_warehouse.infrastructure.object_storage import StorageLocation, read_bytes
+from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
+from edgar_warehouse.serving.silver_landing_writer import write_landing_export
 from edgar_warehouse.silver_protection import compute_silver_fingerprint, merge_candidate_into_canonical
 from edgar_warehouse.silver_support.session import open_silver_database, open_silver_shard
 
@@ -475,6 +477,10 @@ def _execute_warehouse_bronze_capture(
     if command_name in LEASE_ONLY_COMMANDS:
         context = _lease_command_context(context)
 
+    landing_export = (
+        LandingExportBuffer() if context.silver_landing_export_root is not None else None
+    )
+
     now = datetime.now(UTC)
     run_id = _resolve_run_id(arguments)
     command_path = command_name.replace("_", "-")
@@ -546,12 +552,12 @@ def _execute_warehouse_bronze_capture(
                         now=now,
                         silver_root=None,
                     )
-                    db = open_silver_shard(local_shard_path)
+                    db = open_silver_shard(local_shard_path, landing_export=landing_export)
 
     if not _using_shard_path:
         _hydrate_silver_database_from_storage(context)
         scope = _resolve_scope(command_name=command_name, arguments=arguments, now=now, silver_root=context.silver_root)
-        db = _open_silver_database(context.silver_root)
+        db = _open_silver_database(context.silver_root, landing_export=landing_export)
     db_closed = False
     sync_mode = _sync_mode_for_command(command_name)
     sync_scope_type = _sync_scope_type_for_command(command_name, scope)
@@ -607,6 +613,7 @@ def _execute_warehouse_bronze_capture(
     snowflake_export_manifest_write: dict[str, Any] | None = None
     silver_database_write: dict[str, Any] | None = None
     silver_table_counts: dict[str, int] | None = None
+    landing_export_counts: dict[str, int] | None = None
     try:
         _emit_pipeline_event(
             "bronze_silver_started",
@@ -775,6 +782,22 @@ def _execute_warehouse_bronze_capture(
             run_id=run_id,
             silver_database=silver_database_write,
         )
+        if landing_export is not None:
+            landing_export_counts = write_landing_export(
+                landing_export,
+                context.silver_landing_export_root,
+                run_id=run_id,
+                business_date=_resolve_export_business_date(command_name=command_name, scope=scope, now=now),
+                command_name=command_name,
+                environment_name=context.environment_name,
+                now=now,
+            )
+            _emit_pipeline_event(
+                "silver_landing_export_completed",
+                command=command_name,
+                run_id=run_id,
+                table_counts=landing_export_counts,
+            )
     except Exception as exc:
         if not db_closed:
             db.complete_sync_run(run_id, status="failed", error_message=str(exc))
@@ -925,6 +948,9 @@ def _execute_warehouse_bronze_capture(
             "silver_root": context.silver_root.root,
             "identity_present": True,
             "snowflake_export_root": context.snowflake_export_root.root if context.snowflake_export_root else None,
+            "silver_landing_export_root": (
+                context.silver_landing_export_root.root if context.silver_landing_export_root else None
+            ),
         },
         "message": (
             "Warehouse bronze capture completed successfully. "
@@ -944,6 +970,7 @@ def _execute_warehouse_bronze_capture(
         "silver_database": silver_database_write,
         "snowflake_export_manifest": snowflake_export_manifest_write,
         "snowflake_export_row_counts": snowflake_export_counts,
+        "silver_landing_export_row_counts": landing_export_counts,
         "started_at": now.isoformat().replace("+00:00", "Z"),
         "status": "ok",
         "writes": writes,
@@ -952,8 +979,10 @@ def _execute_warehouse_bronze_capture(
     }
 
 
-def _open_silver_database(silver_root: StorageLocation) -> SilverDatabase:
-    return open_silver_database(silver_root)
+def _open_silver_database(
+    silver_root: StorageLocation, *, landing_export: "LandingExportBuffer | None" = None
+) -> SilverDatabase:
+    return open_silver_database(silver_root, landing_export=landing_export)
 
 
 def _protected_fingerprint_sidecar_path(local_path: Path) -> Path:

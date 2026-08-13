@@ -18,6 +18,7 @@ class WarehouseCommandContext:
     environment_name: str
     identity: str
     runtime_mode: str
+    silver_landing_export_root: StorageLocation | None = None
 
     @property
     def serving_export_root(self) -> StorageLocation | None:
