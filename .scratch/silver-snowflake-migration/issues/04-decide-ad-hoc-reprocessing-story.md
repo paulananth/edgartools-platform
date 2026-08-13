@@ -1,7 +1,7 @@
 # Decide the Ad-Hoc Reprocessing Story
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 01
 
 ## Question
