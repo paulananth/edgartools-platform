@@ -4,6 +4,8 @@
 
 {{ silver_model_config('SEC_ACCOUNTING_FLAG') }}
 
+-- altman_z_score, beneish_m_score, piotroski_f_score: last non-null wins, not last row wins --
+-- see generate_silver_dbt_models.py's _COALESCE_PRESERVING_COLUMNS for the citation.
 select
     cik,
     accession_number,
@@ -15,9 +17,9 @@ select
     auditor_location,
     icfr_attestation,
     auditor_changed,
-    beneish_m_score,
-    altman_z_score,
-    piotroski_f_score,
+    last_value(beneish_m_score ignore nulls) over (partition by cik, accession_number order by parse_sequence) as beneish_m_score,
+    last_value(altman_z_score ignore nulls) over (partition by cik, accession_number order by parse_sequence) as altman_z_score,
+    last_value(piotroski_f_score ignore nulls) over (partition by cik, accession_number order by parse_sequence) as piotroski_f_score,
     parser_version,
     ingested_at
 from {{ source('edgartools_silver_landing', 'SEC_ACCOUNTING_FLAG') }}

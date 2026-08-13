@@ -101,6 +101,26 @@ _CIK_ENRICHED_TABLES = {
     "sec_ownership_derivative_txn",
 }
 
+# Columns needing "last non-null wins" instead of plain "last row wins" --
+# found while reading silver_store.py directly, not from an earlier
+# categorization (the same discipline that already caught the
+# pipeline_run_lease/sec_guidance_fact_reject gaps in the landing generator).
+# merge_accounting_flags (silver_store.py:4066-4098) uses
+# COALESCE(excluded.X, sec_accounting_flag.X) for these three forensic score
+# columns specifically, so an incoming NULL never clobbers an existing score
+# -- and update_accounting_flag_scores (silver_store.py:4100-4129), a
+# separate backfill call that arrives *after* the initial merge and only
+# ever carries these three columns (every other column NULL in that landing
+# row), depends on this exact semantic to not wipe out the rest of the row.
+# A plain "value from the single latest parse_sequence row" collapse would
+# silently lose the backfilled scores whenever a later, unrelated parse
+# event for the same key doesn't happen to carry them -- expressed instead
+# via LAST_VALUE(col IGNORE NULLS) OVER (... ORDER BY parse_sequence),
+# evaluated at the same QUALIFY-selected latest row.
+_COALESCE_PRESERVING_COLUMNS = {
+    "sec_accounting_flag": {"beneish_m_score", "altman_z_score", "piotroski_f_score"},
+}
+
 
 def _reflect_tables() -> dict[str, dict]:
     """Execute silver_store._DDL in-memory; reflect columns + PK per table."""
@@ -154,9 +174,26 @@ def _reflect_tables() -> dict[str, dict]:
 
 
 def _model_body_simple(table: str, columns: list[str], pk: list[str]) -> str:
-    col_list = ",\n    ".join(columns)
+    coalesce_cols = _COALESCE_PRESERVING_COLUMNS.get(table, set())
     partition = ", ".join(pk)
-    return f"""select
+    select_lines = []
+    for col in columns:
+        if col in coalesce_cols:
+            select_lines.append(
+                f"last_value({col} ignore nulls) over ("
+                f"partition by {partition} order by parse_sequence"
+                f") as {col}"
+            )
+        else:
+            select_lines.append(col)
+    col_list = ",\n    ".join(select_lines)
+    comment = ""
+    if coalesce_cols:
+        comment = (
+            f"-- {', '.join(sorted(coalesce_cols))}: last non-null wins, not last row wins --\n"
+            f"-- see generate_silver_dbt_models.py's _COALESCE_PRESERVING_COLUMNS for the citation.\n"
+        )
+    return f"""{comment}select
     {col_list}
 from {{{{ source('{SOURCE_NAME}', '{table.upper()}') }}}}
 qualify row_number() over (
