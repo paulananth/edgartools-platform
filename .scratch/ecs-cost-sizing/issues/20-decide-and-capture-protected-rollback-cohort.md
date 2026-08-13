@@ -1,7 +1,7 @@
 # Decide and Capture the Protected Rollback Cohort
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by:
 
 ## Question
@@ -33,3 +33,71 @@ Persist the decision with exact ARNs, digests, role source commits/tags,
 generated-definition compatibility, evidence hashes, and an operator
 attestation. Revision adjacency or `latest-N` is not acceptable rollback
 evidence.
+
+## Answer
+
+The two options in this ticket's own text turn out not to be a strict
+either/or — they answer two different questions, per Ticket 04's own
+Configuration-Rollback-vs-Code-Rollback distinction. **Option 1 adopted
+now** (Configuration Rollback, cheap, available immediately); **Option 2
+split into a new follow-up task** (Code Rollback, real future work, not a
+blocker). This satisfies Ticket 19's Wave 0 hard prerequisite — the
+rollout may now proceed.
+
+### Current release baseline (captured live, 2026-08-13 — not the stale
+2026-08-09 snapshot elsewhere on this map; several deploys landed this
+session since then)
+
+Confirmed by cross-checking `describe-task-definition` against the live
+ASL of `load_history`, `daily_incremental`, `gold_refresh`,
+`residual_holds_graph`, `mdm_utility`, and `load_daily_form_index_for_date`
+— every one resolves to exactly these six revisions, no drift found:
+
+| Task family | Revision | CPU/Mem | Image digest | Tags | Pushed |
+| --- | --- | --- | --- | --- | --- |
+| `edgartools-prod-small` | 181 | 512/1024 | `sha256:64ff30ae...` | `warehouse-prod`, `warehouse-sha-3cd8e60a456a` | 2026-08-12T07:23:28-04:00 |
+| `edgartools-prod-medium` | 186 | 1024/4096 | `sha256:64ff30ae...` | (same) | (same) |
+| `edgartools-prod-large` | 178 | 2048/8192 | `sha256:64ff30ae...` | (same) | (same) |
+| `edgartools-prod-mdm-small` | 158 | 512/1024 | `sha256:ac245df9...` | `mdm-prod`, `retain-mdm-current`, `mdm-sha-c137ebc4ab44` | 2026-08-11T12:51:56-04:00 |
+| `edgartools-prod-mdm-medium` | 158 | 1024/4096 | `sha256:ac245df9...` | (same) | (same) |
+| `edgartools-prod-mdm-large` | 92 | 2048/8192 | `sha256:ac245df9...` | (same) | (same) |
+
+**Persisted as the release baseline.**
+
+### Configuration Rollback cohort (Option 1)
+
+Confirmed live, all six revisions still `ACTIVE` (not deregistered) and
+CPU/memory still exactly matching the current tier definitions — genuinely
+canonically identical, not just claimed:
+
+| Task family | Revision | CPU/Mem | Status |
+| --- | --- | --- | --- |
+| `edgartools-prod-small` | 164 | 512/1024 | ACTIVE |
+| `edgartools-prod-medium` | 168 | 1024/4096 | ACTIVE |
+| `edgartools-prod-large` | 161 | 2048/8192 | ACTIVE |
+| `edgartools-prod-mdm-small` | 141 | 512/1024 | ACTIVE |
+| `edgartools-prod-mdm-medium` | 141 | 1024/4096 | ACTIVE |
+| `edgartools-prod-mdm-large` | 75 | 2048/8192 | ACTIVE |
+
+**Persisted as the Configuration Rollback candidate, explicitly not an
+independent Code Rollback** — same code generation, older wiring/revision
+only. Protects against a bad configuration/wiring change (the kind Waves
+1, 2, 3, and 5 of Ticket 19's rollout mostly produce); does not protect
+against a code regression already present in both cohorts.
+
+**Operator attestation**: pending — this ticket captures and persists the
+evidence; the sign-off itself is the operator's action, not something this
+ticket can self-certify.
+
+### Code Rollback (Option 2) — split to a new task, not a blocker
+
+Ticket 21 already confirmed nothing today qualifies: the only pre-handoff
+execution in the exact prior registration window failed at `mdm export`
+and never validated `BatchSilver` children, graph, or gold completion.
+Building a genuinely validated Code Rollback cohort — a separately
+attested, actually-rehearsed prior image pair — is real work, not a quick
+capture. Split into [Ticket 29](29-build-and-rehearse-code-rollback-cohort.md).
+Not a blocker for Wave 0: genuinely new *code* risk (versus config/wiring
+risk) is primarily Wave 4's (machine-profile) concern, and Ticket 04's own
+policy already leans on Configuration Rollback's 15-minute restore as the
+fast primary safety net even there.
