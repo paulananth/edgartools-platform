@@ -1,7 +1,7 @@
 # Design the Snowflake-Native Silver Layer's Model Structure
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: none
 
 ## Question
