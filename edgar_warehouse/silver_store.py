@@ -11,6 +11,13 @@ from typing import Any, Iterator
 
 import pyarrow as pa
 
+from edgar_warehouse.serving.silver_landing_export import (
+    LandingExportBuffer,
+    track_landing_accounting_flag_scores,
+    track_landing_row,
+    track_landing_rows,
+)
+
 try:
     import duckdb
 except ImportError as exc:
@@ -853,12 +860,18 @@ _SEC_FINANCIAL_DERIVED_FACTOR_COLUMNS = {
 class SilverDatabase:
     """Manages the silver-layer DuckDB instance for a warehouse root."""
 
-    def __init__(self, db_path: str) -> None:
+    def __init__(self, db_path: str, *, landing_export: LandingExportBuffer | None = None) -> None:
         self._path = db_path
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = duckdb.connect(db_path)
         self._conn.execute(_DDL)
         self._ensure_schema_evolution()
+        # Opt-in, silver-snowflake-migration map Ticket 01: when set, every
+        # merge_*/upsert_* method below also records its rows here via the
+        # @track_landing_* decorators, for a later flush to the Snowflake
+        # landing zone. None (the default) makes every decorator a no-op --
+        # existing callers are unaffected.
+        self.landing_export = landing_export
 
     def _ensure_schema_evolution(self) -> None:
         self._conn.execute(_SCHEMA_MIGRATION_TABLE_DDL)
@@ -1339,6 +1352,7 @@ class SilverDatabase:
     # sec_company_ticker
     # ------------------------------------------------------------------
 
+    @track_landing_rows("sec_company_ticker")
     def replace_company_tickers(
         self,
         rows: list[dict[str, Any]],
@@ -1393,6 +1407,7 @@ class SilverDatabase:
     # sec_company (silver merge)
     # ------------------------------------------------------------------
 
+    @track_landing_rows("sec_company")
     def merge_company(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         """Upsert staged company rows into sec_company. Returns row count."""
         now = datetime.now(UTC)
@@ -1453,6 +1468,7 @@ class SilverDatabase:
     # sec_company_address
     # ------------------------------------------------------------------
 
+    @track_landing_rows("sec_company_address")
     def merge_addresses(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         now = datetime.now(UTC)
         count = 0
@@ -1501,6 +1517,7 @@ class SilverDatabase:
     # sec_company_former_name
     # ------------------------------------------------------------------
 
+    @track_landing_rows("sec_company_former_name")
     def merge_former_names(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         count = 0
         for row in rows:
@@ -1537,6 +1554,7 @@ class SilverDatabase:
     # sec_company_submission_file
     # ------------------------------------------------------------------
 
+    @track_landing_rows("sec_company_submission_file")
     def merge_submission_files(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         now = datetime.now(UTC)
         count = 0
@@ -1578,6 +1596,7 @@ class SilverDatabase:
     # sec_company_filing
     # ------------------------------------------------------------------
 
+    @track_landing_rows("sec_company_filing")
     def merge_filings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         """Bulk UPSERT into sec_company_filing.
 
@@ -1813,6 +1832,7 @@ class SilverDatabase:
     # sec_current_filing_feed
     # ------------------------------------------------------------------
 
+    @track_landing_rows("sec_current_filing_feed")
     def merge_current_filing_feed(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         now = datetime.now(UTC)
         count = 0
@@ -1875,6 +1895,7 @@ class SilverDatabase:
     # ownership and ADV parser tables
     # ------------------------------------------------------------------
 
+    @track_landing_rows("sec_ownership_reporting_owner")
     def merge_ownership_reporting_owners(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
@@ -1910,6 +1931,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_ownership_non_derivative_txn")
     def merge_ownership_non_derivative_txns(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
@@ -1951,6 +1973,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_ownership_derivative_txn")
     def merge_ownership_derivative_txns(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
@@ -2003,6 +2026,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_adv_filing")
     def merge_adv_filings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         """Bulk UPSERT into sec_adv_filing.
 
@@ -2089,6 +2113,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_adv_office")
     def merge_adv_offices(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
@@ -2119,6 +2144,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_adv_disclosure_event")
     def merge_adv_disclosure_events(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
@@ -2147,6 +2173,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_adv_private_fund")
     def merge_adv_private_funds(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         """Bulk UPSERT into sec_adv_private_fund.
 
@@ -2254,6 +2281,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_adv_firm_roster")
     def merge_adv_firm_roster(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         """UPSERT into sec_adv_firm_roster, a raw passthrough of the SEC Firm
         Roster CSV's aggregate private-fund columns, keyed on
@@ -2302,6 +2330,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_subsidiary_evidence")
     def merge_subsidiary_evidence(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
@@ -2333,6 +2362,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_auditor_report_evidence")
     def merge_auditor_report_evidence(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
@@ -2363,6 +2393,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_pcaob_firm_identity")
     def merge_pcaob_firm_identities(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
@@ -2820,6 +2851,7 @@ class SilverDatabase:
     # sec_raw_object
     # ------------------------------------------------------------------
 
+    @track_landing_row("sec_raw_object")
     def upsert_raw_object(self, row: dict[str, Any]) -> None:
         """Insert or update a raw object row.
 
@@ -2908,6 +2940,7 @@ class SilverDatabase:
     # sec_filing_attachment
     # ------------------------------------------------------------------
 
+    @track_landing_rows("sec_filing_attachment")
     def merge_filing_attachments(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         """Upsert filing attachment rows. Returns row count."""
         count = 0
@@ -2959,6 +2992,7 @@ class SilverDatabase:
     # sec_filing_text
     # ------------------------------------------------------------------
 
+    @track_landing_row("sec_filing_text")
     def upsert_filing_text(self, row: dict[str, Any]) -> None:
         """Insert or update a filing text extraction row.
 
@@ -3762,6 +3796,7 @@ class SilverDatabase:
     # Fundamentals namespace — Branch B silver tables
     # ------------------------------------------------------------------
 
+    @track_landing_rows("sec_financial_fact")
     def merge_financial_facts(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows_bulk(
             staging_table="stg_sec_financial_fact",
@@ -3825,6 +3860,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_financial_derived")
     def merge_financial_derived(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows_bulk(
             staging_table="stg_sec_financial_derived",
@@ -3974,6 +4010,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_earnings_release")
     def merge_earnings_releases(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
@@ -4006,6 +4043,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_guidance_fact")
     def merge_guidance_facts(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
@@ -4046,6 +4084,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_guidance_fact_reject")
     def merge_guidance_fact_rejects(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         count = 0
         for row in rows:
@@ -4063,6 +4102,7 @@ class SilverDatabase:
             count += 1
         return count
 
+    @track_landing_rows("sec_accounting_flag")
     def merge_accounting_flags(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
@@ -4097,6 +4137,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_accounting_flag_scores
     def update_accounting_flag_scores(
         self,
         cik: int,
@@ -4128,6 +4169,7 @@ class SilverDatabase:
         ).fetchall()
         return len(matched) > 0
 
+    @track_landing_rows("sec_executive_record")
     def merge_executive_records(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
@@ -4158,6 +4200,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_employment_event")
     def merge_employment_events(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
@@ -4184,6 +4227,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_thirteenf_holding")
     def merge_thirteenf_holdings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
@@ -4212,6 +4256,7 @@ class SilverDatabase:
             ],
         )
 
+    @track_landing_rows("sec_thirteenf_filing")
     def merge_thirteenf_filings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._merge_rows(
             """
