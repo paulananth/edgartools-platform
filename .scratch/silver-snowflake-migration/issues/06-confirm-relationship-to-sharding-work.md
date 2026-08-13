@@ -1,7 +1,7 @@
 # Confirm Relationship to `pipeline-throughput-architecture`'s Sharding Work
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: none
 
 ## Question
