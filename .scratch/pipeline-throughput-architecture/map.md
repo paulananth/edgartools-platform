@@ -65,6 +65,23 @@ executes the micro-fixes this map's evidence builds on.
 
 11. [Profile BatchSilver per-batch merge overhead](issues/11-profile-batchsilver-per-batch-merge-overhead.md) — resolved (research, using real evidence from the just-completed medium/20 run): the question is moot. Sharding already replaced the O(canonical file size) copy-in/merge/upload cost this ticket was investigating with O(one shard, ~80-800MB) — a real end-to-end task trace showed `silver_publish` (merge across 21 tables + upload) dropped to 3.2s, versus the original ~76s (merge + upload, unscaled) pre-sharding estimate. Total task wall time is now 77.4s (14-CIK batch) versus the original ~3m38s (100-CIK batch) estimate, and the remaining time is fixed ECS/Fargate task-lifecycle overhead (provisioning + image pull + teardown, ~46s), not merge-storage cost — the same lever tickets 12/13 already used to justify `MaxConcurrency=20`. No further storage-path work is justified for this caller. This was the map's last open ticket.
 
+## Cross-reference (2026-08-13, does not reopen this map)
+
+Decisions 11-13 above built and tuned the CIK-sharded local
+`silver.duckdb` file mechanism (`edgar_warehouse/application/sharding/`)
+that `BatchSilver` runs today. A separate, later effort —
+[silver-snowflake-migration](../silver-snowflake-migration/map.md) — has
+since decided that mechanism is going away entirely: once silver lives
+natively in Snowflake, writes are ordinary `INSERT`s into shared tables,
+and there is no more per-worker file to shard, checksum, hydrate, or
+publish. See that map's [Confirm Relationship to
+`pipeline-throughput-architecture`'s Sharding
+Work](../silver-snowflake-migration/issues/06-confirm-relationship-to-sharding-work.md)
+for the full reasoning. A future reader should not treat file-based
+sharding as this platform's long-term answer for silver throughput —
+it's this map's answer for the architecture that existed when these
+tickets were resolved, not a standing recommendation beyond it.
+
 ## Not yet specified
 
 - Whether scaling `BatchSilver` throughput beyond today's `MaxConcurrency=20`
