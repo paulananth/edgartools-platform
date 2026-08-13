@@ -26,6 +26,9 @@ clean-targets:
 
 models:
   edgartools_gold:
+    silver:
+      +schema: "{{ env_var('DBT_SILVER_SCHEMA', 'EDGARTOOLS_SILVER') }}"
+      +materialized: dynamic_table
     gold:
       +schema: "{{ env_var('DBT_GOLD_SCHEMA', 'EDGARTOOLS_GOLD') }}"
       +materialized: view
