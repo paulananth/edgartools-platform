@@ -50,6 +50,7 @@ class WarehouseSettings:
     storage_root: str
     silver_root: str
     serving_export_root: str | None
+    silver_landing_export_root: str | None = None
 
     @property
     def snowflake_export_root(self) -> str | None:
@@ -95,6 +96,8 @@ class WarehouseSettings:
                 )
             serving_export_root = value
 
+        silver_landing_export_root = os.environ.get("SILVER_LANDING_EXPORT_ROOT", "").strip() or None
+
         return cls(
             identity=identity,
             runtime_mode=runtime_mode,
@@ -103,4 +106,5 @@ class WarehouseSettings:
             storage_root=storage_root,
             silver_root=silver_root,
             serving_export_root=serving_export_root,
+            silver_landing_export_root=silver_landing_export_root,
         )

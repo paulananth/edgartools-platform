@@ -7,16 +7,21 @@ from typing import TYPE_CHECKING, Any
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 
 if TYPE_CHECKING:
+    from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
     from edgar_warehouse.silver_store import SilverDatabase
 
-def open_silver_database(silver_root: StorageLocation) -> "SilverDatabase":
+def open_silver_database(
+    silver_root: StorageLocation, *, landing_export: "LandingExportBuffer | None" = None
+) -> "SilverDatabase":
     from edgar_warehouse.silver_store import SilverDatabase
 
     db_path = silver_root.join("silver", "sec", "silver.duckdb")
-    return SilverDatabase(db_path)
+    return SilverDatabase(db_path, landing_export=landing_export)
 
 
-def open_silver_shard(path: str) -> "SilverDatabase":
+def open_silver_shard(
+    path: str, *, landing_export: "LandingExportBuffer | None" = None
+) -> "SilverDatabase":
     """Open a SilverDatabase at the given shard file path.
 
     Unlike ``open_silver_database`` (which appends the canonical
@@ -38,7 +43,7 @@ def open_silver_shard(path: str) -> "SilverDatabase":
     """
     from edgar_warehouse.silver_store import SilverDatabase
 
-    return SilverDatabase(path)
+    return SilverDatabase(path, landing_export=landing_export)
 
 
 def reset_submission_state(db: Any, cik: int) -> None:

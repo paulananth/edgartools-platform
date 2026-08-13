@@ -26,6 +26,17 @@ def build_warehouse_context(command_name: str) -> WarehouseCommandContext:
                 "SERVING_EXPORT_ROOT must be isolated from bronze and warehouse roots"
             )
 
+    silver_landing_export_root = None
+    if settings.silver_landing_export_root is not None:
+        silver_landing_export_root = StorageLocation(settings.silver_landing_export_root)
+        reserved_roots = {bronze_root.root, storage_root.root}
+        if serving_export_root is not None:
+            reserved_roots.add(serving_export_root.root)
+        if silver_landing_export_root.root in reserved_roots:
+            raise WarehouseRuntimeError(
+                "SILVER_LANDING_EXPORT_ROOT must be isolated from bronze, warehouse, and serving export roots"
+            )
+
     return WarehouseCommandContext(
         bronze_root=bronze_root,
         storage_root=storage_root,
@@ -34,4 +45,5 @@ def build_warehouse_context(command_name: str) -> WarehouseCommandContext:
         environment_name=settings.environment_name,
         identity=settings.identity,
         runtime_mode=settings.runtime_mode,
+        silver_landing_export_root=silver_landing_export_root,
     )

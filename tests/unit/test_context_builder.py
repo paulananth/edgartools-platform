@@ -74,3 +74,51 @@ class CommandContextFactoryTests(unittest.TestCase):
             with patch.dict(os.environ, env, clear=False):
                 with self.assertRaises(WarehouseRuntimeError):
                     build_warehouse_context("daily-incremental")
+
+    def test_silver_landing_export_root_defaults_to_none(self) -> None:
+        """Opt-in, default-off: no SILVER_LANDING_EXPORT_ROOT means no landing export,
+        for any command -- unlike serving_export_root this isn't gated to a command
+        allowlist, so absence alone must be enough to prove the no-op default."""
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {
+                "EDGAR_IDENTITY": "dev@example.com",
+                "WAREHOUSE_RUNTIME_MODE": "bronze_capture",
+                "WAREHOUSE_BRONZE_ROOT": os.path.join(tmp, "bronze"),
+                "WAREHOUSE_STORAGE_ROOT": os.path.join(tmp, "warehouse"),
+                "MDM_DATABASE_URL": "postgresql://test:test@localhost:5432/test",
+            }
+            with patch.dict(os.environ, env, clear=False):
+                context = build_warehouse_context("bootstrap-batch")
+
+            self.assertIsNone(context.silver_landing_export_root)
+
+    def test_silver_landing_export_root_opts_in_via_env_var(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {
+                "EDGAR_IDENTITY": "dev@example.com",
+                "WAREHOUSE_RUNTIME_MODE": "bronze_capture",
+                "WAREHOUSE_BRONZE_ROOT": os.path.join(tmp, "bronze"),
+                "WAREHOUSE_STORAGE_ROOT": os.path.join(tmp, "warehouse"),
+                "SILVER_LANDING_EXPORT_ROOT": os.path.join(tmp, "silver-landing"),
+                "MDM_DATABASE_URL": "postgresql://test:test@localhost:5432/test",
+            }
+            with patch.dict(os.environ, env, clear=False):
+                context = build_warehouse_context("bootstrap-batch")
+
+            self.assertIsNotNone(context.silver_landing_export_root)
+            self.assertTrue(context.silver_landing_export_root.root.endswith("silver-landing"))
+
+    def test_silver_landing_export_root_must_be_isolated(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bronze = os.path.join(tmp, "bronze")
+            env = {
+                "EDGAR_IDENTITY": "dev@example.com",
+                "WAREHOUSE_RUNTIME_MODE": "bronze_capture",
+                "WAREHOUSE_BRONZE_ROOT": bronze,
+                "WAREHOUSE_STORAGE_ROOT": os.path.join(tmp, "warehouse"),
+                "SILVER_LANDING_EXPORT_ROOT": bronze,
+                "MDM_DATABASE_URL": "postgresql://test:test@localhost:5432/test",
+            }
+            with patch.dict(os.environ, env, clear=False):
+                with self.assertRaises(WarehouseRuntimeError):
+                    build_warehouse_context("bootstrap-batch")
