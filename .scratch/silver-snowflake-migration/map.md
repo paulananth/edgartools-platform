@@ -82,12 +82,14 @@ debate — this map does not implement it.
 
 <!-- Closed ticket decisions: one-line gist and link; detail stays in the ticket. -->
 
+- [Design the Snowflake-Native Silver Layer's Model Structure](issues/01-design-snowflake-native-silver-model-structure.md) — new append-only `EDGARTOOLS_SILVER_LANDING` schema (reuses SOURCE's native-pull apparatus, simplified to plain INSERT); final silver tables are uniformly `dynamic_table` (current-state, window-function collapse) rather than a per-table incremental/snapshot mix — chosen specifically because it needs zero new dbt-run trigger infrastructure, unlike `incremental` models; CIK-partitioning and the operational/lease tables' disposition are explicitly deferred to Tickets 06 and 02 respectively.
+
 ## Not yet specified
 
-- How Snowflake's native concurrency (`MERGE`/transactions) interacts with
-  dbt's own incremental-model refresh semantics under genuinely concurrent
-  writers (multiple Distributed Map batches writing "silver" at once) —
-  can't be specified sharply until Ticket 01's model structure exists.
+- How Snowflake's native transactional guarantees interact with concurrent
+  Distributed Map batches writing to the same append-only landing tables —
+  can't be specified sharply until Ticket 02's concurrent-writer model is
+  decided (now unblocked by Ticket 01).
 - Snowflake compute cost (warehouse sizing/credits) for work that's
   currently ~free local DuckDB CPU — not estimable until the model
   structure and expected refresh cadence/pattern are decided.
