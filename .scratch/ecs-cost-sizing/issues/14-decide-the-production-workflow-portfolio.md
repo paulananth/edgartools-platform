@@ -1,7 +1,7 @@
 # Decide the Production Workflow Portfolio
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 10, 11, 13
 
 ## Question
