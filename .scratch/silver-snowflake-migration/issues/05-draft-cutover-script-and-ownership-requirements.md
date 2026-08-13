@@ -1,7 +1,7 @@
 # Draft the Cutover Script and Ownership Requirements
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: none
 
 ## Question
