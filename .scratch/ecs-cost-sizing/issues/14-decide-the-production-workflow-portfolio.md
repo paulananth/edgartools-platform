@@ -37,6 +37,13 @@ is not resolved here — see Ticket 23, opened to settle whether it's a
 deliberate narrower isolation boundary or an abandoned prototype before its
 own keep/retire call is made.
 
+**Addendum (Ticket 23, resolved):** `ownership_mdm_gold` is a deliberate
+narrower isolation boundary, confirmed via its own source comments and
+introducing commit (`02173c80`) — it deliberately skips full company
+MDM re-resolution for insider-only ownership updates. **Keep**, with a
+distinct, documented scope alongside `bronze_seed_silver_gold`. Not added
+to the retirement list.
+
 **2. The other 5 zero-execution utility machines.** **Retire**
 `bootstrap_full`, `catch_up_daily_form_index`, and
 `load_daily_form_index_for_date` — no evidenced need, functionally covered
