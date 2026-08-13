@@ -1,7 +1,7 @@
 # Decide the Replacement Path for Direct Silver Consumers
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 01
 
 ## Question
