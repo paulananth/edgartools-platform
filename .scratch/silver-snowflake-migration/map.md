@@ -87,6 +87,19 @@ debate — this map does not implement it.
 - [Decide the Replacement Path for Direct Silver Consumers](issues/03-decide-direct-silver-consumer-replacement.md) — `gold_models.py`'s ~20 Python builders retire entirely in favor of dbt gold `ref()`-ing dbt silver directly, which also retires `EDGARTOOLS_SOURCE`'s current gold-mirror purpose and structurally moots the `iter_gold_tables` OOM-mitigation concern; `validate_data_quality.py`'s separate `build_gold` call becomes SQL assertions against live Snowflake gold; MDM's `ShardedSilverReader`/`_TABLES` allowlist retires in favor of Snowflake-native GRANTs on a dedicated reader role, fixing the exact silent-gap failure shape that caused the `INSTITUTIONAL_HOLDS`/`EMPLOYED_BY` incidents.
 - [Decide the Ad-Hoc Reprocessing Story](issues/04-decide-ad-hoc-reprocessing-story.md) — today's "one workflow" is really five distinct mechanisms, resolving into three capability classes: SEC-fetching reprocessing (targeted-resync/full-reconcile/--force) is unaffected; bronze-only re-merge (parse-*-bronze) becomes a CLI re-parse into the append-only landing zone, simplified not downgraded; manual diagnosis (diagnose-silver-anomalies.py) keeps its read/print-remediation shape but its remediation output shifts from UPDATE/DELETE to a corrective INSERT or a re-parse pointer, since landing is append-only.
 - [Confirm Relationship to `pipeline-throughput-architecture`'s Sharding Work](issues/06-confirm-relationship-to-sharding-work.md) — confirmed obsolete: the whole local-file sharding mechanism (checksums, hydrate/publish, UNION ALL reconstruction) has no analog in Snowflake. What survives as a concept, now decided: no explicit `CLUSTER BY` for now (rely on natural CIK-ordered load correlation), and the accession-join taxonomy gets an explicit `cik` column materialized in silver rather than left as a join every consumer must rediscover. Cross-reference note left on the closed `pipeline-throughput-architecture` map.
+- [Draft the Cutover Script and Ownership Requirements](issues/05-draft-cutover-script-and-ownership-requirements.md) — landing/silver schemas owned by the existing `EDGARTOOLS_PROD_LOADER` (no new pipeline-object owner minted); MDM gets a brand-new, minimally-scoped `EDGARTOOLS_PROD_MDM_SILVER_READER` role with `FUTURE`-scoped grants (no allowlist to drift). Shipped as real, tested artifacts, not prose: `infra/scripts/generate_silver_landing_ddl.py` (a genuine reflection-based generator, via DuckDB introspection since `silver_store.py`'s schema isn't SQLAlchemy) plus its committed snapshot and a second bootstrap file for the future dbt-managed `EDGARTOOLS_SILVER` schema and the MDM reader role. Caught a real bug while building it: `pipeline_run_lease` doesn't belong in the append-only landing zone despite being listed in `PROTECTED_TABLE_REGISTRY`.
+
+**Map closed — all six tickets resolved.** Destination reached: a locked
+target architecture (append-only Python-populated landing zone → uniformly
+`dynamic_table` dbt silver models → unchanged gold SQL just pointed at a
+new connection), a concurrent-writer model with no promotion race left to
+replace, every direct silver consumer's replacement path named, the
+ad-hoc reprocessing story preserved across three capability classes, the
+sharding relationship confirmed and cross-referenced, and the first two
+real provisioning scripts committed and tested. Implementation is now a
+normal follow-up pass — this map's Destination was reaching a decision
+someone can implement without further architecture debate, not doing that
+implementation itself.
 
 ## Not yet specified
 - Snowflake compute cost (warehouse sizing/credits) for work that's
