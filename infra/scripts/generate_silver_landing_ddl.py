@@ -22,10 +22,14 @@ rather than hand-transcribing column lists that could silently drift from
 `silver_store.py`.
 
 Scope: the 31 tables in `edgar_warehouse.silver_protection.PROTECTED_TABLE_REGISTRY`
-(canonical domain data) -- not the 13 `EXCLUDED_OPERATIONAL_TABLES`
-(checkpoints, leases, run logs), which are warehouse-runtime bookkeeping,
-not part of the Snowflake-native pipeline (silver-snowflake-migration map,
-Ticket 01's Answer, "Explicitly out of scope for this ticket").
+(canonical domain data), minus `pipeline_run_lease` (operational, see
+`_EXCLUDED_FROM_LANDING` below), plus `sec_guidance_fact_reject` (real
+domain data that registry doesn't cover for an unrelated reason, see
+`_INCLUDED_BEYOND_REGISTRY` below) -- 30 tables total. Not the remaining 12
+`EXCLUDED_OPERATIONAL_TABLES` (checkpoints, leases, run logs), which are
+warehouse-runtime bookkeeping, not part of the Snowflake-native pipeline
+(silver-snowflake-migration map, Ticket 01's Answer, "Explicitly out of
+scope for this ticket").
 
 Landing tables are append-only by design (silver-snowflake-migration map,
 Ticket 01): every parse event is a new row, nothing is ever updated in
@@ -82,6 +86,21 @@ SEQUENCE_NAME = "PARSE_SEQ"
 # future re-run of this generator doesn't silently reintroduce it if the registry changes.
 _EXCLUDED_FROM_LANDING = {"pipeline_run_lease"}
 
+# sec_guidance_fact_reject is the mirror-image gap: it's real domain data (a quarantine
+# log of rejected guidance-fact candidates) that Ticket 01's Answer explicitly said
+# "stays append/log-shaped in silver too" -- but it was never in PROTECTED_TABLE_REGISTRY
+# to begin with, because that registry was scoped to the OLD cross-writer whole-file merge
+# eligibility (silver_protection.py's own comment: "append-only quarantine log ... no
+# natural key, rows accumulate, never conflict" is exactly why it was EXCLUDED from that
+# now-retired mechanism, not evidence it should be excluded from landing). Scoping this
+# generator strictly by PROTECTED_TABLE_REGISTRY membership silently missed it -- caught
+# while building the downstream dbt silver-model generator, added back explicitly here
+# rather than left as a carried-forward gap. No parse_sequence-ordered collapse needed for
+# it in silver (every row is already final; see the silver-model generator for the
+# passthrough-view treatment), but it still needs the same append-only landing table shape
+# as everything else, via the same ingest apparatus.
+_INCLUDED_BEYOND_REGISTRY = {"sec_guidance_fact_reject"}
+
 # DuckDB information_schema.columns.data_type -> Snowflake column type.
 # Faithful port of silver_store.py's existing types -- this script does not
 # "fix" any pre-existing schema choice (e.g. CLAUDE.md's SMALLINT-vs-BIGINT
@@ -120,7 +139,7 @@ def _reflect_landing_tables() -> dict[str, list[tuple[str, str, bool]]]:
     """Execute silver_store._DDL in-memory and reflect (name, type, nullable) per table."""
     con = duckdb.connect(":memory:")
     con.execute(silver_store._DDL)
-    wanted = set(PROTECTED_TABLE_REGISTRY.keys()) - _EXCLUDED_FROM_LANDING
+    wanted = (set(PROTECTED_TABLE_REGISTRY.keys()) | _INCLUDED_BEYOND_REGISTRY) - _EXCLUDED_FROM_LANDING
     found = {
         r[0]
         for r in con.execute(
@@ -131,7 +150,7 @@ def _reflect_landing_tables() -> dict[str, list[tuple[str, str, bool]]]:
     missing = wanted - found
     if missing:
         raise RuntimeError(
-            f"PROTECTED_TABLE_REGISTRY tables not found in silver_store._DDL: {sorted(missing)}"
+            f"Landing-scoped tables not found in silver_store._DDL: {sorted(missing)}"
         )
 
     columns_by_table: dict[str, list[tuple[str, str, bool]]] = {}

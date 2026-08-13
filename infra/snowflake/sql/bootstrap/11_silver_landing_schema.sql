@@ -53,6 +53,15 @@
 -- lease's whole point is a mutable current status) -- it stays exactly
 -- where it is today (silver_store.py's local DuckDB), unaffected by this
 -- migration.
+--
+-- Included beyond the registry: sec_guidance_fact_reject. It's real domain
+-- data (a quarantine log) that Ticket 01's Answer said explicitly stays
+-- append/log-shaped in silver too, but it was never in
+-- PROTECTED_TABLE_REGISTRY to begin with -- that registry was scoped to the
+-- OLD cross-writer merge eligibility, and this table was deliberately
+-- excluded from THAT (it has no natural key to merge on). Scoping this
+-- generator strictly by registry membership silently missed it; caught
+-- while building the downstream dbt silver-model generator and fixed here.
 
 USE ROLE ACCOUNTADMIN;
 USE DATABASE EDGARTOOLS_PROD;
@@ -466,6 +475,18 @@ CREATE TABLE IF NOT EXISTS sec_guidance_fact (
     source_ref TEXT,
     excerpt TEXT,
     confidence TEXT NOT NULL,
+    parser_version TEXT,
+    ingested_at TIMESTAMP_TZ,
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    , PRIMARY KEY (parse_sequence)
+);
+
+CREATE TABLE IF NOT EXISTS sec_guidance_fact_reject (
+    cik BIGINT NOT NULL,
+    accession_number TEXT NOT NULL,
+    metric TEXT,
+    reject_reason TEXT NOT NULL,
+    raw_payload TEXT,
     parser_version TEXT,
     ingested_at TIMESTAMP_TZ,
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
