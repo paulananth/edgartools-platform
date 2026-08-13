@@ -1,7 +1,7 @@
 # Decide the Concurrent-Writer Model for Snowflake-Native Silver
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 01
 
 ## Question
