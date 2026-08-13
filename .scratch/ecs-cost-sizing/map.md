@@ -18,6 +18,11 @@ end-to-end completion speed, cost, canary, and rollback gates.
   [`HANDOFF-codex-to-claude-2026-08-11-2000.md`](HANDOFF-codex-to-claude-2026-08-11-2000.md)
   before continuing Ticket 11 or treating the historical 26-workflow inventory
   as current. It links to the full earlier decision handoff.
+- Silver-storage architecture (S3 cost, `load_history`'s `bootstrap-next`
+  monolith-hydrate gap found live while investigating retry6's per-row cost)
+  is out of this map's own scope but was substantial enough to spawn its own
+  effort: see [silver-snowflake-migration](../silver-snowflake-migration/map.md).
+  Treat that map's findings as evidence, not something to re-derive here.
 - This map is planning-only. It does not change ECS, Step Functions, task
   definitions, deployment scripts, or Claude's work.
 - Scope is the operator-selected production AWS account, configured region,
