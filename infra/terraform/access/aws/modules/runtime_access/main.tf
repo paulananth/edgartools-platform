@@ -242,10 +242,9 @@ resource "aws_iam_role_policy" "ecs_task_warehouse_storage" {
         Resource = var.snowflake_export_bucket_arn
         Condition = {
           StringLike = {
-            "s3:prefix" = [
-              trimsuffix(var.snowflake_export_prefix, "/"),
-              "${var.snowflake_export_prefix}*"
-            ]
+            "s3:prefix" = flatten([
+              for prefix in local.export_read_prefixes : [trimsuffix(prefix, "/"), "${prefix}*"]
+            ])
           }
         }
       },
@@ -272,7 +271,9 @@ resource "aws_iam_role_policy" "ecs_task_warehouse_storage" {
           "s3:GetObject",
           "s3:PutObject"
         ]
-        Resource = "${var.snowflake_export_bucket_arn}/${var.snowflake_export_prefix}*"
+        Resource = [
+          for prefix in local.export_read_prefixes : "${var.snowflake_export_bucket_arn}/${prefix}*"
+        ]
       },
       {
         Effect = "Allow"
