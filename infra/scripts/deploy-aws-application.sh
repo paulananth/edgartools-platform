@@ -1014,6 +1014,12 @@ import sys
 ) = sys.argv[1:]
 
 snowflake_export_root = f"s3://{snowflake_export_bucket}/warehouse/artifacts/snowflake_exports"
+# Sibling prefix in the same bucket, per silver-snowflake-migration Ticket 07 --
+# matches the storage integration/IAM-policy widen already live in prod
+# (infra/terraform/snowflake/modules/native_pull, infra/terraform/access/aws/
+# modules/runtime_access) and the LOAD_SILVER_LANDING_TASK that already reads
+# from this exact prefix on its 5-minute schedule.
+silver_landing_export_root = f"s3://{snowflake_export_bucket}/warehouse/artifacts/silver_landing"
 environment_values = [
     {"name": "AWS_REGION", "value": aws_region},
     {"name": "WAREHOUSE_ENVIRONMENT", "value": environment},
@@ -1026,6 +1032,7 @@ environment_values = [
     {"name": "WAREHOUSE_IMAGE_REF", "value": image_ref},
     {"name": "SNOWFLAKE_EXPORT_ROOT", "value": snowflake_export_root},
     {"name": "SERVING_EXPORT_ROOT", "value": snowflake_export_root},
+    {"name": "SILVER_LANDING_EXPORT_ROOT", "value": silver_landing_export_root},
 ]
 if bronze_cik_limit:
     environment_values.append({"name": "WAREHOUSE_BRONZE_CIK_LIMIT", "value": bronze_cik_limit})
