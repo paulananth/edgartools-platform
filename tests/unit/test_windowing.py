@@ -587,7 +587,7 @@ def test_write_run_summary_empty_windows_raises():
 # special-case (warehouse_orchestrator.py:699) -- Stage0CompanyIdentity/
 # ReduceIdentityRefresh, the only thing that used to merge that run manifest
 # + reference snapshot into canonical, were removed from load_history
-# entirely (Stage1Parallel's WindowedBootstrap already writes the identical
+# entirely (IngestBronzeAndSilver's WindowedBootstrap already writes the identical
 # sec_company rows as a byproduct of its own capture). compute-windows now
 # falls through to the normal full-canonical publish, so its once-per-run
 # reference-data sync (company_tickers/company_tickers_exchange) lands in
