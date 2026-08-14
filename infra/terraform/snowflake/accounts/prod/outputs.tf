@@ -38,6 +38,11 @@ output "snowflake_manifest_subscriber_arn" {
   value       = try(module.native_pull[0].storage_aws_iam_user_arn, null)
 }
 
+output "silver_landing_export_root_url" {
+  description = "S3 URL prefix for the silver-landing zone (Ticket 07) -- set SILVER_LANDING_EXPORT_ROOT to this value."
+  value       = local.silver_landing_export_root_url
+}
+
 output "snowflake_storage_external_id" {
   description = "Prod storage integration external ID used for AWS trust."
   value       = try(module.native_pull[0].storage_external_id, local.storage_external_id)
