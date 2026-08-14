@@ -54,6 +54,24 @@ variable "snowflake_export_prefix" {
   type        = string
 }
 
+variable "additional_export_prefixes" {
+  description = <<-EOT
+    Extra bucket-relative prefixes to add to the Snowflake storage-reader
+    role's s3:ListBucket/s3:GetObject grants, alongside snowflake_export_prefix.
+    This IAM policy is a separate, independently-scoped exact-prefix allowlist
+    from Snowflake's own STORAGE_ALLOWED_LOCATIONS on the storage integration
+    (see the native_pull module's additional_storage_locations variable for
+    that side) -- both must list a new prefix before Snowflake can actually
+    read it, confirmed live when silver-snowflake-migration Ticket 07's first
+    COPY INTO test failed with ListBucket AccessDenied despite the storage
+    integration already being widened. Used by that same ticket to let the
+    silver-landing stage (a separate prefix from snowflake_export_prefix)
+    share this role instead of provisioning a new one.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 variable "snowflake_manifest_sns_topic_arn" {
   description = "SNS topic ARN for Snowflake export manifest notifications."
   type        = string
