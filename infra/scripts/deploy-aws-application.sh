@@ -2530,7 +2530,17 @@ fundamentals_entity_facts = {
     "Type": "Map",
     "Comment": "Branch B entity-facts: SEC companyfacts XBRL -> sec_financial_fact, sec_financial_derived, sec_accounting_flag in unified SEC silver. Runs after Branch A to avoid concurrent writes to the same DuckDB artifact.",
     "MaxConcurrency": 1,
-    "ToleratedFailurePercentage": 0,
+    # 15, not 0 (2026-08-14, ecs-cost-sizing ticket 21): at ToleratedFailurePercentage=0,
+    # window 1 of N exhausting its retries aborts the Map immediately, abandoning every
+    # PENDING window without even attempting it -- live evidence from load_history retry7
+    # showed this zeroed out net-new entity-facts coverage across the full run (0.04% CIK
+    # coverage of the universe after a 16-hour execution that reported SUCCEEDED). 15%
+    # tolerates isolated bad windows (a huge filer, a transient SEC 5xx) while still hard-
+    # stopping well before all windows are attempted if something systemic is broken (bad
+    # image, missing credential, unapplied migration) -- see the ticket for the full
+    # analysis and the follow-up (per-window Catch inside the ItemProcessor, so no window's
+    # failure counts against any other window at all) this stopgap doesn't yet cover.
+    "ToleratedFailurePercentage": 15,
     "ItemReader": {
         "Resource": "arn:aws:states:::s3:getObject",
         "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
@@ -2599,7 +2609,11 @@ fundamentals_per_filing = {
     "Type": "Map",
     "Comment": "Branch B per-filing (post-Branch-A): 8-K earnings + DEF 14A proxy -> sec_earnings_release, sec_executive_record in unified SEC silver. Reads filing/attachment/raw-object metadata Branch A just finished writing.",
     "MaxConcurrency": 1,
-    "ToleratedFailurePercentage": 0,
+    # 15, not 0 -- same rationale as fundamentals_entity_facts above (ecs-cost-sizing
+    # ticket 21); this Map shares the identical topology and live evidence showed
+    # per-filing coverage was equally zeroed out (0.07%/1.7% CIK coverage) by the same
+    # abort-on-first-failure behavior.
+    "ToleratedFailurePercentage": 15,
     "ItemReader": {
         "Resource": "arn:aws:states:::s3:getObject",
         "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
@@ -2633,7 +2647,9 @@ fundamentals_thirteenf = {
     "Type": "Map",
     "Comment": "Branch B 13F (post-Branch-A, data-architecture Issue 4): INFORMATION TABLE XML -> sec_thirteenf_holding in unified SEC silver. Same Branch A dependency as per-filing; runs after it in this same sequential stage.",
     "MaxConcurrency": 1,
-    "ToleratedFailurePercentage": 0,
+    # 15, not 0 -- same rationale as fundamentals_entity_facts above (ecs-cost-sizing
+    # ticket 21).
+    "ToleratedFailurePercentage": 15,
     "ItemReader": {
         "Resource": "arn:aws:states:::s3:getObject",
         "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},

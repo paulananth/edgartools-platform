@@ -412,6 +412,21 @@ def test_stage1b_maps_use_large_task_definition(definition: dict) -> None:
         )
 
 
+def test_stage1b_maps_tolerate_isolated_window_failures(definition: dict) -> None:
+    """2026-08-14, ecs-cost-sizing ticket 21: at ToleratedFailurePercentage=0, window 1
+    of N exhausting its retries aborted these Maps immediately, abandoning every other
+    PENDING window without even attempting it. Live evidence from load_history retry7:
+    describe-map-run on all three Maps showed succeeded=0, failed=1, pending=51 (of 53
+    total windows) -- a 16-hour execution that reported SUCCEEDED overall while adding
+    zero net-new entity-facts/per-filing/13F coverage. Raised to 15% so an isolated bad
+    window (a huge filer, a transient SEC 5xx) doesn't zero out the rest of the universe,
+    while a systemic break still hard-stops well before every window is attempted."""
+    for state_name in ("FetchEntityFacts", "FetchPerFilingFundamentals", "FetchThirteenFHoldings"):
+        assert definition["States"][state_name]["ToleratedFailurePercentage"] == 15, (
+            f"{state_name} should tolerate isolated window failures, not abort on the first one"
+        )
+
+
 # -- Issue 3: export before graph sync ----------------------------------------
 
 
