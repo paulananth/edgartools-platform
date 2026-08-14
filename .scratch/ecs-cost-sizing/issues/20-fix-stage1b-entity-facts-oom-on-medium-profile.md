@@ -121,3 +121,28 @@ Full evidence, code citations, and CloudWatch timing:
 [`stage1b-entity-facts-oom-root-cause-2026-08-14.md`](../research/stage1b-entity-facts-oom-root-cause-2026-08-14.md).
 Neither the stopgap nor the structural fix has been implemented — this
 ticket is diagnosis + decision only, per this map's planning-only Notes.
+
+## Update (2026-08-14, live confirmation) — Stage1BPerFiling also OOM'd, not just theoretical
+
+`ticket42-task35-fulluniverse-retry7`'s `Stage1BPerFiling` map (same run-id
+`25a8edae-ea13-3c64-9d51-50851d57d53a`, same window 1, `--cik-limit 500`, same
+`medium` profile) exit-137'd on its first 2 of 3 configured attempts:
+
+| Attempt | Started | Stopped | Duration | Exit code |
+|---|---|---|---|---|
+| 1 | 2026-08-14T06:07:17-04:00 | 2026-08-14T06:32:20-04:00 | ~25 min | 137 |
+| 2 | 2026-08-14T06:36:55-04:00 | 2026-08-14T07:00:21-04:00 | ~23.5 min | 137 |
+
+This confirms the Answer section's Q3 finding is not just architecturally
+shared but **actually realized** for `Stage1BPerFiling`, contrary to the
+research's own risk-ranking (which called per-filing's row fan-out
+"materially lower risk" than `sec_thirteenf_holding`'s and flagged only
+`thirteenf` as the concrete concern). Same failure signature as entity-facts
+(exit 137, `medium` profile, per-window Distributed Map) — not
+re-investigated in depth here (the mechanism is already diagnosed above and
+presumed identical: the shared `merge_candidate_into_canonical` cold-start
+delta materialization), just recorded as live evidence that the risk applies
+more broadly than the original estimate suggested. Does not change the
+Answer's recommendation — if anything, strengthens the case for moving all
+three Stage1B modes to `large` together rather than treating per-filing as
+lower-priority.
