@@ -146,3 +146,43 @@ more broadly than the original estimate suggested. Does not change the
 Answer's recommendation — if anything, strengthens the case for moving all
 three Stage1B modes to `large` together rather than treating per-filing as
 lower-priority.
+
+## Update (2026-08-14, both fixes implemented and deployed to prod)
+
+Both halves of the Answer's decision are now live in prod, not just decided:
+
+1. **Structural fix** (PR #416, merged): `merge_candidate_into_canonical`
+   (`silver_protection.py`) split into a phase-1 pure-SQL `INSERT ... SELECT`
+   for candidate rows whose business key doesn't exist in canonical at all
+   (no Python row materialization — the case that dominates a cold-start
+   table), and a phase-2 chunked (`fetchmany()`, default 50,000 rows,
+   `WAREHOUSE_SILVER_MERGE_CHUNK_SIZE`) Python conflict-resolution path for
+   the remaining same-key-but-differing rows. Required a dedicated
+   `conn.cursor()` for the chunked read — interleaving other `conn.execute()`
+   calls on the parent connection mid-fetch silently corrupted results,
+   caught by a new test before shipping. 8 new tests
+   (`tests/unit/test_silver_protection_merge_chunking.py`); full suite green
+   (2078 passed, 4 skipped).
+2. **Stopgap**: all three Stage1B modes moved from `wh_medium_arn` to
+   `wh_large_arn` in `deploy-aws-application.sh`, with a new architecture
+   regression test pinning it.
+
+Deployed via `deploy-aws-application.sh --env prod --enable-mdm` (warehouse
+image digest `sha256:4939c2a1...`). Verified live:
+`edgartools-prod-load-history`'s definition now points `Stage1BEntityFacts`/
+`Stage1BPerFiling`/`Stage1BThirteenF` at `edgartools-prod-large:182`, and
+that task definition references the new image digest (confirmed via
+`describe-task-definition`).
+
+**Caveat — does not retroactively fix the in-flight run**: AWS Step
+Functions pins a running execution to the state machine definition it
+resolved when the relevant state was entered; updating the state machine
+mid-execution does not change already-in-flight state. Confirmed live:
+`ticket42-task35-fulluniverse-retry7`'s `Stage1BThirteenF` task
+(`105f0994...`, already running before the deploy) is still on
+`edgartools-prod-medium:189` after the deploy completed. So this fix
+protects every *future* `load_history` execution starting now, but
+`retry7`'s own `Stage1BThirteenF` (and anything after it, until the
+execution finishes or is restarted) will not benefit — if it OOMs, the
+existing `Catch` graceful-degradation design still applies, same as
+entity-facts/per-filing before it.
