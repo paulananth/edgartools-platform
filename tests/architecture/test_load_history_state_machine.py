@@ -516,6 +516,22 @@ def test_windowed_bootstrap_uses_large_task_definition(definition: dict) -> None
     assert run_window["Parameters"]["TaskDefinition"] == "arn:wh-large"
 
 
+def test_window_size_default_is_1000(definition: dict) -> None:
+    """2026-08-14, ecs-cost-sizing credit-consumption finding: every window
+    completion triggers a separate EDGARTOOLS_GOLD.REFRESH_AFTER_LOAD call in
+    Snowflake (confirmed live via QUERY_ATTRIBUTION_HISTORY: 5,988 calls/32.2
+    credits over 7 days on EDGARTOOLS_PROD_REFRESH_WH, spiking on days
+    load_history ran many small windows). Doubling window_size 500 -> 1000
+    roughly halves REFRESH_AFTER_LOAD call volume per full-universe run.
+    Capped at 2x, not larger, because window_size also scales
+    WindowedBootstrap's still-unfixed _capture_submission_bronze_snapshots
+    accumulation (test_windowed_bootstrap_uses_large_task_definition above)
+    -- 1000 stays inside the same wh_large_arn/wh_medium_arn headroom ratio
+    that precedent already proved safe, rather than gambling on unmeasured
+    slack beyond it."""
+    assert definition["States"]["WindowSizeDefault"]["Result"] == 1000
+
+
 def test_compute_windows_command_includes_total_cik_limit(definition: dict) -> None:
     """ComputeWindows always passes an explicit --total-cik-limit (0 = no limit sentinel
     when the caller omits $.total_cik_limit) so operators can bound a load_history run to
