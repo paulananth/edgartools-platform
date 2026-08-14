@@ -133,6 +133,32 @@ resource "aws_s3_bucket_lifecycle_configuration" "warehouse" {
       noncurrent_days = 3
     }
   }
+
+  # Backstop for the canonical silver.duckdb + shard-N.duckdb keys under
+  # warehouse/silver/. Every merge_candidate_into_canonical publish
+  # (edgar_warehouse/silver_protection.py) promotes a brand-new full-file
+  # copy onto these keys; with bucket versioning enabled and no lifecycle
+  # rule, every prior version stays billed forever. Confirmed live in prod
+  # (ecs-cost-sizing ticket 22): 458+ noncurrent versions on silver.duckdb
+  # alone, 1.34TB of pure noncurrent-version waste across the 5 canonical
+  # keys (~$1.05/day of the platform's measured ~$2/day steady-state S3
+  # cost). No `expiration` block here, deliberately -- unlike
+  # silverstage/'s ephemeral staging candidates, these ARE the live
+  # canonical data; expiring the *current* version on a quiet day would
+  # delete the only copy. Only noncurrent (already-superseded) versions
+  # are ever eligible.
+  rule {
+    id     = "expire-noncurrent-silver-canonical-versions"
+    status = "Enabled"
+
+    filter {
+      prefix = "warehouse/silver/"
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 7
+    }
+  }
 }
 
 resource "aws_kms_key" "snowflake_export" {
