@@ -93,9 +93,10 @@ debate — this map does not implement it.
 
 **Map closed again — seven tickets resolved.** The Snowflake ingestion-path
 gap discovered while deploying the six original tickets' first
-implementation pass (`claude/silver-snowflake-implementation`) is now not
-just decided but built and live in prod (still opt-in — `SILVER_LANDING_EXPORT_ROOT`
-is unset everywhere, so no real pipeline run populates it yet).
+implementation pass (`claude/silver-snowflake-implementation`) is now fully
+live in prod, including the last deferred piece: `SILVER_LANDING_EXPORT_ROOT`
+was flipped on (PR #412) and prod redeployed, so real bronze-capture runs now
+populate the silver-landing zone end to end.
 
 ## Not yet specified
 - Snowflake compute cost (warehouse sizing/credits) for work that's
