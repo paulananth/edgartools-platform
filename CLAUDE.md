@@ -914,7 +914,11 @@ Stage 2 — MDM entity resolution (sequential Step Functions)
 Stage 3 — Gold refresh (single ECS task)
   gold-refresh
   • Reads complete silver DuckDB, builds all gold tables, writes Snowflake export manifests
-  • SNOWFLAKE_RUN_MANIFEST_TASK picks up the manifest and refreshes EDGARTOOLS_GOLD within 1 min
+  • SNOWFLAKE_RUN_MANIFEST_TASK picks up the manifest and refreshes EDGARTOOLS_GOLD within 6 hours
+    (widened from 1 min -> 15 min -> 6 hours, 2026-08-14, ecs-cost-sizing credit-consumption
+    finding -- a 1-minute poll never let the X-Small refresh warehouse fully suspend during an
+    active backfill, burning ~67 Snowflake credits/week; widened further per explicit operator
+    decision prioritizing credit economy over near-real-time freshness)
 ```
 
 (Elsewhere in this repo, `bootstrap`/`daily_incremental`'s own Company Identity
