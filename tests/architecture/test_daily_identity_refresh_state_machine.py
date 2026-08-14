@@ -8,7 +8,7 @@ tests/architecture/test_gold_affecting_commands_task_sizing.py) and asserts:
 
 - daily_incremental's default path (no refresh_mode input, or refresh_mode
   != "backstop") routes through the new bounded ComputeIdentityRefreshWindow
-  -> Stage0CompanyIdentityBounded stages, NOT the full-universe ComputeWindows
+  -> ResolveCompanyIdentityBounded stages, NOT the full-universe ComputeWindows
   path that took 10h16m alone on the first prod execution (ticket 45's
   evidence).
 - refresh_mode="backstop" routes through the same explicit-CIK batch Map as
@@ -126,9 +126,9 @@ def test_daily_incremental_default_path_is_bounded_not_full_universe(daily_incre
         "the generated daily refresh command must contain exactly one intrinsic "
         "constructor; duplicated fragments make the ECS override invalid"
     )
-    assert compute_window["Next"] == "Stage0CompanyIdentityBounded"
+    assert compute_window["Next"] == "ResolveCompanyIdentityBounded"
 
-    bounded_stage0 = states["Stage0CompanyIdentityBounded"]
+    bounded_stage0 = states["ResolveCompanyIdentityBounded"]
     assert bounded_stage0["Type"] == "Map"
     assert bounded_stage0["Next"] == "ReduceIdentityRefresh"
     item_reader_key = bounded_stage0["ItemReader"]["Parameters"]["Key.$"]
@@ -211,7 +211,7 @@ def test_daily_incremental_backstop_uses_complete_company_eligible_universe(
     ]
     assert "compute-identity-refresh-window" in cmd
     assert "'--mode', 'backstop'" in cmd
-    assert compute_backstop["Next"] == "Stage0CompanyIdentityBounded"
+    assert compute_backstop["Next"] == "ResolveCompanyIdentityBounded"
 
     assert "ComputeWindows" not in states
     assert "Stage0CompanyIdentity" not in states
@@ -222,12 +222,12 @@ def test_daily_incremental_both_modes_share_explicit_cik_stage0(
 ) -> None:
     states = daily_incremental_definition["States"]
     assert states["ComputeIdentityRefreshWindow"]["Next"] == (
-        "Stage0CompanyIdentityBounded"
+        "ResolveCompanyIdentityBounded"
     )
     assert states["ComputeIdentityBackstopUniverse"]["Next"] == (
-        "Stage0CompanyIdentityBounded"
+        "ResolveCompanyIdentityBounded"
     )
-    assert states["Stage0CompanyIdentityBounded"]["Next"] == "ReduceIdentityRefresh"
+    assert states["ResolveCompanyIdentityBounded"]["Next"] == "ReduceIdentityRefresh"
 
 
 def test_bootstrap_definition_has_no_refresh_mode_states(bootstrap_definition) -> None:
@@ -241,7 +241,7 @@ def test_bootstrap_definition_has_no_refresh_mode_states(bootstrap_definition) -
         "RefreshMode",
         "ComputeIdentityRefreshWindow",
         "ComputeIdentityBackstopUniverse",
-        "Stage0CompanyIdentityBounded",
+        "ResolveCompanyIdentityBounded",
         "ComputeWindows",
         "Stage0CompanyIdentity",
         "AcquireLease",
@@ -605,7 +605,7 @@ def test_daily_incremental_previously_uncaught_states_release_lease_on_failure(
     daily_incremental_definition,
 ) -> None:
     """release-readiness ticket 86: ComputeIdentityRefreshWindow/
-    ComputeIdentityBackstopUniverse/Stage0CompanyIdentityBounded/
+    ComputeIdentityBackstopUniverse/ResolveCompanyIdentityBounded/
     ReduceIdentityRefresh/RunWarehouseTask had no Catch at all -- a real
     failure in any of them wedged sec_fetch_active for the full 16h
     stale-reclaim window. Deliberately excludes FetchAdvBulk/
@@ -618,7 +618,7 @@ def test_daily_incremental_previously_uncaught_states_release_lease_on_failure(
     for previously_uncaught_state in (
         "ComputeIdentityRefreshWindow",
         "ComputeIdentityBackstopUniverse",
-        "Stage0CompanyIdentityBounded",
+        "ResolveCompanyIdentityBounded",
         "ReduceIdentityRefresh",
         "RunWarehouseTask",
     ):

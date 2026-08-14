@@ -2113,12 +2113,12 @@ def build_sec_fetch_lease_states(acquired_next_state, released_next_state):
             "Next": released_next_state,
         },
         # release-readiness ticket 86: SeedUniverse/MdmSeedUniverse/
-        # ComputeWindows/Stage1Parallel had no Catch --
+        # ComputeWindows/IngestBronzeAndSilver had no Catch --
         # a real failure in any of them (e.g. the immutable-object content
         # conflict found live during ticket 84's own verification) wedged
         # sec_fetch_active for the full 16h stale-reclaim window instead of
-        # releasing promptly. Stage1BEntityFacts/Stage1BPerFiling/
-        # Stage1BThirteenF are deliberately excluded -- AD-13 already routes
+        # releasing promptly. FetchEntityFacts/FetchPerFilingFundamentals/
+        # FetchThirteenFHoldings are deliberately excluded -- AD-13 already routes
         # their failures forward to the next stage, which still reaches
         # ReleaseSecFetchLease on the happy path, so they were never
         # actually uncaught in the way this fixes. Distinct from
@@ -2142,7 +2142,7 @@ def build_sec_fetch_lease_states(acquired_next_state, released_next_state):
 def sec_fetch_task_catch():
     """ticket 86: shared Catch for load_history's currently-uncaught
     fetch-heavy-span states (SeedUniverse/MdmSeedUniverse/ComputeWindows/
-    Stage1Parallel)."""
+    IngestBronzeAndSilver)."""
     return [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.sec_fetch_task_error", "Next": "ReleaseSecFetchLeaseAfterFailure"}]
 
 # Validate the optional operator repair flag before starting any ECS workload.
@@ -2368,7 +2368,7 @@ filing_lookback_years_default = {
 # in gold-build-memory-reliability ticket 03's run_wh.
 compute_windows = ecs_state(wh_large_arn,
     "States.Array('compute-windows', '--window-size', States.Format('{}', $.window_size), '--total-cik-limit', States.Format('{}', $.total_cik_limit), '--run-id', $$.Execution.Name)",
-    next_state="Stage1Parallel")
+    next_state="IngestBronzeAndSilver")
 # ComputeWindows publishes its durable window manifest to S3; its ECS result is
 # not the data contract for later states. Preserve the normalized execution
 # input so Stage1 still receives artifact_policy/force/defaults.
@@ -2376,7 +2376,7 @@ compute_windows["ResultPath"] = None
 compute_windows["Catch"] = sec_fetch_task_catch()
 
 # Stage0CompanyIdentity/ReduceIdentityRefresh removed (stage0-stage1-consolidation
-# wayfinder map, ticket 02/04): Stage1Parallel's Branch A (WindowedBootstrap,
+# wayfinder map, ticket 02/04): IngestBronzeAndSilver's Branch A (WindowedBootstrap,
 # bootstrap-next --artifact-policy all_attachments) already writes the identical
 # sec_company/sec_company_filing/sec_company_address/sec_company_former_name rows
 # Stage0CompanyIdentity used to produce as a strict subset of its own capture --
@@ -2398,13 +2398,13 @@ compute_windows["Catch"] = sec_fetch_task_catch()
 # and Stage1's bootstrap-next never calls _sync_reference_data itself).
 #
 # write_warehouse_mdm_gold_definition's daily_incremental branch below keeps its
-# own separate Stage0CompanyIdentityBounded/ReduceIdentityRefresh pair untouched --
+# own separate ResolveCompanyIdentityBounded/ReduceIdentityRefresh pair untouched --
 # that command (compute-identity-refresh-window) and this one (compute-windows)
 # were always two distinct handlers that happened to share the ecs_state/
 # _write_cik_universe_batches helper shape, not shared state; daily_incremental's
 # bounded Identity Refresh is unaffected by this removal.
 
-# (4) Stage1Parallel: Branch A ownership bootstrap. Branch B fundamentals is
+# (4) IngestBronzeAndSilver: Branch A ownership bootstrap. Branch B fundamentals is
 # intentionally sequenced after this state because all Branch B modes now write
 # the same canonical SEC silver DuckDB database as Branch A. Running two ECS
 # tasks against the same S3-backed DuckDB artifact would race the hydrate/publish
@@ -2490,12 +2490,12 @@ windowed_bootstrap = {
 # window_limit} item.
 #
 # AD-13: partial Branch B failure is accepted. A failure is caught and routed to
-# Stage1BPerFiling so the pipeline proceeds. Gaps self-heal via idempotent
+# FetchPerFilingFundamentals so the pipeline proceeds. Gaps self-heal via idempotent
 # backfill; a hard abort would defeat that. Branch A remains strict.
 stage1b_entity_facts_catch = [{
     "ErrorEquals": ["States.ALL"],
     "ResultPath": None,
-    "Next": "Stage1BPerFiling",
+    "Next": "FetchPerFilingFundamentals",
 }]
 
 # wh_large_arn, not wh_medium_arn (2026-08-14, ecs-cost-sizing ticket 20): a
@@ -2534,7 +2534,7 @@ fundamentals_entity_facts = {
     },
     "ResultPath": None,
     "Catch": stage1b_entity_facts_catch,
-    "Next": "Stage1BPerFiling",
+    "Next": "FetchPerFilingFundamentals",
 }
 
 stage1_parallel = {
@@ -2551,11 +2551,11 @@ stage1_parallel = {
         },
     ],
     "ResultPath": None,
-    "Next": "Stage1BEntityFacts",
+    "Next": "FetchEntityFacts",
     "Catch": sec_fetch_task_catch(),
 }
 
-# (4c) Stage1BPerFiling / Stage1BThirteenF: Branch B modes that read Branch A's filing/attachment/
+# (4c) FetchPerFilingFundamentals / FetchThirteenFHoldings: Branch B modes that read Branch A's filing/attachment/
 # raw-object metadata (data-architecture Issues 1 and 4). Run sequentially after Branch A and
 # entity-facts because all Branch B modes write the same unified SEC silver DuckDB file.
 #
@@ -2564,7 +2564,7 @@ stage1_parallel = {
 stage1b_per_filing_catch = [{
     "ErrorEquals": ["States.ALL"],
     "ResultPath": None,
-    "Next": "Stage1BThirteenF",
+    "Next": "FetchThirteenFHoldings",
 }]
 stage1b_thirteenf_catch = [{
     "ErrorEquals": ["States.ALL"],
@@ -2603,7 +2603,7 @@ fundamentals_per_filing = {
     },
     "ResultPath": None,
     "Catch": stage1b_per_filing_catch,
-    "Next": "Stage1BThirteenF",
+    "Next": "FetchThirteenFHoldings",
 }
 
 # wh_large_arn, not wh_medium_arn -- same fix as per_window_fundamentals_entity_facts
@@ -2846,8 +2846,8 @@ definition = {
         "manifests to S3 (company-identity capture folded into Branch A below -- "
         "stage0-stage1-consolidation wayfinder map, ticket 02/04 -- it already writes the "
         "identical sec_company rows as a byproduct of its own submissions capture), "
-        "(4) Stage1Parallel — Branch A ownership (bootstrap-next) writes unified SEC silver, "
-        "(4b) Stage1BEntityFacts then (4c) Stage1BPerFiling then Stage1BThirteenF — Branch B "
+        "(4) IngestBronzeAndSilver — Branch A ownership (bootstrap-next) writes unified SEC silver, "
+        "(4b) FetchEntityFacts then (4c) FetchPerFilingFundamentals then FetchThirteenFHoldings — Branch B "
         "fundamentals modes run sequentially after Branch A because they share the same silver "
         "DuckDB artifact; Branch B failures are caught so the pipeline still advances (AD-13), "
         "(4d) AdvBulkFetch — fetch-adv-bulk + ingest-relationship-sources (adv-fetch-pipeline-"
@@ -2877,10 +2877,10 @@ definition = {
         "FilingLookbackYearsCheck":   filing_lookback_years_check,
         "FilingLookbackYearsDefault": filing_lookback_years_default,
         "ComputeWindows":    compute_windows,
-        "Stage1Parallel":    stage1_parallel,
-        "Stage1BEntityFacts": fundamentals_entity_facts,
-        "Stage1BPerFiling":  fundamentals_per_filing,
-        "Stage1BThirteenF":  fundamentals_thirteenf,
+        "IngestBronzeAndSilver":    stage1_parallel,
+        "FetchEntityFacts": fundamentals_entity_facts,
+        "FetchPerFilingFundamentals":  fundamentals_per_filing,
+        "FetchThirteenFHoldings":  fundamentals_thirteenf,
         "DatasetPeriodCheck":   dataset_period_check,
         "DatasetPeriodDefault": dataset_period_default,
         "ForceCheck":           force_check,
@@ -3179,7 +3179,7 @@ if workflow_name != "daily_incremental":
         },
     }
 else:
-    # Stage0CompanyIdentityBounded: Company Identity Pipeline wayfinder map,
+    # ResolveCompanyIdentityBounded: Company Identity Pipeline wayfinder map,
     # ticket 06. A strict, MaxConcurrency=1, delta-then-reduce Map --
     # bootstrap-fundamentals --mode company-identity over explicit
     # --cik-list batches (compute-identity-refresh-window's cik_batches.jsonl),
@@ -3404,10 +3404,10 @@ else:
         "States.Array('compute-identity-refresh-window', '--mode', 'daily', "
         "'--lookback-days', '7', "
         "'--batch-size', '500', '--run-id', $$.Execution.Name)",
-        next_state="Stage0CompanyIdentityBounded")
+        next_state="ResolveCompanyIdentityBounded")
     compute_identity_refresh_window["ResultPath"] = None
     # ticket 86: previously uncaught -- these states, plus
-    # Stage0CompanyIdentityBounded/ReduceIdentityRefresh/RunWarehouseTask
+    # ResolveCompanyIdentityBounded/ReduceIdentityRefresh/RunWarehouseTask
     # below, are all inside the sec_fetch_active fetch-heavy span with no
     # release-on-failure path before this fix.
     compute_identity_refresh_window["Catch"] = sec_fetch_task_catch()
@@ -3415,7 +3415,7 @@ else:
     compute_identity_backstop_universe = ecs_state(wh_medium_arn,
         "States.Array('compute-identity-refresh-window', '--mode', 'backstop', "
         "'--batch-size', '500', '--run-id', $$.Execution.Name)",
-        next_state="Stage0CompanyIdentityBounded")
+        next_state="ResolveCompanyIdentityBounded")
     compute_identity_backstop_universe["ResultPath"] = None
     compute_identity_backstop_universe["Catch"] = sec_fetch_task_catch()
 
@@ -3602,7 +3602,7 @@ else:
     # sec_fetch_active lease (release-readiness ticket 84): acquired right
     # before RefreshMode dispatch, released right before MdmRun -- spans
     # every state that actually calls SEC/IAPD (identity-window compute,
-    # Stage0CompanyIdentityBounded, ReduceIdentityRefresh [no SEC calls
+    # ResolveCompanyIdentityBounded, ReduceIdentityRefresh [no SEC calls
     # itself, but sandwiched between two fetch stages], RunWarehouseTask,
     # and the ADV/firm-roster fetch chain). Independent of AcquireLease/
     # ReleaseLease above -- that lease prevents overlapping daily_incremental/
@@ -3616,7 +3616,7 @@ else:
             "daily (index-impacted company-eligible intersection, default), both emitted by "
             "compute-identity-refresh-window -- release-readiness ticket 45/49/51, "
             "(0a) AcquireSecFetchLease -- cross-command sec_fetch_active lease (ticket 84), "
-            "(0b) Stage0CompanyIdentityBounded -- Company Identity capture, strict, runs "
+            "(0b) ResolveCompanyIdentityBounded -- Company Identity capture, strict, runs "
             "before ownership/ADV so IS_INSIDER derivation sees resolved Company entities, "
             "(1) bronze+silver capture, (1a) ReleaseSecFetchLease, (1b) AdvBulkFetch -- fetch-adv-bulk + "
             "ingest-relationship-sources (adv-fetch-pipeline-wiring spec), then fetch-firm-roster "
@@ -3643,7 +3643,7 @@ else:
             "RefreshMode":        refresh_mode,
             "ComputeIdentityRefreshWindow": compute_identity_refresh_window,
             "ComputeIdentityBackstopUniverse": compute_identity_backstop_universe,
-            "Stage0CompanyIdentityBounded": stage0_company_identity_bounded,
+            "ResolveCompanyIdentityBounded": stage0_company_identity_bounded,
             "ReduceIdentityRefresh": reduce_identity_refresh,
             "RunWarehouseTask": run_wh,
             "DatasetPeriodCheck":   dataset_period_check,

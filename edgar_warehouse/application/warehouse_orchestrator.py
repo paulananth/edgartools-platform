@@ -2705,7 +2705,8 @@ def _capture_bronze_raw(
         ciks = db.get_tracked_ciks(LOAD_HISTORY_TRACKING_STATUS_FILTER)
         if total_cik_limit is not None:
             # Bound the CIK universe BEFORE window slicing so every downstream stage
-            # (WindowedBootstrap, Stage1B*) — which independently re-query the same
+            # (WindowedBootstrap, FetchEntityFacts/FetchPerFilingFundamentals/
+            # FetchThirteenFHoldings) — which independently re-query the same
             # ordered tracked-CIK list by offset/limit against cik_windows.jsonl's
             # window descriptors — only ever sees windows within the capped set.
             # This scopes a whole load_history run to ~N companies (e.g. an

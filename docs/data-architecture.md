@@ -246,7 +246,7 @@ completed.
 
 | State machine/workflow | Shape |
 | --- | --- |
-| `load_history` | `seed-universe` (warehouse reference + `sec_company_sync_state`) -> window size default -> `compute-windows` (tracking_status active-or-bootstrap_pending from silver) -> Stage1Parallel { Branch A `bootstrap-next` (same tracking-status filter as compute-windows, explicit) } -> `bootstrap-fundamentals --mode entity-facts` -> `bootstrap-fundamentals --mode per-filing` -> `bootstrap-fundamentals --mode thirteenf` (all Branch B modes post-Branch-A, sequential — they write the same SEC silver DuckDB artifact) -> MDM chain -> `gold-refresh` -> run summary. |
+| `load_history` | `seed-universe` (warehouse reference + `sec_company_sync_state`) -> window size default -> `compute-windows` (tracking_status active-or-bootstrap_pending from silver) -> IngestBronzeAndSilver { Branch A `bootstrap-next` (same tracking-status filter as compute-windows, explicit) } -> `bootstrap-fundamentals --mode entity-facts` -> `bootstrap-fundamentals --mode per-filing` -> `bootstrap-fundamentals --mode thirteenf` (all Branch B modes post-Branch-A, sequential — they write the same SEC silver DuckDB artifact) -> MDM chain -> `gold-refresh` -> run summary. |
 | `bootstrap` | Optional seed -> `bootstrap` -> MDM chain -> `gold-refresh`. |
 | `daily_incremental` | `daily-incremental` -> MDM chain -> `gold-refresh`. |
 | `silver_mdm_gold` | Seed from existing silver -> cached `bootstrap-batch` -> MDM chain -> `gold-refresh`; intended for zero new SEC calls when policies skip artifact/parser work. |

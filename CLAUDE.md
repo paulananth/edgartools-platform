@@ -883,11 +883,16 @@ worked further).
 `describe-state-machine`, not copied from an older architecture doc) runs:
 
 ```
-Stage 0 — Company identity (windowed, MaxConcurrency=1, strict)
-  seed-universe → mdm-seed-universe → Stage0CompanyIdentity
+Stage 0 — Company identity seeding (single steps, no windowing)
+  SeedUniverse → MdmSeedUniverse
+  • Seeds the CIK universe and MDM's own tracking state. Company entity
+    *resolution* (IS_INSIDER, MANAGES_FUND, etc.) happens later, in Stage 2
+    (MdmRun) -- there is no separate identity-resolution state here; an
+    earlier load_history shape had one (stage0-stage1-consolidation map),
+    removed when Stage0CompanyIdentity/ReduceIdentityRefresh were deleted.
 
 Stage 1 — Bronze + Silver bootstrap (windowed, MaxConcurrency=1)
-  Stage1Parallel/WindowedBootstrap
+  IngestBronzeAndSilver/WindowedBootstrap
   • Each window: bootstrap-next --silver-only over a CIK slice → S3 bronze, parse → silver DuckDB
   • MaxConcurrency=1 by design (same class of reason as the ticket-20 N-way
     silver-promotion-race finding elsewhere in this file) -- windows run one at
@@ -898,7 +903,7 @@ Stage 1 — Bronze + Silver bootstrap (windowed, MaxConcurrency=1)
     default 5) -- this is real parallelism, just not CIK-batch-level parallelism
 
 Stage 1B — Fundamentals (windowed, MaxConcurrency=1 each, run after Stage 1)
-  Stage1BEntityFacts → Stage1BPerFiling → Stage1BThirteenF
+  FetchEntityFacts → FetchPerFilingFundamentals → FetchThirteenFHoldings
   • XBRL company facts, 8-K/DEF 14A per-filing data, and 13F holdings respectively
 
 Stage 2 — MDM entity resolution (sequential Step Functions)
@@ -911,6 +916,12 @@ Stage 3 — Gold refresh (single ECS task)
   • Reads complete silver DuckDB, builds all gold tables, writes Snowflake export manifests
   • SNOWFLAKE_RUN_MANIFEST_TASK picks up the manifest and refreshes EDGARTOOLS_GOLD within 1 min
 ```
+
+(Elsewhere in this repo, `bootstrap`/`daily_incremental`'s own Company Identity
+capture stage -- a different, sibling state named `ResolveCompanyIdentityBounded`
+in `write_warehouse_mdm_gold_definition` -- is unrelated to `load_history`'s
+Stage 0 above; it runs *before* bronze/silver capture in those two pipelines,
+not as a seeding step.)
 
 **`edgartools-prod-bootstrap-batched` (formerly a separate, standalone state
 machine running CIK batches with real parallelism via a `BatchBootstrap`

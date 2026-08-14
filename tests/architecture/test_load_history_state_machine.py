@@ -236,13 +236,13 @@ def test_bootstrap_next_and_compute_windows_use_the_same_tracking_status_filter(
         LOAD_HISTORY_TRACKING_STATUS_FILTER,
     )
 
-    branch_a_states = definition["States"]["Stage1Parallel"]["Branches"][0]["States"]
+    branch_a_states = definition["States"]["IngestBronzeAndSilver"]["Branches"][0]["States"]
     per_window_cmd = _command_of_state(branch_a_states["WindowedBootstrap"])
     assert f"'--tracking-status-filter', '{LOAD_HISTORY_TRACKING_STATUS_FILTER}'" in per_window_cmd
 
 
 def test_windowed_bootstrap_is_silver_only(definition: dict) -> None:
-    branch_a_states = definition["States"]["Stage1Parallel"]["Branches"][0]["States"]
+    branch_a_states = definition["States"]["IngestBronzeAndSilver"]["Branches"][0]["States"]
     per_window_cmd = _command_of_state(branch_a_states["WindowedBootstrap"])
     assert "'bootstrap-next'" in per_window_cmd
     assert "'--silver-only'" in per_window_cmd
@@ -254,7 +254,7 @@ def test_windowed_bootstrap_projects_artifact_policy_into_each_item(
     """The S3 JSONL rows contain only window bounds, while RunWindow also reads
     the execution-scoped artifact policy. The Distributed Map must combine both
     inputs before starting each child execution."""
-    branch_a_states = definition["States"]["Stage1Parallel"]["Branches"][0]["States"]
+    branch_a_states = definition["States"]["IngestBronzeAndSilver"]["Branches"][0]["States"]
     windowed_bootstrap = branch_a_states["WindowedBootstrap"]
 
     assert windowed_bootstrap["ItemSelector"] == {
@@ -289,7 +289,7 @@ def test_execution_routing_survives_compute_windows_to_windowed_bootstrap(
         "SeedUniverse",
         "MdmSeedUniverse",
         "ComputeWindows",
-        "Stage1Parallel",
+        "IngestBronzeAndSilver",
     ):
         state = states[state_name]
         result_path = state.get("ResultPath", "$")
@@ -301,7 +301,7 @@ def test_execution_routing_survives_compute_windows_to_windowed_bootstrap(
                 f"on {state_name}"
             )
 
-    selector = states["Stage1Parallel"]["Branches"][0]["States"]
+    selector = states["IngestBronzeAndSilver"]["Branches"][0]["States"]
     selector = selector["WindowedBootstrap"]["ItemSelector"]
     execution_scoped_paths = {
         target: path.removeprefix("$.")
@@ -343,7 +343,7 @@ def test_load_history_has_one_final_gold_refresh_after_mdm_verify(definition: di
 
 
 def test_stage1_parallel_contains_only_branch_a(definition: dict) -> None:
-    branches = definition["States"]["Stage1Parallel"]["Branches"]
+    branches = definition["States"]["IngestBronzeAndSilver"]["Branches"]
     assert len(branches) == 1
     combined_cmds = " ".join(
         _command_of_state(state)
@@ -357,54 +357,54 @@ def test_stage1_parallel_contains_only_branch_a(definition: dict) -> None:
 def test_branch_b_modes_run_sequentially_after_stage1_parallel(definition: dict) -> None:
     order = _linear_order(definition)
     for name in (
-        "Stage1Parallel",
-        "Stage1BEntityFacts",
-        "Stage1BPerFiling",
-        "Stage1BThirteenF",
+        "IngestBronzeAndSilver",
+        "FetchEntityFacts",
+        "FetchPerFilingFundamentals",
+        "FetchThirteenFHoldings",
         "MdmRun",
     ):
         assert name in order
-    assert order.index("Stage1Parallel") < order.index("Stage1BEntityFacts")
-    assert order.index("Stage1BEntityFacts") < order.index("Stage1BPerFiling")
-    assert order.index("Stage1BPerFiling") < order.index("Stage1BThirteenF")
-    assert order.index("Stage1BThirteenF") < order.index("MdmRun")
+    assert order.index("IngestBronzeAndSilver") < order.index("FetchEntityFacts")
+    assert order.index("FetchEntityFacts") < order.index("FetchPerFilingFundamentals")
+    assert order.index("FetchPerFilingFundamentals") < order.index("FetchThirteenFHoldings")
+    assert order.index("FetchThirteenFHoldings") < order.index("MdmRun")
 
 
 def test_stage1b_entity_facts_command_shape(definition: dict) -> None:
-    cmd = _command_of(definition, "Stage1BEntityFacts")
+    cmd = _command_of(definition, "FetchEntityFacts")
     assert "'bootstrap-fundamentals'" in cmd
     assert "'--mode', 'entity-facts'" in cmd
 
 
 def test_stage1b_per_filing_command_shape(definition: dict) -> None:
-    cmd = _command_of(definition, "Stage1BPerFiling")
+    cmd = _command_of(definition, "FetchPerFilingFundamentals")
     assert "'bootstrap-fundamentals'" in cmd
     assert "'--mode', 'per-filing'" in cmd
 
 
 def test_stage1b_thirteenf_command_shape(definition: dict) -> None:
-    cmd = _command_of(definition, "Stage1BThirteenF")
+    cmd = _command_of(definition, "FetchThirteenFHoldings")
     assert "'bootstrap-fundamentals'" in cmd
     assert "'--mode', 'thirteenf'" in cmd
 
 
 def test_stage1b_maps_use_large_task_definition(definition: dict) -> None:
-    """2026-08-14, ecs-cost-sizing ticket 20: Stage1BEntityFacts OOM'd (exit
+    """2026-08-14, ecs-cost-sizing ticket 20: FetchEntityFacts OOM'd (exit
     137) on all 3 configured attempts on wh_medium_arn during task #35's
     live full-universe load_history run, root-caused to the shared
     silver-publish merge step materializing a cold-start table's entire
-    delta into Python. Stage1BPerFiling then also OOM'd twice on the same
+    delta into Python. FetchPerFilingFundamentals then also OOM'd twice on the same
     run before this fix landed. Moved all three Stage1B modes to
     wh_large_arn as a stopgap alongside the structural fix in
     silver_protection.py, matching the ComputeWindows/SeedUniverse/
-    WindowedBootstrap precedent above -- Stage1BThirteenF is included
+    WindowedBootstrap precedent above -- FetchThirteenFHoldings is included
     preemptively (not yet independently observed OOMing) since it shares
     the identical merge_candidate_into_canonical publish-step risk and
     sec_thirteenf_holding's per-filing fan-out is at least as large."""
     for state_name, inner_state_name in (
-        ("Stage1BEntityFacts", "RunFundamentalsEntityFacts"),
-        ("Stage1BPerFiling", "RunFundamentalsPerFiling"),
-        ("Stage1BThirteenF", "RunFundamentalsThirteenF"),
+        ("FetchEntityFacts", "RunFundamentalsEntityFacts"),
+        ("FetchPerFilingFundamentals", "RunFundamentalsPerFiling"),
+        ("FetchThirteenFHoldings", "RunFundamentalsThirteenF"),
     ):
         inner_state = definition["States"][state_name]["ItemProcessor"]["States"][inner_state_name]
         assert inner_state["Parameters"]["TaskDefinition"] == "arn:wh-large", (
@@ -440,12 +440,12 @@ def test_windowed_bootstrap_and_stage1b_maps_use_distributed_mode(definition: di
     four Map states was never actually exercised. All four Map states that read
     cik_windows.jsonl via ItemReader must use Mode=DISTRIBUTED (matching the already-working
     pattern in write_ownership_mdm_gold_definition's batch_map elsewhere in this script)."""
-    branch_a_states = definition["States"]["Stage1Parallel"]["Branches"][0]["States"]
+    branch_a_states = definition["States"]["IngestBronzeAndSilver"]["Branches"][0]["States"]
     windowed_bootstrap = branch_a_states["WindowedBootstrap"]
     assert windowed_bootstrap["ItemProcessor"]["ProcessorConfig"]["Mode"] == "DISTRIBUTED"
     assert windowed_bootstrap["ItemProcessor"]["ProcessorConfig"]["ExecutionType"] == "STANDARD"
 
-    for state_name in ("Stage1BEntityFacts", "Stage1BPerFiling", "Stage1BThirteenF"):
+    for state_name in ("FetchEntityFacts", "FetchPerFilingFundamentals", "FetchThirteenFHoldings"):
         state = definition["States"][state_name]
         assert state["Type"] == "Map", f"{state_name} should still be a Map state"
         processor_config = state["ItemProcessor"]["ProcessorConfig"]
@@ -511,7 +511,7 @@ def test_windowed_bootstrap_uses_large_task_definition(definition: dict) -> None
     ComputeWindows/Stage0CompanyIdentity/gold-refresh/seed-universe
     precedent above, while the underlying accumulation is tracked
     separately."""
-    branch_a_states = definition["States"]["Stage1Parallel"]["Branches"][0]["States"]
+    branch_a_states = definition["States"]["IngestBronzeAndSilver"]["Branches"][0]["States"]
     run_window = branch_a_states["WindowedBootstrap"]["ItemProcessor"]["States"]["RunWindow"]
     assert run_window["Parameters"]["TaskDefinition"] == "arn:wh-large"
 
@@ -583,7 +583,7 @@ def test_filing_lookback_years_check_defaults_to_two_years(definition: dict) -> 
 
 
 def test_windowed_bootstrap_command_includes_filing_lookback_years(definition: dict) -> None:
-    branch_a_states = definition["States"]["Stage1Parallel"]["Branches"][0]["States"]
+    branch_a_states = definition["States"]["IngestBronzeAndSilver"]["Branches"][0]["States"]
     per_window_cmd = _command_of_state(branch_a_states["WindowedBootstrap"])
     assert "'--filing-lookback-years'" in per_window_cmd
     assert "$.filing_lookback_years" in per_window_cmd
@@ -603,16 +603,16 @@ def test_window_size_total_cik_limit_artifact_policy_filing_lookback_checks_prec
 
 
 # -- ADV fetch pipeline wiring spec (.scratch/adv-fetch-pipeline-wiring, ticket 01):
-# AdvBulkFetch stage between Stage1BThirteenF and MdmRun ------------------------
+# AdvBulkFetch stage between FetchThirteenFHoldings and MdmRun ------------------------
 
 
 def test_fetch_adv_bulk_stage_runs_after_stage1b_thirteenf_before_mdm_run(definition: dict) -> None:
     order = _linear_order(definition)
-    assert "Stage1BThirteenF" in order
+    assert "FetchThirteenFHoldings" in order
     assert "FetchAdvBulk" in order
     assert "IngestAdvBulkSources" in order
     assert "MdmRun" in order
-    assert order.index("Stage1BThirteenF") < order.index("FetchAdvBulk")
+    assert order.index("FetchThirteenFHoldings") < order.index("FetchAdvBulk")
     assert order.index("FetchAdvBulk") < order.index("IngestAdvBulkSources")
     assert order.index("IngestAdvBulkSources") < order.index("MdmRun")
 
@@ -647,7 +647,7 @@ def test_dataset_period_check_and_default_precede_force_check(definition: dict) 
 
 def test_stage1b_thirteenf_routes_into_dataset_period_check(definition: dict) -> None:
     order = _linear_order(definition)
-    assert order.index("Stage1BThirteenF") < order.index("DatasetPeriodCheck")
+    assert order.index("FetchThirteenFHoldings") < order.index("DatasetPeriodCheck")
     assert order.index("DatasetPeriodCheck") < order.index("ForceCheck")
 
 
@@ -714,12 +714,12 @@ def test_fetch_adv_bulk_and_ingest_adv_bulk_sources_catch_falls_through_to_mdm_r
 def test_stage1b_thirteenf_catch_routes_into_adv_bulk_fetch_not_around_it(
     definition: dict,
 ) -> None:
-    """Regression guard: Stage1BThirteenF's own (pre-existing) lenient Catch must
+    """Regression guard: FetchThirteenFHoldings's own (pre-existing) lenient Catch must
     route into DatasetPeriodCheck, not straight to MdmRun -- otherwise a Branch B
     thirteenf failure (an expected, accepted AD-13 outcome, not a rare case)
     would silently skip the entire AdvBulkFetch stage instead of still attempting
     it before MDM runs."""
-    catch = definition["States"]["Stage1BThirteenF"]["Catch"]
+    catch = definition["States"]["FetchThirteenFHoldings"]["Catch"]
     assert catch == [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "DatasetPeriodCheck"}]
 
 
@@ -906,28 +906,28 @@ def test_sec_fetch_lease_read_result_key_matches_the_real_path_resolver(definiti
 
 def test_load_history_sec_fetch_lease_spans_the_whole_windowed_pipeline(definition: dict) -> None:
     """The lease must be held across SeedUniverse, MdmSeedUniverse,
-    Stage1Parallel/Stage1B, and the ADV/firm-roster chain -- i.e. acquired
+    IngestBronzeAndSilver/Stage1B, and the ADV/firm-roster chain -- i.e. acquired
     strictly before all of them and released strictly after all of them,
     with no path that reaches MdmRun without passing through
     ReleaseSecFetchLease first. (Stage0CompanyIdentity/ReduceIdentityRefresh
     removed -- stage0-stage1-consolidation wayfinder map, ticket 02/04 --
-    Stage1Parallel's WindowedBootstrap now covers the identity capture they
+    IngestBronzeAndSilver's WindowedBootstrap now covers the identity capture they
     used to do as a byproduct of its own submissions capture.)"""
     order = _linear_order(definition)
     assert order.index("AcquireSecFetchLease") < order.index("SeedUniverse")
     assert order.index("SeedUniverse") < order.index("MdmSeedUniverse")
-    assert order.index("MdmSeedUniverse") < order.index("Stage1Parallel")
+    assert order.index("MdmSeedUniverse") < order.index("IngestBronzeAndSilver")
     assert "ReleaseSecFetchLease" in order
-    assert order.index("Stage1Parallel") < order.index("ReleaseSecFetchLease")
+    assert order.index("IngestBronzeAndSilver") < order.index("ReleaseSecFetchLease")
     assert order.index("ReleaseSecFetchLease") < order.index("MdmRun")
 
 
 def test_load_history_previously_uncaught_states_release_lease_on_failure(definition: dict) -> None:
     """release-readiness ticket 86: SeedUniverse/MdmSeedUniverse/
-    ComputeWindows/Stage1Parallel had no Catch at all -- a real failure in
+    ComputeWindows/IngestBronzeAndSilver had no Catch at all -- a real failure in
     any of them wedged sec_fetch_active for the full 16h stale-reclaim
-    window. Deliberately excludes Stage1BEntityFacts/Stage1BPerFiling/
-    Stage1BThirteenF, which AD-13 already routes forward on failure (still
+    window. Deliberately excludes FetchEntityFacts/FetchPerFilingFundamentals/
+    FetchThirteenFHoldings, which AD-13 already routes forward on failure (still
     reaching ReleaseSecFetchLease on the happy path), and
     FetchAdvBulk/IngestFirmRosterSources etc., which already had their own
     Catch (adv_bulk_fetch_catch, unchanged by this ticket). (Stage0Company
@@ -941,11 +941,11 @@ def test_load_history_previously_uncaught_states_release_lease_on_failure(defini
         "SeedUniverse",
         "MdmSeedUniverse",
         "ComputeWindows",
-        "Stage1Parallel",
+        "IngestBronzeAndSilver",
     ):
         assert states[previously_uncaught_state]["Catch"] == expected_catch
 
-    for ad13_state in ("Stage1BEntityFacts", "Stage1BPerFiling", "Stage1BThirteenF"):
+    for ad13_state in ("FetchEntityFacts", "FetchPerFilingFundamentals", "FetchThirteenFHoldings"):
         catch = states[ad13_state]["Catch"]
         assert catch != expected_catch
         assert catch[0]["Next"] != "ReleaseSecFetchLeaseAfterFailure"
