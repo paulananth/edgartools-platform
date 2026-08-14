@@ -1,7 +1,7 @@
 # Fix Stage1BEntityFacts's OOM on the `medium` Task Profile
 
 Type: research
-Status: open
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -69,3 +69,55 @@ Relates to [Decide the Machine Profile for Every Workflow Stage](16-decide-machi
 which this evidence directly feeds, but that ticket is broader/blocked and
 this finding is actionable on its own (mirrors task #51's standalone
 `Stage0CompanyIdentity` OOM fix, done outside any wayfinder map).
+
+## Answer
+
+Root cause is **not** the entity-facts fetch/parse/merge loop — that loop
+(`run_bootstrap_entity_facts`, `fundamentals_ingest.py:360-459`) already
+streams per-CIK straight into the local DuckDB file via `_merge_rows_bulk`,
+and CloudWatch confirms it completes cleanly for all 500/500 CIKs on every
+attempt. The OOM happens **afterward**, in the one-time silver-publish step
+every `bootstrap-fundamentals` mode shares:
+`_publish_silver_database_if_remote` → `merge_candidate_into_canonical`
+(`silver_protection.py:585-794`). Its `_delta_rows_as_dicts` helper
+(line 481) does an unchunked `.fetchall()` — fine for a steady-state resync
+where the anti-join against canonical filters out most rows, but for a
+**cold-start table** (canonical `sec_financial_fact` was ~empty going into
+this run) the anti-join returns essentially the whole candidate set. Grounded
+estimate (measured via `tracemalloc` against a real SEC companyfacts payload,
+extrapolated via CloudWatch's own per-company byte counts): ~5.03M candidate
+rows ≈ ~2.3GB Python list, stacking with DuckDB's own explicit 2GB bound
+(`_connect_bounded()`) — ~4.3GB before process baseline, comfortably over a
+`medium` (4096MB) task's ceiling, matching all 3 attempts dying within
+seconds of the identical `silver_table_merge_started` log line for
+`sec_financial_fact`.
+
+**Q3 (shared risk):** confirmed by code, not inference — `Stage1BPerFiling`
+and `Stage1BThirteenF` funnel through the identical publish/merge call on the
+same `medium` profile. `per-filing`'s row fan-out is low-risk; `thirteenf`'s
+is not — `sec_thirteenf_holding` already has 6.8M rows at full-universe
+maturity (per CLAUDE.md), so a cold-start window containing a large 13F
+filer is structurally exposed to the identical failure, just not yet
+observed.
+
+**Decision — do both, not one or the other:**
+1. **Stopgap now:** move `Stage1BEntityFacts`, `Stage1BPerFiling`, and
+   `Stage1BThirteenF` to the `large` profile (8192MB) — the ~4.3GB estimate
+   fits with real headroom, and Q3's finding means all three should move
+   together rather than waiting for `per-filing`/`thirteenf` to independently
+   OOM in a future window.
+2. **Structural fix before the next full-universe attempt at scale:** chunk
+   `_delta_rows_as_dicts`'s row materialization and replace
+   `merge_candidate_into_canonical`'s row-by-row `_insert_row`/`_update_row`
+   loop with a bulk insert, mirroring `_merge_rows_bulk`'s existing
+   Arrow-based approach — the profile bump only moves the ceiling (a wider
+   `--cik-limit`, denser XBRL history, or a large 13F filer can reproduce the
+   same failure at 8192MB just as deterministically). Rejected: shrinking
+   `--cik-limit` alone — it doesn't fix the underlying ~1.5ms/row insert cost
+   and doesn't remove the risk for a future window with unusually dense
+   companies, only reduces this specific window's odds.
+
+Full evidence, code citations, and CloudWatch timing:
+[`stage1b-entity-facts-oom-root-cause-2026-08-14.md`](../research/stage1b-entity-facts-oom-root-cause-2026-08-14.md).
+Neither the stopgap nor the structural fix has been implemented — this
+ticket is diagnosis + decision only, per this map's planning-only Notes.

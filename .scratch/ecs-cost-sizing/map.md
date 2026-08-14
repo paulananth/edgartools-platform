@@ -83,6 +83,7 @@ end-to-end completion speed, cost, canary, and rollback gates.
 <!-- Closed ticket decisions: one-line gist and link; detail stays in the ticket. -->
 
 - [Decide the Workflow Value Test and Optimization Objective](issues/10-decide-workflow-value-and-optimization-objective.md) — Correctness/recovery and end-to-end completion speed are co-primary; retain workflows only for evidenced output or operator value, then optimize cost from measured baselines.
+- [Fix Stage1BEntityFacts's OOM on the `medium` Task Profile](issues/20-fix-stage1b-entity-facts-oom-on-medium-profile.md) — Root cause is the shared silver-publish merge step's unchunked cold-start delta materialization (~4.3GB), not the entity-facts fetch loop (already streams); move all three Stage1B modes to `large` as a stopgap, then chunk/bulk-load `merge_candidate_into_canonical`.
 
 ## Not yet specified
 
