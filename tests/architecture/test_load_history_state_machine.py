@@ -388,6 +388,30 @@ def test_stage1b_thirteenf_command_shape(definition: dict) -> None:
     assert "'--mode', 'thirteenf'" in cmd
 
 
+def test_stage1b_maps_use_large_task_definition(definition: dict) -> None:
+    """2026-08-14, ecs-cost-sizing ticket 20: Stage1BEntityFacts OOM'd (exit
+    137) on all 3 configured attempts on wh_medium_arn during task #35's
+    live full-universe load_history run, root-caused to the shared
+    silver-publish merge step materializing a cold-start table's entire
+    delta into Python. Stage1BPerFiling then also OOM'd twice on the same
+    run before this fix landed. Moved all three Stage1B modes to
+    wh_large_arn as a stopgap alongside the structural fix in
+    silver_protection.py, matching the ComputeWindows/SeedUniverse/
+    WindowedBootstrap precedent above -- Stage1BThirteenF is included
+    preemptively (not yet independently observed OOMing) since it shares
+    the identical merge_candidate_into_canonical publish-step risk and
+    sec_thirteenf_holding's per-filing fan-out is at least as large."""
+    for state_name, inner_state_name in (
+        ("Stage1BEntityFacts", "RunFundamentalsEntityFacts"),
+        ("Stage1BPerFiling", "RunFundamentalsPerFiling"),
+        ("Stage1BThirteenF", "RunFundamentalsThirteenF"),
+    ):
+        inner_state = definition["States"][state_name]["ItemProcessor"]["States"][inner_state_name]
+        assert inner_state["Parameters"]["TaskDefinition"] == "arn:wh-large", (
+            f"{state_name}.{inner_state_name} should run on wh_large_arn"
+        )
+
+
 # -- Issue 3: export before graph sync ----------------------------------------
 
 

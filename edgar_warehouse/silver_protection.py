@@ -22,7 +22,7 @@ import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import duckdb
 
@@ -432,53 +432,132 @@ def _comparable_columns(policy: "ProtectedTablePolicy", all_columns: list[str]) 
     return [c for c in all_columns if c not in excluded]
 
 
-def _delta_rows_as_dicts(
-    conn: duckdb.DuckDBPyConnection,
-    table_name: str,
-    columns: list[str],
-    business_keys: tuple[str, ...],
-    compare_columns: list[str],
-) -> list[dict[str, Any]]:
-    """Candidate ('cand') rows that differ, on any *comparable* column, from
-    the canonical ('out') row sharing the same business key -- computed via a
-    NOT EXISTS anti-join (keyed on business_keys, scoped to compare_columns)
-    so only the delta materializes into Python, not the full candidate table,
-    and a row whose only change is a provenance/authority column never
-    counts as a difference at all.
+def _merge_chunk_size() -> int:
+    """Row-chunk size for the existing-key-diff merge path (see
+    ``_iter_existing_key_diff_row_chunks``).
 
-    Some Branch B publish callers (bootstrap-fundamentals' windowed
-    --cik-offset/--cik-limit path: entity-facts, per-filing, thirteenf,
-    company-identity) hydrate the *entire* canonical DB before mutating a
-    handful of rows in place, so the "candidate" file can be as large as
-    canonical itself (2M+ rows in sec_company_filing) even when a run only
-    touches a few hundred CIKs. Fetching every candidate row unconditionally
-    (an earlier approach) reads that whole table regardless of how much
-    actually changed -- the same class of OOM already fixed for the
-    canonical-side lookup below, but on the candidate side this time.
-
-    A prior version of this function compared *every* column via SQL EXCEPT,
-    including the authority column -- correct for "is this candidate row
-    absent from canonical," wrong for "is this candidate row meaningfully
-    different," since it treated a same-key row whose real data is
-    byte-identical as a genuine delta purely because its sync timestamp
-    advanced. IS NOT DISTINCT FROM is used instead of plain equality for
-    null-safety (a NULL-vs-NULL comparable column must not register as a
-    difference).
+    Bounds Python-side memory for that path regardless of how large a
+    same-key delta is. See ticket 20
+    (.scratch/ecs-cost-sizing/issues/20-fix-stage1b-entity-facts-oom-on-medium-profile.md):
+    an earlier, unchunked version of this merge OOM-killed
+    Stage1BEntityFacts and Stage1BPerFiling on a `medium` (4096MB) ECS task
+    by materializing an entire cold-start table's delta (~5M rows, ~2.3GB)
+    into a Python list of dicts in one ``.fetchall()``.
     """
-    quoted_table = _quote_ident(table_name)
-    select_cols_sql = ", ".join(f"c.{_quote_ident(c)}" for c in columns)
+    raw = os.environ.get("WAREHOUSE_SILVER_MERGE_CHUNK_SIZE", "50000").strip()
+    return int(raw)
+
+
+def _merge_sql_fragments(
+    business_keys: tuple[str, ...], compare_columns: list[str]
+) -> tuple[str, str]:
+    """Return ``(key_eq_sql, match_sql)`` fragments shared by the merge's
+    new-key-insert and existing-key-diff queries, so both definitions of
+    "same business key" / "same business key and content" stay in sync.
+
+    IS NOT DISTINCT FROM is used for content comparison instead of plain
+    equality for null-safety (a NULL-vs-NULL comparable column must not
+    register as a difference). A prior version of this comparison included
+    the authority column -- wrong, since it treated a same-key row whose
+    real data is byte-identical as a genuine delta purely because its sync
+    timestamp advanced; ``compare_columns`` (via ``_comparable_columns``)
+    already excludes it.
+    """
     key_eq_sql = " AND ".join(f"c.{_quote_ident(k)} = o.{_quote_ident(k)}" for k in business_keys)
     compare_eq_sql = " AND ".join(
         f"c.{_quote_ident(c)} IS NOT DISTINCT FROM o.{_quote_ident(c)}" for c in compare_columns
     )
     match_sql = " AND ".join(part for part in (key_eq_sql, compare_eq_sql) if part)
-    result = conn.execute(
+    return key_eq_sql, match_sql
+
+
+def _bulk_insert_new_key_rows(
+    conn: duckdb.DuckDBPyConnection,
+    table_name: str,
+    columns: list[str],
+    business_keys: tuple[str, ...],
+) -> int:
+    """Insert every candidate row whose business key doesn't exist in
+    canonical at all, via one SQL ``INSERT ... SELECT`` executed entirely
+    inside DuckDB -- no candidate row is ever materialized into a Python
+    dict for this case.
+
+    This is the case that dominates a cold-start table (canonical starts
+    ~empty, so ~every candidate row's key is "new" -- see ticket 20, linked
+    on ``_merge_chunk_size``). A row whose key already exists in canonical,
+    even if its content is identical, never matches this WHERE clause and is
+    left for ``_iter_existing_key_diff_row_chunks`` to evaluate.
+
+    Returns the count of rows inserted, via ``COUNT(*)`` against the same
+    predicate evaluated *before* the INSERT mutates ``out`` -- the predicate
+    is re-evaluated fresh on every execution, so counting afterward would
+    always read back zero.
+    """
+    quoted_table = _quote_ident(table_name)
+    key_eq_sql = " AND ".join(f"c.{_quote_ident(k)} = o.{_quote_ident(k)}" for k in business_keys)
+    where_sql = f"NOT EXISTS (SELECT 1 FROM out.main.{quoted_table} o WHERE {key_eq_sql})"
+    count = conn.execute(
+        f"SELECT COUNT(*) FROM cand.main.{quoted_table} c WHERE {where_sql}"
+    ).fetchone()[0]
+    if count:
+        cols_sql = ", ".join(_quote_ident(c) for c in columns)
+        select_cols_sql = ", ".join(f"c.{_quote_ident(c)}" for c in columns)
+        conn.execute(
+            f"INSERT INTO out.main.{quoted_table} ({cols_sql}) "
+            f"SELECT {select_cols_sql} FROM cand.main.{quoted_table} c WHERE {where_sql}"
+        )
+    return count
+
+
+def _iter_existing_key_diff_row_chunks(
+    conn: duckdb.DuckDBPyConnection,
+    table_name: str,
+    columns: list[str],
+    business_keys: tuple[str, ...],
+    compare_columns: list[str],
+    chunk_size: int,
+) -> Iterator[list[dict[str, Any]]]:
+    """Yield chunks of candidate rows whose business key exists in canonical
+    but whose comparable-column content differs, ``chunk_size`` rows at a
+    time -- the only rows that need Python-side conflict resolution
+    (authority-column tiebreak / ambiguous-conflict reporting).
+
+    Bounded via DuckDB's own ``fetchmany`` cursor rather than one
+    ``.fetchall()`` (see ticket 20, linked on ``_merge_chunk_size``). A
+    cold-start table never reaches this path for its new rows at all --
+    those are handled by ``_bulk_insert_new_key_rows`` without a Python
+    round-trip -- but a genuinely large same-key delta (e.g. an
+    authority-column-driven full-history re-sync) still needs a memory
+    bound.
+
+    Executed on a dedicated ``conn.cursor()`` rather than ``conn`` itself:
+    the caller runs other queries (canonical lookups, row updates) on
+    ``conn`` for each chunk this generator yields, and a DuckDB connection
+    keeps only one statement's result live at a time -- interleaving another
+    ``conn.execute()`` on the same connection between two ``fetchmany()``
+    calls silently redirects subsequent fetches to that other statement's
+    results instead of continuing this one (confirmed empirically: without
+    an isolated cursor, a mid-loop lookup query corrupted the next chunk's
+    rows). A cursor shares the parent connection's attached databases
+    (``out``/``cand``), so no separate ATTACH is needed here.
+    """
+    quoted_table = _quote_ident(table_name)
+    select_cols_sql = ", ".join(f"c.{_quote_ident(c)}" for c in columns)
+    key_eq_sql, match_sql = _merge_sql_fragments(business_keys, compare_columns)
+    cursor = conn.cursor()
+    result = cursor.execute(
         f"SELECT {select_cols_sql} FROM cand.main.{quoted_table} c "
-        f"WHERE NOT EXISTS ("
-        f"  SELECT 1 FROM out.main.{quoted_table} o WHERE {match_sql}"
-        f")"
+        f"WHERE EXISTS (SELECT 1 FROM out.main.{quoted_table} o WHERE {key_eq_sql}) "
+        f"AND NOT EXISTS (SELECT 1 FROM out.main.{quoted_table} o WHERE {match_sql})"
     )
-    return [dict(zip(columns, row)) for row in result.fetchall()]
+    try:
+        while True:
+            batch = result.fetchmany(chunk_size)
+            if not batch:
+                return
+            yield [dict(zip(columns, row)) for row in batch]
+    finally:
+        cursor.close()
 
 
 def _key_tuple(row: dict[str, Any], business_keys: tuple[str, ...]) -> tuple[Any, ...]:
@@ -704,20 +783,83 @@ def merge_candidate_into_canonical(
 
             all_columns = list(_columns(conn, "out", table_name).keys())
             comparable_columns = _comparable_columns(policy, all_columns)
-            candidate_rows = _delta_rows_as_dicts(
-                conn, table_name, all_columns, policy.business_keys, comparable_columns
-            )
-            # Rows the anti-join filtered out before ever reaching Python:
+
+            # Rows the anti-join filters out before ever reaching Python:
             # same business key, identical on every comparable column, so
             # only a provenance/authority column (if anything) differed.
-            # Counted via COUNT(*) rather than fetched, so a full-history
-            # re-sync candidate that touches nothing real still reports an
-            # accurate rows_unchanged total without materializing it.
+            # Computed via COUNT(*) below rather than fetched, so a
+            # full-history re-sync candidate that touches nothing real still
+            # reports an accurate rows_unchanged total without materializing
+            # it.
             cand_total = conn.execute(
                 f"SELECT COUNT(*) FROM cand.main.{_quote_ident(table_name)}"
             ).fetchone()[0]
-            provenance_filtered = cand_total - len(candidate_rows)
-            if not candidate_rows:
+
+            # Phase 1: candidate rows whose business key doesn't exist in
+            # canonical at all -- one SQL INSERT, no Python row
+            # materialization. Dominates a cold-start table (ticket 20: an
+            # unchunked Python fetchall of this exact case OOM-killed
+            # Stage1BEntityFacts and Stage1BPerFiling).
+            inserted = _bulk_insert_new_key_rows(conn, table_name, all_columns, policy.business_keys)
+
+            # Phase 2: candidate rows whose key exists in canonical but whose
+            # content differs -- the only rows that need Python-side
+            # conflict resolution, fetched in bounded chunks rather than all
+            # at once.
+            updated = 0
+            unchanged = 0
+            processed_diff = 0
+            for chunk in _iter_existing_key_diff_row_chunks(
+                conn,
+                table_name,
+                all_columns,
+                policy.business_keys,
+                comparable_columns,
+                _merge_chunk_size(),
+            ):
+                processed_diff += len(chunk)
+                canonical_by_key: dict[tuple[Any, ...], dict[str, Any]] = {
+                    _key_tuple(row, policy.business_keys): row
+                    for row in _matching_canonical_rows_as_dicts(
+                        conn, table_name, policy.business_keys, all_columns, chunk
+                    )
+                }
+
+                for cand_row in chunk:
+                    key = _key_tuple(cand_row, policy.business_keys)
+                    # canon_row is guaranteed present: the chunk query above
+                    # only selects candidate rows whose key already exists
+                    # in canonical.
+                    canon_row = canonical_by_key[key]
+
+                    differing = tuple(
+                        c
+                        for c in comparable_columns
+                        if canon_row.get(c) != cand_row.get(c)
+                    )
+                    if not differing:
+                        unchanged += 1
+                        continue
+
+                    winner = _resolve_conflict(policy, canon_row, cand_row)
+                    if winner is None:
+                        conflicts.append(
+                            RowConflict(
+                                table_name=table_name,
+                                business_key=dict(zip(policy.business_keys, key)),
+                                canonical_values=canon_row,
+                                candidate_values=cand_row,
+                                differing_columns=differing,
+                            )
+                        )
+                    elif winner == "candidate":
+                        _update_row(conn, table_name, all_columns, policy.business_keys, cand_row)
+                        updated += 1
+                    else:
+                        unchanged += 1  # canonical remains authoritative; no-op.
+
+            provenance_filtered = cand_total - inserted - processed_diff
+            if inserted == 0 and processed_diff == 0:
                 if provenance_filtered:
                     tables_merged.append(table_name)
                     rows_inserted[table_name] = 0
@@ -728,50 +870,7 @@ def merge_candidate_into_canonical(
                     )
                 continue
 
-            canonical_by_key: dict[tuple[Any, ...], dict[str, Any]] = {
-                _key_tuple(row, policy.business_keys): row
-                for row in _matching_canonical_rows_as_dicts(
-                    conn, table_name, policy.business_keys, all_columns, candidate_rows
-                )
-            }
-
-            inserted = updated = 0
-            unchanged = provenance_filtered
-            for cand_row in candidate_rows:
-                key = _key_tuple(cand_row, policy.business_keys)
-                canon_row = canonical_by_key.get(key)
-
-                if canon_row is None:
-                    _insert_row(conn, table_name, all_columns, cand_row)
-                    inserted += 1
-                    continue
-
-                differing = tuple(
-                    c
-                    for c in comparable_columns
-                    if canon_row.get(c) != cand_row.get(c)
-                )
-                if not differing:
-                    unchanged += 1
-                    continue
-
-                winner = _resolve_conflict(policy, canon_row, cand_row)
-                if winner is None:
-                    conflicts.append(
-                        RowConflict(
-                            table_name=table_name,
-                            business_key=dict(zip(policy.business_keys, key)),
-                            canonical_values=canon_row,
-                            candidate_values=cand_row,
-                            differing_columns=differing,
-                        )
-                    )
-                elif winner == "candidate":
-                    _update_row(conn, table_name, all_columns, policy.business_keys, cand_row)
-                    updated += 1
-                else:
-                    unchanged += 1  # canonical remains authoritative; no-op.
-
+            unchanged += provenance_filtered
             tables_merged.append(table_name)
             rows_inserted[table_name] = inserted
             rows_updated[table_name] = updated
@@ -811,20 +910,6 @@ def _resolve_conflict(
     if canon_value > cand_value:
         return "canonical"
     return None  # exact tie on the authority column is still ambiguous.
-
-
-def _insert_row(
-    conn: duckdb.DuckDBPyConnection,
-    table_name: str,
-    columns: list[str],
-    row: dict[str, Any],
-) -> None:
-    cols_sql = ", ".join(_quote_ident(c) for c in columns)
-    placeholders = ", ".join("?" for _ in columns)
-    conn.execute(
-        f"INSERT INTO out.main.{_quote_ident(table_name)} ({cols_sql}) VALUES ({placeholders})",
-        [row[c] for c in columns],
-    )
 
 
 def _primary_key_columns(conn: duckdb.DuckDBPyConnection, catalog: str, table_name: str) -> tuple[str, ...]:
