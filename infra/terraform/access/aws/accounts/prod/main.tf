@@ -43,6 +43,13 @@ locals {
       try(local.provisioning.mdm_snowflake_secret_arn, ""),
     ] : arn if arn != null && arn != ""
   ]
+  # silver-snowflake-migration Ticket 07: the Snowflake storage-reader role
+  # also needs read access to the silver-landing prefix, a sibling of
+  # snowflake_export_prefix in the same bucket -- mirrors the
+  # silver_landing_export_root_url local in
+  # infra/terraform/snowflake/accounts/prod/main.tf, which does the same
+  # trim/append against the Snowflake side's export_root_url.
+  silver_landing_export_prefix = "${trimsuffix(local.provisioning.snowflake_export_prefix, "snowflake_exports/")}silver_landing/"
 }
 
 module "runtime_access" {
@@ -57,6 +64,7 @@ module "runtime_access" {
   snowflake_export_bucket_arn       = local.provisioning.snowflake_export_bucket_arn
   snowflake_export_kms_key_arn      = local.provisioning.snowflake_export_kms_key_arn
   snowflake_export_prefix           = local.provisioning.snowflake_export_prefix
+  additional_export_prefixes        = [local.silver_landing_export_prefix]
   snowflake_manifest_sns_topic_arn  = local.provisioning.snowflake_manifest_sns_topic_arn
   edgar_identity_secret_arn         = local.provisioning.edgar_identity_secret_arn
   mdm_secret_arns                   = local.mdm_secret_arns

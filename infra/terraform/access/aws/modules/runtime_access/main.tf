@@ -14,6 +14,7 @@ locals {
   )
   aws_region                  = data.aws_region.current.region
   ecs_task_definition_pattern = "arn:aws:ecs:${local.aws_region}:${data.aws_caller_identity.current.account_id}:task-definition/${var.name_prefix}-*:*"
+  export_read_prefixes        = concat([var.snowflake_export_prefix], var.additional_export_prefixes)
   runner_execution_role_name  = "${var.runner_role_name_prefix}_runner_execution"
   runner_task_role_name       = "${var.runner_role_name_prefix}_runner_task"
   runner_sfn_role_name        = "${var.runner_role_name_prefix}_runner_step_functions"
@@ -115,10 +116,9 @@ resource "aws_iam_role_policy" "snowflake_storage_reader" {
         Resource = var.snowflake_export_bucket_arn
         Condition = {
           StringLike = {
-            "s3:prefix" = [
-              var.snowflake_export_prefix,
-              "${var.snowflake_export_prefix}*"
-            ]
+            "s3:prefix" = flatten([
+              for prefix in local.export_read_prefixes : [prefix, "${prefix}*"]
+            ])
           }
         }
       },
@@ -129,7 +129,9 @@ resource "aws_iam_role_policy" "snowflake_storage_reader" {
           "s3:GetObject",
           "s3:GetObjectVersion"
         ]
-        Resource = "${var.snowflake_export_bucket_arn}/${var.snowflake_export_prefix}*"
+        Resource = [
+          for prefix in local.export_read_prefixes : "${var.snowflake_export_bucket_arn}/${prefix}*"
+        ]
       },
       {
         Sid    = "DecryptSnowflakeExportObjects"
