@@ -2211,10 +2211,10 @@ mdm_seed_universe["ResultPath"] = None
 mdm_seed_universe["Catch"] = sec_fetch_task_catch()
 
 # (2) WindowSizeCheck → WindowSizeDefault → TotalCikLimitCheck → TotalCikLimitDefault → ComputeWindows
-# D-15 backward-compat: SM input {} is valid because WindowSizeDefault injects window_size=500
+# D-15 backward-compat: SM input {} is valid because WindowSizeDefault injects window_size=1000
 # when the caller omits it.  The Choice state routes:
 #   - $.window_size IS_PRESENT (caller supplied a value) → skip default, go to TotalCikLimitCheck
-#   - $.window_size absent (e.g. input was {}) → WindowSizeDefault injects the integer 500
+#   - $.window_size absent (e.g. input was {}) → WindowSizeDefault injects the integer 1000
 #     at $.window_size via ResultPath, then falls through to TotalCikLimitCheck
 window_size_check = {
     "Type": "Choice",
@@ -2229,14 +2229,28 @@ window_size_check = {
     "Default": "WindowSizeDefault",
 }
 
-# Pass state: writes integer 500 directly to $.window_size (Result is a scalar, not a dict,
-# so ResultPath merges it in-place — downstream sees $.window_size = 500, not $.window_size = {}).
+# Pass state: writes integer 1000 directly to $.window_size (Result is a scalar, not a dict,
+# so ResultPath merges it in-place — downstream sees $.window_size = 1000, not $.window_size = {}).
+#
+# 1000, not 500 (2026-08-14, ecs-cost-sizing credit-consumption finding): every
+# window completion triggers a separate EDGARTOOLS_GOLD.REFRESH_AFTER_LOAD call
+# in Snowflake -- confirmed live via QUERY_ATTRIBUTION_HISTORY, 5,988 calls
+# over 7 days (32.2 credits) on EDGARTOOLS_PROD_REFRESH_WH, spiking on the
+# days load_history ran many small windows. Doubling window_size roughly
+# halves the number of windows (and therefore REFRESH_AFTER_LOAD calls) per
+# full-universe run. Capped at 2x (not larger) because window_size also
+# scales WindowedBootstrap's still-unfixed _capture_submission_bronze_
+# snapshots accumulation (see "test_windowed_bootstrap_uses_large_task_
+# definition" in tests/architecture/test_load_history_state_machine.py) --
+# 500 CIKs already climbed toward ~2.4GB before this map moved to wh_large_arn
+# (8192MB, ~2x wh_medium_arn's 4096MB); 1000 stays inside that same proven
+# headroom ratio rather than gambling on unmeasured slack beyond it.
 window_size_default = {
     "Type": "Pass",
-    "Comment": "Inject default window_size=500 when caller passed {} or omitted the key. "
+    "Comment": "Inject default window_size=1000 when caller passed {} or omitted the key. "
                "Result is a bare integer; ResultPath $.window_size writes it directly so "
-               "$.window_size = 500 (not {\"window_size\": 500}) for ComputeWindows.",
-    "Result": 500,
+               "$.window_size = 1000 (not {\"window_size\": 1000}) for ComputeWindows.",
+    "Result": 1000,
     "ResultPath": "$.window_size",
     "Next": "TotalCikLimitCheck",
 }

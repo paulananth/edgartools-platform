@@ -732,8 +732,20 @@ resource "snowflake_task" "manifest_processor" {
   # existed as out-of-band drift (`ALTER TASK ... SET SCHEDULE`) on the live
   # dev task, so re-applying this module without it would strip the
   # schedule from a `started` task and stop manifest processing.
+  #
+  # 15 minutes, not 1 (2026-08-14, ecs-cost-sizing credit-consumption finding):
+  # a 1-minute poll cadence never let EDGARTOOLS_PROD_REFRESH_WH (X-Small,
+  # auto_suspend=60s) fully suspend during an active load_history backfill --
+  # confirmed live via QUERY_ATTRIBUTION_HISTORY, PROCESS_RUN_MANIFEST_STREAM
+  # + REFRESH_AFTER_LOAD together burned ~67 credits over 7 days, almost all
+  # of the warehouse's total spend, spiking to ~14 credits/day exactly on the
+  # days load_history was running many small windows. Widening the poll
+  # interval batches more pending manifest/stream rows into each CALL instead
+  # of paying repeated warehouse-resume overhead on tiny batches. Trades
+  # end-to-end gold freshness latency from "within 1 min" to "within 15 min"
+  # (see CLAUDE.md's Phased Pipeline Stage 3 note).
   schedule {
-    minutes = 1
+    minutes = 15
   }
 
   depends_on = [
