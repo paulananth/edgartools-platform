@@ -586,7 +586,7 @@ resource "snowflake_storage_integration_aws" "native_pull" {
   name                      = local.storage_integration_name
   enabled                   = true
   storage_provider          = "S3"
-  storage_allowed_locations = [var.export_root_url]
+  storage_allowed_locations = concat([var.export_root_url], var.additional_storage_locations)
   storage_aws_role_arn      = var.storage_role_arn
   storage_aws_external_id   = var.storage_external_id
   comment                   = "EdgarTools native-pull storage integration for ${var.environment}."

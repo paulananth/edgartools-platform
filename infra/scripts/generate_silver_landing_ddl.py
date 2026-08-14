@@ -195,7 +195,16 @@ def generate() -> str:
             f"    {name} {_snowflake_type(dtype)}" + ("" if nullable else " NOT NULL")
             for name, dtype, nullable in columns
         ]
-        column_lines.append(f"    parse_sequence BIGINT DEFAULT {SEQUENCE_NAME}.NEXTVAL NOT NULL")
+        # NOT deliberately omitted: verified live (silver-snowflake-migration
+        # map, Ticket 07) that COPY INTO ... MATCH_BY_COLUMN_NAME leaves a
+        # column absent from the source file NULL rather than invoking its
+        # DEFAULT expression -- a NOT NULL constraint here would make every
+        # COPY INTO fail, since the Parquet files silver_landing_writer.py
+        # produces never carry this server-assigned column. The load
+        # procedure backfills it via a follow-up UPDATE ... WHERE
+        # parse_sequence IS NULL immediately after each table's COPY INTO,
+        # inside the same procedure call.
+        column_lines.append(f"    parse_sequence BIGINT DEFAULT {SEQUENCE_NAME}.NEXTVAL")
         lines.append(f"CREATE TABLE IF NOT EXISTS {table} (")
         lines.append(",\n".join(column_lines))
         lines.append("    , PRIMARY KEY (parse_sequence)")

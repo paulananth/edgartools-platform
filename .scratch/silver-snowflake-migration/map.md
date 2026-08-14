@@ -89,17 +89,13 @@ debate — this map does not implement it.
 - [Confirm Relationship to `pipeline-throughput-architecture`'s Sharding Work](issues/06-confirm-relationship-to-sharding-work.md) — confirmed obsolete: the whole local-file sharding mechanism (checksums, hydrate/publish, UNION ALL reconstruction) has no analog in Snowflake. What survives as a concept, now decided: no explicit `CLUSTER BY` for now (rely on natural CIK-ordered load correlation), and the accession-join taxonomy gets an explicit `cik` column materialized in silver rather than left as a join every consumer must rediscover. Cross-reference note left on the closed `pipeline-throughput-architecture` map.
 - [Draft the Cutover Script and Ownership Requirements](issues/05-draft-cutover-script-and-ownership-requirements.md) — landing/silver schemas owned by the existing `EDGARTOOLS_PROD_LOADER` (no new pipeline-object owner minted); MDM gets a brand-new, minimally-scoped `EDGARTOOLS_PROD_MDM_SILVER_READER` role with `FUTURE`-scoped grants (no allowlist to drift). Shipped as real, tested artifacts, not prose: `infra/scripts/generate_silver_landing_ddl.py` (a genuine reflection-based generator, via DuckDB introspection since `silver_store.py`'s schema isn't SQLAlchemy) plus its committed snapshot and a second bootstrap file for the future dbt-managed `EDGARTOOLS_SILVER` schema and the MDM reader role. Caught a real bug while building it: `pipeline_run_lease` doesn't belong in the append-only landing zone despite being listed in `PROTECTED_TABLE_REGISTRY`.
 
-**Map closed — all six tickets resolved.** Destination reached: a locked
-target architecture (append-only Python-populated landing zone → uniformly
-`dynamic_table` dbt silver models → unchanged gold SQL just pointed at a
-new connection), a concurrent-writer model with no promotion race left to
-replace, every direct silver consumer's replacement path named, the
-ad-hoc reprocessing story preserved across three capability classes, the
-sharding relationship confirmed and cross-referenced, and the first two
-real provisioning scripts committed and tested. Implementation is now a
-normal follow-up pass — this map's Destination was reaching a decision
-someone can implement without further architecture debate, not doing that
-implementation itself.
+- [Decide the Silver-Landing Ingestion Mechanism](issues/07-decide-silver-landing-ingestion-mechanism.md) — a new, isolated apparatus (not an extension of `native_pull`'s live SOURCE pipeline); a scheduled `COPY INTO` task, not Snowpipe+stream+manifest. Decided, built, and applied live to prod in the same session: `13_silver_landing_ingest.sql` created (loader-owned, not ACCOUNTADMIN — a real policy violation caught before applying), the storage integration and its AWS IAM counterpart both widened for the new prefix, and three live-only bugs fixed (`COPY INTO`'s `MATCH_BY_COLUMN_NAME` doesn't apply column `DEFAULT`s — `parse_sequence`'s `NOT NULL` dropped, backfilled via a follow-up `UPDATE`; `getColumnValue` by name throws, needs positional index; the zero-files result set has a different column count than the loaded-files one). Verified end-to-end against real prod Snowflake with a hand-built test file before trusting it; all test data cleaned up, task confirmed `started` in a verified-clean state. One follow-up still open: the AWS IAM policy widen was applied live but its Terraform source isn't committed yet.
+
+**Map closed again — seven tickets resolved.** The Snowflake ingestion-path
+gap discovered while deploying the six original tickets' first
+implementation pass (`claude/silver-snowflake-implementation`) is now not
+just decided but built and live in prod (still opt-in — `SILVER_LANDING_EXPORT_ROOT`
+is unset everywhere, so no real pipeline run populates it yet).
 
 ## Not yet specified
 - Snowflake compute cost (warehouse sizing/credits) for work that's

@@ -43,6 +43,20 @@ variable "manifest_sns_topic_arn" {
   type        = string
 }
 
+variable "additional_storage_locations" {
+  description = <<-EOT
+    Extra S3 URL prefixes to add to this module's storage integration's
+    STORAGE_ALLOWED_LOCATIONS, alongside export_root_url. Snowflake enforces
+    that list as an exact-prefix allowlist (not a whole-bucket grant), so any
+    stage created outside export_root_url -- even in the same bucket -- needs
+    its prefix listed here first. Used by silver-snowflake-migration Ticket 07
+    to let a separate, isolated silver-landing stage share this storage
+    integration instead of provisioning a new one.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 variable "storage_integration_name" {
   description = "Optional override for the Snowflake storage integration name."
   type        = string

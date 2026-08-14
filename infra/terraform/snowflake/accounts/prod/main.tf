@@ -11,6 +11,13 @@ locals {
   reader_warehouse_name     = "EDGARTOOLS_PROD_READER_WH"
   native_pull_enabled       = var.snowflake_storage_role_arn != null && var.snowflake_export_root_url != null && var.snowflake_manifest_sns_topic_arn != null
   storage_external_id       = coalesce(var.snowflake_storage_external_id, "edgartools-${local.environment}-snowflake-native-pull")
+
+  # silver-snowflake-migration Ticket 07: the silver-landing ingest stage
+  # (infra/snowflake/sql/bootstrap/13_silver_landing_ingest.sql) lives in the
+  # same bucket as export_root_url, under a sibling "silver_landing/" prefix
+  # rather than "snowflake_exports/" -- Snowflake's STORAGE_ALLOWED_LOCATIONS
+  # is an exact-prefix allowlist, so this must be added explicitly.
+  silver_landing_export_root_url = local.native_pull_enabled ? "${trimsuffix(var.snowflake_export_root_url, "snowflake_exports/")}silver_landing/" : null
 }
 
 module "baseline" {
@@ -68,15 +75,16 @@ module "native_pull" {
 
   source = "../../modules/native_pull"
 
-  environment            = local.environment
-  database_name          = module.baseline.database_name
-  source_schema_name     = module.baseline.schema_names.source
-  gold_schema_name       = module.baseline.schema_names.gold
-  refresh_warehouse_name = module.baseline.warehouse_names.refresh
-  storage_role_arn       = var.snowflake_storage_role_arn
-  storage_external_id    = local.storage_external_id
-  export_root_url        = var.snowflake_export_root_url
-  manifest_sns_topic_arn = var.snowflake_manifest_sns_topic_arn
+  environment                  = local.environment
+  database_name                = module.baseline.database_name
+  source_schema_name           = module.baseline.schema_names.source
+  gold_schema_name             = module.baseline.schema_names.gold
+  refresh_warehouse_name       = module.baseline.warehouse_names.refresh
+  storage_role_arn             = var.snowflake_storage_role_arn
+  storage_external_id          = local.storage_external_id
+  export_root_url              = var.snowflake_export_root_url
+  manifest_sns_topic_arn       = var.snowflake_manifest_sns_topic_arn
+  additional_storage_locations = [local.silver_landing_export_root_url]
 
   depends_on = [module.baseline]
 }

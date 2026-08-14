@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS sec_accounting_flag (
     piotroski_f_score INTEGER,
     parser_version TEXT,
     ingested_at TIMESTAMP_TZ,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS sec_adv_disclosure_event (
     description TEXT,
     parser_version TEXT,
     last_sync_run_id TEXT,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -123,7 +123,7 @@ CREATE TABLE IF NOT EXISTS sec_adv_filing (
     source_format TEXT,
     parser_version TEXT,
     last_sync_run_id TEXT,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -141,7 +141,7 @@ CREATE TABLE IF NOT EXISTS sec_adv_firm_roster (
     source_sha256 TEXT,
     parser_version TEXT,
     last_sync_run_id TEXT,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS sec_adv_office (
     is_headquarters BOOLEAN,
     parser_version TEXT,
     last_sync_run_id TEXT,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -178,7 +178,7 @@ CREATE TABLE IF NOT EXISTS sec_adv_private_fund (
     source_sha256 TEXT,
     parser_version TEXT,
     last_sync_run_id TEXT,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -201,7 +201,7 @@ CREATE TABLE IF NOT EXISTS sec_auditor_report_evidence (
     latest_amendment BOOLEAN,
     parser_version TEXT,
     last_sync_run_id TEXT,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -220,7 +220,7 @@ CREATE TABLE IF NOT EXISTS sec_company (
     first_sync_run_id TEXT,
     last_sync_run_id TEXT,
     last_synced_at TIMESTAMP_TZ,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -235,7 +235,7 @@ CREATE TABLE IF NOT EXISTS sec_company_address (
     country TEXT,
     last_sync_run_id TEXT,
     last_synced_at TIMESTAMP_TZ,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -257,7 +257,7 @@ CREATE TABLE IF NOT EXISTS sec_company_filing (
     primary_doc_desc TEXT,
     last_sync_run_id TEXT,
     last_synced_at TIMESTAMP_TZ,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -267,7 +267,7 @@ CREATE TABLE IF NOT EXISTS sec_company_former_name (
     date_changed DATE,
     ordinal INTEGER NOT NULL,
     last_sync_run_id TEXT,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -279,7 +279,7 @@ CREATE TABLE IF NOT EXISTS sec_company_submission_file (
     filing_to DATE,
     last_sync_run_id TEXT,
     last_synced_at TIMESTAMP_TZ,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -291,7 +291,7 @@ CREATE TABLE IF NOT EXISTS sec_company_ticker (
     source_rank INTEGER,
     last_sync_run_id TEXT,
     last_synced_at TIMESTAMP_TZ,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -310,7 +310,7 @@ CREATE TABLE IF NOT EXISTS sec_current_filing_feed (
     raw_object_id TEXT,
     last_sync_run_id TEXT,
     last_synced_at TIMESTAMP_TZ,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -328,7 +328,7 @@ CREATE TABLE IF NOT EXISTS sec_earnings_release (
     has_guidance BOOLEAN NOT NULL,
     parser_version TEXT,
     ingested_at TIMESTAMP_TZ,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -344,7 +344,7 @@ CREATE TABLE IF NOT EXISTS sec_employment_event (
     effective_date DATE NOT NULL,
     parser_version TEXT NOT NULL,
     ingested_at TIMESTAMP_TZ,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -362,7 +362,7 @@ CREATE TABLE IF NOT EXISTS sec_executive_record (
     non_equity_incentive DOUBLE,
     parser_version TEXT,
     ingested_at TIMESTAMP_TZ,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -376,7 +376,7 @@ CREATE TABLE IF NOT EXISTS sec_filing_attachment (
     is_primary BOOLEAN NOT NULL,
     raw_object_id TEXT,
     last_sync_run_id TEXT,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -388,7 +388,7 @@ CREATE TABLE IF NOT EXISTS sec_filing_text (
     text_sha256 TEXT NOT NULL,
     char_count INTEGER NOT NULL,
     extracted_at TIMESTAMP_TZ NOT NULL,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -430,7 +430,7 @@ CREATE TABLE IF NOT EXISTS sec_financial_derived (
     roa DOUBLE,
     parser_version TEXT,
     ingested_at TIMESTAMP_TZ,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -449,7 +449,7 @@ CREATE TABLE IF NOT EXISTS sec_financial_fact (
     segment TEXT NOT NULL,
     parser_version TEXT,
     ingested_at TIMESTAMP_TZ,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -477,7 +477,7 @@ CREATE TABLE IF NOT EXISTS sec_guidance_fact (
     confidence TEXT NOT NULL,
     parser_version TEXT,
     ingested_at TIMESTAMP_TZ,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -489,7 +489,7 @@ CREATE TABLE IF NOT EXISTS sec_guidance_fact_reject (
     raw_payload TEXT,
     parser_version TEXT,
     ingested_at TIMESTAMP_TZ,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -513,7 +513,7 @@ CREATE TABLE IF NOT EXISTS sec_ownership_derivative_txn (
     underlying_security_shares NUMBER(28,8),
     parser_version TEXT,
     last_sync_run_id TEXT,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -532,7 +532,7 @@ CREATE TABLE IF NOT EXISTS sec_ownership_non_derivative_txn (
     ownership_direct_indirect TEXT,
     parser_version TEXT,
     last_sync_run_id TEXT,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -548,7 +548,7 @@ CREATE TABLE IF NOT EXISTS sec_ownership_reporting_owner (
     officer_title TEXT,
     parser_version TEXT,
     last_sync_run_id TEXT,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -562,7 +562,7 @@ CREATE TABLE IF NOT EXISTS sec_pcaob_firm_identity (
     snapshot_uri TEXT,
     snapshot_sha256 TEXT NOT NULL,
     last_sync_run_id TEXT,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -582,7 +582,7 @@ CREATE TABLE IF NOT EXISTS sec_raw_object (
     http_status INTEGER NOT NULL,
     source_last_modified TIMESTAMP_TZ,
     source_etag TEXT,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -601,7 +601,7 @@ CREATE TABLE IF NOT EXISTS sec_subsidiary_evidence (
     source_sha256 TEXT,
     parser_version TEXT,
     last_sync_run_id TEXT,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -617,7 +617,7 @@ CREATE TABLE IF NOT EXISTS sec_thirteenf_filing (
     superseded_by_accession TEXT,
     parser_version TEXT NOT NULL,
     ingested_at TIMESTAMP_TZ,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
@@ -639,7 +639,7 @@ CREATE TABLE IF NOT EXISTS sec_thirteenf_holding (
     voting_auth_none DOUBLE,
     parser_version TEXT,
     ingested_at TIMESTAMP_TZ,
-    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL NOT NULL
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
 
