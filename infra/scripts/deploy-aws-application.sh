@@ -2498,7 +2498,17 @@ stage1b_entity_facts_catch = [{
     "Next": "Stage1BPerFiling",
 }]
 
-per_window_fundamentals_entity_facts = ecs_state(wh_medium_arn,
+# wh_large_arn, not wh_medium_arn (2026-08-14, ecs-cost-sizing ticket 20): a
+# 500-CIK entity-facts window OOM'd (exit 137) on all 3 configured attempts on
+# wh_medium_arn (4096MB) during load_history retry7's live full-universe
+# backfill -- root-caused to the shared silver-publish merge step
+# (merge_candidate_into_canonical) materializing a cold-start table's entire
+# delta into Python (~2.3GB for this window's sec_financial_fact table alone,
+# stacking with DuckDB's own 2GB bound). This is a stopgap alongside the
+# structural fix in silver_protection.py (phase-1 SQL bulk insert for
+# brand-new keys + chunked Python conflict resolution for the rest) -- see
+# .scratch/ecs-cost-sizing/issues/20-fix-stage1b-entity-facts-oom-on-medium-profile.md.
+per_window_fundamentals_entity_facts = ecs_state(wh_large_arn,
     "States.Array('bootstrap-fundamentals', '--mode', 'entity-facts', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
     is_end=True)
 
@@ -2562,7 +2572,12 @@ stage1b_thirteenf_catch = [{
     "Next": "DatasetPeriodCheck",
 }]
 
-per_window_fundamentals_per_filing = ecs_state(wh_medium_arn,
+# wh_large_arn, not wh_medium_arn -- same fix as per_window_fundamentals_entity_facts
+# above (ecs-cost-sizing ticket 20): shares the identical merge_candidate_into_canonical
+# publish-step risk, and live evidence from the same load_history retry7 run confirmed
+# it -- this window also OOM'd twice on wh_medium_arn before the 3rd attempt was
+# preempted by this fix.
+per_window_fundamentals_per_filing = ecs_state(wh_large_arn,
     "States.Array('bootstrap-fundamentals', '--mode', 'per-filing', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
     is_end=True)
 
@@ -2591,7 +2606,12 @@ fundamentals_per_filing = {
     "Next": "Stage1BThirteenF",
 }
 
-per_window_fundamentals_thirteenf = ecs_state(wh_medium_arn,
+# wh_large_arn, not wh_medium_arn -- same fix as per_window_fundamentals_entity_facts
+# above (ecs-cost-sizing ticket 20): shares the identical merge_candidate_into_canonical
+# publish-step risk, and sec_thirteenf_holding's per-filing fan-out (6.8M rows at
+# full-universe maturity) makes this mode's exposure at least as large as entity-facts',
+# not yet independently observed OOMing but moved preemptively rather than waiting for it.
+per_window_fundamentals_thirteenf = ecs_state(wh_large_arn,
     "States.Array('bootstrap-fundamentals', '--mode', 'thirteenf', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
     is_end=True)
 
