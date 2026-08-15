@@ -5,6 +5,7 @@ from __future__ import annotations
 from edgar_warehouse.application.commands import (
     acquire_identity_refresh_lease,
     acquire_sec_fetch_lease,
+    backfill_mdm_entity_ids,
     bootstrap_batch,
     bootstrap_full,
     bootstrap_fundamentals,
@@ -62,6 +63,7 @@ COMMAND_REGISTRY = {
     "bootstrap-next": bootstrap_next.execute,
     "bootstrap-fundamentals": bootstrap_fundamentals.execute,   # Branch B (AD-05)
     "gold-refresh": gold_refresh.execute,
+    "backfill-mdm-entity-ids": backfill_mdm_entity_ids.execute,
     "fetch-adv-bulk": fetch_adv_bulk.execute,
     "fetch-firm-roster": fetch_firm_roster.execute,
     "ingest-relationship-sources": ingest_relationship_sources.execute,

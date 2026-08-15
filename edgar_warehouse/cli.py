@@ -198,6 +198,10 @@ def _handle_gold_refresh(args: argparse.Namespace) -> int:
     return run_command("gold-refresh", args)
 
 
+def _handle_backfill_mdm_entity_ids(args: argparse.Namespace) -> int:
+    return run_command("backfill-mdm-entity-ids", args)
+
+
 def _handle_gold_verify_live(args: argparse.Namespace) -> int:
     import json
     import sys
@@ -960,6 +964,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(gold_refresh)
     gold_refresh.set_defaults(handler=_handle_gold_refresh)
+
+    backfill_mdm_entity_ids = subparsers.add_parser(
+        "backfill-mdm-entity-ids",
+        help="Sweep every silver shard (or the monolith) and backfill mdm_entity_id on rows "
+             "left NULL at parse time, from MDM's already-resolved MdmSourceRef rows. Read-only "
+             "against MDM -- does not trigger entity resolution. Caller MUST hold the "
+             "sec_fetch_active lease for the duration (see edgar_warehouse/mdm_entity_backfill.py).",
+    )
+    _add_run_id_arg(backfill_mdm_entity_ids)
+    backfill_mdm_entity_ids.set_defaults(handler=_handle_backfill_mdm_entity_ids)
 
     gold_verify_live = subparsers.add_parser(
         "gold-verify-live",
