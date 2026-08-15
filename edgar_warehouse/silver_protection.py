@@ -879,24 +879,28 @@ def merge_candidate_into_canonical(
                         )
                     elif winner == "candidate":
                         # A candidate win on some genuinely differing business
-                        # column must not drag a provenance column backwards.
+                        # column must not drag mdm_entity_id backwards.
                         # _update_row writes every non-key column from
-                        # cand_row unconditionally; for a provenance column
-                        # this repo's own comment on ProtectedTablePolicy
-                        # says is deliberately excluded from conflict
-                        # detection, a candidate that simply doesn't know
-                        # the value yet (None) must not overwrite canonical's
-                        # already-known value with it. Concretely: an
-                        # authority-column win driven by an unrelated content
-                        # correction (e.g. a fixed entity_name) must not
-                        # silently regress an already-backfilled
-                        # mdm_entity_id back to NULL (mdm-ahead-of-silver
-                        # map, ticket 02/05). Only applies when the
-                        # candidate's own value is None -- a candidate that
-                        # DOES carry a real provenance value for that column
+                        # cand_row unconditionally; an authority-column win
+                        # driven by an unrelated content correction (e.g. a
+                        # fixed entity_name) must not silently regress an
+                        # already-backfilled mdm_entity_id back to NULL
+                        # (mdm-ahead-of-silver map, ticket 02/05). Only
+                        # applies when the candidate's own value is None --
+                        # a candidate that DOES carry a real mdm_entity_id
                         # still wins normally.
+                        #
+                        # Deliberately scoped to mdm_entity_id only, not to
+                        # every provenance_columns entry generically: other
+                        # tables' provenance sets (e.g. sec_raw_object's
+                        # source_etag/content_encoding/etc.) are structurally
+                        # derived and have their own, possibly-legitimate
+                        # None semantics on a candidate win that were never
+                        # audited for this preserve-canonical rule -- widen
+                        # only after checking each such column's contract
+                        # explicitly, per-table.
                         effective_row = dict(cand_row)
-                        for prov_col in policy.provenance_columns:
+                        for prov_col in ("mdm_entity_id",) if "mdm_entity_id" in policy.provenance_columns else ():
                             if effective_row.get(prov_col) is None and canon_row.get(prov_col) is not None:
                                 effective_row[prov_col] = canon_row[prov_col]
                         _update_row(conn, table_name, all_columns, policy.business_keys, effective_row)
