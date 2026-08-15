@@ -123,6 +123,7 @@ CREATE TABLE IF NOT EXISTS sec_adv_filing (
     source_format TEXT,
     parser_version TEXT,
     last_sync_run_id TEXT,
+    mdm_entity_id TEXT,
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
@@ -178,6 +179,7 @@ CREATE TABLE IF NOT EXISTS sec_adv_private_fund (
     source_sha256 TEXT,
     parser_version TEXT,
     last_sync_run_id TEXT,
+    mdm_entity_id TEXT,
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
@@ -220,6 +222,7 @@ CREATE TABLE IF NOT EXISTS sec_company (
     first_sync_run_id TEXT,
     last_sync_run_id TEXT,
     last_synced_at TIMESTAMP_TZ,
+    mdm_entity_id TEXT,
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
@@ -513,6 +516,7 @@ CREATE TABLE IF NOT EXISTS sec_ownership_derivative_txn (
     underlying_security_shares NUMBER(28,8),
     parser_version TEXT,
     last_sync_run_id TEXT,
+    mdm_entity_id TEXT,
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
@@ -532,6 +536,7 @@ CREATE TABLE IF NOT EXISTS sec_ownership_non_derivative_txn (
     ownership_direct_indirect TEXT,
     parser_version TEXT,
     last_sync_run_id TEXT,
+    mdm_entity_id TEXT,
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
@@ -548,6 +553,7 @@ CREATE TABLE IF NOT EXISTS sec_ownership_reporting_owner (
     officer_title TEXT,
     parser_version TEXT,
     last_sync_run_id TEXT,
+    mdm_entity_id TEXT,
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );

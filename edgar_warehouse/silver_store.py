@@ -57,7 +57,11 @@ CREATE TABLE IF NOT EXISTS sec_company (
     category                   TEXT,
     first_sync_run_id          TEXT,
     last_sync_run_id           TEXT,
-    last_synced_at             TIMESTAMPTZ
+    last_synced_at             TIMESTAMPTZ,
+    -- MDM-ahead-of-silver (mdm-ahead-of-silver map, ticket 02): NULL at
+    -- parse time, backfilled by an independent sweep -- never written
+    -- synchronously by the ingestion write path itself.
+    mdm_entity_id               TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sec_company_address (
@@ -154,6 +158,10 @@ CREATE TABLE IF NOT EXISTS sec_ownership_reporting_owner (
     officer_title       TEXT,
     parser_version      TEXT,
     last_sync_run_id    TEXT,
+    -- MDM-ahead-of-silver (mdm-ahead-of-silver map, ticket 02): NULL at
+    -- parse time, backfilled by an independent sweep -- never written
+    -- synchronously by the ingestion write path itself.
+    mdm_entity_id       TEXT,
     PRIMARY KEY (accession_number, owner_index)
 );
 
@@ -172,6 +180,10 @@ CREATE TABLE IF NOT EXISTS sec_ownership_non_derivative_txn (
     ownership_direct_indirect TEXT,
     parser_version      TEXT,
     last_sync_run_id    TEXT,
+    -- MDM-ahead-of-silver (mdm-ahead-of-silver map, ticket 02): NULL at
+    -- parse time, backfilled by an independent sweep -- never written
+    -- synchronously by the ingestion write path itself.
+    mdm_entity_id       TEXT,
     PRIMARY KEY (accession_number, owner_index, txn_index)
 );
 
@@ -195,6 +207,10 @@ CREATE TABLE IF NOT EXISTS sec_ownership_derivative_txn (
     underlying_security_shares DECIMAL(28,8),
     parser_version      TEXT,
     last_sync_run_id    TEXT,
+    -- MDM-ahead-of-silver (mdm-ahead-of-silver map, ticket 02): NULL at
+    -- parse time, backfilled by an independent sweep -- never written
+    -- synchronously by the ingestion write path itself.
+    mdm_entity_id       TEXT,
     PRIMARY KEY (accession_number, owner_index, txn_index)
 );
 
@@ -210,7 +226,11 @@ CREATE TABLE IF NOT EXISTS sec_adv_filing (
     filing_action       TEXT,
     source_format       TEXT,
     parser_version      TEXT,
-    last_sync_run_id    TEXT
+    last_sync_run_id    TEXT,
+    -- MDM-ahead-of-silver (mdm-ahead-of-silver map, ticket 02): NULL at
+    -- parse time, backfilled by an independent sweep -- never written
+    -- synchronously by the ingestion write path itself.
+    mdm_entity_id       TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sec_adv_office (
@@ -257,6 +277,10 @@ CREATE TABLE IF NOT EXISTS sec_adv_private_fund (
     source_sha256       TEXT,
     parser_version      TEXT,
     last_sync_run_id    TEXT,
+    -- MDM-ahead-of-silver (mdm-ahead-of-silver map, ticket 02): NULL at
+    -- parse time, backfilled by an independent sweep -- never written
+    -- synchronously by the ingestion write path itself.
+    mdm_entity_id       TEXT,
     PRIMARY KEY (accession_number, fund_index)
 );
 
@@ -923,6 +947,12 @@ class SilverDatabase:
                 "Add backstop_overdue to pipeline_run_lease.",
                 self._add_pipeline_run_lease_backstop_overdue,
             ),
+            (
+                "009_mdm_entity_id_columns",
+                "Add mdm_entity_id to the 5 MDM-ahead-of-silver source tables "
+                "(company, adviser, person, fund, security).",
+                self._add_mdm_entity_id_columns,
+            ),
         )
 
     def _schema_migration_applied(self, migration_name: str) -> bool:
@@ -998,6 +1028,24 @@ class SilverDatabase:
             "ALTER TABLE pipeline_run_lease ADD COLUMN IF NOT EXISTS "
             "backstop_overdue BOOLEAN DEFAULT FALSE"
         )
+
+    def _add_mdm_entity_id_columns(self) -> None:
+        # mdm-ahead-of-silver map, ticket 02/05: no DEFAULT -- NULL is the
+        # deliberate "pending resolution" marker the backfill sweep queries
+        # against (WHERE mdm_entity_id IS NULL), mirroring the existing
+        # mdm_change_log.exported_at / mdm_relationship_instance.graph_synced_at
+        # nullable-column-plus-sweep pattern.
+        for table in (
+            "sec_company",
+            "sec_adv_filing",
+            "sec_ownership_reporting_owner",
+            "sec_adv_private_fund",
+            "sec_ownership_non_derivative_txn",
+            "sec_ownership_derivative_txn",
+        ):
+            self._conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS mdm_entity_id TEXT"
+            )
 
     def _widen_adv_fund_index_to_bigint(self) -> None:
         """``CREATE TABLE IF NOT EXISTS`` never widens an existing store's column type.

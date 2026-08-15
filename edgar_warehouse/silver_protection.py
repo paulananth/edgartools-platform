@@ -80,7 +80,17 @@ class ProtectedTablePolicy:
 # existing last_synced_at/ingested_at/fetched_at provenance timestamp.
 PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
     "sec_company": ProtectedTablePolicy(
-        "sec_company", ("cik",), authority_column="last_synced_at"
+        "sec_company",
+        ("cik",),
+        authority_column="last_synced_at",
+        # mdm-ahead-of-silver map, ticket 02/05: written NULL at parse time,
+        # backfilled by an independent sweep -- never business data, and
+        # without this exclusion an authority-column win on this table
+        # overwrites every non-key column from the candidate side (silver_
+        # protection.py's _update_row), which would silently regress an
+        # already-backfilled mdm_entity_id back to NULL on the next ordinary
+        # re-sync of the same CIK.
+        provenance_columns=frozenset({"mdm_entity_id"}),
     ),
     "sec_company_address": ProtectedTablePolicy(
         "sec_company_address", ("cik", "address_type"), authority_column="last_synced_at"
@@ -103,17 +113,29 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
         "sec_current_filing_feed", ("accession_number",), authority_column="last_synced_at"
     ),
     "sec_ownership_reporting_owner": ProtectedTablePolicy(
-        "sec_ownership_reporting_owner", ("accession_number", "owner_index")
+        "sec_ownership_reporting_owner",
+        ("accession_number", "owner_index"),
+        # mdm-ahead-of-silver map, ticket 02/05: see sec_company's comment.
+        # This table has no authority_column, so without this exclusion a
+        # stale parse-time NULL re-presented by any later candidate would
+        # abort the merge outright, not just silently regress a value.
+        provenance_columns=frozenset({"mdm_entity_id"}),
     ),
     "sec_ownership_non_derivative_txn": ProtectedTablePolicy(
         "sec_ownership_non_derivative_txn",
         ("accession_number", "owner_index", "txn_index"),
+        provenance_columns=frozenset({"mdm_entity_id"}),
     ),
     "sec_ownership_derivative_txn": ProtectedTablePolicy(
         "sec_ownership_derivative_txn",
         ("accession_number", "owner_index", "txn_index"),
+        provenance_columns=frozenset({"mdm_entity_id"}),
     ),
-    "sec_adv_filing": ProtectedTablePolicy("sec_adv_filing", ("accession_number",)),
+    "sec_adv_filing": ProtectedTablePolicy(
+        "sec_adv_filing",
+        ("accession_number",),
+        provenance_columns=frozenset({"mdm_entity_id"}),
+    ),
     "sec_adv_office": ProtectedTablePolicy(
         "sec_adv_office", ("accession_number", "office_index")
     ),
@@ -121,7 +143,10 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
         "sec_adv_disclosure_event", ("accession_number", "event_index")
     ),
     "sec_adv_private_fund": ProtectedTablePolicy(
-        "sec_adv_private_fund", ("accession_number", "fund_index")
+        "sec_adv_private_fund",
+        ("accession_number", "fund_index"),
+        # mdm-ahead-of-silver map, ticket 02/05: see sec_company's comment.
+        provenance_columns=frozenset({"mdm_entity_id"}),
     ),
     "sec_adv_firm_roster": ProtectedTablePolicy(
         "sec_adv_firm_roster", ("adviser_crd_number", "dataset_period")
@@ -853,7 +878,28 @@ def merge_candidate_into_canonical(
                             )
                         )
                     elif winner == "candidate":
-                        _update_row(conn, table_name, all_columns, policy.business_keys, cand_row)
+                        # A candidate win on some genuinely differing business
+                        # column must not drag a provenance column backwards.
+                        # _update_row writes every non-key column from
+                        # cand_row unconditionally; for a provenance column
+                        # this repo's own comment on ProtectedTablePolicy
+                        # says is deliberately excluded from conflict
+                        # detection, a candidate that simply doesn't know
+                        # the value yet (None) must not overwrite canonical's
+                        # already-known value with it. Concretely: an
+                        # authority-column win driven by an unrelated content
+                        # correction (e.g. a fixed entity_name) must not
+                        # silently regress an already-backfilled
+                        # mdm_entity_id back to NULL (mdm-ahead-of-silver
+                        # map, ticket 02/05). Only applies when the
+                        # candidate's own value is None -- a candidate that
+                        # DOES carry a real provenance value for that column
+                        # still wins normally.
+                        effective_row = dict(cand_row)
+                        for prov_col in policy.provenance_columns:
+                            if effective_row.get(prov_col) is None and canon_row.get(prov_col) is not None:
+                                effective_row[prov_col] = canon_row[prov_col]
+                        _update_row(conn, table_name, all_columns, policy.business_keys, effective_row)
                         updated += 1
                     else:
                         unchanged += 1  # canonical remains authoritative; no-op.
