@@ -392,9 +392,10 @@ class WarehousePathResolver:
             # lease_result.json side-channel (identity_refresh_lease_path /
             # sec_fetch_lease_path) -- neither goes through this run-manifest
             # writer, so no bronze/gold manifest entries are produced here.
-            # backfill-mdm-entity-ids (mdm-ahead-of-silver map, Phase B) writes
-            # directly into each silver shard and MDM Postgres, not bronze/gold
-            # -- same "no manifest layers beyond artifacts" shape.
+            # backfill-mdm-entity-ids (mdm-ahead-of-silver map, Phase B/ticket
+            # 06) reads MDM Postgres and Snowflake directly and writes via the
+            # separate LandingExportBuffer/write_landing_export manifest, not
+            # bronze/gold -- same "no manifest layers beyond artifacts" shape.
             return {
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }

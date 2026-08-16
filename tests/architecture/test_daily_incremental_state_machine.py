@@ -584,116 +584,74 @@ def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_n
 # MdmRun -> ... -> MdmBackfill chain, so this sub-chain must appear identically
 # in both branches -- parametrize over both fixtures rather than duplicating
 # the assertions.
+#
+# Ticket 06 (.scratch/mdm-ahead-of-silver/issues/06-narrow-backfill-storage-target.md)
+# simplified this from an earlier lease-guarded shape (AcquireEntityBackfillLease/
+# ReadEntityBackfillLeaseResult/EntityBackfillLeaseAcquiredCheck/
+# ReleaseEntityBackfillLease*) once the sweep became Snowflake-only: no DuckDB
+# shard is read or written anymore, so there's nothing left for the
+# sec_fetch_active lease to protect. That shape and these tests were removed,
+# not left asserting a dead state -- see commit history for the prior version
+# if the lease-guarded design is ever needed again.
 
 
 @pytest.mark.parametrize("definition_fixture", ["daily_definition", "bootstrap_definition"])
-def test_mdm_run_routes_into_entity_backfill_lease_acquire(
+def test_mdm_run_routes_directly_into_backfill_mdm_entity_ids(
     definition_fixture: str, request: pytest.FixtureRequest
 ) -> None:
     definition = request.getfixturevalue(definition_fixture)
-    assert definition["States"]["MdmRun"]["Next"] == "AcquireEntityBackfillLease"
+    assert definition["States"]["MdmRun"]["Next"] == "BackfillMdmEntityIds"
 
 
 @pytest.mark.parametrize("definition_fixture", ["daily_definition", "bootstrap_definition"])
-def test_entity_backfill_lease_acquire_uses_same_lease_as_sec_fetch(
+def test_backfill_mdm_entity_ids_runs_on_medium_profile_and_falls_through_to_mdm_backfill(
     definition_fixture: str, request: pytest.FixtureRequest
 ) -> None:
-    """A second, independent acquire/release cycle around just BackfillMdmEntityIds
-    -- not an extension of the main sec_fetch_active span, which already
-    released before MdmRun. Same underlying lease (sec_fetch_active), distinct
-    state names so they don't collide with the ones build_sec_fetch_lease_states
-    already claimed once in this definition."""
-    definition = request.getfixturevalue(definition_fixture)
-    cmd = _command_of(definition, "AcquireEntityBackfillLease")
-    assert "'acquire-sec-fetch-lease'" in cmd
-    assert definition["States"]["AcquireEntityBackfillLease"]["Next"] == "ReadEntityBackfillLeaseResult"
-    assert definition["States"]["AcquireEntityBackfillLease"]["ResultPath"] is None
-
-
-@pytest.mark.parametrize("definition_fixture", ["daily_definition", "bootstrap_definition"])
-def test_entity_backfill_lease_read_result_falls_through_to_mdm_backfill_on_catch(
-    definition_fixture: str, request: pytest.FixtureRequest
-) -> None:
-    """Deliberate divergence from ReadSecFetchLeaseResult (no Catch there --
-    it guards pipeline start and must fail loudly). Here a missing/corrupt
-    lease_result.json must not fail an otherwise-successful MDM/gold run
-    over an optional sweep."""
-    definition = request.getfixturevalue(definition_fixture)
-    state = definition["States"]["ReadEntityBackfillLeaseResult"]
-    assert state["Next"] == "EntityBackfillLeaseAcquiredCheck"
-    assert state.get("Catch") == [
-        {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmBackfill"}
-    ]
-
-
-@pytest.mark.parametrize("definition_fixture", ["daily_definition", "bootstrap_definition"])
-def test_entity_backfill_lease_acquired_check_defaults_to_skip_not_fail(
-    definition_fixture: str, request: pytest.FixtureRequest
-) -> None:
-    """Lease busy (another SEC-fetching command holds it) skips the sweep for
-    this pass only -- MdmBackfill and the rest of the chain still run. No
-    release call on the not-acquired path since we never acquired."""
-    definition = request.getfixturevalue(definition_fixture)
-    check = definition["States"]["EntityBackfillLeaseAcquiredCheck"]
-    assert check["Choices"][0]["Variable"] == "$.entity_backfill_lease_check.parsed.lease_acquired"
-    assert check["Choices"][0]["BooleanEquals"] is True
-    assert check["Choices"][0]["Next"] == "BackfillMdmEntityIds"
-    assert check["Default"] == "MdmBackfill"
-
-
-@pytest.mark.parametrize("definition_fixture", ["daily_definition", "bootstrap_definition"])
-def test_backfill_mdm_entity_ids_runs_on_large_profile_and_releases_lease(
-    definition_fixture: str, request: pytest.FixtureRequest
-) -> None:
-    """wh_large_arn, not medium: the sweep hydrates every silver shard, the
-    same full-canonical-download shape documented elsewhere as having OOM'd
-    a 4096MB task live. A failure still releases the lease (best-effort)
-    before falling through to MdmBackfill -- the sweep is its own retry."""
+    """wh_medium_arn, not large: the Snowflake-only sweep (ticket 06) issues
+    SQL queries, not a full-shard download, so it doesn't need large's
+    headroom. A sweep failure must not fail this otherwise-successful
+    MDM/gold run -- the sweep is its own retry (ticket 05: the next pass
+    re-selects the same still-NULL rows) -- so both the happy path and the
+    Catch converge on MdmBackfill."""
     definition = request.getfixturevalue(definition_fixture)
     state = definition["States"]["BackfillMdmEntityIds"]
     cmd = _command_of(definition, "BackfillMdmEntityIds")
     assert "'backfill-mdm-entity-ids'" in cmd
     assert "$$.Execution.Name" in cmd
-    assert state["Parameters"]["TaskDefinition"] == "arn:wh-large"
-    assert state["Next"] == "ReleaseEntityBackfillLease"
+    assert state["Parameters"]["TaskDefinition"] == "arn:wh-medium"
+    assert state["Next"] == "MdmBackfill"
     assert state["Catch"] == [
-        {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseEntityBackfillLeaseAfterFailure"}
-    ]
-
-
-@pytest.mark.parametrize("definition_fixture", ["daily_definition", "bootstrap_definition"])
-def test_entity_backfill_lease_release_paths_all_reach_mdm_backfill(
-    definition_fixture: str, request: pytest.FixtureRequest
-) -> None:
-    """Every path out of the entity-backfill sub-chain -- happy-path release,
-    release failure (best-effort), and post-task-failure release -- converges
-    on MdmBackfill, so the rest of the MDM/gold chain always runs regardless
-    of how the sweep fared this pass."""
-    definition = request.getfixturevalue(definition_fixture)
-    states = definition["States"]
-    assert states["ReleaseEntityBackfillLease"]["Next"] == "MdmBackfill"
-    assert states["ReleaseEntityBackfillLease"]["Catch"] == [
-        {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseEntityBackfillLeaseFailedNonFatal"}
-    ]
-    assert states["ReleaseEntityBackfillLeaseFailedNonFatal"]["Type"] == "Pass"
-    assert states["ReleaseEntityBackfillLeaseFailedNonFatal"]["Next"] == "MdmBackfill"
-    assert states["ReleaseEntityBackfillLeaseAfterFailure"]["Next"] == "MdmBackfill"
-    assert states["ReleaseEntityBackfillLeaseAfterFailure"]["Catch"] == [
         {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmBackfill"}
     ]
 
 
 @pytest.mark.parametrize("definition_fixture", ["daily_definition", "bootstrap_definition"])
-def test_entity_backfill_lease_states_do_not_collide_with_sec_fetch_lease_states(
+def test_no_entity_backfill_lease_states_remain(
     definition_fixture: str, request: pytest.FixtureRequest
 ) -> None:
-    """build_sec_fetch_lease_states() already claims AcquireSecFetchLease/
-    ReadSecFetchLeaseResult/etc. once in this same definition (guarding
-    SeedUniverse/RunWarehouseTask) -- the entity-backfill sub-chain must use
-    distinct state names, not silently overwrite or reuse them."""
+    """The lease-guarded shape ticket 06 superseded must not linger as dead
+    states in the generated definition."""
     definition = request.getfixturevalue(definition_fixture)
     states = definition["States"]
-    assert states["AcquireSecFetchLease"] is not states["AcquireEntityBackfillLease"]
-    assert states["ReleaseSecFetchLease"] is not states["ReleaseEntityBackfillLease"]
+    for name in (
+        "AcquireEntityBackfillLease",
+        "ReadEntityBackfillLeaseResult",
+        "EntityBackfillLeaseAcquiredCheck",
+        "ReleaseEntityBackfillLease",
+        "ReleaseEntityBackfillLeaseFailedNonFatal",
+        "ReleaseEntityBackfillLeaseAfterFailure",
+    ):
+        assert name not in states
+
+
+@pytest.mark.parametrize("definition_fixture", ["daily_definition", "bootstrap_definition"])
+def test_sec_fetch_lease_still_releases_into_mdm_run_unaffected(
+    definition_fixture: str, request: pytest.FixtureRequest
+) -> None:
+    """The main sec_fetch_active span (build_sec_fetch_lease_states, guarding
+    SeedUniverse/RunWarehouseTask) is untouched by the entity-backfill sweep
+    simplification -- it still releases right before MdmRun."""
+    definition = request.getfixturevalue(definition_fixture)
+    states = definition["States"]
     assert states["ReleaseSecFetchLease"]["Next"] == "MdmRun"
     assert states["AcquireSecFetchLease"]["Next"] == "ReadSecFetchLeaseResult"

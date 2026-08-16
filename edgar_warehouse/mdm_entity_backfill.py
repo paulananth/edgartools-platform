@@ -10,6 +10,22 @@ resolution itself, so it never duplicates run_companies/run_persons/etc.'s
 own work. A NULL row with no MdmSourceRef match yet (not resolved by the
 most recent MdmRun) is left NULL for a later sweep to pick up.
 
+Ticket 06 (.scratch/mdm-ahead-of-silver/issues/06-narrow-backfill-storage-target.md):
+Snowflake only, full-row re-emission -- DuckDB is no longer read or written
+by this sweep at all. Reads pending rows (mdm_entity_id IS NULL) directly
+from the collapsed EDGARTOOLS_SILVER dynamic tables (the same view gold/dbt
+consumes), looks up the resolved entity_id from MDM Postgres (unchanged),
+and re-emits a COMPLETE row (every column, not just the key) with
+mdm_entity_id filled, via the same LandingExportBuffer/Snowpipe append-only
+path every other silver write uses. Full-row, not thin: a thin append would
+rely on the dbt collapse being column-wise for mdm_entity_id, and it isn't
+-- QUALIFY row_number()=1 still picks exactly one winning row for every
+column not itself wrapped in LAST_VALUE(...IGNORE NULLS), so a thin row
+still nulls out every other column once it has the newest parse_sequence.
+See .scratch/silver-landing-coalesce-bug/issues/01-thin-backfill-nulls-other-columns.md
+for the empirical reproduction of why that's unsafe (found live in
+sec_accounting_flag's own partial-score backfill, independent of this map).
+
 The 6 target tables' (entity_type, source_system, source_id) conventions
 below are copied from the exact values each resolver registers today
 (edgar_warehouse/mdm/resolvers/{company,person,security}.py,
@@ -18,25 +34,24 @@ run_companies/run_persons/run_securities call sites) -- if any resolver's
 source_id shape changes, this module's _TABLE_SPECS must change with it,
 or the lookup silently stops matching and rows never backfill.
 
-SAFETY -- NOT SAFE TO RUN CONCURRENTLY WITH A SHARD WRITER:
-_publish_shard_if_remote's ETag guard only protects the instant between its
-own baseline read and its promote call, not the whole hydrate-modify-
-publish lifecycle a caller like this sweep spans (the baseline is re-read
-fresh right before promoting, so it always "matches" trivially unless
-something changes in that narrow final window). A window write
-(bootstrap/daily-incremental/etc.) landing on the same shard between this
-sweep's hydrate and its publish would be silently clobbered, not caught as
-a conflict. The caller MUST hold the sec_fetch_active lease (or equivalent
-mutual exclusion against the 5 SEC-fetching commands) for this sweep's
-entire duration -- see the mdm-ahead-of-silver map, Phase B wiring ticket.
+Residual race, accepted not solved (ticket 06's Answer): the SELECT (read
+pending rows) and the later Snowpipe-ingested INSERT are not atomic. A
+genuinely concurrent write to the same business key in that window could
+have its data staled-over by this sweep's re-emission (this sweep's row
+gets mdm_entity_id right but wins the QUALIFY collapse with column values
+read before the concurrent write). Mitigated by keeping the window short
+(no work between the SELECT and the flush beyond the fast Postgres lookup),
+not solved with a lock -- matching this repo's existing "accept a narrow,
+bounded risk over new distributed locking infrastructure" precedent
+(snowflake-daily-load-trigger map, ticket 02).
 """
 
 from __future__ import annotations
 
+import dataclasses
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any, Callable
 
 
@@ -72,8 +87,6 @@ def _adv_private_fund_source_id(row: dict) -> str:
 @dataclass(frozen=True)
 class _TableSpec:
     table: str
-    key_columns: tuple[str, ...]
-    select_columns: tuple[str, ...]
     entity_type: str
     source_system: str
     source_id: Callable[[dict], str]
@@ -82,48 +95,36 @@ class _TableSpec:
 _TABLE_SPECS: tuple[_TableSpec, ...] = (
     _TableSpec(
         table="sec_company",
-        key_columns=("cik",),
-        select_columns=("cik",),
         entity_type="company",
         source_system="edgar_cik",
         source_id=_company_source_id,
     ),
     _TableSpec(
         table="sec_ownership_reporting_owner",
-        key_columns=("accession_number", "owner_index"),
-        select_columns=("accession_number", "owner_index"),
         entity_type="person",
         source_system="ownership_filing",
         source_id=_reporting_owner_source_id,
     ),
     _TableSpec(
         table="sec_ownership_non_derivative_txn",
-        key_columns=("accession_number", "owner_index", "txn_index"),
-        select_columns=("accession_number", "owner_index", "txn_index"),
         entity_type="security",
         source_system="ownership_filing",
         source_id=_non_derivative_txn_source_id,
     ),
     _TableSpec(
         table="sec_ownership_derivative_txn",
-        key_columns=("accession_number", "owner_index", "txn_index"),
-        select_columns=("accession_number", "owner_index", "txn_index"),
         entity_type="security",
         source_system="ownership_filing",
         source_id=_derivative_txn_source_id,
     ),
     _TableSpec(
         table="sec_adv_filing",
-        key_columns=("accession_number",),
-        select_columns=("accession_number",),
         entity_type="adviser",
         source_system="adv_filing",
         source_id=_adv_filing_source_id,
     ),
     _TableSpec(
         table="sec_adv_private_fund",
-        key_columns=("accession_number", "fund_index"),
-        select_columns=("accession_number", "fund_index", "private_fund_id"),
         entity_type="fund",
         source_system="adv_filing",
         source_id=_adv_private_fund_source_id,
@@ -133,10 +134,6 @@ _TABLE_SPECS: tuple[_TableSpec, ...] = (
 MDM_ENTITY_ID_TABLES: tuple[str, ...] = tuple(spec.table for spec in _TABLE_SPECS)
 
 _LOOKUP_CHUNK_SIZE = 500
-
-
-def _quote_ident(name: str) -> str:
-    return '"' + name.replace('"', '""') + '"'
 
 
 def _chunks(items: list, size: int):
@@ -172,29 +169,56 @@ def _lookup_entity_ids(
     return result
 
 
-def backfill_shard_mdm_entity_ids(db: Any, session: Any) -> dict[str, int]:
-    """Backfill mdm_entity_id on one open shard's 6 target tables.
+def _silver_connection_settings() -> Any:
+    """Snowflake connection settings for the EDGARTOOLS_SILVER schema.
 
-    ``db`` is an open SilverDatabase (or any object exposing a DuckDB
-    ``._conn``); ``session`` is an open MDM SQLAlchemy Session. Returns
-    rows-updated-per-table -- a table absent from the dict, or present with
-    0, both mean nothing changed on that table for this shard.
+    Reuses mdm/export.py's env/secret resolution (MDM_SNOWFLAKE_* /
+    DBT_SNOWFLAKE_* / ~/.snowflake/connections.toml) -- that module's own
+    default schema is EDGARTOOLS_GOLD (the MDM export target), so this
+    overrides just the schema to the silver landing zone's dbt target
+    (DBT_SILVER_SCHEMA, matching dbt_project.yml's own default).
     """
-    from edgar_warehouse.silver_support.access import get_connection
+    from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
 
-    conn = get_connection(db)
+    settings = SnowflakeConnectionSettings.from_env()
+    silver_schema = os.environ.get("DBT_SILVER_SCHEMA", "EDGARTOOLS_SILVER")
+    return dataclasses.replace(settings, schema=silver_schema)
 
-    updated_counts: dict[str, int] = {}
+
+def _fetch_pending_rows(connection: Any, spec: _TableSpec) -> list[dict[str, Any]]:
+    """Every column of every row where mdm_entity_id IS NULL, read from the
+    already-collapsed EDGARTOOLS_SILVER dynamic table -- the same view
+    gold/dbt reads, so "pending" here matches what downstream consumers
+    actually see today. Column names lowercased to match this module's
+    source_id functions (row["cik"]-style) -- Snowflake's connector returns
+    uppercase names for unquoted identifiers by default.
+    """
+    cursor = connection.cursor()
+    try:
+        cursor.execute(f"SELECT * FROM {spec.table.upper()} WHERE mdm_entity_id IS NULL")
+        columns = [col[0].lower() for col in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+
+
+def backfill_pending_rows(connection: Any, session: Any, landing_export: Any) -> dict[str, dict[str, int]]:
+    """One pass over all 6 target tables: read pending (mdm_entity_id IS
+    NULL) rows from Snowflake, resolve against MDM, record full-row
+    (mdm_entity_id filled) re-emissions into landing_export for whatever
+    matched.
+
+    Returns {table: {"pending": N, "resolved": N}} -- resolved <= pending;
+    the gap is rows with no MdmSourceRef match yet (left NULL for the next
+    pass).
+    """
+    counts: dict[str, dict[str, int]] = {}
     for spec in _TABLE_SPECS:
-        cols_sql = ", ".join(_quote_ident(c) for c in spec.select_columns)
-        pending = conn.execute(
-            f"SELECT {cols_sql} FROM {_quote_ident(spec.table)} WHERE mdm_entity_id IS NULL"
-        ).fetchall()
-        if not pending:
-            updated_counts[spec.table] = 0
+        rows = _fetch_pending_rows(connection, spec)
+        counts[spec.table] = {"pending": len(rows), "resolved": 0}
+        if not rows:
             continue
 
-        rows = [dict(zip(spec.select_columns, values)) for values in pending]
         keyed_rows = [(spec.source_id(row), row) for row in rows]
         lookup = _lookup_entity_ids(
             session,
@@ -203,158 +227,93 @@ def backfill_shard_mdm_entity_ids(db: Any, session: Any) -> dict[str, int]:
             source_ids=[source_id for source_id, _ in keyed_rows],
         )
 
-        where_sql = " AND ".join(f"{_quote_ident(k)} = ?" for k in spec.key_columns)
-        update_sql = f"UPDATE {_quote_ident(spec.table)} SET mdm_entity_id = ? WHERE {where_sql}"
-        updated = 0
+        resolved_rows = []
         for source_id, row in keyed_rows:
             entity_id = lookup.get(source_id)
             if entity_id is None:
                 continue
-            conn.execute(update_sql, [entity_id] + [row[k] for k in spec.key_columns])
-            updated += 1
-        updated_counts[spec.table] = updated
-    return updated_counts
-
-
-def _remaining_null_counts(conn: Any) -> dict[str, int]:
-    """COUNT(*) WHERE mdm_entity_id IS NULL per target table, taken right
-    after a backfill pass on the same connection. Feeds the
-    mdm_entity_backfill_completed event's remaining_null_count -- the signal
-    the mdm-ahead-of-silver map's stuck-NULL alarm (ticket 05) watches."""
-    counts: dict[str, int] = {}
-    for spec in _TABLE_SPECS:
-        (count,) = conn.execute(
-            f"SELECT COUNT(*) FROM {_quote_ident(spec.table)} WHERE mdm_entity_id IS NULL"
-        ).fetchone()
-        counts[spec.table] = int(count)
+            resolved_rows.append({**row, "mdm_entity_id": entity_id})
+        if resolved_rows:
+            landing_export.record(spec.table, resolved_rows)
+        counts[spec.table]["resolved"] = len(resolved_rows)
     return counts
 
 
 def run_mdm_entity_backfill_sweep(context: Any, run_id: str) -> dict[str, Any]:
-    """Sweep every shard (or the monolith, when unsharded), backfilling
-    mdm_entity_id from MDM's already-resolved MdmSourceRef rows.
+    """Sweep the Snowflake silver tables, backfilling mdm_entity_id from
+    MDM's already-resolved MdmSourceRef rows.
 
-    Caller contract: see this module's docstring -- the caller MUST hold
-    the sec_fetch_active lease (or equivalent) for the full duration of
-    this call, since a concurrent window write to the same shard is not
-    otherwise safely detected.
+    Snowflake-only (ticket 06): no DuckDB shard is read or written, no
+    sec_fetch_active lease is required. Needs MDM_DATABASE_URL (the Postgres
+    lookup) and context.silver_landing_export_root (where the full-row
+    re-emission is written -- picked up by Snowpipe asynchronously, same
+    lag characteristics as every other silver write in this pipeline).
     """
     from edgar_warehouse.application.warehouse_orchestrator import (
         WarehouseRuntimeError,
         _emit_pipeline_event,
-        _hydrate_all_shards,
-        _publish_shard_if_remote,
-        _read_shard_manifest,
+        _resolve_export_business_date,
     )
-    from edgar_warehouse.infrastructure.object_storage import PromotionConflictError
     from edgar_warehouse.mdm.database import get_engine
-    from edgar_warehouse.silver_support.access import get_connection
-    from edgar_warehouse.silver_support.session import open_silver_database, open_silver_shard
+    from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
+    from edgar_warehouse.serving.silver_landing_writer import write_landing_export
 
     mdm_url = os.environ.get("MDM_DATABASE_URL", "").strip()
     if not mdm_url:
+        raise WarehouseRuntimeError("MDM_DATABASE_URL is required for backfill-mdm-entity-ids")
+    if context.silver_landing_export_root is None:
         raise WarehouseRuntimeError(
-            "MDM_DATABASE_URL is required for backfill-mdm-entity-ids"
+            "SILVER_LANDING_EXPORT_ROOT is required for backfill-mdm-entity-ids -- "
+            "Snowflake is this command's only backfill target (ticket 06)."
         )
     from sqlalchemy.orm import Session
 
     engine = get_engine(mdm_url)
-
     started_at = datetime.now(UTC)
-    per_shard: list[dict[str, Any]] = []
-    totals: dict[str, int] = {table: 0 for table in MDM_ENTITY_ID_TABLES}
-    remaining_totals: dict[str, int] = {table: 0 for table in MDM_ENTITY_ID_TABLES}
-    conflicts: list[int] = []
 
-    if not context.storage_root.is_remote:
-        # Local/dev: single monolith, no shard manifest.
+    connection = _silver_connection_settings().connect()
+    try:
+        landing_export = LandingExportBuffer()
         with Session(engine) as session:
-            db = open_silver_database(context.silver_root)
-            try:
-                counts = backfill_shard_mdm_entity_ids(db, session)
-                remaining = _remaining_null_counts(get_connection(db))
-            finally:
-                db.close()
-        for table, count in counts.items():
-            totals[table] = totals.get(table, 0) + count
-        for table, count in remaining.items():
-            remaining_totals[table] = remaining_totals.get(table, 0) + count
-        per_shard.append({"shard_index": None, "updated": counts})
-        remaining_null_count = sum(remaining_totals.values())
-        _emit_pipeline_event(
-            "mdm_entity_backfill_completed",
-            run_id=run_id,
-            totals=totals,
-            remaining_null_count=remaining_null_count,
-            remaining_by_table=remaining_totals,
-            conflicts=len(conflicts),
-        )
-        return {
-            "command": "backfill-mdm-entity-ids",
-            "run_id": run_id,
-            "started_at": started_at.isoformat().replace("+00:00", "Z"),
-            "shards": per_shard,
-            "totals": totals,
-            "remaining_null_count": remaining_null_count,
-            "remaining_by_table": remaining_totals,
-            "conflicts": conflicts,
-        }
+            counts = backfill_pending_rows(connection, session, landing_export)
+    finally:
+        connection.close()
 
-    manifest = _read_shard_manifest(context)
-    shard_paths = _hydrate_all_shards(context)
+    now = datetime.now(UTC)
+    business_date = _resolve_export_business_date(
+        command_name="backfill-mdm-entity-ids", scope={}, now=now
+    )
+    landing_export_counts = write_landing_export(
+        landing_export,
+        context.silver_landing_export_root,
+        run_id=run_id,
+        business_date=business_date,
+        command_name="backfill-mdm-entity-ids",
+        environment_name=context.environment_name,
+        now=now,
+    )
 
-    with Session(engine) as session:
-        for shard_index, local_path in enumerate(shard_paths):
-            if local_path is None:
-                continue
-            db = open_silver_shard(local_path)
-            try:
-                counts = backfill_shard_mdm_entity_ids(db, session)
-                remaining = _remaining_null_counts(get_connection(db))
-            finally:
-                db.close()
-            any_updated = any(counts.values())
-            publish_result = None
-            if any_updated:
-                try:
-                    publish_result = _publish_shard_if_remote(context, shard_index)
-                except PromotionConflictError:
-                    # A concurrent writer touched this shard between our
-                    # hydrate and this publish. Our local UPDATE is lost for
-                    # this shard this run -- the next sweep re-selects the
-                    # same still-NULL rows and retries. Do not abort the
-                    # whole sweep over one shard's conflict.
-                    conflicts.append(shard_index)
-                    publish_result = None
-            for table, count in counts.items():
-                totals[table] = totals.get(table, 0) + count
-            for table, count in remaining.items():
-                remaining_totals[table] = remaining_totals.get(table, 0) + count
-            per_shard.append(
-                {
-                    "shard_index": shard_index,
-                    "updated": counts,
-                    "published": publish_result is not None,
-                }
-            )
+    remaining_by_table = {
+        table: table_counts["pending"] - table_counts["resolved"] for table, table_counts in counts.items()
+    }
+    remaining_null_count = sum(remaining_by_table.values())
+    totals = {table: table_counts["resolved"] for table, table_counts in counts.items()}
 
-    remaining_null_count = sum(remaining_totals.values())
     _emit_pipeline_event(
         "mdm_entity_backfill_completed",
         run_id=run_id,
         totals=totals,
         remaining_null_count=remaining_null_count,
-        remaining_by_table=remaining_totals,
-        conflicts=len(conflicts),
+        remaining_by_table=remaining_by_table,
     )
+
     return {
         "command": "backfill-mdm-entity-ids",
         "run_id": run_id,
         "started_at": started_at.isoformat().replace("+00:00", "Z"),
-        "shard_count": manifest.get("shard_count"),
-        "shards": per_shard,
+        "pending": {table: table_counts["pending"] for table, table_counts in counts.items()},
         "totals": totals,
         "remaining_null_count": remaining_null_count,
-        "remaining_by_table": remaining_totals,
-        "conflicts": conflicts,
+        "remaining_by_table": remaining_by_table,
+        "landing_export": landing_export_counts,
     }

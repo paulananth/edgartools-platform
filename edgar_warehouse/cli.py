@@ -967,10 +967,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     backfill_mdm_entity_ids = subparsers.add_parser(
         "backfill-mdm-entity-ids",
-        help="Sweep every silver shard (or the monolith) and backfill mdm_entity_id on rows "
+        help="Sweep the EDGARTOOLS_SILVER Snowflake tables and backfill mdm_entity_id on rows "
              "left NULL at parse time, from MDM's already-resolved MdmSourceRef rows. Read-only "
-             "against MDM -- does not trigger entity resolution. Caller MUST hold the "
-             "sec_fetch_active lease for the duration (see edgar_warehouse/mdm_entity_backfill.py).",
+             "against MDM -- does not trigger entity resolution. Snowflake-only (no DuckDB "
+             "read or write, no sec_fetch_active lease needed -- see "
+             "edgar_warehouse/mdm_entity_backfill.py).",
     )
     _add_run_id_arg(backfill_mdm_entity_ids)
     backfill_mdm_entity_ids.set_defaults(handler=_handle_backfill_mdm_entity_ids)

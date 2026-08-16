@@ -3114,7 +3114,7 @@ if workflow_name == "daily_incremental":
     )
 mdm_run = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')",
-    next_state="AcquireEntityBackfillLease")
+    next_state="BackfillMdmEntityIds")
 mdm_backfill = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')",
     next_state="MdmExport")
@@ -3125,110 +3125,33 @@ mdm_export = ecs_state(mdm_medium_arn,
     "States.Array('mdm', 'export')",
     next_state="MdmSync")
 
-# mdm-ahead-of-silver map, Phase B wiring: backfill-mdm-entity-ids sweeps every
-# silver shard for mdm_entity_id IS NULL rows and fills them from MDM's already-
-# resolved MdmSourceRef rows (edgar_warehouse/mdm_entity_backfill.py). Placed
-# right after MdmRun so the freshest resolution pass is visible, and before
-# MdmBackfill (relationships)/GoldRefresh so a newly backfilled entity_id can
-# still reach this same execution's gold build.
+# mdm-ahead-of-silver map, Phase B wiring (ticket 06): backfill-mdm-entity-ids
+# sweeps the Snowflake EDGARTOOLS_SILVER tables for mdm_entity_id IS NULL rows
+# and fills them from MDM's already-resolved MdmSourceRef rows
+# (edgar_warehouse/mdm_entity_backfill.py). Placed right after MdmRun so the
+# freshest resolution pass is visible, and before MdmBackfill (relationships)/
+# GoldRefresh so a newly backfilled entity_id can still reach this same
+# execution's gold build.
 #
-# mdm_entity_backfill.py's own module docstring requires the caller to hold
-# sec_fetch_active (or equivalent mutual exclusion against the other 4
-# SEC-fetching commands) for the sweep's ENTIRE duration -- _hydrate_all_shards
-# downloads every shard, so a concurrent window write landing on the same
-# shard between this sweep's hydrate and its publish would be silently
-# clobbered, not caught as a conflict (the ETag guard only protects the final
-# instant before promote). The main sec_fetch_active span above already
-# releases right before MdmRun (MDM/gold never call SEC) -- rather than
-# extending that span's hold all the way through the MDM/gold chain (which
-# would block the other 4 SEC-fetching commands for materially longer), this
-# is a SECOND, independent acquire/release cycle scoped tightly around just
-# this one state. Distinct state names (EntityBackfillLease*, not
-# SecFetchLease*) since build_sec_fetch_lease_states() already claimed the
-# Acquire/Read/Check/Release names once in this same definition.
-acquire_entity_backfill_lease = ecs_state(wh_medium_arn,
-    "States.Array('acquire-sec-fetch-lease', '--run-id', $$.Execution.Name)",
-    next_state="ReadEntityBackfillLeaseResult", retry_secs=30)
-acquire_entity_backfill_lease["ResultPath"] = None
-
-read_entity_backfill_lease_result = {
-    "Type": "Task",
-    "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
-    "Parameters": {
-        "Bucket": bronze_bucket_name,
-        "Key.$": "States.Format('warehouse/bronze/reference/sec_fetch_lease/runs/{}/lease_result.json', $$.Execution.Name)",
-    },
-    "ResultSelector": {"parsed.$": "States.StringToJson($.Body)"},
-    "ResultPath": "$.entity_backfill_lease_check",
-    "Next": "EntityBackfillLeaseAcquiredCheck",
-    # Deliberate divergence from ReadSecFetchLeaseResult (which has no Catch,
-    # by design -- it guards pipeline START, where "lease busy" and
-    # "something's actually broken" must stay distinguishable and fail
-    # loudly). Here, a missing/corrupt lease_result.json must not fail an
-    # otherwise-successful MDM/gold run over an optional sweep -- fall
-    # through to MdmBackfill and let the next scheduled pass retry.
-    "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmBackfill"}],
-}
-
-entity_backfill_lease_acquired_check = {
-    "Type": "Choice",
-    "Comment": "lease_result.json is the source of truth for whether this run holds sec_fetch_active for the entity-backfill sweep.",
-    "Choices": [
-        {
-            "Variable": "$.entity_backfill_lease_check.parsed.lease_acquired",
-            "BooleanEquals": True,
-            "Next": "BackfillMdmEntityIds",
-        }
-    ],
-    # Lease busy (another SEC-fetching command holds it): skip the sweep for
-    # THIS pass only, not the whole MDM/gold chain -- no release call on this
-    # path since we never acquired. daily_incremental's next scheduled run
-    # (or the next bootstrap/load_history pass) gets the next chance; the
-    # sweep is its own retry mechanism (mdm-ahead-of-silver ticket 05).
-    "Default": "MdmBackfill",
-}
-
-# wh_large_arn, not wh_medium_arn: run_mdm_entity_backfill_sweep's
-# _hydrate_all_shards downloads every silver shard -- the exact
-# full-canonical-download shape this file's LEASE_ONLY_COMMANDS comment
-# (warehouse_orchestrator.py:169-182) documents as having OOM'd a 4096MB task
-# live (task #35, 2026-08-09). Large is the floor, not a margin choice.
-backfill_mdm_entity_ids = ecs_state(wh_large_arn,
+# No sec_fetch_active lease here (unlike this map's own first cut at this
+# wiring, superseded by ticket 06): the sweep is Snowflake-only now -- it
+# reads pending rows from Snowflake and re-emits full rows via the same
+# LandingExportBuffer/Snowpipe append-only path every other silver write
+# uses, touching no DuckDB shard file. The concurrent-writer-clobber risk
+# that lease existed to guard against (_hydrate_all_shards/
+# _publish_shard_if_remote against a shared shard file) no longer applies.
+# wh_medium_arn, not wh_large_arn, for the same reason -- no full-shard
+# download, just SQL queries.
+backfill_mdm_entity_ids = ecs_state(wh_medium_arn,
     "States.Array('backfill-mdm-entity-ids', '--run-id', $$.Execution.Name)",
-    next_state="ReleaseEntityBackfillLease", retry_secs=60)
+    next_state="MdmBackfill", retry_secs=60)
 backfill_mdm_entity_ids["Catch"] = [{
     "ErrorEquals": ["States.ALL"],
     "ResultPath": None,
     # A sweep failure must not fail this otherwise-successful MDM/gold run --
     # the sweep IS its own retry (mdm-ahead-of-silver ticket 05: the next
-    # pass re-selects the same still-NULL rows). Still release the lease
-    # before continuing, so a failed sweep doesn't hold sec_fetch_active for
-    # the full 16h stale-reclaim window and block the other 4 SEC-fetching
-    # commands over a task that already gave up.
-    "Next": "ReleaseEntityBackfillLeaseAfterFailure",
-}]
-
-release_entity_backfill_lease = ecs_state(wh_medium_arn,
-    "States.Array('release-sec-fetch-lease', '--run-id', $$.Execution.Name)",
-    next_state="MdmBackfill", retry_secs=30)
-release_entity_backfill_lease["ResultPath"] = None
-release_entity_backfill_lease["Catch"] = [{
-    "ErrorEquals": ["States.ALL"], "ResultPath": None,
-    "Next": "ReleaseEntityBackfillLeaseFailedNonFatal",
-}]
-
-release_entity_backfill_lease_failed_non_fatal = {
-    "Type": "Pass",
-    "Comment": "Release is best-effort -- a failure here must not mark an otherwise-successful run FAILED. The 16h stale-lease reclaim in acquire_pipeline_run_lease is the actual safety net for a wedged lease.",
+    # pass re-selects the same still-NULL rows).
     "Next": "MdmBackfill",
-}
-
-release_entity_backfill_lease_after_failure = ecs_state(wh_medium_arn,
-    "States.Array('release-sec-fetch-lease', '--run-id', $$.Execution.Name)",
-    next_state="MdmBackfill", retry_secs=30)
-release_entity_backfill_lease_after_failure["ResultPath"] = None
-release_entity_backfill_lease_after_failure["Catch"] = [{
-    "ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmBackfill",
 }]
 mdm_sync = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')",
@@ -3405,13 +3328,7 @@ if workflow_name != "daily_incremental":
             "SeedUniverse":     seed_universe,
             "RunWarehouseTask": run_wh,
             "MdmRun":           mdm_run,
-            "AcquireEntityBackfillLease":    acquire_entity_backfill_lease,
-            "ReadEntityBackfillLeaseResult": read_entity_backfill_lease_result,
-            "EntityBackfillLeaseAcquiredCheck": entity_backfill_lease_acquired_check,
-            "BackfillMdmEntityIds":          backfill_mdm_entity_ids,
-            "ReleaseEntityBackfillLease":    release_entity_backfill_lease,
-            "ReleaseEntityBackfillLeaseFailedNonFatal": release_entity_backfill_lease_failed_non_fatal,
-            "ReleaseEntityBackfillLeaseAfterFailure":   release_entity_backfill_lease_after_failure,
+            "BackfillMdmEntityIds": backfill_mdm_entity_ids,
             "MdmBackfill":      mdm_backfill,
             "MdmExport":        mdm_export,
             "MdmSync":          mdm_sync,
@@ -3898,13 +3815,7 @@ else:
             "FetchFirmRosterForced":   fetch_firm_roster_forced,
             "IngestFirmRosterSources": ingest_firm_roster_sources,
             "MdmRun":           mdm_run,
-            "AcquireEntityBackfillLease":    acquire_entity_backfill_lease,
-            "ReadEntityBackfillLeaseResult": read_entity_backfill_lease_result,
-            "EntityBackfillLeaseAcquiredCheck": entity_backfill_lease_acquired_check,
-            "BackfillMdmEntityIds":          backfill_mdm_entity_ids,
-            "ReleaseEntityBackfillLease":    release_entity_backfill_lease,
-            "ReleaseEntityBackfillLeaseFailedNonFatal": release_entity_backfill_lease_failed_non_fatal,
-            "ReleaseEntityBackfillLeaseAfterFailure":   release_entity_backfill_lease_after_failure,
+            "BackfillMdmEntityIds": backfill_mdm_entity_ids,
             "MdmBackfill":      mdm_backfill,
             "MdmExport":        mdm_export,
             "MdmSync":          mdm_sync,
