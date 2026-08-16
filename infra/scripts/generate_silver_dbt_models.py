@@ -117,21 +117,22 @@ _CIK_ENRICHED_TABLES = {
 # event for the same key doesn't happen to carry them -- expressed instead
 # via LAST_VALUE(col IGNORE NULLS) OVER (... ORDER BY parse_sequence),
 # evaluated at the same QUALIFY-selected latest row.
+#
+# NOTE (mdm-ahead-of-silver map, Ticket 06 follow-up): this mechanism does
+# NOT actually protect a table's *other* columns from a thin backfill row,
+# contrary to the claim in silver_landing_export.py's
+# track_landing_accounting_flag_scores docstring -- QUALIFY row_number()=1
+# still picks exactly one winning row for every column not itself wrapped in
+# LAST_VALUE(...IGNORE NULLS), so a thin row that becomes the newest
+# parse_sequence for its key nulls out every column it doesn't carry. Verified
+# empirically (DuckDB, same QUALIFY/LAST_VALUE semantics as Snowflake) -- see
+# .scratch/silver-landing-coalesce-bug/issues/01-thin-backfill-nulls-other-columns.md
+# for the reproduction and impact. sec_accounting_flag below is a live,
+# pre-existing instance of this bug, not a template to extend -- the
+# mdm_entity_id backfill sweep uses full-row re-emission instead specifically
+# because of this finding, not this dict.
 _COALESCE_PRESERVING_COLUMNS = {
     "sec_accounting_flag": {"beneish_m_score", "altman_z_score", "piotroski_f_score"},
-    # mdm-ahead-of-silver map, Phase B, Ticket 06: the backfill sweep
-    # (edgar_warehouse/mdm_entity_backfill.py) writes a thin landing row --
-    # business key + mdm_entity_id only, every other column absent from the
-    # Parquet -- exactly the same shape as update_accounting_flag_scores'
-    # partial row above. Without this, mdm_entity_id would collapse via the
-    # default "value from the single latest parse_sequence row" rule and the
-    # sweep's thin append would null out every other column for that key.
-    "sec_company": {"mdm_entity_id"},
-    "sec_ownership_reporting_owner": {"mdm_entity_id"},
-    "sec_ownership_non_derivative_txn": {"mdm_entity_id"},
-    "sec_ownership_derivative_txn": {"mdm_entity_id"},
-    "sec_adv_filing": {"mdm_entity_id"},
-    "sec_adv_private_fund": {"mdm_entity_id"},
 }
 
 

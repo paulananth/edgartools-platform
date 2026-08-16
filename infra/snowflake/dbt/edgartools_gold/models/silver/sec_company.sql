@@ -4,8 +4,6 @@
 
 {{ silver_model_config('SEC_COMPANY') }}
 
--- mdm_entity_id: last non-null wins, not last row wins --
--- see generate_silver_dbt_models.py's _COALESCE_PRESERVING_COLUMNS for the citation.
 select
     cik,
     entity_name,
@@ -21,7 +19,7 @@ select
     first_sync_run_id,
     last_sync_run_id,
     last_synced_at,
-    last_value(mdm_entity_id ignore nulls) over (partition by cik order by parse_sequence) as mdm_entity_id
+    mdm_entity_id
 from {{ source('edgartools_silver_landing', 'SEC_COMPANY') }}
 qualify row_number() over (
     partition by cik

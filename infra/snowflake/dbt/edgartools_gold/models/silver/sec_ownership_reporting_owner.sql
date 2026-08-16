@@ -10,8 +10,6 @@
 -- resolve issuer CIK (sec_adv_filing.cik-is-NULL-for-ADV-data is the same
 -- failure shape this is deliberately avoiding a repeat of).
 with collapsed as (
--- mdm_entity_id: last non-null wins, not last row wins --
--- see generate_silver_dbt_models.py's _COALESCE_PRESERVING_COLUMNS for the citation.
 select
     accession_number,
     owner_index,
@@ -24,7 +22,7 @@ select
     officer_title,
     parser_version,
     last_sync_run_id,
-    last_value(mdm_entity_id ignore nulls) over (partition by accession_number, owner_index order by parse_sequence) as mdm_entity_id
+    mdm_entity_id
 from {{ source('edgartools_silver_landing', 'SEC_OWNERSHIP_REPORTING_OWNER') }}
 qualify row_number() over (
     partition by accession_number, owner_index
