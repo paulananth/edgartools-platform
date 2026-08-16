@@ -216,6 +216,20 @@ def backfill_shard_mdm_entity_ids(db: Any, session: Any) -> dict[str, int]:
     return updated_counts
 
 
+def _remaining_null_counts(conn: Any) -> dict[str, int]:
+    """COUNT(*) WHERE mdm_entity_id IS NULL per target table, taken right
+    after a backfill pass on the same connection. Feeds the
+    mdm_entity_backfill_completed event's remaining_null_count -- the signal
+    the mdm-ahead-of-silver map's stuck-NULL alarm (ticket 05) watches."""
+    counts: dict[str, int] = {}
+    for spec in _TABLE_SPECS:
+        (count,) = conn.execute(
+            f"SELECT COUNT(*) FROM {_quote_ident(spec.table)} WHERE mdm_entity_id IS NULL"
+        ).fetchone()
+        counts[spec.table] = int(count)
+    return counts
+
+
 def run_mdm_entity_backfill_sweep(context: Any, run_id: str) -> dict[str, Any]:
     """Sweep every shard (or the monolith, when unsharded), backfilling
     mdm_entity_id from MDM's already-resolved MdmSourceRef rows.
@@ -227,12 +241,14 @@ def run_mdm_entity_backfill_sweep(context: Any, run_id: str) -> dict[str, Any]:
     """
     from edgar_warehouse.application.warehouse_orchestrator import (
         WarehouseRuntimeError,
+        _emit_pipeline_event,
         _hydrate_all_shards,
         _publish_shard_if_remote,
         _read_shard_manifest,
     )
     from edgar_warehouse.infrastructure.object_storage import PromotionConflictError
     from edgar_warehouse.mdm.database import get_engine
+    from edgar_warehouse.silver_support.access import get_connection
     from edgar_warehouse.silver_support.session import open_silver_database, open_silver_shard
 
     mdm_url = os.environ.get("MDM_DATABASE_URL", "").strip()
@@ -247,6 +263,7 @@ def run_mdm_entity_backfill_sweep(context: Any, run_id: str) -> dict[str, Any]:
     started_at = datetime.now(UTC)
     per_shard: list[dict[str, Any]] = []
     totals: dict[str, int] = {table: 0 for table in MDM_ENTITY_ID_TABLES}
+    remaining_totals: dict[str, int] = {table: 0 for table in MDM_ENTITY_ID_TABLES}
     conflicts: list[int] = []
 
     if not context.storage_root.is_remote:
@@ -255,17 +272,31 @@ def run_mdm_entity_backfill_sweep(context: Any, run_id: str) -> dict[str, Any]:
             db = open_silver_database(context.silver_root)
             try:
                 counts = backfill_shard_mdm_entity_ids(db, session)
+                remaining = _remaining_null_counts(get_connection(db))
             finally:
                 db.close()
         for table, count in counts.items():
             totals[table] = totals.get(table, 0) + count
+        for table, count in remaining.items():
+            remaining_totals[table] = remaining_totals.get(table, 0) + count
         per_shard.append({"shard_index": None, "updated": counts})
+        remaining_null_count = sum(remaining_totals.values())
+        _emit_pipeline_event(
+            "mdm_entity_backfill_completed",
+            run_id=run_id,
+            totals=totals,
+            remaining_null_count=remaining_null_count,
+            remaining_by_table=remaining_totals,
+            conflicts=len(conflicts),
+        )
         return {
             "command": "backfill-mdm-entity-ids",
             "run_id": run_id,
             "started_at": started_at.isoformat().replace("+00:00", "Z"),
             "shards": per_shard,
             "totals": totals,
+            "remaining_null_count": remaining_null_count,
+            "remaining_by_table": remaining_totals,
             "conflicts": conflicts,
         }
 
@@ -279,6 +310,7 @@ def run_mdm_entity_backfill_sweep(context: Any, run_id: str) -> dict[str, Any]:
             db = open_silver_shard(local_path)
             try:
                 counts = backfill_shard_mdm_entity_ids(db, session)
+                remaining = _remaining_null_counts(get_connection(db))
             finally:
                 db.close()
             any_updated = any(counts.values())
@@ -296,6 +328,8 @@ def run_mdm_entity_backfill_sweep(context: Any, run_id: str) -> dict[str, Any]:
                     publish_result = None
             for table, count in counts.items():
                 totals[table] = totals.get(table, 0) + count
+            for table, count in remaining.items():
+                remaining_totals[table] = remaining_totals.get(table, 0) + count
             per_shard.append(
                 {
                     "shard_index": shard_index,
@@ -304,6 +338,15 @@ def run_mdm_entity_backfill_sweep(context: Any, run_id: str) -> dict[str, Any]:
                 }
             )
 
+    remaining_null_count = sum(remaining_totals.values())
+    _emit_pipeline_event(
+        "mdm_entity_backfill_completed",
+        run_id=run_id,
+        totals=totals,
+        remaining_null_count=remaining_null_count,
+        remaining_by_table=remaining_totals,
+        conflicts=len(conflicts),
+    )
     return {
         "command": "backfill-mdm-entity-ids",
         "run_id": run_id,
@@ -311,5 +354,7 @@ def run_mdm_entity_backfill_sweep(context: Any, run_id: str) -> dict[str, Any]:
         "shard_count": manifest.get("shard_count"),
         "shards": per_shard,
         "totals": totals,
+        "remaining_null_count": remaining_null_count,
+        "remaining_by_table": remaining_totals,
         "conflicts": conflicts,
     }

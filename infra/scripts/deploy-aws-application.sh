@@ -119,6 +119,17 @@ Options:
                                     never deploys workloads or enables schedules.
   --operator-alert-topic-arn <arn>  Confirmed operator SNS topic used by both alarms.
                                     Required when enabling alarms.
+  --configure-mdm-entity-backfill-alarm <enable|disable>
+                                    Explicitly create/update or remove the mdm-ahead-of-silver
+                                    stuck-NULL alarm (mdm-ahead-of-silver map, ticket 05):
+                                    fires when BackfillMdmEntityIds's own
+                                    mdm_entity_backfill_completed log event reports a nonzero
+                                    remaining_null_count for 2 consecutive daily periods
+                                    (~48h at daily_incremental's cadence), OR when the metric
+                                    never showed up at all (sweep didn't run --
+                                    treat-missing-data=breaching). Same SNS topic as
+                                    --configure-daily-incremental-alarms. This standalone
+                                    action never deploys workloads or enables schedules.
   -h, --help                        Show this help.
 USAGE
 }
@@ -211,6 +222,7 @@ CONFIGURE_DAILY_INCREMENTAL_SCHEDULE=""
 DAILY_INCREMENTAL_SCHEDULER_ROLE_ARN=""
 CONFIGURE_DAILY_INCREMENTAL_ALARMS=""
 OPERATOR_ALERT_TOPIC_ARN=""
+CONFIGURE_MDM_ENTITY_BACKFILL_ALARM=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -269,6 +281,7 @@ while [[ $# -gt 0 ]]; do
     --daily-incremental-scheduler-role-arn) DAILY_INCREMENTAL_SCHEDULER_ROLE_ARN="${2:?}"; shift 2 ;;
     --configure-daily-incremental-alarms) CONFIGURE_DAILY_INCREMENTAL_ALARMS="${2:?}"; shift 2 ;;
     --operator-alert-topic-arn) OPERATOR_ALERT_TOPIC_ARN="${2:?}"; shift 2 ;;
+    --configure-mdm-entity-backfill-alarm) CONFIGURE_MDM_ENTITY_BACKFILL_ALARM="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -286,6 +299,15 @@ if ! is_empty "$CONFIGURE_DAILY_INCREMENTAL_ALARMS"; then
   esac
   if [[ "$CONFIGURE_DAILY_INCREMENTAL_ALARMS" == "enable" ]] && is_empty "$OPERATOR_ALERT_TOPIC_ARN"; then
     fail "--operator-alert-topic-arn is required with --configure-daily-incremental-alarms enable"
+  fi
+fi
+if ! is_empty "$CONFIGURE_MDM_ENTITY_BACKFILL_ALARM"; then
+  case "$CONFIGURE_MDM_ENTITY_BACKFILL_ALARM" in
+    enable|disable) ;;
+    *) fail "--configure-mdm-entity-backfill-alarm must be enable or disable" ;;
+  esac
+  if [[ "$CONFIGURE_MDM_ENTITY_BACKFILL_ALARM" == "enable" ]] && is_empty "$OPERATOR_ALERT_TOPIC_ARN"; then
+    fail "--operator-alert-topic-arn is required with --configure-mdm-entity-backfill-alarm enable"
   fi
 fi
 if is_empty "$RUNNER_ROLE_NAME_PREFIX"; then
@@ -608,6 +630,82 @@ configure_daily_incremental_alarms() {
 
 if ! is_empty "$CONFIGURE_DAILY_INCREMENTAL_ALARMS"; then
   configure_daily_incremental_alarms "$CONFIGURE_DAILY_INCREMENTAL_ALARMS" "$OPERATOR_ALERT_TOPIC_ARN"
+  exit 0
+fi
+
+# mdm-ahead-of-silver map, ticket 05: unlike ticket 81's alarms (built-in
+# AWS/States ExecutionsFailed/ExecutionsTimedOut, no app-level emission
+# needed), there is no built-in AWS metric for "silver rows stuck with
+# mdm_entity_id IS NULL" -- it has to come from a custom metric derived from
+# the sweep's own output. BackfillMdmEntityIds (edgar_warehouse/
+# mdm_entity_backfill.py's run_mdm_entity_backfill_sweep) emits a structured
+# mdm_entity_backfill_completed event via _emit_pipeline_event carrying
+# remaining_null_count (rows still NULL after this pass, summed across every
+# shard/table) to stderr, which ECS routes to the warehouse log group
+# (LOG_GROUP_NAME) same as every other command's events.
+#
+# A CloudWatch Logs metric filter turns that JSON field into a custom metric
+# (namespace EdgarTools/MDM); the alarm below reads it. period=86400
+# (24h, matching daily_incremental's cadence -- the only regular trigger of
+# this sweep per the mdm-ahead-of-silver map's Phase B wiring) with
+# evaluation-periods=2 means "stuck across 2 consecutive daily passes"
+# (~48h), the upper end of ticket 05's "24-48h" threshold -- a single day
+# with leftover freshly-parsed-but-not-yet-MDM-resolved rows is expected and
+# must not page; only a value that survives a SECOND consecutive pass
+# without shrinking to zero is a genuine stuck condition.
+#
+# treat-missing-data=breaching is the load-bearing flag, not a stylistic
+# choice: a log-filter metric only produces a datapoint when the sweep
+# actually runs and logs its completion event. If the sweep never runs at
+# all (EventBridge/lease/task-launch failure upstream of the sweep itself),
+# the metric has NO datapoints -- treat-missing-data=notBreaching (ticket
+# 81's choice, correct there) would silently read that as healthy. Missing
+# data here must alarm, because "the sweep never ran" is exactly the failure
+# mode ticket 05 asked to catch, not just "rows are stuck."
+configure_mdm_entity_backfill_alarm() {
+  local action="$1" topic_arn="$2"
+  # LOG_GROUP_NAME's full manifest-based resolution runs later in this
+  # script (Parameter resolution section) -- this dispatch, like ticket 81's
+  # above, exits before that section, so it defaults locally the same way
+  # that later resolution's own fallback does, rather than depending on it.
+  local log_group_name
+  log_group_name="$(first_nonempty "$LOG_GROUP_NAME" "/aws/ecs/${NAME_PREFIX}-warehouse")"
+  local filter_name="${NAME_PREFIX}-mdm-entity-backfill-remaining-null"
+  local alarm_name="${NAME_PREFIX}-mdm-entity-backfill-stuck-null"
+  local metric_namespace="EdgarTools/MDM"
+  local metric_name="MdmEntityBackfillRemainingNull"
+
+  if [[ "$action" == "disable" ]]; then
+    aws_cli cloudwatch delete-alarms --alarm-names "$alarm_name"
+    aws_cli logs delete-metric-filter --log-group-name "$log_group_name" --filter-name "$filter_name" 2>/dev/null || true
+    log "Deleted mdm-entity-backfill stuck-null alarm and metric filter"
+    return 0
+  fi
+
+  require_confirmed_operator_alert_topic "$topic_arn"
+
+  aws_cli logs put-metric-filter \
+    --log-group-name "$log_group_name" \
+    --filter-name "$filter_name" \
+    --filter-pattern '{ $.event = "mdm_entity_backfill_completed" }' \
+    --metric-transformations \
+      "metricName=${metric_name},metricNamespace=${metric_namespace},metricValue=\$.remaining_null_count,defaultValue=0"
+  log "Configured mdm-entity-backfill CloudWatch Logs metric filter"
+
+  aws_cli cloudwatch put-metric-alarm \
+    --alarm-name "$alarm_name" \
+    --alarm-description "mdm_entity_id rows have stayed NULL across 2 consecutive entity-backfill sweep passes (~48h at daily_incremental's cadence), or the sweep hasn't run at all -- mdm-ahead-of-silver ticket 05" \
+    --namespace "$metric_namespace" \
+    --metric-name "$metric_name" \
+    --statistic Sum --period 86400 --evaluation-periods 2 \
+    --threshold 0 --comparison-operator GreaterThanThreshold \
+    --treat-missing-data breaching \
+    --alarm-actions "$topic_arn"
+  log "Configured mdm-entity-backfill stuck-null alarm"
+}
+
+if ! is_empty "$CONFIGURE_MDM_ENTITY_BACKFILL_ALARM"; then
+  configure_mdm_entity_backfill_alarm "$CONFIGURE_MDM_ENTITY_BACKFILL_ALARM" "$OPERATOR_ALERT_TOPIC_ARN"
   exit 0
 fi
 
@@ -3016,7 +3114,7 @@ if workflow_name == "daily_incremental":
     )
 mdm_run = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')",
-    next_state="MdmBackfill")
+    next_state="AcquireEntityBackfillLease")
 mdm_backfill = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')",
     next_state="MdmExport")
@@ -3026,6 +3124,112 @@ mdm_backfill = ecs_state(mdm_medium_arn,
 mdm_export = ecs_state(mdm_medium_arn,
     "States.Array('mdm', 'export')",
     next_state="MdmSync")
+
+# mdm-ahead-of-silver map, Phase B wiring: backfill-mdm-entity-ids sweeps every
+# silver shard for mdm_entity_id IS NULL rows and fills them from MDM's already-
+# resolved MdmSourceRef rows (edgar_warehouse/mdm_entity_backfill.py). Placed
+# right after MdmRun so the freshest resolution pass is visible, and before
+# MdmBackfill (relationships)/GoldRefresh so a newly backfilled entity_id can
+# still reach this same execution's gold build.
+#
+# mdm_entity_backfill.py's own module docstring requires the caller to hold
+# sec_fetch_active (or equivalent mutual exclusion against the other 4
+# SEC-fetching commands) for the sweep's ENTIRE duration -- _hydrate_all_shards
+# downloads every shard, so a concurrent window write landing on the same
+# shard between this sweep's hydrate and its publish would be silently
+# clobbered, not caught as a conflict (the ETag guard only protects the final
+# instant before promote). The main sec_fetch_active span above already
+# releases right before MdmRun (MDM/gold never call SEC) -- rather than
+# extending that span's hold all the way through the MDM/gold chain (which
+# would block the other 4 SEC-fetching commands for materially longer), this
+# is a SECOND, independent acquire/release cycle scoped tightly around just
+# this one state. Distinct state names (EntityBackfillLease*, not
+# SecFetchLease*) since build_sec_fetch_lease_states() already claimed the
+# Acquire/Read/Check/Release names once in this same definition.
+acquire_entity_backfill_lease = ecs_state(wh_medium_arn,
+    "States.Array('acquire-sec-fetch-lease', '--run-id', $$.Execution.Name)",
+    next_state="ReadEntityBackfillLeaseResult", retry_secs=30)
+acquire_entity_backfill_lease["ResultPath"] = None
+
+read_entity_backfill_lease_result = {
+    "Type": "Task",
+    "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+    "Parameters": {
+        "Bucket": bronze_bucket_name,
+        "Key.$": "States.Format('warehouse/bronze/reference/sec_fetch_lease/runs/{}/lease_result.json', $$.Execution.Name)",
+    },
+    "ResultSelector": {"parsed.$": "States.StringToJson($.Body)"},
+    "ResultPath": "$.entity_backfill_lease_check",
+    "Next": "EntityBackfillLeaseAcquiredCheck",
+    # Deliberate divergence from ReadSecFetchLeaseResult (which has no Catch,
+    # by design -- it guards pipeline START, where "lease busy" and
+    # "something's actually broken" must stay distinguishable and fail
+    # loudly). Here, a missing/corrupt lease_result.json must not fail an
+    # otherwise-successful MDM/gold run over an optional sweep -- fall
+    # through to MdmBackfill and let the next scheduled pass retry.
+    "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmBackfill"}],
+}
+
+entity_backfill_lease_acquired_check = {
+    "Type": "Choice",
+    "Comment": "lease_result.json is the source of truth for whether this run holds sec_fetch_active for the entity-backfill sweep.",
+    "Choices": [
+        {
+            "Variable": "$.entity_backfill_lease_check.parsed.lease_acquired",
+            "BooleanEquals": True,
+            "Next": "BackfillMdmEntityIds",
+        }
+    ],
+    # Lease busy (another SEC-fetching command holds it): skip the sweep for
+    # THIS pass only, not the whole MDM/gold chain -- no release call on this
+    # path since we never acquired. daily_incremental's next scheduled run
+    # (or the next bootstrap/load_history pass) gets the next chance; the
+    # sweep is its own retry mechanism (mdm-ahead-of-silver ticket 05).
+    "Default": "MdmBackfill",
+}
+
+# wh_large_arn, not wh_medium_arn: run_mdm_entity_backfill_sweep's
+# _hydrate_all_shards downloads every silver shard -- the exact
+# full-canonical-download shape this file's LEASE_ONLY_COMMANDS comment
+# (warehouse_orchestrator.py:169-182) documents as having OOM'd a 4096MB task
+# live (task #35, 2026-08-09). Large is the floor, not a margin choice.
+backfill_mdm_entity_ids = ecs_state(wh_large_arn,
+    "States.Array('backfill-mdm-entity-ids', '--run-id', $$.Execution.Name)",
+    next_state="ReleaseEntityBackfillLease", retry_secs=60)
+backfill_mdm_entity_ids["Catch"] = [{
+    "ErrorEquals": ["States.ALL"],
+    "ResultPath": None,
+    # A sweep failure must not fail this otherwise-successful MDM/gold run --
+    # the sweep IS its own retry (mdm-ahead-of-silver ticket 05: the next
+    # pass re-selects the same still-NULL rows). Still release the lease
+    # before continuing, so a failed sweep doesn't hold sec_fetch_active for
+    # the full 16h stale-reclaim window and block the other 4 SEC-fetching
+    # commands over a task that already gave up.
+    "Next": "ReleaseEntityBackfillLeaseAfterFailure",
+}]
+
+release_entity_backfill_lease = ecs_state(wh_medium_arn,
+    "States.Array('release-sec-fetch-lease', '--run-id', $$.Execution.Name)",
+    next_state="MdmBackfill", retry_secs=30)
+release_entity_backfill_lease["ResultPath"] = None
+release_entity_backfill_lease["Catch"] = [{
+    "ErrorEquals": ["States.ALL"], "ResultPath": None,
+    "Next": "ReleaseEntityBackfillLeaseFailedNonFatal",
+}]
+
+release_entity_backfill_lease_failed_non_fatal = {
+    "Type": "Pass",
+    "Comment": "Release is best-effort -- a failure here must not mark an otherwise-successful run FAILED. The 16h stale-lease reclaim in acquire_pipeline_run_lease is the actual safety net for a wedged lease.",
+    "Next": "MdmBackfill",
+}
+
+release_entity_backfill_lease_after_failure = ecs_state(wh_medium_arn,
+    "States.Array('release-sec-fetch-lease', '--run-id', $$.Execution.Name)",
+    next_state="MdmBackfill", retry_secs=30)
+release_entity_backfill_lease_after_failure["ResultPath"] = None
+release_entity_backfill_lease_after_failure["Catch"] = [{
+    "ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmBackfill",
+}]
 mdm_sync = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')",
     next_state="MdmVerify")
@@ -3201,6 +3405,13 @@ if workflow_name != "daily_incremental":
             "SeedUniverse":     seed_universe,
             "RunWarehouseTask": run_wh,
             "MdmRun":           mdm_run,
+            "AcquireEntityBackfillLease":    acquire_entity_backfill_lease,
+            "ReadEntityBackfillLeaseResult": read_entity_backfill_lease_result,
+            "EntityBackfillLeaseAcquiredCheck": entity_backfill_lease_acquired_check,
+            "BackfillMdmEntityIds":          backfill_mdm_entity_ids,
+            "ReleaseEntityBackfillLease":    release_entity_backfill_lease,
+            "ReleaseEntityBackfillLeaseFailedNonFatal": release_entity_backfill_lease_failed_non_fatal,
+            "ReleaseEntityBackfillLeaseAfterFailure":   release_entity_backfill_lease_after_failure,
             "MdmBackfill":      mdm_backfill,
             "MdmExport":        mdm_export,
             "MdmSync":          mdm_sync,
@@ -3687,6 +3898,13 @@ else:
             "FetchFirmRosterForced":   fetch_firm_roster_forced,
             "IngestFirmRosterSources": ingest_firm_roster_sources,
             "MdmRun":           mdm_run,
+            "AcquireEntityBackfillLease":    acquire_entity_backfill_lease,
+            "ReadEntityBackfillLeaseResult": read_entity_backfill_lease_result,
+            "EntityBackfillLeaseAcquiredCheck": entity_backfill_lease_acquired_check,
+            "BackfillMdmEntityIds":          backfill_mdm_entity_ids,
+            "ReleaseEntityBackfillLease":    release_entity_backfill_lease,
+            "ReleaseEntityBackfillLeaseFailedNonFatal": release_entity_backfill_lease_failed_non_fatal,
+            "ReleaseEntityBackfillLeaseAfterFailure":   release_entity_backfill_lease_after_failure,
             "MdmBackfill":      mdm_backfill,
             "MdmExport":        mdm_export,
             "MdmSync":          mdm_sync,

@@ -245,6 +245,68 @@ def test_sweep_local_monolith_path_end_to_end(tmp_path) -> None:
     assert row[0] == company_entity
 
 
+def test_sweep_local_monolith_reports_remaining_null_count_for_unresolved_rows(tmp_path) -> None:
+    """mdm-ahead-of-silver ticket 05's stuck-NULL alarm watches
+    remaining_null_count -- rows with no matching MdmSourceRef yet must stay
+    NULL and be counted, distinct from the ones this pass did resolve."""
+    mdm_db_path = tmp_path / "mdm.sqlite"
+    engine = create_engine(f"sqlite:///{mdm_db_path}")
+    Base.metadata.create_all(engine)
+    with Session(engine) as seed_session:
+        # Only CIK 320193 has a registered source ref -- CIK 999999 has none,
+        # simulating a company MDM hasn't resolved yet.
+        _register(seed_session, entity_type="company", source_system="edgar_cik", source_id="320193")
+        seed_session.commit()
+    engine.dispose()
+
+    silver_root = StorageLocation(str(tmp_path / "silver"))
+    silver_path = silver_root.join("silver", "sec", "silver.duckdb")
+    os.makedirs(os.path.dirname(silver_path), exist_ok=True)
+    db = SilverDatabase(silver_path)
+    db._conn.execute("INSERT INTO sec_company (cik, entity_name) VALUES (320193, 'Apple Inc')")
+    db._conn.execute("INSERT INTO sec_company (cik, entity_name) VALUES (999999, 'Unresolved Co')")
+    db.close()
+
+    context = _local_context(tmp_path)
+    with patch.dict(os.environ, {"MDM_DATABASE_URL": f"sqlite:///{mdm_db_path}"}):
+        result = run_mdm_entity_backfill_sweep(context, "test-run")
+
+    assert result["totals"]["sec_company"] == 1
+    assert result["remaining_null_count"] == 1
+    assert result["remaining_by_table"]["sec_company"] == 1
+    for table in MDM_ENTITY_ID_TABLES:
+        if table != "sec_company":
+            assert result["remaining_by_table"][table] == 0
+
+
+def test_sweep_emits_completed_event_with_remaining_null_count(tmp_path) -> None:
+    """The dead-man's-switch alarm (mdm-ahead-of-silver ticket 05) reads this
+    event's remaining_null_count via a CloudWatch Logs metric filter -- the
+    field name and event name are a real external contract, not incidental."""
+    mdm_db_path = tmp_path / "mdm.sqlite"
+    engine = create_engine(f"sqlite:///{mdm_db_path}")
+    Base.metadata.create_all(engine)
+    engine.dispose()
+
+    silver_root = StorageLocation(str(tmp_path / "silver"))
+    silver_path = silver_root.join("silver", "sec", "silver.duckdb")
+    os.makedirs(os.path.dirname(silver_path), exist_ok=True)
+    db = SilverDatabase(silver_path)
+    db._conn.execute("INSERT INTO sec_company (cik, entity_name) VALUES (1, 'Unresolved Co')")
+    db.close()
+
+    context = _local_context(tmp_path)
+    with patch.dict(os.environ, {"MDM_DATABASE_URL": f"sqlite:///{mdm_db_path}"}), \
+         patch("edgar_warehouse.application.warehouse_orchestrator._emit_pipeline_event") as mock_emit:
+        run_mdm_entity_backfill_sweep(context, "test-run")
+
+    mock_emit.assert_called_once()
+    call_args = mock_emit.call_args
+    assert call_args.args[0] == "mdm_entity_backfill_completed"
+    assert call_args.kwargs["run_id"] == "test-run"
+    assert call_args.kwargs["remaining_null_count"] == 1
+
+
 def test_sweep_shard_path_publishes_changed_shards_and_survives_one_conflict(tmp_path) -> None:
     """Remote/sharded path: two shards, one gets a real update and publishes,
     one hits PromotionConflictError on publish -- the sweep must record the
