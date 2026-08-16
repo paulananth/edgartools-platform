@@ -119,6 +119,19 @@ _CIK_ENRICHED_TABLES = {
 # evaluated at the same QUALIFY-selected latest row.
 _COALESCE_PRESERVING_COLUMNS = {
     "sec_accounting_flag": {"beneish_m_score", "altman_z_score", "piotroski_f_score"},
+    # mdm-ahead-of-silver map, Phase B, Ticket 06: the backfill sweep
+    # (edgar_warehouse/mdm_entity_backfill.py) writes a thin landing row --
+    # business key + mdm_entity_id only, every other column absent from the
+    # Parquet -- exactly the same shape as update_accounting_flag_scores'
+    # partial row above. Without this, mdm_entity_id would collapse via the
+    # default "value from the single latest parse_sequence row" rule and the
+    # sweep's thin append would null out every other column for that key.
+    "sec_company": {"mdm_entity_id"},
+    "sec_ownership_reporting_owner": {"mdm_entity_id"},
+    "sec_ownership_non_derivative_txn": {"mdm_entity_id"},
+    "sec_ownership_derivative_txn": {"mdm_entity_id"},
+    "sec_adv_filing": {"mdm_entity_id"},
+    "sec_adv_private_fund": {"mdm_entity_id"},
 }
 
 

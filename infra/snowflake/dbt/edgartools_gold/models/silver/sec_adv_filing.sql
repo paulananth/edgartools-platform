@@ -4,6 +4,8 @@
 
 {{ silver_model_config('SEC_ADV_FILING') }}
 
+-- mdm_entity_id: last non-null wins, not last row wins --
+-- see generate_silver_dbt_models.py's _COALESCE_PRESERVING_COLUMNS for the citation.
 select
     accession_number,
     cik,
@@ -16,7 +18,8 @@ select
     filing_action,
     source_format,
     parser_version,
-    last_sync_run_id
+    last_sync_run_id,
+    last_value(mdm_entity_id ignore nulls) over (partition by accession_number order by parse_sequence) as mdm_entity_id
 from {{ source('edgartools_silver_landing', 'SEC_ADV_FILING') }}
 qualify row_number() over (
     partition by accession_number
