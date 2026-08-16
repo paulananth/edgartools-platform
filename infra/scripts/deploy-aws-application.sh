@@ -1086,11 +1086,17 @@ write_container_definitions() {
   # MSYS_NO_PATHCONV=1 prevents Git Bash from translating /aws/ecs/... log group names
   # into Windows filesystem paths. win_path() converts output_file to native Windows
   # form so Python can locate it regardless of /tmp remapping differences.
-  # MDM_POSTGRES_DSN_SECRET_ARN is passed (may be empty when MDM is not deployed).
+  # MDM_POSTGRES_DSN_SECRET_ARN and MDM_SNOWFLAKE_SECRET_ARN are passed (may be
+  # empty when MDM is not deployed). MDM_SNOWFLAKE_SECRET_ARN is required by
+  # BackfillMdmEntityIds (mdm-ahead-of-silver map, Phase B), which runs the
+  # `backfill-mdm-entity-ids` command on this warehouse profile, not the MDM
+  # profile -- it needs a direct Snowflake connection
+  # (edgar_warehouse/mdm_entity_backfill.py's SnowflakeConnectionSettings.from_env())
+  # the same way `mdm export`/`mdm sync-graph` do on the MDM profile.
   MSYS_NO_PATHCONV=1 python3 - "$(win_path "$output_file")" "$profile" "$IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
     "$WAREHOUSE_RUNTIME_MODE" "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" \
     "$SNOWFLAKE_EXPORT_BUCKET_NAME" "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" \
-    "$WAREHOUSE_BRONZE_CIK_LIMIT" "${MDM_POSTGRES_DSN_SECRET_ARN:-}" <<'PY'
+    "$WAREHOUSE_BRONZE_CIK_LIMIT" "${MDM_POSTGRES_DSN_SECRET_ARN:-}" "${MDM_SNOWFLAKE_SECRET_ARN:-}" <<'PY'
 import json
 import pathlib
 import sys
@@ -1109,6 +1115,7 @@ import sys
     log_group_name,
     bronze_cik_limit,
     mdm_postgres_dsn_secret_arn,
+    mdm_snowflake_secret_arn,
 ) = sys.argv[1:]
 
 snowflake_export_root = f"s3://{snowflake_export_bucket}/warehouse/artifacts/snowflake_exports"
@@ -1140,6 +1147,14 @@ secrets = [{"name": "EDGAR_IDENTITY", "valueFrom": edgar_secret_arn}]
 # Inject it from Secrets Manager when MDM is deployed alongside the warehouse.
 if mdm_postgres_dsn_secret_arn:
     secrets.append({"name": "MDM_DATABASE_URL", "valueFrom": mdm_postgres_dsn_secret_arn})
+# MDM_SNOWFLAKE_SECRET_JSON is required by `backfill-mdm-entity-ids`
+# (mdm-ahead-of-silver map, Phase B) -- it runs on this warehouse profile and
+# needs a direct Snowflake connection
+# (SnowflakeConnectionSettings.from_env(), edgar_warehouse/mdm/export.py),
+# the same secret shape the MDM profile already injects for `mdm export`/
+# `mdm sync-graph`.
+if mdm_snowflake_secret_arn:
+    secrets.append({"name": "MDM_SNOWFLAKE_SECRET_JSON", "valueFrom": mdm_snowflake_secret_arn})
 
 container_definitions = [{
     "name": "edgar-warehouse",
