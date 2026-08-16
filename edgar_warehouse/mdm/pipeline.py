@@ -920,12 +920,19 @@ class MDMPipeline:
         """
         company_ciks = self._company_cik_set()
         existing = self._relationship_count("HOLDS")
+        rows = self.silver.fetch(self._bounded_relationship_sql(sql, remaining, existing))
+        # Bulk-prefetch issuer_cik -> entity_id once for the whole batch
+        # instead of a fresh per-row round-trip inside _security_entity_id's
+        # issuer fallback lookup for every row (see _derive_company_holds
+        # for the identical rationale -- issuer CIKs repeat heavily here too).
+        issuer_ciks = {row.get("issuer_cik") for row in rows if row.get("issuer_cik") is not None}
+        company_entity_id_by_cik = self._company_entity_ids(issuer_ciks)
         inserted = 0
         skipped_corporate = 0
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
-        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining, existing)):
+        for row in rows:
             owner_cik = row.get("owner_cik")
             if owner_cik in company_ciks:
                 skipped_corporate += 1
@@ -949,7 +956,7 @@ class MDMPipeline:
                     "ts": datetime.now(timezone.utc).isoformat(),
                 }), file=sys.stderr, flush=True)
                 continue
-            security_id = self._security_entity_id(row)
+            security_id = self._security_entity_id(row, company_entity_id_by_cik)
             if security_id is None:
                 skipped_unresolved_target += 1
                 print(json.dumps({
@@ -1038,23 +1045,37 @@ class MDMPipeline:
         """
         company_ciks = self._company_cik_set()
         existing = self._relationship_count("COMPANY_HOLDS")
+        rows = self.silver.fetch(self._bounded_relationship_sql(sql, remaining, existing))
+        # Bulk-prefetch owner_cik/issuer_cik -> entity_id once for the whole
+        # batch instead of a fresh per-row round-trip for each (both the
+        # top-level owner lookup below and _security_entity_id's own issuer
+        # fallback lookup used to each cost one network round-trip per row;
+        # CIKs repeat heavily across a corporate insider's many filings, so
+        # this collapses what was O(rows) round-trips into O(1)).
+        wanted_ciks = {
+            cik
+            for row in rows
+            for cik in (row.get("owner_cik"), row.get("issuer_cik"))
+            if cik is not None
+        }
+        company_entity_id_by_cik = self._company_entity_ids(wanted_ciks)
         inserted = 0
         skipped_corporate = 0
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
-        for row in self.silver.fetch(self._bounded_relationship_sql(sql, remaining, existing)):
+        for row in rows:
             owner_cik = row.get("owner_cik")
             if owner_cik not in company_ciks:
                 # skipped_corporate here means non-corporate owner (inverse of
                 # IS_INSIDER/HOLDS — COMPANY_HOLDS wants corporate owners only)
                 skipped_corporate += 1
                 continue
-            company_id = self._company_entity_id(owner_cik)
+            company_id = company_entity_id_by_cik.get(int(owner_cik))
             if company_id is None:
                 skipped_unresolved_source += 1
                 continue
-            security_id = self._security_entity_id(row)
+            security_id = self._security_entity_id(row, company_entity_id_by_cik)
             if security_id is None:
                 skipped_unresolved_target += 1
                 print(json.dumps({
@@ -1578,7 +1599,21 @@ class MDMPipeline:
             )
         return None
 
-    def _security_entity_id(self, txn_row: dict) -> Optional[str]:
+    def _security_entity_id(
+        self,
+        txn_row: dict,
+        company_entity_id_by_cik: Optional[dict[int, str]] = None,
+    ) -> Optional[str]:
+        """Resolve a security's entity_id for an ownership transaction row.
+
+        ``company_entity_id_by_cik``, when provided, is consulted instead of
+        issuing a fresh ``_company_entity_id`` round-trip for the issuer CIK
+        fallback lookup -- callers that already bulk-prefetched company
+        entity IDs for a batch of rows (see ``_derive_company_holds``/
+        ``_derive_holds``) pass it through to avoid re-fetching the same CIK
+        over and over across rows that share an issuer. Defaults to None,
+        which preserves the original per-row lookup for any other caller.
+        """
         from edgar_warehouse.mdm.database import MdmEntity, MdmSecurity, MdmSourceRef
 
         source_id = _ownership_security_source_id(txn_row)
@@ -1591,7 +1626,13 @@ class MDMPipeline:
         )
         if source_match:
             return source_match
-        issuer_entity_id = self._company_entity_id(txn_row.get("issuer_cik"))
+        issuer_cik = txn_row.get("issuer_cik")
+        if company_entity_id_by_cik is not None:
+            issuer_entity_id = (
+                company_entity_id_by_cik.get(int(issuer_cik)) if issuer_cik is not None else None
+            )
+        else:
+            issuer_entity_id = self._company_entity_id(issuer_cik)
         title = txn_row.get("security_title")
         if not title:
             return None
