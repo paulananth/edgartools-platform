@@ -1400,7 +1400,6 @@ class SilverDatabase:
     # sec_company_ticker
     # ------------------------------------------------------------------
 
-    @track_landing_rows("sec_company_ticker")
     def replace_company_tickers(
         self,
         rows: list[dict[str, Any]],
@@ -1408,17 +1407,33 @@ class SilverDatabase:
         *,
         source_name: str = "company_tickers_exchange",
     ) -> int:
+        # Deliberately NOT @track_landing_rows("sec_company_ticker"): that
+        # decorator records the caller's raw `rows` argument as-is, which is
+        # correct for every other merge_*/upsert_* method here because their
+        # callers already pass fully-shaped rows. This method is the
+        # exception -- its caller passes bare {cik, ticker, exchange} dicts
+        # straight from company_tickers_exchange.json, and source_name/
+        # source_rank/last_sync_run_id/last_synced_at are only added below,
+        # inside this function's own loop. Using the decorator here silently
+        # landed 3-column rows missing source_name (a NOT NULL column in the
+        # Snowflake landing schema) on every row, every run -- confirmed live
+        # as the root cause of LOAD_SILVER_LANDING_TASK's suspension
+        # (.scratch/silver-snowflake-migration/issues/08-...). Recording the
+        # actual enriched row manually, after the loop, fixes it at the
+        # source instead of special-casing the decorator further.
         now = datetime.now(UTC)
         self._conn.execute(
             "DELETE FROM sec_company_ticker WHERE source_name = ?",
             [source_name],
         )
         count = 0
+        landed_rows: list[dict[str, Any]] = []
         for ordinal, row in enumerate(rows, start=1):
             ticker = row.get("ticker")
             cik = row.get("cik")
             if cik is None or not ticker:
                 continue
+            exchange = row.get("exchange")
             self._conn.execute(
                 """
                 INSERT INTO sec_company_ticker
@@ -1429,7 +1444,7 @@ class SilverDatabase:
                 [
                     cik,
                     ticker,
-                    row.get("exchange"),
+                    exchange,
                     source_name,
                     ordinal,
                     sync_run_id,
@@ -1437,6 +1452,20 @@ class SilverDatabase:
                 ],
             )
             count += 1
+            landed_rows.append(
+                {
+                    "cik": cik,
+                    "ticker": ticker,
+                    "exchange": exchange,
+                    "source_name": source_name,
+                    "source_rank": ordinal,
+                    "last_sync_run_id": sync_run_id,
+                    "last_synced_at": now,
+                }
+            )
+        landing_export = getattr(self, "landing_export", None)
+        if landing_export is not None and landed_rows:
+            landing_export.record("sec_company_ticker", landed_rows)
         return count
 
     def get_company_tickers(self, cik: int) -> list[dict[str, Any]]:

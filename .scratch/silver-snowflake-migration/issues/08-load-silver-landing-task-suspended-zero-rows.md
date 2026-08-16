@@ -1,6 +1,6 @@
 # LOAD_SILVER_LANDING_TASK Suspended Since 2026-08-13 — Landing Zone Has Zero Rows
 
-Status: open
+Status: root-caused, fix committed, task not yet resumed
 
 ## Summary
 
@@ -54,11 +54,68 @@ Independent of mdm-ahead-of-silver entirely. Any consumer expecting
 future gold models built on top, this map's new sweep) will find them
 missing or empty in prod today.
 
+## Root cause (confirmed live)
+
+Not the `parse_sequence` gap `13_silver_landing_ingest.sql`'s comments
+describe (that fix is live and correct — `parse_sequence` is nullable and
+gets backfilled by the deployed procedure exactly as documented). A
+different, single table.
+
+- `QUERY_HISTORY` for the exact failure window (`2026-08-13 19:43-19:44`)
+  shows the failing statement is always the same: `COPY INTO
+  sec_company_ticker FROM @LANDING_STAGE/sec_company_ticker/ ...
+  ON_ERROR = ABORT_STATEMENT`. Since the JS procedure has no try/catch
+  around `copyStmt.execute()`, this one table's failure aborts the whole
+  procedure every run — which is why *every* table shows 0 rows, not just
+  this one.
+- Downloaded the actual stuck file
+  (`s3://edgartools-prod-snowflake-export-690839588395/warehouse/artifacts/
+  silver_landing/sec_company_ticker/business_date=2026-08-14/
+  run_id=ticket42-task35-fulluniverse-retry7-1786673391/sec_company_ticker.parquet`,
+  20,796 rows) and inspected its schema directly: only 3 columns —
+  `cik`, `ticker`, `exchange`. `sec_company_ticker`'s Snowflake schema has
+  a 4th `NOT NULL` column, `source_name`, entirely absent from the file —
+  `MATCH_BY_COLUMN_NAME` leaves it unmapped, `COPY INTO` doesn't invoke its
+  default for a column missing from the source, and it lands `NULL`
+  against a `NOT NULL` constraint. Exactly the "NULL result in a
+  non-nullable column" error, on every retry, because a stage file that
+  fails `ON_ERROR = ABORT_STATEMENT` is never marked loaded and gets
+  retried on every subsequent `COPY INTO` call.
+- Traced to the actual bug: `replace_company_tickers`
+  (`edgar_warehouse/silver_store.py`, called from
+  `warehouse_orchestrator.py:5072`) was decorated
+  `@track_landing_rows("sec_company_ticker")`. That decorator records
+  whatever the caller passed as the `rows` argument — correct for every
+  *other* decorated method in this file, because their callers already
+  pass fully-shaped rows. `replace_company_tickers` is the one exception:
+  its caller passes bare `{cik, ticker, exchange}` dicts straight from
+  `company_tickers_exchange.json`, and the method itself only adds
+  `source_name`, `source_rank`, `last_sync_run_id`, `last_synced_at`
+  *inside its own loop*, per row, right before the DuckDB `INSERT`. The
+  decorator captured the 3-column pre-enrichment shape, not the 7-column
+  row actually written to DuckDB — a structural bug, reproducible on
+  every single run, not stale or one-off data.
+
+## Fix (committed, not yet deployed)
+
+Removed `@track_landing_rows("sec_company_ticker")` from
+`replace_company_tickers`; the method now builds the enriched row inline
+during its existing loop and calls `self.landing_export.record(...)`
+manually with the same 7 columns the DuckDB `INSERT` uses — matching the
+precedent `track_landing_accounting_flag_scores` already established in
+this file for a method whose landing shape doesn't match its raw input.
+Two new regression tests in `tests/unit/test_silver_landing_export.py`
+cover the enriched-row shape and the cik/ticker-missing skip path.
+
 ## Next step
 
-Not triaged or fixed here. Needs: (1) root-cause why the documented
-parse_sequence-backfill fix isn't preventing this failure in the live
-procedure (check the actually-deployed `LOAD_SILVER_LANDING` procedure body
-against `13_silver_landing_ingest.sql`'s source — they may have drifted),
-(2) resume the task once fixed, (3) a first `dbt run` against prod for the
-silver layer once landing data exists.
+Not deployed. Needs: (1) build+push a warehouse image containing this fix
+(bundle with mdm-ahead-of-silver task #134's own image rebuild — same
+image, same deploy), (2) manually clear/replace the stuck
+`sec_company_ticker` Parquet file in S3 (the old 3-column file will still
+fail even after the code fix, since it's already sitting in the stage) or
+delete+reprocess it, (3) `ALTER TASK LOAD_SILVER_LANDING_TASK RESUME`,
+(4) verify a clean run loads all 30 tables, (5) a first `dbt run` against
+prod for the silver layer once landing data exists (this issue's original
+"zero tables in EDGARTOOLS_SILVER" finding is a separate, subsequent step
+past just unblocking the load task).
