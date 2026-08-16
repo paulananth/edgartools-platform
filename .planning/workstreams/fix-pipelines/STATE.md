@@ -1,24 +1,18 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.0
-milestone_name: fix-pipelines — Pipeline Data-Source Completeness & Verification
-current_phase: 10
-current_phase_name: cash-conversion-cycle
-current_plan: 0
+milestone_name: milestone
+current_plan: Phase 10 (cash-conversion-cycle, grafted) — 10-01/10-02 built, not yet executed
 status: phase_9_complete_phase_10_not_executed
-stopped_at: "Phase 9 (edgartools-crosscheck) is COMPLETE -- this status line was stale (last written 2026-07-18, before PR #199 landed Phase 9 the next day). Verified live against REQUIREMENTS.md 2026-07-26: EDGX-01/02/03 all [x], traceability table shows 'Complete (09-DISPOSITION)' for Phase 9. All 5 native phases (5-9) are now complete. Current native/grafted frontier is Phase 10 (Cash Conversion Cycle, grafted from fundamental-factors-v2 P3): plans 10-01/10-02 are built (phases/10-cash-conversion-cycle/) but not yet executed. Separately, EDGE-09/EDGE-11 (disposed 'root-caused; fix deferred' in Phase 6) both moved forward on 2026-07-26: a ShardedSilverReader._TABLES registration gap (sec_thirteenf_filing, sec_employment_event) was found and fixed (PR #274, merged), and a follow-on EMPLOYED_BY close_relationship_version date-ordering crash was found and fixed the same day (PR #278, open) when a forced full-universe re-derive exercised the sec_employment_event path at scale for the first time. Neither EDGE-09 nor EDGE-11 is marked Complete yet -- both fixes still need prod deploy + re-derive + graph-verify."
-last_updated: "2026-07-26"
-last_activity: 2026-07-26
-last_activity_desc: "Corrected this file's stale Phase 9 status (unchanged since 2026-07-18, one day before PR #199 completed Phase 9) after verifying live against REQUIREMENTS.md and git history. Also discarded a corrupted uncommitted STATE.md write found in the working tree this session (milestone_name literally 'milestone', total_phases=6 contradicting ROADMAP.md's 11-phase structure, and two body sentences sliced mid-clause) -- consistent with an interrupted GSD auto-update, never committed by any runtime. Kept in git stash for recovery only; see Session Continuity below for what actually happened today."
-consolidation:
-  date: "2026-07-11"
-  note: "This is now the single active workstream. Grafted: Phase 10 <- fundamental-factors-v2 P3; Phases 11-15 <- model-builder-contract-gaps P1-6. Sources tombstoned. Excluded (complete): go-live, mdm-neo4j-dashboard, neo4j-snowflake, neo4j-pipe."
+stopped_at: context exhaustion at 100% (2026-08-10)
+last_updated: "2026-08-10T19:00:47.013Z"
+last_activity: "2026-07-26 — corrected stale Phase 9 status (verified against REQUIREMENTS.md + PR #199); EDGE-09/EDGE-11 registration-gap fix landed (PR #274); new EDGE-09 EMPLOYED_BY date-ordering bug found + fixed (PR #278, open)"
 progress:
-  total_phases: 11
-  completed_phases: 5
-  native_fix_pipelines_phases: "5-9 (all 5 done)"
-  grafted_phases: "10 (plans built, not executed), 11-13 (unplanned), 14-15 (charter-held)"
-  percent: 45
+  total_phases: 6
+  completed_phases: 4
+  total_plans: 21
+  completed_plans: 19
+  percent: 67
 ---
 
 # Project State — fix-pipelines
@@ -90,14 +84,15 @@ regression-tested (reproduces the exact CheckViolation against the unfixed code)
 nor EDGE-11 should be marked Complete until that merges and a clean re-derive + graph-verify runs
 against prod.
 
-**Last session:** 2026-07-13 (this session)
+**Last session:** 2026-08-10T19:00:46.996Z
 
-**Stopped At:** Phase 6 fully complete. This session executed 06-06 inline (no subagents, per
+**Stopped At:** context exhaustion at 100% (2026-08-10)
 explicit user instruction) and, along the way, resolved EDGE-09's previously-open root cause
 using live dev AWS access that 06-04's worktree executors lacked:
 
 - **06-06 Task 1** (from a prior session, `d375964`): EDGE-05/EDGE-06 disposed as source-coverage
   exclusions via a live D-04 SQL zero-overlap check against dev MDM Postgres.
+
 - **EDGE-09 root cause found** (`2cd0156`): re-tested `parse_proxy_fundamentals` against the real
   bronze-captured Apple DEF14A bytes (5 rows, correct) — ruling out a parser bug. Traced via live
   Step Functions execution history + CloudWatch logs (`load-history-oomtest-1783868231`) that
@@ -106,13 +101,16 @@ using live dev AWS access that 06-04's worktree executors lacked:
   artifact-fetch pipeline to `OWNERSHIP_FORMS`/`ADV_FORMS` only — DEF14A/DEFA14A/8-K/13F-HR are
   never selected for attachment fetch platform-wide (confirmed via live silver queries: 8-K
   104/266,634, DEF14A-family 23/52,200, 13F-HR 0/48,877).
+
 - **EDGE-11 disposition corrected** (`2cd0156`): its already-committed bronze-fetch fast-path fix
   shares the same root cause — it's downstream of the gate above and unreachable via the standard
   bulk pipeline (confirmed: `refresh_filing_artifacts` has exactly 2 callers, and the gated one
   excludes 13F-HR entirely). Fix is real but not sufficient alone.
+
 - **06-06 Task 2** (`0aa65ba`): confirmed `POPULATED_RELATIONSHIP_TYPES` correctly stays
   unchanged this phase (no type reached graph-verified-populated status); updated the docstring
   comment; re-verified `tests/mdm/test_cli_snowflake_graph.py` (18 tests) still passes.
+
 - **06-06 Task 3** (`0aa65ba`): wrote `06-PHASE-CLOSURE-LEDGER.md` covering all 5 EDGE IDs, each
   in exactly one evidenced disposition (introducing a third "ROOT-CAUSED / FIX DEFERRED"
   category for EDGE-09/EDGE-11 alongside POPULATED/EXCLUDED, per advisor guidance, since neither
@@ -123,7 +121,7 @@ using live dev AWS access that 06-04's worktree executors lacked:
 3 commits (`d375964`, `2cd0156`, `0aa65ba`) are ahead of `origin/claude/consolidate-workstreams`
 and **not yet pushed**.
 
-**Resume File:** None — Phase 6 is closure-complete. Next work is planning Phase 7
+**Resume File:** None
 (source-coverage-exclusions-and-artifact-hygiene: EDGE-07, EDGE-08, ARTF-01, ARTF-02) via
 `/gsd-plan-phase 7`, or landing a PR from `claude/consolidate-workstreams` → `main` (see
 Blockers — still outstanding from an earlier session, unrelated to Phase 6's own scope).

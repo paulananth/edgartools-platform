@@ -1,0 +1,296 @@
+{
+  "Comment": "Run an EdgarTools MDM workflow on ECS Fargate with optional relationship_type and numeric limit overrides.",
+  "StartAt": "HasLimitPerTypeOverride",
+  "States": {
+    "HasRelationshipTypeAndLimitOverride": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.relationship_type",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.relationship_type",
+              "IsString": true
+            },
+            {
+              "Variable": "$.limit",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.limit",
+              "IsNumeric": true
+            }
+          ],
+          "Next": "RunMdmTaskWithRelationshipTypeAndLimit"
+        }
+      ],
+      "Default": "HasRelationshipTypeOverride"
+    },
+    "HasRelationshipTypeOverride": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.relationship_type",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.relationship_type",
+              "IsString": true
+            }
+          ],
+          "Next": "RunMdmTaskWithRelationshipType"
+        }
+      ],
+      "Default": "HasLimitOverride"
+    },
+    "HasLimitOverride": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.limit",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.limit",
+              "IsNumeric": true
+            }
+          ],
+          "Next": "RunMdmTaskWithLimit"
+        }
+      ],
+      "Default": "RunMdmTaskDefault"
+    },
+    "RunMdmTaskDefault": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:149",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('mdm', 'sync-graph', '--limit', '200')"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 60,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 2
+        }
+      ],
+      "End": true
+    },
+    "RunMdmTaskWithLimit": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:149",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('mdm', 'sync-graph', '--limit', States.Format('{}', $.limit))"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 60,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 2
+        }
+      ],
+      "End": true
+    },
+    "RunMdmTaskWithRelationshipType": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:149",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('mdm', 'sync-graph', '--relationship-type', $.relationship_type)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 60,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 2
+        }
+      ],
+      "End": true
+    },
+    "RunMdmTaskWithRelationshipTypeAndLimit": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:149",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('mdm', 'sync-graph', '--relationship-type', $.relationship_type, '--limit', States.Format('{}', $.limit))"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 60,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 2
+        }
+      ],
+      "End": true
+    },
+    "HasLimitPerTypeOverride": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.limit_per_type",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.limit_per_type",
+              "IsNumeric": true
+            }
+          ],
+          "Next": "RunMdmTaskWithLimitPerType"
+        }
+      ],
+      "Default": "HasRelationshipTypeAndLimitOverride"
+    },
+    "RunMdmTaskWithLimitPerType": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:149",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('mdm', 'sync-graph', '--limit-per-type', States.Format('{}', $.limit_per_type))"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 60,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 2
+        }
+      ],
+      "End": true
+    }
+  }
+}
+
