@@ -84,8 +84,9 @@ def test_resolves_from_connections_toml_via_explicit_connection_flag(monkeypatch
 def test_resolves_from_connections_toml_via_config_toml_default(monkeypatch, tmp_path, capsys):
     """The modern split-file SnowCLI layout: connections.toml holds the
     password, config.toml holds only default_connection_name. This is the
-    exact layout deploy-snowflake-stack.sh's own resolver silently fails on
-    today (see the architecture review) -- proving this path works is the
+    exact layout deploy-snowflake-stack.sh's own bash+inline-python resolver
+    silently failed on before it was cut over to call this command (Ticket 2
+    of the credential-isolation breakdown) -- proving this path works is the
     point of this ticket.
     """
     _clear_snowflake_env(monkeypatch)

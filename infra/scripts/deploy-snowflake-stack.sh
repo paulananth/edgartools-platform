@@ -97,10 +97,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 TMP_DIR="${REPO_ROOT}/.tmp"
 
-# Auto-source the Snowflake password from snow CLI's config.toml when no
-# password env var is set. This lets you run the deploy with just
-# --snow-connection <name>; otherwise everything still works as before
-# because env vars take precedence.
+# Auto-source the Snowflake password from the SnowCLI connection named by
+# --snow-connection when no password env var is set. This lets you run the
+# deploy with just --snow-connection <name>; otherwise everything still works
+# as before because env vars take precedence. Resolution itself is delegated
+# to `edgar-warehouse resolve-snowflake-env` (edgar_warehouse/cli.py) --
+# credential-isolation Ticket 1/2 -- rather than reimplemented here: this
+# script previously read the password out of config.toml's own [connections]
+# table directly, a layout no real SnowCLI config anywhere in this repo
+# (including CI's own smoke-test.yml) actually produces, so that lookup
+# always silently resolved empty against a real operator setup. The shared
+# resolver reads ~/.snowflake/connections.toml, the layout SnowCLI actually
+# uses, and is the same chain `mdm export`/`mdm sync-graph` already trust.
 load_password_from_snow_config() {
   if [[ -n "${TF_VAR_snowflake_password:-}" ]]; then
     return 0
@@ -108,7 +116,7 @@ load_password_from_snow_config() {
   # SNOWFLAKE_PASSWORD is a supported input (e.g. set in the operator's shell
   # profile for `snow`/dbt convenience) but Terraform's snowflake provider only
   # reads TF_VAR_snowflake_password -- without this branch, having only
-  # SNOWFLAKE_PASSWORD set short-circuited the config.toml lookup below
+  # SNOWFLAKE_PASSWORD set short-circuited the resolver lookup below
   # *without* ever populating TF_VAR_snowflake_password, so `terraform apply`
   # silently ran with a null password and failed with "Incorrect username or
   # password was specified."
@@ -117,44 +125,28 @@ load_password_from_snow_config() {
     export DBT_SNOWFLAKE_PASSWORD="${DBT_SNOWFLAKE_PASSWORD:-${SNOWFLAKE_PASSWORD}}"
     return 0
   fi
-  local config_path=""
-  local candidates=(
-    "${SNOWFLAKE_HOME:-$HOME/.snowflake}/config.toml"
-    "$HOME/Library/Application Support/snowflake/config.toml"
-  )
-  local candidate
-  for candidate in "${candidates[@]}"; do
-    if [[ -f "${candidate}" ]]; then
-      config_path="${candidate}"
-      break
-    fi
-  done
-  if [[ -z "${config_path}" ]]; then
-    # Windows path fallback when running under Git Bash (where $HOME may be /c/Users/<u>).
-    local win_config_path
-    win_config_path="$(cygpath -w "${candidates[0]}" 2>/dev/null || echo "${candidates[0]}")"
-    [[ -f "${win_config_path}" ]] && config_path="${win_config_path}"
-  fi
-  [[ -f "${config_path}" ]] || return 0
 
-  local pwd_value
-  pwd_value="$(SNOW_CONFIG_PATH="${config_path}" SNOW_CONN="${SNOW_CONNECTION}" python3 - <<'PY'
-import os, sys
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib  # type: ignore
-path = os.environ["SNOW_CONFIG_PATH"]
-conn = os.environ["SNOW_CONN"]
-with open(path, "rb") as fh:
-    data = tomllib.loads(fh.read().decode("utf-8"))
-print(data.get("connections", {}).get(conn, {}).get("password", ""))
-PY
-)"
-  if [[ -n "${pwd_value}" ]]; then
-    export TF_VAR_snowflake_password="${pwd_value}"
-    export DBT_SNOWFLAKE_PASSWORD="${pwd_value}"
-    echo "Loaded Snowflake password for connection '${SNOW_CONNECTION}' from ${config_path}"
+  # require_command uv is now unconditional here (previously uv was only
+  # required when --run-dbt was set) -- a real, deliberate widening: calling
+  # the shared resolver needs it. This matches require_command terraform/
+  # python3 a few lines below, both already unconditional for this script,
+  # and this repo's own "always use uv" convention (CLAUDE.md), so a plain
+  # `--env-name`-only run now expects uv on PATH same as it already expected
+  # terraform.
+  #
+  # Best-effort otherwise, matching the prior behaviour: a resolution
+  # failure once uv itself is present is not fatal on its own -- downstream
+  # validation (the DBT_SNOWFLAKE_PASSWORD check when --run-dbt is set, or
+  # Terraform's own provider error otherwise) is what actually catches a
+  # genuine miss. $(...) only captures stdout; the resolver's own stderr
+  # (success confirmation or error detail) passes through to this script's
+  # stderr untouched.
+  require_command uv
+  local resolver_exports
+  if resolver_exports="$(uv run --project "${REPO_ROOT}" --extra mdm-runtime edgar-warehouse resolve-snowflake-env --connection "${SNOW_CONNECTION}")"; then
+    eval "${resolver_exports}"
+  else
+    echo "WARNING: could not resolve a Snowflake password for connection '${SNOW_CONNECTION}' via edgar-warehouse resolve-snowflake-env (see error above). Set TF_VAR_snowflake_password or SNOWFLAKE_PASSWORD explicitly if this run needs one." >&2
   fi
 }
 
