@@ -14,7 +14,7 @@ unit_tests:
       the Firm Roster's 7B(1)+7B(2) total is not flagged as a mismatch.
     model: adv_fund_count_reconciliation
     given:
-      - input: source('edgartools_source', 'SEC_ADV_PRIVATE_FUND')
+      - input: ref('sec_adv_private_fund')
         rows:
           - adviser_crd_number: "111111"
             accession_number: "0001111111-26-000001"
@@ -24,7 +24,7 @@ unit_tests:
             accession_number: "0001111111-26-000001"
             fund_index: 2
             private_fund_id: "F2"
-      - input: source('edgartools_source', 'SEC_ADV_FIRM_ROSTER')
+      - input: ref('sec_adv_firm_roster')
         rows:
           - adviser_crd_number: "111111"
             dataset_period: "202607"
@@ -46,13 +46,13 @@ unit_tests:
       coverage gap) is flagged as a mismatch.
     model: adv_fund_count_reconciliation
     given:
-      - input: source('edgartools_source', 'SEC_ADV_PRIVATE_FUND')
+      - input: ref('sec_adv_private_fund')
         rows:
           - adviser_crd_number: "222222"
             accession_number: "0002222222-26-000001"
             fund_index: 1
             private_fund_id: "F3"
-      - input: source('edgartools_source', 'SEC_ADV_FIRM_ROSTER')
+      - input: ref('sec_adv_firm_roster')
         rows:
           - adviser_crd_number: "222222"
             dataset_period: "202607"
@@ -76,9 +76,9 @@ unit_tests:
       funds) as mismatched.
     model: adv_fund_count_reconciliation
     given:
-      - input: source('edgartools_source', 'SEC_ADV_PRIVATE_FUND')
+      - input: ref('sec_adv_private_fund')
         rows: []
-      - input: source('edgartools_source', 'SEC_ADV_FIRM_ROSTER')
+      - input: ref('sec_adv_firm_roster')
         rows:
           - adviser_crd_number: "333333"
             dataset_period: "202607"
@@ -100,13 +100,13 @@ unit_tests:
       count is used for reconciliation, not a sum or the earliest period.
     model: adv_fund_count_reconciliation
     given:
-      - input: source('edgartools_source', 'SEC_ADV_PRIVATE_FUND')
+      - input: ref('sec_adv_private_fund')
         rows:
           - adviser_crd_number: "444444"
             accession_number: "0004444444-26-000001"
             fund_index: 1
             private_fund_id: "F4"
-      - input: source('edgartools_source', 'SEC_ADV_FIRM_ROSTER')
+      - input: ref('sec_adv_firm_roster')
         rows:
           - adviser_crd_number: "444444"
             dataset_period: "202606"
@@ -132,13 +132,13 @@ unit_tests:
       row -- gold.yml declares adviser_crd_number not_null on this model.
     model: adv_fund_count_reconciliation
     given:
-      - input: source('edgartools_source', 'SEC_ADV_PRIVATE_FUND')
+      - input: ref('sec_adv_private_fund')
         rows:
           - adviser_crd_number: "555555"
             accession_number: "0005555555-26-000001"
             fund_index: 1
             private_fund_id: "F5"
-      - input: source('edgartools_source', 'SEC_ADV_FIRM_ROSTER')
+      - input: ref('sec_adv_firm_roster')
         rows:
           - adviser_crd_number: "555555"
             dataset_period: "202607"

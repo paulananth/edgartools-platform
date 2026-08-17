@@ -1,6 +1,7 @@
 -- FINANCIAL_DERIVED: Normalised financial metrics per (cik, accession, fiscal_period, period_end).
 --
--- Isolated DAG branch — zero ref() edges into the existing 9-table chain.
+-- dbt-gold-silver-rewiring map, Ticket 02: reads dbt silver (sec_financial_derived)
+-- via ref() instead of the Python-builder-populated EDGARTOOLS_SOURCE mirror.
 -- Adds YoY growth rates, TTM (trailing-twelve-month) revenue/EBITDA/FCF,
 -- and peer rank percentiles within SIC-4 groupings using Snowflake window functions.
 --
@@ -37,7 +38,7 @@ with base as (
         (d.period_end = max(d.period_end) over (
             partition by d.cik, d.accession_number, d.fiscal_period
         )) as is_current_period
-    from {{ source("edgartools_source", "SEC_FINANCIAL_DERIVED") }} d
+    from {{ ref("sec_financial_derived") }} d
 ),
 
 prior_year_values as (

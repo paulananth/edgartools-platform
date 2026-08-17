@@ -1,6 +1,7 @@
 -- INSTITUTIONAL_HOLDINGS: 13F institutional holdings per (cik, accession, holding_index).
 --
--- Isolated DAG branch — zero ref() edges into the existing 9-table chain.
+-- dbt-gold-silver-rewiring map, Ticket 02: reads dbt silver (sec_thirteenf_holding)
+-- via ref() instead of the Python-builder-populated EDGARTOOLS_SOURCE mirror.
 -- Adds qoq_change_shares (quarter-over-quarter change in shares held) and
 -- ownership_rank_within_period (rank by market_value for same security+quarter).
 --
@@ -8,7 +9,7 @@
 {{ gold_model_config('INSTITUTIONAL_HOLDINGS') }}
 
 with base as (
-    select * from {{ source("edgartools_source", "SEC_THIRTEENF_HOLDING") }}
+    select * from {{ ref("sec_thirteenf_holding") }}
 ),
 
 with_qoq as (

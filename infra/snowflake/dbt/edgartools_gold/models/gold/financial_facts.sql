@@ -1,9 +1,10 @@
 -- FINANCIAL_FACTS: XBRL financial facts per (cik, accession, concept, fiscal_period).
 --
--- Isolated DAG branch — zero ref() edges into the existing 9-table chain.
--- TARGET_LAG=DOWNSTREAM: refreshes only after upstream silver export completes.
--- A NULL source (no fundamentals bootstrap yet) produces an empty table; the
--- existing gold chain is unaffected.
+-- dbt-gold-silver-rewiring map, Ticket 02: reads dbt silver (sec_financial_fact)
+-- via ref() instead of the Python-builder-populated EDGARTOOLS_SOURCE mirror.
+-- TARGET_LAG=DOWNSTREAM: refreshes only after upstream silver refreshes.
+-- An empty silver table (no fundamentals bootstrap yet) produces an empty
+-- table; the existing 9-table gold chain is unaffected.
 --
 -- Grain: one row per (cik, accession_number, concept, fiscal_period, segment,
 -- period_end, period_start). period_start distinguishes QTD ("3 months ended")
@@ -25,4 +26,4 @@ select
     segment,
     parser_version,
     ingested_at
-from {{ source("edgartools_source", "SEC_FINANCIAL_FACT") }}
+from {{ ref("sec_financial_fact") }}
