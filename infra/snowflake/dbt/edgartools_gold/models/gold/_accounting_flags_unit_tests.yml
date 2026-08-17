@@ -1,0 +1,115 @@
+version: 2
+
+# dbt-gold-silver-rewiring map, Ticket 05: proves accounting_flags' rewired
+# `base` CTE -- fact_key/company_key/fiscal_year_date_key/form_key
+# reconstructed from ref('sec_accounting_flag') instead of the
+# EDGARTOOLS_SOURCE mirror -- plus that the pre-existing with_tenure/
+# with_risk derivations (unchanged by this ticket) still compute correctly
+# on top of it. Expected literal fact_key/form_key values are
+# BITAND(HASH(...), 9223372036854775807)::BIGINT, computed live against
+# Snowflake (snow sql --connection edgartools-prod), not guessed -- same
+# standard as Tickets 01/03/04. Live verification here is necessarily
+# against a freshly-provisioned Snowflake account (see
+# 05-rewire-accounting-flags-isolated.md's Answer for why edgartools-prod
+# no longer resolves to the account this repo's other docs describe) --
+# HASH/BITAND behave identically in any Snowflake account regardless of
+# which database holds data, so this is still real confirmation of the SQL,
+# not a guess.
+unit_tests:
+  - name: accounting_flags_key_derivation_and_tenure
+    description: >
+      Two consecutive fiscal years for the same CIK/auditor (auditor_changed
+      = false on both), proving consecutive_auditor_years accumulates and
+      recency_rank/is_most_recent picks the later fiscal year. Row A
+      (fiscal_year 2024) has a real form_type ('10-K') -- form_key hashes
+      it directly. Row B (fiscal_year 2025) has form_type = NULL --
+      exercises the CASE fallback to hash('10-K'), and its form_key must
+      equal Row A's exactly (both resolve to the same literal '10-K' hash),
+      proving the fallback branch actually fires and matches the non-NULL
+      path's value. Row A's forensic scores land in the low/safe/strong
+      tiers; Row B's land in high/grey/neutral -- covering all three
+      threshold CASE expressions on both models' extremes and middle.
+    model: accounting_flags
+    given:
+      - input: ref('sec_accounting_flag')
+        rows:
+          - cik: 1111111
+            accession_number: "0001111111-26-000001"
+            fiscal_year: 2024
+            period_end: "2024-12-31"
+            form_type: "10-K"
+            auditor_name: "EY"
+            auditor_pcaob_id: "42"
+            auditor_location: "NY"
+            icfr_attestation: true
+            auditor_changed: false
+            beneish_m_score: -2.5
+            altman_z_score: 3.5
+            piotroski_f_score: 8
+            parser_version: "v1"
+            ingested_at: "2024-01-01 00:00:00"
+          - cik: 1111111
+            accession_number: "0001111111-26-000002"
+            fiscal_year: 2025
+            period_end: "2025-12-31"
+            form_type: null
+            auditor_name: "EY"
+            auditor_pcaob_id: "42"
+            auditor_location: "NY"
+            icfr_attestation: true
+            auditor_changed: false
+            beneish_m_score: -1.5
+            altman_z_score: 2.0
+            piotroski_f_score: 5
+            parser_version: "v1"
+            ingested_at: "2025-01-01 00:00:00"
+    expect:
+      rows:
+        - fact_key: 5518306488236362277
+          company_key: 1111111
+          fiscal_year_date_key: 20241231
+          form_key: 4137321639767257764
+          accession_number: "0001111111-26-000001"
+          cik: 1111111
+          fiscal_year: 2024
+          period_end: "2024-12-31"
+          form_type: "10-K"
+          auditor_name: "EY"
+          auditor_pcaob_id: "42"
+          auditor_location: "NY"
+          icfr_attestation: true
+          auditor_changed: false
+          consecutive_auditor_years: 1
+          beneish_m_score: -2.5
+          beneish_risk_tier: "low"
+          altman_z_score: 3.5
+          altman_zone: "safe"
+          piotroski_f_score: 8
+          piotroski_strength: "strong"
+          is_most_recent: false
+          parser_version: "v1"
+          ingested_at: "2024-01-01 00:00:00"
+        - fact_key: 1535103594907246810
+          company_key: 1111111
+          fiscal_year_date_key: 20251231
+          form_key: 4137321639767257764
+          accession_number: "0001111111-26-000002"
+          cik: 1111111
+          fiscal_year: 2025
+          period_end: "2025-12-31"
+          form_type: null
+          auditor_name: "EY"
+          auditor_pcaob_id: "42"
+          auditor_location: "NY"
+          icfr_attestation: true
+          auditor_changed: false
+          consecutive_auditor_years: 2
+          beneish_m_score: -1.5
+          beneish_risk_tier: "high"
+          altman_z_score: 2.0
+          altman_zone: "grey"
+          piotroski_f_score: 5
+          piotroski_strength: "neutral"
+          is_most_recent: true
+          parser_version: "v1"
+          ingested_at: "2025-01-01 00:00:00"
