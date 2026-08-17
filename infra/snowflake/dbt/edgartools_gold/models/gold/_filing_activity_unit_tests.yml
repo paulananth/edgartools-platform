@@ -1,0 +1,40 @@
+version: 2
+
+# dbt-gold-silver-rewiring map, Ticket 01 (.scratch/dbt-gold-silver-rewiring/
+# issues/01-establish-snowflake-native-surrogate-keys.md): proves the
+# surrogate_key() macro is deterministic (same accession_number -> same
+# filing_key, always) and independent of every other column on the row.
+# Expected filing_key values below are BITAND(HASH(accession_number),
+# 9223372036854775807)::BIGINT, computed live against Snowflake -- not
+# guessed, since Snowflake's HASH() has no reference implementation to
+# compute offline against.
+unit_tests:
+  - name: filing_activity_filing_key_is_deterministic_per_accession
+    description: >
+      Two rows sharing the same accession_number (but differing on every
+      other column) get the identical filing_key; a different
+      accession_number gets a different filing_key.
+    model: filing_activity
+    given:
+      - input: source('edgartools_source', 'FILING_ACTIVITY')
+        rows:
+          - accession_number: "0001111111-26-000001"
+            cik: 320193
+            form: "10-K"
+            fact_key: 1
+          - accession_number: "0001111111-26-000001"
+            cik: 789019
+            form: "10-K/A"
+            fact_key: 2
+          - accession_number: "0002222222-26-000002"
+            cik: 320193
+            form: "8-K"
+            fact_key: 3
+    expect:
+      rows:
+        - accession_number: "0001111111-26-000001"
+          filing_key: 5518306488236362277
+        - accession_number: "0001111111-26-000001"
+          filing_key: 5518306488236362277
+        - accession_number: "0002222222-26-000002"
+          filing_key: 3991365530149477314
