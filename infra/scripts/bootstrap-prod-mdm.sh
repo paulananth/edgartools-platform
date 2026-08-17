@@ -45,7 +45,7 @@ Options:
 Reads (non-secret, informational only):
   - Postgres instance host via `snow sql --connection <name> -q "DESCRIBE POSTGRES INSTANCE <NAME>"`
 
-Writes:
+Writes (names below are illustrative -- secrets-manifest.json is canonical):
   - <prefix>/mdm/postgres_dsn   (always)
   - <prefix>/mdm/snowflake      (unless --skip-snowflake-secret)
 
@@ -96,9 +96,23 @@ NAME_PREFIX="${NAME_PREFIX:-edgartools-${ENVIRONMENT}}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && cd .. && pwd)"
+# shellcheck source=lib/secrets-manifest.sh
+source "${SCRIPT_DIR}/lib/secrets-manifest.sh"
 
 log() { echo "==> $*" >&2; }
 fail() { echo "ERROR: $*" >&2; exit 1; }
+
+secret_id() { echo "${NAME_PREFIX}/$(secrets_manifest_name "$1")"; }
+
+MDM_POSTGRES_DSN_SECRET_ID="$(secret_id "mdm/postgres_dsn")" || exit 1
+# Resolved only when actually needed: --skip-snowflake-secret means this run
+# never touches mdm/snowflake or reads dbt/snowflake, so it shouldn't fail
+# just because one of those two names happens to be missing from the
+# manifest -- that's an unrelated concern to what the flag is skipping.
+if [[ "$SKIP_SNOWFLAKE_SECRET" != "true" ]]; then
+  MDM_SNOWFLAKE_SECRET_ID="$(secret_id "mdm/snowflake")" || exit 1
+  DBT_SNOWFLAKE_SECRET_ID="$(secret_id "dbt/snowflake")" || exit 1
+fi
 
 aws_cli() {
   local args=()
@@ -115,8 +129,8 @@ log "Instance READY. host=${HOST}"
 
 if [[ "$DRY_RUN" == "true" ]]; then
   log "DRY RUN — would rotate snowflake_admin + application, create/migrate '${DATABASE}', write secrets:"
-  log "  ${NAME_PREFIX}/mdm/postgres_dsn"
-  [[ "$SKIP_SNOWFLAKE_SECRET" == "true" ]] || log "  ${NAME_PREFIX}/mdm/snowflake (schema=${GOLD_SCHEMA})"
+  log "  ${MDM_POSTGRES_DSN_SECRET_ID}"
+  [[ "$SKIP_SNOWFLAKE_SECRET" == "true" ]] || log "  ${MDM_SNOWFLAKE_SECRET_ID} (schema=${GOLD_SCHEMA})"
   exit 0
 fi
 
@@ -291,7 +305,7 @@ log "Rotating snowflake_admin access and ensuring database '${DATABASE}' exists 
 snow sql --connection "$SNOW_CONNECTION" --format json -q "ALTER POSTGRES INSTANCE ${INSTANCE_NAME} RESET ACCESS FOR 'snowflake_admin';" 2>/dev/null \
   | DATABASE="$DATABASE" HOST="$HOST" REPO_ROOT="$REPO_ROOT" uv run --project "$REPO_ROOT" --extra mdm-runtime python "$ADMIN_PY"
 
-log "Rotating application access and writing ${NAME_PREFIX}/mdm/postgres_dsn"
+log "Rotating application access and writing ${MDM_POSTGRES_DSN_SECRET_ID}"
 # Build args conditionally rather than passing --aws-profile "$AWS_PROFILE_NAME"
 # unconditionally: bootstrap-aws-mdm-secrets.sh's arg parser uses ${2:?} for
 # --aws-profile (same as this script's own parser, and as intended --aws-profile
@@ -309,14 +323,14 @@ snow sql --connection "$SNOW_CONNECTION" --format json -q "ALTER POSTGRES INSTAN
   | bash "$SCRIPT_DIR/bootstrap-aws-mdm-secrets.sh" "${SECRETS_SCRIPT_ARGS[@]}"
 
 if [[ "$SKIP_SNOWFLAKE_SECRET" != "true" ]]; then
-  log "Populating ${NAME_PREFIX}/mdm/snowflake from ${NAME_PREFIX}/dbt/snowflake"
+  log "Populating ${MDM_SNOWFLAKE_SECRET_ID} from ${DBT_SNOWFLAKE_SECRET_ID}"
   # Capture into a variable rather than `--secret-string file:///dev/stdin`:
   # /dev/stdin is not reliably present as a readable special file on Windows
   # Git Bash, so the paramfile trick failed there ("No such file or
   # directory"). $(cat) is portable and matches the same in-variable-only
   # pattern this script already uses for PASSWORD in bootstrap-aws-mdm-secrets.sh.
   MDM_SNOWFLAKE_SECRET_JSON="$(aws_cli secretsmanager get-secret-value \
-      --secret-id "${NAME_PREFIX}/dbt/snowflake" \
+      --secret-id "${DBT_SNOWFLAKE_SECRET_ID}" \
       --query SecretString --output text \
     | jq --arg schema "$GOLD_SCHEMA" '{
         MDM_SNOWFLAKE_ACCOUNT: .DBT_SNOWFLAKE_ACCOUNT,
@@ -328,13 +342,13 @@ if [[ "$SKIP_SNOWFLAKE_SECRET" != "true" ]]; then
         MDM_SNOWFLAKE_ROLE: .DBT_SNOWFLAKE_ROLE
       }')"
   aws_cli secretsmanager put-secret-value \
-      --secret-id "${NAME_PREFIX}/mdm/snowflake" \
+      --secret-id "${MDM_SNOWFLAKE_SECRET_ID}" \
       --secret-string "$MDM_SNOWFLAKE_SECRET_JSON" >/dev/null
   MDM_SNOWFLAKE_SECRET_JSON=""
 fi
 
 log "Verifying connectivity via the application credential"
-MDM_DATABASE_URL="$(aws_cli secretsmanager get-secret-value --secret-id "${NAME_PREFIX}/mdm/postgres_dsn" --query SecretString --output text)" \
+MDM_DATABASE_URL="$(aws_cli secretsmanager get-secret-value --secret-id "${MDM_POSTGRES_DSN_SECRET_ID}" --query SecretString --output text)" \
   uv run --project "$REPO_ROOT" --extra mdm-runtime edgar-warehouse mdm check-connectivity \
   | python3 -c "
 import json, sys
@@ -348,4 +362,8 @@ print(json.dumps({'connected': sql.get('connected'), 'missing_tables': sql.get('
 "
 unset MDM_DATABASE_URL
 
-log "Done. ${NAME_PREFIX}/mdm/postgres_dsn and ${NAME_PREFIX}/mdm/snowflake (unless skipped) are populated and verified."
+if [[ "$SKIP_SNOWFLAKE_SECRET" == "true" ]]; then
+  log "Done. ${MDM_POSTGRES_DSN_SECRET_ID} is populated and verified (mdm/snowflake skipped)."
+else
+  log "Done. ${MDM_POSTGRES_DSN_SECRET_ID} and ${MDM_SNOWFLAKE_SECRET_ID} are populated and verified."
+fi

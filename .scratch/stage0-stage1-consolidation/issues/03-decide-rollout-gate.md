@@ -93,3 +93,25 @@ before trusting a structural cutover at full scale.
    `write_load_history_definition`. Mirrors task #21's prior redeploy;
    two uses doesn't clear the bar for building dedicated rollback tooling
    (Rule 0).
+
+## Deployed live (2026-08-10)
+
+Gate satisfied: retry5 reached `Stage0CompanyIdentity`/`ReduceIdentityRefresh`
+success as of this ticket's original resolution, and remained healthy
+throughout the deploy itself (still `RUNNING`, 8/53 windows succeeded, 0
+failed, confirmed both immediately before and after the redeploy).
+
+Item 4 (rollback snapshot) done —
+`.scratch/state-machine-consolidation/rollback-snapshots/pre-ticket02-deploy-load-history-20260810.json`
+(shared with the state-machine-consolidation ticket 02 deploy, same run).
+
+**Item 3 (bounded smoke test) is NOT yet done.** Verified the new
+`load_history` definition is structurally correct live (`Stage0CompanyIdentity`/
+`ReduceIdentityRefresh` absent, `ComputeWindows` routes directly to
+`Stage1Parallel`) but have not run an actual bounded `--cik-limit` execution
+through it end-to-end — retry5 itself can't serve as that proof since it's
+running the *old* pre-deploy definition and will keep doing so until it
+completes. This ticket's own gate calls for that smoke test explicitly
+before trusting the new definition for the next full-universe run; it
+should happen before `load_history` is invoked again for real (retry5's
+eventual successor, or any other trigger).

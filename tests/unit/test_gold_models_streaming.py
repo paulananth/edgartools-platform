@@ -7,6 +7,20 @@ import pyarrow as pa
 
 from edgar_warehouse.serving.gold_models import build_gold, iter_gold_tables
 from edgar_warehouse.silver_store import SilverDatabase
+from tests.unit._fake_snowflake import (
+    EMPTY_ORPHAN_EVIDENCE_TABLE_DATA,
+    FakeSnowflakeConnectionSettings,
+)
+
+# 5 of the tables in EXPECTED_GOLD_TABLE_NAMES below read Snowflake's
+# EDGARTOOLS_SILVER directly instead of the local DuckDB `db` fixture
+# (dbt-gold-silver-rewiring map, Ticket 06) -- patch their connection so
+# iterating/materializing the full builder set doesn't attempt a real
+# Snowflake connection.
+_patch_silver_connection = patch(
+    "edgar_warehouse.mdm.export.silver_connection_settings",
+    return_value=FakeSnowflakeConnectionSettings(EMPTY_ORPHAN_EVIDENCE_TABLE_DATA),
+)
 
 
 EXPECTED_GOLD_TABLE_NAMES = {
@@ -36,7 +50,8 @@ def test_iter_gold_tables_produces_the_full_expected_table_set(tmp_path) -> None
     the way an iter_gold_tables()-vs-build_gold() comparison alone would."""
     db = _empty_silver_db(tmp_path)
     try:
-        names = [name for name, _ in iter_gold_tables(db)]
+        with _patch_silver_connection:
+            names = [name for name, _ in iter_gold_tables(db)]
     finally:
         db.close()
 
@@ -58,8 +73,9 @@ def test_iter_gold_tables_matches_build_gold_with_real_rows(tmp_path) -> None:
             VALUES (320193, 'Apple Inc.', 'operating', '3571', 'run-1')
             """
         )
-        streamed = dict(iter_gold_tables(db))
-        materialized = build_gold(db)
+        with _patch_silver_connection:
+            streamed = dict(iter_gold_tables(db))
+            materialized = build_gold(db)
     finally:
         db.close()
 
@@ -83,7 +99,7 @@ def test_iter_gold_tables_is_lazy(tmp_path) -> None:
     try:
         with patch(
             "edgar_warehouse.serving.gold_models._build_sec_thirteenf_holding"
-        ) as mock_thirteenf:
+        ) as mock_thirteenf, _patch_silver_connection:
             gen = iter_gold_tables(db)
             mock_thirteenf.assert_not_called()
 

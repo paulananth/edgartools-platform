@@ -73,8 +73,13 @@ class RuntimeImportTests(unittest.TestCase):
         )
         # gold-verify-live (like mdm) bypasses the warehouse orchestrator entirely --
         # it's a standalone direct-Snowflake row-count check (edgar_warehouse.serving.
-        # gold_verify), never registered in COMMAND_REGISTRY.
-        warehouse_cli_commands = set(subparsers_action.choices) - {"mdm", "gold-verify-live"}
+        # gold_verify), never registered in COMMAND_REGISTRY. resolve-snowflake-env is
+        # the same shape: a standalone credential resolver, never registered either.
+        warehouse_cli_commands = set(subparsers_action.choices) - {
+            "mdm",
+            "gold-verify-live",
+            "resolve-snowflake-env",
+        }
         self.assertEqual(
             set(commands.COMMAND_REGISTRY),
             warehouse_cli_commands,
@@ -97,7 +102,12 @@ class RuntimeImportTests(unittest.TestCase):
         )
         # gold-verify-live never calls _planned_writes -- it doesn't go through
         # _execute_warehouse_bronze_capture at all (see the skip comment below).
-        all_commands = set(subparsers_action.choices) - {"mdm", "gold-verify-live"}
+        # resolve-snowflake-env is the same shape.
+        all_commands = set(subparsers_action.choices) - {
+            "mdm",
+            "gold-verify-live",
+            "resolve-snowflake-env",
+        }
 
         resolver = catalog.default_path_resolver()
         missing = []
@@ -143,7 +153,8 @@ class RuntimeImportTests(unittest.TestCase):
         # - gold-verify-live is a standalone direct-Snowflake row-count check
         #   (edgar_warehouse.serving.gold_verify) -- never touches the warehouse
         #   orchestrator, bronze/silver roots, or manifest machinery at all
-        skip = {"mdm", "migrate-silver-shards", "gold-verify-live"}
+        # - resolve-snowflake-env is a standalone credential resolver, same shape
+        skip = {"mdm", "migrate-silver-shards", "gold-verify-live", "resolve-snowflake-env"}
         all_commands = set(subparsers_action.choices) - skip
 
         missing = []

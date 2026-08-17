@@ -21,7 +21,8 @@ select
     is_other,
     officer_title,
     parser_version,
-    last_sync_run_id
+    last_sync_run_id,
+    mdm_entity_id
 from {{ source('edgartools_silver_landing', 'SEC_OWNERSHIP_REPORTING_OWNER') }}
 qualify row_number() over (
     partition by accession_number, owner_index

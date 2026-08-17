@@ -1,0 +1,134 @@
+version: 2
+
+# dbt-gold-silver-rewiring map, Ticket 04: proves ownership_activity's
+# rewired key derivation -- the non-derivative/derivative UNION ALL, the
+# owner natural-key fallback (CIK wins over name), security-title
+# normalization, and the transaction-code cleanup that must NOT lowercase
+# (unlike normalized_text()'s other uses in this file, transaction codes
+# are case-significant single letters). Expected key values are
+# BITAND(HASH(...), 9223372036854775807)::BIGINT and YYYYMMDD integer
+# arithmetic, computed live against Snowflake (snow sql --connection
+# edgartools-prod), not guessed -- same standard as Tickets 01/03. Live
+# verification here is necessarily against a freshly-provisioned Snowflake
+# account (see 04-rewire-multi-join-ownership-and-fund-models.md's Answer
+# for why edgartools-prod no longer resolves to the account this repo's
+# other docs describe) -- HASH/BITAND/YEAR/MONTH/DAY/REGEXP_REPLACE behave
+# identically in any Snowflake account regardless of which database holds
+# data, so this is still real confirmation of the SQL, not a guess.
+unit_tests:
+  - name: ownership_activity_key_derivation
+    description: >
+      Row 1 (non-derivative): owner_cik present, so party_key uses the
+      'cik:' natural key even though owner_name is also present. Row 2
+      (derivative): owner_cik absent, owner_name present, so party_key
+      falls back to the normalized 'name:' natural key; transaction_code
+      ' S ' cleans to 'S' -- trimmed/collapsed but NOT lowercased. Row 3
+      (non-derivative): the reporting-owner LEFT JOIN finds no match for
+      this txn_index's owner_index, so owner_index/owner_cik/owner_name
+      (and therefore party_key) are all NULL -- reproducing the existing
+      Python builder's own o.owner_index-not-t.owner_index selection
+      exactly, not a new gap; form/security_title/transaction_code are
+      also NULL/empty on this row, so form_key/security_key/
+      ownership_txn_type_key are all NULL too.
+    model: ownership_activity
+    given:
+      - input: ref('sec_ownership_non_derivative_txn')
+        rows:
+          - accession_number: "0001111111-26-000001"
+            owner_index: 1
+            txn_index: 1
+            security_title: "Common Stock"
+            transaction_code: "P"
+            transaction_shares: 100.5
+            transaction_price: 12.34
+            shares_owned_after: 500.0
+          - accession_number: "0003333333-26-000003"
+            owner_index: 5
+            txn_index: 7
+            security_title: null
+            transaction_code: null
+            transaction_shares: null
+            transaction_price: null
+            shares_owned_after: null
+      - input: ref('sec_ownership_derivative_txn')
+        rows:
+          - accession_number: "0002222222-26-000002"
+            owner_index: 2
+            txn_index: 3
+            security_title: "Stock Option"
+            transaction_code: "  S  "
+            transaction_shares: 50
+            transaction_price: 8.0
+            shares_owned_after: 200
+      - input: ref('sec_ownership_reporting_owner')
+        rows:
+          - accession_number: "0001111111-26-000001"
+            owner_index: 1
+            owner_cik: 9999999
+            owner_name: "Acme Holdings LLC"
+          - accession_number: "0002222222-26-000002"
+            owner_index: 2
+            owner_cik: null
+            owner_name: "  Jane Q Doe  "
+          # No row for (0003333333-26-000003, 5) -- deliberately unmatched.
+      - input: ref('sec_company_filing')
+        rows:
+          - accession_number: "0001111111-26-000001"
+            cik: 1111111
+            form: "4"
+            filing_date: "2026-01-15"
+          - accession_number: "0002222222-26-000002"
+            cik: 2222222
+            form: "4"
+            filing_date: "2026-02-20"
+          - accession_number: "0003333333-26-000003"
+            cik: 3333333
+            form: null
+            filing_date: "2026-03-01"
+    expect:
+      rows:
+        - fact_key: 6907881814608620315
+          company_key: 1111111
+          date_key: 20260115
+          form_key: 3019900512728790636
+          party_key: 6197979437118620473
+          security_key: 9099120233316663067
+          ownership_txn_type_key: 7130304226081159778
+          accession_number: "0001111111-26-000001"
+          owner_index: 1
+          txn_index: 1
+          transaction_code: "P"
+          transaction_shares: 100.5
+          transaction_price: 12.34
+          shares_owned_after: 500.0
+          is_derivative: false
+        - fact_key: 7071252052224427071
+          company_key: 2222222
+          date_key: 20260220
+          form_key: 3019900512728790636
+          party_key: 6913253330764577617
+          security_key: 527207207913748253
+          ownership_txn_type_key: 7793018897683262129
+          accession_number: "0002222222-26-000002"
+          owner_index: 2
+          txn_index: 3
+          transaction_code: "S"
+          transaction_shares: 50.0
+          transaction_price: 8.0
+          shares_owned_after: 200.0
+          is_derivative: true
+        - fact_key: 5562767226301097188
+          company_key: 3333333
+          date_key: 20260301
+          form_key: null
+          party_key: null
+          security_key: null
+          ownership_txn_type_key: null
+          accession_number: "0003333333-26-000003"
+          owner_index: null
+          txn_index: 7
+          transaction_code: null
+          transaction_shares: null
+          transaction_price: null
+          shares_owned_after: null
+          is_derivative: false

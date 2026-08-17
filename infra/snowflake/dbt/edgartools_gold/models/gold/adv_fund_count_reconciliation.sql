@@ -5,6 +5,10 @@
 -- .scratch/adv-firm-roster-crosscheck/) -- never gates MDM entity resolution
 -- or graph sync.
 --
+-- dbt-gold-silver-rewiring map, Ticket 02: both sources below now read dbt
+-- silver (sec_adv_private_fund, sec_adv_firm_roster) via ref() instead of
+-- the Python-builder-populated EDGARTOOLS_SOURCE mirrors.
+--
 -- Grain: one row per adviser_crd_number present in either source.
 --
 -- Join semantics (resolved 2026-07-28, see ticket 04's file for the full
@@ -38,7 +42,7 @@ with filing_derived_counts as (
     select
         adviser_crd_number,
         count(distinct private_fund_id) as filing_derived_fund_count
-    from {{ source('edgartools_source', 'SEC_ADV_PRIVATE_FUND') }}
+    from {{ ref('sec_adv_private_fund') }}
     where adviser_crd_number is not null
     group by adviser_crd_number
 
@@ -55,7 +59,7 @@ latest_roster as (
         private_fund_count_7b1,
         private_fund_count_7b2,
         private_fund_count_7b1 + private_fund_count_7b2 as roster_fund_count
-    from {{ source('edgartools_source', 'SEC_ADV_FIRM_ROSTER') }}
+    from {{ ref('sec_adv_firm_roster') }}
     where adviser_crd_number is not null
     qualify row_number() over (
         partition by adviser_crd_number

@@ -18,7 +18,8 @@ select
     category,
     first_sync_run_id,
     last_sync_run_id,
-    last_synced_at
+    last_synced_at,
+    mdm_entity_id
 from {{ source('edgartools_silver_landing', 'SEC_COMPANY') }}
 qualify row_number() over (
     partition by cik

@@ -635,6 +635,89 @@ class TestRunRelationships:
         assert rows[0].properties["shares_owned"] == 25
         assert rows[0].properties["is_derivative"] is False
 
+    def test_company_holds_batches_entity_id_lookups_across_rows(self, session, fixture_world):
+        """Two COMPANY_HOLDS candidate rows sharing the same owner_cik and
+        issuer_cik, each resolving to a *different* security via
+        _security_entity_id's canonical_title+issuer fallback path (no
+        MdmSourceRef seeded for either security, forcing both through that
+        fallback). Regression guard for the bulk-prefetch fix: asserts both
+        relationships resolve correctly from one shared
+        company_entity_id_by_cik dict, and that the number of
+        mdm_company-touching SQL statements issued stays flat as row count
+        grows (2 rows -> same query count as 1 row would need), not O(rows).
+        """
+        preferred_security_id = _add_entity(session, "security")
+        session.add(MdmSecurity(
+            entity_id=preferred_security_id,
+            issuer_entity_id=fixture_world["issuer_company_id"],
+            canonical_title="Preferred Stock",
+        ))
+        session.commit()
+
+        pipe = MDMPipeline(session=session, silver=StubSilver({
+            "FROM sec_ownership_non_derivative_txn": [
+                {
+                    "accession_number": "0000-corp-batch",
+                    "owner_index": 1,
+                    "txn_index": 0,
+                    "security_title": "Common Stock",
+                    "transaction_date": None,
+                    "shares_owned_after": 25,
+                    "ownership_direct_indirect": "I",
+                    "owner_cik": 910002,
+                    "owner_name": "Linked Corp",
+                    "issuer_cik": 910001,
+                },
+                {
+                    "accession_number": "0000-corp-batch",
+                    "owner_index": 1,
+                    "txn_index": 1,
+                    "security_title": "Preferred Stock",
+                    "transaction_date": None,
+                    "shares_owned_after": 10,
+                    "ownership_direct_indirect": "I",
+                    "owner_cik": 910002,
+                    "owner_name": "Linked Corp",
+                    "issuer_cik": 910001,
+                },
+            ],
+        }))
+
+        company_queries = []
+        engine = session.get_bind()
+
+        def _count_company_queries(conn, cursor, statement, *_args):
+            if "mdm_company" in statement:
+                company_queries.append(statement)
+
+        event.listen(engine, "before_cursor_execute", _count_company_queries)
+        try:
+            summary = pipe.derive_relationships(target_per_type=2, relationship_types=["COMPANY_HOLDS"])
+        finally:
+            event.remove(engine, "before_cursor_execute", _count_company_queries)
+
+        rows = list(session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "COMPANY_HOLDS")
+            .order_by(MdmRelationshipInstance.target_entity_id)
+        ))
+        assert summary["COMPANY_HOLDS"]["inserted"] == 2
+        assert len(rows) == 2
+        targets = {r.target_entity_id for r in rows}
+        assert targets == {fixture_world["security_entity_id"], preferred_security_id}
+        for r in rows:
+            assert r.source_entity_id == fixture_world["linked_company_id"]
+
+        # Exactly 2 mdm_company-touching queries total for 2 rows: one is
+        # _company_cik_set()'s pre-existing whole-table membership check
+        # (unrelated to this fix, runs once regardless of row count), the
+        # other is the new bulk `WHERE cik IN (...)` prefetch that now
+        # serves *both* rows from a single round-trip. Before this fix, the
+        # second row would have added a 3rd, row-scoped query -- this count
+        # would grow with row count instead of staying flat at 2.
+        assert len(company_queries) == 2, company_queries
+
     def test_writes_holds_from_derivative_transactions(self, session, fixture_world):
         derivative_security_id = _add_entity(session, "security")
         session.add(MdmSecurity(

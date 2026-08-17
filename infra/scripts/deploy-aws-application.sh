@@ -119,6 +119,17 @@ Options:
                                     never deploys workloads or enables schedules.
   --operator-alert-topic-arn <arn>  Confirmed operator SNS topic used by both alarms.
                                     Required when enabling alarms.
+  --configure-mdm-entity-backfill-alarm <enable|disable>
+                                    Explicitly create/update or remove the mdm-ahead-of-silver
+                                    stuck-NULL alarm (mdm-ahead-of-silver map, ticket 05):
+                                    fires when BackfillMdmEntityIds's own
+                                    mdm_entity_backfill_completed log event reports a nonzero
+                                    remaining_null_count for 2 consecutive daily periods
+                                    (~48h at daily_incremental's cadence), OR when the metric
+                                    never showed up at all (sweep didn't run --
+                                    treat-missing-data=breaching). Same SNS topic as
+                                    --configure-daily-incremental-alarms. This standalone
+                                    action never deploys workloads or enables schedules.
   -h, --help                        Show this help.
 USAGE
 }
@@ -211,6 +222,7 @@ CONFIGURE_DAILY_INCREMENTAL_SCHEDULE=""
 DAILY_INCREMENTAL_SCHEDULER_ROLE_ARN=""
 CONFIGURE_DAILY_INCREMENTAL_ALARMS=""
 OPERATOR_ALERT_TOPIC_ARN=""
+CONFIGURE_MDM_ENTITY_BACKFILL_ALARM=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -269,6 +281,7 @@ while [[ $# -gt 0 ]]; do
     --daily-incremental-scheduler-role-arn) DAILY_INCREMENTAL_SCHEDULER_ROLE_ARN="${2:?}"; shift 2 ;;
     --configure-daily-incremental-alarms) CONFIGURE_DAILY_INCREMENTAL_ALARMS="${2:?}"; shift 2 ;;
     --operator-alert-topic-arn) OPERATOR_ALERT_TOPIC_ARN="${2:?}"; shift 2 ;;
+    --configure-mdm-entity-backfill-alarm) CONFIGURE_MDM_ENTITY_BACKFILL_ALARM="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -286,6 +299,15 @@ if ! is_empty "$CONFIGURE_DAILY_INCREMENTAL_ALARMS"; then
   esac
   if [[ "$CONFIGURE_DAILY_INCREMENTAL_ALARMS" == "enable" ]] && is_empty "$OPERATOR_ALERT_TOPIC_ARN"; then
     fail "--operator-alert-topic-arn is required with --configure-daily-incremental-alarms enable"
+  fi
+fi
+if ! is_empty "$CONFIGURE_MDM_ENTITY_BACKFILL_ALARM"; then
+  case "$CONFIGURE_MDM_ENTITY_BACKFILL_ALARM" in
+    enable|disable) ;;
+    *) fail "--configure-mdm-entity-backfill-alarm must be enable or disable" ;;
+  esac
+  if [[ "$CONFIGURE_MDM_ENTITY_BACKFILL_ALARM" == "enable" ]] && is_empty "$OPERATOR_ALERT_TOPIC_ARN"; then
+    fail "--operator-alert-topic-arn is required with --configure-mdm-entity-backfill-alarm enable"
   fi
 fi
 if is_empty "$RUNNER_ROLE_NAME_PREFIX"; then
@@ -611,6 +633,82 @@ if ! is_empty "$CONFIGURE_DAILY_INCREMENTAL_ALARMS"; then
   exit 0
 fi
 
+# mdm-ahead-of-silver map, ticket 05: unlike ticket 81's alarms (built-in
+# AWS/States ExecutionsFailed/ExecutionsTimedOut, no app-level emission
+# needed), there is no built-in AWS metric for "silver rows stuck with
+# mdm_entity_id IS NULL" -- it has to come from a custom metric derived from
+# the sweep's own output. BackfillMdmEntityIds (edgar_warehouse/
+# mdm_entity_backfill.py's run_mdm_entity_backfill_sweep) emits a structured
+# mdm_entity_backfill_completed event via _emit_pipeline_event carrying
+# remaining_null_count (rows still NULL after this pass, summed across every
+# shard/table) to stderr, which ECS routes to the warehouse log group
+# (LOG_GROUP_NAME) same as every other command's events.
+#
+# A CloudWatch Logs metric filter turns that JSON field into a custom metric
+# (namespace EdgarTools/MDM); the alarm below reads it. period=86400
+# (24h, matching daily_incremental's cadence -- the only regular trigger of
+# this sweep per the mdm-ahead-of-silver map's Phase B wiring) with
+# evaluation-periods=2 means "stuck across 2 consecutive daily passes"
+# (~48h), the upper end of ticket 05's "24-48h" threshold -- a single day
+# with leftover freshly-parsed-but-not-yet-MDM-resolved rows is expected and
+# must not page; only a value that survives a SECOND consecutive pass
+# without shrinking to zero is a genuine stuck condition.
+#
+# treat-missing-data=breaching is the load-bearing flag, not a stylistic
+# choice: a log-filter metric only produces a datapoint when the sweep
+# actually runs and logs its completion event. If the sweep never runs at
+# all (EventBridge/lease/task-launch failure upstream of the sweep itself),
+# the metric has NO datapoints -- treat-missing-data=notBreaching (ticket
+# 81's choice, correct there) would silently read that as healthy. Missing
+# data here must alarm, because "the sweep never ran" is exactly the failure
+# mode ticket 05 asked to catch, not just "rows are stuck."
+configure_mdm_entity_backfill_alarm() {
+  local action="$1" topic_arn="$2"
+  # LOG_GROUP_NAME's full manifest-based resolution runs later in this
+  # script (Parameter resolution section) -- this dispatch, like ticket 81's
+  # above, exits before that section, so it defaults locally the same way
+  # that later resolution's own fallback does, rather than depending on it.
+  local log_group_name
+  log_group_name="$(first_nonempty "$LOG_GROUP_NAME" "/aws/ecs/${NAME_PREFIX}-warehouse")"
+  local filter_name="${NAME_PREFIX}-mdm-entity-backfill-remaining-null"
+  local alarm_name="${NAME_PREFIX}-mdm-entity-backfill-stuck-null"
+  local metric_namespace="EdgarTools/MDM"
+  local metric_name="MdmEntityBackfillRemainingNull"
+
+  if [[ "$action" == "disable" ]]; then
+    aws_cli cloudwatch delete-alarms --alarm-names "$alarm_name"
+    aws_cli logs delete-metric-filter --log-group-name "$log_group_name" --filter-name "$filter_name" 2>/dev/null || true
+    log "Deleted mdm-entity-backfill stuck-null alarm and metric filter"
+    return 0
+  fi
+
+  require_confirmed_operator_alert_topic "$topic_arn"
+
+  aws_cli logs put-metric-filter \
+    --log-group-name "$log_group_name" \
+    --filter-name "$filter_name" \
+    --filter-pattern '{ $.event = "mdm_entity_backfill_completed" }' \
+    --metric-transformations \
+      "metricName=${metric_name},metricNamespace=${metric_namespace},metricValue=\$.remaining_null_count,defaultValue=0"
+  log "Configured mdm-entity-backfill CloudWatch Logs metric filter"
+
+  aws_cli cloudwatch put-metric-alarm \
+    --alarm-name "$alarm_name" \
+    --alarm-description "mdm_entity_id rows have stayed NULL across 2 consecutive entity-backfill sweep passes (~48h at daily_incremental's cadence), or the sweep hasn't run at all -- mdm-ahead-of-silver ticket 05" \
+    --namespace "$metric_namespace" \
+    --metric-name "$metric_name" \
+    --statistic Sum --period 86400 --evaluation-periods 2 \
+    --threshold 0 --comparison-operator GreaterThanThreshold \
+    --treat-missing-data breaching \
+    --alarm-actions "$topic_arn"
+  log "Configured mdm-entity-backfill stuck-null alarm"
+}
+
+if ! is_empty "$CONFIGURE_MDM_ENTITY_BACKFILL_ALARM"; then
+  configure_mdm_entity_backfill_alarm "$CONFIGURE_MDM_ENTITY_BACKFILL_ALARM" "$OPERATOR_ALERT_TOPIC_ARN"
+  exit 0
+fi
+
 # Parameter resolution order (no Terraform):
 #   1. CLI flag (already set above)
 #   2. Deployment manifest (infra/aws-<env>-application.json — written by every successful deploy)
@@ -715,6 +813,13 @@ is_empty "$BRONZE_BUCKET_NAME" && fail "could not resolve bronze bucket name; pa
 is_empty "$WAREHOUSE_BUCKET_NAME" && fail "could not resolve warehouse bucket name; pass --warehouse-bucket-name"
 is_empty "$SNOWFLAKE_EXPORT_BUCKET_NAME" && fail "could not resolve Snowflake export bucket name; pass --snowflake-export-bucket-name"
 is_empty "$EDGAR_IDENTITY_SECRET_ARN" && fail "could not resolve EDGAR identity secret ARN; pass --edgar-identity-secret-arn"
+# Required unconditionally (not just under --enable-mdm, see the MDM_DEPLOYMENT_MODE
+# check below): 5 gold_models.py builders read EDGARTOOLS_SILVER directly via this
+# secret (dbt-gold-silver-rewiring map, Ticket 06), so every gold-affecting warehouse
+# command (gold-refresh/daily_incremental/bootstrap/etc.) needs it now, not just
+# backfill-mdm-entity-ids. Failing here beats a silent deploy that only breaks deep
+# inside build_gold() on first use.
+is_empty "$MDM_SNOWFLAKE_SECRET_ARN" && fail "could not resolve MDM Snowflake secret ARN; pass --mdm-snowflake-secret-arn or provision \"${NAME_PREFIX}/mdm/snowflake\" in Secrets Manager (see infra/scripts/bootstrap-aws-mdm-secrets.sh)"
 is_empty "$EXECUTION_ROLE_ARN" && fail "could not resolve ECS task execution role ARN; pass --execution-role-arn"
 is_empty "$TASK_ROLE_ARN" && fail "could not resolve ECS task role ARN; pass --task-role-arn"
 is_empty "$STEP_FUNCTIONS_ROLE_ARN" && fail "could not resolve Step Functions role ARN; check IAM role ${RUNNER_STEP_FUNCTIONS_ROLE_NAME} exists or pass --step-functions-role-arn"
@@ -737,7 +842,9 @@ MDM_SILVER_DUCKDB="$(first_nonempty "$MDM_SILVER_DUCKDB" "s3://${WAREHOUSE_BUCKE
 DEPLOY_MDM=false
 missing_mdm_values=()
 is_empty "$MDM_POSTGRES_DSN_SECRET_ARN" && missing_mdm_values+=("mdm_postgres_dsn_secret_arn")
-is_empty "$MDM_SNOWFLAKE_SECRET_ARN" && missing_mdm_values+=("mdm_snowflake_secret_arn")
+# mdm_snowflake_secret_arn is no longer conditionally checked here -- it's now
+# required unconditionally above (MDM_SNOWFLAKE_SECRET_ARN is never empty past
+# that point), since it's not just an MDM-deployment-mode concern anymore.
 case "$MDM_DEPLOYMENT_MODE" in
   enabled)
     if [[ ${#missing_mdm_values[@]} -gt 0 ]]; then
@@ -988,11 +1095,17 @@ write_container_definitions() {
   # MSYS_NO_PATHCONV=1 prevents Git Bash from translating /aws/ecs/... log group names
   # into Windows filesystem paths. win_path() converts output_file to native Windows
   # form so Python can locate it regardless of /tmp remapping differences.
-  # MDM_POSTGRES_DSN_SECRET_ARN is passed (may be empty when MDM is not deployed).
+  # MDM_POSTGRES_DSN_SECRET_ARN and MDM_SNOWFLAKE_SECRET_ARN are passed (may be
+  # empty when MDM is not deployed). MDM_SNOWFLAKE_SECRET_ARN is required by
+  # BackfillMdmEntityIds (mdm-ahead-of-silver map, Phase B), which runs the
+  # `backfill-mdm-entity-ids` command on this warehouse profile, not the MDM
+  # profile -- it needs a direct Snowflake connection
+  # (edgar_warehouse/mdm_entity_backfill.py's SnowflakeConnectionSettings.from_env())
+  # the same way `mdm export`/`mdm sync-graph` do on the MDM profile.
   MSYS_NO_PATHCONV=1 python3 - "$(win_path "$output_file")" "$profile" "$IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
     "$WAREHOUSE_RUNTIME_MODE" "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" \
     "$SNOWFLAKE_EXPORT_BUCKET_NAME" "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" \
-    "$WAREHOUSE_BRONZE_CIK_LIMIT" "${MDM_POSTGRES_DSN_SECRET_ARN:-}" <<'PY'
+    "$WAREHOUSE_BRONZE_CIK_LIMIT" "${MDM_POSTGRES_DSN_SECRET_ARN:-}" "${MDM_SNOWFLAKE_SECRET_ARN:-}" <<'PY'
 import json
 import pathlib
 import sys
@@ -1011,6 +1124,7 @@ import sys
     log_group_name,
     bronze_cik_limit,
     mdm_postgres_dsn_secret_arn,
+    mdm_snowflake_secret_arn,
 ) = sys.argv[1:]
 
 snowflake_export_root = f"s3://{snowflake_export_bucket}/warehouse/artifacts/snowflake_exports"
@@ -1042,6 +1156,14 @@ secrets = [{"name": "EDGAR_IDENTITY", "valueFrom": edgar_secret_arn}]
 # Inject it from Secrets Manager when MDM is deployed alongside the warehouse.
 if mdm_postgres_dsn_secret_arn:
     secrets.append({"name": "MDM_DATABASE_URL", "valueFrom": mdm_postgres_dsn_secret_arn})
+# MDM_SNOWFLAKE_SECRET_JSON is required by `backfill-mdm-entity-ids`
+# (mdm-ahead-of-silver map, Phase B) -- it runs on this warehouse profile and
+# needs a direct Snowflake connection
+# (SnowflakeConnectionSettings.from_env(), edgar_warehouse/mdm/export.py),
+# the same secret shape the MDM profile already injects for `mdm export`/
+# `mdm sync-graph`.
+if mdm_snowflake_secret_arn:
+    secrets.append({"name": "MDM_SNOWFLAKE_SECRET_JSON", "valueFrom": mdm_snowflake_secret_arn})
 
 container_definitions = [{
     "name": "edgar-warehouse",
@@ -3016,7 +3138,7 @@ if workflow_name == "daily_incremental":
     )
 mdm_run = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')",
-    next_state="MdmBackfill")
+    next_state="BackfillMdmEntityIds")
 mdm_backfill = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')",
     next_state="MdmExport")
@@ -3026,6 +3148,35 @@ mdm_backfill = ecs_state(mdm_medium_arn,
 mdm_export = ecs_state(mdm_medium_arn,
     "States.Array('mdm', 'export')",
     next_state="MdmSync")
+
+# mdm-ahead-of-silver map, Phase B wiring (ticket 06): backfill-mdm-entity-ids
+# sweeps the Snowflake EDGARTOOLS_SILVER tables for mdm_entity_id IS NULL rows
+# and fills them from MDM's already-resolved MdmSourceRef rows
+# (edgar_warehouse/mdm_entity_backfill.py). Placed right after MdmRun so the
+# freshest resolution pass is visible, and before MdmBackfill (relationships)/
+# GoldRefresh so a newly backfilled entity_id can still reach this same
+# execution's gold build.
+#
+# No sec_fetch_active lease here (unlike this map's own first cut at this
+# wiring, superseded by ticket 06): the sweep is Snowflake-only now -- it
+# reads pending rows from Snowflake and re-emits full rows via the same
+# LandingExportBuffer/Snowpipe append-only path every other silver write
+# uses, touching no DuckDB shard file. The concurrent-writer-clobber risk
+# that lease existed to guard against (_hydrate_all_shards/
+# _publish_shard_if_remote against a shared shard file) no longer applies.
+# wh_medium_arn, not wh_large_arn, for the same reason -- no full-shard
+# download, just SQL queries.
+backfill_mdm_entity_ids = ecs_state(wh_medium_arn,
+    "States.Array('backfill-mdm-entity-ids', '--run-id', $$.Execution.Name)",
+    next_state="MdmBackfill", retry_secs=60)
+backfill_mdm_entity_ids["Catch"] = [{
+    "ErrorEquals": ["States.ALL"],
+    "ResultPath": None,
+    # A sweep failure must not fail this otherwise-successful MDM/gold run --
+    # the sweep IS its own retry (mdm-ahead-of-silver ticket 05: the next
+    # pass re-selects the same still-NULL rows).
+    "Next": "MdmBackfill",
+}]
 mdm_sync = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')",
     next_state="MdmVerify")
@@ -3201,6 +3352,7 @@ if workflow_name != "daily_incremental":
             "SeedUniverse":     seed_universe,
             "RunWarehouseTask": run_wh,
             "MdmRun":           mdm_run,
+            "BackfillMdmEntityIds": backfill_mdm_entity_ids,
             "MdmBackfill":      mdm_backfill,
             "MdmExport":        mdm_export,
             "MdmSync":          mdm_sync,
@@ -3687,6 +3839,7 @@ else:
             "FetchFirmRosterForced":   fetch_firm_roster_forced,
             "IngestFirmRosterSources": ingest_firm_roster_sources,
             "MdmRun":           mdm_run,
+            "BackfillMdmEntityIds": backfill_mdm_entity_ids,
             "MdmBackfill":      mdm_backfill,
             "MdmExport":        mdm_export,
             "MdmSync":          mdm_sync,

@@ -577,3 +577,81 @@ def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_n
         assert daily_definition["States"][state_name]["ResultPath"] is None, (
             f"{state_name} must set ResultPath=null to preserve $ into the next state"
         )
+
+
+# -- mdm-ahead-of-silver map, Phase B wiring: BackfillMdmEntityIds sweep -----
+# Both bootstrap and daily_incremental share write_warehouse_mdm_gold_definition's
+# MdmRun -> ... -> MdmBackfill chain, so this sub-chain must appear identically
+# in both branches -- parametrize over both fixtures rather than duplicating
+# the assertions.
+#
+# Ticket 06 (.scratch/mdm-ahead-of-silver/issues/06-narrow-backfill-storage-target.md)
+# simplified this from an earlier lease-guarded shape (AcquireEntityBackfillLease/
+# ReadEntityBackfillLeaseResult/EntityBackfillLeaseAcquiredCheck/
+# ReleaseEntityBackfillLease*) once the sweep became Snowflake-only: no DuckDB
+# shard is read or written anymore, so there's nothing left for the
+# sec_fetch_active lease to protect. That shape and these tests were removed,
+# not left asserting a dead state -- see commit history for the prior version
+# if the lease-guarded design is ever needed again.
+
+
+@pytest.mark.parametrize("definition_fixture", ["daily_definition", "bootstrap_definition"])
+def test_mdm_run_routes_directly_into_backfill_mdm_entity_ids(
+    definition_fixture: str, request: pytest.FixtureRequest
+) -> None:
+    definition = request.getfixturevalue(definition_fixture)
+    assert definition["States"]["MdmRun"]["Next"] == "BackfillMdmEntityIds"
+
+
+@pytest.mark.parametrize("definition_fixture", ["daily_definition", "bootstrap_definition"])
+def test_backfill_mdm_entity_ids_runs_on_medium_profile_and_falls_through_to_mdm_backfill(
+    definition_fixture: str, request: pytest.FixtureRequest
+) -> None:
+    """wh_medium_arn, not large: the Snowflake-only sweep (ticket 06) issues
+    SQL queries, not a full-shard download, so it doesn't need large's
+    headroom. A sweep failure must not fail this otherwise-successful
+    MDM/gold run -- the sweep is its own retry (ticket 05: the next pass
+    re-selects the same still-NULL rows) -- so both the happy path and the
+    Catch converge on MdmBackfill."""
+    definition = request.getfixturevalue(definition_fixture)
+    state = definition["States"]["BackfillMdmEntityIds"]
+    cmd = _command_of(definition, "BackfillMdmEntityIds")
+    assert "'backfill-mdm-entity-ids'" in cmd
+    assert "$$.Execution.Name" in cmd
+    assert state["Parameters"]["TaskDefinition"] == "arn:wh-medium"
+    assert state["Next"] == "MdmBackfill"
+    assert state["Catch"] == [
+        {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmBackfill"}
+    ]
+
+
+@pytest.mark.parametrize("definition_fixture", ["daily_definition", "bootstrap_definition"])
+def test_no_entity_backfill_lease_states_remain(
+    definition_fixture: str, request: pytest.FixtureRequest
+) -> None:
+    """The lease-guarded shape ticket 06 superseded must not linger as dead
+    states in the generated definition."""
+    definition = request.getfixturevalue(definition_fixture)
+    states = definition["States"]
+    for name in (
+        "AcquireEntityBackfillLease",
+        "ReadEntityBackfillLeaseResult",
+        "EntityBackfillLeaseAcquiredCheck",
+        "ReleaseEntityBackfillLease",
+        "ReleaseEntityBackfillLeaseFailedNonFatal",
+        "ReleaseEntityBackfillLeaseAfterFailure",
+    ):
+        assert name not in states
+
+
+@pytest.mark.parametrize("definition_fixture", ["daily_definition", "bootstrap_definition"])
+def test_sec_fetch_lease_still_releases_into_mdm_run_unaffected(
+    definition_fixture: str, request: pytest.FixtureRequest
+) -> None:
+    """The main sec_fetch_active span (build_sec_fetch_lease_states, guarding
+    SeedUniverse/RunWarehouseTask) is untouched by the entity-backfill sweep
+    simplification -- it still releases right before MdmRun."""
+    definition = request.getfixturevalue(definition_fixture)
+    states = definition["States"]
+    assert states["ReleaseSecFetchLease"]["Next"] == "MdmRun"
+    assert states["AcquireSecFetchLease"]["Next"] == "ReadSecFetchLeaseResult"

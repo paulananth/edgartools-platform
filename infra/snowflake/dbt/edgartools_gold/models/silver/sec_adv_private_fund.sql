@@ -22,7 +22,8 @@ select
     source_dataset_period,
     source_sha256,
     parser_version,
-    last_sync_run_id
+    last_sync_run_id,
+    mdm_entity_id
 from {{ source('edgartools_silver_landing', 'SEC_ADV_PRIVATE_FUND') }}
 qualify row_number() over (
     partition by accession_number, fund_index

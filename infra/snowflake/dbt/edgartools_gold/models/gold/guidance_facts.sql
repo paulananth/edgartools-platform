@@ -5,12 +5,27 @@
 -- Isolated DAG branch — no ref() into ownership or fundamentals chains.
 --
 -- Source shape:
---   EDGARTOOLS_SOURCE.GUIDANCE_FACTS loaded from serving Parquet export
---   built by _build_fact_guidance() (edgar_warehouse.serving.gold_models)
---   from silver sec_guidance_fact. SEC-derived rows (source_system in
---   sec_8k/sec_10q/sec_10k) come from EarningsRelease.guidance table
---   extraction; firm_manual rows are CSV/Parquet overrides or supplements,
---   coexisting via source_system in the natural key (ERDP-02-05).
+--   dbt-gold-silver-rewiring map, Ticket 03: reads dbt silver
+--   (sec_guidance_fact) via ref() instead of the Python-builder-populated
+--   EDGARTOOLS_SOURCE mirror. Unlike this batch's other seven models,
+--   fact_key/company_key need no surrogate_key() derivation here at all --
+--   edgar_warehouse.explore.guidance_facts.guidance_fact_key() computes and
+--   stores them durably in sec_guidance_fact at write time (a genuine data
+--   column in silver_store.py's DDL, not something gold recomputes per
+--   refresh), so this stays a pure passthrough for both. SEC-derived rows
+--   (source_system in sec_8k/sec_10q/sec_10k) come from
+--   EarningsRelease.guidance table extraction; firm_manual rows are
+--   CSV/Parquet overrides or supplements, coexisting via source_system in
+--   the natural key (ERDP-02-05).
+--
+--   NOT a pure passthrough for accession_number specifically: silver's
+--   sec_guidance_fact stores '' (not NULL) for firm_manual rows, a
+--   NOT NULL DEFAULT '' PRIMARY KEY column constraint in silver_store.py's
+--   DDL. _build_fact_guidance (the Python builder this replaces) always
+--   translated it back to NULL at the gold layer via NULLIF(accession_number,
+--   ''); this model must do the same in its final select below, or
+--   firm_manual rows would surface accession_number = '' to gold consumers
+--   instead of the documented nullable column.
 --
 -- Grain: one revision row per
 --   (cik, metric, fiscal_year, fiscal_quarter, as_of, accession_number,
@@ -23,7 +38,7 @@
 {{ gold_model_config('GUIDANCE_FACTS') }}
 
 with base as (
-    select * from {{ source("edgartools_source", "GUIDANCE_FACTS") }}
+    select * from {{ ref("sec_guidance_fact") }}
 ),
 
 ranked as (
@@ -42,7 +57,7 @@ select
     cik,
     ticker,
     company_key,
-    accession_number,
+    nullif(accession_number, '') as accession_number,
     metric,
     period_type,
     fiscal_year,

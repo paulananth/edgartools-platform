@@ -1,0 +1,60 @@
+{
+  "environment": "prod",
+  "region": "us-east-1",
+  "name_prefix": "edgartools-prod",
+  "image_ref": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:28dd3d76fb90edafa84b160958ffc02d46d13a05e5ab94ef71d667800afdbb69",
+  "mdm_image_ref": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:9f55a0a7910cb55d1a88190c7642ccfc55b6c4f0210deccb956f6750c3711de2",
+  "cluster": {
+    "name": "edgartools-prod-warehouse",
+    "arn": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse"
+  },
+  "ecr_repository_url": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse",
+  "log_groups": {
+    "ecs": "/aws/ecs/edgartools-prod-warehouse",
+    "step_functions": "/aws/states/edgartools-prod-warehouse"
+  },
+  "bronze_bucket_name": "edgartools-prod-bronze-690839588395",
+  "warehouse_bucket_name": "edgartools-prod-warehouse-690839588395",
+  "snowflake_export_bucket_name": "edgartools-prod-snowflake-export-690839588395",
+  "execution_role_arn": "arn:aws:iam::690839588395:role/sec_platform_prod_runner_execution",
+  "task_role_arn": "arn:aws:iam::690839588395:role/sec_platform_prod_runner_task",
+  "step_functions_role_arn": "arn:aws:iam::690839588395:role/sec_platform_prod_runner_step_functions",
+  "edgar_identity_secret_arn": "arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-prod-edgar-identity-ryt4Fs",
+  "task_definitions": {
+    "small": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-small:173",
+    "medium": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:178",
+    "large": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:170",
+    "mdm_small": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-small:150",
+    "mdm_medium": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:150",
+    "mdm_large": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:84"
+  },
+  "state_machines": {
+    "bootstrap_full": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-bootstrap-full",
+    "targeted_resync": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-targeted-resync",
+    "full_reconcile": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-full-reconcile",
+    "load_daily_form_index_for_date": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-load-daily-form-index-for-date",
+    "catch_up_daily_form_index": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-catch-up-daily-form-index",
+    "gold_refresh": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-gold-refresh",
+    "seed_universe": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-seed-universe",
+    "load_history": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-load-history",
+    "bootstrap": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-bootstrap",
+    "daily_incremental": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-daily-incremental",
+    "mdm_gold": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-gold",
+    "ownership_mdm_gold": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-ownership-mdm-gold",
+    "residual_holds_graph": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-residual-holds-graph",
+    "silver_mdm_gold": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-silver-mdm-gold",
+    "bronze_seed_silver_gold": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-bronze-seed-silver-gold",
+    "generation_build": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-generation-build",
+    "mdm_seed_universe": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-seed-universe",
+    "mdm_utility": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-utility"
+  },
+  "mdm": {
+    "image_ref": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:9f55a0a7910cb55d1a88190c7642ccfc55b6c4f0210deccb956f6750c3711de2",
+    "database_source": "snowflake-postgres",
+    "silver_duckdb": "s3://edgartools-prod-warehouse-690839588395/warehouse/silver/sec/silver.duckdb",
+    "secrets": {
+      "postgres_dsn": "arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-prod/mdm/postgres_dsn-FmXxTM",
+      "snowflake": "arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-prod/mdm/snowflake-FmXxTM"
+    }
+  }
+}

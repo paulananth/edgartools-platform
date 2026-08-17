@@ -1,0 +1,48 @@
+{
+  "Comment": "Run an EdgarTools MDM workflow on ECS Fargate.",
+  "StartAt": "RunMdmTask",
+  "States": {
+    "RunMdmTask": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-small:149",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('mdm', 'counts')"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 60,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 2
+        }
+      ],
+      "End": true
+    }
+  }
+}
+

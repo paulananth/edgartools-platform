@@ -1,0 +1,1583 @@
+{
+  "Comment": "Phased bootstrap: (1) seed warehouse reference data, (1b) seed MDM tracked universe (mdm seed-universe \u2014 data-architecture Issue 2), (2) inject window_size default if absent, (3) compute CIK windows for tracking_status active-or-bootstrap_pending + write manifests to S3, (3b) Stage0CompanyIdentity \u2014 Company Identity capture (Company Identity Pipeline wayfinder map, ticket 05), strict, runs before ownership/ADV so IS_INSIDER derivation sees resolved Company entities, (4) Stage1Parallel \u2014 Branch A ownership (bootstrap-next) writes unified SEC silver, (4b) Stage1BEntityFacts then (4c) Stage1BPerFiling then Stage1BThirteenF \u2014 Branch B fundamentals modes run sequentially after Branch A because they share the same silver DuckDB artifact; Branch B failures are caught so the pipeline still advances (AD-13), (4d) AdvBulkFetch \u2014 fetch-adv-bulk + ingest-relationship-sources (adv-fetch-pipeline-wiring spec), then fetch-firm-roster + ingest-relationship-sources (adv-firm-roster-crosscheck spec, ticket 02), both lenient like Branch B, so MDM sees fresh ADV silver and the Firm Roster completeness cross-check stays current in this execution, (5) MDM entity resolution + export to Snowflake mirror + Neo4j sync in bulk (data-architecture Issue 3: export precedes sync-graph so graph reflects this run), (6) single gold build + Snowflake export manifest, (7) write run-summary.json with window_count and cik_count from S3 manifests. Implements CHUNK-02 (sequential windowed SM) and CHUNK-04 SM-side.",
+  "StartAt": "ValidateForceInput",
+  "States": {
+    "ValidateForceInput": {
+      "Type": "Choice",
+      "Comment": "Accept an omitted or boolean force input; reject every other type before workload execution.",
+      "Choices": [
+        {
+          "Variable": "$.force",
+          "IsPresent": false,
+          "Next": "ForceDefault"
+        },
+        {
+          "Variable": "$.force",
+          "IsBoolean": true,
+          "Next": "AcquireSecFetchLease"
+        }
+      ],
+      "Default": "InvalidForceInput"
+    },
+    "ForceDefault": {
+      "Type": "Pass",
+      "Comment": "Normalize an omitted operator force input to false.",
+      "Result": false,
+      "ResultPath": "$.force",
+      "Next": "AcquireSecFetchLease"
+    },
+    "InvalidForceInput": {
+      "Type": "Fail",
+      "Error": "InvalidForceInput",
+      "Cause": "Optional execution input 'force' must be a JSON boolean when present."
+    },
+    "AcquireSecFetchLease": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:177",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('acquire-sec-fetch-lease', '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 30,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "ReadSecFetchLeaseResult",
+      "ResultPath": null
+    },
+    "ReadSecFetchLeaseResult": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Parameters": {
+        "Bucket": "edgartools-prod-bronze-690839588395",
+        "Key.$": "States.Format('warehouse/bronze/reference/sec_fetch_lease/runs/{}/lease_result.json', $$.Execution.Name)"
+      },
+      "ResultSelector": {
+        "parsed.$": "States.StringToJson($.Body)"
+      },
+      "ResultPath": "$.sec_fetch_lease_check",
+      "Next": "SecFetchLeaseAcquiredCheck"
+    },
+    "SecFetchLeaseAcquiredCheck": {
+      "Type": "Choice",
+      "Comment": "lease_result.json (not a plain ecs:runTask.sync field) is the source of truth for whether this run holds the shared cross-command sec_fetch_active lease.",
+      "Choices": [
+        {
+          "Variable": "$.sec_fetch_lease_check.parsed.lease_acquired",
+          "BooleanEquals": true,
+          "Next": "SeedUniverse"
+        }
+      ],
+      "Default": "SecFetchDeferred"
+    },
+    "SecFetchDeferred": {
+      "Type": "Pass",
+      "Comment": "sec_fetch_active lease already held by another SEC-fetching command -- an explicit disposition, not an invisible skip. No SEC/IAPD-fetch work started this run (release-readiness ticket 84).",
+      "Parameters": {
+        "disposition": "sec_fetch_deferred",
+        "sec_fetch_lease_check.$": "$.sec_fetch_lease_check.parsed"
+      },
+      "ResultPath": "$.sec_fetch_deferred_summary",
+      "End": true
+    },
+    "ReleaseSecFetchLease": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:177",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('release-sec-fetch-lease', '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 30,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "MdmRun",
+      "ResultPath": null,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": null,
+          "Next": "ReleaseSecFetchLeaseFailedNonFatal"
+        }
+      ]
+    },
+    "ReleaseSecFetchLeaseFailedNonFatal": {
+      "Type": "Pass",
+      "Comment": "Release is best-effort -- a failure here must not mark an otherwise-successful run FAILED. The 16h stale-lease reclaim in acquire_pipeline_run_lease is the actual safety net for a wedged sec_fetch_active lease.",
+      "Next": "MdmRun"
+    },
+    "ReleaseSecFetchLeaseAfterFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:177",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('release-sec-fetch-lease', '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 30,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "SecFetchTaskFailed",
+      "ResultPath": null,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": null,
+          "Next": "SecFetchTaskFailed"
+        }
+      ]
+    },
+    "SecFetchTaskFailed": {
+      "Type": "Fail",
+      "ErrorPath": "$.sec_fetch_task_error.Error",
+      "CausePath": "$.sec_fetch_task_error.Cause"
+    },
+    "SeedUniverse": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:169",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('seed-universe', '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 60,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "MdmSeedUniverse",
+      "ResultPath": null,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.sec_fetch_task_error",
+          "Next": "ReleaseSecFetchLeaseAfterFailure"
+        }
+      ]
+    },
+    "MdmSeedUniverse": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:149",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('mdm', 'seed-universe', '--tracking-status', 'bootstrap_pending')"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 60,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "WindowSizeCheck",
+      "ResultPath": null,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.sec_fetch_task_error",
+          "Next": "ReleaseSecFetchLeaseAfterFailure"
+        }
+      ]
+    },
+    "WindowSizeCheck": {
+      "Type": "Choice",
+      "Comment": "Route to TotalCikLimitCheck directly when caller supplied window_size; otherwise inject the default.",
+      "Choices": [
+        {
+          "Variable": "$.window_size",
+          "IsPresent": true,
+          "Next": "TotalCikLimitCheck"
+        }
+      ],
+      "Default": "WindowSizeDefault"
+    },
+    "WindowSizeDefault": {
+      "Type": "Pass",
+      "Comment": "Inject default window_size=500 when caller passed {} or omitted the key. Result is a bare integer; ResultPath $.window_size writes it directly so $.window_size = 500 (not {\"window_size\": 500}) for ComputeWindows.",
+      "Result": 500,
+      "ResultPath": "$.window_size",
+      "Next": "TotalCikLimitCheck"
+    },
+    "TotalCikLimitCheck": {
+      "Type": "Choice",
+      "Comment": "Route to ArtifactPolicyCheck directly when caller supplied total_cik_limit; otherwise inject the no-limit default.",
+      "Choices": [
+        {
+          "Variable": "$.total_cik_limit",
+          "IsPresent": true,
+          "Next": "ArtifactPolicyCheck"
+        }
+      ],
+      "Default": "TotalCikLimitDefault"
+    },
+    "TotalCikLimitDefault": {
+      "Type": "Pass",
+      "Comment": "Inject the no-limit sentinel 0 when caller passed {} or omitted total_cik_limit, preserving pre-existing full-universe behavior for every caller that doesn't opt into CIK-scoping.",
+      "Result": 0,
+      "ResultPath": "$.total_cik_limit",
+      "Next": "ArtifactPolicyCheck"
+    },
+    "ArtifactPolicyCheck": {
+      "Type": "Choice",
+      "Comment": "Route to FilingLookbackYearsCheck directly when caller supplied artifact_policy; otherwise inject the all_attachments default.",
+      "Choices": [
+        {
+          "Variable": "$.artifact_policy",
+          "IsPresent": true,
+          "Next": "FilingLookbackYearsCheck"
+        }
+      ],
+      "Default": "ArtifactPolicyDefault"
+    },
+    "ArtifactPolicyDefault": {
+      "Type": "Pass",
+      "Comment": "Inject default artifact_policy='all_attachments' when caller passed {} or omitted the key, preserving artifact capture for brand-new CIKs loaded via load_history.",
+      "Result": "all_attachments",
+      "ResultPath": "$.artifact_policy",
+      "Next": "FilingLookbackYearsCheck"
+    },
+    "FilingLookbackYearsCheck": {
+      "Type": "Choice",
+      "Comment": "Route to ComputeWindows directly when caller supplied filing_lookback_years; otherwise inject the 2-year default.",
+      "Choices": [
+        {
+          "Variable": "$.filing_lookback_years",
+          "IsPresent": true,
+          "Next": "ComputeWindows"
+        }
+      ],
+      "Default": "FilingLookbackYearsDefault"
+    },
+    "FilingLookbackYearsDefault": {
+      "Type": "Pass",
+      "Comment": "Inject default filing_lookback_years=2 when caller passed {} or omitted the key -- load_history-specific default, bounding general filing discovery. Pass {\"filing_lookback_years\": 0} explicitly for full history.",
+      "Result": 2,
+      "ResultPath": "$.filing_lookback_years",
+      "Next": "ComputeWindows"
+    },
+    "ComputeWindows": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:169",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('compute-windows', '--window-size', States.Format('{}', $.window_size), '--total-cik-limit', States.Format('{}', $.total_cik_limit), '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 120,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "Stage0CompanyIdentity",
+      "ResultPath": null,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.sec_fetch_task_error",
+          "Next": "ReleaseSecFetchLeaseAfterFailure"
+        }
+      ]
+    },
+    "Stage0CompanyIdentity": {
+      "Type": "Map",
+      "Comment": "Stage 0: Company Identity capture, delta-then-reduce (MaxConcurrency=1, strict) -- runs before ownership/ADV so IS_INSIDER derivation sees resolved Company entities.",
+      "MaxConcurrency": 1,
+      "ToleratedFailurePercentage": 0,
+      "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {
+          "InputType": "JSONL",
+          "MaxItems": 100000
+        },
+        "Parameters": {
+          "Bucket": "edgartools-prod-bronze-690839588395",
+          "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_batches.jsonl', $$.Execution.Name)"
+        }
+      },
+      "ItemSelector": {
+        "cik_list.$": "$$.Map.Item.Value.cik_list",
+        "identity_refresh_run_id.$": "$$.Execution.Name"
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "DISTRIBUTED",
+          "ExecutionType": "STANDARD"
+        },
+        "StartAt": "RunCompanyIdentityBatch",
+        "States": {
+          "RunCompanyIdentityBatch": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::ecs:runTask.sync",
+            "Parameters": {
+              "LaunchType": "FARGATE",
+              "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+              "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:169",
+              "PropagateTags": "TASK_DEFINITION",
+              "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                  "AssignPublicIp": "ENABLED",
+                  "SecurityGroups": [
+                    "sg-0f7de61f13ba27744"
+                  ],
+                  "Subnets": [
+                    "subnet-09dfb6a34597e8ed3",
+                    "subnet-0606a828b86737ac6"
+                  ]
+                }
+              },
+              "Overrides": {
+                "ContainerOverrides": [
+                  {
+                    "Name": "edgar-warehouse",
+                    "Command.$": "States.Array('bootstrap-fundamentals', '--mode', 'company-identity', '--cik-list', $.cik_list, '--identity-refresh-run-id', $.identity_refresh_run_id, '--run-id', $.identity_refresh_run_id)"
+                  }
+                ]
+              }
+            },
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "States.TaskFailed"
+                ],
+                "IntervalSeconds": 120,
+                "BackoffRate": 2.0,
+                "MaxAttempts": 3
+              }
+            ],
+            "End": true
+          }
+        }
+      },
+      "ResultPath": null,
+      "Next": "ReduceIdentityRefresh",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.sec_fetch_task_error",
+          "Next": "ReleaseSecFetchLeaseAfterFailure"
+        }
+      ]
+    },
+    "ReduceIdentityRefresh": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:169",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('reduce-identity-refresh', '--run-id', $$.Execution.Name, '--max-attempts', '3')"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 1,
+          "BackoffRate": 1.0,
+          "MaxAttempts": 1
+        }
+      ],
+      "Next": "Stage1Parallel",
+      "ResultPath": null,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.sec_fetch_task_error",
+          "Next": "ReleaseSecFetchLeaseAfterFailure"
+        }
+      ]
+    },
+    "Stage1Parallel": {
+      "Type": "Parallel",
+      "Comment": "Stage 1 ownership bootstrap. Branch B fundamentals writes the same unified SEC silver database, so all bootstrap-fundamentals modes run sequentially after Branch A. Branch A is strict; Branch B stages catch failures so the pipeline can still advance (AD-13).",
+      "Branches": [
+        {
+          "StartAt": "WindowedBootstrap",
+          "States": {
+            "WindowedBootstrap": {
+              "Type": "Map",
+              "Comment": "Branch A ownership bootstrap (MaxConcurrency=1): one window at a time so silver/ownership/ is consistent.",
+              "MaxConcurrency": 1,
+              "ToleratedFailurePercentage": 0,
+              "ItemReader": {
+                "Resource": "arn:aws:states:::s3:getObject",
+                "ReaderConfig": {
+                  "InputType": "JSONL",
+                  "MaxItems": 100000
+                },
+                "Parameters": {
+                  "Bucket": "edgartools-prod-bronze-690839588395",
+                  "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)"
+                }
+              },
+              "ItemSelector": {
+                "window_offset.$": "$$.Map.Item.Value.window_offset",
+                "window_limit.$": "$$.Map.Item.Value.window_limit",
+                "artifact_policy.$": "$.artifact_policy",
+                "filing_lookback_years.$": "$.filing_lookback_years"
+              },
+              "ItemProcessor": {
+                "ProcessorConfig": {
+                  "Mode": "DISTRIBUTED",
+                  "ExecutionType": "STANDARD"
+                },
+                "StartAt": "RunWindow",
+                "States": {
+                  "RunWindow": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::ecs:runTask.sync",
+                    "Parameters": {
+                      "LaunchType": "FARGATE",
+                      "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+                      "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:169",
+                      "PropagateTags": "TASK_DEFINITION",
+                      "NetworkConfiguration": {
+                        "AwsvpcConfiguration": {
+                          "AssignPublicIp": "ENABLED",
+                          "SecurityGroups": [
+                            "sg-0f7de61f13ba27744"
+                          ],
+                          "Subnets": [
+                            "subnet-09dfb6a34597e8ed3",
+                            "subnet-0606a828b86737ac6"
+                          ]
+                        }
+                      },
+                      "Overrides": {
+                        "ContainerOverrides": [
+                          {
+                            "Name": "edgar-warehouse",
+                            "Command.$": "States.Array('bootstrap-next', '--silver-only', '--cik-limit', States.Format('{}', $.window_limit), '--cik-offset', States.Format('{}', $.window_offset), '--tracking-status-filter', 'active,bootstrap_pending', '--artifact-policy', States.Format('{}', $.artifact_policy), '--filing-lookback-years', States.Format('{}', $.filing_lookback_years), '--run-id', $$.Execution.Name)"
+                          }
+                        ]
+                      }
+                    },
+                    "Retry": [
+                      {
+                        "ErrorEquals": [
+                          "States.TaskFailed"
+                        ],
+                        "IntervalSeconds": 120,
+                        "BackoffRate": 2.0,
+                        "MaxAttempts": 3
+                      }
+                    ],
+                    "End": true
+                  }
+                }
+              },
+              "ResultPath": null,
+              "End": true
+            }
+          }
+        }
+      ],
+      "ResultPath": null,
+      "Next": "Stage1BEntityFacts",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.sec_fetch_task_error",
+          "Next": "ReleaseSecFetchLeaseAfterFailure"
+        }
+      ]
+    },
+    "Stage1BEntityFacts": {
+      "Type": "Map",
+      "Comment": "Branch B entity-facts: SEC companyfacts XBRL -> sec_financial_fact, sec_financial_derived, sec_accounting_flag in unified SEC silver. Runs after Branch A to avoid concurrent writes to the same DuckDB artifact.",
+      "MaxConcurrency": 1,
+      "ToleratedFailurePercentage": 0,
+      "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {
+          "InputType": "JSONL",
+          "MaxItems": 100000
+        },
+        "Parameters": {
+          "Bucket": "edgartools-prod-bronze-690839588395",
+          "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)"
+        }
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "DISTRIBUTED",
+          "ExecutionType": "STANDARD"
+        },
+        "StartAt": "RunFundamentalsEntityFacts",
+        "States": {
+          "RunFundamentalsEntityFacts": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::ecs:runTask.sync",
+            "Parameters": {
+              "LaunchType": "FARGATE",
+              "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+              "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:177",
+              "PropagateTags": "TASK_DEFINITION",
+              "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                  "AssignPublicIp": "ENABLED",
+                  "SecurityGroups": [
+                    "sg-0f7de61f13ba27744"
+                  ],
+                  "Subnets": [
+                    "subnet-09dfb6a34597e8ed3",
+                    "subnet-0606a828b86737ac6"
+                  ]
+                }
+              },
+              "Overrides": {
+                "ContainerOverrides": [
+                  {
+                    "Name": "edgar-warehouse",
+                    "Command.$": "States.Array('bootstrap-fundamentals', '--mode', 'entity-facts', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)"
+                  }
+                ]
+              }
+            },
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "States.TaskFailed"
+                ],
+                "IntervalSeconds": 120,
+                "BackoffRate": 2.0,
+                "MaxAttempts": 3
+              }
+            ],
+            "End": true
+          }
+        }
+      },
+      "ResultPath": null,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": null,
+          "Next": "Stage1BPerFiling"
+        }
+      ],
+      "Next": "Stage1BPerFiling"
+    },
+    "Stage1BPerFiling": {
+      "Type": "Map",
+      "Comment": "Branch B per-filing (post-Branch-A): 8-K earnings + DEF 14A proxy -> sec_earnings_release, sec_executive_record in unified SEC silver. Reads filing/attachment/raw-object metadata Branch A just finished writing.",
+      "MaxConcurrency": 1,
+      "ToleratedFailurePercentage": 0,
+      "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {
+          "InputType": "JSONL",
+          "MaxItems": 100000
+        },
+        "Parameters": {
+          "Bucket": "edgartools-prod-bronze-690839588395",
+          "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)"
+        }
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "DISTRIBUTED",
+          "ExecutionType": "STANDARD"
+        },
+        "StartAt": "RunFundamentalsPerFiling",
+        "States": {
+          "RunFundamentalsPerFiling": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::ecs:runTask.sync",
+            "Parameters": {
+              "LaunchType": "FARGATE",
+              "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+              "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:177",
+              "PropagateTags": "TASK_DEFINITION",
+              "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                  "AssignPublicIp": "ENABLED",
+                  "SecurityGroups": [
+                    "sg-0f7de61f13ba27744"
+                  ],
+                  "Subnets": [
+                    "subnet-09dfb6a34597e8ed3",
+                    "subnet-0606a828b86737ac6"
+                  ]
+                }
+              },
+              "Overrides": {
+                "ContainerOverrides": [
+                  {
+                    "Name": "edgar-warehouse",
+                    "Command.$": "States.Array('bootstrap-fundamentals', '--mode', 'per-filing', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)"
+                  }
+                ]
+              }
+            },
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "States.TaskFailed"
+                ],
+                "IntervalSeconds": 120,
+                "BackoffRate": 2.0,
+                "MaxAttempts": 3
+              }
+            ],
+            "End": true
+          }
+        }
+      },
+      "ResultPath": null,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": null,
+          "Next": "Stage1BThirteenF"
+        }
+      ],
+      "Next": "Stage1BThirteenF"
+    },
+    "Stage1BThirteenF": {
+      "Type": "Map",
+      "Comment": "Branch B 13F (post-Branch-A, data-architecture Issue 4): INFORMATION TABLE XML -> sec_thirteenf_holding in unified SEC silver. Same Branch A dependency as per-filing; runs after it in this same sequential stage.",
+      "MaxConcurrency": 1,
+      "ToleratedFailurePercentage": 0,
+      "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {
+          "InputType": "JSONL",
+          "MaxItems": 100000
+        },
+        "Parameters": {
+          "Bucket": "edgartools-prod-bronze-690839588395",
+          "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)"
+        }
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "DISTRIBUTED",
+          "ExecutionType": "STANDARD"
+        },
+        "StartAt": "RunFundamentalsThirteenF",
+        "States": {
+          "RunFundamentalsThirteenF": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::ecs:runTask.sync",
+            "Parameters": {
+              "LaunchType": "FARGATE",
+              "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+              "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:177",
+              "PropagateTags": "TASK_DEFINITION",
+              "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                  "AssignPublicIp": "ENABLED",
+                  "SecurityGroups": [
+                    "sg-0f7de61f13ba27744"
+                  ],
+                  "Subnets": [
+                    "subnet-09dfb6a34597e8ed3",
+                    "subnet-0606a828b86737ac6"
+                  ]
+                }
+              },
+              "Overrides": {
+                "ContainerOverrides": [
+                  {
+                    "Name": "edgar-warehouse",
+                    "Command.$": "States.Array('bootstrap-fundamentals', '--mode', 'thirteenf', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)"
+                  }
+                ]
+              }
+            },
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "States.TaskFailed"
+                ],
+                "IntervalSeconds": 120,
+                "BackoffRate": 2.0,
+                "MaxAttempts": 3
+              }
+            ],
+            "End": true
+          }
+        }
+      },
+      "ResultPath": null,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": null,
+          "Next": "DatasetPeriodCheck"
+        }
+      ],
+      "Next": "DatasetPeriodCheck"
+    },
+    "DatasetPeriodCheck": {
+      "Type": "Choice",
+      "Comment": "Route to ForceCheck directly when caller supplied dataset_period; otherwise inject the empty-string default.",
+      "Choices": [
+        {
+          "Variable": "$.dataset_period",
+          "IsPresent": true,
+          "Next": "ForceCheck"
+        }
+      ],
+      "Default": "DatasetPeriodDefault"
+    },
+    "DatasetPeriodDefault": {
+      "Type": "Pass",
+      "Comment": "Inject default dataset_period='' when caller passed {} or omitted the key \u2014 fetch-adv-bulk auto-detects the rolling window in that case.",
+      "Result": "",
+      "ResultPath": "$.dataset_period",
+      "Next": "ForceCheck"
+    },
+    "ForceCheck": {
+      "Type": "Choice",
+      "Comment": "Route to FetchAdvBulkForced (includes --force) when caller supplied force=true; otherwise FetchAdvBulk (no --force), the normal path.",
+      "Choices": [
+        {
+          "Variable": "$.force",
+          "IsPresent": false,
+          "Next": "FetchAdvBulk"
+        },
+        {
+          "Variable": "$.force",
+          "BooleanEquals": true,
+          "Next": "FetchAdvBulkForced"
+        },
+        {
+          "Variable": "$.force",
+          "BooleanEquals": false,
+          "Next": "FetchAdvBulk"
+        }
+      ],
+      "Default": "InvalidForceInput"
+    },
+    "FetchAdvBulk": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:177",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 120,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "IngestAdvBulkSources",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": null,
+          "Next": "ReleaseSecFetchLease"
+        }
+      ],
+      "ResultPath": null
+    },
+    "FetchAdvBulkForced": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:177",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 120,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "IngestAdvBulkSources",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": null,
+          "Next": "ReleaseSecFetchLease"
+        }
+      ],
+      "ResultPath": null
+    },
+    "IngestAdvBulkSources": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:177",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('ingest-relationship-sources', '--source-manifest', States.Format('s3://edgartools-prod-bronze-690839588395/warehouse/bronze/runs/fetch-adv-bulk/{}/source_manifest.json', $$.Execution.Name), '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 120,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "FirmRosterForceCheck",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": null,
+          "Next": "ReleaseSecFetchLease"
+        }
+      ],
+      "ResultPath": null
+    },
+    "FirmRosterForceCheck": {
+      "Type": "Choice",
+      "Comment": "Route to FetchFirmRosterForced (includes --force) when caller supplied force=true; otherwise FetchFirmRoster (no --force).",
+      "Choices": [
+        {
+          "Variable": "$.force",
+          "IsPresent": false,
+          "Next": "FetchFirmRoster"
+        },
+        {
+          "Variable": "$.force",
+          "BooleanEquals": true,
+          "Next": "FetchFirmRosterForced"
+        },
+        {
+          "Variable": "$.force",
+          "BooleanEquals": false,
+          "Next": "FetchFirmRoster"
+        }
+      ],
+      "Default": "InvalidForceInput"
+    },
+    "FetchFirmRoster": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:177",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 120,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "IngestFirmRosterSources",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": null,
+          "Next": "ReleaseSecFetchLease"
+        }
+      ],
+      "ResultPath": null
+    },
+    "FetchFirmRosterForced": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:177",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 120,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "IngestFirmRosterSources",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": null,
+          "Next": "ReleaseSecFetchLease"
+        }
+      ],
+      "ResultPath": null
+    },
+    "IngestFirmRosterSources": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:177",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('ingest-relationship-sources', '--source-manifest', States.Format('s3://edgartools-prod-bronze-690839588395/warehouse/bronze/runs/fetch-firm-roster/{}/source_manifest.json', $$.Execution.Name), '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 120,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "ReleaseSecFetchLease",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": null,
+          "Next": "ReleaseSecFetchLease"
+        }
+      ],
+      "ResultPath": null
+    },
+    "MdmRun": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:149",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '100')"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 120,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "MdmBackfill"
+    },
+    "MdmBackfill": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:149",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('mdm', 'backfill-relationships', '--limit', '200')"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 120,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "MdmExport"
+    },
+    "MdmExport": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:149",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('mdm', 'export')"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 120,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "MdmSync"
+    },
+    "MdmSync": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:149",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('mdm', 'sync-graph', '--limit', '200')"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 120,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "MdmVerify"
+    },
+    "MdmVerify": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-small:149",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('mdm', 'verify-graph')"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 120,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "GoldRefresh",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": null,
+          "Next": "GoldRefresh"
+        }
+      ]
+    },
+    "GoldRefresh": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:169",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('gold-refresh', '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 60,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "WriteRunSummary"
+    },
+    "WriteRunSummary": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:177",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('write-run-summary', '--run-id', $$.Execution.Name, '--from-windows-key', States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name))"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 120,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 3
+        }
+      ],
+      "End": true
+    }
+  }
+}
+

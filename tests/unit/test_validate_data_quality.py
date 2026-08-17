@@ -2,10 +2,24 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from unittest.mock import patch
 
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 from edgar_warehouse.silver_store import SilverDatabase
+from tests.unit._fake_snowflake import (
+    EMPTY_ORPHAN_EVIDENCE_TABLE_DATA,
+    FakeSnowflakeConnectionSettings,
+)
+
+# validate_data_quality() calls build_gold(), which includes 5 builders that
+# read Snowflake's EDGARTOOLS_SILVER directly instead of the local DuckDB
+# fixture (dbt-gold-silver-rewiring map, Ticket 06) -- patch their connection
+# so these tests don't attempt a real Snowflake connection.
+_patch_silver_connection = patch(
+    "edgar_warehouse.mdm.export.silver_connection_settings",
+    return_value=FakeSnowflakeConnectionSettings(EMPTY_ORPHAN_EVIDENCE_TABLE_DATA),
+)
 
 
 def _context(tmp_path) -> WarehouseCommandContext:
@@ -81,7 +95,8 @@ def test_validate_data_quality_flags_row_count_regressions(tmp_path) -> None:
     finally:
         db.close()
 
-    report = validate_data_quality(context=context)
+    with _patch_silver_connection:
+        report = validate_data_quality(context=context)
 
     assert report["checks"]["row_count_monotonic"]["status"] == "failed"
     assert {
@@ -110,7 +125,8 @@ def test_validate_data_quality_flags_foreign_key_orphans(tmp_path) -> None:
     finally:
         db.close()
 
-    report = validate_data_quality(context=context)
+    with _patch_silver_connection:
+        report = validate_data_quality(context=context)
 
     assert report["status"] == "failed"
     assert {
@@ -146,7 +162,8 @@ def test_validate_data_quality_compares_direct_gold_and_silver_counts(tmp_path) 
     finally:
         db.close()
 
-    report = validate_data_quality(context=context)
+    with _patch_silver_connection:
+        report = validate_data_quality(context=context)
 
     comparison = report["checks"]["gold_vs_silver"]["tables"]["sec_financial_fact"]
     assert comparison == {
@@ -175,7 +192,8 @@ def test_validate_data_quality_reports_null_ratios(tmp_path) -> None:
     finally:
         db.close()
 
-    report = validate_data_quality(context=context)
+    with _patch_silver_connection:
+        report = validate_data_quality(context=context)
 
     entity_type_ratio = report["checks"]["null_ratios"]["tables"]["sec_company"]["columns"][
         "entity_type"

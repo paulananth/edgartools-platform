@@ -2,6 +2,9 @@
 # Read-only gate for promoting the former production-shaped environment to prod.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SECRETS_MANIFEST_JSON_PATH="${SCRIPT_DIR}/secrets-manifest.json"
+
 usage() {
   cat <<'EOF'
 Usage: preflight-prod-promotion.sh [options]
@@ -64,14 +67,47 @@ for bucket in "${targets[@]}"; do
   fi
 done
 
-for secret in \
-  edgartools-prod-edgar-identity \
-  edgartools-prod/mdm/postgres_dsn \
-  edgartools-prod/mdm/snowflake; do
-  aws_read secretsmanager describe-secret --secret-id "$secret" >/dev/null 2>&1 \
-    && pass "secret container exists: ${secret}" \
-    || fail "missing secret container: ${secret}"
-done
+# edgar-identity uses a separate legacy hyphenated naming convention and is
+# deliberately not in secrets-manifest.json (see the manifest's own
+# top-level $comment) -- checked here on its own, not from the manifest loop.
+aws_read secretsmanager describe-secret --secret-id edgartools-prod-edgar-identity >/dev/null 2>&1 \
+  && pass "secret container exists: edgartools-prod-edgar-identity" \
+  || fail "missing secret container: edgartools-prod-edgar-identity"
+
+# Every secret this platform depends on, per secrets-manifest.json (Ticket 5
+# of the credential-isolation breakdown) -- previously a hardcoded list of
+# 2, which is exactly how the dbt/snowflake gap this manifest exists to
+# document went uncaught pre-promotion. describe-secret only (metadata),
+# never get-secret-value -- no secret value is ever read by this check.
+[[ -f "$SECRETS_MANIFEST_JSON_PATH" ]] || fail "secrets manifest not found at ${SECRETS_MANIFEST_JSON_PATH}"
+if [[ -f "$SECRETS_MANIFEST_JSON_PATH" ]]; then
+  while IFS=$'\t' read -r manifest_name populated_in_prod; do
+    secret_id="edgartools-prod/${manifest_name}"
+    # Check the command's own exit status, not output emptiness -- a
+    # successful describe-secret with a genuinely empty body (as this
+    # script's own test fakes, and possibly some real edge case) must still
+    # count as "exists," matching the pre-existing check's own >/dev/null
+    # 2>&1 && ... || ... pattern for every other AWS check in this file.
+    if describe_json="$(aws_read secretsmanager describe-secret --secret-id "$secret_id" 2>/dev/null)"; then
+      pass "secret container exists: ${secret_id}"
+    else
+      fail "missing secret container: ${secret_id}"
+      continue
+    fi
+    if [[ "$populated_in_prod" == "true" ]]; then
+      # VersionIdsToStages is part of describe-secret's own response (still
+      # metadata, not a value) -- empty/absent means the container exists
+      # but has never actually been written to, exactly the shape of the
+      # gap this check exists to catch.
+      has_version="$(jq -r '(.VersionIdsToStages // {}) | length > 0' <<<"$describe_json" 2>/dev/null || echo false)"
+      if [[ "$has_version" == "true" ]]; then
+        pass "secret has a value: ${secret_id}"
+      else
+        fail "secret container exists but has never been populated: ${secret_id}"
+      fi
+    fi
+  done < <(jq -r '.secrets[] | [.name, (.populated_in_prod | tostring)] | @tsv' "$SECRETS_MANIFEST_JSON_PATH")
+fi
 
 for repository in edgartools-prod-warehouse edgartools-prod-mdm; do
   aws_read ecr describe-images --repository-name "$repository" --filter tagStatus=TAGGED --max-items 1 >/dev/null 2>&1 \

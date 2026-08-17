@@ -29,7 +29,8 @@ select
     underlying_security_title,
     underlying_security_shares,
     parser_version,
-    last_sync_run_id
+    last_sync_run_id,
+    mdm_entity_id
 from {{ source('edgartools_silver_landing', 'SEC_OWNERSHIP_DERIVATIVE_TXN') }}
 qualify row_number() over (
     partition by accession_number, owner_index, txn_index

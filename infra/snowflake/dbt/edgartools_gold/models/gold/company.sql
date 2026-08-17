@@ -8,6 +8,12 @@
 -- .scratch/unified-company-dimension/issues/05-research-findings.md), but the
 -- row_number/flag guard stays in as a safeguard against a future re-run of
 -- MDM entity resolution reintroducing one, not because it's exercised now.
+--
+-- dbt-gold-silver-rewiring map, Ticket 03: base now reads dbt silver
+-- (sec_company) via ref() instead of the Python-builder-populated
+-- EDGARTOOLS_SOURCE mirror. company_key = cik (never a hash -- the Python
+-- builder derived it as a plain identity, so no surrogate_key() macro is
+-- involved here). The MDM golden-record join below is untouched.
 with mdm_company as (
   select
     entity_id,
@@ -22,7 +28,7 @@ with mdm_company as (
 )
 
 select
-  c.company_key,
+  c.cik as company_key,
   c.cik,
   c.entity_name,
   c.entity_type,
@@ -36,7 +42,7 @@ select
   m.tracking_status,
   m.parent_company_entity_id,
   coalesce(m.cik_match_count, 0) > 1 as has_multi_match_mdm_entity
-from {{ source("edgartools_source", "COMPANY") }} c
+from {{ ref("sec_company") }} c
 left join mdm_company m
   on m.cik = c.cik
   and m.cik_rank = 1

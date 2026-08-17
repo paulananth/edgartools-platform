@@ -105,6 +105,59 @@ def test_accounting_flag_score_backfill_only_records_on_real_match(tmp_path):
     }
 
 
+def test_replace_company_tickers_records_the_enriched_row_not_the_raw_input(tmp_path):
+    """replace_company_tickers enriches each caller-supplied {cik, ticker,
+    exchange} row internally (source_name, source_rank, last_sync_run_id,
+    last_synced_at added inside its own loop) before the DuckDB INSERT --
+    unlike every other landing-tracked method here, whose callers already
+    pass fully-shaped rows. Confirmed live (silver-snowflake-migration
+    issue 08) that recording the raw 3-column input instead of the
+    enriched row landed source_name (a NOT NULL column in the Snowflake
+    schema) as NULL on every row, which suspended LOAD_SILVER_LANDING_TASK.
+    The recorded row must carry every column the DuckDB INSERT does."""
+    buffer = LandingExportBuffer()
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=buffer)
+    try:
+        db.replace_company_tickers(
+            [{"cik": 320193, "ticker": "AAPL", "exchange": "Nasdaq"}],
+            "run-1",
+            source_name="company_tickers_exchange",
+        )
+    finally:
+        db.close()
+
+    recorded = buffer.tables()["sec_company_ticker"]
+    assert len(recorded) == 1
+    row = recorded[0]
+    assert row["cik"] == 320193
+    assert row["ticker"] == "AAPL"
+    assert row["exchange"] == "Nasdaq"
+    assert row["source_name"] == "company_tickers_exchange"
+    assert row["source_rank"] == 1
+    assert row["last_sync_run_id"] == "run-1"
+    assert row["last_synced_at"] is not None
+
+
+def test_replace_company_tickers_skips_rows_missing_cik_or_ticker(tmp_path):
+    buffer = LandingExportBuffer()
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=buffer)
+    try:
+        db.replace_company_tickers(
+            [
+                {"cik": None, "ticker": "AAPL"},
+                {"cik": 320193, "ticker": ""},
+                {"cik": 789019, "ticker": "MSFT"},
+            ],
+            "run-1",
+        )
+    finally:
+        db.close()
+
+    recorded = buffer.tables()["sec_company_ticker"]
+    assert len(recorded) == 1
+    assert recorded[0]["cik"] == 789019
+
+
 def test_every_landing_scoped_table_has_a_decorated_writer(tmp_path):
     """Regression guard for exactly the failure shape this migration keeps
     finding and fixing (pipeline_run_lease, sec_guidance_fact_reject,

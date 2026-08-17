@@ -54,6 +54,17 @@ currently running images, and an explicit two-image rollback capability.
 
 ## Out of scope
 
+- [Decide the Canonical Bronze-to-Silver-to-Snowflake Flow](issues/07-decide-canonical-bronze-silver-snowflake-flow.md)
+  and [Implement Direct Run-Scoped Snowflake Publication](issues/08-implement-direct-run-scoped-snowflake-publication.md)
+  — recovered 2026-08-16 from an orphaned, never-committed worktree. Real
+  resolved decision (eliminate the Snowflake-export bucket + Gold Parquet,
+  publish directly from ECS) with a claimed-but-unfinished implementation,
+  both dated 2026-08-01. Superseded in practice by `silver-snowflake-migration`
+  (shipped 2026-08-13/14, kept native pull + landing zone instead) and, on cost
+  grounds, not worth reviving — see ticket 08's outcome note for the full
+  comparison. Out of scope for *this* map because replacing native S3 pull is
+  a data-architecture redesign beyond this map's own Destination, not because
+  the original decision was wrong on its own terms.
 - Deleting durable run manifests, release evidence, Bronze artifacts, or data
   needed for long-lived integrity and audit claims.
 - Reducing log retention below seven days or selectively retaining errors past

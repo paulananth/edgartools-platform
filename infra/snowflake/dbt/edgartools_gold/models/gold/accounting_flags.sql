@@ -1,20 +1,67 @@
 -- ACCOUNTING_FLAGS: Annual auditor identity + forensic scores per 10-K filing.
 --
--- Isolated DAG branch — zero ref() edges into the existing 9-table chain.
 -- Adds risk_tier classification derived from forensic score thresholds and
 -- consecutive_auditor_years (number of years same auditor has been retained).
 --
--- Source shape (PR-1 / Q3-D):
---   DIMENSIONAL — ACCOUNTING_FLAG source carries surrogate fact_key plus
---   COMPANY+DATE+FORM FKs.  auditor_name / auditor_pcaob_id retained as
---   natural-key columns; AUDIT_FIRM dim deferred until cross-firm analytics
---   demand emerges.
+-- dbt-gold-silver-rewiring map, Ticket 05: `base` now reads dbt silver's
+-- sec_accounting_flag via ref() instead of the Python-builder-populated
+-- EDGARTOOLS_SOURCE mirror, reconstructing _build_fact_accounting_flag's
+-- (gold_models.py) fact_key/company_key/fiscal_year_date_key/form_key
+-- exactly -- kept isolated from Tickets 02-04 because sec_accounting_flag's
+-- own silver model (models/silver/sec_accounting_flag.sql) carries the
+-- separately-tracked forensic-score "last non-null wins" fix
+-- (LAST_VALUE(...IGNORE NULLS) over beneish_m_score/altman_z_score/
+-- piotroski_f_score, generate_silver_dbt_models.py's
+-- _COALESCE_PRESERVING_COLUMNS) -- this rewire picks up that already-fixed
+-- output automatically, not a stale pre-fix baseline. The with_tenure/
+-- with_risk derivation below is unchanged dbt SQL, not part of the Python
+-- builder being replaced -- it already ran downstream of `base`, whatever
+-- `base` sourced from.
+--
+--   fact_key = hash(accession_number) -- single-field surrogate key, no
+--     discriminator needed (accession_number is already this table's PK)
+--   form_key = hash(form_type), falling back to hash('10-K') when
+--     form_type IS NULL -- reproducing the original DuckDB
+--     COALESCE(hash(form_type), hash('10-K')) exactly. Needs an explicit
+--     CASE guard, not COALESCE: unlike DuckDB, Snowflake's HASH(NULL)
+--     returns a real, deterministic, nonzero value, so COALESCE would never
+--     actually fall through. form_type is NOT NULL in the silver DDL today
+--     (silver_store.py: "always 10-K"), so this branch is currently
+--     unreachable -- kept for exact behavioral parity with the Python
+--     builder anyway, matching this map's established rigor.
+--   fiscal_year_date_key = fiscal_year*10000 + 1231 -- a synthetic
+--     "fiscal-year-end" YYYYMMDD-shaped int, not a real calendar date, so
+--     this is direct arithmetic on the integer fiscal_year column, not the
+--     date_key() macro (which operates on an actual DATE expression)
 --
 -- Grain: one row per (cik, accession_number).
 {{ gold_model_config('ACCOUNTING_FLAGS') }}
 
 with base as (
-    select * from {{ source("edgartools_source", "ACCOUNTING_FLAG") }}
+    select
+        {{ surrogate_key(['accession_number']) }} as fact_key,
+        cik as company_key,
+        (fiscal_year * 10000 + 1231)::integer as fiscal_year_date_key,
+        case
+            when form_type is null then {{ surrogate_key(["'10-K'"]) }}
+            else {{ surrogate_key(['form_type']) }}
+        end as form_key,
+        accession_number,
+        cik,
+        fiscal_year,
+        period_end,
+        form_type,
+        auditor_name,
+        auditor_pcaob_id,
+        auditor_location,
+        icfr_attestation,
+        auditor_changed,
+        beneish_m_score,
+        altman_z_score,
+        piotroski_f_score,
+        parser_version,
+        ingested_at
+    from {{ ref('sec_accounting_flag') }}
 ),
 
 with_tenure as (

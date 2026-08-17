@@ -386,11 +386,18 @@ class WarehousePathResolver:
             "release-identity-refresh-lease",
             "acquire-sec-fetch-lease",
             "release-sec-fetch-lease",
+            "backfill-mdm-entity-ids",
+            "backfill-silver-landing-company-metadata",
         ):
             # Lease commands write the pipeline_run_lease DB row plus their own
             # lease_result.json side-channel (identity_refresh_lease_path /
             # sec_fetch_lease_path) -- neither goes through this run-manifest
             # writer, so no bronze/gold manifest entries are produced here.
+            # backfill-mdm-entity-ids (mdm-ahead-of-silver map, Phase B/ticket
+            # 06) and backfill-silver-landing-company-metadata (duckdb-
+            # retirement map) both read silver directly and write via the
+            # separate LandingExportBuffer/write_landing_export manifest, not
+            # bronze/gold -- same "no manifest layers beyond artifacts" shape.
             return {
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }

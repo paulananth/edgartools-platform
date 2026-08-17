@@ -57,7 +57,11 @@ CREATE TABLE IF NOT EXISTS sec_company (
     category                   TEXT,
     first_sync_run_id          TEXT,
     last_sync_run_id           TEXT,
-    last_synced_at             TIMESTAMPTZ
+    last_synced_at             TIMESTAMPTZ,
+    -- MDM-ahead-of-silver (mdm-ahead-of-silver map, ticket 02): NULL at
+    -- parse time, backfilled by an independent sweep -- never written
+    -- synchronously by the ingestion write path itself.
+    mdm_entity_id               TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sec_company_address (
@@ -154,6 +158,10 @@ CREATE TABLE IF NOT EXISTS sec_ownership_reporting_owner (
     officer_title       TEXT,
     parser_version      TEXT,
     last_sync_run_id    TEXT,
+    -- MDM-ahead-of-silver (mdm-ahead-of-silver map, ticket 02): NULL at
+    -- parse time, backfilled by an independent sweep -- never written
+    -- synchronously by the ingestion write path itself.
+    mdm_entity_id       TEXT,
     PRIMARY KEY (accession_number, owner_index)
 );
 
@@ -172,6 +180,10 @@ CREATE TABLE IF NOT EXISTS sec_ownership_non_derivative_txn (
     ownership_direct_indirect TEXT,
     parser_version      TEXT,
     last_sync_run_id    TEXT,
+    -- MDM-ahead-of-silver (mdm-ahead-of-silver map, ticket 02): NULL at
+    -- parse time, backfilled by an independent sweep -- never written
+    -- synchronously by the ingestion write path itself.
+    mdm_entity_id       TEXT,
     PRIMARY KEY (accession_number, owner_index, txn_index)
 );
 
@@ -195,6 +207,10 @@ CREATE TABLE IF NOT EXISTS sec_ownership_derivative_txn (
     underlying_security_shares DECIMAL(28,8),
     parser_version      TEXT,
     last_sync_run_id    TEXT,
+    -- MDM-ahead-of-silver (mdm-ahead-of-silver map, ticket 02): NULL at
+    -- parse time, backfilled by an independent sweep -- never written
+    -- synchronously by the ingestion write path itself.
+    mdm_entity_id       TEXT,
     PRIMARY KEY (accession_number, owner_index, txn_index)
 );
 
@@ -210,7 +226,11 @@ CREATE TABLE IF NOT EXISTS sec_adv_filing (
     filing_action       TEXT,
     source_format       TEXT,
     parser_version      TEXT,
-    last_sync_run_id    TEXT
+    last_sync_run_id    TEXT,
+    -- MDM-ahead-of-silver (mdm-ahead-of-silver map, ticket 02): NULL at
+    -- parse time, backfilled by an independent sweep -- never written
+    -- synchronously by the ingestion write path itself.
+    mdm_entity_id       TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sec_adv_office (
@@ -257,6 +277,10 @@ CREATE TABLE IF NOT EXISTS sec_adv_private_fund (
     source_sha256       TEXT,
     parser_version      TEXT,
     last_sync_run_id    TEXT,
+    -- MDM-ahead-of-silver (mdm-ahead-of-silver map, ticket 02): NULL at
+    -- parse time, backfilled by an independent sweep -- never written
+    -- synchronously by the ingestion write path itself.
+    mdm_entity_id       TEXT,
     PRIMARY KEY (accession_number, fund_index)
 );
 
@@ -923,6 +947,12 @@ class SilverDatabase:
                 "Add backstop_overdue to pipeline_run_lease.",
                 self._add_pipeline_run_lease_backstop_overdue,
             ),
+            (
+                "009_mdm_entity_id_columns",
+                "Add mdm_entity_id to the 5 MDM-ahead-of-silver source tables "
+                "(company, adviser, person, fund, security).",
+                self._add_mdm_entity_id_columns,
+            ),
         )
 
     def _schema_migration_applied(self, migration_name: str) -> bool:
@@ -998,6 +1028,24 @@ class SilverDatabase:
             "ALTER TABLE pipeline_run_lease ADD COLUMN IF NOT EXISTS "
             "backstop_overdue BOOLEAN DEFAULT FALSE"
         )
+
+    def _add_mdm_entity_id_columns(self) -> None:
+        # mdm-ahead-of-silver map, ticket 02/05: no DEFAULT -- NULL is the
+        # deliberate "pending resolution" marker the backfill sweep queries
+        # against (WHERE mdm_entity_id IS NULL), mirroring the existing
+        # mdm_change_log.exported_at / mdm_relationship_instance.graph_synced_at
+        # nullable-column-plus-sweep pattern.
+        for table in (
+            "sec_company",
+            "sec_adv_filing",
+            "sec_ownership_reporting_owner",
+            "sec_adv_private_fund",
+            "sec_ownership_non_derivative_txn",
+            "sec_ownership_derivative_txn",
+        ):
+            self._conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS mdm_entity_id TEXT"
+            )
 
     def _widen_adv_fund_index_to_bigint(self) -> None:
         """``CREATE TABLE IF NOT EXISTS`` never widens an existing store's column type.
@@ -1352,7 +1400,6 @@ class SilverDatabase:
     # sec_company_ticker
     # ------------------------------------------------------------------
 
-    @track_landing_rows("sec_company_ticker")
     def replace_company_tickers(
         self,
         rows: list[dict[str, Any]],
@@ -1360,17 +1407,33 @@ class SilverDatabase:
         *,
         source_name: str = "company_tickers_exchange",
     ) -> int:
+        # Deliberately NOT @track_landing_rows("sec_company_ticker"): that
+        # decorator records the caller's raw `rows` argument as-is, which is
+        # correct for every other merge_*/upsert_* method here because their
+        # callers already pass fully-shaped rows. This method is the
+        # exception -- its caller passes bare {cik, ticker, exchange} dicts
+        # straight from company_tickers_exchange.json, and source_name/
+        # source_rank/last_sync_run_id/last_synced_at are only added below,
+        # inside this function's own loop. Using the decorator here silently
+        # landed 3-column rows missing source_name (a NOT NULL column in the
+        # Snowflake landing schema) on every row, every run -- confirmed live
+        # as the root cause of LOAD_SILVER_LANDING_TASK's suspension
+        # (.scratch/silver-snowflake-migration/issues/08-...). Recording the
+        # actual enriched row manually, after the loop, fixes it at the
+        # source instead of special-casing the decorator further.
         now = datetime.now(UTC)
         self._conn.execute(
             "DELETE FROM sec_company_ticker WHERE source_name = ?",
             [source_name],
         )
         count = 0
+        landed_rows: list[dict[str, Any]] = []
         for ordinal, row in enumerate(rows, start=1):
             ticker = row.get("ticker")
             cik = row.get("cik")
             if cik is None or not ticker:
                 continue
+            exchange = row.get("exchange")
             self._conn.execute(
                 """
                 INSERT INTO sec_company_ticker
@@ -1381,7 +1444,7 @@ class SilverDatabase:
                 [
                     cik,
                     ticker,
-                    row.get("exchange"),
+                    exchange,
                     source_name,
                     ordinal,
                     sync_run_id,
@@ -1389,6 +1452,20 @@ class SilverDatabase:
                 ],
             )
             count += 1
+            landed_rows.append(
+                {
+                    "cik": cik,
+                    "ticker": ticker,
+                    "exchange": exchange,
+                    "source_name": source_name,
+                    "source_rank": ordinal,
+                    "last_sync_run_id": sync_run_id,
+                    "last_synced_at": now,
+                }
+            )
+        landing_export = getattr(self, "landing_export", None)
+        if landing_export is not None and landed_rows:
+            landing_export.record("sec_company_ticker", landed_rows)
         return count
 
     def get_company_tickers(self, cik: int) -> list[dict[str, Any]]:

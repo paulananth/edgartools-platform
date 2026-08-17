@@ -16,7 +16,8 @@ select
     filing_action,
     source_format,
     parser_version,
-    last_sync_run_id
+    last_sync_run_id,
+    mdm_entity_id
 from {{ source('edgartools_silver_landing', 'SEC_ADV_FILING') }}
 qualify row_number() over (
     partition by accession_number

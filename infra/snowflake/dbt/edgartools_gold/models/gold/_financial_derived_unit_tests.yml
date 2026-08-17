@@ -15,7 +15,7 @@ unit_tests:
     description: Basic YoY growth -- one prior-year row, one current-year row, simple positive growth.
     model: financial_derived
     given:
-      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+      - input: ref('sec_financial_derived')
         rows:
           - &row_defaults
             cik: 1
@@ -81,7 +81,7 @@ unit_tests:
     description: First filing for a company -- no prior-year row exists, growth columns are null.
     model: financial_derived
     given:
-      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+      - input: ref('sec_financial_derived')
         rows:
           - <<: *row_defaults
             cik: 2
@@ -104,7 +104,7 @@ unit_tests:
     description: Prior-year revenue is zero -- division guard returns null for revenue_yoy_growth while other metrics compute normally.
     model: financial_derived
     given:
-      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+      - input: ref('sec_financial_derived')
         rows:
           - <<: *row_defaults
             cik: 3
@@ -141,7 +141,7 @@ unit_tests:
     description: Net income flips from negative to positive -- formula handles sign correctly (no special-casing).
     model: financial_derived
     given:
-      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+      - input: ref('sec_financial_derived')
         rows:
           - <<: *row_defaults
             cik: 4
@@ -177,7 +177,7 @@ unit_tests:
       prior-year baseline (1A/3A tiebreaker).
     model: financial_derived
     given:
-      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+      - input: ref('sec_financial_derived')
         rows:
           # Accession 0008 is FY2023's own 10-K -- its FY2023 row is "current"
           # (period_end == max(period_end) for this accession/fiscal_period).
@@ -222,7 +222,7 @@ unit_tests:
       amendment) -- accession_number desc picks the amendment (3A).
     model: financial_derived
     given:
-      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+      - input: ref('sec_financial_derived')
         rows:
           - <<: *row_defaults
             cik: 6
@@ -261,7 +261,7 @@ unit_tests:
     description: A prior-year row exists but for a different fiscal_period (Q1 vs FY) -- join condition excludes it, growth is null.
     model: financial_derived
     given:
-      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+      - input: ref('sec_financial_derived')
         rows:
           - <<: *row_defaults
             cik: 7
@@ -301,7 +301,7 @@ unit_tests:
       "current" predecessor, not a comparative restatement.
     model: financial_derived
     given:
-      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+      - input: ref('sec_financial_derived')
         rows:
           # 0015: FY2022's own 10-K -- FY2022 current.
           - <<: *row_defaults
@@ -363,7 +363,7 @@ unit_tests:
     description: Prior-year ebitda is null (not zero) -- NULL guard returns null for ebitda_yoy_growth without affecting other metrics.
     model: financial_derived
     given:
-      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+      - input: ref('sec_financial_derived')
         rows:
           - <<: *row_defaults
             cik: 9
@@ -398,7 +398,7 @@ unit_tests:
     description: Two companies with overlapping fiscal years -- partitioning by cik keeps growth calcs independent.
     model: financial_derived
     given:
-      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+      - input: ref('sec_financial_derived')
         rows:
           - <<: *row_defaults
             cik: 10
@@ -447,7 +447,7 @@ unit_tests:
     description: Three consecutive fiscal years for one company -- each year's growth uses its own immediate predecessor, not an earlier year.
     model: financial_derived
     given:
-      - input: source('edgartools_source', 'SEC_FINANCIAL_DERIVED')
+      - input: ref('sec_financial_derived')
         rows:
           - <<: *row_defaults
             cik: 12

@@ -267,5 +267,28 @@ changes):
   argument order instead.
 - Full suite green: 1974 passed, 4 skipped.
 
-Not yet done: committing this, and (per the standing code-only decision)
-any live AWS deployment.
+Committed and merged in [PR #399](https://github.com/paulananth/edgartools-platform/pull/399).
+
+## Deployed live (2026-08-10)
+
+Landed in the same `deploy-aws-application.sh --env prod` run as
+stage0-stage1-consolidation's changes (retry5 confirmed unaffected
+throughout — Step Functions `UpdateStateMachine` doesn't touch already-
+running executions, and ECS task-definition revisions are immutable, so
+retry5 kept running its original pre-deploy image/definition end to end).
+Rollback snapshots of all 13 touched state machines captured first
+(`.scratch/state-machine-consolidation/rollback-snapshots/pre-ticket02-deploy-*-20260810.json`).
+Verified live post-deploy: `load_history` no longer has
+`Stage0CompanyIdentity`/`ReduceIdentityRefresh`; `mdm_utility` created
+with all 7 expected modes routable via `SelectMode`.
+
+**New follow-up, not yet actioned:** the 7 old individual MDM Utility
+Machines (`mdm-run`, `mdm-backfill-relationships`, `mdm-sync-graph`,
+`mdm-verify-graph`, `mdm-counts`, `mdm-migrate`, `mdm-check-connectivity`)
+are still `ACTIVE` in AWS — the deploy script only manages what's in its
+current generator loop, so collapsing them into `mdm_utility` didn't
+delete the originals. Nothing references them anymore (`trigger.sh`
+already repoints at `mdm_utility`), so they're orphaned but harmless.
+Same cleanup shape as tickets 03/04 (rollback snapshot, confirm zero
+running executions, explicit `delete-state-machine`) would apply if/when
+actioned — no ticket filed for this yet.
