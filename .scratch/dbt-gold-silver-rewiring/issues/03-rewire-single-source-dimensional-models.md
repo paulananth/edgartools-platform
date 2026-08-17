@@ -189,3 +189,33 @@ turned out to be available this session:**
   models, (4) re-run `ticket02_gold_silver_cutover_reconciliation.sql`
   (extend it to cover these eight tables, or run an equivalent check) to
   confirm real non-empty digests match on business-key content.
+
+## Closing note (2026-08-17, added while implementing Ticket 04)
+
+**Ticket 03 is closed as resolved with its one remaining checkbox
+(`dbt run --full-refresh` against prod) still unchecked — do not check it
+retroactively.** While implementing Ticket 04, `edgartools-prod` (and
+`snowconn`) in this session's `~/.snowflake/connections.toml` were found to
+resolve to Snowflake organization/account `PRJEDJU`/`QJB05385` — a
+freshly-provisioned account with zero `EDGARTOOLS`-prefixed databases or
+roles (`SHOW DATABASES` returns only Snowflake's own system databases;
+`SHOW ROLES LIKE 'EDGARTOOLS%'` returns zero rows) — **not** the
+`XCPCLKF`/`KB19989` account this ticket's own Answer above, and the rest of
+this repo's docs, describe as the platform's real, populated Snowflake
+account. This is a harder gap than the one this ticket originally
+documented ("no dbt prod credentials in the implementing session"): even a
+session *with* full `DBT_SNOWFLAKE_*` credentials cannot run `dbt run
+--full-refresh` right now, because the target account has no
+`EDGARTOOLS_SILVER` schema, no `EDGARTOOLS_PROD_LOADER` role, and no
+`EDGARTOOLS_PROD_REFRESH_WH` warehouse for `profiles.yml`'s `prod` target
+to resolve. This is not a regression caused by this ticket or Ticket 04 —
+it's consistent with a separate, in-flight effort (the
+`snowflake-env-provisioning` wayfinder map) having repointed
+`connections.toml` at a not-yet-installed account. See Ticket 04's Answer
+for the same finding recorded in more detail, including which parts of
+verification remain account-agnostic (dbt parse, and literal
+`HASH`/`BITAND`/date-arithmetic computation) and were still performed for
+real against this new account. Whoever resolves the
+`snowflake-env-provisioning` map (or otherwise restores `edgartools-prod`
+to a populated account) should complete this ticket's deferred step-4 list
+above before checking that last box.

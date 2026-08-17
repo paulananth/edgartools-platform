@@ -1,0 +1,124 @@
+version: 2
+
+# dbt-gold-silver-rewiring map, Ticket 04: proves ownership_holdings'
+# rewired "one row per holding group, keep the most recent transaction"
+# collapse -- the pre-filter that drops rows with no real security_title
+# or a NULL shares_owned_after (matching _build_fact_ownership_holding_
+# snapshot's own WHERE clause), and the QUALIFY tie-break (highest
+# txn_index wins; a tie at the same txn_index prefers the derivative row).
+# Expected key values computed live the same way as
+# _ownership_activity_unit_tests.yml -- see that file's header for why
+# edgartools-prod resolves to a freshly-provisioned account right now and
+# why that doesn't invalidate this kind of literal-expression check.
+unit_tests:
+  - name: ownership_holdings_collapse_and_tie_break
+    description: >
+      Group 1 (non-derivative only): two transactions in the same holding
+      group (accession, owner_index, security, direct/indirect) at
+      txn_index 1 and 3 -- only the txn_index=3 row's shares_owned_after
+      survives. Group 2 (a same-txn_index tie): a non-derivative and a
+      derivative transaction both at txn_index=2 in the same group -- the
+      derivative row wins the tie-break, proving the ORDER BY's second key
+      (is_derivative DESC) actually fires, not just the first. Two more
+      candidate rows are deliberately dropped by the pre-filter and must
+      NOT appear in the output at all: one with a whitespace-only
+      security_title (normalizes to NULL), one with a NULL
+      shares_owned_after.
+    model: ownership_holdings
+    given:
+      - input: ref('sec_ownership_non_derivative_txn')
+        rows:
+          - accession_number: "0004444444-26-000004"
+            owner_index: 1
+            txn_index: 1
+            security_title: "Common Stock"
+            shares_owned_after: 100.0
+            ownership_direct_indirect: "D"
+          - accession_number: "0004444444-26-000004"
+            owner_index: 1
+            txn_index: 3
+            security_title: "Common Stock"
+            shares_owned_after: 150.0
+            ownership_direct_indirect: "D"
+          - accession_number: "0005555555-26-000005"
+            owner_index: 2
+            txn_index: 2
+            security_title: "Preferred Stock"
+            shares_owned_after: 10.0
+            ownership_direct_indirect: "I"
+          - accession_number: "0006666666-26-000006"
+            owner_index: 3
+            txn_index: 1
+            security_title: "   "
+            shares_owned_after: 999.0
+            ownership_direct_indirect: "D"
+          - accession_number: "0007777777-26-000007"
+            owner_index: 4
+            txn_index: 1
+            security_title: "Common Stock"
+            shares_owned_after: null
+            ownership_direct_indirect: "D"
+      - input: ref('sec_ownership_derivative_txn')
+        rows:
+          - accession_number: "0005555555-26-000005"
+            owner_index: 2
+            txn_index: 2
+            security_title: "Preferred Stock"
+            shares_owned_after: 20.0
+            ownership_direct_indirect: "I"
+      - input: ref('sec_ownership_reporting_owner')
+        rows:
+          - accession_number: "0004444444-26-000004"
+            owner_index: 1
+            owner_cik: 8888888
+            owner_name: "Carol Owner"
+          - accession_number: "0005555555-26-000005"
+            owner_index: 2
+            owner_cik: null
+            owner_name: "Bob Smith"
+          - accession_number: "0006666666-26-000006"
+            owner_index: 3
+            owner_cik: 1212121
+            owner_name: "Dave Owner"
+          - accession_number: "0007777777-26-000007"
+            owner_index: 4
+            owner_cik: 3434343
+            owner_name: "Eve Owner"
+      - input: ref('sec_company_filing')
+        rows:
+          - accession_number: "0004444444-26-000004"
+            cik: 4444444
+            form: "4"
+            filing_date: "2026-04-10"
+          - accession_number: "0005555555-26-000005"
+            cik: 5555555
+            form: "4"
+            filing_date: "2026-05-15"
+          - accession_number: "0006666666-26-000006"
+            cik: 6666666
+            form: "4"
+            filing_date: "2026-06-01"
+          - accession_number: "0007777777-26-000007"
+            cik: 7777777
+            form: "4"
+            filing_date: "2026-07-01"
+    expect:
+      rows:
+        - fact_key: 3854892092195128002
+          company_key: 4444444
+          date_key: 20260410
+          party_key: 4298375868526591801
+          security_key: 5400689002794933694
+          accession_number: "0004444444-26-000004"
+          owner_index: 1
+          shares_owned_after: 150.0
+          ownership_direct_indirect: "D"
+        - fact_key: 2099141760122082657
+          company_key: 5555555
+          date_key: 20260515
+          party_key: 486870502603408866
+          security_key: 4441917521798700456
+          accession_number: "0005555555-26-000005"
+          owner_index: 2
+          shares_owned_after: 20.0
+          ownership_direct_indirect: "I"

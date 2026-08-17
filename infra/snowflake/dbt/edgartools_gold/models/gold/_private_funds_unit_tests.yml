@@ -1,0 +1,89 @@
+version: 2
+
+# dbt-gold-silver-rewiring map, Ticket 04: proves private_funds' rewired
+# key derivation -- the sec_adv_filing/sec_company_filing coalesce-join for
+# cik/date (same shape as adviser_disclosures.sql/adviser_offices.sql), and
+# private_fund_key's 4-field composite natural key, which is NULL only when
+# ALL FOUR inputs (resolved cik, fund_name, fund_type, jurisdiction) are
+# empty -- not a single-field NULL-if-empty guard like
+# disclosure_category_key. Expected key values computed live the same way
+# as _ownership_activity_unit_tests.yml -- see that file's header for why
+# edgartools-prod resolves to a freshly-provisioned account right now and
+# why that doesn't invalidate this kind of literal-expression check.
+unit_tests:
+  - name: private_funds_key_derivation
+    description: >
+      Row 1: both sec_adv_filing and sec_company_filing match, with
+      different cik/date values on each side -- proves COALESCE(f.cik,
+      c.cik) picks the adv_filing side while COALESCE(c.filing_date,
+      f.effective_date) picks the company_filing side (opposite
+      precedence per field, matching _build_fact_adv_private_fund exactly).
+      Row 2: no sec_adv_filing match, fund_name/fund_type/jurisdiction all
+      NULL, but the resolved cik (from sec_company_filing alone) is
+      present -- private_fund_key is still non-NULL, because the natural
+      key's cik check is presence (`issuer is not None`), not truthiness.
+      Row 3: no sec_adv_filing or sec_company_filing match AND all three
+      text fields are empty -- every one of the four natural-key inputs is
+      absent, so private_fund_key (and company_key/date_key) are NULL, but
+      fact_key still derives cleanly from accession_number/fund_index
+      alone.
+    model: private_funds
+    given:
+      - input: ref('sec_adv_private_fund')
+        rows:
+          - accession_number: "0008888888-26-000008"
+            fund_index: 1
+            fund_name: "Test Fund I"
+            fund_type: "Hedge Fund"
+            jurisdiction: "Delaware"
+            aum_amount: 1000000.5
+          - accession_number: "0009999999-26-000009"
+            fund_index: 2
+            fund_name: null
+            fund_type: null
+            jurisdiction: null
+            aum_amount: 250000.0
+          - accession_number: "0000000001-26-000010"
+            fund_index: 3
+            fund_name: null
+            fund_type: null
+            jurisdiction: null
+            aum_amount: null
+      - input: ref('sec_adv_filing')
+        rows:
+          - accession_number: "0008888888-26-000008"
+            cik: 1234567
+            effective_date: "2026-01-01"
+          # No row for 0009999999-26-000009 or 0000000001-26-000010 -- deliberately unmatched.
+      - input: ref('sec_company_filing')
+        rows:
+          - accession_number: "0008888888-26-000008"
+            cik: 9999999
+            filing_date: "2026-01-20"
+          - accession_number: "0009999999-26-000009"
+            cik: 2345678
+            filing_date: "2026-02-05"
+          # No row for 0000000001-26-000010 -- deliberately unmatched.
+    expect:
+      rows:
+        - fact_key: 5343096185020994671
+          company_key: 1234567
+          date_key: 20260120
+          private_fund_key: 3392201520474269872
+          accession_number: "0008888888-26-000008"
+          fund_index: 1
+          aum_amount: 1000000.5
+        - fact_key: 8970120307224380857
+          company_key: 2345678
+          date_key: 20260205
+          private_fund_key: 4995462033302928419
+          accession_number: "0009999999-26-000009"
+          fund_index: 2
+          aum_amount: 250000.0
+        - fact_key: 6143067833003529028
+          company_key: null
+          date_key: null
+          private_fund_key: null
+          accession_number: "0000000001-26-000010"
+          fund_index: 3
+          aum_amount: null
