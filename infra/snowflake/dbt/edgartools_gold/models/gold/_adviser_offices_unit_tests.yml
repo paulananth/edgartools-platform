@@ -1,0 +1,88 @@
+version: 2
+
+# dbt-gold-silver-rewiring map, Ticket 03: proves adviser_offices' rewired
+# key derivation -- the sec_adv_filing/sec_company_filing coalesce-join for
+# cik/date, and geography_key's "hash the normalized state+country pair,
+# NULL only when both are empty" guard. Expected fact_key/geography_key/
+# date_key values are BITAND(HASH(...), 9223372036854775807)::BIGINT and
+# YYYYMMDD integer arithmetic, computed live against Snowflake (snow sql
+# --connection edgartools-prod), not guessed -- same standard as Ticket 01's
+# filing_activity unit test.
+unit_tests:
+  - name: adviser_offices_key_derivation
+    description: >
+      Row 1: sec_company_filing's filing_date wins over sec_adv_filing's
+      effective_date, both state_or_country and country present so
+      geography_key hashes the normalized pair. Row 2: no
+      sec_company_filing match, so sec_adv_filing's cik/effective_date are
+      used; country is NULL but state_or_country is present, so
+      geography_key still hashes (state, ''). Row 3: neither
+      state_or_country nor country present, so geography_key is NULL, not
+      a hash of two empty strings.
+    model: adviser_offices
+    given:
+      - input: ref('sec_adv_office')
+        rows:
+          - accession_number: "0004444444-26-000020"
+            office_index: 1
+            office_name: "Wilmington Office"
+            state_or_country: "  DE  "
+            country: "USA"
+            is_headquarters: true
+          - accession_number: "0007777777-26-000050"
+            office_index: 2
+            office_name: "NYC Office"
+            state_or_country: "NY"
+            country: null
+            is_headquarters: false
+          - accession_number: "0008888888-26-000060"
+            office_index: 3
+            office_name: "Remote Office"
+            state_or_country: null
+            country: null
+            is_headquarters: false
+      - input: ref('sec_adv_filing')
+        rows:
+          - accession_number: "0004444444-26-000020"
+            cik: 2222222
+            effective_date: "2026-01-20"
+          - accession_number: "0007777777-26-000050"
+            cik: 3333333
+            effective_date: "2026-07-01"
+          - accession_number: "0008888888-26-000060"
+            cik: 4444444
+            effective_date: "2026-06-15"
+      - input: ref('sec_company_filing')
+        rows:
+          - accession_number: "0004444444-26-000020"
+            cik: 2222222
+            filing_date: "2026-02-01"
+          - accession_number: "0008888888-26-000060"
+            cik: 4444444
+            filing_date: "2026-06-01"
+    expect:
+      rows:
+        - fact_key: 9040891032933640776
+          company_key: 2222222
+          date_key: 20260201
+          geography_key: 2378133883252226455
+          accession_number: "0004444444-26-000020"
+          office_index: 1
+          office_name: "Wilmington Office"
+          is_headquarters: true
+        - fact_key: 9077822826062764621
+          company_key: 3333333
+          date_key: 20260701
+          geography_key: 4367504874428183199
+          accession_number: "0007777777-26-000050"
+          office_index: 2
+          office_name: "NYC Office"
+          is_headquarters: false
+        - fact_key: 7035473216752967100
+          company_key: 4444444
+          date_key: 20260601
+          geography_key: null
+          accession_number: "0008888888-26-000060"
+          office_index: 3
+          office_name: "Remote Office"
+          is_headquarters: false

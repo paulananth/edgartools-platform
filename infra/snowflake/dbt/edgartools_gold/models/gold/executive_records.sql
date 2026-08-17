@@ -5,14 +5,35 @@
 -- comp_pct_change_yoy using window functions over the (cik, exec_name) time series.
 --
 -- Source shape (PR-1 / Q3-D):
---   DIMENSIONAL — EXECUTIVE_RECORD source carries surrogate fact_key
---   (hash of accession+exec_name) plus COMPANY+DATE FKs.
+--   DIMENSIONAL — surrogate keys are derived here directly (dbt-gold-
+--   silver-rewiring map, Ticket 03), matching _build_fact_executive_record
+--   (gold_models.py) exactly: fact_key = hash(accession_number, exec_name)
+--   via surrogate_key()'s multi-arg form; company_key = cik (identity);
+--   fiscal_year_date_key = fiscal_year*10000 + 1231 (literal Dec-31
+--   encoding, not a hash).
 --
 -- Grain: one row per (cik, accession_number, exec_name).
 {{ gold_model_config('EXECUTIVE_RECORDS') }}
 
 with base as (
-    select * from {{ source("edgartools_source", "EXECUTIVE_RECORD") }}
+    select
+        {{ surrogate_key(['accession_number', 'exec_name']) }} as fact_key,
+        cik as company_key,
+        (fiscal_year * 10000 + 1231)::integer as fiscal_year_date_key,
+        accession_number,
+        cik,
+        fiscal_year,
+        exec_name,
+        exec_role,
+        total_comp,
+        base_salary,
+        bonus,
+        stock_awards,
+        option_awards,
+        non_equity_incentive,
+        parser_version,
+        ingested_at
+    from {{ ref("sec_executive_record") }}
 ),
 
 with_rank as (

@@ -1,0 +1,77 @@
+version: 2
+
+# dbt-gold-silver-rewiring map, Ticket 03: proves adviser_disclosures'
+# rewired key derivation -- the sec_adv_filing/sec_company_filing
+# coalesce-join for cik/date, and disclosure_category_key's normalize-then-
+# NULL-if-empty guard. Expected fact_key/disclosure_category_key/date_key
+# values are BITAND(HASH(...), 9223372036854775807)::BIGINT and YYYYMMDD
+# integer arithmetic, computed live against Snowflake (snow sql --connection
+# edgartools-prod), not guessed -- same standard as Ticket 01's
+# filing_activity unit test.
+unit_tests:
+  - name: adviser_disclosures_key_derivation
+    description: >
+      Row 1: sec_company_filing's filing_date wins over sec_adv_filing's
+      effective_date (COALESCE priority), disclosure_category normalizes
+      and hashes to a real key. Row 2: no sec_company_filing match, so
+      sec_adv_filing's cik/effective_date are used instead. Row 3: a
+      whitespace-only disclosure_category normalizes to NULL, so
+      disclosure_category_key is NULL, not a hash of an empty string.
+    model: adviser_disclosures
+    given:
+      - input: ref('sec_adv_disclosure_event')
+        rows:
+          - accession_number: "0003333333-26-000010"
+            event_index: 1
+            disclosure_category: "  Custody  "
+            is_reported: true
+          - accession_number: "0005555555-26-000030"
+            event_index: 2
+            disclosure_category: "criminal"
+            is_reported: false
+          - accession_number: "0006666666-26-000040"
+            event_index: 3
+            disclosure_category: "   "
+            is_reported: true
+      - input: ref('sec_adv_filing')
+        rows:
+          - accession_number: "0003333333-26-000010"
+            cik: 1234567
+            effective_date: "2026-01-10"
+          - accession_number: "0005555555-26-000030"
+            cik: 7654321
+            effective_date: "2026-04-01"
+          - accession_number: "0006666666-26-000040"
+            cik: 1111111
+            effective_date: "2026-05-01"
+      - input: ref('sec_company_filing')
+        rows:
+          - accession_number: "0003333333-26-000010"
+            cik: 1234567
+            filing_date: "2026-01-15"
+          - accession_number: "0006666666-26-000040"
+            cik: 1111111
+            filing_date: "2026-05-05"
+    expect:
+      rows:
+        - fact_key: 3929331113722544358
+          company_key: 1234567
+          date_key: 20260115
+          disclosure_category_key: 6250488910661038491
+          accession_number: "0003333333-26-000010"
+          event_index: 1
+          is_reported: true
+        - fact_key: 4395384803146416832
+          company_key: 7654321
+          date_key: 20260401
+          disclosure_category_key: 3991971953534842068
+          accession_number: "0005555555-26-000030"
+          event_index: 2
+          is_reported: false
+        - fact_key: 4855247253284455143
+          company_key: 1111111
+          date_key: 20260505
+          disclosure_category_key: null
+          accession_number: "0006666666-26-000040"
+          event_index: 3
+          is_reported: true
