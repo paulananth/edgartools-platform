@@ -6,6 +6,10 @@
 # secret container; the credential value stays out of Terraform state.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/secrets-manifest.sh
+source "${SCRIPT_DIR}/lib/secrets-manifest.sh"
+
 usage() {
   cat <<'USAGE'
 Usage:
@@ -23,7 +27,10 @@ Options:
   --aws-profile <profile>       AWS CLI profile. Default: AWS_PROFILE env var or instance role.
   --aws-region <region>         AWS region. Default: us-east-1.
   --name-prefix <prefix>        Resource prefix. Default: edgartools-<env-name>.
-  --secret-id <id-or-arn>       Secret to write. Default: <name-prefix>/mdm/postgres_dsn.
+  --secret-id <id-or-arn>       Secret to write. Default: <name-prefix>/<name>, where <name> is
+                                 the "mdm/postgres_dsn" entry in secrets-manifest.json (the
+                                 canonical declaration -- this default is illustrative, not a
+                                 second source of truth).
   --dsn <dsn>                   Full PostgreSQL DSN. Prefer --dsn-stdin for credentials.
   --dsn-stdin                   Read the full PostgreSQL DSN from stdin.
   --host <host>                 Snowflake Postgres host when constructing a DSN.
@@ -34,6 +41,8 @@ Options:
   --expected-host-suffix <suf>  Required host suffix. Default: .snowflake.app.
   --dry-run                     Validate and print the masked DSN without writing.
   -h, --help                    Show this help.
+
+Requires on PATH: aws, jq (to read secrets-manifest.json), python3.
 USAGE
 }
 
@@ -94,7 +103,10 @@ done
   exit 2
 }
 NAME_PREFIX="${NAME_PREFIX:-edgartools-${ENVIRONMENT}}"
-SECRET_ID="${SECRET_ID:-${NAME_PREFIX}/mdm/postgres_dsn}"
+if [[ -z "$SECRET_ID" ]]; then
+  MANIFEST_SECRET_NAME="$(secrets_manifest_name "mdm/postgres_dsn")" || exit 1
+  SECRET_ID="${NAME_PREFIX}/${MANIFEST_SECRET_NAME}"
+fi
 
 aws_cli() {
   local args=()
@@ -157,6 +169,7 @@ NORMALIZED_DSN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["dsn"]
 MASKED_DSN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["masked"])' <<< "$VALIDATED_JSON")"
 
 if [[ "$DRY_RUN" == "true" ]]; then
+  log "DRY RUN - target secret: ${SECRET_ID}"
   log "DRY RUN - validated DSN:"
   echo "$MASKED_DSN"
   exit 0
