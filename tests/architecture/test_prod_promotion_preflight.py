@@ -20,7 +20,10 @@ set -euo pipefail
 case "$*" in
   *get-caller-identity*) printf '%s\\n' "${FAKE_ACCOUNT:-690839588395}" ;;
   *head-bucket*) [[ "${FAKE_MISSING_BUCKETS:-0}" != 1 ]] ;;
-  *describe-secret*) [[ "${FAKE_MISSING_SECRETS:-0}" != 1 ]] ;;
+  *describe-secret*)
+    [[ "${FAKE_MISSING_SECRETS:-0}" != 1 ]] || exit 254
+    printf '{"Name":"fake","VersionIdsToStages":{"AWSCURRENT":["v1"]}}\\n'
+    ;;
   *describe-images*) exit 0 ;;
   *list-objects-v2*)
     if [[ "$*" == *"edgartools-prod-bronze"* ]]; then
