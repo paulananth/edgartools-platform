@@ -202,6 +202,10 @@ def _handle_backfill_mdm_entity_ids(args: argparse.Namespace) -> int:
     return run_command("backfill-mdm-entity-ids", args)
 
 
+def _handle_backfill_silver_landing_company_metadata(args: argparse.Namespace) -> int:
+    return run_command("backfill-silver-landing-company-metadata", args)
+
+
 def _handle_gold_verify_live(args: argparse.Namespace) -> int:
     import json
     import sys
@@ -975,6 +979,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(backfill_mdm_entity_ids)
     backfill_mdm_entity_ids.set_defaults(handler=_handle_backfill_mdm_entity_ids)
+
+    backfill_silver_landing_company_metadata = subparsers.add_parser(
+        "backfill-silver-landing-company-metadata",
+        help="One-time seed of sec_company/sec_company_address/sec_company_former_name/"
+             "sec_company_submission_file into the Snowflake landing zone from DuckDB "
+             "canonical silver, for rows whose company metadata predates the landing-zone "
+             "write path and will never reach it through the checksum-gated incremental "
+             "path (see edgar_warehouse/silver_landing_company_backfill.py). Safe to re-run.",
+    )
+    _add_run_id_arg(backfill_silver_landing_company_metadata)
+    backfill_silver_landing_company_metadata.set_defaults(
+        handler=_handle_backfill_silver_landing_company_metadata
+    )
 
     gold_verify_live = subparsers.add_parser(
         "gold-verify-live",

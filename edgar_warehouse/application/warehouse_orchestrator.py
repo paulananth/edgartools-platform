@@ -498,6 +498,18 @@ def _execute_warehouse_bronze_capture(
 
         return run_mdm_entity_backfill_sweep(context, run_id)
 
+    if command_name == "backfill-silver-landing-company-metadata":
+        # duckdb-retirement map: one-time seed of sec_company/address/
+        # former_name/submission_file into the landing zone -- see
+        # edgar_warehouse/silver_landing_company_backfill.py's module
+        # docstring. Reads every shard directly, same dispatch shape as
+        # backfill-mdm-entity-ids above.
+        from edgar_warehouse.silver_landing_company_backfill import (
+            run_silver_landing_company_backfill,
+        )
+
+        return run_silver_landing_company_backfill(context, run_id)
+
     # --- Shard-aware hydrate/open (Phase 9, STORE-02) ---
     # bootstrap-batch is the ECS chunk task that receives a pre-resolved CIK list
     # (from seed-silver-batches / Step Functions Distributed Map).  For remote
@@ -6520,6 +6532,11 @@ def _resolve_scope(
     if command_name == "backfill-mdm-entity-ids":
         # mdm-ahead-of-silver map, Phase B: sweeps every shard uniformly;
         # no meaningful CIK range/date/etc scope to report.
+        return {}
+
+    if command_name == "backfill-silver-landing-company-metadata":
+        # duckdb-retirement map: one-time full-universe seed; no meaningful
+        # CIK range/date/etc scope to report.
         return {}
 
     if command_name == "fetch-adv-bulk":
