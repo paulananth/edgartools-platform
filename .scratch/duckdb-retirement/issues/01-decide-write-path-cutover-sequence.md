@@ -1,8 +1,8 @@
 # Decide the Production Write-Path Cutover Sequence
 
 Type: grilling
-Status: open
-Blocked by: 02, 03, 04
+Status: resolved
+Blocked by: 02 (resolved), 03 (resolved), 04 (resolved), 08 (resolved)
 
 ## Question
 
@@ -40,3 +40,60 @@ rule for warehouse/silver/").
 A decided cutover mechanism (flag-gated vs. atomic), an answer for
 mid-flight executions crossing the boundary, an explicit rollback story,
 and a decided disposition for the existing DuckDB files in S3.
+
+## Answer
+
+**Grounding, checked directly:** `register_task_definition()`
+(`deploy-aws-application.sh:1179-1197`) calls `ecs register-task-definition`
+and captures `taskDefinition.taskDefinitionArn` — the **specific-revision**
+ARN (`.../task-definition/name:N`), not a floating family reference. That
+exact ARN is baked directly into the Step Functions state machine JSON
+(`"TaskDefinition": task_def_arn`, ~10 call sites) at every deploy. Combined
+with Step Functions' own documented behavior — an execution runs against
+the state machine definition snapshot active when it *started*, unaffected
+by a later `UpdateStateMachine` call — this means an already-running
+`load_history`/`daily_incremental` execution keeps launching ECS tasks on
+the **old** image/revision for its entire lifecycle, even for windows it
+reaches after a redeploy happens concurrently. This isolation already
+exists; nothing new has to be built for it.
+
+- **Atomic code change, no flag-gated transition window.** Consistent with
+  this map's own established precedent (Ticket 02 and Ticket 04 both chose
+  hard cutover over a toggle for the same reason: a flag is state that
+  itself needs testing and eventual removal). The mid-flight risk a flag
+  would exist to protect against is already covered for free by the
+  pinned-task-definition-ARN + execution-snapshot behavior above — no
+  in-flight execution can straddle old-write/new-write behavior
+  mid-stream, because it never sees the new code at all until it starts a
+  fresh execution.
+- **Mid-flight executions need no special handling** — they simply
+  complete under the old code path (DuckDB-writing) they started with; the
+  first execution to observe the new behavior is the first one *started*
+  after the redeploy, not any window within an execution already underway.
+- **Rollback is all-or-nothing across the whole stack, not the write path
+  alone — recorded explicitly because the narrower version is a real
+  trap.** MDM (Ticket 02) and gold (Ticket 03) both chose hard cutover with
+  no DuckDB fallback kept live in their read paths. If a post-cutover
+  issue prompted rolling back *only* the write path (redeploying old code
+  that resumes writing DuckDB) while MDM/gold still read exclusively from
+  Snowflake, the landing zone and bookkeeping store would simply stop
+  receiving fresh writes — MDM/gold wouldn't error, they'd silently go
+  stale. "Revert the commit(s) and redeploy" is the rollback story, exactly
+  as this repo already practices (this session's own rollback-capture step
+  before this map's earlier deploys), but it must mean reverting the write
+  path together with MDM's and gold's reader cutovers as one unit, not
+  independently.
+- **DuckDB file disposition: bounded retention, then archive/delete** —
+  extends this repo's existing precedent
+  (`expire-noncurrent-silver-canonical-versions`,
+  `infra/terraform/modules/storage_buckets/main.tf:150-161`, ecs-cost-sizing
+  Ticket 22) rather than inventing a new pattern. That existing rule only
+  ever expires *noncurrent* versions and deliberately never touches the
+  live current version — once nothing publishes to `warehouse/silver/`
+  anymore, the current `silver.duckdb` + shard files freeze permanently
+  under that rule with no further action. A companion rule transitions the
+  final current version to Glacier (or expires it outright) after a fixed
+  window — exact retention length (30-90 days, per the earlier framing) is
+  an implementation-time call, not pinned here — giving a real
+  rollback-forensics aid through the highest-risk early post-cutover period
+  without carrying ~1.34TB indefinitely.
