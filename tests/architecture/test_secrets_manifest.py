@@ -69,16 +69,19 @@ def test_manifest_entry_shape_is_consistent():
         assert isinstance(entry["populated_in_prod"], bool)
 
 
-def test_dbt_snowflake_entry_documents_the_known_provisioning_gap():
-    """This is the whole point of the manifest: dbt/snowflake is read live in
-    prod (bootstrap-prod-mdm.sh) but has no Terraform resource and no
-    populating script anywhere in the repo -- confirmed via the architecture
-    review's Explore pass, not guessed.
+def test_dbt_snowflake_entry_now_has_a_populating_script_but_still_no_terraform_resource():
+    """dbt/snowflake was the whole point of the manifest: read live in prod
+    (bootstrap-prod-mdm.sh) but originally had no Terraform resource and no
+    populating script anywhere in the repo (confirmed via the architecture
+    review's Explore pass, not guessed). Ticket 4 closed the populating-
+    script half of that gap with bootstrap-dbt-snowflake-secret.sh; the
+    Terraform half is unaffected (this secret's container was never
+    Terraform-managed and still isn't).
     """
     manifest = _load_manifest()
     entry = next(e for e in manifest["secrets"] if e["name"] == "dbt/snowflake")
     assert entry["terraform_resource"] is None
-    assert entry["populating_script"] is None
+    assert entry["populating_script"] == "infra/scripts/bootstrap-dbt-snowflake-secret.sh"
     assert entry["populated_in_prod"] is True
 
 
