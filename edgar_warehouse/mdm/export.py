@@ -6,7 +6,7 @@ stamps exported_at = NOW(). No CDC or Kafka — just a drain table.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from decimal import Decimal
 import json
@@ -118,6 +118,23 @@ class SnowflakeConnectionSettings:
             ) from exc
 
         return snowflake.connector.connect(**self.connection_kwargs())
+
+
+def silver_connection_settings() -> SnowflakeConnectionSettings:
+    """Snowflake connection settings scoped to the EDGARTOOLS_SILVER schema.
+
+    Reuses SnowflakeConnectionSettings.from_env()'s env/secret resolution
+    (MDM_SNOWFLAKE_* / DBT_SNOWFLAKE_* / ~/.snowflake/connections.toml) --
+    that dataclass's own default schema is EDGARTOOLS_GOLD (the MDM export
+    target), so this overrides just the schema to the silver landing zone's
+    dbt target (DBT_SILVER_SCHEMA, matching dbt_project.yml's own default).
+    Shared by mdm_entity_backfill.py's sweep and gold_models.py's Snowflake-
+    silver-reading builders (dbt-gold-silver-rewiring map, Ticket 06) -- both
+    need the identical "read EDGARTOOLS_SILVER directly" connection.
+    """
+    settings = SnowflakeConnectionSettings.from_env()
+    silver_schema = os.environ.get("DBT_SILVER_SCHEMA", "EDGARTOOLS_SILVER")
+    return replace(settings, schema=silver_schema)
 
 
 def _snowflake_secret_payload() -> dict[str, Any]:

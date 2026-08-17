@@ -48,7 +48,6 @@ bounded risk over new distributed locking infrastructure" precedent
 
 from __future__ import annotations
 
-import dataclasses
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -172,17 +171,13 @@ def _lookup_entity_ids(
 def _silver_connection_settings() -> Any:
     """Snowflake connection settings for the EDGARTOOLS_SILVER schema.
 
-    Reuses mdm/export.py's env/secret resolution (MDM_SNOWFLAKE_* /
-    DBT_SNOWFLAKE_* / ~/.snowflake/connections.toml) -- that module's own
-    default schema is EDGARTOOLS_GOLD (the MDM export target), so this
-    overrides just the schema to the silver landing zone's dbt target
-    (DBT_SILVER_SCHEMA, matching dbt_project.yml's own default).
+    Delegates to mdm/export.py's silver_connection_settings() -- shared with
+    gold_models.py's Snowflake-silver-reading builders (dbt-gold-silver-
+    rewiring map, Ticket 06).
     """
-    from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
+    from edgar_warehouse.mdm.export import silver_connection_settings
 
-    settings = SnowflakeConnectionSettings.from_env()
-    silver_schema = os.environ.get("DBT_SILVER_SCHEMA", "EDGARTOOLS_SILVER")
-    return dataclasses.replace(settings, schema=silver_schema)
+    return silver_connection_settings()
 
 
 def _fetch_pending_rows(connection: Any, spec: _TableSpec) -> list[dict[str, Any]]:

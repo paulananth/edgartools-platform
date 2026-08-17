@@ -927,158 +927,273 @@ def _build_sec_financial_derived(conn: Any) -> pa.Table:
 # pattern matches _build_fact_filing_activity (line 452-474) — DuckDB hash()
 # is deterministic, so MERGE is idempotent across re-runs.
 
-def _build_sec_subsidiary_evidence(conn: Any) -> pa.Table:
-    table = _arrow(
-        conn.execute(
-            """
-            SELECT
-                accession_number,
-                registrant_cik::BIGINT AS registrant_cik,
-                document_name,
-                document_type,
-                row_ordinal::INTEGER AS row_ordinal,
-                legal_name,
-                jurisdiction,
-                parent_scope,
-                immediate_parent_known,
-                effective_date,
-                row_locator,
-                source_sha256,
-                parser_version
-            FROM sec_subsidiary_evidence
-            ORDER BY registrant_cik, accession_number, document_name, row_ordinal
-            """
+
+def _fetch_snowflake_silver_rows(query: str) -> list[dict[str, Any]]:
+    """Run `query` against the live EDGARTOOLS_SILVER Snowflake schema and
+    return every row as a dict with lowercased column names (Snowflake's
+    connector returns uppercase names for unquoted identifiers by default) --
+    same pattern as mdm_entity_backfill.py's _fetch_pending_rows.
+
+    Used only by the 5 orphan evidence-table builders below (dbt-gold-
+    silver-rewiring map, Ticket 06): those tables have no dbt gold model at
+    all -- nothing downstream ref()s them -- so unlike Tickets 02-05 there is
+    no dbt cutover path for them. This repoints their read from local DuckDB
+    silver to Snowflake's EDGARTOOLS_SILVER directly instead, independent of
+    the dbt batches. Opens and closes its own connection per call rather
+    than sharing the local-DuckDB `conn` threaded through every other
+    builder in _gold_table_builders() -- these 5 are the only builders in
+    this file reading Snowflake instead of DuckDB.
+    """
+    from edgar_warehouse.mdm.export import silver_connection_settings
+
+    connection = silver_connection_settings().connect()
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(query)
+            columns = [col[0].lower() for col in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+
+def _build_sec_subsidiary_evidence() -> pa.Table:
+    rows = _fetch_snowflake_silver_rows(
+        """
+        SELECT
+            accession_number,
+            registrant_cik,
+            document_name,
+            document_type,
+            row_ordinal,
+            legal_name,
+            jurisdiction,
+            parent_scope,
+            immediate_parent_known,
+            effective_date,
+            row_locator,
+            source_sha256,
+            parser_version
+        FROM SEC_SUBSIDIARY_EVIDENCE
+        """
+    )
+    records = [
+        {
+            "accession_number": row.get("accession_number"),
+            "registrant_cik": _coerce_int(row.get("registrant_cik")),
+            "document_name": row.get("document_name"),
+            "document_type": row.get("document_type"),
+            "row_ordinal": _coerce_int(row.get("row_ordinal")),
+            "legal_name": row.get("legal_name"),
+            "jurisdiction": row.get("jurisdiction"),
+            "parent_scope": row.get("parent_scope"),
+            "immediate_parent_known": row.get("immediate_parent_known"),
+            "effective_date": _coerce_date(row.get("effective_date")),
+            "row_locator": row.get("row_locator"),
+            "source_sha256": row.get("source_sha256"),
+            "parser_version": row.get("parser_version"),
+        }
+        for row in rows
+    ]
+    records.sort(
+        key=lambda r: (
+            r["registrant_cik"] or 0,
+            r["accession_number"] or "",
+            r["document_name"] or "",
+            r["row_ordinal"] or 0,
         )
     )
-    return (
-        _empty(_SEC_SUBSIDIARY_EVIDENCE_SCHEMA)
-        if table.num_rows == 0
-        else table.cast(_SEC_SUBSIDIARY_EVIDENCE_SCHEMA)
+    return _table_from_records(_SEC_SUBSIDIARY_EVIDENCE_SCHEMA, records)
+
+
+def _build_sec_auditor_report_evidence() -> pa.Table:
+    rows = _fetch_snowflake_silver_rows(
+        """
+        SELECT
+            accession_number,
+            registrant_cik,
+            form_type,
+            document_name,
+            audited_period_end,
+            report_date,
+            principal_firm_name,
+            principal_firm_location,
+            pcaob_firm_id,
+            evidence_source,
+            raw_locator,
+            source_sha256,
+            evidence_fingerprint,
+            form_ap_filing_id,
+            original_form_ap_filing_id,
+            latest_amendment,
+            parser_version
+        FROM SEC_AUDITOR_REPORT_EVIDENCE
+        """
     )
-
-
-def _build_sec_auditor_report_evidence(conn: Any) -> pa.Table:
-    table = _arrow(
-        conn.execute(
-            """
-            SELECT
-                accession_number,
-                registrant_cik::BIGINT AS registrant_cik,
-                form_type,
-                document_name,
-                audited_period_end,
-                report_date,
-                principal_firm_name,
-                principal_firm_location,
-                pcaob_firm_id,
-                evidence_source,
-                raw_locator,
-                source_sha256,
-                evidence_fingerprint,
-                form_ap_filing_id,
-                original_form_ap_filing_id,
-                latest_amendment,
-                parser_version
-            FROM sec_auditor_report_evidence
-            ORDER BY registrant_cik, accession_number, evidence_fingerprint
-            """
+    records = [
+        {
+            "accession_number": row.get("accession_number"),
+            "registrant_cik": _coerce_int(row.get("registrant_cik")),
+            "form_type": row.get("form_type"),
+            "document_name": row.get("document_name"),
+            "audited_period_end": _coerce_date(row.get("audited_period_end")),
+            "report_date": _coerce_date(row.get("report_date")),
+            "principal_firm_name": row.get("principal_firm_name"),
+            "principal_firm_location": row.get("principal_firm_location"),
+            "pcaob_firm_id": row.get("pcaob_firm_id"),
+            "evidence_source": row.get("evidence_source"),
+            "raw_locator": row.get("raw_locator"),
+            "source_sha256": row.get("source_sha256"),
+            "evidence_fingerprint": row.get("evidence_fingerprint"),
+            "form_ap_filing_id": row.get("form_ap_filing_id"),
+            "original_form_ap_filing_id": row.get("original_form_ap_filing_id"),
+            "latest_amendment": row.get("latest_amendment"),
+            "parser_version": row.get("parser_version"),
+        }
+        for row in rows
+    ]
+    records.sort(
+        key=lambda r: (
+            r["registrant_cik"] or 0,
+            r["accession_number"] or "",
+            r["evidence_fingerprint"] or "",
         )
     )
-    return (
-        _empty(_SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA)
-        if table.num_rows == 0
-        else table.cast(_SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA)
+    return _table_from_records(_SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA, records)
+
+
+def _build_sec_employment_event() -> pa.Table:
+    rows = _fetch_snowflake_silver_rows(
+        """
+        SELECT
+            accession_number,
+            event_index,
+            cik,
+            event_type,
+            person_name,
+            exec_role,
+            previous_role,
+            compensation_amount,
+            effective_date,
+            parser_version
+        FROM SEC_EMPLOYMENT_EVENT
+        """
     )
-
-
-def _build_sec_employment_event(conn: Any) -> pa.Table:
-    table = _arrow(
-        conn.execute(
-            """
-            SELECT
-                accession_number,
-                event_index::BIGINT AS event_index,
-                cik::BIGINT AS cik,
-                event_type,
-                person_name,
-                exec_role,
-                previous_role,
-                compensation_amount,
-                effective_date,
-                parser_version
-            FROM sec_employment_event
-            ORDER BY cik, accession_number, event_index
-            """
+    records = [
+        {
+            "accession_number": row.get("accession_number"),
+            "event_index": _coerce_int(row.get("event_index")),
+            "cik": _coerce_int(row.get("cik")),
+            "event_type": row.get("event_type"),
+            "person_name": row.get("person_name"),
+            "exec_role": row.get("exec_role"),
+            "previous_role": row.get("previous_role"),
+            "compensation_amount": _coerce_float(row.get("compensation_amount")),
+            "effective_date": _coerce_date(row.get("effective_date")),
+            "parser_version": row.get("parser_version"),
+        }
+        for row in rows
+    ]
+    records.sort(
+        key=lambda r: (
+            r["cik"] or 0,
+            r["accession_number"] or "",
+            r["event_index"] or 0,
         )
     )
-    return (
-        _empty(_SEC_EMPLOYMENT_EVENT_SCHEMA)
-        if table.num_rows == 0
-        else table.cast(_SEC_EMPLOYMENT_EVENT_SCHEMA)
-    )
+    return _table_from_records(_SEC_EMPLOYMENT_EVENT_SCHEMA, records)
 
 
-def _build_sec_adv_firm_roster(conn: Any) -> pa.Table:
-    table = _arrow(
-        conn.execute(
-            """
-            SELECT
-                adviser_crd_number,
-                dataset_period,
-                private_funds_reported,
-                private_fund_count_7b1::BIGINT AS private_fund_count_7b1,
-                any_hedge_funds,
-                hedge_fund_count::BIGINT AS hedge_fund_count,
-                any_pe_funds,
-                pe_fund_count::BIGINT AS pe_fund_count,
-                total_gross_assets_private_funds,
-                private_fund_count_7b2::BIGINT AS private_fund_count_7b2,
-                source_sha256,
-                parser_version
-            FROM sec_adv_firm_roster
-            ORDER BY adviser_crd_number, dataset_period
-            """
-        )
+def _build_sec_adv_firm_roster() -> pa.Table:
+    rows = _fetch_snowflake_silver_rows(
+        """
+        SELECT
+            adviser_crd_number,
+            dataset_period,
+            private_funds_reported,
+            private_fund_count_7b1,
+            any_hedge_funds,
+            hedge_fund_count,
+            any_pe_funds,
+            pe_fund_count,
+            total_gross_assets_private_funds,
+            private_fund_count_7b2,
+            source_sha256,
+            parser_version
+        FROM SEC_ADV_FIRM_ROSTER
+        """
     )
-    return (
-        _empty(_SEC_ADV_FIRM_ROSTER_SCHEMA)
-        if table.num_rows == 0
-        else table.cast(_SEC_ADV_FIRM_ROSTER_SCHEMA)
-    )
+    records = [
+        {
+            "adviser_crd_number": row.get("adviser_crd_number"),
+            "dataset_period": row.get("dataset_period"),
+            "private_funds_reported": row.get("private_funds_reported"),
+            "private_fund_count_7b1": _coerce_int(row.get("private_fund_count_7b1")),
+            "any_hedge_funds": row.get("any_hedge_funds"),
+            "hedge_fund_count": _coerce_int(row.get("hedge_fund_count")),
+            "any_pe_funds": row.get("any_pe_funds"),
+            "pe_fund_count": _coerce_int(row.get("pe_fund_count")),
+            "total_gross_assets_private_funds": _coerce_float(row.get("total_gross_assets_private_funds")),
+            "private_fund_count_7b2": _coerce_int(row.get("private_fund_count_7b2")),
+            "source_sha256": row.get("source_sha256"),
+            "parser_version": row.get("parser_version"),
+        }
+        for row in rows
+    ]
+    records.sort(key=lambda r: (r["adviser_crd_number"] or "", r["dataset_period"] or ""))
+    return _table_from_records(_SEC_ADV_FIRM_ROSTER_SCHEMA, records)
 
 
-def _build_sec_adv_private_fund_passthrough(conn: Any) -> pa.Table:
-    table = _arrow(
-        conn.execute(
-            """
-            SELECT
-                accession_number,
-                fund_index::BIGINT AS fund_index,
-                filing_id,
-                adviser_crd_number,
-                private_fund_id,
-                reference_id,
-                schedule_section,
-                reporting_role,
-                filing_action,
-                fund_name,
-                fund_type,
-                jurisdiction,
-                aum_amount,
-                effective_date,
-                source_dataset_period,
-                source_sha256,
-                parser_version
-            FROM sec_adv_private_fund
-            ORDER BY accession_number, fund_index
-            """
-        )
+def _build_sec_adv_private_fund_passthrough() -> pa.Table:
+    rows = _fetch_snowflake_silver_rows(
+        """
+        SELECT
+            accession_number,
+            fund_index,
+            filing_id,
+            adviser_crd_number,
+            private_fund_id,
+            reference_id,
+            schedule_section,
+            reporting_role,
+            filing_action,
+            fund_name,
+            fund_type,
+            jurisdiction,
+            aum_amount,
+            effective_date,
+            source_dataset_period,
+            source_sha256,
+            parser_version
+        FROM SEC_ADV_PRIVATE_FUND
+        """
     )
-    return (
-        _empty(_SEC_ADV_PRIVATE_FUND_PASSTHROUGH_SCHEMA)
-        if table.num_rows == 0
-        else table.cast(_SEC_ADV_PRIVATE_FUND_PASSTHROUGH_SCHEMA)
-    )
+    records = [
+        {
+            "accession_number": row.get("accession_number"),
+            "fund_index": _coerce_int(row.get("fund_index")),
+            "filing_id": row.get("filing_id"),
+            "adviser_crd_number": row.get("adviser_crd_number"),
+            "private_fund_id": row.get("private_fund_id"),
+            "reference_id": row.get("reference_id"),
+            "schedule_section": row.get("schedule_section"),
+            "reporting_role": row.get("reporting_role"),
+            "filing_action": row.get("filing_action"),
+            "fund_name": row.get("fund_name"),
+            "fund_type": row.get("fund_type"),
+            "jurisdiction": row.get("jurisdiction"),
+            "aum_amount": _coerce_float(row.get("aum_amount")),
+            "effective_date": _coerce_date(row.get("effective_date")),
+            "source_dataset_period": row.get("source_dataset_period"),
+            "source_sha256": row.get("source_sha256"),
+            "parser_version": row.get("parser_version"),
+        }
+        for row in rows
+    ]
+    records.sort(key=lambda r: (r["accession_number"] or "", r["fund_index"] or 0))
+    return _table_from_records(_SEC_ADV_PRIVATE_FUND_PASSTHROUGH_SCHEMA, records)
 
 
 def _build_fact_earnings_release(conn: Any) -> pa.Table:
@@ -1266,17 +1381,21 @@ def _gold_table_builders(conn: Any) -> list[tuple[str, Callable[[], pa.Table]]]:
         ("fact_guidance",                  lambda: _build_fact_guidance(conn)),
         ("fact_executive_record",          lambda: _build_fact_executive_record(conn)),
         ("fact_accounting_flag",           lambda: _build_fact_accounting_flag(conn)),
-        # Agent neighborhood evidence (ticket 08)
-        ("sec_subsidiary_evidence",        lambda: _build_sec_subsidiary_evidence(conn)),
-        ("sec_auditor_report_evidence",    lambda: _build_sec_auditor_report_evidence(conn)),
-        ("sec_employment_event",           lambda: _build_sec_employment_event(conn)),
+        # Agent neighborhood evidence (ticket 08). These 5 read Snowflake's
+        # EDGARTOOLS_SILVER directly instead of the local DuckDB `conn`
+        # threaded through every other builder here -- they have no dbt gold
+        # model (dbt-gold-silver-rewiring map, Ticket 06), so unlike Tickets
+        # 02-05 there's no dbt-facing cutover path for them.
+        ("sec_subsidiary_evidence",        lambda: _build_sec_subsidiary_evidence()),
+        ("sec_auditor_report_evidence",    lambda: _build_sec_auditor_report_evidence()),
+        ("sec_employment_event",           lambda: _build_sec_employment_event()),
         # Firm Roster completeness cross-check (ticket 03). "sec_adv_private_fund"
         # here is a distinct name from "fact_adv_private_fund" above -- that one
         # is the existing CIK-keyed dimensional PRIVATE_FUNDS gold table; this
         # one is a raw CRD-keyed passthrough export of the same silver table,
         # added because the dimensional table has no CRD column.
-        ("sec_adv_firm_roster",            lambda: _build_sec_adv_firm_roster(conn)),
-        ("sec_adv_private_fund",           lambda: _build_sec_adv_private_fund_passthrough(conn)),
+        ("sec_adv_firm_roster",            lambda: _build_sec_adv_firm_roster()),
+        ("sec_adv_private_fund",           lambda: _build_sec_adv_private_fund_passthrough()),
     ]
 
 

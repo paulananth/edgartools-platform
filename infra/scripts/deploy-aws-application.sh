@@ -813,6 +813,13 @@ is_empty "$BRONZE_BUCKET_NAME" && fail "could not resolve bronze bucket name; pa
 is_empty "$WAREHOUSE_BUCKET_NAME" && fail "could not resolve warehouse bucket name; pass --warehouse-bucket-name"
 is_empty "$SNOWFLAKE_EXPORT_BUCKET_NAME" && fail "could not resolve Snowflake export bucket name; pass --snowflake-export-bucket-name"
 is_empty "$EDGAR_IDENTITY_SECRET_ARN" && fail "could not resolve EDGAR identity secret ARN; pass --edgar-identity-secret-arn"
+# Required unconditionally (not just under --enable-mdm, see the MDM_DEPLOYMENT_MODE
+# check below): 5 gold_models.py builders read EDGARTOOLS_SILVER directly via this
+# secret (dbt-gold-silver-rewiring map, Ticket 06), so every gold-affecting warehouse
+# command (gold-refresh/daily_incremental/bootstrap/etc.) needs it now, not just
+# backfill-mdm-entity-ids. Failing here beats a silent deploy that only breaks deep
+# inside build_gold() on first use.
+is_empty "$MDM_SNOWFLAKE_SECRET_ARN" && fail "could not resolve MDM Snowflake secret ARN; pass --mdm-snowflake-secret-arn or provision \"${NAME_PREFIX}/mdm/snowflake\" in Secrets Manager (see infra/scripts/bootstrap-aws-mdm-secrets.sh)"
 is_empty "$EXECUTION_ROLE_ARN" && fail "could not resolve ECS task execution role ARN; pass --execution-role-arn"
 is_empty "$TASK_ROLE_ARN" && fail "could not resolve ECS task role ARN; pass --task-role-arn"
 is_empty "$STEP_FUNCTIONS_ROLE_ARN" && fail "could not resolve Step Functions role ARN; check IAM role ${RUNNER_STEP_FUNCTIONS_ROLE_NAME} exists or pass --step-functions-role-arn"
@@ -835,7 +842,9 @@ MDM_SILVER_DUCKDB="$(first_nonempty "$MDM_SILVER_DUCKDB" "s3://${WAREHOUSE_BUCKE
 DEPLOY_MDM=false
 missing_mdm_values=()
 is_empty "$MDM_POSTGRES_DSN_SECRET_ARN" && missing_mdm_values+=("mdm_postgres_dsn_secret_arn")
-is_empty "$MDM_SNOWFLAKE_SECRET_ARN" && missing_mdm_values+=("mdm_snowflake_secret_arn")
+# mdm_snowflake_secret_arn is no longer conditionally checked here -- it's now
+# required unconditionally above (MDM_SNOWFLAKE_SECRET_ARN is never empty past
+# that point), since it's not just an MDM-deployment-mode concern anymore.
 case "$MDM_DEPLOYMENT_MODE" in
   enabled)
     if [[ ${#missing_mdm_values[@]} -gt 0 ]]; then

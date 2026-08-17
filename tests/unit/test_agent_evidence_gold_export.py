@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
-
-import duckdb
+from unittest.mock import patch
 
 from edgar_warehouse.infrastructure.run_manifest_builder import SNOWFLAKE_EXPORT_TABLES
 from edgar_warehouse.serving.gold_models import (
@@ -15,6 +15,69 @@ from edgar_warehouse.serving.gold_models import (
     _build_sec_subsidiary_evidence,
 )
 from edgar_warehouse.serving.targets.snowflake import write_gold_to_serving_export
+from tests.unit._fake_snowflake import FakeSnowflakeConnectionSettings
+
+_SUBSIDIARY_COLUMNS = [
+    "accession_number", "registrant_cik", "document_name", "document_type",
+    "row_ordinal", "legal_name", "jurisdiction", "parent_scope",
+    "immediate_parent_known", "effective_date", "row_locator",
+    "source_sha256", "parser_version",
+]
+_AUDITOR_COLUMNS = [
+    "accession_number", "registrant_cik", "form_type", "document_name",
+    "audited_period_end", "report_date", "principal_firm_name",
+    "principal_firm_location", "pcaob_firm_id", "evidence_source",
+    "raw_locator", "source_sha256", "evidence_fingerprint",
+    "form_ap_filing_id", "original_form_ap_filing_id", "latest_amendment",
+    "parser_version",
+]
+_EMPLOYMENT_COLUMNS = [
+    "accession_number", "event_index", "cik", "event_type", "person_name",
+    "exec_role", "previous_role", "compensation_amount", "effective_date",
+    "parser_version",
+]
+
+
+def _populated_table_data() -> dict[str, tuple[list[str], list[tuple]]]:
+    return {
+        "SEC_SUBSIDIARY_EVIDENCE": (
+            _SUBSIDIARY_COLUMNS,
+            [
+                (
+                    "0001", 320193, "ex21.htm", "EX-21", 1, "SubCo", "DE",
+                    "registrant_disclosed", False, date(2024, 1, 1), "r1",
+                    "abc", "v1",
+                )
+            ],
+        ),
+        "SEC_AUDITOR_REPORT_EVIDENCE": (
+            _AUDITOR_COLUMNS,
+            [
+                (
+                    "0001", 320193, "10-K", "a.htm", date(2023, 12, 31),
+                    date(2024, 2, 1), "EY", "NY", "42", "sec_ixbrl", "loc",
+                    "sha", "fp1", None, None, True, "v1",
+                )
+            ],
+        ),
+        "SEC_EMPLOYMENT_EVENT": (
+            _EMPLOYMENT_COLUMNS,
+            [
+                (
+                    "0001", 1, 320193, "appointed", "Jane Doe", "CEO", None,
+                    None, date(2024, 3, 1), "v1",
+                )
+            ],
+        ),
+    }
+
+
+def _empty_table_data() -> dict[str, tuple[list[str], list[tuple]]]:
+    return {
+        "SEC_SUBSIDIARY_EVIDENCE": (_SUBSIDIARY_COLUMNS, []),
+        "SEC_AUDITOR_REPORT_EVIDENCE": (_AUDITOR_COLUMNS, []),
+        "SEC_EMPLOYMENT_EVENT": (_EMPLOYMENT_COLUMNS, []),
+    }
 
 
 class AgentEvidenceExportTests(unittest.TestCase):
@@ -27,73 +90,24 @@ class AgentEvidenceExportTests(unittest.TestCase):
             self.assertIn(name, SNOWFLAKE_EXPORT_TABLES)
 
     def test_builders_export_rows(self) -> None:
-        conn = duckdb.connect(":memory:")
-        conn.execute(
-            """
-            CREATE TABLE sec_subsidiary_evidence (
-                accession_number TEXT, registrant_cik BIGINT, document_name TEXT,
-                document_type TEXT, row_ordinal INTEGER, legal_name TEXT,
-                jurisdiction TEXT, parent_scope TEXT, immediate_parent_known BOOLEAN,
-                effective_date DATE, row_locator TEXT, source_sha256 TEXT, parser_version TEXT
-            );
-            INSERT INTO sec_subsidiary_evidence VALUES
-              ('0001', 320193, 'ex21.htm', 'EX-21', 1, 'SubCo', 'DE',
-               'registrant_disclosed', false, DATE '2024-01-01', 'r1', 'abc', 'v1');
-            CREATE TABLE sec_auditor_report_evidence (
-                accession_number TEXT, registrant_cik BIGINT, form_type TEXT,
-                document_name TEXT, audited_period_end DATE, report_date DATE,
-                principal_firm_name TEXT, principal_firm_location TEXT, pcaob_firm_id TEXT,
-                evidence_source TEXT, raw_locator TEXT, source_sha256 TEXT,
-                evidence_fingerprint TEXT, form_ap_filing_id TEXT,
-                original_form_ap_filing_id TEXT, latest_amendment BOOLEAN, parser_version TEXT
-            );
-            INSERT INTO sec_auditor_report_evidence VALUES
-              ('0001', 320193, '10-K', 'a.htm', DATE '2023-12-31', DATE '2024-02-01',
-               'EY', 'NY', '42', 'sec_ixbrl', 'loc', 'sha', 'fp1', NULL, NULL, true, 'v1');
-            CREATE TABLE sec_employment_event (
-                accession_number TEXT, event_index BIGINT, cik BIGINT, event_type TEXT,
-                person_name TEXT, exec_role TEXT, previous_role TEXT,
-                compensation_amount DOUBLE, effective_date DATE, parser_version TEXT
-            );
-            INSERT INTO sec_employment_event VALUES
-              ('0001', 1, 320193, 'appointed', 'Jane Doe', 'CEO', NULL, NULL,
-               DATE '2024-03-01', 'v1');
-            """
-        )
-        self.assertEqual(_build_sec_subsidiary_evidence(conn).num_rows, 1)
-        self.assertEqual(_build_sec_auditor_report_evidence(conn).num_rows, 1)
-        self.assertEqual(_build_sec_employment_event(conn).num_rows, 1)
+        with patch(
+            "edgar_warehouse.mdm.export.silver_connection_settings",
+            return_value=FakeSnowflakeConnectionSettings(_populated_table_data()),
+        ):
+            self.assertEqual(_build_sec_subsidiary_evidence().num_rows, 1)
+            self.assertEqual(_build_sec_auditor_report_evidence().num_rows, 1)
+            self.assertEqual(_build_sec_employment_event().num_rows, 1)
 
     def test_write_serving_export_includes_evidence_paths(self) -> None:
-        conn = duckdb.connect(":memory:")
-        conn.execute(
-            """
-            CREATE TABLE sec_subsidiary_evidence (
-                accession_number TEXT, registrant_cik BIGINT, document_name TEXT,
-                document_type TEXT, row_ordinal INTEGER, legal_name TEXT,
-                jurisdiction TEXT, parent_scope TEXT, immediate_parent_known BOOLEAN,
-                effective_date DATE, row_locator TEXT, source_sha256 TEXT, parser_version TEXT
-            );
-            CREATE TABLE sec_auditor_report_evidence (
-                accession_number TEXT, registrant_cik BIGINT, form_type TEXT,
-                document_name TEXT, audited_period_end DATE, report_date DATE,
-                principal_firm_name TEXT, principal_firm_location TEXT, pcaob_firm_id TEXT,
-                evidence_source TEXT, raw_locator TEXT, source_sha256 TEXT,
-                evidence_fingerprint TEXT, form_ap_filing_id TEXT,
-                original_form_ap_filing_id TEXT, latest_amendment BOOLEAN, parser_version TEXT
-            );
-            CREATE TABLE sec_employment_event (
-                accession_number TEXT, event_index BIGINT, cik BIGINT, event_type TEXT,
-                person_name TEXT, exec_role TEXT, previous_role TEXT,
-                compensation_amount DOUBLE, effective_date DATE, parser_version TEXT
-            );
-            """
-        )
-        tables = {
-            "sec_subsidiary_evidence": _build_sec_subsidiary_evidence(conn),
-            "sec_auditor_report_evidence": _build_sec_auditor_report_evidence(conn),
-            "sec_employment_event": _build_sec_employment_event(conn),
-        }
+        with patch(
+            "edgar_warehouse.mdm.export.silver_connection_settings",
+            return_value=FakeSnowflakeConnectionSettings(_empty_table_data()),
+        ):
+            tables = {
+                "sec_subsidiary_evidence": _build_sec_subsidiary_evidence(),
+                "sec_auditor_report_evidence": _build_sec_auditor_report_evidence(),
+                "sec_employment_event": _build_sec_employment_event(),
+            }
 
         class _Root:
             def __init__(self, base: Path):
