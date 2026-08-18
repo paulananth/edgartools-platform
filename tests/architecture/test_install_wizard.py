@@ -5,8 +5,6 @@ import os
 import subprocess
 from pathlib import Path
 
-import pytest
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "infra" / "scripts" / "install.sh"
@@ -832,14 +830,6 @@ def test_neo4j_install_precedes_the_grants_stage(tmp_path: Path) -> None:
     assert install < grants
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Ticket 04 (install-sh-provision-deploy-data map) has not landed yet -- "
-        "build_stages() still runs the old sequential order. This test pins the "
-        "target order Ticket 04 must produce; remove the xfail marker when it does."
-    ),
-    strict=True,
-)
 def test_stages_run_in_provision_deploy_early_data_late_data_order(
     tmp_path: Path,
 ) -> None:
