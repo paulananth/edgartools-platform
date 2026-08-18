@@ -27,8 +27,9 @@
 -- Run once per environment (idempotent, safe to re-run):
 --   snow sql --connection edgartools-prod -f infra/snowflake/sql/bootstrap/11_silver_landing_schema.sql
 --
--- Every statement is CREATE ... IF NOT EXISTS or an additive GRANT (no
--- REVOKE, no DROP, no OWNERSHIP transfer -- see CLAUDE.md's
+-- Every statement is CREATE ... IF NOT EXISTS, an additive GRANT, or an
+-- ALTER ... DROP NOT NULL (a no-op against an already-nullable column) --
+-- no REVOKE, no DROP TABLE/SCHEMA, no OWNERSHIP transfer -- see CLAUDE.md's
 -- "Manifest-pipeline ownership + cursor-syntax incident" for why
 -- GRANT OWNERSHIP ... REVOKE CURRENT GRANTS silently strips unrelated
 -- grants). Ownership: the schema, sequence, and every table are created
