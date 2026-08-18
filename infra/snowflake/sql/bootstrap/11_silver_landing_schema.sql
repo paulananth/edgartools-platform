@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS sec_accounting_flag (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_accounting_flag ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_adv_disclosure_event (
     accession_number TEXT NOT NULL,
@@ -109,6 +110,7 @@ CREATE TABLE IF NOT EXISTS sec_adv_disclosure_event (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_adv_disclosure_event ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_adv_filing (
     accession_number TEXT NOT NULL,
@@ -127,6 +129,7 @@ CREATE TABLE IF NOT EXISTS sec_adv_filing (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_adv_filing ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_adv_firm_roster (
     adviser_crd_number TEXT NOT NULL,
@@ -145,6 +148,7 @@ CREATE TABLE IF NOT EXISTS sec_adv_firm_roster (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_adv_firm_roster ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_adv_office (
     accession_number TEXT NOT NULL,
@@ -159,6 +163,7 @@ CREATE TABLE IF NOT EXISTS sec_adv_office (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_adv_office ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_adv_private_fund (
     accession_number TEXT NOT NULL,
@@ -183,6 +188,7 @@ CREATE TABLE IF NOT EXISTS sec_adv_private_fund (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_adv_private_fund ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_auditor_report_evidence (
     accession_number TEXT NOT NULL,
@@ -206,6 +212,7 @@ CREATE TABLE IF NOT EXISTS sec_auditor_report_evidence (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_auditor_report_evidence ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_company (
     cik BIGINT NOT NULL,
@@ -226,6 +233,7 @@ CREATE TABLE IF NOT EXISTS sec_company (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_company ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_company_address (
     cik BIGINT NOT NULL,
@@ -241,6 +249,7 @@ CREATE TABLE IF NOT EXISTS sec_company_address (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_company_address ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_company_filing (
     accession_number TEXT NOT NULL,
@@ -263,6 +272,7 @@ CREATE TABLE IF NOT EXISTS sec_company_filing (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_company_filing ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_company_former_name (
     cik BIGINT NOT NULL,
@@ -273,6 +283,7 @@ CREATE TABLE IF NOT EXISTS sec_company_former_name (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_company_former_name ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_company_submission_file (
     cik BIGINT NOT NULL,
@@ -285,6 +296,7 @@ CREATE TABLE IF NOT EXISTS sec_company_submission_file (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_company_submission_file ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_company_ticker (
     cik BIGINT NOT NULL,
@@ -297,6 +309,7 @@ CREATE TABLE IF NOT EXISTS sec_company_ticker (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_company_ticker ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_current_filing_feed (
     accession_number TEXT NOT NULL,
@@ -316,6 +329,7 @@ CREATE TABLE IF NOT EXISTS sec_current_filing_feed (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_current_filing_feed ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_earnings_release (
     cik BIGINT NOT NULL,
@@ -334,6 +348,7 @@ CREATE TABLE IF NOT EXISTS sec_earnings_release (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_earnings_release ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_employment_event (
     accession_number TEXT NOT NULL,
@@ -350,6 +365,7 @@ CREATE TABLE IF NOT EXISTS sec_employment_event (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_employment_event ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_executive_record (
     cik BIGINT NOT NULL,
@@ -368,6 +384,7 @@ CREATE TABLE IF NOT EXISTS sec_executive_record (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_executive_record ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_filing_attachment (
     accession_number TEXT NOT NULL,
@@ -382,6 +399,7 @@ CREATE TABLE IF NOT EXISTS sec_filing_attachment (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_filing_attachment ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_filing_text (
     accession_number TEXT NOT NULL,
@@ -394,6 +412,7 @@ CREATE TABLE IF NOT EXISTS sec_filing_text (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_filing_text ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_financial_derived (
     cik BIGINT NOT NULL,
@@ -436,6 +455,7 @@ CREATE TABLE IF NOT EXISTS sec_financial_derived (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_financial_derived ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_financial_fact (
     cik BIGINT NOT NULL,
@@ -455,6 +475,7 @@ CREATE TABLE IF NOT EXISTS sec_financial_fact (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_financial_fact ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_guidance_fact (
     fact_key BIGINT NOT NULL,
@@ -483,6 +504,7 @@ CREATE TABLE IF NOT EXISTS sec_guidance_fact (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_guidance_fact ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_guidance_fact_reject (
     cik BIGINT NOT NULL,
@@ -495,6 +517,7 @@ CREATE TABLE IF NOT EXISTS sec_guidance_fact_reject (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_guidance_fact_reject ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_ownership_derivative_txn (
     accession_number TEXT NOT NULL,
@@ -520,6 +543,7 @@ CREATE TABLE IF NOT EXISTS sec_ownership_derivative_txn (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_ownership_derivative_txn ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_ownership_non_derivative_txn (
     accession_number TEXT NOT NULL,
@@ -540,6 +564,7 @@ CREATE TABLE IF NOT EXISTS sec_ownership_non_derivative_txn (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_ownership_non_derivative_txn ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_ownership_reporting_owner (
     accession_number TEXT NOT NULL,
@@ -557,6 +582,7 @@ CREATE TABLE IF NOT EXISTS sec_ownership_reporting_owner (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_ownership_reporting_owner ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_pcaob_firm_identity (
     pcaob_firm_id TEXT NOT NULL,
@@ -571,6 +597,7 @@ CREATE TABLE IF NOT EXISTS sec_pcaob_firm_identity (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_pcaob_firm_identity ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_raw_object (
     raw_object_id TEXT NOT NULL,
@@ -591,6 +618,7 @@ CREATE TABLE IF NOT EXISTS sec_raw_object (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_raw_object ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_subsidiary_evidence (
     accession_number TEXT NOT NULL,
@@ -610,6 +638,7 @@ CREATE TABLE IF NOT EXISTS sec_subsidiary_evidence (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_subsidiary_evidence ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_thirteenf_filing (
     accession_number TEXT NOT NULL,
@@ -626,6 +655,7 @@ CREATE TABLE IF NOT EXISTS sec_thirteenf_filing (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_thirteenf_filing ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_thirteenf_holding (
     cik BIGINT NOT NULL,
@@ -648,6 +678,7 @@ CREATE TABLE IF NOT EXISTS sec_thirteenf_holding (
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
+ALTER TABLE sec_thirteenf_holding ALTER COLUMN parse_sequence DROP NOT NULL;
 
 -- Grant the loader role (the same EDGARTOOLS_PROD_LOADER that already owns
 -- gold's 20 dynamic tables, the MDM mirror, and the graph schema -- reused

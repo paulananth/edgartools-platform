@@ -209,6 +209,20 @@ def generate() -> str:
         lines.append(",\n".join(column_lines))
         lines.append("    , PRIMARY KEY (parse_sequence)")
         lines.append(");")
+        # Snowflake implicitly forces NOT NULL on any column named in a
+        # PRIMARY KEY clause, regardless of the column's own declaration --
+        # confirmed live (silver-snowflake-migration map, Ticket 11) via
+        # GET_DDL showing "parse_sequence NUMBER(38,0) NOT NULL" despite the
+        # CREATE TABLE text above never saying NOT NULL. The comment two
+        # lines up already explains *why* parse_sequence must be nullable
+        # (COPY INTO leaves it NULL pre-backfill); this ALTER is what
+        # actually achieves that against the implicit PK constraint. Prior
+        # to this fix, that nullability only existed as a live, undocumented
+        # ALTER TABLE run once by hand against one account -- it did not
+        # survive that account's later rebuild, which is what broke
+        # LOAD_SILVER_LANDING_TASK a second time. Idempotent: re-running
+        # DROP NOT NULL against an already-nullable column is a no-op.
+        lines.append(f"ALTER TABLE {table} ALTER COLUMN parse_sequence DROP NOT NULL;")
         lines.append("")
 
     lines.extend(
