@@ -163,3 +163,32 @@ def test_strict_ticket20_path_generates_valid_fail_closed_definition(tmp_path: P
     assert "States.JsonToString($.attestations)" in reconcile_cmd
     assert "'--execution-arn'" in reconcile_cmd
     assert "$$.Execution.Id" in reconcile_cmd
+
+
+def test_seed_from_bronze_and_compute_remaining_batches_preserve_resume_from_run_id(
+    tmp_path: Path,
+) -> None:
+    """Regression test for a live production failure (2026-08-18).
+
+    BatchSilver's ItemSelector references "$.resume_from_run_id" directly
+    (a JSONPath reference, not a Choice IsPresent check -- see
+    ResumeFromRunIdPresenceCheck/Default above it in the state machine,
+    which guarantee the key exists by the time either SeedFromBronze or
+    ComputeRemainingBatches runs). ecs_state()'s default ResultPath
+    (omitted, meaning "$") REPLACES the entire state input with the ECS
+    task's own runTask.sync output on both of these paths, discarding
+    resume_from_run_id before BatchSilver ever sees it. A real
+    bronze_seed_silver_gold execution failed on exactly this
+    (States.ItemReaderFailed: "$.resume_from_run_id ... could not be
+    found") the first time this code path actually ran end-to-end,
+    because nothing asserted it. Both states must set ResultPath: None to
+    preserve $ unchanged, matching the same pattern already used by every
+    other "do work but keep $ for a later state" ecs_state() call in this
+    file (seed, mdm_seed_universe, compute_windows, fetch_adv_bulk,
+    run_wh, compute_identity_refresh_window, etc.).
+    """
+    definition = _definition(tmp_path)
+    states = definition["States"]
+
+    assert states["SeedFromBronze"]["ResultPath"] is None
+    assert states["ComputeRemainingBatches"]["ResultPath"] is None
