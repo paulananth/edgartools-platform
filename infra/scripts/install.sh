@@ -644,11 +644,11 @@ build_stages() {
 
   add_stage \
     "AWS: Terraform state bucket" \
-    "Remote state bootstrap for the AWS Terraform backend." \
+    "Remote state bootstrap for the AWS Terraform backend. Passes environment and terraform_state_bucket_name explicitly rather than relying on this root's own local terraform.tfvars: that file is not env-name-aware (it predates the dev|prod-enum-to-slug rename, wayfinder ticket 03), so an operator's leftover local file for a different/earlier environment would otherwise silently bootstrap (or attempt to recreate) the wrong bucket." \
     "cd infra/terraform/bootstrap-state
 AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform init
-AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform plan
-AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform apply"
+AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform plan -var 'environment=${ENVIRONMENT}' -var 'terraform_state_bucket_name=edgartools-${ENVIRONMENT}-tfstate-${expected_account_q}'
+AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform apply -var 'environment=${ENVIRONMENT}' -var 'terraform_state_bucket_name=edgartools-${ENVIRONMENT}-tfstate-${expected_account_q}'"
 
   add_stage \
     "Snowflake: Neo4j Native App install" \
@@ -665,11 +665,15 @@ AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform apply"
 
   add_stage \
     "AWS: access roles/policies" \
-    "AWS access Terraform for deployer, runner execution/task roles, and scoped policies." \
+    "AWS access Terraform for deployer, runner execution/task roles, and scoped policies. Applies in bootstrap mode (snowflake_bootstrap_enabled=true, snowflake_state_bucket=null) rather than a bare apply: a bare apply would let this root's own local terraform.tfvars supply snowflake_manifest_subscriber_arn via a cross-state read of whatever Snowflake state key that file happens to reference -- stale after any account swap (see snowflake-account-cutover map's addendum) -- silently granting SNS trust to the wrong Snowflake account's AWS principal instead of the wildcard bootstrap trust this stage is meant to establish. The 'Snowflake: native-pull foundation' stage below (deploy-snowflake-stack.sh) re-applies this exact root twice more afterward -- once to read the real principal, once to reconcile trust down to it exactly -- so this stage's job is only to get the deployer/runner IAM roles into existence with safe placeholder trust, not to get the final Snowflake trust value right." \
     "cd infra/terraform/access/aws/accounts/${ENVIRONMENT}
 AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform init -backend-config=backend.hcl
-AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform plan
-AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform apply"
+_aws_access_bootstrap_overlay=\"\$(mktemp).tfvars.json\"
+mv \"\${_aws_access_bootstrap_overlay%.tfvars.json}\" \"\${_aws_access_bootstrap_overlay}\"
+printf '%s' '{\"snowflake_bootstrap_enabled\": true, \"snowflake_manifest_subscriber_arn\": null, \"snowflake_storage_external_id\": \"edgartools-${ENVIRONMENT}-snowflake-native-pull\", \"snowflake_state_bucket\": null}' > \"\${_aws_access_bootstrap_overlay}\"
+AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform plan -var-file=\"\${_aws_access_bootstrap_overlay}\"
+AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform apply -var-file=\"\${_aws_access_bootstrap_overlay}\"
+rm -f \"\${_aws_access_bootstrap_overlay}\""
 
   add_stage \
     "AWS: ECR image publish" \
