@@ -137,6 +137,7 @@ populate the silver-landing zone end to end.
 - [Estimate Snowflake Compute Cost for Native Silver](issues/08-estimate-snowflake-compute-cost.md) — real steady-state numbers unobtainable (the live account, `PRJEDJU-QJB05385`, was rebuilt 2026-08-17/18, everything is 0 rows); surfaced that Ticket 07's `LOAD_SILVER_LANDING_TASK` was never re-applied to this account at all (not suspended — absent), which is why nothing has ever refreshed on a schedule here. Delivered a bottom-up floor estimate (~$4/month at 6hr lag to ~$96/month at 15min lag, before an unmeasured and plausibly-dominant marginal cost from the 6 FULL-mode ownership/financial tables) and flagged a live, currently-accruing `SNOWFLAKE_RUN_MANIFEST_TASK` 1-minute-schedule drift as a likely bigger cost lever than silver's own TARGET_LAG choice. See new [Ticket 11](issues/11-reprovision-missing-bootstrap-sql-on-rebuilt-account.md).
 
 - [Reprovision Missing Phase 1 Bootstrap SQL on the Rebuilt Account](issues/11-reprovision-missing-bootstrap-sql-on-rebuilt-account.md) — `13_silver_landing_ingest.sql` reapplied live (storage integration/IAM allowlist and `SILVER_LANDING_EXPORT_ROOT` had already survived the rebuild correctly; only the task itself was missing); `SNOWFLAKE_RUN_MANIFEST_TASK` schedule fixed 1min→6hr. Found and fixed a second, previously-unknown bug in the process: Snowflake implicitly forces `NOT NULL` on any `PRIMARY KEY` column regardless of its own declaration, so Ticket 07's original "drop NOT NULL" fix only ever worked via an undocumented live-only ALTER that didn't survive the rebuild — now a committed, idempotent `ALTER TABLE ... DROP NOT NULL` in the generator itself (`generate_silver_landing_ddl.py`), with a regression test. Verified end-to-end live: a real `bootstrap-batch` run → `LOAD_SILVER_LANDING()` → manual dynamic-table `REFRESH` chain, 1,506 real rows landed in `EDGARTOOLS_SILVER.SEC_EMPLOYMENT_EVENT`. Genuine `SCHEDULED`-triggered refreshes still require Ticket 09/10's cutover (no downstream consumer yet on `DOWNSTREAM`-lag tables) — out of this ticket's scope.
+- [Decide Consumer Cutover Order](issues/09-decide-consumer-cutover-order.md) — **MDM's `ShardedSilverReader` first, then `gold_models.py`'s Python builders, then the write path retires.** Checked directly (not assumed): gold's ~20 builders read zero MDM-derived fields, so MDM-first carries no risk to gold — order was decided by surface area (one class vs. twenty functions) and existing idle runway (`EDGARTOOLS_PROD_MDM_SILVER_READER`, provisioned by Ticket 05, unused) rather than risk. Dual-write window bounded: gold-building's cutover must start within 2 weeks of MDM's cutover being verified live. Stage 14's write-path race kept explicitly out of scope (operational unblock, not a sequencing decision). Graduates into [Ticket 12](issues/12-cutover-mdm-sharded-silver-reader-to-snowflake.md).
 
 **Phase 1's "live in prod" claims above describe a prior account
 (`pijjxma-ppb32800`), not the current one.** The account was rebuilt again
@@ -150,9 +151,10 @@ not currently verified on `PRJEDJU-QJB05385` until Ticket 11 re-confirms
 it.
 
 ## Not yet specified
-- The actual migration ticket for whichever consumer [Decide Consumer
-  Cutover Order](issues/09-decide-consumer-cutover-order.md) names first —
-  can't be written precisely until that ticket resolves.
+- `gold_models.py`'s own cutover ticket — not written yet, deliberately
+  deferred until [Cut Over MDM's ShardedSilverReader to Snowflake](issues/12-cutover-mdm-sharded-silver-reader-to-snowflake.md)
+  is verified live (Ticket 09's 2-week dual-write-window clock starts
+  then, not before).
 
 ## Out of scope
 
