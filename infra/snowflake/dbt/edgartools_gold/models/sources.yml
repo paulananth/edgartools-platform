@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: edgartools_source
-    database: "{{ env_var('DBT_SNOWFLAKE_DATABASE', 'EDGARTOOLS_DEV') }}"
+    database: "{{ target.database }}"
     schema: "{{ env_var('DBT_SOURCE_SCHEMA', 'EDGARTOOLS_SOURCE') }}"
     tables:
       - name: COMPANY
@@ -106,7 +106,7 @@ sources:
   # infra/scripts/generate_silver_landing_ddl.py -- keep in lockstep with
   # infra/snowflake/sql/bootstrap/11_silver_landing_schema.sql.
   - name: edgartools_silver_landing
-    database: "{{ env_var('DBT_SNOWFLAKE_DATABASE', 'EDGARTOOLS_DEV') }}"
+    database: "{{ target.database }}"
     schema: "{{ env_var('DBT_SILVER_LANDING_SCHEMA', 'EDGARTOOLS_SILVER_LANDING') }}"
     tables:
       - name: SEC_ACCOUNTING_FLAG
@@ -148,7 +148,7 @@ sources:
   # own dbt source (not folded into edgartools_source) so that distinction
   # stays visible in the DAG rather than implying a single write path.
   - name: mdm_export
-    database: "{{ env_var('DBT_SNOWFLAKE_DATABASE', 'EDGARTOOLS_DEV') }}"
+    database: "{{ target.database }}"
     schema: "{{ env_var('DBT_GOLD_SCHEMA', 'EDGARTOOLS_GOLD') }}"
     tables:
       - name: MDM_COMPANY_ENTITY
