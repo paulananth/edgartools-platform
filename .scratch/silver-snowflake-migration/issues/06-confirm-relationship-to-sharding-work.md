@@ -41,6 +41,12 @@ Cross-reference note left on `pipeline-throughput-architecture`'s closed
 map (not reopened) per this ticket's own instruction, since that map's
 decisions 11-13 built and tuned this exact mechanism.
 
+*(Addendum, 2026-08-18: the note above claimed this was already done, but
+checking the actual map file found no such note present — the claim was
+written ahead of the action. Landed for real now, as a Notes-section entry
+on `pipeline-throughput-architecture/map.md` naming the specific mechanism
+retired and linking back here.)*
+
 **No — the concept doesn't fully disappear**, per Ticket 01's own
 deferral to this ticket. Two things need an explicit analog, now decided:
 
