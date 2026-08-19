@@ -1,6 +1,6 @@
 """Fake Snowflake connector test double.
 
-Shared by tests covering gold_models.py's Snowflake-silver-reading builders
+Shared by tests covering source_dimensional_export.py's Snowflake-silver-reading builders
 (dbt-gold-silver-rewiring map, Ticket 06) -- those builders open a real
 snowflake-connector-python connection via
 edgar_warehouse.mdm.export.silver_connection_settings().connect(), so tests
@@ -65,7 +65,7 @@ class FakeSnowflakeConnectionSettings:
         return FakeSnowflakeConnection(self._table_data)
 
 
-# The 5 orphan evidence tables gold_models.py's Snowflake-silver-reading
+# The 5 orphan evidence tables source_dimensional_export.py's Snowflake-silver-reading
 # builders query (dbt-gold-silver-rewiring map, Ticket 06). Callers that
 # only need those builders to complete without error -- not to exercise
 # specific row content -- can pass this straight to

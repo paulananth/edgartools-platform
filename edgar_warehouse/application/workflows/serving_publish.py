@@ -6,13 +6,13 @@ from typing import Any
 
 
 def build_gold(*args: Any, **kwargs: Any):
-    from edgar_warehouse.serving.gold_models import build_gold as _build_gold
+    from edgar_warehouse.serving.source_dimensional_export import build_gold as _build_gold
 
     return _build_gold(*args, **kwargs)
 
 
 def build_ticker_reference_table(*args: Any, **kwargs: Any):
-    from edgar_warehouse.serving.gold_models import (
+    from edgar_warehouse.serving.source_dimensional_export import (
         build_ticker_reference_table as _build_ticker_reference_table,
     )
 
@@ -36,7 +36,7 @@ def write_gold_to_serving_export(*args: Any, **kwargs: Any):
 
 
 def write_gold_to_storage(*args: Any, **kwargs: Any):
-    from edgar_warehouse.serving.gold_models import write_gold_to_storage as _write_gold_to_storage
+    from edgar_warehouse.serving.source_dimensional_export import write_gold_to_storage as _write_gold_to_storage
 
     return _write_gold_to_storage(*args, **kwargs)
 

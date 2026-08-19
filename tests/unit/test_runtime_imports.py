@@ -50,7 +50,7 @@ class RuntimeImportTests(unittest.TestCase):
             for module_name in [
                 "edgar_warehouse.silver_store",
                 "edgar_warehouse.silver",
-                "edgar_warehouse.serving.gold_models",
+                "edgar_warehouse.serving.source_dimensional_export",
                 "edgar_warehouse.serving.targets.snowflake",
                 "edgar_warehouse.gold",
             ]:

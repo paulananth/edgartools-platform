@@ -5,7 +5,7 @@ import unittest
 
 import duckdb
 
-from edgar_warehouse.serving.gold_models import (
+from edgar_warehouse.serving.source_dimensional_export import (
     _SEC_FINANCIAL_DERIVED_SCHEMA,
     _build_sec_financial_derived,
 )

@@ -128,7 +128,7 @@ def silver_connection_settings() -> SnowflakeConnectionSettings:
     that dataclass's own default schema is EDGARTOOLS_GOLD (the MDM export
     target), so this overrides just the schema to the silver landing zone's
     dbt target (DBT_SILVER_SCHEMA, matching dbt_project.yml's own default).
-    Shared by mdm_entity_backfill.py's sweep and gold_models.py's Snowflake-
+    Shared by mdm_entity_backfill.py's sweep and source_dimensional_export.py's Snowflake-
     silver-reading builders (dbt-gold-silver-rewiring map, Ticket 06) -- both
     need the identical "read EDGARTOOLS_SILVER directly" connection.
     """

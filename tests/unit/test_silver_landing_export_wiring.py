@@ -54,7 +54,7 @@ def test_landing_export_is_a_noop_when_context_has_no_landing_root(tmp_path) -> 
             "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_with_retry",
             return_value={"layer": "silver_database", "path": "silver.duckdb"},
         ),
-        patch("edgar_warehouse.serving.gold_models.iter_gold_tables", return_value=iter(())),
+        patch("edgar_warehouse.serving.source_dimensional_export.iter_gold_tables", return_value=iter(())),
         patch("edgar_warehouse.application.warehouse_orchestrator.write_landing_export") as write_landing,
     ):
         result = _execute_warehouse_bronze_capture(
@@ -108,7 +108,7 @@ def test_landing_export_flushes_rows_written_during_the_run(tmp_path) -> None:
             "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_with_retry",
             return_value={"layer": "silver_database", "path": "silver.duckdb"},
         ),
-        patch("edgar_warehouse.serving.gold_models.iter_gold_tables", return_value=iter(())),
+        patch("edgar_warehouse.serving.source_dimensional_export.iter_gold_tables", return_value=iter(())),
     ):
         result = _execute_warehouse_bronze_capture(
             context=context,

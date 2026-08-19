@@ -1508,7 +1508,7 @@ def build_earnings_calendar_table_from_rows(
 ) -> pa.Table:
     """Build ERDP-03 gold table from normalized or raw calendar rows.
 
-    Thin wrapper so serving export paths can import from ``gold_models``
+    Thin wrapper so serving export paths can import from ``source_dimensional_export``
     alongside other builders.  Implementation lives in
     ``edgar_warehouse.explore.earnings_calendar``.
     """
@@ -1525,7 +1525,7 @@ def build_consensus_estimates_table_from_rows(
 ) -> pa.Table:
     """Build ERDP-01 gold table from normalized or raw consensus rows.
 
-    Thin wrapper so serving export paths can import from ``gold_models``
+    Thin wrapper so serving export paths can import from ``source_dimensional_export``
     alongside other builders.  Implementation lives in
     ``edgar_warehouse.explore.consensus_estimates``.
     """
@@ -1542,7 +1542,7 @@ def build_transcript_events_table_from_rows(
 ) -> pa.Table:
     """Build ERDP-04 gold table from normalized or raw transcript event rows.
 
-    Thin wrapper so serving export paths can import from ``gold_models``
+    Thin wrapper so serving export paths can import from ``source_dimensional_export``
     alongside other builders.  Implementation lives in
     ``edgar_warehouse.explore.transcript_events``.
     """

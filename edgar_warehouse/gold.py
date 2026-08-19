@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from edgar_warehouse.serving.gold_models import (
+from edgar_warehouse.serving.source_dimensional_export import (
     build_gold,
     build_ticker_reference_table,
     write_gold_to_storage,

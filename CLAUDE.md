@@ -107,14 +107,14 @@ problem entirely.
 
 | Need | Location |
 |------|----------|
-| ETL runtime (form parsing, S3 writes) | `edgar_warehouse/runtime.py` |
-| Silver-layer transformations | `edgar_warehouse/silver.py` |
-| Gold-layer aggregations (Python) | `edgar_warehouse/gold.py` |
+| ETL runtime (form parsing, S3 writes) | `edgar_warehouse/application/warehouse_orchestrator.py` (`edgar_warehouse/runtime.py` and `edgar_warehouse/application/command_router.py` are compatibility shims re-exporting from here, not separate implementations) |
+| Silver-layer transformations | `edgar_warehouse/silver_store.py` (`edgar_warehouse/silver.py` is a compatibility shim re-exporting `SilverDatabase`, not a second implementation) |
+| Source-layer dimensional export (feeds `EDGARTOOLS_SOURCE`, not `EDGARTOOLS_GOLD` — see single-path-per-layer map Ticket 01, which is why this module was renamed off its old "gold_models.py" name) | `edgar_warehouse/serving/source_dimensional_export.py` (`edgar_warehouse/gold.py` is a thin compatibility shim re-exporting it, not a second implementation) |
 | Ownership / Form 3-4-5 parser | `edgar_warehouse/parsers/ownership.py` |
 | ADV parser (investment advisers) | `edgar_warehouse/parsers/adv.py` |
 | CLI entry point | `edgar_warehouse/cli.py` |
 | Batch scripts per form type | `scripts/batch/` |
-| dbt gold models (8 dynamic tables) | `infra/snowflake/dbt/edgartools_gold/models/gold/` |
+| dbt gold models (23 dynamic tables — the actual gold layer) | `infra/snowflake/dbt/edgartools_gold/models/gold/` |
 | Snowflake bootstrap SQL | `infra/snowflake/sql/bootstrap/` |
 | MDM graph (Snowflake-hosted, NOT external Neo4j) | `edgar_warehouse/mdm/graph_readonly.py`, `mdm sync-graph`/`mdm verify-graph` CLI, `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql` |
 | Operator MDM/graph review dashboard | `examples/mdm_graph_dashboard/` |
@@ -130,32 +130,68 @@ problem entirely.
 SEC EDGAR API
       |
       v
-edgar-warehouse CLI  (edgar_warehouse/runtime.py)
+edgar-warehouse CLI  (edgar_warehouse/cli.py -> edgar_warehouse/application/warehouse_orchestrator.py)
       |
       v
 S3 Parquet (bronze)
       |
       v
 Snowflake EDGARTOOLS_SOURCE  <-- native S3 pull via bootstrap SQL
-      |
+      |                          (+ a Python-populated dimensional export from
+      |                           edgar_warehouse/serving/source_dimensional_export.py, merged
+      |                           in here too -- see Quick Navigation above)
       v
-dbt (infra/snowflake/dbt/edgartools_gold/)
+Snowflake EDGARTOOLS_SILVER  <-- landing zone + dbt-native collapse
+      |                          (silver-snowflake-migration map, in progress:
+      |                           real ingestion live in prod; DuckDB/
+      |                           silver_store.py is still canonical for most
+      |                           consumers until each one's cutover ticket
+      |                           lands -- do not assume this is fully cut
+      |                           over without checking that map's Decisions
+      |                           so far)
       |
-      v
-EDGARTOOLS_GOLD  (8 dynamic tables)
-      |
-      v
-Streamlit dashboard  (infra/snowflake/streamlit/  OR  examples/dashboard/)
+      +-------------------------------------------------+
+      |                                                  |
+      v                                                  v
+dbt (infra/snowflake/dbt/edgartools_gold/)      MDM Postgres (Snowflake-hosted, NOT AWS
+      |                                          RDS -- see "MDM database" note below)
+      v                                          entity resolution: edgar_warehouse/mdm/
+EDGARTOOLS_GOLD  (23 dynamic tables)              ("mdm run", 6 entity types)
+      |                                                  |
+      v                                       +----------+-----------+
+Streamlit dashboard                            |                      |
+(infra/snowflake/streamlit/                    v                      v
+ OR examples/dashboard/)              Snowflake                Snowflake
+                                       NEO4J_GRAPH_MIGRATION    MDM mirror schema
+                                       schema -- Neo4j Graph    ("mdm export",
+                                       Analytics Native App,    edgar_warehouse/
+                                       NOT an external Neo4j    mdm/export.py)
+                                       ("mdm sync-graph" /
+                                       "mdm verify-graph" --
+                                       see "Graph storage"
+                                       note below)
+                                             |
+                                             v
+                                       Operator MDM/graph review
+                                       dashboard
+                                       (examples/mdm_graph_dashboard/)
 ```
+
+MDM reads from silver (today: mostly DuckDB `silver_store.py`; migrating to
+`EDGARTOOLS_SILVER`, same in-progress caveat as above) and resolves entities
+independently of the gold/dbt path — the two branches above run in parallel,
+not in sequence. See "Graph storage" and "MDM database" notes further below
+for what each Snowflake-hosted piece actually is, since both names ("Neo4j",
+"Postgres mirror") suggest external services that don't exist here.
 
 ## Data Layer Definitions
 
 | Layer | Location | Description |
 |-------|----------|-------------|
 | **Bronze** | S3 (`s3://<bucket>/`) | Raw Parquet files written by `edgar-warehouse`. One file per filing/entity, partitioned by form type and date. Never mutated. |
-| **Source** | Snowflake `EDGARTOOLS_SOURCE` | External stage + tables auto-refreshed from S3 via Snowflake native S3 pull (bootstrap SQL). Read-only raw layer. |
-| **Silver** | `edgar_warehouse/silver.py` | Cleaned, typed, deduplicated records. Applied in the warehouse runtime before S3 write; also used for ad-hoc re-processing. |
-| **Gold** | `EDGARTOOLS_GOLD` (dbt dynamic tables) | Business-ready tables: `company`, `ownership_holdings`, `ownership_activity`, `filing_detail`, `filing_activity`, `adviser_disclosures`, `adviser_offices`, `private_funds`, `ticker_reference`, `edgartools_gold_status`. Refreshed on a Snowflake-managed schedule. |
+| **Source** | Snowflake `EDGARTOOLS_SOURCE` | External stage + tables auto-refreshed from S3 via Snowflake native S3 pull (bootstrap SQL), plus a Python-built dimensional export (`edgar_warehouse/serving/source_dimensional_export.py`) merged in via `LOAD_EXPORTS_FOR_RUN`. Read-only raw layer. |
+| **Silver** | `edgar_warehouse/silver_store.py` (local DuckDB, canonical today for most consumers) migrating to Snowflake `EDGARTOOLS_SILVER` (landing zone + dbt collapse, real ingestion already live) | Cleaned, typed, deduplicated records. Mid-migration as of this writing — see `.scratch/silver-snowflake-migration/map.md` for exactly which consumers have cut over vs. still read DuckDB; do not assume either store is authoritative without checking there first. |
+| **Gold** | `EDGARTOOLS_GOLD` (23 dbt dynamic tables) | Business-ready tables, e.g. `company`, `ownership_holdings`, `ownership_activity`, `filing_detail`, `filing_activity`, `adviser_disclosures`, `adviser_offices`, `private_funds`, `ticker_reference`, `edgartools_gold_status`, plus 13 more added since this table was first written (`accounting_flags`, `adv_fund_count_reconciliation`, `consensus_estimates`, `earnings_calendar`, `earnings_releases`, `executive_records`, `financial_derived`, `financial_factors`, `financial_facts`, `guidance_facts`, `institutional_holdings`, `mdm_company`, `transcript_events`) — see `infra/snowflake/dbt/edgartools_gold/models/gold/` for the current, authoritative list rather than trusting this count to stay accurate. Refreshed on a Snowflake-managed schedule. |
 
 ## edgartools Dependency
 
@@ -1475,9 +1511,9 @@ These files exceed 30 KB. When modifying them, read section by section rather th
 
 | File | Size | Contents |
 |------|------|----------|
-| `edgar_warehouse/runtime.py` | ~92 KB | Core ETL loop, form dispatch, S3 writes |
-| `edgar_warehouse/silver.py` | ~78 KB | Record cleaning and transformation logic |
-| `edgar_warehouse/gold.py` | ~39 KB | Python-side gold aggregations |
+| `edgar_warehouse/application/warehouse_orchestrator.py` | ~292 KB | Core ETL loop, form dispatch, S3 writes, bronze/silver publish paths. `edgar_warehouse/runtime.py` and `edgar_warehouse/application/command_router.py` are now thin compatibility shims that re-export from here, not separate implementations — this table previously pointed at those shims with stale sizes copied from an earlier version of this file. |
+| `edgar_warehouse/silver_store.py` | ~190 KB | Record cleaning and transformation logic. `edgar_warehouse/silver.py` is a compatibility shim re-exporting `SilverDatabase` from here. |
+| `edgar_warehouse/serving/source_dimensional_export.py` | ~63 KB | Builds a source-layer dimensional export consumed by dbt — not the gold layer itself (see Quick Navigation above and `.scratch/single-path-per-layer/issues/01-enumerate-layer-transitions.md`; renamed off "gold_models.py" for exactly this reason). `edgar_warehouse/gold.py` is a compatibility shim re-exporting from here. |
 
 ## Setup
 

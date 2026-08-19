@@ -56,7 +56,7 @@ class BoundaryTests(unittest.TestCase):
             PACKAGE_ROOT / "application" / "warehouse_orchestrator.py",
             PACKAGE_ROOT / "bronze_filing_artifacts.py",
             PACKAGE_ROOT / "filing_text_projection.py",
-            PACKAGE_ROOT / "serving" / "gold_models.py",
+            PACKAGE_ROOT / "serving" / "source_dimensional_export.py",
             PACKAGE_ROOT / "infrastructure" / "run_manifest_builder.py",
         ]
         forbidden_fragments = (

@@ -518,9 +518,9 @@ class FundamentalsGoldBuilderTests(unittest.TestCase):
     }
 
     def test_passthrough_schemas_mark_pk_columns_not_nullable(self) -> None:
-        from edgar_warehouse.serving import gold_models
+        from edgar_warehouse.serving import source_dimensional_export
         for schema_name, pk_cols in self.PASSTHROUGH_PK_COLUMNS.items():
-            schema = getattr(gold_models, schema_name)
+            schema = getattr(source_dimensional_export, schema_name)
             with self.subTest(schema=schema_name):
                 for field in schema:
                     if field.name in pk_cols:
@@ -530,9 +530,9 @@ class FundamentalsGoldBuilderTests(unittest.TestCase):
                         )
 
     def test_dimensional_schemas_mark_fact_key_not_nullable(self) -> None:
-        from edgar_warehouse.serving import gold_models
+        from edgar_warehouse.serving import source_dimensional_export
         for schema_name, pk_cols in self.DIMENSIONAL_PK_COLUMNS.items():
-            schema = getattr(gold_models, schema_name)
+            schema = getattr(source_dimensional_export, schema_name)
             with self.subTest(schema=schema_name):
                 for field in schema:
                     if field.name in pk_cols:
@@ -559,13 +559,13 @@ class FundamentalsGoldBuilderTests(unittest.TestCase):
     def test_build_gold_registers_fundamentals_builders(self) -> None:
         """build_gold()/iter_gold_tables() must include the 6 new builders so
         the gold-refresh loop emits PyArrow tables for them."""
-        from edgar_warehouse.serving import gold_models
+        from edgar_warehouse.serving import source_dimensional_export
         # We need the source code, not a runtime call (gold-refresh requires
         # a live silver connection). Check the builder registry for the
         # registrations -- build_gold() and iter_gold_tables() both delegate
         # to _gold_table_builders().
         import inspect
-        source = inspect.getsource(gold_models._gold_table_builders)
+        source = inspect.getsource(source_dimensional_export._gold_table_builders)
         for builder_key in (
             "sec_financial_fact",
             "sec_thirteenf_holding",
@@ -611,7 +611,7 @@ class FundamentalsSnowflakeExportTests(unittest.TestCase):
         _empty(_SCHEMA) and write_gold_to_snowflake_export still records them).
         """
         from edgar_warehouse.serving.targets.snowflake import write_gold_to_snowflake_export
-        from edgar_warehouse.serving.gold_models import (
+        from edgar_warehouse.serving.source_dimensional_export import (
             _empty,
             _SEC_FINANCIAL_FACT_SCHEMA,
             _SEC_THIRTEENF_HOLDING_SCHEMA,

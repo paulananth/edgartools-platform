@@ -7,7 +7,7 @@ from typing import Any
 import pyarrow as pa
 
 from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory
-from edgar_warehouse.serving.gold_models import _write_parquet
+from edgar_warehouse.serving.source_dimensional_export import _write_parquet
 from edgar_warehouse.serving.targets.base import ServingTarget
 
 

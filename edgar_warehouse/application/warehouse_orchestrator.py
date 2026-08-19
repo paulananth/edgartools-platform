@@ -661,7 +661,7 @@ def _execute_warehouse_bronze_capture(
         )
         silver_table_counts = db.get_table_counts()
         if context.snowflake_export_root is not None and publish_gold:
-            from edgar_warehouse.serving.gold_models import (
+            from edgar_warehouse.serving.source_dimensional_export import (
                 iter_gold_tables,
                 write_gold_table_manifest_entry,
             )
@@ -901,7 +901,7 @@ def _execute_warehouse_bronze_capture(
         and command_name == "seed-universe"
         and ticker_reference_rows is not None
     ):
-        from edgar_warehouse.serving.gold_models import build_ticker_reference_table
+        from edgar_warehouse.serving.source_dimensional_export import build_ticker_reference_table
         from edgar_warehouse.serving.targets.snowflake import write_ticker_reference_to_serving_export
 
         export_business_date = _resolve_export_business_date(command_name=command_name, scope=scope, now=now)

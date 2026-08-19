@@ -1788,7 +1788,7 @@ def test_merge_emits_a_started_event_before_the_completed_event_per_table(tmp_pa
     silver_publish step ran ~92 minutes with no intermediate log line at
     all). silver_table_merge_started now fires immediately before the work
     for each table with candidate data, giving the same started/completed
-    symmetry gold_models.py's gold_table_started/completed already has."""
+    symmetry source_dimensional_export.py's gold_table_started/completed already has."""
     from edgar_warehouse.silver_protection import merge_candidate_into_canonical
 
     canonical = tmp_path / "canonical.duckdb"

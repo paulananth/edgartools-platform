@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from edgar_warehouse.infrastructure.run_manifest_builder import SNOWFLAKE_EXPORT_TABLES
-from edgar_warehouse.serving.gold_models import (
+from edgar_warehouse.serving.source_dimensional_export import (
     _build_sec_adv_firm_roster,
     _build_sec_adv_private_fund_passthrough,
 )

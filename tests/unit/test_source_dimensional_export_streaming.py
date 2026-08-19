@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pyarrow as pa
 
-from edgar_warehouse.serving.gold_models import build_gold, iter_gold_tables
+from edgar_warehouse.serving.source_dimensional_export import build_gold, iter_gold_tables
 from edgar_warehouse.silver_store import SilverDatabase
 from tests.unit._fake_snowflake import (
     EMPTY_ORPHAN_EVIDENCE_TABLE_DATA,
@@ -98,7 +98,7 @@ def test_iter_gold_tables_is_lazy(tmp_path) -> None:
     db = _empty_silver_db(tmp_path)
     try:
         with patch(
-            "edgar_warehouse.serving.gold_models._build_sec_thirteenf_holding"
+            "edgar_warehouse.serving.source_dimensional_export._build_sec_thirteenf_holding"
         ) as mock_thirteenf, _patch_silver_connection:
             gen = iter_gold_tables(db)
             mock_thirteenf.assert_not_called()

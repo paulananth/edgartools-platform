@@ -589,7 +589,7 @@ def _silver_reader():
     shard-hydration path entirely -- this is the only call site gated by
     this env var. The four other places that construct a
     ``ShardedSilverReader`` directly (seed-universe/seed-from-silver's
-    ``--source silver`` path, ~cli.py:1153/1198; gold_models.py's legacy
+    ``--source silver`` path, ~cli.py:1153/1198; source_dimensional_export.py's legacy
     DuckDB path) reach past ``.fetch()`` into ``reader._conn`` -- a
     Snowflake connection has no such attribute, so gating those too would
     silently break them. Out of Ticket 12's scope (mdm run's entity

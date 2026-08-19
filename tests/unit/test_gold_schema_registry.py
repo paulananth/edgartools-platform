@@ -34,7 +34,7 @@ def test_gold_schema_registry_validates_schema_version() -> None:
         load_gold_schemas_from_config({"SCHEMA_VERSION": 999, "schemas": {}})
 
 
-def test_gold_models_schema_constants_are_loaded_from_yaml() -> None:
-    source = Path("edgar_warehouse/serving/gold_models.py").read_text()
+def test_source_dimensional_export_schema_constants_are_loaded_from_yaml() -> None:
+    source = Path("edgar_warehouse/serving/source_dimensional_export.py").read_text()
 
     assert "pa.schema(" not in source

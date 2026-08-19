@@ -224,7 +224,7 @@ def _check_gold_vs_silver(
     table_counts: dict[str, int],
     findings: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    from edgar_warehouse.serving.gold_models import build_gold
+    from edgar_warehouse.serving.source_dimensional_export import build_gold
 
     try:
         gold_tables = build_gold(db)
