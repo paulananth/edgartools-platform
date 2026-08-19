@@ -2,7 +2,7 @@
 
 Type: task
 Status: partially implemented — code shipped, flip not yet safe to trust live
-Blocked by: Stage 14 (EDGARTOOLS_SILVER at real data volume) and the CloudWatch alarm (Ticket 10 item 3) — Ticket 13's refresh-trigger blocker is now resolved.
+Blocked by: Stage 14 (EDGARTOOLS_SILVER at real data volume). Ticket 13's refresh-trigger blocker is now resolved. The CloudWatch alarm (Ticket 10 item 3) is this ticket's own remaining deliverable, not an external blocker — corrected here (2026-08-18) after a review pass caught the earlier version making this ticket self-blocking by construction. The alarm can't actually be built until a real `verify-silver-parity` run against post-flip data exists to alarm on, so it waits on the same Stage 14 dependency, not a separate one.
 
 ## Question
 
@@ -193,13 +193,40 @@ daily-index tooling, out of this ticket's scope — **already decided**, not
 new fog: `duckdb-retirement` map's own Ticket 08 already sent these to
 Snowflake native Postgres, not `EDGARTOOLS_SILVER`. No new ticket needed.
 
+**`mdm verify-silver-parity` smoke-tested live end-to-end for the first time
+(2026-08-19)**, against a real local `silver.duckdb` (51,888 `sec_company`
+rows) and real prod Snowflake (`MDM_SNOWFLAKE_SECRET_JSON`, role
+`EDGARTOOLS_PROD_MDM_SILVER_READER` reached via the runtime credential's
+`ACCOUNTADMIN` role per the existing documented drift). This is the first
+time the command — and `SnowflakeSilverReader` itself — has run against
+anything but `_fake_snowflake.py`. Result: `passed: false`,
+`cik_fetch_error: null` (the code-review-added guard held, no crash), 22/31
+tables mismatched, all 51,888 DuckDB CIKs reported as `cik_only_in_duckdb`,
+0 as `cik_only_in_snowflake`. This is the **correct, expected** result, not
+a bug — `EDGARTOOLS_SILVER` genuinely has no real data yet (Stage 14 hasn't
+run); the only non-zero live table is `sec_employment_event` (1,506 rows,
+Ticket 11's known manual-`REFRESH` state). Confirms the whole comparison
+path — connection, role activation, per-table counts, the CIK-set diff, the
+JSON payload shape, the exit-1-on-fail contract — works correctly against
+real infrastructure, not just the unit-test fakes. This is the "real metric
+shape" evidence the CloudWatch alarm's earlier deferral (above) was
+specifically waiting on — the alarm can now be scoped from an actual
+payload instead of a guess, though building it still isn't safe to attempt
+until it can be dimensioned against a post-flip run (see below).
+
 **Not done — the actual flip.** `MDM_SILVER_READ_TARGET` stays `duckdb` in
 prod. Ticket 13's refresh-trigger blocker is now resolved (all 30 tables
 refresh on a real 6-hour schedule as of 2026-08-18). Still blocked on
 `EDGARTOOLS_SILVER` actually holding real data at scale (Stage 14 / Task
 #159, itself blocked on the `shard-0.duckdb` race — explicitly out of
 Ticket 09's scope, tracked separately), then a clean `mdm verify-silver-parity`
-result against real volume, then the CloudWatch alarm above. Re-open this
-ticket to `Status: resolved` once all three land and the flip is verified
-live — matching this map's own standing discipline of
-real measurements over assumptions.
+result against real volume, then the CloudWatch alarm (this ticket's own
+remaining deliverable — not buildable yet: `verify-silver-parity` has no
+scheduled/dispatchable invocation wired into `deploy-aws-application.sh` at
+all today, unlike `mdm verify-graph`'s existing `ecs_state` pattern, and an
+alarm on "post-flip divergence" run *before* the flip exists would fire on
+every single scheduled run — the exact "looks like coverage, isn't"
+anti-pattern ticket 81's own write-up warns against for orphaned alarms).
+Re-open this ticket to `Status: resolved` once all three land and the flip
+is verified live — matching this map's own standing discipline of real
+measurements over assumptions.
