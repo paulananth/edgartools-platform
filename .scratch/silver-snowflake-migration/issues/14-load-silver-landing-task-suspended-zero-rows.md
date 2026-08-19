@@ -1,6 +1,6 @@
 # LOAD_SILVER_LANDING_TASK Suspended Since 2026-08-13 — Landing Zone Has Zero Rows
 
-Status: root-caused, fix committed, task not yet resumed
+Status: resolved
 
 ## Summary
 
@@ -119,3 +119,45 @@ delete+reprocess it, (3) `ALTER TASK LOAD_SILVER_LANDING_TASK RESUME`,
 prod for the silver layer once landing data exists (this issue's original
 "zero tables in EDGARTOOLS_SILVER" finding is a separate, subsequent step
 past just unblocking the load task).
+
+## Answer (2026-08-19)
+
+**Resolved.** All of this held even through the intervening account
+rebuild (`pijjxma-ppb32800` → `PRJEDJU-QJB05385`, 2026-08-17/18 — see the
+map's own note on this) and Ticket 11's reprovisioning pass. Checked live,
+not assumed:
+
+- `SHOW TASKS LIKE 'LOAD_SILVER_LANDING_TASK'`: `state: started`,
+  `schedule: 5 MINUTE`, `last_suspended_reason: null`, owned by
+  `EDGARTOOLS_PROD_LOADER`.
+- `TASK_HISTORY` over the last 2 days: 44 `SUCCEEDED`, 2 `FAILED`. Both
+  failures landed at `14:22` and `14:27` PDT, 5 and 10 minutes after the
+  task's own `created_on` (`14:17:11`) — right when Ticket 11 re-created
+  it on the rebuilt account — with the identical old error ("NULL result
+  in a non-nullable column"). Every run since `14:32` (4+ hours, 44
+  consecutive) has succeeded.
+- Source fix confirmed live in the deployed image, not just committed:
+  `silver_store.py:1403-1410` shows `replace_company_tickers` with the
+  `@track_landing_rows` decorator deliberately removed (commit `11f81229`).
+  The currently-registered `edgartools-prod-medium` task def (revision
+  204, registered `2026-08-18T14:43:11-04:00`) runs image digest
+  `sha256:13ba01c5...`, tagged `warehouse-sha-97a93a617b6b` —
+  `git merge-base --is-ancestor 11f81229 97a93a617b6b` confirms the fix
+  commit is an ancestor of what's actually deployed.
+- Landing/silver row counts are still near-zero (`SEC_COMPANY_TICKER`:
+  0, `SEC_COMPANY`: 0) — expected, not a symptom: the only non-zero table
+  is `SEC_EMPLOYMENT_EVENT` (1,506 rows), which is Ticket 11's known
+  manual-`REFRESH` test data, not a real bulk load. No bulk export has run
+  against this account yet (Stage 14 / task #159 pending).
+
+**One inference, flagged as such, not verified:** why the two failures
+stopped after `14:27` isn't directly confirmed. The task's own retry
+semantics mean a still-stuck stage file should keep failing every run
+indefinitely — so something cleared it (most likely the S3 lifecycle rule
+from task #124, or a leftover effect of Ticket 11's own manual test run),
+but that clearing event itself wasn't observed directly, only its absence
+of further failures. This does not weaken the resolution (the code bug
+that *caused* the original symptom is confirmed fixed and deployed), but
+the real at-scale proof point — a fresh `sec_company_ticker` export
+landing clean once Stage 14 actually runs — is still pending, tracked
+under Ticket 12's own Stage 14 blocker rather than reopened here.

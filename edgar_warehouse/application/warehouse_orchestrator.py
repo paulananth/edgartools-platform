@@ -82,7 +82,7 @@ from edgar_warehouse.silver_support.session import open_silver_database, open_si
 if TYPE_CHECKING:
     from edgar_warehouse.silver_store import SilverDatabase
 
-GOLD_AFFECTING_COMMANDS = {
+SOURCE_EXPORT_COMMANDS = {
     "bootstrap-full",
     "bootstrap-next",
     "bootstrap",
@@ -93,7 +93,7 @@ GOLD_AFFECTING_COMMANDS = {
     "full-reconcile",
     "gold-refresh",  # builds gold from current silver state, no bronze capture
 }
-SNOWFLAKE_EXPORT_COMMANDS = GOLD_AFFECTING_COMMANDS | {"seed-universe"}
+SNOWFLAKE_EXPORT_COMMANDS = SOURCE_EXPORT_COMMANDS | {"seed-universe"}
 
 
 def _gold_publication_enabled(command_name: str, arguments: dict[str, Any]) -> bool:
@@ -104,7 +104,7 @@ def _gold_publication_enabled(command_name: str, arguments: dict[str, Any]) -> b
     workflow's single final ``gold-refresh`` task.
     """
 
-    return command_name in GOLD_AFFECTING_COMMANDS and not (
+    return command_name in SOURCE_EXPORT_COMMANDS and not (
         command_name == "bootstrap-next" and bool(arguments.get("silver_only"))
     )
 
@@ -661,9 +661,9 @@ def _execute_warehouse_bronze_capture(
         )
         silver_table_counts = db.get_table_counts()
         if context.snowflake_export_root is not None and publish_gold:
-            from edgar_warehouse.serving.gold_models import (
-                iter_gold_tables,
-                write_gold_table_manifest_entry,
+            from edgar_warehouse.serving.source_dimensional_export import (
+                iter_source_export_tables,
+                write_source_export_table_manifest_entry,
             )
             from edgar_warehouse.serving.targets.snowflake import write_gold_table_to_serving_export
 
@@ -678,16 +678,16 @@ def _execute_warehouse_bronze_capture(
             export_business_date = _resolve_export_business_date(command_name=command_name, scope=scope, now=now)
 
             # Stream one gold table at a time: build -> write to storage ->
-            # export to Snowflake -> discard -> next. See iter_gold_tables()
+            # export to Snowflake -> discard -> next. See iter_source_export_tables()
             # for why the previous all-at-once shape is unsafe.
             _emit_pipeline_event("gold_build_started", command=command_name, run_id=run_id)
             gold_manifest_entries = []
             gold_row_counts = {}
             snowflake_export_counts = {}
             table_count = 0
-            for table_name, table in iter_gold_tables(db):
+            for table_name, table in iter_source_export_tables(db):
                 table_count += 1
-                manifest_entry = write_gold_table_manifest_entry(
+                manifest_entry = write_source_export_table_manifest_entry(
                     table_name, table, context.storage_root, run_id
                 )
                 gold_manifest_entries.append(manifest_entry)
@@ -796,7 +796,7 @@ def _execute_warehouse_bronze_capture(
                 "size_bytes": Path(context.silver_root.join("silver", "sec", "silver.duckdb")).stat().st_size,
             }
         elif _using_shard_path and _active_shard_index is not None:
-            silver_database_write = _publish_shard_if_remote(context, _active_shard_index)
+            silver_database_write = _publish_shard_if_remote_with_retry(context, _active_shard_index)
         else:
             silver_database_write = _publish_silver_database_with_retry(context)
         _emit_pipeline_event(
@@ -901,7 +901,7 @@ def _execute_warehouse_bronze_capture(
         and command_name == "seed-universe"
         and ticker_reference_rows is not None
     ):
-        from edgar_warehouse.serving.gold_models import build_ticker_reference_table
+        from edgar_warehouse.serving.source_dimensional_export import build_ticker_reference_table
         from edgar_warehouse.serving.targets.snowflake import write_ticker_reference_to_serving_export
 
         export_business_date = _resolve_export_business_date(command_name=command_name, scope=scope, now=now)
@@ -1263,10 +1263,34 @@ def _hydrate_shard_for_window(
     relative_path = default_path_resolver().shard_path(shard_index)
     remote_path = context.storage_root.join(relative_path)
 
+    # Delete any stale sidecar from a prior invocation up front (e.g. a
+    # reused ECS task volume), matching _hydrate_silver_database_from_storage's
+    # own safeguard -- "sidecar present" must always mean "this process
+    # successfully hydrated this shard", never leftover state.
+    _protected_fingerprint_sidecar_path(local_path).unlink(missing_ok=True)
+
     try:
         context.storage_root.download_file(relative_path, local_path)
     except (FileNotFoundError, OSError):
         return None
+
+    # Snapshot the hydration-time fingerprint (release-readiness ticket 79's
+    # skip-if-unchanged optimization, ported here 2026-08-19): most
+    # BatchSilver batches during a reprocessing pass write zero new rows
+    # (already-captured bronze, nothing to add), and _publish_shard_if_remote
+    # now merges via merge_candidate_into_canonical on every publish with an
+    # existing baseline -- a real memory/network cost bootstrap-batch's
+    # medium (4096MB) profile has been observed OOMing near even without
+    # this addition (see this repo's own Stage 14 execution history), so
+    # skipping the whole merge/publish cycle on a provable no-op matters
+    # here, not just as a cost optimization. Fail-open on any fingerprint
+    # error, matching the monolith path's own handling.
+    try:
+        fingerprint = compute_silver_fingerprint(local_path)
+    except Exception:
+        fingerprint = None
+    if fingerprint is not None:
+        _write_fingerprint_sidecar(local_path, fingerprint)
 
     _emit_pipeline_event(
         "silver_shard_hydrated",
@@ -1300,21 +1324,28 @@ def _publish_shard_if_remote(
     context: WarehouseCommandContext,
     shard_index: int,
 ) -> dict[str, Any] | None:
-    """Publish the modified shard-{shard_index}.duckdb to remote storage.
+    """Merge the local shard candidate into canonical and publish it, safely.
 
     ETag-guarded via the shared ``stage_and_promote`` primitive (decoupled-
     bronze-pipeline ticket 01/09's identified gap: this previously called
     ``upload_file`` directly -- a blind overwrite with no version check at
-    all, unlike ``_publish_silver_database_if_remote``'s already-guarded
-    monolith path). A concurrent writer to the same shard between this
-    call's baseline read and its promote now raises
-    ``PromotionConflictError`` instead of silently last-writer-wins.
+    all). A concurrent writer to the same shard between this call's baseline
+    read and its promote raises ``PromotionConflictError``.
 
-    Deliberately no retry-on-conflict here (unlike
-    ``_publish_silver_database_with_retry``): each shard is owned by
-    exactly one writer in the sharded architecture (partitioned by CIK
-    range), so a conflict here signals a genuine invariant violation, not
-    an expected race to paper over by retrying.
+    Merges via ``merge_candidate_into_canonical`` (the same function
+    ``_publish_silver_database_if_remote`` uses for the monolith) whenever a
+    canonical version of this shard already exists, instead of blindly
+    uploading the local file's raw bytes -- see this function's own
+    ``_publish_shard_if_remote_with_retry`` wrapper for why a blind overwrite
+    is unsafe here (multiple concurrent writers legitimately land on the same
+    shard index). New shards (no canonical object yet) skip the merge and
+    upload the local candidate directly, matching the monolith path's
+    ``baseline.exists`` branch.
+
+    Also ports the monolith's skip-if-unchanged optimization (release-
+    readiness ticket 79): a fingerprint comparison against
+    ``_hydrate_shard_for_window``'s hydration-time snapshot skips the entire
+    S3/merge cycle for a provable no-op, before any remote call at all.
 
     Parameters
     ----------
@@ -1327,7 +1358,8 @@ def _publish_shard_if_remote(
     -------
     dict | None
         A write-record dict (``layer``, ``shard_index``, ``path``,
-        ``size_bytes``, ``source_version``, ``canonical_version``) if
+        ``size_bytes``, ``source_version``, ``canonical_version``,
+        ``tables_merged``, and ``skipped: True`` on the no-op fast path) if
         published, or ``None`` if storage is local.
 
     Raises
@@ -1336,7 +1368,7 @@ def _publish_shard_if_remote(
         If the local shard file does not exist.
     PromotionConflictError
         If the shard's canonical object changed since this call's baseline
-        read.
+        read. Retryable -- see ``_publish_shard_if_remote_with_retry``.
     """
     if not context.storage_root.is_remote:
         return None
@@ -1350,8 +1382,58 @@ def _publish_shard_if_remote(
         )
 
     relative_path = default_path_resolver().shard_path(shard_index)
+
+    # Skip-if-unchanged (ported from _publish_silver_database_if_remote,
+    # release-readiness ticket 79): before any S3 call, compare the current
+    # fingerprint against the one snapshotted at hydration time
+    # (_hydrate_shard_for_window). If identical, nothing this process wrote
+    # can differ from canonical, so the whole download-canonical/merge/
+    # upload/promote cycle -- newly real memory pressure against
+    # bootstrap-batch's medium (4096MB) profile once this shard's merge
+    # branch exists at all, see this function's own module-level context --
+    # is skipped as a provable no-op. Missing sidecar (new shard, or
+    # hydration wrote nothing) never causes a skip, only a provably-matching
+    # fingerprint does.
+    hydration_fingerprint = _read_fingerprint_sidecar(local_path)
+    if hydration_fingerprint is not None:
+        try:
+            current_fingerprint = compute_silver_fingerprint(local_path)
+        except Exception:
+            current_fingerprint = None
+        if current_fingerprint is not None and current_fingerprint == hydration_fingerprint:
+            _emit_pipeline_event(
+                "silver_shard_publish_skipped_noop",
+                shard_index=shard_index,
+                relative_path=relative_path,
+                protected_tables=sorted(current_fingerprint["protected"]),
+            )
+            return {
+                "layer": "silver_shard",
+                "shard_index": shard_index,
+                "path": context.storage_root.join(relative_path),
+                "relative_path": relative_path,
+                "size_bytes": local_path.stat().st_size,
+                "source_version": None,
+                "staged_checksum": None,
+                "canonical_version": None,
+                "tables_merged": [],
+                "skipped": True,
+            }
+
     baseline = context.storage_root.read_object_version(relative_path)
-    payload = local_path.read_bytes()
+    tables_merged: tuple[str, ...] = ()
+
+    if baseline.exists:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            canonical_local = Path(tmp_dir) / "canonical.duckdb"
+            canonical_local.write_bytes(read_bytes(context.storage_root.join(relative_path)))
+            merged_local = Path(tmp_dir) / "merged.duckdb"
+            merge_result = merge_candidate_into_canonical(local_path, canonical_local, merged_local)
+            tables_merged = merge_result.tables_merged
+            payload = merged_local.read_bytes()
+    else:
+        payload = local_path.read_bytes()
+
     promotion = context.storage_root.stage_and_promote(
         relative_path, payload, expected_etag=baseline.etag
     )
@@ -1359,10 +1441,71 @@ def _publish_shard_if_remote(
         "layer": "silver_shard",
         "shard_index": shard_index,
         "path": promotion.canonical_path,
+        "relative_path": relative_path,
         "size_bytes": len(payload),
         "source_version": baseline.etag,
+        "staged_checksum": hashlib.md5(payload).hexdigest(),
         "canonical_version": promotion.new_version.etag,
+        "tables_merged": list(tables_merged),
     }
+
+
+def _publish_shard_if_remote_with_retry(
+    context: WarehouseCommandContext,
+    shard_index: int,
+) -> dict[str, Any] | None:
+    """Retry _publish_shard_if_remote on a lost promotion race.
+
+    Regression (silver-snowflake-migration map, 2026-08-19): the CIK-sharded
+    architecture's shard count (4) is fixed independently of
+    ``bronze_seed_silver_gold``'s ``BatchSilver`` Distributed Map
+    concurrency (``MaxConcurrency: 20``), so multiple concurrent Map items
+    routinely land on the same shard index -- contradicting this function's
+    former docstring claim that "each shard is owned by exactly one writer."
+    Three real prod executions hit the identical
+    ``PromotionConflictError``-on-``shard-0.duckdb`` failure at this
+    concurrency (see the silver-snowflake-migration map's "Motivating
+    evidence" and Ticket 12's Progress notes); with
+    ``ToleratedFailurePercentage: 0`` on that Map, a single unretried
+    conflict aborts the entire release.
+
+    Mirrors ``_publish_silver_database_with_retry``'s exact pattern (same
+    env vars, same unbounded-by-default policy, same exponential backoff
+    with jitter): on ``PromotionConflictError``, ``_publish_shard_if_remote``
+    itself re-reads the current canonical baseline and re-merges the local
+    candidate into it (see that function's ``merge_candidate_into_canonical``
+    branch), so simply calling it again re-runs the full read-merge-stage-
+    promote cycle against whatever the conflicting writer just published --
+    no separate re-merge step is needed here.
+    """
+    from edgar_warehouse.infrastructure.object_storage import PromotionConflictError
+
+    configured_attempts = int(os.environ.get("WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS", "0"))
+    max_attempts = configured_attempts if configured_attempts > 0 else None
+    backoff_base_seconds = float(os.environ.get("WAREHOUSE_PUBLISH_CONFLICT_RETRY_BASE_SECONDS", "1.0"))
+    backoff_max_seconds = float(os.environ.get("WAREHOUSE_PUBLISH_CONFLICT_RETRY_MAX_SECONDS", "30.0"))
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            return _publish_shard_if_remote(context, shard_index)
+        except PromotionConflictError as exc:
+            if max_attempts is not None and attempt >= max_attempts:
+                raise
+            import random
+            import time as _time
+
+            exponential_delay = backoff_base_seconds * (2 ** min(attempt - 1, 20))
+            delay = min(backoff_max_seconds, exponential_delay) * (0.5 + random.random() / 2)
+            _emit_pipeline_event(
+                "silver_shard_publish_conflict_retry",
+                shard_index=shard_index,
+                attempt=attempt,
+                max_attempts=max_attempts or "unbounded",
+                retry_delay_seconds=delay,
+                error=str(exc),
+            )
+            _time.sleep(delay)
 
 
 def _capture_bronze_raw(
@@ -2709,7 +2852,7 @@ def _capture_bronze_raw(
     if command_name == "gold-refresh":
         # Bronze and silver are already complete. _execute_warehouse (the caller)
         # will build gold tables and write Snowflake export manifests because
-        # gold-refresh is in GOLD_AFFECTING_COMMANDS. Nothing to do here.
+        # gold-refresh is in SOURCE_EXPORT_COMMANDS. Nothing to do here.
         _emit_pipeline_event("gold_refresh_started", run_id=sync_run_id)
         return raw_writes, metrics
 
@@ -6560,7 +6703,7 @@ def _resolve_scope(
 
     if command_name == "gold-refresh":
         # Scope is empty — bronze/silver are already complete.
-        # _execute_warehouse builds gold because gold-refresh is in GOLD_AFFECTING_COMMANDS.
+        # _execute_warehouse builds gold because gold-refresh is in SOURCE_EXPORT_COMMANDS.
         return {}
 
     if command_name == "seed-silver-batches":

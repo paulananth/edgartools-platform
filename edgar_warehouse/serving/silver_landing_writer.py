@@ -26,7 +26,7 @@ from edgar_warehouse.infrastructure.dataset_path_catalog import (
     default_capture_spec_factory,
     default_path_resolver,
 )
-from edgar_warehouse.serving.gold_models import _write_parquet
+from edgar_warehouse.serving.source_dimensional_export import _write_parquet
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 
 

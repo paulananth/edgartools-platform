@@ -44,7 +44,7 @@ def test_snowflake_target_writes_gold_tables_via_serving_interface() -> None:
 
 def test_serving_named_functions_write_snowflake_export_paths() -> None:
     from edgar_warehouse.serving.targets.snowflake import (
-        write_gold_to_serving_export,
+        write_source_dimensional_export_to_serving,
         write_ticker_reference_to_serving_export,
     )
 
@@ -52,7 +52,7 @@ def test_serving_named_functions_write_snowflake_export_paths() -> None:
     gold_table = pa.table({"company_key": ["company-1"], "cik": [320193]})
     ticker_table = pa.table({"cik": [320193], "ticker": ["AAPL"], "exchange": ["Nasdaq"]})
 
-    counts = write_gold_to_serving_export(
+    counts = write_source_dimensional_export_to_serving(
         {"dim_company": gold_table},
         storage,
         run_id="run-8",

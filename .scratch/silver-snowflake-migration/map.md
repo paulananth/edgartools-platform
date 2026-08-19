@@ -109,12 +109,29 @@ for follow-up.
   this is a real but probabilistic race, not a deterministic failure,
   which is exactly the kind of fragility a fully Snowflake-native silver
   layer (no local sharded-file publish step at all) structurally
-  eliminates rather than patches. No code fix was applied to
-  `_publish_shard_if_remote` itself; Stage 14 of the live install
-  provisioning run (Task #159) remains blocked on this pending user
-  direction, tracked separately from this map.
+  eliminates rather than patches. **Third occurrence, 2026-08-19**
+  (`bronze-seed-silver-gold-resultpathfix-retry-1787100060`, 166/680
+  succeeded then aborted): direct evidence this time (via
+  `list-executions --map-run-arn`, not the state-machine-level query that
+  returns nothing for Distributed Map children) showed the failing batch's
+  4 retried attempts split 2 `OutOfMemoryError` (`ExitCode: 137`,
+  `edgartools-prod-medium`, 4096MB, against an 823MB shard) and 2
+  `ExitCode: 2` (consistent with the unretried conflict) — a real,
+  independent OOM risk on the same batch, not just the ETag race. **Fixed
+  (2026-08-19, code only, not yet deployed):** `_publish_shard_if_remote`
+  now merges via `merge_candidate_into_canonical` and a new
+  `_publish_shard_if_remote_with_retry` wrapper retries on
+  `PromotionConflictError`, mirroring `_publish_silver_database_with_retry`
+  exactly; the added merge's memory cost is mitigated (not eliminated) by
+  porting `_publish_silver_database_if_remote`'s skip-if-unchanged
+  fingerprint check to the shard hydrate/publish path, avoiding the new
+  merge machinery entirely for the dominant zero-write-batch case. See
+  [Ticket 12](issues/12-cutover-mdm-sharded-silver-reader-to-snowflake.md)'s
+  own account for full detail. Stage 14 of the live install provisioning
+  run (Task #159) remains blocked pending a real rerun with this fix
+  deployed, tracked separately from this map.
 
-- **Current frontier (2026-08-18):** [Cut Over MDM's ShardedSilverReader to
+- **Current frontier (2026-08-19):** [Cut Over MDM's ShardedSilverReader to
   Snowflake](issues/12-cutover-mdm-sharded-silver-reader-to-snowflake.md) is
   partially implemented — the reader adapter, env-var flip, and correctness-
   gate command are shipped, tested, and committed, and its refresh-trigger
@@ -123,7 +140,16 @@ for follow-up.
   actually holding real data at scale (Stage 14, blocked separately, see
   motivating evidence above), a clean `mdm verify-silver-parity` run against
   that volume, and the CloudWatch alarm on post-flip divergence (not yet
-  built). See Ticket 12's own "Progress" section for the full account before
+  built). Checked live (2026-08-19): the alarm's own scheduled-invocation
+  prerequisite is *not* independently buildable ahead of Stage 14 either — a
+  cron'd parity check against still-empty `EDGARTOOLS_SILVER` would exit 1
+  on every run, the same orphaned-alarm anti-pattern one layer down. Stage 14
+  itself failed a third time this session (`bronze-seed-silver-gold-
+  resultpathfix-retry-1787100060`, 166/680 `BatchSilver` batches succeeded,
+  `States.ExceedToleratedFailureThreshold` at `toleratedFailurePercentage:
+  0.0`) — pattern-consistent with, but not directly confirmed as, the same
+  `shard-0.duckdb` race (stack trace unrecoverable from CloudWatch this
+  pass). See Ticket 12's own "Progress" section for the full account before
   picking this back up.
 
 ## Decisions so far
@@ -152,6 +178,7 @@ populate the silver-landing zone end to end.
 - [Decide Consumer Cutover Order](issues/09-decide-consumer-cutover-order.md) — **MDM's `ShardedSilverReader` first, then `gold_models.py`'s Python builders, then the write path retires.** Checked directly (not assumed): gold's ~20 builders read zero MDM-derived fields, so MDM-first carries no risk to gold — order was decided by surface area (one class vs. twenty functions) and existing idle runway (`EDGARTOOLS_PROD_MDM_SILVER_READER`, provisioned by Ticket 05, unused) rather than risk. Dual-write window bounded: gold-building's cutover must start within 2 weeks of MDM's cutover being verified live. Stage 14's write-path race kept explicitly out of scope (operational unblock, not a sequencing decision). Graduates into [Ticket 12](issues/12-cutover-mdm-sharded-silver-reader-to-snowflake.md).
 - [Decide Cutover/Rollback Mechanics](issues/10-decide-cutover-rollback-mechanics.md) — for MDM's cutover specifically: flip via a toggleable `MDM_SILVER_READ_TARGET=duckdb|snowflake` env var (deliberate exception to the map's "committed script, not toggleable state" preference, scoped to this first-slice read selector only); correctness gate is a new `mdm verify-silver-parity` command mirroring `mdm verify-graph`'s strict-parity precedent, run clean before flipping; rollback trigger is a new CloudWatch alarm (ticket-81 pattern), rollback window rides Ticket 09's existing 2-week deadline rather than a new clock; no downstream-write unwind needed (resolution logic is unchanged, only the read source is — self-corrects on next pass under existing idempotent-upsert posture). Threaded into [Ticket 12](issues/12-cutover-mdm-sharded-silver-reader-to-snowflake.md)'s scope as concrete requirements.
 - [Decide EDGARTOOLS_SILVER's Refresh Trigger](issues/13-decide-edgartools-silver-refresh-trigger.md) — fixed `target_lag = '6 hours'` (not `DOWNSTREAM`, not a dedicated `TASK`), changed in the single shared dbt macro every silver model already flows through (`silver_model_config.sql`) rather than a new bootstrap SQL file. Matches CLAUDE.md's already-documented `SNOWFLAKE_RUN_MANIFEST_TASK` 1min→6hr precedent at the adjacent pipeline layer, and Ticket 08's own cost estimate (~$4/month at this cadence). Applied live to all 30 dynamic tables immediately (as `EDGARTOOLS_PROD_DEPLOYER`, the tables' real owner role — not `EDGARTOOLS_PROD_LOADER`), verified via `SHOW DYNAMIC TABLES`. Unblocks [Ticket 12](issues/12-cutover-mdm-sharded-silver-reader-to-snowflake.md)'s refresh-trigger gap; the actual flip still waits on Stage 14 data volume, a clean parity run, and the CloudWatch alarm.
+- [LOAD_SILVER_LANDING_TASK Suspended Since 2026-08-13 — Landing Zone Has Zero Rows](issues/14-load-silver-landing-task-suspended-zero-rows.md) — a real structural bug (`replace_company_tickers` decorated with a landing-row tracker that recorded the raw 3-column caller input instead of the enriched 7-column row actually written, so any `sec_company_ticker` export aborted the whole load procedure on `COPY INTO`'s `NOT NULL` violation). Fix (`11f81229`) confirmed both committed and live: the deployed `edgartools-prod-medium` image (rev 204, digest `sha256:13ba01c5`) descends from the fix commit, and `LOAD_SILVER_LANDING_TASK` has run clean every 5 minutes for 4+ hours on the current (`PRJEDJU-QJB05385`) account, surviving the account rebuild that came after this fix originally shipped. One inference flagged, not verified: why two initial post-rebuild failures self-cleared isn't directly confirmed (likely a stale S3 file purged by the ticket-22 lifecycle rule). Real at-scale proof — a fresh `sec_company_ticker` export landing clean — still rides on Stage 14, same as Ticket 12.
 
 **Phase 1's "live in prod" claims above describe a prior account
 (`pijjxma-ppb32800`), not the current one.** The account was rebuilt again

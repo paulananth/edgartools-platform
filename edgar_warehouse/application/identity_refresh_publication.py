@@ -34,7 +34,7 @@ _RUN_PREFIX = "identity_refresh/runs"
 def _emit_reducer_event(event: str, *, run_id: str, **fields: Any) -> None:
     """Structured per-stage log event for `reduce_identity_refresh`, matching
     this codebase's existing `event`-keyed JSON logging convention (e.g.
-    gold_models.py's gold_table_started/completed, silver_protection.py's
+    source_dimensional_export.py's gold_table_started/completed, silver_protection.py's
     silver_table_merge_started/silver_table_merged). Before this, the
     reducer emitted zero output for its entire runtime -- a real prod
     ReduceIdentityRefresh task ran 17+ minutes with `describe-log-streams`

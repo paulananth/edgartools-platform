@@ -11,7 +11,7 @@ reader through the same connection-bearing interface as ``SilverDatabase``.
 
 gold.py compatibility
 ----------------------
-``build_gold(...)`` calls ``get_connection(...)``.
+``build_source_export(...)`` calls ``get_connection(...)``.
 ShardedSilverReader satisfies this via duck typing; no signature change needed.
 
 MDM pipeline compatibility

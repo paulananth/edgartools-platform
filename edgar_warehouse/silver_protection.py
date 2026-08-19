@@ -392,7 +392,7 @@ def _columns(conn: duckdb.DuckDBPyConnection, catalog: str, table_name: str) -> 
 def _emit_table_merge_started_event(table_name: str) -> None:
     """Paired with ``_emit_table_merge_event`` (the completion event) to give
     ``merge_candidate_into_canonical`` the same started/completed symmetry as
-    gold_models.py's gold_table_started/completed. Before this, a table whose
+    source_dimensional_export.py's gold_table_started/completed. Before this, a table whose
     merge took a long time (the schema reconciliation, the anti-join delta
     query, or the per-row Python loop below) was silently invisible for its
     entire duration -- only the *previous* table's completion and the *next*
@@ -412,7 +412,7 @@ def _emit_table_merge_started_event(table_name: str) -> None:
 
 def _emit_table_merge_event(table_name: str, *, inserted: int, updated: int, unchanged: int) -> None:
     """One structured line per table merged, matching this codebase's
-    event-keyed JSON logging convention (e.g. gold_models.py's
+    event-keyed JSON logging convention (e.g. source_dimensional_export.py's
     gold_table_started/completed). merge_candidate_into_canonical previously
     emitted nothing at all -- a table taking minutes for zero real writes
     (the sec_company_filing authority-column incident) was invisible in

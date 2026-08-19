@@ -50,7 +50,7 @@ class RuntimeImportTests(unittest.TestCase):
             for module_name in [
                 "edgar_warehouse.silver_store",
                 "edgar_warehouse.silver",
-                "edgar_warehouse.serving.gold_models",
+                "edgar_warehouse.serving.source_dimensional_export",
                 "edgar_warehouse.serving.targets.snowflake",
                 "edgar_warehouse.gold",
             ]:
@@ -60,9 +60,9 @@ class RuntimeImportTests(unittest.TestCase):
             gold = importlib.import_module("edgar_warehouse.gold")
 
         self.assertTrue(hasattr(silver, "SilverDatabase"))
-        self.assertTrue(callable(gold.build_gold))
-        self.assertTrue(callable(gold.write_gold_to_serving_export))
-        self.assertTrue(callable(gold.write_gold_to_snowflake_export))
+        self.assertTrue(callable(gold.build_source_export))
+        self.assertTrue(callable(gold.write_source_dimensional_export_to_serving))
+        self.assertTrue(callable(gold.write_source_dimensional_export_to_snowflake))
 
     def test_command_registry_contains_all_cli_commands(self) -> None:
         cli = importlib.import_module("edgar_warehouse.cli")

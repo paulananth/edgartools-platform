@@ -107,14 +107,14 @@ problem entirely.
 
 | Need | Location |
 |------|----------|
-| ETL runtime (form parsing, S3 writes) | `edgar_warehouse/runtime.py` |
-| Silver-layer transformations | `edgar_warehouse/silver.py` |
-| Gold-layer aggregations (Python) | `edgar_warehouse/gold.py` |
+| ETL runtime (form parsing, S3 writes) | `edgar_warehouse/application/warehouse_orchestrator.py` (`edgar_warehouse/runtime.py` and `edgar_warehouse/application/command_router.py` are compatibility shims re-exporting from here, not separate implementations) |
+| Silver-layer transformations | `edgar_warehouse/silver_store.py` (`edgar_warehouse/silver.py` is a compatibility shim re-exporting `SilverDatabase`, not a second implementation) |
+| Source-layer dimensional export (feeds `EDGARTOOLS_SOURCE`, not `EDGARTOOLS_GOLD` — see single-path-per-layer map Ticket 01, which is why this module was renamed off its old "gold_models.py" name) | `edgar_warehouse/serving/source_dimensional_export.py` (`edgar_warehouse/gold.py` is a thin compatibility shim re-exporting it, not a second implementation) |
 | Ownership / Form 3-4-5 parser | `edgar_warehouse/parsers/ownership.py` |
 | ADV parser (investment advisers) | `edgar_warehouse/parsers/adv.py` |
 | CLI entry point | `edgar_warehouse/cli.py` |
 | Batch scripts per form type | `scripts/batch/` |
-| dbt gold models (8 dynamic tables) | `infra/snowflake/dbt/edgartools_gold/models/gold/` |
+| dbt gold models (23 dynamic tables — the actual gold layer) | `infra/snowflake/dbt/edgartools_gold/models/gold/` |
 | Snowflake bootstrap SQL | `infra/snowflake/sql/bootstrap/` |
 | MDM graph (Snowflake-hosted, NOT external Neo4j) | `edgar_warehouse/mdm/graph_readonly.py`, `mdm sync-graph`/`mdm verify-graph` CLI, `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql` |
 | Operator MDM/graph review dashboard | `examples/mdm_graph_dashboard/` |
@@ -130,32 +130,68 @@ problem entirely.
 SEC EDGAR API
       |
       v
-edgar-warehouse CLI  (edgar_warehouse/runtime.py)
+edgar-warehouse CLI  (edgar_warehouse/cli.py -> edgar_warehouse/application/warehouse_orchestrator.py)
       |
       v
 S3 Parquet (bronze)
       |
       v
 Snowflake EDGARTOOLS_SOURCE  <-- native S3 pull via bootstrap SQL
-      |
+      |                          (+ a Python-populated dimensional export from
+      |                           edgar_warehouse/serving/source_dimensional_export.py, merged
+      |                           in here too -- see Quick Navigation above)
       v
-dbt (infra/snowflake/dbt/edgartools_gold/)
+Snowflake EDGARTOOLS_SILVER  <-- landing zone + dbt-native collapse
+      |                          (silver-snowflake-migration map, in progress:
+      |                           real ingestion live in prod; DuckDB/
+      |                           silver_store.py is still canonical for most
+      |                           consumers until each one's cutover ticket
+      |                           lands -- do not assume this is fully cut
+      |                           over without checking that map's Decisions
+      |                           so far)
       |
-      v
-EDGARTOOLS_GOLD  (8 dynamic tables)
-      |
-      v
-Streamlit dashboard  (infra/snowflake/streamlit/  OR  examples/dashboard/)
+      +-------------------------------------------------+
+      |                                                  |
+      v                                                  v
+dbt (infra/snowflake/dbt/edgartools_gold/)      MDM Postgres (Snowflake-hosted, NOT AWS
+      |                                          RDS -- see "MDM database" note below)
+      v                                          entity resolution: edgar_warehouse/mdm/
+EDGARTOOLS_GOLD  (23 dynamic tables)              ("mdm run", 6 entity types)
+      |                                                  |
+      v                                       +----------+-----------+
+Streamlit dashboard                            |                      |
+(infra/snowflake/streamlit/                    v                      v
+ OR examples/dashboard/)              Snowflake                Snowflake
+                                       NEO4J_GRAPH_MIGRATION    MDM mirror schema
+                                       schema -- Neo4j Graph    ("mdm export",
+                                       Analytics Native App,    edgar_warehouse/
+                                       NOT an external Neo4j    mdm/export.py)
+                                       ("mdm sync-graph" /
+                                       "mdm verify-graph" --
+                                       see "Graph storage"
+                                       note below)
+                                             |
+                                             v
+                                       Operator MDM/graph review
+                                       dashboard
+                                       (examples/mdm_graph_dashboard/)
 ```
+
+MDM reads from silver (today: mostly DuckDB `silver_store.py`; migrating to
+`EDGARTOOLS_SILVER`, same in-progress caveat as above) and resolves entities
+independently of the gold/dbt path — the two branches above run in parallel,
+not in sequence. See "Graph storage" and "MDM database" notes further below
+for what each Snowflake-hosted piece actually is, since both names ("Neo4j",
+"Postgres mirror") suggest external services that don't exist here.
 
 ## Data Layer Definitions
 
 | Layer | Location | Description |
 |-------|----------|-------------|
 | **Bronze** | S3 (`s3://<bucket>/`) | Raw Parquet files written by `edgar-warehouse`. One file per filing/entity, partitioned by form type and date. Never mutated. |
-| **Source** | Snowflake `EDGARTOOLS_SOURCE` | External stage + tables auto-refreshed from S3 via Snowflake native S3 pull (bootstrap SQL). Read-only raw layer. |
-| **Silver** | `edgar_warehouse/silver.py` | Cleaned, typed, deduplicated records. Applied in the warehouse runtime before S3 write; also used for ad-hoc re-processing. |
-| **Gold** | `EDGARTOOLS_GOLD` (dbt dynamic tables) | Business-ready tables: `company`, `ownership_holdings`, `ownership_activity`, `filing_detail`, `filing_activity`, `adviser_disclosures`, `adviser_offices`, `private_funds`, `ticker_reference`, `edgartools_gold_status`. Refreshed on a Snowflake-managed schedule. |
+| **Source** | Snowflake `EDGARTOOLS_SOURCE` | External stage + tables auto-refreshed from S3 via Snowflake native S3 pull (bootstrap SQL), plus a Python-built dimensional export (`edgar_warehouse/serving/source_dimensional_export.py`) merged in via `LOAD_EXPORTS_FOR_RUN`. Read-only raw layer. |
+| **Silver** | `edgar_warehouse/silver_store.py` (local DuckDB, canonical today for most consumers) migrating to Snowflake `EDGARTOOLS_SILVER` (landing zone + dbt collapse, real ingestion already live) | Cleaned, typed, deduplicated records. Mid-migration as of this writing — see `.scratch/silver-snowflake-migration/map.md` for exactly which consumers have cut over vs. still read DuckDB; do not assume either store is authoritative without checking there first. |
+| **Gold** | `EDGARTOOLS_GOLD` (23 dbt dynamic tables) | Business-ready tables, e.g. `company`, `ownership_holdings`, `ownership_activity`, `filing_detail`, `filing_activity`, `adviser_disclosures`, `adviser_offices`, `private_funds`, `ticker_reference`, `edgartools_gold_status`, plus 13 more added since this table was first written (`accounting_flags`, `adv_fund_count_reconciliation`, `consensus_estimates`, `earnings_calendar`, `earnings_releases`, `executive_records`, `financial_derived`, `financial_factors`, `financial_facts`, `guidance_facts`, `institutional_holdings`, `mdm_company`, `transcript_events`) — see `infra/snowflake/dbt/edgartools_gold/models/gold/` for the current, authoritative list rather than trusting this count to stay accurate. Refreshed on a Snowflake-managed schedule. |
 
 ## edgartools Dependency
 
@@ -876,6 +912,71 @@ means for it, or whether it should route through the generation-scoped
 generation-scoped graph sync gap noted above (deprioritized for now, not
 worked further).
 
+## Shard-publish promotion-race 5-whys (fixed, not yet deployed, 2026-08-19)
+
+**Problem:** three separate `bronze_seed_silver_gold` prod executions failed
+on an identical `PromotionConflictError` for `shard-0.duckdb`, the third of
+which aborted a `ToleratedFailurePercentage: 0` release outright on one lost
+race.
+
+1. Symptom: `_publish_shard_if_remote` (`edgar_warehouse/application/
+   warehouse_orchestrator.py`) raised `PromotionConflictError` from
+   `stage_and_promote`, and nothing caught it — the whole `BatchSilver`
+   batch failed.
+2. Why does a concurrent writer land on the same shard? `BatchSilver`
+   (the Distributed Map driving this stage) runs `MaxConcurrency: 20`
+   against only **4** shards total — multiple concurrent batches routinely
+   hash to the same shard index, so "concurrent writer" isn't an edge case,
+   it's the common case at this concurrency ratio.
+3. Why did the function not handle that? It assumed, undocumented, "each
+   shard is owned by exactly one writer" and both blindly overwrote the
+   remote object (no merge) and never retried on conflict — the same false
+   assumption the monolith `silver.duckdb` path already had and already
+   fixed once, in PR #222 (commit `a1f5d37b`), for the identical reason.
+4. Why wasn't the shard path fixed at the same time as the monolith path?
+   No evidence found of a deliberate decision — the shard-publish function
+   was added later and the monolith's fix was never ported over, so the
+   same bug shipped a second time on a structurally identical write path.
+5. **Root cause:** the shard-publish path silently diverged from its own
+   sibling's already-proven concurrency-safety pattern, and nothing
+   (test, lint, or doc) enforced that the two stay in sync.
+
+**Fix:** `_publish_shard_if_remote` now merges the local candidate into
+canonical via `merge_candidate_into_canonical` (same function the monolith
+uses) instead of overwriting; a new `_publish_shard_if_remote_with_retry`
+wrapper retries the whole read-merge-stage-promote cycle on
+`PromotionConflictError`, mirroring `_publish_silver_database_with_retry`
+exactly (same `WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS`/`_RETRY_BASE_SECONDS`/
+`_RETRY_MAX_SECONDS` env vars, unbounded by default). The real call site
+(`_execute_warehouse_bronze_capture`'s shard branch) now uses the retry
+wrapper.
+
+**Two risks surfaced by review, not fully closed:**
+- The merge branch's extra read/write round trips add real memory pressure
+  on top of a Fargate profile (`bootstrap-batch`'s `medium`, 4096MB) that
+  live evidence from this same incident showed was *already* marginal —
+  2 of the failed batch's 4 retry attempts were `OutOfMemoryError`
+  (`ExitCode: 137`) against an 823MB shard, even under the old, simpler
+  no-merge code. Mitigated (not eliminated) by porting the monolith's
+  skip-if-unchanged fingerprint check (release-readiness ticket 79) to the
+  shard path, so a shard provably unchanged since hydration skips the
+  merge/S3 cycle entirely.
+- The retry wrapper is unbounded by default and each retry re-runs the
+  *full* merge branch — on a hot shard with real conflicting writes (not
+  the skip-path's zero-write case), per-attempt memory/time cost
+  multiplies by attempt count. This is the most plausible way the fix
+  still reproduces the same `ExitCode: 137` even once deployed. Not
+  addressed in this pass — logged as an explicit open risk in
+  `.scratch/silver-snowflake-migration/issues/12-cutover-mdm-sharded-silver-reader-to-snowflake.md`
+  for whoever verifies the real Stage 14 rerun.
+
+Tests: 11 cases in `tests/unit/test_publish_shard_if_remote.py`, including a
+real `SilverDatabase`-backed merge test and a two-concurrent-writers
+regression test (injects a stale first baseline read to reproduce the
+actual race a sequential test can't otherwise trigger). Full suite green.
+**Not yet built, pushed, or deployed** as of this entry — see
+`.scratch/silver-snowflake-migration/map.md` for status.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live
@@ -953,7 +1054,56 @@ Snowflake schema (e.g. `EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION`); `mdm verify-grap
 strict SQL parity check plus Native App checks (compute pool, `GRAPH_INFO`, `BFS`, `WCC`)
 against that same Snowflake target. One credential (the same `MDM_SNOWFLAKE_*`/
 `DBT_SNOWFLAKE_*`/Snowflake CLI connection used everywhere else), one platform. Native App
-grants: `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`. Full migration history:
+grants: `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`.
+
+**The write/sync path splits across two modules, not one** (investigated
+2026-08-19, not previously written down here): `edgar_warehouse/mdm/graph.py`
+prepares the Postgres-side mirror (writes `mdm_relationship_instance` rows —
+its own docstring is explicit that "the Neo4j bolt driver and AuraDB are no
+longer used"), then hands off to `edgar_warehouse/mdm/snowflake_graph.py`'s
+`SnowflakeGraphSyncExecutor` (sync) and `SnowflakeGraphVerifier` (verify),
+which generate and run the actual Snowflake SQL. Single path, not a
+duplicate — `graph.py` never talks to Snowflake directly, `snowflake_graph.py`
+never talks to Postgres directly.
+
+**There are two separate read paths, not one, and they read different
+stores on purpose:** `edgar_warehouse/mdm/api/routers/graph.py` (neighborhood/
+traversal endpoints) reads live from the **Postgres mirror**
+(`mdm_relationship_instance`) for speed — its own docstring: "Graph analytics
+run via the Snowflake-hosted Neo4j Graph Analytics native app" (BFS/WCC etc.),
+but simple lookups don't pay a Snowflake round trip. `edgar_warehouse/mdm/
+graph_readonly.py` reads **Snowflake** graph metrics (parity/comparison,
+Native App health) for the local MDM dashboard. Don't assume one is stale
+duplication of the other — they're deliberately different stores for
+different latency needs.
+
+**A third, orthogonal piece governs *when* sync-graph work happens:**
+`edgar_warehouse/mdm/publication.py` is a transactional MDM→graph publication
+queue (07-03, RSYNC-01/03) — relationship-changing workflows call
+`request_publication` atomically with their own MDM commit; a lease-based
+coordinator claims and advances requests through `mdm_committed →
+graph_pending → graph_building → graph_verified → graph_active`, with a
+5-minute-warning/15-minute-hard-alert staleness SLO. This is queue mechanics
+only — no Snowflake/Neo4j orchestration logic lives in this module, per its
+own docstring.
+
+**The generation-scoped operator review contract** (GH-251):
+`edgar_warehouse/mdm/graph_review_publish.py` persists `mdm verify-graph`'s
+payload into a bounded, read-only `MDM_GRAPH_REVIEW` schema that a managed
+dashboard (`examples/mdm_graph_dashboard/`) can query through a plain
+Snowpark session — no MDM Postgres DSN, no direct Neo4j credential needed by
+that dashboard.
+
+**Dead file, removed (2026-08-19):** `edgar_warehouse/serving/targets/
+neo4j.py` was a 1-line, unimported placeholder ("Neo4j serving target
+placeholder for future Gold publishing support") left over from a "publish
+gold data out to an external Neo4j" concept that was superseded by the
+current architecture (graph lives inside Snowflake; there is no external
+Neo4j to publish to). Confirmed unreferenced anywhere in the codebase before
+deletion. Noted here in case a future `git blame` on this line goes looking
+for it.
+
+Full migration history:
 `.planning/workstreams/neo4j-snowflake/`.
 
 **MDM database (read this before assuming a separate AWS RDS instance):**
@@ -1022,8 +1172,8 @@ runs `bootstrap-next` (a different command) per window at
 `MaxConcurrency=1` and is not controlled by `BOOTSTRAP_BATCH_CONCURRENCY`
 at all.
 
-- `bootstrap-batch` must NOT be in `GOLD_AFFECTING_COMMANDS` — enforced in `warehouse_orchestrator.py:79`
-- `gold-refresh` must be in `GOLD_AFFECTING_COMMANDS` — it is the sole gold builder in the phased pipeline
+- `bootstrap-batch` must NOT be in `SOURCE_EXPORT_COMMANDS` (renamed from `GOLD_AFFECTING_COMMANDS`, single-path-per-layer map — the commands it gates build a source-layer export, not gold) — enforced in `warehouse_orchestrator.py:85`
+- `gold-refresh` must be in `SOURCE_EXPORT_COMMANDS` — it is the sole gold builder in the phased pipeline
 - `SNOWFLAKE_RUN_MANIFEST_TASK` must be STARTED in `EDGARTOOLS_GOLD` — verify with
   `snow sql --connection edgartools-dev -q "SHOW TASKS LIKE 'SNOWFLAKE_RUN_MANIFEST_TASK'"`
 - `silver_mdm_gold` map MUST pass `--artifact-policy skip` to `bootstrap-batch` — without it
@@ -1410,9 +1560,9 @@ These files exceed 30 KB. When modifying them, read section by section rather th
 
 | File | Size | Contents |
 |------|------|----------|
-| `edgar_warehouse/runtime.py` | ~92 KB | Core ETL loop, form dispatch, S3 writes |
-| `edgar_warehouse/silver.py` | ~78 KB | Record cleaning and transformation logic |
-| `edgar_warehouse/gold.py` | ~39 KB | Python-side gold aggregations |
+| `edgar_warehouse/application/warehouse_orchestrator.py` | ~292 KB | Core ETL loop, form dispatch, S3 writes, bronze/silver publish paths. `edgar_warehouse/runtime.py` and `edgar_warehouse/application/command_router.py` are now thin compatibility shims that re-export from here, not separate implementations — this table previously pointed at those shims with stale sizes copied from an earlier version of this file. |
+| `edgar_warehouse/silver_store.py` | ~190 KB | Record cleaning and transformation logic. `edgar_warehouse/silver.py` is a compatibility shim re-exporting `SilverDatabase` from here. |
+| `edgar_warehouse/serving/source_dimensional_export.py` | ~63 KB | Builds a source-layer dimensional export consumed by dbt — not the gold layer itself (see Quick Navigation above and `.scratch/single-path-per-layer/issues/01-enumerate-layer-transitions.md`; renamed off "gold_models.py" for exactly this reason). `edgar_warehouse/gold.py` is a compatibility shim re-exporting from here. |
 
 ## Setup
 

@@ -22,7 +22,7 @@ class CompatibilityShimTests(unittest.TestCase):
     def test_gold_is_thin_compatibility_shim(self) -> None:
         gold_path = Path(__file__).resolve().parents[2] / "edgar_warehouse" / "gold.py"
         content = gold_path.read_text()
-        self.assertIn("serving.gold_models", content)
+        self.assertIn("serving.source_dimensional_export", content)
         self.assertIn("serving.targets.snowflake", content)
-        self.assertNotIn("def build_gold", content)
+        self.assertNotIn("def build_source_export", content)
         self.assertNotIn("pq.write_table", content)

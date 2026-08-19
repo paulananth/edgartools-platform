@@ -1,4 +1,4 @@
-"""Regression test for release-readiness ticket 85: gold_models.py's
+"""Regression test for release-readiness ticket 85: source_dimensional_export.py's
 regexp_replace SQL patterns ('\\s+') were embedded in plain (non-raw)
 Python string literals, triggering an "invalid escape sequence '\\s'"
 warning at compile time -- forward-compatibility noise today, a hard
@@ -24,11 +24,11 @@ _GOLD_MODELS_PATH = (
     Path(__file__).resolve().parents[2]
     / "edgar_warehouse"
     / "serving"
-    / "gold_models.py"
+    / "source_dimensional_export.py"
 )
 
 
-def test_gold_models_source_compiles_without_invalid_escape_warnings() -> None:
+def test_source_dimensional_export_source_compiles_without_invalid_escape_warnings() -> None:
     source = _GOLD_MODELS_PATH.read_text(encoding="utf-8")
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")

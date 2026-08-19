@@ -9,11 +9,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from edgar_warehouse.infrastructure.run_manifest_builder import SNOWFLAKE_EXPORT_TABLES
-from edgar_warehouse.serving.gold_models import (
+from edgar_warehouse.serving.source_dimensional_export import (
     _build_sec_adv_firm_roster,
     _build_sec_adv_private_fund_passthrough,
 )
-from edgar_warehouse.serving.targets.snowflake import write_gold_to_serving_export
+from edgar_warehouse.serving.targets.snowflake import write_source_dimensional_export_to_serving
 from tests.unit._fake_snowflake import FakeSnowflakeConnectionSettings
 
 _FIRM_ROSTER_COLUMNS = [
@@ -101,7 +101,7 @@ class AdvFirmRosterExportTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _Root(Path(tmp))
-            counts = write_gold_to_serving_export(
+            counts = write_source_dimensional_export_to_serving(
                 tables, root, run_id="run1", business_date="2024-01-01"
             )
             self.assertIn("sec_adv_firm_roster", counts)

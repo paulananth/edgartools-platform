@@ -224,10 +224,10 @@ def _check_gold_vs_silver(
     table_counts: dict[str, int],
     findings: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    from edgar_warehouse.serving.gold_models import build_gold
+    from edgar_warehouse.serving.source_dimensional_export import build_source_export
 
     try:
-        gold_tables = build_gold(db)
+        gold_tables = build_source_export(db)
     except Exception as exc:
         finding = {"type": "gold_build_error", "error": str(exc)}
         findings.append(finding)

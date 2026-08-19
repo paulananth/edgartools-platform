@@ -10,7 +10,7 @@ ever call ``.fetch()``.
 
 Deliberately does NOT expose a DuckDB-shaped ``._conn`` attribute like
 ``ShardedSilverReader`` does. A handful of call sites (``seed-universe
---source silver``, ``gold_models.py``) bypass ``.fetch()`` entirely and call
+--source silver``, ``source_dimensional_export.py``) bypass ``.fetch()`` entirely and call
 ``reader._conn.execute(...)`` directly -- those are out of this ticket's
 scope and would silently break against a Snowflake connection object. Not
 exposing ``._conn`` at all makes that mistake fail loudly (AttributeError)
@@ -54,7 +54,7 @@ def _mdm_silver_reader_settings() -> _ConnectionSettings:
 
     Reuses ``edgar_warehouse.mdm.export.silver_connection_settings()``
     (already schema-scoped to EDGARTOOLS_SILVER, shared with
-    ``mdm_entity_backfill.py``'s sweep and ``gold_models.py``'s
+    ``mdm_entity_backfill.py``'s sweep and ``source_dimensional_export.py``'s
     Snowflake-silver-reading builders) and overrides only the role --
     a new function rather than changing that shared helper's default,
     since its other two callers were never scoped to

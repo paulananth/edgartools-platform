@@ -92,7 +92,7 @@ def test_close_closes_the_underlying_connection():
 
 
 def test_reader_has_no_duckdb_shaped_conn_attribute():
-    # seed-universe --source silver and gold_models.py's legacy path both
+    # seed-universe --source silver and source_dimensional_export.py's legacy path both
     # bypass .fetch() and call reader._conn.execute(...) directly against
     # ShardedSilverReader. Ticket 12 deliberately scoped those call sites
     # out -- a SnowflakeSilverReader with a ._conn would silently make that

@@ -172,7 +172,7 @@ def _silver_connection_settings() -> Any:
     """Snowflake connection settings for the EDGARTOOLS_SILVER schema.
 
     Delegates to mdm/export.py's silver_connection_settings() -- shared with
-    gold_models.py's Snowflake-silver-reading builders (dbt-gold-silver-
+    source_dimensional_export.py's Snowflake-silver-reading builders (dbt-gold-silver-
     rewiring map, Ticket 06).
     """
     from edgar_warehouse.mdm.export import silver_connection_settings
