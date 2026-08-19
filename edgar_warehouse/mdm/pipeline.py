@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.mdm.database import get_session
 from edgar_warehouse.mdm.graph import GraphSyncEngine
+from edgar_warehouse.mdm.match import MatchAction
 from edgar_warehouse.mdm.observability import elapsed_ms, emit_mdm_event
 from edgar_warehouse.mdm.resolvers import (
     CompanyResolver,
@@ -370,6 +371,7 @@ class MDMPipeline:
         silver = self.silver
         pipeline_run_id = self.run_id
         processed = 0
+        skipped_unchanged = 0
         lock = threading.Lock()
         started_at = time.monotonic()
         log_interval = _progress_log_interval(len(rows))
@@ -390,7 +392,7 @@ class MDMPipeline:
             1 if sql_engine.dialect.name == "sqlite" else _COMPANY_RESOLVE_MAX_WORKERS
         )
 
-        def _resolve_row(row: dict) -> int:
+        def _resolve_row(row: dict) -> tuple[int, bool]:
             worker_session = get_session(sql_engine)
             try:
                 worker_ctx = ResolverContext(
@@ -401,9 +403,9 @@ class MDMPipeline:
                 )
                 ticker = ticker_by_cik.get(row["cik"])
                 tracking = tracking_by_cik.get(row["cik"])
-                resolver.resolve_one(worker_ctx, "edgar_cik", row, ticker, tracking)
+                outcome = resolver.resolve_one(worker_ctx, "edgar_cik", row, ticker, tracking)
                 worker_session.commit()
-                return int(row["cik"])
+                return int(row["cik"]), outcome.action == MatchAction.SKIPPED_UNCHANGED
             finally:
                 worker_session.close()
 
@@ -421,9 +423,11 @@ class MDMPipeline:
             futures = [executor.submit(_resolve_row, row) for row in rows]
             try:
                 for future in as_completed(futures):
-                    resolved_cik = future.result()
+                    resolved_cik, was_skipped = future.result()
                     with lock:
                         processed += 1
+                        if was_skipped:
+                            skipped_unchanged += 1
                         if resumable:
                             pending_flush.append(resolved_cik)
                         if processed % log_interval == 0:
@@ -431,6 +435,7 @@ class MDMPipeline:
                                 "mdm_progress",
                                 domain="company",
                                 processed=processed,
+                                skipped_unchanged=skipped_unchanged,
                                 elapsed_ms=elapsed_ms(started_at),
                             )
                             _flush_pending()
@@ -442,6 +447,12 @@ class MDMPipeline:
                 raise
             with lock:
                 _flush_pending()
+        emit_mdm_event(
+            "mdm_company_resolution_completed",
+            processed=processed,
+            skipped_unchanged=skipped_unchanged,
+            elapsed_ms=elapsed_ms(started_at),
+        )
         return processed
 
     def run_advisers(self, limit: Optional[int] = None) -> int:
