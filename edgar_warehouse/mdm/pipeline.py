@@ -60,6 +60,17 @@ _PERSON_RESOLVE_MAX_WORKERS = int(
     os.environ.get("MDM_PERSON_RESOLVE_CONCURRENCY", str(_RESOLVE_MAX_WORKERS))
 )
 
+# derive_relationships() concurrency -- one worker per relationship *type*
+# (11 today, RELATIONSHIP_TYPES below), each on its own session, mirroring
+# the per-row worker-session pattern above. Deliberately a smaller default
+# than the row-level pools: type-level tasks are much coarser-grained (one
+# task can be a single-digit-millions-row derivation, e.g. INSTITUTIONAL_HOLDS)
+# and this pool runs *after* run_companies/run_securities/run_persons have
+# already finished within the same `mdm run` process (sequential phases, not
+# concurrent with each other), so it doesn't need to share connection-pool
+# headroom with those pools at the same time.
+_RELATIONSHIP_DERIVE_MAX_WORKERS = int(os.environ.get("MDM_RELATIONSHIP_CONCURRENCY", "4"))
+
 # Progress-log cadence for the per-row resolve loops below (run_companies,
 # run_securities, run_persons). A fixed interval is too chatty for large
 # domains (62,190 companies emitted 124 log lines at the old hardcoded-500
@@ -721,55 +732,109 @@ class MDMPipeline:
         ``issuer_ciks`` scopes ownership-sourced types (IS_INSIDER, HOLDS,
         COMPANY_HOLDS) to Form 3/4/5 rows for those issuers only — Ticket 21
         insider smoke does not re-walk the full universe.
+
+        Each relationship type resolves on its own worker thread and its own
+        SQLAlchemy session (bounded by ``_RELATIONSHIP_DERIVE_MAX_WORKERS``),
+        committing independently, mirroring run_companies' worker-session
+        pattern. This is safe because every ``_derive_*`` method only ever
+        writes ``mdm_relationship_instance`` rows scoped to its own
+        rel_type_id (``relationship_id`` is a deterministic hash of
+        ``(rel_type_id, source, target)``, so two types can never collide on
+        the same row) and any stub entity a type creates (e.g.
+        HAS_PARENT_COMPANY's subsidiary stubs, EMPLOYED_BY's proxy-person
+        stubs) is read by other types only as a best-effort, already-
+        idempotent lookup that quietly retries on the next `mdm run` when
+        unresolved this run -- the exact same fallback the old strictly-
+        sequential ordering already relied on (a type earlier in
+        RELATIONSHIP_TYPES never saw a later type's stubs either). Falls
+        back to a single worker whenever the bound engine is SQLite (see
+        run_companies' identical guard -- the StaticPool test fixture shares
+        one physical connection and cannot run concurrent transactions).
         """
-        sync_engine = GraphSyncEngine.build(self.session)
         requested_types = self._relationship_type_names(relationship_types)
         ciks = self._normalize_issuer_ciks(issuer_ciks)
-        summary: dict[str, dict[str, int | None]] = {}
         started_at = time.monotonic()
+
+        # Read-only, so safe to precompute for every type up front rather
+        # than interleaved with each type's own work as the old sequential
+        # loop did -- counts are per rel_type_id and never interact across
+        # types.
+        existing_by_type: dict[str, int] = {
+            name: self._relationship_count(name) for name in requested_types
+        }
+        remaining_by_type: dict[str, Optional[int]] = {}
+        for name in requested_types:
+            if target_per_type is None:
+                remaining_by_type[name] = None
+            else:
+                remaining_by_type[name] = max(int(target_per_type) - existing_by_type[name], 0)
+
+        sql_engine = self.session.get_bind()
+        max_workers = (
+            1 if sql_engine.dialect.name == "sqlite"
+            else min(_RELATIONSHIP_DERIVE_MAX_WORKERS, len(requested_types) or 1)
+        )
+        silver = self.silver
+        pipeline_run_id = self.run_id
+
+        def _derive_one(rel_type_name: str) -> tuple[int, int, int, int, int]:
+            remaining = remaining_by_type[rel_type_name]
+            if remaining is not None and remaining <= 0:
+                return (0, 0, 0, 0, 0)
+            worker_session = get_session(sql_engine)
+            try:
+                worker_pipeline = MDMPipeline(
+                    session=worker_session, silver=silver, run_id=pipeline_run_id
+                )
+                worker_sync_engine = GraphSyncEngine.build(worker_session)
+                result = worker_pipeline._derive_relationship_type(
+                    worker_sync_engine, rel_type_name, remaining, issuer_ciks=ciks
+                )
+                worker_session.commit()
+                return result
+            finally:
+                worker_session.close()
+
+        summary: dict[str, dict[str, int | None]] = {}
         total_inserted = 0
-        for idx, rel_type_name in enumerate(requested_types):
-            existing = self._relationship_count(rel_type_name)
-            remaining = None
-            if target_per_type is not None:
-                remaining = max(int(target_per_type) - existing, 0)
-            inserted = 0
-            skipped_corporate = 0
-            skipped_unresolved_source = 0
-            skipped_unresolved_target = 0
-            skipped_existing = 0
-            if remaining is None or remaining > 0:
-                (inserted, skipped_corporate, skipped_unresolved_source,
-                 skipped_unresolved_target, skipped_existing) = \
-                    self._derive_relationship_type(
-                        sync_engine, rel_type_name, remaining, issuer_ciks=ciks
-                    )
-            total_inserted += inserted
-            type_summary = {
-                "existing":                  existing,
-                "inserted":                  inserted,
-                "skipped":                   (skipped_corporate + skipped_unresolved_source
-                                              + skipped_unresolved_target + skipped_existing),
-                "skipped_corporate":         skipped_corporate,
-                "skipped_unresolved_source": skipped_unresolved_source,
-                "skipped_unresolved_target": skipped_unresolved_target,
-                "skipped_existing":          skipped_existing,
-                "target":                    target_per_type,
-                "total":                     existing + inserted,
+        completed = 0
+        lock = threading.Lock()
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(_derive_one, name): name for name in requested_types
             }
-            summary[rel_type_name] = type_summary
-            emit_mdm_event(
-                "mdm_progress",
-                domain="relationships",
-                rel_type=rel_type_name,
-                types_done=idx + 1,
-                types_total=len(requested_types),
-                inserted=inserted,
-                total_inserted=total_inserted,
-                elapsed_ms=elapsed_ms(started_at),
-                **{k: v for k, v in type_summary.items() if k not in ("inserted",)},
-            )
-        self.session.commit()
+            for future in as_completed(futures):
+                rel_type_name = futures[future]
+                (inserted, skipped_corporate, skipped_unresolved_source,
+                 skipped_unresolved_target, skipped_existing) = future.result()
+                existing = existing_by_type[rel_type_name]
+                with lock:
+                    total_inserted += inserted
+                    completed += 1
+                    type_summary = {
+                        "existing":                  existing,
+                        "inserted":                  inserted,
+                        "skipped":                   (skipped_corporate + skipped_unresolved_source
+                                                      + skipped_unresolved_target + skipped_existing),
+                        "skipped_corporate":         skipped_corporate,
+                        "skipped_unresolved_source": skipped_unresolved_source,
+                        "skipped_unresolved_target": skipped_unresolved_target,
+                        "skipped_existing":          skipped_existing,
+                        "target":                    target_per_type,
+                        "total":                     existing + inserted,
+                    }
+                    summary[rel_type_name] = type_summary
+                    emit_mdm_event(
+                        "mdm_progress",
+                        domain="relationships",
+                        rel_type=rel_type_name,
+                        types_done=completed,
+                        types_total=len(requested_types),
+                        inserted=inserted,
+                        total_inserted=total_inserted,
+                        elapsed_ms=elapsed_ms(started_at),
+                        **{k: v for k, v in type_summary.items() if k not in ("inserted",)},
+                    )
         return summary
 
     def _normalize_issuer_ciks(
@@ -788,29 +853,44 @@ class MDMPipeline:
         *,
         issuer_ciks: Optional[list[int]] = None,
     ) -> tuple[int, int, int, int, int]:
-        if rel_type_name == "IS_INSIDER":
-            return self._derive_is_insider(sync_engine, remaining, issuer_ciks=issuer_ciks)
-        if rel_type_name == "HOLDS":
-            return self._derive_holds(sync_engine, remaining)
-        if rel_type_name == "COMPANY_HOLDS":
-            return self._derive_company_holds(sync_engine, remaining)
-        if rel_type_name == "ISSUED_BY":
-            return self._derive_issued_by(sync_engine, remaining)
-        if rel_type_name == "IS_ENTITY_OF":
-            return self._derive_is_entity_of(sync_engine, remaining)
-        if rel_type_name == "HAS_PARENT_COMPANY":
-            return self._derive_has_parent_company(sync_engine, remaining)
-        if rel_type_name == "MANAGES_FUND":
-            return self._derive_manages_fund(sync_engine, remaining)
-        if rel_type_name == "IS_PERSON_OF":
-            return self._derive_is_person_of(sync_engine, remaining)
-        if rel_type_name == "EMPLOYED_BY":
-            return self._derive_employed_by(sync_engine, remaining)
-        if rel_type_name == "AUDITED_BY":
-            return self._derive_audited_by(sync_engine, remaining)
-        if rel_type_name == "INSTITUTIONAL_HOLDS":
-            return self._derive_institutional_holds(sync_engine, remaining)
-        raise KeyError(f"Unknown relationship type '{rel_type_name}'")
+        # Prime + defer-flush once per type here, for every type uniformly,
+        # rather than leaving each _derive_* method to opt in individually
+        # (only MANAGES_FUND did, before this). Without it, ensure_relationship
+        # pays one existing-version SELECT plus one session.flush() round
+        # trip per row -- confirmed live via CloudWatch overlap-counting
+        # during a real prod mdm run (max concurrently-open SQL calls == 1,
+        # strictly sequential, unlike company/security/person resolution's
+        # proven 16-way concurrency) that this per-row I/O is exactly what
+        # made relationship derivation the slow, single-threaded tail of the
+        # command. prime_relationship_type is idempotent (see graph.py), so
+        # this is safe even for MANAGES_FUND's own internal call.
+        sync_engine.prime_relationship_type(rel_type_name, defer_flush=True)
+        try:
+            if rel_type_name == "IS_INSIDER":
+                return self._derive_is_insider(sync_engine, remaining, issuer_ciks=issuer_ciks)
+            if rel_type_name == "HOLDS":
+                return self._derive_holds(sync_engine, remaining)
+            if rel_type_name == "COMPANY_HOLDS":
+                return self._derive_company_holds(sync_engine, remaining)
+            if rel_type_name == "ISSUED_BY":
+                return self._derive_issued_by(sync_engine, remaining)
+            if rel_type_name == "IS_ENTITY_OF":
+                return self._derive_is_entity_of(sync_engine, remaining)
+            if rel_type_name == "HAS_PARENT_COMPANY":
+                return self._derive_has_parent_company(sync_engine, remaining)
+            if rel_type_name == "MANAGES_FUND":
+                return self._derive_manages_fund(sync_engine, remaining)
+            if rel_type_name == "IS_PERSON_OF":
+                return self._derive_is_person_of(sync_engine, remaining)
+            if rel_type_name == "EMPLOYED_BY":
+                return self._derive_employed_by(sync_engine, remaining)
+            if rel_type_name == "AUDITED_BY":
+                return self._derive_audited_by(sync_engine, remaining)
+            if rel_type_name == "INSTITUTIONAL_HOLDS":
+                return self._derive_institutional_holds(sync_engine, remaining)
+            raise KeyError(f"Unknown relationship type '{rel_type_name}'")
+        finally:
+            sync_engine.flush_pending()
 
     def _derive_is_insider(
         self,
@@ -853,7 +933,21 @@ class MDMPipeline:
         else:
             fetch_sql = self._bounded_relationship_sql(sql, remaining, existing)
             fetch_params = None
-        for row in self.silver.fetch(fetch_sql, fetch_params):
+        rows = self.silver.fetch(fetch_sql, fetch_params)
+        # Bulk-prefetch owner_cik -> entity_id once for the whole batch
+        # instead of a fresh per-row MdmPerson round-trip inside
+        # _person_entity_id for every row (same rationale as
+        # _derive_company_holds/_derive_holds -- owner CIKs repeat heavily
+        # across a person's many filings). Rows with no CIK match (rare:
+        # owner_cik missing entirely) still fall back to _person_entity_id's
+        # per-row name-match branch below.
+        owner_ciks = {row.get("owner_cik") for row in rows if row.get("owner_cik") is not None}
+        person_id_by_cik = self._person_entity_ids(owner_ciks)
+        # Same rationale for the issuer side: a well-followed issuer's CIK
+        # repeats across every one of its own reporting owners' rows.
+        issuer_ciks_seen = {row.get("issuer_cik") for row in rows if row.get("issuer_cik") is not None}
+        issuer_id_by_cik = self._company_entity_ids(issuer_ciks_seen)
+        for row in rows:
             owner_cik = row.get("owner_cik")
             if owner_cik in company_ciks:
                 skipped_corporate += 1
@@ -865,7 +959,9 @@ class MDMPipeline:
                     "ts": datetime.now(timezone.utc).isoformat(),
                 }), file=sys.stderr, flush=True)
                 continue
-            person_id = self._person_entity_id(owner_cik, row.get("owner_name"))
+            person_id = (
+                person_id_by_cik.get(int(owner_cik)) if owner_cik is not None else None
+            ) or self._person_entity_id(owner_cik, row.get("owner_name"))
             if person_id is None:
                 skipped_unresolved_source += 1
                 print(json.dumps({
@@ -877,7 +973,8 @@ class MDMPipeline:
                     "ts": datetime.now(timezone.utc).isoformat(),
                 }), file=sys.stderr, flush=True)
                 continue
-            issuer_id = self._company_entity_id(row.get("issuer_cik"))
+            issuer_cik = row.get("issuer_cik")
+            issuer_id = issuer_id_by_cik.get(int(issuer_cik)) if issuer_cik is not None else None
             if issuer_id is None:
                 skipped_unresolved_target += 1
                 print(json.dumps({
@@ -961,6 +1058,10 @@ class MDMPipeline:
         # for the identical rationale -- issuer CIKs repeat heavily here too).
         issuer_ciks = {row.get("issuer_cik") for row in rows if row.get("issuer_cik") is not None}
         company_entity_id_by_cik = self._company_entity_ids(issuer_ciks)
+        # Same bulk-prefetch rationale as _derive_is_insider: owner CIKs
+        # repeat heavily across a person's many transactions.
+        owner_ciks = {row.get("owner_cik") for row in rows if row.get("owner_cik") is not None}
+        person_id_by_cik = self._person_entity_ids(owner_ciks)
         inserted = 0
         skipped_corporate = 0
         skipped_unresolved_source = 0
@@ -978,7 +1079,9 @@ class MDMPipeline:
                     "ts": datetime.now(timezone.utc).isoformat(),
                 }), file=sys.stderr, flush=True)
                 continue
-            person_id = self._person_entity_id(owner_cik, row.get("owner_name"))
+            person_id = (
+                person_id_by_cik.get(int(owner_cik)) if owner_cik is not None else None
+            ) or self._person_entity_id(owner_cik, row.get("owner_name"))
             if person_id is None:
                 skipped_unresolved_source += 1
                 print(json.dumps({
@@ -1189,8 +1292,22 @@ class MDMPipeline:
             source_table="sec_subsidiary_evidence",
             existing=self._relationship_count("HAS_PARENT_COMPANY"),
         )
+        # Bulk-prefetch registrant_cik -> parent entity_id once for the whole
+        # batch instead of a fresh per-row round-trip (same rationale as
+        # _derive_holds/_derive_company_holds -- registrant CIKs repeat
+        # heavily, one registrant can disclose many subsidiaries). Child
+        # subsidiary resolution (_ensure_disclosed_subsidiary) stays per-row:
+        # it's a create-if-absent write, not a pure lookup, so it isn't safe
+        # to collapse the same way.
+        registrant_ciks = {
+            row.get("registrant_cik") for row in source_rows if row.get("registrant_cik") is not None
+        }
+        parent_id_by_cik = self._company_entity_ids(registrant_ciks)
         for row in source_rows:
-            parent_id = self._company_entity_id(row.get("registrant_cik"))
+            registrant_cik = row.get("registrant_cik")
+            parent_id = (
+                parent_id_by_cik.get(int(registrant_cik)) if registrant_cik is not None else None
+            )
             child_id = self._ensure_disclosed_subsidiary(row)
             if child_id is None:
                 skipped_unresolved_source += 1
@@ -1633,6 +1750,23 @@ class MDMPipeline:
             )
         return None
 
+    def _person_entity_ids(self, owner_ciks: Iterable[Any]) -> dict[int, str]:
+        """Bulk owner_cik->entity_id prefetch -- the multi-row counterpart to
+        ``_person_entity_id``'s CIK branch, used by callers (IS_INSIDER,
+        HOLDS) that would otherwise pay one MdmPerson SELECT per row. Callers
+        still fall back to ``_person_entity_id``'s per-row name-match branch
+        for any CIK this misses (rare: only reporting owners with no
+        owner_cik at all)."""
+        ciks_int = {int(c) for c in owner_ciks if c is not None}
+        if not ciks_int:
+            return {}
+        from edgar_warehouse.mdm.database import MdmPerson
+        from sqlalchemy import select
+        rows = self.session.execute(
+            select(MdmPerson.owner_cik, MdmPerson.entity_id).where(MdmPerson.owner_cik.in_(ciks_int))
+        ).all()
+        return {int(cik): entity_id for cik, entity_id in rows}
+
     def _security_entity_id(
         self,
         txn_row: dict,
@@ -2058,19 +2192,28 @@ class MDMPipeline:
         skipped_unresolved_target = 0
         skipped_existing = 0
 
-        for row in self._fetch_optional_relationship_rows(
+        exec_rows = self._fetch_optional_relationship_rows(
             sql,
             remaining,
             rel_type_name="EMPLOYED_BY",
             source_table="sec_executive_record",
             existing=existing,
-        ):
+        )
+        # Bulk-prefetch cik -> entity_id once for the whole batch instead of
+        # a fresh per-row round-trip -- same rationale as the other
+        # deriver methods (a company reports many executives across many
+        # fiscal years). The person side (_ensure_proxy_person) stays
+        # per-row: it creates a stub entity when no exact match exists, so
+        # it isn't a pure lookup this fix can safely collapse.
+        exec_ciks = {row.get("cik") for row in exec_rows if row.get("cik") is not None}
+        company_id_by_cik = self._company_entity_ids(exec_ciks)
+        for row in exec_rows:
             cik = row.get("cik")
             exec_name = row.get("exec_name") or ""
             accession_number = row.get("accession_number") or ""
             fiscal_year = row.get("fiscal_year")
 
-            company_id = self._company_entity_id(cik)
+            company_id = company_id_by_cik.get(int(cik)) if cik is not None else None
             if company_id is None:
                 skipped_unresolved_target += 1
                 print(json.dumps({
@@ -2138,19 +2281,26 @@ class MDMPipeline:
             FROM sec_employment_event
             ORDER BY effective_date, accession_number, event_index
         """
-        for event in self._fetch_optional_relationship_rows(
+        event_rows = self._fetch_optional_relationship_rows(
             event_sql,
             None,
             rel_type_name="EMPLOYED_BY",
             source_table="sec_employment_event",
-        ):
+        )
+        # Bulk-prefetch company lookups only (this loop's version open/close
+        # sequencing genuinely depends on processing event_rows in the
+        # already-materialized effective_date order above -- that ordering
+        # is unaffected by prefetching, only the per-row lookup mechanism).
+        event_ciks = {event.get("cik") for event in event_rows if event.get("cik") is not None}
+        event_company_id_by_cik = self._company_entity_ids(event_ciks)
+        for event in event_rows:
             cik = event.get("cik")
             accession_number = event.get("accession_number") or ""
             person_name = event.get("person_name") or ""
             effective_date = event.get("effective_date")
             if effective_date and not isinstance(effective_date, date):
                 effective_date = date.fromisoformat(str(effective_date)[:10])
-            company_id = self._company_entity_id(cik)
+            company_id = event_company_id_by_cik.get(int(cik)) if cik is not None else None
             if company_id is None:
                 skipped_unresolved_target += 1
                 continue
@@ -2317,6 +2467,14 @@ class MDMPipeline:
         skipped_unresolved_target = 0
         skipped_existing = 0
 
+        # Bulk-prefetch cik -> entity_id once for the whole batch (same
+        # rationale as the other deriver methods). The auditor-change
+        # detection below still walks `rows` sequentially in its original
+        # cik/fiscal_year order -- prefetching only replaces the lookup, not
+        # the ordering it depends on.
+        audited_ciks = {row.get("cik") for row in rows if row.get("cik") is not None}
+        audited_company_id_by_cik = self._company_entity_ids(audited_ciks)
+
         prev_cik: Optional[int] = None
         prev_auditor_name: Optional[str] = None
 
@@ -2336,7 +2494,7 @@ class MDMPipeline:
             prev_cik = cik
             prev_auditor_name = auditor_name
 
-            company_id = self._company_entity_id(cik)
+            company_id = audited_company_id_by_cik.get(int(cik)) if cik is not None else None
             if company_id is None:
                 skipped_unresolved_source += 1
                 print(json.dumps({
@@ -2519,6 +2677,18 @@ class MDMPipeline:
         max_cik = int(bounds_rows[0]["max_cik"])
         batch_sql = f"{base_sql.rstrip()} AND h.cik BETWEEN ? AND ? ORDER BY h.cik, h.accession_number, h.cusip"
 
+        # A manager CIK's rows repeat thousands of times across this table
+        # (one row per holding, all sharing the same filer) -- CIK-range
+        # batching already bounds memory, but every row still re-ran
+        # _ensure_thirteenf_manager's own lookup query before this cache.
+        # _ensure_thirteenf_manager has no per-call side effect beyond the
+        # first (create-if-absent, then a pure return thereafter), so
+        # memoizing it here is safe -- unlike _ensure_security_by_cusip
+        # below, which opportunistically backfills security_class on every
+        # call and is deliberately left unmemoized so a later row with a
+        # non-NULL security_class can still backfill an earlier NULL one.
+        adviser_id_by_cik: dict[int, Optional[str]] = {}
+
         cik_lo = min_cik
         while cik_lo <= max_cik:
             cik_hi = min(cik_lo + _INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE - 1, max_cik)
@@ -2535,7 +2705,9 @@ class MDMPipeline:
                     skipped_unresolved_target += 1
                     continue
 
-                adviser_id = self._ensure_thirteenf_manager(cik)
+                if cik not in adviser_id_by_cik:
+                    adviser_id_by_cik[cik] = self._ensure_thirteenf_manager(cik)
+                adviser_id = adviser_id_by_cik[cik]
                 if adviser_id is None:
                     skipped_unresolved_source += 1
                     print(json.dumps({

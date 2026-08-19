@@ -977,6 +977,86 @@ actual race a sequential test can't otherwise trigger). Full suite green.
 **Not yet built, pushed, or deployed** as of this entry — see
 `.scratch/silver-snowflake-migration/map.md` for status.
 
+## Relationship-derivation single-threaded tail (fixed, not yet deployed, 2026-08-19)
+
+**Problem:** A live `mdm run --entity-type all` execution (`shard-fix-verify-1787134405`)
+ran 5.6+ hours past company/security/person resolution with no sign of finishing.
+CloudWatch overlap-counting (same technique used to prove `run_companies`' 16-way
+concurrency was genuinely live) showed max concurrently-open SQL calls == 1 during this
+tail — strictly sequential, unlike resolution's proven 16-way concurrency.
+
+1. Symptom: the tail of `mdm run` (writing `mdm_relationship_instance` rows) ran
+   single-threaded with no observable overlap in its Postgres calls.
+2. Why single-threaded? `derive_relationships()`'s outer loop ran all 11
+   `RELATIONSHIP_TYPES` sequentially on one shared session — no worker pool at all,
+   unlike `run_companies`/`run_securities`/`run_persons` (mdm-run-throughput map, already
+   fixed).
+3. Why was each type itself slow, even alone? `GraphSyncEngine.ensure_relationship`
+   pays one existing-version SELECT plus one `session.flush()` round trip **per
+   relationship row** unless the caller primed the type first (`prime_relationship_type`
+   + deferred flush) — only `_derive_manages_fund` did that; the other 10 types paid it
+   per row.
+4. Why per-row on top of that? Several types (`IS_INSIDER`, `HOLDS`,
+   `HAS_PARENT_COMPANY`, `EMPLOYED_BY`, `AUDITED_BY`) also re-queried MdmPerson/MdmCompany
+   fresh for every row via `_person_entity_id`/`_company_entity_id`, even though the same
+   CIK repeats heavily (an issuer's CIK repeats across every one of its own insiders'
+   rows; `INSTITUTIONAL_HOLDS`' `_ensure_thirteenf_manager` re-queried the same manager
+   CIK on every one of its thousands of holding rows).
+5. **Root cause:** the bulk-prefetch + deferred-flush pattern that fixed this exact
+   shape for `MANAGES_FUND` and for `run_companies`/`run_securities`/`run_persons`
+   (mdm-run-throughput map) was never ported to the other 10 relationship types or to
+   the type-level loop itself — the same "sibling path silently diverged" shape as the
+   shard-publish incident above, just in a different subsystem.
+
+**Fix:** `_derive_relationship_type` now primes + defers flush for every type uniformly
+(idempotent — `GraphSyncEngine.prime_relationship_type` is now a no-op on an
+already-primed type, so this composes safely with `_derive_manages_fund`'s own internal
+call). `_derive_is_insider`/`_derive_holds`/`_derive_has_parent_company`/
+`_derive_employed_by`/`_derive_audited_by` now bulk-prefetch their per-row entity-ID
+lookups once per batch instead of once per row (mirroring the bulk-prefetch pattern
+`_derive_company_holds`/`_derive_manages_fund` already used). `_derive_institutional_holds`
+memoizes `_ensure_thirteenf_manager` per unique CIK within a batch (safe: no per-call
+side effect beyond the first) — deliberately did **not** memoize `_ensure_security_by_cusip`,
+which opportunistically backfills `security_class` on every call, so a later row with a
+non-NULL value can still backfill an earlier NULL one. `derive_relationships()` itself now
+runs each relationship *type* on its own worker thread/session (bounded by
+`MDM_RELATIONSHIP_CONCURRENCY`, default 4), mirroring `run_companies`' proven
+per-row-worker-session pattern — falls back to 1 worker under SQLite (same StaticPool
+guard `run_companies` already uses). Safe because every `_derive_*` method only ever
+writes rows scoped to its own `rel_type_id` (`relationship_id` is a deterministic hash of
+`(rel_type_id, source, target)` — no cross-type collision possible), and any stub entity
+one type creates is read by another only as a best-effort, already-idempotent lookup that
+quietly retries on the next `mdm run` if unresolved this run (the same fallback the old
+strictly-sequential ordering already relied on).
+
+**Second, independent bug found while implementing this** (not the original target, but a
+correctness gap this fix would have newly exposed): `edgar_warehouse/silver_store.py`'s
+`SilverDatabase.fetch()` and `edgar_warehouse/silver_support/sharded_reader.py`'s
+`ShardedSilverReader.fetch()` both `execute()` then read back `self._conn.description` on
+one shared DuckDB `Connection` — safe only because every existing caller was
+single-threaded. `derive_relationships()`'s new worker threads call `.fetch()` on the
+*same shared reader instance* concurrently, which would have raced two threads'
+`execute()`/`description` reads against each other. Fixed with a `threading.Lock` around
+each `fetch()` body (scoped to `.fetch()` only — the many other `SilverDatabase` write
+methods are still only ever called from the single-threaded bronze/silver capture path,
+so this adds no contention there). `SnowflakeSilverReader.fetch()` (the third
+implementation of this duck-typed interface) was already safe — it opens a fresh cursor
+per call.
+
+Tests: `tests/mdm/test_pipeline_relationships.py`'s new
+`TestRelationshipDeriveBoundedRoundTrips` (IS_INSIDER query-count stays flat as row count
+grows, mirroring the existing `test_manages_fund_uses_bounded_database_round_trips`/
+`test_company_holds_batches_entity_id_lookups_across_rows` precedents) and
+`TestRelationshipTypesConcurrency` (two relationship types derived on genuinely concurrent
+worker sessions against a real multi-connection SQLite engine — same direct-drive pattern
+`test_run_companies_concurrency.py` uses to prove concurrency safety without going through
+the dialect-gated entry point — plus an end-to-end sanity check that the SQLite-forced
+single-worker path is still behaviorally identical to the old sequential loop). Full
+repo suite green: 2225 passed, 4 skipped (same 2 pre-existing, unrelated failures as
+every prior entry in this file). **Not yet deployed** as of this entry — no live
+before/after timing has been captured; the CloudWatch overlap-counting method above is
+the way to get one once this ships.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live
