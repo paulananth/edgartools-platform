@@ -82,7 +82,7 @@ from edgar_warehouse.silver_support.session import open_silver_database, open_si
 if TYPE_CHECKING:
     from edgar_warehouse.silver_store import SilverDatabase
 
-GOLD_AFFECTING_COMMANDS = {
+SOURCE_EXPORT_COMMANDS = {
     "bootstrap-full",
     "bootstrap-next",
     "bootstrap",
@@ -93,7 +93,7 @@ GOLD_AFFECTING_COMMANDS = {
     "full-reconcile",
     "gold-refresh",  # builds gold from current silver state, no bronze capture
 }
-SNOWFLAKE_EXPORT_COMMANDS = GOLD_AFFECTING_COMMANDS | {"seed-universe"}
+SNOWFLAKE_EXPORT_COMMANDS = SOURCE_EXPORT_COMMANDS | {"seed-universe"}
 
 
 def _gold_publication_enabled(command_name: str, arguments: dict[str, Any]) -> bool:
@@ -104,7 +104,7 @@ def _gold_publication_enabled(command_name: str, arguments: dict[str, Any]) -> b
     workflow's single final ``gold-refresh`` task.
     """
 
-    return command_name in GOLD_AFFECTING_COMMANDS and not (
+    return command_name in SOURCE_EXPORT_COMMANDS and not (
         command_name == "bootstrap-next" and bool(arguments.get("silver_only"))
     )
 
@@ -662,8 +662,8 @@ def _execute_warehouse_bronze_capture(
         silver_table_counts = db.get_table_counts()
         if context.snowflake_export_root is not None and publish_gold:
             from edgar_warehouse.serving.source_dimensional_export import (
-                iter_gold_tables,
-                write_gold_table_manifest_entry,
+                iter_source_export_tables,
+                write_source_export_table_manifest_entry,
             )
             from edgar_warehouse.serving.targets.snowflake import write_gold_table_to_serving_export
 
@@ -678,16 +678,16 @@ def _execute_warehouse_bronze_capture(
             export_business_date = _resolve_export_business_date(command_name=command_name, scope=scope, now=now)
 
             # Stream one gold table at a time: build -> write to storage ->
-            # export to Snowflake -> discard -> next. See iter_gold_tables()
+            # export to Snowflake -> discard -> next. See iter_source_export_tables()
             # for why the previous all-at-once shape is unsafe.
             _emit_pipeline_event("gold_build_started", command=command_name, run_id=run_id)
             gold_manifest_entries = []
             gold_row_counts = {}
             snowflake_export_counts = {}
             table_count = 0
-            for table_name, table in iter_gold_tables(db):
+            for table_name, table in iter_source_export_tables(db):
                 table_count += 1
-                manifest_entry = write_gold_table_manifest_entry(
+                manifest_entry = write_source_export_table_manifest_entry(
                     table_name, table, context.storage_root, run_id
                 )
                 gold_manifest_entries.append(manifest_entry)
@@ -2852,7 +2852,7 @@ def _capture_bronze_raw(
     if command_name == "gold-refresh":
         # Bronze and silver are already complete. _execute_warehouse (the caller)
         # will build gold tables and write Snowflake export manifests because
-        # gold-refresh is in GOLD_AFFECTING_COMMANDS. Nothing to do here.
+        # gold-refresh is in SOURCE_EXPORT_COMMANDS. Nothing to do here.
         _emit_pipeline_event("gold_refresh_started", run_id=sync_run_id)
         return raw_writes, metrics
 
@@ -6703,7 +6703,7 @@ def _resolve_scope(
 
     if command_name == "gold-refresh":
         # Scope is empty — bronze/silver are already complete.
-        # _execute_warehouse builds gold because gold-refresh is in GOLD_AFFECTING_COMMANDS.
+        # _execute_warehouse builds gold because gold-refresh is in SOURCE_EXPORT_COMMANDS.
         return {}
 
     if command_name == "seed-silver-batches":

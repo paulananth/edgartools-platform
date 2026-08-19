@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pyarrow as pa
 
-from edgar_warehouse.serving.source_dimensional_export import build_gold, iter_gold_tables
+from edgar_warehouse.serving.source_dimensional_export import build_source_export, iter_source_export_tables
 from edgar_warehouse.silver_store import SilverDatabase
 from tests.unit._fake_snowflake import (
     EMPTY_ORPHAN_EVIDENCE_TABLE_DATA,
@@ -43,25 +43,25 @@ def _empty_silver_db(tmp_path) -> SilverDatabase:
     return SilverDatabase(str(tmp_path / "silver.duckdb"))
 
 
-def test_iter_gold_tables_produces_the_full_expected_table_set(tmp_path) -> None:
+def test_iter_source_export_tables_produces_the_full_expected_table_set(tmp_path) -> None:
     """Guards against the streaming refactor silently dropping, renaming, or
     reordering a builder -- pinned against a hardcoded name set independent
-    of build_gold()'s own implementation, so this can't pass by construction
-    the way an iter_gold_tables()-vs-build_gold() comparison alone would."""
+    of build_source_export()'s own implementation, so this can't pass by construction
+    the way an iter_source_export_tables()-vs-build_source_export() comparison alone would."""
     db = _empty_silver_db(tmp_path)
     try:
         with _patch_silver_connection:
-            names = [name for name, _ in iter_gold_tables(db)]
+            names = [name for name, _ in iter_source_export_tables(db)]
     finally:
         db.close()
 
     assert set(names) == EXPECTED_GOLD_TABLE_NAMES
-    assert len(names) == len(set(names)), "duplicate table name in iter_gold_tables()"
+    assert len(names) == len(set(names)), "duplicate table name in iter_source_export_tables()"
 
 
-def test_iter_gold_tables_matches_build_gold_with_real_rows(tmp_path) -> None:
-    """iter_gold_tables() must be a drop-in streaming equivalent of
-    build_gold(): same table names, same per-table schema and row counts,
+def test_iter_source_export_tables_matches_build_source_export_with_real_rows(tmp_path) -> None:
+    """iter_source_export_tables() must be a drop-in streaming equivalent of
+    build_source_export(): same table names, same per-table schema and row counts,
     exercised against a non-empty silver database (not just the degenerate
     empty-schema case, which every builder returns identically regardless of
     how it's invoked)."""
@@ -74,8 +74,8 @@ def test_iter_gold_tables_matches_build_gold_with_real_rows(tmp_path) -> None:
             """
         )
         with _patch_silver_connection:
-            streamed = dict(iter_gold_tables(db))
-            materialized = build_gold(db)
+            streamed = dict(iter_source_export_tables(db))
+            materialized = build_source_export(db)
     finally:
         db.close()
 
@@ -90,7 +90,7 @@ def test_iter_gold_tables_matches_build_gold_with_real_rows(tmp_path) -> None:
         assert streamed_table.num_rows == materialized_table.num_rows, name
 
 
-def test_iter_gold_tables_is_lazy(tmp_path) -> None:
+def test_iter_source_export_tables_is_lazy(tmp_path) -> None:
     """Builders must not run until the generator is actually advanced to
     them -- the whole point of streaming is that a later table (e.g.
     sec_thirteenf_holding, the table that OOM'd daily_incremental in prod)
@@ -100,7 +100,7 @@ def test_iter_gold_tables_is_lazy(tmp_path) -> None:
         with patch(
             "edgar_warehouse.serving.source_dimensional_export._build_sec_thirteenf_holding"
         ) as mock_thirteenf, _patch_silver_connection:
-            gen = iter_gold_tables(db)
+            gen = iter_source_export_tables(db)
             mock_thirteenf.assert_not_called()
 
             # sec_thirteenf_holding is well past the first few entries in the

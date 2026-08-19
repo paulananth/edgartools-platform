@@ -1,17 +1,17 @@
-"""Cross-check GOLD_AFFECTING_COMMANDS against ECS task-profile memory sizing.
+"""Cross-check SOURCE_EXPORT_COMMANDS against ECS task-profile memory sizing.
 
-Resolves the wayfinder ticket "Link GOLD_AFFECTING_COMMANDS membership to
+Resolves the wayfinder ticket "Link SOURCE_EXPORT_COMMANDS membership to
 required task-profile sizing" (.scratch/gold-build-memory-reliability/
 issues/02-link-gold-affecting-commands-to-task-sizing.md).
 
-edgar_warehouse.application.warehouse_orchestrator.GOLD_AFFECTING_COMMANDS and
+edgar_warehouse.application.warehouse_orchestrator.SOURCE_EXPORT_COMMANDS and
 infra/scripts/deploy-aws-application.sh's task-sizing are independent, with no
 link between them -- this is exactly why daily_incremental reproduced an OOM
 that gold-refresh had already hit and gotten a dedicated fix for (commit
 37c3171): adding a command to the first doesn't flag that the second needs
 revisiting too.
 
-Every GOLD_AFFECTING_COMMANDS member is resolved through its *real* dispatch
+Every SOURCE_EXPORT_COMMANDS member is resolved through its *real* dispatch
 mechanism, not a single assumed one -- there turn out to be three:
 
 1. `bootstrap-full`, `targeted-resync`, `full-reconcile`, `gold-refresh`
@@ -48,14 +48,14 @@ from pathlib import Path
 
 import pytest
 
-from edgar_warehouse.application.warehouse_orchestrator import GOLD_AFFECTING_COMMANDS
+from edgar_warehouse.application.warehouse_orchestrator import SOURCE_EXPORT_COMMANDS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEPLOY_SCRIPT = REPO_ROOT / "infra" / "scripts" / "deploy-aws-application.sh"
 
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 
-# today's actual minimum memory (MB) across every GOLD_AFFECTING_COMMANDS
+# today's actual minimum memory (MB) across every SOURCE_EXPORT_COMMANDS
 # member's real resolved profile.
 GOLD_BUILD_MEMORY_FLOOR_MB = 4096
 
@@ -182,7 +182,7 @@ def _run_warehouse_task_profile(workflow_name: str) -> str:
 def _gold_affecting_command_memory_mb() -> dict[str, int]:
     profile_memory = _profile_memory_mb()
     resolved: dict[str, int] = {}
-    for command_name in GOLD_AFFECTING_COMMANDS:
+    for command_name in SOURCE_EXPORT_COMMANDS:
         workflow_name = command_name.replace("-", "_")
 
         if command_name in _WAREHOUSE_MDM_GOLD_MEMBERS:
@@ -200,7 +200,7 @@ def _gold_affecting_command_memory_mb() -> dict[str, int]:
             continue
 
         assert command_name in _SPECIAL_CASED_PROFILE, (
-            f"{command_name!r} is in GOLD_AFFECTING_COMMANDS but workflow_profile() "
+            f"{command_name!r} is in SOURCE_EXPORT_COMMANDS but workflow_profile() "
             f"has no case for {workflow_name!r}, it isn't in _WAREHOUSE_MDM_GOLD_MEMBERS, "
             "and it isn't in this test's _SPECIAL_CASED_PROFILE allowlist either. Either "
             "add a case to workflow_profile() in infra/scripts/deploy-aws-application.sh "
@@ -219,17 +219,17 @@ def _gold_affecting_command_memory_mb() -> dict[str, int]:
 
 
 def test_every_gold_affecting_command_has_a_resolvable_task_memory() -> None:
-    """Every GOLD_AFFECTING_COMMANDS member must resolve to a known task
+    """Every SOURCE_EXPORT_COMMANDS member must resolve to a known task
     memory through one of its three real dispatch paths (see module
     docstring). A new gold-affecting command matching none of them is
     exactly the silent-drift gap this ticket closes."""
     resolved = _gold_affecting_command_memory_mb()
-    assert set(resolved.keys()) == GOLD_AFFECTING_COMMANDS
+    assert set(resolved.keys()) == SOURCE_EXPORT_COMMANDS
 
 
-@pytest.mark.parametrize("command_name", sorted(GOLD_AFFECTING_COMMANDS))
+@pytest.mark.parametrize("command_name", sorted(SOURCE_EXPORT_COMMANDS))
 def test_gold_affecting_command_meets_memory_floor(command_name: str) -> None:
-    """Every command that calls build_gold() must run on a task with at
+    """Every command that calls build_source_export() must run on a task with at
     least GOLD_BUILD_MEMORY_FLOOR_MB -- catches both a new command silently
     landing on an under-provisioned profile, and an existing profile's
     memory being lowered below what gold-affecting commands need."""

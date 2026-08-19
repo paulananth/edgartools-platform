@@ -941,7 +941,7 @@ def _fetch_snowflake_silver_rows(query: str) -> list[dict[str, Any]]:
     silver to Snowflake's EDGARTOOLS_SILVER directly instead, independent of
     the dbt batches. Opens and closes its own connection per call rather
     than sharing the local-DuckDB `conn` threaded through every other
-    builder in _gold_table_builders() -- these 5 are the only builders in
+    builder in _source_export_table_builders() -- these 5 are the only builders in
     this file reading Snowflake instead of DuckDB.
     """
     from edgar_warehouse.mdm.export import silver_connection_settings
@@ -1352,7 +1352,7 @@ def _timed(name: str, fn: Callable[[], pa.Table]) -> pa.Table:
     return result
 
 
-def _gold_table_builders(conn: Any) -> list[tuple[str, Callable[[], pa.Table]]]:
+def _source_export_table_builders(conn: Any) -> list[tuple[str, Callable[[], pa.Table]]]:
     return [
         ("dim_company",                    lambda: _build_dim_company(conn)),
         ("dim_form",                       lambda: _build_dim_form(conn)),
@@ -1399,32 +1399,32 @@ def _gold_table_builders(conn: Any) -> list[tuple[str, Callable[[], pa.Table]]]:
     ]
 
 
-def iter_gold_tables(db: Any) -> Iterator[tuple[str, pa.Table]]:
+def iter_source_export_tables(db: Any) -> Iterator[tuple[str, pa.Table]]:
     """Yield each gold table one at a time instead of materializing the whole
     gold layer in memory simultaneously.
 
-    Memory-critical callers — anything in GOLD_AFFECTING_COMMANDS — must use
+    Memory-critical callers — anything in SOURCE_EXPORT_COMMANDS — must use
     this and write+discard each table before building the next, rather than
-    build_gold(), which holds every table alive at once and OOM'd
+    build_source_export(), which holds every table alive at once and OOM'd
     daily_incremental in prod (2026-07-30) building the ~6.8M-row
     sec_thirteenf_holding table on top of ~7M rows of already-built
     predecessor tables still held in the dict.
     """
     # Accepts SilverDatabase or ShardedSilverReader via duck typing (._conn attribute).
     conn = get_connection(db)
-    for name, fn in _gold_table_builders(conn):
+    for name, fn in _source_export_table_builders(conn):
         yield name, _timed(name, fn)
 
 
-def build_gold(db: Any) -> dict[str, pa.Table]:
+def build_source_export(db: Any) -> dict[str, pa.Table]:
     """Materialize the whole gold layer as a dict.
 
     Holds every gold table in memory simultaneously — only safe for callers
     that need random access across the full set (e.g. data-quality
-    validation, tests). See iter_gold_tables() for why memory-critical
+    validation, tests). See iter_source_export_tables() for why memory-critical
     callers must not use this.
     """
-    return dict(iter_gold_tables(db))
+    return dict(iter_source_export_tables(db))
 
 
 def _write_parquet(table: pa.Table, storage_root: Any, relative_path: str) -> dict[str, Any]:
@@ -1440,12 +1440,12 @@ def _write_parquet(table: pa.Table, storage_root: Any, relative_path: str) -> di
     }
 
 
-def write_gold_to_storage(tables: dict[str, pa.Table], storage_root: Any, run_id: str) -> dict[str, int]:
-    manifest = write_gold_to_storage_manifest(tables, storage_root, run_id)
+def write_source_export_to_storage(tables: dict[str, pa.Table], storage_root: Any, run_id: str) -> dict[str, int]:
+    manifest = write_source_export_to_storage_manifest(tables, storage_root, run_id)
     return {entry["table_name"]: entry["row_count"] for entry in manifest}
 
 
-def write_gold_table_manifest_entry(
+def write_source_export_table_manifest_entry(
     table_name: str,
     table: pa.Table,
     storage_root: Any,
@@ -1453,8 +1453,8 @@ def write_gold_table_manifest_entry(
 ) -> dict[str, Any]:
     """Write a single gold table to storage and return its manifest entry.
 
-    Extracted from write_gold_to_storage_manifest so memory-critical callers
-    (paired with iter_gold_tables()) can write and discard one table at a
+    Extracted from write_source_export_to_storage_manifest so memory-critical callers
+    (paired with iter_source_export_tables()) can write and discard one table at a
     time instead of writing the whole dict at once.
     """
     capture_specs = default_capture_spec_factory()
@@ -1471,13 +1471,13 @@ def write_gold_table_manifest_entry(
     }
 
 
-def write_gold_to_storage_manifest(
+def write_source_export_to_storage_manifest(
     tables: dict[str, pa.Table],
     storage_root: Any,
     run_id: str,
 ) -> list[dict[str, Any]]:
     return [
-        write_gold_table_manifest_entry(table_name, table, storage_root, run_id)
+        write_source_export_table_manifest_entry(table_name, table, storage_root, run_id)
         for table_name, table in tables.items()
     ]
 

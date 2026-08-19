@@ -440,8 +440,8 @@ class BootstrapFundamentalsWiringTests(unittest.TestCase):
 
         Gold is built once by gold-refresh after all Branch A + B silver completes.
         """
-        from edgar_warehouse.application.warehouse_orchestrator import GOLD_AFFECTING_COMMANDS
-        self.assertNotIn("bootstrap-fundamentals", GOLD_AFFECTING_COMMANDS)
+        from edgar_warehouse.application.warehouse_orchestrator import SOURCE_EXPORT_COMMANDS
+        self.assertNotIn("bootstrap-fundamentals", SOURCE_EXPORT_COMMANDS)
 
     def test_uses_edgar_identity_not_sec_edgar_identity(self) -> None:
         """data-architecture Issue 5: one primary identity variable (EDGAR_IDENTITY),
@@ -556,16 +556,16 @@ class FundamentalsGoldBuilderTests(unittest.TestCase):
             with self.subTest(table=snow_table):
                 self.assertIn(snow_table, SNOWFLAKE_EXPORT_TABLES)
 
-    def test_build_gold_registers_fundamentals_builders(self) -> None:
-        """build_gold()/iter_gold_tables() must include the 6 new builders so
+    def test_build_source_export_registers_fundamentals_builders(self) -> None:
+        """build_source_export()/iter_source_export_tables() must include the 6 new builders so
         the gold-refresh loop emits PyArrow tables for them."""
         from edgar_warehouse.serving import source_dimensional_export
         # We need the source code, not a runtime call (gold-refresh requires
         # a live silver connection). Check the builder registry for the
-        # registrations -- build_gold() and iter_gold_tables() both delegate
-        # to _gold_table_builders().
+        # registrations -- build_source_export() and iter_source_export_tables() both delegate
+        # to _source_export_table_builders().
         import inspect
-        source = inspect.getsource(source_dimensional_export._gold_table_builders)
+        source = inspect.getsource(source_dimensional_export._source_export_table_builders)
         for builder_key in (
             "sec_financial_fact",
             "sec_thirteenf_holding",
@@ -576,7 +576,7 @@ class FundamentalsGoldBuilderTests(unittest.TestCase):
         ):
             with self.subTest(builder=builder_key):
                 self.assertIn(f'"{builder_key}"', source,
-                              f"build_gold() must register {builder_key}")
+                              f"build_source_export() must register {builder_key}")
 
 
 class FundamentalsSnowflakeExportTests(unittest.TestCase):
@@ -602,15 +602,15 @@ class FundamentalsSnowflakeExportTests(unittest.TestCase):
                               f"GOLD_EXPORT_MAP missing '{export_name}'")
                 self.assertEqual(
                     snow_target.GOLD_EXPORT_MAP[export_name], builder_key,
-                    f"GOLD_EXPORT_MAP['{export_name}'] must map to build_gold() key '{builder_key}'",
+                    f"GOLD_EXPORT_MAP['{export_name}'] must map to build_source_export() key '{builder_key}'",
                 )
 
     def test_export_runs_against_empty_tables(self) -> None:
         """The export step must handle empty PyArrow tables gracefully (e.g.
         when bootstrap-fundamentals has not run yet — the builders return
-        _empty(_SCHEMA) and write_gold_to_snowflake_export still records them).
+        _empty(_SCHEMA) and write_source_dimensional_export_to_snowflake still records them).
         """
-        from edgar_warehouse.serving.targets.snowflake import write_gold_to_snowflake_export
+        from edgar_warehouse.serving.targets.snowflake import write_source_dimensional_export_to_snowflake
         from edgar_warehouse.serving.source_dimensional_export import (
             _empty,
             _SEC_FINANCIAL_FACT_SCHEMA,
@@ -637,7 +637,7 @@ class FundamentalsSnowflakeExportTests(unittest.TestCase):
                 return relative_path
 
         fake = _FakeStorage()
-        counts = write_gold_to_snowflake_export(empty_tables, fake, "test-run", "2024-01-01")
+        counts = write_source_dimensional_export_to_snowflake(empty_tables, fake, "test-run", "2024-01-01")
         # All 6 should be in counts with 0 rows
         for export_name in self.EXPECTED_EXPORTS:
             with self.subTest(export=export_name):

@@ -84,7 +84,7 @@ class BoundaryTests(unittest.TestCase):
                 PACKAGE_ROOT / "application" / "workflows" / "serving_publish.py",
             }:
                 continue
-            if "def write_gold_to_snowflake_export" in text or "def write_ticker_reference_to_snowflake_export" in text:
+            if "def write_source_dimensional_export_to_snowflake" in text or "def write_ticker_reference_to_snowflake_export" in text:
                 offenders.append(path)
         self.assertEqual(offenders, [])
 

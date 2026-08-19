@@ -24,5 +24,5 @@ class CompatibilityShimTests(unittest.TestCase):
         content = gold_path.read_text()
         self.assertIn("serving.source_dimensional_export", content)
         self.assertIn("serving.targets.snowflake", content)
-        self.assertNotIn("def build_gold", content)
+        self.assertNotIn("def build_source_export", content)
         self.assertNotIn("pq.write_table", content)

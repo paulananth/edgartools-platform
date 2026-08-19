@@ -43,8 +43,8 @@ can enforce cross-table consistency through ordinary reads before writing.
 
 Invariants preserved
 --------------------
-- ``bootstrap-batch`` is NOT in ``GOLD_AFFECTING_COMMANDS`` — unchanged.
-- ``bootstrap-fundamentals`` is NOT in ``GOLD_AFFECTING_COMMANDS`` — same design.
+- ``bootstrap-batch`` is NOT in ``SOURCE_EXPORT_COMMANDS`` — unchanged.
+- ``bootstrap-fundamentals`` is NOT in ``SOURCE_EXPORT_COMMANDS`` — same design.
 - Gold is built once by ``gold-refresh`` after all batches complete.
 - SNOWFLAKE_RUN_MANIFEST_TASK remains STARTED — not altered here.
 """

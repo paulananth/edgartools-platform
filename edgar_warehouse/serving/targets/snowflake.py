@@ -24,7 +24,7 @@ class SnowflakeTarget:
         run_id: str,
         business_date: str,
     ) -> dict[str, int]:
-        return write_gold_to_serving_export(
+        return write_source_dimensional_export_to_serving(
             tables,
             export_root,
             run_id=run_id,
@@ -67,7 +67,7 @@ def write_ticker_reference_to_serving_export(
 
 
 # The mapping is:
-#   <export_name in S3 path>  ←  <build_gold()/iter_gold_tables() table name>
+#   <export_name in S3 path>  ←  <build_source_export()/iter_source_export_tables() table name>
 #
 # The current serving package is consumed by Snowflake native pull. Existing
 # entries are dimension/fact tables for the ownership graph. PR-2 adds 6
@@ -124,8 +124,8 @@ def write_gold_table_to_serving_export(
     has an export mapping. Returns (export_name, row_count), or None if
     source_name isn't in GOLD_EXPORT_MAP.
 
-    Extracted from write_gold_to_serving_export so memory-critical callers
-    (paired with iter_gold_tables()) can write and discard one table at a
+    Extracted from write_source_dimensional_export_to_serving so memory-critical callers
+    (paired with iter_source_export_tables()) can write and discard one table at a
     time instead of writing the whole dict at once.
     """
     export_name = _SOURCE_TO_EXPORT_NAME.get(source_name)
@@ -140,7 +140,7 @@ def write_gold_table_to_serving_export(
     return export_name, table.num_rows
 
 
-def write_gold_to_serving_export(
+def write_source_dimensional_export_to_serving(
     tables: dict[str, pa.Table],
     export_root: Any,
     run_id: str,
@@ -210,7 +210,7 @@ def write_transcript_events_to_serving_export(
 
 
 write_ticker_reference_to_snowflake_export = write_ticker_reference_to_serving_export
-write_gold_to_snowflake_export = write_gold_to_serving_export
+write_source_dimensional_export_to_snowflake = write_source_dimensional_export_to_serving
 write_earnings_calendar_to_snowflake_export = write_earnings_calendar_to_serving_export
 write_consensus_estimates_to_snowflake_export = write_consensus_estimates_to_serving_export
 write_transcript_events_to_snowflake_export = write_transcript_events_to_serving_export

@@ -12,7 +12,7 @@ from tests.unit._fake_snowflake import (
     FakeSnowflakeConnectionSettings,
 )
 
-# validate_data_quality() calls build_gold(), which includes 5 builders that
+# validate_data_quality() calls build_source_export(), which includes 5 builders that
 # read Snowflake's EDGARTOOLS_SILVER directly instead of the local DuckDB
 # fixture (dbt-gold-silver-rewiring map, Ticket 06) -- patch their connection
 # so these tests don't attempt a real Snowflake connection.

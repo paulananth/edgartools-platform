@@ -71,13 +71,13 @@ def test_silver_database_records_gold_manifest_diffs(tmp_path) -> None:
     assert rows[0]["parquet_changed"] is True
 
 
-def test_write_gold_to_storage_manifest_hashes_parquet_files(tmp_path) -> None:
-    from edgar_warehouse.serving.source_dimensional_export import write_gold_to_storage_manifest
+def test_write_source_export_to_storage_manifest_hashes_parquet_files(tmp_path) -> None:
+    from edgar_warehouse.serving.source_dimensional_export import write_source_export_to_storage_manifest
 
     storage_root = StorageLocation(str(tmp_path / "warehouse"))
     table = pa.table({"cik": pa.array([320193], type=pa.int64())})
 
-    entries = write_gold_to_storage_manifest(
+    entries = write_source_export_to_storage_manifest(
         {"dim_company": table},
         storage_root,
         "run-1",
@@ -126,11 +126,11 @@ def test_gold_refresh_records_gold_manifest_rows(tmp_path) -> None:
             return_value=([], {"rows_inserted": 0, "rows_skipped": 0, "sync_status": "succeeded"}),
         ),
         patch(
-            "edgar_warehouse.serving.source_dimensional_export.iter_gold_tables",
+            "edgar_warehouse.serving.source_dimensional_export.iter_source_export_tables",
             return_value=iter([("dim_company", MagicMock(num_rows=1))]),
         ),
         patch(
-            "edgar_warehouse.serving.source_dimensional_export.write_gold_table_manifest_entry",
+            "edgar_warehouse.serving.source_dimensional_export.write_source_export_table_manifest_entry",
             return_value=manifest_entries[0],
         ),
         patch(
@@ -186,7 +186,7 @@ def test_bootstrap_next_silver_only_skips_gold_in_bronze_capture(tmp_path) -> No
             return_value={"layer": "silver_database", "path": "silver.duckdb"},
         ),
         patch(
-            "edgar_warehouse.serving.source_dimensional_export.iter_gold_tables",
+            "edgar_warehouse.serving.source_dimensional_export.iter_source_export_tables",
             return_value=iter(()),
         ) as iter_gold,
         patch(
@@ -242,7 +242,7 @@ def test_bootstrap_next_default_still_publishes_gold_in_bronze_capture(tmp_path)
             return_value={"layer": "silver_database", "path": "silver.duckdb"},
         ),
         patch(
-            "edgar_warehouse.serving.source_dimensional_export.iter_gold_tables",
+            "edgar_warehouse.serving.source_dimensional_export.iter_source_export_tables",
             return_value=iter(()),
         ) as iter_gold,
     ):
