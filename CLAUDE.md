@@ -1105,6 +1105,75 @@ every prior entry in this file). **Not yet deployed** as of this entry — no li
 before/after timing has been captured; the CloudWatch overlap-counting method above is
 the way to get one once this ships.
 
+## MDM Postgres migration-011 schema drift blocking every mdm run (resolved 2026-08-19)
+
+**Problem:** the `relderiv-fix-verify-1787165186` execution (verifying the
+relationship-derivation-concurrency fix above) failed at `MdmRun` — every
+`mdm run --entity-type all` attempt exited 1 after exhausting retries.
+Discovered while investigating a separate, adjacent symptom: the
+mdm-ahead-of-silver backfill sweep (`backfill-mdm-entity-ids`) showed 0 of
+5,752 `sec_company` rows resolved in `EDGARTOOLS_PROD.EDGARTOOLS_SILVER`
+despite that feature (Phases A/B, `.scratch/mdm-ahead-of-silver/map.md`)
+being fully implemented, tested, and wired into prod's `daily_incremental`/
+`bootstrap` state machines for days.
+
+1. Symptom: the ECS task's logs showed every query against `mdm_source_ref`
+   failing with Postgres `UndefinedColumn` — 61 straight `mdm_sql_failed`
+   events, same `statement_hash`, all selecting (among other columns)
+   `mdm_source_ref.source_content_hash`.
+2. Why is that column undefined? It doesn't exist on the live table, but the
+   SQLAlchemy `MdmSourceRef` model declares it
+   (`edgar_warehouse/mdm/database.py:216`) — `select()` on the mapped class
+   pulls every mapped column, so any query touching this table fails
+   outright, not just ones that need the new field.
+3. Why does the model have a column the table doesn't? Commit `7ffda2d7`
+   ("skip-if-unchanged fast path for run_companies", single-path-per-layer
+   Ticket 03) added `source_content_hash` to the model **that same day**
+   (2026-08-19 12:06 ET) — a few hours before this failure — along with a
+   proper migration file, `edgar_warehouse/mdm/migrations/
+   011_source_ref_content_hash.sql` (`ADD COLUMN IF NOT EXISTS`).
+4. Why wasn't the migration applied? `migrate()`
+   (`edgar_warehouse/mdm/migrations/runtime.py`) runs `011` as part of its
+   sequence, but `migrate()` only executes via an explicit `mdm migrate`
+   ECS/Step-Functions invocation (`edgartools-prod-mdm-migrate`) — nothing
+   triggers it automatically on deploy or on `mdm run` startup. No `mdm
+   migrate` execution had run against prod since `7ffda2d7` shipped.
+5. **Root cause:** same class of gap as "MDM Snowflake mirror schema lost on
+   cutover" above, just on the Postgres side this time — a schema migration
+   can exist, be correct, and be committed, and still never reach the live
+   database, because applying it is a separate manual step nothing enforces.
+   The mdm-ahead-of-silver backfill sweep's "0 resolved" reading was a
+   downstream symptom: `run_companies` couldn't write/read `mdm_source_ref`
+   at all, so the sweep's `MdmSourceRef` lookup had nothing to match against
+   — the backfill code itself was never the problem.
+
+**Fix:** ran `edgartools-prod-mdm-migrate` (applies `011_source_ref_content_hash.sql`,
+purely additive `ADD COLUMN IF NOT EXISTS`) — succeeded. Re-verified with a
+scoped `mdm run --limit 25` (`edgartools-prod-mdm-run`, avoids a full-universe
+run's cost) — succeeded, no more `UndefinedColumn` errors. Then ran
+`backfill-mdm-entity-ids` as a standalone one-off ECS task (same task
+definition/command the `BackfillMdmEntityIds` state in `daily_incremental`/
+`bootstrap` already uses, per `deploy-aws-application.sh`) to close the loop
+on the original adjacent symptom: resolved 5,752/5,752 pending `sec_company`
+rows (`mdm_entity_backfill_completed`, `remaining_by_table.sec_company: 0`),
+wrote them to the Snowflake landing export, and confirmed live —
+`EDGARTOOLS_PROD.EDGARTOOLS_SILVER_LANDING.SEC_COMPANY` shows 5,752 rows
+with `mdm_entity_id` populated after `LOAD_SILVER_LANDING_TASK`'s next
+5-minute cycle picked up the export. (The downstream collapsed
+`EDGARTOOLS_SILVER.SEC_COMPANY` dynamic table has its own separate 6-hour
+`target_lag`, pre-existing and unrelated to this fix, so it will reflect
+these rows on its own schedule — not re-verified in this pass, and not
+needed to confirm the mdm-ahead-of-silver pipeline itself works end-to-end.)
+
+**Lesson:** a same-day ORM/migration-file change with no forcing function to
+apply it in prod is a live landmine for every other consumer of that table —
+even work (like the relationship-derivation concurrency fix, and the
+mdm-ahead-of-silver feature, both unrelated to `7ffda2d7`) that was fully
+correct on its own can look broken purely because a sibling change's
+migration never ran. When `mdm run` (or any MDM Postgres consumer) fails
+with `UndefinedColumn`/`UndefinedTable`, check for an unapplied migration
+before assuming the failing code itself is at fault.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live
