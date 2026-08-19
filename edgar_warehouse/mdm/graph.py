@@ -95,11 +95,21 @@ class GraphSyncEngine:
         defer_flush: bool = False,
         flush_batch_size: int = 1_000,
     ) -> None:
-        """Load one relationship type's current versions for bounded bulk writes."""
+        """Load one relationship type's current versions for bounded bulk writes.
+
+        Idempotent per rel_type_id: a caller (e.g. a shared dispatcher that
+        primes every type uniformly) may call this for a type a more
+        specific deriver already primed -- re-priming would otherwise
+        double-append the same rows into ``_current_by_relationship_id``, so
+        an already-primed type is a no-op here (``defer_flush``/
+        ``flush_batch_size`` from the first call win).
+        """
         rec = self.registry.rel_type_by_name.get(rel_type_name)
         if rec is None:
             raise KeyError(f"Unknown relationship type '{rel_type_name}'")
         rel_type_id = rec["rel_type_id"]
+        if rel_type_id in self._primed_rel_type_ids:
+            return
         rows = self.session.scalars(
             select(MdmRelationshipInstance).where(
                 MdmRelationshipInstance.rel_type_id == rel_type_id,

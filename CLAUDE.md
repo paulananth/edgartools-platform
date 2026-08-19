@@ -759,6 +759,54 @@ stage's provisioning turns out to have been an uncommitted manual step, assume e
 stage in the same pipeline family is too until proven otherwise — check the whole chain
 before declaring victory on the first fix.
 
+**Follow-up (2026-08-19): a third, still-different failure at the same `MdmExport`
+state**, ten days later — a fresh `bronze_seed_silver_gold` execution reached `MdmExport`
+successfully this time (both fixes above held) and failed with
+`ProgrammingError: Object 'EDGARTOOLS_PROD.MDM.MDM_COMPANY_ENTITY' does not exist or not
+authorized` — a *third* distinct object, not one of the 19 mirror tables or the graph
+schema fixed above.
+
+1. Symptom: `mdm export`'s **default** writer (`_build_snowflake_writer()` in
+   `edgar_warehouse/mdm/cli.py`, meant to target `EDGARTOOLS_GOLD` — see `export.py`'s
+   `DOMAIN_TO_TABLE`, which lists the 5 golden-record export targets `MDM_COMPANY_ENTITY`/
+   `MDM_ADVISER`/`MDM_PERSON`/`MDM_SECURITY`/`MDM_FUND`) tried to write into schema `MDM`
+   instead — confirmed live: all 5 tables exist and are correctly defined in
+   `EDGARTOOLS_GOLD` (`07_mdm_export_targets.sql` was applied; 0 rows each, since export has
+   never once succeeded past this point).
+2. Why did the default writer resolve to schema `MDM`? `SnowflakeConnectionSettings.from_env()`
+   defaults schema to `"EDGARTOOLS_GOLD"` only when the secret's `MDM_SNOWFLAKE_SCHEMA` key is
+   absent/empty — the live secret (`edgartools-prod/mdm/snowflake`) had it explicitly set to
+   `"MDM"`, overriding the default for every consumer of that secret, including the default
+   writer.
+3. Why was it set to `MDM`? `mdm export`'s **separate** mirror writer
+   (`_build_snowflake_mirror_writer()`) deliberately hardcodes `schema="MDM"` in Python — it
+   does *not* read `MDM_SNOWFLAKE_SCHEMA` from the secret at all. `mdm sync-graph`/
+   `verify-graph` (`snowflake_graph.py`) also don't read it — they fully-qualify every
+   reference via their own `DEFAULT_TARGET_SCHEMA`/`DEFAULT_MDM_SCHEMA` constants, never
+   relying on the connection's default schema. So **nothing in the codebase actually needs**
+   `MDM_SNOWFLAKE_SCHEMA=MDM` — the only real consumer of that secret field is the default
+   writer, which needs it to be `EDGARTOOLS_GOLD`.
+4. Why did the secret have the wrong value then? `bootstrap-prod-mdm.sh` (the script that
+   provisions this secret) correctly sets it to `$GOLD_SCHEMA` (default `"EDGARTOOLS_GOLD"`,
+   line ~341) — the live value had drifted from what the script would produce, almost
+   certainly overwritten by a manual `put-secret-value` during the 2026-08-09 incident above
+   (the two "MDM"-schema fixes that day likely prompted someone to point the whole secret at
+   `MDM` without noticing the default writer shares it).
+5. **Root cause:** one secret field (`MDM_SNOWFLAKE_SCHEMA`) is a de facto shared default for
+   two writers with genuinely different target schemas, and only one of the two
+   (`_build_snowflake_mirror_writer`) protects itself with its own hardcoded override — the
+   other silently inherits whatever the secret says. A manual secret edit made for one
+   consumer's benefit silently broke the other, with no test or grant check to catch it
+   (this writer only ever runs against real Snowflake, so nothing in the test suite exercises
+   its schema resolution).
+
+**Fix:** corrected the live secret's `MDM_SNOWFLAKE_SCHEMA` back to `EDGARTOOLS_GOLD` via
+`put-secret-value` (preserving every other field byte-for-byte), matching what
+`bootstrap-prod-mdm.sh` already produces — a config fix, not a code or DDL change. No
+image rebuild needed for this specific fix (ECS injects secrets at task launch), though a
+`bronze_seed_silver_gold` re-run is still needed to confirm live. **Not yet re-verified**
+as of this entry.
+
 ## Dev Terraform/Snowflake go-live blockers 5-whys (partially resolved 2026-07-27)
 
 **Problem:** Resuming a paused live `terraform apply` for the dev Snowflake stack
@@ -976,6 +1024,155 @@ regression test (injects a stale first baseline read to reproduce the
 actual race a sequential test can't otherwise trigger). Full suite green.
 **Not yet built, pushed, or deployed** as of this entry — see
 `.scratch/silver-snowflake-migration/map.md` for status.
+
+## Relationship-derivation single-threaded tail (fixed, not yet deployed, 2026-08-19)
+
+**Problem:** A live `mdm run --entity-type all` execution (`shard-fix-verify-1787134405`)
+ran 5.6+ hours past company/security/person resolution with no sign of finishing.
+CloudWatch overlap-counting (same technique used to prove `run_companies`' 16-way
+concurrency was genuinely live) showed max concurrently-open SQL calls == 1 during this
+tail — strictly sequential, unlike resolution's proven 16-way concurrency.
+
+1. Symptom: the tail of `mdm run` (writing `mdm_relationship_instance` rows) ran
+   single-threaded with no observable overlap in its Postgres calls.
+2. Why single-threaded? `derive_relationships()`'s outer loop ran all 11
+   `RELATIONSHIP_TYPES` sequentially on one shared session — no worker pool at all,
+   unlike `run_companies`/`run_securities`/`run_persons` (mdm-run-throughput map, already
+   fixed).
+3. Why was each type itself slow, even alone? `GraphSyncEngine.ensure_relationship`
+   pays one existing-version SELECT plus one `session.flush()` round trip **per
+   relationship row** unless the caller primed the type first (`prime_relationship_type`
+   + deferred flush) — only `_derive_manages_fund` did that; the other 10 types paid it
+   per row.
+4. Why per-row on top of that? Several types (`IS_INSIDER`, `HOLDS`,
+   `HAS_PARENT_COMPANY`, `EMPLOYED_BY`, `AUDITED_BY`) also re-queried MdmPerson/MdmCompany
+   fresh for every row via `_person_entity_id`/`_company_entity_id`, even though the same
+   CIK repeats heavily (an issuer's CIK repeats across every one of its own insiders'
+   rows; `INSTITUTIONAL_HOLDS`' `_ensure_thirteenf_manager` re-queried the same manager
+   CIK on every one of its thousands of holding rows).
+5. **Root cause:** the bulk-prefetch + deferred-flush pattern that fixed this exact
+   shape for `MANAGES_FUND` and for `run_companies`/`run_securities`/`run_persons`
+   (mdm-run-throughput map) was never ported to the other 10 relationship types or to
+   the type-level loop itself — the same "sibling path silently diverged" shape as the
+   shard-publish incident above, just in a different subsystem.
+
+**Fix:** `_derive_relationship_type` now primes + defers flush for every type uniformly
+(idempotent — `GraphSyncEngine.prime_relationship_type` is now a no-op on an
+already-primed type, so this composes safely with `_derive_manages_fund`'s own internal
+call). `_derive_is_insider`/`_derive_holds`/`_derive_has_parent_company`/
+`_derive_employed_by`/`_derive_audited_by` now bulk-prefetch their per-row entity-ID
+lookups once per batch instead of once per row (mirroring the bulk-prefetch pattern
+`_derive_company_holds`/`_derive_manages_fund` already used). `_derive_institutional_holds`
+memoizes `_ensure_thirteenf_manager` per unique CIK within a batch (safe: no per-call
+side effect beyond the first) — deliberately did **not** memoize `_ensure_security_by_cusip`,
+which opportunistically backfills `security_class` on every call, so a later row with a
+non-NULL value can still backfill an earlier NULL one. `derive_relationships()` itself now
+runs each relationship *type* on its own worker thread/session (bounded by
+`MDM_RELATIONSHIP_CONCURRENCY`, default 4), mirroring `run_companies`' proven
+per-row-worker-session pattern — falls back to 1 worker under SQLite (same StaticPool
+guard `run_companies` already uses). Safe because every `_derive_*` method only ever
+writes rows scoped to its own `rel_type_id` (`relationship_id` is a deterministic hash of
+`(rel_type_id, source, target)` — no cross-type collision possible), and any stub entity
+one type creates is read by another only as a best-effort, already-idempotent lookup that
+quietly retries on the next `mdm run` if unresolved this run (the same fallback the old
+strictly-sequential ordering already relied on).
+
+**Second, independent bug found while implementing this** (not the original target, but a
+correctness gap this fix would have newly exposed): `edgar_warehouse/silver_store.py`'s
+`SilverDatabase.fetch()` and `edgar_warehouse/silver_support/sharded_reader.py`'s
+`ShardedSilverReader.fetch()` both `execute()` then read back `self._conn.description` on
+one shared DuckDB `Connection` — safe only because every existing caller was
+single-threaded. `derive_relationships()`'s new worker threads call `.fetch()` on the
+*same shared reader instance* concurrently, which would have raced two threads'
+`execute()`/`description` reads against each other. Fixed with a `threading.Lock` around
+each `fetch()` body (scoped to `.fetch()` only — the many other `SilverDatabase` write
+methods are still only ever called from the single-threaded bronze/silver capture path,
+so this adds no contention there). `SnowflakeSilverReader.fetch()` (the third
+implementation of this duck-typed interface) was already safe — it opens a fresh cursor
+per call.
+
+Tests: `tests/mdm/test_pipeline_relationships.py`'s new
+`TestRelationshipDeriveBoundedRoundTrips` (IS_INSIDER query-count stays flat as row count
+grows, mirroring the existing `test_manages_fund_uses_bounded_database_round_trips`/
+`test_company_holds_batches_entity_id_lookups_across_rows` precedents) and
+`TestRelationshipTypesConcurrency` (two relationship types derived on genuinely concurrent
+worker sessions against a real multi-connection SQLite engine — same direct-drive pattern
+`test_run_companies_concurrency.py` uses to prove concurrency safety without going through
+the dialect-gated entry point — plus an end-to-end sanity check that the SQLite-forced
+single-worker path is still behaviorally identical to the old sequential loop). Full
+repo suite green: 2225 passed, 4 skipped (same 2 pre-existing, unrelated failures as
+every prior entry in this file). **Not yet deployed** as of this entry — no live
+before/after timing has been captured; the CloudWatch overlap-counting method above is
+the way to get one once this ships.
+
+## MDM Postgres migration-011 schema drift blocking every mdm run (resolved 2026-08-19)
+
+**Problem:** the `relderiv-fix-verify-1787165186` execution (verifying the
+relationship-derivation-concurrency fix above) failed at `MdmRun` — every
+`mdm run --entity-type all` attempt exited 1 after exhausting retries.
+Discovered while investigating a separate, adjacent symptom: the
+mdm-ahead-of-silver backfill sweep (`backfill-mdm-entity-ids`) showed 0 of
+5,752 `sec_company` rows resolved in `EDGARTOOLS_PROD.EDGARTOOLS_SILVER`
+despite that feature (Phases A/B, `.scratch/mdm-ahead-of-silver/map.md`)
+being fully implemented, tested, and wired into prod's `daily_incremental`/
+`bootstrap` state machines for days.
+
+1. Symptom: the ECS task's logs showed every query against `mdm_source_ref`
+   failing with Postgres `UndefinedColumn` — 61 straight `mdm_sql_failed`
+   events, same `statement_hash`, all selecting (among other columns)
+   `mdm_source_ref.source_content_hash`.
+2. Why is that column undefined? It doesn't exist on the live table, but the
+   SQLAlchemy `MdmSourceRef` model declares it
+   (`edgar_warehouse/mdm/database.py:216`) — `select()` on the mapped class
+   pulls every mapped column, so any query touching this table fails
+   outright, not just ones that need the new field.
+3. Why does the model have a column the table doesn't? Commit `7ffda2d7`
+   ("skip-if-unchanged fast path for run_companies", single-path-per-layer
+   Ticket 03) added `source_content_hash` to the model **that same day**
+   (2026-08-19 12:06 ET) — a few hours before this failure — along with a
+   proper migration file, `edgar_warehouse/mdm/migrations/
+   011_source_ref_content_hash.sql` (`ADD COLUMN IF NOT EXISTS`).
+4. Why wasn't the migration applied? `migrate()`
+   (`edgar_warehouse/mdm/migrations/runtime.py`) runs `011` as part of its
+   sequence, but `migrate()` only executes via an explicit `mdm migrate`
+   ECS/Step-Functions invocation (`edgartools-prod-mdm-migrate`) — nothing
+   triggers it automatically on deploy or on `mdm run` startup. No `mdm
+   migrate` execution had run against prod since `7ffda2d7` shipped.
+5. **Root cause:** same class of gap as "MDM Snowflake mirror schema lost on
+   cutover" above, just on the Postgres side this time — a schema migration
+   can exist, be correct, and be committed, and still never reach the live
+   database, because applying it is a separate manual step nothing enforces.
+   The mdm-ahead-of-silver backfill sweep's "0 resolved" reading was a
+   downstream symptom: `run_companies` couldn't write/read `mdm_source_ref`
+   at all, so the sweep's `MdmSourceRef` lookup had nothing to match against
+   — the backfill code itself was never the problem.
+
+**Fix:** ran `edgartools-prod-mdm-migrate` (applies `011_source_ref_content_hash.sql`,
+purely additive `ADD COLUMN IF NOT EXISTS`) — succeeded. Re-verified with a
+scoped `mdm run --limit 25` (`edgartools-prod-mdm-run`, avoids a full-universe
+run's cost) — succeeded, no more `UndefinedColumn` errors. Then ran
+`backfill-mdm-entity-ids` as a standalone one-off ECS task (same task
+definition/command the `BackfillMdmEntityIds` state in `daily_incremental`/
+`bootstrap` already uses, per `deploy-aws-application.sh`) to close the loop
+on the original adjacent symptom: resolved 5,752/5,752 pending `sec_company`
+rows (`mdm_entity_backfill_completed`, `remaining_by_table.sec_company: 0`),
+wrote them to the Snowflake landing export, and confirmed live —
+`EDGARTOOLS_PROD.EDGARTOOLS_SILVER_LANDING.SEC_COMPANY` shows 5,752 rows
+with `mdm_entity_id` populated after `LOAD_SILVER_LANDING_TASK`'s next
+5-minute cycle picked up the export. (The downstream collapsed
+`EDGARTOOLS_SILVER.SEC_COMPANY` dynamic table has its own separate 6-hour
+`target_lag`, pre-existing and unrelated to this fix, so it will reflect
+these rows on its own schedule — not re-verified in this pass, and not
+needed to confirm the mdm-ahead-of-silver pipeline itself works end-to-end.)
+
+**Lesson:** a same-day ORM/migration-file change with no forcing function to
+apply it in prod is a live landmine for every other consumer of that table —
+even work (like the relationship-derivation concurrency fix, and the
+mdm-ahead-of-silver feature, both unrelated to `7ffda2d7`) that was fully
+correct on its own can look broken purely because a sibling change's
+migration never ran. When `mdm run` (or any MDM Postgres consumer) fails
+with `UndefinedColumn`/`UndefinedTable`, check for an unapplied migration
+before assuming the failing code itself is at fault.
 
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 

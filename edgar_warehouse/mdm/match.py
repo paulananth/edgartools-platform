@@ -30,6 +30,13 @@ class MatchAction(str, Enum):
     AUTO_MERGE = "auto_merge"
     REVIEW = "review"
     QUARANTINE = "quarantine"
+    # single-path-per-layer map, Ticket 03: a resolve_one call that found an
+    # unchanged source row (matching stored MdmSourceRef.source_content_hash)
+    # and skipped candidate matching / survivorship entirely, reusing the
+    # already-resolved entity_id. Not persisted anywhere; purely an
+    # in-process signal for callers/tests that want to distinguish this
+    # from a real match.
+    SKIPPED_UNCHANGED = "skipped_unchanged"
 
 
 @dataclass(frozen=True)

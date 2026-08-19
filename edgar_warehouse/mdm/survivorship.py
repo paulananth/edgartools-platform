@@ -14,7 +14,7 @@ Survivorship rule types:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Iterable, Optional
 
 from sqlalchemy import select, update
@@ -34,6 +34,27 @@ class Candidate:
     field_value: Optional[str]
     global_priority: int
     effective_date: Optional[date]
+    loaded_at: Optional[datetime] = None
+
+
+def _recency_key(loaded_at: Optional[datetime]) -> float:
+    """Tie-break key: more recently staged sorts first (ascending sort, so
+    more recent => more negative). Single-path-per-layer map, Ticket 03
+    surfaced this gap while adding skip-if-unchanged: every tie-break sort
+    below picked the *first-ever* staged candidate on a priority tie, with
+    no recency signal at all, so a genuinely newer value from a later
+    ``mdm run`` could permanently lose to a stale one -- ``loaded_at``
+    already existed on ``mdm_entity_attribute_stage`` (server-defaulted
+    NOW() on insert) but was never read. Missing ``loaded_at`` sorts last
+    (least preferred), so an unpopulated timestamp can never win a tie it
+    shouldn't.
+    """
+    if loaded_at is None:
+        return float("inf")
+    try:
+        return -loaded_at.timestamp()
+    except AttributeError:
+        return float("inf")
 
 
 @dataclass(frozen=True)
@@ -77,7 +98,7 @@ def _pick_by_rule(
             pool = [c for c in pool if c.source_system == rule.source_system]
         if not pool:
             return None
-        return sorted(pool, key=lambda c: c.global_priority)[0]
+        return sorted(pool, key=lambda c: (c.global_priority, _recency_key(c.loaded_at)))[0]
 
     if rule.rule_type == "most_recent":
         if rule.source_system:
@@ -89,17 +110,21 @@ def _pick_by_rule(
             key=lambda c: (
                 -(c.effective_date.toordinal() if c.effective_date else 0),
                 c.global_priority,
+                _recency_key(c.loaded_at),
             ),
         )[0]
 
     if rule.rule_type == "highest_source_rank":
-        return sorted(pool, key=lambda c: c.global_priority)[0]
+        return sorted(pool, key=lambda c: (c.global_priority, _recency_key(c.loaded_at)))[0]
 
     # source_priority (default) + custom fallback
     if rule.preferred_source_order:
-        ordered = sorted(pool, key=lambda c: _preferred_rank(c, rule.preferred_source_order))
+        ordered = sorted(
+            pool,
+            key=lambda c: (*_preferred_rank(c, rule.preferred_source_order), _recency_key(c.loaded_at)),
+        )
         return ordered[0]
-    return sorted(pool, key=lambda c: c.global_priority)[0]
+    return sorted(pool, key=lambda c: (c.global_priority, _recency_key(c.loaded_at)))[0]
 
 
 def merge_field(
@@ -199,6 +224,7 @@ def run_survivorship_for_entity(
                 field_value=r.field_value,
                 global_priority=r.global_priority,
                 effective_date=r.effective_date,
+                loaded_at=r.loaded_at,
             )
             for r in rows
         ]

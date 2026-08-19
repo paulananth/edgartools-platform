@@ -363,6 +363,7 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
         _apply_sql_file(engine, "008_publication_queue.sql")
         _apply_sql_file(engine, "009_graph_generation_builder.sql")
         _apply_sql_file(engine, "010_release_relationship_sources.sql")
+        _apply_sql_file(engine, "011_source_ref_content_hash.sql")
 
     if seed:
         with Session(engine) as session:

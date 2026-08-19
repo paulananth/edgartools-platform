@@ -213,6 +213,7 @@ class MdmSourceRef(Base):
     matched_at: Mapped[Optional[object]] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
     )
+    source_content_hash: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     entity: Mapped["MdmEntity"] = relationship("MdmEntity", back_populates="source_refs")
 

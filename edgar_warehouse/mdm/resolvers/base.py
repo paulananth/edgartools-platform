@@ -1,9 +1,12 @@
 """Base resolver scaffolding shared by every domain."""
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from edgar_warehouse.mdm.database import (
@@ -14,6 +17,18 @@ from edgar_warehouse.mdm.database import (
 from edgar_warehouse.mdm.match import MatchAction, MatchPipeline, MatchVerdict
 from edgar_warehouse.mdm.rules import MDMRuleEngine
 from edgar_warehouse.mdm.survivorship import stage_candidate
+
+
+def content_hash(fields: dict[str, Any]) -> str:
+    """Stable hash over the exact fields a resolver stages for one source
+    row, used to detect an unchanged row across separate ``mdm run``
+    invocations (single-path-per-layer map, Ticket 03). Callers must pass
+    the same field set every time -- adding/removing a key changes the
+    hash for every row, which is the desired (fail-safe, not fail-silent)
+    behavior on a genuine field-set change, not a bug.
+    """
+    canonical = json.dumps(fields, sort_keys=True, default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 class SilverReader(Protocol):
@@ -74,6 +89,7 @@ class BaseResolver:
         source_system: str,
         source_id: str,
         confidence: float,
+        source_content_hash: Optional[str] = None,
     ) -> None:
         ref = MdmSourceRef(
             entity_id=entity_id,
@@ -81,8 +97,34 @@ class BaseResolver:
             source_id=str(source_id),
             source_priority=ctx.engine.get_source_priority(self.entity_type, source_system),
             confidence=confidence,
+            source_content_hash=source_content_hash,
         )
         ctx.session.merge(ref)
+
+    def _skip_if_unchanged(
+        self,
+        ctx: ResolverContext,
+        source_system: str,
+        source_id: str,
+        content_hash_value: str,
+    ) -> Optional[str]:
+        """Return the existing entity_id if this source row's content hash
+        matches what was stored at its last successful match, else None to
+        signal a full resolve is required (single-path-per-layer map,
+        Ticket 03). A resolver that never passes ``source_content_hash`` to
+        ``_register_source`` leaves every row's stored hash NULL, which
+        never matches a real hash -- callers opt in per source_system by
+        computing and passing a hash; nothing changes for callers that
+        don't.
+        """
+        stmt = select(MdmSourceRef).where(
+            MdmSourceRef.source_system == source_system,
+            MdmSourceRef.source_id == str(source_id),
+        )
+        ref = ctx.session.execute(stmt).scalars().first()
+        if ref is not None and ref.source_content_hash == content_hash_value:
+            return ref.entity_id
+        return None
 
     def _stage_attrs(
         self,

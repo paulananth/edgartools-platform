@@ -167,12 +167,17 @@ class TestRunCompaniesMissingSyncState:
 
         assert processed == 3  # tracking data missing, resolution still proceeds
         stderr_lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
-        assert len(stderr_lines) == 1
+        # single-path-per-layer map, Ticket 03: run_companies now always
+        # emits a completion summary event alongside whatever else it logged.
+        assert len(stderr_lines) == 2
         import json as _json
-        event = _json.loads(stderr_lines[0])
-        assert event["event"] == "mdm_relationship_skip"
-        assert event["reason"] == "missing_source_table"
-        assert event["source_table"] == "sec_company_sync_state"
+        events = [_json.loads(line) for line in stderr_lines]
+        skip_event = next(e for e in events if e["event"] == "mdm_relationship_skip")
+        assert skip_event["reason"] == "missing_source_table"
+        assert skip_event["source_table"] == "sec_company_sync_state"
+        completed_event = next(e for e in events if e["event"] == "mdm_company_resolution_completed")
+        assert completed_event["processed"] == 3
+        assert completed_event["skipped_unchanged"] == 0
 
     def test_a_genuine_non_missing_table_error_still_raises(self):
         session = _seeded_sqlite_session(static_pool=True)

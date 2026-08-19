@@ -39,6 +39,8 @@ Pitfalls
 
 from __future__ import annotations
 
+import threading
+
 import duckdb
 
 
@@ -101,6 +103,11 @@ class ShardedSilverReader:
     def __init__(self, shard_paths: list[str]) -> None:
         self._shard_paths = shard_paths
         self._conn = duckdb.connect(":memory:")
+        # See fetch()'s docstring: guards against concurrent .fetch() calls
+        # racing on this one shared DuckDB Connection (MDMPipeline.
+        # derive_relationships()'s relationship-type worker threads all
+        # share one ShardedSilverReader instance).
+        self._fetch_lock = threading.Lock()
         aliases = []
         for i, path in enumerate(shard_paths):
             alias = f"s{i}"
@@ -144,10 +151,17 @@ class ShardedSilverReader:
             (i.e., those in _TABLES) for cross-shard reads.
         params:
             Optional list of positional query parameters.
+
+        Thread-safe: serializes concurrent callers on ``_fetch_lock`` (see
+        ``__init__``) -- a single DuckDB Connection cannot safely run
+        ``execute()`` and read back ``.description`` from more than one
+        thread at a time, and MDMPipeline.derive_relationships() calls this
+        from multiple relationship-type worker threads sharing one reader.
         """
-        rows = self._conn.execute(sql, params or []).fetchall()
-        cols = [d[0] for d in self._conn.description]
-        return [dict(zip(cols, r)) for r in rows]
+        with self._fetch_lock:
+            rows = self._conn.execute(sql, params or []).fetchall()
+            cols = [d[0] for d in self._conn.description]
+            return [dict(zip(cols, r)) for r in rows]
 
     def close(self) -> None:
         """Close the in-memory DuckDB connection."""

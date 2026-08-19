@@ -12,7 +12,7 @@ data-movement work everything after it depends on.
 **Blocked by:** 01 — Verify canonical S3 bucket is populated and
 cutover-ready (done; established this ticket is needed)
 
-**Status:** DEFERRED (2026-07-18) — user decision: hold the entire
+**Status:** DONE — executed 2026-07-19 (see trailer note below). Originally DEFERRED (2026-07-18) — user decision: hold the entire
 prodb-prod-cutover set until Ticket 20 (required relationship production
 bulk-load) reaches a terminal PASS/GO disposition. Rationale: Ticket 20 is
 actively writing to `prodb-bronze`/`prodb-warehouse` right now, so any data

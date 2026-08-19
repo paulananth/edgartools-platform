@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 import json
 import logging
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
@@ -890,6 +891,15 @@ class SilverDatabase:
         self._conn = duckdb.connect(db_path)
         self._conn.execute(_DDL)
         self._ensure_schema_evolution()
+        # Guards .fetch() only (see its docstring): a single DuckDB
+        # Connection is not safe for concurrent execute()+description reads
+        # from multiple threads. MDMPipeline.derive_relationships() (make-
+        # mdm-path-multi-threaded fix) now calls .fetch() from several
+        # relationship-type worker threads sharing this same instance --
+        # every other method here is still only ever called from the
+        # single-threaded bronze/silver capture path, so this lock doesn't
+        # add contention there.
+        self._fetch_lock = threading.Lock()
         # Opt-in, silver-snowflake-migration map Ticket 01: when set, every
         # merge_*/upsert_* method below also records its rows here via the
         # @track_landing_* decorators, for a later flush to the Snowflake
@@ -1207,10 +1217,17 @@ class SilverDatabase:
             SQL query string.
         params:
             Optional list of positional query parameters.
+
+        Thread-safe: serializes concurrent callers on ``_fetch_lock`` (see
+        ``__init__``) since a single DuckDB Connection cannot safely run
+        ``execute()`` and read back ``.description`` from more than one
+        thread at a time -- MDMPipeline.derive_relationships() calls this
+        from multiple relationship-type worker threads.
         """
-        rows = self._conn.execute(sql, params or []).fetchall()
-        cols = [d[0] for d in self._conn.description]
-        return [dict(zip(cols, r)) for r in rows]
+        with self._fetch_lock:
+            rows = self._conn.execute(sql, params or []).fetchall()
+            cols = [d[0] for d in self._conn.description]
+            return [dict(zip(cols, r)) for r in rows]
 
     @contextmanager
     def _shard_advisory_lock(self) -> Iterator[None]:

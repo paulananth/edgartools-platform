@@ -13,8 +13,13 @@ from typing import Optional
 from sqlalchemy import select
 
 from edgar_warehouse.mdm.database import MdmCompany, MdmEntity, MdmSourceRef
-from edgar_warehouse.mdm.match import CIKExactMatcher, FuzzyNameMatcher, MatchPipeline
-from edgar_warehouse.mdm.resolvers.base import BaseResolver, ResolveOutcome, ResolverContext
+from edgar_warehouse.mdm.match import CIKExactMatcher, FuzzyNameMatcher, MatchAction, MatchPipeline
+from edgar_warehouse.mdm.resolvers.base import (
+    BaseResolver,
+    ResolveOutcome,
+    ResolverContext,
+    content_hash,
+)
 from edgar_warehouse.mdm.survivorship import run_survivorship_for_entity
 
 logger = logging.getLogger(__name__)
@@ -64,6 +69,43 @@ class CompanyResolver(BaseResolver):
     ) -> ResolveOutcome:
         cik = int(company_row["cik"])
         name = ctx.engine.normalize_name(company_row.get("entity_name"))
+
+        primary_ticker = (ticker_row or {}).get("ticker")
+        primary_exchange = (ticker_row or {}).get("exchange")
+        tracking_status = (tracking_row or {}).get("tracking_status")
+        # Raw parent-CIK source input, not the derived parent_company_entity_id
+        # -- computing the derived value costs a query, and the hash only
+        # needs to change when the *source* changes. sec_company has no
+        # parent-CIK column today (see _parent_company_entity_id's own
+        # warning below), so this is always None in production currently.
+        parent_cik_source = next(
+            (company_row[key] for key in _PARENT_CIK_KEYS if key in company_row), None
+        )
+
+        row_content_hash = content_hash(
+            {
+                "canonical_name": name,
+                "ein": company_row.get("ein"),
+                "sic_code": company_row.get("sic"),
+                "sic_description": company_row.get("sic_description"),
+                "state_of_incorporation": company_row.get("state_of_incorporation"),
+                "fiscal_year_end": company_row.get("fiscal_year_end"),
+                "primary_ticker": primary_ticker,
+                "primary_exchange": primary_exchange,
+                "tracking_status": tracking_status,
+                "parent_cik_source": parent_cik_source,
+            }
+        )
+
+        skip_entity_id = self._skip_if_unchanged(ctx, source_system, str(cik), row_content_hash)
+        if skip_entity_id is not None:
+            return ResolveOutcome(
+                entity_id=skip_entity_id,
+                is_new=False,
+                verdict=None,
+                action=MatchAction.SKIPPED_UNCHANGED,
+            )
+
         attrs_for_match = {"cik": cik, "canonical_name": name}
 
         candidates = self._existing_candidates(ctx, cik)
@@ -74,9 +116,6 @@ class CompanyResolver(BaseResolver):
             ctx, attrs_for_match, source_system, str(cik), candidates
         )
 
-        primary_ticker = (ticker_row or {}).get("ticker")
-        primary_exchange = (ticker_row or {}).get("exchange")
-        tracking_status = (tracking_row or {}).get("tracking_status")
         parent_company_entity_id = self._parent_company_entity_id(ctx, company_row)
 
         staged = {
@@ -99,6 +138,7 @@ class CompanyResolver(BaseResolver):
             source_system,
             str(cik),
             outcome.verdict.score if outcome.verdict else 1.0,
+            source_content_hash=row_content_hash,
         )
 
         existing = self._existing_golden(ctx, outcome.entity_id)

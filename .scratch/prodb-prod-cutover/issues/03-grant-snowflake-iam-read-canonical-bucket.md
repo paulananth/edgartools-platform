@@ -10,7 +10,7 @@ delay from the live cutover in Ticket 05.
 
 **Blocked by:** 02 — Perform Stage 2 S3 data copy: prodb → canonical buckets
 
-**Status:** ready-for-agent
+**Status:** DONE — executed 2026-07-19 (see trailer note below).
 
 - [ ] `edgartools-prod-snowflake-s3` role's policy includes read access to
       the canonical bucket, additive to (not replacing) its existing access
