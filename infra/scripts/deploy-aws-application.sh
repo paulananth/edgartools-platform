@@ -4168,6 +4168,20 @@ batch_size_default = {
 seed_from_bronze = ecs_state(wh_medium_arn,
     "States.Array('seed-bronze-batches', '--run-id', $$.Execution.Name, '--batch-size', States.Format('{}', $.batch_size))",
     next_state="BatchSilver", retry_secs=60)
+# Bug found live 2026-08-18 (install-sh-provision-deploy-data Ticket 04
+# follow-up, root-caused via 5-whys against a real bronze_seed_silver_gold
+# execution failure): ecs_state()'s default ResultPath ("$", i.e. omitted)
+# replaces the ENTIRE state input with the ECS task's own runTask.sync
+# output, discarding resume_from_run_id (and batch_size) that
+# ResumeFromRunIdPresenceCheck/Default injected upstream -- so BatchSilver's
+# ItemSelector ("resume_from_run_id.$": "$.resume_from_run_id") failed with
+# States.ItemReaderFailed on every fresh (non-resumed) execution, 100% of
+# the time, confirmed live. Every other "do work but preserve $ for a
+# downstream state" ecs_state() call in this file (seed, mdm_seed_universe,
+# compute_windows, fetch_adv_bulk, run_wh, compute_identity_refresh_window,
+# etc. -- 30+ instances) already sets this explicitly; this was a genuine
+# omission from pipeline-resumability ticket 02, not touched since.
+seed_from_bronze["ResultPath"] = None
 
 # pipeline-resumability ticket 02: reuses the ORIGINAL run's frozen
 # cik_batches.jsonl (never regenerated from live bronze on resume) plus its
@@ -4183,6 +4197,9 @@ compute_remaining_batches = ecs_state(wh_medium_arn,
     "States.Array('compute-remaining-batches', '--resume-ledger-run-id', $.resume_from_run_id, '--run-id', $$.Execution.Name)",
     next_state="BatchSilver", retry_secs=60)
 compute_remaining_batches.pop("Retry", None)
+# Same bug, same fix, resume path: without this, a RESUMED execution would
+# fail identically once it reached BatchSilver.
+compute_remaining_batches["ResultPath"] = None
 
 # INVARIANT: bronze_seed_silver_gold must make ZERO SEC API calls and must not
 # fan out parser work inside each BatchSilver chunk. --artifact-policy skip

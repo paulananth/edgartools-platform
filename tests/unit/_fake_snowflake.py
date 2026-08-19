@@ -16,10 +16,16 @@ class FakeSnowflakeCursor:
         self._table_data = table_data
         self.description: list[tuple[str]] = []
         self._rows: list[tuple] = []
+        self.last_query: str | None = None
+        self.last_params: list | tuple | None = None
+        self.closed = False
 
-    def execute(self, query: str) -> None:
+    def execute(self, query: str, params: list | tuple | None = None) -> None:
+        self.last_query = query
+        self.last_params = params
+        query_upper = query.upper()
         for table_name, (columns, rows) in self._table_data.items():
-            if table_name in query:
+            if table_name.upper() in query_upper:
                 self.description = [(column,) for column in columns]
                 self._rows = rows
                 return
@@ -29,16 +35,19 @@ class FakeSnowflakeCursor:
         return self._rows
 
     def close(self) -> None:
-        pass
+        self.closed = True
 
 
 class FakeSnowflakeConnection:
     def __init__(self, table_data: dict[str, tuple[list[str], list[tuple]]]) -> None:
         self._table_data = table_data
         self.closed = False
+        self.cursors: list[FakeSnowflakeCursor] = []
 
     def cursor(self) -> FakeSnowflakeCursor:
-        return FakeSnowflakeCursor(self._table_data)
+        created = FakeSnowflakeCursor(self._table_data)
+        self.cursors.append(created)
+        return created
 
     def close(self) -> None:
         self.closed = True

@@ -41,6 +41,20 @@ executes the micro-fixes this map's evidence builds on.
 - Mode: decision-spec only (wayfinder default, not overridden) --
   resolving a ticket here means writing down the decision, not shipping
   code. Implementation is a normal follow-up pass once the map is clear.
+- **Superseded (2026-08-18):** decisions 11-13 below built and tuned a
+  file-based, S3-object-sharded `silver.duckdb` mechanism
+  (`edgar_warehouse/application/sharding/`, `ShardedSilverReader`,
+  `_hydrate_shard_for_window`/`_publish_shard_if_remote`) as the answer to
+  `bootstrap-batch`'s silver-merge throughput. The
+  [silver-snowflake-migration](../silver-snowflake-migration/map.md) map
+  (its [Ticket 06](../silver-snowflake-migration/issues/06-confirm-relationship-to-sharding-work.md))
+  confirmed this entire mechanism is obsolete once silver lives natively in
+  Snowflake tables -- there is no file to checksum, hydrate, publish, or
+  union back together once writes are ordinary `INSERT`s. Do not treat
+  file-based sharding as this platform's long-term answer for silver
+  throughput; it was the right fix for the architecture that existed at the
+  time, superseded by a platform migration, not a flaw in these decisions.
+  This map stays closed -- not reopened for this note.
 
 ## Decisions so far
 

@@ -2,12 +2,20 @@
 
 ## Destination
 
-Silver's canonical store moves fully off S3/local-DuckDB and onto Snowflake:
-a locked target architecture (Python-populated Snowflake landing zone for
-SEC-document parsing, feeding dbt-native silver transformation models) plus
-a staged migration plan from today's monolithic `silver.duckdb`-on-S3 state.
-Done when someone can implement the migration without further architecture
-debate — this map does not implement it.
+Silver's canonical store moves fully off S3/local-DuckDB and onto Snowflake.
+
+**Phase 1 (closed — 7 tickets, 01-07):** a locked target architecture
+(Python-populated Snowflake landing zone for SEC-document parsing, feeding
+dbt-native silver transformation models) — architecture-only, no
+implementation. Achieved; see Decisions so far.
+
+**Phase 2 (reopened 2026-08-18):** a concrete, sequenced cutover plan —
+Snowflake compute cost estimate, consumer cutover order, and rollback
+mechanics — plus execution of the first real migration slice. Done when
+DuckDB is retired as the operational engine for at least one consumer
+(MDM's `ShardedSilverReader`, `gold_models.py`'s Python builders, or the
+`silver_store.py` write path) with the remaining consumers' order locked
+for follow-up.
 
 ## Notes
 
@@ -75,8 +83,48 @@ debate — this map does not implement it.
   `silver_store.py` or `silver_protection.py` — matches
   `pipeline-throughput-architecture`'s own standing preference for this
   exact code.
-- Mode: decision-spec only (wayfinder default, not overridden). Every
-  ticket here decides; implementation is a separate follow-up pass.
+- **Mode, Phase 2 only:** overridden from the wayfinder default. Phase 1
+  (tickets 01-07) was decision-spec only. Phase 2 (tickets 08+) carries
+  **execution** into the map itself — once [Decide Consumer Cutover
+  Order](issues/09-decide-consumer-cutover-order.md) resolves, the
+  consumer it names gets an actual migration ticket, not just a spec.
+- **Motivating evidence for Phase 2 (don't re-derive — captured live,
+  2026-08-18):** the exact write path Phase 1 would retire
+  (`_publish_shard_if_remote` in `warehouse_orchestrator.py`, the
+  sharded-DuckDB S3 publish under `bronze_seed_silver_gold`) failed twice
+  in a row in real prod runs on the same conflict class: an ETag-guarded
+  optimistic-concurrency race on `shard-0.duckdb` under
+  `MaxConcurrency=20` against only 4 shards. First occurrence: execution
+  `bronze-seed-silver-gold-1787078879`, 171/680 batches succeeded then
+  aborted (`ToleratedFailurePercentage: 0`). Second: the resume attempt
+  (`bronze-seed-silver-gold-resume-1787081736`), same shard, same error
+  class, on all 3 Step-Functions retry attempts of the same batch. The
+  function's own docstring asserts "each shard is owned by exactly one
+  writer... a conflict signals a genuine invariant violation, not an
+  expected race" — contradicted by `deploy-aws-application.sh`'s own
+  `batch_map` comment, which already predicted multiple concurrent Map
+  slots landing on the same shard file at this concurrency. One earlier
+  historical run (`bronze-seed-silver-gold-medium-20-retry-1786214600`,
+  2026-08-08, sharding confirmed active) completed 680/680 cleanly — so
+  this is a real but probabilistic race, not a deterministic failure,
+  which is exactly the kind of fragility a fully Snowflake-native silver
+  layer (no local sharded-file publish step at all) structurally
+  eliminates rather than patches. No code fix was applied to
+  `_publish_shard_if_remote` itself; Stage 14 of the live install
+  provisioning run (Task #159) remains blocked on this pending user
+  direction, tracked separately from this map.
+
+- **Current frontier (2026-08-18):** [Cut Over MDM's ShardedSilverReader to
+  Snowflake](issues/12-cutover-mdm-sharded-silver-reader-to-snowflake.md) is
+  partially implemented — the reader adapter, env-var flip, and correctness-
+  gate command are shipped, tested, and committed, and its refresh-trigger
+  blocker is now resolved (see [Ticket 13](issues/13-decide-edgartools-silver-refresh-trigger.md)
+  below). The actual prod flip is still blocked on `EDGARTOOLS_SILVER`
+  actually holding real data at scale (Stage 14, blocked separately, see
+  motivating evidence above), a clean `mdm verify-silver-parity` run against
+  that volume, and the CloudWatch alarm on post-flip divergence (not yet
+  built). See Ticket 12's own "Progress" section for the full account before
+  picking this back up.
 
 ## Decisions so far
 
@@ -98,14 +146,29 @@ live in prod, including the last deferred piece: `SILVER_LANDING_EXPORT_ROOT`
 was flipped on (PR #412) and prod redeployed, so real bronze-capture runs now
 populate the silver-landing zone end to end.
 
+- [Estimate Snowflake Compute Cost for Native Silver](issues/08-estimate-snowflake-compute-cost.md) — real steady-state numbers unobtainable (the live account, `PRJEDJU-QJB05385`, was rebuilt 2026-08-17/18, everything is 0 rows); surfaced that Ticket 07's `LOAD_SILVER_LANDING_TASK` was never re-applied to this account at all (not suspended — absent), which is why nothing has ever refreshed on a schedule here. Delivered a bottom-up floor estimate (~$4/month at 6hr lag to ~$96/month at 15min lag, before an unmeasured and plausibly-dominant marginal cost from the 6 FULL-mode ownership/financial tables) and flagged a live, currently-accruing `SNOWFLAKE_RUN_MANIFEST_TASK` 1-minute-schedule drift as a likely bigger cost lever than silver's own TARGET_LAG choice. See new [Ticket 11](issues/11-reprovision-missing-bootstrap-sql-on-rebuilt-account.md).
+
+- [Reprovision Missing Phase 1 Bootstrap SQL on the Rebuilt Account](issues/11-reprovision-missing-bootstrap-sql-on-rebuilt-account.md) — `13_silver_landing_ingest.sql` reapplied live (storage integration/IAM allowlist and `SILVER_LANDING_EXPORT_ROOT` had already survived the rebuild correctly; only the task itself was missing); `SNOWFLAKE_RUN_MANIFEST_TASK` schedule fixed 1min→6hr. Found and fixed a second, previously-unknown bug in the process: Snowflake implicitly forces `NOT NULL` on any `PRIMARY KEY` column regardless of its own declaration, so Ticket 07's original "drop NOT NULL" fix only ever worked via an undocumented live-only ALTER that didn't survive the rebuild — now a committed, idempotent `ALTER TABLE ... DROP NOT NULL` in the generator itself (`generate_silver_landing_ddl.py`), with a regression test. Verified end-to-end live: a real `bootstrap-batch` run → `LOAD_SILVER_LANDING()` → manual dynamic-table `REFRESH` chain, 1,506 real rows landed in `EDGARTOOLS_SILVER.SEC_EMPLOYMENT_EVENT`. Genuine `SCHEDULED`-triggered refreshes still require Ticket 09/10's cutover (no downstream consumer yet on `DOWNSTREAM`-lag tables) — out of this ticket's scope.
+- [Decide Consumer Cutover Order](issues/09-decide-consumer-cutover-order.md) — **MDM's `ShardedSilverReader` first, then `gold_models.py`'s Python builders, then the write path retires.** Checked directly (not assumed): gold's ~20 builders read zero MDM-derived fields, so MDM-first carries no risk to gold — order was decided by surface area (one class vs. twenty functions) and existing idle runway (`EDGARTOOLS_PROD_MDM_SILVER_READER`, provisioned by Ticket 05, unused) rather than risk. Dual-write window bounded: gold-building's cutover must start within 2 weeks of MDM's cutover being verified live. Stage 14's write-path race kept explicitly out of scope (operational unblock, not a sequencing decision). Graduates into [Ticket 12](issues/12-cutover-mdm-sharded-silver-reader-to-snowflake.md).
+- [Decide Cutover/Rollback Mechanics](issues/10-decide-cutover-rollback-mechanics.md) — for MDM's cutover specifically: flip via a toggleable `MDM_SILVER_READ_TARGET=duckdb|snowflake` env var (deliberate exception to the map's "committed script, not toggleable state" preference, scoped to this first-slice read selector only); correctness gate is a new `mdm verify-silver-parity` command mirroring `mdm verify-graph`'s strict-parity precedent, run clean before flipping; rollback trigger is a new CloudWatch alarm (ticket-81 pattern), rollback window rides Ticket 09's existing 2-week deadline rather than a new clock; no downstream-write unwind needed (resolution logic is unchanged, only the read source is — self-corrects on next pass under existing idempotent-upsert posture). Threaded into [Ticket 12](issues/12-cutover-mdm-sharded-silver-reader-to-snowflake.md)'s scope as concrete requirements.
+- [Decide EDGARTOOLS_SILVER's Refresh Trigger](issues/13-decide-edgartools-silver-refresh-trigger.md) — fixed `target_lag = '6 hours'` (not `DOWNSTREAM`, not a dedicated `TASK`), changed in the single shared dbt macro every silver model already flows through (`silver_model_config.sql`) rather than a new bootstrap SQL file. Matches CLAUDE.md's already-documented `SNOWFLAKE_RUN_MANIFEST_TASK` 1min→6hr precedent at the adjacent pipeline layer, and Ticket 08's own cost estimate (~$4/month at this cadence). Applied live to all 30 dynamic tables immediately (as `EDGARTOOLS_PROD_DEPLOYER`, the tables' real owner role — not `EDGARTOOLS_PROD_LOADER`), verified via `SHOW DYNAMIC TABLES`. Unblocks [Ticket 12](issues/12-cutover-mdm-sharded-silver-reader-to-snowflake.md)'s refresh-trigger gap; the actual flip still waits on Stage 14 data volume, a clean parity run, and the CloudWatch alarm.
+
+**Phase 1's "live in prod" claims above describe a prior account
+(`pijjxma-ppb32800`), not the current one.** The account was rebuilt again
+to `PRJEDJU-QJB05385` on 2026-08-17/18 — after this map's own Tickets 05/07
+verified their work live, and after this session's earlier, separate task
+history (#147/#153/#154 in the session's task list) had already fixed and
+verified `LOAD_SILVER_LANDING_TASK` once before on the account that
+preceded this one. That fix did not survive the rebuild. Treat every "built
+and applied live to prod" claim in Tickets 05-07 as historically true but
+not currently verified on `PRJEDJU-QJB05385` until Ticket 11 re-confirms
+it.
+
 ## Not yet specified
-- Snowflake compute cost (warehouse sizing/credits) for work that's
-  currently ~free local DuckDB CPU — not estimable until the model
-  structure and expected refresh cadence/pattern are decided.
-- Exact cutover/rollback mechanics — how an in-flight `load_history`
-  execution's understanding of "silver" transitions across the cutover
-  boundary. Too early to specify before a target model exists to cut over
-  to.
+- `gold_models.py`'s own cutover ticket — not written yet, deliberately
+  deferred until [Cut Over MDM's ShardedSilverReader to Snowflake](issues/12-cutover-mdm-sharded-silver-reader-to-snowflake.md)
+  is verified live (Ticket 09's 2-week dual-write-window clock starts
+  then, not before).
 
 ## Out of scope
 

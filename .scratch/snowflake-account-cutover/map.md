@@ -68,6 +68,60 @@ NN" sessions, same pattern as the map below.
 - [Assemble the documented go-live runbook, driven by go-live.sh](issues/06-assemble-go-live-runbook.md) — This map's terminal ticket. Final 18-stage sequence locked (was 15): new stages for unscoped `seed-universe`, `07_mdm_export_targets.sql`, and `08_loader_role.sql`; `gold verify-live` appended to the gold-refresh stage (fail-fast); Ticket 03's MDM schema/Postgres provisioning prepended to the Postgres-prereqs stage; the old bounded `seed-universe` line removed from the smoke-test stage. `docs/runbook.md` restructured in place (new "Quick Path — install.sh" section prepended, existing manual steps demoted to a reference section) rather than a second competing doc. Also corrected Ticket 04 in passing: `deploy-snowflake-stack.sh` already self-reconciles AWS↔Snowflake trust in one pass — no second AWS access-roles stage is needed after all. No tickets remain open; implementation is a future session.
 - [6 empty gold tables blocking gold-verify-live, found during live Stage 15 execution](issues/08-six-empty-gold-tables-followup.md) — Post-implementation fog, ticketed live rather than at charting time. Disposition settled per-table: `ACCOUNTING_FLAGS`/`GUIDANCE_FACTS`/`EARNINGS_CALENDAR` all close automatically once task #35's full-universe `bootstrap-fundamentals` run happens; `CONSENSUS_ESTIMATES`/`TRANSCRIPT_EVENTS` are intentionally pilot-scoped — exclude from `gold-verify-live`'s required-table list; `ADVISER_DISCLOSURES` is a real gap (corrects this ticket's own earlier "no producer code" claim — a gold builder/model already exist, the gap is one layer upstream in silver) turned into an implementation-ready spec on the `adv-pipeline` map, its [ticket 09](../adv-pipeline/issues/09-office-disclosure-parser-extension-spec.md).
 
+## Addendum (2026-08-17): second account swap, `pijjxma-ppb32800` → `prjedju-qjb05385`
+
+`~/.snowflake/connections.toml` (`edgartools-prod`, `snowconn`) now resolves
+to a **third** Snowflake account, `PRJEDJU`/`QJB05385` — confirmed live
+(`snow sql --connection edgartools-prod -q "SELECT CURRENT_ACCOUNT_NAME(),
+CURRENT_ORGANIZATION_NAME()"`) and confirmed empty (`SHOW DATABASES` /
+`SHOW ROLES LIKE 'EDGARTOOLS%'`: zero EdgarTools objects, only Snowflake's
+built-in databases plus a `NEO4J_GRAPH_ANALYTICS` application already
+installed the same day). `pijjxma-ppb32800` — this map's original target,
+against which Tickets 01-08 above and the bulk of this map's real
+provisioning work already happened (18-stage install, MDM, graph, ~47
+Terraform-tracked Snowflake resources) — is superseded, not this map's
+target anymore; confirmed by direct user instruction, not inferred.
+
+Terraform for both Snowflake roots (`infra/terraform/snowflake/accounts/prod`,
+`infra/terraform/access/snowflake/accounts/prod`) updated:
+`terraform.tfvars`' `snowflake_organization_name`/`snowflake_account_name`
+point at `PRJEDJU`/`QJB05385`. Both roots' state moved to a **fresh** key
+(`snowflake/prod-qjb05385/terraform.tfstate` and
+`access/snowflake/prod-qjb05385/terraform.tfstate`, both still in the
+existing `edgartools-prod-tfstate-690839588395` AWS S3 bucket — only the
+key changed, not the bucket) rather than reusing `pijjxma-ppb32800`'s old
+`snowflake/prod/terraform.tfstate` key: that state tracks 47 resources
+which do not exist in the new, empty account, so reusing it would have
+made Terraform try to reconcile against phantom resources instead of doing
+a clean first-time apply. `pijjxma-ppb32800`'s old state pulled and backed
+up locally (`~/edgartools-ppb32800-tfstate-backups/`, both roots,
+gitignored — not committed, matches this repo's existing
+`~/edgartools-077-tfstate-backups-FINAL` pattern for the AWS-side
+precedent) before the backend key was changed, so it is not silently lost,
+only superseded. `access/snowflake/accounts/prod/terraform.tfvars`'s
+`provisioning_state_key` (a cross-state read of the main Snowflake root's
+outputs) updated to match the new key — this cross-reference would
+otherwise have silently kept reading `pijjxma-ppb32800`'s stale outputs
+after only the main root's key moved.
+
+AWS Terraform (`infra/terraform/accounts/prod`,
+`infra/terraform/access/aws/accounts/prod`) is **unaffected** — this is a
+Snowflake-account-only swap; AWS account `690839588395` and its existing
+~44-resource `edgartools-prod-tfstate/accounts/prod` state are unchanged,
+matching this map's own "AWS-side is an explicit precondition, not built
+here" framing.
+
+**Not yet done as of this entry:** the actual `install.sh` 18-stage
+provisioning run against `prjedju-qjb05385` has not started. It requires a
+one-time, per-organization ORGADMIN acceptance of the Snowflake Provider/
+Consumer Terms in Snowsight for the Neo4j Graph Analytics Native App
+(wayfinder snowflake-env-provisioning ticket 02 — no SQL/API equivalent
+exists) — `SHOW DATABASES` already shows `NEO4J_GRAPH_ANALYTICS` installed
+today, so this step may already be done for this account, but that has not
+been separately confirmed. `install.sh doctor`/`install.sh deploy --apply`
+against `--env-name prod --snow-connection edgartools-prod` is the next
+step.
+
 ## Not yet specified
 
 - Whether to dry-run this whole repopulation capability against a disposable

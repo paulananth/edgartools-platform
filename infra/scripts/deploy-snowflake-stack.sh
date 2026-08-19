@@ -336,6 +336,20 @@ payload = {
     "snowflake_bootstrap_enabled": os.environ["OVERLAY_BOOTSTRAP"].lower() == "true",
     "snowflake_manifest_subscriber_arn": os.environ["OVERLAY_SUBSCRIBER_ARN"] or None,
     "snowflake_storage_external_id": os.environ["OVERLAY_EXTERNAL_ID"],
+    # Force the access root's own terraform_remote_state read of the
+    # Snowflake root (var.snowflake_state_bucket) off for both overlay
+    # applies here. Without this, a stale snowflake_state_bucket/key left in
+    # the access root's local terraform.tfvars (e.g. after swapping which
+    # Snowflake account is live, per the snowflake-account-cutover map's
+    # "second account swap" addendum) makes
+    # local.subscriber_arn's coalesce() fall through to that OLD account's
+    # already-applied output instead of "*"/the freshly-resolved ARN this
+    # function is explicitly passing -- silently granting SNS trust to the
+    # wrong Snowflake account instead of failing loudly. -var-file supports
+    # a literal JSON null (a bare -var flag cannot express null), which is
+    # required to actually disable the data source's count = ... != null
+    # gate, not just leave the value looking empty.
+    "snowflake_state_bucket": None,
 }
 
 pathlib.Path(os.environ["OVERLAY_PATH"]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

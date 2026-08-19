@@ -75,6 +75,16 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     cov = mdm_sub.add_parser("coverage-report", help="Report silver vs MDM entity counts per domain")
     cov.set_defaults(handler=_logged_handler("coverage-report", _handle_coverage_report))
 
+    vsp = mdm_sub.add_parser(
+        "verify-silver-parity",
+        help=(
+            "Correctness gate before flipping MDM_SILVER_READ_TARGET=snowflake in prod "
+            "(silver-snowflake-migration map, Ticket 10): compares DuckDB silver against "
+            "EDGARTOOLS_SILVER row counts and sec_company CIK sets."
+        ),
+    )
+    vsp.set_defaults(handler=_logged_handler("verify-silver-parity", _handle_verify_silver_parity))
+
     sync = mdm_sub.add_parser(
         "sync-graph",
         help="Materialize Snowflake graph-ready node and edge state from MDM",
@@ -570,6 +580,37 @@ def _silver_reader():
 
     The env var MDM_SILVER_DUCKDB is KEPT for backwards compatibility; its
     presence signals that a silver source is configured.
+
+    MDM_SILVER_READ_TARGET (silver-snowflake-migration map, Ticket 12):
+    ``duckdb`` (default, unset behaves the same) keeps every path below
+    unchanged. ``snowflake`` short-circuits straight to a
+    ``SnowflakeSilverReader`` reading EDGARTOOLS_SILVER as
+    EDGARTOOLS_PROD_MDM_SILVER_READER, ignoring MDM_SILVER_DUCKDB and every
+    shard-hydration path entirely -- this is the only call site gated by
+    this env var. The four other places that construct a
+    ``ShardedSilverReader`` directly (seed-universe/seed-from-silver's
+    ``--source silver`` path, ~cli.py:1153/1198; gold_models.py's legacy
+    DuckDB path) reach past ``.fetch()`` into ``reader._conn`` -- a
+    Snowflake connection has no such attribute, so gating those too would
+    silently break them. Out of Ticket 12's scope (mdm run's entity
+    resolution and mdm-backfill-relationships' relationship derivation
+    only); revisit when those commands get their own cutover ticket.
+    """
+    if os.environ.get("MDM_SILVER_READ_TARGET", "duckdb").strip().lower() == "snowflake":
+        from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
+
+        return SnowflakeSilverReader.connect()
+
+    return _duckdb_silver_reader()
+
+
+def _duckdb_silver_reader():
+    """The DuckDB-shard/monolith reader ``_silver_reader()`` returns when
+    MDM_SILVER_READ_TARGET is unset/"duckdb". Split out so
+    ``verify-silver-parity`` (Ticket 10) can build a DuckDB reader and a
+    SnowflakeSilverReader side by side, independent of whichever target the
+    ambient env var currently selects -- a parity check comparing DuckDB
+    against itself would be meaningless.
     """
     from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
 
@@ -845,6 +886,49 @@ def _handle_coverage_report(args) -> int:
             f"{row['gap']:>{col_w['gap']}}  {row['reason']}"
         )
     return 0  # D-19: reporting tool, always exits 0
+
+
+def _handle_verify_silver_parity(args) -> int:
+    """Correctness gate before flipping MDM_SILVER_READ_TARGET=snowflake in
+    prod (silver-snowflake-migration map, Ticket 10/12). Mirrors
+    verify-graph's shape: build a real verifier, print its JSON payload,
+    exit 1 if not passed.
+
+    Deliberately builds both readers explicitly (_duckdb_silver_reader() /
+    SnowflakeSilverReader.connect()) rather than calling _silver_reader()
+    twice under two different env values -- this command's whole point is
+    comparing the two sources side by side, independent of whichever one
+    MDM_SILVER_READ_TARGET currently selects for other commands.
+    """
+    from edgar_warehouse.mdm.silver_parity import verify_silver_parity
+    from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
+
+    duckdb_reader = _duckdb_silver_reader()
+    if duckdb_reader is None:
+        print(
+            "verify-silver-parity: MDM_SILVER_DUCKDB is required but is not set. "
+            "Set MDM_SILVER_DUCKDB to a local DuckDB path or s3:// URI.",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        snowflake_reader = SnowflakeSilverReader.connect()
+    except Exception as exc:
+        print(f"verify-silver-parity: cannot open Snowflake silver reader -- {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        result = verify_silver_parity(duckdb_reader, snowflake_reader)
+    finally:
+        duckdb_reader.close()
+        snowflake_reader.close()
+
+    print(json.dumps(result.payload, indent=2, sort_keys=True))
+    if not result.passed:
+        print("verify-silver-parity: DuckDB and Snowflake silver are not at parity", file=sys.stderr)
+        return 1
+    return 0
 
 
 def _handle_publication_claim(args) -> int:

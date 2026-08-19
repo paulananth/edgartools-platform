@@ -21,6 +21,36 @@ TEST_ACCOUNT_ID = "123456789012"
 DEFAULT_TEST_ENV = "dev"
 DEFAULT_TEST_SNOW_CONNECTION = "snowconn"
 
+NEO4J_INSTALL_STAGE_TITLE = "Snowflake: Neo4j Native App install"
+GRANTS_STAGE_TITLE = "Snowflake Postgres / graph prerequisites"
+
+# Wayfinder install-sh-provision-deploy-data map, Ticket 01/02: build_stages()
+# is being physically resequenced into four ordered phases -- provision,
+# deploy, early-data, late-data -- so every documented inter-stage dependency
+# still holds while the stages themselves move (see
+# .scratch/install-sh-provision-deploy-data/map.md). Ticket 02 verified this
+# exact order against the real delegate scripts with no conflicts found.
+PROVISION_DEPLOY_DATA_STAGE_ORDER: list[str] = [
+    "AWS: Terraform state bucket",
+    NEO4J_INSTALL_STAGE_TITLE,
+    "AWS: passive infrastructure",
+    "AWS: access roles/policies",
+    "Snowflake: native-pull foundation",
+    GRANTS_STAGE_TITLE,
+    "AWS: ECR image publish",
+    "AWS: ECS task definitions and Step Functions",
+    "Snowflake: MDM export targets",
+    "Snowflake: dbt gold",
+    "Snowflake: loader role ownership",
+    "Snowflake: Streamlit dashboard",
+    "AWS/silver: seed-universe (full/unscoped)",
+    "AWS: bronze_seed_silver_gold (one-click data refresh)",
+    "Snowflake: standalone gold-refresh",
+    "MDM + graph: connectivity, migrations, sync, verification",
+    "MDM + graph: AWS MDM E2E/status checks",
+    "Data: bounded smoke only",
+]
+
 
 def _resolve_bash() -> str:
     # On Linux/macOS there's exactly one "bash", so plain PATH resolution is fine.
@@ -781,21 +811,38 @@ def test_neo4j_install_stage_exists(tmp_path: Path) -> None:
     assert "Snowflake: Neo4j Native App install" in _plan_stage_titles(tmp_path)
 
 
-def test_neo4j_install_runs_early_and_before_the_grants_stage(tmp_path: Path) -> None:
+def test_neo4j_install_precedes_the_grants_stage(tmp_path: Path) -> None:
     """Placement is the decision, not an accident.
 
     Installing needs a one-time ORGADMIN acceptance of the Marketplace terms in
-    Snowsight, which has no SQL equivalent (ticket 02). Running it second means
-    that human step overlaps the stages that don't depend on it, rather than
-    stalling the wizard midway. It must still precede the stage that GRANTs
-    against the application.
+    Snowsight, which has no SQL equivalent (ticket 02). It must precede the
+    stage that GRANTs against the application. Its literal position is
+    otherwise unpinned: the install-sh-provision-deploy-data map's
+    Neo4j-placement decision (see
+    .scratch/install-sh-provision-deploy-data/issues/01-classify-stages-into-phases.md)
+    allows it to sit anywhere within the provision phase -- no longer required
+    to be literally the second stage -- as long as this relative order holds.
     """
     titles = _plan_stage_titles(tmp_path)
-    install = titles.index("Snowflake: Neo4j Native App install")
-    grants = titles.index("Snowflake Postgres / graph prerequisites")
+    install = titles.index(NEO4J_INSTALL_STAGE_TITLE)
+    grants = titles.index(GRANTS_STAGE_TITLE)
 
-    assert install == 1, f"expected stage 2, got stage {install + 1}"
     assert install < grants
+
+
+def test_stages_run_in_provision_deploy_early_data_late_data_order(
+    tmp_path: Path,
+) -> None:
+    """Pins the phase order itself, not just one stage pair.
+
+    provision{TF state, Neo4j, passive infra, access roles, native-pull
+    foundation, Postgres/graph prereqs} -> deploy{ECR publish, ECS task defs,
+    MDM export targets, dbt gold, loader role ownership, Streamlit dashboard}
+    -> early-data{seed-universe} -> late-data{bronze_seed_silver_gold,
+    standalone gold-refresh, MDM+graph connectivity/sync/verify, MDM+graph
+    E2E checks, bounded smoke}.
+    """
+    assert _plan_stage_titles(tmp_path) == PROVISION_DEPLOY_DATA_STAGE_ORDER
 
 
 def test_neo4j_install_stage_delegates_to_the_script(tmp_path: Path) -> None:

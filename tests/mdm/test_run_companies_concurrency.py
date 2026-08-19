@@ -139,6 +139,59 @@ class TestRunCompaniesSequentialFallback:
 
 
 # ---------------------------------------------------------------------------
+# 2b. sec_company_sync_state degrades gracefully when the table is absent
+#     (silver-snowflake-migration map, Ticket 12: no EDGARTOOLS_SILVER
+#     analog under MDM_SILVER_READ_TARGET=snowflake) -- and logs the same
+#     structured mdm_relationship_skip event every other graceful-degrade
+#     path in pipeline.py already emits.
+# ---------------------------------------------------------------------------
+
+class TestRunCompaniesMissingSyncState:
+    def test_missing_sync_state_table_is_skipped_and_logged(self, capsys):
+        session = _seeded_sqlite_session(static_pool=True)
+        fixtures = _companies_fixture(3)
+        del fixtures["FROM sec_company_sync_state"]
+
+        class _RaisingSilver(StubSilver):
+            def fetch(self, sql, params=None):
+                if "sec_company_sync_state" in sql:
+                    raise Exception(
+                        "Catalog Error: Table with name sec_company_sync_state does not exist!"
+                    )
+                return super().fetch(sql, params)
+
+        silver = _RaisingSilver(fixtures)
+        pipeline = MDMPipeline(session=session, silver=silver)
+
+        processed = pipeline.run_companies()
+
+        assert processed == 3  # tracking data missing, resolution still proceeds
+        stderr_lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
+        assert len(stderr_lines) == 1
+        import json as _json
+        event = _json.loads(stderr_lines[0])
+        assert event["event"] == "mdm_relationship_skip"
+        assert event["reason"] == "missing_source_table"
+        assert event["source_table"] == "sec_company_sync_state"
+
+    def test_a_genuine_non_missing_table_error_still_raises(self):
+        session = _seeded_sqlite_session(static_pool=True)
+        fixtures = _companies_fixture(1)
+
+        class _RaisingSilver(StubSilver):
+            def fetch(self, sql, params=None):
+                if "sec_company_sync_state" in sql:
+                    raise Exception("connection reset by peer")
+                return super().fetch(sql, params)
+
+        silver = _RaisingSilver(fixtures)
+        pipeline = MDMPipeline(session=session, silver=silver)
+
+        with pytest.raises(Exception, match="connection reset by peer"):
+            pipeline.run_companies()
+
+
+# ---------------------------------------------------------------------------
 # 3. Genuine concurrent-write safety (real multi-connection sqlite)
 # ---------------------------------------------------------------------------
 
