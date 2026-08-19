@@ -89,10 +89,23 @@ absorb several steps' internal worker pools running at once.
   settled directly during chartering (2026-08-19); `backfill_security_issuers()`'s
   existing repair path is sufficient. Also recorded here rather than as a
   standalone ticket.
+- [Measure Per-Step Timing and Connection-Pool Ceiling](issues/01-measure-per-step-timing-and-connection-pool-ceiling.md)
+  — real measured durations: `adviser` 31s, `fund` 53s, `person` ~1m55s,
+  `security` 1h50m31s (20,683 rows), `company` 2h14m7s (67,870 rows). The
+  two bulk/batched steps are negligible; `company` and `security` dominate
+  and are the only steps worth parallelizing against each other. Connection-
+  pool math: in-process 3-way overlap of company+security+person would
+  over-subscribe the current 30-connection pool ~1.7x (degrades to queueing,
+  not failure); multi-task shape isolates pools per step but needs the same
+  total headroom. Postgres server-side `max_connections` remains unknown —
+  carried to ticket 02 as a pre-decision fact-check. Also surfaced (not
+  chased): `company`'s run only added ~63 net-new rows across 67,870
+  processed, suggesting its "skip-if-unchanged fast path" (commit
+  `7ffda2d7`) may not be effectively skipping real work.
 
 ## Not yet specified
 
-<!-- fog beyond the two frontier tickets below -->
+<!-- fog beyond the frontier ticket below -->
 
 - Whether `derive_relationships()`'s own placement (strictly after all 5
   resolve steps finish) has any room to start early for relationship types
@@ -100,6 +113,15 @@ absorb several steps' internal worker pools running at once.
   turn out to be its own can of worms; deliberately not ticketed until
   ticket 02 (parallelism shape) resolves, since it only matters if this map
   concludes some form of cross-step overlap is worth building at all.
+- Whether `company`'s skip-if-unchanged fast path (commit `7ffda2d7`) is
+  actually skipping real work — ticket 01 found it processed 67,870 rows in
+  8,046s (~119ms/row) while only ~63 were net-new. Not sharp enough to
+  ticket yet (haven't confirmed whether the fast path activated at all vs.
+  activated but still paid a comparable round-trip cost either way) and may
+  belong to a different map entirely (it's a `company`-resolution
+  correctness/perf question, not really a cross-step-parallelism one) —
+  noted here so it isn't lost, not claimed as in-scope for this map's
+  destination.
 
 ## Out of scope
 

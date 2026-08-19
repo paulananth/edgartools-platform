@@ -4,7 +4,7 @@ Labels: wayfinder:task
 
 **Blocked by:** None — can start immediately.
 
-**Status:** in-progress (claimed 2026-08-19)
+**Status:** resolved (2026-08-19)
 
 ## Question
 
@@ -50,36 +50,52 @@ Concretely:
 
 ## Answer
 
-**In progress (2026-08-19) — real measurements below, `company` still
-running.** All four remaining standalone `--entity-type` runs launched
-against the same live silver dataset (in addition to `person`, already
-measured at ~1m55s while charting this map):
+**Resolved (2026-08-19).** Five standalone `--entity-type` runs, launched
+against the same live silver dataset within the same session (`person`
+measured first while charting the map; `company`/`adviser`/`fund`/`security`
+launched together immediately after):
 
-| Entity type | Duration | Notes |
-|---|---|---|
-| `person` | ~1m55s (115s) | measured while charting the map |
-| `adviser` | **31s** (`mdm_command_completed`, `duration_ms: 31000`) | bulk/batched (`adv_bulk.py`), no internal worker pool |
-| `fund` | **53s** (`duration_ms: 52896`) | bulk/batched, no internal worker pool |
-| `security` | **1h51m3s** (6,663s; 16:46:16→18:37:20 ET) | per-row `ThreadPoolExecutor`, 16 workers |
-| `company` | still running, >1h22m and counting as of this update, actively issuing real per-row SQL (not stuck) | per-row `ThreadPoolExecutor`, 16 workers |
+| Entity type | Duration | Rows processed | ms/row | Notes |
+|---|---|---|---|---|
+| `adviser` | **31s** (`duration_ms: 31000`) | — (bulk) | — | `adv_bulk.py`, no internal worker pool, batched INSERTs |
+| `fund` | **53s** (`duration_ms: 52896`) | — (bulk) | — | same shape as adviser |
+| `person` | ~1m55s (115s) | — | — | measured while charting the map, not re-captured with a row count |
+| `security` | **1h50m31s** (6,630.65s, `duration_ms: 6630652`) | **20,683 securities** | ~321ms/row | per-row `ThreadPoolExecutor`, 16 workers |
+| `company` | **2h14m7s** (8,046.71s, `duration_ms: 8046712`) | **67,870 companies** | ~119ms/row | per-row `ThreadPoolExecutor`, 16 workers |
 
-**Headline finding so far**: the five steps are wildly asymmetric, not
-close to an even split. The two bulk/batched steps (`adviser`, `fund`) are
+**Headline finding: the five steps are wildly asymmetric, not close to an
+even split.** The two bulk/batched steps (`adviser`, `fund`) are
 essentially free (tens of seconds) regardless of their large raw row
 counts (234K ADV filings, 1.58M private funds) — confirming
 mdm-run-throughput's decision to leave them out of its per-row concurrency
-fix. The two (so far confirmed) per-row `ThreadPoolExecutor` steps
-(`security` confirmed, `company` still running) each take well over an
-hour despite the 16-way concurrency fix already in place. This directly
-shapes ticket 02: overlapping `adviser`+`fund` with anything else buys at
-most ~53s of wall-clock savings; the real prize, if there is one, is
-whether `company`/`security`/`person` can usefully overlap **each other**
-— and given each already saturates its own 16-worker budget against the
-same ~68ms-round-trip-latency Postgres instance (mdm-run-throughput's root
-cause), 3-way concurrent workers-of-workers may just contend for the same
-underlying latency budget rather than yield a 3x wall-clock win. Real
-numbers for `company` and a proper apples-to-apples full `--entity-type
-all` comparison still needed before concluding either way.
+fix; overlapping them with anything else buys at most ~53s of wall-clock
+savings. `security` and `company` are the real cost — **over an hour each**,
+combined ~4h05m if run sequentially (which is exactly what `run_all()` does
+today, back to back, on top of the ~1m24s bulk/batched steps and whatever
+`person` and relationship derivation add).
+
+**Secondary finding (out of this ticket's scope, flagged for whoever picks
+it up next, not chased further here):** `company`'s 67,870-row run only
+grew `mdm_company`'s total row count by ~63 (67,807 at this session's
+earlier `mdm counts` check, 67,870 after) — meaning **~99.9% of this run's
+8,046s was spent re-verifying already-resolved companies**, not resolving
+new ones. Commit `7ffda2d7` (the same commit whose migration gap caused
+the earlier schema-drift incident this session) added a "skip-if-unchanged
+fast path" to `run_companies` specifically to avoid paying full cost on
+unchanged rows — this run's ~119ms/row average suggests that fast path may
+not be avoiding the real work it was meant to, or at least isn't visible
+in this coarse a measurement. Worth a look before or alongside ticket 02,
+since a working skip-fast-path could shrink `company`'s real number far
+more than any parallelism shape would.
+
+This directly shapes ticket 02: the real prize is whether `company` and
+`security` can usefully overlap **each other** (not `adviser`/`fund`,
+which are already negligible) — and given each already saturates its own
+16-worker budget against the same ~68ms-round-trip-latency Postgres
+instance (mdm-run-throughput's root cause), running both simultaneously
+may mean contending for the same underlying latency/connection budget
+rather than a clean 2x wall-clock win. The connection-pool math below
+quantifies that risk.
 
 **Connection-pool ceiling analysis (code-grounded, not measured live):**
 
@@ -133,6 +149,8 @@ all` comparison still needed before concluding either way.
   direct Postgres client connection before committing to a shape that could
   push app-side connections into the 50-90+ range.
 
-**Still needed to close this ticket:** `company`'s real completed duration,
-row counts processed per step (from `mdm counts`/pipeline stats deltas),
-and the server-side `max_connections` figure above.
+**Remaining open item, carried to ticket 02:** the MDM Postgres server-side
+`max_connections` figure above was not established — flagged as a genuine
+gap, not guessed at. Whoever resolves ticket 02 should get this number via
+a direct Postgres client connection before committing to a shape that could
+push app-side connections into the 50-90+ range.
