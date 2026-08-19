@@ -230,3 +230,107 @@ anti-pattern ticket 81's own write-up warns against for orphaned alarms).
 Re-open this ticket to `Status: resolved` once all three land and the flip
 is verified live — matching this map's own standing discipline of real
 measurements over assumptions.
+
+**Checked, not built (2026-08-19): the scheduled-invocation prerequisite for
+the CloudWatch alarm is itself Stage-14-blocked, not independently
+buildable.** Considered wiring `mdm verify-silver-parity` into the existing
+"MDM Utility Machine" (`write_mdm_utility_definition`,
+`infra/scripts/deploy-aws-application.sh`) as an 8th mode alongside
+`mdm_verify_graph`, since that's a real, unblocked-looking two-line ASL
+addition on its face. Rejected after checking against live state: a
+scheduled parity check against today's `EDGARTOOLS_SILVER` (still
+effectively empty — see the fresh Ticket 08 evidence below) would exit 1 on
+every single run, which is the identical "looks like coverage, isn't"
+orphaned-alarm anti-pattern already invoked two paragraphs up for the alarm
+itself — the invocation and the alarm share the same Stage 14 dependency,
+they aren't separable. Separately, `_handle_verify_silver_parity`
+(`edgar_warehouse/mdm/cli.py`) requires `MDM_SILVER_DUCKDB`, a local
+filesystem path — an ECS-hosted invocation would need either a new
+Snowflake-only parity mode or a step to hydrate `silver.duckdb` into the
+task first, which is real design work whose right shape depends on what a
+post-Stage-14 parity payload actually looks like. Not attempted; revisit
+once Stage 14 produces one.
+
+**Stage 14 status (2026-08-19), corrected with direct evidence:** the
+`bronze-seed-silver-gold-resultpathfix-retry-1787100060` execution (launched
+after task #166's `ResultPath` fix, with the user's explicit accept-the-race-
+risk decision) ran 20:41-21:12 EDT and failed
+`States.ExceedToleratedFailureThreshold`: 166/680 `BatchSilver` batches
+succeeded, 1 failed, 20 aborted in-flight, 493 never started —
+`toleratedFailurePercentage: 0.0`, so a single failure was sufficient to
+trip it. An earlier pass at this diagnosis (same session) used
+`list-executions --state-machine-arn ... --query "?mapRunArn==..."`, which
+returns `[]` for Distributed Map children and couldn't find the failed
+child's own error. The correct call —
+`aws stepfunctions list-executions --map-run-arn <mapRunArn> --status-filter
+FAILED`, then `describe-execution`/`get-execution-history` on that one child
+— found it: the same `--cik-list` batch was retried 4 times (Step
+Functions' own `Retry` on `runTask.sync`, not this ticket's shard-publish
+retry, which didn't exist yet at the time of this run), and **2 of the 4
+attempts show `ExitCode: 137`, `"Reason": "OutOfMemoryError: container
+killed due to memory usage"`** on `edgartools-prod-medium` (4096MB); the
+other 2 show `ExitCode: 2` (consistent with, not directly confirmed as, the
+unretried `PromotionConflictError` this ticket's fix now handles). So the
+real failure shape is **both** the shard-race conflict this ticket set out
+to fix **and** a pre-existing OOM risk on the same batch, independent of
+any merge logic — confirmed via a real `silver_shard_hydrated` log line for
+this exact execution showing an 823MB shard (`shard_index: 0,
+size_bytes: 823406592`) against `bootstrap-batch`'s 4096MB medium profile.
+
+**Fix implemented this session** (`edgar_warehouse/application/
+warehouse_orchestrator.py`): `_publish_shard_if_remote` now merges via
+`merge_candidate_into_canonical` (the same function the monolith path uses)
+instead of blindly overwriting when a canonical version already exists, and
+a new `_publish_shard_if_remote_with_retry` wrapper (mirroring
+`_publish_silver_database_with_retry`'s exact env-configurable
+backoff/attempts shape) retries the whole read-merge-stage-promote cycle on
+`PromotionConflictError` — the actual call site
+(`_execute_warehouse_bronze_capture`'s shard branch) now calls the retry
+wrapper. Docstring's former "each shard is owned by exactly one writer"
+claim removed — false under `BatchSilver`'s `MaxConcurrency: 20` against 4
+shards, which is exactly what caused this and the two prior failures.
+
+**Memory finding surfaced during review, addressed but not fully closed:**
+an independent review pass caught that the merge branch (download canonical
+~823MB, write to tmp, `merge_candidate_into_canonical`'s own canonical copy,
+re-read merged bytes) adds real memory pressure on top of a profile that,
+per the OOM evidence above, is *already* marginal even under the old
+no-merge code. Mitigated by porting `_publish_silver_database_if_remote`'s
+skip-if-unchanged fingerprint check (release-readiness ticket 79) to
+`_hydrate_shard_for_window`/`_publish_shard_if_remote`: a shard whose
+content is provably unchanged since hydration skips the entire merge/S3
+cycle before any remote call, which should cover the dominant case during a
+reprocessing pass (most batches write zero new rows — confirmed via this
+same execution's own logs: `"rows_written": 0` on every sampled batch).
+This does **not** fully close the memory question for batches that *do*
+have real writes to merge — that risk is reduced, not eliminated, and
+remains open pending a real Stage 14 rerun with this fix deployed.
+
+**Second, related gap found by the same review pass (code-review, not
+gof-refactor-reviewer):** the skip-if-unchanged fast path only protects a
+provable no-op. On a shard with real conflicting writes, each
+`PromotionConflictError` retry re-runs the *entire* merge branch — full
+canonical re-download, full `merge_candidate_into_canonical` copy, full
+re-read of merged bytes — so the per-attempt memory/time cost multiplies by
+attempt count, and the retry policy is unbounded by default
+(`WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS=0`). This is the most plausible way
+the fix still reproduces Stage 14's `ExitCode: 137` even once deployed: a
+hot shard under real concurrent writes (not the skip-path's zero-write case)
+retries the full merge cost repeatedly. Test coverage is thin on exactly
+this combination — of the retry-specific tests, only one exercises retry
+together with an actual merge, and it uses tiny in-memory DuckDBs, not the
+~823MB scale that OOM'd in prod. Not fixed in this pass (would mean
+re-architecting the merge to avoid a full re-download per retry, a bigger
+change than the user's chosen scope of "make the publish path safe under
+concurrent writers") — logged here as an explicit, undischarged risk for
+whoever verifies the real Stage 14 rerun: if it OOMs again, check whether it
+was a low-write-count skip-path hit (unexpected) or a high-retry-count
+merge-branch hit (this gap) before re-diagnosing from scratch.
+
+Full test suite green (2208+ passed) including a real hydrate-then-publish
+skip-path test and a two-concurrent-writers-with-injected-stale-baseline
+regression test proving both writers' rows survive. **Not yet built, pushed,
+or deployed** — the fix exists only as committed source as of this entry;
+Stage 14 remains unresolved and this ticket's flip stays blocked — see task
+#159/#70 for that thread; the shard race itself is
+explicitly out of this map's scope per Ticket 09.

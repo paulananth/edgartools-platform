@@ -876,6 +876,71 @@ means for it, or whether it should route through the generation-scoped
 generation-scoped graph sync gap noted above (deprioritized for now, not
 worked further).
 
+## Shard-publish promotion-race 5-whys (fixed, not yet deployed, 2026-08-19)
+
+**Problem:** three separate `bronze_seed_silver_gold` prod executions failed
+on an identical `PromotionConflictError` for `shard-0.duckdb`, the third of
+which aborted a `ToleratedFailurePercentage: 0` release outright on one lost
+race.
+
+1. Symptom: `_publish_shard_if_remote` (`edgar_warehouse/application/
+   warehouse_orchestrator.py`) raised `PromotionConflictError` from
+   `stage_and_promote`, and nothing caught it — the whole `BatchSilver`
+   batch failed.
+2. Why does a concurrent writer land on the same shard? `BatchSilver`
+   (the Distributed Map driving this stage) runs `MaxConcurrency: 20`
+   against only **4** shards total — multiple concurrent batches routinely
+   hash to the same shard index, so "concurrent writer" isn't an edge case,
+   it's the common case at this concurrency ratio.
+3. Why did the function not handle that? It assumed, undocumented, "each
+   shard is owned by exactly one writer" and both blindly overwrote the
+   remote object (no merge) and never retried on conflict — the same false
+   assumption the monolith `silver.duckdb` path already had and already
+   fixed once, in PR #222 (commit `a1f5d37b`), for the identical reason.
+4. Why wasn't the shard path fixed at the same time as the monolith path?
+   No evidence found of a deliberate decision — the shard-publish function
+   was added later and the monolith's fix was never ported over, so the
+   same bug shipped a second time on a structurally identical write path.
+5. **Root cause:** the shard-publish path silently diverged from its own
+   sibling's already-proven concurrency-safety pattern, and nothing
+   (test, lint, or doc) enforced that the two stay in sync.
+
+**Fix:** `_publish_shard_if_remote` now merges the local candidate into
+canonical via `merge_candidate_into_canonical` (same function the monolith
+uses) instead of overwriting; a new `_publish_shard_if_remote_with_retry`
+wrapper retries the whole read-merge-stage-promote cycle on
+`PromotionConflictError`, mirroring `_publish_silver_database_with_retry`
+exactly (same `WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS`/`_RETRY_BASE_SECONDS`/
+`_RETRY_MAX_SECONDS` env vars, unbounded by default). The real call site
+(`_execute_warehouse_bronze_capture`'s shard branch) now uses the retry
+wrapper.
+
+**Two risks surfaced by review, not fully closed:**
+- The merge branch's extra read/write round trips add real memory pressure
+  on top of a Fargate profile (`bootstrap-batch`'s `medium`, 4096MB) that
+  live evidence from this same incident showed was *already* marginal —
+  2 of the failed batch's 4 retry attempts were `OutOfMemoryError`
+  (`ExitCode: 137`) against an 823MB shard, even under the old, simpler
+  no-merge code. Mitigated (not eliminated) by porting the monolith's
+  skip-if-unchanged fingerprint check (release-readiness ticket 79) to the
+  shard path, so a shard provably unchanged since hydration skips the
+  merge/S3 cycle entirely.
+- The retry wrapper is unbounded by default and each retry re-runs the
+  *full* merge branch — on a hot shard with real conflicting writes (not
+  the skip-path's zero-write case), per-attempt memory/time cost
+  multiplies by attempt count. This is the most plausible way the fix
+  still reproduces the same `ExitCode: 137` even once deployed. Not
+  addressed in this pass — logged as an explicit open risk in
+  `.scratch/silver-snowflake-migration/issues/12-cutover-mdm-sharded-silver-reader-to-snowflake.md`
+  for whoever verifies the real Stage 14 rerun.
+
+Tests: 11 cases in `tests/unit/test_publish_shard_if_remote.py`, including a
+real `SilverDatabase`-backed merge test and a two-concurrent-writers
+regression test (injects a stale first baseline read to reproduce the
+actual race a sequential test can't otherwise trigger). Full suite green.
+**Not yet built, pushed, or deployed** as of this entry — see
+`.scratch/silver-snowflake-migration/map.md` for status.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live
