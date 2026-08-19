@@ -119,7 +119,13 @@ class _RecordingSettings:
 
 
 def test_connect_sets_qmark_paramstyle_only_for_the_connect_call():
-    import snowflake.connector as sc
+    # snowflake-connector-python is an optional extra (pyproject.toml's
+    # "snowflake" group) -- not installed in the tests/unit/ CI job, matching
+    # this repo's existing convention of never installing it for CI (see the
+    # "-k not snowflake" exclusion on tests/mdm/'s CI job for the same
+    # package). Skip rather than fail where it's genuinely absent; this test
+    # still runs for real locally with `uv sync --extra snowflake`.
+    sc = pytest.importorskip("snowflake.connector")
 
     original = sc.paramstyle
     assert original != "qmark", "test assumes qmark is not already the ambient default"
@@ -135,7 +141,7 @@ def test_connect_sets_qmark_paramstyle_only_for_the_connect_call():
 
 
 def test_connect_restores_paramstyle_even_if_connect_raises():
-    import snowflake.connector as sc
+    sc = pytest.importorskip("snowflake.connector")
 
     original = sc.paramstyle
 
