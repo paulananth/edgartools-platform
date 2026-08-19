@@ -1,8 +1,10 @@
 # Decide EDGARTOOLS_SILVER's Refresh Trigger
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: none
+
+Claimed by Claude on 2026-08-18.
 
 ## Question
 
@@ -53,3 +55,57 @@ is committed and re-runnable" standing requirement). Consider Ticket 08's
 cost-estimate range ($4/month at 6hr lag to $96/month at 15min lag,
 excluding the unmeasured FULL-mode-table marginal cost it flagged) when
 picking a schedule.
+
+## Answer
+
+**Mechanism: option 1's fixed-`target_lag` variant** (not option 2, a
+dedicated `TASK`). Grounded in the actual code before asking: all 30
+`EDGARTOOLS_SILVER` dynamic tables (31 model files, 1 — `sec_guidance_fact_reject`
+— is a deliberate plain `VIEW` per Ticket 01's "quarantine log" exception, so
+`target_lag` doesn't apply to it) already source their `target_lag` from a
+single shared dbt macro, `silver_model_config` in
+`infra/snowflake/dbt/edgartools_gold/macros/silver_model_config.sql`, called
+once per generated model. Changing `target_lag='DOWNSTREAM'` to a fixed
+interval there is a one-line, one-file change that reaches every table via
+the next `dbt run` (a config-only diff — CLAUDE.md's own documented
+dbt-snowflake behavior means this doesn't even need `--full-refresh`). A
+dedicated `TASK` (option 2) would mean a new bootstrap SQL file, a wrapper
+procedure looping 30 tables (`04_refresh_wrapper.sql`'s shape), and a second
+scheduling surface to monitor — strictly more moving parts to solve a
+problem Snowflake's native `target_lag` already solves directly. The
+"MDM becomes a genuine downstream consumer" half of option 1 (a real
+downstream dynamic table) isn't available yet either way — that only exists
+once `gold_models.py`'s own cutover lands, weeks away per
+[Ticket 09](09-decide-consumer-cutover-order.md)'s dual-write bound — so a
+fixed interval is what's actually achievable today, with `DOWNSTREAM` worth
+revisiting once that cutover exists.
+
+**Schedule: 6 hours.** Per Ticket 08's cost estimate (`$4/month` at this
+cadence for the 30 tables, vs. `$96/month` at 15 minutes, floor estimates).
+This is the identical tradeoff CLAUDE.md already documents this repo making
+once before, at the immediately adjacent layer of the same pipeline:
+`SNOWFLAKE_RUN_MANIFEST_TASK` (refreshes `EDGARTOOLS_GOLD` from silver) was
+deliberately widened `1min → 15min → 6hr` on 2026-08-14 after a 1-minute poll
+never let its warehouse fully suspend, "per explicit operator decision
+prioritizing credit economy over near-real-time freshness." Nothing
+downstream of MDM's silver reads (entity resolution, relationship
+derivation — both themselves batch jobs, not real-time) needs fresher than
+6 hours.
+
+**Committed where:** `infra/snowflake/dbt/edgartools_gold/macros/silver_model_config.sql`
+(the single source of truth every silver model's config already flows
+through) — not a new bootstrap SQL file. Live state was brought in sync
+immediately, ahead of the next `dbt run`, via 30
+`ALTER DYNAMIC TABLE ... SET TARGET_LAG = '6 hours'` statements run as
+`EDGARTOOLS_PROD_DEPLOYER` (the tables' live owner role, confirmed via
+`SHOW DYNAMIC TABLES` before touching anything — not `EDGARTOOLS_PROD_LOADER`,
+which is what CLAUDE.md's "one runtime role" language might suggest; silver
+was never migrated onto the loader role the way `EDGARTOOLS_GOLD` was).
+Live-verified after: all 30 tables report `target_lag = '6 hours'`, zero
+still on `DOWNSTREAM`.
+
+This resolves Ticket 12's refresh-trigger blocker. Ticket 12's remaining
+preconditions on the actual `MDM_SILVER_READ_TARGET=snowflake` flip are
+unchanged by this ticket: `EDGARTOOLS_SILVER` holding real data at scale
+(Stage 14), a clean `mdm verify-silver-parity` run against that volume, and
+the CloudWatch alarm on post-flip divergence (still not built).

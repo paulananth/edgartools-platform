@@ -2,7 +2,7 @@
 
 Type: task
 Status: partially implemented — code shipped, flip not yet safe to trust live
-Blocked by: 13 (for the actual prod flip only; the code below is unblocked and already shipped)
+Blocked by: Stage 14 (EDGARTOOLS_SILVER at real data volume) and the CloudWatch alarm (Ticket 10 item 3) — Ticket 13's refresh-trigger blocker is now resolved.
 
 ## Question
 
@@ -168,13 +168,17 @@ here rather than left only in source comments:**
   volume before `MDM_SILVER_READ_TARGET` moves to `snowflake` in prod.
 
 **Real blocker found during implementation, not assumed away — filed as
-[Ticket 13](13-decide-edgartools-silver-refresh-trigger.md), now blocking
-the actual flip**: `EDGARTOOLS_SILVER`'s dynamic tables are `target_lag =
-'DOWNSTREAM'` with no downstream consumer, so nothing schedules their
-refresh at all — Ticket 11's 1,506 visible rows only exist because of a
-manual `REFRESH`. Flipping `MDM_SILVER_READ_TARGET=snowflake` today would
-mean reading tables that never update. This fell through the gap between
-Ticket 09 (order) and Ticket 10 (mechanics) — neither owned it.
+[Ticket 13](13-decide-edgartools-silver-refresh-trigger.md), now resolved**:
+`EDGARTOOLS_SILVER`'s dynamic tables were `target_lag = 'DOWNSTREAM'` with no
+downstream consumer, so nothing scheduled their refresh at all — Ticket 11's
+1,506 visible rows only existed because of a manual `REFRESH`. This fell
+through the gap between Ticket 09 (order) and Ticket 10 (mechanics) — neither
+owned it. **Fixed (2026-08-18):** `target_lag` changed to a fixed `6 hours`
+in the shared `silver_model_config` dbt macro (matching CLAUDE.md's
+`SNOWFLAKE_RUN_MANIFEST_TASK` 1min→6hr precedent at the adjacent pipeline
+layer), applied live to all 30 dynamic tables, verified via
+`SHOW DYNAMIC TABLES`. No longer a blocker on the actual flip — see Ticket
+13's own Answer for the full reasoning.
 
 **Table-coverage finding, resolved narrowly, not a blocker**: checked
 `ShardedSilverReader._TABLES` (39) against `EDGARTOOLS_SILVER`'s 31 dbt
@@ -190,10 +194,12 @@ new fog: `duckdb-retirement` map's own Ticket 08 already sent these to
 Snowflake native Postgres, not `EDGARTOOLS_SILVER`. No new ticket needed.
 
 **Not done — the actual flip.** `MDM_SILVER_READ_TARGET` stays `duckdb` in
-prod. Blocked on Ticket 13 (refresh trigger) landing, then `EDGARTOOLS_SILVER`
-actually holding real data at scale (Stage 14 / Task #159, itself blocked
-on the `shard-0.duckdb` race — explicitly out of Ticket 09's scope, tracked
-separately), then a clean `mdm verify-silver-parity` result against real
-volume, then the CloudWatch alarm above. Re-open this ticket to
-`Status: resolved` once all four land and the flip is verified live — matching this map's own standing discipline of
+prod. Ticket 13's refresh-trigger blocker is now resolved (all 30 tables
+refresh on a real 6-hour schedule as of 2026-08-18). Still blocked on
+`EDGARTOOLS_SILVER` actually holding real data at scale (Stage 14 / Task
+#159, itself blocked on the `shard-0.duckdb` race — explicitly out of
+Ticket 09's scope, tracked separately), then a clean `mdm verify-silver-parity`
+result against real volume, then the CloudWatch alarm above. Re-open this
+ticket to `Status: resolved` once all three land and the flip is verified
+live — matching this map's own standing discipline of
 real measurements over assumptions.
