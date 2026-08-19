@@ -1054,7 +1054,56 @@ Snowflake schema (e.g. `EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION`); `mdm verify-grap
 strict SQL parity check plus Native App checks (compute pool, `GRAPH_INFO`, `BFS`, `WCC`)
 against that same Snowflake target. One credential (the same `MDM_SNOWFLAKE_*`/
 `DBT_SNOWFLAKE_*`/Snowflake CLI connection used everywhere else), one platform. Native App
-grants: `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`. Full migration history:
+grants: `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`.
+
+**The write/sync path splits across two modules, not one** (investigated
+2026-08-19, not previously written down here): `edgar_warehouse/mdm/graph.py`
+prepares the Postgres-side mirror (writes `mdm_relationship_instance` rows —
+its own docstring is explicit that "the Neo4j bolt driver and AuraDB are no
+longer used"), then hands off to `edgar_warehouse/mdm/snowflake_graph.py`'s
+`SnowflakeGraphSyncExecutor` (sync) and `SnowflakeGraphVerifier` (verify),
+which generate and run the actual Snowflake SQL. Single path, not a
+duplicate — `graph.py` never talks to Snowflake directly, `snowflake_graph.py`
+never talks to Postgres directly.
+
+**There are two separate read paths, not one, and they read different
+stores on purpose:** `edgar_warehouse/mdm/api/routers/graph.py` (neighborhood/
+traversal endpoints) reads live from the **Postgres mirror**
+(`mdm_relationship_instance`) for speed — its own docstring: "Graph analytics
+run via the Snowflake-hosted Neo4j Graph Analytics native app" (BFS/WCC etc.),
+but simple lookups don't pay a Snowflake round trip. `edgar_warehouse/mdm/
+graph_readonly.py` reads **Snowflake** graph metrics (parity/comparison,
+Native App health) for the local MDM dashboard. Don't assume one is stale
+duplication of the other — they're deliberately different stores for
+different latency needs.
+
+**A third, orthogonal piece governs *when* sync-graph work happens:**
+`edgar_warehouse/mdm/publication.py` is a transactional MDM→graph publication
+queue (07-03, RSYNC-01/03) — relationship-changing workflows call
+`request_publication` atomically with their own MDM commit; a lease-based
+coordinator claims and advances requests through `mdm_committed →
+graph_pending → graph_building → graph_verified → graph_active`, with a
+5-minute-warning/15-minute-hard-alert staleness SLO. This is queue mechanics
+only — no Snowflake/Neo4j orchestration logic lives in this module, per its
+own docstring.
+
+**The generation-scoped operator review contract** (GH-251):
+`edgar_warehouse/mdm/graph_review_publish.py` persists `mdm verify-graph`'s
+payload into a bounded, read-only `MDM_GRAPH_REVIEW` schema that a managed
+dashboard (`examples/mdm_graph_dashboard/`) can query through a plain
+Snowpark session — no MDM Postgres DSN, no direct Neo4j credential needed by
+that dashboard.
+
+**Dead file, removed (2026-08-19):** `edgar_warehouse/serving/targets/
+neo4j.py` was a 1-line, unimported placeholder ("Neo4j serving target
+placeholder for future Gold publishing support") left over from a "publish
+gold data out to an external Neo4j" concept that was superseded by the
+current architecture (graph lives inside Snowflake; there is no external
+Neo4j to publish to). Confirmed unreferenced anywhere in the codebase before
+deletion. Noted here in case a future `git blame` on this line goes looking
+for it.
+
+Full migration history:
 `.planning/workstreams/neo4j-snowflake/`.
 
 **MDM database (read this before assuming a separate AWS RDS instance):**

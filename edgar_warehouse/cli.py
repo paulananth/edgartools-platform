@@ -613,8 +613,9 @@ def build_parser() -> argparse.ArgumentParser:
         "seed-silver-batches",
         help=(
             "Write a CIK batch file from companies already in silver (bronze already loaded). "
-            "Used by silver_mdm_gold to reprocess silver → MDM → Neo4j → Snowflake "
-            "without re-downloading bronze from SEC."
+            "Used by silver_mdm_gold to reprocess silver → MDM → graph (Snowflake-hosted "
+            "Neo4j Graph Analytics Native App) → Snowflake without re-downloading bronze "
+            "from SEC."
         ),
     )
     seed_silver_batches.add_argument(

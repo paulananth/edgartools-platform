@@ -120,3 +120,21 @@ fixed earlier this session and is what motivated this map in the first
 place; nothing else at this scope was found. [Ticket 02](02-decide-enforcement-mechanism.md)
 is still worth resolving as insurance against a *future* divergence of
 exactly that shape, even though today's audit came back clean.
+
+## Addendum (2026-08-19, deeper look at MDM → graph)
+
+Finding #5 above ("one handler, no violation") holds up under a much
+deeper look, done separately the same day at the user's request. The full
+picture — write path split across `graph.py` (Postgres-side prep) and
+`snowflake_graph.py` (Snowflake execution, single path, not duplicated);
+two deliberately different read paths (`api/routers/graph.py` reading the
+Postgres mirror for speed, `graph_readonly.py` reading Snowflake for
+dashboard metrics); the publication-lifecycle queue (`publication.py`)
+governing *when* sync happens; and the generation-scoped operator review
+contract (`graph_review_publish.py`) — is now written up in CLAUDE.md's
+"Graph storage" note rather than here, since it's standing architecture
+documentation other sessions need, not a wayfinder finding. One dead file
+found in the process: `edgar_warehouse/serving/targets/neo4j.py`, a
+1-line unimported placeholder for a superseded "publish to external
+Neo4j" concept — flagged in CLAUDE.md, not yet deleted (a decision, not
+done unilaterally).
