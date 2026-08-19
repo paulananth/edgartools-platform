@@ -4,9 +4,11 @@ Labels: wayfinder:map
 
 ## Destination
 
-A measured, risk-tiered cleanup path that restores usable free space on this 113 GB Mac, without deleting personal Documents data until explicitly approved — Tier A executed, Colima shrink and Documents migration decided next.
+**Reached (2026-08-19).** A measured, risk-tiered cleanup path that restores usable free space on this 113 GB Mac, without deleting personal Documents data until explicitly approved — Tier A executed, Colima shrunk, Documents left as-is (user closed out rather than deleting/archiving).
 
 ## Notes
+
+- **Side project — workstation hygiene, not repo product code.** Closed out 2026-08-19; not part of the platform's active workstreams. No further sessions should pick this up unless the user reopens it.
 
 - Domain: local workstation hygiene (not repo product code)
 - Skills: research findings already captured in session; no auto-delete of `~/Documents`
@@ -27,11 +29,11 @@ A measured, risk-tiered cleanup path that restores usable free space on this 113
 
 - [Colima disk allocation](issues/05-colima-shrink-to-40gib.md) — recreated at **20 GiB** (user revised from 40); host ~/.colima ~1.1 GB
 - [Docker image prune](issues/07-docker-image-prune.md) — N/A after wipe; empty image store
+- [Decide Documents migration delete](issues/06-decide-documents-delete.md) — closed without deleting/archiving; user ended the effort here
 
 ## Not yet specified
 
-- Exact Colima recreate procedure (stop/delete/recreate vs lima resize) once Tier A free space is known
-- Whether any slice of `Documents/Existing files` is still needed after inventory
+<!-- empty -- destination reached, map closed out 2026-08-19 -->
 
 ## Out of scope
 

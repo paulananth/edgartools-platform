@@ -11,7 +11,7 @@ ticket is just "flip config + confirm," not discovery work.
 
 **Blocked by:** 04 — Prepare and review the coordinated Terraform diff
 
-**Status:** ready-for-agent
+**Status:** DONE — executed 2026-07-19 (see trailer note below).
 
 - [ ] Both Terraform roots are applied in the same operator window with no
       gap where AWS writes to one bucket and Snowflake reads from another

@@ -8,7 +8,7 @@ objects that still reference it, closing out Stage 5 (cleanup) of
 
 **Blocked by:** 05 — Execute the live cutover in an approved operator window + verify
 
-**Status:** ready-for-agent
+**Status:** DONE — executed 2026-07-19 (see trailer note below).
 
 - [ ] Bake period (owner-defined) has elapsed with no incidents tracing back
       to the canonical bucket/cutover

@@ -13,7 +13,7 @@ able to see the exact combined diff before anyone touches live state.
 
 **Blocked by:** 03 — Grant Snowflake IAM role read access to the canonical bucket
 
-**Status:** ready-for-agent
+**Status:** DONE — executed 2026-07-19 (see trailer note below).
 
 - [ ] `terraform plan` output for the AWS root and the Snowflake root are
       both captured and reviewed together as one change set

@@ -11,7 +11,7 @@ produces the evidence gate that Ticket 02 depends on.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** BLOCKED (verification FAILED) — verified 2026-07-18
+**Status:** DONE — verification FAILED as scoped (2026-07-18), correctly triggering Ticket 02; superseded by the full cutover execution 2026-07-19 (see trailer note below and Ticket 02).
 
 - [x] Object count and latest-manifest key in the canonical bucket are
       compared against the old `prodb` bucket and reported (match / mismatch,
