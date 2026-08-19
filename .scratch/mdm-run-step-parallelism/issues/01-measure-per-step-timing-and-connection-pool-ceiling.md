@@ -50,4 +50,89 @@ Concretely:
 
 ## Answer
 
-<!-- filled in on resolution -->
+**In progress (2026-08-19) — real measurements below, `company` still
+running.** All four remaining standalone `--entity-type` runs launched
+against the same live silver dataset (in addition to `person`, already
+measured at ~1m55s while charting this map):
+
+| Entity type | Duration | Notes |
+|---|---|---|
+| `person` | ~1m55s (115s) | measured while charting the map |
+| `adviser` | **31s** (`mdm_command_completed`, `duration_ms: 31000`) | bulk/batched (`adv_bulk.py`), no internal worker pool |
+| `fund` | **53s** (`duration_ms: 52896`) | bulk/batched, no internal worker pool |
+| `security` | **1h51m3s** (6,663s; 16:46:16→18:37:20 ET) | per-row `ThreadPoolExecutor`, 16 workers |
+| `company` | still running, >1h22m and counting as of this update, actively issuing real per-row SQL (not stuck) | per-row `ThreadPoolExecutor`, 16 workers |
+
+**Headline finding so far**: the five steps are wildly asymmetric, not
+close to an even split. The two bulk/batched steps (`adviser`, `fund`) are
+essentially free (tens of seconds) regardless of their large raw row
+counts (234K ADV filings, 1.58M private funds) — confirming
+mdm-run-throughput's decision to leave them out of its per-row concurrency
+fix. The two (so far confirmed) per-row `ThreadPoolExecutor` steps
+(`security` confirmed, `company` still running) each take well over an
+hour despite the 16-way concurrency fix already in place. This directly
+shapes ticket 02: overlapping `adviser`+`fund` with anything else buys at
+most ~53s of wall-clock savings; the real prize, if there is one, is
+whether `company`/`security`/`person` can usefully overlap **each other**
+— and given each already saturates its own 16-worker budget against the
+same ~68ms-round-trip-latency Postgres instance (mdm-run-throughput's root
+cause), 3-way concurrent workers-of-workers may just contend for the same
+underlying latency budget rather than yield a 3x wall-clock win. Real
+numbers for `company` and a proper apples-to-apples full `--entity-type
+all` comparison still needed before concluding either way.
+
+**Connection-pool ceiling analysis (code-grounded, not measured live):**
+
+- `edgar_warehouse/mdm/database.py`: `get_engine()` builds a **fresh**
+  `Engine` on every call (`create_engine(url, **kwargs)`, no caching/
+  memoization) with `pool_size=15` + `max_overflow=15` = **30 total
+  connections** per engine instance (`MDM_DB_POOL_SIZE`/`MDM_DB_MAX_OVERFLOW`,
+  both default `15` — the file's own comment: "sized for up to ~20
+  concurrent workers with headroom for the primary session").
+- Today, one `mdm run` CLI invocation creates **exactly one** engine/session
+  at entry (`edgar_warehouse/mdm/cli.py` ~line 484-485,
+  `get_session(get_engine())`), passed into one `MDMPipeline` instance and
+  reused sequentially across all five `run_*` calls. Each of
+  `run_companies`/`run_securities`/`run_persons` independently opens its own
+  bounded `ThreadPoolExecutor` (`_RESOLVE_MAX_WORKERS`, default 16 via
+  `MDM_RESOLVE_CONCURRENCY`, per-domain override available) whose workers
+  each pull a session from this **same shared pool** — but only one of the
+  three runs at a time today, so peak demand is ~16 workers + 1 primary
+  session = 17, comfortably under the 30-connection ceiling.
+  `run_advisers`/`run_funds` (`edgar_warehouse/mdm/adv_bulk.py`) have **no**
+  internal `ThreadPoolExecutor** at all — sequential chunked bulk INSERTs
+  (`_WRITE_BATCH_SIZE=5000`) on the one primary session — so they add
+  negligible (~1 connection) demand regardless of parallelism shape.
+- **In-process concurrency scenario** (one ECS task, all steps share the
+  one engine): if `company`+`security`+`person` ran concurrently, worst-case
+  simultaneous demand is ~3×16 workers + 3 sessions ≈ **51 connections**
+  against the current 30-connection ceiling — over-subscribed ~1.7x.
+  SQLAlchemy's `QueuePool` does not hard-fail on this: excess checkout
+  requests block/queue (default `pool_timeout=30s`) rather than erroring
+  immediately, so the realistic failure mode is increased queueing/
+  contention, not a crash — but the pool would need re-tuning
+  (`MDM_DB_POOL_SIZE`/`MDM_DB_MAX_OVERFLOW` raised) to actually realize a
+  3-way overlap rather than just serializing through a smaller effective
+  slot count than the app-level thread count suggests.
+- **Multi-task scenario** (Step Functions `Parallel`, one ECS task per
+  entity type): each task calls `get_engine()` independently, so each gets
+  its **own** isolated 30-connection pool — no risk of one step's pool
+  exhaustion starving another's checkouts (unlike the shared-engine
+  in-process case). Worst-case simultaneous app-side connections across
+  `company`+`security`+`person` tasks: ~3×17 ≈ 51, same total demand as the
+  in-process case, just isolated into 3 separate 30-slot pools instead of
+  one shared 30-slot pool — meaningfully safer from a contention-blocking
+  standpoint, at the cost of needing 3x the pool headroom provisioned
+  overall if the Postgres server itself has a hard ceiling (see next point).
+- **MDM Postgres server-side `max_connections`: not established.** No
+  documentation in `infra/scripts/bootstrap-prod-mdm.sh` or elsewhere in
+  this repo records the Snowflake-hosted Postgres instance's connection
+  ceiling, and this session's tooling (the `mdm` CLI's subcommands) doesn't
+  expose a way to run `SHOW max_connections` or equivalent. **Genuine gap,
+  not a guess** — whoever resolves ticket 02 should get this number via a
+  direct Postgres client connection before committing to a shape that could
+  push app-side connections into the 50-90+ range.
+
+**Still needed to close this ticket:** `company`'s real completed duration,
+row counts processed per step (from `mdm counts`/pipeline stats deltas),
+and the server-side `max_connections` figure above.
