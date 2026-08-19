@@ -759,6 +759,54 @@ stage's provisioning turns out to have been an uncommitted manual step, assume e
 stage in the same pipeline family is too until proven otherwise — check the whole chain
 before declaring victory on the first fix.
 
+**Follow-up (2026-08-19): a third, still-different failure at the same `MdmExport`
+state**, ten days later — a fresh `bronze_seed_silver_gold` execution reached `MdmExport`
+successfully this time (both fixes above held) and failed with
+`ProgrammingError: Object 'EDGARTOOLS_PROD.MDM.MDM_COMPANY_ENTITY' does not exist or not
+authorized` — a *third* distinct object, not one of the 19 mirror tables or the graph
+schema fixed above.
+
+1. Symptom: `mdm export`'s **default** writer (`_build_snowflake_writer()` in
+   `edgar_warehouse/mdm/cli.py`, meant to target `EDGARTOOLS_GOLD` — see `export.py`'s
+   `DOMAIN_TO_TABLE`, which lists the 5 golden-record export targets `MDM_COMPANY_ENTITY`/
+   `MDM_ADVISER`/`MDM_PERSON`/`MDM_SECURITY`/`MDM_FUND`) tried to write into schema `MDM`
+   instead — confirmed live: all 5 tables exist and are correctly defined in
+   `EDGARTOOLS_GOLD` (`07_mdm_export_targets.sql` was applied; 0 rows each, since export has
+   never once succeeded past this point).
+2. Why did the default writer resolve to schema `MDM`? `SnowflakeConnectionSettings.from_env()`
+   defaults schema to `"EDGARTOOLS_GOLD"` only when the secret's `MDM_SNOWFLAKE_SCHEMA` key is
+   absent/empty — the live secret (`edgartools-prod/mdm/snowflake`) had it explicitly set to
+   `"MDM"`, overriding the default for every consumer of that secret, including the default
+   writer.
+3. Why was it set to `MDM`? `mdm export`'s **separate** mirror writer
+   (`_build_snowflake_mirror_writer()`) deliberately hardcodes `schema="MDM"` in Python — it
+   does *not* read `MDM_SNOWFLAKE_SCHEMA` from the secret at all. `mdm sync-graph`/
+   `verify-graph` (`snowflake_graph.py`) also don't read it — they fully-qualify every
+   reference via their own `DEFAULT_TARGET_SCHEMA`/`DEFAULT_MDM_SCHEMA` constants, never
+   relying on the connection's default schema. So **nothing in the codebase actually needs**
+   `MDM_SNOWFLAKE_SCHEMA=MDM` — the only real consumer of that secret field is the default
+   writer, which needs it to be `EDGARTOOLS_GOLD`.
+4. Why did the secret have the wrong value then? `bootstrap-prod-mdm.sh` (the script that
+   provisions this secret) correctly sets it to `$GOLD_SCHEMA` (default `"EDGARTOOLS_GOLD"`,
+   line ~341) — the live value had drifted from what the script would produce, almost
+   certainly overwritten by a manual `put-secret-value` during the 2026-08-09 incident above
+   (the two "MDM"-schema fixes that day likely prompted someone to point the whole secret at
+   `MDM` without noticing the default writer shares it).
+5. **Root cause:** one secret field (`MDM_SNOWFLAKE_SCHEMA`) is a de facto shared default for
+   two writers with genuinely different target schemas, and only one of the two
+   (`_build_snowflake_mirror_writer`) protects itself with its own hardcoded override — the
+   other silently inherits whatever the secret says. A manual secret edit made for one
+   consumer's benefit silently broke the other, with no test or grant check to catch it
+   (this writer only ever runs against real Snowflake, so nothing in the test suite exercises
+   its schema resolution).
+
+**Fix:** corrected the live secret's `MDM_SNOWFLAKE_SCHEMA` back to `EDGARTOOLS_GOLD` via
+`put-secret-value` (preserving every other field byte-for-byte), matching what
+`bootstrap-prod-mdm.sh` already produces — a config fix, not a code or DDL change. No
+image rebuild needed for this specific fix (ECS injects secrets at task launch), though a
+`bronze_seed_silver_gold` re-run is still needed to confirm live. **Not yet re-verified**
+as of this entry.
+
 ## Dev Terraform/Snowflake go-live blockers 5-whys (partially resolved 2026-07-27)
 
 **Problem:** Resuming a paused live `terraform apply` for the dev Snowflake stack
