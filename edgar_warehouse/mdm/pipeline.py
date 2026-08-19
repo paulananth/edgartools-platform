@@ -337,9 +337,32 @@ class MDMPipeline:
             "ORDER BY cik, source_rank NULLS LAST"
         )
         ticker_by_cik = _first_per_key(ticker_rows, "cik")
-        tracking_rows = self.silver.fetch(
-            "SELECT cik, tracking_status FROM sec_company_sync_state"
-        )
+        try:
+            tracking_rows = self.silver.fetch(
+                "SELECT cik, tracking_status FROM sec_company_sync_state"
+            )
+        except Exception as exc:
+            # sec_company_sync_state is a bookkeeping table with no analog
+            # in EDGARTOOLS_SILVER (silver-snowflake-migration map, Ticket
+            # 09's table-coverage check -- 8 operational/lease tables never
+            # landed in the dbt-managed schema, deliberately: they're
+            # destined for MDM's own Postgres store, not Snowflake silver).
+            # Under MDM_SILVER_READ_TARGET=snowflake this table genuinely
+            # doesn't exist; degrade the same way _fetch_optional_
+            # relationship_rows already does for a missing source table --
+            # tracking_by_cik empty means every row's `tracking` argument
+            # below is None, which resolve_one already handles.
+            missing_table = self._find_missing_source_table(exc, "sec_company_sync_state")
+            if missing_table is None:
+                raise
+            print(json.dumps({
+                "event": "mdm_relationship_skip",
+                "rel_type": "company_tracking_status",
+                "reason": "missing_source_table",
+                "source_table": missing_table,
+                "ts": datetime.now(timezone.utc).isoformat(),
+            }), file=sys.stderr, flush=True)
+            tracking_rows = []
         tracking_by_cik = {row["cik"]: row for row in tracking_rows}
 
         rule_engine = self.engine

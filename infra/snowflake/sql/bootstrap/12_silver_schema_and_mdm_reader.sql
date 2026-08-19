@@ -55,24 +55,51 @@ GRANT USAGE ON SCHEMA EDGARTOOLS_PROD.EDGARTOOLS_SILVER TO ROLE EDGARTOOLS_PROD_
 -- needing to be edited and re-run to keep up, closing off the exact
 -- silent-gap failure shape that caused the INSTITUTIONAL_HOLDS/
 -- EMPLOYED_BY incidents (CLAUDE.md).
+--
+-- DYNAMIC TABLES and VIEWS need separate grant statements -- Snowflake's
+-- "ALL/FUTURE DYNAMIC TABLES" grant does not cover plain views. Missed on
+-- first pass (silver-snowflake-migration map, Ticket 12): sec_guidance_
+-- fact_reject is deliberately a plain view, not a dynamic_table (Ticket
+-- 01's "quarantine log, no natural key" exception) -- live grants confirmed
+-- 30/31 EDGARTOOLS_SILVER tables covered, this one missing, before the
+-- VIEW-specific grants below were added.
 GRANT SELECT ON ALL DYNAMIC TABLES IN SCHEMA EDGARTOOLS_PROD.EDGARTOOLS_SILVER TO ROLE EDGARTOOLS_PROD_MDM_SILVER_READER;
 GRANT SELECT ON FUTURE DYNAMIC TABLES IN SCHEMA EDGARTOOLS_PROD.EDGARTOOLS_SILVER TO ROLE EDGARTOOLS_PROD_MDM_SILVER_READER;
+GRANT SELECT ON ALL VIEWS IN SCHEMA EDGARTOOLS_PROD.EDGARTOOLS_SILVER TO ROLE EDGARTOOLS_PROD_MDM_SILVER_READER;
+GRANT SELECT ON FUTURE VIEWS IN SCHEMA EDGARTOOLS_PROD.EDGARTOOLS_SILVER TO ROLE EDGARTOOLS_PROD_MDM_SILVER_READER;
 
--- NOT DECIDED BY THIS SCRIPT, flagged explicitly rather than silently
--- assumed: how does MDM's entity-resolution read session actually activate
--- EDGARTOOLS_PROD_MDM_SILVER_READER? Two real options, genuinely different
--- operational shapes:
---   (a) A separate Snowflake secret/connection for MDM's read path,
---       authenticating directly as this role -- the cleanest read/write
---       separation, matching the intent of minting a dedicated role at all.
---   (b) Grant this role to EDGARTOOLS_PROD_LOADER as a secondary role
---       (GRANT ROLE EDGARTOOLS_PROD_MDM_SILVER_READER TO ROLE
---       EDGARTOOLS_PROD_LOADER), since every one of MDM's other Snowflake
---       commands (export/sync-graph/verify-graph) already shares that one
---       runtime role/secret (CLAUDE.md, "Manifest-pipeline ownership +
---       cursor-syntax incident") -- reuses the existing credential, but
---       partially reintroduces the write-role read-access overlap Ticket 03
---       chose a dedicated role specifically to avoid.
--- Ticket 03 decided the role should be dedicated and minimally-scoped; it
--- did not decide which credential activates it. Resolve this when MDM's
--- actual entity-resolution silver-read code is implemented, not here.
+-- Credential activation (silver-snowflake-migration map, Ticket 12,
+-- resolved -- this section used to flag this as undecided; it no longer is).
+-- MDM's read session activates this role via USE ROLE post-connect on the
+-- SAME secret export/sync-graph/verify-graph already use
+-- (MDM_SNOWFLAKE_SECRET_JSON), not a second dedicated secret -- reuses the
+-- existing credential rather than adding new Secrets Manager/ECS wiring for
+-- a first migration slice. This does reintroduce some write/read role
+-- overlap on the connecting credential, same tradeoff that script's option
+-- (b) already named -- accepted for this slice, revisit if a stricter
+-- secret-per-role boundary is ever justified.
+--
+-- Note this file does NOT parameterize its grantee the way
+-- 08_loader_role.sql's $loader_default_grantee session variable does (that
+-- file is a template re-run per environment; this one is hand-authored and
+-- hardcoded to EDGARTOOLS_PROD throughout, matching this file's own header
+-- comment). The grant below is a literal ROLE name for that reason, not an
+-- omitted convention.
+--
+-- Live-verified this session (2026-08-18): after connecting via
+-- MDM_SNOWFLAKE_SECRET_JSON, `USE ROLE EDGARTOOLS_PROD_MDM_SILVER_READER`
+-- succeeds and SEC_COMPANY is queryable through it -- confirming the grant
+-- below, not asserting it un-tested. Separate finding, not fixed here: the
+-- live secret's own ROLE field is ACCOUNTADMIN, not EDGARTOOLS_PROD_LOADER
+-- as CLAUDE.md's "one runtime role" claim describes -- drifted from that
+-- doc at some point; granting to ACCOUNTADMIN below matches today's actual
+-- runtime identity, not the documented one. This is role-membership, not
+-- object ownership -- it does not repeat the ACCOUNTADMIN-owns-pipeline-
+-- objects pattern CLAUDE.md's manifest-pipeline-ownership incident forbids
+-- (that incident was about who OWNS created objects; this grants an
+-- existing role permission to activate a separate, minimally-scoped
+-- read-only role, and creates/owns nothing).
+GRANT ROLE EDGARTOOLS_PROD_MDM_SILVER_READER TO ROLE ACCOUNTADMIN;
+-- If a future secret rotation moves the runtime role to EDGARTOOLS_PROD_LOADER
+-- (matching CLAUDE.md's original documented shape), also run:
+--   GRANT ROLE EDGARTOOLS_PROD_MDM_SILVER_READER TO ROLE EDGARTOOLS_PROD_LOADER;

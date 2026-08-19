@@ -114,6 +114,17 @@ for follow-up.
   provisioning run (Task #159) remains blocked on this pending user
   direction, tracked separately from this map.
 
+- **Current frontier (2026-08-18):** [Cut Over MDM's ShardedSilverReader to
+  Snowflake](issues/12-cutover-mdm-sharded-silver-reader-to-snowflake.md) is
+  partially implemented — the reader adapter, env-var flip, and correctness-
+  gate command are shipped, tested, and committed, but the actual prod flip
+  is blocked on [Decide EDGARTOOLS_SILVER's Refresh Trigger](issues/13-decide-edgartools-silver-refresh-trigger.md)
+  (a real gap found mid-implementation: the dynamic tables never
+  auto-refresh with no downstream consumer) plus `EDGARTOOLS_SILVER`
+  actually holding real data at scale (Stage 14, blocked separately, see
+  motivating evidence above). See Ticket 12's own "Progress" section for
+  the full account before picking this back up.
+
 ## Decisions so far
 
 <!-- Closed ticket decisions: one-line gist and link; detail stays in the ticket. -->
