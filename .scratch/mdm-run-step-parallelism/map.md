@@ -102,27 +102,51 @@ absorb several steps' internal worker pools running at once.
   chased): `company`'s run only added ~63 net-new rows across 67,870
   processed, suggesting its "skip-if-unchanged fast path" (commit
   `7ffda2d7`) may not be effectively skipping real work.
+- [Decide the Parallelism Shape (or Decide Not To)](issues/02-decide-parallelism-shape.md)
+  — **build it**: in-process concurrency, all 5 entity-resolution steps
+  launched as concurrent top-level futures inside the existing single
+  `MdmRun` ECS task (each step keeps its own existing worker pool
+  unchanged), fail-fast on any step's exception,
+  `derive_relationships()`'s trigger stays unchanged (still waits for all
+  5), `MDM_DB_POOL_SIZE=40`/`MDM_DB_MAX_OVERFLOW=20`. Rejected the
+  multi-ECS-task/Step-Functions `Parallel` shape once a new fact
+  (Postgres server `max_connections=500`, only 13 active — confirmed live)
+  showed the connection-pool ceiling that made per-step isolation look
+  necessary is actually a cheap-to-raise client-side setting, not a real
+  constraint. This resolves the map's own destination question in full —
+  see "Frontier" below.
+
+## Frontier (open tickets)
+
+None. Ticket 02 resolved the map's full destination question (whether/how
+to run the five entity-resolution steps concurrently). This map's
+destination is reached — someone can start implementing the decision above
+without hitting an undecided design question.
 
 ## Not yet specified
 
 <!-- fog beyond the frontier ticket below -->
 
-- Whether `derive_relationships()`'s own placement (strictly after all 5
-  resolve steps finish) has any room to start early for relationship types
-  that only depend on a subset of entity types — not yet looked at, and may
-  turn out to be its own can of worms; deliberately not ticketed until
-  ticket 02 (parallelism shape) resolves, since it only matters if this map
-  concludes some form of cross-step overlap is worth building at all.
-- Whether `company`'s skip-if-unchanged fast path (commit `7ffda2d7`) is
-  actually skipping real work — ticket 01 found it processed 67,870 rows in
-  8,046s (~119ms/row) while only ~63 were net-new. Not sharp enough to
-  ticket yet (haven't confirmed whether the fast path activated at all vs.
-  activated but still paid a comparable round-trip cost either way) and may
-  belong to a different map entirely (it's a `company`-resolution
-  correctness/perf question, not really a cross-step-parallelism one) —
-  noted here so it isn't lost, not claimed as in-scope for this map's
-  destination.
+None — both items previously here graduated into explicit deferrals inside
+ticket 02's own resolution, not into further fog on this map (see "Out of
+scope" below for why they don't belong to this map's own destination).
 
 ## Out of scope
 
-<!-- none yet -->
+- **Whether `derive_relationships()` could start early for relationship
+  types that only depend on a subset of entity types.** Ticket 02
+  considered this directly and deliberately kept `derive_relationships()`'s
+  trigger unchanged (still waits for all 5 entity steps) — this map's
+  destination was "whether/how the five entity-resolution steps run
+  concurrently with each other," not the finer-grained question of
+  relationship-type-level startup dependencies. Genuinely a separate,
+  bigger design question (which of the 11 relationship types depend on
+  which entity types, whether partial availability is safe) — deserves its
+  own future ticket/map, not a fold-in here.
+- **Whether `company`'s skip-if-unchanged fast path (commit `7ffda2d7`) is
+  actually skipping real work.** Ticket 01 found `company` processed 67,870
+  rows in 8,046s while only ~63 were net-new — a real, concrete finding,
+  but a `company`-resolution correctness/performance question, not a
+  cross-step-parallelism one. Never claimed as in-scope for this map's
+  destination; noted here (not lost) for whoever charts that separate
+  effort.
