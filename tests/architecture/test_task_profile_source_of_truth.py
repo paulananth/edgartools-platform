@@ -35,10 +35,22 @@ today):
    machine JSON and reading RunWarehouseTask's actual TaskDefinition.
 3. ``bootstrap-next``: never passed to workflow_profile() or
    write_warehouse_mdm_gold_definition at all. load_history's per-window
-   task hardcodes its ARN directly to the medium profile -- documented
-   here, not re-derived from live wiring, same as
-   test_source_export_commands_task_sizing.py's own
-   ``_SPECIAL_CASED_PROFILE`` approach.
+   WindowedBootstrap/RunWindow task hardcodes its ARN directly. Resolved
+   the same way as path 2 -- generating write_load_history_definition's
+   real state machine JSON and reading RunWindow's actual TaskDefinition --
+   NOT a hardcoded assumption. (An earlier version of this file hardcoded
+   this as "medium" via a `_SPECIAL_CASED_PROFILE` entry, copied from
+   test_source_export_commands_task_sizing.py's own stale assumption of the
+   same shape. Both were wrong: the real wiring was bumped to large on
+   2026-08-10 after a live exit-137 OOM on medium (see
+   test_load_history_state_machine.py's
+   test_windowed_bootstrap_uses_large_task_definition), and neither test
+   had been updated since. Caught 2026-08-19 while implementing ticket 03 --
+   had it gone uncorrected, "migrating" bootstrap-next onto
+   command_task_profile()'s then-wrong "medium" value would have
+   reintroduced that exact OOM. Fixed by deriving the value from live ASL
+   generation instead of a hand-maintained assumption, closing the gap that
+   let the drift go unnoticed in the first place.)
 
 Ticket 05 (blocked by ticket 04) collapses
 test_source_export_commands_task_sizing.py onto ``command_task_profile()``
@@ -84,11 +96,10 @@ _ALL_COMMANDS = {
 _WAREHOUSE_MDM_GOLD_MEMBERS = {"bootstrap", "daily-incremental"}
 
 # bootstrap-next is never passed to workflow_profile() or
-# write_warehouse_mdm_gold_definition -- its deployed load_history
-# invocation hardcodes the medium profile directly (module docstring, path 3).
-_SPECIAL_CASED_PROFILE = {
-    "bootstrap-next": "medium",
-}
+# write_warehouse_mdm_gold_definition -- resolved instead via
+# write_load_history_definition's real generated ASL (module docstring,
+# path 3) by _run_load_history_bootstrap_next_profile below.
+_LOAD_HISTORY_MEMBERS = {"bootstrap-next"}
 
 _WORKFLOW_PROFILE_START = "workflow_profile() {\n"
 _WORKFLOW_PROFILE_END = "\n}\n"
@@ -99,12 +110,27 @@ _COMMAND_TASK_PROFILE_END = "\n}\n"
 _WMG_START = "write_warehouse_mdm_gold_definition() {\n"
 _WMG_END = "\nPY\n}\n"
 
+_LOAD_HISTORY_START = "write_load_history_definition() {\n"
+_LOAD_HISTORY_END = "\nPY\n}\n"
+
 # Fake ARNs passed into write_warehouse_mdm_gold_definition's medium/large
 # parameters -- distinguishable strings so the generated JSON's
 # RunWarehouseTask.Parameters.TaskDefinition tells us which one was used.
 _FAKE_MEDIUM_ARN = "arn:fake-wh-medium"
 _FAKE_LARGE_ARN = "arn:fake-wh-large"
 _FAKE_ARN_PROFILE = {_FAKE_MEDIUM_ARN: "medium", _FAKE_LARGE_ARN: "large"}
+
+# Fake ARNs for write_load_history_definition's 5-way small/medium/large
+# (warehouse) + small/medium (mdm) parameter signature -- only the two
+# warehouse-side values matter for resolving bootstrap-next's profile.
+_FAKE_WH_SMALL_ARN = "arn:fake-wh-small"
+_FAKE_WH_MEDIUM_ARN = "arn:fake-wh-medium-lh"
+_FAKE_WH_LARGE_ARN = "arn:fake-wh-large-lh"
+_FAKE_LOAD_HISTORY_ARN_PROFILE = {
+    _FAKE_WH_SMALL_ARN: "small",
+    _FAKE_WH_MEDIUM_ARN: "medium",
+    _FAKE_WH_LARGE_ARN: "large",
+}
 
 
 def _script_text() -> str:
@@ -206,25 +232,82 @@ def _run_warehouse_task_profile(workflow_name: str) -> str:
     return _FAKE_ARN_PROFILE[arn]
 
 
+def _run_load_history_bootstrap_next_profile() -> str:
+    """Generate the real write_load_history_definition() state machine JSON
+    and return which profile bootstrap-next's per-window RunWindow step --
+    the actual `bootstrap-next --silver-only` task -- resolves to. Same
+    technique as test_load_history_state_machine.py's `definition` fixture
+    and _run_warehouse_task_profile above; this is what makes bootstrap-next
+    a genuine live-derived value, not a hardcoded assumption (see module
+    docstring, path 3, and the incident it documents)."""
+    fn_source = _extract_function_source(_LOAD_HISTORY_START, _LOAD_HISTORY_END)
+
+    tmp_root = REPO_ROOT / ".pytest_cache" / "task_profile_source_of_truth_test"
+    tmp_root.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(dir=tmp_root) as d:
+        tmp_path = Path(d)
+        fn_file = tmp_path / "load_history_fn.sh"
+        fn_file.write_text(fn_source, encoding="utf-8")
+        out_file = tmp_path / "load_history.json"
+
+        driver = tmp_path / "driver.sh"
+        driver.write_text(
+            "set -euo pipefail\n"
+            'CLUSTER_ARN="arn:aws:ecs:us-east-1:000000000000:cluster/fake-cluster"\n'
+            'BRONZE_BUCKET_NAME="fake-bronze-bucket"\n'
+            'PUBLIC_SUBNET_IDS_JSON=\'["subnet-aaaa","subnet-bbbb"]\'\n'
+            'SECURITY_GROUP_IDS_JSON=\'["sg-cccc"]\'\n'
+            'MDM_RUN_LIMIT=100\n'
+            'MDM_GRAPH_LIMIT=200\n'
+            'MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"\n'
+            f'source "{fn_file.as_posix()}"\n'
+            f'write_load_history_definition "{out_file.as_posix()}" '
+            f'"{_FAKE_WH_SMALL_ARN}" "{_FAKE_WH_MEDIUM_ARN}" '
+            '"arn:fake-mdm-small" "arn:fake-mdm-medium" '
+            f'"{_FAKE_WH_LARGE_ARN}"\n',
+            encoding="utf-8",
+        )
+
+        result = subprocess.run(
+            ["bash", driver.as_posix()], capture_output=True, text=True, timeout=30
+        )
+        if result.returncode != 0:
+            raise AssertionError(
+                f"load_history definition generation failed:\n"
+                f"stdout={result.stdout}\nstderr={result.stderr}"
+            )
+        definition = json.loads(out_file.read_text(encoding="utf-8"))
+
+    branch_a_states = definition["States"]["IngestBronzeAndSilver"]["Branches"][0]["States"]
+    run_window = branch_a_states["WindowedBootstrap"]["ItemProcessor"]["States"]["RunWindow"]
+    arn = run_window["Parameters"]["TaskDefinition"]
+    assert arn in _FAKE_LOAD_HISTORY_ARN_PROFILE, (
+        f"bootstrap-next's RunWindow resolved to an unrecognized ARN {arn!r} -- "
+        "write_load_history_definition's parameter wiring changed shape"
+    )
+    return _FAKE_LOAD_HISTORY_ARN_PROFILE[arn]
+
+
 def _legacy_resolved_profile(command_name: str) -> str:
     """Resolve command_name's *current real* profile via whichever of the
     three legacy mechanisms actually governs it live today."""
     if command_name in _WAREHOUSE_MDM_GOLD_MEMBERS:
         return _run_warehouse_task_profile(command_name.replace("-", "_"))
 
+    if command_name in _LOAD_HISTORY_MEMBERS:
+        return _run_load_history_bootstrap_next_profile()
+
     workflow_name = command_name.replace("-", "_")
     profile = _resolve_workflow_profile(workflow_name)
-    if profile is not None:
-        return profile
-
-    assert command_name in _SPECIAL_CASED_PROFILE, (
+    assert profile is not None, (
         f"{command_name!r} has no legacy resolution path -- it isn't handled "
         "by workflow_profile(), isn't in _WAREHOUSE_MDM_GOLD_MEMBERS, and "
-        "isn't in _SPECIAL_CASED_PROFILE either. Either it doesn't belong in "
+        "isn't in _LOAD_HISTORY_MEMBERS either. Either it doesn't belong in "
         "_ALL_COMMANDS, or this test's dispatch needs updating to match a "
         "real new mechanism."
     )
-    return _SPECIAL_CASED_PROFILE[command_name]
+    return profile
 
 
 def test_command_task_profile_covers_every_legacy_command() -> None:

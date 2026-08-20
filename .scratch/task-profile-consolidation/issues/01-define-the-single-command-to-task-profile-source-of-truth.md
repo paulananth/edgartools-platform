@@ -56,7 +56,7 @@ gold-affecting subset):**
 | `seed-universe` | medium | `workflow_profile()` (live) |
 | `daily-incremental` | large | `write_warehouse_mdm_gold_definition`'s `RunWarehouseTask` (`workflow_profile()`'s case is dead code) |
 | `bootstrap` | large | `write_warehouse_mdm_gold_definition`'s `RunWarehouseTask` (`workflow_profile()`'s case is dead code) |
-| `bootstrap-next` | medium | hardcoded directly in `write_load_history_definition` |
+| `bootstrap-next` | large | hardcoded directly in `write_load_history_definition` |
 
 **Test:** `tests/architecture/test_task_profile_source_of_truth.py`, new
 file (mirrors, and deliberately duplicates rather than imports from,
@@ -94,3 +94,59 @@ each has exactly one call site to migrate (`write_warehouse_mdm_gold_definition`
 `write_load_history_definition` hardcode, respectively) against this proven
 mapping, with zero judgment calls about what the "right" profile is for any
 command — that question is already answered and tested here.
+
+**CORRECTION (2026-08-19, found while implementing ticket 03):** the
+`bootstrap-next` row above originally said **medium**, not large — wrong,
+and not a fresh mistake: it was copied uncritically from
+`test_source_export_commands_task_sizing.py`'s own `_SPECIAL_CASED_PROFILE`
+hardcode, which was itself stale since 2026-08-10 (the real
+`write_load_history_definition` wiring was bumped to `wh_large_arn` after a
+live exit-137 OOM on medium — see that day's comment above the `per_window
+= ecs_state(wh_large_arn, ...)` call, and
+`test_load_history_state_machine.py`'s
+`test_windowed_bootstrap_uses_large_task_definition`, which had already
+been asserting `large` for months). Ticket 01's own acceptance criterion 2
+("a test asserts the new mapping matches each command's *current real*
+resolved profile") was technically violated for exactly this one entry —
+the original test's `_SPECIAL_CASED_PROFILE = {"bootstrap-next": "medium"}`
+documented an assumption rather than deriving it from live-generated ASL,
+unlike the other 9 entries. Had this gone uncorrected, ticket 03's "pure
+migration" would have flipped the live wiring from large back to medium and
+reintroduced the exact OOM the 2026-08-10 fix cured.
+
+**Fixed:** `command_task_profile()`'s `bootstrap-next` case corrected to
+`large`. `tests/architecture/test_task_profile_source_of_truth.py` upgraded
+to derive bootstrap-next's expected value from real `write_load_history_definition`
+ASL generation (reading `WindowedBootstrap`/`RunWindow`'s actual
+`TaskDefinition`, same technique already used for `bootstrap`/
+`daily-incremental`) instead of a hardcoded `_SPECIAL_CASED_PROFILE` entry —
+closing the exact verification gap that let the drift go unnoticed.
+Verified the new test is real (not vacuously passing) by temporarily
+reverting the fix and confirming the test fails red, then restoring it.
+`test_source_export_commands_task_sizing.py`'s identical stale assumption
+was fixed too (`_SPECIAL_CASED_PROFILE["bootstrap-next"]`: medium → large),
+so the two files stop disagreeing about the same command.
+
+**Known, deliberately unresolved discrepancy surfaced by this correction:**
+while re-deriving `write_load_history_definition`'s real wiring, found that
+its own `SeedUniverse` state also runs the `seed-universe` CLI command — the
+*same* command `command_task_profile()`'s `seed-universe → medium` entry
+already covers via the standalone `workflow_profile()` mechanism — but on
+`wh_large_arn`, not medium (also a 2026-08-09 OOM fix, same root cause
+class). This means the claim "the three mechanisms already silently agree
+on every command today" is **not actually true for `seed-universe`** — a
+genuine, currently-live disagreement between two call sites for the
+identical command, not a stale comment. Neither ticket 02 nor 03 touches
+`SeedUniverse` or the standalone `seed_universe` workflow, so left
+unresolved here rather than picking a side unilaterally (unverified whether
+the standalone workflow is *also* at OOM risk on medium). Opened as ticket
+06 (grilling — needs a human decision, not something an agent should
+resolve solo).
+
+Also flagged, not fixed: with this correction, all 7 `SOURCE_EXPORT_COMMANDS`
+members now resolve to `large` — `test_source_export_commands_task_sizing.py`'s
+`GOLD_BUILD_MEMORY_FLOOR_MB = 4096` no longer matches its own docstring's
+claim of being "today's actual minimum" (that's now 8192MB). Not a
+correctness bug (the assertion is `>=`, so it still passes) — a deliberate
+tightening decision left unmade, noted in that file's docstring for whoever
+next revisits it.

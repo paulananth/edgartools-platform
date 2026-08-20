@@ -28,14 +28,34 @@ mechanism, not a single assumed one -- there turn out to be three:
    machine JSON (mirroring test_daily_incremental_state_machine.py's
    approach) and reading RunWarehouseTask's actual TaskDefinition.
 3. `bootstrap-next`: never passed to workflow_profile() at all. Its deployed
-   load_history path is hardcoded to medium but explicitly uses
-   `--silver-only`, so it no longer executes the gold-affecting portion of the
-   command there. The special-case below remains a guard on that real wiring;
-   test_load_history_state_machine separately proves the policy flag is present.
+   load_history path explicitly uses `--silver-only`, so it no longer
+   executes the gold-affecting portion of the command there. The
+   special-case below remains a guard on that real wiring;
+   test_load_history_state_machine separately proves the policy flag is
+   present.
 
 The floor is today's actual minimum across all three paths -- not an
 aspirational value. Bump GOLD_BUILD_MEMORY_FLOOR_MB whenever that minimum
 changes so this test keeps enforcing the current floor.
+
+CORRECTION (2026-08-19, found while implementing task-profile-consolidation
+ticket 03): `_SPECIAL_CASED_PROFILE["bootstrap-next"]` was wrongly "medium"
+-- stale since 2026-08-10, when the real load_history wiring was bumped to
+`wh_large_arn` after a live exit-137 OOM on medium (see
+test_load_history_state_machine.py's
+test_windowed_bootstrap_uses_large_task_definition). This test's own floor
+assertion (`>=` GOLD_BUILD_MEMORY_FLOOR_MB) never caught the drift because
+large's 8192MB still cleared the 4096MB floor either way -- the wrong value
+was silently harmless *here*, even though it would have been actively
+harmful if task-profile-consolidation/task_profile_source_of_truth.py had
+copied it uncritically (which it initially did, from this exact assumption,
+before being independently corrected -- see that file's module docstring).
+Now "large", matching live wiring. Separately: with all 7 SOURCE_EXPORT_COMMANDS
+members now resolving to "large" (8192MB), "today's actual minimum" is
+technically 8192MB, not the 4096MB GOLD_BUILD_MEMORY_FLOOR_MB still encodes
+-- flagged, not bumped here, since raising the floor is a deliberate
+tightening decision (not a correctness bug: `>=` still holds), left to
+whoever next revisits this file or ticket 05's collapse.
 """
 from __future__ import annotations
 
@@ -66,15 +86,16 @@ _WAREHOUSE_MDM_GOLD_MEMBERS = {"bootstrap", "daily-incremental"}
 
 # bootstrap-next is never passed to workflow_profile() and never built by
 # write_warehouse_mdm_gold_definition -- its deployed load_history invocation
-# is hardcoded to medium and explicitly silver-only (see module docstring,
-# path 3 and test_load_history_state_machine.py).
+# is hardcoded to large and explicitly silver-only (see module docstring,
+# path 3 and test_load_history_state_machine.py). Corrected 2026-08-19 --
+# was wrongly "medium" (see module docstring's CORRECTION note).
 #
 # Mapped to the profile actually wired so the architecture inventory remains
 # complete. Its gold path is disabled at that call site; this floor assertion
-# now conservatively proves even a policy regression would retain the former
-# 4096 MB safety floor while the generated-workflow test catches the regression.
+# proves even a policy regression would retain the current safety floor
+# while the generated-workflow test catches the regression.
 _SPECIAL_CASED_PROFILE = {
-    "bootstrap-next": "medium",
+    "bootstrap-next": "large",
 }
 
 _TASK_DEF_MEMORY_PATTERN = re.compile(

@@ -1390,6 +1390,20 @@ command_task_profile() {
     load-daily-form-index-for-date) printf '%s\n' "small" ;;
     catch-up-daily-form-index) printf '%s\n' "small" ;;
     gold-refresh) printf '%s\n' "large" ;;
+    # seed-universe: this value reflects workflow_profile()'s standalone
+    # seed_universe workflow only. KNOWN, DELIBERATELY UNRESOLVED
+    # DISCREPANCY (found 2026-08-19 while implementing ticket 03): the
+    # *same* `seed-universe` CLI command also runs as load_history's own
+    # SeedUniverse state (write_load_history_definition), which was bumped
+    # to wh_task_large_arn on 2026-08-09 after a live exit-137 OOM (that
+    # state's own dispatch unconditionally hydrates the full canonical
+    # silver.duckdb before its tracking-status logic runs -- see that
+    # function's own comment above its `seed = ecs_state(wh_large_arn, ...)`
+    # call). Neither ticket 02 nor 03 touches SeedUniverse, so this isn't
+    # fixed here -- whether the standalone workflow is *also* at OOM risk on
+    # medium, or genuinely doesn't need large (e.g. different universe
+    # size/timing), is an unverified judgment call, not something to
+    # silently pick a side on. See ticket 06.
     seed-universe) printf '%s\n' "medium" ;;
     # daily-incremental/bootstrap: workflow_profile() has cases for these
     # two names but they're dead code (see that function's own comment --
@@ -1402,9 +1416,18 @@ command_task_profile() {
     bootstrap) printf '%s\n' "large" ;;
     # bootstrap-next: never passed to workflow_profile() or
     # write_warehouse_mdm_gold_definition -- load_history's per-window
-    # `bootstrap-next --silver-only` task hardcodes wh_task_medium_arn
-    # directly (write_load_history_definition).
-    bootstrap-next) printf '%s\n' "medium" ;;
+    # `bootstrap-next --silver-only` task (write_load_history_definition's
+    # WindowedBootstrap/RunWindow state) hardcodes wh_task_large_arn
+    # directly. CORRECTED 2026-08-19 (was wrongly "medium" -- inherited
+    # uncritically from a stale hardcoded assumption in
+    # test_source_export_commands_task_sizing.py's own
+    # _SPECIAL_CASED_PROFILE, itself unrevised since the real wiring was
+    # bumped to large on 2026-08-10 after a live exit-137 OOM on medium; see
+    # test_load_history_state_machine.py's
+    # test_windowed_bootstrap_uses_large_task_definition for the live-tested
+    # proof). Had this gone uncorrected, ticket 03's "pure migration" would
+    # have flipped this back to medium and reintroduced that exact OOM.
+    bootstrap-next) printf '%s\n' "large" ;;
     *) fail "unknown command: $1" ;;
   esac
 }
