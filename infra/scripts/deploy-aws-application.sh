@@ -1372,19 +1372,23 @@ command_task_profile() {
     gold-refresh) printf '%s\n' "large" ;;
     # seed-universe: this value reflects the standalone seed_universe
     # workflow only (routed here via workflow_profile()'s pass-through).
-    # KNOWN, DELIBERATELY UNRESOLVED DISCREPANCY (found 2026-08-19 while
-    # implementing ticket 03): the *same* `seed-universe` CLI command also
-    # runs as load_history's own SeedUniverse state
-    # (write_load_history_definition), which was bumped to wh_task_large_arn
-    # on 2026-08-09 after a live exit-137 OOM (that state's own dispatch
-    # unconditionally hydrates the full canonical silver.duckdb before its
-    # tracking-status logic runs -- see that function's own comment above
-    # its `seed = ecs_state(wh_large_arn, ...)` call). Neither ticket 02,
-    # 03, nor 04 touches SeedUniverse, so this isn't fixed here -- whether
-    # the standalone workflow is *also* at OOM risk on medium, or genuinely
-    # doesn't need large (e.g. different universe size/timing), is an
-    # unverified judgment call, not something to silently pick a side on.
-    # See ticket 06.
+    # DECIDED, ticket 06 (2026-08-20): stays "medium". The root cause of the
+    # 2026-08-09 OOM this discrepancy was named after -- an unconditional
+    # full-buffer hydrate of canonical silver.duckdb before any per-command
+    # filtering logic runs -- is fixed and confirmed live in prod
+    # (seed-universe-narrow-hydrate map: streaming hydrate, PR #392, plus
+    # moving the active-CIK novelty filter off silver onto MDM, PR #394; both
+    # apply identically to every seed-universe invocation regardless of
+    # caller). A separate, still-unpatched risk remains (the merge/publish
+    # step's own full-buffer read/write, deliberately deferred as
+    # "unobserved" by that same map) -- checked live 2026-08-20: canonical
+    # was 1.5GiB, comfortably inside medium's 4096MB envelope for that step,
+    # with real but shrinking headroom as canonical grows. load_history's own
+    # SeedUniverse state remains on large from the original emergency bump,
+    # not reverted here -- see ticket 07
+    # (.scratch/task-profile-consolidation/issues/
+    # 07-decide-whether-to-revert-load-historys-seeduniverse-off-large.md)
+    # for that follow-on, explicitly out of ticket 06's scope.
     seed-universe) printf '%s\n' "medium" ;;
     # daily-incremental/bootstrap: these two commands are never actually
     # dispatched through workflow_profile()'s pass-through above (its real
