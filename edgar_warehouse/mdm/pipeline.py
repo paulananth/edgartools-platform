@@ -575,17 +575,24 @@ class MDMPipeline:
         shared key that carries no real match risk.
         """
         resolver = SecurityResolver()
+        # mdm-ownership-resolver-filing-join-gap ticket 01: LEFT JOIN, not INNER --
+        # sec_company_filing is only populated for tracked companies' bulk-fetched
+        # submission history. An ownership filing's issuer is not necessarily a
+        # tracked company (e.g. an insider's Form 4 for an issuer that was never
+        # bootstrapped), so an INNER JOIN here silently and permanently drops those
+        # rows from every future run. issuer_cik is genuinely optional downstream --
+        # SecurityResolver already has a NULL-issuer-scoped matching path.
         sql = """
             SELECT DISTINCT t.accession_number, t.owner_index, t.txn_index,
                    t.security_title, f.cik AS issuer_cik, FALSE AS is_derivative
             FROM sec_ownership_non_derivative_txn t
-            JOIN sec_company_filing f ON t.accession_number = f.accession_number
+            LEFT JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
             UNION ALL
             SELECT DISTINCT t.accession_number, t.owner_index, t.txn_index,
                    t.security_title, f.cik AS issuer_cik, TRUE AS is_derivative
             FROM sec_ownership_derivative_txn t
-            JOIN sec_company_filing f ON t.accession_number = f.accession_number
+            LEFT JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
         """
         if limit:
@@ -655,12 +662,23 @@ class MDMPipeline:
         ctx = self._ctx()
         resolver = PersonResolver()
         ciks = self._normalize_issuer_ciks(issuer_ciks)
+        # mdm-ownership-resolver-filing-join-gap ticket 01: LEFT JOIN, not INNER --
+        # sec_company_filing is only populated for tracked companies' bulk-fetched
+        # submission history. An ownership filing's issuer is not necessarily a
+        # tracked company (e.g. an insider's Form 4 for an issuer that was never
+        # bootstrapped), so an INNER JOIN here silently and permanently drops those
+        # rows from every future run. issuer_cik is genuinely optional downstream
+        # (PersonResolver.resolve_one defaults it to None). The explicit
+        # `--cik`/issuer_ciks filter below still works correctly under LEFT JOIN --
+        # f.cik is NULL for an unmatched row, and NULL never satisfies `IN (...)`,
+        # so a caller-scoped run still excludes untracked issuers as intended; only
+        # the unscoped (issuer_ciks=None) default run picks them up.
         sql = """
             SELECT DISTINCT o.owner_cik, o.owner_name, o.officer_title,
                    o.is_director, o.is_officer, o.is_ten_percent_owner, o.is_other,
                    o.accession_number, o.owner_index, f.cik AS issuer_cik
             FROM sec_ownership_reporting_owner o
-            JOIN sec_company_filing f ON o.accession_number = f.accession_number
+            LEFT JOIN sec_company_filing f ON o.accession_number = f.accession_number
             WHERE o.owner_name IS NOT NULL
         """
         params: list[Any] = []
