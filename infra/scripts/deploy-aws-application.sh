@@ -1366,6 +1366,49 @@ workflow_profile() {
   esac
 }
 
+# task-profile-consolidation wayfinder map, ticket 01
+# (.scratch/task-profile-consolidation/issues/
+# 01-define-the-single-command-to-task-profile-source-of-truth.md): single
+# command name -> task profile source of truth, added *alongside*
+# workflow_profile() above, write_warehouse_mdm_gold_definition's hardcoded
+# wh_task_medium_arn/wh_task_large_arn parameters, and bootstrap-next's own
+# hardcoded "medium" special case in write_load_history_definition -- those
+# three independently-maintained mechanisms already silently agree on every
+# command below today (proven by
+# tests/architecture/test_task_profile_source_of_truth.py, which cross-checks
+# this function's answer against each command's *real* currently-live
+# resolution path). Nothing has been switched over to call this function
+# yet -- see tickets 02-04 in .scratch/task-profile-consolidation/issues/ for
+# the migration that retires the old mechanisms once this one is proven
+# correct. Keyed by the real CLI command name (hyphenated), not
+# workflow_profile()'s underscore-workflow-name spelling.
+command_task_profile() {
+  case "$1" in
+    bootstrap-full) printf '%s\n' "large" ;;
+    targeted-resync) printf '%s\n' "large" ;;
+    full-reconcile) printf '%s\n' "large" ;;
+    load-daily-form-index-for-date) printf '%s\n' "small" ;;
+    catch-up-daily-form-index) printf '%s\n' "small" ;;
+    gold-refresh) printf '%s\n' "large" ;;
+    seed-universe) printf '%s\n' "medium" ;;
+    # daily-incremental/bootstrap: workflow_profile() has cases for these
+    # two names but they're dead code (see that function's own comment --
+    # never actually called with these names). The real resolved profile
+    # comes from write_warehouse_mdm_gold_definition's RunWarehouseTask step,
+    # hardcoded to wh_task_large_arn -- "large" here matches that live
+    # resolution, not workflow_profile()'s unreached declared value (though
+    # today the two happen to already agree).
+    daily-incremental) printf '%s\n' "large" ;;
+    bootstrap) printf '%s\n' "large" ;;
+    # bootstrap-next: never passed to workflow_profile() or
+    # write_warehouse_mdm_gold_definition -- load_history's per-window
+    # `bootstrap-next --silver-only` task hardcodes wh_task_medium_arn
+    # directly (write_load_history_definition).
+    bootstrap-next) printf '%s\n' "medium" ;;
+    *) fail "unknown command: $1" ;;
+  esac
+}
+
 workflow_command_expression() {
   case "$1" in
     daily_incremental) printf '%s\n' "States.Array('daily-incremental', '--run-id', \$\$.Execution.Name)" ;;
