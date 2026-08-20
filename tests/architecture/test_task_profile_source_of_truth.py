@@ -68,11 +68,19 @@ now call it directly (tickets 02/03). This test therefore no longer proves
 the new mapping against genuinely independent legacy behavior -- it's a
 regression-lock confirming the migration didn't change any command's
 resolved profile, and confirming an unmapped command still fails loudly
-end-to-end through whichever real caller reaches it. Left as-is rather than
-rewritten: ticket 05 only scopes the sibling file's collapse, and this
-file's tests still pass and still catch a real regression (a caller
-drifting off the shared mapping again). A future pass could fold this file
-into ticket 05's collapse, but that's not decided here.
+end-to-end through whichever real caller reaches it.
+
+UPDATE (2026-08-19, ticket 05 landed):
+test_source_export_commands_task_sizing.py's own three-mechanism
+reverse-engineering is now retired -- it asserts against
+``command_task_profile()`` directly for its SOURCE_EXPORT_COMMANDS subset.
+This file still covers the full _ALL_COMMANDS set (including
+load-daily-form-index-for-date / catch-up-daily-form-index / seed-universe,
+which aren't gold-affecting and so fall outside that file's scope) and still
+regenerates real ASL for paths 2/3 rather than calling
+``command_task_profile()`` a second time under a different name, so the two
+files are not yet fully redundant -- left as two files, not folded into one,
+since no ticket has scoped that decision.
 """
 from __future__ import annotations
 
