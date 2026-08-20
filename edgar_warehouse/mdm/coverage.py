@@ -56,12 +56,17 @@ def compute_coverage(silver_reader: Any, session: Session) -> list[dict]:
     # ------------------------------------------------------------------
     # Persons — non-corporate reporting owners.
     # Mirrors: run_persons excludes owner_cik values present in sec_company
-    # (the silver-side proxy for _company_cik_set()).
+    # (the silver-side proxy for _company_cik_set()). LEFT JOIN, not INNER
+    # (mdm-ownership-resolver-filing-join-gap ticket 01) -- sec_company_filing
+    # only covers tracked companies' bulk-fetched submission history, and an
+    # ownership filing's issuer need not be tracked. An INNER JOIN here would
+    # undercount silver_count relative to what run_persons (now LEFT JOIN)
+    # actually resolves, producing a bogus negative gap.
     # ------------------------------------------------------------------
     person_silver = _silver(
         "SELECT COUNT(DISTINCT o.owner_cik) AS n "
         "FROM sec_ownership_reporting_owner o "
-        "JOIN sec_company_filing f ON o.accession_number = f.accession_number "
+        "LEFT JOIN sec_company_filing f ON o.accession_number = f.accession_number "
         "WHERE o.owner_name IS NOT NULL "
         "  AND (o.owner_cik IS NULL "
         "       OR o.owner_cik NOT IN (SELECT cik FROM sec_company))"
@@ -72,17 +77,19 @@ def compute_coverage(silver_reader: Any, session: Session) -> list[dict]:
     # Securities — ownership-sourced transactions only.
     # Mirrors: run_securities UNION ALL of non-derivative + derivative txns.
     # XBRL-sourced securities (sec_financial_fact) are deferred to Phase 6.
+    # LEFT JOIN, not INNER (mdm-ownership-resolver-filing-join-gap ticket 01)
+    # -- same reasoning as persons above.
     # ------------------------------------------------------------------
     security_silver = _silver(
         "SELECT COUNT(*) AS n FROM ("
         "  SELECT t.accession_number, t.owner_index, t.txn_index"
         "  FROM sec_ownership_non_derivative_txn t"
-        "  JOIN sec_company_filing f ON t.accession_number = f.accession_number"
+        "  LEFT JOIN sec_company_filing f ON t.accession_number = f.accession_number"
         "  WHERE t.security_title IS NOT NULL"
         "  UNION ALL"
         "  SELECT t.accession_number, t.owner_index, t.txn_index"
         "  FROM sec_ownership_derivative_txn t"
-        "  JOIN sec_company_filing f ON t.accession_number = f.accession_number"
+        "  LEFT JOIN sec_company_filing f ON t.accession_number = f.accession_number"
         "  WHERE t.security_title IS NOT NULL"
         ")"
     )

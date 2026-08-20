@@ -1,0 +1,27 @@
+{
+    "stateMachineArn": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-run",
+    "name": "edgartools-prod-mdm-run",
+    "status": "ACTIVE",
+    "definition": "{\n  \"Comment\": \"Run an EdgarTools MDM workflow on ECS Fargate with an optional numeric limit override.\",\n  \"StartAt\": \"HasLimitOverride\",\n  \"States\": {\n    \"HasLimitOverride\": {\n      \"Type\": \"Choice\",\n      \"Choices\": [\n        {\n          \"And\": [\n            {\n              \"Variable\": \"$.limit\",\n              \"IsPresent\": true\n            },\n            {\n              \"Variable\": \"$.limit\",\n              \"IsNumeric\": true\n            }\n          ],\n          \"Next\": \"RunMdmTaskWithLimit\"\n        }\n      ],\n      \"Default\": \"RunMdmTaskDefault\"\n    },\n    \"RunMdmTaskDefault\": {\n      \"Type\": \"Task\",\n      \"Resource\": \"arn:aws:states:::ecs:runTask.sync\",\n      \"Parameters\": {\n        \"LaunchType\": \"FARGATE\",\n        \"Cluster\": \"arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse\",\n        \"TaskDefinition\": \"arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:149\",\n        \"PropagateTags\": \"TASK_DEFINITION\",\n        \"NetworkConfiguration\": {\n          \"AwsvpcConfiguration\": {\n            \"AssignPublicIp\": \"ENABLED\",\n            \"SecurityGroups\": [\n              \"sg-0f7de61f13ba27744\"\n            ],\n            \"Subnets\": [\n              \"subnet-09dfb6a34597e8ed3\",\n              \"subnet-0606a828b86737ac6\"\n            ]\n          }\n        },\n        \"Overrides\": {\n          \"ContainerOverrides\": [\n            {\n              \"Name\": \"edgar-warehouse\",\n              \"Command.$\": \"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '100')\"\n            }\n          ]\n        }\n      },\n      \"Retry\": [\n        {\n          \"ErrorEquals\": [\n            \"States.TaskFailed\"\n          ],\n          \"IntervalSeconds\": 60,\n          \"BackoffRate\": 2.0,\n          \"MaxAttempts\": 2\n        }\n      ],\n      \"End\": true\n    },\n    \"RunMdmTaskWithLimit\": {\n      \"Type\": \"Task\",\n      \"Resource\": \"arn:aws:states:::ecs:runTask.sync\",\n      \"Parameters\": {\n        \"LaunchType\": \"FARGATE\",\n        \"Cluster\": \"arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse\",\n        \"TaskDefinition\": \"arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:149\",\n        \"PropagateTags\": \"TASK_DEFINITION\",\n        \"NetworkConfiguration\": {\n          \"AwsvpcConfiguration\": {\n            \"AssignPublicIp\": \"ENABLED\",\n            \"SecurityGroups\": [\n              \"sg-0f7de61f13ba27744\"\n            ],\n            \"Subnets\": [\n              \"subnet-09dfb6a34597e8ed3\",\n              \"subnet-0606a828b86737ac6\"\n            ]\n          }\n        },\n        \"Overrides\": {\n          \"ContainerOverrides\": [\n            {\n              \"Name\": \"edgar-warehouse\",\n              \"Command.$\": \"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', States.Format('{}', $.limit))\"\n            }\n          ]\n        }\n      },\n      \"Retry\": [\n        {\n          \"ErrorEquals\": [\n            \"States.TaskFailed\"\n          ],\n          \"IntervalSeconds\": 60,\n          \"BackoffRate\": 2.0,\n          \"MaxAttempts\": 2\n        }\n      ],\n      \"End\": true\n    }\n  }\n}\n",
+    "roleArn": "arn:aws:iam::690839588395:role/sec_platform_prod_runner_step_functions",
+    "type": "STANDARD",
+    "creationDate": "2026-07-04T01:09:08.612000-04:00",
+    "loggingConfiguration": {
+        "level": "ALL",
+        "includeExecutionData": true,
+        "destinations": [
+            {
+                "cloudWatchLogsLogGroup": {
+                    "logGroupArn": "arn:aws:logs:us-east-1:690839588395:log-group:/aws/states/edgartools-prod-warehouse:*"
+                }
+            }
+        ]
+    },
+    "tracingConfiguration": {
+        "enabled": false
+    },
+    "revisionId": "383ab2ad-da47-45d9-b6fd-3db84bb90591",
+    "encryptionConfiguration": {
+        "type": "AWS_OWNED_KEY"
+    }
+}

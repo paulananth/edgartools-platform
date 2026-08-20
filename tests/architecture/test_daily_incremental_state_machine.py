@@ -33,6 +33,12 @@ DEPLOY_SCRIPT = REPO_ROOT / "infra" / "scripts" / "deploy-aws-application.sh"
 _START_MARKER = "write_warehouse_mdm_gold_definition() {\n"
 _END_MARKER = "\nPY\n}\n"
 
+# write_warehouse_mdm_gold_definition calls command_task_profile()
+# internally (task-profile-consolidation ticket 02) to resolve
+# RunWarehouseTask's profile -- extracted and sourced alongside it below.
+_COMMAND_TASK_PROFILE_START = "command_task_profile() {\n"
+_COMMAND_TASK_PROFILE_END = "\n}\n"
+
 # LeaseAcquiredCheck inverts this file's usual Choice convention (Default is
 # the fail-closed Deferred path, not the happy path) -- trace helpers must be
 # told to prefer the explicit lease_acquired=True branch when tracing the
@@ -82,8 +88,16 @@ def _extract_function_source() -> str:
     return text[start:end]
 
 
+def _extract_command_task_profile_source() -> str:
+    text = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    start = text.index(_COMMAND_TASK_PROFILE_START)
+    end = text.index(_COMMAND_TASK_PROFILE_END, start) + len(_COMMAND_TASK_PROFILE_END)
+    return text[start:end]
+
+
 def _generate(workflow_name: str) -> dict:
     fn_source = _extract_function_source()
+    command_task_profile_source = _extract_command_task_profile_source()
 
     tmp_root = REPO_ROOT / ".pytest_cache" / "daily_incremental_sm_test"
     tmp_root.mkdir(parents=True, exist_ok=True)
@@ -92,17 +106,21 @@ def _generate(workflow_name: str) -> dict:
         tmp_path = Path(d)
         fn_file = tmp_path / "warehouse_mdm_gold_fn.sh"
         fn_file.write_text(fn_source, encoding="utf-8")
+        command_task_profile_file = tmp_path / "command_task_profile_fn.sh"
+        command_task_profile_file.write_text(command_task_profile_source, encoding="utf-8")
         out_file = tmp_path / f"{workflow_name}.json"
 
         driver = tmp_path / "driver.sh"
         driver.write_text(
             "set -euo pipefail\n"
+            'fail() { echo "ERROR: $*" >&2; exit 1; }\n'
             'CLUSTER_ARN="arn:aws:ecs:us-east-1:000000000000:cluster/fake-cluster"\n'
             'BRONZE_BUCKET_NAME="fake-bronze-bucket"\n'
             "PUBLIC_SUBNET_IDS_JSON='[\"subnet-aaaa\",\"subnet-bbbb\"]'\n"
             "SECURITY_GROUP_IDS_JSON='[\"sg-cccc\"]'\n"
             "MDM_RUN_LIMIT=100\n"
             "MDM_GRAPH_LIMIT=200\n"
+            f'source "{command_task_profile_file.as_posix()}"\n'
             f'source "{fn_file.as_posix()}"\n'
             f'write_warehouse_mdm_gold_definition "{out_file.as_posix()}" '
             '"arn:wh-medium" "arn:mdm-small" "arn:mdm-medium" "arn:wh-large" '

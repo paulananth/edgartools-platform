@@ -270,6 +270,31 @@ def _create_silver_fixture(path: str) -> None:
         ["0001234567-24-000001", 0, 0, "Common Stock", "2024-01-14"],
     )
 
+    # Untracked-issuer regression fixture (mdm-ownership-resolver-filing-join-gap
+    # ticket 01): this accession deliberately has NO matching sec_company_filing
+    # row -- reproducing a real live-prod shape (an insider's Form 4 for an
+    # issuer that was never bootstrapped as a tracked company, so its
+    # sec_company_filing history was never populated). run_persons()/
+    # run_securities() must not silently and permanently drop these rows.
+    con.execute(
+        "INSERT INTO sec_ownership_reporting_owner "
+        "(accession_number, owner_index, owner_cik, owner_name, is_director, is_officer, "
+        "is_ten_percent_owner, is_other) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ["0009999999-24-000099", 0, 910202, "Untracked Issuer Insider", True, False, False, False],
+    )
+    # Deliberately a distinct title from the "Common Stock" row above -- sharing
+    # a canonical_title with another issuer's row would exercise
+    # SecurityResolver's separate (and separately order-dependent, pre-existing,
+    # out of scope for this ticket) NULL-issuer "upgrade" merge path instead of
+    # cleanly testing the JOIN-gap fix in isolation.
+    con.execute(
+        "INSERT INTO sec_ownership_non_derivative_txn "
+        "(accession_number, owner_index, txn_index, security_title, transaction_date) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ["0009999999-24-000099", 0, 0, "Untracked Co Common Stock", "2024-02-01"],
+    )
+
     con.close()
 
 
@@ -868,6 +893,60 @@ class TestMDMPipelineUsesCurrentSilverSchema:
 
         n = pipeline.run_persons()
         assert n >= 0  # Just ensure it doesn't raise a schema error
+
+    def test_run_persons_resolves_owner_with_no_filing_match(self, silver_duckdb, mdm_session):
+        """mdm-ownership-resolver-filing-join-gap ticket 01: an ownership row whose
+        accession has no sec_company_filing row (an untracked issuer) must still be
+        resolved -- not silently and permanently dropped by the INNER JOIN.
+        """
+        from edgar_warehouse.mdm.database import MdmSourceRef
+
+        reader = _DuckReader(str(silver_duckdb))
+        pipeline = MDMPipeline(session=mdm_session, silver=reader)
+
+        pipeline.run_companies()
+        mdm_session.commit()
+        pipeline.run_persons()
+        mdm_session.commit()
+
+        ref = (
+            mdm_session.query(MdmSourceRef)
+            .filter_by(source_system="ownership_filing", source_id="0009999999-24-000099:0")
+            .one_or_none()
+        )
+        assert ref is not None, (
+            "run_persons() dropped the reporting-owner row for accession "
+            "0009999999-24-000099 (no sec_company_filing match) instead of resolving "
+            "it -- the INNER JOIN to sec_company_filing must not silently exclude rows "
+            "whose issuer was never bootstrapped as a tracked company."
+        )
+
+    def test_run_securities_resolves_txn_with_no_filing_match(self, silver_duckdb, mdm_session):
+        """mdm-ownership-resolver-filing-join-gap ticket 01: same gap, run_securities()."""
+        from edgar_warehouse.mdm.database import MdmSourceRef
+
+        reader = _DuckReader(str(silver_duckdb))
+        pipeline = MDMPipeline(session=mdm_session, silver=reader)
+
+        pipeline.run_companies()
+        mdm_session.commit()
+        pipeline.run_securities()
+        mdm_session.commit()
+
+        ref = (
+            mdm_session.query(MdmSourceRef)
+            .filter_by(
+                source_system="ownership_filing",
+                source_id="0009999999-24-000099:0:0",
+            )
+            .one_or_none()
+        )
+        assert ref is not None, (
+            "run_securities() dropped the non-derivative txn row for accession "
+            "0009999999-24-000099 (no sec_company_filing match) instead of resolving "
+            "it -- the INNER JOIN to sec_company_filing must not silently exclude rows "
+            "whose issuer was never bootstrapped as a tracked company."
+        )
 
 
 # ---------------------------------------------------------------------------

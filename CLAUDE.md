@@ -1105,7 +1105,7 @@ every prior entry in this file). **Not yet deployed** as of this entry — no li
 before/after timing has been captured; the CloudWatch overlap-counting method above is
 the way to get one once this ships.
 
-## MDM Postgres migration-011 schema drift blocking every mdm run (resolved 2026-08-19)
+## MDM Postgres migration-011 schema drift blocking every mdm run (resolved 2026-08-20 — see correction below; the 2026-08-19 "resolved" claim was itself never actually verified)
 
 **Problem:** the `relderiv-fix-verify-1787165186` execution (verifying the
 relationship-derivation-concurrency fix above) failed at `MdmRun` — every
@@ -1173,6 +1173,81 @@ correct on its own can look broken purely because a sibling change's
 migration never ran. When `mdm run` (or any MDM Postgres consumer) fails
 with `UndefinedColumn`/`UndefinedTable`, check for an unapplied migration
 before assuming the failing code itself is at fault.
+
+**CORRECTION (2026-08-20): the "Fix" above never actually fixed anything —
+both of its verification steps were false signals.** Discovered while
+investigating a Stage 14 (`bronze_seed_silver_gold`) full-universe rerun
+that still failed at `MdmRun` with the identical `UndefinedColumn:
+mdm_source_ref.source_content_hash` error, a full day after this section
+was first marked resolved.
+
+1. Symptom: `mdm run --entity-type all` still failed with the exact same
+   error the original "Fix" claimed to have closed, reproduced twice more
+   (once inside Stage 14's real execution, once via a standalone scoped
+   `mdm run --limit 5` on the current `edgartools-prod-mdm-medium:178` task
+   def) — including immediately after re-running the exact same "Fix"
+   command and confirming it reported SUCCEEDED again.
+2. Why would the same "successful" fix keep failing to fix anything? Both
+   `edgartools-prod-mdm-migrate` (the "Fix" step) and
+   `edgartools-prod-mdm-run` (the "Re-verified" step) are individually-named
+   state machines that the state-machine-consolidation effort (ticket 02,
+   2026-08-10, `.scratch/state-machine-consolidation/issues/
+   02-decide-consolidation-mechanism-for-shared-mdm-tail.md`) had already
+   superseded with one consolidated `edgartools-prod-mdm-utility` machine
+   (`{"mode": "mdm_migrate"}` / `{"mode": "mdm_run"}`) nine days earlier —
+   but left `ACTIVE`, un-deleted, called "orphaned but harmless" in that
+   ticket's own text.
+3. Why does invoking an "orphaned but harmless" machine matter? Both
+   orphaned originals are frozen on task-def revisions from an image pushed
+   **2026-08-09** (`edgartools-prod-mdm-{small,medium}:149`) — a full day
+   *before* commit `7ffda2d7` even added `source_content_hash` to the
+   `MdmSourceRef` model or wrote migration 011. `edgartools-prod-mdm-utility`
+   was, by contrast, correctly re-registered onto the current `:178`
+   revision by every deploy since (confirmed live: `edgartools-prod-mdm-
+   small:178`/`edgartools-prod-mdm-medium:178` both resolve to the current
+   prod image digest, an ancestor of `85ab9e65`).
+4. Why did that make the original "Fix" a false positive? `mdm migrate`'s
+   stale 2026-08-09 image doesn't contain `011_source_ref_content_hash.sql`
+   in its migration sequence at all (that file didn't exist yet when the
+   image was built) — so the orphaned `edgartools-prod-mdm-migrate` ran a
+   shorter, older migration list, hit nothing new, and reported SUCCEEDED
+   truthfully — for a version of the schema that was never the live problem.
+   The real Postgres table was never touched.
+5. **Root cause of the false negative too:** the orphaned
+   `edgartools-prod-mdm-run`'s equally-stale image predates
+   `source_content_hash` being added to the ORM model, so its `SELECT`
+   against `mdm_source_ref` never asked for that column in the first place
+   — "no `UndefinedColumn` error" was not evidence the migration worked, it
+   was evidence the check never exercised the code path being tested. Two
+   independent stale-code false signals, both pointing the same wrong
+   direction, made the "resolved 2026-08-19" claim look doubly confirmed
+   when neither confirmation ever touched current code.
+
+**Real fix:** re-ran the migration via the actually-current
+`edgartools-prod-mdm-utility` machine (`{"mode": "mdm_migrate"}`) —
+confirmed via direct ECS log inspection that `mdm_source_ref.source_content_hash`
+is now queried, updated, and read back successfully with zero
+`UndefinedColumn` errors, on a scoped `mdm run --entity-type company --limit
+5` task run directly against the current `edgartools-prod-mdm-medium:178`
+task def (exit code 0). Migration 011 is now genuinely, durably applied.
+
+**Lesson (sharper than the first pass above):** "the fix succeeded" and "the
+verification found no error" are not equivalent to "the fix touched current
+code" — when a check can silently run against stale, superseded
+infrastructure and still report a clean result, a false positive and a
+false negative can both look identical to success.
+
+**Gap closed same-day (2026-08-20):** all 7 orphaned MDM Utility Machine
+originals — not just the two that bit this incident — were deleted live in
+prod (`.scratch/state-machine-consolidation/issues/
+05-delete-orphaned-mdm-utility-machine-originals.md`, resolved): zero
+running executions confirmed, fresh rollback snapshots captured, then
+`edgartools-prod-mdm-run`/`-backfill-relationships`/`-sync-graph`/
+`-verify-graph`/`-counts`/`-migrate`/`-check-connectivity` all deleted.
+`edgartools-prod-mdm-utility` (the correct, current consolidated machine)
+and every legitimate sibling confirmed untouched. This class of false
+signal can no longer recur through these 7 names — there is nothing left
+to accidentally invoke.
 
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 

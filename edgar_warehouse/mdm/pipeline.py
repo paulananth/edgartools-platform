@@ -333,16 +333,44 @@ class MDMPipeline:
                 )
             else:
                 rows = []
-        else:
-            sql = "SELECT * FROM sec_company"
-            params: list[Any] = []
-            if ciks is not None:
-                placeholders = ", ".join("?" for _ in ciks)
-                sql += f" WHERE cik IN ({placeholders})"
-                params.extend(ciks)
+        elif ciks is not None:
+            sql = "SELECT * FROM sec_company WHERE cik IN ({})".format(
+                ", ".join("?" for _ in ciks)
+            )
             if limit:
                 sql += f" LIMIT {int(limit)}"
-            rows = self.silver.fetch(sql, params or None)
+            rows = self.silver.fetch(sql, list(ciks))
+        elif limit:
+            # release-readiness ticket 94: a bounded (no resume, no
+            # issuer_ciks) full-universe call previously plateaued on the
+            # same first `limit` rows on every call -- "SELECT * FROM
+            # sec_company LIMIT N" has no ORDER BY and no WHERE excluding
+            # already-resolved CIKs, so a resolver that idempotently
+            # skips/reuses already-resolved CIKs (see this method's own
+            # docstring) never advanced past the first N rows in whatever
+            # order the table scan happened to return. Confirmed live via a
+            # real SilverDatabase-backed repro: 3 successive limit=2 calls
+            # against a 5-company universe never resolved past the same
+            # first 2 CIKs. This is the identical plateau shape already
+            # documented and fixed for relationship-derivation's own source
+            # query (_bounded_relationship_sql's docstring above) -- ported
+            # here: over-fetch a growing window past the already-resolved
+            # prefix (stable ORDER BY cik + the existing-count-scaled LIMIT
+            # that helper already computes), exclude already-resolved CIKs,
+            # then cap at `limit` genuinely-new candidates -- same
+            # bounded-cost-per-call contract as before (at most `limit` real
+            # MDM resolutions happen), but the window now actually advances
+            # on repeat calls instead of plateauing.
+            already_resolved = self._company_cik_set()
+            fetch_sql = self._bounded_relationship_sql(
+                "SELECT * FROM sec_company ORDER BY cik", limit, len(already_resolved)
+            )
+            candidate_rows = self.silver.fetch(fetch_sql)
+            rows = [
+                row for row in candidate_rows if row["cik"] not in already_resolved
+            ][: int(limit)]
+        else:
+            rows = self.silver.fetch("SELECT * FROM sec_company")
 
         ticker_rows = self.silver.fetch(
             "SELECT cik, ticker, exchange FROM sec_company_ticker "
@@ -575,17 +603,24 @@ class MDMPipeline:
         shared key that carries no real match risk.
         """
         resolver = SecurityResolver()
+        # mdm-ownership-resolver-filing-join-gap ticket 01: LEFT JOIN, not INNER --
+        # sec_company_filing is only populated for tracked companies' bulk-fetched
+        # submission history. An ownership filing's issuer is not necessarily a
+        # tracked company (e.g. an insider's Form 4 for an issuer that was never
+        # bootstrapped), so an INNER JOIN here silently and permanently drops those
+        # rows from every future run. issuer_cik is genuinely optional downstream --
+        # SecurityResolver already has a NULL-issuer-scoped matching path.
         sql = """
             SELECT DISTINCT t.accession_number, t.owner_index, t.txn_index,
                    t.security_title, f.cik AS issuer_cik, FALSE AS is_derivative
             FROM sec_ownership_non_derivative_txn t
-            JOIN sec_company_filing f ON t.accession_number = f.accession_number
+            LEFT JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
             UNION ALL
             SELECT DISTINCT t.accession_number, t.owner_index, t.txn_index,
                    t.security_title, f.cik AS issuer_cik, TRUE AS is_derivative
             FROM sec_ownership_derivative_txn t
-            JOIN sec_company_filing f ON t.accession_number = f.accession_number
+            LEFT JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
         """
         if limit:
@@ -655,12 +690,23 @@ class MDMPipeline:
         ctx = self._ctx()
         resolver = PersonResolver()
         ciks = self._normalize_issuer_ciks(issuer_ciks)
+        # mdm-ownership-resolver-filing-join-gap ticket 01: LEFT JOIN, not INNER --
+        # sec_company_filing is only populated for tracked companies' bulk-fetched
+        # submission history. An ownership filing's issuer is not necessarily a
+        # tracked company (e.g. an insider's Form 4 for an issuer that was never
+        # bootstrapped), so an INNER JOIN here silently and permanently drops those
+        # rows from every future run. issuer_cik is genuinely optional downstream
+        # (PersonResolver.resolve_one defaults it to None). The explicit
+        # `--cik`/issuer_ciks filter below still works correctly under LEFT JOIN --
+        # f.cik is NULL for an unmatched row, and NULL never satisfies `IN (...)`,
+        # so a caller-scoped run still excludes untracked issuers as intended; only
+        # the unscoped (issuer_ciks=None) default run picks them up.
         sql = """
             SELECT DISTINCT o.owner_cik, o.owner_name, o.officer_title,
                    o.is_director, o.is_officer, o.is_ten_percent_owner, o.is_other,
                    o.accession_number, o.owner_index, f.cik AS issuer_cik
             FROM sec_ownership_reporting_owner o
-            JOIN sec_company_filing f ON o.accession_number = f.accession_number
+            LEFT JOIN sec_company_filing f ON o.accession_number = f.accession_number
             WHERE o.owner_name IS NOT NULL
         """
         params: list[Any] = []

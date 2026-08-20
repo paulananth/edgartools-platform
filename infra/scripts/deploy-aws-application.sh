@@ -1338,31 +1338,90 @@ task_definition_for_mdm_workflow() {
   esac
 }
 
+# task-profile-consolidation wayfinder map, ticket 04
+# (.scratch/task-profile-consolidation/issues/
+# 04-retire-workflow-profile-dead-cases.md): workflow_profile() no longer
+# holds an independent case statement -- it's a thin pass-through that
+# translates its callers' underscore-style workflow names (e.g.
+# "bootstrap_full") to command_task_profile()'s hyphenated CLI command names
+# (e.g. "bootstrap-full") and delegates entirely. Its former case statement
+# (including "daily_incremental"/"bootstrap", which were always dead code --
+# see command_task_profile()'s comment below) is retired; there is now
+# exactly one place task-profile resolution logic lives.
 workflow_profile() {
+  command_task_profile "${1//_/-}"
+}
+
+# task-profile-consolidation wayfinder map, ticket 01
+# (.scratch/task-profile-consolidation/issues/
+# 01-define-the-single-command-to-task-profile-source-of-truth.md): the
+# single command name -> task profile source of truth.
+# write_warehouse_mdm_gold_definition (ticket 02) and
+# write_load_history_definition (ticket 03) both call this directly for
+# their own task-def resolution; workflow_profile() above (ticket 04) is now
+# a thin pass-through onto this same mapping. There is exactly one place
+# task-profile resolution logic lives. Keyed by the real CLI command name
+# (hyphenated), not workflow_profile()'s underscore-workflow-name spelling.
+command_task_profile() {
   case "$1" in
-    # DEAD CODE as of 2026-07-30 (gold-build-memory-reliability ticket 03 investigation):
-    # workflow_profile() is never actually *called* with "daily_incremental" or "bootstrap"
-    # anywhere in this script -- their real RunWarehouseTask task-def comes from
-    # write_warehouse_mdm_gold_definition's run_wh (see that function's own comment), not
-    # from here. These two cases are kept only so a value exists if that ever changes; set
-    # to "large" to match the ticket 03 decision (both need large's raised 8192MB ceiling,
-    # same as bootstrap_full/full_reconcile/gold_refresh below), not because this line is
-    # actually reached in production.
-    daily_incremental) printf '%s\n' "large" ;;
+    bootstrap-full) printf '%s\n' "large" ;;
+    targeted-resync) printf '%s\n' "large" ;;
+    full-reconcile) printf '%s\n' "large" ;;
+    load-daily-form-index-for-date) printf '%s\n' "small" ;;
+    catch-up-daily-form-index) printf '%s\n' "small" ;;
+    gold-refresh) printf '%s\n' "large" ;;
+    # seed-universe: reached both via the standalone seed_universe workflow
+    # (workflow_profile()'s pass-through) and, as of ticket 07, directly from
+    # write_load_history_definition's own SeedUniverse state -- both call
+    # sites converge on this single answer.
+    # DECIDED, ticket 06 (2026-08-20): stays "medium". The root cause of the
+    # 2026-08-09 OOM this discrepancy was named after -- an unconditional
+    # full-buffer hydrate of canonical silver.duckdb before any per-command
+    # filtering logic runs -- is fixed and confirmed live in prod
+    # (seed-universe-narrow-hydrate map: streaming hydrate, PR #392, plus
+    # moving the active-CIK novelty filter off silver onto MDM, PR #394; both
+    # apply identically to every seed-universe invocation regardless of
+    # caller). A separate, still-unpatched risk remains (the merge/publish
+    # step's own full-buffer read/write, deliberately deferred as
+    # "unobserved" by that same map) -- checked live 2026-08-20: canonical
+    # was 1.5GiB, comfortably inside medium's 4096MB envelope for that step,
+    # with real but shrinking headroom as canonical grows.
+    # DECIDED, ticket 07 (2026-08-20, user-confirmed): load_history's own
+    # SeedUniverse state, previously hardcoded to wh_large_arn from the
+    # original emergency bump, is now also routed through this same mapping
+    # (.scratch/task-profile-consolidation/issues/
+    # 07-decide-whether-to-revert-load-historys-seeduniverse-off-large.md) --
+    # no load_history-specific reason to diverge was found: both call sites
+    # issue the identical command with identical arguments against the same
+    # shared canonical file.
+    seed-universe) printf '%s\n' "medium" ;;
+    # daily-incremental/bootstrap: these two commands are never actually
+    # dispatched through workflow_profile()'s pass-through above (its real
+    # caller loop only iterates bootstrap_full/targeted_resync/
+    # full_reconcile/load_daily_form_index_for_date/
+    # catch_up_daily_form_index/gold_refresh/seed_universe). Their real
+    # resolved profile instead comes from write_warehouse_mdm_gold_definition's
+    # RunWarehouseTask step (ticket 02), which calls command_task_profile()
+    # directly with these same names -- so these two case arms exist for
+    # completeness/direct callers of command_task_profile() itself, not
+    # because anything routes through workflow_profile() to reach them.
+    daily-incremental) printf '%s\n' "large" ;;
     bootstrap) printf '%s\n' "large" ;;
-    # bootstrap_full/targeted_resync/full_reconcile/gold_refresh: this IS the operative path
-    # (see the workflow_profile()-driven loop below) -- moved medium -> large (2026-07-30,
-    # ticket 03): all four call the identical memory-heavy build_gold() path and need
-    # large's raised 8192MB ceiling, not medium's unchanged 4096MB. See TASK_DEF_LARGE_ARN's
-    # comment above.
-    bootstrap_full) printf '%s\n' "large" ;;
-    targeted_resync) printf '%s\n' "large" ;;
-    full_reconcile) printf '%s\n' "large" ;;
-    load_daily_form_index_for_date) printf '%s\n' "small" ;;
-    catch_up_daily_form_index) printf '%s\n' "small" ;;
-    gold_refresh) printf '%s\n' "large" ;;
-    seed_universe) printf '%s\n' "medium" ;;
-    *) fail "unknown workflow: $1" ;;
+    # bootstrap-next: never dispatched through workflow_profile() or
+    # write_warehouse_mdm_gold_definition -- load_history's per-window
+    # `bootstrap-next --silver-only` task (write_load_history_definition's
+    # WindowedBootstrap/RunWindow state) calls command_task_profile()
+    # directly (ticket 03). CORRECTED 2026-08-19 (was wrongly "medium" --
+    # inherited uncritically from a stale hardcoded assumption in
+    # test_source_export_commands_task_sizing.py's own
+    # _SPECIAL_CASED_PROFILE, itself unrevised since the real wiring was
+    # bumped to large on 2026-08-10 after a live exit-137 OOM on medium; see
+    # test_load_history_state_machine.py's
+    # test_windowed_bootstrap_uses_large_task_definition for the live-tested
+    # proof). Had this gone uncorrected, ticket 03's "pure migration" would
+    # have flipped this back to medium and reintroduced that exact OOM.
+    bootstrap-next) printf '%s\n' "large" ;;
+    *) fail "unknown command: $1" ;;
   esac
 }
 
@@ -2121,16 +2180,67 @@ write_load_history_definition() {
   local mdm_task_medium_arn="$5"  # mdm medium       (mdm seed-universe, run, backfill-relationships, export, sync-graph)
   local wh_task_large_arn="$6"    # warehouse large  (gold-refresh — full-universe DuckDB is multi-GB)
 
+  # task-profile-consolidation wayfinder map, ticket 03
+  # (.scratch/task-profile-consolidation/issues/
+  # 03-route-bootstrap-next-through-the-shared-lookup.md): bootstrap-next's
+  # per-window task profile now comes from command_task_profile() -- the
+  # ticket 01 single source of truth -- instead of a hardcoded wh_task_large_arn
+  # reference below, so it can never again silently drift from that mapping
+  # (see ticket 01's Answer for the incident that motivated this: the mapping
+  # itself was briefly wrong and nothing would have caught a "migration" that
+  # copied the wrong value forward). Resolved here, in bash, and passed into
+  # the python heredoc as an extra argv value -- the profile->ARN lookup
+  # reuses this function's own existing small/medium/large params rather than
+  # calling task_definition_for_profile() (which depends on TASK_DEF_*_ARN
+  # globals this function has never needed), so the function's public
+  # parameter list/callers are unaffected.
+  local bootstrap_next_profile
+  bootstrap_next_profile="$(command_task_profile bootstrap-next)"
+  local bootstrap_next_task_arn
+  case "$bootstrap_next_profile" in
+    small) bootstrap_next_task_arn="$wh_task_small_arn" ;;
+    medium) bootstrap_next_task_arn="$wh_task_medium_arn" ;;
+    large) bootstrap_next_task_arn="$wh_task_large_arn" ;;
+    *) fail "write_load_history_definition: command_task_profile('bootstrap-next') returned unknown profile: $bootstrap_next_profile" ;;
+  esac
+
+  # task-profile-consolidation wayfinder map, ticket 07
+  # (.scratch/task-profile-consolidation/issues/
+  # 07-decide-whether-to-revert-load-historys-seeduniverse-off-large.md):
+  # SeedUniverse's task profile now comes from command_task_profile()
+  # (ticket 01's single source of truth) instead of a hardcoded
+  # wh_task_large_arn reference below, same routing pattern as
+  # bootstrap-next above (ticket 03). DECIDED, user-confirmed 2026-08-20:
+  # this state calls the exact same warehouse `seed-universe --run-id
+  # <execution>` command, with identical arguments, against the same
+  # shared canonical silver.duckdb, as the standalone seed_universe
+  # workflow ticket 06 already confirmed is safe on medium -- no
+  # load_history-specific factor (different CIK scope, concurrent
+  # same-task memory pressure, different command args) was found to
+  # justify staying on large. Converges both call sites onto
+  # command_task_profile('seed-universe') == "medium".
+  local seed_universe_profile
+  seed_universe_profile="$(command_task_profile seed-universe)"
+  local seed_universe_task_arn
+  case "$seed_universe_profile" in
+    small) seed_universe_task_arn="$wh_task_small_arn" ;;
+    medium) seed_universe_task_arn="$wh_task_medium_arn" ;;
+    large) seed_universe_task_arn="$wh_task_large_arn" ;;
+    *) fail "write_load_history_definition: command_task_profile('seed-universe') returned unknown profile: $seed_universe_profile" ;;
+  esac
+
   python3 - "$output_file" "$CLUSTER_ARN" \
     "$wh_task_small_arn" "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
-    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$MDM_SEED_UNIVERSE_TRACKING_STATUS" <<'PY'
+    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$MDM_SEED_UNIVERSE_TRACKING_STATUS" \
+    "$bootstrap_next_task_arn" "$seed_universe_task_arn" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  wh_small_arn, wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
  container_name, bronze_bucket_name, subnet_json, security_group_json,
- mdm_run_limit, mdm_graph_limit, mdm_seed_universe_tracking_status) = sys.argv[1:]
+ mdm_run_limit, mdm_graph_limit, mdm_seed_universe_tracking_status,
+ bootstrap_next_task_arn, seed_universe_task_arn) = sys.argv[1:]
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
@@ -2297,18 +2407,28 @@ invalid_force_input = {
 # touch MDM (data-architecture Issue 2: this state's old comment claimed it "enrols CIKs
 # into MDM", which was never true — it calls warehouse `seed-universe`, not
 # `mdm seed-universe`). MDM enrollment is the next state, MdmSeedUniverse.
-# wh_large_arn, not wh_medium_arn (2026-08-09, same OOM class as Stage0CompanyIdentity/
-# ComputeWindows above and gold-build-memory-reliability ticket 03's run_wh): live-observed
-# exit 137 "OutOfMemoryError: container killed due to memory usage" on wh_medium_arn (4096MB)
-# during task #35's full-universe load_history run -- seed-universe's run_command() dispatch
-# unconditionally hydrates the full canonical silver.duckdb (1.5GB+ and growing, same file
-# whose growth already caused the other three incidents) before its own db.get_active_ciks()/
-# _seed_silver_tracking_status() logic runs. Unlike the acquire/release-*-lease commands fixed
-# the same day (edgar_warehouse/application/warehouse_orchestrator.py's LEASE_ONLY_COMMANDS),
-# seed-universe genuinely needs the real canonical universe data, so it can't be repointed at
-# an isolated store -- more headroom is the correct fix here, matching the established
-# precedent for every other command that legitimately needs the full file.
-seed = ecs_state(wh_large_arn,
+#
+# Was hardcoded to wh_large_arn from 2026-08-09 (same OOM class as
+# Stage0CompanyIdentity/ComputeWindows above and gold-build-memory-reliability
+# ticket 03's run_wh): live-observed exit 137 "OutOfMemoryError: container
+# killed due to memory usage" on wh_medium_arn (4096MB) during task #35's
+# full-universe load_history run -- seed-universe's run_command() dispatch
+# unconditionally hydrated the full canonical silver.duckdb before its own
+# db.get_active_ciks()/_seed_silver_tracking_status() logic ran.
+#
+# REVERTED to seed_universe_task_arn (routed through command_task_profile(),
+# resolving to "medium" -- see the bash block above), task-profile-consolidation
+# wayfinder map ticket 07, 2026-08-20: the root cause was the unconditional
+# full-buffer hydrate before filtering, not this state's memory footprint
+# specifically -- seed-universe-narrow-hydrate's streaming hydrate (PR #392)
+# plus moving the novelty filter off silver onto MDM (PR #394) fixed it for
+# every seed-universe invocation, this one included, confirmed live in prod.
+# Converges with the standalone seed_universe workflow's already-decided
+# medium profile (ticket 06) -- both call the identical command with
+# identical arguments against the same shared canonical file, and no
+# load_history-specific factor (different CIK scope, concurrent same-task
+# memory pressure, different args) was found to justify staying on large.
+seed = ecs_state(seed_universe_task_arn,
     "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
     next_state="MdmSeedUniverse", retry_secs=60)
 # ResultPath: null passes the original SM input (e.g. {"window_size": 25}) unchanged to the
@@ -2567,7 +2687,7 @@ compute_windows["Catch"] = sec_fetch_task_catch()
 # write_ownership_mdm_gold_definition's batch_map (Mode: DISTRIBUTED, ExecutionType:
 # STANDARD) elsewhere in this script.
 #
-# wh_large_arn, not wh_medium_arn (2026-08-10, live full-universe task #35): a 500-CIK
+# large, not medium (2026-08-10, live full-universe task #35): a 500-CIK
 # window's `bootstrap-next --silver-only` OOM'd (exit 137) twice in a row on wh_medium_arn
 # (4096MB), exhausting the Map's retry budget and failing the whole load_history execution.
 # Root cause: _capture_submission_bronze_snapshots eagerly materializes every CIK's full
@@ -2580,8 +2700,12 @@ compute_windows["Catch"] = sec_fetch_task_catch()
 # seed-universe precedent above, not a fix for the underlying accumulation -- the real fix
 # (stream bronze-capture into silver-apply per CIK instead of materializing the whole
 # window first) is tracked separately, since it requires restructuring the wave-based
-# concurrent-fetch design without losing its throughput.
-per_window = ecs_state(wh_large_arn,
+# concurrent-fetch design without losing its throughput. Now resolved via
+# command_task_profile('bootstrap-next') (task-profile-consolidation ticket 03)
+# rather than a hardcoded wh_large_arn reference -- bootstrap_next_task_arn
+# above encodes exactly this same "large" decision, just through the shared
+# mapping instead of independently.
+per_window = ecs_state(bootstrap_next_task_arn,
     "States.Array('bootstrap-next', '--silver-only', '--cik-limit', States.Format('{}', $.window_limit), '--cik-offset', States.Format('{}', $.window_offset), '--tracking-status-filter', 'active,bootstrap_pending', '--artifact-policy', States.Format('{}', $.artifact_policy), '--filing-lookback-years', States.Format('{}', $.filing_lookback_years), '--run-id', $$.Execution.Name)",
     is_end=True)
 
@@ -3069,18 +3193,49 @@ write_warehouse_mdm_gold_definition() {
   local bronze_bucket_name="$7"   # daily_incremental's Stage0CompanyIdentity ItemReader
   local operator_alert_topic_arn="$8" # daily_incremental deferral notification target
 
+  # task-profile-consolidation wayfinder map, ticket 02
+  # (.scratch/task-profile-consolidation/issues/
+  # 02-route-write-warehouse-mdm-gold-definition-through-the-shared-profile.md):
+  # RunWarehouseTask -- the step that actually runs `bootstrap`/
+  # `daily-incremental` themselves, i.e. the step that OOM'd in prod when this
+  # was still hardcoded (gold_refresh May 2026, daily_incremental July 2026) --
+  # now resolves its task profile via command_task_profile(), ticket 01's
+  # single source of truth, instead of unconditionally using wh_task_large_arn
+  # below. workflow_name here is the underscore Step-Functions-workflow
+  # spelling ("bootstrap"/"daily_incremental"); command_task_profile() is keyed
+  # by the real hyphenated CLI command name, so translate first -- mirrors the
+  # WAREHOUSE_COMMANDS dict inside the python heredoc below (that dict still
+  # exists for building the actual `States.Array(...)` command expression;
+  # this bash-side case is a separate, smaller lookup solely for the
+  # command_task_profile() call, since bash and the embedded python are
+  # different processes and can't share that dict directly).
+  local run_wh_command
+  case "$workflow_name" in
+    bootstrap) run_wh_command="bootstrap" ;;
+    daily_incremental) run_wh_command="daily-incremental" ;;
+    *) fail "write_warehouse_mdm_gold_definition: unknown workflow_name: $workflow_name" ;;
+  esac
+  local run_wh_profile
+  run_wh_profile="$(command_task_profile "$run_wh_command")"
+  local run_wh_task_arn
+  case "$run_wh_profile" in
+    medium) run_wh_task_arn="$wh_task_medium_arn" ;;
+    large) run_wh_task_arn="$wh_task_large_arn" ;;
+    *) fail "write_warehouse_mdm_gold_definition: command_task_profile('$run_wh_command') returned unknown profile: $run_wh_profile" ;;
+  esac
+
   python3 - "$output_file" "$CLUSTER_ARN" \
     "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
     "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$workflow_name" "$bronze_bucket_name" \
-    "$operator_alert_topic_arn" <<'PY'
+    "$operator_alert_topic_arn" "$run_wh_task_arn" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
  container_name, subnet_json, security_group_json,
  mdm_run_limit, mdm_graph_limit, workflow_name, bronze_bucket_name,
- operator_alert_topic_arn) = sys.argv[1:]
+ operator_alert_topic_arn, run_wh_task_arn) = sys.argv[1:]
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
@@ -3118,15 +3273,17 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
         s["Next"] = next_state
     return s
 
-# wh_large_arn, not wh_medium_arn (2026-07-30, gold-build-memory-reliability ticket 03):
+# large, not medium (2026-07-30, gold-build-memory-reliability ticket 03):
 # this is the state that actually runs `bootstrap`/`daily-incremental` themselves --
-# both are in GOLD_AFFECTING_COMMANDS (they do bronze+silver+gold in one command) and
+# both are in SOURCE_EXPORT_COMMANDS (they do bronze+silver+gold in one command) and
 # this exact step, on wh_medium_arn, is what OOM-killed daily_incremental in prod
-# (task-def edgartools-prod-medium:92, 4096MB, mid-sec_thirteenf_holding). Note this
-# workflow's task profile was NEVER resolved via workflow_profile() -- that function's
-# daily_incremental/bootstrap cases are dead code, since write_warehouse_mdm_gold_definition
-# (this function) builds their state machines directly and was never wired through it.
-run_wh = ecs_state(wh_large_arn,
+# (task-def edgartools-prod-medium:92, 4096MB, mid-sec_thirteenf_holding). Now resolved
+# via command_task_profile() (task-profile-consolidation ticket 02) instead of a direct
+# wh_large_arn reference -- run_wh_task_arn above encodes exactly this same "large"
+# decision, just through the shared mapping instead of independently, so this step can
+# no longer silently drift from workflow_profile()'s declared (if unreached) value the
+# way it did before that mapping existed.
+run_wh = ecs_state(run_wh_task_arn,
     f"States.Array('{wh_cmd}', '--run-id', $$.Execution.Name)",
     next_state="MdmRun")
 if workflow_name == "daily_incremental":

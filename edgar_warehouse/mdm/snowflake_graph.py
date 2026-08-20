@@ -8,6 +8,7 @@ import subprocess
 from typing import Any, Callable
 
 from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
+from edgar_warehouse.mdm.observability import emit_mdm_event
 
 
 DEFAULT_TARGET_SCHEMA = "NEO4J_GRAPH_MIGRATION"
@@ -155,6 +156,14 @@ class SnowflakeGraphSyncResult:
     node_tables: tuple[str, ...]
     edge_tables: tuple[str, ...]
     applied_filters: dict[str, Any]
+    # release-readiness ticket 94, item 3: the eligible count BEFORE any
+    # limit/limit_per_type was applied -- None when no limit was requested
+    # (preflight count is skipped entirely; an unbounded sync can't be
+    # suspiciously capped, see SnowflakeGraphSyncExecutor.sync). Lets a
+    # caller distinguish "this really is everything" from "silently capped
+    # far below what's actually eligible" without a second query.
+    available_node_count: int | None = None
+    available_edge_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -252,6 +261,32 @@ class SnowflakeGraphSyncExecutor:
         )
         cursor = self.connection.cursor()
         try:
+            # release-readiness ticket 94, item 3: a limit/limit_per_type
+            # that silently caps far below what's actually eligible looks
+            # identical to a real, complete sync -- both report "status: ok"
+            # with a plausible-looking node/edge count. Preflight-count the
+            # full eligible set BEFORE applying any limit (same WHERE
+            # filters the main query uses, no LIMIT/QUALIFY) so a caller can
+            # tell "capped by design" from "this really is everything."
+            # Only worth the extra round trip when a limit was actually
+            # requested -- an unbounded sync can't be suspiciously capped.
+            available_node_count: int | None = None
+            available_edge_count: int | None = None
+            if limit is not None or limit_per_type is not None:
+                available_node_count = _fetch_scalar(
+                    cursor,
+                    f"SELECT COUNT(*) FROM {_mdm_fq(context, 'MDM_ENTITY')} E "
+                    f"WHERE E.IS_QUARANTINED = FALSE{context['entity_type_filter']}",
+                )
+                available_edge_count = _fetch_scalar(
+                    cursor,
+                    f"SELECT COUNT(*) FROM {_mdm_fq(context, 'MDM_RELATIONSHIP_INSTANCE')} RI "
+                    f"JOIN {_mdm_fq(context, 'MDM_RELATIONSHIP_TYPE')} RT "
+                    f"  ON RT.REL_TYPE_ID = RI.REL_TYPE_ID "
+                    f"WHERE RI.IS_ACTIVE = TRUE AND RT.IS_ACTIVE = TRUE"
+                    f"{context['relationship_type_filter']}",
+                )
+
             _execute_sql_script(cursor, render_graph_tables(context))
             node_count = _fetch_scalar(
                 cursor,
@@ -271,6 +306,23 @@ class SnowflakeGraphSyncExecutor:
         finally:
             cursor.close()
 
+        capped_below_available = (
+            available_node_count is not None
+            and available_edge_count is not None
+            and (node_count < available_node_count or edge_count < available_edge_count)
+        )
+        if capped_below_available:
+            emit_mdm_event(
+                "mdm_sync_graph_result_capped",
+                generation_id=config.generation_id,
+                node_count=node_count,
+                available_node_count=available_node_count,
+                edge_count=edge_count,
+                available_edge_count=available_edge_count,
+                limit=limit,
+                limit_per_type=limit_per_type,
+            )
+
         return SnowflakeGraphSyncResult(
             node_count=node_count,
             edge_count=edge_count,
@@ -285,6 +337,8 @@ class SnowflakeGraphSyncExecutor:
                 "limit_per_type": limit_per_type,
                 "generation_id": config.generation_id,
             },
+            available_node_count=available_node_count,
+            available_edge_count=available_edge_count,
         )
 
 

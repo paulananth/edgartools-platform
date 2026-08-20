@@ -34,6 +34,13 @@ DEPLOY_SCRIPT = REPO_ROOT / "infra" / "scripts" / "deploy-aws-application.sh"
 _START_MARKER = "write_load_history_definition() {\n"
 _END_MARKER = "\nPY\n}\n"
 
+# write_load_history_definition calls command_task_profile() internally
+# (task-profile-consolidation ticket 03) to resolve bootstrap-next's
+# per-window task profile -- extracted and sourced alongside it below, same
+# as fail() (command_task_profile()'s own unknown-command guard).
+_COMMAND_TASK_PROFILE_START = "command_task_profile() {\n"
+_COMMAND_TASK_PROFILE_END = "\n}\n"
+
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 
 
@@ -68,10 +75,18 @@ def _extract_function_source() -> str:
     return text[start:end]
 
 
+def _extract_command_task_profile_source() -> str:
+    text = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    start = text.index(_COMMAND_TASK_PROFILE_START)
+    end = text.index(_COMMAND_TASK_PROFILE_END, start) + len(_COMMAND_TASK_PROFILE_END)
+    return text[start:end]
+
+
 @pytest.fixture(scope="module")
 def definition() -> dict:
     """Generate load_history's Step Functions JSON with dummy ARNs (no AWS calls)."""
     fn_source = _extract_function_source()
+    command_task_profile_source = _extract_command_task_profile_source()
 
     # dir= is repo-local (under the already-gitignored .pytest_cache/), not the
     # system temp dir: some sandboxed dev environments allow bash to read/exec
@@ -83,6 +98,8 @@ def definition() -> dict:
         tmp_path = Path(d)
         fn_file = tmp_path / "load_history_fn.sh"
         fn_file.write_text(fn_source, encoding="utf-8")
+        command_task_profile_file = tmp_path / "command_task_profile_fn.sh"
+        command_task_profile_file.write_text(command_task_profile_source, encoding="utf-8")
         out_file = tmp_path / "load_history.json"
 
         # Git Bash/MSYS mangles backslash-separated Windows paths passed as argv
@@ -91,6 +108,7 @@ def definition() -> dict:
         driver = tmp_path / "driver.sh"
         driver.write_text(
             "set -euo pipefail\n"
+            'fail() { echo "ERROR: $*" >&2; exit 1; }\n'
             'CLUSTER_ARN="arn:aws:ecs:us-east-1:000000000000:cluster/fake-cluster"\n'
             'BRONZE_BUCKET_NAME="fake-bronze-bucket"\n'
             "PUBLIC_SUBNET_IDS_JSON='[\"subnet-aaaa\",\"subnet-bbbb\"]'\n"
@@ -98,6 +116,7 @@ def definition() -> dict:
             "MDM_RUN_LIMIT=100\n"
             "MDM_GRAPH_LIMIT=200\n"
             'MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"\n'
+            f'source "{command_task_profile_file.as_posix()}"\n'
             f'source "{fn_file.as_posix()}"\n'
             f'write_load_history_definition "{out_file.as_posix()}" '
             '"arn:wh-small" "arn:wh-medium" "arn:mdm-small" "arn:mdm-medium" "arn:wh-large"\n',
@@ -396,8 +415,11 @@ def test_stage1b_maps_use_large_task_definition(definition: dict) -> None:
     delta into Python. FetchPerFilingFundamentals then also OOM'd twice on the same
     run before this fix landed. Moved all three Stage1B modes to
     wh_large_arn as a stopgap alongside the structural fix in
-    silver_protection.py, matching the ComputeWindows/SeedUniverse/
-    WindowedBootstrap precedent above -- FetchThirteenFHoldings is included
+    silver_protection.py, matching the ComputeWindows/WindowedBootstrap
+    precedent above (SeedUniverse was also on this same large-profile
+    precedent at the time, but has since moved back to medium -- see
+    test_seed_universe_uses_medium_task_definition below, ticket 07,
+    2026-08-20) -- FetchThirteenFHoldings is included
     preemptively (not yet independently observed OOMing) since it shares
     the identical merge_candidate_into_canonical publish-step risk and
     sec_thirteenf_holding's per-filing fan-out is at least as large."""
@@ -504,15 +526,90 @@ def test_compute_windows_uses_large_task_definition(definition: dict) -> None:
     assert definition["States"]["ComputeWindows"]["Parameters"]["TaskDefinition"] == "arn:wh-large"
 
 
-def test_seed_universe_uses_large_task_definition(definition: dict) -> None:
+def test_seed_universe_uses_medium_task_definition(definition: dict) -> None:
     """2026-08-09: task #35's first full-universe load_history execution
     OOM'd (exit 137) on SeedUniverse running wh_medium_arn -- seed-universe's
-    run_command() dispatch unconditionally hydrates the full canonical
+    run_command() dispatch unconditionally hydrated the full canonical
     silver.duckdb (1.5GB+ and growing, the same file whose growth already
     caused ComputeWindows/Stage0CompanyIdentity's OOMs above) before its own
-    db.get_active_ciks()/tracking-status logic runs. Moved to wh_large_arn to
-    match that established precedent."""
-    assert definition["States"]["SeedUniverse"]["Parameters"]["TaskDefinition"] == "arn:wh-large"
+    db.get_active_ciks()/tracking-status logic ran, so this state was
+    hardcoded to wh_large_arn as an emergency stopgap that same day.
+
+    task-profile-consolidation wayfinder map ticket 07 (2026-08-20,
+    user-confirmed): the root cause -- the unconditional full-buffer
+    hydrate, not this state's memory footprint specifically -- is fixed
+    (seed-universe-narrow-hydrate map: streaming hydrate PR #392, novelty
+    filter moved off silver onto MDM PR #394), confirmed live in prod for
+    every seed-universe invocation. SeedUniverse now routes through
+    command_task_profile('seed-universe') (see
+    test_seed_universe_task_profile_routing.py's
+    test_seed_universe_genuinely_routes_through_command_task_profile for
+    proof it's a real call, not a coincidental match), which resolves to
+    "medium" -- converging with the standalone seed_universe workflow's
+    already-decided medium profile (ticket 06)."""
+    assert definition["States"]["SeedUniverse"]["Parameters"]["TaskDefinition"] == "arn:wh-medium"
+
+
+def test_every_states_task_definition_matches_expected_profile(definition: dict) -> None:
+    """Full-definition regression lock, task-profile-consolidation ticket 07:
+    walks every state (including nested inside Map/Parallel) that declares a
+    TaskDefinition and asserts the complete, exact mapping -- not just
+    SeedUniverse's own value in isolation. Ticket 07's own Answer claimed a
+    byte-identical-ASL re-verification (every state's shape/value unchanged
+    except SeedUniverse's) via an ad-hoc, uncommitted diff script -- this
+    test commits that same guarantee durably: any future change that
+    accidentally shifts another state's task profile (not just SeedUniverse's
+    intended one) fails here, reproducibly, in CI -- not just once, by hand,
+    in a session transcript. Reuses test_all_item_reader_maps_use_distributed_mode's
+    walk() shape (states + nested Map/Parallel) above."""
+    expected = {
+        "top.AcquireSecFetchLease": "arn:wh-medium",
+        "top.ReleaseSecFetchLease": "arn:wh-medium",
+        "top.ReleaseSecFetchLeaseAfterFailure": "arn:wh-medium",
+        "top.SeedUniverse": "arn:wh-medium",
+        "top.MdmSeedUniverse": "arn:mdm-medium",
+        "top.ComputeWindows": "arn:wh-large",
+        "top.IngestBronzeAndSilver(Parallel[0]).WindowedBootstrap(Map).RunWindow": "arn:wh-large",
+        "top.FetchEntityFacts(Map).RunFundamentalsEntityFacts": "arn:wh-large",
+        "top.FetchPerFilingFundamentals(Map).RunFundamentalsPerFiling": "arn:wh-large",
+        "top.FetchThirteenFHoldings(Map).RunFundamentalsThirteenF": "arn:wh-large",
+        "top.FetchAdvBulk": "arn:wh-medium",
+        "top.FetchAdvBulkForced": "arn:wh-medium",
+        "top.IngestAdvBulkSources": "arn:wh-medium",
+        "top.FetchFirmRoster": "arn:wh-medium",
+        "top.FetchFirmRosterForced": "arn:wh-medium",
+        "top.IngestFirmRosterSources": "arn:wh-medium",
+        "top.MdmRun": "arn:mdm-medium",
+        "top.MdmBackfill": "arn:mdm-medium",
+        "top.MdmExport": "arn:mdm-medium",
+        "top.MdmSync": "arn:mdm-medium",
+        "top.MdmVerify": "arn:mdm-small",
+        "top.GoldRefresh": "arn:wh-large",
+        "top.WriteRunSummary": "arn:wh-medium",
+    }
+
+    actual: dict[str, str] = {}
+
+    def walk(states: dict, label: str) -> None:
+        for name, state in states.items():
+            task_definition = state.get("Parameters", {}).get("TaskDefinition")
+            if task_definition:
+                actual[f"{label}.{name}"] = task_definition
+            if state.get("Type") == "Map":
+                walk(state["ItemProcessor"]["States"], f"{label}.{name}(Map)")
+            if state.get("Type") == "Parallel":
+                for i, branch in enumerate(state["Branches"]):
+                    walk(branch["States"], f"{label}.{name}(Parallel[{i}])")
+
+    walk(definition["States"], "top")
+
+    assert actual == expected, (
+        "The set of states carrying a TaskDefinition, or one of their "
+        "resolved ARNs, changed. If this is an intentional profile change, "
+        "update `expected` above deliberately; if not, this is exactly the "
+        "kind of accidental-collateral-change ticket 07's byte-identical-ASL "
+        f"re-verification exists to catch.\nactual:   {actual}\nexpected: {expected}"
+    )
 
 
 def test_windowed_bootstrap_uses_large_task_definition(definition: dict) -> None:
@@ -523,8 +620,11 @@ def test_windowed_bootstrap_uses_large_task_definition(definition: dict) -> None
     steady ~600MB -> ~2.4GB climb over the task's ~80-minute lifetime
     (accumulation in _capture_submission_bronze_snapshots, not a one-time
     buffer spike) -- moved to wh_large_arn as a stopgap matching the
-    ComputeWindows/Stage0CompanyIdentity/gold-refresh/seed-universe
-    precedent above, while the underlying accumulation is tracked
+    ComputeWindows/Stage0CompanyIdentity/gold-refresh precedent above
+    (seed-universe was also on this same large-profile precedent at the
+    time, but has since moved back to medium -- see
+    test_seed_universe_uses_medium_task_definition above, ticket 07,
+    2026-08-20), while the underlying accumulation is tracked
     separately."""
     branch_a_states = definition["States"]["IngestBronzeAndSilver"]["Branches"][0]["States"]
     run_window = branch_a_states["WindowedBootstrap"]["ItemProcessor"]["States"]["RunWindow"]

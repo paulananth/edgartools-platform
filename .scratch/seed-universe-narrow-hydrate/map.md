@@ -72,6 +72,27 @@ and `scripts/build_relationship_release_manifest.py`.
 
 ## Decisions so far
 
+- [Move seed-universe back to a smaller task profile now that both fixes are
+  live](../task-profile-consolidation/issues/07-decide-whether-to-revert-load-historys-seeduniverse-off-large.md)
+  — this map's own stated destination question, closed by
+  task-profile-consolidation wayfinder map tickets 06 and 07 (2026-08-20),
+  not by a ticket of this map (this map's own "Frontier: None" close never
+  actually recorded the answer — see task-profile-consolidation ticket 07's
+  own text for that gap). Both fixes below (streaming hydrate PR #392,
+  MDM-as-novelty-source PR #394) are confirmed live in prod and apply
+  identically to every `seed-universe` invocation regardless of caller.
+  **Answer: yes, moved back to medium, both call sites.** The standalone
+  `seed_universe` workflow (`command_task_profile('seed-universe')`) was
+  moved first (ticket 06); `load_history`'s own `SeedUniverse` state,
+  hardcoded to `wh_large_arn` since the original PR #391 emergency bump, was
+  converged onto the same `medium` answer immediately after (ticket 07) —
+  both call the identical `seed-universe --run-id <execution>` command with
+  identical arguments against the same shared canonical file, and no
+  `load_history`-specific factor was found to justify a divergence. One
+  risk remains open, not closed by this decision: the merge/publish step's
+  own full-buffer read/write (this map's ticket 04 deliberately deferred
+  it) — checked live 2026-08-20 at 1.5GiB canonical, comfortably inside
+  medium's 4096MB, with real but shrinking headroom as canonical grows.
 - [Route seed-universe's novelty detection through MDM, not
   silver](issues/05-mdm-as-system-of-record-for-novelty-detection.md) --
   MDM is the system of record for company information (user correction),
@@ -143,17 +164,17 @@ and `scripts/build_relationship_release_manifest.py`.
   this is worth pursuing depends on how much headroom ticket 04's streaming
   fix alone buys back -- if that's sufficient, the table-split option may
   not be needed at all.
-- Whether, once both fixes (04 and 05) land, `seed-universe` (and possibly
-  the other three previously-bumped commands) can move off `wh_large_arn`
-  back to a smaller task profile -- not yet specifiable until both designs
-  are locked and their actual memory impact is measured live.
 
 ## Frontier (open tickets)
 
 None. Both parallel tracks are design-complete: ticket 04 (streaming
 hydrate fix) is implemented, tested, and deployed to prod (PR #392); ticket
-05 (MDM as novelty-detection source of record) is designed and
-implementation-ready but not yet built. This map's destination is reached.
+05 (MDM as novelty-detection source of record) is designed,
+implementation-ready, and confirmed built/deployed (PR #394, per
+task-profile-consolidation ticket 06's live verification). This map's
+destination is reached, including the task-profile-revert question above
+(closed 2026-08-20 via the sibling task-profile-consolidation map's tickets
+06/07, listed in Decisions so far).
 
 ## Out of scope
 
