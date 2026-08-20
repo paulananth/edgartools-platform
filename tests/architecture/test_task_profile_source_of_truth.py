@@ -187,8 +187,14 @@ def _run_warehouse_task_profile(workflow_name: str) -> str:
     JSON for workflow_name and return which profile its RunWarehouseTask step
     -- the one that actually runs `bootstrap`/`daily-incremental` themselves
     -- resolves to. Same technique as
-    test_source_export_commands_task_sizing.py's helper of the same shape."""
+    test_source_export_commands_task_sizing.py's helper of the same shape.
+    write_warehouse_mdm_gold_definition now calls command_task_profile()
+    internally (task-profile-consolidation ticket 02), so that function's
+    source must be sourced first too."""
     fn_source = _extract_function_source(_WMG_START, _WMG_END)
+    command_task_profile_source = _extract_function_source(
+        _COMMAND_TASK_PROFILE_START, _COMMAND_TASK_PROFILE_END
+    )
 
     tmp_root = REPO_ROOT / ".pytest_cache" / "task_profile_source_of_truth_test"
     tmp_root.mkdir(parents=True, exist_ok=True)
@@ -197,16 +203,20 @@ def _run_warehouse_task_profile(workflow_name: str) -> str:
         tmp_path = Path(d)
         fn_file = tmp_path / "wmg_fn.sh"
         fn_file.write_text(fn_source, encoding="utf-8")
+        command_task_profile_file = tmp_path / "command_task_profile_fn.sh"
+        command_task_profile_file.write_text(command_task_profile_source, encoding="utf-8")
         out_file = tmp_path / f"{workflow_name}.json"
 
         driver = tmp_path / "driver.sh"
         driver.write_text(
             "set -euo pipefail\n"
+            'fail() { echo "ERROR: $*" >&2; exit 1; }\n'
             'CLUSTER_ARN="arn:aws:ecs:us-east-1:000000000000:cluster/fake-cluster"\n'
             'PUBLIC_SUBNET_IDS_JSON=\'["subnet-aaaa","subnet-bbbb"]\'\n'
             'SECURITY_GROUP_IDS_JSON=\'["sg-cccc"]\'\n'
             'MDM_RUN_LIMIT=100\n'
             'MDM_GRAPH_LIMIT=200\n'
+            f'source "{command_task_profile_file.as_posix()}"\n'
             f'source "{fn_file.as_posix()}"\n'
             f'write_warehouse_mdm_gold_definition "{out_file.as_posix()}" '
             f'"{_FAKE_MEDIUM_ARN}" "arn:fake-mdm-small" "arn:fake-mdm-medium" "{_FAKE_LARGE_ARN}" '
@@ -239,8 +249,13 @@ def _run_load_history_bootstrap_next_profile() -> str:
     technique as test_load_history_state_machine.py's `definition` fixture
     and _run_warehouse_task_profile above; this is what makes bootstrap-next
     a genuine live-derived value, not a hardcoded assumption (see module
-    docstring, path 3, and the incident it documents)."""
+    docstring, path 3, and the incident it documents). write_load_history_definition
+    now calls command_task_profile() internally (task-profile-consolidation
+    ticket 03), so that function's source must be sourced first too."""
     fn_source = _extract_function_source(_LOAD_HISTORY_START, _LOAD_HISTORY_END)
+    command_task_profile_source = _extract_function_source(
+        _COMMAND_TASK_PROFILE_START, _COMMAND_TASK_PROFILE_END
+    )
 
     tmp_root = REPO_ROOT / ".pytest_cache" / "task_profile_source_of_truth_test"
     tmp_root.mkdir(parents=True, exist_ok=True)
@@ -249,11 +264,14 @@ def _run_load_history_bootstrap_next_profile() -> str:
         tmp_path = Path(d)
         fn_file = tmp_path / "load_history_fn.sh"
         fn_file.write_text(fn_source, encoding="utf-8")
+        command_task_profile_file = tmp_path / "command_task_profile_fn.sh"
+        command_task_profile_file.write_text(command_task_profile_source, encoding="utf-8")
         out_file = tmp_path / "load_history.json"
 
         driver = tmp_path / "driver.sh"
         driver.write_text(
             "set -euo pipefail\n"
+            'fail() { echo "ERROR: $*" >&2; exit 1; }\n'
             'CLUSTER_ARN="arn:aws:ecs:us-east-1:000000000000:cluster/fake-cluster"\n'
             'BRONZE_BUCKET_NAME="fake-bronze-bucket"\n'
             'PUBLIC_SUBNET_IDS_JSON=\'["subnet-aaaa","subnet-bbbb"]\'\n'
@@ -261,6 +279,7 @@ def _run_load_history_bootstrap_next_profile() -> str:
             'MDM_RUN_LIMIT=100\n'
             'MDM_GRAPH_LIMIT=200\n'
             'MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"\n'
+            f'source "{command_task_profile_file.as_posix()}"\n'
             f'source "{fn_file.as_posix()}"\n'
             f'write_load_history_definition "{out_file.as_posix()}" '
             f'"{_FAKE_WH_SMALL_ARN}" "{_FAKE_WH_MEDIUM_ARN}" '

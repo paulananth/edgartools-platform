@@ -2187,16 +2187,42 @@ write_load_history_definition() {
   local mdm_task_medium_arn="$5"  # mdm medium       (mdm seed-universe, run, backfill-relationships, export, sync-graph)
   local wh_task_large_arn="$6"    # warehouse large  (gold-refresh — full-universe DuckDB is multi-GB)
 
+  # task-profile-consolidation wayfinder map, ticket 03
+  # (.scratch/task-profile-consolidation/issues/
+  # 03-route-bootstrap-next-through-the-shared-lookup.md): bootstrap-next's
+  # per-window task profile now comes from command_task_profile() -- the
+  # ticket 01 single source of truth -- instead of a hardcoded wh_task_large_arn
+  # reference below, so it can never again silently drift from that mapping
+  # (see ticket 01's Answer for the incident that motivated this: the mapping
+  # itself was briefly wrong and nothing would have caught a "migration" that
+  # copied the wrong value forward). Resolved here, in bash, and passed into
+  # the python heredoc as an extra argv value -- the profile->ARN lookup
+  # reuses this function's own existing small/medium/large params rather than
+  # calling task_definition_for_profile() (which depends on TASK_DEF_*_ARN
+  # globals this function has never needed), so the function's public
+  # parameter list/callers are unaffected.
+  local bootstrap_next_profile
+  bootstrap_next_profile="$(command_task_profile bootstrap-next)"
+  local bootstrap_next_task_arn
+  case "$bootstrap_next_profile" in
+    small) bootstrap_next_task_arn="$wh_task_small_arn" ;;
+    medium) bootstrap_next_task_arn="$wh_task_medium_arn" ;;
+    large) bootstrap_next_task_arn="$wh_task_large_arn" ;;
+    *) fail "write_load_history_definition: command_task_profile('bootstrap-next') returned unknown profile: $bootstrap_next_profile" ;;
+  esac
+
   python3 - "$output_file" "$CLUSTER_ARN" \
     "$wh_task_small_arn" "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
-    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$MDM_SEED_UNIVERSE_TRACKING_STATUS" <<'PY'
+    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$MDM_SEED_UNIVERSE_TRACKING_STATUS" \
+    "$bootstrap_next_task_arn" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  wh_small_arn, wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
  container_name, bronze_bucket_name, subnet_json, security_group_json,
- mdm_run_limit, mdm_graph_limit, mdm_seed_universe_tracking_status) = sys.argv[1:]
+ mdm_run_limit, mdm_graph_limit, mdm_seed_universe_tracking_status,
+ bootstrap_next_task_arn) = sys.argv[1:]
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
@@ -2633,7 +2659,7 @@ compute_windows["Catch"] = sec_fetch_task_catch()
 # write_ownership_mdm_gold_definition's batch_map (Mode: DISTRIBUTED, ExecutionType:
 # STANDARD) elsewhere in this script.
 #
-# wh_large_arn, not wh_medium_arn (2026-08-10, live full-universe task #35): a 500-CIK
+# large, not medium (2026-08-10, live full-universe task #35): a 500-CIK
 # window's `bootstrap-next --silver-only` OOM'd (exit 137) twice in a row on wh_medium_arn
 # (4096MB), exhausting the Map's retry budget and failing the whole load_history execution.
 # Root cause: _capture_submission_bronze_snapshots eagerly materializes every CIK's full
@@ -2646,8 +2672,12 @@ compute_windows["Catch"] = sec_fetch_task_catch()
 # seed-universe precedent above, not a fix for the underlying accumulation -- the real fix
 # (stream bronze-capture into silver-apply per CIK instead of materializing the whole
 # window first) is tracked separately, since it requires restructuring the wave-based
-# concurrent-fetch design without losing its throughput.
-per_window = ecs_state(wh_large_arn,
+# concurrent-fetch design without losing its throughput. Now resolved via
+# command_task_profile('bootstrap-next') (task-profile-consolidation ticket 03)
+# rather than a hardcoded wh_large_arn reference -- bootstrap_next_task_arn
+# above encodes exactly this same "large" decision, just through the shared
+# mapping instead of independently.
+per_window = ecs_state(bootstrap_next_task_arn,
     "States.Array('bootstrap-next', '--silver-only', '--cik-limit', States.Format('{}', $.window_limit), '--cik-offset', States.Format('{}', $.window_offset), '--tracking-status-filter', 'active,bootstrap_pending', '--artifact-policy', States.Format('{}', $.artifact_policy), '--filing-lookback-years', States.Format('{}', $.filing_lookback_years), '--run-id', $$.Execution.Name)",
     is_end=True)
 
@@ -3135,18 +3165,49 @@ write_warehouse_mdm_gold_definition() {
   local bronze_bucket_name="$7"   # daily_incremental's Stage0CompanyIdentity ItemReader
   local operator_alert_topic_arn="$8" # daily_incremental deferral notification target
 
+  # task-profile-consolidation wayfinder map, ticket 02
+  # (.scratch/task-profile-consolidation/issues/
+  # 02-route-write-warehouse-mdm-gold-definition-through-the-shared-profile.md):
+  # RunWarehouseTask -- the step that actually runs `bootstrap`/
+  # `daily-incremental` themselves, i.e. the step that OOM'd in prod when this
+  # was still hardcoded (gold_refresh May 2026, daily_incremental July 2026) --
+  # now resolves its task profile via command_task_profile(), ticket 01's
+  # single source of truth, instead of unconditionally using wh_task_large_arn
+  # below. workflow_name here is the underscore Step-Functions-workflow
+  # spelling ("bootstrap"/"daily_incremental"); command_task_profile() is keyed
+  # by the real hyphenated CLI command name, so translate first -- mirrors the
+  # WAREHOUSE_COMMANDS dict inside the python heredoc below (that dict still
+  # exists for building the actual `States.Array(...)` command expression;
+  # this bash-side case is a separate, smaller lookup solely for the
+  # command_task_profile() call, since bash and the embedded python are
+  # different processes and can't share that dict directly).
+  local run_wh_command
+  case "$workflow_name" in
+    bootstrap) run_wh_command="bootstrap" ;;
+    daily_incremental) run_wh_command="daily-incremental" ;;
+    *) fail "write_warehouse_mdm_gold_definition: unknown workflow_name: $workflow_name" ;;
+  esac
+  local run_wh_profile
+  run_wh_profile="$(command_task_profile "$run_wh_command")"
+  local run_wh_task_arn
+  case "$run_wh_profile" in
+    medium) run_wh_task_arn="$wh_task_medium_arn" ;;
+    large) run_wh_task_arn="$wh_task_large_arn" ;;
+    *) fail "write_warehouse_mdm_gold_definition: command_task_profile('$run_wh_command') returned unknown profile: $run_wh_profile" ;;
+  esac
+
   python3 - "$output_file" "$CLUSTER_ARN" \
     "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
     "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$workflow_name" "$bronze_bucket_name" \
-    "$operator_alert_topic_arn" <<'PY'
+    "$operator_alert_topic_arn" "$run_wh_task_arn" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
  container_name, subnet_json, security_group_json,
  mdm_run_limit, mdm_graph_limit, workflow_name, bronze_bucket_name,
- operator_alert_topic_arn) = sys.argv[1:]
+ operator_alert_topic_arn, run_wh_task_arn) = sys.argv[1:]
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
@@ -3184,15 +3245,17 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
         s["Next"] = next_state
     return s
 
-# wh_large_arn, not wh_medium_arn (2026-07-30, gold-build-memory-reliability ticket 03):
+# large, not medium (2026-07-30, gold-build-memory-reliability ticket 03):
 # this is the state that actually runs `bootstrap`/`daily-incremental` themselves --
-# both are in GOLD_AFFECTING_COMMANDS (they do bronze+silver+gold in one command) and
+# both are in SOURCE_EXPORT_COMMANDS (they do bronze+silver+gold in one command) and
 # this exact step, on wh_medium_arn, is what OOM-killed daily_incremental in prod
-# (task-def edgartools-prod-medium:92, 4096MB, mid-sec_thirteenf_holding). Note this
-# workflow's task profile was NEVER resolved via workflow_profile() -- that function's
-# daily_incremental/bootstrap cases are dead code, since write_warehouse_mdm_gold_definition
-# (this function) builds their state machines directly and was never wired through it.
-run_wh = ecs_state(wh_large_arn,
+# (task-def edgartools-prod-medium:92, 4096MB, mid-sec_thirteenf_holding). Now resolved
+# via command_task_profile() (task-profile-consolidation ticket 02) instead of a direct
+# wh_large_arn reference -- run_wh_task_arn above encodes exactly this same "large"
+# decision, just through the shared mapping instead of independently, so this step can
+# no longer silently drift from workflow_profile()'s declared (if unreached) value the
+# way it did before that mapping existed.
+run_wh = ecs_state(run_wh_task_arn,
     f"States.Array('{wh_cmd}', '--run-id', $$.Execution.Name)",
     next_state="MdmRun")
 if workflow_name == "daily_incremental":

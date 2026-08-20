@@ -108,6 +108,12 @@ _WORKFLOW_PROFILE_END = "\n}\n"
 _WMG_START = "write_warehouse_mdm_gold_definition() {\n"
 _WMG_END = "\nPY\n}\n"
 
+# write_warehouse_mdm_gold_definition now calls command_task_profile()
+# internally (task-profile-consolidation ticket 02) to resolve
+# RunWarehouseTask's profile -- extracted and sourced alongside it below.
+_COMMAND_TASK_PROFILE_START = "command_task_profile() {\n"
+_COMMAND_TASK_PROFILE_END = "\n}\n"
+
 # Fake ARNs passed into write_warehouse_mdm_gold_definition's medium/large
 # parameters -- distinguishable strings so the generated JSON's
 # RunWarehouseTask.Parameters.TaskDefinition tells us which one was used.
@@ -155,8 +161,13 @@ def _run_warehouse_task_profile(workflow_name: str) -> str:
     """Generate the real write_warehouse_mdm_gold_definition() state machine
     JSON for workflow_name and return which profile its RunWarehouseTask step
     -- the one that actually runs `bootstrap`/`daily-incremental` themselves
-    -- resolves to."""
+    -- resolves to. write_warehouse_mdm_gold_definition now calls
+    command_task_profile() internally (task-profile-consolidation ticket 02),
+    so that function's source must be sourced first too."""
     fn_source = _extract_function_source(_WMG_START, _WMG_END)
+    command_task_profile_source = _extract_function_source(
+        _COMMAND_TASK_PROFILE_START, _COMMAND_TASK_PROFILE_END
+    )
 
     tmp_root = REPO_ROOT / ".pytest_cache" / "gold_affecting_task_sizing_test"
     tmp_root.mkdir(parents=True, exist_ok=True)
@@ -165,16 +176,20 @@ def _run_warehouse_task_profile(workflow_name: str) -> str:
         tmp_path = Path(d)
         fn_file = tmp_path / "wmg_fn.sh"
         fn_file.write_text(fn_source, encoding="utf-8")
+        command_task_profile_file = tmp_path / "command_task_profile_fn.sh"
+        command_task_profile_file.write_text(command_task_profile_source, encoding="utf-8")
         out_file = tmp_path / f"{workflow_name}.json"
 
         driver = tmp_path / "driver.sh"
         driver.write_text(
             "set -euo pipefail\n"
+            'fail() { echo "ERROR: $*" >&2; exit 1; }\n'
             'CLUSTER_ARN="arn:aws:ecs:us-east-1:000000000000:cluster/fake-cluster"\n'
             'PUBLIC_SUBNET_IDS_JSON=\'["subnet-aaaa","subnet-bbbb"]\'\n'
             'SECURITY_GROUP_IDS_JSON=\'["sg-cccc"]\'\n'
             'MDM_RUN_LIMIT=100\n'
             'MDM_GRAPH_LIMIT=200\n'
+            f'source "{command_task_profile_file.as_posix()}"\n'
             f'source "{fn_file.as_posix()}"\n'
             f'write_warehouse_mdm_gold_definition "{out_file.as_posix()}" '
             f'"{_FAKE_MEDIUM_ARN}" "arn:fake-mdm-small" "arn:fake-mdm-medium" "{_FAKE_LARGE_ARN}" '

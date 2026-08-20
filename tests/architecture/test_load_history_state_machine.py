@@ -34,6 +34,13 @@ DEPLOY_SCRIPT = REPO_ROOT / "infra" / "scripts" / "deploy-aws-application.sh"
 _START_MARKER = "write_load_history_definition() {\n"
 _END_MARKER = "\nPY\n}\n"
 
+# write_load_history_definition calls command_task_profile() internally
+# (task-profile-consolidation ticket 03) to resolve bootstrap-next's
+# per-window task profile -- extracted and sourced alongside it below, same
+# as fail() (command_task_profile()'s own unknown-command guard).
+_COMMAND_TASK_PROFILE_START = "command_task_profile() {\n"
+_COMMAND_TASK_PROFILE_END = "\n}\n"
+
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 
 
@@ -68,10 +75,18 @@ def _extract_function_source() -> str:
     return text[start:end]
 
 
+def _extract_command_task_profile_source() -> str:
+    text = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    start = text.index(_COMMAND_TASK_PROFILE_START)
+    end = text.index(_COMMAND_TASK_PROFILE_END, start) + len(_COMMAND_TASK_PROFILE_END)
+    return text[start:end]
+
+
 @pytest.fixture(scope="module")
 def definition() -> dict:
     """Generate load_history's Step Functions JSON with dummy ARNs (no AWS calls)."""
     fn_source = _extract_function_source()
+    command_task_profile_source = _extract_command_task_profile_source()
 
     # dir= is repo-local (under the already-gitignored .pytest_cache/), not the
     # system temp dir: some sandboxed dev environments allow bash to read/exec
@@ -83,6 +98,8 @@ def definition() -> dict:
         tmp_path = Path(d)
         fn_file = tmp_path / "load_history_fn.sh"
         fn_file.write_text(fn_source, encoding="utf-8")
+        command_task_profile_file = tmp_path / "command_task_profile_fn.sh"
+        command_task_profile_file.write_text(command_task_profile_source, encoding="utf-8")
         out_file = tmp_path / "load_history.json"
 
         # Git Bash/MSYS mangles backslash-separated Windows paths passed as argv
@@ -91,6 +108,7 @@ def definition() -> dict:
         driver = tmp_path / "driver.sh"
         driver.write_text(
             "set -euo pipefail\n"
+            'fail() { echo "ERROR: $*" >&2; exit 1; }\n'
             'CLUSTER_ARN="arn:aws:ecs:us-east-1:000000000000:cluster/fake-cluster"\n'
             'BRONZE_BUCKET_NAME="fake-bronze-bucket"\n'
             "PUBLIC_SUBNET_IDS_JSON='[\"subnet-aaaa\",\"subnet-bbbb\"]'\n"
@@ -98,6 +116,7 @@ def definition() -> dict:
             "MDM_RUN_LIMIT=100\n"
             "MDM_GRAPH_LIMIT=200\n"
             'MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"\n'
+            f'source "{command_task_profile_file.as_posix()}"\n'
             f'source "{fn_file.as_posix()}"\n'
             f'write_load_history_definition "{out_file.as_posix()}" '
             '"arn:wh-small" "arn:wh-medium" "arn:mdm-small" "arn:mdm-medium" "arn:wh-large"\n',
