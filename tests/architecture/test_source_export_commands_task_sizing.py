@@ -146,9 +146,19 @@ def _extract_function_source(start_marker: str, end_marker: str) -> str:
 
 def _resolve_workflow_profile(workflow_name: str) -> str | None:
     """Invoke the real workflow_profile() bash function. None if unmapped
-    (an unhandled workflow name causes it to `fail` -> non-zero exit)."""
+    (an unhandled workflow name causes it to `fail` -> non-zero exit).
+    workflow_profile() is now a thin pass-through onto command_task_profile()
+    (task-profile-consolidation ticket 04), so that function's source must
+    be sourced first too."""
     fn_source = _extract_function_source(_WORKFLOW_PROFILE_START, _WORKFLOW_PROFILE_END)
-    script = f'set -euo pipefail\n{fn_source}\nworkflow_profile "{workflow_name}"\n'
+    command_task_profile_source = _extract_function_source(
+        _COMMAND_TASK_PROFILE_START, _COMMAND_TASK_PROFILE_END
+    )
+    script = (
+        'set -euo pipefail\n'
+        'fail() { echo "ERROR: $*" >&2; exit 1; }\n'
+        f'{command_task_profile_source}\n{fn_source}\nworkflow_profile "{workflow_name}"\n'
+    )
     result = subprocess.run(
         ["bash", "-c", script], capture_output=True, text=True, timeout=10
     )

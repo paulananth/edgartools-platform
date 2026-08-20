@@ -1338,50 +1338,30 @@ task_definition_for_mdm_workflow() {
   esac
 }
 
+# task-profile-consolidation wayfinder map, ticket 04
+# (.scratch/task-profile-consolidation/issues/
+# 04-retire-workflow-profile-dead-cases.md): workflow_profile() no longer
+# holds an independent case statement -- it's a thin pass-through that
+# translates its callers' underscore-style workflow names (e.g.
+# "bootstrap_full") to command_task_profile()'s hyphenated CLI command names
+# (e.g. "bootstrap-full") and delegates entirely. Its former case statement
+# (including "daily_incremental"/"bootstrap", which were always dead code --
+# see command_task_profile()'s comment below) is retired; there is now
+# exactly one place task-profile resolution logic lives.
 workflow_profile() {
-  case "$1" in
-    # DEAD CODE as of 2026-07-30 (gold-build-memory-reliability ticket 03 investigation):
-    # workflow_profile() is never actually *called* with "daily_incremental" or "bootstrap"
-    # anywhere in this script -- their real RunWarehouseTask task-def comes from
-    # write_warehouse_mdm_gold_definition's run_wh (see that function's own comment), not
-    # from here. These two cases are kept only so a value exists if that ever changes; set
-    # to "large" to match the ticket 03 decision (both need large's raised 8192MB ceiling,
-    # same as bootstrap_full/full_reconcile/gold_refresh below), not because this line is
-    # actually reached in production.
-    daily_incremental) printf '%s\n' "large" ;;
-    bootstrap) printf '%s\n' "large" ;;
-    # bootstrap_full/targeted_resync/full_reconcile/gold_refresh: this IS the operative path
-    # (see the workflow_profile()-driven loop below) -- moved medium -> large (2026-07-30,
-    # ticket 03): all four call the identical memory-heavy build_gold() path and need
-    # large's raised 8192MB ceiling, not medium's unchanged 4096MB. See TASK_DEF_LARGE_ARN's
-    # comment above.
-    bootstrap_full) printf '%s\n' "large" ;;
-    targeted_resync) printf '%s\n' "large" ;;
-    full_reconcile) printf '%s\n' "large" ;;
-    load_daily_form_index_for_date) printf '%s\n' "small" ;;
-    catch_up_daily_form_index) printf '%s\n' "small" ;;
-    gold_refresh) printf '%s\n' "large" ;;
-    seed_universe) printf '%s\n' "medium" ;;
-    *) fail "unknown workflow: $1" ;;
-  esac
+  command_task_profile "${1//_/-}"
 }
 
 # task-profile-consolidation wayfinder map, ticket 01
 # (.scratch/task-profile-consolidation/issues/
-# 01-define-the-single-command-to-task-profile-source-of-truth.md): single
-# command name -> task profile source of truth, added *alongside*
-# workflow_profile() above, write_warehouse_mdm_gold_definition's hardcoded
-# wh_task_medium_arn/wh_task_large_arn parameters, and bootstrap-next's own
-# hardcoded "medium" special case in write_load_history_definition -- those
-# three independently-maintained mechanisms already silently agree on every
-# command below today (proven by
-# tests/architecture/test_task_profile_source_of_truth.py, which cross-checks
-# this function's answer against each command's *real* currently-live
-# resolution path). Nothing has been switched over to call this function
-# yet -- see tickets 02-04 in .scratch/task-profile-consolidation/issues/ for
-# the migration that retires the old mechanisms once this one is proven
-# correct. Keyed by the real CLI command name (hyphenated), not
-# workflow_profile()'s underscore-workflow-name spelling.
+# 01-define-the-single-command-to-task-profile-source-of-truth.md): the
+# single command name -> task profile source of truth.
+# write_warehouse_mdm_gold_definition (ticket 02) and
+# write_load_history_definition (ticket 03) both call this directly for
+# their own task-def resolution; workflow_profile() above (ticket 04) is now
+# a thin pass-through onto this same mapping. There is exactly one place
+# task-profile resolution logic lives. Keyed by the real CLI command name
+# (hyphenated), not workflow_profile()'s underscore-workflow-name spelling.
 command_task_profile() {
   case "$1" in
     bootstrap-full) printf '%s\n' "large" ;;
@@ -1390,36 +1370,40 @@ command_task_profile() {
     load-daily-form-index-for-date) printf '%s\n' "small" ;;
     catch-up-daily-form-index) printf '%s\n' "small" ;;
     gold-refresh) printf '%s\n' "large" ;;
-    # seed-universe: this value reflects workflow_profile()'s standalone
-    # seed_universe workflow only. KNOWN, DELIBERATELY UNRESOLVED
-    # DISCREPANCY (found 2026-08-19 while implementing ticket 03): the
-    # *same* `seed-universe` CLI command also runs as load_history's own
-    # SeedUniverse state (write_load_history_definition), which was bumped
-    # to wh_task_large_arn on 2026-08-09 after a live exit-137 OOM (that
-    # state's own dispatch unconditionally hydrates the full canonical
-    # silver.duckdb before its tracking-status logic runs -- see that
-    # function's own comment above its `seed = ecs_state(wh_large_arn, ...)`
-    # call). Neither ticket 02 nor 03 touches SeedUniverse, so this isn't
-    # fixed here -- whether the standalone workflow is *also* at OOM risk on
-    # medium, or genuinely doesn't need large (e.g. different universe
-    # size/timing), is an unverified judgment call, not something to
-    # silently pick a side on. See ticket 06.
+    # seed-universe: this value reflects the standalone seed_universe
+    # workflow only (routed here via workflow_profile()'s pass-through).
+    # KNOWN, DELIBERATELY UNRESOLVED DISCREPANCY (found 2026-08-19 while
+    # implementing ticket 03): the *same* `seed-universe` CLI command also
+    # runs as load_history's own SeedUniverse state
+    # (write_load_history_definition), which was bumped to wh_task_large_arn
+    # on 2026-08-09 after a live exit-137 OOM (that state's own dispatch
+    # unconditionally hydrates the full canonical silver.duckdb before its
+    # tracking-status logic runs -- see that function's own comment above
+    # its `seed = ecs_state(wh_large_arn, ...)` call). Neither ticket 02,
+    # 03, nor 04 touches SeedUniverse, so this isn't fixed here -- whether
+    # the standalone workflow is *also* at OOM risk on medium, or genuinely
+    # doesn't need large (e.g. different universe size/timing), is an
+    # unverified judgment call, not something to silently pick a side on.
+    # See ticket 06.
     seed-universe) printf '%s\n' "medium" ;;
-    # daily-incremental/bootstrap: workflow_profile() has cases for these
-    # two names but they're dead code (see that function's own comment --
-    # never actually called with these names). The real resolved profile
-    # comes from write_warehouse_mdm_gold_definition's RunWarehouseTask step,
-    # hardcoded to wh_task_large_arn -- "large" here matches that live
-    # resolution, not workflow_profile()'s unreached declared value (though
-    # today the two happen to already agree).
+    # daily-incremental/bootstrap: these two commands are never actually
+    # dispatched through workflow_profile()'s pass-through above (its real
+    # caller loop only iterates bootstrap_full/targeted_resync/
+    # full_reconcile/load_daily_form_index_for_date/
+    # catch_up_daily_form_index/gold_refresh/seed_universe). Their real
+    # resolved profile instead comes from write_warehouse_mdm_gold_definition's
+    # RunWarehouseTask step (ticket 02), which calls command_task_profile()
+    # directly with these same names -- so these two case arms exist for
+    # completeness/direct callers of command_task_profile() itself, not
+    # because anything routes through workflow_profile() to reach them.
     daily-incremental) printf '%s\n' "large" ;;
     bootstrap) printf '%s\n' "large" ;;
-    # bootstrap-next: never passed to workflow_profile() or
+    # bootstrap-next: never dispatched through workflow_profile() or
     # write_warehouse_mdm_gold_definition -- load_history's per-window
     # `bootstrap-next --silver-only` task (write_load_history_definition's
-    # WindowedBootstrap/RunWindow state) hardcodes wh_task_large_arn
-    # directly. CORRECTED 2026-08-19 (was wrongly "medium" -- inherited
-    # uncritically from a stale hardcoded assumption in
+    # WindowedBootstrap/RunWindow state) calls command_task_profile()
+    # directly (ticket 03). CORRECTED 2026-08-19 (was wrongly "medium" --
+    # inherited uncritically from a stale hardcoded assumption in
     # test_source_export_commands_task_sizing.py's own
     # _SPECIAL_CASED_PROFILE, itself unrevised since the real wiring was
     # bumped to large on 2026-08-10 after a live exit-137 OOM on medium; see

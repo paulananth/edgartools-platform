@@ -58,6 +58,21 @@ once tickets 02-04 land and the legacy mechanisms are retired -- until
 then, this file and that one independently duplicate a small amount of
 extraction/dispatch logic, each proving the *current* live behavior it
 covers.
+
+UPDATE (2026-08-19, tickets 02-04 landed): all three paths above now
+resolve through ``command_task_profile()`` themselves rather than through
+independent logic -- path 1 because ``workflow_profile()`` is now a thin
+pass-through onto it (ticket 04); paths 2 and 3 because
+``write_warehouse_mdm_gold_definition``/``write_load_history_definition``
+now call it directly (tickets 02/03). This test therefore no longer proves
+the new mapping against genuinely independent legacy behavior -- it's a
+regression-lock confirming the migration didn't change any command's
+resolved profile, and confirming an unmapped command still fails loudly
+end-to-end through whichever real caller reaches it. Left as-is rather than
+rewritten: ticket 05 only scopes the sibling file's collapse, and this
+file's tests still pass and still catch a real regression (a caller
+drifting off the shared mapping again). A future pass could fold this file
+into ticket 05's collapse, but that's not decided here.
 """
 from __future__ import annotations
 
@@ -146,12 +161,18 @@ def _extract_function_source(start_marker: str, end_marker: str) -> str:
 
 def _resolve_workflow_profile(workflow_name: str) -> str | None:
     """Invoke the real workflow_profile() bash function. None if unmapped
-    (an unhandled workflow name causes it to `fail` -> non-zero exit)."""
+    (an unhandled workflow name causes it to `fail` -> non-zero exit).
+    workflow_profile() is now a thin pass-through onto command_task_profile()
+    (task-profile-consolidation ticket 04), so that function's source must
+    be sourced first too."""
     fn_source = _extract_function_source(_WORKFLOW_PROFILE_START, _WORKFLOW_PROFILE_END)
+    command_task_profile_source = _extract_function_source(
+        _COMMAND_TASK_PROFILE_START, _COMMAND_TASK_PROFILE_END
+    )
     script = (
         'set -euo pipefail\n'
         'fail() { echo "ERROR: $*" >&2; exit 1; }\n'
-        f'{fn_source}\nworkflow_profile "{workflow_name}"\n'
+        f'{command_task_profile_source}\n{fn_source}\nworkflow_profile "{workflow_name}"\n'
     )
     result = subprocess.run(
         ["bash", "-c", script], capture_output=True, text=True, timeout=10
