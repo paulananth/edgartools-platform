@@ -152,6 +152,32 @@ for follow-up.
   pass). See Ticket 12's own "Progress" section for the full account before
   picking this back up.
 
+- **Update (2026-08-19, later same day):** confirmed the shard-publish fix
+  (`eb0a60cb`) live in prod *before* rerunning anything — `warehouse-prod`
+  (digest `sha256:33a6f1e9...`, tag `warehouse-sha-85ab9e65a599`) and
+  `mdm-prod` (digest `sha256:3ad1dba8...`, same commit `85ab9e65`) both
+  descend from `eb0a60cb`, confirmed via `git merge-base --is-ancestor`, and
+  the registered task-def revisions the state machine actually references
+  (`edgartools-prod-medium:208`, `edgartools-prod-mdm-medium:178`) point at
+  those exact digests — so no rebuild/redeploy was needed, just a rerun. The
+  most recent execution before this (`relderiv-fix-verify-1787165186`,
+  started 14:46:28) had already independently proven the shard fix at real
+  scale: `BatchSilver`'s `MapRunSucceeded` at 15:51:57 (~64 min,
+  `MaxConcurrency:20` against 4 shards, the exact race condition) — it then
+  failed 4x at `MdmRun` on the separate, already-diagnosed migration-011
+  `UndefinedColumn` gap (see CLAUDE.md's "MDM Postgres migration-011 schema
+  drift" 5-whys), fixed same-day via `edgartools-prod-mdm-migrate`. Rather
+  than repay the proven ~64-minute `BatchSilver` cost, started a fresh
+  execution (`migration011-fix-verify-resume-1787189893`) with
+  `resume_from_run_id: relderiv-fix-verify-1787165186` to reuse that run's
+  already-succeeded batch state and go straight to `MdmRun` onward,
+  confirmed routing through `ComputeRemainingBatches` as designed. Also
+  confirmed live: the deployed MDM image already contains `534d40e7` (the
+  relationship-derivation multi-threading fix) and `7ffda2d7` (migration-
+  011's own model change), so `MdmRun` this time exercises the fixed,
+  concurrent path, not the old single-threaded one. In progress as of this
+  entry — outcome not yet known.
+
 ## Decisions so far
 
 <!-- Closed ticket decisions: one-line gist and link; detail stays in the ticket. -->
