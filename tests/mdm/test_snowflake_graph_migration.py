@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from edgar_warehouse.mdm.snowflake_graph import (
@@ -282,6 +283,11 @@ def test_run_hosted_neo4j_e2e_uses_hosted_validation_only(tmp_path, monkeypatch)
 
 def test_graph_sync_executor_materializes_filtered_graph_contract_without_credentials():
     connection = FakeGraphConnection()
+    # release-readiness ticket 94, item 3: with limit/limit_per_type set,
+    # sync() issues 2 preflight COUNT queries (available_node_count,
+    # available_edge_count) before the main script, then the usual
+    # node_count/edge_count fetches after it -- 4 fetchone() pops total.
+    connection.fake_cursor.results = [(50,), (60,), (7,), (11,)]
     executor = SnowflakeGraphSyncExecutor(connection)
 
     result = executor.sync(
@@ -300,8 +306,12 @@ def test_graph_sync_executor_materializes_filtered_graph_contract_without_creden
     cursor = connection.fake_cursor
     combined_sql = "\n".join(cursor.executed)
     assert cursor.closed is True
-    assert cursor.executed[0].startswith("-- Build graph-ready node and edge tables")
-    assert len(cursor.executed) > 3
+    # First 2 executed statements are the preflight COUNT queries; the main
+    # build script's opening comment follows them.
+    assert cursor.executed[0].startswith("SELECT COUNT(*) FROM")
+    assert cursor.executed[1].startswith("SELECT COUNT(*) FROM")
+    assert cursor.executed[2].startswith("-- Build graph-ready node and edge tables")
+    assert len(cursor.executed) > 5
     # 07-05: additive publish -- no blanket CREATE OR REPLACE TABLE for staged rows.
     assert "CREATE OR REPLACE TABLE" not in combined_sql
     assert "CREATE TABLE IF NOT EXISTS EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION.MDM_GRAPH_NODES" in combined_sql
@@ -322,6 +332,8 @@ def test_graph_sync_executor_materializes_filtered_graph_contract_without_creden
     assert "LIMIT 100" in combined_sql
     assert result.node_count == 7
     assert result.edge_count == 11
+    assert result.available_node_count == 50
+    assert result.available_edge_count == 60
     assert result.target_database == "EDGARTOOLS_DEV"
     assert result.target_schema == "NEO4J_GRAPH_MIGRATION"
     assert result.node_tables == (
@@ -342,6 +354,103 @@ def test_graph_sync_executor_materializes_filtered_graph_contract_without_creden
         "limit_per_type": 10,
         "generation_id": "11111111-1111-1111-1111-111111111111",
     }
+
+
+# -- release-readiness ticket 94, item 3: preflight-count capped warning ----
+
+
+def test_graph_sync_emits_capped_event_when_applied_falls_short_of_available(capsys):
+    """A limit/limit_per_type that silently caps far below what's eligible
+    must not look identical to a real, complete sync -- both previously
+    reported the same "status: ok" shape. Confirmed the current default
+    shape reproduces this exactly: node_count/edge_count (7/11) below the
+    preflight available counts (50/60) must emit mdm_sync_graph_result_capped."""
+    connection = FakeGraphConnection()
+    connection.fake_cursor.results = [(50,), (60,), (7,), (11,)]
+    executor = SnowflakeGraphSyncExecutor(connection)
+
+    result = executor.sync(
+        SnowflakeGraphSyncConfig(
+            target_database="EDGARTOOLS_DEV",
+            mdm_schema="MDM_TEST",
+            limit=200,
+            generation_id="cccccccc-0000-0000-0000-000000000000",
+        )
+    )
+
+    assert result.available_node_count == 50
+    assert result.available_edge_count == 60
+    assert result.node_count == 7
+    assert result.edge_count == 11
+
+    stderr_lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
+    events = [json.loads(line) for line in stderr_lines]
+    capped_events = [e for e in events if e["event"] == "mdm_sync_graph_result_capped"]
+    assert len(capped_events) == 1
+    capped = capped_events[0]
+    assert capped["node_count"] == 7
+    assert capped["available_node_count"] == 50
+    assert capped["edge_count"] == 11
+    assert capped["available_edge_count"] == 60
+    assert capped["limit"] == 200
+
+
+def test_graph_sync_does_not_emit_capped_event_when_applied_equals_available(capsys):
+    """No false-positive warning when the sync genuinely captured everything
+    eligible -- applied counts equal to (not less than) available counts is
+    a real complete sync, not a cap."""
+    connection = FakeGraphConnection()
+    connection.fake_cursor.results = [(7,), (11,), (7,), (11,)]
+    executor = SnowflakeGraphSyncExecutor(connection)
+
+    executor.sync(
+        SnowflakeGraphSyncConfig(
+            target_database="EDGARTOOLS_DEV",
+            mdm_schema="MDM_TEST",
+            limit=200,
+            generation_id="dddddddd-0000-0000-0000-000000000000",
+        )
+    )
+
+    stderr_lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
+    events = [json.loads(line) for line in stderr_lines]
+    assert not any(e["event"] == "mdm_sync_graph_result_capped" for e in events)
+
+
+def test_graph_sync_skips_preflight_queries_when_unbounded(capsys):
+    """No limit/limit_per_type at all -- an unbounded sync can't be
+    suspiciously capped, so the 2 extra preflight COUNT round trips must not
+    happen (cost discipline: don't pay for a check whose answer is always
+    "not capped"), and available_node_count/available_edge_count stay None."""
+    connection = FakeGraphConnection()
+    connection.fake_cursor.results = [(7,), (11,)]
+    executor = SnowflakeGraphSyncExecutor(connection)
+
+    result = executor.sync(
+        SnowflakeGraphSyncConfig(
+            target_database="EDGARTOOLS_DEV",
+            mdm_schema="MDM_TEST",
+            generation_id="eeeeeeee-0000-0000-0000-000000000000",
+        )
+    )
+
+    assert result.available_node_count is None
+    assert result.available_edge_count is None
+    # Only the 2 post-sync node_count/edge_count fetches against
+    # MDM_GRAPH_NODES/MDM_GRAPH_EDGES -- no preflight MDM_ENTITY/
+    # MDM_RELATIONSHIP_INSTANCE count queries at all. Matches on statements
+    # that ARE a top-level scalar count query (what _fetch_scalar issues),
+    # not the CREATE VIEW ... COUNT(*) ... statements render_graph_tables
+    # also emits as part of the main build script.
+    count_statements = [
+        s for s in connection.fake_cursor.executed
+        if s.strip().startswith("SELECT COUNT(*) FROM")
+    ]
+    assert len(count_statements) == 2
+    assert all("MDM_GRAPH_NODES" in s or "MDM_GRAPH_EDGES" in s for s in count_statements)
+    stderr_lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
+    events = [json.loads(line) for line in stderr_lines]
+    assert not any(e["event"] == "mdm_sync_graph_result_capped" for e in events)
 
 
 def test_graph_sync_executor_requires_generation_id():

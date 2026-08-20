@@ -441,6 +441,57 @@ def test_sync_graph_uses_snowflake_executor_without_neo4j_credentials(monkeypatc
         "limit": 100,
         "limit_per_type": 10,
     }
+    # RecordingSnowflakeExecutor doesn't set available_node_count/
+    # available_edge_count, matching an unbounded (no --limit) call --
+    # capped_below_available must be False, not silently omitted.
+    assert payload["capped_below_available"] is False
+    assert payload["available_node_count"] is None
+    assert payload["available_edge_count"] is None
+
+
+def test_sync_graph_cli_payload_surfaces_capped_below_available(monkeypatch, capsys):
+    """release-readiness ticket 94, item 3: an operator reading only the
+    CLI's own stdout JSON (e.g. a captured Step Functions task result, no
+    stderr access) must still be able to tell a limit silently capped the
+    sync well below what was actually eligible."""
+    _clear_graph_env(monkeypatch)
+
+    class CappedRecordingSnowflakeExecutor(RecordingSnowflakeExecutor):
+        def sync(self, config):
+            self.__class__.configs.append(config)
+            return SnowflakeGraphSyncResult(
+                node_count=200,
+                edge_count=200,
+                target_database=config.target_database or "EDGARTOOLS_DEV",
+                target_schema=config.target_schema,
+                node_tables=("MDM_GRAPH_NODES",),
+                edge_tables=("MDM_GRAPH_EDGES",),
+                applied_filters={
+                    "entity_types": tuple(config.entity_types),
+                    "relationship_types": tuple(config.relationship_types),
+                    "limit": config.limit,
+                    "limit_per_type": config.limit_per_type,
+                },
+                available_node_count=193323,
+                available_edge_count=157732,
+            )
+
+    monkeypatch.setattr(
+        "edgar_warehouse.mdm.snowflake_graph.SnowflakeGraphSyncExecutor",
+        CappedRecordingSnowflakeExecutor,
+    )
+
+    args = build_parser().parse_args(
+        ["mdm", "sync-graph", "--limit", "200", "--target-database", "EDGARTOOLS_DEV"]
+    )
+    assert args.handler(args) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["capped_below_available"] is True
+    assert payload["available_node_count"] == 193323
+    assert payload["available_edge_count"] == 157732
+    assert payload["graph_nodes_materialized"] == 200
+    assert payload["graph_edges_materialized"] == 200
 
 
 def test_verify_graph_reports_strict_snowflake_parity(monkeypatch, capsys):

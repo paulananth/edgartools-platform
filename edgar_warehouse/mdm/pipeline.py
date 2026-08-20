@@ -333,16 +333,44 @@ class MDMPipeline:
                 )
             else:
                 rows = []
-        else:
-            sql = "SELECT * FROM sec_company"
-            params: list[Any] = []
-            if ciks is not None:
-                placeholders = ", ".join("?" for _ in ciks)
-                sql += f" WHERE cik IN ({placeholders})"
-                params.extend(ciks)
+        elif ciks is not None:
+            sql = "SELECT * FROM sec_company WHERE cik IN ({})".format(
+                ", ".join("?" for _ in ciks)
+            )
             if limit:
                 sql += f" LIMIT {int(limit)}"
-            rows = self.silver.fetch(sql, params or None)
+            rows = self.silver.fetch(sql, list(ciks))
+        elif limit:
+            # release-readiness ticket 94: a bounded (no resume, no
+            # issuer_ciks) full-universe call previously plateaued on the
+            # same first `limit` rows on every call -- "SELECT * FROM
+            # sec_company LIMIT N" has no ORDER BY and no WHERE excluding
+            # already-resolved CIKs, so a resolver that idempotently
+            # skips/reuses already-resolved CIKs (see this method's own
+            # docstring) never advanced past the first N rows in whatever
+            # order the table scan happened to return. Confirmed live via a
+            # real SilverDatabase-backed repro: 3 successive limit=2 calls
+            # against a 5-company universe never resolved past the same
+            # first 2 CIKs. This is the identical plateau shape already
+            # documented and fixed for relationship-derivation's own source
+            # query (_bounded_relationship_sql's docstring above) -- ported
+            # here: over-fetch a growing window past the already-resolved
+            # prefix (stable ORDER BY cik + the existing-count-scaled LIMIT
+            # that helper already computes), exclude already-resolved CIKs,
+            # then cap at `limit` genuinely-new candidates -- same
+            # bounded-cost-per-call contract as before (at most `limit` real
+            # MDM resolutions happen), but the window now actually advances
+            # on repeat calls instead of plateauing.
+            already_resolved = self._company_cik_set()
+            fetch_sql = self._bounded_relationship_sql(
+                "SELECT * FROM sec_company ORDER BY cik", limit, len(already_resolved)
+            )
+            candidate_rows = self.silver.fetch(fetch_sql)
+            rows = [
+                row for row in candidate_rows if row["cik"] not in already_resolved
+            ][: int(limit)]
+        else:
+            rows = self.silver.fetch("SELECT * FROM sec_company")
 
         ticker_rows = self.silver.fetch(
             "SELECT cik, ticker, exchange FROM sec_company_ticker "

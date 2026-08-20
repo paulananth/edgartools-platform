@@ -1477,6 +1477,19 @@ def _snowflake_graph_sync_config(
 
 
 def _snowflake_graph_sync_payload(result) -> dict[str, object]:
+    # release-readiness ticket 94, item 3: surface the preflight-vs-applied
+    # comparison in the CLI's own JSON output too, not just the
+    # mdm_sync_graph_result_capped stderr event -- an operator reading only
+    # stdout (e.g. a captured Step Functions task result) should still be
+    # able to tell "capped" from "complete" without cross-referencing logs.
+    capped = (
+        result.available_node_count is not None
+        and result.available_edge_count is not None
+        and (
+            result.node_count < result.available_node_count
+            or result.edge_count < result.available_edge_count
+        )
+    )
     return {
         "status": "ok",
         "generation_id": result.applied_filters.get("generation_id"),
@@ -1496,6 +1509,9 @@ def _snowflake_graph_sync_payload(result) -> dict[str, object]:
             "limit": result.applied_filters.get("limit"),
             "limit_per_type": result.applied_filters.get("limit_per_type"),
         },
+        "capped_below_available": capped,
+        "available_node_count": result.available_node_count,
+        "available_edge_count": result.available_edge_count,
     }
 
 
