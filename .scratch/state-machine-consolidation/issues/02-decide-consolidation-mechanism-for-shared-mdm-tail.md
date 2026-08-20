@@ -292,3 +292,11 @@ already repoints at `mdm_utility`), so they're orphaned but harmless.
 Same cleanup shape as tickets 03/04 (rollback snapshot, confirm zero
 running executions, explicit `delete-state-machine`) would apply if/when
 actioned — no ticket filed for this yet.
+
+**CORRECTION (2026-08-20): "orphaned but harmless" was wrong.** Two of
+these seven (`mdm-migrate`, `mdm-run`) caused a real incident to be
+mis-marked resolved — see `issues/05-delete-orphaned-mdm-utility-machine-
+originals.md` for the full account and CLAUDE.md's migration-011 section
+for the incident itself. Frozen on a stale image, they gave misleadingly
+clean success/no-error signals that tested nothing about current prod
+behavior. Ticket filed: 05.
