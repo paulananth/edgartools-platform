@@ -1,0 +1,27 @@
+{
+    "stateMachineArn": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-migrate",
+    "name": "edgartools-prod-mdm-migrate",
+    "status": "ACTIVE",
+    "definition": "{\n  \"Comment\": \"Run an EdgarTools MDM workflow on ECS Fargate.\",\n  \"StartAt\": \"RunMdmTask\",\n  \"States\": {\n    \"RunMdmTask\": {\n      \"Type\": \"Task\",\n      \"Resource\": \"arn:aws:states:::ecs:runTask.sync\",\n      \"Parameters\": {\n        \"LaunchType\": \"FARGATE\",\n        \"Cluster\": \"arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse\",\n        \"TaskDefinition\": \"arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-small:149\",\n        \"PropagateTags\": \"TASK_DEFINITION\",\n        \"NetworkConfiguration\": {\n          \"AwsvpcConfiguration\": {\n            \"AssignPublicIp\": \"ENABLED\",\n            \"SecurityGroups\": [\n              \"sg-0f7de61f13ba27744\"\n            ],\n            \"Subnets\": [\n              \"subnet-09dfb6a34597e8ed3\",\n              \"subnet-0606a828b86737ac6\"\n            ]\n          }\n        },\n        \"Overrides\": {\n          \"ContainerOverrides\": [\n            {\n              \"Name\": \"edgar-warehouse\",\n              \"Command.$\": \"States.Array('mdm', 'migrate')\"\n            }\n          ]\n        }\n      },\n      \"Retry\": [\n        {\n          \"ErrorEquals\": [\n            \"States.TaskFailed\"\n          ],\n          \"IntervalSeconds\": 60,\n          \"BackoffRate\": 2.0,\n          \"MaxAttempts\": 2\n        }\n      ],\n      \"End\": true\n    }\n  }\n}\n",
+    "roleArn": "arn:aws:iam::690839588395:role/sec_platform_prod_runner_step_functions",
+    "type": "STANDARD",
+    "creationDate": "2026-07-04T01:08:51.466000-04:00",
+    "loggingConfiguration": {
+        "level": "ALL",
+        "includeExecutionData": true,
+        "destinations": [
+            {
+                "cloudWatchLogsLogGroup": {
+                    "logGroupArn": "arn:aws:logs:us-east-1:690839588395:log-group:/aws/states/edgartools-prod-warehouse:*"
+                }
+            }
+        ]
+    },
+    "tracingConfiguration": {
+        "enabled": false
+    },
+    "revisionId": "262a3fa7-3f90-4133-a2d9-4d6102036477",
+    "encryptionConfiguration": {
+        "type": "AWS_OWNED_KEY"
+    }
+}

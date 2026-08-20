@@ -1235,13 +1235,19 @@ task def (exit code 0). Migration 011 is now genuinely, durably applied.
 verification found no error" are not equivalent to "the fix touched current
 code" — when a check can silently run against stale, superseded
 infrastructure and still report a clean result, a false positive and a
-false negative can both look identical to success. Ticket filed to close
-the actual gap: `.scratch/state-machine-consolidation/issues/
-05-delete-orphaned-mdm-utility-machine-originals.md` (delete all 7 orphaned
-MDM Utility Machine originals, not just the two that bit this incident —
-`mdm-backfill-relationships`/`mdm-sync-graph`/`mdm-verify-graph`/
-`mdm-counts`/`mdm-check-connectivity` carry the identical risk, just not
-yet proven to have caused a second incident).
+false negative can both look identical to success.
+
+**Gap closed same-day (2026-08-20):** all 7 orphaned MDM Utility Machine
+originals — not just the two that bit this incident — were deleted live in
+prod (`.scratch/state-machine-consolidation/issues/
+05-delete-orphaned-mdm-utility-machine-originals.md`, resolved): zero
+running executions confirmed, fresh rollback snapshots captured, then
+`edgartools-prod-mdm-run`/`-backfill-relationships`/`-sync-graph`/
+`-verify-graph`/`-counts`/`-migrate`/`-check-connectivity` all deleted.
+`edgartools-prod-mdm-utility` (the correct, current consolidated machine)
+and every legitimate sibling confirmed untouched. This class of false
+signal can no longer recur through these 7 names — there is nothing left
+to accidentally invoke.
 
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
