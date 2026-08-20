@@ -1370,8 +1370,10 @@ command_task_profile() {
     load-daily-form-index-for-date) printf '%s\n' "small" ;;
     catch-up-daily-form-index) printf '%s\n' "small" ;;
     gold-refresh) printf '%s\n' "large" ;;
-    # seed-universe: this value reflects the standalone seed_universe
-    # workflow only (routed here via workflow_profile()'s pass-through).
+    # seed-universe: reached both via the standalone seed_universe workflow
+    # (workflow_profile()'s pass-through) and, as of ticket 07, directly from
+    # write_load_history_definition's own SeedUniverse state -- both call
+    # sites converge on this single answer.
     # DECIDED, ticket 06 (2026-08-20): stays "medium". The root cause of the
     # 2026-08-09 OOM this discrepancy was named after -- an unconditional
     # full-buffer hydrate of canonical silver.duckdb before any per-command
@@ -1383,12 +1385,15 @@ command_task_profile() {
     # step's own full-buffer read/write, deliberately deferred as
     # "unobserved" by that same map) -- checked live 2026-08-20: canonical
     # was 1.5GiB, comfortably inside medium's 4096MB envelope for that step,
-    # with real but shrinking headroom as canonical grows. load_history's own
-    # SeedUniverse state remains on large from the original emergency bump,
-    # not reverted here -- see ticket 07
+    # with real but shrinking headroom as canonical grows.
+    # DECIDED, ticket 07 (2026-08-20, user-confirmed): load_history's own
+    # SeedUniverse state, previously hardcoded to wh_large_arn from the
+    # original emergency bump, is now also routed through this same mapping
     # (.scratch/task-profile-consolidation/issues/
-    # 07-decide-whether-to-revert-load-historys-seeduniverse-off-large.md)
-    # for that follow-on, explicitly out of ticket 06's scope.
+    # 07-decide-whether-to-revert-load-historys-seeduniverse-off-large.md) --
+    # no load_history-specific reason to diverge was found: both call sites
+    # issue the identical command with identical arguments against the same
+    # shared canonical file.
     seed-universe) printf '%s\n' "medium" ;;
     # daily-incremental/bootstrap: these two commands are never actually
     # dispatched through workflow_profile()'s pass-through above (its real
@@ -2199,18 +2204,43 @@ write_load_history_definition() {
     *) fail "write_load_history_definition: command_task_profile('bootstrap-next') returned unknown profile: $bootstrap_next_profile" ;;
   esac
 
+  # task-profile-consolidation wayfinder map, ticket 07
+  # (.scratch/task-profile-consolidation/issues/
+  # 07-decide-whether-to-revert-load-historys-seeduniverse-off-large.md):
+  # SeedUniverse's task profile now comes from command_task_profile()
+  # (ticket 01's single source of truth) instead of a hardcoded
+  # wh_task_large_arn reference below, same routing pattern as
+  # bootstrap-next above (ticket 03). DECIDED, user-confirmed 2026-08-20:
+  # this state calls the exact same warehouse `seed-universe --run-id
+  # <execution>` command, with identical arguments, against the same
+  # shared canonical silver.duckdb, as the standalone seed_universe
+  # workflow ticket 06 already confirmed is safe on medium -- no
+  # load_history-specific factor (different CIK scope, concurrent
+  # same-task memory pressure, different command args) was found to
+  # justify staying on large. Converges both call sites onto
+  # command_task_profile('seed-universe') == "medium".
+  local seed_universe_profile
+  seed_universe_profile="$(command_task_profile seed-universe)"
+  local seed_universe_task_arn
+  case "$seed_universe_profile" in
+    small) seed_universe_task_arn="$wh_task_small_arn" ;;
+    medium) seed_universe_task_arn="$wh_task_medium_arn" ;;
+    large) seed_universe_task_arn="$wh_task_large_arn" ;;
+    *) fail "write_load_history_definition: command_task_profile('seed-universe') returned unknown profile: $seed_universe_profile" ;;
+  esac
+
   python3 - "$output_file" "$CLUSTER_ARN" \
     "$wh_task_small_arn" "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
     "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$MDM_SEED_UNIVERSE_TRACKING_STATUS" \
-    "$bootstrap_next_task_arn" <<'PY'
+    "$bootstrap_next_task_arn" "$seed_universe_task_arn" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  wh_small_arn, wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
  container_name, bronze_bucket_name, subnet_json, security_group_json,
  mdm_run_limit, mdm_graph_limit, mdm_seed_universe_tracking_status,
- bootstrap_next_task_arn) = sys.argv[1:]
+ bootstrap_next_task_arn, seed_universe_task_arn) = sys.argv[1:]
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
@@ -2377,18 +2407,28 @@ invalid_force_input = {
 # touch MDM (data-architecture Issue 2: this state's old comment claimed it "enrols CIKs
 # into MDM", which was never true — it calls warehouse `seed-universe`, not
 # `mdm seed-universe`). MDM enrollment is the next state, MdmSeedUniverse.
-# wh_large_arn, not wh_medium_arn (2026-08-09, same OOM class as Stage0CompanyIdentity/
-# ComputeWindows above and gold-build-memory-reliability ticket 03's run_wh): live-observed
-# exit 137 "OutOfMemoryError: container killed due to memory usage" on wh_medium_arn (4096MB)
-# during task #35's full-universe load_history run -- seed-universe's run_command() dispatch
-# unconditionally hydrates the full canonical silver.duckdb (1.5GB+ and growing, same file
-# whose growth already caused the other three incidents) before its own db.get_active_ciks()/
-# _seed_silver_tracking_status() logic runs. Unlike the acquire/release-*-lease commands fixed
-# the same day (edgar_warehouse/application/warehouse_orchestrator.py's LEASE_ONLY_COMMANDS),
-# seed-universe genuinely needs the real canonical universe data, so it can't be repointed at
-# an isolated store -- more headroom is the correct fix here, matching the established
-# precedent for every other command that legitimately needs the full file.
-seed = ecs_state(wh_large_arn,
+#
+# Was hardcoded to wh_large_arn from 2026-08-09 (same OOM class as
+# Stage0CompanyIdentity/ComputeWindows above and gold-build-memory-reliability
+# ticket 03's run_wh): live-observed exit 137 "OutOfMemoryError: container
+# killed due to memory usage" on wh_medium_arn (4096MB) during task #35's
+# full-universe load_history run -- seed-universe's run_command() dispatch
+# unconditionally hydrated the full canonical silver.duckdb before its own
+# db.get_active_ciks()/_seed_silver_tracking_status() logic ran.
+#
+# REVERTED to seed_universe_task_arn (routed through command_task_profile(),
+# resolving to "medium" -- see the bash block above), task-profile-consolidation
+# wayfinder map ticket 07, 2026-08-20: the root cause was the unconditional
+# full-buffer hydrate before filtering, not this state's memory footprint
+# specifically -- seed-universe-narrow-hydrate's streaming hydrate (PR #392)
+# plus moving the novelty filter off silver onto MDM (PR #394) fixed it for
+# every seed-universe invocation, this one included, confirmed live in prod.
+# Converges with the standalone seed_universe workflow's already-decided
+# medium profile (ticket 06) -- both call the identical command with
+# identical arguments against the same shared canonical file, and no
+# load_history-specific factor (different CIK scope, concurrent same-task
+# memory pressure, different args) was found to justify staying on large.
+seed = ecs_state(seed_universe_task_arn,
     "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
     next_state="MdmSeedUniverse", retry_secs=60)
 # ResultPath: null passes the original SM input (e.g. {"window_size": 25}) unchanged to the
