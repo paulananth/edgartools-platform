@@ -1,16 +1,26 @@
 ---
-workstream: s3-silverstage-lifecycle
-created: 2026-08-20
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: Warehouse S3 duplicate-storage reclaim
+status: planning
+last_updated: "2026-08-20T23:30:21.987Z"
+last_activity: 2026-08-20
+progress:
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Current Position
 
-**Status:** live cleanup done; Terraform prefix fix committed, prod apply still needed so a later apply from old module code cannot restore the broken prefix
-**Current Phase:** None
-**Last Activity:** 2026-08-20
-**Last Activity Description:** Deleted 2,011 versioned objects (1.71 TiB) under warehouse/silverstage/; corrected lifecycle filter silverstage/ → warehouse/silverstage/ live and in Terraform
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-08-20 — Milestone v1.0 started
 
 ## Progress
 
