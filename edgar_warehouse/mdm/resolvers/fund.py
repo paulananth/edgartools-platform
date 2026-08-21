@@ -1,145 +1,16 @@
-"""FundResolver — private-fund dedup across ADV amendments.
+"""Fund field schema for MDM resolution.
 
-Fund identity = (adviser_entity_id, normalized fund_name). AUM and
-as_of_date follow the most_recent survivorship rule so repeated ADV
-amendments refresh the current AUM without losing history in
-mdm_entity_attribute_stage.
+`FundResolver`, the original per-row resolver class this module used to
+define, was deleted (mdm-resolver-skip-unchanged map, Ticket 03,
+2026-08-21): `run_funds()` has resolved private funds via
+`edgar_warehouse.mdm.adv_bulk.resolve_funds_bulk`'s batched rewrite for
+some time, the same rewrite that superseded `AdviserResolver` (see
+`edgar_warehouse/mdm/resolvers/adviser.py`'s module docstring for the
+shared rationale). `FundResolver.resolve_one` had zero callers left in
+production or in the test suite; confirmed via a repo-wide audit before
+deletion. `FUND_FIELDS` is the one piece of the original module still
+live -- `adv_bulk.py` imports it directly to know which fields to stage.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date
-from typing import Optional
-import uuid
-
-from sqlalchemy import select
-
-from edgar_warehouse.mdm.database import MdmEntity, MdmFund
-from edgar_warehouse.mdm.resolvers.base import BaseResolver, ResolveOutcome, ResolverContext
-from edgar_warehouse.mdm.survivorship import run_survivorship_for_entity
-
 FUND_FIELDS = ["canonical_name", "fund_type", "jurisdiction", "aum_amount", "aum_as_of_date"]
-
-# Date-typed columns in MdmFund that receive survivorship winning_value strings.
-# survivorship stores all field values as str(); SQLite Date columns require
-# Python date objects, so coerce ISO-format strings back before setattr.
-_DATE_FIELDS: frozenset[str] = frozenset({"aum_as_of_date"})
-
-
-@dataclass
-class FundResolver(BaseResolver):
-    entity_type: str = "fund"
-    domain_fields: list[str] = None  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        if self.domain_fields is None:
-            self.domain_fields = list(FUND_FIELDS)
-
-    def resolve_one(
-        self,
-        ctx: ResolverContext,
-        source_system: str,
-        fund_row: dict,
-        adviser_entity_id: Optional[str],
-        effective_date=None,
-    ) -> ResolveOutcome:
-        name = ctx.engine.normalize_name(fund_row.get("fund_name"))
-        private_fund_id = str(fund_row.get("private_fund_id") or "").strip() or None
-        existing = self._existing_candidates(ctx, adviser_entity_id, name, private_fund_id)
-        source_id = private_fund_id or f"{fund_row['accession_number']}:{fund_row.get('fund_index')}"
-
-        if existing:
-            entity_id = existing[0]["entity_id"]
-            is_new = False
-        else:
-            if private_fund_id:
-                ent = MdmEntity(
-                    entity_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"iapd:pfid:{private_fund_id}")),
-                    entity_type=self.entity_type,
-                    resolution_method="iapd_pfid_exact",
-                    confidence=1.0,
-                )
-                ctx.session.add(ent)
-                ctx.session.flush()
-            else:
-                ent = self._create_entity(
-                    ctx, resolution_method="adviser_name_dedup", confidence=1.0
-                )
-            entity_id = ent.entity_id
-            is_new = True
-            ctx.session.add(
-                MdmFund(
-                    entity_id=entity_id,
-                    adviser_entity_id=adviser_entity_id,
-                    private_fund_id=private_fund_id,
-                    canonical_name=name or "Unknown Fund",
-                    fund_type=fund_row.get("fund_type"),
-                    jurisdiction=fund_row.get("jurisdiction"),
-                    aum_amount=fund_row.get("aum_amount"),
-                )
-            )
-
-        staged = {
-            "canonical_name": name,
-            "fund_type": fund_row.get("fund_type"),
-            "jurisdiction": fund_row.get("jurisdiction"),
-            "aum_amount": fund_row.get("aum_amount"),
-            "aum_as_of_date": effective_date,
-        }
-        self._stage_attrs(
-            ctx, entity_id, source_system, source_id, staged,
-            effective_date=effective_date,
-        )
-        self._register_source(ctx, entity_id, source_system, source_id, 1.0)
-        merges = run_survivorship_for_entity(
-            ctx.session, ctx.engine, self.entity_type,
-            entity_id, FUND_FIELDS,
-        )
-        row = ctx.session.get(MdmFund, entity_id)
-        if row is not None:
-            for f in FUND_FIELDS:
-                w = merges.get(f)
-                if w is not None and w.winning_value is not None:
-                    value = w.winning_value
-                    if f in _DATE_FIELDS and isinstance(value, str):
-                        try:
-                            value = date.fromisoformat(value)
-                        except ValueError:
-                            value = None
-                    setattr(row, f, value)
-        self._log_change(ctx, entity_id, {k: v.winning_value for k, v in merges.items()})
-
-        from edgar_warehouse.mdm.match import MatchAction
-        return ResolveOutcome(
-            entity_id=entity_id,
-            is_new=is_new,
-            verdict=None,
-            action=MatchAction.AUTO_MERGE,
-        )
-
-    @staticmethod
-    def _existing_candidates(
-        ctx: ResolverContext,
-        adviser_entity_id: Optional[str],
-        name: Optional[str],
-        private_fund_id: Optional[str] = None,
-    ) -> list[dict]:
-        if private_fund_id:
-            row = ctx.session.scalar(
-                select(MdmFund).where(MdmFund.private_fund_id == private_fund_id)
-            )
-            return ([{"entity_id": row.entity_id, "canonical_name": row.canonical_name}]
-                    if row is not None else [])
-        if not name:
-            return []
-        stmt = (
-            select(MdmFund, MdmEntity)
-            .join(MdmEntity, MdmEntity.entity_id == MdmFund.entity_id)
-            .where(MdmFund.canonical_name == name)
-        )
-        if adviser_entity_id:
-            stmt = stmt.where(MdmFund.adviser_entity_id == adviser_entity_id)
-        return [
-            {"entity_id": f.entity_id, "canonical_name": f.canonical_name}
-            for f, _ in ctx.session.execute(stmt).all()
-        ]

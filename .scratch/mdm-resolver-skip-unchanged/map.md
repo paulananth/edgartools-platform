@@ -30,7 +30,7 @@ answer.
 
 - [Audit which resolvers are actually reachable from a live `mdm run`](issues/01-audit-resolvers-reachable-from-mdm-run.md) — 5 resolver classes exist; only 3 are ever instantiated by the pipeline (Company, Security, Person). `AdviserResolver`/`FundResolver` are dead code — `run_advisers()`/`run_funds()` call `adv_bulk.py`'s `resolve_advisers_bulk`/`resolve_funds_bulk` instead, which never construct either class.
 - [Fix PersonResolver's skip-if-unchanged gap](issues/02-fix-personresolver-skip-if-unchanged-gap.md) — Confirmed live via a red/green repro (git-stash proof, stage-row count doubled 6→12 without the fix). Ported the same content-hash pattern used for Company/Security, hashing `issuer_cik` too even though it's never staged, since it's a match-context field. 3 new regression tests, all pass.
-- [Decide disposition of AdviserResolver/FundResolver's identical resolve_one() gap](issues/03-decide-adviserresolver-fundresolver-dead-code-disposition.md) — Ruled out of scope: fixing dead code that no test or production path ever calls would be speculative work this session's own precedent (the PersonResolver-flagged-not-fixed note in commit `091809b0`) explicitly avoids. See Out of scope below.
+- [Decide disposition of AdviserResolver/FundResolver's identical resolve_one() gap](issues/03-decide-adviserresolver-fundresolver-dead-code-disposition.md) — Ruled out of scope for the skip-if-unchanged fix itself (see Out of scope below). The smaller follow-up question the ticket raised — delete or keep the dead classes — was resolved separately (2026-08-21, `/implement 03`, on branch `claude/mdm-adviser-fund-resolver-dead-code`): deleted. `ADVISER_FIELDS`/`FUND_FIELDS` kept (still imported by `adv_bulk.py`).
 
 ## Not yet specified
 
@@ -51,9 +51,8 @@ was already safe.)
   rows are only ever appended for source_ids not already in
   `MdmSourceRef`). Fixing the dead classes would touch code nothing
   exercises. See [Ticket 03](issues/03-decide-adviserresolver-fundresolver-dead-code-disposition.md)
-  for the full reasoning; whether to delete `AdviserResolver`/`FundResolver`
-  outright (dead-code cleanup) is a separate, smaller decision not made
-  here.
+  for the full reasoning, including its 2026-08-21 follow-up: the classes
+  were deleted outright (dead-code cleanup) rather than kept.
 - **`resolve_advisers_bulk`/`resolve_funds_bulk`'s bare `SELECT * FROM ...
   LIMIT N`, no `ORDER BY`/exclusion** — discovered incidentally while
   auditing Ticket 01. This is a *different* bug shape: the same
