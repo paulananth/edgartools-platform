@@ -64,27 +64,49 @@ teardown.
 
 ## Parallel Agent Workstreams
 
-Claude and Codex may work on this repository independently, but they must not share an uncoordinated edit surface.
+Claude, Codex, and Grok may work on this repository independently, but they
+must not share an uncoordinated edit surface.
 
-- **HARD RULE: Claude and Codex must NEVER commit to the same branch.** Each
-  runtime works on its own dedicated branch (or worktree). If you find
-  yourself about to commit and `git log -1` shows a commit authored by the
-  other runtime's current work that you did not expect, STOP — do not
-  commit — and ask the user how to proceed (e.g. branch off, rebase onto a
-  new branch, or hand off).
+- **HARD RULE: no two runtimes may ever commit to the same branch.** Each
+  runtime works on its own dedicated branch. If you find yourself about to
+  commit and `git log -1` shows a commit authored by another runtime's
+  current work that you did not expect, STOP — do not commit — and ask the
+  user how to proceed (e.g. branch off, rebase onto a new branch, or hand
+  off).
+- **HARD RULE: use a dedicated git worktree per active runtime session,
+  not a bare checkout in one shared working directory, whenever more than
+  one runtime (or more than one session of the same runtime) may be
+  active at the same time.** A bare shared checkout only has *one*
+  branch checked out at once — a second session switching that checkout
+  disrupts a first session's in-progress work even when nothing is
+  actually lost (git preserves the underlying commits/stashes either
+  way). Confirmed live 2026-08-21: two concurrent sessions repeatedly
+  switched a shared working directory's checked-out branch out from
+  under a third, in-progress session — once stashing its uncommitted
+  changes, once mid-rebase. Each runtime session should create its own
+  worktree (Claude Code: the `EnterWorktree` tool, or plain
+  `git worktree add ../<repo>-<topic> <branch>`) and work there instead.
+  If you notice your working directory's checked-out branch changed
+  unexpectedly mid-session, do not assume anything was lost — check
+  `git branch --show-current`, `git reflog`, and that your own
+  commits/stash still resolve by name (`git rev-parse <branch>`,
+  `git stash list`) before taking any recovery action, and push your own
+  branch to `origin` as soon as it's in a good state so it no longer
+  depends on the shared working directory's state.
 - Branch naming convention: prefix branches with the owning runtime, e.g.
-  `claude/<topic>` or `codex/<topic>`. Before starting work or committing,
-  run `git branch --show-current` — if the current branch is prefixed for
-  the *other* runtime (or is a shared branch like `main`/`codex/main-sync`
-  that the other runtime is actively using), create/check out your own
-  branch (or worktree) before making any commits.
-- Treat current Codex work as protected unless the user explicitly hands it off.
+  `claude/<topic>`, `codex/<topic>`, or `grok/<topic>`. Before starting
+  work or committing, run `git branch --show-current` — if the current
+  branch is prefixed for a *different* runtime (or is a shared branch
+  like `main`/`codex/main-sync` that another runtime is actively using),
+  create/check out your own branch (in your own worktree) before making
+  any commits.
+- Treat current Codex or Grok work as protected unless the user explicitly hands it off.
 - Use separate GSD workstream directories under `.planning/workstreams/<name>/`; do not edit another runtime's active workstream files.
 - Before editing, run `git status --short` and `git log -1` and inspect
   `.planning/active-workstream` when present.
 - Avoid overlapping source files, Terraform roots, generated application JSON, and planning artifacts across runtimes unless the user assigns the same task to both.
 - If overlap is unavoidable, stop and ask for an ownership decision instead of merging assumptions.
-- Do not overwrite, revert, stage, or commit changes created by the other runtime unless explicitly instructed.
+- Do not overwrite, revert, stage, or commit changes created by another runtime unless explicitly instructed.
 
 ## Git/GitHub commit and PR text with backticks
 
