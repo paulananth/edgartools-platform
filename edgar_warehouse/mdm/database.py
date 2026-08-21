@@ -113,10 +113,19 @@ def _default_relationship_id(context) -> str:
 # pool of concurrent sessions against this same engine -- see pipeline.py's
 # _RESOLVE_MAX_WORKERS. 16 workers + the pipeline's own primary session
 # already exceeds the old 15-connection ceiling, so the pool budget must
-# scale with the resolve concurrency, not stay fixed. Defaults sized for
-# up to ~20 concurrent workers with headroom for the primary session.
-_DB_POOL_SIZE = int(os.environ.get("MDM_DB_POOL_SIZE", "15"))
-_DB_MAX_OVERFLOW = int(os.environ.get("MDM_DB_MAX_OVERFLOW", "15"))
+# scale with the resolve concurrency, not stay fixed.
+#
+# Raised 15/15 -> 40/20 (mdm-run-step-parallelism wayfinder map, ticket 02,
+# .scratch/mdm-run-step-parallelism/issues/02-decide-parallelism-shape.md):
+# run_all() now launches all 5 entity-resolution steps as concurrent
+# top-level futures, each with its own session -- company and security
+# alone can each open up to 16 worker sessions simultaneously, so the
+# worst case is ~50 combined connections in one ECS task. Confirmed live
+# before raising this default that MDM Postgres's real server-side
+# max_connections is 500 (13 active at check time) -- 60 total (40+20) is
+# comfortable margin, nowhere near that ceiling.
+_DB_POOL_SIZE = int(os.environ.get("MDM_DB_POOL_SIZE", "40"))
+_DB_MAX_OVERFLOW = int(os.environ.get("MDM_DB_MAX_OVERFLOW", "20"))
 
 
 def get_engine(url: str | None = None) -> Engine:

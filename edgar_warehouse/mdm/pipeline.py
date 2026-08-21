@@ -22,7 +22,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
@@ -65,11 +65,26 @@ _PERSON_RESOLVE_MAX_WORKERS = int(
 # the per-row worker-session pattern above. Deliberately a smaller default
 # than the row-level pools: type-level tasks are much coarser-grained (one
 # task can be a single-digit-millions-row derivation, e.g. INSTITUTIONAL_HOLDS)
-# and this pool runs *after* run_companies/run_securities/run_persons have
-# already finished within the same `mdm run` process (sequential phases, not
-# concurrent with each other), so it doesn't need to share connection-pool
-# headroom with those pools at the same time.
+# and this pool runs *after* every run_all() entity-resolution step has
+# finished (derive_relationships()'s trigger is unchanged by
+# mdm-run-step-parallelism ticket 02 below -- still waits for all 5), so it
+# doesn't need to share connection-pool headroom with those pools at the
+# same time.
 _RELATIONSHIP_DERIVE_MAX_WORKERS = int(os.environ.get("MDM_RELATIONSHIP_CONCURRENCY", "4"))
+
+# mdm-run-step-parallelism wayfinder map, ticket 02
+# (.scratch/mdm-run-step-parallelism/issues/02-decide-parallelism-shape.md):
+# run_all()'s five entity-resolution steps (company/adviser/security/person/
+# fund) now launch as concurrent top-level futures instead of running
+# sequentially -- each on its own fresh MDMPipeline instance/session (the
+# same "worker gets its own session" pattern derive_relationships() already
+# uses above), never sharing self.session across steps. company + security
+# dominate wall-clock time (2h14m / 1h50m measured live, ticket 01); the
+# other three are collectively under 3 minutes, but fold into the same
+# concurrent batch anyway since special-casing them out buys nothing.
+# Exactly 5 steps exist, so this rarely needs tuning, but exposed for
+# consistency with every other concurrency knob in this file.
+_RUN_STEP_MAX_WORKERS = int(os.environ.get("MDM_RUN_STEP_CONCURRENCY", "5"))
 
 # Progress-log cadence for the per-row resolve loops below (run_companies,
 # run_securities, run_persons). A fixed interval is too chatty for large
@@ -1704,6 +1719,31 @@ class MDMPipeline:
         resume_ledger_run_id: Optional[str] = None,
         run_id: Optional[str] = None,
     ) -> PipelineStats:
+        """Resolve all 5 entity types, then derive relationships.
+
+        mdm-run-step-parallelism wayfinder map, ticket 02: the 5
+        entity-resolution steps run as concurrent top-level futures instead
+        of sequentially. Each step gets its own fresh MDMPipeline
+        instance/session (mirroring derive_relationships()'s own
+        per-relationship-type worker-session pattern below) -- self.session
+        is never touched from more than one thread. This matters because
+        run_advisers/run_funds (edgar_warehouse/mdm/adv_bulk.py) write
+        through whatever session they're given directly, and run_persons'
+        unscoped-name-match fallback also writes through self.session
+        directly (see its own docstring) -- none of the 5 steps is safe to
+        launch concurrently against one shared session, only against 5
+        independent ones.
+
+        derive_relationships() still runs after all 5 steps finish (its own
+        trigger is unchanged -- ticket 02 explicitly kept this), so it never
+        shares connection-pool headroom with the 5-way concurrent phase.
+
+        Fail-fast on any step's exception: cancels the remaining futures and
+        propagates immediately, matching run_companies' own
+        cancel-on-exception pattern for its per-row worker futures (ticket
+        02's explicit choice over letting already-launched steps finish
+        best-effort).
+        """
         stats = PipelineStats()
         # pipeline-resumability ticket 02: only the company step supports
         # resume today -- resume_ledger_run_id/run_id are scoped to
@@ -1714,13 +1754,92 @@ class MDMPipeline:
         # resumable CIK snapshot/outcome ledger the way company does, so a
         # restart still re-resolves them from scratch (idempotently safe,
         # just not skip-ahead).
-        stats.companies_processed = self.run_companies(
-            limit=limit, resume_ledger_run_id=resume_ledger_run_id, run_id=run_id
+        sql_engine = self.session.get_bind()
+        silver = self.silver
+        pipeline_run_id = self.run_id
+        max_workers = 1 if sql_engine.dialect.name == "sqlite" else _RUN_STEP_MAX_WORKERS
+
+        # (stats field, runner) pairs rather than a step-name string dispatched
+        # through an if/elif ladder elsewhere: the field a step's result gets
+        # assigned to and the method that produces it are declared in the same
+        # place, so the two can't silently drift apart (e.g. a copy-paste
+        # swapping which branch feeds which PipelineStats attribute).
+        step_runners: tuple[tuple[str, Callable[[MDMPipeline], int]], ...] = (
+            (
+                "companies_processed",
+                lambda wp: wp.run_companies(
+                    limit=limit, resume_ledger_run_id=resume_ledger_run_id, run_id=run_id
+                ),
+            ),
+            ("advisers_processed", lambda wp: wp.run_advisers(limit=limit)),
+            ("securities_processed", lambda wp: wp.run_securities(limit=limit)),
+            ("persons_processed", lambda wp: wp.run_persons(limit=limit)),
+            ("funds_processed", lambda wp: wp.run_funds(limit=limit)),
         )
-        stats.advisers_processed = self.run_advisers(limit=limit)
-        stats.securities_processed = self.run_securities(limit=limit)
-        stats.persons_processed = self.run_persons(limit=limit)
-        stats.funds_processed = self.run_funds(limit=limit)
+
+        def _run_step(run_fn: Callable[[MDMPipeline], int]) -> int:
+            worker_session = get_session(sql_engine)
+            try:
+                worker_pipeline = MDMPipeline(
+                    session=worker_session, silver=silver, run_id=pipeline_run_id
+                )
+                result = run_fn(worker_pipeline)
+                worker_session.commit()
+                return result
+            finally:
+                worker_session.close()
+        # Not a `with ThreadPoolExecutor(...) as executor:` block deliberately:
+        # its __exit__ always calls shutdown(wait=True), which would block
+        # this except-clause's re-raise until every already-running sibling
+        # step finished -- with exactly 5 futures and max_workers defaulting
+        # to 5, all 5 start immediately, so that wait is never short. That
+        # would silently turn "propagates immediately" (ticket 02's Answer)
+        # into "propagates after the slowest still-running step," up to the
+        # ~2h14m company/~1h50m security durations measured in ticket 01.
+        # shutdown(wait=False, cancel_futures=True) below returns without
+        # waiting; already-running worker threads keep running to their own
+        # completion in the background (Python can't preempt a thread), so
+        # the caller (this method's own exception propagation) sees the
+        # error immediately instead of blocking on them -- confirmed via a
+        # standalone repro script (pool of 2, one sleeping, one raising):
+        # the raise reaches the caller at ~0s, not after the sleep. Caller-
+        # level only, though: the process itself does NOT exit that fast --
+        # CPython's concurrent.futures.thread atexit hook still joins every
+        # pool thread before interpreter shutdown, so an ECS task running
+        # this still waits out the slowest sibling step before its process
+        # actually terminates, even though run_all() itself has already
+        # raised and any caller-side error handling/logging runs right away.
+        executor = ThreadPoolExecutor(max_workers=max_workers)
+        futures = {
+            executor.submit(_run_step, run_fn): stat_field
+            for stat_field, run_fn in step_runners
+        }
+        try:
+            for future in as_completed(futures):
+                setattr(stats, futures[future], future.result())
+        except Exception:
+            executor.shutdown(wait=False, cancel_futures=True)
+            raise
+        executor.shutdown(wait=True)
+
+        # Cross-connection visibility check (traced, not assumed): the 5
+        # steps above wrote their entities through their own committed
+        # worker sessions -- self.session (this outer pipeline's own
+        # connection) never touched those rows. derive_relationships()
+        # itself only reads self.session for _relationship_count(), a
+        # COUNT over pre-existing mdm_relationship_instance rows unrelated
+        # to what the 5 steps just wrote; every actual relationship-
+        # derivation worker below opens its own brand-new
+        # get_session(sql_engine) connection with an empty identity map,
+        # which sees all committed writes under Postgres's default READ
+        # COMMITTED isolation (no isolation_level override in
+        # database.py's get_engine()) regardless of self.session's state.
+        # rollback() here is a cheap belt-and-suspenders: nothing on
+        # self.session was written in this method, so there's nothing to
+        # lose, and it makes that visibility contract explicit rather than
+        # incidental for any future caller who does write through
+        # self.session before calling run_all().
+        self.session.rollback()
         stats.relationship_counts_by_type = self.derive_relationships(target_per_type=limit)
         stats.relationships_written = sum(
             int(item["inserted"] or 0) for item in stats.relationship_counts_by_type.values()

@@ -9,12 +9,19 @@ the pipeline's own primary session (17) already exceeds that old 15-
 connection ceiling -- the pool budget must scale with the resolve
 concurrency or workers start blocking/timing out on pool checkout under
 real load.
+
+mdm-run-step-parallelism wayfinder map, ticket 02: raised again (15/15 ->
+40/20) once run_all() started launching its 5 entity-resolution steps as
+concurrent top-level futures instead of sequentially -- company, security,
+and person can now all have their own internal 16-worker pools open at
+once, on top of their own outer per-step session, instead of one domain's
+pool existing at a time.
 """
 from __future__ import annotations
 
 from unittest.mock import patch
 
-from edgar_warehouse.mdm import database
+from edgar_warehouse.mdm import database, pipeline
 
 
 class TestPoolSizeDefaults:
@@ -22,6 +29,18 @@ class TestPoolSizeDefaults:
         # 16 workers (pipeline.py's _RESOLVE_MAX_WORKERS default) + 1
         # primary session must fit comfortably under pool_size+max_overflow.
         assert database._DB_POOL_SIZE + database._DB_MAX_OVERFLOW >= 16 + 1
+
+    def test_pool_size_and_max_overflow_cover_concurrent_cross_step_worst_case(self):
+        """mdm-run-step-parallelism ticket 02: with company/security/person
+        all running concurrently (run_all()'s 5-way top-level concurrency),
+        each can have its own row-level worker pool open at the same time,
+        on top of its own outer per-step session -- the real worst case
+        the 40/20 default was sized for, not just one domain's pool."""
+        worst_case = (
+            3 * (1 + pipeline._RESOLVE_MAX_WORKERS)  # company/security/person: outer + workers
+            + 2  # adviser/fund: outer session only, no sub-workers
+        )
+        assert database._DB_POOL_SIZE + database._DB_MAX_OVERFLOW >= worst_case
 
     def test_get_engine_passes_pool_kwargs_to_create_engine_for_postgres(self, monkeypatch):
         monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://user:pass@host/db")
