@@ -211,8 +211,10 @@ def _fingerprint(*parts: Iterable[Any]) -> str:
 def compute_edge05_is_entity_of_coverage(session: Session) -> dict:
     """EDGE-05 IS_ENTITY_OF (adviser->company): D-04 zero-overlap exclusion.
 
-    Reproduces AdviserResolver._link_to_company's join independently:
-    MdmCompany.cik == MdmAdviser.cik. Scoped to the current tracking-list
+    Reproduces the adviser-to-company linking join independently:
+    MdmCompany.cik == MdmAdviser.cik (the same join
+    `resolve_advisers_bulk`'s `companies_by_cik` lookup performs in
+    `edgar_warehouse/mdm/adv_bulk.py`). Scoped to the current tracking-list
     universe -- the fingerprint is the sorted union of both CIK sets, so any
     change to either population invalidates a stored record.
     """

@@ -11,18 +11,19 @@ Each resolver:
   8. Inserts a mdm_change_log row for Snowflake export
 """
 from edgar_warehouse.mdm.resolvers.base import BaseResolver, ResolverContext
-from edgar_warehouse.mdm.resolvers.adviser import AdviserResolver
 from edgar_warehouse.mdm.resolvers.company import CompanyResolver
-from edgar_warehouse.mdm.resolvers.fund import FundResolver
 from edgar_warehouse.mdm.resolvers.person import PersonResolver
 from edgar_warehouse.mdm.resolvers.security import SecurityResolver
+
+# AdviserResolver and FundResolver were deleted (mdm-resolver-skip-unchanged
+# map, Ticket 03, 2026-08-21) -- run_advisers()/run_funds() resolve via
+# adv_bulk.py's batched rewrite instead. ADVISER_FIELDS/FUND_FIELDS remain
+# importable from edgar_warehouse.mdm.resolvers.adviser/fund directly.
 
 __all__ = [
     "BaseResolver",
     "ResolverContext",
-    "AdviserResolver",
     "CompanyResolver",
-    "FundResolver",
     "PersonResolver",
     "SecurityResolver",
 ]
