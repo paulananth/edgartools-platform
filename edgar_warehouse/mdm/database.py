@@ -548,6 +548,19 @@ class MdmEntityAttributeStage(Base):
     __table_args__ = (
         Index("idx_attr_stage_entity_field", "entity_id", "field_name"),
         Index("idx_attr_stage_selected", "entity_id", "was_selected"),
+        # Migration 012: enforces at the DB level what stage_candidate()
+        # (survivorship.py) now also enforces at the call site -- one row
+        # per (entity_id, source_system, source_id, field_name), upserted
+        # rather than duplicated on every restage. Without this, a resolver
+        # restart before its skip-if-unchanged check exists (or any future
+        # resolver that lacks one) re-inserts a fresh duplicate every time;
+        # confirmed live in production: one heavily-refiled security's
+        # stage history reached 10,713-14,785+ rows from repeated pre-fix
+        # restarts before this constraint existed.
+        UniqueConstraint(
+            "entity_id", "source_system", "source_id", "field_name",
+            name="uq_attr_stage_entity_source_field",
+        ),
     )
 
     entity: Mapped["MdmEntity"] = relationship(

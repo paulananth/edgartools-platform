@@ -74,6 +74,7 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
         "009_graph_generation_builder.sql",
         "010_release_relationship_sources.sql",
         "011_source_ref_content_hash.sql",
+        "012_dedupe_and_constrain_attribute_stage.sql",
     ]
 
 
