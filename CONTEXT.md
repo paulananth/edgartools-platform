@@ -88,6 +88,18 @@ _Avoid_: Arrival-order merge, last-writer-wins conflict handling, publishing a s
 Optional raw archive of SEC (or other) payloads written only when an operator explicitly requests it, or when the source cannot be obtained via edgartools; not the default hot path.
 _Avoid_: Always bronze first, treating bronze absence as agent-grade failure by default
 
+**Logical Source Revision**:
+A producer-ordered observation of one logical SEC source key, bound before transport to its monotonic per-key position, predecessor, canonical content, and interpretation identities.
+_Avoid_: Consumer admission order, S3 arrival time as ordering, run ID as source version, bronze object path as business identity
+
+**Source Change**:
+The transport-independent selection of a Logical Source Revision for a Change Propagation Run, optionally carrying a Bronze Persist reference when archived bytes exist.
+_Avoid_: Bronze object as the change itself, queue delivery as business identity, parser output row as source identity
+
+**Scope Completion**:
+Proof that one Logical Source Revision authoritatively enumerates an entire replacement scope, including a valid scope with zero members.
+_Avoid_: Missing output as empty scope, partial parse as complete, physical deletion as retirement proof
+
 **Change Propagation Run**:
 The immutable unit that binds one selected set of new, modified, or retired source facts to its parser/schema versions, Affected-Key Closure, expected producers, stage outcomes, and aligned publication watermarks.
 _Avoid_: Mutable run ID, full-universe refresh, unbound retry, distributed transaction
