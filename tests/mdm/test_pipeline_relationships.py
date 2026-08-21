@@ -19,6 +19,7 @@ PostgreSQL/SQL-mirror layer.
 """
 from __future__ import annotations
 
+import itertools
 import re
 import tempfile
 import uuid
@@ -89,6 +90,16 @@ class StubSilver:
         if params and "BETWEEN" in sql.upper():
             lo, hi = params[0], params[1]
             matched = [r for r in matched if r.get("cik") is not None and lo <= r["cik"] <= hi]
+        elif params and " IN (" in sql.upper():
+            # MANAGES_FUND CRD-batch scoping (mdm-oom-manages-fund fix):
+            # filter by whichever CRD-shaped field the matched rows carry --
+            # never parsed out of the SQL text, mirroring the BETWEEN case
+            # above so batching tests can assert bound-param usage too.
+            wanted = {str(p) for p in params}
+            matched = [
+                r for r in matched
+                if str(r.get("crd_number", r.get("adviser_crd_number", ""))) in wanted
+            ]
         return matched
 
     def _matched_rows(self, sql: str) -> list[dict]:
@@ -1440,6 +1451,76 @@ class TestRunRelationships:
         ]
         assert len(lookup_selects) <= 6, lookup_selects
         assert write_flush_calls <= 2
+
+    def test_manages_fund_processes_advisers_in_bounded_crd_batches(
+        self, session, monkeypatch
+    ):
+        """mdm-oom-manages-fund fix: a universe spanning multiple CRD batches
+        must be fully processed, and no single prime() call may ever see more
+        than one batch's advisers primed at once -- the whole point of
+        batching is bounding what's resident at any one time."""
+        import edgar_warehouse.mdm.pipeline as pipeline_module
+
+        monkeypatch.setattr(pipeline_module, "_MANAGES_FUND_CRD_BATCH_SIZE", 2)
+
+        filings = []
+        funds = []
+        crd_by_index = {}
+        for index in range(5):  # 5 advisers, batch size 2 -> 3 batches (2/2/1)
+            adviser_id = _add_entity(session, "adviser")
+            fund_id = _add_entity(session, "fund")
+            crd_number = str(700000 + index)
+            crd_by_index[index] = crd_number
+            private_fund_id = f"805-{700000 + index}"
+            accession = f"iapd-adv:{700000 + index}"
+            session.add(MdmAdviser(
+                entity_id=adviser_id, crd_number=crd_number,
+                canonical_name=f"Batch Adviser {index}",
+            ))
+            session.add(MdmFund(
+                entity_id=fund_id, adviser_entity_id=adviser_id,
+                private_fund_id=private_fund_id, canonical_name=f"Batch Fund {index}",
+            ))
+            filings.append({
+                "accession_number": accession, "crd_number": crd_number,
+                "effective_date": date(2025, 1, 1), "filing_action": "annual_amendment",
+            })
+            funds.append({
+                "accession_number": accession, "adviser_crd_number": crd_number,
+                "private_fund_id": private_fund_id, "filing_id": str(700000 + index),
+                "schedule_section": "7B1", "reporting_role": "detailed_reporter",
+                "effective_date": date(2025, 1, 1), "filing_action": "annual_amendment",
+                "source_sha256": f"sha-{index}",
+            })
+        session.commit()
+
+        prime_calls: list[frozenset] = []
+        original_prime = GraphSyncEngine.prime_relationship_type
+
+        def spy_prime(self, rel_type_name, **kwargs):
+            if rel_type_name == "MANAGES_FUND":
+                prime_calls.append(frozenset(kwargs.get("source_entity_ids") or []))
+            return original_prime(self, rel_type_name, **kwargs)
+
+        monkeypatch.setattr(GraphSyncEngine, "prime_relationship_type", spy_prime)
+
+        summary = MDMPipeline(
+            session=session,
+            silver=StubSilver({
+                "sec_adv_filing": filings,
+                "sec_adv_private_fund": funds,
+            }),
+        ).derive_relationships(relationship_types=["MANAGES_FUND"])
+
+        assert summary["MANAGES_FUND"]["inserted"] == 5
+
+        # 3 batches (ceil(5/2)), each priming a disjoint, non-empty adviser set.
+        assert len(prime_calls) == 3
+        assert all(prime_calls), prime_calls
+        union = frozenset().union(*prime_calls)
+        assert len(union) == 5, "every adviser must be primed exactly once across all batches"
+        for a, b in itertools.combinations(prime_calls, 2):
+            assert a.isdisjoint(b), (a, b, "batches must never overlap")
 
     def test_writes_issued_by_relationship(self, session, fixture_world):
         """ISSUED_BY deriver inserts exactly 1 row when fixture_world has 1 qualifying MdmSecurity. (D-01, D-02, REL-02)"""
