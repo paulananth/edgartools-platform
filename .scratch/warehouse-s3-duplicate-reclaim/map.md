@@ -7,9 +7,10 @@ Label: `wayfinder:map`
 A decided, buildable plan for the remaining warehouse duplicate-storage
 reclaim after GSD Leak-seal is locked. Hands off to `/to-spec` then
 `/to-tickets` (Ask Matt main flow) once CloudWatch retention, gold
-keep-latest completeness, in-flight identity skip, leftover inventory, and
-the reclaim contract beyond `_staging/` are settled. This map decides; it
-does not apply Terraform or delete objects.
+keep-latest completeness, leftover inventory, and the reclaim contract
+beyond `_staging/` are settled. In-flight Identity Refresh Run skip is
+settled (24-hour newest LastModified on the run directory). This map
+decides; it does not apply Terraform or delete objects.
 
 ## Notes
 
@@ -41,6 +42,7 @@ does not apply Terraform or delete objects.
 - [What leftover billed bytes remain on the warehouse bucket after silverstage delete?](issues/04-measure-live-warehouse-leftover-inventory.md) — Silverstage versions are gone (0 versions/DMs; 156 empty MPUs, 0 part bytes). Remaining billed: 315.45 GiB noncurrent shards (830 versions), 1.48 GiB noncurrent `silver.duckdb`, 19.09 GiB identity_refresh (614 current keys, 16 run dirs), 3.43 GiB current + 0.89 GiB noncurrent gold `run_id=` copies (28 tables × 7 runs). Canonical current silver.duckdb + 4 shards still present (3.03 GiB). [research/04-live-warehouse-leftover-inventory.md](research/04-live-warehouse-leftover-inventory.md).
 - [Does bronze have billed duplicate or noncurrent waste, or only immutable current objects?](issues/05-inventory-bronze-duplicate-versions.md) — Almost all 69.64 GiB is current StandardStorage; listed noncurrent ~0.36 GiB; no current-key duplicates. Bronze reclaim of current SEC objects is out of this map. [research/05-bronze-duplicate-inventory.md](research/05-bronze-duplicate-inventory.md).
 - [Keep, drop, or rewrite the three-day CloudWatch retention requirement?](issues/01-decide-cloudwatch-retention-vs-seven-day-floor.md) — Drop CW-01. Prod stays at seven-day Operational Forensics Window; GSD Phase 5 is out of this map. Live groups still 7 days (read-only, 2026-08-21).
+- [How do we detect an in-flight Identity Refresh Run for one-shot skip?](issues/03-decide-in-flight-identity-refresh-skip.md) — Skip a run directory under `warehouse/identity_refresh/runs/` whose newest listed LastModified is ≤ 24 hours old. Unique keys older than 24 hours stay eligible. Do not poll Step Functions or the identity-refresh lease prefix. Standing snapshot lifecycle stays 7/7 with no RUNNING skip.
 
 
 ## Not yet specified
