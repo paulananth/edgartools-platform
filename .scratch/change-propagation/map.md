@@ -83,6 +83,7 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
 <!-- Closed ticket decisions: one-line gist and link; detail stays in the ticket. -->
 
 - [Verify Snowflake incremental change-processing primitives](issues/01-verify-snowflake-incremental-primitives.md) — Snowflake supports bounded incremental publication and aligned refresh evidence, but the application run ledger must own the non-atomic cross-stage barrier.
+- [Inventory table-specific change and dependency semantics](issues/02-inventory-table-change-semantics.md) — All 31 landing tables are mapped; current writers lack a shared retirement/no-op contract, local replacement deletes do not propagate, and MDM/graph closure is dispersed rather than registry-owned.
 
 ## Not yet specified
 
