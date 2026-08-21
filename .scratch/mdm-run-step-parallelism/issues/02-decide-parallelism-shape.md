@@ -104,7 +104,37 @@ folded into this decision.
 worker sessions across all 5 concurrent steps) with real margin, nowhere
 near the 500-connection server ceiling.
 
-**Not built here** — per this map's own Mode (decision-spec only, not
-overridden into execution), this ticket records the decision; implementing
-it (the actual `run_all()` concurrency change, the pool-size env var
-update, and updated tests) is follow-on work, not done in this session.
+**Built (2026-08-20, commit `517f7eff`)** — `run_all()`'s 5 entity-resolution
+steps now launch as concurrent `ThreadPoolExecutor` futures, each on its own
+fresh `MDMPipeline`/session; `derive_relationships()`'s trigger is unchanged.
+`MDM_DB_POOL_SIZE`/`MDM_DB_MAX_OVERFLOW` raised 15/15 → 40/20 as decided.
+
+A parallel Standards/Spec code review caught one thing this decision didn't
+anticipate: a naive `with ThreadPoolExecutor(...) as executor:` block's
+implicit `shutdown(wait=True)` on exit would have silently violated this
+ticket's own "propagates immediately" clause — with exactly 5 futures and
+`max_workers` defaulting to 5, all 5 start immediately, so `f.cancel()` on
+each is a no-op and the implicit wait would block the fail-fast re-raise
+until every already-running sibling step finished (up to the ~2h14m/1h50m
+company/security durations from ticket 01). Fixed with an explicit
+`shutdown(wait=False, cancel_futures=True)` on the exception path instead,
+with a regression test (`test_shutdown_does_not_wait_for_still_running_steps`)
+proving the correct call shape — this couldn't be caught by a timing-based
+test since the SQLite dialect guard forces `max_workers=1` in every unit
+test fixture, so the test asserts the `shutdown()` call semantics directly
+instead.
+
+**Deferred verification, not a gap left silently unmentioned:** genuine
+5-way concurrent execution of `run_all()` itself is not exercised by any
+unit test — the dialect guard forces `max_workers=1` under every SQLite
+fixture (matching `run_companies()`'s own identical guard), so a test would
+have to bypass `run_all()`'s shipped entry point and hand-roll the executor
+itself, testing a reconstruction rather than the real code (unlike
+`test_run_companies_concurrency.py`'s `TestConcurrentCompanyResolutionSafety`,
+which proves a *resolver-level* property, not `run_all()`'s own wiring).
+Per this repo's own established pattern, that verification belongs at
+runtime: a CloudWatch overlap-count on a real production `mdm run
+--entity-type all` execution (the same method already used to prove
+`run_companies()`'s 16-way concurrency and relationship-derivation's 4-way
+concurrency were genuinely live), not in pytest. Not yet captured as of
+this entry.

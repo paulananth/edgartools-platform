@@ -114,7 +114,11 @@ absorb several steps' internal worker pools running at once.
   showed the connection-pool ceiling that made per-step isolation look
   necessary is actually a cheap-to-raise client-side setting, not a real
   constraint. This resolves the map's own destination question in full —
-  see "Frontier" below.
+  see "Frontier" below. **Built 2026-08-20, commit `517f7eff`** — see the
+  ticket for a fail-fast bug a code review caught and fixed before it
+  shipped (a naive executor shutdown would have blocked the "propagates
+  immediately" guarantee), and for the deferred runtime-only verification
+  (CloudWatch overlap-count) that genuine 5-way concurrency is live.
 
 ## Frontier (open tickets)
 
