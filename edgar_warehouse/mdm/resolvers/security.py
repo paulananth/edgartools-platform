@@ -14,7 +14,8 @@ from typing import Optional
 from sqlalchemy import select, update
 
 from edgar_warehouse.mdm.database import MdmEntity, MdmSecurity
-from edgar_warehouse.mdm.resolvers.base import BaseResolver, ResolveOutcome, ResolverContext
+from edgar_warehouse.mdm.match import MatchAction
+from edgar_warehouse.mdm.resolvers.base import BaseResolver, ResolveOutcome, ResolverContext, content_hash
 from edgar_warehouse.mdm.survivorship import run_survivorship_for_entity
 
 SECURITY_FIELDS = ["canonical_title", "security_type", "cusip", "isin"]
@@ -55,9 +56,39 @@ class SecurityResolver(BaseResolver):
         title = txn_row.get("security_title") or ""
         canonical = " ".join(w.capitalize() for w in title.split()) if title else ""
         sec_type = _infer_type(canonical)
+        source_id = txn_row.get("source_id") or _ownership_security_source_id(txn_row)
+
+        # 2026-08-21 throughput investigation: run_securities() has no
+        # resumable ledger (unlike run_companies(), ticket 7ffda2d7), so a
+        # restarted `mdm run` re-processes every ownership-transaction row
+        # from scratch. Without this check, every re-run of an unchanged
+        # row called _stage_attrs() again, and stage_candidate() always
+        # INSERTs a fresh row with no dedup -- mdm_entity_attribute_stage
+        # has no pruning anywhere in this codebase (confirmed by search), so
+        # a heavily-refiled security (e.g. a large issuer's "Common Stock")
+        # accumulated thousands of duplicate stage rows across this
+        # session's several Stage 14 restarts, each one read back in full by
+        # every future run_survivorship_for_entity() call for that entity --
+        # directly measured live: SELECT rowcounts of 8560-12547 for a
+        # single entity's stage history, and the corresponding slowdown.
+        # Mirrors CompanyResolver.resolve_one's existing skip-if-unchanged
+        # fast path (single-path-per-layer map, Ticket 03) exactly: the hash
+        # covers everything that changes this call's outcome (title,
+        # resolved issuer -- so the NULL-issuer "upgrade" path in this same
+        # method still re-runs correctly once an issuer newly resolves).
+        row_content_hash = content_hash(
+            {"canonical_title": canonical, "issuer_entity_id": issuer_entity_id}
+        )
+        skip_entity_id = self._skip_if_unchanged(ctx, source_system, source_id, row_content_hash)
+        if skip_entity_id is not None:
+            return ResolveOutcome(
+                entity_id=skip_entity_id,
+                is_new=False,
+                verdict=None,
+                action=MatchAction.SKIPPED_UNCHANGED,
+            )
 
         existing = self._existing_candidates(ctx, issuer_entity_id, canonical)
-        source_id = txn_row.get("source_id") or _ownership_security_source_id(txn_row)
 
         if existing:
             entity_id = existing[0]["entity_id"]
@@ -112,14 +143,16 @@ class SecurityResolver(BaseResolver):
             ctx, entity_id, source_system, source_id,
             {"canonical_title": canonical, "security_type": sec_type},
         )
-        self._register_source(ctx, entity_id, source_system, source_id, score)
+        self._register_source(
+            ctx, entity_id, source_system, source_id, score,
+            source_content_hash=row_content_hash,
+        )
         merges = run_survivorship_for_entity(
             ctx.session, ctx.engine, self.entity_type,
             entity_id, SECURITY_FIELDS,
         )
         self._log_change(ctx, entity_id, {k: v.winning_value for k, v in merges.items()})
 
-        from edgar_warehouse.mdm.match import MatchAction
         return ResolveOutcome(
             entity_id=entity_id,
             is_new=is_new,
