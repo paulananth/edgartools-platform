@@ -91,16 +91,42 @@ def _gold_table_and_run(key: str) -> tuple[str, str] | None:
 
 
 def _gold_keep_run_ids(rows: list[dict[str, Any]]) -> set[str]:
-    newest: dict[str, tuple[datetime, str]] = {}
+    """Keep the newest complete gold run.
+
+    A run is complete when it has a current object for every gold table
+    present in the listing. Completeness is parquet coverage, not UUID
+    sort and not a partial table's newest LastModified. If no run covers
+    every table, fall back to the union of per-table newest run_ids so a
+    split listing cannot empty the keep-set.
+    """
+    tables: set[str] = set()
+    current_by_run: dict[str, dict[str, datetime]] = {}
     for row in rows:
         parsed = _gold_table_and_run(str(row["key"]))
         if parsed is None or not row["is_latest"]:
             continue
         table, run_id = parsed
+        tables.add(table)
         modified: datetime = row["_modified"]
-        prior = newest.get(table)
-        if prior is None or modified > prior[0]:
-            newest[table] = (modified, run_id)
+        by_table = current_by_run.setdefault(run_id, {})
+        prior = by_table.get(table)
+        if prior is None or modified > prior:
+            by_table[table] = modified
+    if not tables:
+        return set()
+    complete: list[tuple[datetime, str]] = []
+    for run_id, by_table in current_by_run.items():
+        if tables <= by_table.keys():
+            complete.append((max(by_table.values()), run_id))
+    if complete:
+        complete.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        return {complete[0][1]}
+    newest: dict[str, tuple[datetime, str]] = {}
+    for run_id, by_table in current_by_run.items():
+        for table, modified in by_table.items():
+            prior = newest.get(table)
+            if prior is None or modified > prior[0]:
+                newest[table] = (modified, run_id)
     return {run_id for _, run_id in newest.values()}
 
 

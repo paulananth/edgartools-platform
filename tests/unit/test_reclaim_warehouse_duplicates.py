@@ -101,7 +101,44 @@ def test_skips_identity_run_dirs_newer_than_24_hours() -> None:
     assert [row["version_id"] for row in rows] == ["old"]
 
 
-def test_gold_keep_set_is_union_of_per_table_newest_last_modified() -> None:
+def test_gold_keep_set_is_newest_complete_run_not_partial_latest_table() -> None:
+    listing = {
+        "Versions": [
+            _v(
+                "warehouse/gold/dim_filing/run_id=complete-old/dim_filing.parquet",
+                latest=True,
+                size=1,
+                when=NOW - timedelta(days=2),
+                version_id="old-dim",
+            ),
+            _v(
+                "warehouse/gold/fact_filing_activity/run_id=complete-old/fact.parquet",
+                latest=True,
+                size=1,
+                when=NOW - timedelta(days=2),
+                version_id="old-fact",
+            ),
+            _v(
+                "warehouse/gold/dim_filing/run_id=partial-new/dim_filing.parquet",
+                latest=True,
+                size=1,
+                when=NOW - timedelta(hours=1),
+                version_id="new-dim",
+            ),
+            _v(
+                "warehouse/gold/dim_filing/run_id=complete-old/dim_filing.parquet",
+                latest=False,
+                size=1,
+                when=NOW - timedelta(days=9),
+                version_id="old-dim-nc",
+            ),
+        ]
+    }
+    rows = select_candidates(listing, now=NOW)
+    assert [row["version_id"] for row in rows] == ["new-dim"]
+
+
+def test_gold_keep_set_picks_one_newest_complete_run_by_last_modified() -> None:
     listing = {
         "Versions": [
             _v(
@@ -112,18 +149,18 @@ def test_gold_keep_set_is_union_of_per_table_newest_last_modified() -> None:
                 version_id="a-dim",
             ),
             _v(
-                "warehouse/gold/dim_filing/run_id=run-b/dim_filing.parquet",
-                latest=True,
-                size=1,
-                when=NOW - timedelta(days=1),
-                version_id="b-dim",
-            ),
-            _v(
                 "warehouse/gold/fact_filing_activity/run_id=run-a/fact.parquet",
                 latest=True,
                 size=1,
                 when=NOW - timedelta(hours=1),
                 version_id="a-fact",
+            ),
+            _v(
+                "warehouse/gold/dim_filing/run_id=run-b/dim_filing.parquet",
+                latest=True,
+                size=1,
+                when=NOW - timedelta(days=1),
+                version_id="b-dim",
             ),
             _v(
                 "warehouse/gold/fact_filing_activity/run_id=run-b/fact.parquet",
@@ -132,25 +169,84 @@ def test_gold_keep_set_is_union_of_per_table_newest_last_modified() -> None:
                 when=NOW - timedelta(days=3),
                 version_id="b-fact",
             ),
+            _v(
+                "warehouse/gold/dim_filing/run_id=run-c/dim_filing.parquet",
+                latest=True,
+                size=1,
+                when=NOW - timedelta(days=9),
+                version_id="c-dim",
+            ),
         ]
     }
     rows = select_candidates(listing, now=NOW)
-    kept_out = {row["version_id"] for row in rows}
-    # run-b is newest for dim_filing; run-a is newest for fact — union keeps both
-    # run_ids, so no current objects from those run_ids are selected.
-    assert kept_out == set()
-    # An older third run is reclaimable.
-    listing["Versions"].append(
-        _v(
-            "warehouse/gold/dim_filing/run_id=run-c/dim_filing.parquet",
-            latest=True,
-            size=1,
-            when=NOW - timedelta(days=9),
-            version_id="c-dim",
-        )
-    )
+    assert {row["version_id"] for row in rows} == {"b-dim", "b-fact", "c-dim"}
+
+
+def test_gold_run_manifests_do_not_count_as_hive_tables() -> None:
+    listing = {
+        "Versions": [
+            _v(
+                "warehouse/gold/dim_filing/run_id=complete-old/dim_filing.parquet",
+                latest=True,
+                size=1,
+                when=NOW - timedelta(days=2),
+                version_id="old-dim",
+            ),
+            _v(
+                "warehouse/gold/fact_filing_activity/run_id=complete-old/fact.parquet",
+                latest=True,
+                size=1,
+                when=NOW - timedelta(days=2),
+                version_id="old-fact",
+            ),
+            _v(
+                "warehouse/gold/runs/gold-refresh/partial-new/manifest.json",
+                latest=True,
+                size=1,
+                when=NOW - timedelta(hours=1),
+                version_id="manifest",
+            ),
+            _v(
+                "warehouse/gold/dim_filing/run_id=partial-new/dim_filing.parquet",
+                latest=True,
+                size=1,
+                when=NOW - timedelta(hours=1),
+                version_id="new-dim",
+            ),
+            _v(
+                "warehouse/gold/dim_filing/run_id=partial-new/dim_filing.parquet",
+                latest=False,
+                size=1,
+                when=NOW - timedelta(days=8),
+                version_id="new-dim-nc",
+            ),
+        ]
+    }
     rows = select_candidates(listing, now=NOW)
-    assert [row["version_id"] for row in rows] == ["c-dim"]
+    assert {row["version_id"] for row in rows} == {"new-dim", "new-dim-nc"}
+
+
+def test_gold_keep_set_falls_back_to_per_table_newest_when_no_run_is_complete() -> None:
+    listing = {
+        "Versions": [
+            _v(
+                "warehouse/gold/dim_filing/run_id=run-a/dim_filing.parquet",
+                latest=True,
+                size=1,
+                when=NOW - timedelta(days=2),
+                version_id="a-dim",
+            ),
+            _v(
+                "warehouse/gold/fact_filing_activity/run_id=run-b/fact.parquet",
+                latest=True,
+                size=1,
+                when=NOW - timedelta(hours=1),
+                version_id="b-fact",
+            ),
+        ]
+    }
+    rows = select_candidates(listing, now=NOW)
+    assert rows == []
 
 
 def test_empty_candidate_set_is_success() -> None:
