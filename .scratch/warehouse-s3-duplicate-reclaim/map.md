@@ -7,10 +7,12 @@ Label: `wayfinder:map`
 A decided, buildable plan for the remaining warehouse duplicate-storage
 reclaim after GSD Leak-seal is locked. Hands off to `/to-spec` then
 `/to-tickets` (Ask Matt main flow) once CloudWatch retention, gold
-keep-latest completeness, leftover inventory, and the reclaim contract
-beyond `_staging/` are settled. In-flight Identity Refresh Run skip is
-settled (24-hour newest LastModified on the run directory). This map
-decides; it does not apply Terraform or delete objects.
+keep-latest completeness, leftover inventory, and remaining fog are
+settled. In-flight Identity Refresh Run skip is settled (24-hour newest
+LastModified on the run directory). The reclaim contract beyond staging
+is settled (ADR 0004 stays staging-only; sibling VersionId Reclaim for
+warehouse duplicates). This map decides; it does not apply Terraform or
+delete objects.
 
 ## Notes
 
@@ -43,6 +45,7 @@ decides; it does not apply Terraform or delete objects.
 - [Does bronze have billed duplicate or noncurrent waste, or only immutable current objects?](issues/05-inventory-bronze-duplicate-versions.md) — Almost all 69.64 GiB is current StandardStorage; listed noncurrent ~0.36 GiB; no current-key duplicates. Bronze reclaim of current SEC objects is out of this map. [research/05-bronze-duplicate-inventory.md](research/05-bronze-duplicate-inventory.md).
 - [Keep, drop, or rewrite the three-day CloudWatch retention requirement?](issues/01-decide-cloudwatch-retention-vs-seven-day-floor.md) — Drop CW-01. Prod stays at seven-day Operational Forensics Window; GSD Phase 5 is out of this map. Live groups still 7 days (read-only, 2026-08-21).
 - [How do we detect an in-flight Identity Refresh Run for one-shot skip?](issues/03-decide-in-flight-identity-refresh-skip.md) — Skip a run directory under `warehouse/identity_refresh/runs/` whose newest listed LastModified is ≤ 24 hours old. Unique keys older than 24 hours stay eligible. Do not poll Step Functions or the identity-refresh lease prefix. Standing snapshot lifecycle stays 7/7 with no RUNNING skip.
+- [Does ADR 0004’s staging cleanup contract extend, or do we need a sibling reclaim contract?](issues/06-decide-reclaim-contract-beyond-staging.md) — ADR 0004 stays staging-only (`IsLatest=true` under the ephemeral prefix, `--confirm-delete-staging`). Warehouse duplicates use sibling VersionId Reclaim: `--confirm-delete-duplicates`, Canonical Silver current-key deny-list, 24-hour identity skip, gold keep-set. Not one shared script.
 
 
 ## Not yet specified
