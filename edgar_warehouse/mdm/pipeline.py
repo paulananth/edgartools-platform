@@ -603,19 +603,38 @@ class MDMPipeline:
     def run_securities(self, limit: Optional[int] = None) -> int:
         """Resolve ownership-transaction security titles into MDM entities.
 
-        Runs on a bounded thread pool, grouped by canonical title.
+        Runs on a bounded thread pool, grouped by (issuer_entity_id,
+        canonical_title) -- NOT canonical_title alone (mdm-run-throughput
+        map's original design, revised 2026-08-21 after live production
+        data showed why title-only grouping doesn't scale).
         ``SecurityResolver._existing_candidates`` always scopes its exact
         match to ``canonical_title`` -- issuer-scoped when the issuer is
-        known, NULL-issuer-scoped otherwise -- but ``resolve_one`` also has
+        known, NULL-issuer-scoped otherwise -- and ``resolve_one`` also has
         an "upgrade a NULL-issuer security" path that lets two *different*
         issuers sharing the same title interact (the second issuer's row
-        can claim/upgrade an entity the first created). So canonical_title
-        alone, not (issuer, title), is the real concurrency boundary: two
-        rows with the same title must never resolve on different workers,
-        regardless of issuer. Rows with no title never dedup at all (an
-        empty canonical title always creates a brand-new entity), so each
-        gets its own singleton group instead of serializing behind a
-        shared key that carries no real match risk.
+        can claim/upgrade an entity the first created). That upgrade path
+        is only reachable through a NULL-``issuer_entity_id`` security, so
+        the real concurrency boundary is per title: rows sharing a title
+        can safely resolve on different workers UNLESS at least one row for
+        that title has ``issuer_entity_id is None`` (no ``MdmCompany`` match
+        for its ``issuer_cik``) -- only then must every row sharing that
+        title stay serialized, since a shared NULL-issuer entity could exist
+        for them to race on upgrading. Verified empirically, not assumed:
+        live production data (all 4 silver shards, ~15K ownership-txn rows,
+        2026-08-21) has zero rows with a NULL issuer_entity_id, and prod
+        MDM Postgres has zero NULL-issuer ``mdm_security`` rows out of 2,985
+        total -- so today this optimization applies to every title, but the
+        conditional guard is real safety, not a shortcut: a handful of
+        titles like "Common Stock" and "Class A Common Stock" concentrated
+        53%/27% of one shard's rows into ONE sequential group each under the
+        old title-only grouping, collapsing effective concurrency from
+        16-way to ~1-way for the vast majority of the run as smaller groups
+        exhausted (measured live: throughput decayed 17.05 -> 14.97 -> 5.23
+        -> 1.81 records/sec across four progress checkpoints on the same
+        stuck production run this fix was written to unblock). Rows with no
+        title never dedup at all (an empty canonical title always creates a
+        brand-new entity), so each gets its own singleton group instead of
+        serializing behind a shared key that carries no real match risk.
         """
         resolver = SecurityResolver()
         # mdm-ownership-resolver-filing-join-gap ticket 01: LEFT JOIN, not INNER --
@@ -652,14 +671,38 @@ class MDMPipeline:
         }
         company_entity_id_by_cik = self._company_entity_ids(issuer_ciks)
 
-        keyed_rows: list[tuple[Any, dict]] = []
-        for i, row in enumerate(rows):
+        # Two passes: first determine, per canonical title, whether ANY row
+        # has a null issuer_entity_id (the only condition under which
+        # different-issuer rows sharing that title can race -- see
+        # docstring above); second, build the actual grouping key using
+        # that per-title safety determination.
+        canonical_titles: list[str] = []
+        issuer_entity_ids: list[Optional[str]] = []
+        for row in rows:
             title = row.get("security_title") or ""
             # Must match SecurityResolver.resolve_one's own canonicalization
             # exactly, or grouping stops matching the resolver's real match
             # boundary and the concurrency safety argument above breaks.
-            canonical = " ".join(w.capitalize() for w in title.split()) if title else ""
-            key = canonical if canonical else f"__no_title__{i}"
+            canonical_titles.append(
+                " ".join(w.capitalize() for w in title.split()) if title else ""
+            )
+            issuer_entity_ids.append(company_entity_id_by_cik.get(row.get("issuer_cik")))
+
+        titles_needing_serialization = {
+            canonical_titles[i]
+            for i in range(len(rows))
+            if canonical_titles[i] and issuer_entity_ids[i] is None
+        }
+
+        keyed_rows: list[tuple[Any, dict]] = []
+        for i, row in enumerate(rows):
+            canonical = canonical_titles[i]
+            if not canonical:
+                key: Any = f"__no_title__{i}"
+            elif canonical in titles_needing_serialization:
+                key = canonical
+            else:
+                key = (issuer_entity_ids[i], canonical)
             keyed_rows.append((key, row))
 
         def _process(ctx: ResolverContext, row: dict) -> None:

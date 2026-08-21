@@ -252,6 +252,181 @@ class TestNullIssuerUpgradeRaceIsAvoidedByGrouping:
         verify_session.close()
 
 
+# ---------------------------------------------------------------------------
+# 2b. run_securities()'s grouping-key construction (2026-08-21 fix): a title
+#     with NO null-issuer row present splits into per-issuer keys instead of
+#     one shared title-only key -- the fix for the throughput collapse a
+#     live production investigation found (title-only grouping concentrated
+#     53%/27% of one shard's rows into two sequential groups). A title WITH
+#     a null-issuer row present must still fall back to the original
+#     title-only key, since that's the only case the NULL-issuer "upgrade"
+#     race (tested above) can actually happen.
+# ---------------------------------------------------------------------------
+
+class TestSecurityGroupingKeyReflectsIssuerWhenSafe:
+    def test_different_known_issuers_same_title_get_different_keys(self):
+        session = _seeded_sqlite_session(static_pool=True)
+        from edgar_warehouse.mdm.database import MdmCompany, MdmEntity
+
+        entity_ids = {}
+        for cik in (111, 222):
+            entity = MdmEntity(entity_type="company")
+            session.add(entity)
+            session.flush()
+            session.add(MdmCompany(entity_id=entity.entity_id, cik=cik, canonical_name=f"Co {cik}"))
+            entity_ids[cik] = entity.entity_id
+        session.commit()
+
+        fixtures = _security_rows({111: ["Common Stock"], 222: ["Common Stock"]})
+        pipeline = MDMPipeline(session=session, silver=StubSilver(fixtures))
+
+        captured_keys: list[Any] = []
+        real_run_grouped = MDMPipeline._run_grouped_concurrent
+
+        def _capture(self_, keyed_rows, *args, **kwargs):
+            captured_keys.extend(key for key, _ in keyed_rows)
+            return real_run_grouped(self_, keyed_rows, *args, **kwargs)
+
+        with patch.object(MDMPipeline, "_run_grouped_concurrent", _capture):
+            pipeline.run_securities()
+
+        assert len(captured_keys) == 2
+        assert len(set(captured_keys)) == 2, f"expected 2 distinct keys, got {captured_keys}"
+        assert set(captured_keys) == {
+            (entity_ids[111], "Common Stock"),
+            (entity_ids[222], "Common Stock"),
+        }
+
+    def test_same_known_issuer_same_title_still_shares_one_key(self):
+        """The optimization must not stop deduping rows that genuinely
+        belong together -- same issuer, same title, still one group."""
+        session = _seeded_sqlite_session(static_pool=True)
+        from edgar_warehouse.mdm.database import MdmCompany, MdmEntity
+
+        entity = MdmEntity(entity_type="company")
+        session.add(entity)
+        session.flush()
+        session.add(MdmCompany(entity_id=entity.entity_id, cik=111, canonical_name="Co 111"))
+        session.commit()
+        known_entity_id = entity.entity_id
+
+        fixtures = _security_rows({111: ["Common Stock", "Common Stock"]})
+        pipeline = MDMPipeline(session=session, silver=StubSilver(fixtures))
+
+        captured_keys: list[Any] = []
+        real_run_grouped = MDMPipeline._run_grouped_concurrent
+
+        def _capture(self_, keyed_rows, *args, **kwargs):
+            captured_keys.extend(key for key, _ in keyed_rows)
+            return real_run_grouped(self_, keyed_rows, *args, **kwargs)
+
+        with patch.object(MDMPipeline, "_run_grouped_concurrent", _capture):
+            pipeline.run_securities()
+
+        assert captured_keys == [(known_entity_id, "Common Stock"), (known_entity_id, "Common Stock")]
+
+    def test_a_null_issuer_row_forces_title_only_grouping_for_that_title(self):
+        """Safety-critical fallback: if ANY row for a title has no resolved
+        issuer_entity_id -- whether because issuer_cik itself is NULL, or
+        because issuer_cik is a real value that was never bootstrapped as a
+        tracked MdmCompany -- every row sharing that title must share ONE
+        key, since a shared NULL-issuer entity could exist for them to race
+        on upgrading (see TestNullIssuerUpgradeRaceIsAvoidedByGrouping)."""
+        session = _seeded_sqlite_session(static_pool=True)
+        from edgar_warehouse.mdm.database import MdmCompany, MdmEntity
+
+        entity = MdmEntity(entity_type="company")
+        session.add(entity)
+        session.flush()
+        session.add(MdmCompany(entity_id=entity.entity_id, cik=111, canonical_name="Co 111"))
+        session.commit()
+
+        # issuer_cik=999 has no MdmCompany row -> issuer_entity_id resolves
+        # to None despite issuer_cik itself being non-null (the untracked-
+        # issuer case commit 86baa4b6 fixed the join gap for).
+        fixtures = _security_rows({111: ["Common Stock"], 999: ["Common Stock"]})
+        pipeline = MDMPipeline(session=session, silver=StubSilver(fixtures))
+
+        captured_keys: list[Any] = []
+        real_run_grouped = MDMPipeline._run_grouped_concurrent
+
+        def _capture(self_, keyed_rows, *args, **kwargs):
+            captured_keys.extend(key for key, _ in keyed_rows)
+            return real_run_grouped(self_, keyed_rows, *args, **kwargs)
+
+        with patch.object(MDMPipeline, "_run_grouped_concurrent", _capture):
+            pipeline.run_securities()
+
+        assert len(captured_keys) == 2
+        assert captured_keys[0] == captured_keys[1] == "Common Stock", (
+            f"expected both rows to share the title-only fallback key, got {captured_keys}"
+        )
+
+
+class TestDifferentIssuersSameTitleResolveConcurrentlyWithoutCorruption:
+    def test_distinct_known_issuers_sharing_a_title_each_get_their_own_entity_under_real_concurrency(self):
+        """Proves the new (issuer_entity_id, title) sub-grouping is safe
+        under genuine concurrent execution, not just sequentially: several
+        known issuers reporting the same generic title (e.g. "Common
+        Stock") resolve on DIFFERENT worker threads simultaneously and each
+        still gets its own correct, uncorrupted entity. This is the actual
+        throughput fix: live production data showed titles like this
+        concentrating 53%/27% of a shard's rows into ONE sequential group
+        under the old canonical_title-only grouping.
+
+        Drives the resolver directly via _run_grouped_via_real_threadpool
+        (same reason as TestNullIssuerUpgradeRaceIsAvoidedByGrouping --
+        run_securities()'s own SQLite dialect guard forces max_workers=1
+        for any sqlite engine regardless of pool type, so genuine
+        concurrency can't be exercised by calling run_securities() itself
+        in this test suite)."""
+        session = _multi_connection_sqlite_session()
+        rule_engine = MDMRuleEngine.load(session)
+        resolver = SecurityResolver()
+
+        from edgar_warehouse.mdm.database import MdmCompany, MdmEntity
+
+        entity_ids = {}
+        for cik in range(10):
+            entity = MdmEntity(entity_type="company")
+            session.add(entity)
+            session.flush()
+            session.add(MdmCompany(entity_id=entity.entity_id, cik=cik, canonical_name=f"Co {cik}"))
+            entity_ids[cik] = entity.entity_id
+        session.commit()
+
+        rows = [
+            {"security_title": "Common Stock", "issuer_entity_id": entity_ids[cik]}
+            for cik in range(10)
+        ]
+        # Mirrors run_securities()'s new key construction: no null-issuer
+        # row present for this title, so each row gets its own key.
+        keyed_rows = [((row["issuer_entity_id"], "Common Stock"), row) for row in rows]
+
+        seen: dict[Any, set[int]] = {}
+        lock = threading.Lock()
+
+        def _process(worker_session, row):
+            with lock:
+                seen.setdefault(row["issuer_entity_id"], set()).add(threading.get_ident())
+            time.sleep(0.02)  # widen the window for genuine overlap to show up
+            ctx = ResolverContext(session=worker_session, engine=rule_engine, silver=None, run_id="test")
+            resolver.resolve_one(ctx, "ownership_filing", row, row["issuer_entity_id"])
+
+        _run_grouped_via_real_threadpool(session, keyed_rows, _process, max_workers=10)
+
+        all_idents = {ident for idents in seen.values() for ident in idents}
+        assert len(all_idents) > 1, "expected genuine parallelism across distinct issuers"
+
+        verify_session = Session(session.get_bind())
+        securities = verify_session.execute(select(MdmSecurity)).scalars().all()
+        assert len(securities) == 10, (
+            f"expected 10 distinct entities (one per issuer), got {len(securities)}"
+        )
+        assert {s.issuer_entity_id for s in securities} == set(entity_ids.values())
+        verify_session.close()
+
+
 class TestPersonUnscopedFuzzyMergeStaysCorrect:
     def test_null_owner_cik_near_duplicate_names_merge_to_one_entity(self):
         """Two owner_cik=IS NULL rows with the identical normalized name
