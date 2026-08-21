@@ -89,6 +89,7 @@ infra/snowflake/sql/*_native_pull_handshake.json
 # Local Terraform state backups (may contain secrets) — never commit
 infra/.aws-tfstate-backups/
 infra/.s3-staging-cleanup-evidence/
+infra/.warehouse-duplicate-reclaim-evidence/
 infra/.bronze-historic-review-manifests/
 infra/.bronze-historic-delete-evidence/
 
