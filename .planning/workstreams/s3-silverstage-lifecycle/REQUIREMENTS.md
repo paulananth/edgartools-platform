@@ -53,6 +53,7 @@ Deferred to a later milestone.
 | Terraform state objects | Needed for apply; kilobytes |
 | `aws s3 rm --recursive` as the reclaim path | Leaves billed versions on this versioned bucket |
 | New buckets / non-AWS storage | Platform is AWS-only |
+| VersionId deletes in Terraform | Terraform owns standing lifecycle; operator script owns existing versions |
 
 ## Traceability
 
@@ -60,22 +61,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LIFE-01 | — | Pending |
-| REGR-01 | — | Pending |
-| SAFE-01 | — | Pending |
-| SAFE-02 | — | Pending |
-| SHARD-01 | — | Pending |
-| IDEN-01 | — | Pending |
-| IDEN-02 | — | Pending |
-| GOLD-01 | — | Pending |
-| BRON-01 | — | Pending |
-| CW-01 | — | Pending |
+| LIFE-01 | Phase 1 | Pending |
+| REGR-01 | Phase 1 | Pending |
+| SAFE-01 | Phase 2 | Pending |
+| SAFE-02 | Phase 2 | Pending |
+| SHARD-01 | Phase 3 | Pending |
+| IDEN-01 | Phase 3 | Pending |
+| IDEN-02 | Phase 1 | Pending |
+| GOLD-01 | Phase 3 | Pending |
+| BRON-01 | Phase 4 | Pending |
+| CW-01 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 10 total
-- Mapped to phases: 0
-- Unmapped: 10
+- Mapped to phases: 10
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-08-20*
-*Last updated: 2026-08-20 after v1.0 scoping*
+*Last updated: 2026-08-20 after v1.0 roadmap*
