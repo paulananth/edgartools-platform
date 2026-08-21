@@ -1,0 +1,40 @@
+# Decide disposition of AdviserResolver/FundResolver's identical resolve_one() gap
+
+Type: task
+Status: resolved
+Blocked by: 01
+
+## Question
+
+`AdviserResolver.resolve_one()` and `FundResolver.resolve_one()` have the
+exact same missing-skip-if-unchanged code shape `SecurityResolver` and
+`PersonResolver` had. Should this map's fix be ported to them too, purely
+for shape-consistency, even though Ticket 01 found neither method has a
+live caller?
+
+## Answer
+
+**Ruled out of scope — not fixed.** Porting the fix to dead code would be
+speculative work: nothing in production or the test suite exercises
+`AdviserResolver.resolve_one()`/`FundResolver.resolve_one()`, so a fix
+there changes no observed behavior and adds untested-in-practice surface
+area. This directly follows the precedent this map's own destination
+started from — commit `091809b0`'s explicit choice not to fix
+`PersonResolver` speculatively in the same pass as `SecurityResolver`,
+because "the live production evidence that motivated this investigation
+was specifically about security's slow tail, not person." The same
+discipline applies here with an even stronger reason: it's not just
+unmotivated, it's unreachable.
+
+The real live path for adviser/fund data (`adv_bulk.py`'s
+`resolve_advisers_bulk`/`resolve_funds_bulk`) was separately confirmed
+safe from this bug class — see Ticket 01's Answer and this map's Out of
+scope section for the adjacent bug it does have (a different shape,
+tracked as release-readiness Ticket 100).
+
+A genuinely separate, smaller question this ticket surfaced but does not
+answer: should `AdviserResolver`/`FundResolver` (and their `resolve_one()`
+methods) be deleted outright as dead code, or kept as intentional
+resolver-class scaffolding for a future non-bulk path? Not decided here —
+flagging for whoever next touches `edgar_warehouse/mdm/resolvers/adviser.py`
+or `fund.py` to weigh, not blocking this map's destination.

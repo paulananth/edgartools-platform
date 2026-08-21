@@ -16,10 +16,11 @@ from edgar_warehouse.mdm.database import MdmEntity, MdmPerson
 from edgar_warehouse.mdm.match import (
     CIKExactMatcher,
     FuzzyNameMatcher,
+    MatchAction,
     MatchPipeline,
     SplinkMatcher,
 )
-from edgar_warehouse.mdm.resolvers.base import BaseResolver, ResolveOutcome, ResolverContext
+from edgar_warehouse.mdm.resolvers.base import BaseResolver, ResolveOutcome, ResolverContext, content_hash
 from edgar_warehouse.mdm.survivorship import run_survivorship_for_entity
 
 PERSON_FIELDS = ["canonical_name", "owner_cik", "primary_role"]
@@ -70,12 +71,32 @@ class PersonResolver(BaseResolver):
             "issuer_cik": issuer_cik,
             "primary_role": title,
         }
+        source_id = f"{owner_row['accession_number']}:{owner_row.get('owner_index')}"
+
+        # mdm-resolver-skip-unchanged map, Ticket 02: run_persons() has no
+        # resumable ledger (unlike run_companies()), so a restarted `mdm run`
+        # re-processes every ownership row from scratch. Mirrors
+        # SecurityResolver.resolve_one's fix for the identical shape:
+        # mdm_entity_attribute_stage is genuinely append-only with no
+        # pruning, so an unresolved skip-check duplicated stage rows forever
+        # across restarts. The hash covers issuer_cik even though it's never
+        # staged as a golden field, because FuzzyNameMatcher uses it as a
+        # match context field for owner_cik-less rows -- a row whose issuer
+        # context changes between runs must still be reprocessed.
+        row_content_hash = content_hash(attrs)
+        skip_entity_id = self._skip_if_unchanged(ctx, source_system, source_id, row_content_hash)
+        if skip_entity_id is not None:
+            return ResolveOutcome(
+                entity_id=skip_entity_id,
+                is_new=False,
+                verdict=None,
+                action=MatchAction.SKIPPED_UNCHANGED,
+            )
 
         candidates = self._existing_candidates(ctx, owner_cik, name)
         pipeline = ctx.pipeline or self._build_pipeline(ctx)
         ctx.pipeline = pipeline
 
-        source_id = f"{owner_row['accession_number']}:{owner_row.get('owner_index')}"
         outcome = self.resolve_or_create(ctx, attrs, source_system, source_id, candidates)
 
         staged = {"canonical_name": name, "owner_cik": owner_cik, "primary_role": title}
@@ -83,6 +104,7 @@ class PersonResolver(BaseResolver):
         self._register_source(
             ctx, outcome.entity_id, source_system, source_id,
             outcome.verdict.score if outcome.verdict else 1.0,
+            source_content_hash=row_content_hash,
         )
 
         existing = self._existing_golden(ctx, outcome.entity_id)
