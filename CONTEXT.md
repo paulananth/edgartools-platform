@@ -88,6 +88,14 @@ _Avoid_: Arrival-order merge, last-writer-wins conflict handling, publishing a s
 Optional raw archive of SEC (or other) payloads written only when an operator explicitly requests it, or when the source cannot be obtained via edgartools; not the default hot path.
 _Avoid_: Always bronze first, treating bronze absence as agent-grade failure by default
 
+**Change Propagation Run**:
+The immutable unit that binds one selected set of new, modified, or retired source facts to its parser/schema versions, Affected-Key Closure, expected producers, stage outcomes, and aligned publication watermarks.
+_Avoid_: Mutable run ID, full-universe refresh, unbound retry, distributed transaction
+
+**Affected-Key Closure**:
+The smallest set of source keys, business keys, and derived dependents that must be recomputed for a Change Propagation Run to converge correctly without processing unrelated data.
+_Avoid_: Literal changed rows only, full-universe recomputation, best-effort dependency selection
+
 **Daily-Artifact Run Manifest**:
 The immutable, ordered accession selection for one daily-artifact run, bound to its daily-index input identity, warehouse image, and parser/configuration versions; it is the only candidate set a resume may use.
 _Avoid_: Re-selecting candidates on retry, mixing image or index inputs, adding repaired work through a later run's selection
