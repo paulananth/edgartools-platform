@@ -4,12 +4,10 @@ Label: `wayfinder:map`
 
 ## Destination
 
-A decided, buildable plan for the remaining warehouse duplicate-storage
-reclaim after GSD Leak-seal is locked. Hands off to `/to-spec` then
-`/to-tickets` (Ask Matt main flow) once CloudWatch retention, gold
-keep-latest completeness, in-flight identity skip, leftover inventory, and
-the reclaim contract beyond `_staging/` are settled. This map decides; it
-does not apply Terraform or delete objects.
+A decided, buildable plan for warehouse duplicate-storage reclaim after
+GSD Leak-seal. Decision work on this map is complete; execution already
+handed off to `/to-spec` then `/to-tickets`. This map does not apply
+Terraform or delete objects.
 
 ## Notes
 
@@ -19,9 +17,8 @@ does not apply Terraform or delete objects.
   Identity Refresh Run). Flag conflicts via `/domain-modeling`.
 - GSD workstream `s3-silverstage-lifecycle` Phase 1 Leak-seal is **already
   decided** in
-  [01-CONTEXT.md](../../.planning/workstreams/s3-silverstage-lifecycle/phases/01-leak-seal/01-CONTEXT.md)
-  (D-01–D-17). Do not re-litigate it here. Leak-seal implementation happens
-  after this map clears, via `/to-spec`.
+  [01-CONTEXT.md](../../.planning/milestones/ws-s3-silverstage-lifecycle-2026-08-21/phases/01-leak-seal/01-CONTEXT.md)
+  (D-01–D-17). Do not re-litigate it here. The workstream is archived.
 - Standing: never expire current Canonical Silver; never use
   `cleanup-s3-staging.sh` as-is (it deletes `IsLatest=true`); copy its
   dry-run TSV / confirm / VersionId contract from
@@ -41,17 +38,16 @@ does not apply Terraform or delete objects.
 - [What leftover billed bytes remain on the warehouse bucket after silverstage delete?](issues/04-measure-live-warehouse-leftover-inventory.md) — Silverstage versions are gone (0 versions/DMs; 156 empty MPUs, 0 part bytes). Remaining billed: 315.45 GiB noncurrent shards (830 versions), 1.48 GiB noncurrent `silver.duckdb`, 19.09 GiB identity_refresh (614 current keys, 16 run dirs), 3.43 GiB current + 0.89 GiB noncurrent gold `run_id=` copies (28 tables × 7 runs). Canonical current silver.duckdb + 4 shards still present (3.03 GiB). [research/04-live-warehouse-leftover-inventory.md](research/04-live-warehouse-leftover-inventory.md).
 - [Does bronze have billed duplicate or noncurrent waste, or only immutable current objects?](issues/05-inventory-bronze-duplicate-versions.md) — Almost all 69.64 GiB is current StandardStorage; listed noncurrent ~0.36 GiB; no current-key duplicates. Bronze reclaim of current SEC objects is out of this map. [research/05-bronze-duplicate-inventory.md](research/05-bronze-duplicate-inventory.md).
 - [Keep, drop, or rewrite the three-day CloudWatch retention requirement?](issues/01-decide-cloudwatch-retention-vs-seven-day-floor.md) — Drop CW-01. Prod stays at seven-day Operational Forensics Window; GSD Phase 5 is out of this map. Live groups still 7 days (read-only, 2026-08-21).
+- [How do we detect an in-flight Identity Refresh Run for one-shot skip?](issues/03-decide-in-flight-identity-refresh-skip.md) — Skip a run directory under `warehouse/identity_refresh/runs/` whose newest listed LastModified is ≤ 24 hours old. Unique keys older than 24 hours stay eligible. Do not poll Step Functions or the identity-refresh lease prefix. Standing snapshot lifecycle stays 7/7 with no RUNNING skip.
+- [Does ADR 0004’s staging cleanup contract extend, or do we need a sibling reclaim contract?](issues/06-decide-reclaim-contract-beyond-staging.md) — ADR 0004 stays staging-only (`IsLatest=true` under the ephemeral prefix, `--confirm-delete-staging`). Warehouse duplicates use sibling VersionId Reclaim: `--confirm-delete-duplicates`, Canonical Silver current-key deny-list, 24-hour identity skip, gold keep-set. Not one shared script.
+- [Is the 7-day Canonical Silver noncurrent rule enough after the one-shot?](issues/11-keep-seven-day-silver-noncurrent-window.md) — Keep 7-day noncurrent-only on `warehouse/silver/`. Do not shorten after SHARD-01. Current Canonical Silver still has no expiration.
 
 
 ## Not yet specified
 
-- How `/to-spec` should slice Leak-seal vs reclaim vs bronze vs CloudWatch
-  once the tickets below close.
-- Whether the standing 7-day noncurrent rule on `warehouse/silver/` is
-  enough after a one-shot shard VersionId reclaim, or a shorter window is
-  required.
-- Where reclaim dry-run TSVs and byte-evidence live
-  (`warehouse/release-evidence/` vs operator scratch).
+None on this map. Stopping the warehouse-bucket gold dual-write and
+reclaiming remaining `warehouse/gold/` with no keep-latest is a new
+effort, not remaining fog here.
 
 ## Out of scope
 
