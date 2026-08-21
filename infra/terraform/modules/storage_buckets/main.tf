@@ -139,6 +139,27 @@ resource "aws_s3_bucket_lifecycle_configuration" "warehouse" {
     }
   }
 
+  # Unique Identity Refresh Run keys (warehouse/identity_refresh/runs/...)
+  # are never overwritten, so they stay current forever without a current
+  # expiration. 7/7 current+noncurrent; leases live under
+  # warehouse/reference/identity_refresh_lease/ and are out of this prefix.
+  rule {
+    id     = "expire-identity-refresh-run-snapshots"
+    status = "Enabled"
+
+    filter {
+      prefix = "warehouse/identity_refresh/"
+    }
+
+    expiration {
+      days = 7
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 7
+    }
+  }
+
   # Backstop for the canonical silver.duckdb + shard-N.duckdb keys under
   # warehouse/silver/. Every merge_candidate_into_canonical publish
   # (edgar_warehouse/silver_protection.py) promotes a brand-new full-file
