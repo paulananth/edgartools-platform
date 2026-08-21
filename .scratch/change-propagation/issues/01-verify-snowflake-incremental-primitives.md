@@ -1,7 +1,7 @@
 # Verify Snowflake incremental change-processing primitives
 
 Type: research
-Status: open
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -27,3 +27,18 @@ Determine specifically:
 Use primary sources only. Save the findings at
 `.scratch/change-propagation/research/snowflake-incremental-primitives.md` and
 link every material claim to its official source.
+
+## Answer
+
+[Snowflake incremental change-processing primitives](../research/snowflake-incremental-primitives.md)
+finds that Snowflake supports immutable-file landing, CDC streams,
+transactional `MERGE`, and bounded multi-table dynamic-table refresh, but no
+single native primitive provides an atomic, run-bound barrier across them.
+
+Use content-addressed files and explicit lifecycle events; one stream per
+consumer; deterministic target-plus-outcome DML transactions; and an externally
+selected dynamic-table closure verified at one shared `DATA_TIMESTAMP`.
+Persist the actual refresh action and work statistics. The durable
+Change-Propagation-Run ledger remains authoritative for Decision Watermark
+publication because native histories have retention/latency limits and
+multi-table refresh can publish partially.

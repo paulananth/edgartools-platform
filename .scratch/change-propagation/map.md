@@ -82,6 +82,8 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
 
 <!-- Closed ticket decisions: one-line gist and link; detail stays in the ticket. -->
 
+- [Verify Snowflake incremental change-processing primitives](issues/01-verify-snowflake-incremental-primitives.md) — Snowflake supports bounded incremental publication and aligned refresh evidence, but the application run ledger must own the non-atomic cross-stage barrier.
+
 ## Not yet specified
 
 - The physical coordinator topology and exact Step Functions/EventBridge Pipes
