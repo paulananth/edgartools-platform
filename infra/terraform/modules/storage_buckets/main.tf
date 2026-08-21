@@ -107,22 +107,27 @@ resource "aws_s3_bucket_lifecycle_configuration" "warehouse" {
   bucket = aws_s3_bucket.warehouse.id
 
   # Backstop for staged canonical-silver promotion candidates
-  # (silverstage/<uuid>/..., written by ObjectStorage.write_staged_bytes --
-  # see edgar_warehouse/infrastructure/object_storage.py). promote_staged
-  # deliberately never deletes a staged object on a PromotionConflictError
-  # (left in place for inspection/retry), and the reducer's own
-  # explicit-delete-on-success path (release-readiness ticket 65) only
-  # covers the success case. Without this rule a staged object with no
-  # successful promotion and no manual cleanup lives forever -- confirmed
-  # live in prod: 46 orphaned objects, 49.3GB, under the pre-rename
-  # `_staging/` prefix, with no lifecycle rule at all
+  # (warehouse/silverstage/<uuid>/..., written by
+  # ObjectStorage.write_staged_bytes -- see
+  # edgar_warehouse/infrastructure/object_storage.py). The relative write
+  # path is silverstage/<uuid>/..., but ObjectStorage.join() prefixes the
+  # storage root, which already ends in /warehouse, so live keys are
+  # warehouse/silverstage/... . A filter of silverstage/ matches nothing
+  # (confirmed 2026-08-20: 1,999 orphaned DuckDB copies, 1.70 TiB).
+  # promote_staged deliberately never deletes a staged object on a
+  # PromotionConflictError (left in place for inspection/retry), and the
+  # reducer's own explicit-delete-on-success path (release-readiness
+  # ticket 65) only covers the success case. Without this rule a staged
+  # object with no successful promotion and no manual cleanup lives
+  # forever -- confirmed live in prod: 46 orphaned objects, 49.3GB, under
+  # the pre-rename `_staging/` prefix, with no lifecycle rule at all
   # (`get-bucket-lifecycle-configuration` returned NoSuchLifecycleConfiguration).
   rule {
     id     = "expire-silver-staging-candidates"
     status = "Enabled"
 
     filter {
-      prefix = "silverstage/"
+      prefix = "warehouse/silverstage/"
     }
 
     expiration {
@@ -131,6 +136,27 @@ resource "aws_s3_bucket_lifecycle_configuration" "warehouse" {
 
     noncurrent_version_expiration {
       noncurrent_days = 3
+    }
+  }
+
+  # Unique Identity Refresh Run keys (warehouse/identity_refresh/runs/...)
+  # are never overwritten, so they stay current forever without a current
+  # expiration. 7/7 current+noncurrent; leases live under
+  # warehouse/reference/identity_refresh_lease/ and are out of this prefix.
+  rule {
+    id     = "expire-identity-refresh-run-snapshots"
+    status = "Enabled"
+
+    filter {
+      prefix = "warehouse/identity_refresh/"
+    }
+
+    expiration {
+      days = 7
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 7
     }
   }
 
