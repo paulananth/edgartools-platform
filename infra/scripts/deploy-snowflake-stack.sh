@@ -419,6 +419,29 @@ echo "Applying full Snowflake stack with reconciled trust"
 terraform_apply "${SNOWFLAKE_ROOT}" "${SNOWFLAKE_OVERLAY}"
 terraform_output_json "${SNOWFLAKE_ROOT}" "${SNOWFLAKE_OUTPUTS_FILE}"
 
+# 15_decision_schema.sql must run here, between the two applies above/below --
+# not as its own later install.sh stage. infra/terraform/access/snowflake/
+# modules/account_access/main.tf (applied by SNOWFLAKE_ACCESS_ROOT just below)
+# grants reader privileges on EDGARTOOLS_<ENV>.EDGARTOOLS_DECISION
+# unconditionally, but no Terraform root creates that schema -- confirmed via
+# repo-wide search: account_baseline's schema_names local only has "source"
+# and "gold". Without this, a brand-new account's access-root apply fails
+# outright: "object does not exist or not authorized" for
+# reader_decision_schema_usage/reader_decision_all_views/
+# reader_decision_future_views. The database itself must already exist for
+# this to succeed, which is why this can't run any earlier than immediately
+# after the SNOWFLAKE_ROOT apply just above (account_baseline, part of that
+# same root, is what creates the database).
+DECISION_SCHEMA_DATABASE_NAME="$(json_value "${SNOWFLAKE_OUTPUTS_FILE}" "database_name")"
+[[ -n "${DECISION_SCHEMA_DATABASE_NAME}" ]] || die "Snowflake stack apply did not produce database_name (needed for 15_decision_schema.sql)"
+echo "Applying Decision Contract schema (must precede access-control grants below)"
+{
+  printf '%s\n' \
+    "SET database_name = '${DECISION_SCHEMA_DATABASE_NAME}';" \
+    "SET decision_schema_name = 'EDGARTOOLS_DECISION';"
+  cat "${REPO_ROOT}/infra/snowflake/sql/bootstrap/15_decision_schema.sql"
+} | snow sql --connection "${SNOW_CONNECTION}" -i
+
 echo "Applying Snowflake access-control grants"
 terraform_apply_root "${SNOWFLAKE_ACCESS_ROOT}"
 terraform_output_json "${SNOWFLAKE_ACCESS_ROOT}" "${SNOWFLAKE_ACCESS_OUTPUTS_FILE}"
