@@ -25,8 +25,7 @@ BEGIN
     END IF;
     GRANT edgartools_acquisition_owner TO snowflake_admin
       WITH INHERIT FALSE, SET TRUE;
-    GRANT application TO snowflake_admin
-      WITH INHERIT FALSE, SET TRUE;
+    GRANT application TO snowflake_admin;
     GRANT edgartools_acquisition_coordinator TO application
       WITH INHERIT FALSE, SET TRUE;
     GRANT edgartools_acquisition_worker TO application
