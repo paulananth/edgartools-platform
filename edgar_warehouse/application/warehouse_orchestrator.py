@@ -16,6 +16,9 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Final, Iterable, Mapping
 
+from edgar_warehouse.application.acquisition_command_registry import (
+    acquisition_command_registration,
+)
 from edgar_warehouse.application.command_context_factory import build_warehouse_context
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
@@ -6580,6 +6583,13 @@ def _resolve_scope(
     silver_root: StorageLocation | None = None,
 ) -> dict[str, Any]:
     db = _open_silver_database(silver_root) if silver_root is not None else None
+    registration = acquisition_command_registration(command_name)
+    if registration is not None:
+        return registration.resolve_scope(
+            arguments=arguments,
+            now=now,
+            silver_root=silver_root,
+        )
     if command_name == "bootstrap":
         return {
             "cik_list": arguments.get("cik_list"),
@@ -6619,12 +6629,6 @@ def _resolve_scope(
             "business_date_end": end_date.isoformat(),
             "tracking_status_filter": arguments.get("tracking_status_filter"),
         }
-
-    if command_name == "load-daily-form-index-for-date":
-        target_date = _parse_date(arguments.get("target_date"), "target_date")
-        if target_date is None:
-            raise WarehouseRuntimeError("target_date is required")
-        return {"target_date": target_date.isoformat()}
 
     if command_name == "catch-up-daily-form-index":
         end_date = _parse_date(arguments.get("end_date"), "end_date")
@@ -6772,6 +6776,13 @@ def _resolve_scope(
 
 
 def _planned_writes(command_name: str, command_path: str, run_id: str, scope: dict[str, Any]) -> dict[str, str]:
+    registration = acquisition_command_registration(command_name)
+    if registration is not None:
+        return registration.planned_writes(
+            command_path=command_path,
+            run_id=run_id,
+            scope=scope,
+        )
     return planned_writes(command_name, command_path, run_id, scope)
 
 

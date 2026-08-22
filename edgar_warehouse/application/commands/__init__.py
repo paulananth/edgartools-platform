@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+from edgar_warehouse.application.acquisition_command_registry import (
+    registered_acquisition_handlers,
+)
 from edgar_warehouse.application.commands import (
     acquire_identity_refresh_lease,
     acquire_sec_fetch_lease,
     backfill_mdm_entity_ids,
     backfill_silver_landing_company_metadata,
+    bootstrap,
     bootstrap_batch,
     bootstrap_full,
     bootstrap_fundamentals,
     bootstrap_next,
-    bootstrap,
     catch_up_daily_form_index,
     compute_identity_refresh_window,
     compute_remaining_batches,
@@ -22,7 +25,6 @@ from edgar_warehouse.application.commands import (
     full_reconcile,
     gold_refresh,
     ingest_relationship_sources,
-    load_daily_form_index_for_date,
     migrate_silver_shards,
     parse_adv_bronze,
     parse_ownership_bronze,
@@ -39,7 +41,7 @@ from edgar_warehouse.application.commands import (
     write_run_summary,
 )
 
-COMMAND_REGISTRY = {
+LEGACY_COMMAND_REGISTRY = {
     "bootstrap-full": bootstrap_full.execute,
     "bootstrap": bootstrap.execute,
     "compute-windows": compute_windows.execute,
@@ -51,7 +53,6 @@ COMMAND_REGISTRY = {
     "release-sec-fetch-lease": release_sec_fetch_lease.execute,
     "reduce-identity-refresh": reduce_identity_refresh.execute,
     "daily-incremental": daily_incremental.execute,
-    "load-daily-form-index-for-date": load_daily_form_index_for_date.execute,
     "catch-up-daily-form-index": catch_up_daily_form_index.execute,
     "targeted-resync": targeted_resync.execute,
     "full-reconcile": full_reconcile.execute,
@@ -62,7 +63,7 @@ COMMAND_REGISTRY = {
     "parse-ownership-bronze": parse_ownership_bronze.execute,
     "bootstrap-batch": bootstrap_batch.execute,
     "bootstrap-next": bootstrap_next.execute,
-    "bootstrap-fundamentals": bootstrap_fundamentals.execute,   # Branch B (AD-05)
+    "bootstrap-fundamentals": bootstrap_fundamentals.execute,  # Branch B (AD-05)
     "gold-refresh": gold_refresh.execute,
     "backfill-mdm-entity-ids": backfill_mdm_entity_ids.execute,
     "backfill-silver-landing-company-metadata": backfill_silver_landing_company_metadata.execute,
@@ -74,4 +75,19 @@ COMMAND_REGISTRY = {
     "validate-data-quality": validate_data_quality.execute,
     "verify-pipeline-run": verify_pipeline_run.execute,
     "write-run-summary": write_run_summary.execute,
+}
+
+_REGISTERED_ACQUISITION_HANDLERS = registered_acquisition_handlers()
+_DUPLICATE_COMMANDS = set(LEGACY_COMMAND_REGISTRY) & set(
+    _REGISTERED_ACQUISITION_HANDLERS
+)
+if _DUPLICATE_COMMANDS:
+    duplicate_names = ", ".join(sorted(_DUPLICATE_COMMANDS))
+    raise ValueError(
+        f"Commands registered in both acquisition and legacy registries: {duplicate_names}"
+    )
+
+COMMAND_REGISTRY = {
+    **LEGACY_COMMAND_REGISTRY,
+    **_REGISTERED_ACQUISITION_HANDLERS,
 }
