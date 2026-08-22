@@ -42,6 +42,7 @@ PROVISION_DEPLOY_DATA_STAGE_ORDER: list[str] = [
     "Snowflake: MDM export targets",
     "Snowflake: dbt gold",
     "Snowflake: loader role ownership",
+    "Snowflake: loader read grants on silver",
     "Snowflake: Streamlit dashboard",
     "AWS/silver: seed-universe (full/unscoped)",
     "AWS: bronze_seed_silver_gold (one-click data refresh)",

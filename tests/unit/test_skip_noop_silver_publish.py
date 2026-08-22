@@ -227,3 +227,57 @@ def test_new_unregistered_table_forces_merge_and_guard_still_fires(tmp_path):
     ):
         with pytest.raises(SilverPublicationError, match="Unclassified"):
             _publish_silver_database_if_remote(context)
+
+
+def test_real_change_only_merges_the_actually_changed_table(tmp_path):
+    """seed-universe OOM root cause (found live 2026-08-22): a candidate that
+    only changed sec_company_ticker must not drag sec_company (or any other
+    untouched table) through a real merge pass -- the per-table fingerprint
+    diff between hydration-time and publish-time must scope the merge to
+    exactly the tables that actually changed, not "differs at all ->
+    full scope"."""
+    context = _build_context(tmp_path)
+    canonical_bytes = _build_canonical_bytes(tmp_path)
+    _hydrate(context, canonical_bytes)
+
+    conn = duckdb.connect(_local_silver_path(context))
+    conn.execute(
+        "INSERT INTO sec_company_ticker "
+        "(cik, ticker, exchange, source_name, source_rank, last_sync_run_id, last_synced_at) "
+        "VALUES (1, 'ALPHA', 'NASDAQ', 'company_tickers_exchange', 1, 'run-1', '2026-01-01 00:00:00')"
+    )
+    conn.close()
+
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _publish_silver_database_if_remote,
+    )
+
+    with (
+        patch(
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.read_object_version",
+            return_value=ObjectVersion(exists=True, etag="old-etag", version_id=None),
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator.read_bytes",
+            return_value=canonical_bytes,
+        ),
+        patch(
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes",
+            return_value="silverstage/token/silver/sec/silver.duckdb",
+        ),
+        patch(
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.promote_staged",
+            return_value=PromotionResult(
+                canonical_path="s3://bucket/warehouse/silver/sec/silver.duckdb",
+                staged_relative_path="silverstage/token/silver/sec/silver.duckdb",
+                previous_version=ObjectVersion(exists=True, etag="old-etag", version_id=None),
+                new_version=ObjectVersion(exists=True, etag="new-etag", version_id=None),
+            ),
+        ),
+    ):
+        result = _publish_silver_database_if_remote(context)
+
+    assert "sec_company_ticker" in result["tables_merged"]
+    assert "sec_company" not in result["tables_merged"], (
+        "sec_company was untouched since hydration but still went through a full merge pass"
+    )

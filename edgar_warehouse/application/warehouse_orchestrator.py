@@ -1100,6 +1100,7 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
     relative_path = "silver/sec/silver.duckdb"
 
     hydration_fingerprint = _read_fingerprint_sidecar(source_path)
+    current_fingerprint: dict[str, Any] | None = None
     if hydration_fingerprint is not None:
         try:
             current_fingerprint = compute_silver_fingerprint(source_path)
@@ -1126,6 +1127,33 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
                 "skipped": True,
             }
 
+    # Scoped merge (seed-universe OOM root cause, found live 2026-08-22): when
+    # the whole-file fingerprints above differ (so the skip-if-unchanged
+    # short-circuit didn't apply), diff them per protected table instead of
+    # falling through to a full-scope merge across every table in the file.
+    # A command that only wrote e.g. sec_company_ticker still hydrates the
+    # *entire* canonical locally (every other command needs that), so its
+    # candidate always contains every table -- without this, merging it
+    # drags every unrelated table (ownership transactions, 13F holdings,
+    # financial facts, ...) through a real compare/merge pass regardless of
+    # whether this process ever touched them. Safe by construction: a table
+    # is only ever excluded from the merge when its (row_count, content_hash)
+    # is byte-for-byte identical to what hydration captured, so excluding it
+    # can never drop a real write -- see merge_candidate_into_canonical's own
+    # only_tables docstring. Only computed when both fingerprints are
+    # available (hydration_fingerprint is None or current_fingerprint failed
+    # to compute both fall back to only_tables=None, i.e. the original
+    # always-correct full-scope behavior, unchanged).
+    changed_tables: frozenset[str] | None = None
+    if hydration_fingerprint is not None and current_fingerprint is not None:
+        hydration_protected = hydration_fingerprint.get("protected", {})
+        current_protected = current_fingerprint.get("protected", {})
+        changed_tables = frozenset(
+            table_name
+            for table_name in set(hydration_protected) | set(current_protected)
+            if hydration_protected.get(table_name) != current_protected.get(table_name)
+        )
+
     baseline = context.storage_root.read_object_version(relative_path)
     tables_merged: tuple[str, ...] = ()
 
@@ -1134,7 +1162,9 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
             canonical_local = Path(tmp_dir) / "canonical.duckdb"
             canonical_local.write_bytes(read_bytes(context.storage_root.join(relative_path)))
             merged_local = Path(tmp_dir) / "merged.duckdb"
-            merge_result = merge_candidate_into_canonical(source_path, canonical_local, merged_local)
+            merge_result = merge_candidate_into_canonical(
+                source_path, canonical_local, merged_local, only_tables=changed_tables
+            )
             tables_merged = merge_result.tables_merged
             payload = merged_local.read_bytes()
     else:
