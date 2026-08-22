@@ -99,3 +99,5 @@ def test_bootstrap_and_restore_preserve_dedicated_acquisition_owner() -> None:
     assert "OWNER TO edgartools_acquisition_owner" in restore
     assert "FROM application" in restore
     assert "GRANT edgartools_acquisition_coordinator TO application" in restore
+    assert "GRANT application TO snowflake_admin" in restore
+    assert "to_regclass('public.source_fetch_decision') IS NOT NULL" in restore
