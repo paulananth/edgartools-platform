@@ -72,6 +72,10 @@ class UnauthorizedTransitionRole(PermissionError):
     """A non-owner role attempted a fetch-work transition."""
 
 
+class InvalidDecisionEvidence(ValueError):
+    """A terminal no-download decision lacks its authoritative proof reference."""
+
+
 TERMINAL_NO_DOWNLOAD_DISPOSITIONS = frozenset(
     {
         FetchDisposition.ALREADY_CAPTURED_VERIFIED,
@@ -94,6 +98,9 @@ class FetchDecisionRequest:
     next_action: str
     next_eligible_at: datetime | None = None
     owner_role: DecisionOwnerRole = DecisionOwnerRole.ACQUISITION_COORDINATOR
+    verified_evidence_reference: str | None = None
+    scope_proof_reference: str | None = None
+    operator_authorization_reference: str | None = None
 
 
 @dataclass(frozen=True)
@@ -125,8 +132,10 @@ class AcquisitionLedger:
         self, request: FetchDecisionRequest
     ) -> SourceChangeStatus:
         _validate_decision_owner(request)
+        _validate_terminal_evidence(request)
         try:
             with Session(self._engine) as session, session.begin():
+                _set_postgres_role(session, request.owner_role.value)
                 existing = session.scalar(
                     select(SourceFetchDecisionRecord).where(
                         SourceFetchDecisionRecord.candidate_id == request.candidate_id
@@ -156,6 +165,11 @@ class AcquisitionLedger:
                     blocker=request.blocker,
                     next_action=request.next_action,
                     next_eligible_at=request.next_eligible_at,
+                    verified_evidence_reference=request.verified_evidence_reference,
+                    scope_proof_reference=request.scope_proof_reference,
+                    operator_authorization_reference=(
+                        request.operator_authorization_reference
+                    ),
                 )
                 session.add(decision)
                 session.flush()
@@ -169,7 +183,7 @@ class AcquisitionLedger:
                         fencing_token=0,
                         lease_owner=None,
                         lease_expires_at=None,
-                        last_transition_role=DecisionOwnerRole.ACQUISITION_COORDINATOR.value,
+                        last_transition_role=request.owner_role.value,
                     )
                     session.add(work)
                     session.add(
@@ -177,7 +191,7 @@ class AcquisitionLedger:
                             decision_id=decision.decision_id,
                             from_state=None,
                             to_state=FetchWorkState.READY.value,
-                            owner_role=DecisionOwnerRole.ACQUISITION_COORDINATOR.value,
+                            owner_role=request.owner_role.value,
                             fencing_token=0,
                             worker_id=None,
                             reason="FETCH_AUTHORIZED",
@@ -195,6 +209,7 @@ class AcquisitionLedger:
 
     def source_change_status(self, decision_id: str) -> SourceChangeStatus:
         with Session(self._engine) as session:
+            _set_postgres_role(session, DecisionOwnerRole.ACQUISITION_COORDINATOR.value)
             decision = session.scalar(
                 select(SourceFetchDecisionRecord).where(
                     SourceFetchDecisionRecord.decision_id == decision_id
@@ -220,6 +235,9 @@ class AcquisitionLedger:
         claim_time = now or datetime.now(UTC)
         if self._engine.dialect.name == "postgresql":
             with Session(self._engine) as session, session.begin():
+                _set_postgres_role(
+                    session, FetchTransitionRole.ACQUISITION_WORKER.value
+                )
                 row = session.execute(
                     text(
                         "SELECT fencing_token, lease_expires_at "
@@ -246,7 +264,10 @@ class AcquisitionLedger:
             previous_state = FetchWorkState(work.fetch_state)
             previous_token = work.fencing_token
             previous_expiry = _normalized_datetime(work.lease_expires_at)
-            claimable = previous_state is FetchWorkState.READY or (
+            claimable = previous_state in {
+                FetchWorkState.READY,
+                FetchWorkState.FAILED,
+            } or (
                 previous_state is FetchWorkState.LEASED
                 and previous_expiry is not None
                 and previous_expiry <= claim_time
@@ -263,6 +284,8 @@ class AcquisitionLedger:
                     SourceFetchWorkRecord.fencing_token == previous_token,
                     or_(
                         SourceFetchWorkRecord.fetch_state == FetchWorkState.READY.value,
+                        SourceFetchWorkRecord.fetch_state
+                        == FetchWorkState.FAILED.value,
                         SourceFetchWorkRecord.lease_expires_at <= claim_time,
                     ),
                 )
@@ -314,6 +337,9 @@ class AcquisitionLedger:
         finalize_time = now or datetime.now(UTC)
         if self._engine.dialect.name == "postgresql":
             with Session(self._engine) as session, session.begin():
+                _set_postgres_role(
+                    session, FetchTransitionRole.ACQUISITION_WORKER.value
+                )
                 session.execute(
                     text(
                         "SELECT finalize_source_fetch(:decision_id, :worker_id, "
@@ -465,11 +491,45 @@ def _validate_decision_owner(request: FetchDecisionRequest) -> None:
         )
 
 
+def _validate_terminal_evidence(request: FetchDecisionRequest) -> None:
+    required_reference = {
+        FetchDisposition.ALREADY_CAPTURED_VERIFIED: (
+            "verified_evidence_reference",
+            request.verified_evidence_reference,
+        ),
+        FetchDisposition.OUT_OF_SCOPE: (
+            "scope_proof_reference",
+            request.scope_proof_reference,
+        ),
+        FetchDisposition.OPERATOR_EXCLUDED: (
+            "operator_authorization_reference",
+            request.operator_authorization_reference,
+        ),
+    }.get(request.disposition)
+    if required_reference is not None and not required_reference[1]:
+        raise InvalidDecisionEvidence(
+            f"{request.disposition.value} requires {required_reference[0]}"
+        )
+
+
 def _require_worker_role(actor_role: FetchTransitionRole) -> None:
     if actor_role is not FetchTransitionRole.ACQUISITION_WORKER:
         raise UnauthorizedTransitionRole(
             f"fetch-work transitions require {FetchTransitionRole.ACQUISITION_WORKER.value}"
         )
+
+
+def _set_postgres_role(session: Session, role: str) -> None:
+    if session.get_bind().dialect.name != "postgresql":
+        return
+    allowed_roles = {
+        DecisionOwnerRole.ACQUISITION_COORDINATOR.value,
+        DecisionOwnerRole.ACQUISITION_OPERATOR.value,
+        FetchTransitionRole.ACQUISITION_WORKER.value,
+    }
+    if role not in allowed_roles:
+        raise UnauthorizedTransitionRole(f"Unknown acquisition database role {role}")
+    session.execute(text(f"SET LOCAL ROLE edgartools_{role.lower()}"))
 
 
 def _decision_matches_request(
@@ -485,6 +545,10 @@ def _decision_matches_request(
         and decision.fetch_disposition == request.disposition.value
         and decision.blocker == request.blocker
         and decision.next_action == request.next_action
+        and decision.verified_evidence_reference == request.verified_evidence_reference
+        and decision.scope_proof_reference == request.scope_proof_reference
+        and decision.operator_authorization_reference
+        == request.operator_authorization_reference
         and _normalized_datetime(decision.next_eligible_at)
         == _normalized_datetime(request.next_eligible_at)
     )

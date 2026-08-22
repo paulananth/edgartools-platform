@@ -37,7 +37,10 @@ TEST_API_KEY = "test-key-abc123"
 @event.listens_for(Engine, "connect")
 def _register_sqlite_functions(dbapi_conn, _record):
     """Register NOW() so server_default=text('NOW()') works in SQLite."""
-    dbapi_conn.create_function("NOW", 0, lambda: datetime.now(timezone.utc).isoformat())
+    if hasattr(dbapi_conn, "create_function"):
+        dbapi_conn.create_function(
+            "NOW", 0, lambda: datetime.now(timezone.utc).isoformat()
+        )
 
 
 # ---------------------------------------------------------------------------

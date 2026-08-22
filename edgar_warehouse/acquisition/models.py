@@ -9,12 +9,13 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    String,
     Text,
     UniqueConstraint,
     text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+from edgar_warehouse.mdm.database import GUID
 
 
 def _uuid_string() -> str:
@@ -43,7 +44,7 @@ class SourceFetchDecisionRecord(AcquisitionBase):
     __tablename__ = "source_fetch_decision"
 
     decision_id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=_uuid_string
+        GUID(), primary_key=True, default=_uuid_string
     )
     candidate_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     source_family: Mapped[str] = mapped_column(Text, nullable=False)
@@ -56,6 +57,11 @@ class SourceFetchDecisionRecord(AcquisitionBase):
     fetch_disposition: Mapped[str] = mapped_column(Text, nullable=False)
     blocker: Mapped[str | None] = mapped_column(Text, nullable=True)
     next_action: Mapped[str] = mapped_column(Text, nullable=False)
+    verified_evidence_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scope_proof_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    operator_authorization_reference: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
     next_eligible_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -109,6 +115,20 @@ class SourceFetchDecisionRecord(AcquisitionBase):
             "OR (next_action = 'NONE' AND next_eligible_at IS NULL)",
             name="ck_source_fetch_decision_terminal_no_download",
         ),
+        CheckConstraint(
+            "fetch_disposition <> 'ALREADY_CAPTURED_VERIFIED' OR "
+            "verified_evidence_reference IS NOT NULL",
+            name="ck_source_fetch_decision_verified_evidence",
+        ),
+        CheckConstraint(
+            "fetch_disposition <> 'OUT_OF_SCOPE' OR scope_proof_reference IS NOT NULL",
+            name="ck_source_fetch_decision_scope_proof",
+        ),
+        CheckConstraint(
+            "fetch_disposition <> 'OPERATOR_EXCLUDED' OR "
+            "operator_authorization_reference IS NOT NULL",
+            name="ck_source_fetch_decision_operator_authorization",
+        ),
     )
 
 
@@ -116,7 +136,7 @@ class SourceFetchWorkRecord(AcquisitionBase):
     __tablename__ = "source_fetch_work"
 
     decision_id: Mapped[str] = mapped_column(
-        String(36),
+        GUID(),
         ForeignKey("source_fetch_decision.decision_id"),
         primary_key=True,
     )
@@ -144,13 +164,15 @@ class SourceFetchWorkRecord(AcquisitionBase):
             "fencing_token >= 0", name="ck_source_fetch_work_fencing_token"
         ),
         CheckConstraint(
-            "last_transition_role IN ('ACQUISITION_COORDINATOR','ACQUISITION_WORKER')",
+            "last_transition_role IN ("
+            "'ACQUISITION_COORDINATOR','ACQUISITION_OPERATOR','ACQUISITION_WORKER')",
             name="ck_source_fetch_work_transition_role",
         ),
         CheckConstraint(
             "(fetch_state = 'READY' AND fencing_token = 0 AND lease_owner IS NULL "
             "AND lease_expires_at IS NULL AND "
-            "last_transition_role = 'ACQUISITION_COORDINATOR') OR "
+            "last_transition_role IN ("
+            "'ACQUISITION_COORDINATOR','ACQUISITION_OPERATOR')) OR "
             "(fetch_state = 'LEASED' AND fencing_token > 0 AND lease_owner IS NOT NULL "
             "AND lease_expires_at IS NOT NULL AND "
             "last_transition_role = 'ACQUISITION_WORKER') OR "
@@ -164,8 +186,8 @@ class SourceFetchWorkRecord(AcquisitionBase):
             "source_family",
             "logical_source_key",
             unique=True,
-            sqlite_where=text("fetch_state IN ('READY','LEASED')"),
-            postgresql_where=text("fetch_state IN ('READY','LEASED')"),
+            sqlite_where=text("fetch_state IN ('READY','LEASED','FAILED')"),
+            postgresql_where=text("fetch_state IN ('READY','LEASED','FAILED')"),
         ),
     )
 
@@ -174,10 +196,10 @@ class SourceFetchTransitionRecord(AcquisitionBase):
     __tablename__ = "source_fetch_transition"
 
     transition_id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=_uuid_string
+        GUID(), primary_key=True, default=_uuid_string
     )
     decision_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("source_fetch_decision.decision_id"), nullable=False
+        GUID(), ForeignKey("source_fetch_decision.decision_id"), nullable=False
     )
     from_state: Mapped[str | None] = mapped_column(Text, nullable=True)
     to_state: Mapped[str] = mapped_column(Text, nullable=False)
@@ -198,8 +220,11 @@ class SourceFetchTransitionRecord(AcquisitionBase):
         ),
         CheckConstraint(
             "(from_state IS NULL AND to_state = 'READY' AND "
-            "owner_role = 'ACQUISITION_COORDINATOR' AND fencing_token = 0) OR "
-            "(to_state IN ('LEASED','CAPTURED','FAILED') AND "
+            "owner_role IN ('ACQUISITION_COORDINATOR','ACQUISITION_OPERATOR') "
+            "AND fencing_token = 0) OR "
+            "(from_state IN ('READY','LEASED','FAILED') AND to_state = 'LEASED' AND "
+            "owner_role = 'ACQUISITION_WORKER' AND fencing_token > 0) OR "
+            "(from_state = 'LEASED' AND to_state IN ('CAPTURED','FAILED') AND "
             "owner_role = 'ACQUISITION_WORKER' AND fencing_token > 0)",
             name="ck_source_fetch_transition_owner",
         ),

@@ -13,6 +13,14 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'edgartools_acquisition_operator') THEN
         CREATE ROLE edgartools_acquisition_operator NOLOGIN;
     END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'application') THEN
+        GRANT edgartools_acquisition_coordinator TO application
+            WITH INHERIT FALSE, SET TRUE;
+        GRANT edgartools_acquisition_worker TO application
+            WITH INHERIT FALSE, SET TRUE;
+        GRANT edgartools_acquisition_operator TO application
+            WITH INHERIT FALSE, SET TRUE;
+    END IF;
 END;
 $$;
 
@@ -37,6 +45,9 @@ CREATE TABLE IF NOT EXISTS source_fetch_decision (
     fetch_disposition TEXT NOT NULL,
     blocker TEXT,
     next_action TEXT NOT NULL,
+    verified_evidence_reference TEXT,
+    scope_proof_reference TEXT,
+    operator_authorization_reference TEXT,
     next_eligible_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_source_fetch_decision_observation
@@ -71,6 +82,17 @@ CREATE TABLE IF NOT EXISTS source_fetch_decision (
         fetch_disposition NOT IN (
             'ALREADY_CAPTURED_VERIFIED','OUT_OF_SCOPE','OPERATOR_EXCLUDED'
         ) OR (next_action = 'NONE' AND next_eligible_at IS NULL)
+    ),
+    CONSTRAINT ck_source_fetch_decision_verified_evidence CHECK (
+        fetch_disposition <> 'ALREADY_CAPTURED_VERIFIED' OR
+        verified_evidence_reference IS NOT NULL
+    ),
+    CONSTRAINT ck_source_fetch_decision_scope_proof CHECK (
+        fetch_disposition <> 'OUT_OF_SCOPE' OR scope_proof_reference IS NOT NULL
+    ),
+    CONSTRAINT ck_source_fetch_decision_operator_authorization CHECK (
+        fetch_disposition <> 'OPERATOR_EXCLUDED' OR
+        operator_authorization_reference IS NOT NULL
     )
 );
 
@@ -89,12 +111,14 @@ CREATE TABLE IF NOT EXISTS source_fetch_work (
     ),
     CONSTRAINT ck_source_fetch_work_fencing_token CHECK (fencing_token >= 0),
     CONSTRAINT ck_source_fetch_work_transition_role CHECK (
-        last_transition_role IN ('ACQUISITION_COORDINATOR','ACQUISITION_WORKER')
+        last_transition_role IN (
+            'ACQUISITION_COORDINATOR','ACQUISITION_OPERATOR','ACQUISITION_WORKER'
+        )
     ),
     CONSTRAINT ck_source_fetch_work_state_shape CHECK (
         (fetch_state = 'READY' AND fencing_token = 0 AND lease_owner IS NULL AND
          lease_expires_at IS NULL AND
-         last_transition_role = 'ACQUISITION_COORDINATOR') OR
+         last_transition_role IN ('ACQUISITION_COORDINATOR','ACQUISITION_OPERATOR')) OR
         (fetch_state = 'LEASED' AND fencing_token > 0 AND lease_owner IS NOT NULL AND
          lease_expires_at IS NOT NULL AND
          last_transition_role = 'ACQUISITION_WORKER') OR
@@ -106,7 +130,7 @@ CREATE TABLE IF NOT EXISTS source_fetch_work (
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_source_fetch_work_active_key
     ON source_fetch_work(source_family, logical_source_key)
-    WHERE fetch_state IN ('READY','LEASED');
+    WHERE fetch_state IN ('READY','LEASED','FAILED');
 
 CREATE TABLE IF NOT EXISTS source_fetch_transition (
     transition_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -123,11 +147,18 @@ CREATE TABLE IF NOT EXISTS source_fetch_transition (
     ),
     CONSTRAINT ck_source_fetch_transition_owner CHECK (
         (from_state IS NULL AND to_state = 'READY' AND
-         owner_role = 'ACQUISITION_COORDINATOR' AND fencing_token = 0) OR
-        (to_state IN ('LEASED','CAPTURED','FAILED') AND
+         owner_role IN ('ACQUISITION_COORDINATOR','ACQUISITION_OPERATOR') AND
+         fencing_token = 0) OR
+        (from_state IN ('READY','LEASED','FAILED') AND to_state = 'LEASED' AND
+         owner_role = 'ACQUISITION_WORKER' AND fencing_token > 0) OR
+        (from_state = 'LEASED' AND to_state IN ('CAPTURED','FAILED') AND
          owner_role = 'ACQUISITION_WORKER' AND fencing_token > 0)
     )
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_source_fetch_transition_initial
+    ON source_fetch_transition(decision_id)
+    WHERE from_state IS NULL AND to_state = 'READY';
 
 CREATE OR REPLACE FUNCTION reject_acquisition_history_mutation()
 RETURNS TRIGGER
@@ -157,6 +188,7 @@ DECLARE
 BEGIN
     required_role := CASE NEW.owner_role
         WHEN 'ACQUISITION_COORDINATOR' THEN 'edgartools_acquisition_coordinator'
+        WHEN 'ACQUISITION_OPERATOR' THEN 'edgartools_acquisition_operator'
         WHEN 'ACQUISITION_OPERATOR' THEN 'edgartools_acquisition_operator'
         WHEN 'ACQUISITION_WORKER' THEN 'edgartools_acquisition_worker'
         ELSE NULL
@@ -250,7 +282,7 @@ BEGIN
         updated_at = requested_at
     WHERE work.decision_id = requested_decision_id
       AND (
-          work.fetch_state = 'READY' OR
+          work.fetch_state IN ('READY','FAILED') OR
           (work.fetch_state = 'LEASED' AND work.lease_expires_at <= requested_at)
       )
     RETURNING work.fencing_token, work.lease_expires_at
@@ -325,16 +357,15 @@ REVOKE INSERT, UPDATE, DELETE ON source_fetch_work FROM PUBLIC;
 REVOKE INSERT, UPDATE, DELETE ON source_fetch_transition FROM PUBLIC;
 
 GRANT SELECT, INSERT, UPDATE ON source_observation_cursor
-    TO edgartools_acquisition_coordinator;
+    TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
 GRANT SELECT, INSERT ON source_fetch_decision
     TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
 GRANT SELECT, INSERT ON source_fetch_work
-    TO edgartools_acquisition_coordinator;
+    TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
 GRANT SELECT, INSERT ON source_fetch_transition
-    TO edgartools_acquisition_coordinator;
+    TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
 GRANT SELECT ON source_fetch_decision, source_fetch_work, source_fetch_transition
     TO edgartools_acquisition_worker;
-GRANT INSERT ON source_fetch_transition TO edgartools_acquisition_worker;
 REVOKE EXECUTE ON FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ)
     FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ)
@@ -355,6 +386,9 @@ SELECT
     decision.fetch_disposition,
     work.fetch_state,
     decision.blocker,
+    decision.verified_evidence_reference,
+    decision.scope_proof_reference,
+    decision.operator_authorization_reference,
     CASE work.fetch_state
         WHEN 'LEASED' THEN 'FETCH_SOURCE'
         WHEN 'CAPTURED' THEN 'MATERIALIZE_SOURCE_REVISION'

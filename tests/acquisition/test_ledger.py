@@ -18,6 +18,7 @@ from edgar_warehouse.acquisition.ledger import (
     FetchDisposition,
     FetchTransitionRole,
     FetchWorkState,
+    InvalidDecisionEvidence,
     StaleFencingToken,
     UnauthorizedDecisionRole,
     UnauthorizedTransitionRole,
@@ -52,6 +53,7 @@ def test_out_of_scope_candidate_is_terminal_without_network_request() -> None:
             disposition=FetchDisposition.OUT_OF_SCOPE,
             blocker="outside acquisition universe v1",
             next_action="NONE",
+            scope_proof_reference="acquisition-universe-v1/exclusion-1",
         ),
         source_adapter,
     )
@@ -142,6 +144,7 @@ def test_operator_exclusion_requires_the_operator_decision_role() -> None:
             blocker="legal hold excludes acquisition",
             next_action="NONE",
             owner_role=DecisionOwnerRole.ACQUISITION_OPERATOR,
+            operator_authorization_reference="operator-exclusion-42",
         )
     )
 
@@ -160,6 +163,7 @@ def test_operator_exclusion_requires_the_operator_decision_role() -> None:
                 disposition=FetchDisposition.OPERATOR_EXCLUDED,
                 blocker="attempted exclusion",
                 next_action="NONE",
+                operator_authorization_reference="operator-exclusion-43",
             )
         )
 
@@ -228,6 +232,53 @@ def test_expired_lease_reacquires_with_higher_token_and_rejects_stale_finalize()
     )
     assert completed.fetch_state is FetchWorkState.CAPTURED
     assert completed.next_action == "MATERIALIZE_SOURCE_REVISION"
+
+
+def test_failed_fetch_retries_same_decision_with_higher_fencing_token() -> None:
+    ledger = _ledger()
+    decision = ledger.create_fetch_decision(_authorized_request("candidate-retry"))
+    first = ledger.claim_fetch(
+        decision.decision_id,
+        worker_id="worker-1",
+        lease_seconds=60,
+        now=datetime(2026, 8, 22, 10, tzinfo=UTC),
+    )
+    failed = ledger.finalize_fetch(
+        decision.decision_id,
+        worker_id="worker-1",
+        fencing_token=first.fencing_token,
+        final_state=FetchWorkState.FAILED,
+        now=datetime(2026, 8, 22, 10, 0, 1, tzinfo=UTC),
+    )
+
+    retried = ledger.claim_fetch(
+        decision.decision_id,
+        worker_id="worker-2",
+        lease_seconds=60,
+        now=datetime(2026, 8, 22, 10, 0, 2, tzinfo=UTC),
+    )
+
+    assert failed.next_action == "RETRY_FETCH"
+    assert retried.fencing_token == 2
+
+
+def test_terminal_no_download_requires_authoritative_proof_reference() -> None:
+    ledger = _ledger()
+
+    with pytest.raises(InvalidDecisionEvidence, match="verified_evidence_reference"):
+        ledger.create_fetch_decision(
+            FetchDecisionRequest(
+                candidate_id="candidate-unproved-skip",
+                source_family="filing_artifact",
+                logical_source_key="accession/document",
+                source_url="https://www.sec.gov/Archives/example.txt",
+                cause=DecisionCause.CAPTURED_DISCOVERY,
+                cause_reference="manifest-1",
+                disposition=FetchDisposition.ALREADY_CAPTURED_VERIFIED,
+                blocker="claimed prior capture",
+                next_action="NONE",
+            )
+        )
 
 
 def test_non_worker_role_cannot_claim_fetch_work() -> None:
