@@ -2274,6 +2274,177 @@ class TestRelationshipDeriveBoundedRoundTrips:
         assert write_flush_calls <= 2
 
 
+# ---------------------------------------------------------------------------
+# large-profile-unscoped-load-audit, Ticket 01: IS_INSIDER/HOLDS/COMPANY_HOLDS
+# still called the shared dispatcher's unconditional, unscoped
+# `prime_relationship_type(rel_type_name, defer_flush=True)` (no
+# `source_entity_ids`) -- the exact MANAGES_FUND/INSTITUTIONAL_HOLDS OOM
+# shape, just not yet at their scale. Live prod measurement 2026-08-22:
+# COMPANY_HOLDS grew 3,148 -> 33,398 rows (~10.6x) in roughly 24h, HOLDS grew
+# 395 -> 3,093 (~7.8x), IS_INSIDER grew 902 -> 1,552 -- proving "currently
+# small" is not a durable safety argument for this specific pattern. Fix
+# mirrors _derive_manages_fund_batch/_derive_institutional_holds_batch:
+# resolve this invocation's touched source entities first, prime scoped to
+# exactly those, run the existing per-row loop, unprime in a finally.
+# ---------------------------------------------------------------------------
+
+class TestPrimeScopingForOwnershipDerivedTypes:
+    def test_is_insider_primes_scoped_to_touched_persons_not_the_whole_type(
+        self, session, fixture_world, monkeypatch
+    ):
+        # Out-of-scope: an existing IS_INSIDER row for a person this run's
+        # source rows never touch. Before the fix, the shared dispatcher's
+        # unscoped prime would load this row into the cache regardless.
+        sync_engine = GraphSyncEngine.build(session)
+        sync_engine.ensure_relationship(
+            rel_type_name="IS_INSIDER",
+            source_entity_id=fixture_world["individual_person_id"],
+            target_entity_id=fixture_world["issuer_company_id"],
+            source_system="ownership_filing",
+        )
+        session.commit()
+
+        prime_calls: list[Optional[frozenset]] = []
+        original_prime = GraphSyncEngine.prime_relationship_type
+
+        def spy_prime(self, rel_type_name, **kwargs):
+            if rel_type_name == "IS_INSIDER":
+                source_entity_ids = kwargs.get("source_entity_ids")
+                prime_calls.append(
+                    frozenset(source_entity_ids) if source_entity_ids is not None else None
+                )
+            return original_prime(self, rel_type_name, **kwargs)
+
+        monkeypatch.setattr(GraphSyncEngine, "prime_relationship_type", spy_prime)
+
+        pipe = MDMPipeline(session=session, silver=StubSilver({
+            "FROM sec_ownership_reporting_owner": [
+                {
+                    "accession_number": "0000-new-insider",
+                    "owner_index": 0,
+                    "owner_cik": 910102,
+                    "owner_name": "Reporting Person",
+                    "is_director": True,
+                    "is_officer": False,
+                    "is_ten_percent_owner": False,
+                    "is_other": False,
+                    "officer_title": None,
+                    "issuer_cik": 910001,
+                    "period_of_report": date(2025, 1, 1),
+                },
+            ],
+        }))
+        summary = pipe.derive_relationships(relationship_types=["IS_INSIDER"])
+
+        assert summary["IS_INSIDER"]["inserted"] == 1
+        assert len(prime_calls) == 1
+        assert prime_calls[0] is not None, "prime must be scoped, not an unscoped whole-type load"
+        assert prime_calls[0] == frozenset({fixture_world["reporting_person_id"]})
+        assert fixture_world["individual_person_id"] not in prime_calls[0]
+
+    def test_holds_primes_scoped_to_touched_persons_not_the_whole_type(
+        self, session, fixture_world, monkeypatch
+    ):
+        sync_engine = GraphSyncEngine.build(session)
+        sync_engine.ensure_relationship(
+            rel_type_name="HOLDS",
+            source_entity_id=fixture_world["individual_person_id"],
+            target_entity_id=fixture_world["security_entity_id"],
+            source_system="ownership_filing",
+        )
+        session.commit()
+
+        prime_calls: list[Optional[frozenset]] = []
+        original_prime = GraphSyncEngine.prime_relationship_type
+
+        def spy_prime(self, rel_type_name, **kwargs):
+            if rel_type_name == "HOLDS":
+                source_entity_ids = kwargs.get("source_entity_ids")
+                prime_calls.append(
+                    frozenset(source_entity_ids) if source_entity_ids is not None else None
+                )
+            return original_prime(self, rel_type_name, **kwargs)
+
+        monkeypatch.setattr(GraphSyncEngine, "prime_relationship_type", spy_prime)
+
+        pipe = MDMPipeline(session=session, silver=StubSilver({
+            "FROM sec_ownership_non_derivative_txn": [
+                {
+                    "accession_number": "0000-new-holds",
+                    "owner_index": 0,
+                    "txn_index": 0,
+                    "security_title": "Common Stock",
+                    "transaction_date": None,
+                    "shares_owned_after": 100,
+                    "ownership_direct_indirect": "D",
+                    "owner_cik": 910102,
+                    "owner_name": "Reporting Person",
+                    "issuer_cik": 910001,
+                },
+            ],
+        }))
+        summary = pipe.derive_relationships(relationship_types=["HOLDS"])
+
+        assert summary["HOLDS"]["inserted"] == 1
+        assert len(prime_calls) == 1
+        assert prime_calls[0] is not None, "prime must be scoped, not an unscoped whole-type load"
+        assert prime_calls[0] == frozenset({fixture_world["reporting_person_id"]})
+        assert fixture_world["individual_person_id"] not in prime_calls[0]
+
+    def test_company_holds_primes_scoped_to_touched_companies_not_the_whole_type(
+        self, session, fixture_world, monkeypatch
+    ):
+        # Out-of-scope: an existing COMPANY_HOLDS row for the *issuer*
+        # company acting as a corporate holder elsewhere -- not touched by
+        # this run's new source row, whose only corporate owner is
+        # linked_company_id.
+        sync_engine = GraphSyncEngine.build(session)
+        sync_engine.ensure_relationship(
+            rel_type_name="COMPANY_HOLDS",
+            source_entity_id=fixture_world["issuer_company_id"],
+            target_entity_id=fixture_world["security_entity_id"],
+            source_system="ownership_filing",
+        )
+        session.commit()
+
+        prime_calls: list[Optional[frozenset]] = []
+        original_prime = GraphSyncEngine.prime_relationship_type
+
+        def spy_prime(self, rel_type_name, **kwargs):
+            if rel_type_name == "COMPANY_HOLDS":
+                source_entity_ids = kwargs.get("source_entity_ids")
+                prime_calls.append(
+                    frozenset(source_entity_ids) if source_entity_ids is not None else None
+                )
+            return original_prime(self, rel_type_name, **kwargs)
+
+        monkeypatch.setattr(GraphSyncEngine, "prime_relationship_type", spy_prime)
+
+        pipe = MDMPipeline(session=session, silver=StubSilver({
+            "FROM sec_ownership_non_derivative_txn": [
+                {
+                    "accession_number": "0000-new-company-holds",
+                    "owner_index": 0,
+                    "txn_index": 0,
+                    "security_title": "Common Stock",
+                    "transaction_date": None,
+                    "shares_owned_after": 50,
+                    "ownership_direct_indirect": "I",
+                    "owner_cik": 910002,
+                    "owner_name": "Linked Corp",
+                    "issuer_cik": 910001,
+                },
+            ],
+        }))
+        summary = pipe.derive_relationships(relationship_types=["COMPANY_HOLDS"])
+
+        assert summary["COMPANY_HOLDS"]["inserted"] == 1
+        assert len(prime_calls) == 1
+        assert prime_calls[0] is not None, "prime must be scoped, not an unscoped whole-type load"
+        assert prime_calls[0] == frozenset({fixture_world["linked_company_id"]})
+        assert fixture_world["issuer_company_id"] not in prime_calls[0]
+
+
 class TestRelationshipTypesConcurrency:
     def test_concurrent_type_worker_sessions_create_no_duplicates_or_deadlocks(self):
         """The actual safety property derive_relationships()'s per-type

@@ -13,7 +13,9 @@ suite uses) so the MdmSourceRef lookup is exercised for real, not mocked.
 from __future__ import annotations
 
 import os
+import re
 import uuid
+from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -45,20 +47,51 @@ def _register(session: Session, *, entity_type: str, source_system: str, source_
 
 
 class _FakeCursor:
-    """Mimics snowflake-connector-python's cursor shape: .execute(sql) then
-    .description (list of (name, ...) tuples) and .fetchall() (list of
-    tuples), keyed by which table the query names."""
+    """Mimics snowflake-connector-python's cursor shape: .execute(sql, params)
+    then .description (list of (name, ...) tuples) and .fetchall() (list of
+    tuples), keyed by which table the query names.
 
-    def __init__(self, rows_by_table: dict[str, tuple[list[str], list[tuple]]]) -> None:
+    Genuinely simulates the keyset-pagination SQL shape
+    _fetch_pending_rows_batches issues (large-profile-unscoped-load-audit
+    Ticket 02): parses the ORDER BY column list and LIMIT out of the SQL
+    text, applies the keyset filter (row-value tuple > params) when params
+    are supplied, sorts by the key columns, and truncates to LIMIT -- the
+    same technique the INSTITUTIONAL_HOLDS StubSilver uses for its own
+    CIK-BETWEEN batching, adapted to keyset comparison instead of a range."""
+
+    def __init__(
+        self,
+        rows_by_table: dict[str, tuple[list[str], list[tuple]]],
+        execute_calls: list[tuple[str, str, list]],
+    ) -> None:
         self._rows_by_table = rows_by_table
+        self._execute_calls = execute_calls
         self.description: list[tuple] = []
         self._pending_rows: list[tuple] = []
 
-    def execute(self, sql: str) -> None:
+    def execute(self, sql: str, params: Optional[list] = None) -> None:
+        params = params or []
         table = sql.split("FROM", 1)[1].split("WHERE", 1)[0].strip()
+        self._execute_calls.append((table, sql, list(params)))
         columns, rows = self._rows_by_table.get(table, ([], []))
         self.description = [(c,) for c in columns]
-        self._pending_rows = rows
+
+        order_match = re.search(r"ORDER BY (.+?) LIMIT", sql, re.IGNORECASE)
+        limit_match = re.search(r"LIMIT (\d+)", sql, re.IGNORECASE)
+        key_cols = [c.strip() for c in order_match.group(1).split(",")] if order_match else []
+        limit = int(limit_match.group(1)) if limit_match else None
+        col_index = {c.upper(): i for i, c in enumerate(columns)}
+        key_indices = [col_index[c.upper()] for c in key_cols if c.upper() in col_index]
+
+        filtered = list(rows)
+        if params and key_indices:
+            keyset = tuple(params)
+            filtered = [r for r in filtered if tuple(r[i] for i in key_indices) > keyset]
+        if key_indices:
+            filtered.sort(key=lambda r: tuple(r[i] for i in key_indices))
+        if limit is not None:
+            filtered = filtered[:limit]
+        self._pending_rows = filtered
 
     def fetchall(self) -> list[tuple]:
         return self._pending_rows
@@ -70,9 +103,14 @@ class _FakeCursor:
 class _FakeConnection:
     def __init__(self, rows_by_table: dict[str, tuple[list[str], list[tuple]]]) -> None:
         self._rows_by_table = rows_by_table
+        # (table, sql, params) for every cursor.execute() call across every
+        # cursor this connection has issued -- a fresh _FakeCursor is
+        # created per page, mirroring _fetch_pending_rows_batches' real
+        # per-page `connection.cursor()` call, so call tracking lives here.
+        self.execute_calls: list[tuple[str, str, list]] = []
 
     def cursor(self) -> _FakeCursor:
-        return _FakeCursor(self._rows_by_table)
+        return _FakeCursor(self._rows_by_table, self.execute_calls)
 
     def close(self) -> None:
         pass
@@ -253,3 +291,83 @@ def test_sweep_reports_remaining_null_count_for_unresolved_rows(tmp_path) -> Non
     assert result["totals"]["sec_company"] == 0
     assert result["remaining_null_count"] == 1
     assert result["remaining_by_table"]["sec_company"] == 1
+
+
+# ---------------------------------------------------------------------------
+# large-profile-unscoped-load-audit Ticket 02: _fetch_pending_rows used to
+# issue one unbounded `SELECT * FROM {table} WHERE mdm_entity_id IS NULL`
+# per table with no LIMIT -- the MANAGES_FUND OOM shape. Live-measured
+# 2026-08-22: sec_adv_private_fund alone is 1,579,876 rows total (larger
+# than MANAGES_FUND's own 563,631-row OOM trigger), currently 0 pending --
+# the same "safe until it isn't" shape INSTITUTIONAL_HOLDS's pre-emptive
+# fix addressed. Fix: keyset-paginated reads via _fetch_pending_rows_batches.
+# ---------------------------------------------------------------------------
+
+def test_backfill_pending_rows_pages_sec_company_in_bounded_chunks(monkeypatch, db_session) -> None:
+    """5 pending sec_company rows, chunk size forced to 2 -> 3 bounded
+    execute() calls (2, 2, 1), each carrying a LIMIT, not one unbounded
+    fetch of all 5. Every row must still be seen exactly once (no gaps,
+    no duplicates) and the resolved/pending totals must match what a
+    single unbounded pass would have produced."""
+    import edgar_warehouse.mdm_entity_backfill as backfill_module
+
+    monkeypatch.setattr(backfill_module, "_ROW_CHUNK_SIZE", 2)
+
+    ciks = [500, 100, 400, 200, 300]  # deliberately unsorted
+    resolvable_ciks = {100, 200, 300}
+    for cik in resolvable_ciks:
+        _register(db_session, entity_type="company", source_system="edgar_cik", source_id=str(cik))
+
+    rows_by_table = {
+        "SEC_COMPANY": (
+            ["CIK", "ENTITY_NAME", "MDM_ENTITY_ID"],
+            [(cik, f"Company {cik}", None) for cik in ciks],
+        ),
+    }
+    connection = _FakeConnection(rows_by_table)
+    landing_export = LandingExportBuffer()
+
+    counts = backfill_pending_rows(connection, db_session, landing_export)
+
+    assert counts["sec_company"] == {"pending": 5, "resolved": 3}
+
+    sec_company_calls = [c for c in connection.execute_calls if c[0] == "SEC_COMPANY"]
+    # 5 rows at chunk size 2 -> 3 calls (2 + 2 + 1), not 1 unbounded call.
+    assert len(sec_company_calls) == 3, sec_company_calls
+    for _table, sql, _params in sec_company_calls:
+        assert "LIMIT 2" in sql, sql
+
+    recorded_ciks = {row["cik"] for row in landing_export.tables()["sec_company"]}
+    assert recorded_ciks == resolvable_ciks
+
+
+def test_backfill_pending_rows_batch_size_does_not_change_resolved_output(monkeypatch, db_session) -> None:
+    """Batch equivalence: chunked reads (size 1) must resolve the exact
+    same rows as one unbounded-equivalent pass (a chunk size larger than
+    the whole fixture) -- chunking is a memory-shape change only, not a
+    correctness change."""
+    import edgar_warehouse.mdm_entity_backfill as backfill_module
+
+    ciks = [100, 200, 300, 400]
+    for cik in (100, 300):
+        _register(db_session, entity_type="company", source_system="edgar_cik", source_id=str(cik))
+
+    def _run(chunk_size: int) -> dict:
+        monkeypatch.setattr(backfill_module, "_ROW_CHUNK_SIZE", chunk_size)
+        rows_by_table = {
+            "SEC_COMPANY": (
+                ["CIK", "ENTITY_NAME", "MDM_ENTITY_ID"],
+                [(cik, f"Company {cik}", None) for cik in ciks],
+            ),
+        }
+        connection = _FakeConnection(rows_by_table)
+        landing_export = LandingExportBuffer()
+        counts = backfill_pending_rows(connection, db_session, landing_export)
+        return counts, {row["cik"] for row in landing_export.tables()["sec_company"]}
+
+    single_pass_counts, single_pass_ciks = _run(chunk_size=1_000)
+    chunked_counts, chunked_ciks = _run(chunk_size=1)
+
+    assert single_pass_counts == chunked_counts
+    assert single_pass_counts["sec_company"] == {"pending": 4, "resolved": 2}
+    assert single_pass_ciks == chunked_ciks == {100, 300}

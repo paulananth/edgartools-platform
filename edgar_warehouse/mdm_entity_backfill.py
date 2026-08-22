@@ -51,7 +51,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 
 def _text_id(value: Any) -> str | None:
@@ -89,6 +89,18 @@ class _TableSpec:
     entity_type: str
     source_system: str
     source_id: Callable[[dict], str]
+    # Keyset-pagination columns (large-profile-unscoped-load-audit Ticket
+    # 02) -- each table's own unique-key columns, always present and
+    # NOT NULL, used to page through pending rows in bounded chunks instead
+    # of one unbounded SELECT *. Not every table has a CIK column
+    # (sec_adv_private_fund does not -- verified live against
+    # EDGARTOOLS_SILVER.SEC_ADV_PRIVATE_FUND's schema, 2026-08-22), so this
+    # uses each table's real unique key rather than assuming CIK
+    # universally, unlike the CRD/CIK-range batching MANAGES_FUND/
+    # INSTITUTIONAL_HOLDS use (those batch to scope a *priming* cache to a
+    # domain key; this just bounds a raw table scan, so any stable unique
+    # key works equally well).
+    key_columns: tuple[str, ...]
 
 
 _TABLE_SPECS: tuple[_TableSpec, ...] = (
@@ -97,42 +109,58 @@ _TABLE_SPECS: tuple[_TableSpec, ...] = (
         entity_type="company",
         source_system="edgar_cik",
         source_id=_company_source_id,
+        key_columns=("cik",),
     ),
     _TableSpec(
         table="sec_ownership_reporting_owner",
         entity_type="person",
         source_system="ownership_filing",
         source_id=_reporting_owner_source_id,
+        key_columns=("accession_number", "owner_index"),
     ),
     _TableSpec(
         table="sec_ownership_non_derivative_txn",
         entity_type="security",
         source_system="ownership_filing",
         source_id=_non_derivative_txn_source_id,
+        key_columns=("accession_number", "owner_index", "txn_index"),
     ),
     _TableSpec(
         table="sec_ownership_derivative_txn",
         entity_type="security",
         source_system="ownership_filing",
         source_id=_derivative_txn_source_id,
+        key_columns=("accession_number", "owner_index", "txn_index"),
     ),
     _TableSpec(
         table="sec_adv_filing",
         entity_type="adviser",
         source_system="adv_filing",
         source_id=_adv_filing_source_id,
+        key_columns=("accession_number",),
     ),
     _TableSpec(
         table="sec_adv_private_fund",
         entity_type="fund",
         source_system="adv_filing",
         source_id=_adv_private_fund_source_id,
+        key_columns=("accession_number", "fund_index"),
     ),
 )
 
 MDM_ENTITY_ID_TABLES: tuple[str, ...] = tuple(spec.table for spec in _TABLE_SPECS)
 
 _LOOKUP_CHUNK_SIZE = 500
+
+# Row-read chunk size (large-profile-unscoped-load-audit Ticket 02): bounds
+# a single SELECT's result set instead of _fetch_pending_rows' prior
+# unconditional `SELECT * ... WHERE mdm_entity_id IS NULL` + fetchall() with
+# no LIMIT. Live-measured 2026-08-22: sec_adv_private_fund alone is
+# 1,579,876 rows total (larger than MANAGES_FUND's 563,631-row OOM
+# trigger) -- currently 0 pending (MDM resolution has kept up), the same
+# "safe until it isn't" shape INSTITUTIONAL_HOLDS's pre-emptive fix
+# addressed for its own 6.8M-row source table.
+_ROW_CHUNK_SIZE = 2000
 
 
 def _chunks(items: list, size: int):
@@ -180,28 +208,66 @@ def _silver_connection_settings() -> Any:
     return silver_connection_settings()
 
 
-def _fetch_pending_rows(connection: Any, spec: _TableSpec) -> list[dict[str, Any]]:
-    """Every column of every row where mdm_entity_id IS NULL, read from the
-    already-collapsed EDGARTOOLS_SILVER dynamic table -- the same view
-    gold/dbt reads, so "pending" here matches what downstream consumers
-    actually see today. Column names lowercased to match this module's
-    source_id functions (row["cik"]-style) -- Snowflake's connector returns
-    uppercase names for unquoted identifiers by default.
+def _fetch_pending_rows_batches(connection: Any, spec: _TableSpec):
+    """Yield bounded batches (<= _ROW_CHUNK_SIZE rows) of pending
+    (mdm_entity_id IS NULL) rows from Snowflake, keyset-paginated on the
+    table's own unique key columns instead of one unbounded `SELECT *` +
+    `fetchall()` (large-profile-unscoped-load-audit Ticket 02).
+
+    Keyset, not OFFSET: this sweep never mutates the source table in place
+    (resolved rows are re-emitted via a separate landing-export path, not
+    an UPDATE), so a plain forward-only `key > last_seen` cursor is exactly
+    as correct as OFFSET pagination would be here, without OFFSET's
+    re-scan cost on a large table. Snowflake supports row-value tuple
+    comparison directly (`(a, b) > (?, ?)`, verified live), so the keyset
+    predicate is a single bound-param tuple, not a manually-expanded
+    OR-chain.
+
+    Column names lowercased to match this module's source_id functions
+    (row["cik"]-style) -- Snowflake's connector returns uppercase names for
+    unquoted identifiers by default.
     """
-    cursor = connection.cursor()
-    try:
-        cursor.execute(f"SELECT * FROM {spec.table.upper()} WHERE mdm_entity_id IS NULL")
-        columns = [col[0].lower() for col in cursor.description]
-        return [dict(zip(columns, row)) for row in cursor.fetchall()]
-    finally:
-        cursor.close()
+    key_cols = spec.key_columns
+    key_cols_sql = ", ".join(key_cols)
+    last_key: Optional[tuple] = None
+    while True:
+        cursor = connection.cursor()
+        try:
+            if last_key is None:
+                sql = (
+                    f"SELECT * FROM {spec.table.upper()} WHERE mdm_entity_id IS NULL "
+                    f"ORDER BY {key_cols_sql} LIMIT {_ROW_CHUNK_SIZE}"
+                )
+                params: list[Any] = []
+            else:
+                placeholders = ", ".join(["?"] * len(key_cols))
+                sql = (
+                    f"SELECT * FROM {spec.table.upper()} WHERE mdm_entity_id IS NULL "
+                    f"AND ({key_cols_sql}) > ({placeholders}) "
+                    f"ORDER BY {key_cols_sql} LIMIT {_ROW_CHUNK_SIZE}"
+                )
+                params = list(last_key)
+            cursor.execute(sql, params)
+            columns = [col[0].lower() for col in cursor.description]
+            batch = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        finally:
+            cursor.close()
+        if not batch:
+            return
+        yield batch
+        last_row = batch[-1]
+        last_key = tuple(last_row[col] for col in key_cols)
+        if len(batch) < _ROW_CHUNK_SIZE:
+            return
 
 
 def backfill_pending_rows(connection: Any, session: Any, landing_export: Any) -> dict[str, dict[str, int]]:
     """One pass over all 6 target tables: read pending (mdm_entity_id IS
-    NULL) rows from Snowflake, resolve against MDM, record full-row
-    (mdm_entity_id filled) re-emissions into landing_export for whatever
-    matched.
+    NULL) rows from Snowflake in bounded batches, resolve against MDM,
+    record full-row (mdm_entity_id filled) re-emissions into landing_export
+    for whatever matched -- one batch at a time, rather than materializing
+    every pending row across all 6 tables before writing anything
+    (large-profile-unscoped-load-audit Ticket 02).
 
     Returns {table: {"pending": N, "resolved": N}} -- resolved <= pending;
     the gap is rows with no MdmSourceRef match yet (left NULL for the next
@@ -209,28 +275,28 @@ def backfill_pending_rows(connection: Any, session: Any, landing_export: Any) ->
     """
     counts: dict[str, dict[str, int]] = {}
     for spec in _TABLE_SPECS:
-        rows = _fetch_pending_rows(connection, spec)
-        counts[spec.table] = {"pending": len(rows), "resolved": 0}
-        if not rows:
-            continue
+        pending = 0
+        resolved = 0
+        for rows in _fetch_pending_rows_batches(connection, spec):
+            pending += len(rows)
+            keyed_rows = [(spec.source_id(row), row) for row in rows]
+            lookup = _lookup_entity_ids(
+                session,
+                entity_type=spec.entity_type,
+                source_system=spec.source_system,
+                source_ids=[source_id for source_id, _ in keyed_rows],
+            )
 
-        keyed_rows = [(spec.source_id(row), row) for row in rows]
-        lookup = _lookup_entity_ids(
-            session,
-            entity_type=spec.entity_type,
-            source_system=spec.source_system,
-            source_ids=[source_id for source_id, _ in keyed_rows],
-        )
-
-        resolved_rows = []
-        for source_id, row in keyed_rows:
-            entity_id = lookup.get(source_id)
-            if entity_id is None:
-                continue
-            resolved_rows.append({**row, "mdm_entity_id": entity_id})
-        if resolved_rows:
-            landing_export.record(spec.table, resolved_rows)
-        counts[spec.table]["resolved"] = len(resolved_rows)
+            resolved_rows = []
+            for source_id, row in keyed_rows:
+                entity_id = lookup.get(source_id)
+                if entity_id is None:
+                    continue
+                resolved_rows.append({**row, "mdm_entity_id": entity_id})
+            if resolved_rows:
+                landing_export.record(spec.table, resolved_rows)
+            resolved += len(resolved_rows)
+        counts[spec.table] = {"pending": pending, "resolved": resolved}
     return counts
 
 
