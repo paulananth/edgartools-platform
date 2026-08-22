@@ -96,10 +96,24 @@ health with the evidence checked if none is found.
    `mdm_entity_backfill.py` gap is already live-risky at today's data
    volumes or a pre-emptive fix (like INSTITUTIONAL_HOLDS was), so I know
    whether to treat this as urgent or routine.
+10. As the platform operator, I want `ReleaseSecFetchLease`,
+    `ReduceIdentityRefresh` (`reduce-identity-refresh`), and the
+    `bootstrap`/`daily_incremental`-specific hardcoded `SeedUniverse` state
+    — all three live inside `write_warehouse_mdm_gold_definition`, this
+    ticket's exact two commands, but were originally misattributed to
+    `load_history` while charting the parent map — checked for the same
+    unscoped-load shape. `reduce-identity-refresh` is the most likely of
+    the three to matter: its own comment cites a real prior OOM ("a real
+    prod run was OOM-killed... mid-merge on the largest protected table")
+    fixed by bounding what it holds as Python bytes during the merge —
+    confirm that fix is structurally the same batch-scope-release pattern
+    this map is auditing for, not a different mitigation that leaves the
+    underlying shape unaddressed.
 
 ## Implementation Decisions
 
-- **Two seams** (confirmed with the user before writing this spec):
+- **Three seams** (the third added via addendum, after the `to-spec`
+  investigation for ticket 04 found these states actually belong here):
   - **`mdm_entity_backfill.py`**: `backfill_pending_rows(connection,
     session, landing_export)` — the existing entry point
     `tests/mdm/test_entity_backfill.py` already tests, using its existing
@@ -113,6 +127,21 @@ health with the evidence checked if none is found.
     sites), already exercised by `tests/unit/test_discovery_checkpoint.py`,
     `test_submission_phase_order.py`, `test_batch_silver_resume.py`, and
     `test_submissions_fetch_concurrency.py`.
+  - **`ReleaseSecFetchLease`/`ReduceIdentityRefresh`/hardcoded
+    `SeedUniverse`**: `write_warehouse_mdm_gold_definition`
+    (`infra/scripts/deploy-aws-application.sh`) — an infra-script bash
+    function, not application Python, so its proven test pattern is
+    different from the other two seams: extract the function's source
+    text, run it under a real bash subprocess with a stubbed
+    `command_task_profile()`, and parse the generated state-machine JSON —
+    exactly the pattern `tests/architecture/test_seed_universe_task_profile_routing.py`
+    already established for `load_history`'s own SeedUniverse routing
+    fix. Use that file as the direct template for any new assertion here,
+    not a from-scratch test design. `reduce-identity-refresh`'s own
+    behavioral memory fix (if it needs auditing beyond routing) lives in
+    whatever Python module implements the `reduce-identity-refresh` CLI
+    command — locate it during implementation rather than guessing the
+    path here.
 - **`mdm_entity_backfill.py` fix pattern, if the audit confirms the risk
   is real at some plausible scale**: replace `_fetch_pending_rows`'s
   unbounded `SELECT * FROM {table} WHERE mdm_entity_id IS NULL` with a
@@ -136,9 +165,13 @@ health with the evidence checked if none is found.
   path it calls for any load of a *different* shared dataset (not the CIK
   list) that isn't itself filtered to the current run's scope.
 - **No changes to any of the 6 commands' Step Functions definitions**
-  (task profile, retry/timeout config, windowing strategy) are in scope —
-  this ticket is about the Python-level load shape inside each command's
-  shared code paths, not the orchestration around them.
+  (task profile, retry/timeout config, windowing strategy) are in scope,
+  **except** routing the hardcoded `SeedUniverse` state through
+  `command_task_profile()`'s shared lookup if the audit confirms it's a
+  real routing gap (mirroring task-profile-consolidation's own established
+  pattern) — that one change is in scope since it's the same class of fix
+  ticket 07 already made for `load_history`'s SeedUniverse, just never
+  ported to this state.
 - **A clean bill of health is a valid outcome** for
   `_run_submissions_bronze_then_silver` — if the audit confirms every call
   site is genuinely bounded and nothing unscoped is loaded downstream,
@@ -205,3 +238,13 @@ health with the evidence checked if none is found.
   audit surfaces a genuine gap inside a deeper-nested function this spec
   doesn't name, graduate it as a new ticket on the map rather than fold it
   in here, per wayfinder's fog-of-war convention.
+- The third seam (`ReleaseSecFetchLease`/`ReduceIdentityRefresh`/hardcoded
+  `SeedUniverse`) was added by addendum after writing ticket 04's spec
+  found these states actually live inside this ticket's own
+  `write_warehouse_mdm_gold_definition`, not `load_history` as originally
+  charted. Ticket 04's spec has a sibling finding — a *different*
+  hardcoded `SeedUniverse` inside `write_silver_mdm_gold_definition`
+  (`silver_mdm_gold`, not in scope here) with the identical stale-comment
+  pattern. Both should very likely resolve the same way (route through
+  `command_task_profile()`); worth checking both tickets' resolutions
+  land on a consistent answer rather than diverging.

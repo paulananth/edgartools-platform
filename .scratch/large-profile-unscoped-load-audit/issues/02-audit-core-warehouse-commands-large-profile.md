@@ -41,6 +41,21 @@ red-before-green test). If nothing new is found, record that explicitly
 with the evidence checked — a clean bill of health is a valid, useful
 answer here.
 
+**Addendum (found while investigating ticket 04, moved here since
+`bootstrap`/`daily_incremental` are this ticket's exact scope):** 3 more
+`large`-profile states live inside `write_warehouse_mdm_gold_definition`
+(the shared bash function building both commands' state machines) that
+were originally, incorrectly attributed to `load_history` in ticket 04's
+first draft — `ReleaseSecFetchLease`, `ReduceIdentityRefresh`
+(`reduce-identity-refresh`, part of `bootstrap`/`daily_incremental`'s own
+`ResolveCompanyIdentityBounded`/Stage0-company-identity sub-map — a
+different, sibling stage from `load_history`'s own since-removed
+Stage0CompanyIdentity, per CLAUDE.md), and one hardcoded `wh_large_arn`
+`SeedUniverse` state (~line 3487 as of this addendum, distinct from
+`load_history`'s own already-correctly-routed SeedUniverse). Check these
+for the same unscoped-load shape alongside the `mdm_entity_backfill.py`
+finding above.
+
 ## Blocked by
 
 None — can start immediately.
