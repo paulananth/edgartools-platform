@@ -54,6 +54,31 @@ BEGIN
   -- A restore from a pre-Ticket14 backup has no acquisition objects yet; the
   -- following privileged migration will create them under the dedicated owner.
   IF to_regclass('public.source_fetch_decision') IS NOT NULL THEN
+    GRANT SELECT, INSERT, UPDATE ON source_observation_cursor
+      TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
+    GRANT SELECT, INSERT ON source_fetch_decision
+      TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
+    GRANT SELECT, INSERT ON source_fetch_work
+      TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
+    GRANT SELECT ON source_fetch_transition
+      TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
+    GRANT SELECT ON source_fetch_decision, source_fetch_work, source_fetch_transition
+      TO edgartools_acquisition_worker;
+    REVOKE EXECUTE ON FUNCTION
+      record_initial_source_fetch_transition(UUID, TEXT),
+      claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ),
+      finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ)
+    FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION record_initial_source_fetch_transition(UUID, TEXT)
+      TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
+    GRANT EXECUTE ON FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ)
+      TO edgartools_acquisition_worker;
+    GRANT EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ)
+      TO edgartools_acquisition_worker;
+    GRANT SELECT ON source_change_status TO
+      edgartools_acquisition_coordinator,
+      edgartools_acquisition_worker,
+      edgartools_acquisition_operator;
     REVOKE ALL PRIVILEGES ON
       source_observation_cursor,
       source_fetch_decision,

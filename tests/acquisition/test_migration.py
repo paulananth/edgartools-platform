@@ -101,6 +101,9 @@ def test_bootstrap_and_restore_preserve_dedicated_acquisition_owner() -> None:
     assert "GRANT edgartools_acquisition_coordinator TO application" in restore
     assert "GRANT application TO snowflake_admin" in restore
     assert "to_regclass('public.source_fetch_decision') IS NOT NULL" in restore
+    assert "GRANT SELECT, INSERT ON source_fetch_decision" in restore
+    assert "GRANT EXECUTE ON FUNCTION claim_source_fetch" in restore
+    assert "GRANT SELECT ON source_change_status" in restore
     assert restore.index("REVOKE ALL PRIVILEGES ON") < restore.index(
         "ALTER TABLE source_observation_cursor"
     )
