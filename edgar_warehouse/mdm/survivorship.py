@@ -14,7 +14,7 @@ Survivorship rule types:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any, Iterable, Optional
 
 from sqlalchemy import select, update
@@ -178,14 +178,47 @@ def stage_candidate(
     field_value: Optional[Any],
     effective_date: Optional[date] = None,
 ) -> MdmEntityAttributeStage:
-    """Insert a single source value into the staging table before survivorship runs."""
+    """Upsert a single source value into the staging table before survivorship
+    runs, keyed on the natural key (entity_id, source_system, source_id,
+    field_name) -- mirrors _register_source's MdmSourceRef upsert for the
+    same (entity_id, source_system, source_id) grouping (base.py), which
+    already has this natural key as its primary key.
+
+    Without this, restaging the exact same source row (a resolver restart
+    before its skip-if-unchanged check exists, or any future resolver that
+    lacks one) inserted a fresh duplicate every time -- mdm_entity_
+    attribute_stage has no pruning anywhere in this codebase, so the
+    duplicates were permanent and every future run_survivorship_for_entity()
+    call for that entity had to read the whole bloated history. Confirmed
+    live in production: one heavily-refiled security's stage history
+    reached 10,713-14,785+ rows from ~6 restarts before the skip-if-
+    unchanged fix (mdm-resolver-skip-unchanged map) existed. That fix stops
+    new duplicates for the resolvers it covers; this closes the same gap
+    structurally, for every caller, including future ones.
+    """
     priority = engine.get_source_priority(entity_type, source_system)
+    value_str = None if field_value is None else str(field_value)
+    existing = session.execute(
+        select(MdmEntityAttributeStage).where(
+            MdmEntityAttributeStage.entity_id == entity_id,
+            MdmEntityAttributeStage.source_system == source_system,
+            MdmEntityAttributeStage.source_id == source_id,
+            MdmEntityAttributeStage.field_name == field_name,
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        existing.field_value = value_str
+        existing.global_priority = priority
+        existing.effective_date = effective_date
+        existing.loaded_at = datetime.now(timezone.utc)
+        existing.was_selected = False
+        return existing
     row = MdmEntityAttributeStage(
         entity_id=entity_id,
         source_system=source_system,
         source_id=source_id,
         field_name=field_name,
-        field_value=None if field_value is None else str(field_value),
+        field_value=value_str,
         global_priority=priority,
         effective_date=effective_date,
     )
