@@ -1994,6 +1994,51 @@ class TestInstitutionalHoldsBatching:
         assert second["INSTITUTIONAL_HOLDS"]["inserted"] == 0
         session.close()
 
+    def test_institutional_holds_primes_scoped_to_each_cik_batchs_advisers(
+        self, monkeypatch
+    ):
+        """mdm-oom-institutional-holds-guard fix: each CIK-range batch must
+        prime only its own advisers, not the whole INSTITUTIONAL_HOLDS type
+        -- the same per-batch bound the mdm-oom-manages-fund fix proved for
+        MANAGES_FUND's CRD batching. No single prime() call may ever see
+        another batch's advisers primed at the same time."""
+        import edgar_warehouse.mdm.pipeline as pipeline_module
+        from edgar_warehouse.mdm.graph import GraphSyncEngine
+
+        monkeypatch.setattr(
+            pipeline_module, "_INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", 1
+        )
+
+        session = _fresh_batching_session()
+        ciks = sorted({r["cik"] for r in _BATCH_THIRTEENF_ROWS})
+        adviser_id_by_cik = _seed_batching_advisers(session, ciks)
+
+        prime_calls: list[frozenset] = []
+        original_prime = GraphSyncEngine.prime_relationship_type
+
+        def spy_prime(self, rel_type_name, **kwargs):
+            if rel_type_name == "INSTITUTIONAL_HOLDS":
+                prime_calls.append(frozenset(kwargs.get("source_entity_ids") or []))
+            return original_prime(self, rel_type_name, **kwargs)
+
+        monkeypatch.setattr(GraphSyncEngine, "prime_relationship_type", spy_prime)
+
+        silver = StubSilver({"sec_thirteenf_holding": _BATCH_THIRTEENF_ROWS})
+        pipe = MDMPipeline(session=session, silver=silver)
+        summary = pipe.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+        session.close()
+
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 3
+
+        # 3 distinct CIKs, batch size 1 -> 3 batches, each priming exactly
+        # one adviser and no batch's set overlapping another's.
+        assert len(prime_calls) == 3
+        assert all(prime_calls), prime_calls
+        assert set.union(*(set(c) for c in prime_calls)) == set(adviser_id_by_cik.values())
+        for i, a in enumerate(prime_calls):
+            for b in prime_calls[i + 1:]:
+                assert not (a & b), f"overlapping prime scopes: {a} and {b}"
+
 
 # ---------------------------------------------------------------------------
 # _bounded_relationship_sql / plateau-fix regression

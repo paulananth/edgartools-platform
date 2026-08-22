@@ -139,10 +139,28 @@ _INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE = 1000
 # count, not the whole universe's.
 _MANAGES_FUND_CRD_BATCH_SIZE = 1000
 
+# INSTITUTIONAL_HOLDS priming an adviser at a time within its existing
+# CIK-range batches (mdm-oom-institutional-holds-guard fix) -- the same
+# shape as MANAGES_FUND above, applied pre-emptively rather than after an
+# incident: measured live 2026-08-21, INSTITUTIONAL_HOLDS has 0 active rows
+# today only because it hasn't been derived at scale yet in this
+# environment -- its source table (sec_thirteenf_holding) already has 6.8M
+# rows in prod, dwarfing MANAGES_FUND's 563,631-row table that caused a real
+# OOM. The CIK-range batching above already bounds the *silver read*; this
+# additionally bounds the *Postgres relationship-instance prime* the same
+# way MANAGES_FUND's CRD batching does, so this type can't reproduce that
+# incident once real 13F-derived relationships accumulate. Every other
+# relationship type (COMPANY_HOLDS, ISSUED_BY, IS_INSIDER, HOLDS,
+# EMPLOYED_BY, and the rest) had at most 3,148 active rows when measured the
+# same day -- three orders of magnitude below MANAGES_FUND's outlier scale
+# -- so they are deliberately left on the uniform dispatcher prime rather
+# than batched pre-emptively; batch only where there's real (or clearly
+# foreseeable) evidence of scale, not every type uniformly.
+
 # _derive_relationship_type's uniform dispatcher prime (below) is skipped for
 # these types -- they manage their own (batch-scoped) priming instead of one
-# unscoped whole-type load. See _derive_manages_fund.
-_SELF_PRIMING_RELATIONSHIP_TYPES = frozenset({"MANAGES_FUND"})
+# unscoped whole-type load. See _derive_manages_fund, _derive_institutional_holds.
+_SELF_PRIMING_RELATIONSHIP_TYPES = frozenset({"MANAGES_FUND", "INSTITUTIONAL_HOLDS"})
 
 
 @dataclass
@@ -2922,6 +2940,20 @@ class MDMPipeline:
         the SQL. Adviser-entity resolution is per-CIK, so batch ordering carries
         no correctness risk (TODOS.md). Counters and the `remaining` early-exit
         accumulate across all batches, not per batch.
+
+        Postgres-side self-priming (mdm-oom-institutional-holds-guard fix,
+        mirrors _derive_manages_fund): the CIK-range batching above already
+        bounds the *silver read*, but until this fix every batch still primed
+        the *entire* INSTITUTIONAL_HOLDS relationship-instance cache via the
+        uniform dispatcher (`_derive_relationship_type`'s unconditional
+        `prime_relationship_type`) before this method ran at all — bounded
+        today only because this type currently has 0 active rows in prod, not
+        because the code path is actually safe at scale. Each CIK-range batch
+        now resolves its own advisers first (`_derive_institutional_holds_batch`),
+        primes scoped to just those advisers, processes its rows, then releases
+        that batch's cache (`GraphSyncEngine.unprime_relationship_type`) before
+        the next CIK range — the same per-batch bound MANAGES_FUND's CRD
+        batching applies, keyed by CIK range instead of CRD.
         """
         base_sql = """
             SELECT h.cik, h.accession_number, h.period_of_report, h.cusip,
@@ -2990,13 +3022,64 @@ class MDMPipeline:
         # below, which opportunistically backfills security_class on every
         # call and is deliberately left unmemoized so a later row with a
         # non-NULL security_class can still backfill an earlier NULL one.
+        # Shared across every CIK-range batch (not reset per batch) -- it's
+        # bounded by the distinct manager count, not row count, so it stays
+        # small even though INSTITUTIONAL_HOLDS priming below is now
+        # batch-scoped.
         adviser_id_by_cik: dict[int, Optional[str]] = {}
 
+        totals = [0, 0, 0, 0, 0]  # inserted, skipped_corporate, skipped_unresolved_source/target, skipped_existing
         cik_lo = min_cik
         while cik_lo <= max_cik:
             cik_hi = min(cik_lo + _INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE - 1, max_cik)
+            batch_remaining = None if remaining is None else max(remaining - totals[0], 0)
+            if batch_remaining == 0:
+                break
+            batch_result = self._derive_institutional_holds_batch(
+                sync_engine, batch_remaining, batch_sql, cik_lo, cik_hi, adviser_id_by_cik,
+            )
+            for i, value in enumerate(batch_result):
+                totals[i] += value
+            if remaining is not None and totals[0] >= remaining:
+                break
+            cik_lo = cik_hi + 1
 
-            for row in self.silver.fetch(batch_sql, params=[cik_lo, cik_hi]):
+        return tuple(totals)
+
+    def _derive_institutional_holds_batch(
+        self,
+        sync_engine: GraphSyncEngine,
+        remaining: Optional[int],
+        batch_sql: str,
+        cik_lo: int,
+        cik_hi: int,
+        adviser_id_by_cik: dict[int, Optional[str]],
+    ) -> tuple[int, int, int, int, int]:
+        inserted = 0
+        skipped_corporate = 0
+        skipped_unresolved_source = 0
+        skipped_unresolved_target = 0
+        skipped_existing = 0
+
+        batch_rows = self.silver.fetch(batch_sql, params=[cik_lo, cik_hi])
+
+        # Resolve this batch's advisers first (reusing the cross-batch cache)
+        # so priming can be scoped to exactly the source entities this batch
+        # touches -- mirrors _derive_manages_fund_batch's adviser-then-prime
+        # ordering.
+        batch_cik_set = {row.get("cik") for row in batch_rows}
+        for cik in batch_cik_set:
+            if cik not in adviser_id_by_cik:
+                adviser_id_by_cik[cik] = self._ensure_thirteenf_manager(cik)
+        batch_adviser_ids = [
+            adviser_id_by_cik[cik] for cik in batch_cik_set if adviser_id_by_cik.get(cik) is not None
+        ]
+
+        sync_engine.prime_relationship_type(
+            "INSTITUTIONAL_HOLDS", defer_flush=True, source_entity_ids=batch_adviser_ids,
+        )
+        try:
+            for row in batch_rows:
                 cik = row.get("cik")
                 cusip = row.get("cusip") or ""
                 accession_number = row.get("accession_number") or ""
@@ -3008,9 +3091,7 @@ class MDMPipeline:
                     skipped_unresolved_target += 1
                     continue
 
-                if cik not in adviser_id_by_cik:
-                    adviser_id_by_cik[cik] = self._ensure_thirteenf_manager(cik)
-                adviser_id = adviser_id_by_cik[cik]
+                adviser_id = adviser_id_by_cik.get(cik)
                 if adviser_id is None:
                     skipped_unresolved_source += 1
                     print(json.dumps({
@@ -3064,11 +3145,10 @@ class MDMPipeline:
                         "ts": datetime.now(timezone.utc).isoformat(),
                     }), file=sys.stderr, flush=True)
                 if remaining is not None and inserted >= remaining:
-                    # Early exit across both the inner row loop and the outer
-                    # CIK-range batch loop — counters accumulated so far are final.
-                    return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
-
-            cik_lo = cik_hi + 1
+                    break
+            sync_engine.flush_pending()
+        finally:
+            sync_engine.unprime_relationship_type("INSTITUTIONAL_HOLDS")
 
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
