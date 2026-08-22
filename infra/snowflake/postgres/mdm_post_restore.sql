@@ -54,6 +54,13 @@ BEGIN
   -- A restore from a pre-Ticket14 backup has no acquisition objects yet; the
   -- following privileged migration will create them under the dedicated owner.
   IF to_regclass('public.source_fetch_decision') IS NOT NULL THEN
+    REVOKE ALL PRIVILEGES ON
+      source_observation_cursor,
+      source_fetch_decision,
+      source_fetch_work,
+      source_fetch_transition
+    FROM application;
+    REVOKE ALL PRIVILEGES ON source_change_status FROM application;
     EXECUTE 'ALTER TABLE source_observation_cursor OWNER TO edgartools_acquisition_owner';
     EXECUTE 'ALTER TABLE source_fetch_decision OWNER TO edgartools_acquisition_owner';
     EXECUTE 'ALTER TABLE source_fetch_work OWNER TO edgartools_acquisition_owner';
@@ -65,13 +72,6 @@ BEGIN
     EXECUTE 'ALTER FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ) OWNER TO edgartools_acquisition_owner';
     EXECUTE 'ALTER FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ) OWNER TO edgartools_acquisition_owner';
     EXECUTE 'ALTER VIEW source_change_status OWNER TO edgartools_acquisition_owner';
-    REVOKE ALL PRIVILEGES ON
-      source_observation_cursor,
-      source_fetch_decision,
-      source_fetch_work,
-      source_fetch_transition
-    FROM application;
-    REVOKE ALL PRIVILEGES ON source_change_status FROM application;
   END IF;
 END;
 $$;
