@@ -742,6 +742,12 @@ uv run --with dbt-snowflake dbt test --target ${ENVIRONMENT}"
 cat infra/snowflake/sql/bootstrap/08_loader_role.sql; } | snow sql --connection ${SNOW_CONNECTION} -i"
 
   add_stage \
+    "Snowflake: loader read grants on silver" \
+    "Grants EDGARTOOLS_${ENV_UPPER}_LOADER OPERATE + SELECT on every EDGARTOOLS_SILVER dynamic table (current and future). Must run after this stage's own loader-role prerequisite above (the role must exist first) and before any gold-refresh (both the standalone stage and bronze_seed_silver_gold's internal one, both later in this sequence) -- without it, REFRESH_AFTER_LOAD (EXECUTE AS OWNER, running as loader) cannot refresh any gold dynamic table whose dbt model reads from silver via ref()/source() (e.g. COMPANY, FILING_ACTIVITY, TICKER_REFERENCE), because those silver dynamic tables are owned by EDGARTOOLS_${ENV_UPPER}_DEPLOYER, not loader, and 08_loader_role.sql's own grants only ever covered EDGARTOOLS_GOLD. Found live 2026-08-22 (PRJEDJU-QJB05385): this had been silently failing every scheduled SNOWFLAKE_RUN_MANIFEST_TASK refresh since at least 2026-08-18 with no visible signal beyond the task's own TASK_HISTORY, because the task's overall state stayed 'started' and its schedule kept firing on time regardless of the refresh failing every single run. Full timeline: CLAUDE.md's 'SNOWFLAKE_RUN_MANIFEST_TASK / silver-loader OPERATE+SELECT gap' 5-whys section." \
+    "{ printf '%s\n' \"SET database_name = '${db_name}';\" \"SET silver_schema_name = 'EDGARTOOLS_SILVER';\" \"SET loader_role_name = 'EDGARTOOLS_${ENV_UPPER}_LOADER';\"
+cat infra/snowflake/sql/bootstrap/18_silver_loader_read_grants.sql; } | snow sql --connection ${SNOW_CONNECTION} -i"
+
+  add_stage \
     "Snowflake: Streamlit dashboard" \
     "Uploads the Streamlit dashboard artifacts to the Snowflake dashboard stage." \
     "SNOW_CONNECTION=${snow_q} DASHBOARD_DATABASE=${db_name} bash infra/snowflake/streamlit/deploy.sh"
@@ -798,7 +804,7 @@ echo \"bronze_seed_silver_gold SUCCEEDED. Do not treat this alone as Blocker 4 /
 
   add_stage \
     "Snowflake: standalone gold-refresh" \
-    "Explicitly triggers the dedicated edgartools-${ENVIRONMENT}-gold-refresh Step Function, polls to a terminal state, then runs gold-verify-live -- a direct-Snowflake row-count check across every EDGARTOOLS_GOLD dynamic table that fails this stage (non-zero exit) if any expected table is empty (wayfinder snowflake-env-provisioning ticket 06 / snowflake-account-cutover ticket 06). This replaces a manual echo reminder to check row counts by hand with an automated, fail-closed gate -- appended here rather than as a separate final stage so an empty gold layer is caught before the MDM+graph stages below spend time on identity resolution/graph sync against it. The bronze_seed_silver_gold stage above runs a GoldRefresh step internally, but that is not a substitute for this: found 2026-07-26 in prod that the standalone gold-refresh state machine had ZERO executions ever (install.sh never called it directly), and separately that Snowflake's REFRESH_AFTER_LOAD stored procedure only refreshes a hardcoded table allowlist -- several newer gold tables (EXECUTIVE_RECORDS, EARNINGS_RELEASES, INSTITUTIONAL_HOLDINGS, ACCOUNTING_FLAGS, FINANCIAL_FACTS, FINANCIAL_DERIVED, FINANCIAL_FACTORS) were missing from that list and so never refreshed past their empty initialize=ON_CREATE run, even though their EDGARTOOLS_SOURCE data was current. Both gaps are fixed (04_refresh_wrapper.sql updated and reapplied to prod), but this stage exists so a stale gold layer surfaces as an explicit, auditable install step instead of silently depending on a side effect of the combined pipeline." \
+    "Explicitly triggers the dedicated edgartools-${ENVIRONMENT}-gold-refresh Step Function, polls to a terminal state, then runs gold-verify-live -- a direct-Snowflake row-count check across every EDGARTOOLS_GOLD dynamic table that fails this stage (non-zero exit) if any expected table is empty (wayfinder snowflake-env-provisioning ticket 06 / snowflake-account-cutover ticket 06). This replaces a manual echo reminder to check row counts by hand with an automated, fail-closed gate -- appended here rather than as a separate final stage so an empty gold layer is caught before the MDM+graph stages below spend time on identity resolution/graph sync against it. The bronze_seed_silver_gold stage above runs a GoldRefresh step internally, but that is not a substitute for this: found 2026-07-26 in prod that the standalone gold-refresh state machine had ZERO executions ever (install.sh never called it directly), and separately that Snowflake's REFRESH_AFTER_LOAD stored procedure only refreshes a hardcoded table allowlist -- several newer gold tables (EXECUTIVE_RECORDS, EARNINGS_RELEASES, INSTITUTIONAL_HOLDINGS, ACCOUNTING_FLAGS, FINANCIAL_FACTS, FINANCIAL_DERIVED, FINANCIAL_FACTORS) were missing from that list and so never refreshed past their empty initialize=ON_CREATE run, even though their EDGARTOOLS_SOURCE data was current. Both gaps are fixed (04_refresh_wrapper.sql updated and reapplied to prod), but this stage exists so a stale gold layer surfaces as an explicit, auditable install step instead of silently depending on a side effect of the combined pipeline. The retry loop below also fires SNOWFLAKE_RUN_MANIFEST_TASK manually on every attempt (not just polls passively) -- found live 2026-08-22 that its schedule was widened to 360 MINUTE (ecs-cost-sizing credit-consumption finding, CLAUDE.md) after this stage's 20-attempt/60s retry budget was written, so a purely passive wait can never fall inside a 6-hour window on any single install.sh run; manually firing the task each attempt decouples this stage from that schedule without changing it (EXECUTE TASK on a task whose stream has no data yet is a harmless no-op SKIPPED run, so this is safe to call even before Snowpipe has ingested the manifest). Full timeline: CLAUDE.md's 'SNOWFLAKE_RUN_MANIFEST_TASK / silver-loader OPERATE+SELECT gap' 5-whys section." \
     "account_id=\"\$(aws --profile ${deployer_q} sts get-caller-identity --query Account --output text)\"
 state_machine_arn=\"arn:aws:states:${AWS_REGION_NAME}:\${account_id}:stateMachine:edgartools-${ENVIRONMENT}-gold-refresh\"
 execution_name=\"gold-refresh-\$(date +%s)\"
@@ -820,14 +826,20 @@ echo \"gold-refresh SUCCEEDED. Snowflake ingestion of the export manifest (Snowp
 verify_attempts=20
 verify_delay=60
 for ((attempt=1; attempt<=verify_attempts; attempt++)); do
+  # SNOWFLAKE_RUN_MANIFEST_TASK's own schedule is 360 MINUTE (widened for
+  # credit economy, ecs-cost-sizing finding, CLAUDE.md) -- far longer than
+  # this loop's budget, so passively waiting on it can never reliably land
+  # inside a single install.sh run. Fire it manually every attempt instead;
+  # a call with nothing yet in the manifest stream just SKIPs harmlessly.
+  snow sql --connection ${SNOW_CONNECTION} -q \"EXECUTE TASK EDGARTOOLS_GOLD.SNOWFLAKE_RUN_MANIFEST_TASK\" >/dev/null 2>&1 || true
   if uv run --extra snowflake edgar-warehouse gold-verify-live; then
     break
   fi
   if [[ \"\${attempt}\" -eq \"\${verify_attempts}\" ]]; then
-    echo \"gold-verify-live still failing after \${verify_attempts} attempts (~\$((verify_attempts * verify_delay / 60)) minutes) -- treating as a real failure, not a slow refresh.\" >&2
+    echo \"gold-verify-live still failing after \${verify_attempts} attempts (~\$((verify_attempts * verify_delay / 60)) minutes) -- treating as a real failure, not a slow refresh. Check TASK_HISTORY for SNOWFLAKE_RUN_MANIFEST_TASK (SELECT * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(TASK_NAME => 'SNOWFLAKE_RUN_MANIFEST_TASK')) ORDER BY SCHEDULED_TIME DESC) for a real error (e.g. a missing OPERATE/SELECT grant on an upstream table) before assuming this is just a slow refresh.\" >&2
     exit 1
   fi
-  echo \"gold-verify-live attempt \${attempt}/\${verify_attempts} not yet passing -- refresh may still be in progress, retrying in \${verify_delay}s.\"
+  echo \"gold-verify-live attempt \${attempt}/\${verify_attempts} not yet passing -- refresh may still be in progress, retrying in \${verify_delay}s.\" >&2
   sleep \"\${verify_delay}\"
 done"
 

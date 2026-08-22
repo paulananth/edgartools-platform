@@ -1271,6 +1271,87 @@ and every legitimate sibling confirmed untouched. This class of false
 signal can no longer recur through these 7 names — there is nothing left
 to accidentally invoke.
 
+## SNOWFLAKE_RUN_MANIFEST_TASK / silver-loader OPERATE+SELECT gap 5-whys (resolved 2026-08-22)
+
+**Problem:** After finally getting `bronze_seed_silver_gold`'s "Stage 14" and the standalone "Stage 15"
+(`install.sh`'s two `gold-refresh`-adjacent stages) to a real `SUCCEEDED` state, `gold-verify-live`
+still reported 19 of 19 checked `EDGARTOOLS_GOLD` tables empty — including `COMPANY`, which should
+never be empty once `bronze_seed_silver_gold` has run.
+
+1. Symptom: `gold-verify-live` failing repeatedly, `COMPANY` row count 0, no error surfaced by the
+   Step Function or ECS task — everything upstream reported success.
+2. Why empty despite success upstream? `SNOWFLAKE_RUN_MANIFEST_TASK`'s `TASK_HISTORY` (checked
+   directly, not assumed) showed the task **firing exactly on its 360-minute schedule** but
+   **failing every single scheduled run**, going back to at least 2026-08-18:
+   `SQL compilation error: OPERATE privilege is required on all upstream Dynamic Tables of
+   'EDGARTOOLS_PROD.EDGARTOOLS_GOLD.COMPANY' to perform a manual refresh.` The task's own `state`
+   stayed `started` throughout — a "started, on-schedule, silently failing every tick" task gives
+   no ambient signal that anything is wrong.
+3. Why the OPERATE gap? `COMPANY`'s dbt model (the `dbt-gold-silver-rewiring` map) now reads
+   directly from `EDGARTOOLS_SILVER.SEC_COMPANY` via `ref()`, not the old Python-populated
+   `EDGARTOOLS_SOURCE` mirror. `08_loader_role.sql` (the "Manifest-pipeline ownership" fix, above)
+   only ever granted `EDGARTOOLS_PROD_LOADER` — the role `REFRESH_AFTER_LOAD` runs
+   `EXECUTE AS OWNER` under — privileges on `EDGARTOOLS_GOLD`. It was never extended to cover
+   `EDGARTOOLS_SILVER`, so every one of `EDGARTOOLS_SILVER`'s 29 dynamic tables sat owned by
+   `EDGARTOOLS_PROD_DEPLOYER` with no grant to loader at all.
+4. Why did fixing OPERATE alone not fix it? A second, distinct gap surfaced immediately after:
+   `SQL access control error: ... Your primary role EDGARTOOLS_PROD_LOADER must have SELECT
+   granted on TABLE EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_COMPANY.` A dynamic table's query runs
+   as its *owner* — `OPERATE` lets the owner role refresh the object itself, but the owner role
+   separately needs `SELECT` on every object the query text references. Both grants were missing,
+   not just one.
+5. **Root cause:** the silver-layer migration (dbt-gold-silver-rewiring) introduced a new upstream
+   dependency for several gold models without anyone re-checking whether the loader role's existing
+   grant surface (scoped to `EDGARTOOLS_GOLD` only, from the earlier ownership incident) still
+   covered it — the same "fixed in one place, never ported to the newly-added dependency" shape as
+   several other entries in this file (`ShardedSilverReader._TABLES`, the `SeedUniverse` task-profile
+   hardcodes). Nothing enforced that a new cross-schema `ref()` edge also needed a matching grant.
+
+**Compounding, unrelated finding along the way:** `install.sh`'s own Stage 15 retry loop
+(20 attempts × 60s = ~20 minutes, built to ride out `REFRESH_AFTER_LOAD`'s per-table refresh time)
+can **never succeed** as originally written, independent of the grant bug above: the
+`ecs-cost-sizing` credit-consumption fix (see below) widened `SNOWFLAKE_RUN_MANIFEST_TASK`'s
+schedule `1 min → 15 min → 6 hours` on 2026-08-14, after Stage 15's retry loop was written, and
+nobody re-checked the two against each other. A purely passive 20-minute poll can only pass if it
+happens to land within minutes of a 6-hourly tick — everywhere else, it always exhausts and fails,
+even with zero underlying problem.
+
+**Fix:**
+- `infra/snowflake/sql/bootstrap/18_silver_loader_read_grants.sql` (new) grants
+  `EDGARTOOLS_<ENV>_LOADER` `OPERATE` + `SELECT` on `ALL` + `FUTURE` dynamic tables in
+  `EDGARTOOLS_SILVER` — additive only, no `REVOKE CURRENT GRANTS` (per the manifest-pipeline-
+  ownership incident's own lesson). Wired into `install.sh` as a new "Snowflake: loader read
+  grants on silver" stage, immediately after the existing loader-role-ownership stage and before
+  any gold-refresh stage.
+- `install.sh`'s Stage 15 retry loop now fires `EXECUTE TASK EDGARTOOLS_GOLD.SNOWFLAKE_RUN_MANIFEST_TASK`
+  manually on every attempt (a call against an empty manifest stream just `SKIP`s harmlessly),
+  decoupling this stage from the 6-hour schedule without changing the schedule itself — the
+  credit-economy decision stays intact.
+- Applied live to `PRJEDJU-QJB05385`: both grants applied, `REFRESH_AFTER_LOAD` re-run directly
+  for the stuck `gold-refresh-stage15-1787432984` manifest (its `LOAD_EXPORTS_FOR_RUN` half had
+  already succeeded and consumed the stream; only the refresh half was stuck) — all 20 gold tables
+  refreshed successfully. `COMPANY` (5,752 rows), `FILING_ACTIVITY`/`FILING_DETAIL` (474,897 rows
+  each), `OWNERSHIP_ACTIVITY`/`OWNERSHIP_HOLDINGS` (3 rows each) now populated and confirmed via a
+  fresh `gold-verify-live`.
+
+**Not fixed here, separately noted:** `gold-verify-live` still shows 14 tables empty after this
+fix. Checked each: most (`FINANCIAL_FACTS`, `SEC_ADV_OFFICE`-derived tables, etc.) have genuinely
+empty upstream silver data — the same, already-tracked "6 empty gold tables" gap from the
+`snowflake-account-cutover` map's ticket 08 (awaiting task #35's full-universe fundamentals
+backfill), just wider in scope than that ticket originally found. One new, real gap:
+`TICKER_REFERENCE`'s dbt model was repointed (same `dbt-gold-silver-rewiring` migration) to read
+from `EDGARTOOLS_SILVER.SEC_COMPANY_TICKER`, which has **zero rows** — even though the old,
+now-orphaned `EDGARTOOLS_SOURCE.TICKER_REFERENCE` mirror still has 10,398 real rows. The silver
+ingestion for company tickers appears to have never been wired up post-migration. Not investigated
+further this session — needs its own ticket before fixing.
+
+**Also still orphaned, found while wiring this fix (not fixed here):** `infra/snowflake/sql/bootstrap/
+16_silver_landing_deployer_read.sql` and `17_mdm_export_deployer_read.sql` are committed, real,
+non-dead fixes (each carries its own root-cause header) but are referenced by **neither**
+`install.sh` nor `deploy-snowflake-stack.sh` — confirmed via a plain grep, zero hits for either
+filename in either script. Both predate this fix and are unrelated to it; noted here so a future
+session doesn't have to rediscover the gap from scratch.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live
