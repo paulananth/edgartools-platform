@@ -35,6 +35,7 @@ MIGRATION = (
 class PostgresLedger:
     container: str
     database_url: str
+    admin_database_url: str
 
 
 def _run(*args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
@@ -133,6 +134,9 @@ def postgres_ledger() -> Iterator[PostgresLedger]:
             container=container,
             database_url=(
                 f"postgresql+psycopg2://application:test@127.0.0.1:{port}/postgres"
+            ),
+            admin_database_url=(
+                f"postgresql+psycopg2://postgres:test@127.0.0.1:{port}/postgres"
             ),
         )
     finally:
@@ -407,5 +411,11 @@ def test_repository_uses_application_role_and_postgres_uuid_columns(
         assert failed.next_action == "RETRY_FETCH"
         assert retried.fencing_token == 2
         assert migrations._apply_acquisition_ledger_migration(engine) is False
+
+        admin_engine = create_engine(postgres_ledger.admin_database_url)
+        try:
+            assert migrations._apply_acquisition_ledger_migration(admin_engine) is True
+        finally:
+            admin_engine.dispose()
     finally:
         engine.dispose()

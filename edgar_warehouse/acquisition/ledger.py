@@ -119,7 +119,10 @@ class SourceChangeStatus:
 
     @property
     def may_fetch(self) -> bool:
-        return self.fetch_disposition is FetchDisposition.FETCH_AUTHORIZED
+        return (
+            self.fetch_disposition is FetchDisposition.FETCH_AUTHORIZED
+            and self.fetch_state is FetchWorkState.LEASED
+        )
 
 
 class AcquisitionLedger:
@@ -418,6 +421,7 @@ AdapterResult = TypeVar("AdapterResult")
 @dataclass(frozen=True)
 class SourceRequestResult(Generic[AdapterResult]):
     status: SourceChangeStatus
+    fetch_lease: FetchLease | None
     adapter_result: AdapterResult | None
 
 
@@ -432,14 +436,31 @@ class FetchLease:
 def execute_source_request(
     ledger: AcquisitionLedger,
     request: FetchDecisionRequest,
-    source_adapter: Callable[[SourceChangeStatus], AdapterResult],
+    source_adapter: Callable[[SourceChangeStatus, FetchLease], AdapterResult],
+    *,
+    worker_id: str,
+    lease_seconds: int = 300,
 ) -> SourceRequestResult[AdapterResult]:
-    """Commit the PostgreSQL decision before an authorized network request."""
+    """Commit and fence the PostgreSQL decision before a network request."""
 
     status = ledger.create_fetch_decision(request)
-    if not status.may_fetch:
-        return SourceRequestResult(status=status, adapter_result=None)
-    return SourceRequestResult(status=status, adapter_result=source_adapter(status))
+    if status.fetch_disposition is not FetchDisposition.FETCH_AUTHORIZED:
+        return SourceRequestResult(status=status, fetch_lease=None, adapter_result=None)
+    lease = ledger.claim_fetch(
+        status.decision_id,
+        worker_id=worker_id,
+        lease_seconds=lease_seconds,
+    )
+    leased_status = ledger.source_change_status(status.decision_id)
+    if not leased_status.may_fetch:
+        raise ActiveFetchConflict(
+            f"decision_id={status.decision_id} did not enter fenced LEASED state"
+        )
+    return SourceRequestResult(
+        status=leased_status,
+        fetch_lease=lease,
+        adapter_result=source_adapter(leased_status, lease),
+    )
 
 
 def _status_from_record(

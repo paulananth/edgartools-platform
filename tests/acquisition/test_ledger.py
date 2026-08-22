@@ -56,9 +56,11 @@ def test_out_of_scope_candidate_is_terminal_without_network_request() -> None:
             scope_proof_reference="acquisition-universe-v1/exclusion-1",
         ),
         source_adapter,
+        worker_id="worker-terminal",
     )
 
     assert result.adapter_result is None
+    assert result.fetch_lease is None
     assert result.status.candidate_id == "candidate-1"
     assert result.status.observation_position == 1
     assert result.status.cause == DecisionCause.CAPTURED_DISCOVERY
@@ -262,6 +264,36 @@ def test_failed_fetch_retries_same_decision_with_higher_fencing_token() -> None:
     assert retried.fencing_token == 2
 
 
+def test_source_adapter_receives_only_a_fenced_leased_decision() -> None:
+    ledger = _ledger()
+    source_adapter = Mock(return_value=b"source-bytes")
+
+    result = execute_source_request(
+        ledger,
+        _authorized_request("candidate-gated-adapter"),
+        source_adapter,
+        worker_id="worker-gated",
+        lease_seconds=60,
+    )
+
+    assert result.status.fetch_state is FetchWorkState.LEASED
+    assert result.status.may_fetch is True
+    assert result.fetch_lease is not None
+    assert result.fetch_lease.fencing_token == 1
+    source_adapter.assert_called_once_with(result.status, result.fetch_lease)
+
+    second_adapter = Mock(side_effect=AssertionError("leased work cannot refetch"))
+    with pytest.raises(ActiveFetchConflict):
+        execute_source_request(
+            ledger,
+            _authorized_request("candidate-gated-adapter"),
+            second_adapter,
+            worker_id="worker-duplicate",
+            lease_seconds=60,
+        )
+    second_adapter.assert_not_called()
+
+
 def test_terminal_no_download_requires_authoritative_proof_reference() -> None:
     ledger = _ledger()
 
@@ -322,6 +354,7 @@ def test_postgres_unavailability_fails_closed_before_source_adapter() -> None:
             ledger,
             _authorized_request("candidate-postgres-down"),
             source_adapter,
+            worker_id="worker-postgres-down",
         )
 
     source_adapter.assert_not_called()

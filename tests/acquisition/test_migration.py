@@ -13,6 +13,7 @@ from edgar_warehouse.acquisition.models import (
 from edgar_warehouse.mdm.migrations import runtime as migrations
 
 MIGRATION_NAME = "012_acquisition_ledger.sql"
+REPO_ROOT = Path(__file__).parents[2]
 
 
 def _migration_sql() -> str:
@@ -87,3 +88,14 @@ def test_postgres_schema_makes_history_immutable_and_checks_role_and_fencing() -
         "grant select, insert on source_fetch_transition to "
         "edgartools_acquisition_coordinator" not in normalized
     )
+
+
+def test_bootstrap_and_restore_preserve_dedicated_acquisition_owner() -> None:
+    bootstrap = (REPO_ROOT / "infra/scripts/bootstrap-prod-mdm.sh").read_text()
+    restore = (REPO_ROOT / "infra/snowflake/postgres/mdm_post_restore.sql").read_text()
+
+    assert "CREATE ROLE application NOLOGIN" in bootstrap
+    assert "REVOKE ALL PRIVILEGES ON source_observation_cursor" in bootstrap
+    assert "OWNER TO edgartools_acquisition_owner" in restore
+    assert "FROM application" in restore
+    assert "GRANT edgartools_acquisition_coordinator TO application" in restore

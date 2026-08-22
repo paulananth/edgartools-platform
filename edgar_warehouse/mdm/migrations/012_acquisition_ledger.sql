@@ -13,6 +13,7 @@ BEGIN
             current_user
         );
     END IF;
+    GRANT USAGE, CREATE ON SCHEMA public TO edgartools_acquisition_owner;
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'edgartools_acquisition_coordinator') THEN
         CREATE ROLE edgartools_acquisition_coordinator NOLOGIN;
     END IF;
