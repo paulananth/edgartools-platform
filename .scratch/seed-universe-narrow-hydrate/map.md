@@ -72,6 +72,20 @@ and `scripts/build_relationship_release_manifest.py`.
 
 ## Decisions so far
 
+- [Fix the publish/merge-side non-streaming buffer this map
+  deferred](issues/06-publish-merge-side-streaming-fix.md) — the risk this
+  map's own close-out flagged as unresolved ("real but shrinking headroom
+  as canonical grows") materialized live 2026-08-22: `seed-universe`
+  OOM'd again on the exact deferred boundary (canonical re-download,
+  merged-file read, `promote_staged`'s internal re-read) even after an
+  unrelated table-scoping fix to the merge step itself made the merge
+  logic provably correct. `/gof-refactor-reviewer` adjudicated two designs
+  and rejected parallel bytes/file sibling functions (the shape that
+  already caused one silent regression of this exact fix, `37c3171f` →
+  `dc9e6925`) in favor of widening `write_staged_bytes`/`promote_staged`/
+  `stage_and_promote` to accept `bytes | Path` via `isinstance` dispatch —
+  one implementation per operation, not two to keep in sync. Design
+  decided, not yet implemented.
 - [Move seed-universe back to a smaller task profile now that both fixes are
   live](../task-profile-consolidation/issues/07-decide-whether-to-revert-load-historys-seeduniverse-off-large.md)
   — this map's own stated destination question, closed by
@@ -167,14 +181,14 @@ and `scripts/build_relationship_release_manifest.py`.
 
 ## Frontier (open tickets)
 
-None. Both parallel tracks are design-complete: ticket 04 (streaming
-hydrate fix) is implemented, tested, and deployed to prod (PR #392); ticket
-05 (MDM as novelty-detection source of record) is designed,
-implementation-ready, and confirmed built/deployed (PR #394, per
-task-profile-consolidation ticket 06's live verification). This map's
-destination is reached, including the task-profile-revert question above
-(closed 2026-08-20 via the sibling task-profile-consolidation map's tickets
-06/07, listed in Decisions so far).
+None design-side. Ticket 04 (streaming hydrate fix), ticket 05 (MDM as
+novelty-detection source of record), and ticket 06 (publish/merge-side
+streaming fix, opened 2026-08-22 once its previously-flagged risk
+materialized live) are all design-complete/decided. **Ticket 06 is now implemented** (TDD steps 1-5, full repo suite green) but
+**not yet committed, deployed, or empirically re-verified against the live
+OOM** (step 6). Not reopening this as a full wayfinder frontier ticket (the
+decision is made, only the commit/deploy/verify tail remains) — track via
+ticket 06's own Status field instead.
 
 ## Out of scope
 

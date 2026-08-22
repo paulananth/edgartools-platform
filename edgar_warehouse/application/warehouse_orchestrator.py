@@ -1065,6 +1065,16 @@ def _hydrate_silver_database_from_storage(context: WarehouseCommandContext) -> N
     )
 
 
+def _streaming_md5_hexdigest(path: Path, chunk_size: int = 8 * 1024 * 1024) -> str:
+    """MD5 of a local file's content, read in chunks rather than buffered
+    fully into memory (seed-universe-narrow-hydrate ticket 06)."""
+    digest = hashlib.md5()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict[str, Any] | None:
     """Merge the local silver candidate into canonical and publish it, safely.
 
@@ -1157,30 +1167,46 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
     baseline = context.storage_root.read_object_version(relative_path)
     tables_merged: tuple[str, ...] = ()
 
+    # File-transfer streaming (seed-universe-narrow-hydrate ticket 06): a
+    # canonical silver.duckdb is a whole-database file, not per-table slices,
+    # so even with the table-scoped merge above, the transfer of the merged
+    # *result* is still O(file size). This used to buffer the whole file
+    # into memory three times over (canonical re-download, merged-file read
+    # for upload, promote_staged's own internal re-read of what it just
+    # uploaded) -- the exact boundary that OOM'd a live seed-universe task
+    # immediately after the table-scoping merge above had already completed
+    # cleanly. `download_file`/`stage_and_promote`(payload=Path) stream
+    # instead of buffering, and passing the local `Path` straight through to
+    # `stage_and_promote` lets `promote_staged` reuse it directly instead of
+    # re-downloading the object this same call just uploaded.
     if baseline.exists:
         with tempfile.TemporaryDirectory() as tmp_dir:
             canonical_local = Path(tmp_dir) / "canonical.duckdb"
-            canonical_local.write_bytes(read_bytes(context.storage_root.join(relative_path)))
+            context.storage_root.download_file(relative_path, canonical_local)
             merged_local = Path(tmp_dir) / "merged.duckdb"
             merge_result = merge_candidate_into_canonical(
                 source_path, canonical_local, merged_local, only_tables=changed_tables
             )
             tables_merged = merge_result.tables_merged
-            payload = merged_local.read_bytes()
+            size_bytes = merged_local.stat().st_size
+            staged_checksum = _streaming_md5_hexdigest(merged_local)
+            promotion = context.storage_root.stage_and_promote(
+                relative_path, merged_local, expected_etag=baseline.etag
+            )
     else:
-        payload = source_path.read_bytes()
+        size_bytes = source_path.stat().st_size
+        staged_checksum = _streaming_md5_hexdigest(source_path)
+        promotion = context.storage_root.stage_and_promote(
+            relative_path, source_path, expected_etag=baseline.etag
+        )
 
-    size_bytes = len(payload)
-    promotion = context.storage_root.stage_and_promote(
-        relative_path, payload, expected_etag=baseline.etag
-    )
     return {
         "layer": "silver_database",
         "path": promotion.canonical_path,
         "relative_path": relative_path,
         "size_bytes": size_bytes,
         "source_version": baseline.etag,
-        "staged_checksum": hashlib.md5(payload).hexdigest(),
+        "staged_checksum": staged_checksum,
         "canonical_version": promotion.new_version.etag,
         "tables_merged": list(tables_merged),
     }

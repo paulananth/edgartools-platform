@@ -49,19 +49,30 @@ def _build_canonical_bytes(tmp_path) -> bytes:
     return canonical_path.read_bytes()
 
 
-def _hydrate(context, canonical_bytes):
-    from edgar_warehouse.application.warehouse_orchestrator import (
-        _hydrate_silver_database_from_storage,
-    )
+def _fake_download_file(canonical_bytes):
+    """A ``download_file`` side_effect that writes ``canonical_bytes`` to the
+    requested local path -- stands in for a real streamed S3 download.
+    Shared by hydration (below) and by publish's own canonical re-download,
+    which switched from buffered ``read_bytes`` to streaming
+    ``download_file`` in the seed-universe-narrow-hydrate ticket 06 fix.
+    """
 
     def fake_download_file(relative_path, local_path, chunk_size=8 * 1024 * 1024):
         local_path.parent.mkdir(parents=True, exist_ok=True)
         local_path.write_bytes(canonical_bytes)
         return str(local_path)
 
+    return fake_download_file
+
+
+def _hydrate(context, canonical_bytes):
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _hydrate_silver_database_from_storage,
+    )
+
     with patch(
         "edgar_warehouse.infrastructure.object_storage.StorageLocation.download_file",
-        side_effect=fake_download_file,
+        side_effect=_fake_download_file(canonical_bytes),
     ):
         _hydrate_silver_database_from_storage(context)
 
@@ -123,8 +134,8 @@ def test_real_change_still_runs_full_merge(tmp_path):
             return_value=ObjectVersion(exists=True, etag="old-etag", version_id=None),
         ),
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator.read_bytes",
-            return_value=canonical_bytes,
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.download_file",
+            side_effect=_fake_download_file(canonical_bytes),
         ),
         patch(
             "edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes",
@@ -221,8 +232,8 @@ def test_new_unregistered_table_forces_merge_and_guard_still_fires(tmp_path):
             return_value=ObjectVersion(exists=True, etag="old-etag", version_id=None),
         ),
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator.read_bytes",
-            return_value=canonical_bytes,
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.download_file",
+            side_effect=_fake_download_file(canonical_bytes),
         ),
     ):
         with pytest.raises(SilverPublicationError, match="Unclassified"):
@@ -258,8 +269,8 @@ def test_real_change_only_merges_the_actually_changed_table(tmp_path):
             return_value=ObjectVersion(exists=True, etag="old-etag", version_id=None),
         ),
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator.read_bytes",
-            return_value=canonical_bytes,
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.download_file",
+            side_effect=_fake_download_file(canonical_bytes),
         ),
         patch(
             "edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes",
