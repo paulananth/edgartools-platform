@@ -128,6 +128,22 @@ _RELATIONSHIP_SOURCE_LIMIT_MINIMUM = 100
 # in CIK-range chunks rather than one unbounded silver.fetch() (D-03, TODOS.md).
 _INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE = 1000
 
+# MANAGES_FUND priming an adviser CRD at a time (rather than the whole type
+# unconditionally) -- mdm-oom-manages-fund fix. Measured live 2026-08-21:
+# unscoped prime_relationship_type("MANAGES_FUND") materializes ~2GB of ORM
+# rows for a table that's only 390MB on disk, and one adviser alone (a
+# large fund-administration platform, same outlier already flagged in
+# CLAUDE.md's schema-conventions section) holds 89,108 of the 563,631 active
+# rows -- 16% from a single CRD. Batched by CRD (not row count) so a single
+# oversized adviser's batch is bounded by that adviser's own relationship
+# count, not the whole universe's.
+_MANAGES_FUND_CRD_BATCH_SIZE = 1000
+
+# _derive_relationship_type's uniform dispatcher prime (below) is skipped for
+# these types -- they manage their own (batch-scoped) priming instead of one
+# unscoped whole-type load. See _derive_manages_fund.
+_SELF_PRIMING_RELATIONSHIP_TYPES = frozenset({"MANAGES_FUND"})
+
 
 @dataclass
 class PipelineStats:
@@ -967,8 +983,14 @@ class MDMPipeline:
         # proven 16-way concurrency) that this per-row I/O is exactly what
         # made relationship derivation the slow, single-threaded tail of the
         # command. prime_relationship_type is idempotent (see graph.py), so
-        # this is safe even for MANAGES_FUND's own internal call.
-        sync_engine.prime_relationship_type(rel_type_name, defer_flush=True)
+        # this is safe even for MANAGES_FUND's own internal call -- except
+        # self-priming types (mdm-oom-manages-fund fix) are skipped here
+        # deliberately: an unscoped prime here would run BEFORE the deriver
+        # gets a chance to scope its own batches, defeating the whole point
+        # (idempotency means the deriver's own scoped call would then be a
+        # silent no-op against the already-fully-primed cache).
+        if rel_type_name not in _SELF_PRIMING_RELATIONSHIP_TYPES:
+            sync_engine.prime_relationship_type(rel_type_name, defer_flush=True)
         try:
             if rel_type_name == "IS_INSIDER":
                 return self._derive_is_insider(sync_engine, remaining, issuer_ciks=issuer_ciks)
@@ -1527,17 +1549,28 @@ class MDMPipeline:
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_manages_fund(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
+        """Derive MANAGES_FUND edges, batched by adviser CRD (mdm-oom-manages-fund fix).
+
+        Prior version primed the WHOLE type unconditionally (every active
+        MANAGES_FUND row, universe-wide) before it knew which advisers this
+        run would even touch. Measured live 2026-08-21: that single query
+        materializes ~2GB of ORM rows for a table that's 390MB on disk, and
+        one adviser (a large fund-administration platform, the same outlier
+        flagged in CLAUDE.md's schema-conventions section) holds 89,108 of
+        the 563,631 active rows -- 16% from a single CRD. Concurrent with
+        derive_relationships()'s other worker threads, that pushed
+        edgartools-prod-mdm-medium (4096MB) over its ceiling.
+
+        Advisers are resolved first, then CRDs are processed in
+        ``_MANAGES_FUND_CRD_BATCH_SIZE`` batches -- each batch primes,
+        reads, and closes/inserts relationships for only its own advisers,
+        then discards that batch's cache before moving on
+        (``GraphSyncEngine.unprime_relationship_type``). Peak memory is
+        bounded by one batch's data (worst case: whichever batch contains
+        the outlier adviser) instead of the whole type.
+        """
         from edgar_warehouse.mdm.database import MdmAdviser, MdmFund
 
-        inserted = 0
-        skipped_corporate = 0
-        skipped_unresolved_source = 0
-        skipped_unresolved_target = 0
-        skipped_existing = 0
-        sync_engine.prime_relationship_type(
-            "MANAGES_FUND",
-            defer_flush=True,
-        )
         adviser_ids_by_crd = {
             str(crd_number): entity_id
             for entity_id, crd_number in self.session.execute(
@@ -1554,116 +1587,30 @@ class MDMPipeline:
                 )
             )
         }
-        current_by_adviser: dict[str, list] = {}
-        for current in sync_engine.current_relationships("MANAGES_FUND"):
-            current_by_adviser.setdefault(current.source_entity_id, []).append(current)
-        filing_rows = self._fetch_optional_relationship_rows(
-            """
-            SELECT accession_number, crd_number, effective_date, filing_action
-            FROM sec_adv_filing
-            WHERE crd_number IS NOT NULL
-            ORDER BY crd_number, effective_date, accession_number
-            """,
-            None,
-            rel_type_name="MANAGES_FUND",
-            source_table="sec_adv_filing",
-            existing=self._relationship_count("MANAGES_FUND"),
-        )
-        source_rows = self._fetch_optional_relationship_rows(
-            """
-            SELECT accession_number, adviser_crd_number, private_fund_id,
-                   filing_id, schedule_section, reporting_role, effective_date,
-                   filing_action, source_sha256
-            FROM sec_adv_private_fund
-            WHERE adviser_crd_number IS NOT NULL AND private_fund_id IS NOT NULL
-            ORDER BY filing_id, private_fund_id, schedule_section
-            """,
-            remaining,
-            rel_type_name="MANAGES_FUND",
-            source_table="sec_adv_private_fund",
-            existing=self._relationship_count("MANAGES_FUND"),
-        )
-        latest_by_crd: dict[str, dict] = {}
-        if filing_rows:
-            for filing in filing_rows:
-                crd = str(filing.get("crd_number") or "")
-                effective = filing.get("effective_date")
-                if effective and not isinstance(effective, date):
-                    effective = date.fromisoformat(str(effective)[:10])
-                accession = str(filing.get("accession_number") or "")
-                filing_id = accession.rsplit(":", 1)[-1]
-                key = (effective or date.min, int(filing_id) if filing_id.isdecimal() else 0,
-                       accession)
-                prior = latest_by_crd.get(crd)
-                if prior is None or key > prior["_key"]:
-                    latest_by_crd[crd] = {**filing, "_key": key}
-            active_accessions = {
-                str(filing.get("accession_number"))
-                for filing in latest_by_crd.values()
-                if not any(
-                    marker in str(filing.get("filing_action") or "").lower()
-                    for marker in ("final", "withdraw")
-                )
-            }
-            source_rows = [
-                row for row in source_rows
-                if str(row.get("accession_number")) in active_accessions
-            ]
-            from edgar_warehouse.mdm.graph import close_relationship_version
 
-            expected_targets_by_adviser: dict[str, set[str]] = {}
-            for row in source_rows:
-                adviser_id = adviser_ids_by_crd.get(
-                    str(row.get("adviser_crd_number"))
-                )
-                fund_id = fund_ids_by_pfid.get(str(row.get("private_fund_id")))
-                if adviser_id and fund_id:
-                    expected_targets_by_adviser.setdefault(adviser_id, set()).add(fund_id)
-            for crd, filing in latest_by_crd.items():
-                adviser_id = adviser_ids_by_crd.get(str(crd))
-                if adviser_id is None:
-                    continue
-                effective = filing["_key"][0]
-                expected_targets = expected_targets_by_adviser.get(adviser_id, set())
-                current_versions = current_by_adviser.get(adviser_id, [])
-                for current in current_versions:
-                    if (
-                        current.valid_to_date is None
-                        and current.target_entity_id not in expected_targets
-                    ):
-                        close_relationship_version(
-                            self.session, current.instance_id, effective
-                        )
-        for row in source_rows:
-            adviser_id = adviser_ids_by_crd.get(str(row.get("adviser_crd_number")))
-            fund_id = fund_ids_by_pfid.get(str(row.get("private_fund_id")))
-            if adviser_id is None:
-                skipped_unresolved_source += 1
-                continue
-            if fund_id is None:
-                skipped_unresolved_target += 1
-                continue
-            _rel, created = sync_engine.ensure_relationship(
-                rel_type_name="MANAGES_FUND",
-                source_entity_id=adviser_id,
-                target_entity_id=fund_id,
-                properties={
-                    "private_fund_id": row.get("private_fund_id"),
-                    "source_filing_id": row.get("filing_id"),
-                    "source_section": row.get("schedule_section"),
-                    "reporting_role": row.get("reporting_role"),
-                    "evidence_fingerprint": row.get("source_sha256"),
-                },
-                effective_from=row.get("effective_date"),
-                source_system="iapd_adv_bulk",
-                source_accession=row.get("accession_number"),
-                date_provenance="reported",
-            )
-            inserted += 1 if created else 0
-            skipped_existing += 0 if created else 1
-            if remaining is not None and inserted >= remaining:
-                break
-        if not source_rows and not filing_rows:
+        # Cheap existence probe -- if there's no ADV filing/private-fund
+        # data at all (fresh/degenerate universe), skip straight to the
+        # MdmFund-based fallback below instead of iterating CRD batches
+        # that would all come back empty. Both queries are LIMIT 1 -- this
+        # is not the memory-heavy read the batching below guards against.
+        existing_count = self._relationship_count("MANAGES_FUND")
+        probe_filing = self._fetch_optional_relationship_rows(
+            "SELECT 1 AS probe FROM sec_adv_filing WHERE crd_number IS NOT NULL LIMIT 1",
+            None, rel_type_name="MANAGES_FUND", source_table="sec_adv_filing",
+            existing=existing_count,
+        )
+        probe_source = self._fetch_optional_relationship_rows(
+            """
+            SELECT 1 AS probe FROM sec_adv_private_fund
+            WHERE adviser_crd_number IS NOT NULL AND private_fund_id IS NOT NULL LIMIT 1
+            """,
+            None, rel_type_name="MANAGES_FUND", source_table="sec_adv_private_fund",
+            existing=existing_count,
+        )
+
+        if not probe_filing and not probe_source:
+            sync_engine.prime_relationship_type("MANAGES_FUND", defer_flush=True)
+            inserted = skipped_existing = 0
             for fund in self.session.scalars(
                 select(MdmFund).where(MdmFund.adviser_entity_id.isnot(None))
             ):
@@ -1677,7 +1624,155 @@ class MDMPipeline:
                 skipped_existing += 0 if created else 1
                 if remaining is not None and inserted >= remaining:
                     break
-        sync_engine.flush_pending()
+            sync_engine.flush_pending()
+            return inserted, 0, 0, 0, skipped_existing
+
+        totals = [0, 0, 0, 0, 0]  # inserted, skipped_corporate, skipped_unresolved_source/target, skipped_existing
+        sorted_crds = sorted(adviser_ids_by_crd.keys())
+        for start in range(0, len(sorted_crds), _MANAGES_FUND_CRD_BATCH_SIZE):
+            batch_crds = sorted_crds[start:start + _MANAGES_FUND_CRD_BATCH_SIZE]
+            batch_remaining = None if remaining is None else max(remaining - totals[0], 0)
+            if batch_remaining == 0:
+                break
+            batch_result = self._derive_manages_fund_batch(
+                sync_engine, batch_remaining, batch_crds, adviser_ids_by_crd, fund_ids_by_pfid,
+            )
+            for i, value in enumerate(batch_result):
+                totals[i] += value
+            if remaining is not None and totals[0] >= remaining:
+                break
+        return tuple(totals)
+
+    def _derive_manages_fund_batch(
+        self,
+        sync_engine: GraphSyncEngine,
+        remaining: Optional[int],
+        batch_crds: list[str],
+        adviser_ids_by_crd: dict[str, str],
+        fund_ids_by_pfid: dict[str, str],
+    ) -> tuple[int, int, int, int, int]:
+        inserted = 0
+        skipped_corporate = 0
+        skipped_unresolved_source = 0
+        skipped_unresolved_target = 0
+        skipped_existing = 0
+
+        batch_adviser_ids = [
+            adviser_ids_by_crd[crd] for crd in batch_crds if crd in adviser_ids_by_crd
+        ]
+        sync_engine.prime_relationship_type(
+            "MANAGES_FUND", defer_flush=True, source_entity_ids=batch_adviser_ids,
+        )
+        try:
+            placeholders = ", ".join(["?"] * len(batch_crds))
+            filing_rows = self.silver.fetch(
+                f"""
+                SELECT accession_number, crd_number, effective_date, filing_action
+                FROM sec_adv_filing
+                WHERE crd_number IN ({placeholders})
+                ORDER BY crd_number, effective_date, accession_number
+                """,
+                params=list(batch_crds),
+            )
+            source_rows = self.silver.fetch(
+                f"""
+                SELECT accession_number, adviser_crd_number, private_fund_id,
+                       filing_id, schedule_section, reporting_role, effective_date,
+                       filing_action, source_sha256
+                FROM sec_adv_private_fund
+                WHERE adviser_crd_number IN ({placeholders}) AND private_fund_id IS NOT NULL
+                ORDER BY filing_id, private_fund_id, schedule_section
+                """,
+                params=list(batch_crds),
+            )
+
+            current_by_adviser: dict[str, list] = {}
+            for current in sync_engine.current_relationships("MANAGES_FUND"):
+                current_by_adviser.setdefault(current.source_entity_id, []).append(current)
+
+            latest_by_crd: dict[str, dict] = {}
+            if filing_rows:
+                for filing in filing_rows:
+                    crd = str(filing.get("crd_number") or "")
+                    effective = filing.get("effective_date")
+                    if effective and not isinstance(effective, date):
+                        effective = date.fromisoformat(str(effective)[:10])
+                    accession = str(filing.get("accession_number") or "")
+                    filing_id = accession.rsplit(":", 1)[-1]
+                    key = (effective or date.min, int(filing_id) if filing_id.isdecimal() else 0,
+                           accession)
+                    prior = latest_by_crd.get(crd)
+                    if prior is None or key > prior["_key"]:
+                        latest_by_crd[crd] = {**filing, "_key": key}
+                active_accessions = {
+                    str(filing.get("accession_number"))
+                    for filing in latest_by_crd.values()
+                    if not any(
+                        marker in str(filing.get("filing_action") or "").lower()
+                        for marker in ("final", "withdraw")
+                    )
+                }
+                source_rows = [
+                    row for row in source_rows
+                    if str(row.get("accession_number")) in active_accessions
+                ]
+                from edgar_warehouse.mdm.graph import close_relationship_version
+
+                expected_targets_by_adviser: dict[str, set[str]] = {}
+                for row in source_rows:
+                    adviser_id = adviser_ids_by_crd.get(
+                        str(row.get("adviser_crd_number"))
+                    )
+                    fund_id = fund_ids_by_pfid.get(str(row.get("private_fund_id")))
+                    if adviser_id and fund_id:
+                        expected_targets_by_adviser.setdefault(adviser_id, set()).add(fund_id)
+                for crd, filing in latest_by_crd.items():
+                    adviser_id = adviser_ids_by_crd.get(str(crd))
+                    if adviser_id is None:
+                        continue
+                    effective = filing["_key"][0]
+                    expected_targets = expected_targets_by_adviser.get(adviser_id, set())
+                    current_versions = current_by_adviser.get(adviser_id, [])
+                    for current in current_versions:
+                        if (
+                            current.valid_to_date is None
+                            and current.target_entity_id not in expected_targets
+                        ):
+                            close_relationship_version(
+                                self.session, current.instance_id, effective
+                            )
+            for row in source_rows:
+                adviser_id = adviser_ids_by_crd.get(str(row.get("adviser_crd_number")))
+                fund_id = fund_ids_by_pfid.get(str(row.get("private_fund_id")))
+                if adviser_id is None:
+                    skipped_unresolved_source += 1
+                    continue
+                if fund_id is None:
+                    skipped_unresolved_target += 1
+                    continue
+                _rel, created = sync_engine.ensure_relationship(
+                    rel_type_name="MANAGES_FUND",
+                    source_entity_id=adviser_id,
+                    target_entity_id=fund_id,
+                    properties={
+                        "private_fund_id": row.get("private_fund_id"),
+                        "source_filing_id": row.get("filing_id"),
+                        "source_section": row.get("schedule_section"),
+                        "reporting_role": row.get("reporting_role"),
+                        "evidence_fingerprint": row.get("source_sha256"),
+                    },
+                    effective_from=row.get("effective_date"),
+                    source_system="iapd_adv_bulk",
+                    source_accession=row.get("accession_number"),
+                    date_provenance="reported",
+                )
+                inserted += 1 if created else 0
+                skipped_existing += 0 if created else 1
+                if remaining is not None and inserted >= remaining:
+                    break
+            sync_engine.flush_pending()
+        finally:
+            sync_engine.unprime_relationship_type("MANAGES_FUND")
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_issued_by(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:

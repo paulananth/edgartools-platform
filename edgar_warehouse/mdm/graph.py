@@ -94,6 +94,7 @@ class GraphSyncEngine:
         *,
         defer_flush: bool = False,
         flush_batch_size: int = 1_000,
+        source_entity_ids: Optional[Iterable[str]] = None,
     ) -> None:
         """Load one relationship type's current versions for bounded bulk writes.
 
@@ -103,6 +104,20 @@ class GraphSyncEngine:
         double-append the same rows into ``_current_by_relationship_id``, so
         an already-primed type is a no-op here (``defer_flush``/
         ``flush_batch_size`` from the first call win).
+
+        ``source_entity_ids``, when given, scopes the load to
+        ``source_entity_id IN (...)`` instead of every active row of the
+        type. This exists for callers that process the type in disjoint
+        entity batches (e.g. MANAGES_FUND by adviser CRD range) rather than
+        all at once -- pair it with ``unprime_relationship_type`` between
+        batches, since a scoped prime marks the type fully primed and a
+        later unscoped caller in the same session would otherwise see only
+        the last batch's rows. Batches must be genuinely disjoint on
+        ``source_entity_id`` for this to be safe -- ``ensure_relationship``
+        only ever looks up ``relationship_id``s derived from a row's own
+        ``source_entity_id``, so a caller that never re-visits a
+        ``source_entity_id`` across batches never needs a prior batch's
+        primed rows once it moves on.
         """
         rec = self.registry.rel_type_by_name.get(rel_type_name)
         if rec is None:
@@ -110,14 +125,17 @@ class GraphSyncEngine:
         rel_type_id = rec["rel_type_id"]
         if rel_type_id in self._primed_rel_type_ids:
             return
-        rows = self.session.scalars(
-            select(MdmRelationshipInstance).where(
-                MdmRelationshipInstance.rel_type_id == rel_type_id,
-                MdmRelationshipInstance.is_active.is_(True),
-                MdmRelationshipInstance.quarantined.is_(False),
-                MdmRelationshipInstance.superseded_by_version_id.is_(None),
+        conditions = [
+            MdmRelationshipInstance.rel_type_id == rel_type_id,
+            MdmRelationshipInstance.is_active.is_(True),
+            MdmRelationshipInstance.quarantined.is_(False),
+            MdmRelationshipInstance.superseded_by_version_id.is_(None),
+        ]
+        if source_entity_ids is not None:
+            conditions.append(
+                MdmRelationshipInstance.source_entity_id.in_(list(source_entity_ids))
             )
-        ).all()
+        rows = self.session.scalars(select(MdmRelationshipInstance).where(*conditions)).all()
         for row in rows:
             self._current_by_relationship_id.setdefault(
                 row.relationship_id, []
@@ -126,6 +144,32 @@ class GraphSyncEngine:
         if defer_flush:
             self._deferred_flush_rel_type_ids.add(rel_type_id)
             self._flush_batch_size = max(int(flush_batch_size), 1)
+
+    def unprime_relationship_type(self, rel_type_name: str) -> None:
+        """Release a type's primed cache so the next ``prime_relationship_type`` reloads.
+
+        For batch-scoped priming only (see ``source_entity_ids`` above):
+        drops the primed flag and every cached row belonging to this type
+        (filtered by ``rel_type_id``, not just cleared wholesale, since
+        ``_current_by_relationship_id`` is keyed by ``relationship_id``
+        across all types). Deferred-flush bookkeeping is untouched --
+        callers using deferred flush must call ``flush_pending`` before
+        unpriming, or pending writes for this type are still safe (they're
+        already staged on the session) but won't be visible to this cache
+        if re-queried before the next commit.
+        """
+        rec = self.registry.rel_type_by_name.get(rel_type_name)
+        if rec is None:
+            raise KeyError(f"Unknown relationship type '{rel_type_name}'")
+        rel_type_id = rec["rel_type_id"]
+        self._primed_rel_type_ids.discard(rel_type_id)
+        stale_keys = [
+            key
+            for key, versions in self._current_by_relationship_id.items()
+            if versions and versions[0].rel_type_id == rel_type_id
+        ]
+        for key in stale_keys:
+            del self._current_by_relationship_id[key]
 
     def current_relationships(
         self, rel_type_name: str
