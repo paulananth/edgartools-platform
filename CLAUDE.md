@@ -1345,6 +1345,15 @@ now-orphaned `EDGARTOOLS_SOURCE.TICKER_REFERENCE` mirror still has 10,398 real r
 ingestion for company tickers appears to have never been wired up post-migration. Not investigated
 further this session — needs its own ticket before fixing.
 
+**Resolved 2026-08-22, as a side effect of the seed-universe-narrow-hydrate map's ticket 06** (a
+publish/merge-side streaming-I/O fix, unrelated in purpose to this gap): the real root cause was
+that `seed-universe` — the only writer of `sec_company_ticker` — had never successfully completed
+against the rebuilt Snowflake account at all; every attempt OOM'd (see that map for the two-part
+fix: table-scoped merges, then streaming file transfer). Once `seed-universe` finally ran clean,
+`sec_company_ticker` populated (20,806 rows) and its Snowflake landing export wrote
+`ticker_reference: 10403` for `LOAD_SILVER_LANDING_TASK`'s next cycle to pick up — the silver
+ingestion path was correctly wired all along; it just never had a chance to run.
+
 **Also still orphaned, found while wiring this fix (not fixed here):** `infra/snowflake/sql/bootstrap/
 16_silver_landing_deployer_read.sql` and `17_mdm_export_deployer_read.sql` are committed, real,
 non-dead fixes (each carries its own root-cause header) but are referenced by **neither**

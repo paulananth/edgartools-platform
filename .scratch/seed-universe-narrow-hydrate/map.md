@@ -84,8 +84,15 @@ and `scripts/build_relationship_release_manifest.py`.
   already caused one silent regression of this exact fix, `37c3171f` →
   `dc9e6925`) in favor of widening `write_staged_bytes`/`promote_staged`/
   `stage_and_promote` to accept `bytes | Path` via `isinstance` dispatch —
-  one implementation per operation, not two to keep in sync. Design
-  decided, not yet implemented.
+  one implementation per operation, not two to keep in sync. **Implemented,
+  committed (`5c7409a8`), deployed to prod, and empirically verified live**:
+  a real `seed-universe` re-run against the deployed fix (execution
+  `seed-universe-verify-streaming-fix-1787441504`) succeeded cleanly on
+  `medium` against the real 1.59GB canonical, no OOM, no profile bump
+  needed. Bonus: also closed the `TICKER_REFERENCE` empty-gold-table gap
+  (CLAUDE.md's "SNOWFLAKE_RUN_MANIFEST_TASK" entry) as a side effect —
+  `sec_company_ticker` populated for the first time since the
+  silver-landing-zone migration.
 - [Move seed-universe back to a smaller task profile now that both fixes are
   live](../task-profile-consolidation/issues/07-decide-whether-to-revert-load-historys-seeduniverse-off-large.md)
   — this map's own stated destination question, closed by
@@ -181,14 +188,12 @@ and `scripts/build_relationship_release_manifest.py`.
 
 ## Frontier (open tickets)
 
-None design-side. Ticket 04 (streaming hydrate fix), ticket 05 (MDM as
+None. Ticket 04 (streaming hydrate fix), ticket 05 (MDM as
 novelty-detection source of record), and ticket 06 (publish/merge-side
 streaming fix, opened 2026-08-22 once its previously-flagged risk
-materialized live) are all design-complete/decided. **Ticket 06 is now implemented** (TDD steps 1-5, full repo suite green) but
-**not yet committed, deployed, or empirically re-verified against the live
-OOM** (step 6). Not reopening this as a full wayfinder frontier ticket (the
-decision is made, only the commit/deploy/verify tail remains) — track via
-ticket 06's own Status field instead.
+materialized live) are all implemented, deployed, and — for 04 and 06 —
+empirically verified live against a real `seed-universe` execution. This
+map's destination is fully reached.
 
 ## Out of scope
 

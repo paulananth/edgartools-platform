@@ -92,8 +92,25 @@ mechanism forcing the other form to stay in sync.
 6. Empirically re-verify: rebuild/push the warehouse image, redeploy,
    re-run `seed-universe` a third time, confirm no OOM.
 
-**Status:** implemented (steps 1-5 above; TDD red/green, full repo suite
-green — 2319 passed, 4 skipped, only 2 pre-existing unrelated failures).
-Not yet committed or deployed. **Step 6 (empirical re-verification against
-the live OOM) is still pending** — needs a warehouse image rebuild/push,
-redeploy, and a third `seed-universe` run to confirm no OOM.
+**Status:** resolved and verified live, 2026-08-22. Committed as `5c7409a8`.
+Built and pushed as `warehouse-sha-5c7409a85457`/`warehouse-prod`
+(digest `sha256:5cec2c7b...`), deployed to prod via `deploy-aws-application.sh
+--env prod --enable-mdm` (task def `edgartools-prod-medium` → revision 221).
+
+Step 6 (empirical re-verification) confirmed clean:
+execution `seed-universe-verify-streaming-fix-1787441504` — `SUCCEEDED`,
+`ExitCode: 0`, still on `medium` (1024 CPU / 4096MB, no profile bump
+needed), ~5m8s wall time. CloudWatch logs confirm both fixes working
+together end to end against the real 1.59GB canonical (`size_bytes:
+1590702080`): `silver_table_merge_started`/`merged` fired for exactly
+`sec_company_ticker` (the table-scoping fix from the prior commit), and
+`silver_publish_started` → `silver_publish_completed` completed cleanly
+around it (this ticket's streaming fix) with no OOM.
+
+Bonus, not part of this ticket's original scope but closed as a side
+effect: this run also populated `sec_company_ticker` (20,806 rows) for the
+first time since the silver-landing-zone migration, closing the
+`TICKER_REFERENCE` empty-gold-table gap flagged in CLAUDE.md's
+"SNOWFLAKE_RUN_MANIFEST_TASK / silver-loader OPERATE+SELECT gap" entry —
+`snowflake_export_row_counts` shows `ticker_reference: 10403` written to
+the export manifest for `LOAD_SILVER_LANDING_TASK`'s next cycle to pick up.
