@@ -150,16 +150,30 @@ a new instance of the MANAGES_FUND pattern.
   memory (the batch-scope-release pattern this whole map is checking for),
   and the `wh_large_arn` move was explicit "belt-and-suspenders headroom"
   *on top of* that code fix, not a substitute for it.
-- **`SeedUniverse`** (hardcoded `wh_large_arn`, line ~3487): the script's
-  own comment identifies this as the *same, already-known*
-  full-canonical-`silver.duckdb`-hydrate cost as `load_history`'s own
-  SeedUniverse — this is the DuckDB/S3-buffering shape, explicitly owned
-  by the already-active `seed-universe-narrow-hydrate` wayfinder map (2
-  parallel fixes in progress: a shared streaming-hydrate fix, and a
-  narrow read-only path via DuckDB `httpfs` remote `ATTACH`) and
-  explicitly listed in this map's own Out-of-scope section. Confirmed
-  that map is genuinely live/in-progress, not stale — not re-litigated
-  here per the parent map's own scope boundary.
+- **`SeedUniverse`** (hardcoded `wh_large_arn`, line ~3487) — **CORRECTION
+  (found while preparing Ticket 04, recorded here and in Ticket 04's own
+  Answer):** my original conclusion below was incomplete. The
+  full-canonical-`silver.duckdb`-hydrate *cost* genuinely is the
+  DuckDB/S3-buffering shape owned by `seed-universe-narrow-hydrate`, out
+  of scope here — that part of the original conclusion stands. But a
+  *separate*, already-decided question was missed: task-profile-
+  consolidation tickets 06/07 already decided
+  `command_task_profile('seed-universe') == "medium"` and already ported
+  that routing to `write_load_history_definition`'s own SeedUniverse
+  (ticket 07) — this state's hardcode was simply never updated to match,
+  exactly the "fixed elsewhere, not yet ported here" pattern this map
+  exists to catch. **Fixed**: `write_warehouse_mdm_gold_definition` now
+  routes this state's task ARN through `command_task_profile("seed-universe")`
+  (guarded to only compute for `workflow_name != "daily_incremental"`,
+  the only case with a SeedUniverse state), mirroring
+  `write_load_history_definition`'s exact pattern. See Ticket 03's Answer
+  for the full fix + test detail (found and fixed during that ticket's
+  own preparation, but belongs to this ticket's scope).
+  ~~The full-canonical-`silver.duckdb`-hydrate cost is the DuckDB/S3-
+  buffering shape, explicitly owned by the already-active
+  `seed-universe-narrow-hydrate` wayfinder map... not re-litigated here~~
+  — superseded by the correction above; struck through, not deleted, so
+  the original reasoning trail stays visible.
 
 Full `tests/mdm/` + `tests/unit/` suites: 1413 passed, 4 skipped. Not yet deployed — this ticket's mandate is investigate-and-fix in the
 codebase; deployment is a separate, explicit follow-up.
