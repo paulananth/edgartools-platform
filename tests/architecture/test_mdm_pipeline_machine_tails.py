@@ -30,6 +30,9 @@ DEPLOY_SCRIPT = REPO_ROOT / "infra" / "scripts" / "deploy-aws-application.sh"
 _START_MARKER = "write_silver_mdm_gold_definition() {\n"
 _END_MARKER = "\nwrite_generation_build_definition() {"
 
+_COMMAND_TASK_PROFILE_START = "command_task_profile() {\n"
+_COMMAND_TASK_PROFILE_END = "\n}\n"
+
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 
 
@@ -40,8 +43,19 @@ def _extract_function_source() -> str:
     return text[start:end]
 
 
+def _extract_command_task_profile_source() -> str:
+    """write_silver_mdm_gold_definition calls command_task_profile()
+    (large-profile-unscoped-load-audit ticket 04's SeedUniverse routing
+    fix) -- must be sourced alongside the function under test or bash
+    fails with "command_task_profile: command not found"."""
+    text = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    start = text.index(_COMMAND_TASK_PROFILE_START)
+    end = text.index(_COMMAND_TASK_PROFILE_END, start) + len(_COMMAND_TASK_PROFILE_END)
+    return text[start:end]
+
+
 def _generate(fn_call: str, tmp_root: Path, name: str) -> dict:
-    fn_source = _extract_function_source()
+    fn_source = _extract_command_task_profile_source() + "\n" + _extract_function_source()
     with tempfile.TemporaryDirectory(dir=tmp_root) as d:
         tmp_path = Path(d)
         fn_file = tmp_path / "mdm_pipeline_fns.sh"
@@ -51,6 +65,7 @@ def _generate(fn_call: str, tmp_root: Path, name: str) -> dict:
         driver = tmp_path / "driver.sh"
         driver.write_text(
             "set -euo pipefail\n"
+            'fail() { echo "ERROR: $*" >&2; exit 1; }\n'
             'CLUSTER_ARN="arn:aws:ecs:us-east-1:000000000000:cluster/fake-cluster"\n'
             "PUBLIC_SUBNET_IDS_JSON='[\"subnet-aaaa\",\"subnet-bbbb\"]'\n"
             "SECURITY_GROUP_IDS_JSON='[\"sg-cccc\"]'\n"

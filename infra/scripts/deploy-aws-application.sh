@@ -4048,16 +4048,35 @@ write_silver_mdm_gold_definition() {
   local mdm_task_medium_arn="$4" # mdm medium  (mdm run, backfill, sync)
   local wh_task_large_arn="$5"   # warehouse large (gold-refresh)
 
+  # large-profile-unscoped-load-audit ticket 04 (2026-08-22): this
+  # function's SeedUniverse state was still hardcoded to wh_task_large_arn
+  # from the original emergency bump -- never ported to the ticket 06/07-
+  # decided command_task_profile('seed-universe') == "medium" routing
+  # write_load_history_definition's own SeedUniverse already uses (ticket
+  # 07), and that ticket 02 (large-profile-unscoped-load-audit) already
+  # ported to write_warehouse_mdm_gold_definition. Same command, same
+  # shared canonical file, no reason to diverge.
+  local seed_universe_profile
+  seed_universe_profile="$(command_task_profile "seed-universe")"
+  local seed_universe_task_arn
+  case "$seed_universe_profile" in
+    medium) seed_universe_task_arn="$wh_task_medium_arn" ;;
+    large) seed_universe_task_arn="$wh_task_large_arn" ;;
+    *) fail "write_silver_mdm_gold_definition: command_task_profile('seed-universe') returned unknown profile: $seed_universe_profile" ;;
+  esac
+
   python3 - "$output_file" "$CLUSTER_ARN" \
     "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
-    "$BOOTSTRAP_BATCH_CONCURRENCY" "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$SCRIPT_DIR" <<'PY'
+    "$BOOTSTRAP_BATCH_CONCURRENCY" "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$SCRIPT_DIR" \
+    "$seed_universe_task_arn" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
  container_name, bronze_bucket_name, subnet_json, security_group_json,
- batch_concurrency, mdm_run_limit, mdm_graph_limit, script_dir) = sys.argv[1:]
+ batch_concurrency, mdm_run_limit, mdm_graph_limit, script_dir,
+ seed_universe_task_arn) = sys.argv[1:]
 sys.path.insert(0, script_dir)
 from mdm_tail_helper import wire_mdm_tail
 
@@ -4149,11 +4168,16 @@ gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id
 # see infra/scripts/mdm_tail_helper.py.
 mdm_tail = wire_mdm_tail(mdm_export, mdm_sync, mdm_verify, gold_state=gold)
 
-# wh_large_arn, not wh_medium_arn -- same seed-universe OOM fixed in
-# write_load_history_definition (2026-08-09, task #35's live exit-137 on
-# wh_medium_arn); identical command, identical unconditional full-canonical-
-# silver.duckdb hydrate, so this state machine is equally exposed.
-seed_universe = ecs_state(wh_large_arn,
+# large-profile-unscoped-load-audit ticket 04 (2026-08-22): now routed
+# through command_task_profile('seed-universe') (bash side, above), same
+# as write_load_history_definition's own SeedUniverse (ticket 07) and
+# write_warehouse_mdm_gold_definition's (ticket 02) -- resolves to
+# "medium" today; the full-canonical-silver.duckdb hydrate this state used
+# to be unconditionally exposed to on the old hardcoded wh_large_arn is
+# the seed-universe-narrow-hydrate map's already-fixed streaming path (PR
+# #392), confirmed live, so this state machine is no longer "equally
+# exposed" the way this comment used to say.
+seed_universe = ecs_state(seed_universe_task_arn,
     "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
     next_state="SeedSilverBatches", retry_secs=60)
 
