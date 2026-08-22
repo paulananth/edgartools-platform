@@ -71,6 +71,7 @@ that made it safe recorded) or fixed.
 <!-- Closed ticket decisions — one-line gist + link; detail lives in the ticket. -->
 
 - [Audit residual_holds_graph's mdm-large steps for the unscoped-load shape](issues/01-audit-residual-holds-graph-mdm-large-steps.md) — found and fixed the real gap: IS_INSIDER/HOLDS/COMPANY_HOLDS still primed unscoped (COMPANY_HOLDS grew ~10.6x in ~24h, live-measured), now self-priming with per-invocation scoped source_entity_ids; MdmSecurities/MdmPersons and both `mdm export` steps confirmed safe with evidence recorded; MdmInstitutionalHolds's call site confirmed consistent with the existing fix.
+- [Audit bootstrap-full/targeted-resync/full-reconcile/bootstrap/daily-incremental/bootstrap-next for the unscoped-load shape](issues/02-audit-core-warehouse-commands-large-profile.md) — found and fixed the real gap: `mdm_entity_backfill.py`'s `_fetch_pending_rows` read each of 6 tables fully unbounded (`sec_adv_private_fund` alone is 1,579,876 rows, larger than MANAGES_FUND's own OOM trigger, live-measured), now keyset-paginated per table's real unique key (not uniformly CIK — `sec_adv_private_fund` has no CIK column); `_run_submissions_bronze_then_silver` and the addendum's 3 states (`ReleaseSecFetchLease`/`ReduceIdentityRefresh`/hardcoded `SeedUniverse`) all confirmed safe or already fixed elsewhere, with evidence recorded.
 
 ## Not yet specified
 

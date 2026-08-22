@@ -1,7 +1,7 @@
 # 02 — Audit bootstrap-full/targeted-resync/full-reconcile/bootstrap/daily-incremental/bootstrap-next for the unscoped-load shape
 
 Type: task
-Status: open
+Status: resolved
 
 ## Question
 
@@ -59,3 +59,107 @@ finding above.
 ## Blocked by
 
 None — can start immediately.
+
+## Answer
+
+Found and fixed one genuine, real gap; confirmed the rest safe with live
+evidence.
+
+**`edgar_warehouse/mdm_entity_backfill.py` — genuine gap, fixed.**
+`_fetch_pending_rows` issued one unbounded `SELECT * FROM {table} WHERE
+mdm_entity_id IS NULL` + `cursor.fetchall()` per table, no LIMIT, full-row
+width. Live Snowflake measurement (2026-08-22): today's pending sets are
+all tiny (sec_company 5,752; reporting_owner 44; non_derivative_txn 36;
+derivative_txn 1; adv_filing 0; adv_private_fund 0) — but the underlying
+**total table sizes** (live-measured against the real canonical shards,
+`s3://edgartools-prod-warehouse-690839588395/warehouse/silver/sec/shards/`)
+show the real risk: `sec_adv_private_fund` alone is **1,579,876 rows** —
+larger than MANAGES_FUND's own 563,631-row OOM trigger — currently 0
+pending only because MDM resolution has kept up so far. Exactly the "safe
+until it isn't" shape INSTITUTIONAL_HOLDS's pre-emptive fix addressed for
+its own 6.8M-row source table; a resolution outage, a large backfill event,
+or a newly-added table could spike this table's pending set into the
+hundreds of thousands, and the unbounded read would hold that many
+full-row dicts in Python at once.
+
+Fixed by adding keyset pagination (`_fetch_pending_rows_batches`,
+`_ROW_CHUNK_SIZE=2000`) using each table's own real unique-key columns —
+**not** uniformly CIK, since live schema inspection
+(`DESC TABLE EDGARTOOLS_SILVER.SEC_ADV_PRIVATE_FUND`) showed
+`sec_adv_private_fund` has no CIK column at all (only
+`ADVISER_CRD_NUMBER`, a VARCHAR) — correcting the spec's original
+CIK-range-batching assumption before writing any code. Snowflake supports
+row-value tuple comparison directly (`(a,b) > (?,?)`, verified live), so
+each table pages via `WHERE mdm_entity_id IS NULL AND (key_cols...) >
+(last_seen...) ORDER BY key_cols LIMIT 2000` — forward-only keyset, not
+OFFSET, since this sweep never mutates the source table in place (resolved
+rows are re-emitted via a separate landing-export path). `backfill_pending_rows`
+now processes and writes one batch's resolved rows at a time instead of
+materializing every pending row across all 6 tables before writing
+anything. `_lookup_entity_ids`'s existing 500-row Postgres-side chunking
+(already correct) is untouched.
+
+Tests: 2 new regression tests in `tests/mdm/test_entity_backfill.py` —
+one proving genuine chunking (5 rows, chunk size forced to 2 → 3 bounded
+`execute()` calls, each carrying `LIMIT 2`, not one unbounded fetch), one
+proving batch-size independence (chunk size 1 vs 1,000 produce identical
+resolved/pending counts and landing-export contents). Both confirmed red
+without the fix (`git stash` on `edgar_warehouse/mdm_entity_backfill.py` —
+`AttributeError: no attribute '_ROW_CHUNK_SIZE'`), green with it. All 6
+pre-existing tests in the file still pass unmodified against the upgraded
+`_FakeCursor`/`_FakeConnection` (now genuinely simulates keyset-pagination
+SQL instead of unconditionally returning every configured row).
+
+**`_run_submissions_bronze_then_silver` and what it calls — confirmed
+clean, no fix needed.** Checked all 6 call sites' `ciks` arguments: line
+1614 (`daily-incremental`'s `ResolveCompanyIdentityBounded`/discovery path)
+windows via `impacted_ciks[cik_offset:][:cik_limit]` then
+`db.claim_discovery_ciks`; lines 1681/1711 (`bootstrap`/`bootstrap-next`)
+and 1751 route through `_resolve_bootstrap_target_ciks`, which applies
+`ciks[cik_offset:][:cik_limit]` windowing — `bootstrap-full`/
+`full-reconcile`'s apparently-unbounded case is `cik_limit=None` by
+*design* (the entire point of "full"), not a scoping defeat; line 2278
+(`load_history`'s per-window call) passes an already-windowed `cik_list`;
+line 3227 (`targeted_resync`) passes `ciks=[cik]`, a single company.
+Inspected `_capture_submission_bronze_snapshots` and
+`_apply_submission_snapshot_to_silver`: every DB/S3 access inside both is
+keyed by the current CIK or a specific file checkpoint (`db.get_company_sync_state(cik)`,
+`db.get_source_checkpoint(...)`, `db.stage_submission(cik=cik, ...)`) —
+no load of an unrelated shared table independent of the caller's CIK list.
+Memory scales proportionally to the caller's own bounded (or intentionally
+full-universe, for `bootstrap-full`) CIK list — the caller's *own* stated
+scope, not an unrelated dataset loaded before scoping is known. This is
+the DuckDB/S3-buffering shape the parent map's Notes explicitly separate
+from this ticket's target (unscoped *independent* dataset hydration), not
+a new instance of the MANAGES_FUND pattern.
+
+**Addendum's 3 states, all confirmed — no fix needed.**
+- **`ReleaseSecFetchLease`**: `edgar_warehouse/application/warehouse_orchestrator.py`'s
+  `release-sec-fetch-lease` handler is a single `db.release_pipeline_run_lease(...)`
+  call plus an event emission — no table read/hydration of any kind. Runs
+  on `wh_large_arn` today, which is oversized for what it does, but that's
+  a cost-sizing question (the `ecs-cost-sizing` map's territory), not an
+  OOM-shape finding.
+- **`ReduceIdentityRefresh`**: already fixed with exactly this map's
+  established pattern, before this ticket existed. The script's own
+  comment (line ~3767) states the OOM history directly: "a real prod run
+  was OOM-killed (exit 137) on medium's 4096MB mid-merge on the largest
+  protected table, even after the code-level fix... that stopped holding
+  every verified candidate as Python bytes for the whole reducer call" —
+  release-readiness ticket 83's fix bounded what the reducer holds in
+  memory (the batch-scope-release pattern this whole map is checking for),
+  and the `wh_large_arn` move was explicit "belt-and-suspenders headroom"
+  *on top of* that code fix, not a substitute for it.
+- **`SeedUniverse`** (hardcoded `wh_large_arn`, line ~3487): the script's
+  own comment identifies this as the *same, already-known*
+  full-canonical-`silver.duckdb`-hydrate cost as `load_history`'s own
+  SeedUniverse — this is the DuckDB/S3-buffering shape, explicitly owned
+  by the already-active `seed-universe-narrow-hydrate` wayfinder map (2
+  parallel fixes in progress: a shared streaming-hydrate fix, and a
+  narrow read-only path via DuckDB `httpfs` remote `ATTACH`) and
+  explicitly listed in this map's own Out-of-scope section. Confirmed
+  that map is genuinely live/in-progress, not stale — not re-litigated
+  here per the parent map's own scope boundary.
+
+Full `tests/mdm/` + `tests/unit/` suites: 1413 passed, 4 skipped. Not yet deployed — this ticket's mandate is investigate-and-fix in the
+codebase; deployment is a separate, explicit follow-up.
