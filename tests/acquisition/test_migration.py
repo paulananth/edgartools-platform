@@ -69,8 +69,10 @@ def test_postgres_schema_makes_history_immutable_and_checks_role_and_fencing() -
     assert "create role edgartools_acquisition_coordinator nologin" in normalized
     assert "create role edgartools_acquisition_worker nologin" in normalized
     assert "create role edgartools_acquisition_operator nologin" in normalized
+    assert "create role edgartools_acquisition_owner nologin" in normalized
     assert "security definer" in normalized
-    assert "pg_has_role(session_user" in normalized
+    assert "current_setting('role', true)" in normalized
+    assert "owner to edgartools_acquisition_owner" in normalized
     assert "stale fencing token" in normalized
     assert "revoke insert, update, delete" in normalized
     assert "revoke execute on function claim_source_fetch" in normalized
@@ -80,4 +82,8 @@ def test_postgres_schema_makes_history_immutable_and_checks_role_and_fencing() -
     assert (
         "grant insert on source_fetch_transition to edgartools_acquisition_worker"
         not in normalized
+    )
+    assert (
+        "grant select, insert on source_fetch_transition to "
+        "edgartools_acquisition_coordinator" not in normalized
     )

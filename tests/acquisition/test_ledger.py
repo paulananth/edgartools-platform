@@ -280,6 +280,22 @@ def test_terminal_no_download_requires_authoritative_proof_reference() -> None:
             )
         )
 
+    with pytest.raises(InvalidDecisionEvidence, match="scope_proof_reference"):
+        ledger.create_fetch_decision(
+            FetchDecisionRequest(
+                candidate_id="candidate-blank-proof",
+                source_family="filing_artifact",
+                logical_source_key="accession/blank-proof",
+                source_url="https://www.sec.gov/Archives/blank-proof.txt",
+                cause=DecisionCause.CAPTURED_DISCOVERY,
+                cause_reference="manifest-2",
+                disposition=FetchDisposition.OUT_OF_SCOPE,
+                blocker="claimed scope exclusion",
+                next_action="NONE",
+                scope_proof_reference="   ",
+            )
+        )
+
 
 def test_non_worker_role_cannot_claim_fetch_work() -> None:
     ledger = _ledger()

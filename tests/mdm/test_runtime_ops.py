@@ -57,6 +57,11 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
         applied_files.append(filename)
 
     monkeypatch.setattr(migrations, "_apply_sql_file", _record_apply)
+    monkeypatch.setattr(
+        migrations,
+        "_apply_acquisition_ledger_migration",
+        lambda engine: (_record_apply(engine, "012_acquisition_ledger.sql"), True)[1],
+    )
     monkeypatch.setattr(migrations, "count_tables", lambda _engine: {})
     monkeypatch.setattr(migrations, "_seed_entity_types", lambda _session: None)
 

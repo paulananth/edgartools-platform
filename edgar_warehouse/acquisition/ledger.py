@@ -186,17 +186,30 @@ class AcquisitionLedger:
                         last_transition_role=request.owner_role.value,
                     )
                     session.add(work)
-                    session.add(
-                        SourceFetchTransitionRecord(
-                            decision_id=decision.decision_id,
-                            from_state=None,
-                            to_state=FetchWorkState.READY.value,
-                            owner_role=request.owner_role.value,
-                            fencing_token=0,
-                            worker_id=None,
-                            reason="FETCH_AUTHORIZED",
+                    session.flush()
+                    if self._engine.dialect.name == "postgresql":
+                        session.execute(
+                            text(
+                                "SELECT record_initial_source_fetch_transition("
+                                ":decision_id, :owner_role)"
+                            ),
+                            {
+                                "decision_id": decision.decision_id,
+                                "owner_role": request.owner_role.value,
+                            },
                         )
-                    )
+                    else:
+                        session.add(
+                            SourceFetchTransitionRecord(
+                                decision_id=decision.decision_id,
+                                from_state=None,
+                                to_state=FetchWorkState.READY.value,
+                                owner_role=request.owner_role.value,
+                                fencing_token=0,
+                                worker_id=None,
+                                reason="FETCH_AUTHORIZED",
+                            )
+                        )
                     session.flush()
                 return _status_from_record(decision, work)
         except IntegrityError as error:
@@ -506,7 +519,9 @@ def _validate_terminal_evidence(request: FetchDecisionRequest) -> None:
             request.operator_authorization_reference,
         ),
     }.get(request.disposition)
-    if required_reference is not None and not required_reference[1]:
+    if required_reference is not None and (
+        not required_reference[1] or not required_reference[1].strip()
+    ):
         raise InvalidDecisionEvidence(
             f"{request.disposition.value} requires {required_reference[0]}"
         )

@@ -14,10 +14,12 @@ from sqlalchemy import create_engine
 from edgar_warehouse.acquisition.ledger import (
     AcquisitionLedger,
     DecisionCause,
+    DecisionOwnerRole,
     FetchDecisionRequest,
     FetchDisposition,
     FetchWorkState,
 )
+from edgar_warehouse.mdm.migrations import runtime as migrations
 
 POSTGRES_IMAGE = "postgres:16-alpine"
 MIGRATION = (
@@ -162,12 +164,9 @@ def test_postgres_roles_proofs_and_fencing_are_enforced(
             'accession/document', 'READY', 0, NULL, NULL,
             'ACQUISITION_COORDINATOR', NOW()
         );
-        INSERT INTO source_fetch_transition (
-            decision_id, from_state, to_state, owner_role,
-            fencing_token, worker_id, reason
-        ) VALUES (
-            '00000000-0000-0000-0000-000000000014', NULL, 'READY',
-            'ACQUISITION_COORDINATOR', 0, NULL, 'FETCH_AUTHORIZED'
+        SELECT record_initial_source_fetch_transition(
+            '00000000-0000-0000-0000-000000000014',
+            'ACQUISITION_COORDINATOR'
         );
         """,
         user="application",
@@ -216,6 +215,48 @@ def test_postgres_roles_proofs_and_fencing_are_enforced(
     assert forged.returncode != 0
     assert "permission denied for table source_fetch_transition" in forged.stderr
 
+    cross_role = _psql(
+        postgres_ledger.container,
+        """
+        SET ROLE edgartools_acquisition_coordinator;
+        INSERT INTO source_fetch_decision (
+            candidate_id, source_family, logical_source_key, source_url,
+            observation_position, cause, cause_reference, owner_role,
+            fetch_disposition, blocker, next_action,
+            operator_authorization_reference
+        ) VALUES (
+            'candidate-cross-role', 'filing_artifact', 'cross-role/document',
+            'https://www.sec.gov/Archives/cross-role.txt', 1,
+            'OPERATOR_REQUEST', 'operator-request-cross-role',
+            'ACQUISITION_OPERATOR', 'OPERATOR_EXCLUDED',
+            'cross-role exclusion', 'NONE', 'operator-proof-cross-role'
+        );
+        """,
+        user="application",
+    )
+    assert cross_role.returncode != 0
+    assert "does not own ACQUISITION_OPERATOR transition" in cross_role.stderr
+
+    universal_login = _psql(
+        postgres_ledger.container,
+        """
+        INSERT INTO source_fetch_decision (
+            candidate_id, source_family, logical_source_key, source_url,
+            observation_position, cause, cause_reference, owner_role,
+            fetch_disposition, blocker, next_action, scope_proof_reference
+        ) VALUES (
+            'candidate-universal-login', 'filing_artifact', 'universal/document',
+            'https://www.sec.gov/Archives/universal.txt', 1,
+            'CAPTURED_DISCOVERY', 'manifest-universal',
+            'ACQUISITION_COORDINATOR', 'OUT_OF_SCOPE',
+            'outside universe', 'NONE', 'universe-proof'
+        );
+        """,
+        user="application",
+    )
+    assert universal_login.returncode != 0
+    assert "permission denied for table source_fetch_decision" in universal_login.stderr
+
     stale = _psql(
         postgres_ledger.container,
         """
@@ -249,6 +290,26 @@ def test_postgres_roles_proofs_and_fencing_are_enforced(
     )
     assert unproved.returncode != 0
     assert "ck_source_fetch_decision_scope_proof" in unproved.stderr
+
+    empty_proof = _psql(
+        postgres_ledger.container,
+        """
+        SET ROLE edgartools_acquisition_coordinator;
+        INSERT INTO source_fetch_decision (
+            candidate_id, source_family, logical_source_key, source_url,
+            observation_position, cause, cause_reference, owner_role,
+            fetch_disposition, blocker, next_action, scope_proof_reference
+        ) VALUES (
+            'candidate-empty-proof', 'filing_artifact', 'empty-proof/document',
+            'https://www.sec.gov/Archives/empty-proof.txt', 1,
+            'CAPTURED_DISCOVERY', 'manifest-empty', 'ACQUISITION_COORDINATOR',
+            'OUT_OF_SCOPE', 'outside universe', 'NONE', '   '
+        );
+        """,
+        user="application",
+    )
+    assert empty_proof.returncode != 0
+    assert "ck_source_fetch_decision_scope_proof" in empty_proof.stderr
 
     operator = _psql(
         postgres_ledger.container,
@@ -307,6 +368,22 @@ def test_repository_uses_application_role_and_postgres_uuid_columns(
                 next_action="ACQUIRE_FETCH_LEASE",
             )
         )
+        operator_authorized = ledger.create_fetch_decision(
+            FetchDecisionRequest(
+                candidate_id="candidate-repository-operator-fetch",
+                source_family="filing_artifact",
+                logical_source_key="repository/operator-fetch",
+                source_url=(
+                    "https://www.sec.gov/Archives/repository-operator-fetch.txt"
+                ),
+                cause=DecisionCause.OPERATOR_REQUEST,
+                cause_reference="operator-repair-1",
+                disposition=FetchDisposition.FETCH_AUTHORIZED,
+                blocker=None,
+                next_action="ACQUIRE_FETCH_LEASE",
+                owner_role=DecisionOwnerRole.ACQUISITION_OPERATOR,
+            )
+        )
         first = ledger.claim_fetch(
             authorized.decision_id,
             worker_id="repository-worker-1",
@@ -326,7 +403,9 @@ def test_repository_uses_application_role_and_postgres_uuid_columns(
 
         assert terminal.observation_position == 1
         assert ledger.source_change_status(terminal.decision_id) == terminal
+        assert operator_authorized.fetch_state is FetchWorkState.READY
         assert failed.next_action == "RETRY_FETCH"
         assert retried.fencing_token == 2
+        assert migrations._apply_acquisition_ledger_migration(engine) is False
     finally:
         engine.dispose()

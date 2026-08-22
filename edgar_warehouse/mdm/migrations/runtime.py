@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from edgar_warehouse.mdm import database as db
 
-
 MDM_TABLES = [
     "mdm_entity",
     "mdm_source_ref",
@@ -364,13 +363,37 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
         _apply_sql_file(engine, "009_graph_generation_builder.sql")
         _apply_sql_file(engine, "010_release_relationship_sources.sql")
         _apply_sql_file(engine, "011_source_ref_content_hash.sql")
-        _apply_sql_file(engine, "012_acquisition_ledger.sql")
+        _apply_acquisition_ledger_migration(engine)
 
     if seed:
         with Session(engine) as session:
             seed_defaults(session)
             session.commit()
     return {"dialect": dialect, "seeded": seed, "tables": count_tables(engine)}
+
+
+def _apply_acquisition_ledger_migration(engine: Engine) -> bool:
+    """Apply privileged ledger DDL, or preserve it for the runtime application role."""
+    if engine.dialect.name == "postgresql":
+        with engine.connect() as conn:
+            installed = bool(
+                conn.scalar(
+                    text("SELECT to_regclass('source_fetch_decision') IS NOT NULL")
+                )
+            )
+            if installed:
+                may_manage = bool(
+                    conn.scalar(
+                        text(
+                            "SELECT pg_has_role(current_user, "
+                            "'edgartools_acquisition_owner', 'MEMBER')"
+                        )
+                    )
+                )
+                if not may_manage:
+                    return False
+    _apply_sql_file(engine, "012_acquisition_ledger.sql")
+    return True
 
 
 def check_connectivity(engine: Engine) -> dict[str, Any]:

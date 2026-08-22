@@ -4,6 +4,15 @@
 
 DO $$
 BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'edgartools_acquisition_owner') THEN
+        CREATE ROLE edgartools_acquisition_owner NOLOGIN;
+    END IF;
+    IF current_user <> 'application' THEN
+        EXECUTE format(
+            'GRANT edgartools_acquisition_owner TO %I WITH INHERIT FALSE, SET TRUE',
+            current_user
+        );
+    END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'edgartools_acquisition_coordinator') THEN
         CREATE ROLE edgartools_acquisition_coordinator NOLOGIN;
     END IF;
@@ -85,14 +94,15 @@ CREATE TABLE IF NOT EXISTS source_fetch_decision (
     ),
     CONSTRAINT ck_source_fetch_decision_verified_evidence CHECK (
         fetch_disposition <> 'ALREADY_CAPTURED_VERIFIED' OR
-        verified_evidence_reference IS NOT NULL
+        NULLIF(BTRIM(verified_evidence_reference), '') IS NOT NULL
     ),
     CONSTRAINT ck_source_fetch_decision_scope_proof CHECK (
-        fetch_disposition <> 'OUT_OF_SCOPE' OR scope_proof_reference IS NOT NULL
+        fetch_disposition <> 'OUT_OF_SCOPE' OR
+        NULLIF(BTRIM(scope_proof_reference), '') IS NOT NULL
     ),
     CONSTRAINT ck_source_fetch_decision_operator_authorization CHECK (
         fetch_disposition <> 'OPERATOR_EXCLUDED' OR
-        operator_authorization_reference IS NOT NULL
+        NULLIF(BTRIM(operator_authorization_reference), '') IS NOT NULL
     )
 );
 
@@ -189,14 +199,14 @@ BEGIN
     required_role := CASE NEW.owner_role
         WHEN 'ACQUISITION_COORDINATOR' THEN 'edgartools_acquisition_coordinator'
         WHEN 'ACQUISITION_OPERATOR' THEN 'edgartools_acquisition_operator'
-        WHEN 'ACQUISITION_OPERATOR' THEN 'edgartools_acquisition_operator'
         WHEN 'ACQUISITION_WORKER' THEN 'edgartools_acquisition_worker'
         ELSE NULL
     END;
-    IF required_role IS NULL OR
-       NOT pg_has_role(session_user, required_role, 'MEMBER') THEN
+    IF required_role IS NULL OR current_user NOT IN (
+        required_role, 'edgartools_acquisition_owner'
+    ) THEN
         RAISE EXCEPTION 'database role % does not own % transition',
-            session_user, NEW.owner_role;
+            current_user, NEW.owner_role;
     END IF;
     RETURN NEW;
 EXCEPTION WHEN undefined_object THEN
@@ -224,13 +234,15 @@ DECLARE
 BEGIN
     required_role := CASE NEW.last_transition_role
         WHEN 'ACQUISITION_COORDINATOR' THEN 'edgartools_acquisition_coordinator'
+        WHEN 'ACQUISITION_OPERATOR' THEN 'edgartools_acquisition_operator'
         WHEN 'ACQUISITION_WORKER' THEN 'edgartools_acquisition_worker'
         ELSE NULL
     END;
-    IF required_role IS NULL OR
-       NOT pg_has_role(session_user, required_role, 'MEMBER') THEN
+    IF required_role IS NULL OR current_user NOT IN (
+        required_role, 'edgartools_acquisition_owner'
+    ) THEN
         RAISE EXCEPTION 'database role % does not own % transition',
-            session_user, NEW.last_transition_role;
+            current_user, NEW.last_transition_role;
     END IF;
     RETURN NEW;
 EXCEPTION WHEN undefined_object THEN
@@ -243,6 +255,57 @@ DROP TRIGGER IF EXISTS source_fetch_work_role_owner ON source_fetch_work;
 CREATE TRIGGER source_fetch_work_role_owner
 BEFORE INSERT OR UPDATE ON source_fetch_work
 FOR EACH ROW EXECUTE FUNCTION enforce_acquisition_work_role();
+
+CREATE OR REPLACE FUNCTION record_initial_source_fetch_transition(
+    requested_decision_id UUID,
+    requested_owner_role TEXT
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    required_database_role TEXT;
+    decision_disposition TEXT;
+    decision_owner_role TEXT;
+    work_state TEXT;
+    work_owner_role TEXT;
+BEGIN
+    required_database_role := CASE requested_owner_role
+        WHEN 'ACQUISITION_COORDINATOR' THEN 'edgartools_acquisition_coordinator'
+        WHEN 'ACQUISITION_OPERATOR' THEN 'edgartools_acquisition_operator'
+        ELSE NULL
+    END;
+    IF required_database_role IS NULL OR
+       current_setting('role', TRUE) <> required_database_role THEN
+        RAISE EXCEPTION 'active database role % cannot record % transition',
+            current_setting('role', TRUE), requested_owner_role;
+    END IF;
+
+    SELECT decision.fetch_disposition, decision.owner_role,
+           work.fetch_state, work.last_transition_role
+    INTO decision_disposition, decision_owner_role, work_state, work_owner_role
+    FROM source_fetch_decision AS decision
+    JOIN source_fetch_work AS work ON work.decision_id = decision.decision_id
+    WHERE decision.decision_id = requested_decision_id;
+
+    IF NOT FOUND OR decision_disposition <> 'FETCH_AUTHORIZED' OR
+       decision_owner_role <> requested_owner_role OR work_state <> 'READY' OR
+       work_owner_role <> requested_owner_role THEN
+        RAISE EXCEPTION 'decision % is not an authorized READY fetch owned by %',
+            requested_decision_id, requested_owner_role;
+    END IF;
+
+    INSERT INTO source_fetch_transition (
+        decision_id, from_state, to_state, owner_role,
+        fencing_token, worker_id, reason
+    ) VALUES (
+        requested_decision_id, NULL, 'READY', requested_owner_role,
+        0, NULL, 'FETCH_AUTHORIZED'
+    );
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION claim_source_fetch(
     requested_decision_id UUID,
@@ -260,8 +323,9 @@ DECLARE
     claimed_token BIGINT;
     claimed_until TIMESTAMPTZ;
 BEGIN
-    IF NOT pg_has_role(session_user, 'edgartools_acquisition_worker', 'MEMBER') THEN
-        RAISE EXCEPTION 'database role % cannot claim source fetches', session_user;
+    IF current_setting('role', TRUE) <> 'edgartools_acquisition_worker' THEN
+        RAISE EXCEPTION 'active database role % cannot claim source fetches',
+            current_setting('role', TRUE);
     END IF;
     IF requested_lease_seconds <= 0 THEN
         RAISE EXCEPTION 'lease seconds must be positive';
@@ -318,8 +382,9 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 BEGIN
-    IF NOT pg_has_role(session_user, 'edgartools_acquisition_worker', 'MEMBER') THEN
-        RAISE EXCEPTION 'database role % cannot finalize source fetches', session_user;
+    IF current_setting('role', TRUE) <> 'edgartools_acquisition_worker' THEN
+        RAISE EXCEPTION 'active database role % cannot finalize source fetches',
+            current_setting('role', TRUE);
     END IF;
     IF requested_final_state NOT IN ('CAPTURED','FAILED') THEN
         RAISE EXCEPTION 'invalid final source fetch state %', requested_final_state;
@@ -362,7 +427,7 @@ GRANT SELECT, INSERT ON source_fetch_decision
     TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
 GRANT SELECT, INSERT ON source_fetch_work
     TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
-GRANT SELECT, INSERT ON source_fetch_transition
+GRANT SELECT ON source_fetch_transition
     TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
 GRANT SELECT ON source_fetch_decision, source_fetch_work, source_fetch_transition
     TO edgartools_acquisition_worker;
@@ -370,10 +435,14 @@ REVOKE EXECUTE ON FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ)
     FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ)
     FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION record_initial_source_fetch_transition(UUID, TEXT)
+    FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ)
     TO edgartools_acquisition_worker;
 GRANT EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ)
     TO edgartools_acquisition_worker;
+GRANT EXECUTE ON FUNCTION record_initial_source_fetch_transition(UUID, TEXT)
+    TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
 
 CREATE OR REPLACE VIEW source_change_status AS
 SELECT
@@ -405,3 +474,35 @@ GRANT SELECT ON source_change_status TO
     edgartools_acquisition_coordinator,
     edgartools_acquisition_worker,
     edgartools_acquisition_operator;
+
+ALTER TABLE source_observation_cursor OWNER TO edgartools_acquisition_owner;
+ALTER TABLE source_fetch_decision OWNER TO edgartools_acquisition_owner;
+ALTER TABLE source_fetch_work OWNER TO edgartools_acquisition_owner;
+ALTER TABLE source_fetch_transition OWNER TO edgartools_acquisition_owner;
+ALTER FUNCTION reject_acquisition_history_mutation()
+    OWNER TO edgartools_acquisition_owner;
+ALTER FUNCTION enforce_acquisition_transition_role()
+    OWNER TO edgartools_acquisition_owner;
+ALTER FUNCTION enforce_acquisition_work_role()
+    OWNER TO edgartools_acquisition_owner;
+ALTER FUNCTION record_initial_source_fetch_transition(UUID, TEXT)
+    OWNER TO edgartools_acquisition_owner;
+ALTER FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ)
+    OWNER TO edgartools_acquisition_owner;
+ALTER FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ)
+    OWNER TO edgartools_acquisition_owner;
+ALTER VIEW source_change_status OWNER TO edgartools_acquisition_owner;
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'application') THEN
+        REVOKE ALL PRIVILEGES ON
+            source_observation_cursor,
+            source_fetch_decision,
+            source_fetch_work,
+            source_fetch_transition
+        FROM application;
+        REVOKE ALL PRIVILEGES ON source_change_status FROM application;
+    END IF;
+END;
+$$;
