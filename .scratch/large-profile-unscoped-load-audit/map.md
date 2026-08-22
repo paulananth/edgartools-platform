@@ -70,6 +70,8 @@ that made it safe recorded) or fixed.
 
 <!-- Closed ticket decisions — one-line gist + link; detail lives in the ticket. -->
 
+- [Audit residual_holds_graph's mdm-large steps for the unscoped-load shape](issues/01-audit-residual-holds-graph-mdm-large-steps.md) — found and fixed the real gap: IS_INSIDER/HOLDS/COMPANY_HOLDS still primed unscoped (COMPANY_HOLDS grew ~10.6x in ~24h, live-measured), now self-priming with per-invocation scoped source_entity_ids; MdmSecurities/MdmPersons and both `mdm export` steps confirmed safe with evidence recorded; MdmInstitutionalHolds's call site confirmed consistent with the existing fix.
+
 ## Not yet specified
 
 - Whether MDM entity-*resolution* steps (`run_companies`/`run_securities`/

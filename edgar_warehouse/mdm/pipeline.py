@@ -160,7 +160,16 @@ _MANAGES_FUND_CRD_BATCH_SIZE = 1000
 # _derive_relationship_type's uniform dispatcher prime (below) is skipped for
 # these types -- they manage their own (batch-scoped) priming instead of one
 # unscoped whole-type load. See _derive_manages_fund, _derive_institutional_holds.
-_SELF_PRIMING_RELATIONSHIP_TYPES = frozenset({"MANAGES_FUND", "INSTITUTIONAL_HOLDS"})
+# IS_INSIDER/HOLDS/COMPANY_HOLDS added by the large-profile-unscoped-load-audit
+# map's Ticket 01: same unscoped-prime shape, not yet at MANAGES_FUND's scale
+# but growing fast (COMPANY_HOLDS grew ~10.6x in ~24h, live-measured
+# 2026-08-22) -- each already reads one bounded batch of new source rows per
+# invocation (no CRD/CIK-range outer loop needed), so their fix scopes the
+# single prime call to just that batch's resolved source entities instead of
+# adding batching.
+_SELF_PRIMING_RELATIONSHIP_TYPES = frozenset({
+    "MANAGES_FUND", "INSTITUTIONAL_HOLDS", "IS_INSIDER", "HOLDS", "COMPANY_HOLDS",
+})
 
 
 @dataclass
@@ -1091,67 +1100,92 @@ class MDMPipeline:
         # repeats across every one of its own reporting owners' rows.
         issuer_ciks_seen = {row.get("issuer_cik") for row in rows if row.get("issuer_cik") is not None}
         issuer_id_by_cik = self._company_entity_ids(issuer_ciks_seen)
+
+        # Resolve each row's source entity (person) before priming, so the
+        # prime can be scoped to exactly this batch's touched persons
+        # instead of loading the whole IS_INSIDER type (large-profile-
+        # unscoped-load-audit Ticket 01; mirrors
+        # _derive_manages_fund_batch/_derive_institutional_holds_batch's
+        # resolve-then-prime ordering). Corporate owners resolve to None
+        # here too -- they're skipped either way in the main loop below, so
+        # they must not appear in the prime scope. _person_entity_id has no
+        # side effect beyond a read, so calling it once here and reusing the
+        # result changes nothing else about this method's behavior.
+        resolved_person_ids: list[Optional[str]] = []
         for row in rows:
             owner_cik = row.get("owner_cik")
             if owner_cik in company_ciks:
-                skipped_corporate += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "IS_INSIDER",
-                    "reason": "corporate",
-                    "owner_cik": owner_cik,
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
+                resolved_person_ids.append(None)
                 continue
-            person_id = (
-                person_id_by_cik.get(int(owner_cik)) if owner_cik is not None else None
-            ) or self._person_entity_id(owner_cik, row.get("owner_name"))
-            if person_id is None:
-                skipped_unresolved_source += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "IS_INSIDER",
-                    "reason": "unresolved_source",
-                    "owner_cik": owner_cik,
-                    "owner_name": row.get("owner_name"),
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-                continue
-            issuer_cik = row.get("issuer_cik")
-            issuer_id = issuer_id_by_cik.get(int(issuer_cik)) if issuer_cik is not None else None
-            if issuer_id is None:
-                skipped_unresolved_target += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "IS_INSIDER",
-                    "reason": "unresolved_target",
-                    "issuer_cik": row.get("issuer_cik"),
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-                continue
-            _rel, created = sync_engine.ensure_relationship(
-                rel_type_name="IS_INSIDER",
-                source_entity_id=person_id,
-                target_entity_id=issuer_id,
-                properties={"role": _derive_role(row), "title": row.get("officer_title") or ""},
-                effective_from=row.get("period_of_report"),
-                source_system="ownership_filing",
-                source_accession=row.get("accession_number"),
+            resolved_person_ids.append(
+                (person_id_by_cik.get(int(owner_cik)) if owner_cik is not None else None)
+                or self._person_entity_id(owner_cik, row.get("owner_name"))
             )
-            if created:
-                inserted += 1
-            else:
-                skipped_existing += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "IS_INSIDER",
-                    "reason": "existing",
-                    "source_entity_id": person_id,
-                    "target_entity_id": issuer_id,
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-            if remaining is not None and inserted >= remaining:
-                break
+        batch_source_ids = {pid for pid in resolved_person_ids if pid is not None}
+        sync_engine.prime_relationship_type(
+            "IS_INSIDER", defer_flush=True, source_entity_ids=batch_source_ids,
+        )
+        try:
+            for row, person_id in zip(rows, resolved_person_ids):
+                owner_cik = row.get("owner_cik")
+                if owner_cik in company_ciks:
+                    skipped_corporate += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "IS_INSIDER",
+                        "reason": "corporate",
+                        "owner_cik": owner_cik,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
+                if person_id is None:
+                    skipped_unresolved_source += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "IS_INSIDER",
+                        "reason": "unresolved_source",
+                        "owner_cik": owner_cik,
+                        "owner_name": row.get("owner_name"),
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
+                issuer_cik = row.get("issuer_cik")
+                issuer_id = issuer_id_by_cik.get(int(issuer_cik)) if issuer_cik is not None else None
+                if issuer_id is None:
+                    skipped_unresolved_target += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "IS_INSIDER",
+                        "reason": "unresolved_target",
+                        "issuer_cik": row.get("issuer_cik"),
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
+                _rel, created = sync_engine.ensure_relationship(
+                    rel_type_name="IS_INSIDER",
+                    source_entity_id=person_id,
+                    target_entity_id=issuer_id,
+                    properties={"role": _derive_role(row), "title": row.get("officer_title") or ""},
+                    effective_from=row.get("period_of_report"),
+                    source_system="ownership_filing",
+                    source_accession=row.get("accession_number"),
+                )
+                if created:
+                    inserted += 1
+                else:
+                    skipped_existing += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "IS_INSIDER",
+                        "reason": "existing",
+                        "source_entity_id": person_id,
+                        "target_entity_id": issuer_id,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                if remaining is not None and inserted >= remaining:
+                    break
+        finally:
+            sync_engine.unprime_relationship_type("IS_INSIDER")
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_holds(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
@@ -1211,78 +1245,97 @@ class MDMPipeline:
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
+
+        # Resolve each row's source entity (person) before priming, so the
+        # prime can be scoped to exactly this batch's touched persons
+        # instead of loading the whole HOLDS type (large-profile-unscoped-
+        # load-audit Ticket 01; same rationale as _derive_is_insider above).
+        resolved_person_ids: list[Optional[str]] = []
         for row in rows:
             owner_cik = row.get("owner_cik")
             if owner_cik in company_ciks:
-                skipped_corporate += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "HOLDS",
-                    "reason": "corporate",
-                    "owner_cik": owner_cik,
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
+                resolved_person_ids.append(None)
                 continue
-            person_id = (
-                person_id_by_cik.get(int(owner_cik)) if owner_cik is not None else None
-            ) or self._person_entity_id(owner_cik, row.get("owner_name"))
-            if person_id is None:
-                skipped_unresolved_source += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "HOLDS",
-                    "reason": "unresolved_source",
-                    "owner_cik": owner_cik,
-                    "owner_name": row.get("owner_name"),
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-                continue
-            security_id = self._security_entity_id(row, company_entity_id_by_cik)
-            if security_id is None:
-                skipped_unresolved_target += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "HOLDS",
-                    "reason": "unresolved_target",
-                    "security_title": row.get("security_title"),
-                    "issuer_cik": row.get("issuer_cik"),
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-                continue
-            properties = {
-                "shares_owned": self._json_property(row.get("shares_owned_after")),
-                "direct_indirect": row.get("ownership_direct_indirect"),
-                "as_of_date": self._json_property(row.get("transaction_date")),
-                "is_derivative": bool(row.get("is_derivative")),
-                "conversion_or_exercise_price": self._json_property(row.get("conversion_or_exercise_price")),
-                "exercise_date": self._json_property(row.get("exercise_date")),
-                "expiration_date": self._json_property(row.get("expiration_date")),
-                "underlying_security_title": row.get("underlying_security_title"),
-                "underlying_security_shares": self._json_property(row.get("underlying_security_shares")),
-            }
-            _rel, created = sync_engine.ensure_relationship(
-                rel_type_name="HOLDS",
-                source_entity_id=person_id,
-                target_entity_id=security_id,
-                properties={k: v for k, v in properties.items() if v is not None},
-                effective_from=row.get("transaction_date"),
-                source_system="ownership_filing",
-                source_accession=row.get("accession_number"),
+            resolved_person_ids.append(
+                (person_id_by_cik.get(int(owner_cik)) if owner_cik is not None else None)
+                or self._person_entity_id(owner_cik, row.get("owner_name"))
             )
-            if created:
-                inserted += 1
-            else:
-                skipped_existing += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "HOLDS",
-                    "reason": "existing",
-                    "source_entity_id": person_id,
-                    "target_entity_id": security_id,
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-            if remaining is not None and inserted >= remaining:
-                break
+        batch_source_ids = {pid for pid in resolved_person_ids if pid is not None}
+        sync_engine.prime_relationship_type(
+            "HOLDS", defer_flush=True, source_entity_ids=batch_source_ids,
+        )
+        try:
+            for row, person_id in zip(rows, resolved_person_ids):
+                owner_cik = row.get("owner_cik")
+                if owner_cik in company_ciks:
+                    skipped_corporate += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "HOLDS",
+                        "reason": "corporate",
+                        "owner_cik": owner_cik,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
+                if person_id is None:
+                    skipped_unresolved_source += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "HOLDS",
+                        "reason": "unresolved_source",
+                        "owner_cik": owner_cik,
+                        "owner_name": row.get("owner_name"),
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
+                security_id = self._security_entity_id(row, company_entity_id_by_cik)
+                if security_id is None:
+                    skipped_unresolved_target += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "HOLDS",
+                        "reason": "unresolved_target",
+                        "security_title": row.get("security_title"),
+                        "issuer_cik": row.get("issuer_cik"),
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
+                properties = {
+                    "shares_owned": self._json_property(row.get("shares_owned_after")),
+                    "direct_indirect": row.get("ownership_direct_indirect"),
+                    "as_of_date": self._json_property(row.get("transaction_date")),
+                    "is_derivative": bool(row.get("is_derivative")),
+                    "conversion_or_exercise_price": self._json_property(row.get("conversion_or_exercise_price")),
+                    "exercise_date": self._json_property(row.get("exercise_date")),
+                    "expiration_date": self._json_property(row.get("expiration_date")),
+                    "underlying_security_title": row.get("underlying_security_title"),
+                    "underlying_security_shares": self._json_property(row.get("underlying_security_shares")),
+                }
+                _rel, created = sync_engine.ensure_relationship(
+                    rel_type_name="HOLDS",
+                    source_entity_id=person_id,
+                    target_entity_id=security_id,
+                    properties={k: v for k, v in properties.items() if v is not None},
+                    effective_from=row.get("transaction_date"),
+                    source_system="ownership_filing",
+                    source_accession=row.get("accession_number"),
+                )
+                if created:
+                    inserted += 1
+                else:
+                    skipped_existing += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "HOLDS",
+                        "reason": "existing",
+                        "source_entity_id": person_id,
+                        "target_entity_id": security_id,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                if remaining is not None and inserted >= remaining:
+                    break
+        finally:
+            sync_engine.unprime_relationship_type("HOLDS")
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_company_holds(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
@@ -1345,55 +1398,75 @@ class MDMPipeline:
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
+
+        # Resolve each row's source entity (the corporate owner) before
+        # priming, so the prime can be scoped to exactly this batch's
+        # touched companies instead of loading the whole COMPANY_HOLDS type
+        # (large-profile-unscoped-load-audit Ticket 01; same rationale as
+        # _derive_is_insider/_derive_holds above). A pure dict lookup here,
+        # no fallback query, so no behavior changes from resolving it early.
+        resolved_company_ids: list[Optional[str]] = []
         for row in rows:
             owner_cik = row.get("owner_cik")
             if owner_cik not in company_ciks:
-                # skipped_corporate here means non-corporate owner (inverse of
-                # IS_INSIDER/HOLDS — COMPANY_HOLDS wants corporate owners only)
-                skipped_corporate += 1
+                resolved_company_ids.append(None)
                 continue
-            company_id = company_entity_id_by_cik.get(int(owner_cik))
-            if company_id is None:
-                skipped_unresolved_source += 1
-                continue
-            security_id = self._security_entity_id(row, company_entity_id_by_cik)
-            if security_id is None:
-                skipped_unresolved_target += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "COMPANY_HOLDS",
-                    "reason": "unresolved_target",
-                    "security_title": row.get("security_title"),
-                    "issuer_cik": row.get("issuer_cik"),
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-                continue
-            properties = {
-                "shares_owned": self._json_property(row.get("shares_owned_after")),
-                "direct_indirect": row.get("ownership_direct_indirect"),
-                "as_of_date": self._json_property(row.get("transaction_date")),
-                "is_derivative": bool(row.get("is_derivative")),
-                "conversion_or_exercise_price": self._json_property(row.get("conversion_or_exercise_price")),
-                "exercise_date": self._json_property(row.get("exercise_date")),
-                "expiration_date": self._json_property(row.get("expiration_date")),
-                "underlying_security_title": row.get("underlying_security_title"),
-                "underlying_security_shares": self._json_property(row.get("underlying_security_shares")),
-            }
-            _rel, created = sync_engine.ensure_relationship(
-                rel_type_name="COMPANY_HOLDS",
-                source_entity_id=company_id,
-                target_entity_id=security_id,
-                properties={k: v for k, v in properties.items() if v is not None},
-                effective_from=row.get("transaction_date"),
-                source_system="ownership_filing",
-                source_accession=row.get("accession_number"),
-            )
-            if created:
-                inserted += 1
-            else:
-                skipped_existing += 1
-            if remaining is not None and inserted >= remaining:
-                break
+            resolved_company_ids.append(company_entity_id_by_cik.get(int(owner_cik)))
+        batch_source_ids = {cid for cid in resolved_company_ids if cid is not None}
+        sync_engine.prime_relationship_type(
+            "COMPANY_HOLDS", defer_flush=True, source_entity_ids=batch_source_ids,
+        )
+        try:
+            for row, company_id in zip(rows, resolved_company_ids):
+                owner_cik = row.get("owner_cik")
+                if owner_cik not in company_ciks:
+                    # skipped_corporate here means non-corporate owner (inverse of
+                    # IS_INSIDER/HOLDS — COMPANY_HOLDS wants corporate owners only)
+                    skipped_corporate += 1
+                    continue
+                if company_id is None:
+                    skipped_unresolved_source += 1
+                    continue
+                security_id = self._security_entity_id(row, company_entity_id_by_cik)
+                if security_id is None:
+                    skipped_unresolved_target += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "COMPANY_HOLDS",
+                        "reason": "unresolved_target",
+                        "security_title": row.get("security_title"),
+                        "issuer_cik": row.get("issuer_cik"),
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
+                properties = {
+                    "shares_owned": self._json_property(row.get("shares_owned_after")),
+                    "direct_indirect": row.get("ownership_direct_indirect"),
+                    "as_of_date": self._json_property(row.get("transaction_date")),
+                    "is_derivative": bool(row.get("is_derivative")),
+                    "conversion_or_exercise_price": self._json_property(row.get("conversion_or_exercise_price")),
+                    "exercise_date": self._json_property(row.get("exercise_date")),
+                    "expiration_date": self._json_property(row.get("expiration_date")),
+                    "underlying_security_title": row.get("underlying_security_title"),
+                    "underlying_security_shares": self._json_property(row.get("underlying_security_shares")),
+                }
+                _rel, created = sync_engine.ensure_relationship(
+                    rel_type_name="COMPANY_HOLDS",
+                    source_entity_id=company_id,
+                    target_entity_id=security_id,
+                    properties={k: v for k, v in properties.items() if v is not None},
+                    effective_from=row.get("transaction_date"),
+                    source_system="ownership_filing",
+                    source_accession=row.get("accession_number"),
+                )
+                if created:
+                    inserted += 1
+                else:
+                    skipped_existing += 1
+                if remaining is not None and inserted >= remaining:
+                    break
+        finally:
+            sync_engine.unprime_relationship_type("COMPANY_HOLDS")
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_is_entity_of(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
