@@ -11,8 +11,11 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
 
 ## Notes
 
-- Repo: `edgartools-platform`. Decision-spec only: this map plans the change;
-  implementation happens in a later effort.
+- Repo: `edgartools-platform`. Originally decision-spec only; superseded
+  2026-08-22 (Tickets 13-17 landed real, merged implementation, not just
+  decisions) — this map now also carries implementation and a first prod
+  dry run through to Ticket 29. Per-source-family production cutover and
+  ongoing operation still happen in a later effort.
 - AWS-only. Keep the current SEC EDGAR → warehouse CLI → S3/Snowflake → dbt →
   hosted graph architecture. Do not introduce another cloud, registry,
   workflow engine, storage target, or secret-management path.
@@ -115,6 +118,7 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
 - [26 — Rebuild and activate a ledger epoch](issues/26-rebuild-and-activate-ledger-epoch.md) — Recover authority through a Hybrid Source Baseline and atomic activation.
 - [27 — Contract legacy acquisition bypasses](issues/27-contract-legacy-acquisition-bypasses.md) — Remove bypasses only after every source family proves the authoritative path.
 - [28 — Add conditional-fetch validators and not-modified linking](issues/28-add-conditional-fetch-and-not-modified-linking.md) — Surfaced while resolving Ticket 17: a due-poll conditional-GET path needs a new ledger read API and has no live caller yet.
+- [29 — Deploy the gated acquisition path to prod and dry-run it](issues/29-deploy-and-dry-run-gated-acquisition-path.md) — Blocked by 18 and 19: apply migration 013, deploy current images, and observe a real bounded diff (capture through Silver acceptance) plus a no-op replay against real prod infrastructure.
 
 ## Not yet specified
 
@@ -135,4 +139,6 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
   exposing a misaligned watermark as agent-grade.
 - Non-AWS deployment/storage paths, broker execution, portfolio management, or
   unrelated dashboard/product work.
-- Implementing, deploying, or production-validating the plan inside this map.
+- Full-universe production cutover for every source family, and ongoing
+  production operation of the gated path — Ticket 29 covers only a first,
+  bounded, single-family prod dry run; broader rollout is a later effort.
