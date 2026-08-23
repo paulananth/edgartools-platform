@@ -267,7 +267,7 @@ def test_postgres_roles_proofs_and_fencing_are_enforced(
         SET ROLE edgartools_acquisition_worker;
         SELECT finalize_source_fetch(
             '00000000-0000-0000-0000-000000000014',
-            'worker-1', 1, 'CAPTURED', NOW()
+            'worker-1', 1, 'CAPTURED', NOW(), 'filing_artifact/deadbeef'
         );
         """,
         user="application",

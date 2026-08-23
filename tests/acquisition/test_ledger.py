@@ -222,6 +222,7 @@ def test_expired_lease_reacquires_with_higher_token_and_rejects_stale_finalize()
             worker_id="worker-1",
             fencing_token=first.fencing_token,
             final_state=FetchWorkState.CAPTURED,
+            artifact_reference="filing_artifact/deadbeef",
             now=datetime(2026, 8, 22, 10, 0, 3, tzinfo=UTC),
         )
 
@@ -230,6 +231,7 @@ def test_expired_lease_reacquires_with_higher_token_and_rejects_stale_finalize()
         worker_id="worker-2",
         fencing_token=second.fencing_token,
         final_state=FetchWorkState.CAPTURED,
+        artifact_reference="filing_artifact/deadbeef",
         now=datetime(2026, 8, 22, 10, 0, 3, tzinfo=UTC),
     )
     assert completed.fetch_state is FetchWorkState.CAPTURED

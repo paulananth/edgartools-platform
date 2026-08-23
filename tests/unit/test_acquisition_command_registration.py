@@ -67,6 +67,43 @@ def test_migrated_command_is_separate_from_legacy_fallback() -> None:
     assert "daily-incremental" in LEGACY_COMMAND_REGISTRY
 
 
+def test_capture_filing_artifact_is_registered_through_ticket_13_seam() -> None:
+    from edgar_warehouse.application.commands import (
+        COMMAND_REGISTRY,
+        LEGACY_COMMAND_REGISTRY,
+    )
+
+    registration = acquisition_command_registration("capture-filing-artifact")
+
+    assert registration is not None
+    assert "capture-filing-artifact" in COMMAND_REGISTRY
+    assert "capture-filing-artifact" not in LEGACY_COMMAND_REGISTRY
+
+    scope = registration.resolve_scope(
+        arguments={"candidate_id": "candidate-1"},
+        now=datetime(2026, 4, 23, tzinfo=UTC),
+        silver_root=None,
+    )
+    assert scope == {"candidate_id": "candidate-1"}
+    assert registration.planned_writes(
+        command_path="capture-filing-artifact",
+        run_id="run-123",
+        scope=scope,
+    ) == {
+        "bronze": "runs/capture-filing-artifact/run-123/manifest.json",
+        "staging": "staging/runs/capture-filing-artifact/run-123/manifest.json",
+        "artifacts": "artifacts/runs/capture-filing-artifact/run-123/manifest.json",
+    }
+
+
+def test_capture_filing_artifact_scope_requires_candidate_id() -> None:
+    registration = acquisition_command_registration("capture-filing-artifact")
+    assert registration is not None
+
+    with pytest.raises(Exception, match="candidate_id is required"):
+        registration.resolve_scope(arguments={}, now=datetime(2026, 4, 23, tzinfo=UTC), silver_root=None)
+
+
 def test_registered_daily_index_command_preserves_public_result(
     tmp_path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

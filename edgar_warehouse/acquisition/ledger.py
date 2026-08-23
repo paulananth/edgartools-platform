@@ -109,10 +109,12 @@ class SourceChangeStatus:
     candidate_id: str
     source_family: str
     logical_source_key: str
+    source_url: str
     observation_position: int
     cause: DecisionCause
     fetch_disposition: FetchDisposition
     fetch_state: FetchWorkState | None
+    captured_artifact_reference: str | None
     blocker: str | None
     next_action: str
     is_terminal: bool
@@ -344,12 +346,15 @@ class AcquisitionLedger:
         worker_id: str,
         fencing_token: int,
         final_state: FetchWorkState,
+        artifact_reference: str | None = None,
         now: datetime | None = None,
         actor_role: FetchTransitionRole = FetchTransitionRole.ACQUISITION_WORKER,
     ) -> SourceChangeStatus:
         _require_worker_role(actor_role)
         if final_state not in {FetchWorkState.CAPTURED, FetchWorkState.FAILED}:
             raise ValueError("final_state must be CAPTURED or FAILED")
+        if final_state is FetchWorkState.CAPTURED and not (artifact_reference or "").strip():
+            raise ValueError("artifact_reference is required when final_state is CAPTURED")
         finalize_time = now or datetime.now(UTC)
         if self._engine.dialect.name == "postgresql":
             with Session(self._engine) as session, session.begin():
@@ -359,7 +364,8 @@ class AcquisitionLedger:
                 session.execute(
                     text(
                         "SELECT finalize_source_fetch(:decision_id, :worker_id, "
-                        ":fencing_token, :final_state, :finalized_at)"
+                        ":fencing_token, :final_state, :finalized_at, "
+                        ":artifact_reference)"
                     ),
                     {
                         "decision_id": decision_id,
@@ -367,6 +373,7 @@ class AcquisitionLedger:
                         "fencing_token": fencing_token,
                         "final_state": final_state.value,
                         "finalized_at": finalize_time,
+                        "artifact_reference": artifact_reference,
                     },
                 )
             return self.source_change_status(decision_id)
@@ -385,6 +392,7 @@ class AcquisitionLedger:
                     lease_owner=None,
                     lease_expires_at=None,
                     last_transition_role="ACQUISITION_WORKER",
+                    captured_artifact_reference=artifact_reference,
                     updated_at=finalize_time,
                 )
                 .execution_options(synchronize_session=False)
@@ -480,10 +488,14 @@ def _status_from_record(
         candidate_id=decision.candidate_id,
         source_family=decision.source_family,
         logical_source_key=decision.logical_source_key,
+        source_url=decision.source_url,
         observation_position=decision.observation_position,
         cause=DecisionCause(decision.cause),
         fetch_disposition=disposition,
         fetch_state=fetch_state,
+        captured_artifact_reference=(
+            work.captured_artifact_reference if work is not None else None
+        ),
         blocker=decision.blocker,
         next_action=next_action,
         is_terminal=disposition in TERMINAL_NO_DOWNLOAD_DISPOSITIONS,

@@ -116,6 +116,7 @@ CREATE TABLE IF NOT EXISTS source_fetch_work (
     lease_owner TEXT,
     lease_expires_at TIMESTAMPTZ,
     last_transition_role TEXT NOT NULL,
+    captured_artifact_reference TEXT,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT ck_source_fetch_work_state CHECK (
         fetch_state IN ('READY','LEASED','CAPTURED','FAILED')
@@ -136,6 +137,10 @@ CREATE TABLE IF NOT EXISTS source_fetch_work (
         (fetch_state IN ('CAPTURED','FAILED') AND fencing_token > 0 AND
          lease_owner IS NULL AND lease_expires_at IS NULL AND
          last_transition_role = 'ACQUISITION_WORKER')
+    ),
+    CONSTRAINT ck_source_fetch_work_captured_requires_artifact_reference CHECK (
+        fetch_state <> 'CAPTURED' OR
+        NULLIF(BTRIM(captured_artifact_reference), '') IS NOT NULL
     )
 );
 
@@ -375,7 +380,8 @@ CREATE OR REPLACE FUNCTION finalize_source_fetch(
     requested_worker_id TEXT,
     presented_fencing_token BIGINT,
     requested_final_state TEXT,
-    requested_at TIMESTAMPTZ DEFAULT NOW()
+    requested_at TIMESTAMPTZ DEFAULT NOW(),
+    requested_artifact_reference TEXT DEFAULT NULL
 )
 RETURNS VOID
 LANGUAGE plpgsql
@@ -390,11 +396,17 @@ BEGIN
     IF requested_final_state NOT IN ('CAPTURED','FAILED') THEN
         RAISE EXCEPTION 'invalid final source fetch state %', requested_final_state;
     END IF;
+    IF requested_final_state = 'CAPTURED' AND
+       NULLIF(BTRIM(requested_artifact_reference), '') IS NULL THEN
+        RAISE EXCEPTION 'artifact reference is required to finalize decision % as CAPTURED',
+            requested_decision_id;
+    END IF;
     UPDATE source_fetch_work
     SET fetch_state = requested_final_state,
         lease_owner = NULL,
         lease_expires_at = NULL,
         last_transition_role = 'ACQUISITION_WORKER',
+        captured_artifact_reference = requested_artifact_reference,
         updated_at = requested_at
     WHERE decision_id = requested_decision_id
       AND fetch_state = 'LEASED'
@@ -434,13 +446,13 @@ GRANT SELECT ON source_fetch_decision, source_fetch_work, source_fetch_transitio
     TO edgartools_acquisition_worker;
 REVOKE EXECUTE ON FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ)
     FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ)
+REVOKE EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT)
     FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION record_initial_source_fetch_transition(UUID, TEXT)
     FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ)
     TO edgartools_acquisition_worker;
-GRANT EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ)
+GRANT EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT)
     TO edgartools_acquisition_worker;
 GRANT EXECUTE ON FUNCTION record_initial_source_fetch_transition(UUID, TEXT)
     TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
@@ -490,7 +502,7 @@ ALTER FUNCTION record_initial_source_fetch_transition(UUID, TEXT)
     OWNER TO edgartools_acquisition_owner;
 ALTER FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ)
     OWNER TO edgartools_acquisition_owner;
-ALTER FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ)
+ALTER FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT)
     OWNER TO edgartools_acquisition_owner;
 ALTER VIEW source_change_status OWNER TO edgartools_acquisition_owner;
 

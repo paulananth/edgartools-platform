@@ -344,6 +344,7 @@ class WarehousePathResolver:
             "fetch-firm-roster",
             "ingest-relationship-sources",
             "reconcile-relationship-release",
+            "capture-filing-artifact",
         ):
             return {
                 "bronze": self._render("manifest.default.bronze.path", **default_tokens),

@@ -79,6 +79,45 @@ def _plan_load_daily_form_index_for_date_writes(
     )
 
 
+def _execute_capture_filing_artifact(args: Any) -> int:
+    # Import lazily: this command's own workflow imports the orchestrator,
+    # which in turn consults this registry for scope and write planning.
+    from edgar_warehouse.application.commands.capture_filing_artifact import execute
+
+    return execute(args)
+
+
+def _resolve_capture_filing_artifact_scope(
+    *,
+    arguments: dict[str, Any],
+    now: datetime,
+    silver_root: StorageLocation | None,
+) -> dict[str, Any]:
+    del now, silver_root
+    candidate_id = str(arguments.get("candidate_id") or "").strip()
+    if not candidate_id:
+        raise WarehouseRuntimeError("candidate_id is required")
+    return {"candidate_id": candidate_id}
+
+
+def _plan_capture_filing_artifact_writes(
+    *,
+    command_path: str,
+    run_id: str,
+    scope: dict[str, Any],
+) -> dict[str, str]:
+    # Ticket 15 note: this declares the command's own run-manifest layers,
+    # not the content-addressed Bronze Artifact the Facade writes -- that
+    # key depends on the fetched payload's hash and is only known after the
+    # network fetch completes, so it cannot be pre-declared here.
+    return planned_writes(
+        "capture-filing-artifact",
+        command_path,
+        run_id,
+        scope,
+    )
+
+
 def build_acquisition_command_registry(
     registrations: Iterable[AcquisitionCommandRegistration],
 ) -> dict[str, AcquisitionCommandRegistration]:
@@ -101,6 +140,12 @@ _ACQUISITION_COMMAND_REGISTRATIONS = build_acquisition_command_registry(
             execute=_execute_load_daily_form_index_for_date,
             resolve_scope=_resolve_load_daily_form_index_for_date_scope,
             planned_writes=_plan_load_daily_form_index_for_date_writes,
+        ),
+        AcquisitionCommandRegistration(
+            name="capture-filing-artifact",
+            execute=_execute_capture_filing_artifact,
+            resolve_scope=_resolve_capture_filing_artifact_scope,
+            planned_writes=_plan_capture_filing_artifact_writes,
         ),
     )
 )
