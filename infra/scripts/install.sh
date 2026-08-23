@@ -825,6 +825,7 @@ done
 echo \"gold-refresh SUCCEEDED. Snowflake ingestion of the export manifest (Snowpipe + SNOWFLAKE_RUN_MANIFEST_TASK + REFRESH_AFTER_LOAD) is asynchronous from here -- polling gold-verify-live itself rather than sleeping a fixed duration, since REFRESH_AFTER_LOAD refreshes 21 dynamic tables sequentially (up to 900s each per its own timeout) and some (e.g. sec_thirteenf_holding, multi-million rows) are genuinely slow.\"
 verify_attempts=20
 verify_delay=60
+previous_empty_tables=\"\"
 for ((attempt=1; attempt<=verify_attempts; attempt++)); do
   # SNOWFLAKE_RUN_MANIFEST_TASK's own schedule is 360 MINUTE (widened for
   # credit economy, ecs-cost-sizing finding, CLAUDE.md) -- far longer than
@@ -832,14 +833,43 @@ for ((attempt=1; attempt<=verify_attempts; attempt++)); do
   # inside a single install.sh run. Fire it manually every attempt instead;
   # a call with nothing yet in the manifest stream just SKIPs harmlessly.
   snow sql --connection ${SNOW_CONNECTION} -q \"EXECUTE TASK EDGARTOOLS_GOLD.SNOWFLAKE_RUN_MANIFEST_TASK\" >/dev/null 2>&1 || true
-  if uv run --extra snowflake edgar-warehouse gold-verify-live; then
+  verify_output=\"\$(uv run --extra snowflake edgar-warehouse gold-verify-live)\"
+  verify_exit=\$?
+  echo \"\$verify_output\"
+  if [[ \"\${verify_exit}\" -eq 0 ]]; then
     break
+  fi
+  # Live incident (2026-08-22): this loop used to retry all 20 attempts
+  # (~20 minutes) unconditionally even when the exact same tables were
+  # empty on every single check -- pointless for tables with no upstream
+  # data at all (task #35's fundamentals backfill not yet run, ADV
+  # disclosure parser not yet built, etc.; CLAUDE.md's ticket-08 list),
+  # since no amount of waiting for REFRESH_AFTER_LOAD makes those refresh
+  # into existence. Track the empty-table set attempt-to-attempt and stop
+  # early, instead of burning the rest of the budget, once it stabilizes
+  # (unchanged across two consecutive checks) -- that is the signal
+  # REFRESH_AFTER_LOAD has already finished catching up and any remaining
+  # gap is a real upstream data gap, not a slow-in-progress refresh.
+  current_empty_tables=\"\$(printf '%s' \"\$verify_output\" | python3 -c 'import json, sys
+try:
+    payload = json.load(sys.stdin)
+    print(\",\".join(sorted(payload.get(\"empty_tables\", []))))
+except Exception:
+    sys.exit(1)
+')\"
+  parse_ok=\$?
+  if [[ \"\${parse_ok}\" -eq 0 && -n \"\${previous_empty_tables}\" && \"\${current_empty_tables}\" == \"\${previous_empty_tables}\" ]]; then
+    echo \"gold-verify-live: the same empty table(s) (\${current_empty_tables}) showed up unchanged on two consecutive checks -- REFRESH_AFTER_LOAD has already settled, so waiting longer within this run cannot help. Stopping early after \${attempt} attempts instead of the full \${verify_attempts} (~\$((verify_attempts * verify_delay / 60)) min budget). If these tables should have real data, that is a genuine upstream gap (see CLAUDE.md's ticket-08 empty-gold-tables list / task #35's fundamentals backfill), not a slow refresh -- fix the root cause and re-run this stage, don't just retry it again.\" >&2
+    exit 1
+  fi
+  if [[ \"\${parse_ok}\" -eq 0 ]]; then
+    previous_empty_tables=\"\${current_empty_tables}\"
   fi
   if [[ \"\${attempt}\" -eq \"\${verify_attempts}\" ]]; then
     echo \"gold-verify-live still failing after \${verify_attempts} attempts (~\$((verify_attempts * verify_delay / 60)) minutes) -- treating as a real failure, not a slow refresh. Check TASK_HISTORY for SNOWFLAKE_RUN_MANIFEST_TASK (SELECT * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(TASK_NAME => 'SNOWFLAKE_RUN_MANIFEST_TASK')) ORDER BY SCHEDULED_TIME DESC) for a real error (e.g. a missing OPERATE/SELECT grant on an upstream table) before assuming this is just a slow refresh.\" >&2
     exit 1
   fi
-  echo \"gold-verify-live attempt \${attempt}/\${verify_attempts} not yet passing -- refresh may still be in progress, retrying in \${verify_delay}s.\" >&2
+  echo \"gold-verify-live attempt \${attempt}/\${verify_attempts} not yet passing -- empty-table set still changing (refresh may be in progress), retrying in \${verify_delay}s.\" >&2
   sleep \"\${verify_delay}\"
 done"
 
