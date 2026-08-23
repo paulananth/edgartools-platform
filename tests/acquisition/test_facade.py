@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -9,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from edgar_warehouse.acquisition.facade import (
     CapturedArtifact,
+    OrphanedBronzeCapture,
     SourceCaptureFailed,
     build_capture_facade,
 )
@@ -19,6 +21,7 @@ from edgar_warehouse.acquisition.ledger import (
     FetchDecisionRequest,
     FetchDisposition,
     FetchWorkState,
+    StaleFencingToken,
     execute_source_request,
 )
 from edgar_warehouse.acquisition.models import AcquisitionBase
@@ -166,6 +169,183 @@ def test_identical_bytes_reuse_one_bronze_object_with_distinct_ledger_lineage(tm
     second_status = ledger.source_change_status(second.status.decision_id)
     assert first_status.fetch_state is FetchWorkState.CAPTURED
     assert second_status.fetch_state is FetchWorkState.CAPTURED
+
+
+class _FlakyOnCaptureLedger:
+    """Wraps a real AcquisitionLedger; the first N CAPTURED finalize calls
+    raise a transient-looking error before delegating to the real ledger.
+    Every other method (including FAILED finalize calls) passes straight
+    through -- this is what stands in for "the DB connection blipped right
+    after the Bronze write succeeded" in the orphan-quarantine tests.
+    """
+
+    def __init__(self, real_ledger: AcquisitionLedger, fail_times: int) -> None:
+        self._real = real_ledger
+        self._fail_times = fail_times
+        self.capture_finalize_attempts = 0
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+    def finalize_fetch(self, *args, **kwargs):
+        if kwargs.get("final_state") is FetchWorkState.CAPTURED:
+            self.capture_finalize_attempts += 1
+            if self.capture_finalize_attempts <= self._fail_times:
+                raise RuntimeError(
+                    f"transient ledger error on attempt {self.capture_finalize_attempts}"
+                )
+        return self._real.finalize_fetch(*args, **kwargs)
+
+
+def test_capture_finalize_survives_a_transient_ledger_failure_and_retries_to_captured(
+    tmp_path,
+) -> None:
+    real_ledger = _ledger()
+    flaky_ledger = _FlakyOnCaptureLedger(real_ledger, fail_times=1)
+    bronze_root = StorageLocation(str(tmp_path / "bronze"))
+    payload = b"payload that survives a flaky finalize"
+    policy = _FakePolicy(payload)
+    facade = build_capture_facade(
+        flaky_ledger, bronze_root, {"filing_artifact": policy}, worker_id="worker-1"
+    )
+
+    result = execute_source_request(
+        real_ledger,
+        _authorized_request(
+            "candidate-flaky-finalize",
+            "0000320193/accession-flaky/doc",
+            "https://www.sec.gov/Archives/flaky.xml",
+        ),
+        facade,
+        worker_id="worker-1",
+    )
+
+    assert flaky_ledger.capture_finalize_attempts == 2
+    assert isinstance(result.adapter_result, CapturedArtifact)
+    status = real_ledger.source_change_status(result.status.decision_id)
+    assert status.fetch_state is FetchWorkState.CAPTURED
+    assert status.captured_artifact_reference == result.adapter_result.bronze_relative_path
+
+
+def test_capture_finalize_exhausting_all_retries_raises_orphaned_bronze_capture(
+    tmp_path,
+) -> None:
+    real_ledger = _ledger()
+    flaky_ledger = _FlakyOnCaptureLedger(real_ledger, fail_times=99)
+    bronze_root = StorageLocation(str(tmp_path / "bronze"))
+    payload = b"payload that never finalizes"
+    policy = _FakePolicy(payload)
+    facade = build_capture_facade(
+        flaky_ledger, bronze_root, {"filing_artifact": policy}, worker_id="worker-1"
+    )
+
+    with pytest.raises(OrphanedBronzeCapture) as excinfo:
+        execute_source_request(
+            real_ledger,
+            _authorized_request(
+                "candidate-orphaned",
+                "0000320193/accession-orphaned/doc",
+                "https://www.sec.gov/Archives/orphaned.xml",
+            ),
+            facade,
+            worker_id="worker-1",
+        )
+
+    raised = excinfo.value
+    expected_hash = hashlib.sha256(payload).hexdigest()
+    assert raised.raw_evidence_hash == expected_hash
+    assert raised.bronze_relative_path == f"filing_artifact/{expected_hash}"
+
+    # The Bronze write genuinely happened and is verified on disk -- the
+    # artifact is real, just unowned by any finalized decision.
+    stored = (tmp_path / "bronze" / "filing_artifact" / expected_hash).read_bytes()
+    assert stored == payload
+
+    # Quarantined: the ledger was never told this succeeded (still LEASED,
+    # not downgraded to FAILED -- that would be a lie about what happened),
+    # so it stays open/unsettled rather than silently discarding real
+    # evidence or masking it behind a false failure.
+    status = real_ledger.source_change_status(raised.decision_id)
+    assert status.fetch_state is FetchWorkState.LEASED
+    assert status.captured_artifact_reference is None
+
+
+def test_capture_finalize_does_not_retry_a_stale_fencing_token(tmp_path) -> None:
+    """A stale fencing token means a NEWER attempt already owns this decision
+    -- retrying a doomed finalize would just waste time and could mask the
+    real (newer) outcome behind a misleading OrphanedBronzeCapture. It must
+    fail fast, in one attempt, with the ledger's own StaleFencingToken.
+    """
+    real_ledger = _ledger()
+    bronze_root = StorageLocation(str(tmp_path / "bronze"))
+    payload = b"payload racing a newer fenced attempt"
+    policy = _FakePolicy(payload)
+    facade = build_capture_facade(
+        real_ledger, bronze_root, {"filing_artifact": policy}, worker_id="worker-stale"
+    )
+
+    request = _authorized_request(
+        "candidate-stale-fence",
+        "0000320193/accession-stale-fence/doc",
+        "https://www.sec.gov/Archives/stale-fence.xml",
+    )
+    decision = real_ledger.create_fetch_decision(request)
+    stale_lease = real_ledger.claim_fetch(
+        decision.decision_id, worker_id="worker-stale", lease_seconds=1
+    )
+    # Snapshot the status while it's genuinely LEASED under this worker's
+    # token -- this is what a real stale worker would be holding in memory
+    # right before a newer attempt races ahead of it, not a status re-read
+    # after the fact (which would already show CAPTURED and get rejected by
+    # capture()'s own may_fetch guard for an unrelated reason).
+    stale_status = real_ledger.source_change_status(decision.decision_id)
+
+    # A newer worker reclaims (expires+reclaims the same lease slot) and
+    # finalizes first, advancing the fencing token past the one the stale
+    # worker above is still holding.
+    fresh_lease = real_ledger.claim_fetch(
+        decision.decision_id,
+        worker_id="worker-fresh",
+        lease_seconds=60,
+        now=datetime.now(UTC) + timedelta(seconds=2),
+    )
+    real_ledger.finalize_fetch(
+        decision.decision_id,
+        worker_id="worker-fresh",
+        fencing_token=fresh_lease.fencing_token,
+        final_state=FetchWorkState.CAPTURED,
+        artifact_reference="filing_artifact/already-owned-by-someone-else",
+    )
+
+    with pytest.raises(StaleFencingToken):
+        facade(stale_status, stale_lease)
+
+    # Not retried: the flaky-ledger-style attempt counter doesn't exist here
+    # because this is the REAL ledger, so instead we assert the CAPTURED
+    # state that "won" is still exactly the fresh worker's, untouched.
+    final_status = real_ledger.source_change_status(decision.decision_id)
+    assert final_status.captured_artifact_reference == "filing_artifact/already-owned-by-someone-else"
+
+
+def test_fetch_failure_records_failure_detail_as_durable_fetch_attempt_evidence(
+    tmp_path,
+) -> None:
+    ledger = _ledger()
+    bronze_root = StorageLocation(str(tmp_path / "bronze"))
+    facade = build_capture_facade(
+        ledger, bronze_root, {"filing_artifact": _FailingPolicy()}, worker_id="worker-1"
+    )
+    request = _authorized_request(
+        "candidate-failure-evidence",
+        "0000320193/accession-failure/doc",
+        "https://www.sec.gov/Archives/failure.xml",
+    )
+    decision_id = ledger.create_fetch_decision(request).decision_id
+
+    with pytest.raises(RuntimeError):
+        execute_source_request(ledger, request, facade, worker_id="worker-1")
+
+    assert "SEC request failed" in (ledger.latest_transition_reason(decision_id) or "")
 
 
 def test_incomplete_payload_finalizes_ledger_as_failed_and_raises(tmp_path) -> None:

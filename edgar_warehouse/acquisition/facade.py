@@ -19,6 +19,8 @@ ledger transitions are the Facade's own job and stay out of every Strategy.
 from __future__ import annotations
 
 import hashlib
+import os
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
@@ -29,6 +31,7 @@ from edgar_warehouse.acquisition.ledger import (
     FetchTransitionRole,
     FetchWorkState,
     SourceChangeStatus,
+    StaleFencingToken,
 )
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.infrastructure.object_storage import (
@@ -36,6 +39,16 @@ from edgar_warehouse.infrastructure.object_storage import (
     read_bytes,
     sanitize_relative_path,
 )
+
+# Ticket 17 bullet 4: bounded retry around the CAPTURED finalize call only --
+# not the fetch/write path, which already has its own retry story in
+# sec_client.py. A transient DB hiccup right after a verified Bronze write
+# must not immediately quarantine real evidence; a deterministic rejection
+# (StaleFencingToken, a bad call shape) must never be retried at all, since
+# retrying it would only delay recognizing a state that will never change.
+DEFAULT_FINALIZE_CAPTURE_ATTEMPTS = 3
+DEFAULT_FINALIZE_CAPTURE_RETRY_BASE_SECONDS = 0.5
+_MAX_FAILURE_DETAIL_LENGTH = 2000
 
 
 class SourceFamilyPolicy(Protocol):
@@ -53,6 +66,44 @@ class SourceFamilyPolicy(Protocol):
 
 class SourceCaptureFailed(WarehouseRuntimeError):
     """A fenced decision's fetch, completeness proof, or Bronze capture failed."""
+
+
+class OrphanedBronzeCapture(SourceCaptureFailed):
+    """Bronze holds verified evidence that the ledger could not finalize.
+
+    The fetch, write, and read-back verification all genuinely succeeded --
+    this is raised only when every bounded attempt to finalize the CAPTURED
+    disposition itself failed (e.g. sustained DB unavailability). Recording
+    FAILED here would be a lie (the artifact *was* captured) and could mask
+    real evidence behind a false failure, so the work row is deliberately
+    left exactly as it was: LEASED, under this same fenced lease. Recovery
+    is lease-gated, not immediately retryable -- a caller that retries
+    before the lease expires gets ``ActiveFetchConflict`` from
+    ``claim_fetch``, not a fresh attempt. Once the lease expires, a new
+    claim on this SAME decision_id (never a different one -- an orphan can
+    only ever attach back to the decision whose fenced lease produced it)
+    re-fetches (idempotent by content hash -- no duplicate Bronze write) and
+    retries finalization.
+    """
+
+    def __init__(
+        self,
+        *,
+        decision_id: str,
+        bronze_relative_path: str,
+        raw_evidence_hash: str,
+        cause: str,
+    ) -> None:
+        super().__init__(
+            f"Bronze artifact {bronze_relative_path!r} for decision_id={decision_id} "
+            "was verified but could not be finalized in the ledger after "
+            f"{_finalize_capture_attempts()} attempt(s); it remains quarantined "
+            "(no finalized decision references it) until the work lease expires "
+            f"and a retry reclaims decision_id={decision_id} -- cause: {cause}"
+        )
+        self.decision_id = decision_id
+        self.bronze_relative_path = bronze_relative_path
+        self.raw_evidence_hash = raw_evidence_hash
 
 
 @dataclass(frozen=True)
@@ -113,26 +164,87 @@ def build_capture_facade(
                     f"source_family={status.source_family!r}"
                 )
             artifact = _capture_bronze_evidence(bronze_root, status, payload)
-        except Exception:
+        except Exception as error:
             ledger.finalize_fetch(
                 status.decision_id,
                 worker_id=worker_id,
                 fencing_token=lease.fencing_token,
                 final_state=FetchWorkState.FAILED,
+                failure_detail=_failure_detail(error),
                 actor_role=FetchTransitionRole.ACQUISITION_WORKER,
             )
             raise
-        ledger.finalize_fetch(
-            status.decision_id,
-            worker_id=worker_id,
-            fencing_token=lease.fencing_token,
-            final_state=FetchWorkState.CAPTURED,
-            artifact_reference=artifact.bronze_relative_path,
-            actor_role=FetchTransitionRole.ACQUISITION_WORKER,
-        )
+        _finalize_captured_with_retry(ledger, status, lease, artifact, worker_id=worker_id)
         return artifact
 
     return capture
+
+
+def _finalize_captured_with_retry(
+    ledger: AcquisitionLedger,
+    status: SourceChangeStatus,
+    lease: FetchLease,
+    artifact: CapturedArtifact,
+    *,
+    worker_id: str,
+) -> None:
+    """Finalize CAPTURED with a bounded retry for transient ledger failures.
+
+    Never falls back to finalize(FAILED) -- see OrphanedBronzeCapture's
+    docstring for why. A StaleFencingToken is never retried: it means a
+    newer attempt already owns this decision, so this artifact was never
+    orphaned in the first place, just superseded.
+    """
+
+    attempts = _finalize_capture_attempts()
+    base_delay = _finalize_capture_retry_base_seconds()
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            ledger.finalize_fetch(
+                status.decision_id,
+                worker_id=worker_id,
+                fencing_token=lease.fencing_token,
+                final_state=FetchWorkState.CAPTURED,
+                artifact_reference=artifact.bronze_relative_path,
+                actor_role=FetchTransitionRole.ACQUISITION_WORKER,
+            )
+            return
+        except StaleFencingToken:
+            raise
+        except Exception as error:  # noqa: BLE001 -- bounded retry, re-raised below
+            last_error = error
+            if attempt < attempts:
+                time.sleep(base_delay * attempt)
+    raise OrphanedBronzeCapture(
+        decision_id=status.decision_id,
+        bronze_relative_path=artifact.bronze_relative_path,
+        raw_evidence_hash=artifact.raw_evidence_hash,
+        cause=str(last_error),
+    ) from last_error
+
+
+def _finalize_capture_attempts() -> int:
+    return int(
+        os.environ.get(
+            "WAREHOUSE_ACQUISITION_FINALIZE_CAPTURE_ATTEMPTS",
+            DEFAULT_FINALIZE_CAPTURE_ATTEMPTS,
+        )
+    )
+
+
+def _finalize_capture_retry_base_seconds() -> float:
+    return float(
+        os.environ.get(
+            "WAREHOUSE_ACQUISITION_FINALIZE_CAPTURE_RETRY_BASE_SECONDS",
+            DEFAULT_FINALIZE_CAPTURE_RETRY_BASE_SECONDS,
+        )
+    )
+
+
+def _failure_detail(error: Exception) -> str:
+    detail = f"{error.__class__.__name__}: {error}"
+    return detail[:_MAX_FAILURE_DETAIL_LENGTH]
 
 
 def _capture_bronze_evidence(

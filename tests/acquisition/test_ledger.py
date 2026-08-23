@@ -266,6 +266,107 @@ def test_failed_fetch_retries_same_decision_with_higher_fencing_token() -> None:
     assert retried.fencing_token == 2
 
 
+def test_failed_finalize_records_failure_detail_as_durable_fetch_attempt_evidence() -> (
+    None
+):
+    ledger = _ledger()
+    decision = ledger.create_fetch_decision(_authorized_request("candidate-failure-detail"))
+    lease = ledger.claim_fetch(
+        decision.decision_id, worker_id="worker-1", lease_seconds=60
+    )
+
+    ledger.finalize_fetch(
+        decision.decision_id,
+        worker_id="worker-1",
+        fencing_token=lease.fencing_token,
+        final_state=FetchWorkState.FAILED,
+        failure_detail="HTTP 503 Service Unavailable",
+    )
+
+    assert (
+        ledger.latest_transition_reason(decision.decision_id)
+        == "HTTP 503 Service Unavailable"
+    )
+
+
+def test_failed_finalize_without_detail_falls_back_to_the_generic_reason() -> None:
+    ledger = _ledger()
+    decision = ledger.create_fetch_decision(_authorized_request("candidate-no-detail"))
+    lease = ledger.claim_fetch(
+        decision.decision_id, worker_id="worker-1", lease_seconds=60
+    )
+
+    ledger.finalize_fetch(
+        decision.decision_id,
+        worker_id="worker-1",
+        fencing_token=lease.fencing_token,
+        final_state=FetchWorkState.FAILED,
+    )
+
+    assert ledger.latest_transition_reason(decision.decision_id) == "FETCH_FAILED"
+
+
+def test_failure_detail_is_rejected_when_final_state_is_captured() -> None:
+    ledger = _ledger()
+    decision = ledger.create_fetch_decision(_authorized_request("candidate-bad-detail"))
+    lease = ledger.claim_fetch(
+        decision.decision_id, worker_id="worker-1", lease_seconds=60
+    )
+
+    with pytest.raises(ValueError, match="failure_detail"):
+        ledger.finalize_fetch(
+            decision.decision_id,
+            worker_id="worker-1",
+            fencing_token=lease.fencing_token,
+            final_state=FetchWorkState.CAPTURED,
+            artifact_reference="filing_artifact/deadbeef",
+            failure_detail="this should never be set alongside CAPTURED",
+        )
+
+
+def test_stale_worker_finalize_cannot_overwrite_a_newer_fenced_success() -> None:
+    """Bullet 5, exercised through the widened finalize_fetch signature: a
+    stale worker holding an old fencing token must not be able to overwrite
+    or downgrade work a newer fenced attempt already finalized as CAPTURED.
+    """
+    ledger = _ledger()
+    decision = ledger.create_fetch_decision(_authorized_request("candidate-stale-worker"))
+    stale = ledger.claim_fetch(
+        decision.decision_id,
+        worker_id="worker-stale",
+        lease_seconds=1,
+        now=datetime(2026, 8, 22, 10, tzinfo=UTC),
+    )
+    fresh = ledger.claim_fetch(
+        decision.decision_id,
+        worker_id="worker-fresh",
+        lease_seconds=60,
+        now=datetime(2026, 8, 22, 10, 0, 2, tzinfo=UTC),
+    )
+    ledger.finalize_fetch(
+        decision.decision_id,
+        worker_id="worker-fresh",
+        fencing_token=fresh.fencing_token,
+        final_state=FetchWorkState.CAPTURED,
+        artifact_reference="filing_artifact/real-evidence",
+        now=datetime(2026, 8, 22, 10, 0, 3, tzinfo=UTC),
+    )
+
+    with pytest.raises(StaleFencingToken):
+        ledger.finalize_fetch(
+            decision.decision_id,
+            worker_id="worker-stale",
+            fencing_token=stale.fencing_token,
+            final_state=FetchWorkState.FAILED,
+            failure_detail="stale worker's belated failure report",
+            now=datetime(2026, 8, 22, 10, 0, 4, tzinfo=UTC),
+        )
+
+    status = ledger.source_change_status(decision.decision_id)
+    assert status.fetch_state is FetchWorkState.CAPTURED
+    assert status.captured_artifact_reference == "filing_artifact/real-evidence"
+
+
 def test_source_adapter_receives_only_a_fenced_leased_decision() -> None:
     ledger = _ledger()
     source_adapter = Mock(return_value=b"source-bytes")

@@ -13,6 +13,7 @@ from edgar_warehouse.acquisition.discovery import (
     discovery_candidate_id,
     drive_discovery_manifest,
 )
+from edgar_warehouse.acquisition.facade import DEFAULT_FINALIZE_CAPTURE_ATTEMPTS
 from edgar_warehouse.acquisition.ledger import AcquisitionLedger, FetchDisposition, FetchWorkState
 from edgar_warehouse.acquisition.models import AcquisitionBase
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
@@ -259,6 +260,160 @@ def test_one_candidates_capture_failure_does_not_abort_the_rest_of_the_interval(
     assert failed.fetch_state is FetchWorkState.FAILED
     assert failed.error is not None
     assert result.unsettled_candidate_ids == ("0001-26-000002",)
+
+
+def test_retrying_a_failed_candidate_on_a_later_drive_call_preserves_decision_identity(
+    tmp_path,
+) -> None:
+    """Ticket 17 bullet 1: a retry (a second, later drive_discovery_manifest
+    call for the SAME interval) must reuse the original decision, cause, and
+    observation position while claiming a new attempt with a higher fence --
+    not invent a second decision for the same candidate.
+    """
+    ledger = _ledger()
+    bronze_root = StorageLocation(str(tmp_path / "bronze"))
+    manifest = build_discovery_manifest(
+        [_row(accession="0001-26-000001", cik=1, form="4")], business_date="2026-08-24"
+    )
+
+    class _FailOnceThenSucceedPolicy:
+        def __init__(self, payload: bytes) -> None:
+            self.payload = payload
+            self.calls = 0
+
+        def fetch(self, source_url: str) -> bytes:
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("SEC request failed")
+            return self.payload
+
+        def is_complete(self, payload: bytes) -> bool:
+            return True
+
+    policy = _FailOnceThenSucceedPolicy(b"real filing bytes")
+
+    first = drive_discovery_manifest(
+        ledger,
+        bronze_root,
+        {"filing_artifact": policy},
+        manifest,
+        worker_id="worker-1",
+        registry_version="filing_artifact-v1",
+    )
+    assert first.interval_complete is False
+    failed_outcome = first.outcomes[0]
+    assert failed_outcome.fetch_state is FetchWorkState.FAILED
+    original_decision_id = failed_outcome.decision_id
+
+    retried = drive_discovery_manifest(
+        ledger,
+        bronze_root,
+        {"filing_artifact": policy},
+        manifest,
+        worker_id="worker-2",
+        registry_version="filing_artifact-v1",
+    )
+
+    assert retried.interval_complete is True
+    retried_outcome = retried.outcomes[0]
+    # Same decision, cause, and observation position -- not a second decision
+    # for the same candidate.
+    assert retried_outcome.decision_id == original_decision_id
+    assert retried_outcome.fetch_state is FetchWorkState.CAPTURED
+    assert policy.calls == 2
+
+    original_status = ledger.source_change_status(original_decision_id)
+    assert original_status.observation_position == 1
+    assert original_status.cause.value == "CAPTURED_DISCOVERY"
+
+    stored = (
+        tmp_path
+        / "bronze"
+        / "filing_artifact"
+        / hashlib.sha256(policy.payload).hexdigest()
+    ).read_bytes()
+    assert stored == policy.payload
+
+
+class _FlakyOnFirstCaptureLedger:
+    """Wraps a real AcquisitionLedger; every CAPTURED finalize call for the
+    FIRST candidate's decision (all of its bounded retry attempts) raises,
+    standing in for sustained ledger unavailability right after that one
+    candidate's Bronze write -- the orphan-quarantine scenario (Ticket 17
+    bullet 4). A later candidate's CAPTURED finalize succeeds normally,
+    proving the outage is isolated to the one decision, not global.
+    """
+
+    def __init__(self, real_ledger: AcquisitionLedger, *, fail_calls: int) -> None:
+        self._real = real_ledger
+        self._fail_calls = fail_calls
+        self._capture_call_count = 0
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+    def finalize_fetch(self, *args, **kwargs):
+        if kwargs.get("final_state") is FetchWorkState.CAPTURED:
+            self._capture_call_count += 1
+            if self._capture_call_count <= self._fail_calls:
+                raise RuntimeError("sustained ledger unavailability")
+        return self._real.finalize_fetch(*args, **kwargs)
+
+
+def test_an_orphaned_bronze_capture_stays_unsettled_without_touching_sibling_candidates(
+    tmp_path,
+) -> None:
+    real_ledger = _ledger()
+    flaky_ledger = _FlakyOnFirstCaptureLedger(
+        real_ledger, fail_calls=DEFAULT_FINALIZE_CAPTURE_ATTEMPTS
+    )
+    bronze_root = StorageLocation(str(tmp_path / "bronze"))
+    policy = _SpyPolicy(b"real filing bytes that never finalize")
+    manifest = build_discovery_manifest(
+        [
+            _row(accession="0001-26-000001", cik=1, form="4"),
+            _row(accession="0001-26-000002", cik=2, form="4"),
+        ],
+        business_date="2026-08-24",
+    )
+
+    class _RoutingPolicy:
+        def fetch(self, source_url: str) -> bytes:
+            if "0001-26-000001" in source_url:
+                return policy.fetch(source_url)
+            return b"sibling candidate's own payload"
+
+        def is_complete(self, payload: bytes) -> bool:
+            return True
+
+    result = drive_discovery_manifest(
+        flaky_ledger,
+        bronze_root,
+        {"filing_artifact": _RoutingPolicy()},
+        manifest,
+        worker_id="worker-1",
+        registry_version="filing_artifact-v1",
+    )
+
+    assert result.interval_complete is False
+    outcomes_by_accession = {o.candidate.accession_number: o for o in result.outcomes}
+
+    orphaned = outcomes_by_accession["0001-26-000001"]
+    assert orphaned.error is not None
+    assert "quarantined" in orphaned.error
+    # Never downgraded to FAILED -- the ledger genuinely doesn't know CAPTURED
+    # happened, so it must not lie about it either. Confirmed via the REAL
+    # (unwrapped) ledger, since drive_discovery_manifest's own outcome record
+    # is built from what the (possibly stale) status read returned.
+    real_status = real_ledger.source_change_status(orphaned.decision_id)
+    assert real_status.fetch_state is FetchWorkState.LEASED
+
+    # The sibling candidate, sharing this same interval/call, is untouched.
+    sibling = outcomes_by_accession["0001-26-000002"]
+    assert sibling.fetch_state is FetchWorkState.CAPTURED
+    assert sibling.error is None
+
+    assert result.unsettled_candidate_ids == ("0001-26-000001",)
 
 
 def test_discovery_candidate_id_is_deterministic_per_interval_and_accession() -> None:
