@@ -155,7 +155,7 @@ def test_promotion_conflict_retries_up_to_max_attempts_then_raises(tmp_path: Pat
 
     attempts = []
 
-    def always_conflict(self, staged_relative, canonical_relative, *, expected_etag):
+    def always_conflict(self, staged_relative, canonical_relative, *, expected_etag, payload=None):
         attempts.append(expected_etag)
         raise PromotionConflictError(canonical_relative, expected_etag, "other-etag", staged_relative)
 

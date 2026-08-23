@@ -769,6 +769,12 @@ uv run --with dbt-snowflake dbt test --target ${ENVIRONMENT}"
 cat infra/snowflake/sql/bootstrap/08_loader_role.sql; } | snow sql --connection ${SNOW_CONNECTION} -i"
 
   add_stage \
+    "Snowflake: loader read grants on silver" \
+    "Grants EDGARTOOLS_${ENV_UPPER}_LOADER OPERATE + SELECT on every EDGARTOOLS_SILVER dynamic table (current and future). Must run after this stage's own loader-role prerequisite above (the role must exist first) and before any gold-refresh (both the standalone stage and bronze_seed_silver_gold's internal one, both later in this sequence) -- without it, REFRESH_AFTER_LOAD (EXECUTE AS OWNER, running as loader) cannot refresh any gold dynamic table whose dbt model reads from silver via ref()/source() (e.g. COMPANY, FILING_ACTIVITY, TICKER_REFERENCE), because those silver dynamic tables are owned by EDGARTOOLS_${ENV_UPPER}_DEPLOYER, not loader, and 08_loader_role.sql's own grants only ever covered EDGARTOOLS_GOLD. Found live 2026-08-22 (PRJEDJU-QJB05385): this had been silently failing every scheduled SNOWFLAKE_RUN_MANIFEST_TASK refresh since at least 2026-08-18 with no visible signal beyond the task's own TASK_HISTORY, because the task's overall state stayed 'started' and its schedule kept firing on time regardless of the refresh failing every single run. Full timeline: CLAUDE.md's 'SNOWFLAKE_RUN_MANIFEST_TASK / silver-loader OPERATE+SELECT gap' 5-whys section." \
+    "{ printf '%s\n' \"SET database_name = '${db_name}';\" \"SET silver_schema_name = 'EDGARTOOLS_SILVER';\" \"SET loader_role_name = 'EDGARTOOLS_${ENV_UPPER}_LOADER';\"
+cat infra/snowflake/sql/bootstrap/18_silver_loader_read_grants.sql; } | snow sql --connection ${SNOW_CONNECTION} -i"
+
+  add_stage \
     "Snowflake: Streamlit dashboard" \
     "Uploads the Streamlit dashboard artifacts to the Snowflake dashboard stage." \
     "SNOW_CONNECTION=${snow_q} DASHBOARD_DATABASE=${db_name} bash infra/snowflake/streamlit/deploy.sh"
@@ -782,7 +788,7 @@ cat infra/snowflake/sql/bootstrap/08_loader_role.sql; } | snow sql --connection 
   add_stage \
     "AWS/silver: seed-universe (full/unscoped)" \
     "Full, unscoped edgar-warehouse seed-universe run -- an AWS/silver-layer concern, not a Snowflake-specific step. Runs in the early-data phase, after the entire deploy phase rather than immediately after native-pull foundation as earlier versions of this wizard had it (install-sh-provision-deploy-data map, Tickets 01/02): the two hard constraints (wayfinder snowflake-account-cutover ticket 06) are that Snowpipe (created by the provision-phase native-pull foundation stage) must already exist -- Ticket 02 confirmed it only needs to exist, not to run immediately afterward -- so this cannot run before native-pull foundation completes; and 'mdm seed-universe' inside the MDM+graph stage below errors ('silver universe empty; warehouse seed-universe must run first') unless this ran first, so it cannot run after that stage either. Ticket 02 additionally verified no deploy-phase stage (ECR publish, ECS task defs, MDM export targets, dbt gold, loader role ownership, Streamlit dashboard) depends on this stage having already run, or vice versa -- dbt gold's own INITIAL refresh against a still-empty EDGARTOOLS_SOURCE self-heals via the dynamic tables' scheduled target_lag refresh once this stage's S3 writes reach Snowpipe, and the standalone gold-refresh stage's gold-verify-live gate below fails closed if that self-heal hasn't caught up by the time it runs. Deliberately unscoped (no --limit, unlike the old bounded call this replaces in the smoke-test stage): --limit truncates which newly-discovered CIKs get queued into bootstrap_pending tracking status after the already-active-CIK filter, silently dropping genuinely-new companies past the first N. WAREHOUSE_RUNTIME_MODE=bronze_capture (not infrastructure_validation, the smoke-test stage's mode) is required here -- infrastructure_validation never calls the real reference-data sync at all, only writes a placeholder manifest. WAREHOUSE_BRONZE_ROOT/WAREHOUSE_STORAGE_ROOT/SERVING_EXPORT_ROOT are set explicitly here (derived from the same edgartools-<env>-{bronze,warehouse,snowflake-export}-<account-id> bucket names the AWS passive-infrastructure stage provisions and deploy-aws-application.sh's manifest confirms) rather than left to ambient shell state -- WarehouseSettings.from_env() (edgar_warehouse/infrastructure/warehouse_settings.py) requires all three unconditionally for every SERVING_EXPORT_COMMANDS member (seed-universe is one), regardless of runtime_mode, so this stage previously failed outright with 'WAREHOUSE_BRONZE_ROOT is required for warehouse commands' unless an operator's shell happened to already export them from an unrelated source. This is a one-time initial-state establishment for a new account, not an ongoing mechanism: ordinary freshness continues afterward via the existing recurring silver-layer cadence (e.g. daily_incremental), independent of which Snowflake account is live." \
-    "EDGAR_IDENTITY=\"\${EDGAR_IDENTITY:?set EDGAR_IDENTITY with contact email}\" WAREHOUSE_ENVIRONMENT=${ENVIRONMENT} WAREHOUSE_RUNTIME_MODE=bronze_capture WAREHOUSE_BRONZE_ROOT=\"s3://edgartools-${ENVIRONMENT}-bronze-${expected_account_q}/warehouse/bronze\" WAREHOUSE_STORAGE_ROOT=\"s3://edgartools-${ENVIRONMENT}-warehouse-${expected_account_q}/warehouse\" SERVING_EXPORT_ROOT=\"s3://edgartools-${ENVIRONMENT}-snowflake-export-${expected_account_q}/warehouse/artifacts/snowflake_exports/\" uv run --extra s3 edgar-warehouse seed-universe"
+    "EDGAR_IDENTITY=\"\${EDGAR_IDENTITY:?set EDGAR_IDENTITY with contact email}\" WAREHOUSE_ENVIRONMENT=${ENVIRONMENT} WAREHOUSE_RUNTIME_MODE=bronze_capture WAREHOUSE_BRONZE_ROOT=\"s3://edgartools-${ENVIRONMENT}-bronze-${EXPECTED_AWS_ACCOUNT_ID}/warehouse/bronze\" WAREHOUSE_STORAGE_ROOT=\"s3://edgartools-${ENVIRONMENT}-warehouse-${EXPECTED_AWS_ACCOUNT_ID}/warehouse\" SERVING_EXPORT_ROOT=\"s3://edgartools-${ENVIRONMENT}-snowflake-export-${EXPECTED_AWS_ACCOUNT_ID}/warehouse/artifacts/snowflake_exports/\" uv run --extra s3 edgar-warehouse seed-universe"
 
   # Phase: late-data -- full pipeline runs, identity/graph resolution against
   # real data, and verification. Everything here assumes early-data has
@@ -825,7 +831,7 @@ echo \"bronze_seed_silver_gold SUCCEEDED. Do not treat this alone as Blocker 4 /
 
   add_stage \
     "Snowflake: standalone gold-refresh" \
-    "Explicitly triggers the dedicated edgartools-${ENVIRONMENT}-gold-refresh Step Function, polls to a terminal state, then runs gold-verify-live -- a direct-Snowflake row-count check across every EDGARTOOLS_GOLD dynamic table that fails this stage (non-zero exit) if any expected table is empty (wayfinder snowflake-env-provisioning ticket 06 / snowflake-account-cutover ticket 06). This replaces a manual echo reminder to check row counts by hand with an automated, fail-closed gate -- appended here rather than as a separate final stage so an empty gold layer is caught before the MDM+graph stages below spend time on identity resolution/graph sync against it. The bronze_seed_silver_gold stage above runs a GoldRefresh step internally, but that is not a substitute for this: found 2026-07-26 in prod that the standalone gold-refresh state machine had ZERO executions ever (install.sh never called it directly), and separately that Snowflake's REFRESH_AFTER_LOAD stored procedure only refreshes a hardcoded table allowlist -- several newer gold tables (EXECUTIVE_RECORDS, EARNINGS_RELEASES, INSTITUTIONAL_HOLDINGS, ACCOUNTING_FLAGS, FINANCIAL_FACTS, FINANCIAL_DERIVED, FINANCIAL_FACTORS) were missing from that list and so never refreshed past their empty initialize=ON_CREATE run, even though their EDGARTOOLS_SOURCE data was current. Both gaps are fixed (04_refresh_wrapper.sql updated and reapplied to prod), but this stage exists so a stale gold layer surfaces as an explicit, auditable install step instead of silently depending on a side effect of the combined pipeline." \
+    "Explicitly triggers the dedicated edgartools-${ENVIRONMENT}-gold-refresh Step Function, polls to a terminal state, then runs gold-verify-live -- a direct-Snowflake row-count check across every EDGARTOOLS_GOLD dynamic table that fails this stage (non-zero exit) if any expected table is empty (wayfinder snowflake-env-provisioning ticket 06 / snowflake-account-cutover ticket 06). This replaces a manual echo reminder to check row counts by hand with an automated, fail-closed gate -- appended here rather than as a separate final stage so an empty gold layer is caught before the MDM+graph stages below spend time on identity resolution/graph sync against it. The bronze_seed_silver_gold stage above runs a GoldRefresh step internally, but that is not a substitute for this: found 2026-07-26 in prod that the standalone gold-refresh state machine had ZERO executions ever (install.sh never called it directly), and separately that Snowflake's REFRESH_AFTER_LOAD stored procedure only refreshes a hardcoded table allowlist -- several newer gold tables (EXECUTIVE_RECORDS, EARNINGS_RELEASES, INSTITUTIONAL_HOLDINGS, ACCOUNTING_FLAGS, FINANCIAL_FACTS, FINANCIAL_DERIVED, FINANCIAL_FACTORS) were missing from that list and so never refreshed past their empty initialize=ON_CREATE run, even though their EDGARTOOLS_SOURCE data was current. Both gaps are fixed (04_refresh_wrapper.sql updated and reapplied to prod), but this stage exists so a stale gold layer surfaces as an explicit, auditable install step instead of silently depending on a side effect of the combined pipeline. The retry loop below also fires SNOWFLAKE_RUN_MANIFEST_TASK manually on every attempt (not just polls passively) -- found live 2026-08-22 that its schedule was widened to 360 MINUTE (ecs-cost-sizing credit-consumption finding, CLAUDE.md) after this stage's 20-attempt/60s retry budget was written, so a purely passive wait can never fall inside a 6-hour window on any single install.sh run; manually firing the task each attempt decouples this stage from that schedule without changing it (EXECUTE TASK on a task whose stream has no data yet is a harmless no-op SKIPPED run, so this is safe to call even before Snowpipe has ingested the manifest). Full timeline: CLAUDE.md's 'SNOWFLAKE_RUN_MANIFEST_TASK / silver-loader OPERATE+SELECT gap' 5-whys section." \
     "account_id=\"\$(aws --profile ${deployer_q} sts get-caller-identity --query Account --output text)\"
 state_machine_arn=\"arn:aws:states:${AWS_REGION_NAME}:\${account_id}:stateMachine:edgartools-${ENVIRONMENT}-gold-refresh\"
 execution_name=\"gold-refresh-\$(date +%s)\"
@@ -846,15 +852,51 @@ done
 echo \"gold-refresh SUCCEEDED. Snowflake ingestion of the export manifest (Snowpipe + SNOWFLAKE_RUN_MANIFEST_TASK + REFRESH_AFTER_LOAD) is asynchronous from here -- polling gold-verify-live itself rather than sleeping a fixed duration, since REFRESH_AFTER_LOAD refreshes 21 dynamic tables sequentially (up to 900s each per its own timeout) and some (e.g. sec_thirteenf_holding, multi-million rows) are genuinely slow.\"
 verify_attempts=20
 verify_delay=60
+previous_empty_tables=\"\"
 for ((attempt=1; attempt<=verify_attempts; attempt++)); do
-  if uv run --extra snowflake edgar-warehouse gold-verify-live; then
+  # SNOWFLAKE_RUN_MANIFEST_TASK's own schedule is 360 MINUTE (widened for
+  # credit economy, ecs-cost-sizing finding, CLAUDE.md) -- far longer than
+  # this loop's budget, so passively waiting on it can never reliably land
+  # inside a single install.sh run. Fire it manually every attempt instead;
+  # a call with nothing yet in the manifest stream just SKIPs harmlessly.
+  snow sql --connection ${SNOW_CONNECTION} -q \"EXECUTE TASK EDGARTOOLS_GOLD.SNOWFLAKE_RUN_MANIFEST_TASK\" >/dev/null 2>&1 || true
+  verify_output=\"\$(uv run --extra snowflake edgar-warehouse gold-verify-live)\"
+  verify_exit=\$?
+  echo \"\$verify_output\"
+  if [[ \"\${verify_exit}\" -eq 0 ]]; then
     break
   fi
-  if [[ \"\${attempt}\" -eq \"\${verify_attempts}\" ]]; then
-    echo \"gold-verify-live still failing after \${verify_attempts} attempts (~\$((verify_attempts * verify_delay / 60)) minutes) -- treating as a real failure, not a slow refresh.\" >&2
+  # Live incident (2026-08-22): this loop used to retry all 20 attempts
+  # (~20 minutes) unconditionally even when the exact same tables were
+  # empty on every single check -- pointless for tables with no upstream
+  # data at all (task #35's fundamentals backfill not yet run, ADV
+  # disclosure parser not yet built, etc.; CLAUDE.md's ticket-08 list),
+  # since no amount of waiting for REFRESH_AFTER_LOAD makes those refresh
+  # into existence. Track the empty-table set attempt-to-attempt and stop
+  # early, instead of burning the rest of the budget, once it stabilizes
+  # (unchanged across two consecutive checks) -- that is the signal
+  # REFRESH_AFTER_LOAD has already finished catching up and any remaining
+  # gap is a real upstream data gap, not a slow-in-progress refresh.
+  current_empty_tables=\"\$(printf '%s' \"\$verify_output\" | python3 -c 'import json, sys
+try:
+    payload = json.load(sys.stdin)
+    print(\",\".join(sorted(payload.get(\"empty_tables\", []))))
+except Exception:
+    sys.exit(1)
+')\"
+  parse_ok=\$?
+  if [[ \"\${parse_ok}\" -eq 0 && -n \"\${previous_empty_tables}\" && \"\${current_empty_tables}\" == \"\${previous_empty_tables}\" ]]; then
+    echo \"gold-verify-live: the same empty table(s) (\${current_empty_tables}) showed up unchanged on two consecutive checks -- REFRESH_AFTER_LOAD has already settled, so waiting longer within this run cannot help. Stopping early after \${attempt} attempts instead of the full \${verify_attempts} (~\$((verify_attempts * verify_delay / 60)) min budget). If these tables should have real data, that is a genuine upstream gap (see CLAUDE.md's ticket-08 empty-gold-tables list / task #35's fundamentals backfill), not a slow refresh -- fix the root cause and re-run this stage, don't just retry it again.\" >&2
     exit 1
   fi
-  echo \"gold-verify-live attempt \${attempt}/\${verify_attempts} not yet passing -- refresh may still be in progress, retrying in \${verify_delay}s.\"
+  if [[ \"\${parse_ok}\" -eq 0 ]]; then
+    previous_empty_tables=\"\${current_empty_tables}\"
+  fi
+  if [[ \"\${attempt}\" -eq \"\${verify_attempts}\" ]]; then
+    echo \"gold-verify-live still failing after \${verify_attempts} attempts (~\$((verify_attempts * verify_delay / 60)) minutes) -- treating as a real failure, not a slow refresh. Check TASK_HISTORY for SNOWFLAKE_RUN_MANIFEST_TASK (SELECT * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(TASK_NAME => 'SNOWFLAKE_RUN_MANIFEST_TASK')) ORDER BY SCHEDULED_TIME DESC) for a real error (e.g. a missing OPERATE/SELECT grant on an upstream table) before assuming this is just a slow refresh.\" >&2
+    exit 1
+  fi
+  echo \"gold-verify-live attempt \${attempt}/\${verify_attempts} not yet passing -- empty-table set still changing (refresh may be in progress), retrying in \${verify_delay}s.\" >&2
   sleep \"\${verify_delay}\"
 done"
 
@@ -877,8 +919,8 @@ bash infra/scripts/run-aws-mdm-e2e.sh --env ${ENVIRONMENT} --aws-profile ${DEPLO
 
   add_stage \
     "Data: bounded smoke only" \
-    "Runs a bounded smoke command only; unbounded bootstrap is not part of the default install path. The seed-universe smoke call that used to run here is gone (wayfinder snowflake-account-cutover ticket 06): the new unscoped 'AWS/silver: seed-universe' stage above already seeds the real universe, and re-running it here in infrastructure_validation mode would only write a second, pointless placeholder manifest." \
-    "EDGAR_IDENTITY=\"\${EDGAR_IDENTITY:?set EDGAR_IDENTITY with contact email}\" WAREHOUSE_ENVIRONMENT=${ENVIRONMENT} WAREHOUSE_RUNTIME_MODE=infrastructure_validation uv run --extra s3 edgar-warehouse bootstrap-next --limit 100"
+    "Runs a bounded smoke command only; unbounded bootstrap is not part of the default install path. The seed-universe smoke call that used to run here is gone (wayfinder snowflake-account-cutover ticket 06): the new unscoped 'AWS/silver: seed-universe' stage above already seeds the real universe, and re-running it here in infrastructure_validation mode would only write a second, pointless placeholder manifest. Live incident (2026-08-23): this stage's command previously omitted WAREHOUSE_BRONZE_ROOT/WAREHOUSE_STORAGE_ROOT/SERVING_EXPORT_ROOT and failed outright with 'WAREHOUSE_BRONZE_ROOT is required for warehouse commands' -- WarehouseSettings.from_env() requires all three unconditionally for every SERVING_EXPORT_COMMANDS member (bootstrap-next is one, same as seed-universe), regardless of runtime_mode. The 'AWS/silver: seed-universe' stage above already documented and fixed this exact gap for itself; this stage was missed. Fixed the same way here: set explicitly from the same edgartools-<env>-{bronze,warehouse,snowflake-export}-<account-id> bucket-naming convention, rather than left to ambient shell state. While fixing this, found a second, deeper bug in the exact pattern being copied: the seed-universe stage's own WAREHOUSE_BRONZE_ROOT/WAREHOUSE_STORAGE_ROOT/SERVING_EXPORT_ROOT values spliced the shell_quote()-wrapped \${expected_account_q} (single-quoted, e.g. \"'690839588395'\") into an already-double-quoted string -- bash does not treat a single-quote character as a quoting operator inside double quotes, so the resulting env var value would contain the literal quote characters (verified: WAREHOUSE_BRONZE_ROOT would resolve to \"s3://edgartools-prod-bronze-'690839588395'/warehouse/bronze\", an invalid S3 URI) rather than being stripped. Never caught before because every prior run of the seed-universe stage in this account went through the AWS Step Functions execution (a separate code path -- deploy-aws-application.sh's task definition JSON sets these env vars directly, no shell quoting involved), never through install.sh's own local CLI stage. Fixed both this stage and the seed-universe stage above to interpolate the raw \${EXPECTED_AWS_ACCOUNT_ID} directly instead of the quote-wrapped \${expected_account_q} -- safe because it's already validated to be exactly 12 digits (line ~1129) before build_stages ever runs, so no shell metacharacters are possible and no quoting is needed in this double-quoted context." \
+    "EDGAR_IDENTITY=\"\${EDGAR_IDENTITY:?set EDGAR_IDENTITY with contact email}\" WAREHOUSE_ENVIRONMENT=${ENVIRONMENT} WAREHOUSE_RUNTIME_MODE=infrastructure_validation WAREHOUSE_BRONZE_ROOT=\"s3://edgartools-${ENVIRONMENT}-bronze-${EXPECTED_AWS_ACCOUNT_ID}/warehouse/bronze\" WAREHOUSE_STORAGE_ROOT=\"s3://edgartools-${ENVIRONMENT}-warehouse-${EXPECTED_AWS_ACCOUNT_ID}/warehouse\" SERVING_EXPORT_ROOT=\"s3://edgartools-${ENVIRONMENT}-snowflake-export-${EXPECTED_AWS_ACCOUNT_ID}/warehouse/artifacts/snowflake_exports/\" uv run --extra s3 edgar-warehouse bootstrap-next --limit 100"
 }
 
 print_command_block() {

@@ -690,6 +690,8 @@ def merge_candidate_into_canonical(
     candidate_path: Path,
     canonical_path: Path,
     output_path: Path,
+    *,
+    only_tables: frozenset[str] | None = None,
 ) -> MergeResult:
     """Merge a partial candidate silver DuckDB into a copy of canonical.
 
@@ -708,6 +710,22 @@ def merge_candidate_into_canonical(
     published through this path. A protected table whose candidate schema
     drops a canonical column, or changes a shared column's declared type,
     also fails closed (only additive schema evolution is permitted here).
+
+    ``only_tables``: when provided, restricts actual merge work (row
+    comparison, insert/update resolution, the emitted per-table events) to
+    exactly this set -- every other classified table is skipped entirely,
+    its content in ``output_path`` left exactly as canonical's own copy
+    already had it. Correct by construction, not just an optimization: a
+    caller only passes a table here if it can prove that table is otherwise
+    unchanged since it was hydrated from canonical (e.g. via a per-table
+    fingerprint diff), so "leave canonical's copy alone" is definitionally
+    the right answer, not a shortcut that could drop real data. The
+    unclassified-table fail-closed check above still runs over every table
+    in either file regardless of scope -- schema safety is never narrowed.
+    ``None`` (the default) preserves the original full-scope behavior
+    unchanged, for every existing caller. An empty ``frozenset()`` is a
+    valid, genuine no-op merge (every table skipped), not a signal to fall
+    back to full scope.
     """
     if not candidate_path.exists():
         raise SilverPublicationError(f"Candidate silver database not found: {candidate_path}")
@@ -758,6 +776,8 @@ def merge_candidate_into_canonical(
         for table_name, policy in PROTECTED_TABLE_REGISTRY.items():
             if table_name not in cand_tables:
                 continue  # candidate has no data for this table; canonical copy stands.
+            if only_tables is not None and table_name not in only_tables:
+                continue  # caller proved this table is otherwise unchanged; canonical copy stands.
 
             _emit_table_merge_started_event(table_name)
 

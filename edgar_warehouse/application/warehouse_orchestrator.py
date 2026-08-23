@@ -1065,6 +1065,16 @@ def _hydrate_silver_database_from_storage(context: WarehouseCommandContext) -> N
     )
 
 
+def _streaming_md5_hexdigest(path: Path, chunk_size: int = 8 * 1024 * 1024) -> str:
+    """MD5 of a local file's content, read in chunks rather than buffered
+    fully into memory (seed-universe-narrow-hydrate ticket 06)."""
+    digest = hashlib.md5()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict[str, Any] | None:
     """Merge the local silver candidate into canonical and publish it, safely.
 
@@ -1100,6 +1110,7 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
     relative_path = "silver/sec/silver.duckdb"
 
     hydration_fingerprint = _read_fingerprint_sidecar(source_path)
+    current_fingerprint: dict[str, Any] | None = None
     if hydration_fingerprint is not None:
         try:
             current_fingerprint = compute_silver_fingerprint(source_path)
@@ -1126,31 +1137,76 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
                 "skipped": True,
             }
 
+    # Scoped merge (seed-universe OOM root cause, found live 2026-08-22): when
+    # the whole-file fingerprints above differ (so the skip-if-unchanged
+    # short-circuit didn't apply), diff them per protected table instead of
+    # falling through to a full-scope merge across every table in the file.
+    # A command that only wrote e.g. sec_company_ticker still hydrates the
+    # *entire* canonical locally (every other command needs that), so its
+    # candidate always contains every table -- without this, merging it
+    # drags every unrelated table (ownership transactions, 13F holdings,
+    # financial facts, ...) through a real compare/merge pass regardless of
+    # whether this process ever touched them. Safe by construction: a table
+    # is only ever excluded from the merge when its (row_count, content_hash)
+    # is byte-for-byte identical to what hydration captured, so excluding it
+    # can never drop a real write -- see merge_candidate_into_canonical's own
+    # only_tables docstring. Only computed when both fingerprints are
+    # available (hydration_fingerprint is None or current_fingerprint failed
+    # to compute both fall back to only_tables=None, i.e. the original
+    # always-correct full-scope behavior, unchanged).
+    changed_tables: frozenset[str] | None = None
+    if hydration_fingerprint is not None and current_fingerprint is not None:
+        hydration_protected = hydration_fingerprint.get("protected", {})
+        current_protected = current_fingerprint.get("protected", {})
+        changed_tables = frozenset(
+            table_name
+            for table_name in set(hydration_protected) | set(current_protected)
+            if hydration_protected.get(table_name) != current_protected.get(table_name)
+        )
+
     baseline = context.storage_root.read_object_version(relative_path)
     tables_merged: tuple[str, ...] = ()
 
+    # File-transfer streaming (seed-universe-narrow-hydrate ticket 06): a
+    # canonical silver.duckdb is a whole-database file, not per-table slices,
+    # so even with the table-scoped merge above, the transfer of the merged
+    # *result* is still O(file size). This used to buffer the whole file
+    # into memory three times over (canonical re-download, merged-file read
+    # for upload, promote_staged's own internal re-read of what it just
+    # uploaded) -- the exact boundary that OOM'd a live seed-universe task
+    # immediately after the table-scoping merge above had already completed
+    # cleanly. `download_file`/`stage_and_promote`(payload=Path) stream
+    # instead of buffering, and passing the local `Path` straight through to
+    # `stage_and_promote` lets `promote_staged` reuse it directly instead of
+    # re-downloading the object this same call just uploaded.
     if baseline.exists:
         with tempfile.TemporaryDirectory() as tmp_dir:
             canonical_local = Path(tmp_dir) / "canonical.duckdb"
-            canonical_local.write_bytes(read_bytes(context.storage_root.join(relative_path)))
+            context.storage_root.download_file(relative_path, canonical_local)
             merged_local = Path(tmp_dir) / "merged.duckdb"
-            merge_result = merge_candidate_into_canonical(source_path, canonical_local, merged_local)
+            merge_result = merge_candidate_into_canonical(
+                source_path, canonical_local, merged_local, only_tables=changed_tables
+            )
             tables_merged = merge_result.tables_merged
-            payload = merged_local.read_bytes()
+            size_bytes = merged_local.stat().st_size
+            staged_checksum = _streaming_md5_hexdigest(merged_local)
+            promotion = context.storage_root.stage_and_promote(
+                relative_path, merged_local, expected_etag=baseline.etag
+            )
     else:
-        payload = source_path.read_bytes()
+        size_bytes = source_path.stat().st_size
+        staged_checksum = _streaming_md5_hexdigest(source_path)
+        promotion = context.storage_root.stage_and_promote(
+            relative_path, source_path, expected_etag=baseline.etag
+        )
 
-    size_bytes = len(payload)
-    promotion = context.storage_root.stage_and_promote(
-        relative_path, payload, expected_etag=baseline.etag
-    )
     return {
         "layer": "silver_database",
         "path": promotion.canonical_path,
         "relative_path": relative_path,
         "size_bytes": size_bytes,
         "source_version": baseline.etag,
-        "staged_checksum": hashlib.md5(payload).hexdigest(),
+        "staged_checksum": staged_checksum,
         "canonical_version": promotion.new_version.etag,
         "tables_merged": list(tables_merged),
     }

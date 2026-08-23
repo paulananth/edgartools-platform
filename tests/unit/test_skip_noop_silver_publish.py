@@ -49,19 +49,30 @@ def _build_canonical_bytes(tmp_path) -> bytes:
     return canonical_path.read_bytes()
 
 
-def _hydrate(context, canonical_bytes):
-    from edgar_warehouse.application.warehouse_orchestrator import (
-        _hydrate_silver_database_from_storage,
-    )
+def _fake_download_file(canonical_bytes):
+    """A ``download_file`` side_effect that writes ``canonical_bytes`` to the
+    requested local path -- stands in for a real streamed S3 download.
+    Shared by hydration (below) and by publish's own canonical re-download,
+    which switched from buffered ``read_bytes`` to streaming
+    ``download_file`` in the seed-universe-narrow-hydrate ticket 06 fix.
+    """
 
     def fake_download_file(relative_path, local_path, chunk_size=8 * 1024 * 1024):
         local_path.parent.mkdir(parents=True, exist_ok=True)
         local_path.write_bytes(canonical_bytes)
         return str(local_path)
 
+    return fake_download_file
+
+
+def _hydrate(context, canonical_bytes):
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _hydrate_silver_database_from_storage,
+    )
+
     with patch(
         "edgar_warehouse.infrastructure.object_storage.StorageLocation.download_file",
-        side_effect=fake_download_file,
+        side_effect=_fake_download_file(canonical_bytes),
     ):
         _hydrate_silver_database_from_storage(context)
 
@@ -123,8 +134,8 @@ def test_real_change_still_runs_full_merge(tmp_path):
             return_value=ObjectVersion(exists=True, etag="old-etag", version_id=None),
         ),
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator.read_bytes",
-            return_value=canonical_bytes,
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.download_file",
+            side_effect=_fake_download_file(canonical_bytes),
         ),
         patch(
             "edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes",
@@ -221,9 +232,63 @@ def test_new_unregistered_table_forces_merge_and_guard_still_fires(tmp_path):
             return_value=ObjectVersion(exists=True, etag="old-etag", version_id=None),
         ),
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator.read_bytes",
-            return_value=canonical_bytes,
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.download_file",
+            side_effect=_fake_download_file(canonical_bytes),
         ),
     ):
         with pytest.raises(SilverPublicationError, match="Unclassified"):
             _publish_silver_database_if_remote(context)
+
+
+def test_real_change_only_merges_the_actually_changed_table(tmp_path):
+    """seed-universe OOM root cause (found live 2026-08-22): a candidate that
+    only changed sec_company_ticker must not drag sec_company (or any other
+    untouched table) through a real merge pass -- the per-table fingerprint
+    diff between hydration-time and publish-time must scope the merge to
+    exactly the tables that actually changed, not "differs at all ->
+    full scope"."""
+    context = _build_context(tmp_path)
+    canonical_bytes = _build_canonical_bytes(tmp_path)
+    _hydrate(context, canonical_bytes)
+
+    conn = duckdb.connect(_local_silver_path(context))
+    conn.execute(
+        "INSERT INTO sec_company_ticker "
+        "(cik, ticker, exchange, source_name, source_rank, last_sync_run_id, last_synced_at) "
+        "VALUES (1, 'ALPHA', 'NASDAQ', 'company_tickers_exchange', 1, 'run-1', '2026-01-01 00:00:00')"
+    )
+    conn.close()
+
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _publish_silver_database_if_remote,
+    )
+
+    with (
+        patch(
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.read_object_version",
+            return_value=ObjectVersion(exists=True, etag="old-etag", version_id=None),
+        ),
+        patch(
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.download_file",
+            side_effect=_fake_download_file(canonical_bytes),
+        ),
+        patch(
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes",
+            return_value="silverstage/token/silver/sec/silver.duckdb",
+        ),
+        patch(
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.promote_staged",
+            return_value=PromotionResult(
+                canonical_path="s3://bucket/warehouse/silver/sec/silver.duckdb",
+                staged_relative_path="silverstage/token/silver/sec/silver.duckdb",
+                previous_version=ObjectVersion(exists=True, etag="old-etag", version_id=None),
+                new_version=ObjectVersion(exists=True, etag="new-etag", version_id=None),
+            ),
+        ),
+    ):
+        result = _publish_silver_database_if_remote(context)
+
+    assert "sec_company_ticker" in result["tables_merged"]
+    assert "sec_company" not in result["tables_merged"], (
+        "sec_company was untouched since hydration but still went through a full merge pass"
+    )
