@@ -109,6 +109,7 @@ class SourceChangeStatus:
     candidate_id: str
     source_family: str
     logical_source_key: str
+    source_url: str
     observation_position: int
     cause: DecisionCause
     fetch_disposition: FetchDisposition
@@ -480,6 +481,7 @@ def _status_from_record(
         candidate_id=decision.candidate_id,
         source_family=decision.source_family,
         logical_source_key=decision.logical_source_key,
+        source_url=decision.source_url,
         observation_position=decision.observation_position,
         cause=DecisionCause(decision.cause),
         fetch_disposition=disposition,

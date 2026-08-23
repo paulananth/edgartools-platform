@@ -146,6 +146,10 @@ def _handle_daily_incremental(args: argparse.Namespace) -> int:
     return run_command("daily-incremental", args)
 
 
+def _handle_capture_filing_artifact(args: argparse.Namespace) -> int:
+    return run_command("capture-filing-artifact", args)
+
+
 def _handle_load_daily_form_index_for_date(args: argparse.Namespace) -> int:
     return run_command("load-daily-form-index-for-date", args)
 
@@ -486,6 +490,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(daily_index_for_date)
     daily_index_for_date.set_defaults(handler=_handle_load_daily_form_index_for_date)
+
+    capture_filing_artifact = subparsers.add_parser(
+        "capture-filing-artifact",
+        help="Carry one operator-authorized SEC filing-artifact request through "
+        "the ledger-gated acquisition Facade into verified Bronze evidence.",
+    )
+    capture_filing_artifact.add_argument(
+        "--candidate-id",
+        required=True,
+        help="Stable identity for this fetch candidate (idempotency key)",
+    )
+    capture_filing_artifact.add_argument(
+        "--logical-source-key",
+        required=True,
+        help="Logical source key, e.g. <cik>/<accession>/<document-name>",
+    )
+    capture_filing_artifact.add_argument(
+        "--source-url",
+        required=True,
+        help="Canonical SEC archival URL for the filing artifact",
+    )
+    capture_filing_artifact.add_argument(
+        "--cause-reference",
+        required=True,
+        help="Operator-supplied reason for this explicit fetch request",
+    )
+    capture_filing_artifact.add_argument(
+        "--worker-id",
+        default=None,
+        help="Fencing worker identity; defaults to a process-derived value",
+    )
+    capture_filing_artifact.add_argument(
+        "--lease-seconds",
+        type=int,
+        default=None,
+        help="Fetch-work lease duration in seconds (default: 300)",
+    )
+    capture_filing_artifact.set_defaults(handler=_handle_capture_filing_artifact)
 
     catch_up_daily = subparsers.add_parser(
         "catch-up-daily-form-index",
