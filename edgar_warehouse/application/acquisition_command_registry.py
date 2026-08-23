@@ -118,6 +118,43 @@ def _plan_capture_filing_artifact_writes(
     )
 
 
+def _execute_drive_filing_discovery_for_date(args: Any) -> int:
+    # Import lazily: this command's own workflow imports the orchestrator,
+    # which in turn consults this registry for scope and write planning.
+    from edgar_warehouse.application.commands.drive_filing_discovery_for_date import (
+        execute,
+    )
+
+    return execute(args)
+
+
+def _resolve_drive_filing_discovery_for_date_scope(
+    *,
+    arguments: dict[str, Any],
+    now: datetime,
+    silver_root: StorageLocation | None,
+) -> dict[str, Any]:
+    del now, silver_root
+    target_date = parse_date(arguments.get("business_date"), "business_date")
+    if target_date is None:
+        raise WarehouseRuntimeError("business_date is required")
+    return {"business_date": target_date.isoformat()}
+
+
+def _plan_drive_filing_discovery_for_date_writes(
+    *,
+    command_path: str,
+    run_id: str,
+    scope: dict[str, Any],
+) -> dict[str, str]:
+    return planned_writes(
+        "drive-filing-discovery-for-date",
+        command_path,
+        run_id,
+        scope,
+    )
+
+
 def build_acquisition_command_registry(
     registrations: Iterable[AcquisitionCommandRegistration],
 ) -> dict[str, AcquisitionCommandRegistration]:
@@ -146,6 +183,12 @@ _ACQUISITION_COMMAND_REGISTRATIONS = build_acquisition_command_registry(
             execute=_execute_capture_filing_artifact,
             resolve_scope=_resolve_capture_filing_artifact_scope,
             planned_writes=_plan_capture_filing_artifact_writes,
+        ),
+        AcquisitionCommandRegistration(
+            name="drive-filing-discovery-for-date",
+            execute=_execute_drive_filing_discovery_for_date,
+            resolve_scope=_resolve_drive_filing_discovery_for_date_scope,
+            planned_writes=_plan_drive_filing_discovery_for_date_writes,
         ),
     )
 )

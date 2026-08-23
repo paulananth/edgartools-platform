@@ -40,10 +40,9 @@ from edgar_warehouse.application.acquisition_command_registry import (
     acquisition_command_registration,
 )
 from edgar_warehouse.application.warehouse_orchestrator import _build_warehouse_context
-from edgar_warehouse.infrastructure.run_manifest_builder import (
-    layer_manifest,
-    run_manifest,
-    run_manifest_relative_path,
+from edgar_warehouse.application.workflows.acquisition_run_writes import (
+    write_consolidated_run_manifest,
+    write_declared_layer_manifests,
 )
 from edgar_warehouse.mdm.database import get_engine
 
@@ -65,8 +64,8 @@ def run_capture_filing_artifact(args: Any) -> int:
     registration = acquisition_command_registration(COMMAND_NAME)
     assert registration is not None, f"{COMMAND_NAME} is not registered"
     scope = registration.resolve_scope(arguments=arguments, now=now, silver_root=None)
-    manifest_writes = _write_declared_layer_manifests(
-        context=context, run_id=run_id, arguments=arguments, scope=scope, now=now
+    manifest_writes = write_declared_layer_manifests(
+        command_name=COMMAND_NAME, context=context, run_id=run_id, arguments=arguments, scope=scope, now=now
     )
 
     engine = get_engine()
@@ -97,7 +96,8 @@ def run_capture_filing_artifact(args: Any) -> int:
         lease_seconds=lease_seconds,
     )
 
-    _write_consolidated_run_manifest(
+    write_consolidated_run_manifest(
+        command_name=COMMAND_NAME,
         context=context,
         run_id=run_id,
         arguments=arguments,
@@ -123,74 +123,3 @@ def run_capture_filing_artifact(args: Any) -> int:
         }
     print(json.dumps(payload, sort_keys=True))
     return 0
-
-
-def _write_declared_layer_manifests(
-    *,
-    context: Any,
-    run_id: str,
-    arguments: dict[str, Any],
-    scope: dict[str, Any],
-    now: datetime,
-) -> list[dict[str, Any]]:
-    """Write the run-manifest layers ``planned_writes`` declared for this run.
-
-    Mirrors ``warehouse_orchestrator._execute_warehouse_infrastructure_validation``'s
-    write loop, scoped to what this command actually declares (bronze/staging/
-    artifacts -- no silver/gold, this command never touches those layers).
-    """
-    registration = acquisition_command_registration(COMMAND_NAME)
-    assert registration is not None, f"{COMMAND_NAME} is not registered"
-    planned = registration.planned_writes(
-        command_path=COMMAND_NAME, run_id=run_id, scope=scope
-    )
-    writes: list[dict[str, Any]] = []
-    for layer, relative_path in planned.items():
-        target = context.bronze_root if layer == "bronze" else context.storage_root
-        manifest = layer_manifest(
-            COMMAND_NAME,
-            run_id,
-            layer,
-            relative_path,
-            arguments,
-            scope,
-            now,
-            context.runtime_mode,
-        )
-        writes.append(
-            {
-                "layer": layer,
-                "path": target.write_json(relative_path, manifest),
-                "relative_path": relative_path,
-            }
-        )
-    return writes
-
-
-def _write_consolidated_run_manifest(
-    *,
-    context: Any,
-    run_id: str,
-    arguments: dict[str, Any],
-    scope: dict[str, Any],
-    now: datetime,
-    manifest_writes: list[dict[str, Any]],
-) -> dict[str, Any]:
-    relative_path = run_manifest_relative_path(COMMAND_NAME, run_id)
-    payload = run_manifest(
-        command_name=COMMAND_NAME,
-        run_id=run_id,
-        command_path=COMMAND_NAME,
-        arguments=arguments,
-        scope=scope,
-        now=now,
-        runtime_mode=context.runtime_mode,
-        environment_name=context.environment_name,
-        manifest_writes=manifest_writes,
-        row_counts={},
-    )
-    return {
-        "layer": "run_manifest",
-        "path": context.bronze_root.write_json(relative_path, payload),
-        "relative_path": relative_path,
-    }

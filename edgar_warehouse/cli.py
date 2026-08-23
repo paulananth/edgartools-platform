@@ -150,6 +150,10 @@ def _handle_capture_filing_artifact(args: argparse.Namespace) -> int:
     return run_command("capture-filing-artifact", args)
 
 
+def _handle_drive_filing_discovery_for_date(args: argparse.Namespace) -> int:
+    return run_command("drive-filing-discovery-for-date", args)
+
+
 def _handle_load_daily_form_index_for_date(args: argparse.Namespace) -> int:
     return run_command("load-daily-form-index-for-date", args)
 
@@ -529,6 +533,37 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(capture_filing_artifact)
     capture_filing_artifact.set_defaults(handler=_handle_capture_filing_artifact)
+
+    drive_filing_discovery_for_date = subparsers.add_parser(
+        "drive-filing-discovery-for-date",
+        help="Seal one business date's already-captured SEC daily index into a "
+        "Discovery Manifest and drive each in-scope filing candidate through "
+        "the ledger-gated acquisition Facade.",
+    )
+    drive_filing_discovery_for_date.add_argument(
+        "business_date", help="Business date in YYYY-MM-DD format"
+    )
+    drive_filing_discovery_for_date.add_argument(
+        "--worker-id",
+        default=None,
+        help="Fencing worker identity; defaults to a process-derived value",
+    )
+    drive_filing_discovery_for_date.add_argument(
+        "--lease-seconds",
+        type=int,
+        default=None,
+        help="Fetch-work lease duration in seconds (default: 300)",
+    )
+    drive_filing_discovery_for_date.add_argument(
+        "--registry-version",
+        default=None,
+        help="Source Family Registry version tied to issued decisions "
+        "(default: filing_artifact-v1)",
+    )
+    _add_run_id_arg(drive_filing_discovery_for_date)
+    drive_filing_discovery_for_date.set_defaults(
+        handler=_handle_drive_filing_discovery_for_date
+    )
 
     catch_up_daily = subparsers.add_parser(
         "catch-up-daily-form-index",

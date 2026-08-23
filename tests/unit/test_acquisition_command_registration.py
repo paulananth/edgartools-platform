@@ -104,6 +104,43 @@ def test_capture_filing_artifact_scope_requires_candidate_id() -> None:
         registration.resolve_scope(arguments={}, now=datetime(2026, 4, 23, tzinfo=UTC), silver_root=None)
 
 
+def test_drive_filing_discovery_for_date_is_registered_through_ticket_13_seam() -> None:
+    from edgar_warehouse.application.commands import (
+        COMMAND_REGISTRY,
+        LEGACY_COMMAND_REGISTRY,
+    )
+
+    registration = acquisition_command_registration("drive-filing-discovery-for-date")
+
+    assert registration is not None
+    assert "drive-filing-discovery-for-date" in COMMAND_REGISTRY
+    assert "drive-filing-discovery-for-date" not in LEGACY_COMMAND_REGISTRY
+
+    scope = registration.resolve_scope(
+        arguments={"business_date": "2026-08-24"},
+        now=datetime(2026, 8, 25, tzinfo=UTC),
+        silver_root=None,
+    )
+    assert scope == {"business_date": "2026-08-24"}
+    assert registration.planned_writes(
+        command_path="drive-filing-discovery-for-date",
+        run_id="run-123",
+        scope=scope,
+    ) == {
+        "bronze": "runs/drive-filing-discovery-for-date/run-123/manifest.json",
+        "staging": "staging/runs/drive-filing-discovery-for-date/run-123/manifest.json",
+        "artifacts": "artifacts/runs/drive-filing-discovery-for-date/run-123/manifest.json",
+    }
+
+
+def test_drive_filing_discovery_for_date_scope_requires_business_date() -> None:
+    registration = acquisition_command_registration("drive-filing-discovery-for-date")
+    assert registration is not None
+
+    with pytest.raises(Exception, match="business_date is required"):
+        registration.resolve_scope(arguments={}, now=datetime(2026, 8, 25, tzinfo=UTC), silver_root=None)
+
+
 def test_registered_daily_index_command_preserves_public_result(
     tmp_path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
