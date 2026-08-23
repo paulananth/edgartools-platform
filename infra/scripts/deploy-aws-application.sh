@@ -3224,18 +3224,40 @@ write_warehouse_mdm_gold_definition() {
     *) fail "write_warehouse_mdm_gold_definition: command_task_profile('$run_wh_command') returned unknown profile: $run_wh_profile" ;;
   esac
 
+  # large-profile-unscoped-load-audit ticket 02 (2026-08-22): SeedUniverse
+  # here was still hardcoded to wh_task_large_arn from the original
+  # emergency bump -- never ported to the ticket 06/07-decided
+  # command_task_profile('seed-universe') == "medium" routing that
+  # write_load_history_definition's own SeedUniverse already uses (ticket
+  # 07). Same command, same shared canonical file, no reason to diverge.
+  # Only computed for the workflows that actually get a SeedUniverse state
+  # below (everything except daily_incremental) -- daily_incremental must
+  # not pay (or be seen to call) this lookup at all, matching the existing
+  # test_run_warehouse_task_profile_routing.py strict-stub contract that
+  # daily_incremental only ever calls command_task_profile('daily-incremental').
+  local seed_universe_task_arn=""
+  if [ "$workflow_name" != "daily_incremental" ]; then
+    local seed_universe_profile
+    seed_universe_profile="$(command_task_profile "seed-universe")"
+    case "$seed_universe_profile" in
+      medium) seed_universe_task_arn="$wh_task_medium_arn" ;;
+      large) seed_universe_task_arn="$wh_task_large_arn" ;;
+      *) fail "write_warehouse_mdm_gold_definition: command_task_profile('seed-universe') returned unknown profile: $seed_universe_profile" ;;
+    esac
+  fi
+
   python3 - "$output_file" "$CLUSTER_ARN" \
     "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
     "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$workflow_name" "$bronze_bucket_name" \
-    "$operator_alert_topic_arn" "$run_wh_task_arn" <<'PY'
+    "$operator_alert_topic_arn" "$run_wh_task_arn" "$seed_universe_task_arn" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
  container_name, subnet_json, security_group_json,
  mdm_run_limit, mdm_graph_limit, workflow_name, bronze_bucket_name,
- operator_alert_topic_arn, run_wh_task_arn) = sys.argv[1:]
+ operator_alert_topic_arn, run_wh_task_arn, seed_universe_task_arn) = sys.argv[1:]
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
@@ -3480,11 +3502,16 @@ def sec_fetch_task_catch():
 # All workflows except daily_incremental seed the universe first so any
 # bootstrap_pending CIKs are enrolled before the main pipeline step runs.
 if workflow_name != "daily_incremental":
-    # wh_large_arn, not wh_medium_arn -- same seed-universe OOM fixed in
-    # write_load_history_definition (2026-08-09, task #35's live exit-137 on
-    # wh_medium_arn); identical command, identical unconditional full-canonical-
-    # silver.duckdb hydrate, so this state machine is equally exposed.
-    seed_universe = ecs_state(wh_large_arn,
+    # large-profile-unscoped-load-audit ticket 02 (2026-08-22): now routed
+    # through command_task_profile('seed-universe') (bash side, above),
+    # same as write_load_history_definition's own SeedUniverse (ticket 07)
+    # -- resolves to "medium" today; the full-canonical-silver.duckdb
+    # hydrate this state used to be unconditionally exposed to on the old
+    # hardcoded wh_large_arn is the seed-universe-narrow-hydrate map's
+    # already-fixed streaming path (PR #392), confirmed live, so this
+    # state machine is no longer "equally exposed" the way this comment
+    # used to say.
+    seed_universe = ecs_state(seed_universe_task_arn,
         "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
         next_state="RunWarehouseTask", retry_secs=60)
     # sec_fetch_active lease (release-readiness ticket 84): SeedUniverse

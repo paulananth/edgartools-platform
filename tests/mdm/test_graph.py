@@ -162,6 +162,78 @@ class TestGraphSyncEngine:
         with pytest.raises(KeyError, match="NO_SUCH_REL"):
             engine.record_relationship("NO_SUCH_REL", "src", "tgt")
 
+
+class TestPrimeRelationshipTypeScoping:
+    """MANAGES_FUND batches by adviser CRD range (mdm-oom-manages-fund fix) --
+    these cover the scoped-prime/unprime primitives that batching relies on,
+    independent of the batching loop itself."""
+
+    def test_scoped_prime_only_loads_matching_source_entity_ids(self, db_session):
+        adviser_1 = _make_entity(db_session, "adviser")
+        adviser_2 = _make_entity(db_session, "adviser")
+        fund_1 = _make_entity(db_session, "fund")
+        fund_2 = _make_entity(db_session, "fund")
+        db_session.commit()
+
+        seed_engine = GraphSyncEngine.build(db_session)
+        seed_engine.record_relationship("MANAGES_FUND", adviser_1, fund_1)
+        seed_engine.record_relationship("MANAGES_FUND", adviser_2, fund_2)
+        db_session.commit()
+
+        scoped_engine = GraphSyncEngine.build(db_session)
+        scoped_engine.prime_relationship_type(
+            "MANAGES_FUND", source_entity_ids=[adviser_1]
+        )
+        current = scoped_engine.current_relationships("MANAGES_FUND")
+        assert [row.source_entity_id for row in current] == [adviser_1]
+
+    def test_unprime_allows_a_disjoint_batch_to_be_primed_next(self, db_session):
+        adviser_1 = _make_entity(db_session, "adviser")
+        adviser_2 = _make_entity(db_session, "adviser")
+        fund_1 = _make_entity(db_session, "fund")
+        fund_2 = _make_entity(db_session, "fund")
+        db_session.commit()
+
+        seed_engine = GraphSyncEngine.build(db_session)
+        seed_engine.record_relationship("MANAGES_FUND", adviser_1, fund_1)
+        seed_engine.record_relationship("MANAGES_FUND", adviser_2, fund_2)
+        db_session.commit()
+
+        engine = GraphSyncEngine.build(db_session)
+        engine.prime_relationship_type("MANAGES_FUND", source_entity_ids=[adviser_1])
+        assert [row.source_entity_id for row in engine.current_relationships("MANAGES_FUND")] == [
+            adviser_1
+        ]
+
+        engine.unprime_relationship_type("MANAGES_FUND")
+        engine.prime_relationship_type("MANAGES_FUND", source_entity_ids=[adviser_2])
+        current_after_reprime = engine.current_relationships("MANAGES_FUND")
+        assert [row.source_entity_id for row in current_after_reprime] == [adviser_2]
+        # The first batch's row must not leak back in after the reset.
+        assert adviser_1 not in [row.source_entity_id for row in current_after_reprime]
+
+    def test_unprime_does_not_disturb_a_different_already_primed_type(self, db_session):
+        adviser_1 = _make_entity(db_session, "adviser")
+        fund_1 = _make_entity(db_session, "fund")
+        company_1 = _make_entity(db_session, "company")
+        db_session.commit()
+
+        seed_engine = GraphSyncEngine.build(db_session)
+        seed_engine.record_relationship("MANAGES_FUND", adviser_1, fund_1)
+        seed_engine.record_relationship("ISSUED_BY", adviser_1, company_1)
+        db_session.commit()
+
+        engine = GraphSyncEngine.build(db_session)
+        engine.prime_relationship_type("ISSUED_BY")
+        engine.prime_relationship_type("MANAGES_FUND", source_entity_ids=[adviser_1])
+
+        engine.unprime_relationship_type("MANAGES_FUND")
+
+        # ISSUED_BY's cache must survive MANAGES_FUND's reset untouched.
+        still_primed = engine.current_relationships("ISSUED_BY")
+        assert [row.source_entity_id for row in still_primed] == [adviser_1]
+
+
 def _make_full_entity(session, entity_type: str) -> str:
     eid = str(uuid.uuid4())
     session.add(MdmEntity(entity_id=eid, entity_type=entity_type))

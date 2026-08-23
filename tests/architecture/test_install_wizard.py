@@ -36,10 +36,14 @@ PROVISION_DEPLOY_DATA_STAGE_ORDER: list[str] = [
     "AWS: passive infrastructure",
     "AWS: access roles/policies",
     "Snowflake: native-pull foundation",
+    "Snowflake: fundamentals load wrapper",
     GRANTS_STAGE_TITLE,
+    "Snowflake: MDM mirror + graph schema",
     "AWS: ECR image publish",
     "AWS: ECS task definitions and Step Functions",
     "Snowflake: MDM export targets",
+    "Snowflake: MDM export deployer read",
+    "Snowflake: silver-landing schema + ingest",
     "Snowflake: dbt gold",
     "Snowflake: loader role ownership",
     "Snowflake: loader read grants on silver",
@@ -881,3 +885,134 @@ def test_plan_is_preview_only_and_installs_nothing(tmp_path: Path) -> None:
     for line in combined.splitlines():
         if "install-neo4j-graph-app.sh" in line:
             assert "[preview only]" in line
+
+
+# ---------------------------------------------------------------------------
+# Missing-deploys fix: bootstrap SQL files 06/09/10/11/12/13/14/16/17 had no
+# install.sh (or deploy-snowflake-stack.sh, for 15) stage at all before this
+# change -- each was only ever applied by hand, the exact "uncommitted manual
+# shell session" failure class CLAUDE.md's "MDM Snowflake mirror schema lost
+# on cutover" incident already documents for 09. Reproduced live 2026-08-22
+# for 09 and 10 specifically (both schemas empty/missing in prod, blocking a
+# real bronze_seed_silver_gold execution) while writing this fix. These tests
+# pin each file's stage placement so the gap can't silently reopen.
+# ---------------------------------------------------------------------------
+
+
+def _plan_output(tmp_path: Path) -> str:
+    result = run_wizard(
+        "plan",
+        "--env-name",
+        "prod",
+        "--snow-connection",
+        "edgartools-prod",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        explicit_flags=False,
+    )
+    return result.stdout + result.stderr
+
+
+def test_fundamentals_load_wrapper_stage_applies_file_06(tmp_path: Path) -> None:
+    combined = _plan_output(tmp_path)
+    assert "infra/snowflake/sql/bootstrap/06_fundamentals_load_wrapper.sql" in combined
+    titles = _plan_stage_titles(tmp_path)
+    assert titles.index("Snowflake: native-pull foundation") < titles.index(
+        "Snowflake: fundamentals load wrapper"
+    )
+
+
+def test_mdm_mirror_and_graph_schema_stage_applies_files_09_and_10(
+    tmp_path: Path,
+) -> None:
+    combined = _plan_output(tmp_path)
+    assert "infra/snowflake/sql/bootstrap/09_mdm_mirror_schema.sql" in combined
+    assert "infra/snowflake/sql/bootstrap/10_graph_schema.sql" in combined
+    assert "infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql" in combined
+    titles = _plan_stage_titles(tmp_path)
+    mirror_idx = titles.index("Snowflake: MDM mirror + graph schema")
+    assert titles.index(GRANTS_STAGE_TITLE) < mirror_idx
+    assert mirror_idx < titles.index("AWS: ECR image publish")
+
+
+def test_mdm_export_deployer_read_stage_applies_file_17_after_export_targets(
+    tmp_path: Path,
+) -> None:
+    combined = _plan_output(tmp_path)
+    assert "infra/snowflake/sql/bootstrap/17_mdm_export_deployer_read.sql" in combined
+    titles = _plan_stage_titles(tmp_path)
+    assert titles.index("Snowflake: MDM export targets") < titles.index(
+        "Snowflake: MDM export deployer read"
+    )
+
+
+def test_silver_landing_stage_applies_files_11_through_16_before_dbt_gold(
+    tmp_path: Path,
+) -> None:
+    combined = _plan_output(tmp_path)
+    for n in ("11", "12", "13", "14", "16"):
+        assert f"infra/snowflake/sql/bootstrap/{n}_" in combined, n
+    titles = _plan_stage_titles(tmp_path)
+    silver_idx = titles.index("Snowflake: silver-landing schema + ingest")
+    assert titles.index("Snowflake: MDM export deployer read") < silver_idx
+    assert silver_idx < titles.index("Snowflake: dbt gold")
+
+
+def test_no_bootstrap_sql_file_is_missing_from_the_full_plan(tmp_path: Path) -> None:
+    """Every bootstrap SQL file must be reachable from install.sh (07/08
+    already were; 05 is explicitly deprecated with no action to take; 01-04
+    are superseded by native_pull's Terraform module, applied by the
+    'Snowflake: native-pull foundation' stage -- confirmed via the identical
+    procedure/task names in infra/terraform/snowflake/modules/native_pull/
+    main.tf, not asserted here since that stage's command is a delegate
+    script call, not a literal file reference)."""
+    bootstrap_dir = REPO_ROOT / "infra" / "snowflake" / "sql" / "bootstrap"
+    covered_directly = {"07", "08", "06", "09", "10", "11", "12", "13", "14", "16", "17"}
+    superseded_by_terraform_or_deprecated = {"01", "02", "03", "04", "05"}
+    covered_via_deploy_snowflake_stack = {"15"}
+    all_numbers = {
+        path.name.split("_", 1)[0] for path in bootstrap_dir.glob("*.sql")
+    }
+    accounted_for = (
+        covered_directly
+        | superseded_by_terraform_or_deprecated
+        | covered_via_deploy_snowflake_stack
+    )
+    unaccounted = all_numbers - accounted_for
+    assert not unaccounted, (
+        f"bootstrap SQL file(s) {sorted(unaccounted)} exist but aren't covered by "
+        "install.sh, deploy-snowflake-stack.sh, or a documented Terraform/deprecated "
+        "exemption -- add a stage or extend the exemption sets above with the reason."
+    )
+
+    combined = _plan_output(tmp_path)
+    for number in sorted(covered_directly):
+        matches = [
+            path.name
+            for path in bootstrap_dir.glob(f"{number}_*.sql")
+        ]
+        assert matches, number
+        assert any(name in combined for name in matches), (number, matches)
+
+
+def test_decision_schema_applied_by_deploy_snowflake_stack_between_the_two_applies() -> (
+    None
+):
+    """15_decision_schema.sql can't be its own install.sh stage: the access-
+    root Terraform apply that needs it already runs inside the 'Snowflake:
+    native-pull foundation' stage's single delegate script call
+    (deploy-snowflake-stack.sh), between its two terraform applies -- so the
+    fix has to live there too, not as a separately orderable install.sh
+    stage. Static-checks the script text rather than exercising deploy-
+    snowflake-stack.sh's own real Terraform/Snowflake calls (out of scope for
+    this test file, no test double for it exists here)."""
+    script = (
+        REPO_ROOT / "infra" / "scripts" / "deploy-snowflake-stack.sh"
+    ).read_text(encoding="utf-8")
+    assert "infra/snowflake/sql/bootstrap/15_decision_schema.sql" in script
+    snowflake_root_apply = script.index('terraform_apply "${SNOWFLAKE_ROOT}"')
+    decision_schema_call = script.index(
+        "infra/snowflake/sql/bootstrap/15_decision_schema.sql"
+    )
+    access_root_apply = script.index('terraform_apply_root "${SNOWFLAKE_ACCESS_ROOT}"')
+    assert snowflake_root_apply < decision_schema_call < access_root_apply
