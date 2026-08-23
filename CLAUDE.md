@@ -64,27 +64,49 @@ teardown.
 
 ## Parallel Agent Workstreams
 
-Claude and Codex may work on this repository independently, but they must not share an uncoordinated edit surface.
+Claude, Codex, and Grok may work on this repository independently, but they
+must not share an uncoordinated edit surface.
 
-- **HARD RULE: Claude and Codex must NEVER commit to the same branch.** Each
-  runtime works on its own dedicated branch (or worktree). If you find
-  yourself about to commit and `git log -1` shows a commit authored by the
-  other runtime's current work that you did not expect, STOP — do not
-  commit — and ask the user how to proceed (e.g. branch off, rebase onto a
-  new branch, or hand off).
+- **HARD RULE: no two runtimes may ever commit to the same branch.** Each
+  runtime works on its own dedicated branch. If you find yourself about to
+  commit and `git log -1` shows a commit authored by another runtime's
+  current work that you did not expect, STOP — do not commit — and ask the
+  user how to proceed (e.g. branch off, rebase onto a new branch, or hand
+  off).
+- **HARD RULE: use a dedicated git worktree per active runtime session,
+  not a bare checkout in one shared working directory, whenever more than
+  one runtime (or more than one session of the same runtime) may be
+  active at the same time.** A bare shared checkout only has *one*
+  branch checked out at once — a second session switching that checkout
+  disrupts a first session's in-progress work even when nothing is
+  actually lost (git preserves the underlying commits/stashes either
+  way). Confirmed live 2026-08-21: two concurrent sessions repeatedly
+  switched a shared working directory's checked-out branch out from
+  under a third, in-progress session — once stashing its uncommitted
+  changes, once mid-rebase. Each runtime session should create its own
+  worktree (Claude Code: the `EnterWorktree` tool, or plain
+  `git worktree add ../<repo>-<topic> <branch>`) and work there instead.
+  If you notice your working directory's checked-out branch changed
+  unexpectedly mid-session, do not assume anything was lost — check
+  `git branch --show-current`, `git reflog`, and that your own
+  commits/stash still resolve by name (`git rev-parse <branch>`,
+  `git stash list`) before taking any recovery action, and push your own
+  branch to `origin` as soon as it's in a good state so it no longer
+  depends on the shared working directory's state.
 - Branch naming convention: prefix branches with the owning runtime, e.g.
-  `claude/<topic>` or `codex/<topic>`. Before starting work or committing,
-  run `git branch --show-current` — if the current branch is prefixed for
-  the *other* runtime (or is a shared branch like `main`/`codex/main-sync`
-  that the other runtime is actively using), create/check out your own
-  branch (or worktree) before making any commits.
-- Treat current Codex work as protected unless the user explicitly hands it off.
+  `claude/<topic>`, `codex/<topic>`, or `grok/<topic>`. Before starting
+  work or committing, run `git branch --show-current` — if the current
+  branch is prefixed for a *different* runtime (or is a shared branch
+  like `main`/`codex/main-sync` that another runtime is actively using),
+  create/check out your own branch (in your own worktree) before making
+  any commits.
+- Treat current Codex or Grok work as protected unless the user explicitly hands it off.
 - Use separate GSD workstream directories under `.planning/workstreams/<name>/`; do not edit another runtime's active workstream files.
 - Before editing, run `git status --short` and `git log -1` and inspect
   `.planning/active-workstream` when present.
 - Avoid overlapping source files, Terraform roots, generated application JSON, and planning artifacts across runtimes unless the user assigns the same task to both.
 - If overlap is unavoidable, stop and ask for an ownership decision instead of merging assumptions.
-- Do not overwrite, revert, stage, or commit changes created by the other runtime unless explicitly instructed.
+- Do not overwrite, revert, stage, or commit changes created by another runtime unless explicitly instructed.
 
 ## Git/GitHub commit and PR text with backticks
 
@@ -1248,6 +1270,96 @@ running executions confirmed, fresh rollback snapshots captured, then
 and every legitimate sibling confirmed untouched. This class of false
 signal can no longer recur through these 7 names — there is nothing left
 to accidentally invoke.
+
+## SNOWFLAKE_RUN_MANIFEST_TASK / silver-loader OPERATE+SELECT gap 5-whys (resolved 2026-08-22)
+
+**Problem:** After finally getting `bronze_seed_silver_gold`'s "Stage 14" and the standalone "Stage 15"
+(`install.sh`'s two `gold-refresh`-adjacent stages) to a real `SUCCEEDED` state, `gold-verify-live`
+still reported 19 of 19 checked `EDGARTOOLS_GOLD` tables empty — including `COMPANY`, which should
+never be empty once `bronze_seed_silver_gold` has run.
+
+1. Symptom: `gold-verify-live` failing repeatedly, `COMPANY` row count 0, no error surfaced by the
+   Step Function or ECS task — everything upstream reported success.
+2. Why empty despite success upstream? `SNOWFLAKE_RUN_MANIFEST_TASK`'s `TASK_HISTORY` (checked
+   directly, not assumed) showed the task **firing exactly on its 360-minute schedule** but
+   **failing every single scheduled run**, going back to at least 2026-08-18:
+   `SQL compilation error: OPERATE privilege is required on all upstream Dynamic Tables of
+   'EDGARTOOLS_PROD.EDGARTOOLS_GOLD.COMPANY' to perform a manual refresh.` The task's own `state`
+   stayed `started` throughout — a "started, on-schedule, silently failing every tick" task gives
+   no ambient signal that anything is wrong.
+3. Why the OPERATE gap? `COMPANY`'s dbt model (the `dbt-gold-silver-rewiring` map) now reads
+   directly from `EDGARTOOLS_SILVER.SEC_COMPANY` via `ref()`, not the old Python-populated
+   `EDGARTOOLS_SOURCE` mirror. `08_loader_role.sql` (the "Manifest-pipeline ownership" fix, above)
+   only ever granted `EDGARTOOLS_PROD_LOADER` — the role `REFRESH_AFTER_LOAD` runs
+   `EXECUTE AS OWNER` under — privileges on `EDGARTOOLS_GOLD`. It was never extended to cover
+   `EDGARTOOLS_SILVER`, so every one of `EDGARTOOLS_SILVER`'s 29 dynamic tables sat owned by
+   `EDGARTOOLS_PROD_DEPLOYER` with no grant to loader at all.
+4. Why did fixing OPERATE alone not fix it? A second, distinct gap surfaced immediately after:
+   `SQL access control error: ... Your primary role EDGARTOOLS_PROD_LOADER must have SELECT
+   granted on TABLE EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_COMPANY.` A dynamic table's query runs
+   as its *owner* — `OPERATE` lets the owner role refresh the object itself, but the owner role
+   separately needs `SELECT` on every object the query text references. Both grants were missing,
+   not just one.
+5. **Root cause:** the silver-layer migration (dbt-gold-silver-rewiring) introduced a new upstream
+   dependency for several gold models without anyone re-checking whether the loader role's existing
+   grant surface (scoped to `EDGARTOOLS_GOLD` only, from the earlier ownership incident) still
+   covered it — the same "fixed in one place, never ported to the newly-added dependency" shape as
+   several other entries in this file (`ShardedSilverReader._TABLES`, the `SeedUniverse` task-profile
+   hardcodes). Nothing enforced that a new cross-schema `ref()` edge also needed a matching grant.
+
+**Compounding, unrelated finding along the way:** `install.sh`'s own Stage 15 retry loop
+(20 attempts × 60s = ~20 minutes, built to ride out `REFRESH_AFTER_LOAD`'s per-table refresh time)
+can **never succeed** as originally written, independent of the grant bug above: the
+`ecs-cost-sizing` credit-consumption fix (see below) widened `SNOWFLAKE_RUN_MANIFEST_TASK`'s
+schedule `1 min → 15 min → 6 hours` on 2026-08-14, after Stage 15's retry loop was written, and
+nobody re-checked the two against each other. A purely passive 20-minute poll can only pass if it
+happens to land within minutes of a 6-hourly tick — everywhere else, it always exhausts and fails,
+even with zero underlying problem.
+
+**Fix:**
+- `infra/snowflake/sql/bootstrap/18_silver_loader_read_grants.sql` (new) grants
+  `EDGARTOOLS_<ENV>_LOADER` `OPERATE` + `SELECT` on `ALL` + `FUTURE` dynamic tables in
+  `EDGARTOOLS_SILVER` — additive only, no `REVOKE CURRENT GRANTS` (per the manifest-pipeline-
+  ownership incident's own lesson). Wired into `install.sh` as a new "Snowflake: loader read
+  grants on silver" stage, immediately after the existing loader-role-ownership stage and before
+  any gold-refresh stage.
+- `install.sh`'s Stage 15 retry loop now fires `EXECUTE TASK EDGARTOOLS_GOLD.SNOWFLAKE_RUN_MANIFEST_TASK`
+  manually on every attempt (a call against an empty manifest stream just `SKIP`s harmlessly),
+  decoupling this stage from the 6-hour schedule without changing the schedule itself — the
+  credit-economy decision stays intact.
+- Applied live to `PRJEDJU-QJB05385`: both grants applied, `REFRESH_AFTER_LOAD` re-run directly
+  for the stuck `gold-refresh-stage15-1787432984` manifest (its `LOAD_EXPORTS_FOR_RUN` half had
+  already succeeded and consumed the stream; only the refresh half was stuck) — all 20 gold tables
+  refreshed successfully. `COMPANY` (5,752 rows), `FILING_ACTIVITY`/`FILING_DETAIL` (474,897 rows
+  each), `OWNERSHIP_ACTIVITY`/`OWNERSHIP_HOLDINGS` (3 rows each) now populated and confirmed via a
+  fresh `gold-verify-live`.
+
+**Not fixed here, separately noted:** `gold-verify-live` still shows 14 tables empty after this
+fix. Checked each: most (`FINANCIAL_FACTS`, `SEC_ADV_OFFICE`-derived tables, etc.) have genuinely
+empty upstream silver data — the same, already-tracked "6 empty gold tables" gap from the
+`snowflake-account-cutover` map's ticket 08 (awaiting task #35's full-universe fundamentals
+backfill), just wider in scope than that ticket originally found. One new, real gap:
+`TICKER_REFERENCE`'s dbt model was repointed (same `dbt-gold-silver-rewiring` migration) to read
+from `EDGARTOOLS_SILVER.SEC_COMPANY_TICKER`, which has **zero rows** — even though the old,
+now-orphaned `EDGARTOOLS_SOURCE.TICKER_REFERENCE` mirror still has 10,398 real rows. The silver
+ingestion for company tickers appears to have never been wired up post-migration. Not investigated
+further this session — needs its own ticket before fixing.
+
+**Resolved 2026-08-22, as a side effect of the seed-universe-narrow-hydrate map's ticket 06** (a
+publish/merge-side streaming-I/O fix, unrelated in purpose to this gap): the real root cause was
+that `seed-universe` — the only writer of `sec_company_ticker` — had never successfully completed
+against the rebuilt Snowflake account at all; every attempt OOM'd (see that map for the two-part
+fix: table-scoped merges, then streaming file transfer). Once `seed-universe` finally ran clean,
+`sec_company_ticker` populated (20,806 rows) and its Snowflake landing export wrote
+`ticker_reference: 10403` for `LOAD_SILVER_LANDING_TASK`'s next cycle to pick up — the silver
+ingestion path was correctly wired all along; it just never had a chance to run.
+
+**Also still orphaned, found while wiring this fix (not fixed here):** `infra/snowflake/sql/bootstrap/
+16_silver_landing_deployer_read.sql` and `17_mdm_export_deployer_read.sql` are committed, real,
+non-dead fixes (each carries its own root-cause header) but are referenced by **neither**
+`install.sh` nor `deploy-snowflake-stack.sh` — confirmed via a plain grep, zero hits for either
+filename in either script. Both predate this fix and are unrelated to it; noted here so a future
+session doesn't have to rediscover the gap from scratch.
 
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 

@@ -620,8 +620,17 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         self.assertIn("AWS-only MDM hosted graph e2e", text)
         self.assertIn("Snowflake-hosted graph validation", text)
         self.assertNotIn('start_and_wait "mdm_check_connectivity"', text)
-        self.assertIn('start_and_wait "mdm_sync_graph"', text)
-        self.assertIn('start_and_wait "mdm_verify_graph"', text)
+        # mdm_migrate / mdm_run / mdm_backfill_relationships / mdm_sync_graph /
+        # mdm_verify_graph / mdm_counts no longer exist as individually-deployed
+        # state machines (state-machine-consolidation wayfinder map, ticket 02 --
+        # deleted from prod 2026-08-20) -- every workflow is now selected via
+        # {"mode": "<workflow>"} against the single consolidated mdm_utility
+        # machine, so the e2e chain must target that key with mode-tagged input
+        # rather than an individually-named key.
+        self.assertNotIn('start_and_wait "mdm_sync_graph"', text)
+        self.assertNotIn('start_and_wait "mdm_verify_graph"', text)
+        self.assertIn('start_and_wait "mdm_utility" "{\\"mode\\":\\"mdm_sync_graph\\"', text)
+        self.assertIn('start_and_wait "mdm_utility" "{\\"mode\\":\\"mdm_verify_graph\\"}" "verify"', text)
         self.assertIn("warn_lingering_neo4j_references", text)
         self.assertIn("WARNING", text)
         self.assertIn("NEO4J_*", text)

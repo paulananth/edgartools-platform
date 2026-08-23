@@ -349,9 +349,15 @@ def test_publish_silver_database_uploads_to_remote(tmp_path):
     assert result["source_version"] is None
     assert result["canonical_version"] == "new-etag"
     assert result["tables_merged"] == []
-    mock_stage.assert_called_once_with("silver/sec/silver.duckdb", b"duckdb-data")
+    # No baseline exists: publish streams the local hydrated file directly
+    # (a Path, not a fully-buffered bytes payload) -- seed-universe-narrow-
+    # hydrate ticket 06.
+    mock_stage.assert_called_once_with("silver/sec/silver.duckdb", silver_db)
     mock_promote.assert_called_once_with(
-        "silverstage/token/silver/sec/silver.duckdb", "silver/sec/silver.duckdb", expected_etag=None
+        "silverstage/token/silver/sec/silver.duckdb",
+        "silver/sec/silver.duckdb",
+        expected_etag=None,
+        payload=silver_db,
     )
 
 
@@ -411,8 +417,11 @@ def test_publish_silver_database_merges_when_canonical_already_exists(tmp_path):
             return_value=ObjectVersion(exists=True, etag="old-etag", version_id=None),
         ),
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator.read_bytes",
-            return_value=canonical_bytes,
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.download_file",
+            side_effect=lambda relative_path, local_path, chunk_size=8 * 1024 * 1024: (
+                local_path.write_bytes(canonical_bytes),
+                str(local_path),
+            )[1],
         ),
         patch(
             "edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes",
@@ -476,8 +485,11 @@ def test_publish_silver_database_propagates_ambiguous_conflict(tmp_path):
             return_value=ObjectVersion(exists=True, etag="old-etag", version_id=None),
         ),
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator.read_bytes",
-            return_value=canonical_bytes,
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.download_file",
+            side_effect=lambda relative_path, local_path, chunk_size=8 * 1024 * 1024: (
+                local_path.write_bytes(canonical_bytes),
+                str(local_path),
+            )[1],
         ),
     ):
         with pytest.raises(SemanticMergeConflictError):
@@ -524,7 +536,7 @@ def test_publish_silver_database_retries_on_lost_promotion_race(tmp_path, monkey
 
     call_count = {"n": 0}
 
-    def flaky_promote(staged_relative, relative_path, *, expected_etag):
+    def flaky_promote(staged_relative, relative_path, *, expected_etag, payload=None):
         call_count["n"] += 1
         if call_count["n"] == 1:
             raise PromotionConflictError(relative_path, expected_etag, "someone-else-won", staged_relative)
@@ -615,7 +627,7 @@ def test_publish_silver_database_retry_gives_up_after_max_attempts(tmp_path, mon
 
     call_count = {"n": 0}
 
-    def always_conflicts(staged_relative, relative_path, *, expected_etag):
+    def always_conflicts(staged_relative, relative_path, *, expected_etag, payload=None):
         call_count["n"] += 1
         raise PromotionConflictError(relative_path, expected_etag, "someone-else-won", staged_relative)
 

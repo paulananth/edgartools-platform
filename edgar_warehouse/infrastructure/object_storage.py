@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -10,6 +11,31 @@ from typing import Any
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 
 ALLOWED_REMOTE_PROTOCOLS = frozenset({"s3"})
+
+
+@contextlib.contextmanager
+def _put_object_body(source: "bytes | Path"):
+    """Yield (body, extra_put_object_kwargs) for a conditional S3 put.
+
+    A ``bytes`` source passes through unchanged with no extra kwargs --
+    this preserves the exact ``put_object`` call shape (no ``ContentLength``
+    key) that existing callers assert byte-for-byte
+    (test_object_storage_conditional_promotion.py). A ``Path`` source opens
+    a real file handle and supplies an explicit ``ContentLength`` so
+    ``promote_staged`` can hand botocore a stream instead of buffering the
+    whole file into memory first (seed-universe-narrow-hydrate ticket 06 --
+    this is the boundary that OOM'd a production `seed-universe` task after
+    an unrelated merge-scoping fix had already made the merge step itself
+    provably correct).
+    """
+    if isinstance(source, Path):
+        handle = source.open("rb")
+        try:
+            yield handle, {"ContentLength": source.stat().st_size}
+        finally:
+            handle.close()
+    else:
+        yield source, {}
 
 
 class PromotionConflictError(WarehouseRuntimeError):
@@ -270,12 +296,16 @@ class StorageLocation:
         digest = hashlib.md5(destination_path.read_bytes()).hexdigest()
         return ObjectVersion(exists=True, etag=digest, version_id=None)
 
-    def write_staged_bytes(self, canonical_relative_path: str, payload: bytes) -> str:
+    def write_staged_bytes(self, canonical_relative_path: str, payload: "bytes | Path") -> str:
         """Write payload under a fresh, immutable staging key.
 
         The staging key embeds a random token so it never collides with the
         canonical key or with any other concurrent staged write. Returns the
         relative staging path (pass it to ``promote_staged``).
+
+        ``payload`` may be raw bytes or a local ``Path`` -- passing a ``Path``
+        streams the write instead of buffering the whole file into memory
+        (seed-universe-narrow-hydrate ticket 06).
         """
         import uuid
 
@@ -366,6 +396,7 @@ class StorageLocation:
         canonical_relative_path: str,
         *,
         expected_etag: str | None,
+        payload: "bytes | Path | None" = None,
     ) -> "PromotionResult":
         """Promote a staged object onto the canonical key -- but only if
         canonical's current version/ETag still equals ``expected_etag``. For
@@ -375,6 +406,14 @@ class StorageLocation:
         Raises ``PromotionConflictError`` (leaving the staged object in place
         for inspection/retry) if canonical changed since ``expected_etag`` was
         read. Never silently last-writer-wins.
+
+        ``payload`` -- when the caller still has the exact bytes or local file
+        it just staged, pass it here to promote directly instead of
+        re-downloading the object this same call just uploaded
+        (seed-universe-narrow-hydrate ticket 06). Omitted (the default),
+        this reads the staged object back from storage -- the original
+        behavior, needed by any caller that only has the staged *path*, not
+        the original payload (e.g. a promotion retried in a later process).
         """
         canonical_relative = sanitize_relative_path(canonical_relative_path)
         previous = self.read_object_version(canonical_relative)
@@ -383,7 +422,11 @@ class StorageLocation:
                 canonical_relative, expected_etag, previous.etag, staged_relative_path
             )
 
-        staged_bytes = read_bytes(self.join(sanitize_relative_path(staged_relative_path)))
+        source: "bytes | Path" = (
+            payload
+            if payload is not None
+            else read_bytes(self.join(sanitize_relative_path(staged_relative_path)))
+        )
         canonical_path_str = self.join(canonical_relative)
         if self.is_remote:
             from urllib.parse import urlsplit
@@ -391,28 +434,30 @@ class StorageLocation:
             from botocore.exceptions import ClientError
 
             destination = urlsplit(canonical_path_str)
-            request: dict[str, Any] = {
-                "Bucket": destination.netloc,
-                "Key": destination.path.lstrip("/"),
-                "Body": staged_bytes,
-            }
-            if expected_etag is None:
-                request["IfNoneMatch"] = "*"
-            else:
-                request["IfMatch"] = expected_etag
-            try:
-                response = self._s3().put_object(**request)
-            except ClientError as exc:
-                status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
-                if status in {404, 409, 412}:
-                    actual = self.read_object_version(canonical_relative)
-                    raise PromotionConflictError(
-                        canonical_relative,
-                        expected_etag,
-                        actual.etag,
-                        staged_relative_path,
-                    ) from exc
-                raise
+            with _put_object_body(source) as (body, extra_kwargs):
+                request: dict[str, Any] = {
+                    "Bucket": destination.netloc,
+                    "Key": destination.path.lstrip("/"),
+                    "Body": body,
+                    **extra_kwargs,
+                }
+                if expected_etag is None:
+                    request["IfNoneMatch"] = "*"
+                else:
+                    request["IfMatch"] = expected_etag
+                try:
+                    response = self._s3().put_object(**request)
+                except ClientError as exc:
+                    status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+                    if status in {404, 409, 412}:
+                        actual = self.read_object_version(canonical_relative)
+                        raise PromotionConflictError(
+                            canonical_relative,
+                            expected_etag,
+                            actual.etag,
+                            staged_relative_path,
+                        ) from exc
+                    raise
             raw_etag = response.get("ETag")
             new_version = ObjectVersion(
                 exists=True,
@@ -420,7 +465,7 @@ class StorageLocation:
                 version_id=response.get("VersionId"),
             )
         else:
-            canonical_path_str = self.write_bytes(canonical_relative, staged_bytes)
+            canonical_path_str = self.write_bytes(canonical_relative, source)
             new_version = self.read_object_version(canonical_relative)
         return PromotionResult(
             canonical_path=canonical_path_str,
@@ -432,7 +477,7 @@ class StorageLocation:
     def stage_and_promote(
         self,
         canonical_relative_path: str,
-        payload: bytes,
+        payload: "bytes | Path",
         *,
         expected_etag: str | None,
     ) -> "PromotionResult":
@@ -446,9 +491,16 @@ class StorageLocation:
         finding). A single shared helper means that gap can't recur at a
         fourth call site. See ``promote_staged`` for the concurrency
         contract this preserves.
+
+        ``payload`` may be a local ``Path``, in which case it is streamed to
+        the staging key and then reused directly for promotion, without ever
+        re-downloading the object this call just uploaded
+        (seed-universe-narrow-hydrate ticket 06).
         """
         staged_relative = self.write_staged_bytes(canonical_relative_path, payload)
-        return self.promote_staged(staged_relative, canonical_relative_path, expected_etag=expected_etag)
+        return self.promote_staged(
+            staged_relative, canonical_relative_path, expected_etag=expected_etag, payload=payload
+        )
 
     def delete_object(self, relative_path: str) -> None:
         """Delete one object. Best-effort: missing objects are not an error.
@@ -470,7 +522,15 @@ class StorageLocation:
             return
         Path(destination).unlink(missing_ok=True)
 
-    def write_bytes(self, relative_path: str, payload: bytes) -> str:
+    def write_bytes(self, relative_path: str, payload: "bytes | Path") -> str:
+        """Write ``payload`` to storage.
+
+        A ``Path`` payload delegates to the already-streaming ``upload_file``
+        (no full-buffer read of the source file) instead of being read fully
+        into memory first (seed-universe-narrow-hydrate ticket 06).
+        """
+        if isinstance(payload, Path):
+            return self.upload_file(relative_path, payload)
         relative = sanitize_relative_path(relative_path)
         destination = self.join(relative)
         if self.is_remote:

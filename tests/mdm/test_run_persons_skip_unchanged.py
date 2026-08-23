@@ -99,26 +99,39 @@ class TestPersonSkipIfUnchanged:
         """issuer_cik is never staged as a PERSON_FIELDS value, but it is a
         FuzzyNameMatcher context field -- the content hash must still cover
         it, or a row whose issuer context changes between runs would wrongly
-        skip reprocessing."""
+        skip reprocessing.
+
+        Asserts on MdmSourceRef.source_content_hash rather than stage-row
+        count: stage_candidate() upserts on its natural key
+        (investigate-and-fix-stage-bloat, 2026-08-21), so a genuine
+        reprocess updates the same 3 PERSON_FIELDS rows in place rather
+        than adding 3 new ones -- row count alone no longer distinguishes
+        "reprocessed" from "skipped". The hash changing is the correct
+        signal: it only advances when resolve_one actually re-ran past the
+        skip check.
+        """
         session = _seeded_sqlite_session(static_pool=True)
         fixtures = _person_rows([111])
         fixtures["sec_ownership_reporting_owner"][0]["issuer_cik"] = 900
         pipeline = MDMPipeline(session=session, silver=StubSilver(fixtures))
 
         pipeline.run_persons()
-        stage_count_after_first = len(
-            session.execute(select(MdmEntityAttributeStage)).scalars().all()
-        )
+        source_id = "acc-0:0"
+        hash_after_first = session.execute(
+            select(MdmSourceRef.source_content_hash).where(MdmSourceRef.source_id == source_id)
+        ).scalar_one()
+        assert hash_after_first is not None
 
         fixtures["sec_ownership_reporting_owner"][0]["issuer_cik"] = 901
         second_processed = pipeline.run_persons()
 
         assert second_processed == 1
-        stage_count_after_second = len(
-            session.execute(select(MdmEntityAttributeStage)).scalars().all()
-        )
-        assert stage_count_after_second > stage_count_after_first, (
-            "a changed issuer_cik must be reprocessed (re-staged), not skipped"
+        hash_after_second = session.execute(
+            select(MdmSourceRef.source_content_hash).where(MdmSourceRef.source_id == source_id)
+        ).scalar_one()
+        assert hash_after_second != hash_after_first, (
+            "a changed issuer_cik must be reprocessed (its stored content "
+            "hash must advance), not skipped"
         )
 
     def test_skip_if_unchanged_returns_none_when_no_prior_match_exists(self) -> None:

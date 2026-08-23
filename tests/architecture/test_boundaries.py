@@ -81,7 +81,6 @@ class BoundaryTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             if path in {
                 PACKAGE_ROOT / "serving" / "targets" / "snowflake.py",
-                PACKAGE_ROOT / "application" / "workflows" / "serving_publish.py",
             }:
                 continue
             if "def write_source_dimensional_export_to_snowflake" in text or "def write_ticker_reference_to_snowflake_export" in text:

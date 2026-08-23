@@ -27,7 +27,7 @@ MIGRATION = (
     / "edgar_warehouse"
     / "mdm"
     / "migrations"
-    / "012_acquisition_ledger.sql"
+    / "013_acquisition_ledger.sql"
 )
 
 

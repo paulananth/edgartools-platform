@@ -138,12 +138,20 @@ def test_run_warehouse_task_genuinely_routes_through_command_task_profile(
     must flip RunWarehouseTask's TaskDefinition to the medium ARN. If this
     fails (still resolves to large), write_warehouse_mdm_gold_definition is
     NOT calling command_task_profile() at runtime -- it's still hardcoding
-    the ARN directly, and the override had nothing to intercept."""
+    the ARN directly, and the override had nothing to intercept.
+
+    bootstrap also legitimately calls command_task_profile('seed-universe')
+    for its own SeedUniverse state (large-profile-unscoped-load-audit
+    ticket 02) -- the stub answers that call too, so this test stays
+    scoped to RunWarehouseTask's own routing (see
+    test_warehouse_mdm_gold_seed_universe_task_profile_routing.py for
+    SeedUniverse's own proof)."""
     real_command_name = "bootstrap" if workflow_name == "bootstrap" else "daily-incremental"
     override = (
         'command_task_profile() {\n'
         f'  case "$1" in\n'
         f'    {real_command_name}) printf "%s\\n" "medium" ;;\n'
+        '    seed-universe) printf "%s\\n" "medium" ;;\n'
         '    *) fail "unexpected command_task_profile call: $1" ;;\n'
         '  esac\n'
         '}\n'
@@ -169,12 +177,14 @@ def test_run_warehouse_task_calls_command_task_profile_with_exact_command_name(
     """write_warehouse_mdm_gold_definition must call command_task_profile()
     with exactly the real hyphenated CLI command name, not the underscore
     workflow_name spelling -- a stub that fails on anything else must still
-    let generation succeed."""
+    let generation succeed. bootstrap also legitimately calls it with
+    'seed-universe' for its own SeedUniverse state (large-profile-
+    unscoped-load-audit ticket 02) -- allowed here too."""
     strict_stub = (
         'command_task_profile() {\n'
-        f'  if [ "$1" != "{real_command_name}" ]; then\n'
+        f'  if [ "$1" != "{real_command_name}" ] && [ "$1" != "seed-universe" ]; then\n'
         f'    fail "expected command_task_profile to be called with exactly '
-        f"'{real_command_name}', got: $1\"\n"
+        f"'{real_command_name}' or 'seed-universe', got: $1\"\n"
         '  fi\n'
         '  printf "%s\\n" "large"\n'
         '}\n'

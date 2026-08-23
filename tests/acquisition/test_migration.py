@@ -12,7 +12,7 @@ from edgar_warehouse.acquisition.models import (
 )
 from edgar_warehouse.mdm.migrations import runtime as migrations
 
-MIGRATION_NAME = "012_acquisition_ledger.sql"
+MIGRATION_NAME = "013_acquisition_ledger.sql"
 REPO_ROOT = Path(__file__).parents[2]
 
 

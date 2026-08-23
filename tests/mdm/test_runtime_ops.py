@@ -60,7 +60,7 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
     monkeypatch.setattr(
         migrations,
         "_apply_acquisition_ledger_migration",
-        lambda engine: (_record_apply(engine, "012_acquisition_ledger.sql"), True)[1],
+        lambda engine: (_record_apply(engine, "013_acquisition_ledger.sql"), True)[1],
     )
     monkeypatch.setattr(migrations, "count_tables", lambda _engine: {})
     monkeypatch.setattr(migrations, "_seed_entity_types", lambda _session: None)
@@ -79,7 +79,8 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
         "009_graph_generation_builder.sql",
         "010_release_relationship_sources.sql",
         "011_source_ref_content_hash.sql",
-        "012_acquisition_ledger.sql",
+        "012_dedupe_and_constrain_attribute_stage.sql",
+        "013_acquisition_ledger.sql",
     ]
 
 

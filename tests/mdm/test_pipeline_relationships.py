@@ -19,6 +19,7 @@ PostgreSQL/SQL-mirror layer.
 """
 from __future__ import annotations
 
+import itertools
 import re
 import tempfile
 import uuid
@@ -89,6 +90,16 @@ class StubSilver:
         if params and "BETWEEN" in sql.upper():
             lo, hi = params[0], params[1]
             matched = [r for r in matched if r.get("cik") is not None and lo <= r["cik"] <= hi]
+        elif params and " IN (" in sql.upper():
+            # MANAGES_FUND CRD-batch scoping (mdm-oom-manages-fund fix):
+            # filter by whichever CRD-shaped field the matched rows carry --
+            # never parsed out of the SQL text, mirroring the BETWEEN case
+            # above so batching tests can assert bound-param usage too.
+            wanted = {str(p) for p in params}
+            matched = [
+                r for r in matched
+                if str(r.get("crd_number", r.get("adviser_crd_number", ""))) in wanted
+            ]
         return matched
 
     def _matched_rows(self, sql: str) -> list[dict]:
@@ -1441,6 +1452,76 @@ class TestRunRelationships:
         assert len(lookup_selects) <= 6, lookup_selects
         assert write_flush_calls <= 2
 
+    def test_manages_fund_processes_advisers_in_bounded_crd_batches(
+        self, session, monkeypatch
+    ):
+        """mdm-oom-manages-fund fix: a universe spanning multiple CRD batches
+        must be fully processed, and no single prime() call may ever see more
+        than one batch's advisers primed at once -- the whole point of
+        batching is bounding what's resident at any one time."""
+        import edgar_warehouse.mdm.pipeline as pipeline_module
+
+        monkeypatch.setattr(pipeline_module, "_MANAGES_FUND_CRD_BATCH_SIZE", 2)
+
+        filings = []
+        funds = []
+        crd_by_index = {}
+        for index in range(5):  # 5 advisers, batch size 2 -> 3 batches (2/2/1)
+            adviser_id = _add_entity(session, "adviser")
+            fund_id = _add_entity(session, "fund")
+            crd_number = str(700000 + index)
+            crd_by_index[index] = crd_number
+            private_fund_id = f"805-{700000 + index}"
+            accession = f"iapd-adv:{700000 + index}"
+            session.add(MdmAdviser(
+                entity_id=adviser_id, crd_number=crd_number,
+                canonical_name=f"Batch Adviser {index}",
+            ))
+            session.add(MdmFund(
+                entity_id=fund_id, adviser_entity_id=adviser_id,
+                private_fund_id=private_fund_id, canonical_name=f"Batch Fund {index}",
+            ))
+            filings.append({
+                "accession_number": accession, "crd_number": crd_number,
+                "effective_date": date(2025, 1, 1), "filing_action": "annual_amendment",
+            })
+            funds.append({
+                "accession_number": accession, "adviser_crd_number": crd_number,
+                "private_fund_id": private_fund_id, "filing_id": str(700000 + index),
+                "schedule_section": "7B1", "reporting_role": "detailed_reporter",
+                "effective_date": date(2025, 1, 1), "filing_action": "annual_amendment",
+                "source_sha256": f"sha-{index}",
+            })
+        session.commit()
+
+        prime_calls: list[frozenset] = []
+        original_prime = GraphSyncEngine.prime_relationship_type
+
+        def spy_prime(self, rel_type_name, **kwargs):
+            if rel_type_name == "MANAGES_FUND":
+                prime_calls.append(frozenset(kwargs.get("source_entity_ids") or []))
+            return original_prime(self, rel_type_name, **kwargs)
+
+        monkeypatch.setattr(GraphSyncEngine, "prime_relationship_type", spy_prime)
+
+        summary = MDMPipeline(
+            session=session,
+            silver=StubSilver({
+                "sec_adv_filing": filings,
+                "sec_adv_private_fund": funds,
+            }),
+        ).derive_relationships(relationship_types=["MANAGES_FUND"])
+
+        assert summary["MANAGES_FUND"]["inserted"] == 5
+
+        # 3 batches (ceil(5/2)), each priming a disjoint, non-empty adviser set.
+        assert len(prime_calls) == 3
+        assert all(prime_calls), prime_calls
+        union = frozenset().union(*prime_calls)
+        assert len(union) == 5, "every adviser must be primed exactly once across all batches"
+        for a, b in itertools.combinations(prime_calls, 2):
+            assert a.isdisjoint(b), (a, b, "batches must never overlap")
+
     def test_writes_issued_by_relationship(self, session, fixture_world):
         """ISSUED_BY deriver inserts exactly 1 row when fixture_world has 1 qualifying MdmSecurity. (D-01, D-02, REL-02)"""
         pipe = MDMPipeline(session=session, silver=StubSilver({}))
@@ -1913,6 +1994,51 @@ class TestInstitutionalHoldsBatching:
         assert second["INSTITUTIONAL_HOLDS"]["inserted"] == 0
         session.close()
 
+    def test_institutional_holds_primes_scoped_to_each_cik_batchs_advisers(
+        self, monkeypatch
+    ):
+        """mdm-oom-institutional-holds-guard fix: each CIK-range batch must
+        prime only its own advisers, not the whole INSTITUTIONAL_HOLDS type
+        -- the same per-batch bound the mdm-oom-manages-fund fix proved for
+        MANAGES_FUND's CRD batching. No single prime() call may ever see
+        another batch's advisers primed at the same time."""
+        import edgar_warehouse.mdm.pipeline as pipeline_module
+        from edgar_warehouse.mdm.graph import GraphSyncEngine
+
+        monkeypatch.setattr(
+            pipeline_module, "_INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", 1
+        )
+
+        session = _fresh_batching_session()
+        ciks = sorted({r["cik"] for r in _BATCH_THIRTEENF_ROWS})
+        adviser_id_by_cik = _seed_batching_advisers(session, ciks)
+
+        prime_calls: list[frozenset] = []
+        original_prime = GraphSyncEngine.prime_relationship_type
+
+        def spy_prime(self, rel_type_name, **kwargs):
+            if rel_type_name == "INSTITUTIONAL_HOLDS":
+                prime_calls.append(frozenset(kwargs.get("source_entity_ids") or []))
+            return original_prime(self, rel_type_name, **kwargs)
+
+        monkeypatch.setattr(GraphSyncEngine, "prime_relationship_type", spy_prime)
+
+        silver = StubSilver({"sec_thirteenf_holding": _BATCH_THIRTEENF_ROWS})
+        pipe = MDMPipeline(session=session, silver=silver)
+        summary = pipe.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+        session.close()
+
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 3
+
+        # 3 distinct CIKs, batch size 1 -> 3 batches, each priming exactly
+        # one adviser and no batch's set overlapping another's.
+        assert len(prime_calls) == 3
+        assert all(prime_calls), prime_calls
+        assert set.union(*(set(c) for c in prime_calls)) == set(adviser_id_by_cik.values())
+        for i, a in enumerate(prime_calls):
+            for b in prime_calls[i + 1:]:
+                assert not (a & b), f"overlapping prime scopes: {a} and {b}"
+
 
 # ---------------------------------------------------------------------------
 # _bounded_relationship_sql / plateau-fix regression
@@ -2146,6 +2272,177 @@ class TestRelationshipDeriveBoundedRoundTrips:
         ]
         assert len(lookup_selects) <= 8, lookup_selects
         assert write_flush_calls <= 2
+
+
+# ---------------------------------------------------------------------------
+# large-profile-unscoped-load-audit, Ticket 01: IS_INSIDER/HOLDS/COMPANY_HOLDS
+# still called the shared dispatcher's unconditional, unscoped
+# `prime_relationship_type(rel_type_name, defer_flush=True)` (no
+# `source_entity_ids`) -- the exact MANAGES_FUND/INSTITUTIONAL_HOLDS OOM
+# shape, just not yet at their scale. Live prod measurement 2026-08-22:
+# COMPANY_HOLDS grew 3,148 -> 33,398 rows (~10.6x) in roughly 24h, HOLDS grew
+# 395 -> 3,093 (~7.8x), IS_INSIDER grew 902 -> 1,552 -- proving "currently
+# small" is not a durable safety argument for this specific pattern. Fix
+# mirrors _derive_manages_fund_batch/_derive_institutional_holds_batch:
+# resolve this invocation's touched source entities first, prime scoped to
+# exactly those, run the existing per-row loop, unprime in a finally.
+# ---------------------------------------------------------------------------
+
+class TestPrimeScopingForOwnershipDerivedTypes:
+    def test_is_insider_primes_scoped_to_touched_persons_not_the_whole_type(
+        self, session, fixture_world, monkeypatch
+    ):
+        # Out-of-scope: an existing IS_INSIDER row for a person this run's
+        # source rows never touch. Before the fix, the shared dispatcher's
+        # unscoped prime would load this row into the cache regardless.
+        sync_engine = GraphSyncEngine.build(session)
+        sync_engine.ensure_relationship(
+            rel_type_name="IS_INSIDER",
+            source_entity_id=fixture_world["individual_person_id"],
+            target_entity_id=fixture_world["issuer_company_id"],
+            source_system="ownership_filing",
+        )
+        session.commit()
+
+        prime_calls: list[Optional[frozenset]] = []
+        original_prime = GraphSyncEngine.prime_relationship_type
+
+        def spy_prime(self, rel_type_name, **kwargs):
+            if rel_type_name == "IS_INSIDER":
+                source_entity_ids = kwargs.get("source_entity_ids")
+                prime_calls.append(
+                    frozenset(source_entity_ids) if source_entity_ids is not None else None
+                )
+            return original_prime(self, rel_type_name, **kwargs)
+
+        monkeypatch.setattr(GraphSyncEngine, "prime_relationship_type", spy_prime)
+
+        pipe = MDMPipeline(session=session, silver=StubSilver({
+            "FROM sec_ownership_reporting_owner": [
+                {
+                    "accession_number": "0000-new-insider",
+                    "owner_index": 0,
+                    "owner_cik": 910102,
+                    "owner_name": "Reporting Person",
+                    "is_director": True,
+                    "is_officer": False,
+                    "is_ten_percent_owner": False,
+                    "is_other": False,
+                    "officer_title": None,
+                    "issuer_cik": 910001,
+                    "period_of_report": date(2025, 1, 1),
+                },
+            ],
+        }))
+        summary = pipe.derive_relationships(relationship_types=["IS_INSIDER"])
+
+        assert summary["IS_INSIDER"]["inserted"] == 1
+        assert len(prime_calls) == 1
+        assert prime_calls[0] is not None, "prime must be scoped, not an unscoped whole-type load"
+        assert prime_calls[0] == frozenset({fixture_world["reporting_person_id"]})
+        assert fixture_world["individual_person_id"] not in prime_calls[0]
+
+    def test_holds_primes_scoped_to_touched_persons_not_the_whole_type(
+        self, session, fixture_world, monkeypatch
+    ):
+        sync_engine = GraphSyncEngine.build(session)
+        sync_engine.ensure_relationship(
+            rel_type_name="HOLDS",
+            source_entity_id=fixture_world["individual_person_id"],
+            target_entity_id=fixture_world["security_entity_id"],
+            source_system="ownership_filing",
+        )
+        session.commit()
+
+        prime_calls: list[Optional[frozenset]] = []
+        original_prime = GraphSyncEngine.prime_relationship_type
+
+        def spy_prime(self, rel_type_name, **kwargs):
+            if rel_type_name == "HOLDS":
+                source_entity_ids = kwargs.get("source_entity_ids")
+                prime_calls.append(
+                    frozenset(source_entity_ids) if source_entity_ids is not None else None
+                )
+            return original_prime(self, rel_type_name, **kwargs)
+
+        monkeypatch.setattr(GraphSyncEngine, "prime_relationship_type", spy_prime)
+
+        pipe = MDMPipeline(session=session, silver=StubSilver({
+            "FROM sec_ownership_non_derivative_txn": [
+                {
+                    "accession_number": "0000-new-holds",
+                    "owner_index": 0,
+                    "txn_index": 0,
+                    "security_title": "Common Stock",
+                    "transaction_date": None,
+                    "shares_owned_after": 100,
+                    "ownership_direct_indirect": "D",
+                    "owner_cik": 910102,
+                    "owner_name": "Reporting Person",
+                    "issuer_cik": 910001,
+                },
+            ],
+        }))
+        summary = pipe.derive_relationships(relationship_types=["HOLDS"])
+
+        assert summary["HOLDS"]["inserted"] == 1
+        assert len(prime_calls) == 1
+        assert prime_calls[0] is not None, "prime must be scoped, not an unscoped whole-type load"
+        assert prime_calls[0] == frozenset({fixture_world["reporting_person_id"]})
+        assert fixture_world["individual_person_id"] not in prime_calls[0]
+
+    def test_company_holds_primes_scoped_to_touched_companies_not_the_whole_type(
+        self, session, fixture_world, monkeypatch
+    ):
+        # Out-of-scope: an existing COMPANY_HOLDS row for the *issuer*
+        # company acting as a corporate holder elsewhere -- not touched by
+        # this run's new source row, whose only corporate owner is
+        # linked_company_id.
+        sync_engine = GraphSyncEngine.build(session)
+        sync_engine.ensure_relationship(
+            rel_type_name="COMPANY_HOLDS",
+            source_entity_id=fixture_world["issuer_company_id"],
+            target_entity_id=fixture_world["security_entity_id"],
+            source_system="ownership_filing",
+        )
+        session.commit()
+
+        prime_calls: list[Optional[frozenset]] = []
+        original_prime = GraphSyncEngine.prime_relationship_type
+
+        def spy_prime(self, rel_type_name, **kwargs):
+            if rel_type_name == "COMPANY_HOLDS":
+                source_entity_ids = kwargs.get("source_entity_ids")
+                prime_calls.append(
+                    frozenset(source_entity_ids) if source_entity_ids is not None else None
+                )
+            return original_prime(self, rel_type_name, **kwargs)
+
+        monkeypatch.setattr(GraphSyncEngine, "prime_relationship_type", spy_prime)
+
+        pipe = MDMPipeline(session=session, silver=StubSilver({
+            "FROM sec_ownership_non_derivative_txn": [
+                {
+                    "accession_number": "0000-new-company-holds",
+                    "owner_index": 0,
+                    "txn_index": 0,
+                    "security_title": "Common Stock",
+                    "transaction_date": None,
+                    "shares_owned_after": 50,
+                    "ownership_direct_indirect": "I",
+                    "owner_cik": 910002,
+                    "owner_name": "Linked Corp",
+                    "issuer_cik": 910001,
+                },
+            ],
+        }))
+        summary = pipe.derive_relationships(relationship_types=["COMPANY_HOLDS"])
+
+        assert summary["COMPANY_HOLDS"]["inserted"] == 1
+        assert len(prime_calls) == 1
+        assert prime_calls[0] is not None, "prime must be scoped, not an unscoped whole-type load"
+        assert prime_calls[0] == frozenset({fixture_world["linked_company_id"]})
+        assert fixture_world["issuer_company_id"] not in prime_calls[0]
 
 
 class TestRelationshipTypesConcurrency:

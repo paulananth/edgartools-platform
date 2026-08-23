@@ -221,12 +221,30 @@ RUN_PREFIX="aws-mdm-e2e-$(date +%s)"
 echo ""
 echo "==> Running AWS-only MDM hosted graph e2e"
 echo "  Snowflake-hosted graph validation uses mdm_sync_graph plus strict mdm_verify_graph."
-start_and_wait "mdm_migrate" "{}" "migrate"
-start_and_wait "mdm_run" "{\"limit\":${MDM_RUN_LIMIT}}" "run"
-start_and_wait "mdm_backfill_relationships" "{\"limit\":${GRAPH_LIMIT}}" "backfill"
-start_and_wait "mdm_sync_graph" "{\"limit\":${GRAPH_LIMIT}}" "sync"
-start_and_wait "mdm_verify_graph" "{}" "verify"
-start_and_wait "mdm_counts" "{}" "counts"
+# mdm_migrate / mdm_run / mdm_backfill_relationships / mdm_sync_graph /
+# mdm_verify_graph / mdm_counts no longer exist as individually-deployed
+# state machines -- the state-machine-consolidation wayfinder map (ticket
+# 02, CONTEXT.md's "MDM Utility Machine" entry) folded all 7 uniform
+# single-command MDM CLI wrappers into one edgartools-<env>-mdm-utility
+# machine, selected per execution via {"mode": "<workflow>", ...overrides}
+# in the Step Functions input rather than by picking a different state
+# machine ARN. The 7 individually-named originals (including mdm_migrate)
+# were deleted from prod on 2026-08-20 once nothing referenced them --
+# this script was missed in that cutover and kept calling the old,
+# now-nonexistent keys, so every AWS-only e2e run failed outright with
+# "state machine key not found in deployment summary: mdm_migrate" instead
+# of ever reaching a real Step Functions execution. Fixed by targeting the
+# single mdm_utility key for every step and threading "mode" through each
+# input, mirroring how every other current caller (install.sh's own
+# "MDM + graph: connectivity, migrations, sync, verification" stage runs
+# these as bare edgar-warehouse CLI commands, not through this AWS-only
+# path) invokes the consolidated machine.
+start_and_wait "mdm_utility" "{\"mode\":\"mdm_migrate\"}" "migrate"
+start_and_wait "mdm_utility" "{\"mode\":\"mdm_run\",\"limit\":${MDM_RUN_LIMIT}}" "run"
+start_and_wait "mdm_utility" "{\"mode\":\"mdm_backfill_relationships\",\"limit\":${GRAPH_LIMIT}}" "backfill"
+start_and_wait "mdm_utility" "{\"mode\":\"mdm_sync_graph\",\"limit\":${GRAPH_LIMIT}}" "sync"
+start_and_wait "mdm_utility" "{\"mode\":\"mdm_verify_graph\"}" "verify"
+start_and_wait "mdm_utility" "{\"mode\":\"mdm_counts\"}" "counts"
 
 echo ""
 echo "AWS MDM hosted graph e2e succeeded."

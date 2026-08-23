@@ -128,6 +128,49 @@ _RELATIONSHIP_SOURCE_LIMIT_MINIMUM = 100
 # in CIK-range chunks rather than one unbounded silver.fetch() (D-03, TODOS.md).
 _INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE = 1000
 
+# MANAGES_FUND priming an adviser CRD at a time (rather than the whole type
+# unconditionally) -- mdm-oom-manages-fund fix. Measured live 2026-08-21:
+# unscoped prime_relationship_type("MANAGES_FUND") materializes ~2GB of ORM
+# rows for a table that's only 390MB on disk, and one adviser alone (a
+# large fund-administration platform, same outlier already flagged in
+# CLAUDE.md's schema-conventions section) holds 89,108 of the 563,631 active
+# rows -- 16% from a single CRD. Batched by CRD (not row count) so a single
+# oversized adviser's batch is bounded by that adviser's own relationship
+# count, not the whole universe's.
+_MANAGES_FUND_CRD_BATCH_SIZE = 1000
+
+# INSTITUTIONAL_HOLDS priming an adviser at a time within its existing
+# CIK-range batches (mdm-oom-institutional-holds-guard fix) -- the same
+# shape as MANAGES_FUND above, applied pre-emptively rather than after an
+# incident: measured live 2026-08-21, INSTITUTIONAL_HOLDS has 0 active rows
+# today only because it hasn't been derived at scale yet in this
+# environment -- its source table (sec_thirteenf_holding) already has 6.8M
+# rows in prod, dwarfing MANAGES_FUND's 563,631-row table that caused a real
+# OOM. The CIK-range batching above already bounds the *silver read*; this
+# additionally bounds the *Postgres relationship-instance prime* the same
+# way MANAGES_FUND's CRD batching does, so this type can't reproduce that
+# incident once real 13F-derived relationships accumulate. Every other
+# relationship type (COMPANY_HOLDS, ISSUED_BY, IS_INSIDER, HOLDS,
+# EMPLOYED_BY, and the rest) had at most 3,148 active rows when measured the
+# same day -- three orders of magnitude below MANAGES_FUND's outlier scale
+# -- so they are deliberately left on the uniform dispatcher prime rather
+# than batched pre-emptively; batch only where there's real (or clearly
+# foreseeable) evidence of scale, not every type uniformly.
+
+# _derive_relationship_type's uniform dispatcher prime (below) is skipped for
+# these types -- they manage their own (batch-scoped) priming instead of one
+# unscoped whole-type load. See _derive_manages_fund, _derive_institutional_holds.
+# IS_INSIDER/HOLDS/COMPANY_HOLDS added by the large-profile-unscoped-load-audit
+# map's Ticket 01: same unscoped-prime shape, not yet at MANAGES_FUND's scale
+# but growing fast (COMPANY_HOLDS grew ~10.6x in ~24h, live-measured
+# 2026-08-22) -- each already reads one bounded batch of new source rows per
+# invocation (no CRD/CIK-range outer loop needed), so their fix scopes the
+# single prime call to just that batch's resolved source entities instead of
+# adding batching.
+_SELF_PRIMING_RELATIONSHIP_TYPES = frozenset({
+    "MANAGES_FUND", "INSTITUTIONAL_HOLDS", "IS_INSIDER", "HOLDS", "COMPANY_HOLDS",
+})
+
 
 @dataclass
 class PipelineStats:
@@ -967,8 +1010,14 @@ class MDMPipeline:
         # proven 16-way concurrency) that this per-row I/O is exactly what
         # made relationship derivation the slow, single-threaded tail of the
         # command. prime_relationship_type is idempotent (see graph.py), so
-        # this is safe even for MANAGES_FUND's own internal call.
-        sync_engine.prime_relationship_type(rel_type_name, defer_flush=True)
+        # this is safe even for MANAGES_FUND's own internal call -- except
+        # self-priming types (mdm-oom-manages-fund fix) are skipped here
+        # deliberately: an unscoped prime here would run BEFORE the deriver
+        # gets a chance to scope its own batches, defeating the whole point
+        # (idempotency means the deriver's own scoped call would then be a
+        # silent no-op against the already-fully-primed cache).
+        if rel_type_name not in _SELF_PRIMING_RELATIONSHIP_TYPES:
+            sync_engine.prime_relationship_type(rel_type_name, defer_flush=True)
         try:
             if rel_type_name == "IS_INSIDER":
                 return self._derive_is_insider(sync_engine, remaining, issuer_ciks=issuer_ciks)
@@ -1051,67 +1100,92 @@ class MDMPipeline:
         # repeats across every one of its own reporting owners' rows.
         issuer_ciks_seen = {row.get("issuer_cik") for row in rows if row.get("issuer_cik") is not None}
         issuer_id_by_cik = self._company_entity_ids(issuer_ciks_seen)
+
+        # Resolve each row's source entity (person) before priming, so the
+        # prime can be scoped to exactly this batch's touched persons
+        # instead of loading the whole IS_INSIDER type (large-profile-
+        # unscoped-load-audit Ticket 01; mirrors
+        # _derive_manages_fund_batch/_derive_institutional_holds_batch's
+        # resolve-then-prime ordering). Corporate owners resolve to None
+        # here too -- they're skipped either way in the main loop below, so
+        # they must not appear in the prime scope. _person_entity_id has no
+        # side effect beyond a read, so calling it once here and reusing the
+        # result changes nothing else about this method's behavior.
+        resolved_person_ids: list[Optional[str]] = []
         for row in rows:
             owner_cik = row.get("owner_cik")
             if owner_cik in company_ciks:
-                skipped_corporate += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "IS_INSIDER",
-                    "reason": "corporate",
-                    "owner_cik": owner_cik,
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
+                resolved_person_ids.append(None)
                 continue
-            person_id = (
-                person_id_by_cik.get(int(owner_cik)) if owner_cik is not None else None
-            ) or self._person_entity_id(owner_cik, row.get("owner_name"))
-            if person_id is None:
-                skipped_unresolved_source += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "IS_INSIDER",
-                    "reason": "unresolved_source",
-                    "owner_cik": owner_cik,
-                    "owner_name": row.get("owner_name"),
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-                continue
-            issuer_cik = row.get("issuer_cik")
-            issuer_id = issuer_id_by_cik.get(int(issuer_cik)) if issuer_cik is not None else None
-            if issuer_id is None:
-                skipped_unresolved_target += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "IS_INSIDER",
-                    "reason": "unresolved_target",
-                    "issuer_cik": row.get("issuer_cik"),
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-                continue
-            _rel, created = sync_engine.ensure_relationship(
-                rel_type_name="IS_INSIDER",
-                source_entity_id=person_id,
-                target_entity_id=issuer_id,
-                properties={"role": _derive_role(row), "title": row.get("officer_title") or ""},
-                effective_from=row.get("period_of_report"),
-                source_system="ownership_filing",
-                source_accession=row.get("accession_number"),
+            resolved_person_ids.append(
+                (person_id_by_cik.get(int(owner_cik)) if owner_cik is not None else None)
+                or self._person_entity_id(owner_cik, row.get("owner_name"))
             )
-            if created:
-                inserted += 1
-            else:
-                skipped_existing += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "IS_INSIDER",
-                    "reason": "existing",
-                    "source_entity_id": person_id,
-                    "target_entity_id": issuer_id,
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-            if remaining is not None and inserted >= remaining:
-                break
+        batch_source_ids = {pid for pid in resolved_person_ids if pid is not None}
+        sync_engine.prime_relationship_type(
+            "IS_INSIDER", defer_flush=True, source_entity_ids=batch_source_ids,
+        )
+        try:
+            for row, person_id in zip(rows, resolved_person_ids):
+                owner_cik = row.get("owner_cik")
+                if owner_cik in company_ciks:
+                    skipped_corporate += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "IS_INSIDER",
+                        "reason": "corporate",
+                        "owner_cik": owner_cik,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
+                if person_id is None:
+                    skipped_unresolved_source += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "IS_INSIDER",
+                        "reason": "unresolved_source",
+                        "owner_cik": owner_cik,
+                        "owner_name": row.get("owner_name"),
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
+                issuer_cik = row.get("issuer_cik")
+                issuer_id = issuer_id_by_cik.get(int(issuer_cik)) if issuer_cik is not None else None
+                if issuer_id is None:
+                    skipped_unresolved_target += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "IS_INSIDER",
+                        "reason": "unresolved_target",
+                        "issuer_cik": row.get("issuer_cik"),
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
+                _rel, created = sync_engine.ensure_relationship(
+                    rel_type_name="IS_INSIDER",
+                    source_entity_id=person_id,
+                    target_entity_id=issuer_id,
+                    properties={"role": _derive_role(row), "title": row.get("officer_title") or ""},
+                    effective_from=row.get("period_of_report"),
+                    source_system="ownership_filing",
+                    source_accession=row.get("accession_number"),
+                )
+                if created:
+                    inserted += 1
+                else:
+                    skipped_existing += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "IS_INSIDER",
+                        "reason": "existing",
+                        "source_entity_id": person_id,
+                        "target_entity_id": issuer_id,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                if remaining is not None and inserted >= remaining:
+                    break
+        finally:
+            sync_engine.unprime_relationship_type("IS_INSIDER")
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_holds(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
@@ -1171,78 +1245,97 @@ class MDMPipeline:
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
+
+        # Resolve each row's source entity (person) before priming, so the
+        # prime can be scoped to exactly this batch's touched persons
+        # instead of loading the whole HOLDS type (large-profile-unscoped-
+        # load-audit Ticket 01; same rationale as _derive_is_insider above).
+        resolved_person_ids: list[Optional[str]] = []
         for row in rows:
             owner_cik = row.get("owner_cik")
             if owner_cik in company_ciks:
-                skipped_corporate += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "HOLDS",
-                    "reason": "corporate",
-                    "owner_cik": owner_cik,
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
+                resolved_person_ids.append(None)
                 continue
-            person_id = (
-                person_id_by_cik.get(int(owner_cik)) if owner_cik is not None else None
-            ) or self._person_entity_id(owner_cik, row.get("owner_name"))
-            if person_id is None:
-                skipped_unresolved_source += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "HOLDS",
-                    "reason": "unresolved_source",
-                    "owner_cik": owner_cik,
-                    "owner_name": row.get("owner_name"),
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-                continue
-            security_id = self._security_entity_id(row, company_entity_id_by_cik)
-            if security_id is None:
-                skipped_unresolved_target += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "HOLDS",
-                    "reason": "unresolved_target",
-                    "security_title": row.get("security_title"),
-                    "issuer_cik": row.get("issuer_cik"),
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-                continue
-            properties = {
-                "shares_owned": self._json_property(row.get("shares_owned_after")),
-                "direct_indirect": row.get("ownership_direct_indirect"),
-                "as_of_date": self._json_property(row.get("transaction_date")),
-                "is_derivative": bool(row.get("is_derivative")),
-                "conversion_or_exercise_price": self._json_property(row.get("conversion_or_exercise_price")),
-                "exercise_date": self._json_property(row.get("exercise_date")),
-                "expiration_date": self._json_property(row.get("expiration_date")),
-                "underlying_security_title": row.get("underlying_security_title"),
-                "underlying_security_shares": self._json_property(row.get("underlying_security_shares")),
-            }
-            _rel, created = sync_engine.ensure_relationship(
-                rel_type_name="HOLDS",
-                source_entity_id=person_id,
-                target_entity_id=security_id,
-                properties={k: v for k, v in properties.items() if v is not None},
-                effective_from=row.get("transaction_date"),
-                source_system="ownership_filing",
-                source_accession=row.get("accession_number"),
+            resolved_person_ids.append(
+                (person_id_by_cik.get(int(owner_cik)) if owner_cik is not None else None)
+                or self._person_entity_id(owner_cik, row.get("owner_name"))
             )
-            if created:
-                inserted += 1
-            else:
-                skipped_existing += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "HOLDS",
-                    "reason": "existing",
-                    "source_entity_id": person_id,
-                    "target_entity_id": security_id,
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-            if remaining is not None and inserted >= remaining:
-                break
+        batch_source_ids = {pid for pid in resolved_person_ids if pid is not None}
+        sync_engine.prime_relationship_type(
+            "HOLDS", defer_flush=True, source_entity_ids=batch_source_ids,
+        )
+        try:
+            for row, person_id in zip(rows, resolved_person_ids):
+                owner_cik = row.get("owner_cik")
+                if owner_cik in company_ciks:
+                    skipped_corporate += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "HOLDS",
+                        "reason": "corporate",
+                        "owner_cik": owner_cik,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
+                if person_id is None:
+                    skipped_unresolved_source += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "HOLDS",
+                        "reason": "unresolved_source",
+                        "owner_cik": owner_cik,
+                        "owner_name": row.get("owner_name"),
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
+                security_id = self._security_entity_id(row, company_entity_id_by_cik)
+                if security_id is None:
+                    skipped_unresolved_target += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "HOLDS",
+                        "reason": "unresolved_target",
+                        "security_title": row.get("security_title"),
+                        "issuer_cik": row.get("issuer_cik"),
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
+                properties = {
+                    "shares_owned": self._json_property(row.get("shares_owned_after")),
+                    "direct_indirect": row.get("ownership_direct_indirect"),
+                    "as_of_date": self._json_property(row.get("transaction_date")),
+                    "is_derivative": bool(row.get("is_derivative")),
+                    "conversion_or_exercise_price": self._json_property(row.get("conversion_or_exercise_price")),
+                    "exercise_date": self._json_property(row.get("exercise_date")),
+                    "expiration_date": self._json_property(row.get("expiration_date")),
+                    "underlying_security_title": row.get("underlying_security_title"),
+                    "underlying_security_shares": self._json_property(row.get("underlying_security_shares")),
+                }
+                _rel, created = sync_engine.ensure_relationship(
+                    rel_type_name="HOLDS",
+                    source_entity_id=person_id,
+                    target_entity_id=security_id,
+                    properties={k: v for k, v in properties.items() if v is not None},
+                    effective_from=row.get("transaction_date"),
+                    source_system="ownership_filing",
+                    source_accession=row.get("accession_number"),
+                )
+                if created:
+                    inserted += 1
+                else:
+                    skipped_existing += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "HOLDS",
+                        "reason": "existing",
+                        "source_entity_id": person_id,
+                        "target_entity_id": security_id,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                if remaining is not None and inserted >= remaining:
+                    break
+        finally:
+            sync_engine.unprime_relationship_type("HOLDS")
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_company_holds(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
@@ -1305,55 +1398,75 @@ class MDMPipeline:
         skipped_unresolved_source = 0
         skipped_unresolved_target = 0
         skipped_existing = 0
+
+        # Resolve each row's source entity (the corporate owner) before
+        # priming, so the prime can be scoped to exactly this batch's
+        # touched companies instead of loading the whole COMPANY_HOLDS type
+        # (large-profile-unscoped-load-audit Ticket 01; same rationale as
+        # _derive_is_insider/_derive_holds above). A pure dict lookup here,
+        # no fallback query, so no behavior changes from resolving it early.
+        resolved_company_ids: list[Optional[str]] = []
         for row in rows:
             owner_cik = row.get("owner_cik")
             if owner_cik not in company_ciks:
-                # skipped_corporate here means non-corporate owner (inverse of
-                # IS_INSIDER/HOLDS — COMPANY_HOLDS wants corporate owners only)
-                skipped_corporate += 1
+                resolved_company_ids.append(None)
                 continue
-            company_id = company_entity_id_by_cik.get(int(owner_cik))
-            if company_id is None:
-                skipped_unresolved_source += 1
-                continue
-            security_id = self._security_entity_id(row, company_entity_id_by_cik)
-            if security_id is None:
-                skipped_unresolved_target += 1
-                print(json.dumps({
-                    "event": "mdm_relationship_skip",
-                    "rel_type": "COMPANY_HOLDS",
-                    "reason": "unresolved_target",
-                    "security_title": row.get("security_title"),
-                    "issuer_cik": row.get("issuer_cik"),
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }), file=sys.stderr, flush=True)
-                continue
-            properties = {
-                "shares_owned": self._json_property(row.get("shares_owned_after")),
-                "direct_indirect": row.get("ownership_direct_indirect"),
-                "as_of_date": self._json_property(row.get("transaction_date")),
-                "is_derivative": bool(row.get("is_derivative")),
-                "conversion_or_exercise_price": self._json_property(row.get("conversion_or_exercise_price")),
-                "exercise_date": self._json_property(row.get("exercise_date")),
-                "expiration_date": self._json_property(row.get("expiration_date")),
-                "underlying_security_title": row.get("underlying_security_title"),
-                "underlying_security_shares": self._json_property(row.get("underlying_security_shares")),
-            }
-            _rel, created = sync_engine.ensure_relationship(
-                rel_type_name="COMPANY_HOLDS",
-                source_entity_id=company_id,
-                target_entity_id=security_id,
-                properties={k: v for k, v in properties.items() if v is not None},
-                effective_from=row.get("transaction_date"),
-                source_system="ownership_filing",
-                source_accession=row.get("accession_number"),
-            )
-            if created:
-                inserted += 1
-            else:
-                skipped_existing += 1
-            if remaining is not None and inserted >= remaining:
-                break
+            resolved_company_ids.append(company_entity_id_by_cik.get(int(owner_cik)))
+        batch_source_ids = {cid for cid in resolved_company_ids if cid is not None}
+        sync_engine.prime_relationship_type(
+            "COMPANY_HOLDS", defer_flush=True, source_entity_ids=batch_source_ids,
+        )
+        try:
+            for row, company_id in zip(rows, resolved_company_ids):
+                owner_cik = row.get("owner_cik")
+                if owner_cik not in company_ciks:
+                    # skipped_corporate here means non-corporate owner (inverse of
+                    # IS_INSIDER/HOLDS — COMPANY_HOLDS wants corporate owners only)
+                    skipped_corporate += 1
+                    continue
+                if company_id is None:
+                    skipped_unresolved_source += 1
+                    continue
+                security_id = self._security_entity_id(row, company_entity_id_by_cik)
+                if security_id is None:
+                    skipped_unresolved_target += 1
+                    print(json.dumps({
+                        "event": "mdm_relationship_skip",
+                        "rel_type": "COMPANY_HOLDS",
+                        "reason": "unresolved_target",
+                        "security_title": row.get("security_title"),
+                        "issuer_cik": row.get("issuer_cik"),
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }), file=sys.stderr, flush=True)
+                    continue
+                properties = {
+                    "shares_owned": self._json_property(row.get("shares_owned_after")),
+                    "direct_indirect": row.get("ownership_direct_indirect"),
+                    "as_of_date": self._json_property(row.get("transaction_date")),
+                    "is_derivative": bool(row.get("is_derivative")),
+                    "conversion_or_exercise_price": self._json_property(row.get("conversion_or_exercise_price")),
+                    "exercise_date": self._json_property(row.get("exercise_date")),
+                    "expiration_date": self._json_property(row.get("expiration_date")),
+                    "underlying_security_title": row.get("underlying_security_title"),
+                    "underlying_security_shares": self._json_property(row.get("underlying_security_shares")),
+                }
+                _rel, created = sync_engine.ensure_relationship(
+                    rel_type_name="COMPANY_HOLDS",
+                    source_entity_id=company_id,
+                    target_entity_id=security_id,
+                    properties={k: v for k, v in properties.items() if v is not None},
+                    effective_from=row.get("transaction_date"),
+                    source_system="ownership_filing",
+                    source_accession=row.get("accession_number"),
+                )
+                if created:
+                    inserted += 1
+                else:
+                    skipped_existing += 1
+                if remaining is not None and inserted >= remaining:
+                    break
+        finally:
+            sync_engine.unprime_relationship_type("COMPANY_HOLDS")
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_is_entity_of(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
@@ -1527,17 +1640,28 @@ class MDMPipeline:
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_manages_fund(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
+        """Derive MANAGES_FUND edges, batched by adviser CRD (mdm-oom-manages-fund fix).
+
+        Prior version primed the WHOLE type unconditionally (every active
+        MANAGES_FUND row, universe-wide) before it knew which advisers this
+        run would even touch. Measured live 2026-08-21: that single query
+        materializes ~2GB of ORM rows for a table that's 390MB on disk, and
+        one adviser (a large fund-administration platform, the same outlier
+        flagged in CLAUDE.md's schema-conventions section) holds 89,108 of
+        the 563,631 active rows -- 16% from a single CRD. Concurrent with
+        derive_relationships()'s other worker threads, that pushed
+        edgartools-prod-mdm-medium (4096MB) over its ceiling.
+
+        Advisers are resolved first, then CRDs are processed in
+        ``_MANAGES_FUND_CRD_BATCH_SIZE`` batches -- each batch primes,
+        reads, and closes/inserts relationships for only its own advisers,
+        then discards that batch's cache before moving on
+        (``GraphSyncEngine.unprime_relationship_type``). Peak memory is
+        bounded by one batch's data (worst case: whichever batch contains
+        the outlier adviser) instead of the whole type.
+        """
         from edgar_warehouse.mdm.database import MdmAdviser, MdmFund
 
-        inserted = 0
-        skipped_corporate = 0
-        skipped_unresolved_source = 0
-        skipped_unresolved_target = 0
-        skipped_existing = 0
-        sync_engine.prime_relationship_type(
-            "MANAGES_FUND",
-            defer_flush=True,
-        )
         adviser_ids_by_crd = {
             str(crd_number): entity_id
             for entity_id, crd_number in self.session.execute(
@@ -1554,116 +1678,30 @@ class MDMPipeline:
                 )
             )
         }
-        current_by_adviser: dict[str, list] = {}
-        for current in sync_engine.current_relationships("MANAGES_FUND"):
-            current_by_adviser.setdefault(current.source_entity_id, []).append(current)
-        filing_rows = self._fetch_optional_relationship_rows(
-            """
-            SELECT accession_number, crd_number, effective_date, filing_action
-            FROM sec_adv_filing
-            WHERE crd_number IS NOT NULL
-            ORDER BY crd_number, effective_date, accession_number
-            """,
-            None,
-            rel_type_name="MANAGES_FUND",
-            source_table="sec_adv_filing",
-            existing=self._relationship_count("MANAGES_FUND"),
-        )
-        source_rows = self._fetch_optional_relationship_rows(
-            """
-            SELECT accession_number, adviser_crd_number, private_fund_id,
-                   filing_id, schedule_section, reporting_role, effective_date,
-                   filing_action, source_sha256
-            FROM sec_adv_private_fund
-            WHERE adviser_crd_number IS NOT NULL AND private_fund_id IS NOT NULL
-            ORDER BY filing_id, private_fund_id, schedule_section
-            """,
-            remaining,
-            rel_type_name="MANAGES_FUND",
-            source_table="sec_adv_private_fund",
-            existing=self._relationship_count("MANAGES_FUND"),
-        )
-        latest_by_crd: dict[str, dict] = {}
-        if filing_rows:
-            for filing in filing_rows:
-                crd = str(filing.get("crd_number") or "")
-                effective = filing.get("effective_date")
-                if effective and not isinstance(effective, date):
-                    effective = date.fromisoformat(str(effective)[:10])
-                accession = str(filing.get("accession_number") or "")
-                filing_id = accession.rsplit(":", 1)[-1]
-                key = (effective or date.min, int(filing_id) if filing_id.isdecimal() else 0,
-                       accession)
-                prior = latest_by_crd.get(crd)
-                if prior is None or key > prior["_key"]:
-                    latest_by_crd[crd] = {**filing, "_key": key}
-            active_accessions = {
-                str(filing.get("accession_number"))
-                for filing in latest_by_crd.values()
-                if not any(
-                    marker in str(filing.get("filing_action") or "").lower()
-                    for marker in ("final", "withdraw")
-                )
-            }
-            source_rows = [
-                row for row in source_rows
-                if str(row.get("accession_number")) in active_accessions
-            ]
-            from edgar_warehouse.mdm.graph import close_relationship_version
 
-            expected_targets_by_adviser: dict[str, set[str]] = {}
-            for row in source_rows:
-                adviser_id = adviser_ids_by_crd.get(
-                    str(row.get("adviser_crd_number"))
-                )
-                fund_id = fund_ids_by_pfid.get(str(row.get("private_fund_id")))
-                if adviser_id and fund_id:
-                    expected_targets_by_adviser.setdefault(adviser_id, set()).add(fund_id)
-            for crd, filing in latest_by_crd.items():
-                adviser_id = adviser_ids_by_crd.get(str(crd))
-                if adviser_id is None:
-                    continue
-                effective = filing["_key"][0]
-                expected_targets = expected_targets_by_adviser.get(adviser_id, set())
-                current_versions = current_by_adviser.get(adviser_id, [])
-                for current in current_versions:
-                    if (
-                        current.valid_to_date is None
-                        and current.target_entity_id not in expected_targets
-                    ):
-                        close_relationship_version(
-                            self.session, current.instance_id, effective
-                        )
-        for row in source_rows:
-            adviser_id = adviser_ids_by_crd.get(str(row.get("adviser_crd_number")))
-            fund_id = fund_ids_by_pfid.get(str(row.get("private_fund_id")))
-            if adviser_id is None:
-                skipped_unresolved_source += 1
-                continue
-            if fund_id is None:
-                skipped_unresolved_target += 1
-                continue
-            _rel, created = sync_engine.ensure_relationship(
-                rel_type_name="MANAGES_FUND",
-                source_entity_id=adviser_id,
-                target_entity_id=fund_id,
-                properties={
-                    "private_fund_id": row.get("private_fund_id"),
-                    "source_filing_id": row.get("filing_id"),
-                    "source_section": row.get("schedule_section"),
-                    "reporting_role": row.get("reporting_role"),
-                    "evidence_fingerprint": row.get("source_sha256"),
-                },
-                effective_from=row.get("effective_date"),
-                source_system="iapd_adv_bulk",
-                source_accession=row.get("accession_number"),
-                date_provenance="reported",
-            )
-            inserted += 1 if created else 0
-            skipped_existing += 0 if created else 1
-            if remaining is not None and inserted >= remaining:
-                break
-        if not source_rows and not filing_rows:
+        # Cheap existence probe -- if there's no ADV filing/private-fund
+        # data at all (fresh/degenerate universe), skip straight to the
+        # MdmFund-based fallback below instead of iterating CRD batches
+        # that would all come back empty. Both queries are LIMIT 1 -- this
+        # is not the memory-heavy read the batching below guards against.
+        existing_count = self._relationship_count("MANAGES_FUND")
+        probe_filing = self._fetch_optional_relationship_rows(
+            "SELECT 1 AS probe FROM sec_adv_filing WHERE crd_number IS NOT NULL LIMIT 1",
+            None, rel_type_name="MANAGES_FUND", source_table="sec_adv_filing",
+            existing=existing_count,
+        )
+        probe_source = self._fetch_optional_relationship_rows(
+            """
+            SELECT 1 AS probe FROM sec_adv_private_fund
+            WHERE adviser_crd_number IS NOT NULL AND private_fund_id IS NOT NULL LIMIT 1
+            """,
+            None, rel_type_name="MANAGES_FUND", source_table="sec_adv_private_fund",
+            existing=existing_count,
+        )
+
+        if not probe_filing and not probe_source:
+            sync_engine.prime_relationship_type("MANAGES_FUND", defer_flush=True)
+            inserted = skipped_existing = 0
             for fund in self.session.scalars(
                 select(MdmFund).where(MdmFund.adviser_entity_id.isnot(None))
             ):
@@ -1677,7 +1715,155 @@ class MDMPipeline:
                 skipped_existing += 0 if created else 1
                 if remaining is not None and inserted >= remaining:
                     break
-        sync_engine.flush_pending()
+            sync_engine.flush_pending()
+            return inserted, 0, 0, 0, skipped_existing
+
+        totals = [0, 0, 0, 0, 0]  # inserted, skipped_corporate, skipped_unresolved_source/target, skipped_existing
+        sorted_crds = sorted(adviser_ids_by_crd.keys())
+        for start in range(0, len(sorted_crds), _MANAGES_FUND_CRD_BATCH_SIZE):
+            batch_crds = sorted_crds[start:start + _MANAGES_FUND_CRD_BATCH_SIZE]
+            batch_remaining = None if remaining is None else max(remaining - totals[0], 0)
+            if batch_remaining == 0:
+                break
+            batch_result = self._derive_manages_fund_batch(
+                sync_engine, batch_remaining, batch_crds, adviser_ids_by_crd, fund_ids_by_pfid,
+            )
+            for i, value in enumerate(batch_result):
+                totals[i] += value
+            if remaining is not None and totals[0] >= remaining:
+                break
+        return tuple(totals)
+
+    def _derive_manages_fund_batch(
+        self,
+        sync_engine: GraphSyncEngine,
+        remaining: Optional[int],
+        batch_crds: list[str],
+        adviser_ids_by_crd: dict[str, str],
+        fund_ids_by_pfid: dict[str, str],
+    ) -> tuple[int, int, int, int, int]:
+        inserted = 0
+        skipped_corporate = 0
+        skipped_unresolved_source = 0
+        skipped_unresolved_target = 0
+        skipped_existing = 0
+
+        batch_adviser_ids = [
+            adviser_ids_by_crd[crd] for crd in batch_crds if crd in adviser_ids_by_crd
+        ]
+        sync_engine.prime_relationship_type(
+            "MANAGES_FUND", defer_flush=True, source_entity_ids=batch_adviser_ids,
+        )
+        try:
+            placeholders = ", ".join(["?"] * len(batch_crds))
+            filing_rows = self.silver.fetch(
+                f"""
+                SELECT accession_number, crd_number, effective_date, filing_action
+                FROM sec_adv_filing
+                WHERE crd_number IN ({placeholders})
+                ORDER BY crd_number, effective_date, accession_number
+                """,
+                params=list(batch_crds),
+            )
+            source_rows = self.silver.fetch(
+                f"""
+                SELECT accession_number, adviser_crd_number, private_fund_id,
+                       filing_id, schedule_section, reporting_role, effective_date,
+                       filing_action, source_sha256
+                FROM sec_adv_private_fund
+                WHERE adviser_crd_number IN ({placeholders}) AND private_fund_id IS NOT NULL
+                ORDER BY filing_id, private_fund_id, schedule_section
+                """,
+                params=list(batch_crds),
+            )
+
+            current_by_adviser: dict[str, list] = {}
+            for current in sync_engine.current_relationships("MANAGES_FUND"):
+                current_by_adviser.setdefault(current.source_entity_id, []).append(current)
+
+            latest_by_crd: dict[str, dict] = {}
+            if filing_rows:
+                for filing in filing_rows:
+                    crd = str(filing.get("crd_number") or "")
+                    effective = filing.get("effective_date")
+                    if effective and not isinstance(effective, date):
+                        effective = date.fromisoformat(str(effective)[:10])
+                    accession = str(filing.get("accession_number") or "")
+                    filing_id = accession.rsplit(":", 1)[-1]
+                    key = (effective or date.min, int(filing_id) if filing_id.isdecimal() else 0,
+                           accession)
+                    prior = latest_by_crd.get(crd)
+                    if prior is None or key > prior["_key"]:
+                        latest_by_crd[crd] = {**filing, "_key": key}
+                active_accessions = {
+                    str(filing.get("accession_number"))
+                    for filing in latest_by_crd.values()
+                    if not any(
+                        marker in str(filing.get("filing_action") or "").lower()
+                        for marker in ("final", "withdraw")
+                    )
+                }
+                source_rows = [
+                    row for row in source_rows
+                    if str(row.get("accession_number")) in active_accessions
+                ]
+                from edgar_warehouse.mdm.graph import close_relationship_version
+
+                expected_targets_by_adviser: dict[str, set[str]] = {}
+                for row in source_rows:
+                    adviser_id = adviser_ids_by_crd.get(
+                        str(row.get("adviser_crd_number"))
+                    )
+                    fund_id = fund_ids_by_pfid.get(str(row.get("private_fund_id")))
+                    if adviser_id and fund_id:
+                        expected_targets_by_adviser.setdefault(adviser_id, set()).add(fund_id)
+                for crd, filing in latest_by_crd.items():
+                    adviser_id = adviser_ids_by_crd.get(str(crd))
+                    if adviser_id is None:
+                        continue
+                    effective = filing["_key"][0]
+                    expected_targets = expected_targets_by_adviser.get(adviser_id, set())
+                    current_versions = current_by_adviser.get(adviser_id, [])
+                    for current in current_versions:
+                        if (
+                            current.valid_to_date is None
+                            and current.target_entity_id not in expected_targets
+                        ):
+                            close_relationship_version(
+                                self.session, current.instance_id, effective
+                            )
+            for row in source_rows:
+                adviser_id = adviser_ids_by_crd.get(str(row.get("adviser_crd_number")))
+                fund_id = fund_ids_by_pfid.get(str(row.get("private_fund_id")))
+                if adviser_id is None:
+                    skipped_unresolved_source += 1
+                    continue
+                if fund_id is None:
+                    skipped_unresolved_target += 1
+                    continue
+                _rel, created = sync_engine.ensure_relationship(
+                    rel_type_name="MANAGES_FUND",
+                    source_entity_id=adviser_id,
+                    target_entity_id=fund_id,
+                    properties={
+                        "private_fund_id": row.get("private_fund_id"),
+                        "source_filing_id": row.get("filing_id"),
+                        "source_section": row.get("schedule_section"),
+                        "reporting_role": row.get("reporting_role"),
+                        "evidence_fingerprint": row.get("source_sha256"),
+                    },
+                    effective_from=row.get("effective_date"),
+                    source_system="iapd_adv_bulk",
+                    source_accession=row.get("accession_number"),
+                    date_provenance="reported",
+                )
+                inserted += 1 if created else 0
+                skipped_existing += 0 if created else 1
+                if remaining is not None and inserted >= remaining:
+                    break
+            sync_engine.flush_pending()
+        finally:
+            sync_engine.unprime_relationship_type("MANAGES_FUND")
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_issued_by(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
@@ -2827,6 +3013,20 @@ class MDMPipeline:
         the SQL. Adviser-entity resolution is per-CIK, so batch ordering carries
         no correctness risk (TODOS.md). Counters and the `remaining` early-exit
         accumulate across all batches, not per batch.
+
+        Postgres-side self-priming (mdm-oom-institutional-holds-guard fix,
+        mirrors _derive_manages_fund): the CIK-range batching above already
+        bounds the *silver read*, but until this fix every batch still primed
+        the *entire* INSTITUTIONAL_HOLDS relationship-instance cache via the
+        uniform dispatcher (`_derive_relationship_type`'s unconditional
+        `prime_relationship_type`) before this method ran at all — bounded
+        today only because this type currently has 0 active rows in prod, not
+        because the code path is actually safe at scale. Each CIK-range batch
+        now resolves its own advisers first (`_derive_institutional_holds_batch`),
+        primes scoped to just those advisers, processes its rows, then releases
+        that batch's cache (`GraphSyncEngine.unprime_relationship_type`) before
+        the next CIK range — the same per-batch bound MANAGES_FUND's CRD
+        batching applies, keyed by CIK range instead of CRD.
         """
         base_sql = """
             SELECT h.cik, h.accession_number, h.period_of_report, h.cusip,
@@ -2895,13 +3095,64 @@ class MDMPipeline:
         # below, which opportunistically backfills security_class on every
         # call and is deliberately left unmemoized so a later row with a
         # non-NULL security_class can still backfill an earlier NULL one.
+        # Shared across every CIK-range batch (not reset per batch) -- it's
+        # bounded by the distinct manager count, not row count, so it stays
+        # small even though INSTITUTIONAL_HOLDS priming below is now
+        # batch-scoped.
         adviser_id_by_cik: dict[int, Optional[str]] = {}
 
+        totals = [0, 0, 0, 0, 0]  # inserted, skipped_corporate, skipped_unresolved_source/target, skipped_existing
         cik_lo = min_cik
         while cik_lo <= max_cik:
             cik_hi = min(cik_lo + _INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE - 1, max_cik)
+            batch_remaining = None if remaining is None else max(remaining - totals[0], 0)
+            if batch_remaining == 0:
+                break
+            batch_result = self._derive_institutional_holds_batch(
+                sync_engine, batch_remaining, batch_sql, cik_lo, cik_hi, adviser_id_by_cik,
+            )
+            for i, value in enumerate(batch_result):
+                totals[i] += value
+            if remaining is not None and totals[0] >= remaining:
+                break
+            cik_lo = cik_hi + 1
 
-            for row in self.silver.fetch(batch_sql, params=[cik_lo, cik_hi]):
+        return tuple(totals)
+
+    def _derive_institutional_holds_batch(
+        self,
+        sync_engine: GraphSyncEngine,
+        remaining: Optional[int],
+        batch_sql: str,
+        cik_lo: int,
+        cik_hi: int,
+        adviser_id_by_cik: dict[int, Optional[str]],
+    ) -> tuple[int, int, int, int, int]:
+        inserted = 0
+        skipped_corporate = 0
+        skipped_unresolved_source = 0
+        skipped_unresolved_target = 0
+        skipped_existing = 0
+
+        batch_rows = self.silver.fetch(batch_sql, params=[cik_lo, cik_hi])
+
+        # Resolve this batch's advisers first (reusing the cross-batch cache)
+        # so priming can be scoped to exactly the source entities this batch
+        # touches -- mirrors _derive_manages_fund_batch's adviser-then-prime
+        # ordering.
+        batch_cik_set = {row.get("cik") for row in batch_rows}
+        for cik in batch_cik_set:
+            if cik not in adviser_id_by_cik:
+                adviser_id_by_cik[cik] = self._ensure_thirteenf_manager(cik)
+        batch_adviser_ids = [
+            adviser_id_by_cik[cik] for cik in batch_cik_set if adviser_id_by_cik.get(cik) is not None
+        ]
+
+        sync_engine.prime_relationship_type(
+            "INSTITUTIONAL_HOLDS", defer_flush=True, source_entity_ids=batch_adviser_ids,
+        )
+        try:
+            for row in batch_rows:
                 cik = row.get("cik")
                 cusip = row.get("cusip") or ""
                 accession_number = row.get("accession_number") or ""
@@ -2913,9 +3164,7 @@ class MDMPipeline:
                     skipped_unresolved_target += 1
                     continue
 
-                if cik not in adviser_id_by_cik:
-                    adviser_id_by_cik[cik] = self._ensure_thirteenf_manager(cik)
-                adviser_id = adviser_id_by_cik[cik]
+                adviser_id = adviser_id_by_cik.get(cik)
                 if adviser_id is None:
                     skipped_unresolved_source += 1
                     print(json.dumps({
@@ -2969,11 +3218,10 @@ class MDMPipeline:
                         "ts": datetime.now(timezone.utc).isoformat(),
                     }), file=sys.stderr, flush=True)
                 if remaining is not None and inserted >= remaining:
-                    # Early exit across both the inner row loop and the outer
-                    # CIK-range batch loop — counters accumulated so far are final.
-                    return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
-
-            cik_lo = cik_hi + 1
+                    break
+            sync_engine.flush_pending()
+        finally:
+            sync_engine.unprime_relationship_type("INSTITUTIONAL_HOLDS")
 
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 

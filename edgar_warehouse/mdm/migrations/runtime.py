@@ -363,6 +363,7 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
         _apply_sql_file(engine, "009_graph_generation_builder.sql")
         _apply_sql_file(engine, "010_release_relationship_sources.sql")
         _apply_sql_file(engine, "011_source_ref_content_hash.sql")
+        _apply_sql_file(engine, "012_dedupe_and_constrain_attribute_stage.sql")
         _apply_acquisition_ledger_migration(engine)
 
     if seed:
@@ -375,10 +376,10 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
 def _apply_acquisition_ledger_migration(engine: Engine) -> bool:
     """Apply privileged ledger DDL, or preserve it for the runtime application role."""
     if engine.dialect.name != "postgresql":
-        _apply_sql_file(engine, "012_acquisition_ledger.sql")
+        _apply_sql_file(engine, "013_acquisition_ledger.sql")
         return True
 
-    statements = _sql_file_statements("012_acquisition_ledger.sql")
+    statements = _sql_file_statements("013_acquisition_ledger.sql")
     with engine.begin() as conn:
         installed = bool(
             conn.scalar(text("SELECT to_regclass('source_fetch_decision') IS NOT NULL"))
