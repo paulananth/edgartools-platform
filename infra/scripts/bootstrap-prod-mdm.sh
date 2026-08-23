@@ -205,6 +205,14 @@ conn.close()
 conn = connect(database)
 conn.autocommit = True
 cur = conn.cursor()
+cur.execute("SELECT 1 FROM pg_roles WHERE rolname = 'application'")
+if cur.fetchone() is None:
+    # The first Snowflake Postgres access reset may not have materialized the
+    # runtime login yet. Create its privilege shell before migrations so the
+    # acquisition roles can be granted atomically; RESET ACCESS below supplies
+    # the managed login credential.
+    cur.execute("CREATE ROLE application NOLOGIN")
+    print("APPLICATION_ROLE_CREATED", file=sys.stderr)
 try:
     # REASSIGN OWNED requires membership in *both* the source and target
     # roles (per REASSIGN OWNED's own docs), not just admin-ish privileges
@@ -262,6 +270,10 @@ for stmt in [
     "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO application;",
     "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO application;",
     "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO application;",
+    # Acquisition history is intentionally excluded from the shared runtime
+    # principal's broad legacy grants. Runtime code must SET one fenced role.
+    "REVOKE ALL PRIVILEGES ON source_observation_cursor, source_fetch_decision, source_fetch_work, source_fetch_transition FROM application;",
+    "REVOKE ALL PRIVILEGES ON source_change_status FROM application;",
 ]:
     cur.execute(stmt)
 cur.close()

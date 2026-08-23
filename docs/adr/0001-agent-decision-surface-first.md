@@ -1,7 +1,7 @@
 # Agent Decision Surface first (graph bundles over Snowflake)
 
 **Status:** accepted  
-**Ingest doctrine:** see [0002-silver-soe-edgartools-exclusive.md](0002-silver-soe-edgartools-exclusive.md) — agents still read **Snowflake only**; warehouse hot path is silver + edgartools, not default bronze.
+**Ingest doctrine:** see [0002-silver-soe-edgartools-exclusive.md](0002-silver-soe-edgartools-exclusive.md) and its partial supersession by [0006-sec-bronze-ledger-silver-authority.md](0006-sec-bronze-ledger-silver-authority.md) — agents still read **Snowflake only**; SEC access is ledger-authorized through edgartools, captured in Bronze, and published as Silver business state.
 
 The platform’s product output for trading is not a dashboard-first research app
 and not an order-execution system. v1 prioritizes an **Agent Decision Surface**:

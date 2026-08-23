@@ -152,14 +152,16 @@ are deployed by operator scripts, not by packing full pipelines into Terraform.
 
 ## Data plane doctrine
 
-**Current ingest doctrine** (supersedes “always bronze first” in older diagrams):
+**Accepted ingest target** (legacy capture-mode flags remain until migration):
 
-- **Silver** = runtime system of engagement  
-- **edgartools** = exclusive SEC I/O gateway (cutover target)  
-- **Bronze** = optional archive (explicit request or non-edgartools sources)  
-- **Agent** = Snowflake Decision Contract only  
+- **SEC** = external source authority
+- **PostgreSQL** = local acquisition and processing-state authority
+- **edgartools** = exclusive SEC I/O gateway
+- **Bronze** = mandatory immutable source evidence
+- **Silver** = authoritative published business state and runtime system of engagement
+- **Agent** = Snowflake Decision Contract only
 
-See [doctrine-data-plane.md](doctrine-data-plane.md) and [adr/0002-silver-soe-edgartools-exclusive.md](adr/0002-silver-soe-edgartools-exclusive.md).
+See [doctrine-data-plane.md](doctrine-data-plane.md) and [ADR 0006](adr/0006-sec-bronze-ledger-silver-authority.md).
 
 ## Questions & dashboards
 

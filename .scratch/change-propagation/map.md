@@ -1,0 +1,137 @@
+# Incremental Change Propagation
+
+Label: `wayfinder:map`
+
+## Destination
+
+An implementation-ready, decision-complete plan for propagating only new,
+modified, or retired source facts—and their correctness-required Affected-Key
+Closure—from bronze to silver, silver to MDM and gold, and MDM to the hosted
+Neo4j graph, with deterministic replay and one aligned Decision Watermark.
+
+## Notes
+
+- Repo: `edgartools-platform`. Decision-spec only: this map plans the change;
+  implementation happens in a later effort.
+- AWS-only. Keep the current SEC EDGAR → warehouse CLI → S3/Snowflake → dbt →
+  hosted graph architecture. Do not introduce another cloud, registry,
+  workflow engine, storage target, or secret-management path.
+- Scope locked during destination grilling and revised by Ticket 03 grilling on
+  2026-08-21:
+  - SEC is the external Source Authority; Bronze is the mandatory immutable
+    evidence store for every successful relevant response; PostgreSQL is the
+    sole local authority for acquisition and processing state; and Silver
+    remains the authoritative Runtime System of Engagement for published
+    business state.
+  - Every SEC request requires a prior PostgreSQL Source Fetch Decision. A
+    Logical Source Revision materializes only after verified Bronze capture,
+    and PostgreSQL exposes one joined download/processing status per candidate.
+  - A change includes `UPSERT`, `RETIRE`, and scoped replacement completion;
+    history is preserved rather than physically deleted.
+  - Delivery is at-least-once with content-addressed idempotency and
+    deterministic convergence, not an infrastructure-level exactly-once claim.
+  - Work is bounded by the Affected-Key Closure: directly changed inputs plus
+    the entity, survivorship, relationship, and derived-table dependents needed
+    for correctness—never unrelated full-universe work.
+  - A Change Propagation Run is immutable and binds source versions/hashes,
+    parser/schema versions, operation types, affected keys, expected producers,
+    stage outcomes, and publication identities.
+  - Silver, MDM, gold, and graph publish independently. A composite Decision
+    Watermark becomes agent-grade only after every affected stage is complete
+    and aligned.
+  - MDM uses targeted re-resolution plus bounded match/survivorship closure and
+    a periodic full-universe reconciliation backstop.
+  - Gold refreshes the affected dbt dependency closure and records whether
+    Snowflake performed incremental or full work.
+  - The graph is an immutable candidate generation assembled from changed
+    partitions plus content-addressed reuse of unchanged partitions, fully
+    verified before atomic pointer activation.
+  - Immutable manifests/deltas live in S3; cursors, leases, outbox entries, and
+    outcome ledgers live in Snowflake Postgres, outside the silver artifact.
+  - Initial bootstrap and recovery after ledger loss use an explicitly
+    authorized Hybrid Source Baseline, complete non-serving Silver candidate,
+    catch-up barrier, verification, and atomic activation into a new epoch.
+  - Migration performs read-only reconciliation and cuts over
+    boundary-by-boundary without concurrent canonical writers.
+- Settled predecessor maps are inputs, not questions to reopen:
+  - [Decoupled bronze pipeline](../decoupled-bronze-pipeline/map.md):
+    S3→SNS→two SQS queues, per-accession completion events, N-or-timer batching,
+    on-demand compute, retry/DLQ policy, and migration principles.
+  - [Silver-on-Snowflake Migration](../silver-snowflake-migration/map.md) and
+    [DuckDB Retirement](../duckdb-retirement/map.md): append-only Snowflake
+    landing, dbt-native silver, Snowflake Postgres operational bookkeeping, and
+    retirement of DuckDB readers/writers.
+  - [MDM Entity Resolution Ahead of Silver](../mdm-ahead-of-silver/map.md):
+    two-phase Snowflake backfill and independent sweep semantics.
+  - [dbt Gold Silver Rewiring tickets](../dbt-gold-silver-rewiring/issues/):
+    existing vertical migrations away from Python full-snapshot gold builders.
+- Current-head facts established before charting:
+  - Bronze replay selects complete CIK directories and has no durable consumed
+    object/version cursor; an intact old checkpoint can mask a newer bronze
+    snapshot.
+  - Silver landing objects use table/date/run paths that collide when multiple
+    windows share one execution run ID; current landing rows also lack
+    tombstones and scope-completion records.
+  - MDM change detection is company-only by content hash; other entity and
+    relationship paths rescan broadly or fail to requeue modified rows.
+  - The legacy gold path still builds full snapshots, and normal graph workflow
+    tails can sync a new generation while verifying the previously active one.
+- Use `/grilling` and `/domain-modeling` for grilling tickets, `/prototype` for
+  concrete contract artifacts, and a `/research` subagent for research tickets.
+  Before any later code change or restructuring proposal, use
+  `/gof-refactor-reviewer` against the relevant code and git history; leave the
+  design alone unless current costs justify a pattern.
+- Acceptance must cover no-op replay, modification, retirement, scoped
+  replacement, concurrent producers, partial failure/resume, out-of-order
+  delivery, unchanged graph-partition reuse, bounded reconciliation, and an
+  aligned Decision Watermark—with measured proof that unrelated rows were not
+  processed.
+
+## Decisions so far
+
+<!-- Closed ticket decisions: one-line gist and link; detail stays in the ticket. -->
+
+- [Verify Snowflake incremental change-processing primitives](issues/01-verify-snowflake-incremental-primitives.md) — Snowflake supports bounded incremental publication and aligned refresh evidence, but the application run ledger must own the non-atomic cross-stage barrier.
+- [Inventory table-specific change and dependency semantics](issues/02-inventory-table-change-semantics.md) — All 31 landing tables are mapped; current writers lack a shared retirement/no-op contract, local replacement deletes do not propagate, and MDM/graph closure is dispersed rather than registry-owned.
+- [Decide the Bronze capture, consumption ledger, and source cursor contract](issues/03-decide-bronze-consumption-ledger.md) — SEC owns source truth, mandatory verified Bronze owns raw evidence, PostgreSQL owns local acquisition/processing state, and Silver owns published business state; ledger-gated capture uses a narrow Facade, executable family policies, and bundled acquisition handlers while scope proof, status, and epoch recovery fail closed.
+
+## Ticket 03 implementation tickets
+
+<!-- Agent-grabbable tracer bullets; blocking edges live in each ticket. -->
+
+- [13 — Expand acquisition command registration](issues/13-expand-acquisition-command-registration.md) — Add the behavior-preserving Command registration seam before changing acquisition semantics.
+- [14 — Establish the acquisition ledger and status spine](issues/14-establish-acquisition-ledger-status-spine.md) — Make PostgreSQL authorize and visibly resolve a no-download candidate without network access.
+- [15 — Capture one filing-artifact family through the gated Facade](issues/15-capture-filing-artifact-through-gated-facade.md) — Prove the Facade and first executable family Strategy through verified Bronze capture.
+- [16 — Drive filing capture from SEC change discovery](issues/16-drive-filing-capture-from-sec-change-discovery.md) — Seal SEC change candidates and issue one ledger decision per candidate.
+- [17 — Make Bronze capture retry-safe and recoverable](issues/17-make-bronze-capture-retry-safe.md) — Converge retries, not-modified responses, failures, fencing, and orphaned captures.
+- [18 — Materialize ordered logical source revisions](issues/18-materialize-ordered-logical-source-revisions.md) — Turn verified evidence into ordered versioned revisions and processing decisions.
+- [19 — Complete the filing-to-Silver acceptance seam](issues/19-complete-filing-to-silver-acceptance-seam.md) — Verify publication or explicit non-publication while protecting prior Silver authority.
+- [20 — Version and activate the Acquisition Universe](issues/20-version-and-activate-acquisition-universe.md) — Gate coverage changes on scoped baseline and catch-up proof.
+- [21 — Migrate submissions snapshots and pagination](issues/21-migrate-submissions-and-pagination.md) — Deliver complete inventory-aware submissions processing.
+- [22 — Migrate company-facts snapshots](issues/22-migrate-company-facts-snapshots.md) — Deliver complete scoped company-facts lifecycle outcomes.
+- [23 — Migrate reference catalogs](issues/23-migrate-reference-catalogs.md) — Deliver counted and digested catalog completeness.
+- [24 — Migrate ADV sources](issues/24-migrate-adv-sources.md) — Deliver filing and bulk-source ADV outcomes with explicit scopes.
+- [25 — Add conflict, repair, exclusion, and evidence-import workflows](issues/25-add-conflict-repair-and-evidence-import.md) — Give operators auditable exceptional-evidence controls.
+- [26 — Rebuild and activate a ledger epoch](issues/26-rebuild-and-activate-ledger-epoch.md) — Recover authority through a Hybrid Source Baseline and atomic activation.
+- [27 — Contract legacy acquisition bypasses](issues/27-contract-legacy-acquisition-bypasses.md) — Remove bypasses only after every source family proves the authoritative path.
+
+## Not yet specified
+
+- The physical coordinator topology and exact Step Functions/EventBridge Pipes
+  ownership split; its shape depends on the stage-publication contracts.
+- Post-cutover retention and cleanup of superseded DuckDB, mutable landing, and
+  legacy SOURCE artifacts; the safe boundary depends on rollback design.
+- Exact production canary thresholds and live rollout gates; these become
+  specifiable after the acceptance artifact and migration sequence are locked.
+
+## Out of scope
+
+- Replacing Silver as the Runtime System of Engagement or treating Bronze as a
+  competing processing-state authority beside PostgreSQL.
+- Re-deciding the settled AWS messaging substrate, per-accession event grain,
+  on-demand compute stance, Snowflake-native silver target, or DuckDB retirement.
+- Physical deletion of SEC history, best-effort partial graph activation, or
+  exposing a misaligned watermark as agent-grade.
+- Non-AWS deployment/storage paths, broker execution, portfolio management, or
+  unrelated dashboard/product work.
+- Implementing, deploying, or production-validating the plan inside this map.

@@ -1,7 +1,9 @@
 # Capture modes (normal vs strict_release)
 
-Operator contract for dual-mode capture (ADR 0002 + Ticket 20 coexistence).
+Legacy operator contract for dual-mode capture (ADR 0002 + Ticket 20 coexistence).
 Code: `edgar_warehouse.infrastructure.capture_mode`.
+
+> **Migration notice:** [ADR 0006](adr/0006-sec-bronze-ledger-silver-authority.md) supersedes optional Bronze as the accepted target. The current flags below describe runtime behavior until the change-propagation migration requires ledger-authorized, verified Bronze capture for every successful relevant source response. They are not the target authority contract.
 
 ## Modes
 

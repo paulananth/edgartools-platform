@@ -5,22 +5,30 @@ from __future__ import annotations
 from typing import Any
 
 from edgar_warehouse.application import warehouse_orchestrator
-from edgar_warehouse.application.commands import COMMAND_REGISTRY
+from edgar_warehouse.application.acquisition_command_registry import (
+    acquisition_command_registration,
+)
+from edgar_warehouse.application.commands import LEGACY_COMMAND_REGISTRY
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 
 
 def run_command(command_name: str, args: Any) -> int:
+    registration = acquisition_command_registration(command_name)
+    if registration is not None:
+        return registration.execute(args)
     try:
-        handler = COMMAND_REGISTRY[command_name]
+        handler = LEGACY_COMMAND_REGISTRY[command_name]
     except KeyError as exc:
-        raise WarehouseRuntimeError(f"Unsupported warehouse command: {command_name}") from exc
+        raise WarehouseRuntimeError(
+            f"Unsupported warehouse command: {command_name}"
+        ) from exc
     return handler(args)
 
 
 def run_seed_universe_command(args: Any) -> int:
-    return COMMAND_REGISTRY["seed-universe"](args)
+    return LEGACY_COMMAND_REGISTRY["seed-universe"](args)
 
 
 _build_warehouse_context = warehouse_orchestrator._build_warehouse_context

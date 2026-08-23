@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from edgar_warehouse.mdm import database as db
 
-
 MDM_TABLES = [
     "mdm_entity",
     "mdm_source_ref",
@@ -365,12 +364,46 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
         _apply_sql_file(engine, "010_release_relationship_sources.sql")
         _apply_sql_file(engine, "011_source_ref_content_hash.sql")
         _apply_sql_file(engine, "012_dedupe_and_constrain_attribute_stage.sql")
+        _apply_acquisition_ledger_migration(engine)
 
     if seed:
         with Session(engine) as session:
             seed_defaults(session)
             session.commit()
     return {"dialect": dialect, "seeded": seed, "tables": count_tables(engine)}
+
+
+def _apply_acquisition_ledger_migration(engine: Engine) -> bool:
+    """Apply privileged ledger DDL, or preserve it for the runtime application role."""
+    if engine.dialect.name != "postgresql":
+        _apply_sql_file(engine, "013_acquisition_ledger.sql")
+        return True
+
+    statements = _sql_file_statements("013_acquisition_ledger.sql")
+    with engine.begin() as conn:
+        installed = bool(
+            conn.scalar(text("SELECT to_regclass('source_fetch_decision') IS NOT NULL"))
+        )
+        if installed:
+            may_manage = bool(
+                conn.scalar(
+                    text(
+                        "SELECT pg_has_role(current_user, "
+                        "'edgartools_acquisition_owner', 'MEMBER')"
+                    )
+                )
+            )
+            if not may_manage:
+                return False
+
+        # Role provisioning must run as the deployment principal. All remaining
+        # DDL runs as the dedicated owner in the same transaction so reruns can
+        # manage owner-gated indexes, functions, triggers, and tables.
+        conn.execute(text(statements[0]))
+        conn.execute(text("SET LOCAL ROLE edgartools_acquisition_owner"))
+        for statement in statements[1:]:
+            conn.execute(text(statement))
+    return True
 
 
 def check_connectivity(engine: Engine) -> dict[str, Any]:
@@ -410,16 +443,25 @@ def seed_defaults(session: Session) -> None:
 
 
 def _apply_sql_file(engine: Engine, filename: str) -> None:
+    with engine.begin() as conn:
+        for statement in _sql_file_statements(filename):
+            conn.execute(text(statement))
+
+
+def _sql_file_statements(filename: str) -> list[str]:
     import re
+
     path = Path(__file__).with_name(filename)
     sql = path.read_text(encoding="utf-8")
-    # Filter: skip statements that consist only of whitespace and -- comments
-    def _has_sql(stmt: str) -> bool:
-        return bool(re.sub(r"--[^\n]*", "", stmt).strip())
-    statements = [s.strip() for s in _split_sql(sql) if s.strip() and _has_sql(s)]
-    with engine.begin() as conn:
-        for statement in statements:
-            conn.execute(text(statement))
+
+    def _has_sql(statement: str) -> bool:
+        return bool(re.sub(r"--[^\n]*", "", statement).strip())
+
+    return [
+        statement.strip()
+        for statement in _split_sql(sql)
+        if statement.strip() and _has_sql(statement)
+    ]
 
 
 def _split_sql(sql: str) -> list[str]:

@@ -1,38 +1,43 @@
-# Data plane doctrine (current)
+# Data plane doctrine (accepted target; implementation pending)
 
-**Accepted** doctrine for ingest, engagement, and agent consumption.  
-Authoritative ADRs: [0001](adr/0001-agent-decision-surface-first.md), [0002](adr/0002-silver-soe-edgartools-exclusive.md).
+**Accepted** doctrine for ingest, engagement, and agent consumption.
+Authoritative ADRs: [0001](adr/0001-agent-decision-surface-first.md), [0002](adr/0002-silver-soe-edgartools-exclusive.md), and [0006](adr/0006-sec-bronze-ledger-silver-authority.md).
 
-If older docs (README medallion diagrams, data-architecture “always bronze”, companyfacts-must-bronze notes) conflict with this page, **this page and ADR 0002 win** until those docs are updated.
+ADR 0006 supersedes ADR 0002 only for optional-Bronze, default network-skip, and parser-upgrade re-download semantics. Existing runtime flags may still expose the legacy behavior until the change-propagation migration implements this target.
 
 ---
 
 ## One sentence
 
-Ingest and engage through **silver**, fetch only via **edgartools** when silver + parser_version says miss, archive raw to **bronze** only on explicit request or when edgartools cannot provide the source; form trading decisions only from **Snowflake** projections of that state.
+Authorize source requests in **PostgreSQL**, fetch SEC only through **edgartools**, verify every successful relevant response in immutable **Bronze**, publish business state to **Silver**, and form trading decisions only from aligned **Snowflake** projections.
 
 ---
 
-## Three systems of engagement
+## Authority and engagement planes
 
 ```text
-SEC ──(edgartools only)──► Silver (runtime SoE)
-                              │
-              ┌───────────────┼───────────────┐
-              ▼               ▼               ▼
-           MDM/graph      gold export     optional bronze
-              │               │           (explicit / non-edgartools)
-              └───────► Snowflake ◄───────┘
-                           │
-              ┌────────────┴────────────┐
-              ▼                         ▼
-     Agent Decision Contract    Human Explore Mode
-     (+ Agent View Mode)        (labeled not agent-grade)
+PostgreSQL Change Ledger ──authorizes──► SEC via edgartools
+          │                                  │
+          │                                  ▼
+          │                         immutable Bronze evidence
+          │                                  │
+          └────────controls processing───────┤
+                                             ▼
+                                Silver published business state
+                                             │
+                             ┌───────────────┼───────────────┐
+                             ▼               ▼               ▼
+                          MDM/graph      gold export      Snowflake
+                             └───────────────┴───────────────┘
+                                             │
+                                Agent Decision Contract
 ```
 
 | Plane | SoE | Not SoE |
 | --- | --- | --- |
-| Warehouse jobs | Silver | edgartools disk cache, ad-hoc SEC |
+| Acquisition and processing control | PostgreSQL Change Ledger | S3 listings, workflow logs, Silver rows |
+| Raw source evidence | Bronze | edgartools disk cache, mutable latest objects |
+| Warehouse business state | Silver | Bronze, PostgreSQL lifecycle records |
 | Trading agent | Snowflake Decision Contract | Silver, bronze, Streamlit |
 | Human audit of agent | Same contract (Agent View) | Explore free gold joins |
 
@@ -42,21 +47,21 @@ SEC ──(edgartools only)──► Silver (runtime SoE)
 
 | Stale idea | Replacement |
 | --- | --- |
-| Always write bronze first | Default edgartools → silver |
-| Companyfacts bronze required for agent-grade | Versioned silver facts skip; optional bronze |
-| Artifact-in-bronze required for completeness | Silver parse success + parser_version |
+| Optional Bronze on successful source responses | Mandatory verified Bronze evidence before processing |
+| Silver/parser version decides whether to call SEC | PostgreSQL Source Fetch Decision backed by verified evidence and policy |
+| Artifact-in-Bronze alone proves completeness | Exact ledger binding plus checksum, capture finalization, and scope proof |
 | Parallel sec_client + edgartools forever | Hard cutover to edgartools-exclusive SEC I/O |
 | Agent may read silver | Snowflake only for agents |
-| Bronze once as default idempotency law | Silver once per parser_version; network on miss/force/bump |
+| Parser bump forces network acquisition | Reprocess verified Bronze; redownload only for missing, corrupt, incomplete, or repaired evidence |
 
 ---
 
 ## Still true (not superseded)
 
-- SEC historical filing **bytes** do not rewrite; we simply **choose not to keep a second copy by default**.
+- SEC historical filing **bytes** are immutable; contradictory bytes under one identity fail closed and both artifacts remain evidence.
 - Discovery still needs network for **new** accessions / daily dates.
 - Agent-grade still fail-closed on watermark mismatch, graph parity, coverage flags.
-- ADV bulk and other **non-edgartools** sources still use **mandatory bronze** (or equivalent immutable store).
+- ADV bulk and other approved source families also require immutable Bronze evidence.
 - Universe: warehouse ∩ MDM active; warehouse seed single writer (product grill).
 - Issuer vs manager bundle shapes; 13F dual sections; pure-SEC features.
 
@@ -70,7 +75,7 @@ See the “Needs clarity” list from the doctrine review session (cutover phasi
 
 ## Capture modes
 
-See [capture-modes.md](capture-modes.md) for `normal` vs `strict_release`, env vars, and Ticket 20 coexistence.
+See [capture-modes.md](capture-modes.md) for the legacy `normal` versus `strict_release` runtime flags that remain until this target is implemented.
 
 ## Next engineering step
 
