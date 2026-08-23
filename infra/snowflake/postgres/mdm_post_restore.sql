@@ -23,6 +23,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'edgartools_acquisition_operator') THEN
         CREATE ROLE edgartools_acquisition_operator NOLOGIN;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'edgartools_acquisition_processor') THEN
+        CREATE ROLE edgartools_acquisition_processor NOLOGIN;
+    END IF;
     GRANT edgartools_acquisition_owner TO snowflake_admin
       WITH INHERIT FALSE, SET TRUE;
     GRANT application TO snowflake_admin;
@@ -31,6 +34,8 @@ BEGIN
     GRANT edgartools_acquisition_worker TO application
       WITH INHERIT FALSE, SET TRUE;
     GRANT edgartools_acquisition_operator TO application
+      WITH INHERIT FALSE, SET TRUE;
+    GRANT edgartools_acquisition_processor TO application
       WITH INHERIT FALSE, SET TRUE;
     GRANT USAGE, CREATE ON SCHEMA public TO edgartools_acquisition_owner;
 END;
@@ -63,7 +68,7 @@ BEGIN
     GRANT SELECT ON source_fetch_transition
       TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
     GRANT SELECT ON source_fetch_decision, source_fetch_work, source_fetch_transition
-      TO edgartools_acquisition_worker;
+      TO edgartools_acquisition_worker, edgartools_acquisition_processor;
     REVOKE EXECUTE ON FUNCTION
       record_initial_source_fetch_transition(UUID, TEXT),
       claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ),
@@ -97,6 +102,17 @@ BEGIN
     EXECUTE 'ALTER FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ) OWNER TO edgartools_acquisition_owner';
     EXECUTE 'ALTER FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT, TEXT) OWNER TO edgartools_acquisition_owner';
     EXECUTE 'ALTER VIEW source_change_status OWNER TO edgartools_acquisition_owner';
+  END IF;
+  -- Ticket 18: a restore predating source_revision has none yet either --
+  -- the privileged migration creates it under the same dedicated owner.
+  IF to_regclass('public.source_revision') IS NOT NULL THEN
+    GRANT SELECT ON source_revision
+      TO edgartools_acquisition_coordinator, edgartools_acquisition_worker,
+         edgartools_acquisition_operator;
+    GRANT SELECT, INSERT ON source_revision TO edgartools_acquisition_processor;
+    REVOKE ALL PRIVILEGES ON source_revision FROM application;
+    EXECUTE 'ALTER TABLE source_revision OWNER TO edgartools_acquisition_owner';
+    EXECUTE 'ALTER FUNCTION enforce_acquisition_revision_role() OWNER TO edgartools_acquisition_owner';
   END IF;
 END;
 $$;

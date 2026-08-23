@@ -23,12 +23,22 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'edgartools_acquisition_operator') THEN
         CREATE ROLE edgartools_acquisition_operator NOLOGIN;
     END IF;
+    -- Ticket 18: processing is a separate ledger lifecycle from fetching
+    -- (Ticket 03's authority model -- "processors claim work" is its own
+    -- transition family, distinct from "acquisition workers record
+    -- attempts and captures"), so it gets its own database role rather
+    -- than reusing edgartools_acquisition_worker.
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'edgartools_acquisition_processor') THEN
+        CREATE ROLE edgartools_acquisition_processor NOLOGIN;
+    END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'application') THEN
         GRANT edgartools_acquisition_coordinator TO application
             WITH INHERIT FALSE, SET TRUE;
         GRANT edgartools_acquisition_worker TO application
             WITH INHERIT FALSE, SET TRUE;
         GRANT edgartools_acquisition_operator TO application
+            WITH INHERIT FALSE, SET TRUE;
+        GRANT edgartools_acquisition_processor TO application
             WITH INHERIT FALSE, SET TRUE;
     END IF;
 END;
@@ -176,6 +186,62 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_source_fetch_transition_initial
     ON source_fetch_transition(decision_id)
     WHERE from_state IS NULL AND to_state = 'READY';
 
+-- Ticket 18: Logical Source Revisions. Two mutually-exclusive provenance
+-- shapes -- a fresh capture (decision_id set) or a derived revision
+-- (parent_revision_id + revision_relationship set, decision_id NULL,
+-- reusing the parent's already-verified Bronze evidence without a new SEC
+-- fetch). See models.py's SourceRevisionRecord docstring for the full
+-- rationale; kept in lockstep with it here.
+CREATE TABLE IF NOT EXISTS source_revision (
+    revision_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    decision_id UUID REFERENCES source_fetch_decision(decision_id),
+    parent_revision_id UUID REFERENCES source_revision(revision_id),
+    revision_relationship TEXT,
+    source_family TEXT NOT NULL,
+    logical_source_key TEXT NOT NULL,
+    observation_position BIGINT NOT NULL,
+    source_native_revision TEXT,
+    raw_evidence_hash TEXT NOT NULL,
+    canonical_source_hash TEXT NOT NULL,
+    domain_content_hash TEXT NOT NULL,
+    contract_version TEXT NOT NULL,
+    parser_version TEXT NOT NULL,
+    schema_version TEXT NOT NULL,
+    configuration_version TEXT NOT NULL,
+    completeness_type TEXT NOT NULL,
+    declared_replacement_scope TEXT,
+    bronze_artifact_reference TEXT NOT NULL,
+    content_impact TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_source_revision_decision UNIQUE (decision_id),
+    CONSTRAINT uq_source_revision_observation
+        UNIQUE (source_family, logical_source_key, observation_position),
+    CONSTRAINT ck_source_revision_provenance_exclusive CHECK (
+        (decision_id IS NULL) = (parent_revision_id IS NOT NULL)
+    ),
+    CONSTRAINT ck_source_revision_relationship_requires_parent CHECK (
+        (parent_revision_id IS NULL) = (revision_relationship IS NULL)
+    ),
+    CONSTRAINT ck_source_revision_relationship CHECK (
+        revision_relationship IS NULL OR revision_relationship IN (
+            'REPAIR','SUPERSESSION','COALESCING','REINTERPRETATION'
+        )
+    ),
+    CONSTRAINT ck_source_revision_content_impact CHECK (
+        content_impact IN ('CHANGED','NO_IMPACT')
+    ),
+    CONSTRAINT ck_source_revision_completeness_type CHECK (
+        completeness_type IN ('COMPLETE','PARTIAL')
+    )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_source_revision_reinterpretation
+    ON source_revision(
+        parent_revision_id, contract_version, parser_version,
+        schema_version, configuration_version
+    )
+    WHERE parent_revision_id IS NOT NULL;
+
 CREATE OR REPLACE FUNCTION reject_acquisition_history_mutation()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -194,6 +260,31 @@ DROP TRIGGER IF EXISTS source_fetch_transition_immutable ON source_fetch_transit
 CREATE TRIGGER source_fetch_transition_immutable
 BEFORE UPDATE OR DELETE ON source_fetch_transition
 FOR EACH ROW EXECUTE FUNCTION reject_acquisition_history_mutation();
+
+DROP TRIGGER IF EXISTS source_revision_immutable ON source_revision;
+CREATE TRIGGER source_revision_immutable
+BEFORE UPDATE OR DELETE ON source_revision
+FOR EACH ROW EXECUTE FUNCTION reject_acquisition_history_mutation();
+
+CREATE OR REPLACE FUNCTION enforce_acquisition_revision_role()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF current_user NOT IN (
+        'edgartools_acquisition_processor', 'edgartools_acquisition_owner'
+    ) THEN
+        RAISE EXCEPTION 'database role % may not materialize source revisions',
+            current_user;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS source_revision_role_owner ON source_revision;
+CREATE TRIGGER source_revision_role_owner
+BEFORE INSERT ON source_revision
+FOR EACH ROW EXECUTE FUNCTION enforce_acquisition_revision_role();
 
 CREATE OR REPLACE FUNCTION enforce_acquisition_transition_role()
 RETURNS TRIGGER
@@ -450,9 +541,11 @@ REVOKE INSERT, UPDATE, DELETE ON source_observation_cursor FROM PUBLIC;
 REVOKE INSERT, UPDATE, DELETE ON source_fetch_decision FROM PUBLIC;
 REVOKE INSERT, UPDATE, DELETE ON source_fetch_work FROM PUBLIC;
 REVOKE INSERT, UPDATE, DELETE ON source_fetch_transition FROM PUBLIC;
+REVOKE INSERT, UPDATE, DELETE ON source_revision FROM PUBLIC;
 
 GRANT SELECT, INSERT, UPDATE ON source_observation_cursor
-    TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
+    TO edgartools_acquisition_coordinator, edgartools_acquisition_operator,
+       edgartools_acquisition_processor;
 GRANT SELECT, INSERT ON source_fetch_decision
     TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
 GRANT SELECT, INSERT ON source_fetch_work
@@ -460,7 +553,15 @@ GRANT SELECT, INSERT ON source_fetch_work
 GRANT SELECT ON source_fetch_transition
     TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
 GRANT SELECT ON source_fetch_decision, source_fetch_work, source_fetch_transition
-    TO edgartools_acquisition_worker;
+    TO edgartools_acquisition_worker, edgartools_acquisition_processor;
+-- Ticket 18: revisions are read by every acquisition role (coordinators and
+-- operators inspect Source Change Status; a future Ticket 19 status
+-- projection joins revision state in), but only the processor role may
+-- materialize one.
+GRANT SELECT ON source_revision
+    TO edgartools_acquisition_coordinator, edgartools_acquisition_worker,
+       edgartools_acquisition_operator;
+GRANT SELECT, INSERT ON source_revision TO edgartools_acquisition_processor;
 REVOKE EXECUTE ON FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ)
     FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT, TEXT)
@@ -509,11 +610,14 @@ ALTER TABLE source_observation_cursor OWNER TO edgartools_acquisition_owner;
 ALTER TABLE source_fetch_decision OWNER TO edgartools_acquisition_owner;
 ALTER TABLE source_fetch_work OWNER TO edgartools_acquisition_owner;
 ALTER TABLE source_fetch_transition OWNER TO edgartools_acquisition_owner;
+ALTER TABLE source_revision OWNER TO edgartools_acquisition_owner;
 ALTER FUNCTION reject_acquisition_history_mutation()
     OWNER TO edgartools_acquisition_owner;
 ALTER FUNCTION enforce_acquisition_transition_role()
     OWNER TO edgartools_acquisition_owner;
 ALTER FUNCTION enforce_acquisition_work_role()
+    OWNER TO edgartools_acquisition_owner;
+ALTER FUNCTION enforce_acquisition_revision_role()
     OWNER TO edgartools_acquisition_owner;
 ALTER FUNCTION record_initial_source_fetch_transition(UUID, TEXT)
     OWNER TO edgartools_acquisition_owner;
@@ -530,7 +634,8 @@ BEGIN
             source_observation_cursor,
             source_fetch_decision,
             source_fetch_work,
-            source_fetch_transition
+            source_fetch_transition,
+            source_revision
         FROM application;
         REVOKE ALL PRIVILEGES ON source_change_status FROM application;
     END IF;

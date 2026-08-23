@@ -52,6 +52,21 @@ class FetchTransitionRole(StrEnum):
     ACQUISITION_OPERATOR = "ACQUISITION_OPERATOR"
 
 
+class ProcessingTransitionRole(StrEnum):
+    """The database role that owns the processing lifecycle (Ticket 18).
+
+    Ticket 03's authority model gives fetch and processing separate ledger
+    lifecycles with separate owners ("acquisition workers record attempts
+    and captures... processors claim work") -- kept distinct from
+    ``FetchTransitionRole`` rather than folded into it, even though today
+    there is exactly one processing-owning role, so a future split (e.g. a
+    dedicated repair/reprocess role) does not have to retrofit this
+    distinction later.
+    """
+
+    ACQUISITION_PROCESSOR = "ACQUISITION_PROCESSOR"
+
+
 class CandidateDecisionConflict(RuntimeError):
     """A candidate identity was reused for a different immutable decision."""
 
@@ -140,7 +155,7 @@ class AcquisitionLedger:
         _validate_terminal_evidence(request)
         try:
             with Session(self._engine) as session, session.begin():
-                _set_postgres_role(session, request.owner_role.value)
+                set_postgres_role(session, request.owner_role.value)
                 existing = session.scalar(
                     select(SourceFetchDecisionRecord).where(
                         SourceFetchDecisionRecord.candidate_id == request.candidate_id
@@ -155,7 +170,9 @@ class AcquisitionLedger:
                     work = session.get(SourceFetchWorkRecord, existing.decision_id)
                     return _status_from_record(existing, work)
 
-                position = _reserve_observation_position(session, request)
+                position = reserve_observation_position(
+                    session, request.source_family, request.logical_source_key
+                )
 
                 decision = SourceFetchDecisionRecord(
                     candidate_id=request.candidate_id,
@@ -235,7 +252,7 @@ class AcquisitionLedger:
 
     def source_change_status(self, decision_id: str) -> SourceChangeStatus:
         with Session(self._engine) as session:
-            _set_postgres_role(session, DecisionOwnerRole.ACQUISITION_COORDINATOR.value)
+            set_postgres_role(session, DecisionOwnerRole.ACQUISITION_COORDINATOR.value)
             decision = session.scalar(
                 select(SourceFetchDecisionRecord).where(
                     SourceFetchDecisionRecord.decision_id == decision_id
@@ -261,7 +278,7 @@ class AcquisitionLedger:
         claim_time = now or datetime.now(UTC)
         if self._engine.dialect.name == "postgresql":
             with Session(self._engine) as session, session.begin():
-                _set_postgres_role(
+                set_postgres_role(
                     session, FetchTransitionRole.ACQUISITION_WORKER.value
                 )
                 row = session.execute(
@@ -371,7 +388,7 @@ class AcquisitionLedger:
         finalize_time = now or datetime.now(UTC)
         if self._engine.dialect.name == "postgresql":
             with Session(self._engine) as session, session.begin():
-                _set_postgres_role(
+                set_postgres_role(
                     session, FetchTransitionRole.ACQUISITION_WORKER.value
                 )
                 try:
@@ -465,7 +482,7 @@ class AcquisitionLedger:
         """
 
         with Session(self._engine) as session:
-            _set_postgres_role(session, DecisionOwnerRole.ACQUISITION_COORDINATOR.value)
+            set_postgres_role(session, DecisionOwnerRole.ACQUISITION_COORDINATOR.value)
             row = session.execute(
                 select(SourceFetchTransitionRecord.reason)
                 .where(SourceFetchTransitionRecord.decision_id == decision_id)
@@ -554,17 +571,25 @@ def _status_from_record(
     )
 
 
-def _reserve_observation_position(
-    session: Session, request: FetchDecisionRequest
+def reserve_observation_position(
+    session: Session, source_family: str, logical_source_key: str
 ) -> int:
+    """Atomically reserve the next per-key Source Observation Position.
+
+    Shared by decision creation (ledger.py) and revision materialization
+    (revisions.py, Ticket 18) -- both a Fetch Decision and a standalone
+    reinterpretation revision occupy one unified per-key position timeline,
+    so they share this one atomic counter rather than each keeping its own.
+    """
+
     insert_factory = (
         sqlite_insert
         if session.get_bind().dialect.name == "sqlite"
         else postgresql_insert
     )
     statement = insert_factory(SourceObservationCursor).values(
-        source_family=request.source_family,
-        logical_source_key=request.logical_source_key,
+        source_family=source_family,
+        logical_source_key=logical_source_key,
         last_position=1,
     )
     statement = statement.on_conflict_do_update(
@@ -619,13 +644,24 @@ def _require_worker_role(actor_role: FetchTransitionRole) -> None:
         )
 
 
-def _set_postgres_role(session: Session, role: str) -> None:
+def require_processor_role(actor_role: ProcessingTransitionRole) -> None:
+    """Shared by revisions.py (Ticket 18) -- see ``_require_worker_role``."""
+
+    if actor_role is not ProcessingTransitionRole.ACQUISITION_PROCESSOR:
+        raise UnauthorizedTransitionRole(
+            "processing transitions require "
+            f"{ProcessingTransitionRole.ACQUISITION_PROCESSOR.value}"
+        )
+
+
+def set_postgres_role(session: Session, role: str) -> None:
     if session.get_bind().dialect.name != "postgresql":
         return
     allowed_roles = {
         DecisionOwnerRole.ACQUISITION_COORDINATOR.value,
         DecisionOwnerRole.ACQUISITION_OPERATOR.value,
         FetchTransitionRole.ACQUISITION_WORKER.value,
+        ProcessingTransitionRole.ACQUISITION_PROCESSOR.value,
     }
     if role not in allowed_roles:
         raise UnauthorizedTransitionRole(f"Unknown acquisition database role {role}")
