@@ -25,8 +25,8 @@ An immutable, random-token-scoped warehouse object written before ETag-guarded p
 _Avoid_: Canonical silver, bronze archive, release evidence
 
 **Runtime System of Engagement**:
-Silver warehouse state (typed tables after parse) is where ingest jobs decide whether work is already done and what to mutate next.
-_Avoid_: Bronze as default SoE, edgartools local disk cache as shared SoE, agent queries against DuckDB silver
+Silver warehouse state (typed tables after parse) is the authoritative published business state against which processors compute Lifecycle Diffs; the Change Ledger decides acquisition and processing eligibility and records completion.
+_Avoid_: Silver as processing ledger, Bronze as business state, edgartools local disk cache as shared state, agent queries against DuckDB silver
 
 **Agent System of Engagement**:
 Snowflake Decision Contract objects only; agents never read silver or bronze directly.
@@ -37,12 +37,12 @@ Labeled Explore Mode over Snowflake gold (and related analytics tables), not val
 _Avoid_: Unlabeled explore as agent view
 
 **SecGateway**:
-The exclusive warehouse path for SEC network I/O, implemented with edgartools; on miss it loads into silver (and bronze only under Bronze Persist rules).
+The exclusive warehouse path for SEC network I/O, implemented with edgartools; every successful response eligible to affect warehouse state is captured as Bronze Persist evidence before processing.
 _Avoid_: Parallel sec_client downloads for the same objects after cutover, parse paths that call SEC
 
-**Silver-Once Idempotency**:
-Skip SEC network when silver already holds successful work for the skip key (for filings: accession + form-family + parser_version; for facts: CIK + facts_parser_version; catalogs: checkpoint completeness), unless force or version bump requires refresh.
-_Avoid_: Always re-fetch, skip only by bronze presence, accession-only forever skip that blocks parser upgrades
+**Verified-Evidence Acquisition Idempotency**:
+Skip an SEC request only through a Change Ledger Fetch Decision backed by exact Verified Source Evidence, a sealed out-of-scope classification, or an operator exclusion; interpretation-version changes reprocess verified Bronze without redownloading.
+_Avoid_: Silver row as download proof, S3 presence alone, parser upgrade as automatic refetch, worker cache decision
 
 **Daily Identity Refresh**:
 The recurring company-identity refresh for tracked entities whose recent SEC daily-index activity signals that their submissions state may have changed.
@@ -85,16 +85,236 @@ The reducer processes the declared batch-delta set in its manifest order and rej
 _Avoid_: Arrival-order merge, last-writer-wins conflict handling, publishing a subset after a rejected delta
 
 **Bronze Persist**:
-Optional raw archive of SEC (or other) payloads written only when an operator explicitly requests it, or when the source cannot be obtained via edgartools; not the default hot path.
-_Avoid_: Always bronze first, treating bronze absence as agent-grade failure by default
+Mandatory immutable evidence of every successful source response eligible to affect warehouse state, recorded before its processing decision.
+_Avoid_: Optional raw archive, changed-content-only capture, Bronze as processing-state authority
+
+**Bronze Artifact**:
+One immutable source byte sequence addressed by its canonical content identity; multiple Source Captures may reference the same artifact while retaining distinct observation provenance.
+_Avoid_: Payload copy per poll, mutable latest object, request ID as content identity
+
+**Raw Evidence Hash**:
+The digest of the exact source bytes that identifies one Bronze Artifact without claiming those bytes represent a business change.
+_Avoid_: Domain hash, request identity, transport metadata as meaning
+
+**Canonical Source Hash**:
+A versioned digest of source content after removing transport-only representation differences but before interpreting it as business facts.
+_Avoid_: Raw-byte equality as semantic equality, unversioned normalization, parsed-row hash
+
+**Domain Content Hash**:
+A versioned digest of the business meaning produced under one interpretation identity, excluding operational timestamps, attempts, paths, and serialization details.
+_Avoid_: Ingest timestamp in change identity, run ID in business hash, raw artifact checksum as row meaning
+
+**Lifecycle Diff**:
+The business-key comparison between one complete interpreted source revision and the prior authoritative Silver publication, yielding changed or new upserts, scope-proved retirements, unchanged members, or explicit no-impact.
+_Avoid_: Rewrite unchanged scope, byte-difference mutation, absence without Scope Completion
+
+**Pinned Silver Publication**:
+The exact authoritative Silver state against which a Lifecycle Diff is calculated; the Change Ledger records its identity and the resulting publication evidence without duplicating Silver row authority.
+_Avoid_: Mutable latest during diff, PostgreSQL row copy as business authority, unpinned read
+
+**Scope Publication Fence**:
+The compare-and-swap guard requiring an overlapping Silver mutation to retain its Pinned Silver Publication as the current predecessor; disjoint scopes may publish concurrently.
+_Avoid_: Last-writer-wins, stale diff commit, global Silver lock
+
+**Bronze Evidence Retention**:
+Every distinct Bronze Artifact is preserved indefinitely as replay and audit evidence; archival storage transitions are allowed, but deletion requires an explicit audited exception.
+_Avoid_: Delete after processing, automatic retention expiry, duplicate-byte version accumulation
+
+**Ledger Reinitialization**:
+Restoration of local processing authority from a new complete Source Authority baseline beginning at the recovery point, without reconstructing lost historical ledger decisions.
+_Avoid_: Infer old decisions from Bronze, pretend historical continuity, resume from an unverified partial baseline
+
+**Initial Ledger Bootstrap**:
+The first production Ledger Epoch established through the same authorized Hybrid Source Baseline, catch-up, verification, and cutover path used for later reinitialization.
+_Avoid_: Import legacy checkpoints as authority, incremental start without baseline, separate untested bootstrap semantics
+
+**Reinitialization Authorization**:
+The explicit audited decision to create a new Ledger Epoch, naming its reason, baseline cutoff, source-family coverage contract, deployment cohort, and authority identity before recovery work begins.
+_Avoid_: Automatic empty-ledger rebuild, implicit epoch creation, activation without evidence
+
+**Hybrid Source Baseline**:
+The complete starting state for a new ledger epoch, combining closed Source Authority change intervals with fresh complete snapshots for every source family lacking complete change capture.
+_Avoid_: Filing-index-only recovery, stale Bronze inventory as current proof, ready with uncovered source family
+
+**Baseline Coverage Contract**:
+The sealed set of required source families and their accepted completeness proofs for a Ledger Epoch; every required family must complete before authority may activate.
+_Avoid_: Partial baseline activation, automatic failure exclusion, unlisted required source
+
+**Source Family Registry**:
+The versioned authority contract naming each source family's logical keys, acquisition method, completeness proof, poll or change-discovery policy, and required Silver producers; an affected required family cannot activate under a new version without scoped baseline and catch-up evidence.
+_Avoid_: Deployment-defined completeness, undocumented source addition, producer set inferred at runtime
+
+**Registry Transition**:
+A bounded change to a healthy epoch's Source Family Registry with an explicit effective boundary, affected-family baseline, catch-up, and activation gate; a new Ledger Epoch is reserved for initialization or lost ledger authority.
+_Avoid_: Full epoch rebuild for every source change, deploy-time registry mutation, mixed registry versions without a boundary
+
+**Baseline Catch-up Barrier**:
+Proof that every source family covers its Hybrid Source Baseline through the sealed activation high-water mark, using a final complete snapshot wherever change capture is incomplete.
+_Avoid_: Activate then catch up, rebuild acquisition blackout, unclosed baseline gap
+
+**Ledger Epoch**:
+One continuous period of local processing authority beginning at a verified Hybrid Source Baseline; evidence from earlier epochs remains historical unless explicitly selected for backfill, repair, or reprocessing.
+_Avoid_: Inferred pending work across reinitialization, hidden epoch reset, historical Bronze automatically queued
+
+**Environment Authority Boundary**:
+The rule that fetch decisions, observations, Bronze evidence bindings, processing decisions, and epochs belong to one environment and account; external evidence requires an explicit checksum-verified operator import that creates local lineage.
+_Avoid_: Dev capture satisfying production implicitly, shared mutable acquisition state, cross-account artifact reference without import authority
+
+**Silver Baseline Candidate**:
+A complete, non-serving Silver state rebuilt from one Hybrid Source Baseline to establish a new Ledger Epoch, activated only after its coverage, counts, and content are verified.
+_Avoid_: Trust existing Silver after ledger loss, patch an unexplained state, serve the rebuilding candidate
+
+**Immutable Source Conflict**:
+Contradictory Bronze Artifacts observed under one immutable source identity; all evidence is retained and the source key is quarantined until an explicit repair decision resolves processing authority.
+_Avoid_: First-writer-wins, latest-writer-wins, overwrite contradictory evidence
+
+**Repair Revision**:
+An immutable child revision that records which quarantined evidence may drive processing, which evidence was rejected, and the reason and authority for superseding the original conflict.
+_Avoid_: Amend quarantined revision, delete rejected evidence, invisible operator correction
 
 **Logical Source Revision**:
-A producer-ordered observation of one logical SEC source key, bound before transport to its monotonic per-key position, predecessor, canonical content, and interpretation identities.
-_Avoid_: Consumer admission order, S3 arrival time as ordering, run ID as source version, bronze object path as business identity
+A verified source observation materialized after Source Capture, binding its reserved monotonic per-key position to canonical content and interpretation identities.
+_Avoid_: Revision before evidence, consumer completion order, S3 arrival time as ordering, Bronze object path as business identity
+
+**Source Observation Position**:
+The monotonic per-key order reserved by a Source Fetch Decision before transport; not-modified, skipped, or failed attempts may leave unused positions without creating Logical Source Revisions.
+_Avoid_: Dense revision requirement, response-arrival order, renumbering after retry
 
 **Source Change**:
-The transport-independent selection of a Logical Source Revision for a Change Propagation Run, optionally carrying a Bronze Persist reference when archived bytes exist.
+The transport-independent selection of a Logical Source Revision for a Change Propagation Run, carrying the Bronze Persist evidence reference for its source observation.
 _Avoid_: Bronze object as the change itself, queue delivery as business identity, parser output row as source identity
+
+**Change Ledger**:
+The sole local authoritative record of each Logical Source Revision's processing disposition and progress; immutable source artifacts are evidence referenced by it, not competing control state.
+_Avoid_: Bronze as processing-state authority, S3 listing as consumption state, dual authority
+
+**Ledger State Record**:
+The atomic pairing of constrained current state with immutable within-epoch transitions, attempts, outcomes, and reasons for one ledger-controlled lifecycle.
+_Avoid_: Mutable status only, unconstrained event sourcing, current state without transition evidence
+
+**Source Change Status**:
+The Change Ledger's unified operator-facing projection for each discovered source candidate, showing its cause, fetch decision and state, Bronze evidence, logical revision, processing state, expected-producer progress, current blocker, and next action while immutable transition records remain the audit trail.
+_Avoid_: Raw-table interpretation by operators, log-derived status, separate download and processing dashboards with conflicting truth
+
+**Transition Ownership**:
+The rule that each Change Ledger transition family has one authorized role, preventing workers from certifying their own publications or altering operator authority.
+_Avoid_: Shared writer role, self-approved output, coordinator as universal database proxy
+
+**Source Authority**:
+The external publisher whose current source material defines what the platform may truthfully capture; for SEC-family data this is SEC or its designated source system.
+_Avoid_: Bronze as original publisher, Change Ledger as source-content authority, downstream table as source truth
+
+**Ledger-Gated Acquisition**:
+No new source request may begin while the Change Ledger is unavailable; evidence from an already authorized in-flight request remains unprocessable until its original ledger lineage is reconciled.
+_Avoid_: Local decision spool, Bronze fallback authority, ungated outage download
+
+**Source Fetch Decision**:
+The Change Ledger's required authorization or explicit skip decision for one source network request, recorded before any request is attempted and carrying the reason it may or may not proceed.
+_Avoid_: Ungated SEC request, post-facto download audit, implicit skip
+
+**Source-Key Fetch Ownership**:
+Exclusive authority for one active source request against a logical source key; independent keys retain parallel fetch ownership.
+_Avoid_: Same-key concurrent download, global fetch lock, deduplicate after racing SEC calls
+
+**Fetch Attempt**:
+One fenced execution of a Source Fetch Decision; a retry creates a new attempt while preserving the original cause, source position, request identity, and conditional validators.
+_Avoid_: New source observation per retry, reused fencing token, racing finalization
+
+**Fetch Cause**:
+The immutable reason a Source Fetch Decision exists: a captured source discovery observation, a versioned poll policy, or an explicit operator repair, backfill, or reprocess request.
+_Avoid_: Unexplained schedule trigger, worker-invented URL, missing causal lineage
+
+**Poll Policy**:
+The versioned Change Ledger rule for a source without complete change discovery, recording its last completed observation, next eligible time, conditional validators, and reason; a scheduler may request work, but only a due ledger decision authorizes the source call.
+_Avoid_: Scheduler-owned acquisition truth, worker cache-age decision, post-facto poll authorization
+
+**Discovery Manifest**:
+The immutable, counted, and digested candidate set derived from one complete source discovery observation; every candidate must receive an explicit Fetch Decision before its interval closes.
+_Avoid_: Downloaded-items-only inventory, omitted candidate as skip, workflow count as completeness
+
+**Open Discovery Interval**:
+A discovery interval with at least one required candidate still deferred or otherwise non-terminal; it remains incomplete, ages visibly, and cannot satisfy a baseline or catch-up barrier.
+_Avoid_: Close with deferred candidate, timeout-to-skip, hidden coverage gap
+
+**Acquisition Universe**:
+The sealed, versioned set of source families, source keys, forms, and history boundaries for which source coverage and child-download decisions are authoritative.
+_Avoid_: Entire SEC by implication, mutable tracking table as scope, unversioned command filter
+
+**Universe Transition**:
+A versioned Acquisition Universe change: additions require a complete scoped baseline, while removals end future coverage without rewriting or retiring Source Authority facts.
+_Avoid_: Tracking-table-only change, delete facts on removal, incremental processing before added-key baseline
+
+**Download Disposition**:
+The explicit classification separating a terminal reason not to fetch, a temporary deferral, and the outcome of a request that was actually attempted.
+_Avoid_: Generic skipped, rate-limit skip, treating not-modified as no request
+
+**Not-Modified Observation**:
+Evidence that an authorized source check found no new producer revision or content, linked to the prior Source Capture without creating new Bronze bytes or processing work.
+_Avoid_: New source revision for every poll, invisible 304, no-impact Silver publication for an unchanged fetch
+
+**Missing Source Artifact**:
+An expected source candidate whose authorized fetch cannot obtain its artifact; it remains retryable or quarantined and never proves deletion or retirement by itself.
+_Avoid_: 404 as retirement, not-found skip, close discovery interval without evidence
+
+**Failed Source Response**:
+A non-success source response retained as Fetch Attempt evidence with status, headers, timing, retry classification, and any diagnostic body reference; it creates neither a Bronze Artifact nor a Logical Source Revision.
+_Avoid_: Error page as Bronze source data, 404 as source revision, logs as the only retry evidence
+
+**Source Capture**:
+A source response is durably acquired only when its immutable Bronze Persist evidence is verified and the exact evidence reference is finalized in the Change Ledger.
+_Avoid_: Downloaded on network receipt, unverified upload success, untracked Bronze object
+
+**Verified Source Evidence**:
+The Change Ledger binding between an exact source identity, canonical checksum, terminal Source Capture, and verified Bronze Artifact required to prove that source need not be downloaded again.
+_Avoid_: S3 path existence, Silver row as download proof, unverified artifact reference
+
+**Orphaned Capture**:
+Verified Bronze evidence whose authorized fetch was not finalized in the Change Ledger; it may be reconciled only to that pre-existing Fetch Decision, otherwise it remains quarantined.
+_Avoid_: S3-created ledger authority, delete-and-forget evidence, attach to a different request
+
+**Processing Decision**:
+The Change Ledger's classification of a Source Capture using both its logical content identity and its interpretation identity, determining whether processing is required or explicitly has no impact.
+_Avoid_: Checksum-only skip, parser-blind deduplication, implicit no-op
+
+**Interpretation Reprocess**:
+New processing work over existing Verified Source Evidence caused by a changed parser, schema, contract, or configuration identity, without requiring a new source observation.
+_Avoid_: Redownload for parser change, mutate prior interpretation, worker-selected evidence
+
+**Processing Disposition**:
+The explicit, reasoned classification of a captured revision as processing-required, no-impact, out-of-scope, operator-excluded, superseded, quarantined, retryable-failure, or processed.
+_Avoid_: Generic process-skipped, free-text-only outcome, silence as success
+
+**Processed Source Revision**:
+A Logical Source Revision backed by a verified Silver publication or verified no-impact publication whose identity, counts, and digest are finalized in the Change Ledger.
+_Avoid_: Parser success, landing upload, task success, workflow success
+
+**Expected Producer Set**:
+The sealed set of Silver producers, tables, and scopes that must each publish a verified outcome for one Logical Source Revision before it is processed.
+_Avoid_: Infer expected output after execution, silence as no-impact, first-producer success as complete
+
+**Source Lifecycle**:
+The two independent Change Ledger histories for one source observation: its fetch decision and outcome, and its processing decision and outcome.
+_Avoid_: Combined download-processing status, generic skipped, inference from workflow history
+
+**Ordered Revision Queue**:
+The per-key sequence of captured Logical Source Revisions awaiting processing; capture may advance, but a later revision cannot publish or become current before every earlier position has a terminal processing disposition.
+_Avoid_: Fetch blocked by Silver completion, later-writer-wins, global processing order
+
+**Gap Closure**:
+An explicit exclusion or supersession that unblocks a later source position without claiming the closed revision was processed or advancing the cursor by itself.
+_Avoid_: Exclusion as no-impact, partial publication activation, permanently poisoned key
+
+**Complete-Snapshot Supersession**:
+Automatic replacement of an earlier incomplete or quarantined mutable-snapshot revision by a newer revision that proves complete authority over the same replacement scope, with explicit ledger linkage.
+_Avoid_: Partial newer snapshot wins, immutable filing supersession, unrecorded latest-wins
+
+**Snapshot Coalescing Policy**:
+The versioned source-family rule declaring whether multiple complete queued snapshots preserve distinct semantic history or may collapse to the latest complete state before processing.
+_Avoid_: Universal latest-wins, worker-selected coalescing, coalesce immutable observations
+
+**Coalescing Boundary**:
+The point before any Silver producer publication commits for an older complete snapshot; coalescing is forbidden after this boundary.
+_Avoid_: Coalesce partial publication, coalescing as rollback, stranded producer output
 
 **Scope Completion**:
 Proof that one Logical Source Revision authoritatively enumerates an entire replacement scope, including a valid scope with zero members.
@@ -183,8 +403,8 @@ The v1 delivery of the Agent Decision Surface: published Snowflake objects (view
 _Avoid_: Streamlit-only data path, agent-private tables that diverge from audit UI, S3 file dump as the primary contract, undocumented ad-hoc gold joins
 
 **Decision Watermark**:
-The composite identity bound into every Decision Graph Bundle: silver-derived parse/completeness claims (versions and section coverage), Relationship Generation Snapshot (or equivalent graph generation id), gold/feature as-of (run_id), and business date; bronze content hashes only when Bronze Persist was used; a bundle is invalid for agent use if any required component is missing or the components are known to disagree.
-_Avoid_: Wall-clock now, best-effort multi-table join without pins, requiring bronze sha for every agent-grade read, gold-only or graph-only as sole identity
+The composite identity bound into every Decision Graph Bundle: Bronze Persist evidence-manifest identity, silver-derived parse/completeness claims (versions and section coverage), Relationship Generation Snapshot (or equivalent graph generation id), gold/feature as-of (run_id), and business date; a bundle is invalid for agent use if any required component is missing or the components are known to disagree.
+_Avoid_: Wall-clock now, best-effort multi-table join without pins, gold-only or graph-only as sole identity
 
 **Pure-SEC Decision Features**:
 Decision Features derived only from SEC (and approved operator-supplied SEC-family) filings and platform calculations on those filings; market prices, market cap, and price-derived multiples are outside the Agent Decision Surface.

@@ -26,8 +26,8 @@ Related: [project-overview.md](project-overview.md) ·
 | **Factor freshness** | **As-Of Decision Features** | Features at watermark are latest complete calc; may use multi-period history as *inputs*; null ≠ zero when history insufficient |
 | **Factor slice on bundle** | **FY + newer interim (B)** | Primary Annual Feature Vector always when available; Latest Interim Feature Vector only if period_end after last FY |
 | **Agent delivery (v1)** | **Snowflake Decision Contract (A)** | Published Snowflake objects are the contract; audit UI reads the same; S3/API optional later |
-| **Bundle identity** | **Decision Watermark (C)** | Silver parse/completeness + graph generation + gold feature as-of + business date; bronze sha only if persist used; mismatch → invalid |
-| **Ingest doctrine** | **ADR 0002** | Silver SoE; edgartools-exclusive SEC I/O; bronze opt-in or non-edgartools only — see `docs/doctrine-data-plane.md` |
+| **Bundle identity** | **Decision Watermark (C)** | Verified Bronze evidence manifest + Silver publication + graph generation + gold feature as-of + business date; mismatch → invalid |
+| **Ingest doctrine** | **ADR 0006** | SEC source authority; mandatory Bronze evidence; PostgreSQL acquisition/processing authority; Silver business-state SoE — see `docs/doctrine-data-plane.md` |
 | **Hosting for audit UI** | Streamlit-in-Snowflake | Thin audit over the contract; `examples/dashboard` is prototype only |
 | **Market data (v1)** | **Pure-SEC Decision Features (A)** | No prices/market cap/PE on the surface; agent joins market data elsewhere if needed |
 | **Subject universe** | **Tracked / active only (B)** | Bundles for maintained universe, not every gold COMPANY row |

@@ -1,6 +1,8 @@
 # Silver system of engagement; edgartools-exclusive SEC I/O; optional bronze
 
 **Status:** accepted  
+**Partially superseded by:** [0006-sec-bronze-ledger-silver-authority.md](0006-sec-bronze-ledger-silver-authority.md) for optional-Bronze, default network-skip, and parser-upgrade re-download semantics. Silver remains the Runtime System of Engagement and `edgartools` remains the exclusive SEC gateway.
+
 **Supersedes (hot path):** default “always bronze first,” “companyfacts bronze required for agent-grade,” and “artifact present in bronze” as the primary idempotency/agent completeness signal.  
 **Complements:** [0001-agent-decision-surface-first.md](0001-agent-decision-surface-first.md) (agent still consumes **Snowflake** projections; this ADR defines **ingest** doctrine).
 

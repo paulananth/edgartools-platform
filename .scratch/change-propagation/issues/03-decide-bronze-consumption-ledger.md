@@ -1,4 +1,4 @@
-# Decide the bronze consumption ledger and source cursor contract
+# Decide the Bronze capture, consumption ledger, and source cursor contract
 
 Type: grilling
 Status: resolved
@@ -6,202 +6,286 @@ Blocked by: none
 
 ## Question
 
-What exact identity, ordering, completeness, and disposition contract lets a
-bronze replay select only never-consumed or content-modified source material
-without changing Bronze Persist's optional role?
+What exact authority, acquisition, capture, identity, ordering, completeness,
+and disposition contract lets the platform download and process only new or
+meaningfully changed SEC material while proving what was downloaded,
+processed, excluded, deferred, failed, or blocked?
 
 Decide the contract across submissions snapshots, pagination files, filing
 artifacts/accessions, company facts, reference catalogs, and ADV bulk inputs:
-object key/version/content hash, logical source key, parser/config version,
-accession/document completeness, late arrival, explicit repair, retry, and the
-rule for advancing a cursor only after silver publication succeeds. Resolve how
-newer dated bronze objects supersede intact older checkpoints and how immutable
-SEC conflicts fail closed without last-writer-wins behavior.
+source authority, pre-request authorization, immutable Bronze evidence,
+logical source keys and positions, parser/configuration versions, scope
+completion, retries, conflicts, lifecycle diffs, operator status, and recovery
+after loss of the PostgreSQL ledger.
 
 ## Answer
 
-### Decision
+### Authority model
 
-Use a PostgreSQL consumption ledger keyed by **Logical Source Revision**, not a
-global time cursor and not a silver-table checkpoint. Direct `SecGateway`
-acquisition and bronze replay both normalize into the same **Source Change**;
-the bronze reference is nullable. Bronze remains an optional archive and replay
-source rather than a mandatory hop.
+The four authorities are distinct and non-overlapping:
 
-The ledger is authoritative for selection and disposition. An object listing,
-dated prefix, local checkpoint, queue receipt, or Snowflake load history may
-accelerate discovery, but none may prove that source material was consumed.
+1. **SEC is the external Source Authority.** Its current source material
+   defines what the platform may truthfully capture.
+2. **Bronze is the mandatory immutable local evidence store.** Every successful
+   SEC response capable of affecting warehouse state is captured and verified
+   before processing. Identical bytes may reuse one content-addressed object,
+   but every observation retains its own manifest and ledger lineage.
+3. **PostgreSQL is the sole local change-control authority.** Its Change Ledger
+   owns fetch authorization, observations, revision order, download and
+   processing dispositions, leases, blockers, publications, and readiness.
+4. **Silver is the authoritative published business state.** Lifecycle diffs
+   compare against an exact pinned Silver publication; PostgreSQL records that
+   publication's identity and outcome without duplicating Silver row state.
 
-### Source-change identity
+This decision supersedes the optional-Bronze part of ADR 0002. It preserves
+Silver as the Runtime System of Engagement and preserves `edgartools` as the
+exclusive SEC network gateway.
 
-Every observed source revision records:
+### Ledger-gated acquisition
+
+Every source network request requires a **Source Fetch Decision** committed in
+PostgreSQL before transport begins. A decision reserves a monotonic
+**Source Observation Position** for the logical source key and records one
+immutable cause:
+
+- a captured discovery observation;
+- a due, versioned poll policy; or
+- an explicit operator repair, backfill, or reprocess request.
+
+The scheduler may request work but cannot authorize it. A worker may execute a
+decision but cannot invent its source key, URL, cause, or eligibility. If
+PostgreSQL is unavailable, new SEC requests stop. An already authorized
+in-flight request may finish its Bronze write, but its evidence is
+unprocessable until reconciled to that original decision.
+
+Only one fenced fetch may be active for a logical source key. Unrelated keys
+remain parallel. A retry preserves the original decision, cause, position,
+request identity, and conditional validators while creating a new immutable
+attempt with a higher fencing token.
+
+Terminal reasons not to download are intentionally narrow:
+
+- `ALREADY_CAPTURED_VERIFIED`: exact ledger-bound source identity, terminal
+  capture, checksum, and verified Bronze reference already exist;
+- `OUT_OF_SCOPE`: the candidate is outside the sealed Acquisition Universe;
+- `OPERATOR_EXCLUDED`: an authorized operator exclusion names its reason and
+  evidence.
+
+Not-due, rate-limited, leased, or backoff work is `DOWNLOAD_DEFERRED`, remains
+open, records its next eligibility, and eventually alerts. HTTP `304` is a
+`NOT_MODIFIED` observation linked to the prior capture. A non-success response
+is Fetch Attempt evidence with status, headers, timing, retry classification,
+and any diagnostic-body reference; it creates neither a Bronze Artifact nor a
+Logical Source Revision. An expected `404` or missing object never proves
+deletion or retirement.
+
+### Capture and evidence
+
+Successful source bytes become downloaded state only after:
+
+1. immutable content-addressed Bronze storage succeeds;
+2. checksum or equivalent read-back verification succeeds; and
+3. PostgreSQL finalizes the exact artifact reference against the originating
+   Fetch Decision.
+
+The Bronze object is keyed by exact raw-byte hash. A per-observation manifest
+binds environment, account, ledger epoch, logical source key, observation
+position, source-native identity, request and response metadata, content hash,
+and capture time. Every distinct Bronze Artifact is retained indefinitely;
+storage-tier transitions are allowed, while deletion requires a separate
+audited exception. This prospective policy does not reconstruct artifacts
+removed under earlier accepted cleanup decisions.
+
+If Bronze succeeds but ledger finalization fails, the object is an
+**Orphaned Capture**. It may attach only to its original existing Fetch
+Decision; otherwise it remains quarantined. S3 listings never create ledger
+authority. Cross-environment or cross-account evidence requires an explicit,
+checksum-verified operator import that creates local lineage.
+
+### Source revision identity and ordering
+
+A Logical Source Revision materializes only after verified capture. It binds:
 
 - source family and logical source key;
-- producer-issued monotonic revision ordinal and predecessor revision for that
-  key, assigned before transport;
-- canonical byte hash and versioned domain-content hash;
-- observation time for telemetry only;
-- contract, parser, schema, and parser-configuration versions;
-- acquisition reason: steady-state, replay, backfill, repair, or reprocess;
-- optional bronze bucket/key/version ID/ETag reference;
-- completeness type and declared replacement scope, when applicable; and
-- causing parent revision/run for repair, supersession, or reinterpretation.
+- reserved Source Observation Position and source-native revision/period when
+  supplied;
+- exact raw-byte hash;
+- versioned canonical-source hash after transport-only normalization;
+- versioned domain-content hash after interpretation;
+- contract, parser, schema, and configuration identities;
+- completeness type and declared replacement scope;
+- verified Bronze artifact and observation manifest; and
+- repair, supersession, coalescing, or reinterpretation parent when applicable.
 
-The source family, logical key, revision ordinal, content hash, and
-interpretation versions form the comparison identity. `run_id`, S3 key,
-business date, arrival time, ETag alone, and mutable “latest” pointers are not
-source identity.
+`run_id`, S3 key, date prefix, arrival time, ETag alone, and mutable `latest`
+pointers are not source identity. Positions are monotonic per key but need not
+be dense: failed, skipped, and not-modified decisions may leave gaps without
+creating revisions. Capture may run ahead after the previous fetch lifecycle
+is terminal, but processing and publication remain ordered for the same key.
 
-An object observed later with the same versioned domain-content hash is a
-consumed `NO_IMPACT` revision. New source bytes, a new parser/configuration
-version, or a changed canonical domain hash is selectable even when the logical
-source key is unchanged.
+A `304`, or the same bytes under the same producer revision, records
+`NOT_MODIFIED` without a new Logical Source Revision. A new authenticated
+producer revision with the same domain content creates a revision with an
+explicit publication-backed `NO_IMPACT`. Parser, schema, contract, or
+configuration changes reprocess existing verified Bronze evidence and do not
+redownload unless that evidence is missing, corrupt, incomplete, or subject to
+an explicit acquisition repair.
 
 ### Source-family keys and completeness
 
-| Source family | Logical source key and revision | Completeness required before Scope Completion or retirement |
+| Source family | Logical key and revision evidence | Completeness required before Scope Completion or retirement |
 | --- | --- | --- |
-| Submissions company snapshot | Company CIK plus the main submissions resource; the serialized acquisition producer issues the next dense per-CIK ordinal at the authoritative SEC observation and names its predecessor. | Valid main snapshot plus the complete declared pagination-file inventory. Company, address, former-name, and submission-file replacement scopes are declared separately so one incomplete child scope cannot retire another. |
-| Submissions pagination file | Company CIK plus SEC-declared pagination filename; the child carries its parent main-snapshot revision and the serialized producer's dense per-file ordinal. | Complete verified bytes for that file and membership in the main snapshot's ordered pagination inventory. A newer main snapshot cannot mark an unacquired referenced file complete. |
-| Filing/accession artifacts | Accession plus configured document role/name. The immutable source revision is ordinal 1; the accession manifest binds the ordered required document set and each document hash. Changed bytes are a conflict, not ordinal 2. | The accession is complete only when every configured required document is present and verified. Optional documents are explicitly classified; absence is never inferred from a failed fetch. |
-| Company facts | Company CIK plus company-facts resource; the serialized acquisition producer issues the next dense per-CIK ordinal at the authoritative SEC observation and names its predecessor. | One fully parsed authoritative snapshot for the CIK and an ordered membership digest for each replacement fact scope. |
-| Reference catalog | Catalog name/source scope. The producer validates the source-published effective version plus a serialized same-version correction counter, then maps that position to the next dense per-scope ordinal before transport. | The complete catalog, member count, and ordered member-key digest, including a legitimate zero-member catalog. |
-| ADV filing/bulk source | SEC/IARD dataset identity plus declared period or filing accession, as appropriate. Immutable filing keys use ordinal 1. For replacement/bulk keys, the producer validates source-declared period/version plus a serialized same-period correction counter, then issues the next dense per-key ordinal. | Verified complete archive/filing plus the declared adviser, office, disclosure, fund, or roster scope. Rolling-window absence does not retire an older row unless the newer input proves authority over that same scope. |
+| Submissions company snapshot | Company CIK plus main submissions resource; source-native metadata and the reserved per-CIK observation position identify successive captured snapshots. | Valid main snapshot plus the complete declared pagination inventory. Company, address, former-name, and submission-file scopes remain separate. |
+| Submissions pagination file | Company CIK plus SEC-declared filename, linked to its main-snapshot revision. | Verified file bytes and membership in the complete ordered pagination inventory. An unacquired referenced file leaves the discovery interval open. |
+| Filing/accession artifacts | Accession plus configured document role/name. | Every configured required document is present and verified. Optional documents are explicitly classified; failed fetch absence is never completeness evidence. |
+| Company facts | Company CIK plus company-facts resource and captured observation position. | One fully interpreted authoritative snapshot and ordered membership digest for every declared replacement scope. |
+| Reference catalog | Catalog name/source scope plus source-published version when available and captured observation position. | Complete catalog, member count, and ordered member-key digest, including a valid zero-member catalog. |
+| ADV filing or bulk source | SEC/IARD dataset identity plus period or filing accession, as appropriate. | Verified complete archive or filing plus declared adviser, office, disclosure, fund, or roster scope. Rolling-window absence cannot retire an older row outside the proved scope. |
 
-Immutable filing artifacts are additive after capture. If the same
-accession/document identity is observed with different bytes, selection fails
-closed as an immutable-content conflict. Neither arrival order nor a higher S3
-version makes either copy authoritative. The conflict is quarantined until an
-operator supplies an immutable repair attestation that identifies the accepted
-bytes and reason; the original evidence remains retained.
+A complete **Discovery Manifest** freezes the counted, ordered, digested
+candidate set for an interval. Every candidate receives one Fetch Decision.
+Deferred or failed candidates keep the interval open and block baseline or
+catch-up completion.
 
-Mutable snapshots such as submissions, company facts, catalogs, and applicable
-ADV datasets accept a new hash as a new Logical Source Revision. The new
-revision supersedes older current membership only for scopes whose completeness
-it proves.
+The **Source Family Registry** versions every family's keys, acquisition mode,
+completeness proof, poll or change-discovery policy, and required Silver
+producers. The **Acquisition Universe** versions the included source families,
+CIKs, forms, keys, and history boundaries. A family or universe addition needs
+a complete scoped baseline; removal ends future coverage at an explicit
+boundary without deleting or retiring SEC facts. Registry changes use a
+bounded in-epoch transition with an effective boundary, affected-family
+baseline, catch-up, and activation gate.
 
-### Ordering and cursor
+### Processing and Silver publication
 
-Ordering is a producer-issued dense ordinal per logical source key and is
-assigned before queue or object transport. Where SEC/IARD publishes an
-effective version or period, the producer first rejects a lower source-native
-position and orders an authenticated same-position correction with its fenced
-correction counter. Where the source exposes only a mutable current snapshot,
-the acquisition producer holds the key's fenced lease and fetches the
-authoritative response. In either case the producer transactionally allocates
-the next dense ordinal plus predecessor while writing the durable source-change
-outbox. The same revision metadata is stamped on an optional bronze object. It
-is never allocated when the consumer happens to receive the object.
+Fetch and processing are separate ledger lifecycles. A Processing Decision
+compares logical content plus interpretation identity and yields
+`PROCESS_REQUIRED` or an explicit reasoned disposition:
 
-Ordinal 1 has no predecessor; ordinal N names N-1. The ledger may admit N
-before delayed N-1, but it stores N behind the gap and cannot make it current.
-Bronze replay carries the producer revision/predecessor from its capture
-manifest. Legacy bronze without that lineage must first receive a one-time,
-immutable migration attestation derived from its original capture manifest and
-source-native position; if precedence is still ambiguous, it is quarantined
-rather than ordered by S3 arrival. An exact existing source-change identity is
-deduplicated without allocating another revision.
+- `NO_IMPACT`;
+- `OUT_OF_SCOPE`;
+- `OPERATOR_EXCLUDED`;
+- `SUPERSEDED`;
+- `QUARANTINED`; or
+- `RETRYABLE_FAILURE`.
 
-Wall-clock observation, source date, S3 `LastModified`, and queue delivery
-order are observability fields only. A claimed predecessor mismatch, a producer
-revision collision with different content, or conflicting same-position
-correction counters fails closed. A later authenticated producer revision with
-identical versioned domain content produces a publication-backed `NO_IMPACT`
-outcome. A copied/relisted object with no new producer revision is only a
-transport duplicate and cannot move the cursor.
+Before processing, the ledger seals the expected Silver producer, table, and
+scope set. A revision is processed only after every expected producer records
+a verified Silver publication or verified `NO_IMPACT`; parser success,
+landing upload, workflow success, and `COPY INTO` success are insufficient.
 
-The consumption cursor is the latest authoritative Logical Source Revision
-whose exact verified silver publication identity is recorded. It advances only
-after the silver prepare/write/read-back/finalize protocol records either:
+Each producer computes a row-level **Lifecycle Diff** against the exact pinned
+authoritative Silver publication:
 
-- a verified silver publication for the revision; or
-- a verified silver publication outcome of `NO_IMPACT` for semantically
-  unchanged content.
+- new or different business-key content emits `UPSERT`;
+- identical content is unchanged;
+- absence from a proved complete replacement scope emits `RETIRE`; and
+- no mutations emit explicit `NO_IMPACT`.
 
-Landing upload, `COPY INTO` success, parsing success, or a DuckDB checkpoint is
-insufficient. MDM, gold, and graph completion do not hold the bronze/source
-cursor; after silver publication they consume independent stage-local
-publications.
+An incomplete scope or parse failure cannot emit retirement or Scope
+Completion. A complete empty scope is valid. Overlapping publication uses a
+compare-and-swap scope fence: a stale attempt must recompute, while disjoint
+scopes may publish concurrently.
 
-The ledger separately records the gap proof for every intervening ordinal. An
-unresolved earlier revision blocks later revisions only for the same logical
-source key. `EXCLUDED` and `SUPERSEDED` are terminal gap proofs, but they never
-become the cursor and never advance it by themselves. Once every intervening
-ordinal has an allowed terminal gap proof, a later revision's verified
-`SILVER_PUBLISHED` or publication-backed `NO_IMPACT` outcome may move the cursor
-directly to that later revision. Thus an explicit exclusion can unblock the
-key without weakening the publication-only cursor rule.
+A later complete mutable snapshot automatically supersedes an earlier
+incomplete or quarantined snapshot for the same scope with explicit ledger
+linkage. Immutable filing artifacts never use that rule. Snapshot coalescing is
+a versioned family policy and is allowed only before any Silver producer output
+for the older revision commits.
 
-### Dispositions
+### Conflicts, repair, and status
 
-Each observed revision retains one current disposition backed by immutable
-attempt and transition history:
+Different bytes under one immutable SEC identity are both retained and
+quarantined; neither first nor latest wins. An operator repair creates an
+immutable child Repair Revision identifying accepted and rejected evidence and
+the reason. It never rewrites the original observation.
 
-- `PENDING`: observed and eligible for selection;
-- `SELECTED`: frozen into one Change Propagation Run;
-- `SILVER_PUBLISHED`: applied and verified under a silver publication;
-- `NO_IMPACT`: verified under a silver publication without business mutation;
-- `RETRYABLE_FAILURE`: the frozen work may be attempted again;
-- `QUARANTINED`: content, completeness, version, or identity is unresolved;
-- `EXCLUDED`: an operator-authorized immutable exclusion with reason/evidence;
-- `SUPERSEDED`: replaced by an explicitly linked correction or reinterpretation.
+Each transition family has one owner: the coordinator creates decisions and
+seals; acquisition workers record attempts and captures; processors claim
+work; the Silver finalizer verifies and finalizes publications; operators alone
+authorize exclusions, repairs, universe changes, imports, and ledger
+reinitialization. Database roles and constraints enforce these boundaries.
 
-Dispositions do not overwrite attempt evidence. Every retry has a distinct
-attempt identity and fencing token while retaining the same frozen source
-revision and run selection.
+PostgreSQL exposes one **Source Change Status** projection per discovered
+candidate with cause, fetch decision and state, Bronze evidence, logical
+revision, processing state, expected-producer progress, blocker, and next
+action. Immutable attempts, transitions, outcomes, and reasons remain the
+audit history beneath that operational view.
 
-### Retry, repair, and late arrival
+### GoF implementation constraints
 
-- A transient retry reuses the same Change Propagation Run, source selection,
-  object/content identities, expected producer set, and publication identity;
-  only the attempt identity changes.
-- Corrected mutable content creates a new Logical Source Revision in a child
-  run linked with reason `repair`.
-- A new parser, schema, or configuration version creates a child reprocess run
-  even when bytes are unchanged.
-- A late older revision is recorded for audit but cannot replace a higher
-  terminal producer revision. A late higher revision is selected into the next
-  run; a sealed run never expands.
-- A poisoned revision blocks its logical key/scope. It does not block unrelated
-  source keys, and it cannot be bypassed without an explicit exclusion.
+The implementation must follow the focused design-pattern review recorded in
+the [canonical change-propagation spec](../spec.md#ticket-03-gof-implementation-constraints):
 
-### Bronze discovery and checkpoint repair
+- Put the ledger-gated acquisition sequence behind one non-bypassable
+  **Facade**. It accepts an existing fenced Source Fetch Decision, records the
+  attempt, invokes the selected source-family policy, verifies immutable
+  Bronze evidence, and finalizes Source Capture. It must not invent fetch
+  decisions, parse source material, publish Silver, or coordinate downstream
+  stages.
+- Represent proven source-family differences as executable **Strategy**
+  policies selected by the Source Family Registry. Prefer first-class
+  functions or small protocol-conforming policy objects for discovery, fetch,
+  and completeness proof over a class hierarchy. Authorization, hashing,
+  Bronze finalization, and ledger transitions remain shared behavior.
+- Use a lightweight **Command**-style acquisition handler registry that binds
+  execution, scope resolution, and planned writes in one registration. Migrate
+  acquisition commands incrementally and retain existing dispatch as a
+  fallback until each command is covered; Ticket 03 does not authorize a
+  wholesale orchestrator rewrite.
+- Keep persisted fetch and processing lifecycles in PostgreSQL constraints,
+  transition history, and a deterministic reducer or transition table. Do not
+  model durable lifecycle truth as in-memory GoF State objects.
+- Keep the transactional outbox as the durable delivery contract. Do not
+  replace it with Observer callbacks.
+- Do not introduce a Template Method superclass for similar source families
+  until repeated co-change demonstrates a stable shared algorithm skeleton.
 
-Bronze inventory reconciliation enumerates immutable object versions and their
-logical source identities, compares them with the consumption ledger, and
-enqueues only missing or non-terminal revisions. It does not resume from a
-single “latest date processed” cutoff.
+These choices respond to current evidence: acquisition dispatch and scope
+resolution have drifted apart, source families have repeated but genuinely
+different discovery and completeness behavior, and Bronze capture has needed
+multiple fixes around immutability, dangling references, deduplication, and
+orphan recovery. The patterns create explicit boundaries around those costs
+without turning Ticket 03 into a broad framework rewrite.
 
-Consequently, a bronze snapshot carrying a higher producer revision cannot be
-masked by an intact older checkpoint: if its object version/content identity
-has no terminal ledger record, reconciliation selects it even when its dated
-prefix falls outside the old checkpoint window. A newer date prefix alone has
-no precedence. Relisting or copying an already terminal revision does not
-repeat business work.
+### Initial bootstrap and ledger loss
 
-Bronze object references are environment-bound and checksum-verified. A
-reference to another environment is rejected, and credentials or mutable
-infrastructure identifiers are never embedded in the source-change contract.
+The first production ledger and every recovery after loss of ledger authority
+use the same explicit bootstrap protocol. An operator authorization names the
+reason, source-family coverage contract, cutoff, deployment cohort, and new
+Ledger Epoch. The platform does not infer lost decisions from Bronze and does
+not silently continue an empty ledger.
+
+The new epoch starts from a **Hybrid Source Baseline**:
+
+- existing verified Bronze plus complete SEC change intervals where a source
+  family provides adequate change capture; and
+- a fresh complete SEC snapshot or bulk reconciliation for every family that
+  lacks complete change capture.
+
+All required families must satisfy the sealed Baseline Coverage Contract.
+During the rebuild, acquisition continues; a Baseline Catch-up Barrier closes
+each family through the activation high-water mark, using a final complete
+snapshot where necessary. A complete non-serving Silver Baseline Candidate is
+rebuilt, verified, and activated atomically. The old Silver state remains the
+serving authority until activation. Pre-epoch Bronze remains historical
+evidence unless explicitly selected for backfill, repair, or reprocessing.
 
 ### Scenarios locked by this decision
 
-1. An identical submissions snapshot with a new authenticated producer revision
-   records a verified no-impact disposition and advances that logical key
-   without downstream row mutations. Merely copying it to a new S3 version is
-   deduplicated and does not move the cursor.
-2. A submissions snapshot that omits a formerly listed pagination file cannot
-   emit Scope Completion until the new main snapshot proves the new full file
-   inventory; only then can removed members retire.
-3. A complete reference catalog with zero members emits Scope Completion with
-   count zero rather than no output.
-4. Two different documents for the same immutable accession/document key are
-   quarantined; neither wins by arrival order.
-5. A parser upgrade over unchanged filing bytes creates a child reprocess run
-   and can publish changed silver domain content.
-6. A silver failure leaves the source cursor unmoved; retry uses the same
-   source selection and does not reselect newer arrivals.
+1. A due poll with unchanged content records `NOT_MODIFIED` and reuses the
+   verified prior artifact; it does not manufacture downstream work.
+2. A parser upgrade reuses verified Bronze evidence and may create changed
+   Silver output without calling SEC again.
+3. A submissions snapshot cannot retire a missing pagination member until the
+   complete new inventory and every required child are verified.
+4. A valid zero-member catalog emits Scope Completion with count zero.
+5. Two documents for one immutable accession/document identity are
+   quarantined; arrival order never chooses the winner.
+6. A Silver failure leaves processing incomplete; later revisions for the same
+   key cannot become current, while unrelated keys continue.
+7. PostgreSQL loss halts new requests and requires an authorized Hybrid Source
+   Baseline, Silver candidate, catch-up, verification, and new epoch activation.
 
-The hard-to-reverse ledger authority and Logical Source Revision identity must
-be promoted into the planned Change Propagation Run ADR before code
-implementation. This ticket supplies that ADR's accepted source-consumption
-contract.
+This contract is recorded by
+[ADR 0006](../../../docs/adr/0006-sec-bronze-ledger-silver-authority.md).

@@ -3,7 +3,7 @@
 **Status:** ready-for-agent  
 **Feature slug:** `change-propagation`  
 **Related map:** [Incremental Change Propagation](map.md)  
-**Decision baseline:** Accepted grilling recommendations through 2026-08-20
+**Decision baseline:** Accepted grilling recommendations through 2026-08-21
 
 ---
 
@@ -18,13 +18,15 @@ This creates four user-visible risks:
 3. A replay, retry, parser upgrade, or overlapping run can repeat expensive work, overwrite an immutable-looking landing key, or allow an older result to win.
 4. Operators cannot prove that a run was bounded to its affected-key closure, nor reliably roll serving state back to the last complete cross-stage publication.
 
-The platform needs an incremental change-propagation process that selects only new or semantically modified source revisions, explicitly represents retirements and complete empty scopes, computes the smallest correct downstream closure, and publishes stage-local immutable results. The process must converge under at-least-once delivery, preserve the accepted architecture in which silver is the Runtime System of Engagement, keep bronze persistence optional, and expose only complete aligned publications as Agent-Grade Read state.
+The platform needs an incremental change-propagation process that selects only new or semantically modified source revisions, explicitly represents retirements and complete empty scopes, computes the smallest correct downstream closure, and publishes stage-local immutable results. The process must converge under at-least-once delivery, preserve the accepted architecture in which Silver is the Runtime System of Engagement, require verified immutable Bronze evidence before source processing, and expose only complete aligned publications as Agent-Grade Read state.
 
 ## Solution
 
-Introduce an immutable **Change Propagation Run** coordinated by a durable PostgreSQL ledger. A run freezes a selected set of logical source revisions, the contract/parser/configuration versions used to interpret them, the dependency policy used to calculate their **Affected-Key Closure**, and the set of expected stage producers. Late arrivals go into a later run. Retries reuse the frozen selection and produce new attempts, while corrected content or changed interpretation creates an explicitly related child run.
+Introduce an immutable **Change Propagation Run** coordinated by a durable PostgreSQL ledger. SEC remains the external Source Authority; Bronze becomes the mandatory immutable local evidence store; PostgreSQL is the sole local authority for acquisition and processing state; and Silver remains the authoritative published business state. A run freezes a selected set of logical source revisions, the contract/parser/configuration versions used to interpret them, the dependency policy used to calculate their **Affected-Key Closure**, and the set of expected stage producers. Late arrivals go into a later run. Retries reuse the frozen selection and produce new attempts, while corrected content or changed interpretation creates an explicitly related child run.
 
-Every selected source revision is normalized into a `SourceChange` whose identity is independent of transport. Direct SEC acquisition and bronze replay emit the same contract; a bronze object reference is optional. Content-addressed immutable objects carry row payloads, while the ledger, manifests, and queues carry identities, hashes, versions, scope declarations, and locations.
+Every SEC request requires a prior PostgreSQL Source Fetch Decision. Every successful response capable of affecting warehouse state becomes a verified, content-addressed Bronze Artifact before a Logical Source Revision may materialize or processing may begin. Identical bytes may reuse one object while retaining per-observation manifests and ledger lineage. HTTP not-modified and non-success responses remain fetch observations or attempt evidence and do not manufacture source revisions. PostgreSQL exposes one joined source-change status showing download, evidence, revision, processing, blocker, and next action.
+
+Every selected source revision is normalized into a `SourceChange` whose identity is independent of transport but carries a mandatory verified Bronze reference. Exact raw-byte, versioned canonical-source, and versioned domain-content hashes distinguish transport evidence, normalized source content, and interpreted business meaning. Content-addressed immutable objects carry row payloads, while the ledger, manifests, and queues carry identities, hashes, versions, scope declarations, and locations.
 
 Silver producers publish three lifecycle operations:
 
@@ -68,15 +70,15 @@ Migration proceeds through verified, non-serving candidates. First establish the
 18. As a release owner, I want each migration phase to have an activation and rollback checkpoint, so that failures do not force an all-or-nothing cutover.
 19. As a release owner, I want old producers drained before an alias switch, so that incompatible runs are not redriven across a cohort boundary.
 20. As a release owner, I want expand-and-contract schema changes retained through the rollback horizon, so that the prior cohort remains operable.
-21. As a data engineer, I want direct SEC acquisition and bronze replay to emit the same source-change contract, so that persistence choice does not alter semantics.
-22. As a data engineer, I want the bronze reference to be optional, so that bronze remains an archive and replay aid rather than a mandatory system boundary.
-23. As a data engineer, I want source identity to include logical key, revision, content hash, and interpretation versions, so that byte and semantic changes are distinguishable.
-24. As a data engineer, I want producer revisions to be monotonic per source key, so that delayed delivery cannot make an older revision current.
+21. As a data engineer, I want every SEC request authorized by PostgreSQL before transport, so that the platform can prove why data should or should not be downloaded.
+22. As a data engineer, I want every successful relevant SEC response verified in immutable Bronze before processing, so that every business change has replayable source evidence.
+23. As a data engineer, I want source identity to include logical key, observation position, raw-byte hash, canonical-source hash, domain-content hash, and interpretation versions, so that transport, source, and semantic changes are distinguishable.
+24. As a data engineer, I want observation positions monotonic per source key and Logical Source Revisions created only after verified capture, so that failed polls leave explainable gaps without inventing business revisions.
 25. As a data engineer, I want arrival time used only for observability, so that clock ordering does not decide business precedence.
 26. As a data engineer, I want immutable filing conflicts to fail closed, so that an accession cannot silently acquire contradictory content.
 27. As a data engineer, I want mutable source snapshots to accept new content hashes as new revisions, so that authoritative corrections propagate.
-28. As a data engineer, I want semantically identical content to record an observed no-op, so that transport churn does not cause downstream work.
-29. As a data engineer, I want parser and configuration upgrades to reprocess unchanged bytes, so that interpretation changes are represented.
+28. As a data engineer, I want unchanged polls recorded as not-modified and authenticated semantically identical revisions recorded as publication-backed no-impact, so that transport churn does not cause downstream work.
+29. As a data engineer, I want parser and configuration upgrades to reprocess verified Bronze without redownloading, so that interpretation changes are represented without unnecessary SEC traffic.
 30. As a data engineer, I want periodic inventory reconciliation to enqueue only missing versions, so that completeness can be repaired without full replay.
 31. As a data engineer, I want filing completeness to require the configured document set, so that partial filings cannot retire valid current facts.
 32. As a data engineer, I want replacement sources to prove complete snapshot scope, so that absence can safely become retirement.
@@ -158,12 +160,17 @@ Migration proceeds through verified, non-serving candidates. First establish the
 108. As a developer, I want each source family migrated as a vertical slice, so that real end-to-end evidence arrives before broad legacy removal.
 109. As a developer, I want legacy code frozen except for safety fixes during migration, so that the comparison baseline stays stable.
 110. As a developer, I want a slice considered complete only after production evidence, rollback proof, horizon expiry, and legacy removal, so that “done” means one authoritative path remains.
+111. As a developer, I want one non-bypassable ledger-gated acquisition boundary, so that no SEC adapter can fetch bytes without a committed Source Fetch Decision and verified capture outcome.
+112. As a developer, I want each Source Family Registry entry to supply its executable discovery, fetch, and completeness policy, so that adding a family does not add another orchestrator switch.
+113. As a developer, I want acquisition commands to bind execution, scope resolution, and planned writes in one handler registration, so that a partially registered command cannot fail only after deployment.
+114. As a test engineer, I want every approved low-level source adapter reachable only through ledger-gated acquisition, so that architecture checks prove the authorization boundary cannot be bypassed.
+115. As a test engineer, I want one Ticket 03 acceptance seam from an authorized candidate to verified Silver publication status, so that download and processing truth is tested together without coupling tests to internal classes.
 
 ## Implementation Decisions
 
 ### Governing semantics
 
-- Silver remains the Runtime System of Engagement. Snowflake's Decision Contract remains the Agent System of Engagement. Bronze persistence is optional and must not become a required hop.
+- SEC is the external Source Authority. Bronze is the mandatory immutable local evidence store. PostgreSQL is the sole local acquisition and processing-state authority. Silver remains the Runtime System of Engagement and authoritative published business state. Snowflake's Decision Contract remains the Agent System of Engagement.
 - Delivery is at-least-once. Correctness comes from immutable identities, deterministic state transitions, idempotent writes, explicit lifecycle operations, and reconciliation. The system must not claim exactly-once transport.
 - A Change Propagation Run is an immutable selected set of logical source revisions plus frozen contract, parser, configuration, dependency, eligibility, and cohort versions.
 - The Affected-Key Closure is the smallest set of source keys, business keys, dependent keys, scopes, models, and graph partitions required for correct downstream state. It is data recorded by the run, not an ephemeral query result.
@@ -173,17 +180,43 @@ Migration proceeds through verified, non-serving candidates. First establish the
 ### Identity and contract model
 
 - Use distinct immutable identifiers for run, producer, attempt, file, stage publication, and composite Decision Watermark. An attempt identifier must never appear in a content path or business identity.
-- Define `SourceChange` around source family, logical source key, monotonic source revision, canonical source content hash, change reason, event observation time, contract version, parser version, configuration version, and optional bronze reference.
+- Reserve a monotonic Source Observation Position per logical key before transport. Materialize a Logical Source Revision only after verified capture; failed, skipped, and not-modified observations may leave position gaps.
+- Define `SourceChange` around source family, logical source key, observation position, source-native revision when available, raw-byte hash, canonical-source hash, domain-content hash, change reason, contract version, parser version, schema version, configuration version, and mandatory verified Bronze reference.
 - Filing source completeness requires the accession and full configured document set. Replacement sources such as submissions, company facts, catalogs, and ADV require a proved complete snapshot and declared replacement scope.
-- Treat a later observation with the same versioned domain-content hash as consumed no-impact. Treat a new parser, configuration, or schema interpretation as reprocessing even when source bytes are unchanged.
+- Treat `304` or the same bytes under the same producer revision as not-modified without a new Logical Source Revision. Treat a new authenticated producer revision with the same versioned domain-content hash as publication-backed no-impact. Treat a new parser, configuration, or schema interpretation as reprocessing over existing verified Bronze.
 - Emit one lifecycle envelope per business-key mutation. Group envelopes in an immutable manifest. Emit `SCOPE_COMPLETE` once per authoritative replacement scope rather than per row.
 - Keep payload rows in immutable Parquet objects. Messages and ledger records carry only identities, versions, hashes, counts, scope declarations, and object references.
 - Contract compatibility is versioned independently from parser and storage schema versions. Additive compatible changes use minor versions; incompatible major versions fail closed unless a declared adapter exists.
 
+### Source acquisition and evidence
+
+- Commit a PostgreSQL Source Fetch Decision before every SEC request. A decision is caused only by a captured discovery observation, a due versioned poll policy, or an explicit operator repair, backfill, or reprocess request.
+- Route every approved source adapter through one ledger-gated acquisition facade. The facade accepts an existing fenced Source Fetch Decision, records the attempt, invokes the selected source-family policy, verifies immutable Bronze evidence, and finalizes Source Capture. It neither invents decisions nor performs parsing or Silver publication.
+- Halt new SEC requests while PostgreSQL is unavailable. An already authorized in-flight request may complete Bronze capture but cannot process until reconciled to its original decision.
+- Permit one fenced active fetch per logical source key while retaining parallelism across unrelated keys. Retries reuse the original decision, cause, position, request identity, and conditional validators with a new attempt and higher fence.
+- Capture and verify every successful response capable of affecting warehouse state in content-addressed immutable Bronze before processing. Reuse identical byte objects while retaining a per-observation manifest and ledger binding.
+- Mark download complete only after Bronze write, checksum/read-back verification, and ledger finalization of the exact artifact reference. A Bronze object without its originating finalized decision is quarantined orphan evidence, never independent authority.
+- Restrict terminal no-download reasons to verified prior capture, sealed out-of-scope classification, or explicit operator exclusion. Treat not-due, lease, rate-limit, and backoff as deferred open work.
+- Record HTTP not-modified against the prior capture without creating a source revision. Record non-success responses as fetch-attempt evidence, not Bronze source artifacts; missing or `404` responses never prove retirement.
+- Seal a complete counted and digested Discovery Manifest and issue one Fetch Decision for every candidate. Deferred, failed, or unaccounted candidates keep the interval open and block baseline/catch-up completion.
+- Version the Source Family Registry and Acquisition Universe. Additions require a scoped baseline; removals end future coverage at an explicit boundary without retiring source facts; registry changes require an affected-family baseline, catch-up, and activation gate.
+- Make each Source Family Registry entry an executable policy selected centrally by source family. Use narrow Python protocols and first-class functions for discovery, fetch, and completeness proof; keep authorization, hashing, Bronze finalization, and ledger transitions in the shared acquisition facade.
+- Retain every distinct Bronze Artifact indefinitely, allowing archival tier transitions and only explicit audited deletion exceptions. Cross-environment evidence requires an explicit checksum-verified local import with preserved lineage.
+
+### Ticket 03 GoF implementation constraints
+
+- Use a Facade for the non-bypassable ledger-gated acquisition sequence. Keep source-family branching, parsing, processing, and downstream coordination out of the facade so it cannot become a replacement orchestrator.
+- Use Strategy only for proven source-family variation. Prefer first-class functions or small injected policy objects over a class hierarchy; the Source Family Registry chooses the policy so callers do not select implementations.
+- Use a Command-style handler registry for acquisition operations. One lightweight registration binds execution, scope resolution, and planned writes. Migrate one acquisition command at a time with the existing dispatch retained as fallback; do not refactor unrelated warehouse commands as part of Ticket 03.
+- Do not model persisted fetch and processing dispositions as GoF State objects. Keep constrained current state, immutable transition history, role ownership, and transition validation in PostgreSQL with a deterministic reducer or transition table.
+- Do not replace the transactional outbox with Observer. Delivery order, idempotency, retry, and recipient evidence must remain explicit and durable.
+- Do not introduce a Template Method superclass for similar source-family modules until repeated co-change demonstrates a stable shared skeleton. Similarity alone is insufficient.
+
 ### Durable run ledger
 
-- PostgreSQL is authoritative for run selection, lifecycle state, dependency closure, attempts, leases, external transaction attestations, publications, outbox delivery, and Decision Watermark readiness.
+- PostgreSQL is authoritative for acquisition decisions, download and processing state, run selection, lifecycle state, dependency closure, attempts, leases, external transaction attestations, publications, outbox delivery, and Decision Watermark readiness.
 - Store constrained current-state records for efficient coordination plus immutable attempts, transitions, outcomes, exclusions, supersessions, and verification attestations. Do not build an unrestricted event-sourcing framework.
+- Keep fetch and processing lifecycles separate. Expose one joined Source Change Status per discovered candidate with cause, fetch state, Bronze evidence, revision, processing state, expected-producer progress, blocker, and next action.
 - Use the lifecycle `SELECTING`, `SEALED`, `SILVER_PUBLISHED`, `DOWNSTREAM_PROCESSING`, and `READY`, with terminal or exceptional states `FAILED`, `QUARANTINED`, and `SUPERSEDED`.
 - Seal the expected producer set before any stage publication. A producer must report a verified publication, explicit no-impact, quarantine, exclusion, or failure outcome.
 - Use expiring work leases with monotonically increasing fencing tokens. Every finalize operation checks the current token.
@@ -197,6 +230,8 @@ Migration proceeds through verified, non-serving candidates. First establish the
 - Classify every silver table as one of: authoritative scoped snapshot, immutable observation/evidence, derived projection, or append-only audit/quarantine.
 - Define each column as immutable-first, latest-authoritative, independently enriched, derived, or operational-only. Merge and hashing behavior follows this policy.
 - Compute canonical, versioned domain-content hashes that exclude operational timestamps, run identifiers, file names, and serialization differences.
+- Compute each Lifecycle Diff by business key against an exact pinned authoritative Silver publication: new or different content upserts, identical content is unchanged, and absence retires only under proved Scope Completion. PostgreSQL records publication identities, counts, and digests without copying Silver row authority.
+- Guard overlapping scope publication with compare-and-swap against the pinned predecessor. Disjoint scopes may publish concurrently; a stale overlapping attempt must recompute.
 - `UPSERT` always carries the complete row owned by its producer. Move asynchronously owned values, including MDM identifiers and independent scoring, to keyed overlay relations joined at query time.
 - `RETIRE` closes the current validity interval with the causing source revision and scope proof. It never physically deletes history.
 - A scoped snapshot includes scope identity, member count, ordered member-key digest, and `SCOPE_COMPLETE`. A valid complete empty snapshot publishes zero members and its completion marker.
@@ -271,9 +306,11 @@ Migration proceeds through verified, non-serving candidates. First establish the
 
 ### Migration and cutover
 
-- Create a verified baseline that binds exact silver digests and inventories, Snowflake source state, MDM state, current gold outputs, active graph generation, cohort, and Decision Watermark.
-- Rebuild candidate silver from the verified baseline plus immutable post-baseline source revisions. Do not treat historical mutable landing objects as a trustworthy rebuild source.
-- Keep shadow candidates isolated and non-serving. The old path remains the sole serving authority until a phase's reconciliation and approval gate passes.
+- Establish the first production Ledger Epoch through an explicit operator-authorized bootstrap. Existing checkpoints and Silver state are comparison evidence, not imported acquisition authority.
+- Build a Hybrid Source Baseline from complete SEC change intervals where available plus fresh complete snapshots or bulk reconciliation for every source family lacking complete change capture. Seal the required family set and completeness proof in a Baseline Coverage Contract.
+- Rebuild a complete non-serving Silver Baseline Candidate from the Hybrid Source Baseline. Continue capture during rebuild and close every family through an activation high-water mark; use a final complete snapshot wherever change capture is incomplete.
+- Keep the candidate isolated and the old Silver path serving until coverage, content, parity, and catch-up verification pass and activation occurs atomically.
+- On catastrophic ledger loss, halt new acquisition and require the same authorized baseline, candidate, catch-up, and activation protocol in a new Ledger Epoch. Do not reconstruct lost processing decisions from Bronze or automatically queue all pre-epoch evidence.
 - Implement phases in this dependency order: contracts and ledger; immutable landing and candidate silver; silver verification; MDM Snowflake reads and overlays; dbt gold completion and legacy Python retirement; coordinated retirement of DuckDB readers/writers/shards; selective MDM outbox processing; graph physical reuse; coordinator and Decision Watermark.
 - Reconcile the existing change-propagation tickets into these phases. Supersede or amend overlapping tickets instead of creating duplicate ownership.
 - Drain old producers before switching an orchestration alias: stop new old-cohort runs, finish compatible executions, forbid cross-version redrive, capture a final baseline, then switch.
@@ -313,6 +350,16 @@ The highest acceptance seam is **Change Propagation Run to Agent-Grade Read**. A
 - the run remains non-serving with a precise terminal reason and no partial state visible through the decision contract.
 
 This seam must assert both business state and bounded work. A correct final row set is insufficient if the run scanned or rebuilt unexplained unrelated data.
+
+### Ticket 03 acceptance seam
+
+The highest Ticket 03 seam is **Authorized Source Candidate to verified Source Change Status and Silver publication outcome**. A test begins with a candidate covered by a sealed Discovery Manifest and Acquisition Universe, then observes the system through PostgreSQL status, immutable Bronze evidence, and authoritative Silver state. It ends only when:
+
+- the candidate has a terminal download disposition without an unauthorized network request; or
+- verified Source Capture produces an ordered Logical Source Revision and every expected Silver producer records a verified publication or explicit no-impact; or
+- failure, deferral, exclusion, supersession, or quarantine remains visible with its blocker and next action while prior Silver state remains authoritative.
+
+Tests assert observable sequencing and durable evidence rather than the concrete facade, strategy, or command-handler classes. Architecture checks separately enforce that low-level source adapters have no unapproved direct callers, every required Source Family Registry entry has a complete executable policy, and every acquisition command binds execution, scope, and planned-write behavior in one registration.
 
 ### Test layers
 
@@ -363,7 +410,7 @@ This seam must assert both business state and bounded work. A correct final row 
 
 ### Existing testing seams to extend
 
-The implementation should extend the repository's established seams rather than inventing separate harnesses: CLI and workflow entry points; silver event-reducer and landing-export idempotency tests; daily, batch, and release resume tests; MDM reader and publication-queue protocols; graph generation, migration, verification, and activation tests; dbt manifest/model selection and Snowflake status checks; Decision Contract tests; and architecture checks for dashboard access, graph workflows, deployment manifests, and secrets handling.
+The implementation should extend the repository's established seams rather than inventing separate harnesses: SEC gateway boundary tests; Bronze immutability, presence-verification, deduplication, and orphan-recovery tests; capture-mode and source-skip tests as legacy characterization during migration; command registration and scope-coverage tests; CLI and workflow entry points; silver event-reducer and landing-export idempotency tests; daily, batch, and release resume tests; MDM reader and publication-queue protocols; graph generation, migration, verification, and activation tests; dbt manifest/model selection and Snowflake status checks; Decision Contract tests; and architecture checks for dashboard access, graph workflows, deployment manifests, and secrets handling.
 
 ### Acceptance artifact
 
@@ -373,7 +420,7 @@ Produce one immutable machine-readable artifact per release candidate containing
 
 - Replacing `edgartools` as the SEC access and ownership parsing library.
 - Changing silver's role as Runtime System of Engagement or the Snowflake Decision Contract as Agent System of Engagement.
-- Making bronze persistence mandatory for steady-state ingestion.
+- Treating Bronze, S3 listings, workflow history, or downstream tables as a second local processing-state authority beside PostgreSQL.
 - Adding non-AWS deployment, storage, registry, secret-management, or workflow-engine paths.
 - Claiming exactly-once message delivery or using a distributed transaction across PostgreSQL, S3, Snowflake, and Neo4j.
 - Physical deletion of source or business history as part of retirement processing.
@@ -390,8 +437,8 @@ Produce one immutable machine-readable artifact per release candidate containing
 
 - This spec is the canonical synthesis of the accepted recommendations from the diff-processing grilling. It refines the existing change-propagation map and tickets; it does not authorize implementation outside an assigned ticket or workstream.
 - The existing ticket set must be reconciled against this spec before execution. Update or supersede overlapping tickets and preserve their historical links instead of opening duplicate tasks.
-- Four focused ADRs must be accepted before the corresponding hard-to-reverse implementation: Change Propagation Run and ledger authority; stage publication identities and composite Decision Watermark; scoped replacement and historical retirement semantics; and content-addressed graph partitions with generation membership.
-- Existing accepted ADRs remain controlling: silver is the exclusive Runtime System of Engagement, bronze is optional, `edgartools` owns SEC interaction, the Agent Decision Surface is the serving boundary, and the Loader Role governs Snowflake ingestion.
+- ADR 0006 accepts the source authority, mandatory Bronze evidence, PostgreSQL Change Ledger, and Silver business-state boundary before implementation. Three further focused ADRs remain required before their corresponding hard-to-reverse implementation: stage publication identities and composite Decision Watermark; scoped replacement and historical retirement semantics; and content-addressed graph partitions with generation membership.
+- Existing accepted ADRs remain controlling except where explicitly superseded: Silver is the exclusive Runtime System of Engagement, `edgartools` owns SEC interaction, the Agent Decision Surface is the serving boundary, and the Loader Role governs Snowflake ingestion. ADR 0006 supersedes ADR 0002 only for optional-Bronze, default network-skip, and re-download semantics.
 - Snowflake native histories are useful operational evidence but are not durable correctness ledgers. Copy deduplication has finite retention, Dynamic Table refresh can be non-atomic across selected leaves, and a successful refresh does not prove bounded incremental work.
 - Current landing layouts can collide when parallel windows share a run identifier, and object writes can overwrite the same key. Immutable content-addressed paths and exact manifests are therefore a prerequisite, not a later optimization.
 - Current graph generation physical tables duplicate complete generations, while stable serving views already provide a migration seam. Physical partition reuse must include migration of direct internal consumers, grants, verifier, cleanup, and activation logic before compatibility views can be removed.
