@@ -9,7 +9,7 @@ from typing import Generic, TypeVar
 from sqlalchemy import Engine, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from edgar_warehouse.acquisition.models import (
@@ -213,6 +213,14 @@ class AcquisitionLedger:
                                 fencing_token=0,
                                 worker_id=None,
                                 reason="FETCH_AUTHORIZED",
+                                # SQLite's CURRENT_TIMESTAMP server_default is
+                                # second-granularity, so a decision, claim, and
+                                # finalize created within the same wall-clock
+                                # second would otherwise tie on created_at and
+                                # make latest_transition_reason's ordering
+                                # ambiguous -- set it explicitly here with
+                                # Python's microsecond-precision clock.
+                                created_at=datetime.now(UTC),
                             )
                         )
                     session.flush()
@@ -329,6 +337,7 @@ class AcquisitionLedger:
                     fencing_token=token,
                     worker_id=worker_id,
                     reason="LEASE_ACQUIRED",
+                    created_at=claim_time,
                 )
             )
             session.flush()
@@ -347,6 +356,7 @@ class AcquisitionLedger:
         fencing_token: int,
         final_state: FetchWorkState,
         artifact_reference: str | None = None,
+        failure_detail: str | None = None,
         now: datetime | None = None,
         actor_role: FetchTransitionRole = FetchTransitionRole.ACQUISITION_WORKER,
     ) -> SourceChangeStatus:
@@ -355,27 +365,47 @@ class AcquisitionLedger:
             raise ValueError("final_state must be CAPTURED or FAILED")
         if final_state is FetchWorkState.CAPTURED and not (artifact_reference or "").strip():
             raise ValueError("artifact_reference is required when final_state is CAPTURED")
+        if final_state is FetchWorkState.CAPTURED and (failure_detail or "").strip():
+            raise ValueError("failure_detail must not be set when final_state is CAPTURED")
+        reason = (failure_detail or "").strip() or f"FETCH_{final_state.value}"
         finalize_time = now or datetime.now(UTC)
         if self._engine.dialect.name == "postgresql":
             with Session(self._engine) as session, session.begin():
                 _set_postgres_role(
                     session, FetchTransitionRole.ACQUISITION_WORKER.value
                 )
-                session.execute(
-                    text(
-                        "SELECT finalize_source_fetch(:decision_id, :worker_id, "
-                        ":fencing_token, :final_state, :finalized_at, "
-                        ":artifact_reference)"
-                    ),
-                    {
-                        "decision_id": decision_id,
-                        "worker_id": worker_id,
-                        "fencing_token": fencing_token,
-                        "final_state": final_state.value,
-                        "finalized_at": finalize_time,
-                        "artifact_reference": artifact_reference,
-                    },
-                )
+                try:
+                    session.execute(
+                        text(
+                            "SELECT finalize_source_fetch(:decision_id, :worker_id, "
+                            ":fencing_token, :final_state, :finalized_at, "
+                            ":artifact_reference, :failure_detail)"
+                        ),
+                        {
+                            "decision_id": decision_id,
+                            "worker_id": worker_id,
+                            "fencing_token": fencing_token,
+                            "final_state": final_state.value,
+                            "finalized_at": finalize_time,
+                            "artifact_reference": artifact_reference,
+                            "failure_detail": failure_detail,
+                        },
+                    )
+                except SQLAlchemyError as error:
+                    # finalize_source_fetch's stale-token RAISE EXCEPTION
+                    # surfaces here as a generic driver error, not the
+                    # Python StaleFencingToken type the SQLite/generic
+                    # branch below raises directly -- translate it so
+                    # callers (e.g. the Facade's bounded finalize retry,
+                    # which must never retry a deterministic "someone newer
+                    # already won" race) can catch one type regardless of
+                    # dialect.
+                    if "stale fencing token" in str(error.orig or error):
+                        raise StaleFencingToken(
+                            f"stale fencing token {fencing_token} for "
+                            f"decision_id={decision_id}"
+                        ) from error
+                    raise
             return self.source_change_status(decision_id)
         with Session(self._engine) as session, session.begin():
             result = session.execute(
@@ -409,7 +439,8 @@ class AcquisitionLedger:
                     owner_role="ACQUISITION_WORKER",
                     fencing_token=fencing_token,
                     worker_id=worker_id,
-                    reason=f"FETCH_{final_state.value}",
+                    reason=reason,
+                    created_at=finalize_time,
                 )
             )
             session.flush()
@@ -421,6 +452,27 @@ class AcquisitionLedger:
                 )
             session.refresh(work)
             return _status_from_record(decision, work)
+
+    def latest_transition_reason(self, decision_id: str) -> str | None:
+        """Return the most recent transition's durable reason/detail, if any.
+
+        The primary read path for Fetch Attempt evidence (Ticket 17 bullet
+        3): a non-success finalize records its failure detail (or a generic
+        fallback) in ``source_fetch_transition.reason`` -- this makes that
+        evidence queryable independently of whatever exception the original
+        caller happened to catch, e.g. for an operator inspecting a
+        long-since-failed decision in a different process.
+        """
+
+        with Session(self._engine) as session:
+            _set_postgres_role(session, DecisionOwnerRole.ACQUISITION_COORDINATOR.value)
+            row = session.execute(
+                select(SourceFetchTransitionRecord.reason)
+                .where(SourceFetchTransitionRecord.decision_id == decision_id)
+                .order_by(SourceFetchTransitionRecord.created_at.desc())
+                .limit(1)
+            ).scalar_one_or_none()
+            return row
 
 
 AdapterResult = TypeVar("AdapterResult")

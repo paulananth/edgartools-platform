@@ -381,13 +381,16 @@ CREATE OR REPLACE FUNCTION finalize_source_fetch(
     presented_fencing_token BIGINT,
     requested_final_state TEXT,
     requested_at TIMESTAMPTZ DEFAULT NOW(),
-    requested_artifact_reference TEXT DEFAULT NULL
+    requested_artifact_reference TEXT DEFAULT NULL,
+    requested_failure_detail TEXT DEFAULT NULL
 )
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
+DECLARE
+    transition_reason TEXT;
 BEGIN
     IF current_setting('role', TRUE) <> 'edgartools_acquisition_worker' THEN
         RAISE EXCEPTION 'active database role % cannot finalize source fetches',
@@ -401,6 +404,20 @@ BEGIN
         RAISE EXCEPTION 'artifact reference is required to finalize decision % as CAPTURED',
             requested_decision_id;
     END IF;
+    IF requested_final_state = 'CAPTURED' AND
+       NULLIF(BTRIM(requested_failure_detail), '') IS NOT NULL THEN
+        RAISE EXCEPTION 'failure detail must not be set to finalize decision % as CAPTURED',
+            requested_decision_id;
+    END IF;
+    -- Ticket 17 bullet 3: durable Fetch Attempt evidence -- a non-success
+    -- finalize records its caller-supplied failure detail (e.g. an HTTP
+    -- status or exception message) in place of the generic FETCH_<state>
+    -- reason, so a later operator can inspect why a decision failed without
+    -- needing the original caught exception.
+    transition_reason := COALESCE(
+        NULLIF(BTRIM(requested_failure_detail), ''),
+        'FETCH_' || requested_final_state
+    );
     UPDATE source_fetch_work
     SET fetch_state = requested_final_state,
         lease_owner = NULL,
@@ -423,7 +440,7 @@ BEGIN
     ) VALUES (
         requested_decision_id, 'LEASED', requested_final_state,
         'ACQUISITION_WORKER', presented_fencing_token,
-        requested_worker_id, 'FETCH_' || requested_final_state
+        requested_worker_id, transition_reason
     );
 END;
 $$;
@@ -446,13 +463,13 @@ GRANT SELECT ON source_fetch_decision, source_fetch_work, source_fetch_transitio
     TO edgartools_acquisition_worker;
 REVOKE EXECUTE ON FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ)
     FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT)
+REVOKE EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT, TEXT)
     FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION record_initial_source_fetch_transition(UUID, TEXT)
     FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ)
     TO edgartools_acquisition_worker;
-GRANT EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT)
+GRANT EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT, TEXT)
     TO edgartools_acquisition_worker;
 GRANT EXECUTE ON FUNCTION record_initial_source_fetch_transition(UUID, TEXT)
     TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
@@ -502,7 +519,7 @@ ALTER FUNCTION record_initial_source_fetch_transition(UUID, TEXT)
     OWNER TO edgartools_acquisition_owner;
 ALTER FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ)
     OWNER TO edgartools_acquisition_owner;
-ALTER FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT)
+ALTER FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT, TEXT)
     OWNER TO edgartools_acquisition_owner;
 ALTER VIEW source_change_status OWNER TO edgartools_acquisition_owner;
 

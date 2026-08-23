@@ -98,12 +98,12 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
 - [14 — Establish the acquisition ledger and status spine](issues/14-establish-acquisition-ledger-status-spine.md) — PostgreSQL fenced ledger (`AcquisitionLedger`, role-owned transitions, monotonic observation positions) live; a no-download candidate resolves without network access (PR #445, merged `d30cbfd8`).
 - [15 — Capture one filing-artifact family through the gated Facade](issues/15-capture-filing-artifact-through-gated-facade.md) — Non-bypassable capture Facade plus the `filing_artifact` Source Family Registry Strategy prove content-addressed Bronze capture with durable artifact-reference finalization; manually smoke-tested against real Postgres + a real live SEC filing (PR #446, merged `6e4079cc`).
 - [16 — Drive filing capture from SEC change discovery](issues/16-drive-filing-capture-from-sec-change-discovery.md) — `drive-filing-discovery-for-date` seals the daily index into a digested Discovery Manifest and issues one Fetch Decision per candidate, replay-safe and per-candidate fault-isolated (PR #447, merged `bae5637e`).
+- [17 — Make Bronze capture retry-safe and recoverable](issues/17-make-bronze-capture-retry-safe.md) — Retry-after-failure, durable Fetch Attempt evidence, and lease-gated orphan quarantine all land; a real Postgres-only stale-fencing-token exception-translation gap (found by Spec review) is fixed and regression-tested. 304/conditional-GET linking is deliberately deferred to [Ticket 28](issues/28-add-conditional-fetch-and-not-modified-linking.md) — no live caller exists yet for it.
 
 ## Ticket 03 implementation tickets
 
 <!-- Agent-grabbable tracer bullets; blocking edges live in each ticket. -->
 
-- [17 — Make Bronze capture retry-safe and recoverable](issues/17-make-bronze-capture-retry-safe.md) — Converge retries, not-modified responses, failures, fencing, and orphaned captures.
 - [18 — Materialize ordered logical source revisions](issues/18-materialize-ordered-logical-source-revisions.md) — Turn verified evidence into ordered versioned revisions and processing decisions.
 - [19 — Complete the filing-to-Silver acceptance seam](issues/19-complete-filing-to-silver-acceptance-seam.md) — Verify publication or explicit non-publication while protecting prior Silver authority.
 - [20 — Version and activate the Acquisition Universe](issues/20-version-and-activate-acquisition-universe.md) — Gate coverage changes on scoped baseline and catch-up proof.
@@ -114,6 +114,7 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
 - [25 — Add conflict, repair, exclusion, and evidence-import workflows](issues/25-add-conflict-repair-and-evidence-import.md) — Give operators auditable exceptional-evidence controls.
 - [26 — Rebuild and activate a ledger epoch](issues/26-rebuild-and-activate-ledger-epoch.md) — Recover authority through a Hybrid Source Baseline and atomic activation.
 - [27 — Contract legacy acquisition bypasses](issues/27-contract-legacy-acquisition-bypasses.md) — Remove bypasses only after every source family proves the authoritative path.
+- [28 — Add conditional-fetch validators and not-modified linking](issues/28-add-conditional-fetch-and-not-modified-linking.md) — Surfaced while resolving Ticket 17: a due-poll conditional-GET path needs a new ledger read API and has no live caller yet.
 
 ## Not yet specified
 

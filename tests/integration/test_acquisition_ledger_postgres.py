@@ -6,6 +6,7 @@ import time
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ from edgar_warehouse.acquisition.ledger import (
     FetchDecisionRequest,
     FetchDisposition,
     FetchWorkState,
+    StaleFencingToken,
 )
 from edgar_warehouse.mdm.migrations import runtime as migrations
 
@@ -337,6 +339,155 @@ def test_postgres_roles_proofs_and_fencing_are_enforced(
         user="application",
     )
     assert operator.returncode == 0, operator.stderr
+
+
+def test_finalize_source_fetch_persists_failure_detail_and_rejects_it_with_captured(
+    postgres_ledger: PostgresLedger,
+) -> None:
+    """Ticket 17 bullet 3, against real Postgres: the widened 7-arg
+    finalize_source_fetch persists a caller-supplied failure detail as
+    durable Fetch Attempt evidence, and the server-side guard rejects
+    supplying one alongside CAPTURED (defense in depth -- the same rule
+    ledger.py already enforces in Python).
+    """
+    engine = create_engine(postgres_ledger.database_url)
+    ledger = AcquisitionLedger(engine)
+    try:
+        decision = ledger.create_fetch_decision(
+            FetchDecisionRequest(
+                candidate_id="candidate-pg-failure-detail",
+                source_family="filing_artifact",
+                logical_source_key="pg-failure-detail/document",
+                source_url="https://www.sec.gov/Archives/pg-failure-detail.txt",
+                cause=DecisionCause.CAPTURED_DISCOVERY,
+                cause_reference="manifest-pg-failure-detail",
+                disposition=FetchDisposition.FETCH_AUTHORIZED,
+                blocker=None,
+                next_action="ACQUIRE_FETCH_LEASE",
+            )
+        )
+        lease = ledger.claim_fetch(
+            decision.decision_id, worker_id="pg-worker-1", lease_seconds=60
+        )
+
+        ledger.finalize_fetch(
+            decision.decision_id,
+            worker_id="pg-worker-1",
+            fencing_token=lease.fencing_token,
+            final_state=FetchWorkState.FAILED,
+            failure_detail="HTTP 503 Service Unavailable",
+        )
+
+        assert (
+            ledger.latest_transition_reason(decision.decision_id)
+            == "HTTP 503 Service Unavailable"
+        )
+    finally:
+        engine.dispose()
+
+    server_side_reject = _psql(
+        postgres_ledger.container,
+        """
+        SET ROLE edgartools_acquisition_coordinator;
+        INSERT INTO source_observation_cursor VALUES
+            ('filing_artifact', 'pg-bad-detail/document', 1);
+        INSERT INTO source_fetch_decision (
+            decision_id, candidate_id, source_family, logical_source_key,
+            source_url, observation_position, cause, cause_reference,
+            owner_role, fetch_disposition, blocker, next_action
+        ) VALUES (
+            '00000000-0000-0000-0000-000000000099', 'candidate-pg-bad-detail',
+            'filing_artifact', 'pg-bad-detail/document',
+            'https://www.sec.gov/Archives/pg-bad-detail.txt', 1,
+            'CAPTURED_DISCOVERY', 'manifest-pg-bad-detail', 'ACQUISITION_COORDINATOR',
+            'FETCH_AUTHORIZED', NULL, 'ACQUIRE_FETCH_LEASE'
+        );
+        INSERT INTO source_fetch_work VALUES (
+            '00000000-0000-0000-0000-000000000099', 'filing_artifact',
+            'pg-bad-detail/document', 'READY', 0, NULL, NULL,
+            'ACQUISITION_COORDINATOR', NOW()
+        );
+        SELECT record_initial_source_fetch_transition(
+            '00000000-0000-0000-0000-000000000099',
+            'ACQUISITION_COORDINATOR'
+        );
+        SET ROLE edgartools_acquisition_worker;
+        SELECT fencing_token FROM claim_source_fetch(
+            '00000000-0000-0000-0000-000000000099', 'pg-worker-2', 60, NOW()
+        );
+        SELECT finalize_source_fetch(
+            '00000000-0000-0000-0000-000000000099',
+            'pg-worker-2', 1, 'CAPTURED', NOW(),
+            'filing_artifact/deadbeef', 'this must be rejected'
+        );
+        """,
+        user="application",
+    )
+    assert server_side_reject.returncode != 0
+    assert "failure detail must not be set" in server_side_reject.stderr
+
+
+def test_finalize_fetch_raises_python_stale_fencing_token_against_real_postgres(
+    postgres_ledger: PostgresLedger,
+) -> None:
+    """Ticket 17 bullet 5, against real Postgres via the actual
+    AcquisitionLedger.finalize_fetch Python API (not raw psql -- prior
+    coverage of this exact race only asserted on stderr text from a raw SQL
+    call, never on what exception TYPE the Python wrapper raises).
+
+    facade.py's retry helper does ``except StaleFencingToken: raise`` to
+    avoid retrying a deterministic race (a newer attempt already won) and
+    misclassifying it as an orphaned capture. That guard is only correct if
+    a stale-token finalize on Postgres actually raises this Python type --
+    prove it does, not just that some error occurs.
+    """
+    engine = create_engine(postgres_ledger.database_url)
+    ledger = AcquisitionLedger(engine)
+    try:
+        decision = ledger.create_fetch_decision(
+            FetchDecisionRequest(
+                candidate_id="candidate-pg-stale-token-type",
+                source_family="filing_artifact",
+                logical_source_key="pg-stale-token-type/document",
+                source_url="https://www.sec.gov/Archives/pg-stale-token-type.txt",
+                cause=DecisionCause.CAPTURED_DISCOVERY,
+                cause_reference="manifest-pg-stale-token-type",
+                disposition=FetchDisposition.FETCH_AUTHORIZED,
+                blocker=None,
+                next_action="ACQUIRE_FETCH_LEASE",
+            )
+        )
+        stale_lease = ledger.claim_fetch(
+            decision.decision_id, worker_id="pg-worker-stale", lease_seconds=1
+        )
+        fresh_lease = ledger.claim_fetch(
+            decision.decision_id,
+            worker_id="pg-worker-fresh",
+            lease_seconds=60,
+            now=datetime.now(UTC) + timedelta(seconds=2),
+        )
+        ledger.finalize_fetch(
+            decision.decision_id,
+            worker_id="pg-worker-fresh",
+            fencing_token=fresh_lease.fencing_token,
+            final_state=FetchWorkState.CAPTURED,
+            artifact_reference="filing_artifact/won-the-race",
+        )
+
+        with pytest.raises(StaleFencingToken):
+            ledger.finalize_fetch(
+                decision.decision_id,
+                worker_id="pg-worker-stale",
+                fencing_token=stale_lease.fencing_token,
+                final_state=FetchWorkState.FAILED,
+                failure_detail="stale worker's belated failure report",
+            )
+
+        status = ledger.source_change_status(decision.decision_id)
+        assert status.fetch_state is FetchWorkState.CAPTURED
+        assert status.captured_artifact_reference == "filing_artifact/won-the-race"
+    finally:
+        engine.dispose()
 
 
 def test_repository_uses_application_role_and_postgres_uuid_columns(
