@@ -127,6 +127,7 @@ def build_capture_facade(
             worker_id=worker_id,
             fencing_token=lease.fencing_token,
             final_state=FetchWorkState.CAPTURED,
+            artifact_reference=artifact.bronze_relative_path,
             actor_role=FetchTransitionRole.ACQUISITION_WORKER,
         )
         return artifact

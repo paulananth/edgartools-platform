@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import create_engine
@@ -274,3 +275,69 @@ def test_facade_rejects_lease_that_does_not_match_the_fenced_decision(tmp_path) 
     with pytest.raises(SourceCaptureFailed, match="does not match"):
         facade(leased_status, lease)
     assert policy.fetch_calls == []
+
+
+def test_facade_rejects_a_status_that_is_not_in_a_fetchable_state(tmp_path) -> None:
+    """Direct-call boundary check: a caller other than execute_source_request (e.g.
+    a future retry path) could hand the Facade a matching lease against a status
+    that is no longer LEASED -- the Facade must still refuse, not just rely on
+    execute_source_request's own upstream guard."""
+    ledger = _ledger()
+    bronze_root = StorageLocation(str(tmp_path / "bronze"))
+    policy = _FakePolicy(b"payload")
+    facade = build_capture_facade(
+        ledger, bronze_root, {"filing_artifact": policy}, worker_id="worker-1"
+    )
+
+    status = ledger.create_fetch_decision(
+        _authorized_request(
+            "candidate-not-leased",
+            "0000320193/accession-g/doc",
+            "https://www.sec.gov/Archives/g.xml",
+        )
+    )
+    lease = ledger.claim_fetch(status.decision_id, worker_id="worker-1", lease_seconds=60)
+    ledger.finalize_fetch(
+        status.decision_id,
+        worker_id="worker-1",
+        fencing_token=lease.fencing_token,
+        final_state=FetchWorkState.FAILED,
+    )
+    stale_status = ledger.source_change_status(status.decision_id)
+
+    with pytest.raises(SourceCaptureFailed, match="not in a fetchable state"):
+        facade(stale_status, lease)
+    assert policy.fetch_calls == []
+
+
+def test_bronze_read_back_mismatch_finalizes_ledger_as_failed_and_raises(tmp_path) -> None:
+    ledger = _ledger()
+    bronze_root = StorageLocation(str(tmp_path / "bronze"))
+    policy = _FakePolicy(b"the real payload")
+    facade = build_capture_facade(
+        ledger, bronze_root, {"filing_artifact": policy}, worker_id="worker-1"
+    )
+
+    with patch(
+        "edgar_warehouse.acquisition.facade.read_bytes", return_value=b"corrupted bytes"
+    ):
+        with pytest.raises(SourceCaptureFailed, match="read-back mismatch"):
+            execute_source_request(
+                ledger,
+                _authorized_request(
+                    "candidate-readback",
+                    "0000320193/accession-h/doc",
+                    "https://www.sec.gov/Archives/h.xml",
+                ),
+                facade,
+                worker_id="worker-1",
+            )
+
+    decision = ledger.create_fetch_decision(
+        _authorized_request(
+            "candidate-readback",
+            "0000320193/accession-h/doc",
+            "https://www.sec.gov/Archives/h.xml",
+        )
+    )
+    assert decision.fetch_state is FetchWorkState.FAILED

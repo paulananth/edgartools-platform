@@ -149,6 +149,7 @@ class SourceFetchWorkRecord(AcquisitionBase):
         DateTime(timezone=True), nullable=True
     )
     last_transition_role: Mapped[str] = mapped_column(Text, nullable=False)
+    captured_artifact_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -180,6 +181,10 @@ class SourceFetchWorkRecord(AcquisitionBase):
             "lease_owner IS NULL AND lease_expires_at IS NULL AND "
             "last_transition_role = 'ACQUISITION_WORKER')",
             name="ck_source_fetch_work_state_shape",
+        ),
+        CheckConstraint(
+            "fetch_state <> 'CAPTURED' OR captured_artifact_reference IS NOT NULL",
+            name="ck_source_fetch_work_captured_requires_artifact_reference",
         ),
         Index(
             "uq_source_fetch_work_active_key",

@@ -527,6 +527,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Fetch-work lease duration in seconds (default: 300)",
     )
+    _add_run_id_arg(capture_filing_artifact)
     capture_filing_artifact.set_defaults(handler=_handle_capture_filing_artifact)
 
     catch_up_daily = subparsers.add_parser(

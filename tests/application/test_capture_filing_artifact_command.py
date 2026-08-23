@@ -53,6 +53,7 @@ def test_capture_filing_artifact_command_captures_bronze_and_finalizes_ledger(
                 cause_reference="operator-backfill-cli-1",
                 worker_id="cli-worker-1",
                 lease_seconds=None,
+                run_id="run-cli-1",
             ),
         )
 
@@ -70,3 +71,13 @@ def test_capture_filing_artifact_command_captures_bronze_and_finalizes_ledger(
 
     stored = (tmp_path / "bronze" / "filing_artifact" / expected_hash).read_bytes()
     assert stored == payload
+
+    # The registration's resolve_scope/planned_writes are genuinely exercised at
+    # runtime, not just unit-tested in isolation (code-review finding).
+    run_manifest_path = tmp_path / "bronze" / "runs" / "capture-filing-artifact" / "run-cli-1" / "run_manifest.json"
+    assert run_manifest_path.exists()
+    run_manifest_doc = json.loads(run_manifest_path.read_text())
+    assert run_manifest_doc["command"] == "capture-filing-artifact"
+    assert run_manifest_doc["scope"] == {"candidate_id": "candidate-cli-1"}
+    written_layers = {entry["layer"] for entry in run_manifest_doc["manifests"]}
+    assert written_layers == {"bronze", "staging", "artifacts"}

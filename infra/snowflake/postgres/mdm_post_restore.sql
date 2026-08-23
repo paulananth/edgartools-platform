@@ -67,13 +67,13 @@ BEGIN
     REVOKE EXECUTE ON FUNCTION
       record_initial_source_fetch_transition(UUID, TEXT),
       claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ),
-      finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ)
+      finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT)
     FROM PUBLIC;
     GRANT EXECUTE ON FUNCTION record_initial_source_fetch_transition(UUID, TEXT)
       TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
     GRANT EXECUTE ON FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ)
       TO edgartools_acquisition_worker;
-    GRANT EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ)
+    GRANT EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT)
       TO edgartools_acquisition_worker;
     GRANT SELECT ON source_change_status TO
       edgartools_acquisition_coordinator,
@@ -95,7 +95,7 @@ BEGIN
     EXECUTE 'ALTER FUNCTION enforce_acquisition_work_role() OWNER TO edgartools_acquisition_owner';
     EXECUTE 'ALTER FUNCTION record_initial_source_fetch_transition(UUID, TEXT) OWNER TO edgartools_acquisition_owner';
     EXECUTE 'ALTER FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ) OWNER TO edgartools_acquisition_owner';
-    EXECUTE 'ALTER FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ) OWNER TO edgartools_acquisition_owner';
+    EXECUTE 'ALTER FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT) OWNER TO edgartools_acquisition_owner';
     EXECUTE 'ALTER VIEW source_change_status OWNER TO edgartools_acquisition_owner';
   END IF;
 END;
