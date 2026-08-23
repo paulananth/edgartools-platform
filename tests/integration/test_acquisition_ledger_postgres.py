@@ -21,6 +21,11 @@ from edgar_warehouse.acquisition.ledger import (
     FetchWorkState,
     StaleFencingToken,
 )
+from edgar_warehouse.acquisition.revisions import (
+    ContentImpact,
+    RevisionNotEligible,
+    SourceRevisionLedger,
+)
 from edgar_warehouse.mdm.migrations import runtime as migrations
 
 POSTGRES_IMAGE = "postgres:16-alpine"
@@ -570,3 +575,131 @@ def test_repository_uses_application_role_and_postgres_uuid_columns(
             admin_engine.dispose()
     finally:
         engine.dispose()
+
+
+def test_materialize_from_capture_round_trips_against_real_postgres(
+    postgres_ledger: PostgresLedger,
+) -> None:
+    """Ticket 18, end-to-end against real Postgres via the actual Python
+    API: a coordinator-created, worker-captured decision materializes a
+    revision under the dedicated processor role, and the revision is
+    genuinely immutable (the same trigger pattern proven for the other
+    acquisition tables in Ticket 14).
+    """
+
+    engine = create_engine(postgres_ledger.database_url)
+    ledger = AcquisitionLedger(engine)
+    revisions = SourceRevisionLedger(engine)
+    try:
+        decision = ledger.create_fetch_decision(
+            FetchDecisionRequest(
+                candidate_id="candidate-pg-revision",
+                source_family="filing_artifact",
+                logical_source_key="pg-revision/document",
+                source_url="https://www.sec.gov/Archives/pg-revision.txt",
+                cause=DecisionCause.CAPTURED_DISCOVERY,
+                cause_reference="manifest-pg-revision",
+                disposition=FetchDisposition.FETCH_AUTHORIZED,
+                blocker=None,
+                next_action="ACQUIRE_FETCH_LEASE",
+            )
+        )
+        lease = ledger.claim_fetch(
+            decision.decision_id, worker_id="pg-worker-revision", lease_seconds=60
+        )
+        ledger.finalize_fetch(
+            decision.decision_id,
+            worker_id="pg-worker-revision",
+            fencing_token=lease.fencing_token,
+            final_state=FetchWorkState.CAPTURED,
+            artifact_reference="filing_artifact/pg-revision-hash",
+        )
+
+        revision = revisions.materialize_from_capture(
+            decision.decision_id,
+            raw_evidence_hash="pg-revision-hash",
+            canonical_source_hash="pg-revision-hash",
+            domain_content_hash="pg-revision-domain-hash",
+            contract_version="v1",
+            parser_version="v1",
+            schema_version="v1",
+            configuration_version="v1",
+        )
+
+        assert revision.decision_id == decision.decision_id
+        assert revision.content_impact is ContentImpact.CHANGED
+        assert revision.bronze_artifact_reference == "filing_artifact/pg-revision-hash"
+
+        replayed = revisions.materialize_from_capture(
+            decision.decision_id,
+            raw_evidence_hash="pg-revision-hash",
+            canonical_source_hash="pg-revision-hash",
+            domain_content_hash="pg-revision-domain-hash",
+            contract_version="v1",
+            parser_version="v1",
+            schema_version="v1",
+            configuration_version="v1",
+        )
+        assert replayed.revision_id == revision.revision_id
+
+        with pytest.raises(RevisionNotEligible):
+            revisions.materialize_from_capture(
+                "00000000-0000-0000-0000-000000000000",
+                raw_evidence_hash="x",
+                canonical_source_hash="x",
+                domain_content_hash="x",
+                contract_version="v1",
+                parser_version="v1",
+                schema_version="v1",
+                configuration_version="v1",
+            )
+    finally:
+        engine.dispose()
+
+    # The processor role -- the only role that ever writes source_revision --
+    # is only ever granted SELECT/INSERT (same shape as source_fetch_decision
+    # and source_fetch_transition), so an UPDATE is rejected at the grant
+    # level. This is a stricter, and simpler to prove, guarantee than the
+    # immutability trigger alone -- the trigger's own presence in the schema
+    # is covered separately by test_migration.py's SQL-text assertions; the
+    # only role that could bypass this grant check (the table owner) is
+    # never reachable from the ``application`` login this test connects as.
+    no_update_grant = _psql(
+        postgres_ledger.container,
+        f"""
+        SET ROLE edgartools_acquisition_processor;
+        UPDATE source_revision SET content_impact = 'NO_IMPACT'
+        WHERE decision_id = (
+            SELECT decision_id FROM source_fetch_decision
+            WHERE candidate_id = 'candidate-pg-revision'
+        );
+        """,
+        user="application",
+    )
+    assert no_update_grant.returncode != 0
+    assert "permission denied for table source_revision" in no_update_grant.stderr
+
+    # Same shape as the existing source_fetch_transition "forged" proof
+    # above: edgartools_acquisition_worker has only SELECT on
+    # source_revision, so this is rejected at the grant level -- the
+    # dedicated enforce_acquisition_revision_role trigger is the (currently
+    # unreachable from this login) defense against the table owner itself,
+    # mirroring the same layering the older acquisition tables already use.
+    forged_role = _psql(
+        postgres_ledger.container,
+        """
+        SET ROLE edgartools_acquisition_worker;
+        INSERT INTO source_revision (
+            decision_id, source_family, logical_source_key, observation_position,
+            raw_evidence_hash, canonical_source_hash, domain_content_hash,
+            contract_version, parser_version, schema_version, configuration_version,
+            completeness_type, bronze_artifact_reference, content_impact
+        ) VALUES (
+            NULL, 'filing_artifact', 'forged/document', 999,
+            'x', 'x', 'x', 'v1', 'v1', 'v1', 'v1', 'COMPLETE', 'filing_artifact/x', 'CHANGED'
+        );
+        """,
+        user="application",
+    )
+    assert forged_role.returncode != 0
+    assert "permission denied for table source_revision" in forged_role.stderr

@@ -11,8 +11,11 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
 
 ## Notes
 
-- Repo: `edgartools-platform`. Decision-spec only: this map plans the change;
-  implementation happens in a later effort.
+- Repo: `edgartools-platform`. Originally decision-spec only; superseded
+  2026-08-22 (Tickets 13-17 landed real, merged implementation, not just
+  decisions) — this map now also carries implementation and a first prod
+  dry run through to Ticket 29. Per-source-family production cutover and
+  ongoing operation still happen in a later effort.
 - AWS-only. Keep the current SEC EDGAR → warehouse CLI → S3/Snowflake → dbt →
   hosted graph architecture. Do not introduce another cloud, registry,
   workflow engine, storage target, or secret-management path.
@@ -99,12 +102,12 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
 - [15 — Capture one filing-artifact family through the gated Facade](issues/15-capture-filing-artifact-through-gated-facade.md) — Non-bypassable capture Facade plus the `filing_artifact` Source Family Registry Strategy prove content-addressed Bronze capture with durable artifact-reference finalization; manually smoke-tested against real Postgres + a real live SEC filing (PR #446, merged `6e4079cc`).
 - [16 — Drive filing capture from SEC change discovery](issues/16-drive-filing-capture-from-sec-change-discovery.md) — `drive-filing-discovery-for-date` seals the daily index into a digested Discovery Manifest and issues one Fetch Decision per candidate, replay-safe and per-candidate fault-isolated (PR #447, merged `bae5637e`).
 - [17 — Make Bronze capture retry-safe and recoverable](issues/17-make-bronze-capture-retry-safe.md) — Retry-after-failure, durable Fetch Attempt evidence, and lease-gated orphan quarantine all land; a real Postgres-only stale-fencing-token exception-translation gap (found by Spec review) is fixed and regression-tested. 304/conditional-GET linking is deliberately deferred to [Ticket 28](issues/28-add-conditional-fetch-and-not-modified-linking.md) — no live caller exists yet for it.
+- [18 — Materialize ordered logical source revisions](issues/18-materialize-ordered-logical-source-revisions.md) — New `SourceRevisionLedger` and `source_revision` table (own `edgartools_acquisition_processor` role) materialize immutable, ordered Logical Source Revisions from CAPTURED decisions or from parser/schema reinterpretation of already-verified Bronze evidence, with real-thread concurrency proof and behavioral identity tests. Ticket 04's blocking edge was stale for this subset — Ticket 03's own answer already named the three hashes, completeness declaration, and revision-identity composition; Ticket 04 stays open for the run-manifest/expected-producer-set/replay-linkage portions later stages still need.
 
 ## Ticket 03 implementation tickets
 
 <!-- Agent-grabbable tracer bullets; blocking edges live in each ticket. -->
 
-- [18 — Materialize ordered logical source revisions](issues/18-materialize-ordered-logical-source-revisions.md) — Turn verified evidence into ordered versioned revisions and processing decisions.
 - [19 — Complete the filing-to-Silver acceptance seam](issues/19-complete-filing-to-silver-acceptance-seam.md) — Verify publication or explicit non-publication while protecting prior Silver authority.
 - [20 — Version and activate the Acquisition Universe](issues/20-version-and-activate-acquisition-universe.md) — Gate coverage changes on scoped baseline and catch-up proof.
 - [21 — Migrate submissions snapshots and pagination](issues/21-migrate-submissions-and-pagination.md) — Deliver complete inventory-aware submissions processing.
@@ -115,6 +118,7 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
 - [26 — Rebuild and activate a ledger epoch](issues/26-rebuild-and-activate-ledger-epoch.md) — Recover authority through a Hybrid Source Baseline and atomic activation.
 - [27 — Contract legacy acquisition bypasses](issues/27-contract-legacy-acquisition-bypasses.md) — Remove bypasses only after every source family proves the authoritative path.
 - [28 — Add conditional-fetch validators and not-modified linking](issues/28-add-conditional-fetch-and-not-modified-linking.md) — Surfaced while resolving Ticket 17: a due-poll conditional-GET path needs a new ledger read API and has no live caller yet.
+- [29 — Deploy the gated acquisition path to prod and dry-run it](issues/29-deploy-and-dry-run-gated-acquisition-path.md) — Blocked by 18 and 19: apply migration 013, deploy current images, and observe a real bounded diff (capture through Silver acceptance) plus a no-op replay against real prod infrastructure.
 
 ## Not yet specified
 
@@ -135,4 +139,6 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
   exposing a misaligned watermark as agent-grade.
 - Non-AWS deployment/storage paths, broker execution, portfolio management, or
   unrelated dashboard/product work.
-- Implementing, deploying, or production-validating the plan inside this map.
+- Full-universe production cutover for every source family, and ongoing
+  production operation of the gated path — Ticket 29 covers only a first,
+  bounded, single-family prod dry run; broader rollout is a later effort.

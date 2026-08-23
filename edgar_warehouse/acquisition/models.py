@@ -234,3 +234,100 @@ class SourceFetchTransitionRecord(AcquisitionBase):
             name="ck_source_fetch_transition_owner",
         ),
     )
+
+
+class SourceRevisionRecord(AcquisitionBase):
+    """A Logical Source Revision (Ticket 18).
+
+    Two, mutually-exclusive provenance shapes:
+
+    - a fresh capture: ``decision_id`` is set (the CAPTURED Source Fetch
+      Decision whose Bronze evidence this revision materializes from),
+      ``parent_revision_id``/``revision_relationship`` are NULL.
+    - a derived revision (reinterpretation today; repair/supersession/
+      coalescing are later family policy): ``parent_revision_id`` and
+      ``revision_relationship`` are set, ``decision_id`` is NULL -- no new
+      SEC fetch backs it, per Ticket 03's "Parser, schema, contract, or
+      configuration changes reprocess existing verified Bronze evidence and
+      do not redownload."
+
+    ``observation_position`` is reserved from the same per-key counter as
+    Source Fetch Decisions (``ledger.reserve_observation_position``) --
+    Ticket 18 treats a logical key's decisions and revisions as one ordered
+    timeline, not two.
+    """
+
+    __tablename__ = "source_revision"
+
+    revision_id: Mapped[str] = mapped_column(
+        GUID(), primary_key=True, default=_uuid_string
+    )
+    decision_id: Mapped[str | None] = mapped_column(
+        GUID(), ForeignKey("source_fetch_decision.decision_id"), nullable=True
+    )
+    parent_revision_id: Mapped[str | None] = mapped_column(
+        GUID(), ForeignKey("source_revision.revision_id"), nullable=True
+    )
+    revision_relationship: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_family: Mapped[str] = mapped_column(Text, nullable=False)
+    logical_source_key: Mapped[str] = mapped_column(Text, nullable=False)
+    observation_position: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_native_revision: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_evidence_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    canonical_source_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    domain_content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    contract_version: Mapped[str] = mapped_column(Text, nullable=False)
+    parser_version: Mapped[str] = mapped_column(Text, nullable=False)
+    schema_version: Mapped[str] = mapped_column(Text, nullable=False)
+    configuration_version: Mapped[str] = mapped_column(Text, nullable=False)
+    completeness_type: Mapped[str] = mapped_column(Text, nullable=False)
+    declared_replacement_scope: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bronze_artifact_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    content_impact: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("decision_id", name="uq_source_revision_decision"),
+        UniqueConstraint(
+            "source_family",
+            "logical_source_key",
+            "observation_position",
+            name="uq_source_revision_observation",
+        ),
+        Index(
+            "uq_source_revision_reinterpretation",
+            "parent_revision_id",
+            "contract_version",
+            "parser_version",
+            "schema_version",
+            "configuration_version",
+            unique=True,
+            sqlite_where=text("parent_revision_id IS NOT NULL"),
+            postgresql_where=text("parent_revision_id IS NOT NULL"),
+        ),
+        CheckConstraint(
+            "(decision_id IS NULL) = (parent_revision_id IS NOT NULL)",
+            name="ck_source_revision_provenance_exclusive",
+        ),
+        CheckConstraint(
+            "(parent_revision_id IS NULL) = (revision_relationship IS NULL)",
+            name="ck_source_revision_relationship_requires_parent",
+        ),
+        CheckConstraint(
+            "revision_relationship IS NULL OR revision_relationship IN "
+            "('REPAIR','SUPERSESSION','COALESCING','REINTERPRETATION')",
+            name="ck_source_revision_relationship",
+        ),
+        CheckConstraint(
+            "content_impact IN ('CHANGED','NO_IMPACT')",
+            name="ck_source_revision_content_impact",
+        ),
+        CheckConstraint(
+            "completeness_type IN ('COMPLETE','PARTIAL')",
+            name="ck_source_revision_completeness_type",
+        ),
+    )
