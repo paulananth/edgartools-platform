@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from edgar_warehouse.acquisition.source_family_registry import FilingArtifactPolicy
+import pytest
+
+from edgar_warehouse.acquisition.source_family_registry import (
+    FilingArtifactPolicy,
+    UnsupportedCompletenessPolicy,
+)
 
 
 def test_filing_artifact_policy_fetches_via_byte_preserving_filing_content_gateway() -> None:
@@ -26,3 +31,17 @@ def test_filing_artifact_policy_completeness_requires_non_empty_payload() -> Non
 
     assert policy.is_complete(b"some bytes") is True
     assert policy.is_complete(b"") is False
+
+
+def test_filing_artifact_policy_rejects_an_unknown_completeness_policy() -> None:
+    """Ticket 32 bullet 1: completeness_policy is a real dispatch key, not
+    inert metadata -- an unimplemented value must fail closed at fetch time.
+    """
+
+    policy = FilingArtifactPolicy(
+        identity="EdgarTools Platform test@example.com",
+        completeness_policy="some_future_policy",
+    )
+
+    with pytest.raises(UnsupportedCompletenessPolicy):
+        policy.is_complete(b"some bytes")

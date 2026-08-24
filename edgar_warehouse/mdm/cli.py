@@ -66,6 +66,21 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         handler=_logged_handler("registry-status", _handle_registry_status)
     )
 
+    # Ticket 32 item 3: the missing piece a bootstrap sequence needs --
+    # record_catchup_progress previously had no CLI surface, only a direct
+    # Python-API call duplicated inline in two test fixtures.
+    reg_catchup = mdm_sub.add_parser(
+        "registry-record-catchup",
+        help="Record catch-up progress for a draft/blocked registry version's 'add' rows",
+    )
+    reg_catchup.add_argument("source_family")
+    reg_catchup.add_argument(
+        "--through-date", required=True, help="ISO date (YYYY-MM-DD) verified caught up through"
+    )
+    reg_catchup.set_defaults(
+        handler=_logged_handler("registry-record-catchup", _handle_registry_record_catchup)
+    )
+
     # run
     run = mdm_sub.add_parser("run", help="Run MDM pipeline for one or all domains")
     run.add_argument("--entity-type", choices=["company", "adviser", "security", "person", "fund", "all"], default="all")
@@ -1522,6 +1537,26 @@ def _handle_registry_activate(args) -> int:
     version = ledger.activate(args.version_id)
     print(json.dumps(_registry_version_payload(version), indent=2, sort_keys=True))
     return 0 if version.status == "active" else 1
+
+
+def _handle_registry_record_catchup(args) -> int:
+    from edgar_warehouse.acquisition.registry_ledger import SourceRegistryLedger
+    from edgar_warehouse.mdm.database import get_engine
+
+    ledger = SourceRegistryLedger(get_engine())
+    verified_through_date = date.fromisoformat(args.through_date)
+    ledger.record_catchup_progress(args.source_family, verified_through_date)
+    print(
+        json.dumps(
+            {
+                "source_family": args.source_family,
+                "catchup_verified_through_date": args.through_date,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
 
 
 def _handle_registry_status(args) -> int:

@@ -40,11 +40,13 @@ from edgar_warehouse.acquisition.ledger import AcquisitionLedger, FetchDispositi
 from edgar_warehouse.acquisition.processing import ProcessingLedger, SilverFinalizer
 from edgar_warehouse.acquisition.registry_ledger import (
     SourceRegistryLedger,
+    active_family_coverage,
     active_in_scope_forms,
     build_active_source_family_registry,
 )
 from edgar_warehouse.acquisition.revisions import SourceRevisionLedger
 from edgar_warehouse.acquisition.silver_acceptance import (
+    FILING_ARTIFACT_PRODUCER_NAME,
     FilingArtifactSilverAcceptanceResult,
     drive_filing_artifact_silver_acceptance,
 )
@@ -69,12 +71,22 @@ DEFAULT_LEASE_SECONDS = 300
 DEFAULT_REGISTRY_VERSION = "filing_artifact-v1"
 COMMAND_NAME = "drive-filing-discovery-for-date"
 
+# Ticket 32 bullet 1: the only discovery mechanism this module implements --
+# a covered family's registry coverage declaring anything else is a real
+# configuration error, not inert metadata to read and ignore.
+DAILY_INDEX_DRIVEN_DISCOVERY_POLICY = "daily_index_driven"
+
+
+class UnsupportedDiscoveryPolicy(WarehouseRuntimeError):
+    """A covered family declares a discovery_policy this driver does not implement."""
+
 
 def run_drive_filing_discovery_for_date(args: Any) -> int:
     context = _build_warehouse_context(COMMAND_NAME)
     now = datetime.now(UTC)
     run_id = getattr(args, "run_id", None) or uuid.uuid4().hex
     business_date = str(args.business_date)
+    business_date_value = date.fromisoformat(business_date)
     arguments = {"business_date": business_date}
 
     registration = acquisition_command_registration(COMMAND_NAME)
@@ -97,7 +109,45 @@ def run_drive_filing_discovery_for_date(args: Any) -> int:
     # a covered-but-not-yet-activated family, or one 'remove'd, must not
     # silently fall back to acquiring everything DISCOVERY_IN_SCOPE_FORMS
     # would have covered before the registry existed.
-    in_scope_forms = active_in_scope_forms(engine, FILING_ARTIFACT_SOURCE_FAMILY)
+    #
+    # Ticket 32 bullet 2's coverage_end_date boundary is evaluated against
+    # this run's own business_date, not server wall-clock date -- this
+    # driver runs per business date, including late replays of an
+    # already-in-window historical date, so "as of" has to mean "as of the
+    # date being processed," never "as of whenever this process happens to
+    # execute." (/code-review's Spec pass caught this: every one of these
+    # registry reads originally defaulted to date.today() despite
+    # business_date_value already being in scope right here.)
+    in_scope_forms = active_in_scope_forms(
+        engine, FILING_ARTIFACT_SOURCE_FAMILY, as_of_date=business_date_value
+    )
+    # Ticket 32 bullet 1: the registry's discovery_policy and
+    # required_producers become real gates here, not inert audit fields --
+    # None (no active coverage for this family) is left unvalidated, matching
+    # active_in_scope_forms's own "no coverage is not a hard failure"
+    # contract just above (an empty in_scope_forms already makes this run a
+    # no-op interval regardless).
+    coverage = active_family_coverage(
+        engine, FILING_ARTIFACT_SOURCE_FAMILY, as_of_date=business_date_value
+    )
+    if coverage is not None and coverage.discovery_policy != DAILY_INDEX_DRIVEN_DISCOVERY_POLICY:
+        raise UnsupportedDiscoveryPolicy(
+            f"source_family={FILING_ARTIFACT_SOURCE_FAMILY!r} declares "
+            f"discovery_policy={coverage.discovery_policy!r}, but this driver "
+            f"only implements {DAILY_INDEX_DRIVEN_DISCOVERY_POLICY!r}"
+        )
+    # No active coverage means in_scope_forms is already empty (nothing will
+    # reach CAPTURED this run), but the value still has to be *something*
+    # drive_filing_artifact_silver_acceptance's own upfront validation
+    # accepts -- its default is exactly the one producer filing_artifact's
+    # write body knows, so falling back to it here (instead of an empty
+    # tuple) avoids a spurious UnsupportedRequiredProducers on a genuinely
+    # empty, otherwise-trivially-complete interval.
+    required_producers = (
+        coverage.required_producers
+        if coverage is not None
+        else (FILING_ARTIFACT_PRODUCER_NAME,)
+    )
 
     _hydrate_silver_database_from_storage(context)
     db = open_silver_database(context.silver_root)
@@ -111,7 +161,9 @@ def run_drive_filing_discovery_for_date(args: Any) -> int:
         revisions = SourceRevisionLedger(engine)
         processing = ProcessingLedger(engine)
         finalizer = SilverFinalizer(engine)
-        registry = build_active_source_family_registry(engine, identity=context.identity)
+        registry = build_active_source_family_registry(
+            engine, identity=context.identity, as_of_date=business_date_value
+        )
         worker_id = getattr(args, "worker_id", None) or f"drive-filing-discovery-{os.getpid()}"
         lease_seconds = getattr(args, "lease_seconds", None) or DEFAULT_LEASE_SECONDS
         registry_version = getattr(args, "registry_version", None) or DEFAULT_REGISTRY_VERSION
@@ -126,7 +178,13 @@ def run_drive_filing_discovery_for_date(args: Any) -> int:
             lease_seconds=lease_seconds,
         )
         silver_result = drive_filing_artifact_silver_acceptance(
-            ledger, revisions, processing, finalizer, db, result
+            ledger,
+            revisions,
+            processing,
+            finalizer,
+            db,
+            result,
+            required_producers=required_producers,
         )
     finally:
         db.close()

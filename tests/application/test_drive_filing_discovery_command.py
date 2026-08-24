@@ -306,3 +306,155 @@ def test_drive_filing_discovery_fails_closed_when_no_discovery_observation_exist
                 run_id="run-discovery-1",
             ),
         )
+
+
+def test_drive_filing_discovery_fails_closed_on_an_unsupported_discovery_policy(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ticket 32 bullet 1: discovery_policy gates which discovery mechanism
+    this driver may run -- a covered family declaring anything other than
+    'daily_index_driven' (the only one this module implements) must fail
+    closed rather than silently running the daily-index mechanism anyway.
+    """
+
+    from sqlalchemy import create_engine
+
+    from edgar_warehouse.acquisition.models import AcquisitionBase
+    from edgar_warehouse.acquisition.registry_ledger import CoverageSpec, SourceRegistryLedger
+    from edgar_warehouse.application.command_router import run_command
+    from edgar_warehouse.application.workflows.drive_filing_discovery import (
+        UnsupportedDiscoveryPolicy,
+    )
+
+    db_path = tmp_path / "mdm.db"
+    url = f"sqlite:///{db_path}"
+    engine = create_engine(url)
+    AcquisitionBase.metadata.create_all(engine)
+    monkeypatch.setenv("MDM_DATABASE_URL", url)
+
+    ledger = SourceRegistryLedger(engine)
+    version = ledger.open_draft(
+        [
+            CoverageSpec(
+                source_family="filing_artifact",
+                coverage_action="add",
+                in_scope_forms=("3", "3/A", "4", "4/A", "5", "5/A"),
+                acquisition_mode="on_demand_fetch",
+                completeness_policy="non_empty_payload",
+                discovery_policy="polling",
+                required_producers=("sec_raw_object",),
+                coverage_start_date=date(2026, 1, 1),
+                catchup_required_through_date=date(2026, 1, 1),
+            )
+        ],
+        operator_authorization_reference="test-bootstrap",
+    )
+    ledger.record_catchup_progress("filing_artifact", date(2026, 1, 1))
+    ledger.activate(version.version_id)
+
+    _set_warehouse_env(monkeypatch, tmp_path)
+    _seed_daily_index(tmp_path, business_date="2026-08-24", sealed=True)
+
+    with pytest.raises(UnsupportedDiscoveryPolicy, match="polling"):
+        run_command(
+            "drive-filing-discovery-for-date",
+            Namespace(
+                business_date="2026-08-24",
+                worker_id="discovery-worker-1",
+                lease_seconds=None,
+                registry_version=None,
+                run_id="run-discovery-1",
+            ),
+        )
+
+
+def test_drive_filing_discovery_evaluates_coverage_end_date_against_business_date_not_wall_clock(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Ticket 32 bullet 2: coverage_end_date is a boundary on the business
+    date this run is processing, not on whenever the process happens to
+    execute -- a late replay of an already-in-window historical business
+    date must still capture, even though real wall-clock time is long past
+    a since-scheduled removal boundary.
+
+    Regression test for /code-review's Spec finding: every registry read in
+    this driver originally defaulted as_of_date to date.today() despite
+    business_date_value already being in scope at the call site.
+    """
+    from sqlalchemy import create_engine
+
+    from edgar_warehouse.application.command_router import run_command
+
+    db_path = tmp_path / "mdm.db"
+    url = f"sqlite:///{db_path}"
+    engine = create_engine(url)
+    AcquisitionBase.metadata.create_all(engine)
+    monkeypatch.setenv("MDM_DATABASE_URL", url)
+
+    ledger = SourceRegistryLedger(engine)
+    first = ledger.open_draft(
+        [
+            CoverageSpec(
+                source_family="filing_artifact",
+                coverage_action="add",
+                in_scope_forms=("3", "3/A", "4", "4/A", "5", "5/A"),
+                acquisition_mode="on_demand_fetch",
+                completeness_policy="non_empty_payload",
+                discovery_policy="daily_index_driven",
+                required_producers=("sec_raw_object",),
+                coverage_start_date=date(2019, 1, 1),
+                catchup_required_through_date=date(2019, 6, 1),
+            )
+        ],
+        operator_authorization_reference="op-1",
+    )
+    ledger.record_catchup_progress("filing_artifact", date(2019, 6, 1))
+    ledger.activate(first.version_id)
+
+    # Scheduled removal with a boundary that is long past by real wall-clock
+    # time (this test runs in 2026+), but still in the *future* relative to
+    # the historical business_date this run replays below.
+    second = ledger.open_draft(
+        [
+            CoverageSpec(
+                source_family="filing_artifact",
+                coverage_action="remove",
+                coverage_start_date=date(2019, 1, 1),
+                coverage_end_date=date(2020, 1, 1),
+            )
+        ],
+        operator_authorization_reference="op-2",
+    )
+    ledger.activate(second.version_id)
+
+    _set_warehouse_env(monkeypatch, tmp_path)
+    _seed_daily_index(tmp_path, business_date="2019-06-01", sealed=True)
+    payload = b"<ownershipDocument>historical Form 4 bytes</ownershipDocument>"
+
+    with patch(
+        "edgar_warehouse.acquisition.source_family_registry.download_filing_content_bytes",
+        return_value=payload,
+    ) as mocked_fetch:
+        exit_code = run_command(
+            "drive-filing-discovery-for-date",
+            Namespace(
+                business_date="2019-06-01",
+                worker_id="discovery-worker-1",
+                lease_seconds=None,
+                registry_version=None,
+                run_id="run-discovery-1",
+            ),
+        )
+
+    assert exit_code == 0
+    # Still captured: business_date=2019-06-01 is before the 2020-01-01
+    # boundary. If the driver evaluated the boundary against wall-clock
+    # date.today() instead (the bug this test guards against), this family
+    # would wrongly appear excluded and nothing would be fetched.
+    mocked_fetch.assert_called_once()
+    result = json.loads(capsys.readouterr().out)
+    outcomes = {o["accession_number"]: o for o in result["outcomes"]}
+    captured = outcomes["0001140361-26-000001"]
+    assert captured["in_scope"] is True
+    assert captured["network_fetched"] is True
+    assert captured["fetch_state"] == "CAPTURED"

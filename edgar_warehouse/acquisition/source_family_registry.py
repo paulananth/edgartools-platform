@@ -25,6 +25,7 @@ activation, or which families are currently covered.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from edgar_warehouse.infrastructure.filing_content_gateway import (
@@ -32,6 +33,18 @@ from edgar_warehouse.infrastructure.filing_content_gateway import (
 )
 
 FILING_ARTIFACT_SOURCE_FAMILY = "filing_artifact"
+
+# Ticket 32: the registry's completeness_policy field names which of these
+# checks applies -- validated, not merely read, so a coverage row declaring
+# a policy nothing here implements fails closed at fetch time rather than
+# silently falling back to some default.
+_COMPLETENESS_CHECKS: dict[str, Callable[[bytes], bool]] = {
+    "non_empty_payload": bool,
+}
+
+
+class UnsupportedCompletenessPolicy(RuntimeError):
+    """A covered family declares a completeness_policy this Strategy cannot check."""
 
 
 @dataclass(frozen=True)
@@ -45,9 +58,16 @@ class FilingArtifactPolicy:
     """
 
     identity: str
+    completeness_policy: str = "non_empty_payload"
 
     def fetch(self, source_url: str) -> bytes:
         return download_filing_content_bytes(source_url, self.identity)
 
     def is_complete(self, payload: bytes) -> bool:
-        return bool(payload)
+        check = _COMPLETENESS_CHECKS.get(self.completeness_policy)
+        if check is None:
+            raise UnsupportedCompletenessPolicy(
+                f"completeness_policy={self.completeness_policy!r} has no "
+                "installed check for filing_artifact"
+            )
+        return check(payload)
