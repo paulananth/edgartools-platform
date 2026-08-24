@@ -11,9 +11,11 @@ not a mocked-away no-op.
 
 from __future__ import annotations
 
+from pathlib import Path
+from unittest.mock import patch
+
 import duckdb
 import pytest
-from unittest.mock import patch
 
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import (
@@ -238,6 +240,91 @@ def test_new_unregistered_table_forces_merge_and_guard_still_fires(tmp_path):
     ):
         with pytest.raises(SilverPublicationError, match="Unclassified"):
             _publish_silver_database_if_remote(context)
+
+
+def test_daily_index_checkpoint_only_change_actually_publishes(tmp_path):
+    """Change-propagation Ticket 31: a command that writes only
+    sec_daily_index_checkpoint (e.g. load-daily-form-index-for-date) must
+    neither be skipped (bug #1, compute_silver_fingerprint's blind spot) nor
+    have its write silently dropped by the merge (bug #2,
+    merge_candidate_into_canonical never copying EXCLUDED_OPERATIONAL_TABLES
+    content) -- both were true in prod until Ticket 31's fix landed."""
+    from datetime import UTC, datetime
+
+    context = _build_context(tmp_path)
+    canonical_bytes = _build_canonical_bytes(tmp_path)
+    _hydrate(context, canonical_bytes)
+
+    db = SilverDatabase(_local_silver_path(context))
+    db.upsert_daily_index_checkpoint(
+        {
+            "business_date": "2026-08-21",
+            "source_name": "daily_form_index",
+            "source_key": "date:2026-08-21",
+            "source_url": "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/form.idx",
+            "expected_available_at": datetime.now(UTC),
+            "first_attempt_at": datetime.now(UTC),
+            "last_attempt_at": datetime.now(UTC),
+            "attempt_count": 1,
+            "raw_object_id": None,
+            "last_sha256": None,
+            "row_count": 1,
+            "distinct_cik_count": 1,
+            "distinct_accession_count": 1,
+            "status": "succeeded",
+            "error_message": None,
+            "finalized_at": datetime.now(UTC),
+            "last_success_at": datetime.now(UTC),
+        }
+    )
+    db.close()
+
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _publish_silver_database_if_remote,
+    )
+
+    def _capture_promote(relative_path, local_path, expected_etag=None):
+        # Real streaming promote: persist the merged local file so the test
+        # can read back what actually would have reached canonical storage.
+        merged_path.write_bytes(Path(local_path).read_bytes())
+        return PromotionResult(
+            canonical_path="s3://bucket/warehouse/silver/sec/silver.duckdb",
+            staged_relative_path="silverstage/token/silver/sec/silver.duckdb",
+            previous_version=ObjectVersion(exists=True, etag="old-etag", version_id=None),
+            new_version=ObjectVersion(exists=True, etag="new-etag", version_id=None),
+        )
+
+    merged_path = tmp_path / "captured_promoted.duckdb"
+
+    with (
+        patch(
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.read_object_version",
+            return_value=ObjectVersion(exists=True, etag="old-etag", version_id=None),
+        ),
+        patch(
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.download_file",
+            side_effect=_fake_download_file(canonical_bytes),
+        ),
+        patch(
+            "edgar_warehouse.infrastructure.object_storage.StorageLocation.stage_and_promote",
+            side_effect=_capture_promote,
+        ) as mock_stage_and_promote,
+    ):
+        result = _publish_silver_database_if_remote(context)
+
+    assert "skipped" not in result
+    assert "sec_daily_index_checkpoint" in result["tables_merged"]
+    mock_stage_and_promote.assert_called_once()
+
+    conn = duckdb.connect(str(merged_path))
+    try:
+        rows = conn.execute(
+            "SELECT business_date, status FROM sec_daily_index_checkpoint"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert len(rows) == 1
+    assert rows[0][1] == "succeeded"
 
 
 def test_real_change_only_merges_the_actually_changed_table(tmp_path):

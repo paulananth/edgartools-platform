@@ -331,6 +331,32 @@ EXCLUDED_OPERATIONAL_TABLES = frozenset(
     }
 )
 
+# Change-propagation Ticket 31 (found live 2026-08-24, Ticket 29's prod dry
+# run): a curated subset of EXCLUDED_OPERATIONAL_TABLES whose content is the
+# entire point of the command that wrote it -- unlike pipeline_run/sec_sync_run-
+# style pure bookkeeping that's genuinely fine to lose, a command like
+# load-daily-form-index-for-date exists only to write these two tables, so
+# losing them silently defeats the command's whole purpose. Two independent
+# bugs compounded to make that loss total once canonical already existed:
+# compute_silver_fingerprint only fingerprinted PROTECTED_TABLE_REGISTRY
+# tables (so a command writing only these always looked "unchanged" and was
+# skipped outright), and merge_candidate_into_canonical's only content-copying
+# loop also iterates PROTECTED_TABLE_REGISTRY exclusively (so even without the
+# skip, these tables were never copied into the merged output). Both are fixed
+# below for exactly this evidenced pair -- deliberately narrow, not "every
+# EXCLUDED_OPERATIONAL_TABLES member": sec_source_checkpoint and friends have
+# not been shown to have the same bug and widening on suspicion risks forcing
+# a real merge pass on commands that currently correctly skip one. These
+# tables have no authority_column/business-key conflict semantics (that's
+# *why* they're excluded from PROTECTED_TABLE_REGISTRY, not a gap to close)
+# -- they get a blind overwrite, not row-level conflict resolution.
+PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES = frozenset(
+    {
+        "sec_daily_index_checkpoint",
+        "stg_daily_index_filing",
+    }
+)
+
 
 @dataclass(frozen=True)
 class RowConflict:
@@ -651,15 +677,20 @@ def compute_silver_fingerprint(db_path: Path) -> dict[str, Any] | None:
       forces a mismatch -- so an unregistered new table can never be
       silently skipped past ``merge_candidate_into_canonical``'s own
       fail-closed unclassified-table guard.
-    - ``protected``: per-``PROTECTED_TABLE_REGISTRY`` table (only those
+    - ``protected``: per-``PROTECTED_TABLE_REGISTRY`` table plus per-
+      ``PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES`` table (only those
       present in the file), a ``(row_count, content_hash)`` pair covering
-      every column. ``EXCLUDED_OPERATIONAL_TABLES`` bookkeeping writes
+      every column. Plain ``EXCLUDED_OPERATIONAL_TABLES`` bookkeeping writes
       (``pipeline_run``/``sec_sync_run``) are deliberately excluded, so a
       command that only ever writes those never registers as "changed"
-      here. The hash is an order-independent ``BIT_XOR`` of each row's
-      ``HASH()`` over every column, so a same-row-count in-place content
-      update (e.g. an authority-column-resolved conflict) is still caught
-      -- a row-count-only check would miss it.
+      here -- but a command that only writes
+      ``PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES`` (e.g.
+      ``sec_daily_index_checkpoint``) does, since losing that data would
+      defeat the whole point of the command that wrote it (Ticket 31). The
+      hash is an order-independent ``BIT_XOR`` of each row's ``HASH()`` over
+      every column, so a same-row-count in-place content update (e.g. an
+      authority-column-resolved conflict) is still caught -- a row-count-only
+      check would miss it.
 
     Returns ``None`` if ``db_path`` doesn't exist.
     """
@@ -671,7 +702,8 @@ def compute_silver_fingerprint(db_path: Path) -> dict[str, Any] | None:
         table_names = sorted(_table_names(conn, "fp"))
         table_name_set = set(table_names)
         protected: dict[str, list[Any]] = {}
-        for table_name in sorted(PROTECTED_TABLE_REGISTRY):
+        fingerprinted_tables = set(PROTECTED_TABLE_REGISTRY) | PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES
+        for table_name in sorted(fingerprinted_tables):
             if table_name not in table_name_set:
                 continue
             columns = sorted(_columns(conn, "fp", table_name).keys())
@@ -710,6 +742,19 @@ def merge_candidate_into_canonical(
     published through this path. A protected table whose candidate schema
     drops a canonical column, or changes a shared column's declared type,
     also fails closed (only additive schema evolution is permitted here).
+
+    For every table in ``PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES`` that
+    the candidate also has data for (Ticket 31): a separate, simpler pass
+    blindly overwrites canonical's copy with the candidate's -- ``DELETE``
+    then ``INSERT`` via an explicit named column list on both sides, never
+    row-level conflict resolution, since these tables have no
+    ``authority_column``/business-key semantics to resolve against (that's
+    *why* they're excluded from ``PROTECTED_TABLE_REGISTRY``, not a gap in
+    coverage). Unlike the protected-table loop above, a column-set mismatch
+    between candidate and canonical here raises ``SilverPublicationError``
+    directly rather than silently dropping an extra candidate column or
+    surfacing a raw binder error on a missing one -- schema drift for these
+    two tables is not expected to happen quietly.
 
     ``only_tables``: when provided, restricts actual merge work (row
     comparison, insert/update resolution, the emitted per-table events) to
@@ -948,6 +993,58 @@ def merge_candidate_into_canonical(
             _emit_table_merge_event(
                 table_name, inserted=inserted, updated=updated, unchanged=unchanged
             )
+
+        # Ticket 31: PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES have no
+        # authority_column/business-key conflict semantics (that's why they're
+        # excluded from the PROTECTED_TABLE_REGISTRY loop above, not a gap in
+        # it) -- so a blind overwrite here, matching EXCLUDED_OPERATIONAL_TABLES'
+        # own documented intent ("a candidate is always free to overwrite
+        # them"), which the loop above never actually applied to any excluded
+        # table. Explicit named column lists on both sides (never `SELECT *`):
+        # candidate and canonical could have identical column sets in a
+        # different physical order, and `INSERT ... SELECT *` maps
+        # positionally, not by name -- that would silently write values into
+        # the wrong columns instead of failing loud.
+        for table_name in sorted(PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES):
+            if table_name not in cand_tables:
+                continue  # candidate has no data for this table; canonical copy stands.
+            if only_tables is not None and table_name not in only_tables:
+                continue  # caller proved this table is otherwise unchanged; canonical copy stands.
+
+            _emit_table_merge_started_event(table_name)
+
+            if table_name not in out_tables:
+                conn.execute("USE out")
+                conn.execute(_SILVER_SCHEMA_DDL)
+                conn.execute("USE memory")
+
+            out_columns = set(_columns(conn, "out", table_name).keys())
+            cand_columns = set(_columns(conn, "cand", table_name).keys())
+            if cand_columns != out_columns:
+                raise SilverPublicationError(
+                    f"Column set mismatch on {table_name!r} (Ticket 31 "
+                    "publication-significant overwrite): "
+                    f"canonical has {sorted(out_columns)}, candidate has "
+                    f"{sorted(cand_columns)} -- unlike PROTECTED_TABLE_REGISTRY "
+                    "tables, this table's merge does not reconcile additive "
+                    "schema evolution; the schema must already agree."
+                )
+            columns = sorted(out_columns)
+            col_list = ", ".join(_quote_ident(c) for c in columns)
+            quoted_table = _quote_ident(table_name)
+            row_count = conn.execute(
+                f"SELECT COUNT(*) FROM cand.main.{quoted_table}"
+            ).fetchone()[0]
+            conn.execute(f"DELETE FROM out.main.{quoted_table}")
+            conn.execute(
+                f"INSERT INTO out.main.{quoted_table} ({col_list}) "
+                f"SELECT {col_list} FROM cand.main.{quoted_table}"
+            )
+            tables_merged.append(table_name)
+            rows_inserted[table_name] = row_count
+            rows_updated[table_name] = 0
+            rows_unchanged[table_name] = 0
+            _emit_table_merge_event(table_name, inserted=row_count, updated=0, unchanged=0)
 
         if conflicts:
             raise SemanticMergeConflictError(conflicts)
