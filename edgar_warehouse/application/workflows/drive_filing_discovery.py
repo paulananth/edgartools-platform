@@ -1,10 +1,16 @@
-"""Workflow entrypoint for ``drive-filing-discovery-for-date`` (Ticket 16).
+"""Workflow entrypoint for ``drive-filing-discovery-for-date`` (Ticket 16/19/29).
 
 Turns an already-sealed SEC daily form index observation
 (``load-daily-form-index-for-date``'s own output: ``stg_daily_index_filing``
-rows checkpointed ``status='succeeded'``) into a Discovery Manifest and
-drives each in-scope candidate through the Ticket 15 ledger-gated capture
-Facade -- without a human supplying a ``--source-url`` by hand.
+rows checkpointed ``status='succeeded'``) into a Discovery Manifest, drives
+each in-scope candidate through the Ticket 15 ledger-gated capture Facade,
+then (Ticket 29's wiring of Ticket 18/19's work into the live path) carries
+every CAPTURED candidate the rest of the way -- Logical Source Revision,
+sealed expected Silver producers, and a verified Silver publication or
+explicit no-impact outcome -- via
+``silver_acceptance.drive_filing_artifact_silver_acceptance``, then
+publishes the local Silver candidate back to canonical storage the same way
+every other silver-writing command does.
 
 Like ``capture-filing-artifact``, this command is genuinely new and drives
 the Ticket 14 ledger and Ticket 15 Facade directly rather than delegating
@@ -31,6 +37,12 @@ from edgar_warehouse.acquisition.discovery import (
     drive_discovery_manifest,
 )
 from edgar_warehouse.acquisition.ledger import AcquisitionLedger, FetchDisposition, FetchWorkState
+from edgar_warehouse.acquisition.processing import ProcessingLedger, SilverFinalizer
+from edgar_warehouse.acquisition.revisions import SourceRevisionLedger
+from edgar_warehouse.acquisition.silver_acceptance import (
+    FilingArtifactSilverAcceptanceResult,
+    drive_filing_artifact_silver_acceptance,
+)
 from edgar_warehouse.acquisition.source_family_registry import build_source_family_registry
 from edgar_warehouse.application.acquisition_command_registry import (
     acquisition_command_registration,
@@ -39,6 +51,7 @@ from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.application.warehouse_orchestrator import (
     _build_warehouse_context,
     _hydrate_silver_database_from_storage,
+    _publish_silver_database_with_retry,
 )
 from edgar_warehouse.application.workflows.acquisition_run_writes import (
     write_consolidated_run_manifest,
@@ -66,25 +79,45 @@ def run_drive_filing_discovery_for_date(args: Any) -> int:
         command_name=COMMAND_NAME, context=context, run_id=run_id, arguments=arguments, scope=scope, now=now
     )
 
-    rows = _load_sealed_discovery_rows(context, business_date)
-    manifest = build_discovery_manifest(rows, business_date=business_date)
+    # The Silver connection stays open across discovery + capture + revision
+    # + processing + Silver finalization (Ticket 29): finalize_filing_
+    # artifact_candidate needs to write and read back sec_raw_object on the
+    # same local candidate this process eventually publishes. Only closed
+    # once every candidate has settled, then published as one unit -- not
+    # per-candidate, matching every other silver-writing command's
+    # hydrate-once/publish-once shape.
+    _hydrate_silver_database_from_storage(context)
+    db = open_silver_database(context.silver_root)
+    try:
+        rows = _load_sealed_discovery_rows(db, business_date)
+        manifest = build_discovery_manifest(rows, business_date=business_date)
 
-    engine = get_engine()
-    ledger = AcquisitionLedger(engine)
-    registry = build_source_family_registry(identity=context.identity)
-    worker_id = getattr(args, "worker_id", None) or f"drive-filing-discovery-{os.getpid()}"
-    lease_seconds = getattr(args, "lease_seconds", None) or DEFAULT_LEASE_SECONDS
-    registry_version = getattr(args, "registry_version", None) or DEFAULT_REGISTRY_VERSION
+        engine = get_engine()
+        ledger = AcquisitionLedger(engine)
+        revisions = SourceRevisionLedger(engine)
+        processing = ProcessingLedger(engine)
+        finalizer = SilverFinalizer(engine)
+        registry = build_source_family_registry(identity=context.identity)
+        worker_id = getattr(args, "worker_id", None) or f"drive-filing-discovery-{os.getpid()}"
+        lease_seconds = getattr(args, "lease_seconds", None) or DEFAULT_LEASE_SECONDS
+        registry_version = getattr(args, "registry_version", None) or DEFAULT_REGISTRY_VERSION
 
-    result = drive_discovery_manifest(
-        ledger,
-        context.bronze_root,
-        registry,
-        manifest,
-        worker_id=worker_id,
-        registry_version=registry_version,
-        lease_seconds=lease_seconds,
-    )
+        result = drive_discovery_manifest(
+            ledger,
+            context.bronze_root,
+            registry,
+            manifest,
+            worker_id=worker_id,
+            registry_version=registry_version,
+            lease_seconds=lease_seconds,
+        )
+        silver_result = drive_filing_artifact_silver_acceptance(
+            ledger, revisions, processing, finalizer, db, result
+        )
+    finally:
+        db.close()
+
+    _publish_silver_database_with_retry(context)
 
     write_consolidated_run_manifest(
         command_name=COMMAND_NAME,
@@ -94,39 +127,41 @@ def run_drive_filing_discovery_for_date(args: Any) -> int:
         scope=scope,
         now=now,
         manifest_writes=manifest_writes,
-        row_counts=_interval_row_counts(result),
+        row_counts=_interval_row_counts(result, silver_result),
     )
 
-    payload = _result_payload(result, run_id=run_id, business_date=business_date)
+    payload = _result_payload(
+        result, silver_result, run_id=run_id, business_date=business_date
+    )
     print(json.dumps(payload, sort_keys=True))
-    return 0 if result.interval_complete else 1
+    return 0 if (result.interval_complete and silver_result.interval_complete) else 1
 
 
-def _load_sealed_discovery_rows(context: Any, business_date: str) -> list[dict[str, Any]]:
+def _load_sealed_discovery_rows(db: Any, business_date: str) -> list[dict[str, Any]]:
     """Read the already-captured, already-checkpointed discovery observation.
 
     Fails closed if the daily index for this business date has not yet been
     fetched and sealed by ``load-daily-form-index-for-date`` -- this command
     never triggers that fetch itself (out of scope; see module docstring).
+    Takes an already-open ``SilverDatabase`` (Ticket 29) rather than opening
+    and closing its own, since the caller keeps the connection open across
+    the whole workflow now.
     """
 
-    _hydrate_silver_database_from_storage(context)
-    db = open_silver_database(context.silver_root)
-    try:
-        checkpoint = db.get_daily_index_checkpoint(business_date)
-        status = checkpoint.get("status") if checkpoint else "missing"
-        if status != "succeeded":
-            raise WarehouseRuntimeError(
-                f"No sealed discovery observation for business_date={business_date} "
-                f"(checkpoint status={status!r}); run load-daily-form-index-for-date "
-                "for this date first"
-            )
-        return db.get_daily_index_filings(business_date)
-    finally:
-        db.close()
+    checkpoint = db.get_daily_index_checkpoint(business_date)
+    status = checkpoint.get("status") if checkpoint else "missing"
+    if status != "succeeded":
+        raise WarehouseRuntimeError(
+            f"No sealed discovery observation for business_date={business_date} "
+            f"(checkpoint status={status!r}); run load-daily-form-index-for-date "
+            "for this date first"
+        )
+    return db.get_daily_index_filings(business_date)
 
 
-def _interval_row_counts(result: DiscoveryDriveResult) -> dict[str, Any]:
+def _interval_row_counts(
+    result: DiscoveryDriveResult, silver_result: FilingArtifactSilverAcceptanceResult
+) -> dict[str, Any]:
     """Seal the interval's completion in the durable manifest, not just the exit code."""
 
     captured = sum(
@@ -137,25 +172,43 @@ def _interval_row_counts(result: DiscoveryDriveResult) -> dict[str, Any]:
         for outcome in result.outcomes
         if outcome.fetch_disposition is FetchDisposition.OUT_OF_SCOPE
     )
+    silver_published = sum(
+        1
+        for outcome in silver_result.outcomes
+        if outcome.error is None and outcome.settled
+    )
     return {
         "candidates": result.manifest.candidate_count,
         "captured": captured,
         "excluded": excluded,
         "unsettled": len(result.unsettled_candidate_ids),
         "interval_complete": result.interval_complete,
+        "silver_carried_forward": len(silver_result.outcomes),
+        "silver_settled": silver_published,
+        "silver_unsettled": len(silver_result.unsettled_candidate_ids),
+        "silver_interval_complete": silver_result.interval_complete,
     }
 
 
 def _result_payload(
-    result: DiscoveryDriveResult, *, run_id: str, business_date: str
+    result: DiscoveryDriveResult,
+    silver_result: FilingArtifactSilverAcceptanceResult,
+    *,
+    run_id: str,
+    business_date: str,
 ) -> dict[str, Any]:
+    silver_by_decision_id = {
+        outcome.decision_id: outcome for outcome in silver_result.outcomes
+    }
     return {
         "business_date": business_date,
         "candidate_count": result.manifest.candidate_count,
         "discovery_manifest_digest": result.manifest.digest,
         "interval_complete": result.interval_complete,
+        "silver_interval_complete": silver_result.interval_complete,
         "run_id": run_id,
         "unsettled_candidate_ids": list(result.unsettled_candidate_ids),
+        "silver_unsettled_candidate_ids": list(silver_result.unsettled_candidate_ids),
         "outcomes": [
             {
                 "accession_number": outcome.candidate.accession_number,
@@ -173,7 +226,25 @@ def _result_payload(
                 ),
                 "network_fetched": outcome.network_fetched,
                 "error": outcome.error,
+                **_silver_outcome_fields(silver_by_decision_id.get(outcome.decision_id)),
             }
             for outcome in result.outcomes
         ],
+    }
+
+
+def _silver_outcome_fields(outcome: Any) -> dict[str, Any]:
+    if outcome is None:
+        return {
+            "revision_id": None,
+            "processing_disposition": None,
+            "silver_outcome": None,
+            "silver_error": None,
+        }
+    decision = outcome.processing_decision
+    return {
+        "revision_id": decision.revision_id if decision is not None else None,
+        "processing_disposition": decision.disposition.value if decision is not None else None,
+        "silver_outcome": decision.silver_outcome.value if decision is not None else None,
+        "silver_error": outcome.error,
     }
