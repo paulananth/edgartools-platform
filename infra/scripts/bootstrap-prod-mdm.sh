@@ -272,8 +272,9 @@ for stmt in [
     "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO application;",
     # Acquisition history is intentionally excluded from the shared runtime
     # principal's broad legacy grants. Runtime code must SET one fenced role.
-    "REVOKE ALL PRIVILEGES ON source_observation_cursor, source_fetch_decision, source_fetch_work, source_fetch_transition, source_revision FROM application;",
+    "REVOKE ALL PRIVILEGES ON source_observation_cursor, source_fetch_decision, source_fetch_work, source_fetch_transition, source_revision, source_processing_decision, source_expected_producer FROM application;",
     "REVOKE ALL PRIVILEGES ON source_change_status FROM application;",
+    "REVOKE ALL PRIVILEGES ON source_change_status_detail FROM application;",
 ]:
     cur.execute(stmt)
 cur.close()

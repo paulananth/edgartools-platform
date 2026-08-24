@@ -53,18 +53,22 @@ class FetchTransitionRole(StrEnum):
 
 
 class ProcessingTransitionRole(StrEnum):
-    """The database role that owns the processing lifecycle (Ticket 18).
+    """The database roles that own the processing lifecycle (Ticket 18/19).
 
     Ticket 03's authority model gives fetch and processing separate ledger
-    lifecycles with separate owners ("acquisition workers record attempts
-    and captures... processors claim work") -- kept distinct from
-    ``FetchTransitionRole`` rather than folded into it, even though today
-    there is exactly one processing-owning role, so a future split (e.g. a
-    dedicated repair/reprocess role) does not have to retrofit this
-    distinction later.
+    lifecycles with separate owners -- and within processing, splits
+    "processors claim work" from "the Silver finalizer verifies and
+    finalizes publications" as two distinct owners. ``ACQUISITION_PROCESSOR``
+    (Ticket 18) seals what a revision requires (materializes the revision,
+    seals its expected Silver producer set); ``ACQUISITION_SILVER_FINALIZER``
+    (Ticket 19) is the only role that may record a producer's verified
+    outcome. Kept as two members of one enum rather than two separate enums
+    since both are still "processing lifecycle" roles in Ticket 03's sense,
+    distinct from ``FetchTransitionRole``.
     """
 
     ACQUISITION_PROCESSOR = "ACQUISITION_PROCESSOR"
+    ACQUISITION_SILVER_FINALIZER = "ACQUISITION_SILVER_FINALIZER"
 
 
 class CandidateDecisionConflict(RuntimeError):
@@ -645,12 +649,30 @@ def _require_worker_role(actor_role: FetchTransitionRole) -> None:
 
 
 def require_processor_role(actor_role: ProcessingTransitionRole) -> None:
-    """Shared by revisions.py (Ticket 18) -- see ``_require_worker_role``."""
+    """Shared by revisions.py (Ticket 18) and processing.py (Ticket 19,
+    sealing) -- see ``_require_worker_role``.
+    """
 
     if actor_role is not ProcessingTransitionRole.ACQUISITION_PROCESSOR:
         raise UnauthorizedTransitionRole(
             "processing transitions require "
             f"{ProcessingTransitionRole.ACQUISITION_PROCESSOR.value}"
+        )
+
+
+def require_silver_finalizer_role(actor_role: ProcessingTransitionRole) -> None:
+    """Shared by processing.py (Ticket 19, recording producer outcomes).
+
+    Distinct from ``require_processor_role`` -- Ticket 03 gives "processors
+    claim work" and "the Silver finalizer verifies and finalizes
+    publications" separate owners; only this role may record a verified or
+    failed producer outcome.
+    """
+
+    if actor_role is not ProcessingTransitionRole.ACQUISITION_SILVER_FINALIZER:
+        raise UnauthorizedTransitionRole(
+            "Silver finalization requires "
+            f"{ProcessingTransitionRole.ACQUISITION_SILVER_FINALIZER.value}"
         )
 
 
@@ -662,6 +684,7 @@ def set_postgres_role(session: Session, role: str) -> None:
         DecisionOwnerRole.ACQUISITION_OPERATOR.value,
         FetchTransitionRole.ACQUISITION_WORKER.value,
         ProcessingTransitionRole.ACQUISITION_PROCESSOR.value,
+        ProcessingTransitionRole.ACQUISITION_SILVER_FINALIZER.value,
     }
     if role not in allowed_roles:
         raise UnauthorizedTransitionRole(f"Unknown acquisition database role {role}")

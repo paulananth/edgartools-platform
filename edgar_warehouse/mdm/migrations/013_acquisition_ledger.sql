@@ -31,6 +31,16 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'edgartools_acquisition_processor') THEN
         CREATE ROLE edgartools_acquisition_processor NOLOGIN;
     END IF;
+    -- Ticket 19: Ticket 03's authority model splits "processors claim work"
+    -- (sealing what a revision requires) from "the Silver finalizer
+    -- verifies and finalizes publications" (recording a producer's verified
+    -- or failed outcome) as two distinct owners -- a separate role, not
+    -- folded into edgartools_acquisition_processor, so GRANTs alone (not a
+    -- role-check trigger) can express "processor may INSERT expected
+    -- producers, only the finalizer may UPDATE their outcome."
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'edgartools_acquisition_silver_finalizer') THEN
+        CREATE ROLE edgartools_acquisition_silver_finalizer NOLOGIN;
+    END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'application') THEN
         GRANT edgartools_acquisition_coordinator TO application
             WITH INHERIT FALSE, SET TRUE;
@@ -39,6 +49,8 @@ BEGIN
         GRANT edgartools_acquisition_operator TO application
             WITH INHERIT FALSE, SET TRUE;
         GRANT edgartools_acquisition_processor TO application
+            WITH INHERIT FALSE, SET TRUE;
+        GRANT edgartools_acquisition_silver_finalizer TO application
             WITH INHERIT FALSE, SET TRUE;
     END IF;
 END;
@@ -241,6 +253,71 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_source_revision_reinterpretation
         schema_version, configuration_version
     )
     WHERE parent_revision_id IS NOT NULL;
+
+-- Ticket 19: Processing Decisions seal what a revision requires before any
+-- Silver write happens. silver_outcome is a denormalized rollup maintained
+-- by the Silver Finalizer as expected producers settle -- see
+-- models.py's SourceProcessingDecisionRecord docstring for the full
+-- rationale, kept in lockstep with it here.
+CREATE TABLE IF NOT EXISTS source_processing_decision (
+    processing_decision_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    revision_id UUID NOT NULL REFERENCES source_revision(revision_id),
+    source_family TEXT NOT NULL,
+    logical_source_key TEXT NOT NULL,
+    observation_position BIGINT NOT NULL,
+    disposition TEXT NOT NULL,
+    silver_outcome TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    settled_at TIMESTAMPTZ,
+    CONSTRAINT uq_source_processing_decision_revision UNIQUE (revision_id),
+    CONSTRAINT ck_source_processing_decision_disposition CHECK (
+        disposition IN ('PROCESS_REQUIRED','NO_IMPACT','OUT_OF_SCOPE','OPERATOR_EXCLUDED','SUPERSEDED','QUARANTINED','RETRYABLE_FAILURE')
+    ),
+    CONSTRAINT ck_source_processing_decision_silver_outcome CHECK (
+        silver_outcome IN ('PENDING','PUBLISHED','FAILED')
+    ),
+    CONSTRAINT ck_source_processing_decision_no_process_required_published CHECK (
+        disposition = 'PROCESS_REQUIRED' OR silver_outcome = 'PUBLISHED'
+    ),
+    CONSTRAINT ck_source_processing_decision_settled_at_shape CHECK (
+        (silver_outcome = 'PENDING') = (settled_at IS NULL)
+    )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_source_processing_decision_active_key
+    ON source_processing_decision(source_family, logical_source_key)
+    WHERE silver_outcome = 'PENDING';
+
+-- Ticket 19: one row per expected Silver producer sealed under a Processing
+-- Decision. Only the processor may INSERT (sealing); only the Silver
+-- Finalizer may UPDATE outcome/verified_reference/failure_detail --
+-- enforced entirely at the GRANT layer below (column-scoped UPDATE), not a
+-- role-check trigger, since the two operations already belong to disjoint
+-- roles.
+CREATE TABLE IF NOT EXISTS source_expected_producer (
+    expected_producer_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    processing_decision_id UUID NOT NULL
+        REFERENCES source_processing_decision(processing_decision_id),
+    producer_name TEXT NOT NULL,
+    target_table TEXT NOT NULL,
+    scope_reference TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    verified_reference TEXT,
+    failure_detail TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_source_expected_producer_name
+        UNIQUE (processing_decision_id, producer_name),
+    CONSTRAINT ck_source_expected_producer_outcome CHECK (
+        outcome IN ('PENDING','VERIFIED','NO_IMPACT','FAILED')
+    ),
+    CONSTRAINT ck_source_expected_producer_verified_reference CHECK (
+        outcome <> 'VERIFIED' OR NULLIF(BTRIM(verified_reference), '') IS NOT NULL
+    ),
+    CONSTRAINT ck_source_expected_producer_failure_detail CHECK (
+        outcome <> 'FAILED' OR NULLIF(BTRIM(failure_detail), '') IS NOT NULL
+    )
+);
 
 CREATE OR REPLACE FUNCTION reject_acquisition_history_mutation()
 RETURNS TRIGGER
@@ -542,6 +619,8 @@ REVOKE INSERT, UPDATE, DELETE ON source_fetch_decision FROM PUBLIC;
 REVOKE INSERT, UPDATE, DELETE ON source_fetch_work FROM PUBLIC;
 REVOKE INSERT, UPDATE, DELETE ON source_fetch_transition FROM PUBLIC;
 REVOKE INSERT, UPDATE, DELETE ON source_revision FROM PUBLIC;
+REVOKE INSERT, UPDATE, DELETE ON source_processing_decision FROM PUBLIC;
+REVOKE INSERT, UPDATE, DELETE ON source_expected_producer FROM PUBLIC;
 
 GRANT SELECT, INSERT, UPDATE ON source_observation_cursor
     TO edgartools_acquisition_coordinator, edgartools_acquisition_operator,
@@ -555,13 +634,30 @@ GRANT SELECT ON source_fetch_transition
 GRANT SELECT ON source_fetch_decision, source_fetch_work, source_fetch_transition
     TO edgartools_acquisition_worker, edgartools_acquisition_processor;
 -- Ticket 18: revisions are read by every acquisition role (coordinators and
--- operators inspect Source Change Status; a future Ticket 19 status
--- projection joins revision state in), but only the processor role may
--- materialize one.
+-- operators inspect Source Change Status; Ticket 19's status projection
+-- joins revision state in), but only the processor role may materialize
+-- one.
 GRANT SELECT ON source_revision
     TO edgartools_acquisition_coordinator, edgartools_acquisition_worker,
-       edgartools_acquisition_operator;
+       edgartools_acquisition_operator, edgartools_acquisition_silver_finalizer;
 GRANT SELECT, INSERT ON source_revision TO edgartools_acquisition_processor;
+-- Ticket 19: the processor seals (INSERT) a revision's Processing Decision
+-- and expected producer set; only the Silver Finalizer may record a
+-- producer's settled outcome, and only on the specific columns that
+-- outcome touches -- column-scoped GRANTs are the sole enforcement layer
+-- here (see models.py's SourceExpectedProducerRecord docstring for why no
+-- role-check trigger backs this up).
+GRANT SELECT ON source_processing_decision, source_expected_producer
+    TO edgartools_acquisition_coordinator, edgartools_acquisition_worker,
+       edgartools_acquisition_operator;
+GRANT SELECT, INSERT ON source_processing_decision, source_expected_producer
+    TO edgartools_acquisition_processor;
+GRANT SELECT ON source_processing_decision, source_expected_producer
+    TO edgartools_acquisition_silver_finalizer;
+GRANT UPDATE (silver_outcome, settled_at) ON source_processing_decision
+    TO edgartools_acquisition_silver_finalizer;
+GRANT UPDATE (outcome, verified_reference, failure_detail, updated_at)
+    ON source_expected_producer TO edgartools_acquisition_silver_finalizer;
 REVOKE EXECUTE ON FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ)
     FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT, TEXT)
@@ -606,11 +702,67 @@ GRANT SELECT ON source_change_status TO
     edgartools_acquisition_worker,
     edgartools_acquisition_operator;
 
+-- Ticket 19 bullet 3: "PostgreSQL exposes one Source Change Status
+-- projection per discovered candidate with cause, fetch decision and
+-- state, Bronze evidence, logical revision, processing state,
+-- expected-producer progress, blocker, and next action" (Ticket 03). This
+-- widens source_change_status (left untouched, above -- every existing
+-- caller keeps its narrower shape) with revision/processing/expected-
+-- producer state for direct operator SQL access; the Python-side
+-- equivalent is processing.read_source_change_status_detail, composed via
+-- the ORM rather than this view (this view exists for ad-hoc operator
+-- queries against Postgres directly).
+CREATE OR REPLACE VIEW source_change_status_detail AS
+SELECT
+    decision.decision_id,
+    decision.source_family,
+    decision.logical_source_key,
+    decision.fetch_disposition,
+    work.fetch_state,
+    revision.revision_id,
+    revision.content_impact,
+    processing.disposition AS processing_disposition,
+    processing.silver_outcome,
+    COALESCE(producer_counts.total, 0) AS expected_producer_total,
+    COALESCE(producer_counts.settled, 0) AS expected_producer_settled,
+    decision.blocker,
+    CASE
+        WHEN processing.silver_outcome = 'FAILED' THEN 'REPAIR_SILVER_FAILURE'
+        WHEN processing.silver_outcome = 'PUBLISHED' THEN 'NONE'
+        WHEN processing.processing_decision_id IS NOT NULL
+            THEN 'FINALIZE_SILVER_PUBLICATION'
+        WHEN revision.revision_id IS NOT NULL THEN 'SEAL_EXPECTED_PRODUCERS'
+        WHEN work.fetch_state = 'CAPTURED' THEN 'MATERIALIZE_SOURCE_REVISION'
+        WHEN work.fetch_state = 'LEASED' THEN 'FETCH_SOURCE'
+        WHEN work.fetch_state = 'FAILED' THEN 'RETRY_FETCH'
+        ELSE decision.next_action
+    END AS next_action
+FROM source_fetch_decision AS decision
+LEFT JOIN source_fetch_work AS work ON work.decision_id = decision.decision_id
+LEFT JOIN source_revision AS revision ON revision.decision_id = decision.decision_id
+LEFT JOIN source_processing_decision AS processing
+    ON processing.revision_id = revision.revision_id
+LEFT JOIN LATERAL (
+    SELECT COUNT(*) AS total,
+           COUNT(*) FILTER (WHERE outcome <> 'PENDING') AS settled
+    FROM source_expected_producer
+    WHERE processing_decision_id = processing.processing_decision_id
+) AS producer_counts ON TRUE;
+
+GRANT SELECT ON source_change_status_detail TO
+    edgartools_acquisition_coordinator,
+    edgartools_acquisition_worker,
+    edgartools_acquisition_operator,
+    edgartools_acquisition_processor,
+    edgartools_acquisition_silver_finalizer;
+
 ALTER TABLE source_observation_cursor OWNER TO edgartools_acquisition_owner;
 ALTER TABLE source_fetch_decision OWNER TO edgartools_acquisition_owner;
 ALTER TABLE source_fetch_work OWNER TO edgartools_acquisition_owner;
 ALTER TABLE source_fetch_transition OWNER TO edgartools_acquisition_owner;
 ALTER TABLE source_revision OWNER TO edgartools_acquisition_owner;
+ALTER TABLE source_processing_decision OWNER TO edgartools_acquisition_owner;
+ALTER TABLE source_expected_producer OWNER TO edgartools_acquisition_owner;
 ALTER FUNCTION reject_acquisition_history_mutation()
     OWNER TO edgartools_acquisition_owner;
 ALTER FUNCTION enforce_acquisition_transition_role()
@@ -626,6 +778,7 @@ ALTER FUNCTION claim_source_fetch(UUID, TEXT, INTEGER, TIMESTAMPTZ)
 ALTER FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT, TEXT)
     OWNER TO edgartools_acquisition_owner;
 ALTER VIEW source_change_status OWNER TO edgartools_acquisition_owner;
+ALTER VIEW source_change_status_detail OWNER TO edgartools_acquisition_owner;
 
 DO $$
 BEGIN
@@ -635,9 +788,12 @@ BEGIN
             source_fetch_decision,
             source_fetch_work,
             source_fetch_transition,
-            source_revision
+            source_revision,
+            source_processing_decision,
+            source_expected_producer
         FROM application;
         REVOKE ALL PRIVILEGES ON source_change_status FROM application;
+        REVOKE ALL PRIVILEGES ON source_change_status_detail FROM application;
     END IF;
 END;
 $$;

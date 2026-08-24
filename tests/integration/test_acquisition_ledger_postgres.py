@@ -21,6 +21,14 @@ from edgar_warehouse.acquisition.ledger import (
     FetchWorkState,
     StaleFencingToken,
 )
+from edgar_warehouse.acquisition.processing import (
+    ExpectedProducerOutcome,
+    ExpectedProducerSpec,
+    PriorRevisionNotSettled,
+    ProcessingLedger,
+    SilverFinalizer,
+    SilverOutcome,
+)
 from edgar_warehouse.acquisition.revisions import (
     ContentImpact,
     RevisionNotEligible,
@@ -703,3 +711,313 @@ def test_materialize_from_capture_round_trips_against_real_postgres(
     )
     assert forged_role.returncode != 0
     assert "permission denied for table source_revision" in forged_role.stderr
+
+
+def test_seals_and_finalizes_processing_decision_round_trip_against_real_postgres(
+    postgres_ledger: PostgresLedger,
+) -> None:
+    """Ticket 19, end-to-end against real Postgres via the actual Python
+    API: the processor role seals a Processing Decision and its expected
+    producer set, the dedicated Silver Finalizer role records a verified
+    outcome, and the same-key ordering rule genuinely blocks a later
+    revision until the prior one is published -- proven through the real
+    role/grant boundary, not just SQLite.
+    """
+
+    engine = create_engine(postgres_ledger.database_url)
+    ledger = AcquisitionLedger(engine)
+    revisions = SourceRevisionLedger(engine)
+    processing = ProcessingLedger(engine)
+    finalizer = SilverFinalizer(engine)
+    try:
+        decision = ledger.create_fetch_decision(
+            FetchDecisionRequest(
+                candidate_id="candidate-pg-processing",
+                source_family="filing_artifact",
+                logical_source_key="pg-processing/document",
+                source_url="https://www.sec.gov/Archives/pg-processing.txt",
+                cause=DecisionCause.CAPTURED_DISCOVERY,
+                cause_reference="manifest-pg-processing",
+                disposition=FetchDisposition.FETCH_AUTHORIZED,
+                blocker=None,
+                next_action="ACQUIRE_FETCH_LEASE",
+            )
+        )
+        lease = ledger.claim_fetch(
+            decision.decision_id, worker_id="pg-worker-processing", lease_seconds=60
+        )
+        ledger.finalize_fetch(
+            decision.decision_id,
+            worker_id="pg-worker-processing",
+            fencing_token=lease.fencing_token,
+            final_state=FetchWorkState.CAPTURED,
+            artifact_reference="filing_artifact/pg-processing-hash",
+        )
+        revision = revisions.materialize_from_capture(
+            decision.decision_id,
+            raw_evidence_hash="pg-processing-hash",
+            canonical_source_hash="pg-processing-hash",
+            domain_content_hash="pg-processing-domain-hash",
+            contract_version="v1",
+            parser_version="v1",
+            schema_version="v1",
+            configuration_version="v1",
+        )
+
+        sealed = processing.seal_expected_producers(
+            revision.revision_id,
+            expected_producers=(
+                ExpectedProducerSpec(
+                    producer_name="sec_raw_object",
+                    target_table="sec_raw_object",
+                    scope_reference="pg-processing-accession",
+                ),
+            ),
+        )
+        assert sealed.silver_outcome is SilverOutcome.PENDING
+
+        # A second revision for the same key must not be able to seal while
+        # the first is still PENDING.
+        second_decision_id = "candidate-pg-processing-2"
+        second_decision = ledger.create_fetch_decision(
+            FetchDecisionRequest(
+                candidate_id=second_decision_id,
+                source_family="filing_artifact",
+                logical_source_key="pg-processing/document",
+                source_url="https://www.sec.gov/Archives/pg-processing-2.txt",
+                cause=DecisionCause.CAPTURED_DISCOVERY,
+                cause_reference="manifest-pg-processing-2",
+                disposition=FetchDisposition.FETCH_AUTHORIZED,
+                blocker=None,
+                next_action="ACQUIRE_FETCH_LEASE",
+            )
+        )
+        second_lease = ledger.claim_fetch(
+            second_decision.decision_id,
+            worker_id="pg-worker-processing-2",
+            lease_seconds=60,
+        )
+        ledger.finalize_fetch(
+            second_decision.decision_id,
+            worker_id="pg-worker-processing-2",
+            fencing_token=second_lease.fencing_token,
+            final_state=FetchWorkState.CAPTURED,
+            artifact_reference="filing_artifact/pg-processing-hash-2",
+        )
+        second_revision = revisions.materialize_from_capture(
+            second_decision.decision_id,
+            raw_evidence_hash="pg-processing-hash-2",
+            canonical_source_hash="pg-processing-hash-2",
+            domain_content_hash="pg-processing-domain-hash-2",
+            contract_version="v1",
+            parser_version="v1",
+            schema_version="v1",
+            configuration_version="v1",
+        )
+        with pytest.raises(PriorRevisionNotSettled):
+            processing.seal_expected_producers(
+                second_revision.revision_id,
+                expected_producers=(
+                    ExpectedProducerSpec(
+                        producer_name="sec_raw_object",
+                        target_table="sec_raw_object",
+                        scope_reference="pg-processing-accession-2",
+                    ),
+                ),
+            )
+
+        published = finalizer.record_producer_outcome(
+            sealed.processing_decision_id,
+            "sec_raw_object",
+            outcome=ExpectedProducerOutcome.VERIFIED,
+            verified_reference="pg-raw-object-1",
+        )
+        assert published.silver_outcome is SilverOutcome.PUBLISHED
+
+        # Now that the prior revision is PUBLISHED, the second may seal.
+        second_sealed = processing.seal_expected_producers(
+            second_revision.revision_id,
+            expected_producers=(
+                ExpectedProducerSpec(
+                    producer_name="sec_raw_object",
+                    target_table="sec_raw_object",
+                    scope_reference="pg-processing-accession-2",
+                ),
+            ),
+        )
+        assert second_sealed.silver_outcome is SilverOutcome.PENDING
+    finally:
+        engine.dispose()
+
+    # Grant-layer proof (Ticket 19's design deliberately relies on GRANTs,
+    # not a role-check trigger, to split "processor seals" from "finalizer
+    # records outcomes" -- see models.py's SourceExpectedProducerRecord
+    # docstring): the processor has no UPDATE grant on source_expected_producer
+    # at all.
+    processor_update_denied = _psql(
+        postgres_ledger.container,
+        """
+        SET ROLE edgartools_acquisition_processor;
+        UPDATE source_expected_producer SET outcome = 'VERIFIED'
+        WHERE producer_name = 'sec_raw_object';
+        """,
+        user="application",
+    )
+    assert processor_update_denied.returncode != 0
+    assert (
+        "permission denied for table source_expected_producer"
+        in processor_update_denied.stderr
+    )
+
+    # The finalizer has no INSERT grant on source_expected_producer at all.
+    finalizer_insert_denied = _psql(
+        postgres_ledger.container,
+        """
+        SET ROLE edgartools_acquisition_silver_finalizer;
+        INSERT INTO source_expected_producer (
+            processing_decision_id, producer_name, target_table,
+            scope_reference, outcome
+        )
+        SELECT processing_decision_id, 'forged-producer', 'forged_table',
+               'forged-scope', 'PENDING'
+        FROM source_processing_decision LIMIT 1;
+        """,
+        user="application",
+    )
+    assert finalizer_insert_denied.returncode != 0
+    assert (
+        "permission denied for table source_expected_producer"
+        in finalizer_insert_denied.stderr
+    )
+
+    # The finalizer's UPDATE grant is column-scoped: it may update outcome/
+    # verified_reference/failure_detail/updated_at, but not producer_name.
+    finalizer_column_denied = _psql(
+        postgres_ledger.container,
+        """
+        SET ROLE edgartools_acquisition_silver_finalizer;
+        UPDATE source_expected_producer SET producer_name = 'renamed'
+        WHERE producer_name = 'sec_raw_object';
+        """,
+        user="application",
+    )
+    assert finalizer_column_denied.returncode != 0
+    assert (
+        "permission denied for table source_expected_producer"
+        in finalizer_column_denied.stderr
+    )
+
+    # The finalizer's UPDATE grant on source_processing_decision is
+    # similarly column-scoped: silver_outcome/settled_at only, not
+    # disposition.
+    finalizer_decision_column_denied = _psql(
+        postgres_ledger.container,
+        """
+        SET ROLE edgartools_acquisition_silver_finalizer;
+        UPDATE source_processing_decision SET disposition = 'QUARANTINED'
+        WHERE source_family = 'filing_artifact';
+        """,
+        user="application",
+    )
+    assert finalizer_decision_column_denied.returncode != 0
+    assert (
+        "permission denied for table source_processing_decision"
+        in finalizer_decision_column_denied.stderr
+    )
+
+
+def test_concurrent_producer_settlement_rollup_converges_to_published(
+    postgres_ledger: PostgresLedger,
+) -> None:
+    """Two producers under the same Processing Decision settling on genuinely
+    concurrent connections must still converge the decision to PUBLISHED
+    exactly once -- proving the ``FOR UPDATE`` row lock in
+    ``SilverFinalizer.record_producer_outcome`` (which the finalizer role's
+    column-scoped UPDATE grant does support, unlike the processor's
+    SELECT-only grant on the same table) actually closes the "both threads
+    see 1 remaining PENDING" race described in processing.py's own risk
+    analysis, rather than only being exercised sequentially.
+    """
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    setup_engine = create_engine(postgres_ledger.database_url)
+    ledger = AcquisitionLedger(setup_engine)
+    revisions = SourceRevisionLedger(setup_engine)
+    processing = ProcessingLedger(setup_engine)
+    try:
+        decision = ledger.create_fetch_decision(
+            FetchDecisionRequest(
+                candidate_id="candidate-pg-rollup-race",
+                source_family="filing_artifact",
+                logical_source_key="pg-rollup-race/document",
+                source_url="https://www.sec.gov/Archives/pg-rollup-race.txt",
+                cause=DecisionCause.CAPTURED_DISCOVERY,
+                cause_reference="manifest-pg-rollup-race",
+                disposition=FetchDisposition.FETCH_AUTHORIZED,
+                blocker=None,
+                next_action="ACQUIRE_FETCH_LEASE",
+            )
+        )
+        lease = ledger.claim_fetch(
+            decision.decision_id, worker_id="pg-worker-rollup-race", lease_seconds=60
+        )
+        ledger.finalize_fetch(
+            decision.decision_id,
+            worker_id="pg-worker-rollup-race",
+            fencing_token=lease.fencing_token,
+            final_state=FetchWorkState.CAPTURED,
+            artifact_reference="filing_artifact/pg-rollup-race-hash",
+        )
+        revision = revisions.materialize_from_capture(
+            decision.decision_id,
+            raw_evidence_hash="pg-rollup-race-hash",
+            canonical_source_hash="pg-rollup-race-hash",
+            domain_content_hash="pg-rollup-race-domain-hash",
+            contract_version="v1",
+            parser_version="v1",
+            schema_version="v1",
+            configuration_version="v1",
+        )
+        sealed = processing.seal_expected_producers(
+            revision.revision_id,
+            expected_producers=(
+                ExpectedProducerSpec("producer-a", "table_a", "scope-a"),
+                ExpectedProducerSpec("producer-b", "table_b", "scope-b"),
+            ),
+        )
+        revision_id = revision.revision_id
+    finally:
+        setup_engine.dispose()
+
+    results: list[SilverOutcome] = []
+
+    def _settle(producer_name: str) -> None:
+        engine = create_engine(postgres_ledger.database_url)
+        try:
+            finalizer = SilverFinalizer(engine)
+            updated = finalizer.record_producer_outcome(
+                sealed.processing_decision_id,
+                producer_name,
+                outcome=ExpectedProducerOutcome.VERIFIED,
+                verified_reference=f"ref-{producer_name}",
+            )
+            results.append(updated.silver_outcome)
+        finally:
+            engine.dispose()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(_settle, ["producer-a", "producer-b"]))
+
+    assert SilverOutcome.PUBLISHED in results
+
+    verify_engine = create_engine(postgres_ledger.database_url)
+    try:
+        final_status = ProcessingLedger(verify_engine).read_for_revision(revision_id)
+        assert final_status is not None
+        assert final_status.silver_outcome is SilverOutcome.PUBLISHED
+        assert {p.outcome for p in final_status.expected_producers} == {
+            ExpectedProducerOutcome.VERIFIED
+        }
+    finally:
+        verify_engine.dispose()

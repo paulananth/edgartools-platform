@@ -331,3 +331,150 @@ class SourceRevisionRecord(AcquisitionBase):
             name="ck_source_revision_completeness_type",
         ),
     )
+
+
+class SourceProcessingDecisionRecord(AcquisitionBase):
+    """A Processing Decision sealing a revision's expected Silver work (Ticket 19).
+
+    Ticket 03: "Before processing, the ledger seals the expected Silver
+    producer, table, and scope set. A revision is processed only after every
+    expected producer records a verified Silver publication or verified
+    NO_IMPACT." One row per revision (``revision_id`` is unique -- sealing is
+    idempotent, mirroring ``source_revision``'s per-decision idempotency).
+
+    ``silver_outcome`` is a denormalized rollup of this decision's expected
+    producers (``source_expected_producer``), maintained by the Silver
+    Finalizer (Ticket 19 bullet 2) as each producer settles -- not the
+    ``disposition`` itself, which is fixed at seal time. This is what makes
+    the same-key ordering rule (bullet 4) a single indexed lookup instead of
+    an aggregate query over every expected producer on every check: sealing
+    a later revision for the same key requires the immediately preceding
+    revision's processing decision to have ``silver_outcome = 'PUBLISHED'``.
+
+    A revision whose ``content_impact`` is ``NO_IMPACT`` seals with
+    ``disposition = 'NO_IMPACT'`` and zero expected producers -- there is
+    nothing to publish, so ``silver_outcome`` is ``'PUBLISHED'`` immediately
+    (bullet 1's "explicit no-impact outcome"). A ``'CHANGED'`` revision seals
+    ``disposition = 'PROCESS_REQUIRED'`` with at least one expected producer
+    and starts ``silver_outcome = 'PENDING'``.
+    """
+
+    __tablename__ = "source_processing_decision"
+
+    processing_decision_id: Mapped[str] = mapped_column(
+        GUID(), primary_key=True, default=_uuid_string
+    )
+    revision_id: Mapped[str] = mapped_column(
+        GUID(), ForeignKey("source_revision.revision_id"), nullable=False
+    )
+    source_family: Mapped[str] = mapped_column(Text, nullable=False)
+    logical_source_key: Mapped[str] = mapped_column(Text, nullable=False)
+    observation_position: Mapped[int] = mapped_column(Integer, nullable=False)
+    disposition: Mapped[str] = mapped_column(Text, nullable=False)
+    silver_outcome: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    settled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("revision_id", name="uq_source_processing_decision_revision"),
+        Index(
+            "uq_source_processing_decision_active_key",
+            "source_family",
+            "logical_source_key",
+            unique=True,
+            sqlite_where=text("silver_outcome = 'PENDING'"),
+            postgresql_where=text("silver_outcome = 'PENDING'"),
+        ),
+        CheckConstraint(
+            "disposition IN ("
+            "'PROCESS_REQUIRED','NO_IMPACT','OUT_OF_SCOPE','OPERATOR_EXCLUDED',"
+            "'SUPERSEDED','QUARANTINED','RETRYABLE_FAILURE')",
+            name="ck_source_processing_decision_disposition",
+        ),
+        CheckConstraint(
+            "silver_outcome IN ('PENDING','PUBLISHED','FAILED')",
+            name="ck_source_processing_decision_silver_outcome",
+        ),
+        CheckConstraint(
+            "disposition = 'PROCESS_REQUIRED' OR silver_outcome = 'PUBLISHED'",
+            name="ck_source_processing_decision_no_process_required_published",
+        ),
+        CheckConstraint(
+            "(silver_outcome = 'PENDING') = (settled_at IS NULL)",
+            name="ck_source_processing_decision_settled_at_shape",
+        ),
+    )
+
+
+class SourceExpectedProducerRecord(AcquisitionBase):
+    """One expected Silver producer sealed under a Processing Decision (Ticket 19).
+
+    Sealed (inserted, ``outcome='PENDING'``) by the processor role alongside
+    its parent ``SourceProcessingDecisionRecord``. Only the Silver Finalizer
+    role may update ``outcome``/``verified_reference``/``failure_detail`` --
+    enforced at the grant layer (INSERT to processor, column-scoped UPDATE to
+    the finalizer), not a role-check trigger: the two operations already
+    belong to disjoint roles, so a trigger would only duplicate what GRANTs
+    already express (the lesson from the manifest-pipeline-ownership /
+    Ticket 18 review incidents about mismatched trigger-vs-grant enforcement
+    layers).
+
+    Ticket 19 bullet 2: "Success requires read-back verification of
+    authoritative Silver state" -- ``outcome='VERIFIED'`` is only ever set
+    after the Silver Finalizer reads the target row back from the
+    authoritative store and confirms it matches, never merely because a
+    write call did not raise.
+    """
+
+    __tablename__ = "source_expected_producer"
+
+    expected_producer_id: Mapped[str] = mapped_column(
+        GUID(), primary_key=True, default=_uuid_string
+    )
+    processing_decision_id: Mapped[str] = mapped_column(
+        GUID(),
+        ForeignKey("source_processing_decision.processing_decision_id"),
+        nullable=False,
+    )
+    producer_name: Mapped[str] = mapped_column(Text, nullable=False)
+    target_table: Mapped[str] = mapped_column(Text, nullable=False)
+    scope_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    outcome: Mapped[str] = mapped_column(Text, nullable=False)
+    verified_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    failure_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "processing_decision_id",
+            "producer_name",
+            name="uq_source_expected_producer_name",
+        ),
+        CheckConstraint(
+            "outcome IN ('PENDING','VERIFIED','NO_IMPACT','FAILED')",
+            name="ck_source_expected_producer_outcome",
+        ),
+        CheckConstraint(
+            "outcome <> 'VERIFIED' OR verified_reference IS NOT NULL",
+            name="ck_source_expected_producer_verified_reference",
+        ),
+        CheckConstraint(
+            "outcome <> 'FAILED' OR failure_detail IS NOT NULL",
+            name="ck_source_expected_producer_failure_detail",
+        ),
+    )
