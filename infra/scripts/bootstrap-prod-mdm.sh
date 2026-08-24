@@ -298,6 +298,14 @@ for stmt in [
     "REVOKE ALL PRIVILEGES ON source_change_status FROM application;",
     "REVOKE ALL PRIVILEGES ON source_change_status_detail FROM application;",
     "RESET ROLE;",
+    # Ticket 20: source_registry_version/source_registry_coverage are owned
+    # by a *different* dedicated role (edgartools_acquisition_registry_owner,
+    # not edgartools_acquisition_owner) -- the same ownership-timing REVOKE
+    # bug above would recur here under the wrong role, so this needs its own
+    # SET ROLE targeting the role that actually owns these two tables.
+    "SET ROLE edgartools_acquisition_registry_owner;",
+    "REVOKE ALL PRIVILEGES ON source_registry_version, source_registry_coverage FROM application;",
+    "RESET ROLE;",
 ]:
     cur.execute(stmt)
 cur.close()

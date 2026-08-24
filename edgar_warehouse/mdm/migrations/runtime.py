@@ -365,6 +365,7 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
         _apply_sql_file(engine, "011_source_ref_content_hash.sql")
         _apply_sql_file(engine, "012_dedupe_and_constrain_attribute_stage.sql")
         _apply_acquisition_ledger_migration(engine)
+        _apply_source_registry_migration(engine)
 
     if seed:
         with Session(engine) as session:
@@ -401,6 +402,42 @@ def _apply_acquisition_ledger_migration(engine: Engine) -> bool:
         # manage owner-gated indexes, functions, triggers, and tables.
         conn.execute(text(statements[0]))
         conn.execute(text("SET LOCAL ROLE edgartools_acquisition_owner"))
+        for statement in statements[1:]:
+            conn.execute(text(statement))
+    return True
+
+
+def _apply_source_registry_migration(engine: Engine) -> bool:
+    """Apply privileged registry DDL, or preserve it for the runtime application role.
+
+    Same self-managing shape as :func:`_apply_acquisition_ledger_migration`
+    -- a first install needs CREATEROLE (must run as an admin principal, not
+    the ordinary ``application`` DSN); a rerun by a role that isn't a member
+    of the owner role it created is silently skipped rather than erroring.
+    """
+    if engine.dialect.name != "postgresql":
+        _apply_sql_file(engine, "014_source_registry.sql")
+        return True
+
+    statements = _sql_file_statements("014_source_registry.sql")
+    with engine.begin() as conn:
+        installed = bool(
+            conn.scalar(text("SELECT to_regclass('source_registry_version') IS NOT NULL"))
+        )
+        if installed:
+            may_manage = bool(
+                conn.scalar(
+                    text(
+                        "SELECT pg_has_role(current_user, "
+                        "'edgartools_acquisition_registry_owner', 'MEMBER')"
+                    )
+                )
+            )
+            if not may_manage:
+                return False
+
+        conn.execute(text(statements[0]))
+        conn.execute(text("SET LOCAL ROLE edgartools_acquisition_registry_owner"))
         for statement in statements[1:]:
             conn.execute(text(statement))
     return True

@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
     Integer,
+    JSON,
     Text,
     UniqueConstraint,
     text,
@@ -476,5 +478,112 @@ class SourceExpectedProducerRecord(AcquisitionBase):
         CheckConstraint(
             "outcome <> 'FAILED' OR failure_detail IS NOT NULL",
             name="ck_source_expected_producer_failure_detail",
+        ),
+    )
+
+
+class SourceRegistryVersionRecord(AcquisitionBase):
+    """A versioned snapshot of covered source families (Ticket 20).
+
+    ``status`` starts ``'draft'``; ``activate()`` either flips it straight to
+    ``'active'`` (superseding whichever version was previously active) or, if
+    any 'add' coverage row's catch-up obligation is unmet, to
+    ``'activation_blocked'`` with ``blocker``/``next_action`` set -- the
+    previously active version is untouched either way (Ticket 20 bullet 4).
+    At most one row may ever be ``'active'`` at a time, enforced by the
+    partial unique index below (belt-and-suspenders against a concurrent
+    double-activation race, not just application-level serialization).
+    """
+
+    __tablename__ = "source_registry_version"
+
+    version_id: Mapped[str] = mapped_column(GUID(), primary_key=True, default=_uuid_string)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'draft'"))
+    operator_authorization_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    blocker: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft','activation_blocked','active','superseded')",
+            name="ck_source_registry_version_status",
+        ),
+        CheckConstraint(
+            # activated_at is set once, on activation, and stays put as history
+            # through a later supersession -- 'active' requires it non-null,
+            # but a 'superseded' row legitimately keeps it non-null too.
+            "status <> 'active' OR activated_at IS NOT NULL",
+            name="ck_source_registry_version_activated_at_shape",
+        ),
+        CheckConstraint(
+            "status <> 'activation_blocked' OR (blocker IS NOT NULL AND next_action IS NOT NULL)",
+            name="ck_source_registry_version_blocker_shape",
+        ),
+        Index(
+            "uq_source_registry_version_single_active",
+            text("1"),
+            unique=True,
+            sqlite_where=text("status = 'active'"),
+            postgresql_where=text("status = 'active'"),
+        ),
+    )
+
+
+class SourceRegistryCoverageRecord(AcquisitionBase):
+    """One source family's declared coverage within a registry version (Ticket 20).
+
+    ``coverage_action='add'`` (new coverage) requires
+    ``catchup_verified_through_date`` to reach ``catchup_required_through_date``
+    before the parent version can activate --
+    :func:`edgar_warehouse.acquisition.registry_ledger.SourceRegistryLedger.
+    record_catchup_progress` is the only writer of that watermark, advanced by
+    a real ``drive-filing-discovery-for-date``-shaped run completing for the
+    family/date. ``'remove'`` (coverage ending at ``coverage_end_date``) and
+    ``'carry_forward'`` (unchanged from the predecessor version, including the
+    one-time bootstrap row for pre-registry coverage) need no such proof --
+    removing acquisition never needs to *prove* anything to take effect, and
+    carrying forward already-proven coverage doesn't re-litigate it.
+    """
+
+    __tablename__ = "source_registry_coverage"
+
+    coverage_id: Mapped[str] = mapped_column(GUID(), primary_key=True, default=_uuid_string)
+    version_id: Mapped[str] = mapped_column(
+        GUID(), ForeignKey("source_registry_version.version_id"), nullable=False
+    )
+    source_family: Mapped[str] = mapped_column(Text, nullable=False)
+    coverage_action: Mapped[str] = mapped_column(Text, nullable=False)
+    in_scope_forms: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    acquisition_mode: Mapped[str] = mapped_column(Text, nullable=False)
+    completeness_policy: Mapped[str] = mapped_column(Text, nullable=False)
+    discovery_policy: Mapped[str] = mapped_column(Text, nullable=False)
+    required_producers: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    coverage_start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    coverage_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    catchup_required_through_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    catchup_verified_through_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "version_id", "source_family", name="uq_source_registry_coverage_family"
+        ),
+        CheckConstraint(
+            "coverage_action IN ('add','remove','carry_forward')",
+            name="ck_source_registry_coverage_action",
+        ),
+        CheckConstraint(
+            "coverage_action <> 'remove' OR coverage_end_date IS NOT NULL",
+            name="ck_source_registry_coverage_remove_end_date",
+        ),
+        CheckConstraint(
+            "coverage_action <> 'add' OR catchup_required_through_date IS NOT NULL",
+            name="ck_source_registry_coverage_add_catchup_required",
         ),
     )

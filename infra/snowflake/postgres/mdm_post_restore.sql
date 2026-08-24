@@ -29,7 +29,12 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'edgartools_acquisition_silver_finalizer') THEN
         CREATE ROLE edgartools_acquisition_silver_finalizer NOLOGIN;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'edgartools_acquisition_registry_owner') THEN
+        CREATE ROLE edgartools_acquisition_registry_owner NOLOGIN;
+    END IF;
     GRANT edgartools_acquisition_owner TO snowflake_admin
+      WITH INHERIT FALSE, SET TRUE;
+    GRANT edgartools_acquisition_registry_owner TO snowflake_admin
       WITH INHERIT FALSE, SET TRUE;
     GRANT application TO snowflake_admin;
     GRANT edgartools_acquisition_coordinator TO application
@@ -42,7 +47,10 @@ BEGIN
       WITH INHERIT FALSE, SET TRUE;
     GRANT edgartools_acquisition_silver_finalizer TO application
       WITH INHERIT FALSE, SET TRUE;
+    GRANT edgartools_acquisition_registry_owner TO application
+      WITH INHERIT FALSE, SET TRUE;
     GRANT USAGE, CREATE ON SCHEMA public TO edgartools_acquisition_owner;
+    GRANT USAGE, CREATE ON SCHEMA public TO edgartools_acquisition_registry_owner;
 END;
 $$;
 
@@ -146,6 +154,18 @@ BEGIN
     EXECUTE 'ALTER TABLE source_processing_decision OWNER TO edgartools_acquisition_owner';
     EXECUTE 'ALTER TABLE source_expected_producer OWNER TO edgartools_acquisition_owner';
     EXECUTE 'ALTER VIEW source_change_status_detail OWNER TO edgartools_acquisition_owner';
+  END IF;
+  -- Ticket 20: a restore predating source_registry_version/
+  -- source_registry_coverage has neither yet -- the privileged migration
+  -- creates both under their own dedicated owner (a distinct governance
+  -- responsibility from every fetch/processing role above).
+  IF to_regclass('public.source_registry_version') IS NOT NULL THEN
+    GRANT SELECT, INSERT, UPDATE ON source_registry_version, source_registry_coverage
+      TO edgartools_acquisition_registry_owner;
+    REVOKE ALL PRIVILEGES ON source_registry_version, source_registry_coverage
+      FROM application;
+    EXECUTE 'ALTER TABLE source_registry_version OWNER TO edgartools_acquisition_registry_owner';
+    EXECUTE 'ALTER TABLE source_registry_coverage OWNER TO edgartools_acquisition_registry_owner';
   END IF;
 END;
 $$;

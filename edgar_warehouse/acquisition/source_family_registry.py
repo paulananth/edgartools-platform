@@ -1,4 +1,4 @@
-"""Source Family Registry entries: executable per-family acquisition policy.
+"""Source Family Registry Strategy implementations: per-family acquisition policy.
 
 Ticket 15 delivers the first entry, ``filing_artifact`` -- fetch and
 completeness behavior for one SEC filing document/attachment, reusing the
@@ -12,13 +12,21 @@ Per the change-propagation spec's Ticket 03 GoF constraints, a policy here
 is a narrow first-class object satisfying ``facade.SourceFamilyPolicy`` --
 not a class hierarchy, and it never performs authorization, hashing, Bronze
 writes, or ledger transitions; those stay in ``facade.py``.
+
+Ticket 20 retired this module's own ``build_source_family_registry`` (an
+unconditional, unversioned in-memory dict every process constructed fresh)
+in favor of ``registry_ledger.build_active_source_family_registry`` -- the
+*only* sanctioned way a caller may obtain a real ``SourceFamilyPolicy`` now,
+gated on a Source Family Registry version having actually activated. This
+module keeps only the Strategy implementations themselves
+(``FilingArtifactPolicy``); it deliberately has no knowledge of versioning,
+activation, or which families are currently covered.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from edgar_warehouse.acquisition.facade import SourceFamilyPolicy
 from edgar_warehouse.infrastructure.filing_content_gateway import (
     download_filing_content_bytes,
 )
@@ -43,11 +51,3 @@ class FilingArtifactPolicy:
 
     def is_complete(self, payload: bytes) -> bool:
         return bool(payload)
-
-
-def build_source_family_registry(*, identity: str) -> dict[str, SourceFamilyPolicy]:
-    """Return the Source Family Registry entries this deployment supports."""
-
-    return {
-        FILING_ARTIFACT_SOURCE_FAMILY: FilingArtifactPolicy(identity=identity),
-    }
