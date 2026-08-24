@@ -119,6 +119,11 @@ def test_finalize_writes_and_verifies_sec_raw_object(tmp_path: Path) -> None:
     producer = decision.expected_producers[0]
     assert producer.outcome is ExpectedProducerOutcome.VERIFIED
 
+    # raw_object_id is the content hash itself (sec_raw_object's
+    # codebase-wide business key, per silver_protection.py's
+    # ProtectedTablePolicy for this table), not an arbitrary identifier.
+    assert producer.verified_reference == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
     # Durable external evidence: read sec_raw_object back independently,
     # not via anything this call returned.
     raw_object = silver.get_raw_object(producer.verified_reference)
@@ -129,6 +134,61 @@ def test_finalize_writes_and_verifies_sec_raw_object(tmp_path: Path) -> None:
     assert raw_object["form"] == "4"
     assert raw_object["source_type"] == "filing_artifact"
     assert raw_object["storage_path"] == "filing_artifact/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+
+def test_finalize_reuses_one_sec_raw_object_row_for_identical_content_across_accessions(
+    tmp_path: Path,
+) -> None:
+    """sec_raw_object's whole design point (silver_protection.py's policy
+    comment): identical byte content legitimately recurs across different
+    filings (shared boilerplate/exhibit templates), fetched under different
+    accessions -- content-addressing must actually dedupe this, not create
+    one row per revision.
+    """
+
+    ledger, revisions, processing, finalizer, silver = _harness(tmp_path)
+    shared_hash_reference = "filing_artifact/99999999999999999999999999999999"
+    first_meta = FilingArtifactCandidateMeta(
+        cik=320193,
+        accession_number="0000320193-26-000001",
+        form="4",
+        source_url="https://www.sec.gov/Archives/edgar/data/320193/0000320193-26-000001.txt",
+    )
+    second_meta = FilingArtifactCandidateMeta(
+        cik=789019,
+        accession_number="0000789019-26-000042",
+        form="4",
+        source_url="https://www.sec.gov/Archives/edgar/data/789019/0000789019-26-000042.txt",
+    )
+    first_decision_id = _captured_decision(
+        ledger,
+        candidate_id="c1",
+        logical_source_key="320193/0000320193-26-000001/full-submission-text",
+        artifact_reference=shared_hash_reference,
+    )
+    second_decision_id = _captured_decision(
+        ledger,
+        candidate_id="c2",
+        logical_source_key="789019/0000789019-26-000042/full-submission-text",
+        artifact_reference=shared_hash_reference,
+    )
+
+    first = finalize_filing_artifact_candidate(
+        ledger, revisions, processing, finalizer, silver, first_decision_id, first_meta
+    )
+    second = finalize_filing_artifact_candidate(
+        ledger, revisions, processing, finalizer, silver, second_decision_id, second_meta
+    )
+
+    assert first.revision_id != second.revision_id
+    first_ref = first.expected_producers[0].verified_reference
+    second_ref = second.expected_producers[0].verified_reference
+    assert first_ref == second_ref == "99999999999999999999999999999999"
+
+    raw_object = silver.get_raw_object(first_ref)
+    assert raw_object is not None
+    # One physical row -- the second finalize's upsert landed on the same
+    # content-addressed key, matching every other real writer of this table.
 
 
 def test_finalize_marks_failed_on_read_back_mismatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -206,8 +266,9 @@ def test_finalize_blocks_later_revision_for_same_key_after_a_failure(
     # Prior Silver state remains exactly as it was -- the blocked later
     # attempt never wrote or touched sec_raw_object at all. The first
     # (failed) attempt's row is still there, still carrying the mismatched
-    # content it failed on -- nothing repaired or overwrote it.
-    first_row = silver.get_raw_object(first_result.revision_id)
+    # content it failed on -- nothing repaired or overwrote it. raw_object_id
+    # is the content hash (cccc...), not the revision_id.
+    first_row = silver.get_raw_object("cccccccccccccccccccccccccccccccc")
     assert first_row is not None
     assert first_row["sha256"] == "corrupted-on-write"
 

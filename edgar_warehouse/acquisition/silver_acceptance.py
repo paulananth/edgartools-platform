@@ -151,7 +151,15 @@ def finalize_filing_artifact_candidate(
     if already_settled is not None:
         return decision
 
-    raw_object_id = revision.revision_id
+    # sec_raw_object's business key IS the sha256 of the fetched bytes
+    # (silver_protection.py's ProtectedTablePolicy for this table, and
+    # every real writer in bronze_filing_artifacts.py, key it this way) --
+    # not an arbitrary identifier. Using anything else (e.g. revision_id)
+    # would defeat this table's whole content-dedup design: identical byte
+    # content legitimately recurs across different filings (shared
+    # boilerplate/exhibit templates), and downstream code keys off this
+    # exact convention.
+    raw_object_id = revision.raw_evidence_hash
     silver.upsert_raw_object(
         {
             "raw_object_id": raw_object_id,
