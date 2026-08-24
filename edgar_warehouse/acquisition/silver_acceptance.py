@@ -20,6 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from edgar_warehouse.acquisition.discovery import DiscoveryCandidate, DiscoveryDriveResult
 from edgar_warehouse.acquisition.ledger import AcquisitionLedger, FetchWorkState
 from edgar_warehouse.acquisition.processing import (
     ExpectedProducerOutcome,
@@ -27,6 +28,7 @@ from edgar_warehouse.acquisition.processing import (
     ProcessingDecision,
     ProcessingLedger,
     SilverFinalizer,
+    SilverOutcome,
 )
 from edgar_warehouse.acquisition.revisions import ContentImpact, SourceRevisionLedger
 from edgar_warehouse.silver_store import SilverDatabase
@@ -191,3 +193,98 @@ def finalize_filing_artifact_candidate(
             f"match expected sha256={revision.raw_evidence_hash!r} (got {read_back!r})"
         ),
     )
+
+
+@dataclass(frozen=True)
+class FilingArtifactSilverOutcome:
+    """One candidate's outcome from carrying a Discovery drive result to Silver."""
+
+    candidate: DiscoveryCandidate
+    decision_id: str
+    processing_decision: ProcessingDecision | None
+    error: str | None
+
+    @property
+    def settled(self) -> bool:
+        return (
+            self.error is None
+            and self.processing_decision is not None
+            and self.processing_decision.silver_outcome is not SilverOutcome.PENDING
+        )
+
+
+@dataclass(frozen=True)
+class FilingArtifactSilverAcceptanceResult:
+    outcomes: tuple[FilingArtifactSilverOutcome, ...]
+
+    @property
+    def interval_complete(self) -> bool:
+        return all(outcome.settled for outcome in self.outcomes)
+
+    @property
+    def unsettled_candidate_ids(self) -> tuple[str, ...]:
+        return tuple(
+            outcome.candidate.accession_number
+            for outcome in self.outcomes
+            if not outcome.settled
+        )
+
+
+def drive_filing_artifact_silver_acceptance(
+    ledger: AcquisitionLedger,
+    revisions: SourceRevisionLedger,
+    processing: ProcessingLedger,
+    finalizer: SilverFinalizer,
+    silver: SilverDatabase,
+    result: DiscoveryDriveResult,
+) -> FilingArtifactSilverAcceptanceResult:
+    """Carry every CAPTURED candidate in a Discovery drive result to Silver.
+
+    The Ticket 19 half of Ticket 16's own drive loop (``discovery.
+    drive_discovery_manifest`` stops at CAPTURED Bronze evidence by design --
+    see that module's docstring). Mirrors its per-candidate fault isolation
+    exactly: one candidate's ``finalize_filing_artifact_candidate`` failure
+    (including ``PriorRevisionNotSettled`` -- a real, expected outcome when
+    the same accession appears in two runs or a prior run partially failed)
+    is caught and recorded per-candidate so it cannot abort the rest of the
+    interval, which simply stays incomplete until every candidate reaches a
+    settled outcome, the same convergence contract
+    ``DiscoveryDriveResult.interval_complete`` already establishes for
+    fetch/capture. Candidates that never reached CAPTURED (excluded,
+    deferred, or failed at the fetch stage) are not carried forward -- there
+    is nothing to materialize a revision from yet.
+    """
+
+    outcomes: list[FilingArtifactSilverOutcome] = []
+    for outcome in result.outcomes:
+        if outcome.fetch_state is not FetchWorkState.CAPTURED or outcome.decision_id is None:
+            continue
+        meta = FilingArtifactCandidateMeta(
+            cik=outcome.candidate.cik,
+            accession_number=outcome.candidate.accession_number,
+            form=outcome.candidate.form,
+            source_url=outcome.candidate.source_url,
+        )
+        try:
+            decision = finalize_filing_artifact_candidate(
+                ledger, revisions, processing, finalizer, silver, outcome.decision_id, meta
+            )
+        except Exception as error:  # noqa: BLE001 -- one candidate must not abort the interval
+            outcomes.append(
+                FilingArtifactSilverOutcome(
+                    candidate=outcome.candidate,
+                    decision_id=outcome.decision_id,
+                    processing_decision=None,
+                    error=str(error),
+                )
+            )
+            continue
+        outcomes.append(
+            FilingArtifactSilverOutcome(
+                candidate=outcome.candidate,
+                decision_id=outcome.decision_id,
+                processing_decision=decision,
+                error=None,
+            )
+        )
+    return FilingArtifactSilverAcceptanceResult(outcomes=tuple(outcomes))
