@@ -1,18 +1,25 @@
-"""Carry a captured ``filing_artifact`` candidate through to Silver (Ticket 19).
+"""Carry a captured ``filing_artifact`` candidate through to Silver (Ticket 19/29).
 
 This is the family-specific wiring for the generic mechanism in
 ``processing.py``: materialize the Logical Source Revision for an already
 CAPTURED Source Fetch Decision, seal its expected Silver producer set, and --
 for a revision whose content actually changed -- write and read back
 ``sec_raw_object`` (``edgar_warehouse.silver_store.SilverDatabase``) as this
-family's one Silver producer.
+family's one Silver producer. Two entry points:
+
+- ``finalize_filing_artifact_candidate``: one already-CAPTURED decision.
+- ``drive_filing_artifact_silver_acceptance`` (Ticket 29): every CAPTURED
+  candidate in a real ``discovery.DiscoveryDriveResult``, with the same
+  per-candidate fault isolation ``discovery.drive_discovery_manifest``
+  itself uses -- the actual live entry point
+  ``application/workflows/drive_filing_discovery.py`` calls.
 
 Deliberately does not touch ``discovery.py``: that module's own docstring
 says it "stays independent of the ~292KB legacy orchestrator," and pulling a
 ``SilverDatabase`` (DuckDB) dependency into it would re-acquire exactly the
 coupling it was built to avoid. This module instead consumes an already
-CAPTURED ``decision_id`` (e.g. from a ``DiscoveryDriveResult`` outcome) and
-owns nothing upstream of capture.
+CAPTURED ``decision_id`` (or a whole ``DiscoveryDriveResult``) and owns
+nothing upstream of capture.
 """
 
 from __future__ import annotations

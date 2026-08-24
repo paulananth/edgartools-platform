@@ -189,6 +189,10 @@ def test_finalize_reuses_one_sec_raw_object_row_for_identical_content_across_acc
     assert raw_object is not None
     # One physical row -- the second finalize's upsert landed on the same
     # content-addressed key, matching every other real writer of this table.
+    row_count = silver._conn.execute(
+        "SELECT COUNT(*) FROM sec_raw_object WHERE raw_object_id = ?", [first_ref]
+    ).fetchone()[0]
+    assert row_count == 1
 
 
 def test_finalize_marks_failed_on_read_back_mismatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
