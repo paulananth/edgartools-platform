@@ -10,7 +10,9 @@ diff end-to-end" — for the one source family already wired through it
 first real deployment of code this map already produced.
 
 **Blocked by:** 18 — Materialize ordered logical source revisions; 19 —
-Complete the filing-to-Silver acceptance seam
+Complete the filing-to-Silver acceptance seam; 31 — `EXCLUDED_OPERATIONAL_TABLES`
+content never reaches canonical silver once canonical exists (added after
+the live dry-run attempt surfaced it as the actual remaining blocker)
 
 **Status:** ready-for-agent
 
