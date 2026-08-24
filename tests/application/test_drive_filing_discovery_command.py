@@ -132,23 +132,51 @@ def test_drive_filing_discovery_captures_new_filing_and_excludes_out_of_scope_fo
     assert result["candidate_count"] == 2
     assert result["interval_complete"] is True
     assert result["unsettled_candidate_ids"] == []
+    # Ticket 29's wiring: capture completing isn't the whole story anymore --
+    # the revision/processing/Silver chain must also settle.
+    assert result["silver_interval_complete"] is True
+    assert result["silver_unsettled_candidate_ids"] == []
 
     outcomes = {o["accession_number"]: o for o in result["outcomes"]}
     captured = outcomes["0001140361-26-000001"]
     assert captured["in_scope"] is True
     assert captured["network_fetched"] is True
     assert captured["fetch_state"] == "CAPTURED"
+    assert captured["revision_id"] is not None
+    assert captured["processing_disposition"] == "PROCESS_REQUIRED"
+    assert captured["silver_outcome"] == "PUBLISHED"
+    assert captured["silver_error"] is None
 
     excluded = outcomes["0001140361-26-000002"]
     assert excluded["in_scope"] is False
     assert excluded["network_fetched"] is False
     assert excluded["fetch_disposition"] == "OUT_OF_SCOPE"
+    # Never carried forward -- nothing was ever captured for it.
+    assert excluded["revision_id"] is None
+    assert excluded["silver_outcome"] is None
 
     expected_hash = hashlib.sha256(payload).hexdigest()
     stored = (tmp_path / "bronze" / "filing_artifact" / expected_hash).read_bytes()
     assert stored == payload
     # The excluded candidate produced no Bronze object at all.
     assert len(list((tmp_path / "bronze" / "filing_artifact").iterdir())) == 1
+
+    # Durable external evidence (Ticket 19 bullet 5): read sec_raw_object
+    # back independently from the local Silver database this run wrote to,
+    # not via anything the command's own JSON payload claimed.
+    from edgar_warehouse.infrastructure.object_storage import StorageLocation
+    from edgar_warehouse.silver_support.session import open_silver_database
+
+    silver_root = StorageLocation(str(tmp_path / "silver"))
+    verify_db = open_silver_database(silver_root)
+    try:
+        raw_object = verify_db.get_raw_object(expected_hash)
+        assert raw_object is not None
+        assert raw_object["sha256"] == expected_hash
+        assert raw_object["accession_number"] == "0001140361-26-000001"
+        assert raw_object["cik"] == 320193
+    finally:
+        verify_db.close()
 
     run_manifest_path = (
         tmp_path
@@ -173,6 +201,7 @@ def test_drive_filing_discovery_replay_performs_no_second_network_fetch(
     _seed_daily_index(tmp_path, business_date="2026-08-24", sealed=True)
     payload = b"<ownershipDocument>real Form 4 bytes</ownershipDocument>"
 
+    revision_ids: list[str] = []
     with patch(
         "edgar_warehouse.acquisition.source_family_registry.download_filing_content_bytes",
         return_value=payload,
@@ -189,9 +218,20 @@ def test_drive_filing_discovery_replay_performs_no_second_network_fetch(
                 ),
             )
             assert exit_code == 0
-            capsys.readouterr()
+            result = json.loads(capsys.readouterr().out)
+            # Ticket 29's own no-op-replay acceptance criterion, proven here
+            # at the command level: both runs report the full chain settled,
+            # and the second run reuses the exact same already-materialized
+            # revision rather than creating a new one.
+            assert result["silver_interval_complete"] is True
+            captured = next(
+                o for o in result["outcomes"] if o["accession_number"] == "0001140361-26-000001"
+            )
+            assert captured["silver_outcome"] == "PUBLISHED"
+            revision_ids.append(captured["revision_id"])
 
     mocked_fetch.assert_called_once()
+    assert revision_ids[0] == revision_ids[1]
 
 
 def test_drive_filing_discovery_fails_closed_when_discovery_is_not_sealed(

@@ -1,18 +1,25 @@
-"""Carry a captured ``filing_artifact`` candidate through to Silver (Ticket 19).
+"""Carry a captured ``filing_artifact`` candidate through to Silver (Ticket 19/29).
 
 This is the family-specific wiring for the generic mechanism in
 ``processing.py``: materialize the Logical Source Revision for an already
 CAPTURED Source Fetch Decision, seal its expected Silver producer set, and --
 for a revision whose content actually changed -- write and read back
 ``sec_raw_object`` (``edgar_warehouse.silver_store.SilverDatabase``) as this
-family's one Silver producer.
+family's one Silver producer. Two entry points:
+
+- ``finalize_filing_artifact_candidate``: one already-CAPTURED decision.
+- ``drive_filing_artifact_silver_acceptance`` (Ticket 29): every CAPTURED
+  candidate in a real ``discovery.DiscoveryDriveResult``, with the same
+  per-candidate fault isolation ``discovery.drive_discovery_manifest``
+  itself uses -- the actual live entry point
+  ``application/workflows/drive_filing_discovery.py`` calls.
 
 Deliberately does not touch ``discovery.py``: that module's own docstring
 says it "stays independent of the ~292KB legacy orchestrator," and pulling a
 ``SilverDatabase`` (DuckDB) dependency into it would re-acquire exactly the
 coupling it was built to avoid. This module instead consumes an already
-CAPTURED ``decision_id`` (e.g. from a ``DiscoveryDriveResult`` outcome) and
-owns nothing upstream of capture.
+CAPTURED ``decision_id`` (or a whole ``DiscoveryDriveResult``) and owns
+nothing upstream of capture.
 """
 
 from __future__ import annotations
@@ -20,6 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from edgar_warehouse.acquisition.discovery import DiscoveryCandidate, DiscoveryDriveResult
 from edgar_warehouse.acquisition.ledger import AcquisitionLedger, FetchWorkState
 from edgar_warehouse.acquisition.processing import (
     ExpectedProducerOutcome,
@@ -27,6 +35,7 @@ from edgar_warehouse.acquisition.processing import (
     ProcessingDecision,
     ProcessingLedger,
     SilverFinalizer,
+    SilverOutcome,
 )
 from edgar_warehouse.acquisition.revisions import ContentImpact, SourceRevisionLedger
 from edgar_warehouse.silver_store import SilverDatabase
@@ -151,7 +160,15 @@ def finalize_filing_artifact_candidate(
     if already_settled is not None:
         return decision
 
-    raw_object_id = revision.revision_id
+    # sec_raw_object's business key IS the sha256 of the fetched bytes
+    # (silver_protection.py's ProtectedTablePolicy for this table, and
+    # every real writer in bronze_filing_artifacts.py, key it this way) --
+    # not an arbitrary identifier. Using anything else (e.g. revision_id)
+    # would defeat this table's whole content-dedup design: identical byte
+    # content legitimately recurs across different filings (shared
+    # boilerplate/exhibit templates), and downstream code keys off this
+    # exact convention.
+    raw_object_id = revision.raw_evidence_hash
     silver.upsert_raw_object(
         {
             "raw_object_id": raw_object_id,
@@ -183,3 +200,98 @@ def finalize_filing_artifact_candidate(
             f"match expected sha256={revision.raw_evidence_hash!r} (got {read_back!r})"
         ),
     )
+
+
+@dataclass(frozen=True)
+class FilingArtifactSilverOutcome:
+    """One candidate's outcome from carrying a Discovery drive result to Silver."""
+
+    candidate: DiscoveryCandidate
+    decision_id: str
+    processing_decision: ProcessingDecision | None
+    error: str | None
+
+    @property
+    def settled(self) -> bool:
+        return (
+            self.error is None
+            and self.processing_decision is not None
+            and self.processing_decision.silver_outcome is not SilverOutcome.PENDING
+        )
+
+
+@dataclass(frozen=True)
+class FilingArtifactSilverAcceptanceResult:
+    outcomes: tuple[FilingArtifactSilverOutcome, ...]
+
+    @property
+    def interval_complete(self) -> bool:
+        return all(outcome.settled for outcome in self.outcomes)
+
+    @property
+    def unsettled_candidate_ids(self) -> tuple[str, ...]:
+        return tuple(
+            outcome.candidate.accession_number
+            for outcome in self.outcomes
+            if not outcome.settled
+        )
+
+
+def drive_filing_artifact_silver_acceptance(
+    ledger: AcquisitionLedger,
+    revisions: SourceRevisionLedger,
+    processing: ProcessingLedger,
+    finalizer: SilverFinalizer,
+    silver: SilverDatabase,
+    result: DiscoveryDriveResult,
+) -> FilingArtifactSilverAcceptanceResult:
+    """Carry every CAPTURED candidate in a Discovery drive result to Silver.
+
+    The Ticket 19 half of Ticket 16's own drive loop (``discovery.
+    drive_discovery_manifest`` stops at CAPTURED Bronze evidence by design --
+    see that module's docstring). Mirrors its per-candidate fault isolation
+    exactly: one candidate's ``finalize_filing_artifact_candidate`` failure
+    (including ``PriorRevisionNotSettled`` -- a real, expected outcome when
+    the same accession appears in two runs or a prior run partially failed)
+    is caught and recorded per-candidate so it cannot abort the rest of the
+    interval, which simply stays incomplete until every candidate reaches a
+    settled outcome, the same convergence contract
+    ``DiscoveryDriveResult.interval_complete`` already establishes for
+    fetch/capture. Candidates that never reached CAPTURED (excluded,
+    deferred, or failed at the fetch stage) are not carried forward -- there
+    is nothing to materialize a revision from yet.
+    """
+
+    outcomes: list[FilingArtifactSilverOutcome] = []
+    for outcome in result.outcomes:
+        if outcome.fetch_state is not FetchWorkState.CAPTURED or outcome.decision_id is None:
+            continue
+        meta = FilingArtifactCandidateMeta(
+            cik=outcome.candidate.cik,
+            accession_number=outcome.candidate.accession_number,
+            form=outcome.candidate.form,
+            source_url=outcome.candidate.source_url,
+        )
+        try:
+            decision = finalize_filing_artifact_candidate(
+                ledger, revisions, processing, finalizer, silver, outcome.decision_id, meta
+            )
+        except Exception as error:  # noqa: BLE001 -- one candidate must not abort the interval
+            outcomes.append(
+                FilingArtifactSilverOutcome(
+                    candidate=outcome.candidate,
+                    decision_id=outcome.decision_id,
+                    processing_decision=None,
+                    error=str(error),
+                )
+            )
+            continue
+        outcomes.append(
+            FilingArtifactSilverOutcome(
+                candidate=outcome.candidate,
+                decision_id=outcome.decision_id,
+                processing_decision=decision,
+                error=None,
+            )
+        )
+    return FilingArtifactSilverAcceptanceResult(outcomes=tuple(outcomes))
