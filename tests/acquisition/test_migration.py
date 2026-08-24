@@ -142,3 +142,69 @@ def test_bootstrap_and_restore_preserve_dedicated_acquisition_owner() -> None:
     assert restore.index("REVOKE ALL PRIVILEGES ON") < restore.index(
         "ALTER TABLE source_observation_cursor"
     )
+
+
+def test_postgres_schema_seals_processing_decisions_and_expected_producers() -> None:
+    """Ticket 19: the processing/expected-producer tables, the dedicated
+    Silver Finalizer role, the same-key ordering index, and the
+    column-scoped GRANT split (processor INSERTs, finalizer UPDATEs only
+    specific columns -- no role-check trigger backs this up, see
+    models.py's SourceExpectedProducerRecord docstring) are all present.
+    """
+
+    normalized = " ".join(_migration_sql().lower().split())
+
+    assert "create table if not exists source_processing_decision" in normalized
+    assert "create table if not exists source_expected_producer" in normalized
+    assert (
+        "create role edgartools_acquisition_silver_finalizer nologin" in normalized
+    )
+    assert "uq_source_processing_decision_revision" in normalized
+    assert "uq_source_processing_decision_active_key" in normalized
+    assert "uq_source_expected_producer_name" in normalized
+    assert "ck_source_processing_decision_no_process_required_published" in normalized
+    assert "ck_source_processing_decision_settled_at_shape" in normalized
+    assert (
+        "'process_required','no_impact','out_of_scope','operator_excluded',"
+        "'superseded','quarantined','retryable_failure'" in normalized
+    )
+    assert "'pending','published','failed'" in normalized
+    assert "'pending','verified','no_impact','failed'" in normalized
+    # Column-scoped GRANTs, not a role-check trigger, are the enforcement
+    # layer for who may update a producer's outcome.
+    assert (
+        "grant update (outcome, verified_reference, failure_detail, updated_at) "
+        "on source_expected_producer to edgartools_acquisition_silver_finalizer"
+        in normalized
+    )
+    assert (
+        "grant update (silver_outcome, settled_at) on source_processing_decision "
+        "to edgartools_acquisition_silver_finalizer" in normalized
+    )
+    assert (
+        "grant select, insert on source_processing_decision, "
+        "source_expected_producer to edgartools_acquisition_processor"
+        in normalized
+    )
+    assert "create or replace view source_change_status_detail" in normalized
+
+
+def test_bootstrap_and_restore_cover_processing_and_expected_producer() -> None:
+    bootstrap = (REPO_ROOT / "infra/scripts/bootstrap-prod-mdm.sh").read_text()
+    restore = (REPO_ROOT / "infra/snowflake/postgres/mdm_post_restore.sql").read_text()
+
+    assert "source_processing_decision" in bootstrap
+    assert "source_expected_producer" in bootstrap
+    assert "source_change_status_detail" in bootstrap
+    assert "edgartools_acquisition_silver_finalizer" in restore
+    assert (
+        "to_regclass('public.source_processing_decision') IS NOT NULL" in restore
+    )
+    assert (
+        "GRANT UPDATE (silver_outcome, settled_at) ON source_processing_decision"
+        in restore
+    )
+    assert (
+        "GRANT UPDATE (outcome, verified_reference, failure_detail, updated_at)"
+        in restore
+    )
