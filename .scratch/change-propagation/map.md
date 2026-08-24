@@ -112,7 +112,8 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
 <!-- Agent-grabbable tracer bullets; blocking edges live in each ticket. -->
 
 - [19 — Complete the filing-to-Silver acceptance seam](issues/19-complete-filing-to-silver-acceptance-seam.md) — Verify publication or explicit non-publication while protecting prior Silver authority.
-- [20 — Version and activate the Acquisition Universe](issues/20-version-and-activate-acquisition-universe.md) — Gate coverage changes on scoped baseline and catch-up proof.
+- [20 — Version and activate the Acquisition Universe](issues/20-version-and-activate-acquisition-universe.md) — **Partially done.** `SourceRegistryLedger`, migration 014, and `mdm registry-*` CLI merged (PR #455) with a real-Postgres integration suite that found and fixed two genuine bugs. Bullets 3/4/5 fully done; bullets 1/2 partial — see 32.
+- [32 — Wire Ticket 20's remaining registry policy fields, enforce the removal boundary, and bootstrap the first active version](issues/32-wire-remaining-registry-policy-fields-and-boundary-enforcement.md) — Surfaced by `/code-review`'s Spec pass on Ticket 20: `acquisition_mode`/`completeness_policy`/`discovery_policy`/`required_producers` are captured but never read back (inert, not "executable policy data"), `coverage_end_date` is stored but never enforced, and no committed bootstrap path exists to activate a first registry version in prod. Blocked by 20.
 - [21 — Migrate submissions snapshots and pagination](issues/21-migrate-submissions-and-pagination.md) — Deliver complete inventory-aware submissions processing.
 - [22 — Migrate company-facts snapshots](issues/22-migrate-company-facts-snapshots.md) — Deliver complete scoped company-facts lifecycle outcomes.
 - [23 — Migrate reference catalogs](issues/23-migrate-reference-catalogs.md) — Deliver counted and digested catalog completeness.
