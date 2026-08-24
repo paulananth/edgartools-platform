@@ -3,6 +3,21 @@
 -- deciding what's in scope is governance over the acquisition universe
 -- itself, not a step within it.
 
+-- Unlike 013's owner/operational role split, this single role is both the
+-- schema-managing owner AND the role `application` runtime code SET ROLEs
+-- into for reads/writes (registry_ledger.py's own comment: no equivalent
+-- split responsibility exists here). That means `application` genuinely is
+-- a member of the owner role once installed -- so
+-- `_apply_source_registry_migration`'s rerun-gate (`pg_has_role(current_user,
+-- 'edgartools_acquisition_registry_owner', 'MEMBER')`) is TRUE for a rerun
+-- through `application`'s own DSN, unlike 013 where it's always False for
+-- `application`. Every privileged statement below must therefore be a
+-- true no-op on a rerun by a role that already holds what it grants --
+-- `application` has no ADMIN OPTION on this role and no GRANT OPTION on
+-- schema public, so re-issuing an already-satisfied GRANT unconditionally
+-- fails outright (reproduced live in tests/integration/
+-- test_source_registry_postgres.py::test_apply_source_registry_migration_rerun_against_real_postgres
+-- before this guard was added).
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -10,14 +25,21 @@ BEGIN
     ) THEN
         CREATE ROLE edgartools_acquisition_registry_owner NOLOGIN;
     END IF;
-    IF current_user <> 'application' THEN
+    IF current_user <> 'application'
+       AND NOT pg_has_role(current_user, 'edgartools_acquisition_registry_owner', 'MEMBER') THEN
         EXECUTE format(
             'GRANT edgartools_acquisition_registry_owner TO %I WITH INHERIT FALSE, SET TRUE',
             current_user
         );
     END IF;
-    GRANT USAGE, CREATE ON SCHEMA public TO edgartools_acquisition_registry_owner;
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'application') THEN
+    IF NOT (
+        has_schema_privilege('edgartools_acquisition_registry_owner', 'public', 'USAGE')
+        AND has_schema_privilege('edgartools_acquisition_registry_owner', 'public', 'CREATE')
+    ) THEN
+        GRANT USAGE, CREATE ON SCHEMA public TO edgartools_acquisition_registry_owner;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'application')
+       AND NOT pg_has_role('application', 'edgartools_acquisition_registry_owner', 'MEMBER') THEN
         GRANT edgartools_acquisition_registry_owner TO application
             WITH INHERIT FALSE, SET TRUE;
     END IF;

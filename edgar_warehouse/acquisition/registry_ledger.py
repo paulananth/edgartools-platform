@@ -305,6 +305,7 @@ class SourceRegistryLedger:
                 if c.coverage_action == "add"
                 and (
                     c.catchup_verified_through_date is None
+                    or c.catchup_required_through_date is None
                     or c.catchup_verified_through_date < c.catchup_required_through_date
                 )
             ]
@@ -326,6 +327,20 @@ class SourceRegistryLedger:
             if previous is not None and previous.version_id != version_id:
                 previous.status = "superseded"
                 previous.superseded_at = datetime.now(UTC)
+                # Flushed separately, before the new version is marked
+                # active below: uq_source_registry_version_single_active is a
+                # partial *index*, not a deferrable constraint (Postgres
+                # cannot defer a partial unique index), so it is checked
+                # immediately per statement. Setting both ORM objects' status
+                # and flushing once left SQLAlchemy free to emit the two
+                # UPDATEs in either order -- when the new version's UPDATE
+                # landed first, both rows briefly had status='active'
+                # simultaneously and Postgres rejected it outright
+                # (reproduced live in tests/integration/
+                # test_source_registry_postgres.py). Superseding first and
+                # flushing guarantees at most one 'active' row exists at any
+                # statement boundary.
+                session.flush()
 
             version.status = "active"
             version.activated_at = datetime.now(UTC)
