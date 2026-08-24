@@ -743,6 +743,19 @@ def merge_candidate_into_canonical(
     drops a canonical column, or changes a shared column's declared type,
     also fails closed (only additive schema evolution is permitted here).
 
+    For every table in ``PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES`` that
+    the candidate also has data for (Ticket 31): a separate, simpler pass
+    blindly overwrites canonical's copy with the candidate's -- ``DELETE``
+    then ``INSERT`` via an explicit named column list on both sides, never
+    row-level conflict resolution, since these tables have no
+    ``authority_column``/business-key semantics to resolve against (that's
+    *why* they're excluded from ``PROTECTED_TABLE_REGISTRY``, not a gap in
+    coverage). Unlike the protected-table loop above, a column-set mismatch
+    between candidate and canonical here raises ``SilverPublicationError``
+    directly rather than silently dropping an extra candidate column or
+    surfacing a raw binder error on a missing one -- schema drift for these
+    two tables is not expected to happen quietly.
+
     ``only_tables``: when provided, restricts actual merge work (row
     comparison, insert/update resolution, the emitted per-table events) to
     exactly this set -- every other classified table is skipped entirely,
@@ -1005,7 +1018,18 @@ def merge_candidate_into_canonical(
                 conn.execute(_SILVER_SCHEMA_DDL)
                 conn.execute("USE memory")
 
-            columns = sorted(_columns(conn, "out", table_name).keys())
+            out_columns = set(_columns(conn, "out", table_name).keys())
+            cand_columns = set(_columns(conn, "cand", table_name).keys())
+            if cand_columns != out_columns:
+                raise SilverPublicationError(
+                    f"Column set mismatch on {table_name!r} (Ticket 31 "
+                    "publication-significant overwrite): "
+                    f"canonical has {sorted(out_columns)}, candidate has "
+                    f"{sorted(cand_columns)} -- unlike PROTECTED_TABLE_REGISTRY "
+                    "tables, this table's merge does not reconcile additive "
+                    "schema evolution; the schema must already agree."
+                )
+            columns = sorted(out_columns)
             col_list = ", ".join(_quote_ident(c) for c in columns)
             quoted_table = _quote_ident(table_name)
             row_count = conn.execute(

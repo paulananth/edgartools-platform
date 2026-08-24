@@ -1047,6 +1047,82 @@ actual race a sequential test can't otherwise trigger). Full suite green.
 **Not yet built, pushed, or deployed** as of this entry — see
 `.scratch/silver-snowflake-migration/map.md` for status.
 
+## EXCLUDED_OPERATIONAL_TABLES silently dropped on merge 5-whys (fixed, not yet deployed, 2026-08-24)
+
+**Problem:** live during the change-propagation map's Ticket 29 prod dry run,
+`load-daily-form-index-for-date 2026-08-21` ran clean at the ECS-task level
+(3,719 daily-index rows staged, checkpoint written locally) but its own log
+showed `"skipped": true, "tables_merged": []` for the silver-database publish
+step. A follow-up `drive-filing-discovery-for-date` run against prod then
+failed closed with `checkpoint status='missing'` — canonical genuinely never
+received the seed.
+
+1. Symptom: `sec_daily_index_checkpoint`/`stg_daily_index_filing` writes
+   never reached canonical `silver.duckdb`, even though the seeding ECS task
+   reported success.
+2. Why "skipped"? `compute_silver_fingerprint`'s skip-if-unchanged
+   optimization (release-readiness ticket 79) only fingerprints
+   `PROTECTED_TABLE_REGISTRY` tables. `load-daily-form-index-for-date`'s
+   entire write footprint is these two `EXCLUDED_OPERATIONAL_TABLES`
+   members, so its fingerprint is *always* identical to hydration's —
+   the publish is skipped unconditionally, every single run, forever.
+3. Why does fixing the fingerprint alone not fix it? Found while
+   implementing that fix: `merge_candidate_into_canonical`'s only
+   content-copying loop (`for table_name, policy in
+   PROTECTED_TABLE_REGISTRY.items(): ...`) also iterates
+   `PROTECTED_TABLE_REGISTRY` exclusively — `EXCLUDED_OPERATIONAL_TABLES`
+   tables are used only to satisfy the fail-closed unclassified-table
+   check, never actually copied from candidate into the merged output.
+4. Why was this never caught? Two independent bugs compounded so the first
+   always masked the second — the fingerprint skip fired before the merge
+   ever ran, so the merge loop's inability to copy these tables was never
+   reached to be observed. `load-daily-form-index-for-date` has zero
+   executions in prod prior to this attempt (confirmed via
+   `list-executions`), so nothing had ever exercised this path before.
+5. **Root cause:** `EXCLUDED_OPERATIONAL_TABLES` conflates two distinct
+   concerns under one flag — "safe to skip conflict detection" (true for all
+   members: checkpoints/staging have no `authority_column`/business-key
+   semantics) and "changes here don't matter for publication" (only true for
+   genuine bookkeeping like `pipeline_run`/`sec_sync_run`, false for tables
+   like `sec_daily_index_checkpoint` whose content *is* the entire point of
+   the command that wrote them). The merge's own documented intent for the
+   whole set — "a candidate is always free to overwrite them" — was never
+   actually implemented for any excluded table; only the fail-closed guard's
+   exemption was.
+
+**Resolution:** new `PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES` frozenset
+(`silver_protection.py`), deliberately scoped to exactly the two tables with
+live evidence — `sec_daily_index_checkpoint`, `stg_daily_index_filing` — not
+every `EXCLUDED_OPERATIONAL_TABLES` member (widening on suspicion risks
+forcing a real merge pass on commands that currently correctly skip one;
+`sec_source_checkpoint` has 27,342 rows in prod today and has not been shown
+to have the same bug — its live staleness is unaudited, logged as an open
+follow-up in
+[Ticket 31](.scratch/change-propagation/issues/31-excluded-operational-tables-never-reach-canonical-silver.md)
+rather than assumed). `compute_silver_fingerprint` now fingerprints
+`PROTECTED_TABLE_REGISTRY | PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES`.
+`merge_candidate_into_canonical` gets a second, separate copying pass for
+just these two tables: a blind `DELETE`+`INSERT` overwrite (no
+authority-column conflict resolution — these tables have none, that's
+*why* they were excluded from the protected loop, not a gap in it), using
+explicit named column lists on both sides rather than `SELECT *` (candidate
+and canonical could share the same columns in a different physical order;
+`SELECT *` maps positionally and would silently write values into the
+wrong columns instead of failing loud), and fails closed with a clear
+`SilverPublicationError` on any column-set mismatch rather than a raw
+DuckDB binder error or a silently dropped column.
+
+Tests: `tests/unit/test_publication_significant_operational_tables.py` (7
+cases) locks in both fixes at their own seams plus the inverse for genuine
+bookkeeping (`pipeline_run` must stay excluded from both, proving the fix
+doesn't over-widen); `test_skip_noop_silver_publish.py` gained one
+end-to-end test through `_publish_silver_database_if_remote`. Full repo
+suite green (2459 passed, 4 skipped). **Not yet deployed** as of this
+entry — see
+[Ticket 29](.scratch/change-propagation/issues/29-deploy-and-dry-run-gated-acquisition-path.md)
+for the redeploy + re-run of `load-daily-form-index-for-date` /
+`drive-filing-discovery-for-date` this fix was written to unblock.
+
 ## Relationship-derivation single-threaded tail (fixed, not yet deployed, 2026-08-19)
 
 **Problem:** A live `mdm run --entity-type all` execution (`shard-fix-verify-1787134405`)

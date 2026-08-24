@@ -30,9 +30,11 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 import duckdb
+import pytest
 
 from edgar_warehouse.silver_protection import (
     PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES,
+    SilverPublicationError,
     compute_silver_fingerprint,
     merge_candidate_into_canonical,
 )
@@ -157,6 +159,27 @@ def test_merge_only_tables_scoping_still_applies_to_significant_tables(tmp_path:
     finally:
         conn.close()
     assert count == 0
+
+
+def test_merge_fails_closed_on_a_column_set_mismatch(tmp_path: Path) -> None:
+    """Unlike PROTECTED_TABLE_REGISTRY's additive-schema-evolution handling,
+    a publication-significant table's merge does not reconcile schema drift
+    -- a mismatch must fail loud with a clear error, not a raw DuckDB binder
+    error or (worse) a silently dropped/missing column."""
+    canonical_path = tmp_path / "canonical.duckdb"
+    SilverDatabase(str(canonical_path)).close()
+
+    candidate_path = tmp_path / "candidate.duckdb"
+    candidate_db = SilverDatabase(str(candidate_path))
+    candidate_db.upsert_daily_index_checkpoint(_checkpoint_row("2026-08-21"))
+    candidate_db._conn.execute(
+        "ALTER TABLE sec_daily_index_checkpoint ADD COLUMN extra_column TEXT"
+    )
+    candidate_db.close()
+
+    output_path = tmp_path / "merged.duckdb"
+    with pytest.raises(SilverPublicationError, match="Column set mismatch"):
+        merge_candidate_into_canonical(candidate_path, canonical_path, output_path)
 
 
 def test_merge_still_ignores_pipeline_run_content(tmp_path: Path) -> None:
