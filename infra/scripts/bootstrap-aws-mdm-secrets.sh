@@ -111,7 +111,11 @@ fi
 aws_cli() {
   local args=()
   [[ -n "$AWS_PROFILE_NAME" ]] && args+=(--profile "$AWS_PROFILE_NAME")
-  aws "${args[@]}" --region "$AWS_REGION_NAME" "$@"
+  # macOS ships bash 3.2, which treats "${args[@]}" on a still-empty array as
+  # an unbound variable under `set -u` (fixed in bash 4.4+) -- the
+  # ${args[@]+"${args[@]}"} form expands to nothing instead of erroring when
+  # args is empty, and to the normal array expansion otherwise.
+  aws ${args[@]+"${args[@]}"} --region "$AWS_REGION_NAME" "$@"
 }
 
 if [[ "$DSN_STDIN" == "true" ]]; then

@@ -117,7 +117,11 @@ fi
 aws_cli() {
   local args=()
   [[ -n "$AWS_PROFILE_NAME" ]] && args+=(--profile "$AWS_PROFILE_NAME")
-  aws "${args[@]}" --region "$AWS_REGION_NAME" "$@"
+  # macOS ships bash 3.2, which treats "${args[@]}" on a still-empty array as
+  # an unbound variable under `set -u` (fixed in bash 4.4+) -- the
+  # ${args[@]+"${args[@]}"} form expands to nothing instead of erroring when
+  # args is empty, and to the normal array expansion otherwise.
+  aws ${args[@]+"${args[@]}"} --region "$AWS_REGION_NAME" "$@"
 }
 
 log "Resolving Postgres instance state for ${INSTANCE_NAME} via ${SNOW_CONNECTION}"
@@ -272,9 +276,28 @@ for stmt in [
     "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO application;",
     # Acquisition history is intentionally excluded from the shared runtime
     # principal's broad legacy grants. Runtime code must SET one fenced role.
+    #
+    # These REVOKEs target tables/views by name, which Postgres gates on
+    # ownership (unlike the "ON ALL TABLES IN SCHEMA" grants above, which
+    # silently skip objects the grantor doesn't own) -- and by this point
+    # ownership of every acquisition object has already moved from
+    # snowflake_admin to edgartools_acquisition_owner (013_acquisition_ledger.sql's
+    # own `ALTER TABLE ... OWNER TO edgartools_acquisition_owner` statements,
+    # applied inside the `mdm migrate` call above). snowflake_admin is
+    # neither superuser nor still the owner at this point, so REVOKE fails
+    # outright with "permission denied for table" -- reproduced live against
+    # prod 2026-08-24 on a from-empty acquisition-ledger provisioning run.
+    # Fix: the same migration also granted snowflake_admin non-inherited,
+    # SET-TRUE membership in edgartools_acquisition_owner (its DO block's
+    # `GRANT edgartools_acquisition_owner TO %I WITH INHERIT FALSE, SET TRUE`
+    # where %I = current_user = snowflake_admin during that call) -- so
+    # SET ROLE into it just for these three statements, matching the
+    # session identity that actually holds the confirming ownership.
+    "SET ROLE edgartools_acquisition_owner;",
     "REVOKE ALL PRIVILEGES ON source_observation_cursor, source_fetch_decision, source_fetch_work, source_fetch_transition, source_revision, source_processing_decision, source_expected_producer FROM application;",
     "REVOKE ALL PRIVILEGES ON source_change_status FROM application;",
     "REVOKE ALL PRIVILEGES ON source_change_status_detail FROM application;",
+    "RESET ROLE;",
 ]:
     cur.execute(stmt)
 cur.close()
