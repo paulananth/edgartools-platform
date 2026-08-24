@@ -28,7 +28,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from edgar_warehouse.acquisition.discovery import (
@@ -38,12 +38,17 @@ from edgar_warehouse.acquisition.discovery import (
 )
 from edgar_warehouse.acquisition.ledger import AcquisitionLedger, FetchDisposition, FetchWorkState
 from edgar_warehouse.acquisition.processing import ProcessingLedger, SilverFinalizer
+from edgar_warehouse.acquisition.registry_ledger import (
+    SourceRegistryLedger,
+    active_in_scope_forms,
+    build_active_source_family_registry,
+)
 from edgar_warehouse.acquisition.revisions import SourceRevisionLedger
 from edgar_warehouse.acquisition.silver_acceptance import (
     FilingArtifactSilverAcceptanceResult,
     drive_filing_artifact_silver_acceptance,
 )
-from edgar_warehouse.acquisition.source_family_registry import build_source_family_registry
+from edgar_warehouse.acquisition.source_family_registry import FILING_ARTIFACT_SOURCE_FAMILY
 from edgar_warehouse.application.acquisition_command_registry import (
     acquisition_command_registration,
 )
@@ -86,18 +91,27 @@ def run_drive_filing_discovery_for_date(args: Any) -> int:
     # once every candidate has settled, then published as one unit -- not
     # per-candidate, matching every other silver-writing command's
     # hydrate-once/publish-once shape.
+    engine = get_engine()
+    # Ticket 20: which forms are in scope now comes from the active Source
+    # Family Registry version, not discovery.py's own hardcoded default --
+    # a covered-but-not-yet-activated family, or one 'remove'd, must not
+    # silently fall back to acquiring everything DISCOVERY_IN_SCOPE_FORMS
+    # would have covered before the registry existed.
+    in_scope_forms = active_in_scope_forms(engine, FILING_ARTIFACT_SOURCE_FAMILY)
+
     _hydrate_silver_database_from_storage(context)
     db = open_silver_database(context.silver_root)
     try:
         rows = _load_sealed_discovery_rows(db, business_date)
-        manifest = build_discovery_manifest(rows, business_date=business_date)
+        manifest = build_discovery_manifest(
+            rows, business_date=business_date, in_scope_forms=in_scope_forms
+        )
 
-        engine = get_engine()
         ledger = AcquisitionLedger(engine)
         revisions = SourceRevisionLedger(engine)
         processing = ProcessingLedger(engine)
         finalizer = SilverFinalizer(engine)
-        registry = build_source_family_registry(identity=context.identity)
+        registry = build_active_source_family_registry(engine, identity=context.identity)
         worker_id = getattr(args, "worker_id", None) or f"drive-filing-discovery-{os.getpid()}"
         lease_seconds = getattr(args, "lease_seconds", None) or DEFAULT_LEASE_SECONDS
         registry_version = getattr(args, "registry_version", None) or DEFAULT_REGISTRY_VERSION
@@ -116,6 +130,15 @@ def run_drive_filing_discovery_for_date(args: Any) -> int:
         )
     finally:
         db.close()
+
+    if result.interval_complete and silver_result.interval_complete:
+        # Ticket 20's catch-up obligation, advanced by the exact same
+        # completeness signal Ticket 29 already proved live end-to-end --
+        # no separate cross-database prover, this run's own success *is*
+        # the proof for this one business date.
+        SourceRegistryLedger(engine).record_catchup_progress(
+            FILING_ARTIFACT_SOURCE_FAMILY, date.fromisoformat(business_date)
+        )
 
     _publish_silver_database_with_retry(context)
 

@@ -1437,6 +1437,104 @@ non-dead fixes (each carries its own root-cause header) but are referenced by **
 filename in either script. Both predate this fix and are unrelated to it; noted here so a future
 session doesn't have to rediscover the gap from scratch.
 
+## Ticket 20 Source Family Registry — Postgres-only activation/rerun bugs 5-whys (fixed, not yet deployed, 2026-08-24)
+
+**Problem:** Ticket 20's Source Family Registry (`edgar_warehouse/acquisition/registry_ledger.py`,
+migration `014_source_registry.sql`) shipped with 18 passing SQLite-backed unit tests and no
+real-Postgres integration test. Writing the missing test (`tests/integration/
+test_source_registry_postgres.py`, same shape as the existing 013/018/019 Postgres suite) found
+two genuine bugs on first run against real Postgres, neither caught by SQLite.
+
+**Bug 1 — `activate()`'s supersede-then-activate write hit the partial unique index it's supposed
+to satisfy:**
+
+1. Symptom: `SourceRegistryLedger.activate()`, activating a second version after a first was
+   already active, raised `psycopg2.errors.UniqueViolation: duplicate key value violates unique
+   constraint "uq_source_registry_version_single_active"` — from inside the ledger's own normal
+   activation path, not a forged/bypass attempt.
+2. Why? `activate()` set `previous.status = "superseded"` and `version.status = "active"` on two
+   ORM objects, then called `session.flush()` once — leaving SQLAlchemy's unit-of-work free to
+   emit the two resulting UPDATE statements in either order.
+3. Why does statement order matter? `uq_source_registry_version_single_active` is a **partial
+   unique index**, not a deferrable constraint — Postgres cannot defer a partial unique index
+   (only a full-table `UNIQUE`/`PRIMARY KEY` constraint backed by a non-partial index can be
+   declared `DEFERRABLE`), so it is checked immediately at each row-level UPDATE, not at commit.
+4. Why did that make the flush fail? When SQLAlchemy happened to emit the new version's
+   `status='active'` UPDATE before the previous version's `status='superseded'` UPDATE, both rows
+   briefly held `status='active'` simultaneously at that statement boundary — an immediate
+   violation.
+5. **Root cause:** the code relied on `session.flush()`'s internal ordering to keep "at most one
+   active row" true at every intermediate point, but nothing enforces that ordering — the two
+   UPDATEs are independent objects in one unit of work with no declared dependency between them.
+
+**Fix:** split the single flush into two — set `previous.status = "superseded"` and flush that
+UPDATE first, *then* set `version.status = "active"` and flush again. Guarantees at most one
+`'active'` row exists at any statement boundary, regardless of what SQLAlchemy would have chosen
+unordered.
+
+**Bug 2 — the migration's own DO block isn't idempotent for a rerun through `application`'s DSN:**
+
+1. Symptom: calling `_apply_source_registry_migration` a second time via an engine connected as
+   `application` (exactly how `mdm migrate` is documented to be safely re-runnable, per this
+   file's "Self-managing Postgres migration pattern" note) raised
+   `psycopg2.errors.InsufficientPrivilege: permission denied to grant role
+   "edgartools_acquisition_registry_owner" ... Only roles with the ADMIN option ... may grant
+   this role.`
+2. Why does a rerun even reach privileged DDL? The rerun-gate checks
+   `pg_has_role(current_user, 'edgartools_acquisition_registry_owner', 'MEMBER')` — analogous to
+   013's `_apply_acquisition_ledger_migration` gate — and proceeds (`may_manage = True`) if the
+   connecting role is a member.
+3. Why is `application` a member here when it never is for 013? Ticket 20 deliberately uses **one**
+   role for both governance (schema ownership) and operational access (what `application` SET
+   ROLEs into to read/write) — unlike 013's split owner/coordinator/worker/etc. roles, where
+   `application` is only ever granted the *operational* roles, never `edgartools_acquisition_owner`
+   itself. 014's own DO block unconditionally grants the single owner role directly to
+   `application`, so `pg_has_role` is `True` for `application` here, `may_manage` becomes `True`,
+   and the rerun path — never exercised by 013's application DSN — executes for the first time.
+4. Why did that DDL fail? The DO block's final statement,
+   `GRANT edgartools_acquisition_registry_owner TO application`, ran unconditionally on every
+   invocation. On a rerun, `application` already holds that membership but has no `ADMIN OPTION`
+   on the role (`WITH INHERIT FALSE, SET TRUE` grants neither inherit-by-default nor
+   admin-option), so re-issuing the same GRANT as `application` itself is rejected outright — not
+   a no-op just because the membership already exists.
+5. **Root cause:** the migration file was written assuming the "grant once, safe to reapply"
+   idempotency 013 gets almost for free (because `application` never reaches the privileged branch
+   for 013) — but 014's single-role design puts `application` on the privileged branch on every
+   rerun, and none of the DO block's GRANT statements were individually guarded against "already
+   satisfied, and the caller lacks rights to redundantly reassert it."
+
+**Fix:** guarded each of the three privileged statements in `014_source_registry.sql`'s DO block
+with an explicit "already satisfied" check before executing: the owner-role membership grant to
+`current_user` now also checks `NOT pg_has_role(current_user, ...)`; the schema `USAGE, CREATE`
+grant now checks `NOT (has_schema_privilege(...) AND has_schema_privilege(...))`; the membership
+grant to `application` now also checks `NOT pg_has_role('application', ...)`. First install (run
+by an admin principal, nothing yet satisfied) behaves identically; a rerun by `application` (or
+anyone else already fully provisioned) now short-circuits every GRANT and reaches the idempotent
+`CREATE TABLE IF NOT EXISTS`/`ALTER TABLE ... OWNER TO`/`REVOKE` statements in `statements[1:]`
+cleanly, matching the rerun contract 013 established (and this file's "Self-managing Postgres
+migration pattern" note) rather than diverging from it silently.
+
+**Both fixes proven against real Postgres** (not just re-reading the SQL), via the new
+`tests/integration/test_source_registry_postgres.py` — 4 tests, all reproduced the failure
+against unfixed code first, then passed after: role/fencing proof mirroring the 013 suite's
+"universal_login"/"forged_role" pattern, the open-draft/block/catch-up/activate round trip via
+the real `SourceRegistryLedger` Python API, the supersede-then-activate proof plus a direct
+attempt to force two active rows under the owning role (rejected by the partial index, as
+designed), and the rerun proof for both the `application` and admin engines. SQLite-backed unit
+tests (`tests/acquisition/test_registry_ledger.py`, 18 tests) still pass unchanged — neither bug
+is reachable from SQLite, which has no equivalent immediate-partial-unique-index semantics and no
+Postgres role/GRANT model to expose the rerun gap.
+
+**Lesson:** a migration or ledger method whose only proof is SQLite-backed unit tests is unproven
+for exactly the two things SQLite can't model — real constraint-timing semantics (deferrable vs.
+immediate, partial index checks per-statement) and a real multi-role GRANT/`SET ROLE` privilege
+graph. This is the same class of gap the "MDM Postgres migration-011 schema drift" and
+"Manifest-pipeline ownership" incidents above already document for other subsystems — a real
+role graph is not optional coverage for anything that fences a table by role.
+
+**Not yet deployed** as of this entry — migration `014_source_registry.sql` has not been applied
+to prod, and no image rebuild has happened for this fix.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live

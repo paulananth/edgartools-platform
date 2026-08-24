@@ -32,10 +32,8 @@ from edgar_warehouse.acquisition.ledger import (
     FetchDisposition,
     execute_source_request,
 )
-from edgar_warehouse.acquisition.source_family_registry import (
-    FILING_ARTIFACT_SOURCE_FAMILY,
-    build_source_family_registry,
-)
+from edgar_warehouse.acquisition.registry_ledger import build_active_source_family_registry
+from edgar_warehouse.acquisition.source_family_registry import FILING_ARTIFACT_SOURCE_FAMILY
 from edgar_warehouse.application.acquisition_command_registry import (
     acquisition_command_registration,
 )
@@ -70,7 +68,7 @@ def run_capture_filing_artifact(args: Any) -> int:
 
     engine = get_engine()
     ledger = AcquisitionLedger(engine)
-    registry = build_source_family_registry(identity=context.identity)
+    registry = build_active_source_family_registry(engine, identity=context.identity)
     worker_id = getattr(args, "worker_id", None) or f"capture-filing-artifact-{os.getpid()}"
     lease_seconds = getattr(args, "lease_seconds", None) or DEFAULT_LEASE_SECONDS
 

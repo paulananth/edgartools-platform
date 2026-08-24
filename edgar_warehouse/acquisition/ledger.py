@@ -71,6 +71,21 @@ class ProcessingTransitionRole(StrEnum):
     ACQUISITION_SILVER_FINALIZER = "ACQUISITION_SILVER_FINALIZER"
 
 
+class RegistryTransitionRole(StrEnum):
+    """The database role that owns Source Family Registry versioning (Ticket 20).
+
+    A distinct responsibility from every fetch/processing role above:
+    deciding *what's in scope* (opening a draft version, advancing catch-up
+    progress, activating or blocking a version) is governance over the
+    acquisition universe itself, not a step within it. One member, not a
+    pair like ``ProcessingTransitionRole`` -- registry versioning has no
+    equivalent split responsibility the way "seal expected work" and
+    "verify the outcome" are split in Ticket 19.
+    """
+
+    ACQUISITION_REGISTRY_OWNER = "ACQUISITION_REGISTRY_OWNER"
+
+
 class CandidateDecisionConflict(RuntimeError):
     """A candidate identity was reused for a different immutable decision."""
 
@@ -676,6 +691,16 @@ def require_silver_finalizer_role(actor_role: ProcessingTransitionRole) -> None:
         )
 
 
+def require_registry_owner_role(actor_role: RegistryTransitionRole) -> None:
+    """Shared by registry_ledger.py (Ticket 20, versioning the acquisition universe)."""
+
+    if actor_role is not RegistryTransitionRole.ACQUISITION_REGISTRY_OWNER:
+        raise UnauthorizedTransitionRole(
+            "registry transitions require "
+            f"{RegistryTransitionRole.ACQUISITION_REGISTRY_OWNER.value}"
+        )
+
+
 def set_postgres_role(session: Session, role: str) -> None:
     if session.get_bind().dialect.name != "postgresql":
         return
@@ -685,6 +710,7 @@ def set_postgres_role(session: Session, role: str) -> None:
         FetchTransitionRole.ACQUISITION_WORKER.value,
         ProcessingTransitionRole.ACQUISITION_PROCESSOR.value,
         ProcessingTransitionRole.ACQUISITION_SILVER_FINALIZER.value,
+        RegistryTransitionRole.ACQUISITION_REGISTRY_OWNER.value,
     }
     if role not in allowed_roles:
         raise UnauthorizedTransitionRole(f"Unknown acquisition database role {role}")

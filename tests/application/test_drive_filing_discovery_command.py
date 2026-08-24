@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from edgar_warehouse.acquisition.models import AcquisitionBase
+from edgar_warehouse.acquisition.registry_ledger import CoverageSpec, SourceRegistryLedger
 
 
 @pytest.fixture()
@@ -17,9 +18,39 @@ def _acquisition_db(tmp_path, monkeypatch: pytest.MonkeyPatch) -> str:
 
     db_path = tmp_path / "mdm.db"
     url = f"sqlite:///{db_path}"
-    AcquisitionBase.metadata.create_all(create_engine(url))
+    engine = create_engine(url)
+    AcquisitionBase.metadata.create_all(engine)
     monkeypatch.setenv("MDM_DATABASE_URL", url)
+    _activate_filing_artifact_registry(engine)
     return url
+
+
+def _activate_filing_artifact_registry(engine) -> None:
+    """Ticket 20: no acquisition command runs without an active Source Family
+    Registry version -- seed and activate one covering filing_artifact,
+    mirroring the real bootstrap a fresh deployment needs.
+    """
+
+    ledger = SourceRegistryLedger(engine)
+    version = ledger.open_draft(
+        [
+            CoverageSpec(
+                source_family="filing_artifact",
+                coverage_action="add",
+                in_scope_forms=("3", "3/A", "4", "4/A", "5", "5/A"),
+                acquisition_mode="on_demand_fetch",
+                completeness_policy="non_empty_payload",
+                discovery_policy="daily_index_driven",
+                required_producers=("sec_raw_object",),
+                coverage_start_date=date(2026, 1, 1),
+                catchup_required_through_date=date(2026, 1, 1),
+            )
+        ],
+        operator_authorization_reference="test-bootstrap",
+    )
+    ledger.record_catchup_progress("filing_artifact", date(2026, 1, 1))
+    activated = ledger.activate(version.version_id)
+    assert activated.status == "active"
 
 
 def _set_warehouse_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:

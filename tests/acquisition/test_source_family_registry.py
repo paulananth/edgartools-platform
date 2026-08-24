@@ -2,11 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from edgar_warehouse.acquisition.source_family_registry import (
-    FILING_ARTIFACT_SOURCE_FAMILY,
-    FilingArtifactPolicy,
-    build_source_family_registry,
-)
+from edgar_warehouse.acquisition.source_family_registry import FilingArtifactPolicy
 
 
 def test_filing_artifact_policy_fetches_via_byte_preserving_filing_content_gateway() -> None:
@@ -30,10 +26,3 @@ def test_filing_artifact_policy_completeness_requires_non_empty_payload() -> Non
 
     assert policy.is_complete(b"some bytes") is True
     assert policy.is_complete(b"") is False
-
-
-def test_build_source_family_registry_registers_filing_artifact() -> None:
-    registry = build_source_family_registry(identity="EdgarTools Platform test@example.com")
-
-    assert FILING_ARTIFACT_SOURCE_FAMILY in registry
-    assert isinstance(registry[FILING_ARTIFACT_SOURCE_FAMILY], FilingArtifactPolicy)
