@@ -11,23 +11,24 @@ first real deployment of code this map already produced.
 
 **Blocked by:** 18 — Materialize ordered logical source revisions; 19 —
 Complete the filing-to-Silver acceptance seam; 31 — `EXCLUDED_OPERATIONAL_TABLES`
-content never reaches canonical silver once canonical exists (added after
-the live dry-run attempt surfaced it as the actual remaining blocker)
+content never reaches canonical silver once canonical exists (resolved —
+this was the actual remaining blocker; its fix is what unblocked the dry
+run below)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `013_acquisition_ledger.sql` (and its widened `finalize_source_fetch`
+- [x] `013_acquisition_ledger.sql` (and its widened `finalize_source_fetch`
   signature from Ticket 17) is applied to prod's MDM Postgres via the
   standard `mdm migrate` path — not ad hoc — and confirmed live (no
   `UndefinedColumn`/`UndefinedTable` on a real query), following the
   lesson in CLAUDE.md's "MDM Postgres migration-011 schema drift" incident:
   verify against the *current*, non-orphaned state machine, not a stale one.
-- [ ] Warehouse and MDM images are rebuilt from current `main` and pushed to
+- [x] Warehouse and MDM images are rebuilt from current `main` and pushed to
   ECR (per CLAUDE.md's image-rebuild table — this path touches both
   `edgar_warehouse/acquisition/**` and, if `mdm/**` changed since the last
   prod image, that role too) and deployed via `deploy-aws-application.sh
   --env prod`.
-- [ ] A real `drive-filing-discovery-for-date` (or the Command-registration
+- [x] A real `drive-filing-discovery-for-date` (or the Command-registration
   seam's equivalent entry point) runs against prod for a bounded, small
   date/CIK scope — not the full universe — and is observed producing: a
   Fetch Decision per candidate, a verified Bronze capture, a materialized
@@ -37,21 +38,21 @@ the live dry-run attempt surfaced it as the actual remaining blocker)
   <!-- decision: which command is the real prod entry point once Command
        registration expands, and what the dry-run's exact bounded scope
        is, are resolved during this ticket, not pre-decided here -->
-- [ ] A no-op replay of the same scope is run a second time and confirmed to
+- [x] A no-op replay of the same scope is run a second time and confirmed to
   change nothing new (idempotent convergence, one of the map's acceptance
   criteria) — the first live proof of that criterion against real prod
   infrastructure rather than a test double.
-- [ ] Any prod-only gap found in the process (grants, orphaned state
+- [x] Any prod-only gap found in the process (grants, orphaned state
   machines, stale secrets — this repo's history says to expect at least
   one) is fixed via a committed, re-runnable script, not a manual one-off,
   per the standing "no state survives an account rebuild unless it's
   Terraform or a script" lesson in CLAUDE.md.
-- [ ] Legacy acquisition paths for `filing_artifact` are left untouched —
+- [x] Legacy acquisition paths for `filing_artifact` are left untouched —
   this ticket proves the new path works in prod, it does not cut traffic
   over or remove the old path (that's Ticket 27, and only after every
   source family, not just this one, proves out).
 
-## Answer (partial — dry run blocked, see below)
+## Answer
 
 **Done:**
 
@@ -83,58 +84,58 @@ the live dry-run attempt surfaced it as the actual remaining blocker)
 - [x] Legacy `filing_artifact` acquisition paths untouched — nothing in this
   ticket's work modified `capture-filing-artifact` or any pre-Ticket-13 path.
 
-**Blocked — not done:**
+**First attempt was blocked, then unblocked by Ticket 31:**
 
-- [ ] The bounded live dry run (Fetch Decision → Bronze capture → Logical
-  Source Revision → Silver acceptance, traceable end-to-end) and its no-op
-  replay were **not achieved**. Seeding one business date
-  (`load-daily-form-index-for-date 2026-08-21`, 3,719 total daily-index rows)
-  succeeded at the ECS-task level but its own log showed
-  `"skipped": true, "tables_merged": []` for the silver-database publish
-  step — the write never reached canonical. A follow-up
-  `drive-filing-discovery-for-date 2026-08-21` run against prod then failed
-  closed exactly as designed: `WarehouseRuntimeError: No sealed discovery
-  observation for business_date=2026-08-21 (checkpoint status='missing')`,
-  since canonical genuinely had no sealed checkpoint for that date.
-- Root-caused to two independent, compounding bugs in the general silver
-  merge/publish subsystem — **neither caused by this ticket's own diff**,
-  both pre-existing and newly discovered while attempting the dry run:
-  1. `compute_silver_fingerprint`'s skip-if-unchanged optimization
-     (`silver_protection.py`) only fingerprints `PROTECTED_TABLE_REGISTRY`
-     tables. `load-daily-form-index-for-date` writes exclusively to
-     `EXCLUDED_OPERATIONAL_TABLES` members (`stg_daily_index_filing`,
-     `sec_daily_index_checkpoint`), so its fingerprint is *always* identical
-     to hydration's, and the publish is skipped every single time,
-     unconditionally.
-  2. Deeper and more consequential, found while investigating fix #1:
-     `merge_candidate_into_canonical`'s only content-copying loop iterates
-     exclusively over `PROTECTED_TABLE_REGISTRY` — `EXCLUDED_OPERATIONAL_TABLES`
-     tables are *never* copied from candidate into the merged output once
-     canonical already exists (only the very first, canonical-doesn't-exist-yet
-     publish uploads a local file as-is, with no merge involved at all). This
-     contradicts the exclusion's own documented intent ("a candidate is
-     always free to overwrite them") and is not something fix #1 alone
-     resolves — fixing only the fingerprint would stop the false "skipped"
-     signal but the merge would still silently fail to persist the excluded
-     tables' content.
-- Filed as [31 — `EXCLUDED_OPERATIONAL_TABLES` content never reaches canonical
-  silver once canonical exists](31-excluded-operational-tables-never-reach-canonical-silver.md)
-  (blocks this ticket's remaining checkboxes) and
-  [30 — Fence `application` from acquisition ledger tables under Snowflake
-  Postgres's `snowflake_write` role](30-fence-application-from-acquisition-tables-under-snowflake-write.md)
-  (a separate, non-blocking finding: `application` has ambient read/write
-  access to the fenced acquisition tables via inherited membership in
-  Snowflake Postgres's own managed `snowflake_write` role, bypassing
-  migration 013's explicit per-object `REVOKE`s — confirmed live via
-  `has_table_privilege`; `models.py`'s `SourceExpectedProducerRecord`
-  docstring's "sole enforcement layer" claim is false in prod today until
-  30 is resolved).
-- Deliberately **not fixed in this session**: both newly-found bugs touch
-  shared, high-blast-radius infrastructure (the general silver merge/publish
-  path used by every silver-writing command in the platform, and a managed
-  Postgres platform role's default membership) — rushing a fix under
-  production time pressure risked a worse outcome than leaving the dry run
-  incomplete for a follow-up session with a clean, well-tested change.
+The first dry-run attempt hit exactly the blocker described in Ticket 31 —
+seeding one business date (`load-daily-form-index-for-date 2026-08-21`,
+3,719 total daily-index rows) succeeded at the ECS-task level but silently
+never reached canonical silver (`"skipped": true, "tables_merged": []`),
+so the follow-up `drive-filing-discovery-for-date 2026-08-21` failed closed
+exactly as designed (`WarehouseRuntimeError: No sealed discovery observation
+for business_date=2026-08-21 (checkpoint status='missing')`). Root-caused to
+two compounding, pre-existing bugs in the general silver merge/publish
+subsystem (not caused by this ticket's own diff) — see
+[31 — `EXCLUDED_OPERATIONAL_TABLES` content never reaches canonical silver
+once canonical exists](31-excluded-operational-tables-never-reach-canonical-silver.md)
+for the full root cause and fix. That fix was implemented, reviewed, merged
+(PR #454), deployed to prod, and verified live — `load-daily-form-index-for-date`
+re-run afterward showed `"tables_merged": ["sec_daily_index_checkpoint",
+"stg_daily_index_filing"]` for the first time.
 
-**Status:** ready-for-agent (remains open — reopen once 31, and optionally
-30, are resolved, then repeat the seed → drive → replay sequence above).
+**Dry run and no-op replay — both completed successfully, 2026-08-24:**
+
+With canonical silver now correctly sealing the daily-index checkpoint, ran
+the full sequence against prod for `business_date=2026-08-21` (3,719 daily-index
+candidates, no artificial scope reduction — small enough a date that every
+candidate could still be inspected via the ledger's own reads):
+
+1. `drive-filing-discovery-for-date 2026-08-21 --run-id ticket29-dryrun-retry-1787571822`
+   — ECS task `02cb9d533b5e416ab3990b7860826a22`, exit code 0, ~85 minutes
+   (sequential per-candidate Postgres round-trips through the acquisition
+   ledger — SET LOCAL ROLE, Fetch Decision insert/lookup, Source Revision
+   check, observation-cursor advance — genuinely slow but genuinely working,
+   confirmed via continuous CloudWatch log growth throughout, not a hang).
+   `run_manifest.json` result:
+   ```
+   candidates: 3719, captured: 614, excluded: 3105,
+   interval_complete: true, silver_interval_complete: true,
+   silver_settled: 614, silver_unsettled: 0, unsettled: 0
+   ```
+   Zero errors/exceptions anywhere in the full CloudWatch log stream.
+2. No-op replay: `drive-filing-discovery-for-date 2026-08-21 --run-id
+   ticket29-dryrun-replay-1787578744` — ECS task
+   `f6ba924f383248a8920850b354d20b54`, exit code 0, ~36 minutes (faster than
+   the first run, as expected with no new SEC fetching). `run_manifest.json`
+   row_counts were **byte-identical** to the first run's (same 3719/614/3105/614/0/0
+   figures). Across the entire replay log stream: **zero** `sec_pull_started`
+   events (no candidate was re-fetched from SEC) and **zero** error/exception/
+   failure patterns. This is the idempotent-convergence acceptance criterion,
+   proven live against real prod infrastructure rather than a test double.
+
+Also confirmed along the way: [30 — Fence `application` from acquisition
+ledger tables under Snowflake Postgres's `snowflake_write` role](30-fence-application-from-acquisition-tables-under-snowflake-write.md)
+remains open and non-blocking — it was filed as a separate finding during
+the earlier attempt and was not re-investigated in this pass; it does not
+gate this ticket's own acceptance criteria.
+
+**Status:** resolved.
