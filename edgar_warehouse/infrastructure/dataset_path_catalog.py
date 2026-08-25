@@ -347,6 +347,7 @@ class WarehousePathResolver:
             "capture-filing-artifact",
             "drive-filing-discovery-for-date",
             "drive-submissions-discovery",
+            "drive-company-facts-discovery",
         ):
             return {
                 "bronze": self._render("manifest.default.bronze.path", **default_tokens),

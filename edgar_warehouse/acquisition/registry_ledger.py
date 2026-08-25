@@ -60,8 +60,10 @@ from edgar_warehouse.acquisition.models import (
     SourceRegistryVersionRecord,
 )
 from edgar_warehouse.acquisition.source_family_registry import (
+    COMPANY_FACTS_SOURCE_FAMILY,
     FILING_ARTIFACT_SOURCE_FAMILY,
     SUBMISSIONS_SOURCE_FAMILY,
+    CompanyFactsPolicy,
     FilingArtifactPolicy,
     SubmissionsPolicy,
 )
@@ -451,6 +453,15 @@ _POLICY_FACTORIES: dict[str, tuple[str, _PolicyFactory]] = {
         # this Strategy or its acquisition_mode need to express.
         "on_demand_fetch",
         lambda identity, coverage: SubmissionsPolicy(
+            identity=identity, completeness_policy=coverage.completeness_policy
+        ),
+    ),
+    COMPANY_FACTS_SOURCE_FAMILY: (
+        # Same acquisition_mode as submissions -- one caller-supplied URL
+        # per call; the CIK-universe-driven fan-out is the discovery
+        # driver's concern (Ticket 22), not this Strategy's.
+        "on_demand_fetch",
+        lambda identity, coverage: CompanyFactsPolicy(
             identity=identity, completeness_policy=coverage.completeness_policy
         ),
     ),

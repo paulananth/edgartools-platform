@@ -47,7 +47,7 @@ if "${EDGAR_WAREHOUSE[@]}" mdm registry-status >/dev/null 2>&1; then
   exit 0
 fi
 
-echo "bootstrap-source-family-registry: no active registry version found -- opening and activating the first one for filing_artifact and submissions."
+echo "bootstrap-source-family-registry: no active registry version found -- opening and activating the first one for filing_artifact, submissions, and company_facts."
 
 # No prior history to catch up on for a brand-new environment: today is the
 # chosen baseline (catchup_required_through_date), and this script itself
@@ -90,6 +90,16 @@ cat > "${coverage_file}" <<JSON
     "required_producers": ["sec_company", "sec_company_filing"],
     "coverage_start_date": "${today}",
     "catchup_required_through_date": "${today}"
+  },
+  {
+    "source_family": "company_facts",
+    "coverage_action": "add",
+    "acquisition_mode": "on_demand_fetch",
+    "completeness_policy": "valid_json_object",
+    "discovery_policy": "cik_universe_driven",
+    "required_producers": ["sec_financial_fact", "sec_accounting_flag"],
+    "coverage_start_date": "${today}",
+    "catchup_required_through_date": "${today}"
   }
 ]
 JSON
@@ -104,7 +114,8 @@ print(json.load(sys.stdin)["version_id"])')"
 
 "${EDGAR_WAREHOUSE[@]}" mdm registry-record-catchup filing_artifact --through-date "${today}"
 "${EDGAR_WAREHOUSE[@]}" mdm registry-record-catchup submissions --through-date "${today}"
+"${EDGAR_WAREHOUSE[@]}" mdm registry-record-catchup company_facts --through-date "${today}"
 
 "${EDGAR_WAREHOUSE[@]}" mdm registry-activate "${version_id}"
 
-echo "bootstrap-source-family-registry: activated version_id=${version_id} for filing_artifact and submissions, caught up through ${today}."
+echo "bootstrap-source-family-registry: activated version_id=${version_id} for filing_artifact, submissions, and company_facts, caught up through ${today}."
