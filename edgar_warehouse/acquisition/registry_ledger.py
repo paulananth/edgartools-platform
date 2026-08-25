@@ -61,7 +61,9 @@ from edgar_warehouse.acquisition.models import (
 )
 from edgar_warehouse.acquisition.source_family_registry import (
     FILING_ARTIFACT_SOURCE_FAMILY,
+    SUBMISSIONS_SOURCE_FAMILY,
     FilingArtifactPolicy,
+    SubmissionsPolicy,
 )
 
 _DEFAULT_ROLE = RegistryTransitionRole.ACQUISITION_REGISTRY_OWNER
@@ -439,6 +441,16 @@ _POLICY_FACTORIES: dict[str, tuple[str, _PolicyFactory]] = {
     FILING_ARTIFACT_SOURCE_FAMILY: (
         "on_demand_fetch",
         lambda identity, coverage: FilingArtifactPolicy(
+            identity=identity, completeness_policy=coverage.completeness_policy
+        ),
+    ),
+    SUBMISSIONS_SOURCE_FAMILY: (
+        # Same acquisition_mode as filing_artifact -- both Strategies fetch
+        # one caller-supplied URL per call; the CIK-universe-driven fan-out
+        # is the new discovery driver's concern (Ticket 21), not something
+        # this Strategy or its acquisition_mode need to express.
+        "on_demand_fetch",
+        lambda identity, coverage: SubmissionsPolicy(
             identity=identity, completeness_policy=coverage.completeness_policy
         ),
     ),

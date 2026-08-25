@@ -8,6 +8,20 @@ HTTP path -- filing document/attachment bytes are deliberately *not* routed
 through ``edgartools_sec_gateway``, which is reserved for catalog/facts
 object classes; see that module's own docstring).
 
+Ticket 21 adds the second entry, ``submissions`` -- fetch and completeness
+behavior for one SEC submissions main snapshot or pagination file. Both are
+catalog objects (submissions.json / a company's paginated filing-history
+file), the object class ``edgartools_sec_gateway`` *is* reserved for -- the
+inverse gateway choice from ``filing_artifact``, deliberately, per that
+module's own docstring boundary. One Strategy class serves both logical-key
+kinds (main and pagination): from the Facade's point of view both are "fetch
+one URL, get bytes, check it's a well-formed JSON object" -- structurally
+identical, differing only in which URL a caller supplies. Proving that a
+main snapshot's *referenced pagination files* are all captured (Ticket 21
+bullet 2) is a cross-fetch concern the Facade's one-URL-per-call contract
+cannot express -- that lives above this module, in the new submissions
+discovery driver and its Silver-acceptance module, not inside ``is_complete``.
+
 Per the change-propagation spec's Ticket 03 GoF constraints, a policy here
 is a narrow first-class object satisfying ``facade.SourceFamilyPolicy`` --
 not a class hierarchy, and it never performs authorization, hashing, Bronze
@@ -19,20 +33,25 @@ in favor of ``registry_ledger.build_active_source_family_registry`` -- the
 *only* sanctioned way a caller may obtain a real ``SourceFamilyPolicy`` now,
 gated on a Source Family Registry version having actually activated. This
 module keeps only the Strategy implementations themselves
-(``FilingArtifactPolicy``); it deliberately has no knowledge of versioning,
-activation, or which families are currently covered.
+(``FilingArtifactPolicy``, ``SubmissionsPolicy``); it deliberately has no
+knowledge of versioning, activation, or which families are currently covered.
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from edgar_warehouse.infrastructure.edgartools_sec_gateway import (
+    download_bytes as download_sec_catalog_bytes,
+)
 from edgar_warehouse.infrastructure.filing_content_gateway import (
     download_filing_content_bytes,
 )
 
 FILING_ARTIFACT_SOURCE_FAMILY = "filing_artifact"
+SUBMISSIONS_SOURCE_FAMILY = "submissions"
 
 # Ticket 32: the registry's completeness_policy field names which of these
 # checks applies -- validated, not merely read, so a coverage row declaring
@@ -69,5 +88,48 @@ class FilingArtifactPolicy:
             raise UnsupportedCompletenessPolicy(
                 f"completeness_policy={self.completeness_policy!r} has no "
                 "installed check for filing_artifact"
+            )
+        return check(payload)
+
+
+def _is_valid_json_object(payload: bytes) -> bool:
+    if not payload:
+        return False
+    try:
+        document = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    return isinstance(document, dict)
+
+
+# Ticket 21: distinct from filing_artifact's checks -- a submissions payload
+# that decodes to non-empty bytes but isn't well-formed JSON (a truncated
+# download, an SEC error page served with a 200) must not be treated as
+# complete, since silver_store.py's staging loaders would fail or silently
+# produce nothing useful from it downstream.
+_SUBMISSIONS_COMPLETENESS_CHECKS: dict[str, Callable[[bytes], bool]] = {
+    "valid_json_object": _is_valid_json_object,
+}
+
+
+@dataclass(frozen=True)
+class SubmissionsPolicy:
+    """Fetch and completeness behavior for one submissions main snapshot or
+    pagination file -- one Strategy serves both logical-key kinds (see this
+    module's own docstring for why).
+    """
+
+    identity: str
+    completeness_policy: str = "valid_json_object"
+
+    def fetch(self, source_url: str) -> bytes:
+        return download_sec_catalog_bytes(source_url, self.identity)
+
+    def is_complete(self, payload: bytes) -> bool:
+        check = _SUBMISSIONS_COMPLETENESS_CHECKS.get(self.completeness_policy)
+        if check is None:
+            raise UnsupportedCompletenessPolicy(
+                f"completeness_policy={self.completeness_policy!r} has no "
+                "installed check for submissions"
             )
         return check(payload)

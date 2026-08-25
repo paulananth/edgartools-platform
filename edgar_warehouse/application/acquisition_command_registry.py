@@ -155,6 +155,43 @@ def _plan_drive_filing_discovery_for_date_writes(
     )
 
 
+def _execute_drive_submissions_discovery(args: Any) -> int:
+    # Import lazily: this command's own workflow imports the orchestrator,
+    # which in turn consults this registry for scope and write planning.
+    from edgar_warehouse.application.commands.drive_submissions_discovery import (
+        execute,
+    )
+
+    return execute(args)
+
+
+def _resolve_drive_submissions_discovery_scope(
+    *,
+    arguments: dict[str, Any],
+    now: datetime,
+    silver_root: StorageLocation | None,
+) -> dict[str, Any]:
+    del now, silver_root
+    return {
+        "tracking_status_filter": str(arguments.get("tracking_status_filter") or "active"),
+        "limit": str(arguments.get("limit")) if arguments.get("limit") is not None else "",
+    }
+
+
+def _plan_drive_submissions_discovery_writes(
+    *,
+    command_path: str,
+    run_id: str,
+    scope: dict[str, Any],
+) -> dict[str, str]:
+    return planned_writes(
+        "drive-submissions-discovery",
+        command_path,
+        run_id,
+        scope,
+    )
+
+
 def build_acquisition_command_registry(
     registrations: Iterable[AcquisitionCommandRegistration],
 ) -> dict[str, AcquisitionCommandRegistration]:
@@ -189,6 +226,12 @@ _ACQUISITION_COMMAND_REGISTRATIONS = build_acquisition_command_registry(
             execute=_execute_drive_filing_discovery_for_date,
             resolve_scope=_resolve_drive_filing_discovery_for_date_scope,
             planned_writes=_plan_drive_filing_discovery_for_date_writes,
+        ),
+        AcquisitionCommandRegistration(
+            name="drive-submissions-discovery",
+            execute=_execute_drive_submissions_discovery,
+            resolve_scope=_resolve_drive_submissions_discovery_scope,
+            planned_writes=_plan_drive_submissions_discovery_writes,
         ),
     )
 )

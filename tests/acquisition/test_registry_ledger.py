@@ -23,7 +23,10 @@ from edgar_warehouse.acquisition.registry_ledger import (
     active_in_scope_forms,
     build_active_source_family_registry,
 )
-from edgar_warehouse.acquisition.source_family_registry import FilingArtifactPolicy
+from edgar_warehouse.acquisition.source_family_registry import (
+    FilingArtifactPolicy,
+    SubmissionsPolicy,
+)
 
 
 def _engine():
@@ -200,6 +203,33 @@ def test_build_active_source_family_registry_constructs_real_policy() -> None:
 
     registry = build_active_source_family_registry(engine, identity="dev@example.com")
     assert registry == {"filing_artifact": FilingArtifactPolicy(identity="dev@example.com")}
+
+
+def test_build_active_source_family_registry_constructs_a_real_submissions_policy() -> None:
+    """Ticket 21: submissions is the second real _POLICY_FACTORIES entry."""
+
+    engine = _engine()
+    ledger = SourceRegistryLedger(engine)
+    version = ledger.open_draft(
+        [
+            CoverageSpec(
+                source_family="submissions",
+                coverage_action="add",
+                acquisition_mode="on_demand_fetch",
+                completeness_policy="valid_json_object",
+                discovery_policy="cik_universe_driven",
+                required_producers=("sec_company", "sec_company_filing"),
+                coverage_start_date=date(2026, 8, 21),
+                catchup_required_through_date=date(2026, 8, 21),
+            )
+        ],
+        operator_authorization_reference="op-1",
+    )
+    ledger.record_catchup_progress("submissions", date(2026, 8, 21))
+    ledger.activate(version.version_id)
+
+    registry = build_active_source_family_registry(engine, identity="dev@example.com")
+    assert registry == {"submissions": SubmissionsPolicy(identity="dev@example.com")}
 
 
 def test_removed_family_stays_covered_until_coverage_end_date_then_excluded() -> None:
