@@ -1535,6 +1535,61 @@ role graph is not optional coverage for anything that fences a table by role.
 **Not yet deployed** as of this entry — migration `014_source_registry.sql` has not been applied
 to prod, and no image rebuild has happened for this fix.
 
+## LOAD_SILVER_LANDING_TASK credit-burn 5-whys (resolved 2026-08-25)
+
+**Problem:** `EDGARTOOLS_PROD_REFRESH_WH` went from ~$0/day to ~9 credits/day, sustained every
+day, starting 2026-08-18 — confirmed via `SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY`
+and `METERING_DAILY_HISTORY` (this one warehouse is essentially all of the account's
+`WAREHOUSE_METERING` cost on every affected day).
+
+1. Symptom: `EDGARTOOLS_PROD_REFRESH_WH` (X-Small, `auto_suspend=60`) burns ~9 credits/day, every
+   day, with no obvious backfill or manual work running.
+2. Why? `QUERY_HISTORY` on that warehouse shows 58,971 `COPY INTO` statements and 1,908
+   `CALL LOAD_SILVER_LANDING()` calls over 7 days — continuous, not bursty.
+3. Why so many? `TASK_HISTORY` shows `LOAD_SILVER_LANDING_TASK` firing every 5 minutes, 288
+   times/day, every day since it was created (2026-08-18 14:17), each firing running one
+   `COPY INTO` per silver-landing table (~30 tables,
+   `infra/snowflake/sql/bootstrap/13_silver_landing_ingest.sql`'s `LOAD_SILVER_LANDING()`
+   procedure) regardless of whether new Parquet files actually landed since the last run.
+4. Why does that cost real credits when each run only does ~20-30s of real work? Snowflake bills
+   a per-resume minimum on top of actual compute time; with the warehouse suspending between
+   5-minute ticks (idle time between runs exceeds `auto_suspend=60`), nearly every one of the 288
+   daily firings pays that minimum on top of its real work, even on ticks with nothing new to
+   load.
+5. **Root cause:** `LOAD_SILVER_LANDING_TASK` was shipped with an explicitly-labeled "starting
+   default... tune once real volume exists" 5-minute cadence (Ticket 07's own comment, silver-
+   snowflake-migration map) and nobody circled back to tune it — the exact same
+   poll-interval-too-tight-for-warehouse-resume-billing shape this file's own "ecs-cost-sizing"
+   finding had already diagnosed and fixed for `SNOWFLAKE_RUN_MANIFEST_TASK` (1 MIN → 15 MIN →
+   6 HOUR) three weeks earlier. That fix was never ported to this sibling task, created after it
+   — the same "sibling path silently diverged" pattern this file documents repeatedly elsewhere
+   (`ShardedSilverReader._TABLES`, shard-publish, relationship-derivation, the silver-loader
+   OPERATE+SELECT gap above).
+
+**Fix:** `LOAD_SILVER_LANDING_TASK`'s `SCHEDULE` widened `5 MINUTE → 60 MINUTE` in
+`infra/snowflake/sql/bootstrap/13_silver_landing_ingest.sql` (24 resumes/day instead of 288),
+applied live to prod (`SHOW TASKS` confirms `schedule: 60 MINUTE`, `state: started`). Sized to
+land under an explicit **≤1 credit/day** ceiling for this task, extrapolated from the 5-minute
+cadence's own observed ~9 credits/day at 288 resumes/day — **re-verify against a full day of
+`WAREHOUSE_METERING_HISTORY` after this deploys**, since the 60-minute number itself was not
+independently measured before rollout. `ALTER TASK ... SET SCHEDULE` against a `STARTED` root
+task fails closed (`"Unable to update graph with root task ... since that root task is not
+suspended"`, confirmed live) — the script now `SUSPEND`s before altering the schedule and
+`RESUME`s after, both idempotent no-ops if already in that state, so a re-run is safe regardless
+of the task's current state. Nothing downstream depends on landing's write latency (Ticket 07's
+own answer, unchanged by this fix) — an hourly ceiling on data freshness here doesn't block any
+consumer, since every consumer refreshes on its own `TARGET_LAG`, not on landing's write time.
+
+**For future builds — read this before adding any new Snowflake `TASK`:** a fixed-interval poll
+task pays a per-resume minimum charge close to every tick unless the interval is wide enough for
+the warehouse to have been suspended for a meaningful stretch beforehand. Before shipping a new
+scheduled task (or accepting a "5 MINUTE, tune later" placeholder default the way this one was
+shipped), size the interval — or add a data-presence gate so idle ticks skip the resume
+entirely (e.g. a stream-gated conditional task via `WHEN SYSTEM$STREAM_HAS_DATA(...)`, not
+implemented here, evaluated once real volume makes tighter freshness worth its own cost) — against
+an explicit credit budget up front, the same way this fix had to retrofit one after the fact.
+Full write-up: `.scratch/silver-landing-task-cost/issues/01-cap-load-silver-landing-task-credit-spend.md`.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live
