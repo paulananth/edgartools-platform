@@ -3645,7 +3645,12 @@ def _reset_edgartools_filing_cache_after_transient_content_error(exc: BaseExcept
     degraded result forever within this process -- retrying without busting this
     cache is a no-op that always replays the same bad response. Mirrors
     `_reset_edgartools_client_after_pool_timeout`'s HTTP-client-reuse fix for the
-    same "edgartools reuses internal state across calls" class of issue.
+    same "edgartools reuses internal state across calls" class of issue, but
+    unlike that sibling's unguarded `edgar.httpclient` import, this one is
+    wrapped defensively -- `edgar._filings` is edgartools' private,
+    underscore-prefixed module (no public cache-clear surface exists for this
+    specific cache), so it carries materially higher break-on-upgrade risk
+    than the sibling's import from a public module.
     """
     pending: list[BaseException] = [exc]
     seen: set[int] = set()
@@ -3658,9 +3663,28 @@ def _reset_edgartools_filing_cache_after_transient_content_error(exc: BaseExcept
             error_type.__name__.lower() == "transientfilingcontenterror"
             for error_type in type(current).__mro__
         ):
-            from edgar._filings import get_filing_by_accession
-
-            get_filing_by_accession.cache_clear()
+            # get_filing_by_accession lives in edgar's private, underscore-
+            # prefixed _filings module -- there is no public cache-clear
+            # surface for this (edgar.get_by_accession_number, the public
+            # wrapper, does not itself expose .cache_clear()). This runs
+            # inside a caller's `except` block already handling a real
+            # transient error, so an unhandled ImportError/AttributeError from
+            # an edgartools upgrade renaming or removing this private symbol
+            # would replace that original exception and crash the whole retry
+            # loop outright. Only the *absence* of the symbol/attribute is
+            # treated as "reset not available" (returning False, surfaced via
+            # the caller's edgartools_filing_cache_reset telemetry) -- an
+            # AttributeError raised from inside cache_clear() itself (a real
+            # bug, not a missing attribute) is deliberately not caught here,
+            # so it still propagates instead of being silently swallowed.
+            try:
+                from edgar._filings import get_filing_by_accession
+            except ImportError:
+                return False
+            cache_clear = getattr(get_filing_by_accession, "cache_clear", None)
+            if cache_clear is None:
+                return False
+            cache_clear()
             return True
         for nested in (
             getattr(current, "__cause__", None),
