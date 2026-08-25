@@ -17,6 +17,13 @@ def _parse_cik_list(value: str) -> list[int]:
         raise argparse.ArgumentTypeError("CIKs must be comma-separated integers") from exc
 
 
+def _parse_source_name_list(value: str) -> list[str]:
+    items = [item.strip() for item in value.split(",") if item.strip()]
+    if not items:
+        raise argparse.ArgumentTypeError("expected at least one source name")
+    return items
+
+
 def _parse_adv_artifact(value: str) -> dict[str, object]:
     parts = [part.strip() for part in value.split(",", 3)]
     if len(parts) not in (3, 4):
@@ -160,6 +167,10 @@ def _handle_drive_submissions_discovery(args: argparse.Namespace) -> int:
 
 def _handle_drive_company_facts_discovery(args: argparse.Namespace) -> int:
     return run_command("drive-company-facts-discovery", args)
+
+
+def _handle_drive_reference_catalog_discovery(args: argparse.Namespace) -> int:
+    return run_command("drive-reference-catalog-discovery", args)
 
 
 def _handle_load_daily_form_index_for_date(args: argparse.Namespace) -> int:
@@ -653,6 +664,40 @@ def build_parser() -> argparse.ArgumentParser:
     _add_run_id_arg(drive_company_facts_discovery)
     drive_company_facts_discovery.set_defaults(
         handler=_handle_drive_company_facts_discovery
+    )
+
+    drive_reference_catalog_discovery = subparsers.add_parser(
+        "drive-reference-catalog-discovery",
+        help="Drive the fixed SEC reference-catalog source-name set through "
+        "the ledger-gated acquisition Facade.",
+    )
+    drive_reference_catalog_discovery.add_argument(
+        "--source-names",
+        type=_parse_source_name_list,
+        default=None,
+        help="Comma-separated source-name override (default: both supported "
+        "ticker catalogs)",
+    )
+    drive_reference_catalog_discovery.add_argument(
+        "--worker-id",
+        default=None,
+        help="Fencing worker identity; defaults to a process-derived value",
+    )
+    drive_reference_catalog_discovery.add_argument(
+        "--lease-seconds",
+        type=int,
+        default=None,
+        help="Fetch-work lease duration in seconds (default: 300)",
+    )
+    drive_reference_catalog_discovery.add_argument(
+        "--registry-version",
+        default=None,
+        help="Source Family Registry version tied to issued decisions "
+        "(default: reference-catalog-v1)",
+    )
+    _add_run_id_arg(drive_reference_catalog_discovery)
+    drive_reference_catalog_discovery.set_defaults(
+        handler=_handle_drive_reference_catalog_discovery
     )
 
     catch_up_daily = subparsers.add_parser(

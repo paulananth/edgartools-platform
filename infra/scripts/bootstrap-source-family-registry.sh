@@ -1,23 +1,25 @@
 #!/usr/bin/env bash
-# Ticket 32 item 3 (extended by Ticket 21 for the submissions family): open
-# and activate the first Source Family Registry version, covering every
-# family a fresh environment needs -- the one committed, re-runnable
-# bootstrap path this system needs before drive-filing-discovery-for-date/
-# capture-filing-artifact/drive-submissions-discovery can run at all. All
-# three commands hard-require an active registry version covering their own
-# family (NoActiveRegistryVersion / UnsupportedAcquisitionMode /
+# Ticket 32 item 3 (extended by Ticket 21 for submissions, Ticket 22 for
+# company_facts, and Ticket 23 for reference_catalog): open and activate the
+# first Source Family Registry version, covering every family a fresh
+# environment needs -- the one committed, re-runnable bootstrap path this
+# system needs before drive-filing-discovery-for-date/capture-filing-artifact/
+# drive-submissions-discovery/drive-company-facts-discovery/
+# drive-reference-catalog-discovery can run at all. Every one of these
+# commands hard-requires an active registry version covering its own family
+# (NoActiveRegistryVersion / UnsupportedAcquisitionMode /
 # UnsupportedDiscoveryPolicy otherwise) -- before this script existed, the
 # only place this sequence was written down was duplicated inline in test
 # fixtures (`_activate_filing_artifact_registry` in
 # test_capture_filing_artifact_command.py and
 # test_drive_filing_discovery_command.py, `_activate_submissions_registry`
 # in test_drive_submissions_discovery_command.py), which is not a
-# deliverable. Both families are declared in ONE draft/activate here, not
-# two separate scripts -- Ticket 20's model is one active version covering
-# every currently-in-scope family, and this script's own idempotency guard
-# below (checking whether ANY version is already active) would make a
-# second script for a second family silently no-op instead of adding its
-# coverage.
+# deliverable. Every family is declared in ONE draft/activate here, not a
+# separate script per family -- Ticket 20's model is one active version
+# covering every currently-in-scope family, and this script's own
+# idempotency guard below (checking whether ANY version is already active)
+# would make a second script for a new family silently no-op instead of
+# adding its coverage.
 #
 # Idempotent once a version has actually activated: does nothing if a
 # registry version is already active (checked via `mdm registry-status`'s
@@ -47,7 +49,7 @@ if "${EDGAR_WAREHOUSE[@]}" mdm registry-status >/dev/null 2>&1; then
   exit 0
 fi
 
-echo "bootstrap-source-family-registry: no active registry version found -- opening and activating the first one for filing_artifact, submissions, and company_facts."
+echo "bootstrap-source-family-registry: no active registry version found -- opening and activating the first one for filing_artifact, submissions, company_facts, and reference_catalog."
 
 # No prior history to catch up on for a brand-new environment: today is the
 # chosen baseline (catchup_required_through_date), and this script itself
@@ -100,6 +102,16 @@ cat > "${coverage_file}" <<JSON
     "required_producers": ["sec_financial_fact", "sec_accounting_flag"],
     "coverage_start_date": "${today}",
     "catchup_required_through_date": "${today}"
+  },
+  {
+    "source_family": "reference_catalog",
+    "coverage_action": "add",
+    "acquisition_mode": "on_demand_fetch",
+    "completeness_policy": "valid_ticker_catalog_json",
+    "discovery_policy": "fixed_source_name_set",
+    "required_producers": ["sec_company_ticker"],
+    "coverage_start_date": "${today}",
+    "catchup_required_through_date": "${today}"
   }
 ]
 JSON
@@ -115,7 +127,8 @@ print(json.load(sys.stdin)["version_id"])')"
 "${EDGAR_WAREHOUSE[@]}" mdm registry-record-catchup filing_artifact --through-date "${today}"
 "${EDGAR_WAREHOUSE[@]}" mdm registry-record-catchup submissions --through-date "${today}"
 "${EDGAR_WAREHOUSE[@]}" mdm registry-record-catchup company_facts --through-date "${today}"
+"${EDGAR_WAREHOUSE[@]}" mdm registry-record-catchup reference_catalog --through-date "${today}"
 
 "${EDGAR_WAREHOUSE[@]}" mdm registry-activate "${version_id}"
 
-echo "bootstrap-source-family-registry: activated version_id=${version_id} for filing_artifact, submissions, and company_facts, caught up through ${today}."
+echo "bootstrap-source-family-registry: activated version_id=${version_id} for filing_artifact, submissions, company_facts, and reference_catalog, caught up through ${today}."
