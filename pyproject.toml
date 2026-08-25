@@ -87,6 +87,26 @@ include = [
 
 [tool.pytest.ini_options]
 markers = []
+filterwarnings = [
+    # `edgartools` (our third-party PyPI dependency, not our code -- see
+    # CLAUDE.md's "edgartools Dependency" note) still imports its own
+    # deprecated internal modules (edgar.files.html_documents, edgar.files.html,
+    # edgar.files.htmltools) from several of its own top-level modules
+    # (edgar/_filings.py, edgar/_markdown.py, edgar/files/markdown.py) --
+    # every one of these DeprecationWarnings fires purely from `import edgar`
+    # itself, regardless of what this codebase calls. Confirmed still present,
+    # unchanged, in the latest available release (5.53.0, checked 2026-08-25
+    # by inspecting its wheel directly against our pinned 5.30.0) -- so
+    # upgrading the dependency does not resolve this; it's an upstream lag
+    # between deprecating a module and migrating the library's own internal
+    # callers off it. Pure test-output noise, not actionable in our code --
+    # filtered narrowly by message (each pattern names the specific deprecated
+    # module), not by blanket-ignoring every DeprecationWarning, so a real
+    # deprecation warning from our own code or another dependency still surfaces.
+    "ignore:edgar\\.files\\.html_documents module.*is deprecated:DeprecationWarning",
+    "ignore:edgar\\.files\\.html module.*is deprecated:DeprecationWarning",
+    "ignore:edgar\\.files\\.htmltools module.*is deprecated:DeprecationWarning",
+]
 
 [tool.uv.sources]
 en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
