@@ -7,6 +7,7 @@ import pytest
 from edgar_warehouse.acquisition.source_family_registry import (
     CompanyFactsPolicy,
     FilingArtifactPolicy,
+    ReferenceCatalogPolicy,
     SubmissionsPolicy,
     UnsupportedCompletenessPolicy,
 )
@@ -131,3 +132,71 @@ def test_company_facts_policy_rejects_an_unknown_completeness_policy() -> None:
 
     with pytest.raises(UnsupportedCompletenessPolicy):
         policy.is_complete(b'{"cik": 320193}')
+
+
+def test_reference_catalog_policy_fetches_via_edgartools_sec_gateway() -> None:
+    """Ticket 23: ticker catalogs are a catalog/facts object class, same
+    gateway boundary as submissions/company_facts -- see this module's own
+    docstring.
+    """
+
+    policy = ReferenceCatalogPolicy(identity="EdgarTools Platform test@example.com")
+
+    with patch(
+        "edgar_warehouse.acquisition.source_family_registry.download_sec_catalog_bytes",
+        return_value=b'{"fields": ["cik", "name", "ticker", "exchange"], "data": []}',
+    ) as mocked:
+        payload = policy.fetch("https://www.sec.gov/files/company_tickers_exchange.json")
+
+    mocked.assert_called_once_with(
+        "https://www.sec.gov/files/company_tickers_exchange.json",
+        "EdgarTools Platform test@example.com",
+    )
+    assert payload == b'{"fields": ["cik", "name", "ticker", "exchange"], "data": []}'
+
+
+def test_reference_catalog_policy_completeness_accepts_both_sec_ticker_shapes() -> None:
+    policy = ReferenceCatalogPolicy(identity="EdgarTools Platform test@example.com")
+
+    # company_tickers_exchange.json shape.
+    assert policy.is_complete(b'{"fields": ["cik", "ticker"], "data": [[320193, "AAPL"]]}') is True
+    # company_tickers.json shape (numbered-dict of entries).
+    assert policy.is_complete(b'{"0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple"}}') is True
+
+
+def test_reference_catalog_policy_completeness_allows_a_valid_empty_catalog() -> None:
+    """Bullet 2: a valid zero-member catalog must complete without fabricated
+    rows -- both SEC shapes have a legitimate empty form.
+    """
+
+    policy = ReferenceCatalogPolicy(identity="EdgarTools Platform test@example.com")
+
+    assert policy.is_complete(b'{"fields": ["cik", "ticker"], "data": []}') is True
+    assert policy.is_complete(b"{}") is True
+
+
+def test_reference_catalog_policy_completeness_rejects_malformed_or_unrecognized_shapes() -> None:
+    """Advisor trap ``_parse_company_ticker_rows`` doesn't guard against on its
+    own: a payload that decodes to well-formed JSON but matches neither SEC
+    ticker-catalog shape would otherwise silently parse to zero rows,
+    indistinguishable from a genuine empty catalog -- completeness must catch
+    this before it ever reaches the parser.
+    """
+
+    policy = ReferenceCatalogPolicy(identity="EdgarTools Platform test@example.com")
+
+    assert policy.is_complete(b"") is False
+    assert policy.is_complete(b"not json") is False
+    assert policy.is_complete(b"[1, 2, 3]") is False  # valid JSON, not an object
+    assert policy.is_complete(b'{"unexpected": "shape"}') is False
+    assert policy.is_complete(b'{"0": {"missing_cik_str": true}}') is False
+
+
+def test_reference_catalog_policy_rejects_an_unknown_completeness_policy() -> None:
+    policy = ReferenceCatalogPolicy(
+        identity="EdgarTools Platform test@example.com",
+        completeness_policy="some_future_policy",
+    )
+
+    with pytest.raises(UnsupportedCompletenessPolicy):
+        policy.is_complete(b'{"fields": [], "data": []}')

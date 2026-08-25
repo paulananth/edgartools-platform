@@ -26,6 +26,7 @@ from edgar_warehouse.acquisition.registry_ledger import (
 from edgar_warehouse.acquisition.source_family_registry import (
     CompanyFactsPolicy,
     FilingArtifactPolicy,
+    ReferenceCatalogPolicy,
     SubmissionsPolicy,
 )
 
@@ -258,6 +259,33 @@ def test_build_active_source_family_registry_constructs_a_real_company_facts_pol
 
     registry = build_active_source_family_registry(engine, identity="dev@example.com")
     assert registry == {"company_facts": CompanyFactsPolicy(identity="dev@example.com")}
+
+
+def test_build_active_source_family_registry_constructs_a_real_reference_catalog_policy() -> None:
+    """Ticket 23: reference_catalog is the fourth real _POLICY_FACTORIES entry."""
+
+    engine = _engine()
+    ledger = SourceRegistryLedger(engine)
+    version = ledger.open_draft(
+        [
+            CoverageSpec(
+                source_family="reference_catalog",
+                coverage_action="add",
+                acquisition_mode="on_demand_fetch",
+                completeness_policy="valid_ticker_catalog_json",
+                discovery_policy="fixed_source_name_set",
+                required_producers=("sec_company_ticker",),
+                coverage_start_date=date(2026, 8, 25),
+                catchup_required_through_date=date(2026, 8, 25),
+            )
+        ],
+        operator_authorization_reference="op-1",
+    )
+    ledger.record_catchup_progress("reference_catalog", date(2026, 8, 25))
+    ledger.activate(version.version_id)
+
+    registry = build_active_source_family_registry(engine, identity="dev@example.com")
+    assert registry == {"reference_catalog": ReferenceCatalogPolicy(identity="dev@example.com")}
 
 
 def test_removed_family_stays_covered_until_coverage_end_date_then_excluded() -> None:

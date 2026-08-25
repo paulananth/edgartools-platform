@@ -53,6 +53,7 @@ from edgar_warehouse.infrastructure.filing_content_gateway import (
 FILING_ARTIFACT_SOURCE_FAMILY = "filing_artifact"
 SUBMISSIONS_SOURCE_FAMILY = "submissions"
 COMPANY_FACTS_SOURCE_FAMILY = "company_facts"
+REFERENCE_CATALOG_SOURCE_FAMILY = "reference_catalog"
 
 # Ticket 32: the registry's completeness_policy field names which of these
 # checks applies -- validated, not merely read, so a coverage row declaring
@@ -167,5 +168,71 @@ class CompanyFactsPolicy:
             raise UnsupportedCompletenessPolicy(
                 f"completeness_policy={self.completeness_policy!r} has no "
                 "installed check for company_facts"
+            )
+        return check(payload)
+
+
+def _is_valid_ticker_catalog_json(payload: bytes) -> bool:
+    """Ticket 23: stricter than ``_is_valid_json_object`` -- a ticker catalog
+    payload that decodes to *some* well-formed JSON object but not one of SEC's
+    two actual company-tickers shapes (``company_tickers.json``'s numbered-dict
+    shape, or ``company_tickers_exchange.json``'s ``{"fields": [...], "data":
+    [...]}`` shape) must not be treated as complete -- ``_parse_company_ticker_rows``
+    silently returns an empty list for any payload shape it doesn't recognize,
+    which would otherwise be indistinguishable from a genuine, valid zero-member
+    catalog (bullet 2's complete-empty-scope case). An empty ``{}`` or an empty
+    ``data`` list is still complete -- SEC serving a real empty catalog is a
+    legitimate, if unlikely, outcome, not a malformed one.
+    """
+
+    if not payload:
+        return False
+    try:
+        document = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(document, dict):
+        return False
+    fields = document.get("fields")
+    data = document.get("data")
+    if isinstance(fields, list) and isinstance(data, list):
+        return True
+    if not document:
+        return True
+    return all(isinstance(entry, dict) and "cik_str" in entry for entry in document.values())
+
+
+_REFERENCE_CATALOG_COMPLETENESS_CHECKS: dict[str, Callable[[bytes], bool]] = {
+    "valid_ticker_catalog_json": _is_valid_ticker_catalog_json,
+}
+
+
+@dataclass(frozen=True)
+class ReferenceCatalogPolicy:
+    """Fetch and completeness behavior for one SEC reference catalog snapshot
+    (``company_tickers.json`` or ``company_tickers_exchange.json``).
+
+    A catalog/facts object class, same gateway as ``submissions``/
+    ``company_facts``. Scoped to the two auto-refetched ticker catalogs only
+    -- the PCAOB firm registry is a supported reference source too
+    (``edgartools_sec_gateway``'s catalog list), but it arrives today only via
+    the operator-driven evidence-import ladder
+    (``warehouse_orchestrator.py``'s ``pcaob_firm_registry`` relationship-source
+    kind), not an auto-refetched snapshot -- Ticket 25 owns that path, not
+    this one.
+    """
+
+    identity: str
+    completeness_policy: str = "valid_ticker_catalog_json"
+
+    def fetch(self, source_url: str) -> bytes:
+        return download_sec_catalog_bytes(source_url, self.identity)
+
+    def is_complete(self, payload: bytes) -> bool:
+        check = _REFERENCE_CATALOG_COMPLETENESS_CHECKS.get(self.completeness_policy)
+        if check is None:
+            raise UnsupportedCompletenessPolicy(
+                f"completeness_policy={self.completeness_policy!r} has no "
+                "installed check for reference_catalog"
             )
         return check(payload)
