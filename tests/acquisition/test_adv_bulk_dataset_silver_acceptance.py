@@ -20,6 +20,7 @@ from edgar_warehouse.acquisition.adv_bulk_dataset_discovery import (
     AdvBulkDatasetManifest,
 )
 from edgar_warehouse.acquisition.adv_bulk_dataset_silver_acceptance import (
+    ADV_BULK_PRODUCER_NAMES,
     UnsupportedRequiredProducers,
     drive_adv_bulk_dataset_silver_acceptance,
 )
@@ -230,6 +231,68 @@ def test_second_identical_capture_is_no_impact_and_publishes_with_no_producers(t
     decision_2 = second.outcomes[0].processing_decision
     assert decision_2.silver_outcome is SilverOutcome.PUBLISHED
     assert decision_2.expected_producers == ()
+
+
+_BULK_ARCHIVE_SUPERSEDING = _zip(
+    {
+        "IA_ADV_Base_A_20260601_20260630.csv": (
+            '"FilingID","DateSubmitted","1A","1D","1E1","7B"\n'
+            '2115188,"06/25/2026 09:00:00 AM","PNC WEALTH","801-66195",129099,"N"\n'
+        ),
+    }
+)
+
+
+def test_a_content_different_capture_for_the_same_period_supersedes_and_settles_verified(
+    tmp_path: Path,
+) -> None:
+    """Bullet 3's "superseding" case: a later capture for the same
+    logical_source_key (same dataset_period) with genuinely different
+    content is ContentImpact.CHANGED, not NO_IMPACT -- and Silver's upsert
+    (accession_number PK) reflects the new content, not a duplicate row.
+    """
+
+    ledger, bronze_root, revisions, processing, finalizer, silver = _harness(tmp_path)
+    decision_id_1 = _captured_decision(
+        ledger, bronze_root,
+        candidate_id="adv-bulk-dataset-discovery/adv-bulk/2026-06",
+        logical_source_key="adv-bulk-archive/2026-06",
+        payload=_BULK_ARCHIVE,
+    )
+    outcome_1 = _outcome(source_kind="adv_bulk", dataset_period="2026-06", decision_id=decision_id_1)
+    first = drive_adv_bulk_dataset_silver_acceptance(
+        ledger, bronze_root, revisions, processing, finalizer, silver,
+        AdvBulkDatasetDriveResult(
+            manifest=AdvBulkDatasetManifest(universe_label="t", candidates=(), unpublished_periods=()),
+            outcomes=(outcome_1,),
+        ),
+    )
+    assert first.outcomes[0].processing_decision.silver_outcome is SilverOutcome.PUBLISHED
+
+    decision_id_2 = _captured_decision(
+        ledger, bronze_root,
+        candidate_id="adv-bulk-dataset-discovery/adv-bulk/2026-06-corrected",
+        logical_source_key="adv-bulk-archive/2026-06",
+        payload=_BULK_ARCHIVE_SUPERSEDING,
+    )
+    outcome_2 = _outcome(source_kind="adv_bulk", dataset_period="2026-06", decision_id=decision_id_2)
+    second = drive_adv_bulk_dataset_silver_acceptance(
+        ledger, bronze_root, revisions, processing, finalizer, silver,
+        AdvBulkDatasetDriveResult(
+            manifest=AdvBulkDatasetManifest(universe_label="t", candidates=(), unpublished_periods=()),
+            outcomes=(outcome_2,),
+        ),
+    )
+    decision_2 = second.outcomes[0].processing_decision
+    assert decision_2.silver_outcome is SilverOutcome.PUBLISHED
+    # A real content change, not a no-op -- expected producers are sealed
+    # and verified again, not skipped as NO_IMPACT.
+    assert len(decision_2.expected_producers) == len(ADV_BULK_PRODUCER_NAMES)
+    for producer in decision_2.expected_producers:
+        assert producer.outcome.value == "VERIFIED"
+
+    rows = silver.fetch("SELECT accession_number, crd_number FROM sec_adv_filing")
+    assert rows == [{"accession_number": "iapd-adv:2115188", "crd_number": "129099"}]
 
 
 def test_fails_closed_on_an_unsupported_required_producers_set(tmp_path: Path) -> None:

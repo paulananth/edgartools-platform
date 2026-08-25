@@ -109,13 +109,37 @@ real EDGAR accessions) does **not** exist: bulk rows are keyed
 `NNNNNNNNNN-YY-NNNNNN` accession shape, verified by reading
 `adv_bulk_ingest.py` directly — no defensive keying needed.
 
-**Tests:** 12 new (7 `test_adv_bulk_dataset_discovery.py`, 4
+**Tests:** 13 new (7 `test_adv_bulk_dataset_discovery.py`, 5
 `test_adv_bulk_dataset_silver_acceptance.py`, 1 command-level integration
 test), all passed on first implementation (no bug-fix cycle this ticket, per
 the prior three tickets' hard-won lessons applied preemptively: source-name/
 kind-only candidate IDs, upfront `UnsupportedRequiredProducers` gate,
 `dataset_path_catalog.py` wiring remembered proactively). `tests/acquisition/`
-+ `tests/application/` (593 tests) and `tests/architecture/` (534 tests,
++ `tests/application/` (593+ tests) and `tests/architecture/` (534 tests,
 confirming the new `sec_client` import into `source_family_registry.py` is a
 permitted per-source-module boundary, not a `warehouse_orchestrator.py`
-violation) both green.
+violation) both green. Full repo suite green: 2592 passed, 4 skipped.
+
+**`/code-review` (Standards + Spec, two parallel agents against `origin/main`):**
+Standards found no hard violations — two minor, disclosed judgement calls
+(a `source_kind` dispatch branch in the silver-acceptance module, and a
+duplicated family-name-string constant between the discovery module and
+`source_family_registry.py`), both either justified by ADV's real data shape
+or faithfully inherited from Ticket 23's own precedent, not new smells.
+Spec confirmed bullets 1/4/5 as accurately implemented/reported, and no
+scope creep — but caught one real gap: bullet 3 ("...superseding...replayed...
+produce explicit verified outcomes") was checked `[x]` without a test
+actually exercising the *superseding* case (a second, content-different
+capture for the same `dataset_period`/`logical_source_key`, proving
+`ContentImpact.CHANGED` — not `NO_IMPACT` — and a correct Silver upsert of
+the new content). Confirmed via the reviewer's own repo-wide grep that this
+gap is pre-existing across Tickets 21-23 too (not a new regression), but
+fixed for this family anyway since it was cheap and the failure mode is
+real: `test_a_content_different_capture_for_the_same_period_supersedes_and_
+settles_verified` now proves a same-`FilingID` archive republished with a
+corrected field value produces a genuinely re-verified decision (non-empty
+`expected_producers`, not the empty-tuple `NO_IMPACT` shape) and that
+Silver's `accession_number`-keyed upsert reflects the corrected value with
+no duplicate row. Bullet 3 is now `[x]` honestly for this family; the same
+gap for Tickets 21-23 is not retroactively fixed here (out of this ticket's
+scope) and remains open for whoever picks it up.
