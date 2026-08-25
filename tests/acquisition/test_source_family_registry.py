@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from edgar_warehouse.acquisition.source_family_registry import (
+    CompanyFactsPolicy,
     FilingArtifactPolicy,
     SubmissionsPolicy,
     UnsupportedCompletenessPolicy,
@@ -87,3 +88,46 @@ def test_submissions_policy_rejects_an_unknown_completeness_policy() -> None:
 
     with pytest.raises(UnsupportedCompletenessPolicy):
         policy.is_complete(b'{"cik": "0000320193"}')
+
+
+def test_company_facts_policy_fetches_via_edgartools_sec_gateway() -> None:
+    """Ticket 22: companyfacts JSON is a catalog/facts object class, same
+    gateway boundary as submissions -- see this module's own docstring.
+    """
+
+    policy = CompanyFactsPolicy(identity="EdgarTools Platform test@example.com")
+
+    with patch(
+        "edgar_warehouse.acquisition.source_family_registry.download_sec_catalog_bytes",
+        return_value=b'{"cik": 320193, "facts": {}}',
+    ) as mocked:
+        payload = policy.fetch("https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json")
+
+    mocked.assert_called_once_with(
+        "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json",
+        "EdgarTools Platform test@example.com",
+    )
+    assert payload == b'{"cik": 320193, "facts": {}}'
+
+
+def test_company_facts_policy_completeness_allows_an_empty_facts_section() -> None:
+    """Advisor trap: a real CIK can have zero XBRL facts -- completeness is
+    "well-formed JSON object", not "non-empty facts section".
+    """
+
+    policy = CompanyFactsPolicy(identity="EdgarTools Platform test@example.com")
+
+    assert policy.is_complete(b'{"cik": 320193, "facts": {}}') is True
+    assert policy.is_complete(b"") is False
+    assert policy.is_complete(b"not json") is False
+    assert policy.is_complete(b"[1, 2, 3]") is False  # valid JSON, not an object
+
+
+def test_company_facts_policy_rejects_an_unknown_completeness_policy() -> None:
+    policy = CompanyFactsPolicy(
+        identity="EdgarTools Platform test@example.com",
+        completeness_policy="some_future_policy",
+    )
+
+    with pytest.raises(UnsupportedCompletenessPolicy):
+        policy.is_complete(b'{"cik": 320193}')

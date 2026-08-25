@@ -158,6 +158,10 @@ def _handle_drive_submissions_discovery(args: argparse.Namespace) -> int:
     return run_command("drive-submissions-discovery", args)
 
 
+def _handle_drive_company_facts_discovery(args: argparse.Namespace) -> int:
+    return run_command("drive-company-facts-discovery", args)
+
+
 def _handle_load_daily_form_index_for_date(args: argparse.Namespace) -> int:
     return run_command("load-daily-form-index-for-date", args)
 
@@ -608,6 +612,47 @@ def build_parser() -> argparse.ArgumentParser:
     _add_run_id_arg(drive_submissions_discovery)
     drive_submissions_discovery.set_defaults(
         handler=_handle_drive_submissions_discovery
+    )
+
+    drive_company_facts_discovery = subparsers.add_parser(
+        "drive-company-facts-discovery",
+        help="Drive a bounded CIK universe's company-facts snapshot capture "
+        "through the ledger-gated acquisition Facade.",
+    )
+    drive_company_facts_discovery.add_argument(
+        "--cik-list", type=_parse_cik_list, help="Comma-separated CIK list"
+    )
+    drive_company_facts_discovery.add_argument(
+        "--tracking-status-filter",
+        default="active",
+        help="Tracked universe status filter (default: active)",
+    )
+    drive_company_facts_discovery.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of CIKs to drive this run",
+    )
+    drive_company_facts_discovery.add_argument(
+        "--worker-id",
+        default=None,
+        help="Fencing worker identity; defaults to a process-derived value",
+    )
+    drive_company_facts_discovery.add_argument(
+        "--lease-seconds",
+        type=int,
+        default=None,
+        help="Fetch-work lease duration in seconds (default: 300)",
+    )
+    drive_company_facts_discovery.add_argument(
+        "--registry-version",
+        default=None,
+        help="Source Family Registry version tied to issued decisions "
+        "(default: company-facts-v1)",
+    )
+    _add_run_id_arg(drive_company_facts_discovery)
+    drive_company_facts_discovery.set_defaults(
+        handler=_handle_drive_company_facts_discovery
     )
 
     catch_up_daily = subparsers.add_parser(

@@ -52,6 +52,7 @@ from edgar_warehouse.infrastructure.filing_content_gateway import (
 
 FILING_ARTIFACT_SOURCE_FAMILY = "filing_artifact"
 SUBMISSIONS_SOURCE_FAMILY = "submissions"
+COMPANY_FACTS_SOURCE_FAMILY = "company_facts"
 
 # Ticket 32: the registry's completeness_policy field names which of these
 # checks applies -- validated, not merely read, so a coverage row declaring
@@ -131,5 +132,40 @@ class SubmissionsPolicy:
             raise UnsupportedCompletenessPolicy(
                 f"completeness_policy={self.completeness_policy!r} has no "
                 "installed check for submissions"
+            )
+        return check(payload)
+
+
+# Ticket 22: same shape as _SUBMISSIONS_COMPLETENESS_CHECKS, reusing the
+# shared _is_valid_json_object check -- a company-facts payload with an
+# empty `"facts": {}` section is still a valid, complete snapshot (a real
+# CIK can have zero XBRL facts), so completeness here is deliberately just
+# "well-formed JSON object", not "non-empty facts section".
+_COMPANY_FACTS_COMPLETENESS_CHECKS: dict[str, Callable[[bytes], bool]] = {
+    "valid_json_object": _is_valid_json_object,
+}
+
+
+@dataclass(frozen=True)
+class CompanyFactsPolicy:
+    """Fetch and completeness behavior for one company's XBRL company-facts
+    snapshot (SEC's ``/api/xbrl/companyfacts/CIK{cik:010}.json`` endpoint).
+
+    A catalog/facts object class, same as ``submissions`` -- uses the same
+    edgartools-backed gateway.
+    """
+
+    identity: str
+    completeness_policy: str = "valid_json_object"
+
+    def fetch(self, source_url: str) -> bytes:
+        return download_sec_catalog_bytes(source_url, self.identity)
+
+    def is_complete(self, payload: bytes) -> bool:
+        check = _COMPANY_FACTS_COMPLETENESS_CHECKS.get(self.completeness_policy)
+        if check is None:
+            raise UnsupportedCompletenessPolicy(
+                f"completeness_policy={self.completeness_policy!r} has no "
+                "installed check for company_facts"
             )
         return check(payload)
