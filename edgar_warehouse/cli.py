@@ -173,6 +173,10 @@ def _handle_drive_reference_catalog_discovery(args: argparse.Namespace) -> int:
     return run_command("drive-reference-catalog-discovery", args)
 
 
+def _handle_drive_adv_bulk_dataset_discovery(args: argparse.Namespace) -> int:
+    return run_command("drive-adv-bulk-dataset-discovery", args)
+
+
 def _handle_load_daily_form_index_for_date(args: argparse.Namespace) -> int:
     return run_command("load-daily-form-index-for-date", args)
 
@@ -698,6 +702,40 @@ def build_parser() -> argparse.ArgumentParser:
     _add_run_id_arg(drive_reference_catalog_discovery)
     drive_reference_catalog_discovery.set_defaults(
         handler=_handle_drive_reference_catalog_discovery
+    )
+
+    drive_adv_bulk_dataset_discovery = subparsers.add_parser(
+        "drive-adv-bulk-dataset-discovery",
+        help="Resolve and drive the rolling window of ADV bulk archives plus "
+        "the latest Firm Roster archives through the ledger-gated "
+        "acquisition Facade.",
+    )
+    drive_adv_bulk_dataset_discovery.add_argument(
+        "--window-months",
+        type=int,
+        default=None,
+        help="Trailing months of ADV bulk periods to consider (default: 13)",
+    )
+    drive_adv_bulk_dataset_discovery.add_argument(
+        "--worker-id",
+        default=None,
+        help="Fencing worker identity; defaults to a process-derived value",
+    )
+    drive_adv_bulk_dataset_discovery.add_argument(
+        "--lease-seconds",
+        type=int,
+        default=None,
+        help="Fetch-work lease duration in seconds (default: 300)",
+    )
+    drive_adv_bulk_dataset_discovery.add_argument(
+        "--registry-version",
+        default=None,
+        help="Source Family Registry version tied to issued decisions "
+        "(default: adv-bulk-dataset-v1)",
+    )
+    _add_run_id_arg(drive_adv_bulk_dataset_discovery)
+    drive_adv_bulk_dataset_discovery.set_defaults(
+        handler=_handle_drive_adv_bulk_dataset_discovery
     )
 
     catch_up_daily = subparsers.add_parser(
