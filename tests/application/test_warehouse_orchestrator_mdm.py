@@ -734,6 +734,93 @@ def test_connection_error_is_classified_transient():
 
 
 # ---------------------------------------------------------------------------
+# _reset_edgartools_filing_cache_after_transient_content_error — private
+# edgartools cache eviction, hardened against a future edgartools upgrade
+# renaming/removing the private edgar._filings.get_filing_by_accession symbol
+# this reaches into (no public cache-clear surface exists for it today).
+# ---------------------------------------------------------------------------
+
+
+def test_reset_filing_cache_clears_the_real_edgartools_private_cache(monkeypatch):
+    """Locks in the live behavior against the actually-installed edgartools:
+    a TransientFilingContentError anywhere in the exception's __cause__/
+    __context__/reason chain must bust edgar._filings.get_filing_by_accession's
+    LRU cache and report True."""
+    from edgar._filings import get_filing_by_accession
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _reset_edgartools_filing_cache_after_transient_content_error,
+    )
+    from edgar_warehouse.bronze_filing_artifacts import TransientFilingContentError
+
+    calls = {"n": 0}
+    real_cache_clear = get_filing_by_accession.cache_clear
+    monkeypatch.setattr(
+        get_filing_by_accession,
+        "cache_clear",
+        lambda: (calls.__setitem__("n", calls["n"] + 1), real_cache_clear())[0],
+    )
+
+    wrapped = RuntimeError("artifact fetch failed")
+    wrapped.__cause__ = TransientFilingContentError("degraded to homepage fallback")
+
+    result = _reset_edgartools_filing_cache_after_transient_content_error(wrapped)
+
+    assert result is True
+    assert calls["n"] == 1
+
+
+def test_reset_filing_cache_returns_false_without_a_transient_content_error():
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _reset_edgartools_filing_cache_after_transient_content_error,
+    )
+
+    assert _reset_edgartools_filing_cache_after_transient_content_error(ValueError("unrelated")) is False
+
+
+def test_reset_filing_cache_degrades_gracefully_if_the_private_symbol_is_renamed(monkeypatch):
+    """If a future edgartools upgrade renames/removes get_filing_by_accession
+    from its private _filings module, this must return False (surfaced via
+    the caller's edgartools_filing_cache_reset telemetry) rather than raise
+    ImportError -- this runs inside a caller's `except` block already
+    handling a real transient error, so an unhandled ImportError here would
+    replace that original exception and crash the whole retry loop outright."""
+    import edgar._filings as edgar_filings_module
+
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _reset_edgartools_filing_cache_after_transient_content_error,
+    )
+    from edgar_warehouse.bronze_filing_artifacts import TransientFilingContentError
+
+    monkeypatch.delattr(edgar_filings_module, "get_filing_by_accession", raising=True)
+
+    wrapped = RuntimeError("artifact fetch failed")
+    wrapped.__cause__ = TransientFilingContentError("degraded to homepage fallback")
+
+    assert _reset_edgartools_filing_cache_after_transient_content_error(wrapped) is False
+
+
+def test_reset_filing_cache_degrades_gracefully_if_cache_clear_is_gone(monkeypatch):
+    """Same hardening as above, for the narrower case where the symbol still
+    exists but no longer exposes .cache_clear() (e.g. edgartools swaps its
+    cache_except_none decorator for one that doesn't preserve the attribute)."""
+    import edgar._filings as edgar_filings_module
+
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _reset_edgartools_filing_cache_after_transient_content_error,
+    )
+    from edgar_warehouse.bronze_filing_artifacts import TransientFilingContentError
+
+    monkeypatch.setattr(
+        edgar_filings_module, "get_filing_by_accession", lambda *a, **k: None, raising=True
+    )
+
+    wrapped = RuntimeError("artifact fetch failed")
+    wrapped.__cause__ = TransientFilingContentError("degraded to homepage fallback")
+
+    assert _reset_edgartools_filing_cache_after_transient_content_error(wrapped) is False
+
+
+# ---------------------------------------------------------------------------
 # silver_protection.merge_candidate_into_canonical — core merge semantics
 # (ARTF-01: protected-table registry + fail-closed publication)
 # ---------------------------------------------------------------------------

@@ -2,15 +2,14 @@ from rich import print
 from tqdm.auto import tqdm
 
 from edgar import *
-from edgar.legacy.xbrl import XBRLAttachments
+from edgar.xbrl import XBRL
 
 
 def examine_filing_xbrl(filing: Filing):
-    doc = XBRLAttachments(filing.attachments)
-    if doc.empty:
+    xbrl = XBRL.from_filing(filing)
+    if xbrl is None:
         print(f"No XBRL data found for filing {filing}")
         return
-    xbrl = doc.get_xbrl()
     print(xbrl)
 
 
