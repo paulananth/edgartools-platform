@@ -346,6 +346,7 @@ class WarehousePathResolver:
             "reconcile-relationship-release",
             "capture-filing-artifact",
             "drive-filing-discovery-for-date",
+            "drive-submissions-discovery",
         ):
             return {
                 "bronze": self._render("manifest.default.bronze.path", **default_tokens),
