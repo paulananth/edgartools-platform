@@ -206,18 +206,49 @@ return {
 };
 $$;
 
--- 5-minute cadence: a starting default, not load-bearing on anything
--- downstream yet (Ticket 07's Answer) -- tune once real volume exists.
+-- Cadence tuned 2026-08-25 (silver-landing-task-cost Ticket 01) after the
+-- "5-minute cadence... tune once real volume exists" starting default above
+-- turned out to be a real, live cost problem: at 5 MINUTE (288 resumes/day
+-- on EDGARTOOLS_PROD_REFRESH_WH, X-Small, auto_suspend=60s), the warehouse
+-- never stayed suspended long enough between ticks to avoid paying a
+-- per-resume minimum charge on almost every one of them -- confirmed live
+-- via WAREHOUSE_METERING_HISTORY at ~9 credits/day, versus ~$0 before this
+-- task existed. Root cause is the same shape CLAUDE.md's "ecs-cost-sizing"
+-- finding already documented for SNOWFLAKE_RUN_MANIFEST_TASK (1 MINUTE ->
+-- 15 MINUTE -> 6 HOUR for the identical reason) -- that fix was never
+-- ported to this sibling task when it was created three weeks later.
+-- 60 MINUTE keeps 24 resumes/day (vs. 288), landing an operator-set ceiling
+-- of <=1 credit/day for this task specifically -- see the ticket for the
+-- observed per-run cost this was sized against, and re-verify against a
+-- full day of WAREHOUSE_METERING_HISTORY after this deploys, since the
+-- sizing is extrapolated from the 5-minute cadence's real numbers, not
+-- independently measured at 60 MINUTE. Nothing downstream depends on
+-- landing's write latency (Ticket 07's own Answer, unchanged) -- an hourly
+-- ceiling on data freshness here does not block any consumer's own
+-- TARGET_LAG-scheduled refresh.
 -- Reuses EDGARTOOLS_PROD_REFRESH_WH, the warehouse already used for this
 -- account's other lightweight scheduled/refresh work; no new warehouse.
 -- Loader already holds USAGE on this warehouse (it is dbt's prod target's
 -- warehouse too) -- no additional grant needed for the task to run on it.
 CREATE TASK IF NOT EXISTS LOAD_SILVER_LANDING_TASK
     WAREHOUSE = EDGARTOOLS_PROD_REFRESH_WH
-    SCHEDULE = '5 MINUTE'
-    COMMENT = 'Scheduled COPY INTO of the silver-landing Parquet export (Ticket 07).'
+    SCHEDULE = '60 MINUTE'
+    COMMENT = 'Scheduled COPY INTO of the silver-landing Parquet export (Ticket 07); 60 MINUTE cadence caps EDGARTOOLS_PROD_REFRESH_WH at <=1 credit/day (silver-landing-task-cost Ticket 01).'
 AS
     CALL LOAD_SILVER_LANDING();
+
+-- CREATE TASK IF NOT EXISTS above is a no-op against an already-created
+-- task -- it does NOT update SCHEDULE on a prior install. This is what
+-- actually re-points an existing prod task at the new cadence when this
+-- script is re-run. A running (STARTED) root task must be SUSPENDed before
+-- its SCHEDULE can be altered -- confirmed live: attempting the ALTER
+-- directly against a started task fails closed with "Unable to update
+-- graph with root task ... since that root task is not suspended," it does
+-- not silently no-op. SUSPEND is itself a safe no-op against an
+-- already-suspended task, so this sequence is idempotent regardless of the
+-- task's state going in.
+ALTER TASK LOAD_SILVER_LANDING_TASK SUSPEND;
+ALTER TASK LOAD_SILVER_LANDING_TASK SET SCHEDULE = '60 MINUTE';
 
 -- Tasks are created SUSPENDED by default -- must be explicitly resumed to
 -- actually run on schedule (same real Snowflake behavior the manifest-task
