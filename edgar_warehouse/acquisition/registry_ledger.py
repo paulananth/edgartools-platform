@@ -42,6 +42,7 @@ This module makes the registry a versioned, database-backed ledger:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
@@ -72,6 +73,13 @@ class NoActiveRegistryVersion(RuntimeError):
 
 class CoverageAlreadyDeclared(ValueError):
     """The same source family was declared more than once in one draft."""
+
+
+class UnsupportedAcquisitionMode(RuntimeError):
+    """A covered family declares an acquisition_mode its installed Strategy
+    does not implement (Ticket 32 bullet 1: acquisition_mode gates which
+    Strategy factory may serve a family, rather than being read and ignored).
+    """
 
 
 @dataclass(frozen=True)
@@ -163,6 +171,16 @@ class SourceRegistryLedger:
         named in ``coverage_specs`` is carried forward unchanged
         (``coverage_action='carry_forward'``) -- a partial ``coverage_specs``
         list can never accidentally drop an already-active family.
+
+        A ``'remove'`` spec inherits ``in_scope_forms``/``acquisition_mode``/
+        ``completeness_policy``/``discovery_policy``/``required_producers``
+        from the family's currently active row rather than whatever (if
+        anything) the caller declared for those fields -- Ticket 32 bullet 2
+        makes a removed family keep acquiring, using its real operational
+        policy, until ``coverage_end_date``; an operator declaring
+        ``coverage_action='remove'`` should never have to redeclare that
+        policy just to schedule a stop. Falls back to the spec's own values
+        if the family has no currently active row (nothing to inherit).
         """
 
         require_registry_owner_role(actor_role)
@@ -177,15 +195,20 @@ class SourceRegistryLedger:
         with Session(self._engine) as session, session.begin():
             set_postgres_role(session, actor_role.value)
             active = self._active_record(session)
-            carried = {}
+            active_by_family: dict[str, SourceRegistryCoverageRecord] = {}
             if active is not None:
                 for record in session.scalars(
                     select(SourceRegistryCoverageRecord).where(
                         SourceRegistryCoverageRecord.version_id == active.version_id
                     )
                 ):
-                    if record.source_family not in seen and record.coverage_action != "remove":
-                        carried[record.source_family] = record
+                    if record.coverage_action != "remove":
+                        active_by_family[record.source_family] = record
+            carried = {
+                family: record
+                for family, record in active_by_family.items()
+                if family not in seen
+            }
 
             version = SourceRegistryVersionRecord(
                 status="draft",
@@ -196,16 +219,41 @@ class SourceRegistryLedger:
 
             coverage_records: list[SourceRegistryCoverageRecord] = []
             for spec in coverage_specs:
+                inherited = (
+                    active_by_family.get(spec.source_family)
+                    if spec.coverage_action == "remove"
+                    else None
+                )
                 coverage_records.append(
                     SourceRegistryCoverageRecord(
                         version_id=version.version_id,
                         source_family=spec.source_family,
                         coverage_action=spec.coverage_action,
-                        in_scope_forms=list(spec.in_scope_forms),
-                        acquisition_mode=spec.acquisition_mode,
-                        completeness_policy=spec.completeness_policy,
-                        discovery_policy=spec.discovery_policy,
-                        required_producers=list(spec.required_producers),
+                        in_scope_forms=(
+                            list(inherited.in_scope_forms or ())
+                            if inherited is not None
+                            else list(spec.in_scope_forms)
+                        ),
+                        acquisition_mode=(
+                            inherited.acquisition_mode
+                            if inherited is not None
+                            else spec.acquisition_mode
+                        ),
+                        completeness_policy=(
+                            inherited.completeness_policy
+                            if inherited is not None
+                            else spec.completeness_policy
+                        ),
+                        discovery_policy=(
+                            inherited.discovery_policy
+                            if inherited is not None
+                            else spec.discovery_policy
+                        ),
+                        required_producers=(
+                            list(inherited.required_producers or ())
+                            if inherited is not None
+                            else list(spec.required_producers)
+                        ),
                         coverage_start_date=spec.coverage_start_date,
                         coverage_end_date=spec.coverage_end_date,
                         catchup_required_through_date=(
@@ -376,26 +424,56 @@ class SourceRegistryLedger:
         )
 
 
+_PolicyFactory = Callable[[str, "RegistryCoverage"], SourceFamilyPolicy]
+
 # Ticket 20 bullet 5: the only place a source family name is mapped to a real
 # Strategy implementation -- narrow and evidenced, not a speculative plugin
 # system, since exactly one family exists today. Adding a second family means
 # adding one entry here, not inventing a config-driven dispatch mechanism
-# nothing yet needs.
-_POLICY_FACTORIES = {
-    FILING_ARTIFACT_SOURCE_FAMILY: lambda identity: FilingArtifactPolicy(identity=identity),
+# nothing yet needs. Ticket 32: each entry also names the one
+# acquisition_mode its factory's Strategy actually implements -- a coverage
+# row declaring anything else is a real configuration error (a family
+# claiming a fetch mode nothing installed can perform), not inert metadata
+# to read and ignore.
+_POLICY_FACTORIES: dict[str, tuple[str, _PolicyFactory]] = {
+    FILING_ARTIFACT_SOURCE_FAMILY: (
+        "on_demand_fetch",
+        lambda identity, coverage: FilingArtifactPolicy(
+            identity=identity, completeness_policy=coverage.completeness_policy
+        ),
+    ),
 }
 
 
+def _coverage_in_effect(coverage: RegistryCoverage, as_of_date: date) -> bool:
+    """Ticket 32 bullet 2: a 'remove'd family stays in effect until its
+    declared ``coverage_end_date`` -- an explicit future boundary, not
+    immediate exclusion on activation. ``coverage_end_date`` is required
+    non-null for 'remove' rows (``ck_source_registry_coverage_remove_end_date``);
+    a defensive ``None`` here is treated as already-ended rather than raising,
+    since the database already guarantees this cannot happen for a real row.
+    """
+
+    if coverage.coverage_action != "remove":
+        return True
+    return coverage.coverage_end_date is not None and as_of_date < coverage.coverage_end_date
+
+
 def build_active_source_family_registry(
-    engine: Engine, *, identity: str
+    engine: Engine, *, identity: str, as_of_date: date | None = None
 ) -> dict[str, SourceFamilyPolicy]:
     """The only sanctioned way to obtain real ``SourceFamilyPolicy`` objects.
 
     Replaces ``source_family_registry.build_source_family_registry``'s
     unconditional in-memory dict: policies now exist only for families the
-    active registry version actually covers (``'add'``/``'carry_forward'``),
-    never a ``'remove'``d one, and never at all before any version has ever
-    activated.
+    active registry version actually covers (``'add'``/``'carry_forward'``,
+    or a ``'remove'``d family whose ``coverage_end_date`` boundary hasn't
+    passed yet -- Ticket 32 bullet 2), and never at all before any version
+    has ever activated.
+
+    Raises :class:`UnsupportedAcquisitionMode` if a covered family declares
+    an ``acquisition_mode`` its installed Strategy factory does not
+    implement (Ticket 32 bullet 1).
     """
 
     ledger = SourceRegistryLedger(engine)
@@ -405,31 +483,66 @@ def build_active_source_family_registry(
             "no Source Family Registry version has ever activated -- "
             "open and activate one before running any acquisition command"
         )
+    cutoff = as_of_date or date.today()
     result: dict[str, SourceFamilyPolicy] = {}
     for coverage in active.coverage:
-        if coverage.coverage_action == "remove":
+        if not _coverage_in_effect(coverage, cutoff):
             continue
-        factory = _POLICY_FACTORIES.get(coverage.source_family)
-        if factory is None:
+        entry = _POLICY_FACTORIES.get(coverage.source_family)
+        if entry is None:
             continue  # a covered family with no known Strategy is not yet installable here
-        result[coverage.source_family] = factory(identity)
+        supported_mode, factory = entry
+        if coverage.acquisition_mode != supported_mode:
+            raise UnsupportedAcquisitionMode(
+                f"source_family={coverage.source_family!r} declares "
+                f"acquisition_mode={coverage.acquisition_mode!r}, but the only "
+                f"installed Strategy for it implements {supported_mode!r}"
+            )
+        result[coverage.source_family] = factory(identity, coverage)
     return result
 
 
-def active_in_scope_forms(engine: Engine, source_family: str) -> frozenset[str]:
+def active_in_scope_forms(
+    engine: Engine, source_family: str, *, as_of_date: date | None = None
+) -> frozenset[str]:
     """The active registry's declared in-scope forms for one family.
 
-    Returns an empty set (never raises) when the family isn't covered or no
-    version has ever activated -- callers like discovery-drive should treat
-    "no coverage" as "nothing is in scope", not a hard failure; sealing a
-    daily index observation must not depend on the registry already existing.
+    Returns an empty set (never raises) when the family isn't covered, its
+    ``'remove'`` boundary (Ticket 32 bullet 2) has passed, or no version has
+    ever activated -- callers like discovery-drive should treat "no
+    coverage" as "nothing is in scope", not a hard failure; sealing a daily
+    index observation must not depend on the registry already existing.
     """
 
     ledger = SourceRegistryLedger(engine)
     active = ledger.get_active_registry()
     if active is None:
         return frozenset()
+    cutoff = as_of_date or date.today()
     for coverage in active.coverage:
-        if coverage.source_family == source_family and coverage.coverage_action != "remove":
+        if coverage.source_family == source_family and _coverage_in_effect(coverage, cutoff):
             return frozenset(coverage.in_scope_forms)
     return frozenset()
+
+
+def active_family_coverage(
+    engine: Engine, source_family: str, *, as_of_date: date | None = None
+) -> RegistryCoverage | None:
+    """The active registry's full coverage row for one family, or ``None``.
+
+    Ticket 32: the read path for ``discovery_policy``/``required_producers``
+    -- fields ``active_in_scope_forms`` doesn't expose. ``None`` (never a
+    raise) when the family isn't covered, its ``'remove'`` boundary has
+    passed, or no version has ever activated, matching
+    ``active_in_scope_forms``'s "no coverage is not a hard failure" contract.
+    """
+
+    ledger = SourceRegistryLedger(engine)
+    active = ledger.get_active_registry()
+    if active is None:
+        return None
+    cutoff = as_of_date or date.today()
+    for coverage in active.coverage:
+        if coverage.source_family == source_family and _coverage_in_effect(coverage, cutoff):
+            return coverage
+    return None

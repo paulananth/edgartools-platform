@@ -45,9 +45,9 @@ new idea:
 **Blocked by:** 20 — Version and activate the Acquisition Universe (this
 ticket only exists because 20 is otherwise merged and working)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Decide what `acquisition_mode`/`completeness_policy`/`discovery_policy`
+- [x] Decide what `acquisition_mode`/`completeness_policy`/`discovery_policy`
   actually change about runtime behavior for `filing_artifact` (today the
   only covered family) — or, if none of the three currently have a
   meaningful effect on this one family, decide and document that
@@ -55,13 +55,66 @@ ticket only exists because 20 is otherwise merged and working)
   should very likely gate `ProcessingLedger.seal_expected_producers`'s
   expected-producer set instead of (or in addition to) wherever that set is
   constructed today — confirm and wire it, or explain why not.
-- [ ] Either enforce `coverage_end_date` (acquisition genuinely continues
+- [x] Either enforce `coverage_end_date` (acquisition genuinely continues
   until that date, then stops) or narrow the spec bullet's own language/this
   repo's understanding of "explicit boundary" to mean "recorded, not
   time-gated" — whichever is decided, make the code and a test agree with
   it explicitly (today they're silently mismatched).
-- [ ] Ship a real, committed, re-runnable bootstrap path (a script or a
+- [x] Ship a real, committed, re-runnable bootstrap path (a script or a
   `mdm` CLI invocation sequence documented in this repo, not inline test
   fixture logic) that opens and activates the first Source Family Registry
   version for `filing_artifact` in prod, and wire it into whichever
   deploy/install script currently applies migration 014.
+
+## Answer
+
+All three gaps closed (commit `e3db9bbd`, branch
+`claude/change-propagation-ticket32-registry-policy-bootstrap`).
+
+1. **User decision:** put to the user as an explicit either/or (per
+   wayfinder's HITL rule for a genuine design fork); they chose the broader
+   "wire all four fields now" option over "wire `required_producers` only."
+   Each field became a *validate-against-the-one-known-value* gate rather
+   than generic dispatch machinery for hypothetical modes nothing yet
+   needs (confirmed sound via a `/gof-refactor-reviewer` pass before
+   implementing, given exactly one source family exists today):
+   `acquisition_mode` gates which Strategy factory may serve a family
+   (`registry_ledger.py`'s `_POLICY_FACTORIES`); `completeness_policy`
+   dispatches `FilingArtifactPolicy.is_complete` via a one-entry check map;
+   `discovery_policy` is validated in `drive_filing_discovery.py` against
+   the one mechanism that module implements; `required_producers` is
+   validated against the one producer `filing_artifact`'s Silver-write body
+   can actually serve (`silver_acceptance.py`) rather than generalized to
+   arbitrary N producers with different write bodies.
+2. **User decision:** delegated to the agent ("you decide"); chose "enforce
+   the date." `coverage_end_date` now genuinely gates future acquisition
+   (`registry_ledger.py`'s new `_coverage_in_effect`). This surfaced a
+   non-obvious follow-on requirement: a `'remove'` `CoverageSpec` now
+   inherits its operational fields from the family's currently-active
+   coverage row in `SourceRegistryLedger.open_draft`, since an operator
+   scheduling a removal naturally wouldn't redeclare policy just to stop
+   it later — without this, a removed family would report zero in-scope
+   forms immediately despite still being "in effect." `/code-review`'s
+   Spec pass then found a second, real bug in the first draft of this fix:
+   every production call site defaulted the new `as_of_date` parameter to
+   server wall-clock `date.today()` instead of the command's own
+   `business_date` — wrong for a per-business-date driver that can replay
+   historical dates. Fixed by threading `business_date_value` through every
+   registry read in `drive_filing_discovery.py`; a regression test proves
+   it (reproduced red before the fix, confirmed green after).
+3. Shipped `infra/scripts/bootstrap-source-family-registry.sh` (idempotent
+   once a version is active; documented non-idempotent edge case on a
+   mid-sequence crash — leaves a harmless orphaned draft) plus a new `mdm
+   registry-record-catchup` CLI subcommand (previously had no CLI surface
+   at all). Wired into `install.sh` right after `mdm migrate`. Smoke-tested
+   end-to-end — including the idempotent re-run — against a real throwaway
+   Postgres 16 container, not just unit tests.
+
+Both `/code-review` axes ran against the full diff: Standards found no hard
+violations (a few minor duplicated-validation-shape smells noted, not
+fixed); Spec's one real finding (the wall-clock boundary bug above) is
+fixed and regression-tested. Full suite green: 2484 passed, 4 skipped, plus
+the real-Postgres integration suite (4 passed).
+
+Ticket 20 can now be marked fully resolved — its own bullets 1 and 2 were
+the only partial pieces, and both are closed by this ticket.

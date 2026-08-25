@@ -80,13 +80,18 @@ def test_open_draft_then_activate_via_cli(
     assert blocked_payload["status"] == "activation_blocked"
     assert "filing_artifact" in blocked_payload["blocker"]
 
-    from edgar_warehouse.acquisition.registry_ledger import SourceRegistryLedger
-    from edgar_warehouse.mdm.database import get_engine
-    from datetime import date
-
-    SourceRegistryLedger(get_engine()).record_catchup_progress(
-        "filing_artifact", date(2026, 1, 1)
+    # Ticket 32 item 3: registry-record-catchup is now a real CLI surface --
+    # a bootstrap sequence no longer has to reach past the CLI into the
+    # Python API just to record catch-up progress.
+    _, exit_code = _run(
+        ["mdm", "registry-record-catchup", "filing_artifact", "--through-date", "2026-01-01"]
     )
+    assert exit_code == 0
+    catchup_payload = json.loads(capsys.readouterr().out)
+    assert catchup_payload == {
+        "source_family": "filing_artifact",
+        "catchup_verified_through_date": "2026-01-01",
+    }
 
     _, exit_code = _run(["mdm", "registry-activate", version_id])
     assert exit_code == 0

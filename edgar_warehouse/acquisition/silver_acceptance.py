@@ -63,6 +63,19 @@ class CandidateNotCaptured(RuntimeError):
     """The referenced decision has not reached a CAPTURED Bronze evidence state."""
 
 
+class UnsupportedRequiredProducers(RuntimeError):
+    """A covered family declares a required_producers set this Strategy's
+    Silver-write body cannot serve.
+
+    Ticket 32 bullet 1: filing_artifact's write body
+    (``finalize_filing_artifact_candidate``) is hardcoded to write exactly
+    one table, ``sec_raw_object`` -- it has no generic per-producer dispatch,
+    since there has never been a second producer to justify one (Speculative
+    Generality). Validating the registry's declared set against that single
+    known value, rather than iterating it generically, keeps that honest.
+    """
+
+
 def bronze_reference_to_raw_evidence_hash(bronze_relative_path: str) -> str:
     """Recover a Bronze object's raw evidence hash from its storage path.
 
@@ -98,6 +111,8 @@ def finalize_filing_artifact_candidate(
     silver: SilverDatabase,
     decision_id: str,
     candidate: FilingArtifactCandidateMeta,
+    *,
+    required_producers: tuple[str, ...] = (FILING_ARTIFACT_PRODUCER_NAME,),
 ) -> ProcessingDecision:
     """Carry one CAPTURED ``filing_artifact`` decision to a verified Silver
     publication or an explicit ``NO_IMPACT`` outcome.
@@ -110,7 +125,22 @@ def finalize_filing_artifact_candidate(
     the already-sealed Processing Decision, and (via the Silver Finalizer's
     own idempotency) the already-recorded producer outcome rather than
     re-writing or re-verifying Silver state that already settled.
+
+    ``required_producers`` (Ticket 32 bullet 1) is normally the active
+    Source Family Registry coverage's declared set for ``filing_artifact``,
+    threaded in by the caller -- defaults to the one producer this function
+    actually knows how to write so a direct call (e.g. from a test) keeps
+    working unchanged. Raises :class:`UnsupportedRequiredProducers` if the
+    declared set is anything other than exactly that one producer; see that
+    exception's docstring for why this validates rather than dispatches.
     """
+
+    if required_producers != (FILING_ARTIFACT_PRODUCER_NAME,):
+        raise UnsupportedRequiredProducers(
+            f"required_producers={required_producers!r} for filing_artifact, "
+            f"but this Strategy's Silver-write body only knows how to "
+            f"produce {(FILING_ARTIFACT_PRODUCER_NAME,)!r}"
+        )
 
     status = ledger.source_change_status(decision_id)
     if status.fetch_state is not FetchWorkState.CAPTURED:
@@ -244,6 +274,8 @@ def drive_filing_artifact_silver_acceptance(
     finalizer: SilverFinalizer,
     silver: SilverDatabase,
     result: DiscoveryDriveResult,
+    *,
+    required_producers: tuple[str, ...] = (FILING_ARTIFACT_PRODUCER_NAME,),
 ) -> FilingArtifactSilverAcceptanceResult:
     """Carry every CAPTURED candidate in a Discovery drive result to Silver.
 
@@ -260,7 +292,21 @@ def drive_filing_artifact_silver_acceptance(
     fetch/capture. Candidates that never reached CAPTURED (excluded,
     deferred, or failed at the fetch stage) are not carried forward -- there
     is nothing to materialize a revision from yet.
+
+    ``required_producers`` (Ticket 32 bullet 1, normally the active registry
+    coverage's declared set) is validated once, upfront, rather than inside
+    the per-candidate fault-isolation loop below -- a misconfigured registry
+    is the same error for every candidate in the interval, so failing fast
+    here beats silently recording it N times as N identical per-candidate
+    outcomes.
     """
+
+    if required_producers != (FILING_ARTIFACT_PRODUCER_NAME,):
+        raise UnsupportedRequiredProducers(
+            f"required_producers={required_producers!r} for filing_artifact, "
+            f"but this Strategy's Silver-write body only knows how to "
+            f"produce {(FILING_ARTIFACT_PRODUCER_NAME,)!r}"
+        )
 
     outcomes: list[FilingArtifactSilverOutcome] = []
     for outcome in result.outcomes:
@@ -274,7 +320,14 @@ def drive_filing_artifact_silver_acceptance(
         )
         try:
             decision = finalize_filing_artifact_candidate(
-                ledger, revisions, processing, finalizer, silver, outcome.decision_id, meta
+                ledger,
+                revisions,
+                processing,
+                finalizer,
+                silver,
+                outcome.decision_id,
+                meta,
+                required_producers=required_producers,
             )
         except Exception as error:  # noqa: BLE001 -- one candidate must not abort the interval
             outcomes.append(

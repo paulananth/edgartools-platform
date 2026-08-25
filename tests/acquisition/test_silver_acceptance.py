@@ -34,6 +34,7 @@ from edgar_warehouse.acquisition.revisions import SourceRevisionLedger
 from edgar_warehouse.acquisition.silver_acceptance import (
     CandidateNotCaptured,
     FilingArtifactCandidateMeta,
+    UnsupportedRequiredProducers,
     bronze_reference_to_raw_evidence_hash,
     finalize_filing_artifact_candidate,
 )
@@ -134,6 +135,34 @@ def test_finalize_writes_and_verifies_sec_raw_object(tmp_path: Path) -> None:
     assert raw_object["form"] == "4"
     assert raw_object["source_type"] == "filing_artifact"
     assert raw_object["storage_path"] == "filing_artifact/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+
+def test_finalize_rejects_a_required_producers_set_it_cannot_serve(tmp_path: Path) -> None:
+    """Ticket 32 bullet 1: required_producers is validated, not read and
+    ignored -- filing_artifact's write body only knows how to produce
+    sec_raw_object, so a registry declaring anything else must fail closed
+    rather than silently doing nothing for the undeclared producer.
+    """
+
+    ledger, revisions, processing, finalizer, silver = _harness(tmp_path)
+    decision_id = _captured_decision(
+        ledger,
+        candidate_id="c1",
+        logical_source_key="320193/0000320193-26-000001/full-submission-text",
+        artifact_reference="filing_artifact/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    )
+
+    with pytest.raises(UnsupportedRequiredProducers):
+        finalize_filing_artifact_candidate(
+            ledger,
+            revisions,
+            processing,
+            finalizer,
+            silver,
+            decision_id,
+            _META,
+            required_producers=("some_other_table",),
+        )
 
 
 def test_finalize_reuses_one_sec_raw_object_row_for_identical_content_across_accessions(
