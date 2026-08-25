@@ -349,6 +349,7 @@ class WarehousePathResolver:
             "drive-submissions-discovery",
             "drive-company-facts-discovery",
             "drive-reference-catalog-discovery",
+            "drive-adv-bulk-dataset-discovery",
         ):
             return {
                 "bronze": self._render("manifest.default.bronze.path", **default_tokens),

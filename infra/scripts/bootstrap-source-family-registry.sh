@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Ticket 32 item 3 (extended by Ticket 21 for submissions, Ticket 22 for
-# company_facts, and Ticket 23 for reference_catalog): open and activate the
+# company_facts, Ticket 23 for reference_catalog, and Ticket 24 for
+# adv_bulk_dataset/adv_filing): open and activate the
 # first Source Family Registry version, covering every family a fresh
 # environment needs -- the one committed, re-runnable bootstrap path this
 # system needs before drive-filing-discovery-for-date/capture-filing-artifact/
@@ -49,7 +50,7 @@ if "${EDGAR_WAREHOUSE[@]}" mdm registry-status >/dev/null 2>&1; then
   exit 0
 fi
 
-echo "bootstrap-source-family-registry: no active registry version found -- opening and activating the first one for filing_artifact, submissions, company_facts, and reference_catalog."
+echo "bootstrap-source-family-registry: no active registry version found -- opening and activating the first one for filing_artifact, submissions, company_facts, reference_catalog, adv_bulk_dataset, and adv_filing."
 
 # No prior history to catch up on for a brand-new environment: today is the
 # chosen baseline (catchup_required_through_date), and this script itself
@@ -112,9 +113,40 @@ cat > "${coverage_file}" <<JSON
     "required_producers": ["sec_company_ticker"],
     "coverage_start_date": "${today}",
     "catchup_required_through_date": "${today}"
+  },
+  {
+    "source_family": "adv_bulk_dataset",
+    "coverage_action": "add",
+    "acquisition_mode": "on_demand_fetch",
+    "completeness_policy": "non_empty_payload",
+    "discovery_policy": "rolling_window_bulk_dataset",
+    "required_producers": ["sec_adv_filing", "sec_adv_private_fund", "sec_adv_firm_roster"],
+    "coverage_start_date": "${today}",
+    "catchup_required_through_date": "${today}"
+  },
+  {
+    "source_family": "adv_filing",
+    "coverage_action": "add",
+    "in_scope_forms": ["ADV", "ADV/A", "ADV-E", "ADV-E/A", "ADV-H", "ADV-H/A", "ADV-NR", "ADV-W", "ADV-W/A"],
+    "acquisition_mode": "on_demand_fetch",
+    "completeness_policy": "non_empty_payload",
+    "discovery_policy": "daily_index_driven",
+    "required_producers": ["sec_raw_object"],
+    "coverage_start_date": "${today}",
+    "catchup_required_through_date": "${today}"
   }
 ]
 JSON
+# Ticket 24 bullet 1: adv_filing declares ADV accession identity's own scope
+# (in_scope_forms above), distinct from adv_bulk_dataset's bulk-snapshot
+# identity. Reuses FilingArtifactPolicy's Strategy and filing_artifact's own
+# "daily_index_driven" mechanism/producer shape (see source_family_registry.py's
+# ADV_FILING_SOURCE_FAMILY docstring) -- but no drive-adv-filing-discovery-for-date
+# command exists yet to actually populate coverage through this family (unlike
+# filing_artifact's real drive-filing-discovery-for-date driver, which is hardcoded
+# to FILING_ARTIFACT_SOURCE_FAMILY only). This coverage row is a declared, inert
+# scope until that follow-up driver ships; ADV filing documents are still captured
+# via the pre-Ticket-14 legacy path _run_parse_adv_bronze reads from.
 
 draft_output="$("${EDGAR_WAREHOUSE[@]}" mdm registry-open-draft \
   --coverage "${coverage_file}" \
@@ -128,7 +160,9 @@ print(json.load(sys.stdin)["version_id"])')"
 "${EDGAR_WAREHOUSE[@]}" mdm registry-record-catchup submissions --through-date "${today}"
 "${EDGAR_WAREHOUSE[@]}" mdm registry-record-catchup company_facts --through-date "${today}"
 "${EDGAR_WAREHOUSE[@]}" mdm registry-record-catchup reference_catalog --through-date "${today}"
+"${EDGAR_WAREHOUSE[@]}" mdm registry-record-catchup adv_bulk_dataset --through-date "${today}"
+"${EDGAR_WAREHOUSE[@]}" mdm registry-record-catchup adv_filing --through-date "${today}"
 
 "${EDGAR_WAREHOUSE[@]}" mdm registry-activate "${version_id}"
 
-echo "bootstrap-source-family-registry: activated version_id=${version_id} for filing_artifact, submissions, company_facts, and reference_catalog, caught up through ${today}."
+echo "bootstrap-source-family-registry: activated version_id=${version_id} for filing_artifact, submissions, company_facts, reference_catalog, adv_bulk_dataset, and adv_filing, caught up through ${today}."

@@ -49,11 +49,28 @@ from edgar_warehouse.infrastructure.edgartools_sec_gateway import (
 from edgar_warehouse.infrastructure.filing_content_gateway import (
     download_filing_content_bytes,
 )
+from edgar_warehouse.infrastructure.sec_client import download_sec_bytes
 
 FILING_ARTIFACT_SOURCE_FAMILY = "filing_artifact"
 SUBMISSIONS_SOURCE_FAMILY = "submissions"
 COMPANY_FACTS_SOURCE_FAMILY = "company_facts"
 REFERENCE_CATALOG_SOURCE_FAMILY = "reference_catalog"
+# Ticket 24: accession identity reuses FilingArtifactPolicy verbatim under a
+# distinct family name/coverage (own in_scope_forms, own Source Family
+# Registry coverage row) -- the Strategy's fetch/completeness mechanics are
+# identical to filing_artifact's (one caller-supplied URL, byte-preserving
+# fetch, non-empty-payload completeness); only the *scope* (which forms) and
+# *identity* (a distinct source_family name so ADV accessions never overlap
+# filing_artifact's own coverage) differ. See this module's docstring for why
+# reusing a Strategy class across two families is the correct move, not a
+# Template Method violation: Strategy reuse is exactly what the pattern is
+# for when the behavior is genuinely identical.
+ADV_FILING_SOURCE_FAMILY = "adv_filing"
+# Bulk-dataset identity: complete-snapshot-per-dataset_period, covering both
+# IAPD ADV bulk archives and IAPD Firm Roster archives -- two source names
+# under one identity kind (same shape as reference_catalog's fixed-source-
+# name-set family), distinct from adv_filing's per-accession identity above.
+ADV_BULK_DATASET_SOURCE_FAMILY = "adv_bulk_dataset"
 
 # Ticket 32: the registry's completeness_policy field names which of these
 # checks applies -- validated, not merely read, so a coverage row declaring
@@ -234,5 +251,41 @@ class ReferenceCatalogPolicy:
             raise UnsupportedCompletenessPolicy(
                 f"completeness_policy={self.completeness_policy!r} has no "
                 "installed check for reference_catalog"
+            )
+        return check(payload)
+
+
+@dataclass(frozen=True)
+class AdvBulkDatasetPolicy:
+    """Fetch and completeness behavior for one resolved IAPD bulk archive
+    download (an ADV bulk-data ZIP, or a Firm Roster CSV/ZIP variant).
+
+    IAPD is a non-edgartools object class (see ``sec_client.py``'s
+    ``NON_EDGARTOOLS_OBJECT_CLASSES`` boundary, referenced in CLAUDE.md) --
+    fetches route through ``sec_client.download_sec_bytes``, not either SEC
+    gateway used by the families above. By the time this Strategy's
+    ``fetch`` is called, the *which archive* question (which
+    ``reports_metadata.json`` period, or which Firm Roster listing href) has
+    already been resolved by the discovery driver, reusing
+    ``adv_bulk_fetch.py``/``firm_roster_fetch.py``'s own existing
+    period-selection logic unmodified -- this Strategy only ever receives
+    one concrete, already-resolved download URL, same one-URL-per-call
+    contract every other family here uses. Completeness is a non-empty byte
+    check (these are ZIP/CSV archives, not JSON) -- structural validation of
+    the archive's own contents happens later, in Silver acceptance.
+    """
+
+    identity: str
+    completeness_policy: str = "non_empty_payload"
+
+    def fetch(self, source_url: str) -> bytes:
+        return download_sec_bytes(source_url, self.identity)
+
+    def is_complete(self, payload: bytes) -> bool:
+        check = _COMPLETENESS_CHECKS.get(self.completeness_policy)
+        if check is None:
+            raise UnsupportedCompletenessPolicy(
+                f"completeness_policy={self.completeness_policy!r} has no "
+                "installed check for adv_bulk_dataset"
             )
         return check(payload)

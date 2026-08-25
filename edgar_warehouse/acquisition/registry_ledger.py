@@ -60,10 +60,13 @@ from edgar_warehouse.acquisition.models import (
     SourceRegistryVersionRecord,
 )
 from edgar_warehouse.acquisition.source_family_registry import (
+    ADV_BULK_DATASET_SOURCE_FAMILY,
+    ADV_FILING_SOURCE_FAMILY,
     COMPANY_FACTS_SOURCE_FAMILY,
     FILING_ARTIFACT_SOURCE_FAMILY,
     REFERENCE_CATALOG_SOURCE_FAMILY,
     SUBMISSIONS_SOURCE_FAMILY,
+    AdvBulkDatasetPolicy,
     CompanyFactsPolicy,
     FilingArtifactPolicy,
     ReferenceCatalogPolicy,
@@ -473,6 +476,26 @@ _POLICY_FACTORIES: dict[str, tuple[str, _PolicyFactory]] = {
         # the discovery driver's concern (Ticket 23), not this Strategy's.
         "on_demand_fetch",
         lambda identity, coverage: ReferenceCatalogPolicy(
+            identity=identity, completeness_policy=coverage.completeness_policy
+        ),
+    ),
+    ADV_FILING_SOURCE_FAMILY: (
+        # Ticket 24: reuses FilingArtifactPolicy verbatim (see that class'
+        # own reuse note) under a distinct family/coverage -- own
+        # in_scope_forms (the ADV form family), independent of
+        # filing_artifact's own coverage row.
+        "on_demand_fetch",
+        lambda identity, coverage: FilingArtifactPolicy(
+            identity=identity, completeness_policy=coverage.completeness_policy
+        ),
+    ),
+    ADV_BULK_DATASET_SOURCE_FAMILY: (
+        # Ticket 24: one caller-supplied, already-resolved archive URL per
+        # call -- identical acquisition_mode to every other family here; the
+        # two-source-name (adv bulk / firm roster), period-rolling-window
+        # fan-out is the discovery driver's concern, not this Strategy's.
+        "on_demand_fetch",
+        lambda identity, coverage: AdvBulkDatasetPolicy(
             identity=identity, completeness_policy=coverage.completeness_policy
         ),
     ),
