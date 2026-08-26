@@ -38,6 +38,7 @@ PROVISION_DEPLOY_DATA_STAGE_ORDER: list[str] = [
     "Snowflake: native-pull foundation",
     "Snowflake: fundamentals load wrapper",
     GRANTS_STAGE_TITLE,
+    "Snowflake: installer role",
     "Snowflake: MDM mirror + graph schema",
     "AWS: ECR image publish",
     "AWS: ECS task definitions and Step Functions",
@@ -922,6 +923,19 @@ def test_fundamentals_load_wrapper_stage_applies_file_06(tmp_path: Path) -> None
     )
 
 
+def test_installer_role_stage_applies_file_19_before_mdm_mirror_schema(
+    tmp_path: Path,
+) -> None:
+    """Ticket 30 (change-propagation map) follow-up: EDGARTOOLS_PROD_INSTALLER
+    must exist before 09_mdm_mirror_schema.sql runs under it."""
+    combined = _plan_output(tmp_path)
+    assert "infra/snowflake/sql/bootstrap/19_installer_role.sql" in combined
+    titles = _plan_stage_titles(tmp_path)
+    assert titles.index("Snowflake: installer role") < titles.index(
+        "Snowflake: MDM mirror + graph schema"
+    )
+
+
 def test_mdm_mirror_and_graph_schema_stage_applies_files_09_and_10(
     tmp_path: Path,
 ) -> None:
@@ -967,7 +981,9 @@ def test_no_bootstrap_sql_file_is_missing_from_the_full_plan(tmp_path: Path) -> 
     main.tf, not asserted here since that stage's command is a delegate
     script call, not a literal file reference)."""
     bootstrap_dir = REPO_ROOT / "infra" / "snowflake" / "sql" / "bootstrap"
-    covered_directly = {"07", "08", "06", "09", "10", "11", "12", "13", "14", "16", "17", "18"}
+    covered_directly = {
+        "07", "08", "06", "09", "10", "11", "12", "13", "14", "16", "17", "18", "19",
+    }
     superseded_by_terraform_or_deprecated = {"01", "02", "03", "04", "05"}
     covered_via_deploy_snowflake_stack = {"15"}
     all_numbers = {
