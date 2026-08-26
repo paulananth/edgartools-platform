@@ -5,17 +5,30 @@ mirroring ``submissions_silver_acceptance.py``'s shape but single-phase (one
 producer pair per CIK, not two Silver scopes split across main/pagination
 candidates).
 
-Retirement: ``sec_financial_fact`` carries no ``valid_from``/``valid_to``/
-``is_current`` column (confirmed via its DDL), and the change-propagation
-spec is explicit that RETIRE "never physically deletes history" -- so this
-module does not attempt row-level absence handling for facts no longer
-present in a fresh snapshot; that would need a schema change this ticket
-does not authorize. Bullet 3 ("missing, partial, or failed snapshots cannot
-retire prior facts or become the current Silver authority") is instead
-satisfied the same way Ticket 21 satisfies its analogous bullet: nothing
-reaches Silver unless the candidate is CAPTURED with a complete payload
-(``CompanyFactsPolicy.is_complete``), and a snapshot whose ``ContentImpact``
-is unchanged seals with empty expected producers, touching nothing.
+Retirement (Ticket 33, change-propagation map): ``sec_financial_fact`` and
+``sec_accounting_flag`` both gained ``valid_from``/``valid_to``/
+``is_current`` columns (``silver_store.py``'s schema migration
+``010_company_facts_retirement_columns``). A business key present in a
+prior complete snapshot but absent from a fresh, verified-written one is
+retired by closing its validity interval (``is_current=FALSE``,
+``valid_to=<retirement time>``) via ``SilverDatabase.
+retire_financial_facts_not_in_snapshot``/``retire_accounting_flags_not_in_snapshot``
+-- never a physical DELETE, per the change-propagation spec's "RETIRE ...
+never physically deletes history" rule. The comparison basis is each
+table's own ``is_current=TRUE`` rows for the CIK (always exactly the prior
+complete snapshot's membership set, since nothing else mutates
+``is_current``), a per-CIK full-scope comparison, run only after this
+snapshot's own write is confirmed VERIFIED. A retired key that reappears in
+a later snapshot is reinstated by the merge methods' own ``ON CONFLICT``
+branch, not by the retire call. Bullet 3 ("missing, partial, or failed
+snapshots cannot retire prior facts or become the current Silver
+authority") is satisfied the same way Ticket 21 satisfies its analogous
+bullet plus this retirement gate: nothing reaches Silver unless the
+candidate is CAPTURED with a complete payload
+(``CompanyFactsPolicy.is_complete``), a snapshot whose ``ContentImpact`` is
+unchanged seals with empty expected producers touching nothing, and a
+FAILED write (read-back mismatch) skips retirement entirely rather than
+retiring against an unconfirmed fact_keys set.
 
 Bullet 2 ("Scope Completion includes the authoritative member count and
 ordered digest") is a *recording* requirement, not a deletion one: each
@@ -260,6 +273,12 @@ def _finalize_company_facts_candidate(
             # (e.g. a newly registered company). Zero written, zero
             # expected, so this settles VERIFIED trivially -- not a failure.
             verified = True
+        if verified:
+            # Ticket 33: only retire once this snapshot's own facts are
+            # confirmed durably written -- a FAILED write must not retire
+            # anything, since we can't yet trust fact_keys reflects what's
+            # actually in Silver.
+            silver.retire_financial_facts_not_in_snapshot(cik, fact_keys, decision_id)
         decision = finalizer.record_producer_outcome(
             decision.processing_decision_id,
             COMPANY_FACTS_FACT_PRODUCER_NAME,
@@ -285,6 +304,8 @@ def _finalize_company_facts_candidate(
             verified = {r["accession_number"] for r in present} == set(written_flag_accessions)
         else:
             verified = True
+        if verified:
+            silver.retire_accounting_flags_not_in_snapshot(cik, written_flag_accessions, decision_id)
         decision = finalizer.record_producer_outcome(
             decision.processing_decision_id,
             COMPANY_FACTS_FLAG_PRODUCER_NAME,

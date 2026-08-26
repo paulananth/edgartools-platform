@@ -21,7 +21,10 @@ select
     last_value(altman_z_score ignore nulls) over (partition by cik, accession_number order by parse_sequence) as altman_z_score,
     last_value(piotroski_f_score ignore nulls) over (partition by cik, accession_number order by parse_sequence) as piotroski_f_score,
     parser_version,
-    ingested_at
+    ingested_at,
+    valid_from,
+    valid_to,
+    is_current
 from {{ source('edgartools_silver_landing', 'SEC_ACCOUNTING_FLAG') }}
 qualify row_number() over (
     partition by cik, accession_number

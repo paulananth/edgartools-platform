@@ -80,9 +80,17 @@ _SPLIT_TABLES = {
     # last_synced_at. NOT in UPDATE SET (immutable): cik, act, file_number,
     # film_number, items.
     "sec_company_filing": {"cik", "act", "file_number", "film_number", "items"},
-    # merge_financial_facts, silver_store.py:3765-3826. UPDATE SET
+    # merge_financial_facts, silver_store.py:3956-4030. UPDATE SET
     # (mutable): value, decimals, parser_version (+ ingested_at, not staged
     # data). NOT in UPDATE SET (immutable): fiscal_year, form_type, unit.
+    # Ticket 33's is_current/valid_to are also in UPDATE SET (mutable) --
+    # left out of this immutable set deliberately. valid_from is NOT in
+    # UPDATE SET in silver_store.py (DuckDB keeps it genuinely
+    # first-insert-wins), but merge_financial_facts's landing_export.record
+    # call re-stamps it on every write as a deliberate, last-write-wins
+    # simplification for this collapse only (see that call's own comment) --
+    # so it's correctly excluded from this immutable set too, matching what
+    # the landing zone actually receives, not DuckDB's own local semantics.
     "sec_financial_fact": {"fiscal_year", "form_type", "unit"},
     # merge_financial_derived, silver_store.py:3828-3975. UPDATE SET
     # (mutable): every metric column + parser_version (+ ingested_at). NOT
@@ -131,6 +139,14 @@ _CIK_ENRICHED_TABLES = {
 # pre-existing instance of this bug, not a template to extend -- the
 # mdm_entity_id backfill sweep uses full-row re-emission instead specifically
 # because of this finding, not this dict.
+#
+# Ticket 33's is_current/valid_to/valid_from columns inherit this exact,
+# already-known bug for sec_accounting_flag: update_accounting_flag_scores's
+# thin backfill row doesn't carry them either (silver_store.py's
+# track_landing_accounting_flag_scores), so a backfill that happens to be
+# the newest parse_sequence for a key nulls them out the same way it
+# already nulls out auditor_name etc. Not a new gap introduced here, and
+# not fixed here -- same pre-existing, separately-tracked issue.
 _COALESCE_PRESERVING_COLUMNS = {
     "sec_accounting_flag": {"beneish_m_score", "altman_z_score", "piotroski_f_score"},
 }

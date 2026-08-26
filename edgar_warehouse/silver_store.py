@@ -611,6 +611,17 @@ CREATE TABLE IF NOT EXISTS sec_financial_fact (
     segment             TEXT NOT NULL DEFAULT 'consolidated',  -- 'consolidated' or JSON-encoded dimension key
     parser_version      TEXT,
     ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+    -- Ticket 33 (change-propagation map): validity-interval retirement. A
+    -- fact absent from a fresher, COMPLETE company-facts snapshot for its
+    -- CIK is retired by closing its interval (is_current=FALSE,
+    -- valid_to=<retirement time>) rather than being deleted, per
+    -- spec.md's "RETIRE ... never physically deletes history" rule.
+    -- valid_from marks first capture; reinstatement (the same business key
+    -- reappears in a later complete snapshot) reopens the same row via
+    -- merge_financial_facts's ON CONFLICT branch rather than a new row.
+    valid_from          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    valid_to            TIMESTAMPTZ,
+    is_current          BOOLEAN NOT NULL DEFAULT TRUE,
     -- period_end is part of the PK because the SEC companyfacts API reports
     -- both the current-period and comparative prior-period value for the
     -- same (accn, concept, fiscal_period, segment) -- omitting period_end
@@ -769,6 +780,14 @@ CREATE TABLE IF NOT EXISTS sec_accounting_flag (
     -- in the same change that lands the extractor.
     parser_version      TEXT,
     ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+    -- Ticket 33: same validity-interval retirement as sec_financial_fact
+    -- above -- an accession's flag row absent from a fresher, COMPLETE
+    -- company-facts snapshot is retired rather than deleted, keeping both
+    -- required producers of the company_facts family symmetric instead of
+    -- only one of them tracking retirement.
+    valid_from          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    valid_to            TIMESTAMPTZ,
+    is_current          BOOLEAN NOT NULL DEFAULT TRUE,
     PRIMARY KEY (cik, accession_number)
 );
 
@@ -963,6 +982,12 @@ class SilverDatabase:
                 "(company, adviser, person, fund, security).",
                 self._add_mdm_entity_id_columns,
             ),
+            (
+                "010_company_facts_retirement_columns",
+                "Add valid_from/valid_to/is_current to sec_financial_fact and "
+                "sec_accounting_flag (change-propagation map Ticket 33).",
+                self._add_company_facts_retirement_columns,
+            ),
         )
 
     def _schema_migration_applied(self, migration_name: str) -> bool:
@@ -1057,6 +1082,26 @@ class SilverDatabase:
                 f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS mdm_entity_id TEXT"
             )
 
+    def _add_company_facts_retirement_columns(self) -> None:
+        # DuckDB ALTER TABLE ADD COLUMN rejects a NOT NULL constraint (see
+        # _add_pipeline_run_lease_backstop_overdue above) -- DEFAULT alone is
+        # sufficient: valid_from's DEFAULT NOW() backfills every pre-existing
+        # row to "became valid at migration time" (retirement wasn't tracked
+        # before, so that's the earliest honest value), and is_current's
+        # DEFAULT TRUE backfills every pre-existing row to "current", which
+        # is correct since nothing could have retired it before this
+        # migration existed.
+        for table in ("sec_financial_fact", "sec_accounting_flag"):
+            self._conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS valid_from TIMESTAMPTZ DEFAULT NOW()"
+            )
+            self._conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS valid_to TIMESTAMPTZ"
+            )
+            self._conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS is_current BOOLEAN DEFAULT TRUE"
+            )
+
     def _widen_adv_fund_index_to_bigint(self) -> None:
         """``CREATE TABLE IF NOT EXISTS`` never widens an existing store's column type.
 
@@ -1118,6 +1163,18 @@ class SilverDatabase:
                 reason="pre_period_end_pk",
                 missing_values={
                     "period_start": f"DATE '{_INSTANT_FACT_PERIOD_START_SENTINEL}'",
+                    # Ticket 33's valid_from/is_current are NOT NULL on
+                    # sec_financial_fact -- a backed-up pre-Ticket-33 store's
+                    # rows have no source value for these, so the recreate's
+                    # copy-select must supply one explicitly (the same
+                    # reasoning as _add_company_facts_retirement_columns'
+                    # ALTER-path migration: treat pre-existing rows as
+                    # "became valid, and is current, as of migration time").
+                    # Harmless no-op for sec_financial_derived, the other
+                    # table this migration also recreates -- it has neither
+                    # column, so _table_columns() never selects these keys.
+                    "valid_from": "NOW()",
+                    "is_current": "TRUE",
                 },
             )
 
@@ -1152,6 +1209,12 @@ class SilverDatabase:
                 reason="pre_period_start_pk",
                 missing_values={
                     "period_start": f"DATE '{_INSTANT_FACT_PERIOD_START_SENTINEL}'",
+                    # Same NOT NULL backfill reasoning as
+                    # _migrate_financial_period_end_pk above -- a store on
+                    # this pre-Stage-2 PK also predates Ticket 33's
+                    # valid_from/is_current columns.
+                    "valid_from": "NOW()",
+                    "is_current": "TRUE",
                 },
             )
 
@@ -3890,9 +3953,21 @@ class SilverDatabase:
     # Fundamentals namespace — Branch B silver tables
     # ------------------------------------------------------------------
 
-    @track_landing_rows("sec_financial_fact")
     def merge_financial_facts(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows_bulk(
+        # Not @track_landing_rows here (Ticket 33): that decorator forwards
+        # the caller's rows unmodified, which lack is_current/valid_to/
+        # valid_from entirely -- if left unpatched, every ordinary
+        # (non-retiring) write would land in Snowflake landing with
+        # is_current=NULL forever, since only retire_financial_facts_
+        # not_in_snapshot's RETURNING readback ever populated those columns.
+        # Any row present in this call is, by construction, current as of
+        # this write -- is_current=True/valid_to=None need no DB read-back,
+        # they're deterministic. valid_from is set to this write's own time
+        # rather than DuckDB's true first-insert value (a deliberate,
+        # last-write-wins simplification for the landing/dbt collapse only
+        # -- DuckDB's own valid_from column stays genuinely first-insert-wins,
+        # see the ON CONFLICT clause below, which never touches it).
+        count = self._merge_rows_bulk(
             staging_table="stg_sec_financial_fact",
             staging_ddl="""
                 CREATE TEMP TABLE IF NOT EXISTS stg_sec_financial_fact (
@@ -3940,7 +4015,15 @@ class SilverDatabase:
                     value = excluded.value,
                     decimals = excluded.decimals,
                     parser_version = excluded.parser_version,
-                    ingested_at = now()
+                    ingested_at = now(),
+                    -- Ticket 33: a fact reappearing in this fresh snapshot
+                    -- is reinstated if a prior snapshot had retired it --
+                    -- reopens the existing row rather than needing a
+                    -- separate retire_financial_facts_not_in_snapshot call
+                    -- to notice the reversal. A no-op for a fact that was
+                    -- never retired (already is_current=TRUE/valid_to=NULL).
+                    is_current = TRUE,
+                    valid_to = NULL
             """,
             rows=rows,
             values_fn=lambda r: [
@@ -3953,6 +4036,125 @@ class SilverDatabase:
                 r.get("parser_version"),
             ],
         )
+        landing_export = getattr(self, "landing_export", None)
+        if landing_export is not None and rows:
+            now = datetime.now(UTC)
+            landing_export.record(
+                "sec_financial_fact",
+                [dict(r, valid_from=now, valid_to=None, is_current=True) for r in rows],
+            )
+        return count
+
+    _FINANCIAL_FACT_ROW_COLUMNS = (
+        "cik", "accession_number", "fiscal_year", "fiscal_period", "period_end",
+        "period_start", "form_type", "concept", "value", "unit", "decimals",
+        "segment", "parser_version", "valid_from", "valid_to", "is_current",
+    )
+
+    def retire_financial_facts_not_in_snapshot(
+        self, cik: int, fact_keys: list[tuple], sync_run_id: str
+    ) -> int:
+        """Close the validity interval of every currently-current
+        sec_financial_fact row for `cik` that is absent from `fact_keys`
+        (Ticket 33, change-propagation map).
+
+        `fact_keys` is the fresh, COMPLETE company-facts snapshot's full
+        membership set for this CIK -- (accession_number, concept,
+        fiscal_period, segment, period_end, period_start) tuples, matching
+        `_finalize_company_facts_candidate`'s own `fact_keys` list exactly.
+
+        The comparison basis is this table's own is_current=TRUE rows for
+        the CIK -- always exactly the prior complete snapshot's membership
+        set, because nothing but this method and merge_financial_facts's
+        ON CONFLICT reinstatement branch ever mutates is_current, and
+        nothing reaches Silver unless CAPTURED with a complete payload
+        (company_facts_silver_acceptance's existing negative gate). A fact
+        retired here and present again in a later snapshot is reinstated by
+        merge_financial_facts's own ON CONFLICT branch, not by this method.
+
+        Never physically deletes -- closes the interval instead
+        (is_current=FALSE, valid_to=<retirement time>), per spec.md's
+        "RETIRE ... never physically deletes history" rule. Retired rows
+        are pushed into landing_export (when configured) so the Snowflake
+        landing zone's append-only, latest-write-wins collapse reflects the
+        retirement too, mirroring `replace_company_tickers`'s manual
+        landing_export.record call for the same reason (this UPDATE's
+        row shape doesn't fit @track_landing_rows's `rows` bound-arg
+        convention).
+        """
+        now = datetime.now(UTC)
+        row_columns_sql = ", ".join(self._FINANCIAL_FACT_ROW_COLUMNS)
+        if not fact_keys:
+            # Complete-empty scope: a real CIK can lose every fact it had
+            # (e.g. all prior filings withdrawn) -- retire everything current.
+            retired = self._conn.execute(
+                f"""
+                UPDATE sec_financial_fact
+                SET is_current = FALSE, valid_to = ?
+                WHERE cik = ? AND is_current = TRUE
+                RETURNING {row_columns_sql}
+                """,
+                [now, cik],
+            ).fetchall()
+        else:
+            self._conn.execute(
+                """
+                CREATE TEMP TABLE IF NOT EXISTS stg_financial_fact_retain_keys (
+                    accession_number TEXT, concept TEXT, fiscal_period TEXT,
+                    segment TEXT, period_end DATE, period_start DATE
+                )
+                """
+            )
+            try:
+                columns = list(zip(*fact_keys))
+                col_names = [f"c{i}" for i in range(len(columns))]
+                arrow_table = pa.table(dict(zip(col_names, columns)))
+                self._conn.register("_retain_keys_src", arrow_table)
+                try:
+                    self._conn.execute(
+                        f"INSERT INTO stg_financial_fact_retain_keys "
+                        f"SELECT * FROM _retain_keys_src"
+                    )
+                finally:
+                    self._conn.unregister("_retain_keys_src")
+                retired = self._conn.execute(
+                    f"""
+                    UPDATE sec_financial_fact
+                    SET is_current = FALSE, valid_to = ?
+                    WHERE cik = ?
+                      AND is_current = TRUE
+                      AND NOT EXISTS (
+                          SELECT 1 FROM stg_financial_fact_retain_keys k
+                          WHERE k.accession_number = sec_financial_fact.accession_number
+                            AND k.concept = sec_financial_fact.concept
+                            AND k.fiscal_period = sec_financial_fact.fiscal_period
+                            AND k.segment = sec_financial_fact.segment
+                            AND k.period_end = sec_financial_fact.period_end
+                            AND k.period_start = sec_financial_fact.period_start
+                      )
+                    RETURNING {row_columns_sql}
+                    """,
+                    [now, cik],
+                ).fetchall()
+            finally:
+                self._conn.execute("DELETE FROM stg_financial_fact_retain_keys")
+
+        return self._finalize_retirement("sec_financial_fact", self._FINANCIAL_FACT_ROW_COLUMNS, retired)
+
+    def _finalize_retirement(
+        self, table_name: str, row_columns: tuple[str, ...], retired: list[tuple]
+    ) -> int:
+        """Shared tail for retire_financial_facts_not_in_snapshot/
+        retire_accounting_flags_not_in_snapshot (Ticket 33): turn a
+        RETURNING result into row dicts and push them to landing_export.
+        """
+        if not retired:
+            return 0
+        retired_rows = [dict(zip(row_columns, row)) for row in retired]
+        landing_export = getattr(self, "landing_export", None)
+        if landing_export is not None:
+            landing_export.record(table_name, retired_rows)
+        return len(retired_rows)
 
     @track_landing_rows("sec_financial_derived")
     def merge_financial_derived(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
@@ -4196,9 +4398,10 @@ class SilverDatabase:
             count += 1
         return count
 
-    @track_landing_rows("sec_accounting_flag")
     def merge_accounting_flags(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
+        # Not @track_landing_rows -- same reasoning as merge_financial_facts
+        # above (Ticket 33).
+        count = self._merge_rows(
             """
             INSERT INTO sec_accounting_flag
                 (cik, accession_number, fiscal_year, period_end, form_type,
@@ -4216,7 +4419,11 @@ class SilverDatabase:
                 altman_z_score = COALESCE(excluded.altman_z_score, sec_accounting_flag.altman_z_score),
                 piotroski_f_score = COALESCE(excluded.piotroski_f_score, sec_accounting_flag.piotroski_f_score),
                 parser_version = excluded.parser_version,
-                ingested_at = now()
+                ingested_at = now(),
+                -- Ticket 33: same reinstatement-on-reappearance as
+                -- merge_financial_facts above.
+                is_current = TRUE,
+                valid_to = NULL
             """,
             rows,
             lambda r: [
@@ -4230,6 +4437,58 @@ class SilverDatabase:
                 r.get("parser_version"),
             ],
         )
+        landing_export = getattr(self, "landing_export", None)
+        if landing_export is not None and rows:
+            now = datetime.now(UTC)
+            landing_export.record(
+                "sec_accounting_flag",
+                [dict(r, valid_from=now, valid_to=None, is_current=True) for r in rows],
+            )
+        return count
+
+    _ACCOUNTING_FLAG_ROW_COLUMNS = (
+        "cik", "accession_number", "fiscal_year", "period_end", "form_type",
+        "auditor_name", "auditor_pcaob_id", "auditor_location", "icfr_attestation",
+        "auditor_changed", "beneish_m_score", "altman_z_score", "piotroski_f_score",
+        "parser_version", "valid_from", "valid_to", "is_current",
+    )
+
+    def retire_accounting_flags_not_in_snapshot(
+        self, cik: int, accession_numbers: list[str], sync_run_id: str
+    ) -> int:
+        """sec_accounting_flag's sibling of retire_financial_facts_not_in_snapshot
+        (Ticket 33) -- one row per (cik, accession_number), so the retained
+        set is a plain accession_number list rather than a multi-column key
+        tuple; no Arrow staging table needed at this row volume (one flag
+        row per 10-K, not per XBRL fact).
+        """
+        now = datetime.now(UTC)
+        row_columns_sql = ", ".join(self._ACCOUNTING_FLAG_ROW_COLUMNS)
+        if not accession_numbers:
+            retired = self._conn.execute(
+                f"""
+                UPDATE sec_accounting_flag
+                SET is_current = FALSE, valid_to = ?
+                WHERE cik = ? AND is_current = TRUE
+                RETURNING {row_columns_sql}
+                """,
+                [now, cik],
+            ).fetchall()
+        else:
+            placeholders = ", ".join("?" * len(accession_numbers))
+            retired = self._conn.execute(
+                f"""
+                UPDATE sec_accounting_flag
+                SET is_current = FALSE, valid_to = ?
+                WHERE cik = ?
+                  AND is_current = TRUE
+                  AND accession_number NOT IN ({placeholders})
+                RETURNING {row_columns_sql}
+                """,
+                [now, cik, *accession_numbers],
+            ).fetchall()
+
+        return self._finalize_retirement("sec_accounting_flag", self._ACCOUNTING_FLAG_ROW_COLUMNS, retired)
 
     @track_landing_accounting_flag_scores
     def update_accounting_flag_scores(

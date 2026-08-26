@@ -5,7 +5,7 @@
 {{ silver_model_config('SEC_FINANCIAL_FACT') }}
 
 -- First-insert-wins (fiscal_year, form_type, unit) from the earliest parse;
--- last-write-wins (value, decimals, parser_version, ingested_at) from the latest parse -- matches
+-- last-write-wins (value, decimals, parser_version, ingested_at, valid_from, valid_to, is_current) from the latest parse -- matches
 -- silver_store.py's merge_financial_fact-shaped two-pass upsert
 -- exactly (see generate_silver_dbt_models.py's _SPLIT_TABLES for the citation).
 with first_seen as (
@@ -35,7 +35,10 @@ last_seen as (
     value,
     decimals,
     parser_version,
-    ingested_at
+    ingested_at,
+    valid_from,
+    valid_to,
+    is_current
     from {{ source('edgartools_silver_landing', 'SEC_FINANCIAL_FACT') }}
     qualify row_number() over (partition by cik, accession_number, concept, fiscal_period, segment, period_end, period_start order by parse_sequence desc) = 1
 )
@@ -53,7 +56,10 @@ select
     l.value,
     l.decimals,
     l.parser_version,
-    l.ingested_at
+    l.ingested_at,
+    l.valid_from,
+    l.valid_to,
+    l.is_current
 from first_seen f
 join last_seen l
     on f.cik = l.cik and f.accession_number = l.accession_number and f.concept = l.concept and f.fiscal_period = l.fiscal_period and f.segment = l.segment and f.period_end = l.period_end and f.period_start = l.period_start

@@ -29,6 +29,7 @@ _EXPECTED_SCHEMA_MIGRATIONS = [
     "007_adv_private_fund_fund_index_bigint",
     "008_pipeline_run_lease_backstop_overdue",
     "009_mdm_entity_id_columns",
+    "010_company_facts_retirement_columns",
 ]
 
 # Pre-PR-#57 DDL (PK omits period_end) for sec_financial_fact / sec_financial_derived.

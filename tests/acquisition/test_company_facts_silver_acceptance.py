@@ -120,6 +120,58 @@ def _facts_payload(*, accession: str = "0000320193-23-000106", with_facts: bool 
     }
 
 
+def _two_concept_facts_payload(*, accession: str = "0000320193-23-000106") -> dict:
+    return {
+        "cik": 320193,
+        "entityName": "Apple Inc.",
+        "facts": {
+            "us-gaap": {
+                "Assets": {
+                    "units": {
+                        "USD": [
+                            {
+                                "end": "2023-09-30", "val": 1000,
+                                "accn": accession, "fy": 2023, "fp": "FY", "form": "10-K",
+                            }
+                        ]
+                    }
+                },
+                "Revenues": {
+                    "units": {
+                        "USD": [
+                            {
+                                "start": "2022-10-01", "end": "2023-09-30", "val": 500,
+                                "accn": accession, "fy": 2023, "fp": "FY", "form": "10-K",
+                            }
+                        ]
+                    }
+                },
+            }
+        },
+    }
+
+
+def _one_concept_facts_payload(*, accession: str = "0000320193-23-000106") -> dict:
+    return {
+        "cik": 320193,
+        "entityName": "Apple Inc.",
+        "facts": {
+            "us-gaap": {
+                "Assets": {
+                    "units": {
+                        "USD": [
+                            {
+                                "end": "2023-09-30", "val": 1000,
+                                "accn": accession, "fy": 2023, "fp": "FY", "form": "10-K",
+                            }
+                        ]
+                    }
+                },
+            }
+        },
+    }
+
+
 def _candidate_outcome(*, cik: int, decision_id: str) -> CompanyFactsCandidateOutcome:
     return CompanyFactsCandidateOutcome(
         candidate=CompanyFactsCandidate(
@@ -278,6 +330,85 @@ def test_finalize_second_identical_capture_is_no_impact_and_publishes_with_no_pr
     assert second_decision.disposition.value == "NO_IMPACT"
     assert second_decision.silver_outcome is SilverOutcome.PUBLISHED
     assert second_decision.expected_producers == ()
+
+
+def test_a_second_complete_snapshot_missing_a_fact_key_retires_it_deterministically(
+    tmp_path: Path,
+) -> None:
+    """Ticket 33's own regression scenario: a second complete snapshot
+    missing a fact key the first snapshot had produces a deterministic,
+    verified 'retired' outcome for that key, and the row's history remains
+    queryable, not deleted.
+    """
+
+    ledger, bronze_root, revisions, processing, finalizer, silver = _harness(tmp_path)
+    logical_key = "320193/company-facts"
+
+    first_payload = json.dumps(_two_concept_facts_payload()).encode("utf-8")
+    first_decision_id = _captured_decision(
+        ledger, bronze_root,
+        candidate_id="company-facts-discovery/320193/first",
+        logical_source_key=logical_key,
+        payload=first_payload,
+    )
+    first_result = drive_company_facts_silver_acceptance(
+        ledger, bronze_root, revisions, processing, finalizer, silver,
+        CompanyFactsDriveResult(
+            manifest=CompanyFactsManifest(universe_label="test", candidates=()),
+            outcomes=(_candidate_outcome(cik=320193, decision_id=first_decision_id),),
+        ),
+    )
+    assert first_result.outcomes[0].processing_decision.silver_outcome is SilverOutcome.PUBLISHED
+    initial_rows = silver.fetch(
+        "SELECT concept, is_current FROM sec_financial_fact WHERE cik = ? ORDER BY concept",
+        [320193],
+    )
+    assert initial_rows == [
+        {"concept": "Assets", "is_current": True},
+        {"concept": "Revenues", "is_current": True},
+    ]
+
+    # A fresh, complete snapshot no longer reports Revenues -- different
+    # bytes, so this is a real content change, not a NO_IMPACT replay.
+    second_payload = json.dumps(_one_concept_facts_payload()).encode("utf-8")
+    second_decision_id = _captured_decision(
+        ledger, bronze_root,
+        candidate_id="company-facts-discovery/320193/second",
+        logical_source_key=logical_key,
+        payload=second_payload,
+    )
+    second_result = drive_company_facts_silver_acceptance(
+        ledger, bronze_root, revisions, processing, finalizer, silver,
+        CompanyFactsDriveResult(
+            manifest=CompanyFactsManifest(universe_label="test", candidates=()),
+            outcomes=(_candidate_outcome(cik=320193, decision_id=second_decision_id),),
+        ),
+    )
+
+    second_decision = second_result.outcomes[0].processing_decision
+    assert second_decision.silver_outcome is SilverOutcome.PUBLISHED
+    fact_producer = next(
+        p for p in second_decision.expected_producers if p.producer_name == "sec_financial_fact"
+    )
+    assert fact_producer.outcome.value == "VERIFIED"
+
+    rows = silver.fetch(
+        "SELECT concept, is_current, valid_to FROM sec_financial_fact "
+        "WHERE cik = ? ORDER BY concept",
+        [320193],
+    )
+    by_concept = {r["concept"]: r for r in rows}
+    assert by_concept["Assets"]["is_current"] is True
+    assert by_concept["Assets"]["valid_to"] is None
+    assert by_concept["Revenues"]["is_current"] is False
+    assert by_concept["Revenues"]["valid_to"] is not None
+
+    # Never physically deleted -- still queryable by value.
+    retired_value = silver.fetch(
+        "SELECT value FROM sec_financial_fact WHERE cik = ? AND concept = 'Revenues'",
+        [320193],
+    )
+    assert retired_value == [{"value": 500.0}]
 
 
 def test_drive_rejects_a_required_producers_set_it_cannot_serve(tmp_path: Path) -> None:
