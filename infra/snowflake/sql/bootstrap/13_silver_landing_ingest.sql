@@ -217,13 +217,21 @@ $$;
 -- finding already documented for SNOWFLAKE_RUN_MANIFEST_TASK (1 MINUTE ->
 -- 15 MINUTE -> 6 HOUR for the identical reason) -- that fix was never
 -- ported to this sibling task when it was created three weeks later.
--- 60 MINUTE keeps 24 resumes/day (vs. 288), landing an operator-set ceiling
--- of <=1 credit/day for this task specifically -- see the ticket for the
--- observed per-run cost this was sized against, and re-verify against a
--- full day of WAREHOUSE_METERING_HISTORY after this deploys, since the
--- sizing is extrapolated from the 5-minute cadence's real numbers, not
--- independently measured at 60 MINUTE. Nothing downstream depends on
--- landing's write latency (Ticket 07's own Answer, unchanged) -- an hourly
+-- 60 MINUTE (24 resumes/day, vs. 288) was independently re-measured live
+-- 2026-08-26 (silver-landing-task-cost Ticket 02) at a genuinely clean,
+-- steady-state ~0.80 credits/day (0.031-0.042 credits/hour across 25
+-- consecutive hourly buckets post-fix) -- comfortably under the original
+-- <=1 credit/day ceiling, closing that ticket's own "re-verify" requirement.
+-- Widened further, same day, to explicitly target the 0.3-0.5 credit/day
+-- band: 180 MINUTE keeps 8 resumes/day (vs. 24), extrapolating from the
+-- same ~0.033 credits/resume measured at 60 MINUTE to ~0.27 credits/day --
+-- under the target band as deliberate headroom, an operator choice over the
+-- 120 MINUTE (~0.40/day) alternative. Re-verify against a full day of
+-- WAREHOUSE_METERING_HISTORY after this deploys, same discipline as the
+-- 60 MINUTE change -- the extrapolation assumes per-resume cost stays flat
+-- as batches get less frequent/larger, which was not independently
+-- confirmed at 180 MINUTE before rollout. Nothing downstream depends on
+-- landing's write latency (Ticket 07's own Answer, unchanged) -- a 3-hour
 -- ceiling on data freshness here does not block any consumer's own
 -- TARGET_LAG-scheduled refresh.
 -- Reuses EDGARTOOLS_PROD_REFRESH_WH, the warehouse already used for this
@@ -232,8 +240,8 @@ $$;
 -- warehouse too) -- no additional grant needed for the task to run on it.
 CREATE TASK IF NOT EXISTS LOAD_SILVER_LANDING_TASK
     WAREHOUSE = EDGARTOOLS_PROD_REFRESH_WH
-    SCHEDULE = '60 MINUTE'
-    COMMENT = 'Scheduled COPY INTO of the silver-landing Parquet export (Ticket 07); 60 MINUTE cadence caps EDGARTOOLS_PROD_REFRESH_WH at <=1 credit/day (silver-landing-task-cost Ticket 01).'
+    SCHEDULE = '180 MINUTE'
+    COMMENT = 'Scheduled COPY INTO of the silver-landing Parquet export (Ticket 07); 180 MINUTE cadence targets ~0.3-0.5 credits/day on EDGARTOOLS_PROD_REFRESH_WH (silver-landing-task-cost Ticket 02, widened from the original 60 MINUTE/<=1 credit/day sizing in Ticket 01).'
 AS
     CALL LOAD_SILVER_LANDING();
 
@@ -248,7 +256,7 @@ AS
 -- already-suspended task, so this sequence is idempotent regardless of the
 -- task's state going in.
 ALTER TASK LOAD_SILVER_LANDING_TASK SUSPEND;
-ALTER TASK LOAD_SILVER_LANDING_TASK SET SCHEDULE = '60 MINUTE';
+ALTER TASK LOAD_SILVER_LANDING_TASK SET SCHEDULE = '180 MINUTE';
 
 -- Tasks are created SUSPENDED by default -- must be explicitly resumed to
 -- actually run on schedule (same real Snowflake behavior the manifest-task
