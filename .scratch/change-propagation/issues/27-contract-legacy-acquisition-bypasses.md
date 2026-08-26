@@ -10,7 +10,13 @@ company-facts snapshots; 23 — Migrate reference catalogs; 24 — Migrate ADV
 sources; 25 — Add conflict, repair, exclusion, and evidence-import workflows;
 26 — Rebuild and activate a ledger epoch
 
-**Status:** ready-for-agent
+**Status:** blocked — transitively blocked through Ticket 26 (itself blocked
+on the still-open Ticket 10), and even setting that aside, three direct
+blockers are only partially resolved with named unfinished bullets: Ticket
+22 (bullets 1/4/5 partial — conditional-fetch, retirement schema, full
+Facade purity), Ticket 23 (bullet 1 partial — conditional-fetch), Ticket 24
+(bullet 4 partial — `adv_filing` has no discovery driver yet). Corrected
+2026-08-26; this file previously said `ready-for-agent`.
 
 - [ ] Architecture tests prove every approved low-level source adapter is
   reachable only through the ledger-gated Facade.

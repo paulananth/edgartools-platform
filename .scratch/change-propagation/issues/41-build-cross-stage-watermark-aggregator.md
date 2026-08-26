@@ -12,7 +12,9 @@ placeholder-ridden SQL sketch.
 watermark contract (this map); 35, 36, 39, 40 (each stage's own
 completion-evidence mechanism must exist for the aggregator to read)
 
-**Status:** ready-for-agent
+**Status:** blocked — none of Tickets 35, 36, 39, 40 are resolved yet
+(corrected 2026-08-26; this file previously said `ready-for-agent`, despite
+its own Blocked-by list naming all four as prerequisites).
 
 - [ ] A new scheduled job (not event-triggered, per Ticket 09's Answer)
   reads, per `cause_reference`: silver's completion barrier (Ticket 35),
