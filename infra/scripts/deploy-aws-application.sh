@@ -862,7 +862,14 @@ put_fence_monitor_metric_and_alarm() {
 configure_fence_monitor_alarm() {
   local action="$1" topic_arn="$2"
   local log_group_name
-  log_group_name="$(first_nonempty "$LOG_GROUP_NAME" "/aws/ecs/${NAME_PREFIX}-mdm")"
+  # MDM tasks log into the same shared warehouse log group, distinguished
+  # only by awslogs-stream-prefix (e.g. "mdm-mdm-small") -- there is no
+  # separate "-mdm" log group (confirmed live via
+  # `aws ecs describe-task-definition ... --query
+  # taskDefinition.containerDefinitions[0].logConfiguration` against
+  # edgartools-prod-mdm-small). Matches configure_mdm_entity_backfill_alarm's
+  # own default above exactly, not a bespoke "-mdm" suffix.
+  log_group_name="$(first_nonempty "$LOG_GROUP_NAME" "/aws/ecs/${NAME_PREFIX}-warehouse")"
   local filter_name_leak="${NAME_PREFIX}-fence-monitor-leak-count"
   local filter_name_gap="${NAME_PREFIX}-fence-monitor-access-gap-count"
   local alarm_name_leak="${NAME_PREFIX}-fence-monitor-leak-detected"
