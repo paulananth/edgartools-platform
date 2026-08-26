@@ -763,13 +763,23 @@ fi
 # see write_mdm_utility_definition's own comment) on a recurring schedule
 # so a future credential rotation reopening Ticket 30's fence -- confirmed
 # live to happen on *any* RESET ACCESS call, not just an unusual one -- gets
-# caught without a human having to remember to check. Every 4 hours: cheap
-# enough (a handful of read-only has_table_privilege/pg_class queries on
-# the mdm-small task profile, seconds of runtime) that tightening the
-# interval buys real reduction in exposure window without meaningfully
-# raising cost, unlike LOAD_SILVER_LANDING_TASK's per-resume-billing
-# concern (CLAUDE.md) which doesn't apply to a scheduled Step Functions ->
-# Fargate invocation the same way it did to a Snowflake warehouse resume.
+# caught without a human having to remember to check.
+#
+# Sizing rationale for "every 4 hours" (not a placeholder default -- see
+# CLAUDE.md's LOAD_SILVER_LANDING_TASK credit-burn 5-whys for why that
+# matters): the trigger this guards against -- an out-of-band credential
+# rotation run outside bootstrap-prod-mdm.sh's own now-self-healing flow,
+# e.g. manual incident response -- has no observed historical frequency to
+# size a cadence against; it's rare and unscheduled by nature, not a
+# recurring load pattern like LOAD_SILVER_LANDING_TASK's polling problem
+# was. Absent that data, this instead bounds worst-case exposure to
+# comfortably inside a single business day (6 checks/day) while the cost
+# side is negligible regardless of interval: a handful of read-only
+# has_table_privilege/pg_class queries on the mdm-small task profile,
+# seconds of Fargate runtime, no Snowflake-warehouse-resume billing concern
+# (LOAD_SILVER_LANDING_TASK's actual driver) to weigh against. Revisit if a
+# real incident's time-to-detection ever matters enough to want tighter,
+# now that there would be at least one data point to size against.
 configure_fence_monitor_schedule() {
   local action="$1" role_arn="$2"
   local state_machine_arn="arn:aws:states:${AWS_REGION_NAME}:${ACCOUNT_ID}:stateMachine:${NAME_PREFIX}-mdm-utility"
@@ -814,14 +824,41 @@ if ! is_empty "$CONFIGURE_FENCE_MONITOR_SCHEDULE"; then
   exit 0
 fi
 
+# Configures one CloudWatch Logs metric filter + one alarm on a single
+# mdm_fence_check_result field. $1=log group, $2=filter name, $3=metric
+# name, $4=JSON path into the log event (e.g. $.leak_count), $5=alarm name,
+# $6=alarm description, $7=SNS topic ARN. treat-missing-data=breaching is
+# load-bearing, not a default: "the check never ran at all" (a schedule
+# silently disabled, an IAM permission broken) is exactly the failure
+# Ticket 44 exists to catch, the same reason ticket-05's mdm-entity-backfill
+# alarm above uses it, not just "it ran and found something."
+put_fence_monitor_metric_and_alarm() {
+  local log_group_name="$1" filter_name="$2" metric_name="$3" json_path="$4"
+  local alarm_name="$5" alarm_description="$6" topic_arn="$7"
+  local metric_namespace="EdgarTools/MDM"
+
+  aws_cli logs put-metric-filter \
+    --log-group-name "$log_group_name" \
+    --filter-name "$filter_name" \
+    --filter-pattern '{ $.event = "mdm_fence_check_result" }' \
+    --metric-transformations \
+      "metricName=${metric_name},metricNamespace=${metric_namespace},metricValue=\$${json_path},defaultValue=0"
+  aws_cli cloudwatch put-metric-alarm \
+    --alarm-name "$alarm_name" \
+    --alarm-description "$alarm_description" \
+    --namespace "$metric_namespace" \
+    --metric-name "$metric_name" \
+    --statistic Sum --period 14400 --evaluation-periods 1 \
+    --threshold 0 --comparison-operator GreaterThanThreshold \
+    --treat-missing-data breaching \
+    --alarm-actions "$topic_arn"
+}
+
 # Two separate metric filters/alarms (not one combined check) mirroring
 # ticket-81/ticket-05's own precedent of one alarm per independent failure
 # signal, rather than a metric-math expression combining both into one --
 # simpler to reason about and to test, at the cost of one extra
-# put-metric-alarm call. Both use treat-missing-data=breaching for the same
-# reason ticket 05's alarm does: "the check never ran at all" is exactly
-# the failure this ticket exists to catch (a schedule silently disabled,
-# an IAM permission broken), not just "it ran and found something."
+# put-metric-alarm call.
 configure_fence_monitor_alarm() {
   local action="$1" topic_arn="$2"
   local log_group_name
@@ -830,7 +867,6 @@ configure_fence_monitor_alarm() {
   local filter_name_gap="${NAME_PREFIX}-fence-monitor-access-gap-count"
   local alarm_name_leak="${NAME_PREFIX}-fence-monitor-leak-detected"
   local alarm_name_gap="${NAME_PREFIX}-fence-monitor-access-gap-detected"
-  local metric_namespace="EdgarTools/MDM"
 
   if [[ "$action" == "disable" ]]; then
     aws_cli cloudwatch delete-alarms --alarm-names "$alarm_name_leak" "$alarm_name_gap"
@@ -842,39 +878,17 @@ configure_fence_monitor_alarm() {
 
   require_confirmed_operator_alert_topic "$topic_arn"
 
-  aws_cli logs put-metric-filter \
-    --log-group-name "$log_group_name" \
-    --filter-name "$filter_name_leak" \
-    --filter-pattern '{ $.event = "mdm_fence_check_result" }' \
-    --metric-transformations \
-      "metricName=FenceMonitorLeakCount,metricNamespace=${metric_namespace},metricValue=\$.leak_count,defaultValue=0"
-  aws_cli logs put-metric-filter \
-    --log-group-name "$log_group_name" \
-    --filter-name "$filter_name_gap" \
-    --filter-pattern '{ $.event = "mdm_fence_check_result" }' \
-    --metric-transformations \
-      "metricName=FenceMonitorAccessGapCount,metricNamespace=${metric_namespace},metricValue=\$.access_gap_count,defaultValue=0"
-  log "Configured fence-monitor CloudWatch Logs metric filters"
-
-  aws_cli cloudwatch put-metric-alarm \
-    --alarm-name "$alarm_name_leak" \
-    --alarm-description "application/snowflake_write regained access to a Ticket-30-fenced acquisition-ledger/registry table, or the fence-monitor check hasn't run at all (Ticket 44, change-propagation map)" \
-    --namespace "$metric_namespace" \
-    --metric-name "FenceMonitorLeakCount" \
-    --statistic Sum --period 14400 --evaluation-periods 1 \
-    --threshold 0 --comparison-operator GreaterThanThreshold \
-    --treat-missing-data breaching \
-    --alarm-actions "$topic_arn"
-  aws_cli cloudwatch put-metric-alarm \
-    --alarm-name "$alarm_name_gap" \
-    --alarm-description "A fenced acquisition-ledger/registry table's own owning role lost its SELECT access, or the fence-monitor check hasn't run at all (Ticket 44, change-propagation map)" \
-    --namespace "$metric_namespace" \
-    --metric-name "FenceMonitorAccessGapCount" \
-    --statistic Sum --period 14400 --evaluation-periods 1 \
-    --threshold 0 --comparison-operator GreaterThanThreshold \
-    --treat-missing-data breaching \
-    --alarm-actions "$topic_arn"
-  log "Configured fence-monitor leak and access-gap alarms"
+  put_fence_monitor_metric_and_alarm \
+    "$log_group_name" "$filter_name_leak" "FenceMonitorLeakCount" '.leak_count' \
+    "$alarm_name_leak" \
+    "application/snowflake_write regained access to a Ticket-30-fenced acquisition-ledger/registry table, or the fence-monitor check hasn't run at all (Ticket 44, change-propagation map)" \
+    "$topic_arn"
+  put_fence_monitor_metric_and_alarm \
+    "$log_group_name" "$filter_name_gap" "FenceMonitorAccessGapCount" '.access_gap_count' \
+    "$alarm_name_gap" \
+    "A fenced acquisition-ledger/registry table's own owning role lost its SELECT access, or the fence-monitor check hasn't run at all (Ticket 44, change-propagation map)" \
+    "$topic_arn"
+  log "Configured fence-monitor CloudWatch Logs metric filters and alarms"
 }
 
 if ! is_empty "$CONFIGURE_FENCE_MONITOR_ALARM"; then

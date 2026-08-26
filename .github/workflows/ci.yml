@@ -97,6 +97,10 @@ jobs:
 
       - uses: astral-sh/setup-uv@v4
 
+      # mdm-runtime, not the broader mdm extra the sibling jobs above use:
+      # every file under tests/integration/ only needs psycopg2/sqlalchemy/
+      # the warehouse-runtime surface, never fastapi/sqladmin/splink (the
+      # mdm-only extras) -- verified against these tests' actual imports.
       - name: Install dependencies
         run: uv sync --extra mdm-runtime
 

@@ -74,3 +74,20 @@ BEGIN
     END IF;
 END;
 $$;
+
+-- Ticket 30 (change-propagation map) sibling gap, caught live by Ticket
+-- 44's own fence monitor on this table specifically: the REVOKE above only
+-- closes application's own direct grant. application also carries an
+-- ambient, platform-managed, INHERIT-true membership in Snowflake
+-- Postgres's snowflake_write role, which independently grants full DML on
+-- this table and was never revoked here -- the exact gap 013 had before
+-- Ticket 30's fix and 014 had before that same fix was ported to it.
+-- Guarded on snowflake_write existing at all for the same reason 013/014's
+-- equivalent blocks are (not present on a local/test Postgres instance).
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'snowflake_write') THEN
+        REVOKE ALL PRIVILEGES ON source_evidence_conflict FROM snowflake_write;
+    END IF;
+END;
+$$;

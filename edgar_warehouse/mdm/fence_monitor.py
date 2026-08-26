@@ -113,8 +113,9 @@ def _discover_owner_roles(conn) -> list[str]:
             "SELECT DISTINCT pg_get_userbyid(c.relowner) AS owner "
             "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
             "WHERE n.nspname = 'public' AND c.relkind = 'r' "
-            f"AND pg_get_userbyid(c.relowner) LIKE '{_OWNER_ROLE_LIKE_PATTERN}'"
-        )
+            "AND pg_get_userbyid(c.relowner) LIKE :pattern"
+        ),
+        {"pattern": _OWNER_ROLE_LIKE_PATTERN},
     ).fetchall()
     return sorted({row[0] for row in rows if row[0]})
 
