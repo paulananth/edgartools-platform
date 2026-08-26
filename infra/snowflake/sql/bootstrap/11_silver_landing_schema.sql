@@ -94,6 +94,9 @@ CREATE TABLE IF NOT EXISTS sec_accounting_flag (
     piotroski_f_score INTEGER,
     parser_version TEXT,
     ingested_at TIMESTAMP_TZ,
+    valid_from TIMESTAMP_TZ NOT NULL,
+    valid_to TIMESTAMP_TZ,
+    is_current BOOLEAN NOT NULL,
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
@@ -473,6 +476,9 @@ CREATE TABLE IF NOT EXISTS sec_financial_fact (
     segment TEXT NOT NULL,
     parser_version TEXT,
     ingested_at TIMESTAMP_TZ,
+    valid_from TIMESTAMP_TZ NOT NULL,
+    valid_to TIMESTAMP_TZ,
+    is_current BOOLEAN NOT NULL,
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
