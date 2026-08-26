@@ -644,9 +644,14 @@ GRANT SELECT, INSERT ON source_revision TO edgartools_acquisition_processor;
 -- Ticket 19: the processor seals (INSERT) a revision's Processing Decision
 -- and expected producer set; only the Silver Finalizer may record a
 -- producer's settled outcome, and only on the specific columns that
--- outcome touches -- column-scoped GRANTs are the sole enforcement layer
--- here (see models.py's SourceExpectedProducerRecord docstring for why no
--- role-check trigger backs this up).
+-- outcome touches -- column-scoped GRANTs are the enforcement layer here
+-- among the acquisition sub-roles (see models.py's
+-- SourceExpectedProducerRecord docstring for why no role-check trigger
+-- backs this up). Ticket 30 (change-propagation map) found this is NOT the
+-- sole enforcement layer in practice: `application`'s ambient,
+-- platform-managed `snowflake_write` membership grants it full DML on
+-- these tables independent of the column-scoped GRANTs below -- see that
+-- ticket for the live finding and fix status.
 GRANT SELECT ON source_processing_decision, source_expected_producer
     TO edgartools_acquisition_coordinator, edgartools_acquisition_worker,
        edgartools_acquisition_operator;

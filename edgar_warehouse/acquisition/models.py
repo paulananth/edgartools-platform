@@ -421,11 +421,19 @@ class SourceExpectedProducerRecord(AcquisitionBase):
     its parent ``SourceProcessingDecisionRecord``. Only the Silver Finalizer
     role may update ``outcome``/``verified_reference``/``failure_detail`` --
     enforced at the grant layer (INSERT to processor, column-scoped UPDATE to
-    the finalizer), not a role-check trigger: the two operations already
-    belong to disjoint roles, so a trigger would only duplicate what GRANTs
-    already express (the lesson from the manifest-pipeline-ownership /
-    Ticket 18 review incidents about mismatched trigger-vs-grant enforcement
-    layers).
+    the finalizer) against every role the acquisition roles themselves
+    depend on, not a role-check trigger: the two operations already belong
+    to disjoint roles, so a trigger would only duplicate what GRANTs already
+    express (the lesson from the manifest-pipeline-ownership / Ticket 18
+    review incidents about mismatched trigger-vs-grant enforcement layers).
+    **Caveat (Ticket 30, change-propagation map):** this is not the sole
+    enforcement layer in practice -- the ``application`` role also carries
+    an ambient, platform-managed membership in Snowflake Postgres's
+    ``snowflake_write`` role (re-asserted by the platform, not by this
+    repo's own migrations) that grants ``application`` itself full DML on
+    every table here regardless of these column-scoped GRANTs to the
+    acquisition sub-roles. See Ticket 30 for the live finding and fix
+    status.
 
     Ticket 19 bullet 2: "Success requires read-back verification of
     authoritative Silver state" -- ``outcome='VERIFIED'`` is only ever set
