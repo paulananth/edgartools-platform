@@ -328,6 +328,117 @@ class SourceRevisionLedger:
             )
             return _revision_from_record(existing) if existing is not None else None
 
+    def materialize_repair(
+        self,
+        parent_revision_id: str,
+        *,
+        new_raw_evidence_hash: str,
+        new_bronze_artifact_reference: str,
+        actor_role: ProcessingTransitionRole = (
+            ProcessingTransitionRole.ACQUISITION_PROCESSOR
+        ),
+    ) -> SourceRevision:
+        """Materialize a REPAIR child revision that accepts different bytes
+        than the parent's evidence as authoritative (Ticket 25 bullet 2).
+
+        Unlike ``materialize_reinterpretation`` (same verified bytes, new
+        interpretation), a repair supplies genuinely different raw bytes --
+        the quarantined evidence from a
+        ``conflict.ConflictLedger``-recorded ``source_evidence_conflict``
+        (the caller, not this method, is responsible for that context;
+        this method only knows "these bytes are now accepted for this
+        parent's identity"). Interpretation itself is unchanged, so
+        contract/parser/schema/configuration versions and
+        ``declared_replacement_scope`` are inherited from the parent
+        unmodified -- only the raw evidence, canonical-source hash, and
+        Bronze artifact reference are fresh. No separate interpretation step
+        exists to derive a distinct domain-content hash here (the same
+        bounded, raw-passthrough posture already used elsewhere in this
+        package -- see e.g. Ticket 23's ``REFERENCE_CATALOG_INTERPRETATION_
+        VERSION`` docstring for the same honest scoping), so
+        ``domain_content_hash`` is the new raw evidence hash too.
+
+        Idempotent per ``parent_revision_id``: reuses
+        ``uq_source_revision_reinterpretation``'s existing unique index
+        (``parent_revision_id`` + all four version columns) rather than a
+        new one -- a repair's version tuple is always identical to its
+        parent's own (interpretation didn't change), so that index already
+        enforces "at most one derived revision per parent at this exact
+        version tuple," which for a repair specifically means "at most one
+        repair per parent." A second, genuinely independent conflict against
+        the same parent is out of this ticket's scope (see the ticket's own
+        Answer section).
+        """
+
+        require_processor_role(actor_role)
+        existing = self._existing_repair(parent_revision_id, actor_role=actor_role)
+        if existing is not None:
+            return existing
+        try:
+            with Session(self._engine) as session, session.begin():
+                set_postgres_role(session, actor_role.value)
+                parent = session.get(SourceRevisionRecord, parent_revision_id)
+                if parent is None:
+                    raise RevisionNotEligible(
+                        f"parent_revision_id={parent_revision_id} does not exist"
+                    )
+
+                position = reserve_observation_position(
+                    session, parent.source_family, parent.logical_source_key
+                )
+                previous = _latest_revision_before(
+                    session, parent.source_family, parent.logical_source_key, position
+                )
+                content_impact = _content_impact(previous, new_raw_evidence_hash)
+
+                record = SourceRevisionRecord(
+                    decision_id=None,
+                    parent_revision_id=parent_revision_id,
+                    revision_relationship=RevisionRelationship.REPAIR.value,
+                    source_family=parent.source_family,
+                    logical_source_key=parent.logical_source_key,
+                    observation_position=position,
+                    source_native_revision=parent.source_native_revision,
+                    raw_evidence_hash=new_raw_evidence_hash,
+                    canonical_source_hash=new_raw_evidence_hash,
+                    domain_content_hash=new_raw_evidence_hash,
+                    contract_version=parent.contract_version,
+                    parser_version=parent.parser_version,
+                    schema_version=parent.schema_version,
+                    configuration_version=parent.configuration_version,
+                    completeness_type=parent.completeness_type,
+                    declared_replacement_scope=parent.declared_replacement_scope,
+                    bronze_artifact_reference=new_bronze_artifact_reference,
+                    content_impact=content_impact.value,
+                )
+                session.add(record)
+                session.flush()
+                return _revision_from_record(record)
+        except IntegrityError:
+            winner = self._existing_repair(parent_revision_id, actor_role=actor_role)
+            if winner is None:
+                raise
+            return winner
+
+    def _existing_repair(
+        self,
+        parent_revision_id: str,
+        *,
+        actor_role: ProcessingTransitionRole = (
+            ProcessingTransitionRole.ACQUISITION_PROCESSOR
+        ),
+    ) -> SourceRevision | None:
+        with Session(self._engine) as session:
+            set_postgres_role(session, actor_role.value)
+            existing = session.scalar(
+                select(SourceRevisionRecord).where(
+                    SourceRevisionRecord.parent_revision_id == parent_revision_id,
+                    SourceRevisionRecord.revision_relationship
+                    == RevisionRelationship.REPAIR.value,
+                )
+            )
+            return _revision_from_record(existing) if existing is not None else None
+
 
 def _content_impact(
     previous: SourceRevisionRecord | None, domain_content_hash: str

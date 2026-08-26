@@ -167,6 +167,22 @@ BEGIN
     EXECUTE 'ALTER TABLE source_registry_version OWNER TO edgartools_acquisition_registry_owner';
     EXECUTE 'ALTER TABLE source_registry_coverage OWNER TO edgartools_acquisition_registry_owner';
   END IF;
+  -- Ticket 25: a restore predating source_evidence_conflict has none yet --
+  -- the privileged migration creates it, owned by edgartools_acquisition_owner
+  -- (no new dedicated owner role -- same owner as source_revision; only
+  -- CREATE on schema public was ever granted to the owner role, not to any
+  -- operational role such as edgartools_acquisition_processor, which gets
+  -- scoped operational GRANTs below instead).
+  IF to_regclass('public.source_evidence_conflict') IS NOT NULL THEN
+    GRANT SELECT, INSERT,
+      UPDATE (status, repair_revision_id, resolved_at, operator_authorization_reference, resolution_reason)
+      ON source_evidence_conflict TO edgartools_acquisition_processor;
+    GRANT SELECT ON source_evidence_conflict TO
+      edgartools_acquisition_coordinator, edgartools_acquisition_worker,
+      edgartools_acquisition_operator, edgartools_acquisition_silver_finalizer;
+    REVOKE ALL PRIVILEGES ON source_evidence_conflict FROM application;
+    EXECUTE 'ALTER TABLE source_evidence_conflict OWNER TO edgartools_acquisition_owner';
+  END IF;
 END;
 $$;
 

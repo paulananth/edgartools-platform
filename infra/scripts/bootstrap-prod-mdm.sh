@@ -294,7 +294,13 @@ for stmt in [
     # SET ROLE into it just for these three statements, matching the
     # session identity that actually holds the confirming ownership.
     "SET ROLE edgartools_acquisition_owner;",
-    "REVOKE ALL PRIVILEGES ON source_observation_cursor, source_fetch_decision, source_fetch_work, source_fetch_transition, source_revision, source_processing_decision, source_expected_producer FROM application;",
+    # Ticket 25: source_evidence_conflict is owned by edgartools_acquisition_owner
+    # too (like source_revision, not a new dedicated role -- CREATE on schema
+    # public was only ever granted to the owner role, confirmed live: an
+    # earlier attempt to own this table under edgartools_acquisition_processor
+    # instead failed with "permission denied for schema public" running the
+    # migration as `application`), so it belongs in this same REVOKE list.
+    "REVOKE ALL PRIVILEGES ON source_observation_cursor, source_fetch_decision, source_fetch_work, source_fetch_transition, source_revision, source_processing_decision, source_expected_producer, source_evidence_conflict FROM application;",
     "REVOKE ALL PRIVILEGES ON source_change_status FROM application;",
     "REVOKE ALL PRIVILEGES ON source_change_status_detail FROM application;",
     "RESET ROLE;",
