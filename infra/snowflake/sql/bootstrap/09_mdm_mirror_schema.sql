@@ -26,8 +26,15 @@
 -- REVOKE, no DROP, no OWNERSHIP transfer -- see CLAUDE.md's
 -- "manifest-pipeline ownership" incident for why GRANT OWNERSHIP ... REVOKE
 -- CURRENT GRANTS silently strips unrelated grants).
+--
+-- Ticket 30 (change-propagation map) follow-up, 2026-08-26: this schema is
+-- self-contained (nothing here grants on an object outside it), so it runs
+-- under the dedicated EDGARTOOLS_PROD_INSTALLER role
+-- (infra/snowflake/sql/bootstrap/19_installer_role.sql) instead of
+-- ACCOUNTADMIN -- see that file for the scope this role does and does not
+-- cover. Must run after 19_installer_role.sql.
 
-USE ROLE ACCOUNTADMIN;
+USE ROLE EDGARTOOLS_PROD_INSTALLER;
 USE DATABASE EDGARTOOLS_PROD;
 CREATE SCHEMA IF NOT EXISTS MDM;
 USE SCHEMA MDM;

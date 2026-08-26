@@ -63,7 +63,13 @@ def generate() -> str:
         "-- Snowflake MDM mirror schema (edgar_warehouse.mdm.migrations.runtime.MDM_TABLES).",
         "-- Idempotent: every statement is CREATE ... IF NOT EXISTS or an additive GRANT.",
         "",
-        "USE ROLE ACCOUNTADMIN;",
+        # Ticket 30 (change-propagation map) follow-up, 2026-08-26: this
+        # schema is self-contained (nothing here grants on an object outside
+        # it), so it runs under the dedicated EDGARTOOLS_PROD_INSTALLER role
+        # (infra/snowflake/sql/bootstrap/19_installer_role.sql) instead of
+        # ACCOUNTADMIN -- see that file for the scope this role does and
+        # does not cover.
+        "USE ROLE EDGARTOOLS_PROD_INSTALLER;",
         f"USE DATABASE {TARGET_DATABASE};",
         f"CREATE SCHEMA IF NOT EXISTS {TARGET_SCHEMA};",
         f"USE SCHEMA {TARGET_SCHEMA};",

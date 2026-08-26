@@ -644,9 +644,14 @@ GRANT SELECT, INSERT ON source_revision TO edgartools_acquisition_processor;
 -- Ticket 19: the processor seals (INSERT) a revision's Processing Decision
 -- and expected producer set; only the Silver Finalizer may record a
 -- producer's settled outcome, and only on the specific columns that
--- outcome touches -- column-scoped GRANTs are the sole enforcement layer
--- here (see models.py's SourceExpectedProducerRecord docstring for why no
--- role-check trigger backs this up).
+-- outcome touches -- column-scoped GRANTs are the enforcement layer here
+-- among the acquisition sub-roles (see models.py's
+-- SourceExpectedProducerRecord docstring for why no role-check trigger
+-- backs this up). Ticket 30 (change-propagation map) found this is NOT the
+-- sole enforcement layer in practice: `application`'s ambient,
+-- platform-managed `snowflake_write` membership grants it full DML on
+-- these tables independent of the column-scoped GRANTs below -- see that
+-- ticket for the live finding and fix status.
 GRANT SELECT ON source_processing_decision, source_expected_producer
     TO edgartools_acquisition_coordinator, edgartools_acquisition_worker,
        edgartools_acquisition_operator;
@@ -794,6 +799,65 @@ BEGIN
         FROM application;
         REVOKE ALL PRIVILEGES ON source_change_status FROM application;
         REVOKE ALL PRIVILEGES ON source_change_status_detail FROM application;
+    END IF;
+END;
+$$;
+
+-- Ticket 30 (change-propagation map): the REVOKE above only closes
+-- application's own direct grants -- live prod verification found
+-- application also carries an ambient, platform-managed membership in
+-- Snowflake Postgres's snowflake_write role, which independently grants
+-- full DML on these same nine objects (confirmed live:
+-- has_table_privilege('application', 'source_fetch_decision', 'SELECT')
+-- returned true even after the REVOKE above). See models.py's
+-- SourceExpectedProducerRecord docstring and this file's own Ticket 19
+-- comment (both corrected alongside this fix) for the real enforcement
+-- boundary this leaves: GRANTs still fence every role that only exists
+-- inside this migration's own model, but not application's snowflake_write
+-- membership, which the platform re-grants independently of anything this
+-- migration does.
+--
+-- Deliberately scoped to only these nine objects, not application's
+-- snowflake_write membership itself (out of this fix's blast radius --
+-- confirmed live that membership is a standing pg_default_acl rule,
+-- recurring for every future table, not a one-time artifact; touching it
+-- would affect all 19 MDM mirror tables and whatever else depends on it).
+-- A future acquisition-ledger table added by a later migration will need
+-- the same REVOKE repeated for it -- this is not a "fix once" mechanism.
+--
+-- Guarded on snowflake_write existing at all: it is Snowflake-Postgres-
+-- managed platform infrastructure, not something a local/test Postgres
+-- instance has, so this is a genuine no-op there (proven by
+-- tests/integration/test_acquisition_ledger_postgres.py's own fixture,
+-- which never creates this role) rather than an error.
+--
+-- Runs under edgartools_acquisition_owner (same as the REVOKE above, and
+-- the ALTER ... OWNER TO statements immediately preceding both blocks) --
+-- REVOKE only requires being the object's owner or the original grantor,
+-- so ownership here is sufficient regardless of who/what originally
+-- granted snowflake_write access.
+--
+-- NOT independently verified live against prod as of this migration --
+-- application's Postgres DSN, the only credential the standard `mdm
+-- migrate` deploy path uses, has no membership in
+-- edgartools_acquisition_owner (Ticket 43, change-propagation map), so a
+-- rerun via that path silently no-ops before reaching this statement at
+-- all. Applying and verifying this live needs a more privileged
+-- connection or Ticket 43's deploy-path gap resolved first.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'snowflake_write') THEN
+        REVOKE ALL PRIVILEGES ON
+            source_observation_cursor,
+            source_fetch_decision,
+            source_fetch_work,
+            source_fetch_transition,
+            source_revision,
+            source_processing_decision,
+            source_expected_producer
+        FROM snowflake_write;
+        REVOKE ALL PRIVILEGES ON source_change_status FROM snowflake_write;
+        REVOKE ALL PRIVILEGES ON source_change_status_detail FROM snowflake_write;
     END IF;
 END;
 $$;
