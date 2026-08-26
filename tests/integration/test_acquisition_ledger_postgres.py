@@ -354,6 +354,98 @@ def test_postgres_roles_proofs_and_fencing_are_enforced(
     assert operator.returncode == 0, operator.stderr
 
 
+def test_processor_and_silver_finalizer_boundaries_are_grant_enforced_not_just_python_checked(
+    postgres_ledger: PostgresLedger,
+) -> None:
+    """Ticket 25 bullet 5: coordinator/worker/processor/silver-finalizer/
+    operator transition ownership stays separate at the real Postgres GRANT
+    level, not only behind Python's ``require_processor_role``/
+    ``require_silver_finalizer_role`` checks (trivially bypassable by any
+    caller that talks to Postgres directly instead of through
+    ``revisions.py``/``processing.py``). ``test_postgres_roles_proofs_and_
+    fencing_are_enforced`` above already proves the coordinator-vs-operator
+    boundary (a trigger-level cause-ownership check); this covers the two
+    boundaries that check doesn't: worker-vs-processor (INSERT on
+    ``source_revision``) and processor-vs-silver-finalizer (the
+    column-scoped UPDATE grants on ``source_expected_producer``/
+    ``source_processing_decision`` -- see models.py's
+    ``SourceExpectedProducerRecord`` docstring for why no role-check trigger
+    backs those up, only the GRANT itself).
+    """
+
+    worker_insert = _psql(
+        postgres_ledger.container,
+        """
+        SET ROLE edgartools_acquisition_worker;
+        INSERT INTO source_revision (
+            source_family, logical_source_key, observation_position,
+            raw_evidence_hash, canonical_source_hash, domain_content_hash,
+            contract_version, parser_version, schema_version,
+            configuration_version, completeness_type,
+            bronze_artifact_reference, content_impact
+        ) VALUES (
+            'filing_artifact', 'boundary-proof/document', 1,
+            'h', 'h', 'h', 'v1', 'v1', 'v1', 'v1', 'COMPLETE',
+            'filing_artifact/h', 'CHANGED'
+        );
+        """,
+        user="application",
+    )
+    assert worker_insert.returncode != 0
+    assert "permission denied for table source_revision" in worker_insert.stderr
+
+    coordinator_insert = _psql(
+        postgres_ledger.container,
+        """
+        SET ROLE edgartools_acquisition_coordinator;
+        INSERT INTO source_revision (
+            source_family, logical_source_key, observation_position,
+            raw_evidence_hash, canonical_source_hash, domain_content_hash,
+            contract_version, parser_version, schema_version,
+            configuration_version, completeness_type,
+            bronze_artifact_reference, content_impact
+        ) VALUES (
+            'filing_artifact', 'boundary-proof-2/document', 1,
+            'h', 'h', 'h', 'v1', 'v1', 'v1', 'v1', 'COMPLETE',
+            'filing_artifact/h', 'CHANGED'
+        );
+        """,
+        user="application",
+    )
+    assert coordinator_insert.returncode != 0
+    assert "permission denied for table source_revision" in coordinator_insert.stderr
+
+    processor_finalizer_update = _psql(
+        postgres_ledger.container,
+        """
+        SET ROLE edgartools_acquisition_processor;
+        UPDATE source_processing_decision SET silver_outcome = 'PUBLISHED'
+        WHERE processing_decision_id = '00000000-0000-0000-0000-000000000000';
+        """,
+        user="application",
+    )
+    assert processor_finalizer_update.returncode != 0
+    assert (
+        "permission denied for table source_processing_decision"
+        in processor_finalizer_update.stderr
+    )
+
+    processor_expected_producer_update = _psql(
+        postgres_ledger.container,
+        """
+        SET ROLE edgartools_acquisition_processor;
+        UPDATE source_expected_producer SET outcome = 'VERIFIED'
+        WHERE expected_producer_id = '00000000-0000-0000-0000-000000000000';
+        """,
+        user="application",
+    )
+    assert processor_expected_producer_update.returncode != 0
+    assert (
+        "permission denied for table source_expected_producer"
+        in processor_expected_producer_update.stderr
+    )
+
+
 def test_finalize_source_fetch_persists_failure_detail_and_rejects_it_with_captured(
     postgres_ledger: PostgresLedger,
 ) -> None:

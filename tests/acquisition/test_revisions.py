@@ -472,6 +472,100 @@ def test_reinterpretation_and_fresh_captures_share_one_per_key_position_timeline
     assert second.observation_position == 3
 
 
+def test_materialize_repair_creates_a_repair_child_revision_from_new_evidence() -> None:
+    """Ticket 25 bullet 2: a repair accepts genuinely different bytes as
+    authoritative for the parent's identity -- distinct from reinterpretation
+    (same bytes, new parsing): raw evidence and Bronze reference are fresh,
+    not inherited, while interpretation identities (contract/parser/schema/
+    configuration version) stay exactly as the parent's.
+    """
+
+    ledger, revisions, engine = _ledgers()
+    decision_id = _captured_decision(ledger, candidate_id="c1", logical_source_key="key-repair")
+    parent = revisions.materialize_from_capture(
+        decision_id,
+        raw_evidence_hash="raw-original",
+        canonical_source_hash="canonical-original",
+        domain_content_hash="domain-original",
+        contract_version="v1",
+        parser_version="v1",
+        schema_version="v1",
+        configuration_version="v1",
+    )
+
+    with Session(engine) as session:
+        decisions_before = len(
+            session.execute(select(SourceFetchDecisionRecord)).scalars().all()
+        )
+
+    repaired = revisions.materialize_repair(
+        parent.revision_id,
+        new_raw_evidence_hash="raw-corrected",
+        new_bronze_artifact_reference="filing_artifact/raw-corrected.conflict/raw-corrected",
+    )
+
+    with Session(engine) as session:
+        decisions_after = len(
+            session.execute(select(SourceFetchDecisionRecord)).scalars().all()
+        )
+    assert decisions_after == decisions_before  # no new SEC fetch decision was created
+
+    assert repaired.decision_id is None
+    assert repaired.parent_revision_id == parent.revision_id
+    assert repaired.revision_relationship is RevisionRelationship.REPAIR
+    assert repaired.raw_evidence_hash == "raw-corrected"
+    assert repaired.canonical_source_hash == "raw-corrected"
+    assert repaired.domain_content_hash == "raw-corrected"
+    assert repaired.bronze_artifact_reference == (
+        "filing_artifact/raw-corrected.conflict/raw-corrected"
+    )
+    # Interpretation is unchanged by a repair -- inherited from the parent.
+    assert repaired.contract_version == parent.contract_version
+    assert repaired.parser_version == parent.parser_version
+    assert repaired.schema_version == parent.schema_version
+    assert repaired.configuration_version == parent.configuration_version
+    assert repaired.observation_position == 2
+
+
+def test_materialize_repair_is_idempotent_per_parent() -> None:
+    ledger, revisions, _ = _ledgers()
+    decision_id = _captured_decision(ledger, candidate_id="c1", logical_source_key="key-repair-idem")
+    parent = revisions.materialize_from_capture(
+        decision_id,
+        raw_evidence_hash="raw",
+        canonical_source_hash="canonical",
+        domain_content_hash="domain",
+        contract_version="v1",
+        parser_version="v1",
+        schema_version="v1",
+        configuration_version="v1",
+    )
+
+    first = revisions.materialize_repair(
+        parent.revision_id,
+        new_raw_evidence_hash="raw-corrected",
+        new_bronze_artifact_reference="ref-1",
+    )
+    second = revisions.materialize_repair(
+        parent.revision_id,
+        new_raw_evidence_hash="raw-corrected",
+        new_bronze_artifact_reference="ref-1",
+    )
+
+    assert first.revision_id == second.revision_id
+
+
+def test_materialize_repair_against_a_nonexistent_parent_raises() -> None:
+    _, revisions, _ = _ledgers()
+
+    with pytest.raises(RevisionNotEligible):
+        revisions.materialize_repair(
+            "does-not-exist",
+            new_raw_evidence_hash="raw",
+            new_bronze_artifact_reference="ref",
+        )
+
+
 def test_revision_schema_and_api_reject_run_id_arrival_time_object_path_pointer_and_etag_as_identity() -> None:
     """Ticket 18 bullet 5: none of run_id, arrival time, object path, a
     mutable "latest" pointer, or an ETag (alone) are revision identity --
@@ -497,6 +591,7 @@ def test_revision_schema_and_api_reject_run_id_arrival_time_object_path_pointer_
     for method in (
         SourceRevisionLedger.materialize_from_capture,
         SourceRevisionLedger.materialize_reinterpretation,
+        SourceRevisionLedger.materialize_repair,
     ):
         parameter_names = set(inspect.signature(method).parameters.keys())
         assert parameter_names.isdisjoint(excluded_names)

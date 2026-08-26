@@ -366,6 +366,7 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
         _apply_sql_file(engine, "012_dedupe_and_constrain_attribute_stage.sql")
         _apply_acquisition_ledger_migration(engine)
         _apply_source_registry_migration(engine)
+        _apply_source_evidence_conflict_migration(engine)
 
     if seed:
         with Session(engine) as session:
@@ -439,6 +440,51 @@ def _apply_source_registry_migration(engine: Engine) -> bool:
         conn.execute(text(statements[0]))
         conn.execute(text("SET LOCAL ROLE edgartools_acquisition_registry_owner"))
         for statement in statements[1:]:
+            conn.execute(text(statement))
+    return True
+
+
+def _apply_source_evidence_conflict_migration(engine: Engine) -> bool:
+    """Apply privileged conflict-table DDL, or preserve it for `application`.
+
+    This file provisions no new role at all (013 already created
+    ``edgartools_acquisition_processor`` and granted it the operational
+    GRANTs this table needs) -- but the table is still owned by 013's
+    ``edgartools_acquisition_owner``, same as ``source_revision`` is,
+    because ``CREATE`` on schema ``public`` was only ever granted to the
+    owner role, not to any of the five operational roles. So this mirrors
+    :func:`_apply_acquisition_ledger_migration`'s gate exactly
+    (``edgartools_acquisition_owner`` membership, not
+    ``edgartools_acquisition_processor``) -- confirmed live: an earlier
+    version of this function gated on and ``SET LOCAL ROLE``'d into
+    ``edgartools_acquisition_processor`` directly and failed with
+    ``permission denied for schema public`` on ``CREATE TABLE`` running as
+    ``application``, since ``application`` is a member of the operational
+    roles but never of the owner role.
+    """
+    if engine.dialect.name != "postgresql":
+        _apply_sql_file(engine, "015_source_evidence_conflict.sql")
+        return True
+
+    statements = _sql_file_statements("015_source_evidence_conflict.sql")
+    with engine.begin() as conn:
+        installed = bool(
+            conn.scalar(text("SELECT to_regclass('source_evidence_conflict') IS NOT NULL"))
+        )
+        if installed:
+            may_manage = bool(
+                conn.scalar(
+                    text(
+                        "SELECT pg_has_role(current_user, "
+                        "'edgartools_acquisition_owner', 'MEMBER')"
+                    )
+                )
+            )
+            if not may_manage:
+                return False
+
+        conn.execute(text("SET LOCAL ROLE edgartools_acquisition_owner"))
+        for statement in statements:
             conn.execute(text(statement))
     return True
 

@@ -14,12 +14,21 @@ from edgar_warehouse.acquisition.models import (
 from edgar_warehouse.mdm.migrations import runtime as migrations
 
 MIGRATION_NAME = "013_acquisition_ledger.sql"
+CONFLICT_MIGRATION_NAME = "015_source_evidence_conflict.sql"
 REPO_ROOT = Path(__file__).parents[2]
 
 
 def _migration_sql() -> str:
     return (
         Path(migrations.__file__).with_name(MIGRATION_NAME).read_text(encoding="utf-8")
+    )
+
+
+def _conflict_migration_sql() -> str:
+    return (
+        Path(migrations.__file__)
+        .with_name(CONFLICT_MIGRATION_NAME)
+        .read_text(encoding="utf-8")
     )
 
 
@@ -206,5 +215,60 @@ def test_bootstrap_and_restore_cover_processing_and_expected_producer() -> None:
     )
     assert (
         "GRANT UPDATE (outcome, verified_reference, failure_detail, updated_at)"
+        in restore
+    )
+
+
+def test_conflict_migration_is_registered() -> None:
+    assert CONFLICT_MIGRATION_NAME in Path(migrations.__file__).read_text(encoding="utf-8")
+
+
+def test_conflict_migration_defines_source_evidence_conflict_and_reuses_existing_013_roles() -> None:
+    """Ticket 25 bullet 1/2: the conflict table, its resolution-completeness
+    constraint, and (critically) the *absence* of a new role-provisioning
+    DO block -- this migration reuses 013's roles: owned by
+    edgartools_acquisition_owner (same as source_revision -- CREATE on
+    schema public was only ever granted to the owner role, not to any
+    operational role), with operational GRANTs to
+    edgartools_acquisition_processor. No new role is created.
+    """
+
+    normalized = " ".join(_conflict_migration_sql().lower().split())
+
+    assert "create table if not exists source_evidence_conflict" in normalized
+    assert "uq_source_evidence_conflict_quarantine" in normalized
+    assert "ck_source_evidence_conflict_status" in normalized
+    assert "ck_source_evidence_conflict_resolution_complete" in normalized
+    assert "'pending','repaired'" in normalized
+    assert "references source_revision(revision_id)" in normalized
+    assert "grant select, insert" in normalized
+    assert "to edgartools_acquisition_processor" in normalized
+    assert "owner to edgartools_acquisition_owner" in normalized
+    # No new role: unlike 013/014, this file provisions nothing via
+    # CREATE ROLE -- it reuses 013's edgartools_acquisition_processor.
+    assert "create role" not in normalized
+
+
+def test_conflict_migration_grants_read_access_to_every_other_acquisition_role() -> None:
+    normalized = " ".join(_conflict_migration_sql().lower().split())
+
+    assert "grant select on source_evidence_conflict to" in normalized
+    for role in (
+        "edgartools_acquisition_coordinator",
+        "edgartools_acquisition_worker",
+        "edgartools_acquisition_operator",
+        "edgartools_acquisition_silver_finalizer",
+    ):
+        assert role in normalized
+
+
+def test_bootstrap_and_restore_cover_evidence_conflict() -> None:
+    bootstrap = (REPO_ROOT / "infra/scripts/bootstrap-prod-mdm.sh").read_text()
+    restore = (REPO_ROOT / "infra/snowflake/postgres/mdm_post_restore.sql").read_text()
+
+    assert "source_evidence_conflict" in bootstrap
+    assert "to_regclass('public.source_evidence_conflict') IS NOT NULL" in restore
+    assert (
+        "ALTER TABLE source_evidence_conflict OWNER TO edgartools_acquisition_owner"
         in restore
     )

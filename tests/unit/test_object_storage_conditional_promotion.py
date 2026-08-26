@@ -8,6 +8,7 @@ from botocore.exceptions import ClientError
 
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.infrastructure.object_storage import (
+    ImmutableContentConflictError,
     PromotionConflictError,
     StorageLocation,
 )
@@ -117,12 +118,57 @@ def test_remote_immutable_write_rejects_different_content_at_existing_key(monkey
 
     storage.write_immutable_bytes("filings/sec/accession/primary.xml", b"immutable")
 
-    with pytest.raises(WarehouseRuntimeError, match="different content"):
+    with pytest.raises(ImmutableContentConflictError, match="different content") as excinfo:
         storage.write_immutable_bytes("filings/sec/accession/primary.xml", b"changed")
 
-    assert len(client.puts) == 1
+    # Ticket 25 bullet 1: both are retained, not just the original -- the
+    # conflicting payload is quarantined to a second, content-addressed
+    # object rather than discarded or silently overwriting the first.
+    assert len(client.puts) == 2
     stored_key = ("bucket", "warehouse/bronze/filings/sec/accession/primary.xml")
     assert client.objects[stored_key] == b"immutable"
+    error = excinfo.value
+    quarantine_key = (
+        "bucket",
+        f"warehouse/bronze/{error.quarantine_relative_path}",
+    )
+    assert client.objects[quarantine_key] == b"changed"
+    assert error.relative_path == "filings/sec/accession/primary.xml"
+    assert error.new_content_hash in error.quarantine_relative_path
+
+
+def test_local_immutable_write_rejects_different_content_at_existing_key(tmp_path):
+    storage = StorageLocation(str(tmp_path))
+
+    storage.write_immutable_bytes("filings/sec/accession/primary.xml", b"immutable")
+
+    with pytest.raises(ImmutableContentConflictError, match="different content") as excinfo:
+        storage.write_immutable_bytes("filings/sec/accession/primary.xml", b"changed")
+
+    original = tmp_path / "filings" / "sec" / "accession" / "primary.xml"
+    assert original.read_bytes() == b"immutable"
+
+    error = excinfo.value
+    quarantine = tmp_path / error.quarantine_relative_path
+    assert quarantine.read_bytes() == b"changed"
+    assert error.relative_path == "filings/sec/accession/primary.xml"
+    assert error.existing_content_hash != error.new_content_hash
+
+
+def test_local_immutable_write_conflict_is_idempotent_on_replay(tmp_path):
+    """A replayed conflict (same new bytes arriving twice) quarantines the
+    same content-addressed object cleanly rather than raising a second,
+    unrelated error on the quarantine write itself."""
+
+    storage = StorageLocation(str(tmp_path))
+    storage.write_immutable_bytes("filings/sec/accession/primary.xml", b"immutable")
+
+    with pytest.raises(ImmutableContentConflictError) as first:
+        storage.write_immutable_bytes("filings/sec/accession/primary.xml", b"changed")
+    with pytest.raises(ImmutableContentConflictError) as second:
+        storage.write_immutable_bytes("filings/sec/accession/primary.xml", b"changed")
+
+    assert first.value.quarantine_relative_path == second.value.quarantine_relative_path
 
 
 def test_remote_promotion_atomically_requires_the_canonical_etag(monkeypatch):

@@ -67,6 +67,11 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
         "_apply_source_registry_migration",
         lambda engine: (_record_apply(engine, "014_source_registry.sql"), True)[1],
     )
+    monkeypatch.setattr(
+        migrations,
+        "_apply_source_evidence_conflict_migration",
+        lambda engine: (_record_apply(engine, "015_source_evidence_conflict.sql"), True)[1],
+    )
     monkeypatch.setattr(migrations, "count_tables", lambda _engine: {})
     monkeypatch.setattr(migrations, "_seed_entity_types", lambda _session: None)
 
@@ -87,6 +92,7 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
         "012_dedupe_and_constrain_attribute_stage.sql",
         "013_acquisition_ledger.sql",
         "014_source_registry.sql",
+        "015_source_evidence_conflict.sql",
     ]
 
 

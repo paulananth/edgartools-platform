@@ -38,6 +38,40 @@ def _put_object_body(source: "bytes | Path"):
         yield source, {}
 
 
+class ImmutableContentConflictError(WarehouseRuntimeError):
+    """Different bytes arrived for one immutable Bronze identity (Ticket 25 bullet 1).
+
+    Raised by ``write_immutable_bytes`` when a new payload does not match the
+    content already stored at ``relative_path`` -- this only happens for an
+    identity-keyed path (e.g. one accession/document), never a content-hash-
+    keyed path (where different bytes always land at a different key by
+    construction). The new payload is never silently discarded and never
+    silently replaces the existing one: it is written, unchanged, to
+    ``quarantine_relative_path`` -- a content-addressed sibling location keyed
+    by its own hash, so it is genuinely retained -- before this is raised.
+    Neither arrival order nor a mutable "latest" pointer picks a winner here;
+    a caller with ledger access is expected to catch this and record a
+    conflict (``acquisition/conflict.py``) for operator repair.
+    """
+
+    def __init__(
+        self,
+        relative_path: str,
+        existing_content_hash: str,
+        new_content_hash: str,
+        quarantine_relative_path: str,
+    ) -> None:
+        self.relative_path = relative_path
+        self.existing_content_hash = existing_content_hash
+        self.new_content_hash = new_content_hash
+        self.quarantine_relative_path = quarantine_relative_path
+        super().__init__(
+            f"immutable object {relative_path!r} already exists with different "
+            f"content (existing={existing_content_hash!r}, new={new_content_hash!r}); "
+            f"new content quarantined at {quarantine_relative_path!r}"
+        )
+
+
 class PromotionConflictError(WarehouseRuntimeError):
     """Raised when the canonical object changed since its version/ETag baseline was read.
 
@@ -360,22 +394,30 @@ class StorageLocation:
                 Key=parsed.path.lstrip("/"),
             )
             body = response["Body"]
+            import hashlib
+
             offset = 0
             content_matches = True
+            existing_hasher = hashlib.sha256()
             try:
                 while chunk := body.read(1024 * 1024):
+                    existing_hasher.update(chunk)
                     end = offset + len(chunk)
                     if payload[offset:end] != chunk:
                         content_matches = False
                         break
                     offset = end
+                # A mismatch can be detected before the existing object is
+                # fully read (early break above) -- finish hashing whatever
+                # remains so existing_content_hash reflects the real stored
+                # object, not just the bytes compared before the break.
+                while chunk := body.read(1024 * 1024):
+                    existing_hasher.update(chunk)
             finally:
                 body.close()
             if content_matches and offset == len(payload):
                 return destination
-            raise WarehouseRuntimeError(
-                f"immutable object {relative!r} already exists with different content"
-            )
+            raise self._quarantine_conflict(relative, payload, existing_hasher.hexdigest())
 
         destination_path = Path(destination)
         destination_path.parent.mkdir(parents=True, exist_ok=True)
@@ -384,11 +426,48 @@ class StorageLocation:
                 handle.write(payload)
             return str(destination_path)
         except FileExistsError:
-            if destination_path.read_bytes() == payload:
+            import hashlib
+
+            existing_bytes = destination_path.read_bytes()
+            if existing_bytes == payload:
                 return str(destination_path)
-            raise WarehouseRuntimeError(
-                f"immutable object {relative!r} already exists with different content"
+            raise self._quarantine_conflict(
+                relative, payload, hashlib.sha256(existing_bytes).hexdigest()
             )
+
+    def _quarantine_conflict(
+        self, relative: str, payload: bytes, existing_hash: str
+    ) -> "ImmutableContentConflictError":
+        """Write ``payload`` to a content-addressed quarantine sibling and
+        build (not raise -- so callers keep their own ``raise ... from``
+        context) the conflict error describing it. See
+        ``ImmutableContentConflictError``'s own docstring.
+
+        Takes ``existing_hash`` from the caller rather than re-reading the
+        existing object itself: the local branch already has the bytes in
+        hand, and the remote branch already streamed them once for the
+        byte-for-byte compare -- a second remote read here would be both
+        wasteful and, for a caller whose test/runtime environment only mocks
+        the specific client already in use, a real path to an unrelated
+        failure (confirmed live: an unconditional ``read_bytes`` re-read hit
+        a real network call under a test that only mocks ``boto3.client``,
+        not ``fsspec``).
+        """
+        import hashlib
+
+        new_hash = hashlib.sha256(payload).hexdigest()
+        quarantine_relative = sanitize_relative_path(f"{relative}.conflict/{new_hash}")
+        # Reuses this same method: a quarantine path is itself content-addressed
+        # by the new payload's own hash, so it can never collide with anything
+        # else (a replay of the same conflict is idempotent -- matching content
+        # at a matching key returns cleanly, same as any other immutable write).
+        self.write_immutable_bytes(quarantine_relative, payload)
+        return ImmutableContentConflictError(
+            relative_path=relative,
+            existing_content_hash=existing_hash,
+            new_content_hash=new_hash,
+            quarantine_relative_path=quarantine_relative,
+        )
 
     def promote_staged(
         self,

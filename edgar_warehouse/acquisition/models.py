@@ -587,3 +587,60 @@ class SourceRegistryCoverageRecord(AcquisitionBase):
             name="ck_source_registry_coverage_add_catchup_required",
         ),
     )
+
+
+class SourceEvidenceConflictRecord(AcquisitionBase):
+    """Two different byte-sets both claiming one immutable Bronze identity (Ticket 25).
+
+    Raised only for an identity-keyed Bronze path (one accession/document),
+    never a content-hash-keyed one -- see
+    ``object_storage.ImmutableContentConflictError``'s own docstring for why
+    a hash-keyed path can never produce this. ``source_family``/
+    ``logical_source_key`` are nullable: a conflict is detected at the
+    storage layer, which may run before a caller has ledger context to
+    supply them (the legacy identity-keyed Bronze writers this bullet
+    targets predate the Ticket 14 ledger entirely) -- ``relative_path`` plus
+    both content hashes are what make a conflict record meaningful on their
+    own, independent of whether a ``source_revision`` link exists yet.
+
+    ``PENDING`` until an operator resolves it via
+    ``conflict.materialize_repair`` -- resolution is recorded here (not by
+    mutating the conflict row's own hash/quarantine fields) so this row is
+    itself an immutable audit trail of what was in conflict and how it was
+    settled, per bullet 2's "without rewriting history."
+    """
+
+    __tablename__ = "source_evidence_conflict"
+
+    conflict_id: Mapped[str] = mapped_column(GUID(), primary_key=True, default=_uuid_string)
+    source_family: Mapped[str | None] = mapped_column(Text, nullable=True)
+    logical_source_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    relative_path: Mapped[str] = mapped_column(Text, nullable=False)
+    existing_content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    new_content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    quarantine_bronze_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    detected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'PENDING'"))
+    repair_revision_id: Mapped[str | None] = mapped_column(
+        GUID(), ForeignKey("source_revision.revision_id"), nullable=True
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    operator_authorization_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolution_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "quarantine_bronze_reference", name="uq_source_evidence_conflict_quarantine"
+        ),
+        CheckConstraint(
+            "status IN ('PENDING','REPAIRED')", name="ck_source_evidence_conflict_status"
+        ),
+        CheckConstraint(
+            "(status = 'REPAIRED') = ("
+            "repair_revision_id IS NOT NULL AND resolved_at IS NOT NULL AND "
+            "operator_authorization_reference IS NOT NULL AND resolution_reason IS NOT NULL)",
+            name="ck_source_evidence_conflict_resolution_complete",
+        ),
+    )
