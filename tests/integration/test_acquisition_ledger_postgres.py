@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import time
@@ -416,6 +417,37 @@ def test_snowflake_write_ambient_access_is_revoked_on_the_nine_ledger_objects(
 
     assert _has_privilege("source_fetch_decision") is False
     assert _has_privilege("source_change_status") is False
+
+
+def test_privileged_rerun_skip_is_logged_not_silent(
+    postgres_ledger: PostgresLedger, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Ticket 43 (change-propagation map): `application` -- the only role
+    the real prod deploy path (`mdm migrate`) ever connects as -- has no
+    membership in `edgartools_acquisition_owner` by design, so a rerun of
+    the already-installed migration 013 silently returns False with no
+    error. That silence is exactly what let the "MDM Postgres migration-011
+    schema drift" incident (CLAUDE.md) go undetected for a day: a rerun
+    reporting success while never touching the schema it claimed to. This
+    test calls the real function against the real Postgres role graph the
+    module fixture already set up (connecting as `application`, which the
+    fixture's own migration already proved lacks owner membership) and
+    proves the skip is now an observable JSON event, not silence.
+    """
+    engine = create_engine(postgres_ledger.database_url)
+    try:
+        applied = migrations._apply_acquisition_ledger_migration(engine)
+    finally:
+        engine.dispose()
+
+    assert applied is False
+    captured = capsys.readouterr()
+    events = [json.loads(line) for line in captured.err.splitlines() if line.strip()]
+    skip_events = [e for e in events if e.get("event") == "mdm_migration_privileged_rerun_skipped"]
+    assert len(skip_events) == 1, captured.err
+    assert skip_events[0]["migration"] == "013_acquisition_ledger"
+    assert skip_events[0]["owner_role"] == "edgartools_acquisition_owner"
+    assert skip_events[0]["reason"] == "connecting_role_lacks_owner_membership"
 
 
 def test_processor_and_silver_finalizer_boundaries_are_grant_enforced_not_just_python_checked(

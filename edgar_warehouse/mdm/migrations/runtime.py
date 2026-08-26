@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +13,35 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from edgar_warehouse.mdm import database as db
+
+
+def _log_privileged_rerun_skipped(migration_name: str, owner_role: str) -> None:
+    """Ticket 43 (change-propagation map): a rerun of an already-installed,
+    owner-gated migration silently no-ops (``return False``, no exception)
+    whenever the connecting role lacks membership in the owner role -- true
+    for the standard ``application``-DSN deploy path, by design (the whole
+    point of these owner roles is that ``application`` never gets them
+    ambiently). That silent no-op is indistinguishable from "nothing pending
+    to apply" unless it's logged -- exactly the gap the "MDM Postgres
+    migration-011 schema drift" incident (CLAUDE.md) hit: a stale/wrong-role
+    rerun reported success while never touching the schema it claimed to.
+    Emitting this event doesn't fix the underlying access gap (see Ticket 43
+    for the real privileged path -- bootstrap-prod-mdm.sh's snowflake_admin-
+    driven ``mdm migrate`` call), it just makes the no-op observable.
+    """
+    print(
+        json.dumps(
+            {
+                "event": "mdm_migration_privileged_rerun_skipped",
+                "migration": migration_name,
+                "owner_role": owner_role,
+                "reason": "connecting_role_lacks_owner_membership",
+                "ts": datetime.now(timezone.utc).isoformat(),
+            }
+        ),
+        file=sys.stderr,
+        flush=True,
+    )
 
 MDM_TABLES = [
     "mdm_entity",
@@ -396,6 +428,9 @@ def _apply_acquisition_ledger_migration(engine: Engine) -> bool:
                 )
             )
             if not may_manage:
+                _log_privileged_rerun_skipped(
+                    "013_acquisition_ledger", "edgartools_acquisition_owner"
+                )
                 return False
 
         # Role provisioning must run as the deployment principal. All remaining
@@ -435,6 +470,9 @@ def _apply_source_registry_migration(engine: Engine) -> bool:
                 )
             )
             if not may_manage:
+                _log_privileged_rerun_skipped(
+                    "014_source_registry", "edgartools_acquisition_registry_owner"
+                )
                 return False
 
         conn.execute(text(statements[0]))
@@ -481,6 +519,9 @@ def _apply_source_evidence_conflict_migration(engine: Engine) -> bool:
                 )
             )
             if not may_manage:
+                _log_privileged_rerun_skipped(
+                    "015_source_evidence_conflict", "edgartools_acquisition_owner"
+                )
                 return False
 
         conn.execute(text("SET LOCAL ROLE edgartools_acquisition_owner"))
