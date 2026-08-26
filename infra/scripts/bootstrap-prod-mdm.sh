@@ -140,7 +140,8 @@ fi
 
 ADMIN_PY="$(mktemp)"
 APP_PY="$(mktemp)"
-trap 'rm -f "$ADMIN_PY" "$APP_PY"' EXIT
+REAPPLY_PY="$(mktemp)"
+trap 'rm -f "$ADMIN_PY" "$APP_PY" "$REAPPLY_PY"' EXIT
 
 cat > "$ADMIN_PY" <<'PYEOF'
 import json, os, re, subprocess, sys, time
@@ -345,6 +346,52 @@ if not pw:
 sys.stdout.write(pw)
 PYEOF
 
+cat > "$REAPPLY_PY" <<'PYEOF'
+import json, os, subprocess, sys, re
+from urllib.parse import quote_plus
+
+def find_password(obj):
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if isinstance(k, str) and k.lower() == "password" and isinstance(v, str) and v:
+                return v
+            found = find_password(v)
+            if found:
+                return found
+    elif isinstance(obj, list):
+        for item in obj:
+            found = find_password(item)
+            if found:
+                return found
+    return None
+
+data = json.load(sys.stdin)
+pw = find_password(data)
+if not pw:
+    sys.exit("NO_PASSWORD_FOUND_IN_ROTATION_OUTPUT")
+
+host = os.environ["HOST"]
+database = os.environ["DATABASE"]
+repo_root = os.environ["REPO_ROOT"]
+
+admin_dsn = f"postgresql://snowflake_admin:{quote_plus(pw)}@{host}:5432/{database}?sslmode=require"
+env = dict(os.environ)
+env["MDM_DATABASE_URL"] = admin_dsn
+result = subprocess.run(
+    ["uv", "run", "--project", repo_root, "--extra", "mdm-runtime", "edgar-warehouse", "mdm", "migrate"],
+    env=env, capture_output=True, text=True,
+)
+admin_dsn = None
+env = None
+out = re.sub(r"(postgresql://)[^@]+@", r"\1<redacted>@", result.stdout + result.stderr)
+out = re.sub(r'"password"\s*:\s*"[^"]*"', '"password": "<redacted>"', out)
+print(out[-1000:], file=sys.stderr)
+if result.returncode != 0:
+    sys.exit(f"REAPPLY_MIGRATE_FAILED_RC_{result.returncode}")
+pw = None
+print("REAPPLY_COMPLETE", file=sys.stderr)
+PYEOF
+
 log "Rotating snowflake_admin access and ensuring database '${DATABASE}' exists + is migrated"
 # python (not python3): uv-managed venvs on Windows only ship python.exe, no
 # python3.exe, so a bare `python3` here falls through PATH to an unrelated
@@ -371,6 +418,22 @@ SECRETS_SCRIPT_ARGS=(
 snow sql --connection "$SNOW_CONNECTION" --format json -q "ALTER POSTGRES INSTANCE ${INSTANCE_NAME} RESET ACCESS FOR 'application';" 2>/dev/null \
   | python3 "$APP_PY" \
   | bash "$SCRIPT_DIR/bootstrap-aws-mdm-secrets.sh" "${SECRETS_SCRIPT_ARGS[@]}"
+
+# Ticket 30 (change-propagation map) follow-up, confirmed live 2026-08-26:
+# Snowflake-hosted Postgres re-grants snowflake_write's ambient, platform-
+# managed access to every acquisition-ledger/registry table on EVERY
+# `ALTER POSTGRES INSTANCE ... RESET ACCESS FOR '<role>'` call -- proven for
+# both 'snowflake_admin' and 'application'. Both RESET ACCESS calls above
+# have already silently reopened the REVOKE fencing that `mdm migrate` just
+# applied moments ago. Re-running migrate() now (idempotent, safe, mirrors
+# the "Rotating snowflake_admin access..." step above) re-applies it as the
+# true last database-mutating step in this script, after both rotations --
+# not a redundant safety margin, a required correction. Any future
+# credential rotation of either role will reopen it again until the next
+# `mdm migrate` runs; there is currently no monitoring for this drift.
+log "Re-applying acquisition-ledger/registry REVOKE fencing (both RESET ACCESS calls above silently reopen it)"
+snow sql --connection "$SNOW_CONNECTION" --format json -q "ALTER POSTGRES INSTANCE ${INSTANCE_NAME} RESET ACCESS FOR 'snowflake_admin';" 2>/dev/null \
+  | DATABASE="$DATABASE" HOST="$HOST" REPO_ROOT="$REPO_ROOT" uv run --project "$REPO_ROOT" --extra mdm-runtime python "$REAPPLY_PY"
 
 if [[ "$SKIP_SNOWFLAKE_SECRET" != "true" ]]; then
   log "Populating ${MDM_SNOWFLAKE_SECRET_ID} from ${DBT_SNOWFLAKE_SECRET_ID}"
