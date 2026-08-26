@@ -76,6 +76,33 @@ jobs:
       - name: Run application tests
         run: uv run pytest tests/application/ -v --tb=short
 
+  # ── Integration tests (real Postgres via Docker, no mocks) ─────────────────
+  # Ticket 44 (change-propagation map) found these never ran in CI at all --
+  # docker-run-managed fixtures (test_acquisition_ledger_postgres.py,
+  # test_source_registry_postgres.py, test_fence_monitor_postgres.py) only
+  # ever ran on a developer's own laptop. ubuntu-latest ships Docker
+  # pre-installed, and every fixture here manages its own `docker run
+  # postgres:16-alpine` container directly (no GHA `services:` container
+  # needed), so this needs no new CI infrastructure beyond a normal job.
+  integration:
+    name: Integration tests (Postgres)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --extra mdm-runtime
+
+      - name: Run integration tests
+        run: uv run pytest tests/integration/ -v --tb=short
+
   # ── dbt compile check (validates SQL models parse correctly) ───────────────
   dbt-check:
     name: dbt compile check
@@ -125,7 +152,7 @@ jobs:
   ci-gate:
     name: CI gate
     if: always()
-    needs: [unit, mdm, application, dbt-check, shellcheck]
+    needs: [unit, mdm, application, integration, dbt-check, shellcheck]
     runs-on: ubuntu-latest
     steps:
       - name: Check all jobs passed
@@ -134,6 +161,7 @@ jobs:
             "${{ needs.unit.result }}" \
             "${{ needs.mdm.result }}" \
             "${{ needs.application.result }}" \
+            "${{ needs.integration.result }}" \
             "${{ needs.dbt-check.result }}" \
             "${{ needs.shellcheck.result }}" \
           )
