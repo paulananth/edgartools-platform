@@ -802,3 +802,62 @@ BEGIN
     END IF;
 END;
 $$;
+
+-- Ticket 30 (change-propagation map): the REVOKE above only closes
+-- application's own direct grants -- live prod verification found
+-- application also carries an ambient, platform-managed membership in
+-- Snowflake Postgres's snowflake_write role, which independently grants
+-- full DML on these same nine objects (confirmed live:
+-- has_table_privilege('application', 'source_fetch_decision', 'SELECT')
+-- returned true even after the REVOKE above). See models.py's
+-- SourceExpectedProducerRecord docstring and this file's own Ticket 19
+-- comment (both corrected alongside this fix) for the real enforcement
+-- boundary this leaves: GRANTs still fence every role that only exists
+-- inside this migration's own model, but not application's snowflake_write
+-- membership, which the platform re-grants independently of anything this
+-- migration does.
+--
+-- Deliberately scoped to only these nine objects, not application's
+-- snowflake_write membership itself (out of this fix's blast radius --
+-- confirmed live that membership is a standing pg_default_acl rule,
+-- recurring for every future table, not a one-time artifact; touching it
+-- would affect all 19 MDM mirror tables and whatever else depends on it).
+-- A future acquisition-ledger table added by a later migration will need
+-- the same REVOKE repeated for it -- this is not a "fix once" mechanism.
+--
+-- Guarded on snowflake_write existing at all: it is Snowflake-Postgres-
+-- managed platform infrastructure, not something a local/test Postgres
+-- instance has, so this is a genuine no-op there (proven by
+-- tests/integration/test_acquisition_ledger_postgres.py's own fixture,
+-- which never creates this role) rather than an error.
+--
+-- Runs under edgartools_acquisition_owner (same as the REVOKE above, and
+-- the ALTER ... OWNER TO statements immediately preceding both blocks) --
+-- REVOKE only requires being the object's owner or the original grantor,
+-- so ownership here is sufficient regardless of who/what originally
+-- granted snowflake_write access.
+--
+-- NOT independently verified live against prod as of this migration --
+-- application's Postgres DSN, the only credential the standard `mdm
+-- migrate` deploy path uses, has no membership in
+-- edgartools_acquisition_owner (Ticket 43, change-propagation map), so a
+-- rerun via that path silently no-ops before reaching this statement at
+-- all. Applying and verifying this live needs a more privileged
+-- connection or Ticket 43's deploy-path gap resolved first.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'snowflake_write') THEN
+        REVOKE ALL PRIVILEGES ON
+            source_observation_cursor,
+            source_fetch_decision,
+            source_fetch_work,
+            source_fetch_transition,
+            source_revision,
+            source_processing_decision,
+            source_expected_producer
+        FROM snowflake_write;
+        REVOKE ALL PRIVILEGES ON source_change_status FROM snowflake_write;
+        REVOKE ALL PRIVILEGES ON source_change_status_detail FROM snowflake_write;
+    END IF;
+END;
+$$;

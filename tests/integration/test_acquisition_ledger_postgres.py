@@ -354,6 +354,70 @@ def test_postgres_roles_proofs_and_fencing_are_enforced(
     assert operator.returncode == 0, operator.stderr
 
 
+def test_snowflake_write_ambient_access_is_revoked_on_the_nine_ledger_objects(
+    postgres_ledger: PostgresLedger,
+) -> None:
+    """Ticket 30 (change-propagation map): live prod verification found
+    `application` also carries an ambient, platform-managed membership in
+    Snowflake Postgres's `snowflake_write` role, independently granting full
+    DML on these nine objects regardless of the `application`-scoped REVOKE
+    above. `snowflake_write` doesn't exist in this fixture's vanilla
+    Postgres, so the migration's new REVOKE block is a guarded no-op during
+    the module fixture's own setup (proving the guard doesn't error against
+    a plain Postgres instance) -- this test creates a role that plays
+    `snowflake_write`'s part, grants it access the way the platform's own
+    default-ACL automation would, then re-applies the (idempotent)
+    migration and proves that access is gone afterward.
+    """
+    created = _psql(
+        postgres_ledger.container,
+        """
+        CREATE ROLE snowflake_write NOLOGIN;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON source_fetch_decision TO snowflake_write;
+        GRANT SELECT ON source_change_status TO snowflake_write;
+        """,
+    )
+    assert created.returncode == 0, created.stderr
+
+    def _has_privilege(table: str) -> bool:
+        result = _psql(
+            postgres_ledger.container,
+            f"SELECT has_table_privilege('snowflake_write', '{table}', 'SELECT');",
+        )
+        assert result.returncode == 0, result.stderr
+        row = result.stdout.splitlines()[2].strip()
+        assert row in ("t", "f"), result.stdout
+        return row == "t"
+
+    assert _has_privilege("source_fetch_decision") is True
+    assert _has_privilege("source_change_status") is True
+
+    copied = _run(
+        "docker", "cp", str(MIGRATION), f"{postgres_ledger.container}:/tmp/ledger-rerun.sql"
+    )
+    assert copied.returncode == 0, copied.stderr
+    reapplied = _run(
+        "docker",
+        "exec",
+        "-e",
+        "PGPASSWORD=test",
+        postgres_ledger.container,
+        "psql",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-U",
+        "postgres",
+        "-d",
+        "postgres",
+        "-f",
+        "/tmp/ledger-rerun.sql",
+    )
+    assert reapplied.returncode == 0, reapplied.stderr
+
+    assert _has_privilege("source_fetch_decision") is False
+    assert _has_privilege("source_change_status") is False
+
+
 def test_processor_and_silver_finalizer_boundaries_are_grant_enforced_not_just_python_checked(
     postgres_ledger: PostgresLedger,
 ) -> None:

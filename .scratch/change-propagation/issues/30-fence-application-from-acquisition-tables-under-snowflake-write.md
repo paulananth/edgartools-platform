@@ -47,8 +47,8 @@ defines.
 **Blocked by:** None — can start immediately. Surfaced while resolving
 [29 — Deploy the gated acquisition path to prod and dry-run it](29-deploy-and-dry-run-gated-acquisition-path.md).
 
-**Status:** in-progress (bullets 1 and 3 addressed; bullets 2 and 4 blocked
-pending a decision — see Progress below)
+**Status:** in-progress (bullets 1, 2, and 3 done; bullet 4 blocked on Ticket
+43/a privileged credential — see Progress below)
 
 - [x] Confirm whether `snowflake_write`'s blanket grant on new tables is a
   Snowflake Postgres platform guarantee (i.e. will recur for every future
@@ -56,7 +56,7 @@ pending a decision — see Progress below)
   to run for each) or a one-time artifact of how migration 013 happened to
   run — check Snowflake's own Postgres documentation and/or ask Snowflake
   support if the account-level docs don't say.
-- [ ] Decide and implement the fencing fix (or the deliberate non-fix,
+- [x] Decide and implement the fencing fix (or the deliberate non-fix,
   documented as such) for the nine objects listed above.
 - [x] Correct `models.py`'s `SourceExpectedProducerRecord` docstring to match
   whatever the real, verified enforcement boundary is after this ticket,
@@ -124,10 +124,46 @@ platform's standard deploy path — resolving Ticket 43 (or getting a more
 privileged Postgres credential from the user) is a prerequisite for
 finishing bullets 2 and 4 of this ticket, not just a nice-to-have.
 
-**Not decided, needs the user:** whether to (i) obtain/point to a more
-privileged Postgres credential to actually test and apply option (a) live,
-(ii) proceed with option (b) (accept the ambient access, already reflected
-in bullet 3's docstring fix, and close this ticket on that basis without a
-REVOKE), or (iii) land the code/SQL for option (a) as a reviewable PR now
-and defer live application + verification (bullet 4) to a follow-up once
-Ticket 43 is resolved.
+**Update (2026-08-26): option (iii) chosen** — landed option (a)'s fix as
+code/SQL with automated test coverage, deferring live prod application to a
+follow-up once Ticket 43 (or a more privileged credential) is available.
+
+**Bullet 2 — done.** `013_acquisition_ledger.sql` gained a second, guarded
+`DO $$ ... $$;` block immediately after the existing `application` REVOKE,
+scoped to the same nine objects: `REVOKE ALL PRIVILEGES ON <9 objects> FROM
+snowflake_write;`, wrapped in `IF EXISTS (SELECT 1 FROM pg_roles WHERE
+rolname = 'snowflake_write')` so it's a genuine no-op against a plain
+Postgres instance (local/test) rather than an error, and runs under
+`edgartools_acquisition_owner` automatically (same execution path as the
+`application` REVOKE immediately before it — `_apply_acquisition_ledger_
+migration` runs every statement after the first under `SET LOCAL ROLE
+edgartools_acquisition_owner`, and that role already owns all nine objects
+via the `ALTER ... OWNER TO` statements earlier in the file, so REVOKE
+doesn't need to match the original grantor). Deliberately does not touch
+`application`'s `snowflake_write` role membership itself, matching the
+ticket's blast-radius constraint. `models.py` and `013`'s Ticket 19 comment
+were already corrected under bullet 3.
+
+**New test proves the fix actually revokes access, not just that the SQL
+parses:** `tests/integration/test_acquisition_ledger_postgres.py::
+test_snowflake_write_ambient_access_is_revoked_on_the_nine_ledger_objects`
+creates a role literally named `snowflake_write` in the real (Dockerized)
+Postgres fixture, grants it privileges on two representative objects the
+way the platform's own automation would, re-applies the (idempotent)
+migration, and confirms `has_table_privilege` flips `true → false` for both
+— a real Postgres role-graph proof, not a SQLite stand-in (this exact class
+of gap — SQLite can't model real GRANT/role semantics — is why the Source
+Family Registry Postgres-only bugs existed; same lesson applied here
+up front). Full file: 9/9 passed. `tests/acquisition` + `tests/mdm`: 772/772
+passed. No regression in the existing `application`-REVOKE proof in the same
+file (`test_postgres_roles_proofs_and_fencing_are_enforced` still passes
+unchanged).
+
+**Bullet 4 — still blocked, unchanged from before.** This fix cannot be
+applied to real prod through the standard `mdm migrate` deploy path today —
+that path connects as `application`, which has no membership in
+`edgartools_acquisition_owner`, so `_apply_acquisition_ledger_migration`
+silently no-ops before reaching this statement (Ticket 43). Live prod
+verification (`application` denied, `SET ROLE
+edgartools_acquisition_processor` etc. still permitted) needs either Ticket
+43 resolved or a more privileged Postgres connection supplied by the user.
