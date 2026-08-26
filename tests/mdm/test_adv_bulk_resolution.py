@@ -202,6 +202,134 @@ def test_fund_bulk_resolution_survives_adviser_resolving_after_the_fund(db_sessi
     assert fund.adviser_entity_id is not None
 
 
+def test_fund_bulk_resolution_second_identical_run_does_not_duplicate_stage_or_change_rows(
+    db_session,
+) -> None:
+    """Mirrors test_adv_bulk_projection_is_latest_and_idempotent for funds
+    (change-propagation map, Ticket 37): resolve_funds_bulk's
+    _existing_source_ids check is the fund entity type's skip-if-unchanged
+    equivalent -- an accession already seen for a private_fund_id/accession
+    identity must not re-append MdmEntityAttributeStage/MdmChangeLog rows on
+    a restart, even though SEC accession content is immutable so there is no
+    literal "changed field" to re-detect the way content-hash resolvers do.
+    """
+    silver = _FundSilver(3)
+    pipeline = MDMPipeline(session=db_session, silver=silver)
+    pipeline.engine._source_priority[("fund", "adv_filing")] = 30
+
+    assert pipeline.run_funds() == 3
+    first_funds = db_session.scalar(select(func.count()).select_from(MdmFund))
+    first_stages = db_session.scalar(
+        select(func.count()).select_from(MdmEntityAttributeStage)
+    )
+    first_changes = db_session.scalar(select(func.count()).select_from(MdmChangeLog))
+    assert first_funds == 3
+    assert first_stages > 0
+    assert first_changes == 3
+
+    assert pipeline.run_funds() == 3
+    assert (
+        db_session.scalar(select(func.count()).select_from(MdmFund)) == first_funds
+    ), "second identical run must not create duplicate fund golden records"
+    assert (
+        db_session.scalar(select(func.count()).select_from(MdmEntityAttributeStage))
+        == first_stages
+    ), "second identical run over unchanged accessions must not re-stage attributes"
+    assert (
+        db_session.scalar(select(func.count()).select_from(MdmChangeLog))
+        == first_changes
+    ), "second identical run over unchanged accessions must not log new changes"
+
+
+def test_adviser_bulk_resolution_a_new_accession_for_the_same_crd_still_resolves(
+    db_session,
+) -> None:
+    """The other half of Ticket 37's requirement: an unchanged accession is
+    skipped (test_adv_bulk_projection_is_latest_and_idempotent), but a
+    genuinely new accession for an already-known CRD (e.g. a later ADV
+    amendment) must still be staged and logged, not silently absorbed by the
+    dedup check.
+    """
+    silver = _AdviserSilver(1)
+    pipeline = MDMPipeline(session=db_session, silver=silver)
+    pipeline.engine._source_priority[("adviser", "adv_filing")] = 30
+
+    assert pipeline.run_advisers() == 1
+    first_changes = db_session.scalar(select(func.count()).select_from(MdmChangeLog))
+    assert first_changes == 1
+
+    amended = dict(silver.rows[0])
+    amended["accession_number"] = "adv-00000-amended"
+    amended["adviser_name"] = "Adviser 0 Renamed"
+    amended["effective_date"] = date(2026, 9, 30)
+    silver.rows = [amended]
+
+    assert pipeline.run_advisers() == 1
+    assert (
+        db_session.scalar(select(func.count()).select_from(MdmAdviser)) == 1
+    ), "the amendment must update the existing adviser, not create a second one"
+    assert (
+        db_session.scalar(select(func.count()).select_from(MdmChangeLog))
+        == first_changes + 1
+    ), "a new accession must still produce a new MdmChangeLog row, not be skipped"
+    adviser = db_session.scalar(select(MdmAdviser))
+    assert adviser.canonical_name == "Adviser 0 Renamed"
+
+
+def test_fund_bulk_resolution_dedups_by_private_fund_id_not_accession(
+    db_session,
+) -> None:
+    """Characterizes a real, deliberately-not-fixed-here gap (change-propagation
+    map, Ticket 37's Answer): unlike adviser (dedup key = accession_number,
+    always), resolve_funds_bulk's _existing_source_ids check keys on
+    private_fund_id when present. A later accession amending an
+    already-known pfid IS recognized by the pfid-based existing_sources
+    check, so it produces no new MdmSourceRef/stage/MdmChangeLog row -- even
+    though the golden MdmFund record itself still refreshes (the
+    unconditional setattr loop runs regardless of the dedup check).
+
+    This silently starves MDMExporter.export_pending (keyed on
+    MdmChangeLog.exported_at IS NULL) of any signal that this fund needs
+    re-export after its first-ever accession -- a real freshness bug, not
+    just an audit-trail gap. Deliberately not fixed in this ticket: fixing
+    it means re-keying dedup to accession_number like adviser, which would
+    re-stage every already-seen pfid-keyed fund once on the next run at
+    production scale (fund_index has been observed past 22,000 for a single
+    adviser -- see CLAUDE.md's schema-conventions note) -- an unsized
+    one-time backlog cost, not a line change. See the filed follow-up ticket
+    for the real fix.
+    """
+    silver = _FundSilver(1)
+    pipeline = MDMPipeline(session=db_session, silver=silver)
+    pipeline.engine._source_priority[("fund", "adv_filing")] = 30
+
+    assert pipeline.run_funds() == 1
+    first_changes = db_session.scalar(select(func.count()).select_from(MdmChangeLog))
+    assert first_changes == 1
+
+    amended = dict(silver.rows[0])
+    amended["accession_number"] = "adv-00000-amended"
+    amended["fund_name"] = "Fund 0 Renamed"
+    amended["effective_date"] = date(2026, 9, 30)
+    silver.rows = [amended]
+
+    assert pipeline.run_funds() == 1
+    assert (
+        db_session.scalar(select(func.count()).select_from(MdmFund)) == 1
+    ), "the amendment must update the existing fund, not create a second one"
+    fund = db_session.scalar(select(MdmFund))
+    assert fund.canonical_name == "Fund 0 Renamed", (
+        "the golden record does refresh even though no change is logged for it"
+    )
+    assert (
+        db_session.scalar(select(func.count()).select_from(MdmChangeLog))
+        == first_changes
+    ), (
+        "current behavior: a new accession under an already-known pfid is "
+        "NOT logged -- MDMExporter never learns this fund needs re-export"
+    )
+
+
 def test_fund_bulk_resolution_has_bounded_database_round_trips(db_session) -> None:
     adviser_pipeline = MDMPipeline(session=db_session, silver=_AdviserSilver(12))
     adviser_pipeline.engine._source_priority[("adviser", "adv_filing")] = 30
