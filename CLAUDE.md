@@ -1535,7 +1535,7 @@ role graph is not optional coverage for anything that fences a table by role.
 **Not yet deployed** as of this entry — migration `014_source_registry.sql` has not been applied
 to prod, and no image rebuild has happened for this fix.
 
-## LOAD_SILVER_LANDING_TASK credit-burn 5-whys (resolved 2026-08-25)
+## LOAD_SILVER_LANDING_TASK credit-burn 5-whys (resolved 2026-08-25, widened further 2026-08-26)
 
 **Problem:** `EDGARTOOLS_PROD_REFRESH_WH` went from ~$0/day to ~9 credits/day, sustained every
 day, starting 2026-08-18 — confirmed via `SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY`
@@ -1570,25 +1570,41 @@ and `METERING_DAILY_HISTORY` (this one warehouse is essentially all of the accou
 `infra/snowflake/sql/bootstrap/13_silver_landing_ingest.sql` (24 resumes/day instead of 288),
 applied live to prod (`SHOW TASKS` confirms `schedule: 60 MINUTE`, `state: started`). Sized to
 land under an explicit **≤1 credit/day** ceiling for this task, extrapolated from the 5-minute
-cadence's own observed ~9 credits/day at 288 resumes/day — **re-verify against a full day of
-`WAREHOUSE_METERING_HISTORY` after this deploys**, since the 60-minute number itself was not
-independently measured before rollout. `ALTER TASK ... SET SCHEDULE` against a `STARTED` root
-task fails closed (`"Unable to update graph with root task ... since that root task is not
-suspended"`, confirmed live) — the script now `SUSPEND`s before altering the schedule and
-`RESUME`s after, both idempotent no-ops if already in that state, so a re-run is safe regardless
-of the task's current state. Nothing downstream depends on landing's write latency (Ticket 07's
-own answer, unchanged by this fix) — an hourly ceiling on data freshness here doesn't block any
-consumer, since every consumer refreshes on its own `TARGET_LAG`, not on landing's write time.
+cadence's own observed ~9 credits/day at 288 resumes/day.
+
+**Re-verified 2026-08-26 (Ticket 02) and widened further:** the 60-minute cadence's real cost was
+independently measured against a full clean day of `WAREHOUSE_METERING_HISTORY` (the fix landed
+mid-morning on 08-25, so that calendar day's raw total was a misleading transition-day mix of old
+and new cadence) — a steady **0.031-0.042 credits/hour**, extrapolating to **~0.80 credits/day**,
+comfortably confirming the ≤1 credit/day target. The operator then asked to bring cost down
+further, into an explicit 0.3-0.5 credit/day band; presented with concrete options (120 MINUTE
+≈0.40/day, 180 MINUTE ≈0.27/day, a stream-gated conditional task mirroring
+`SNOWFLAKE_RUN_MANIFEST_TASK`'s own `WHEN SYSTEM$STREAM_HAS_DATA(...)` pattern, or a custom
+interval), the operator chose **180 MINUTE** (8 resumes/day) — applied live to prod, `SHOW TASKS`
+confirms `schedule: 180 MINUTE`, `state: started`. Extrapolated cost ~0.27 credits/day, not yet
+independently re-measured at this cadence — see
+[Ticket 02](.scratch/silver-landing-task-cost/issues/02-widen-load-silver-landing-task-to-0.3-0.5-credit-day.md)
+for the full write-up and that open re-verification item.
+
+`ALTER TASK ... SET SCHEDULE` against a `STARTED` root task fails closed (`"Unable to update
+graph with root task ... since that root task is not suspended"`, confirmed live) — the script
+now `SUSPEND`s before altering the schedule and `RESUME`s after, both idempotent no-ops if
+already in that state, so a re-run is safe regardless of the task's current state. Nothing
+downstream depends on landing's write latency (Ticket 07's own answer, unchanged by this fix) —
+a multi-hour ceiling on data freshness here doesn't block any consumer, since every consumer
+refreshes on its own `TARGET_LAG`, not on landing's write time.
 
 **For future builds — read this before adding any new Snowflake `TASK`:** a fixed-interval poll
 task pays a per-resume minimum charge close to every tick unless the interval is wide enough for
 the warehouse to have been suspended for a meaningful stretch beforehand. Before shipping a new
 scheduled task (or accepting a "5 MINUTE, tune later" placeholder default the way this one was
 shipped), size the interval — or add a data-presence gate so idle ticks skip the resume
-entirely (e.g. a stream-gated conditional task via `WHEN SYSTEM$STREAM_HAS_DATA(...)`, not
-implemented here, evaluated once real volume makes tighter freshness worth its own cost) — against
-an explicit credit budget up front, the same way this fix had to retrofit one after the fact.
-Full write-up: `.scratch/silver-landing-task-cost/issues/01-cap-load-silver-landing-task-credit-spend.md`.
+entirely (e.g. a stream-gated conditional task via `WHEN SYSTEM$STREAM_HAS_DATA(...)`, already
+live for the sibling `SNOWFLAKE_RUN_MANIFEST_TASK` but still not built for this task, since a
+fixed-interval widening met every credit target asked of it so far) — against an explicit credit
+budget up front, the same way this fix had to retrofit one after the fact.
+Full write-up: `.scratch/silver-landing-task-cost/issues/01-cap-load-silver-landing-task-credit-spend.md`,
+`.scratch/silver-landing-task-cost/issues/02-widen-load-silver-landing-task-to-0.3-0.5-credit-day.md`.
 
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 

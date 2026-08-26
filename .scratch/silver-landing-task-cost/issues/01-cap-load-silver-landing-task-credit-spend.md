@@ -74,10 +74,10 @@ going in.
 - [x] Documented in `CLAUDE.md` as a 5-whys entry, including the general lesson for any future
       scheduled `TASK` (size the interval against a credit budget up front, or gate on data
       presence, rather than shipping a tight fixed poll as a placeholder).
-- [ ] **Not yet done — re-verify against a full day of `WAREHOUSE_METERING_HISTORY` at the new
-      60-minute cadence** to confirm the ≤1 credit/day target actually holds (this ticket's
-      sizing was extrapolated, not independently measured post-change). Check on 2026-08-26 or
-      later once a full day has metered.
+- [x] Re-verified against a full day of `WAREHOUSE_METERING_HISTORY` at the 60-minute cadence,
+      2026-08-26 — see [02 — Widen `LOAD_SILVER_LANDING_TASK` further, to a 0.3-0.5 credit/day
+      target](02-widen-load-silver-landing-task-to-0.3-0.5-credit-day.md), which also supersedes
+      the 60-minute schedule itself with a wider one per an explicit operator target.
 
 ## Not done here (deliberately out of scope for this ticket)
 
