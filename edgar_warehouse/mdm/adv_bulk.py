@@ -352,10 +352,17 @@ def resolve_funds_bulk(
     stages: list[dict[str, Any]] = []
     changes: list[dict[str, Any]] = []
     source_priority = engine.get_source_priority("fund", "adv_filing")
+    # Ticket 42 (change-propagation map): the dedup/staging key is always
+    # accession_number:fund_index -- the same per-accession granularity
+    # resolve_advisers_bulk uses -- never private_fund_id. A pfid identifies
+    # the FUND (see identity()/by_pfid above, unchanged), not the SOURCE ROW;
+    # keying dedup on pfid meant a later accession amending an already-known
+    # fund matched `existing_sources` and silently produced no new
+    # MdmSourceRef/stage/MdmChangeLog row, even though the golden record
+    # itself refreshed -- starving MDMExporter.export_pending (keyed on
+    # MdmChangeLog.exported_at IS NULL) of any signal the fund had changed.
     source_ids = [
-        _text_id(row.get("private_fund_id"))
-        or f"{row['accession_number']}:{row.get('fund_index')}"
-        for row in rows
+        f"{row['accession_number']}:{row.get('fund_index')}" for row in rows
     ]
     existing_sources = _existing_source_ids(
         session, "fund", "adv_filing", source_ids
