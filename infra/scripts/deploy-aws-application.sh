@@ -130,6 +130,30 @@ Options:
                                     treat-missing-data=breaching). Same SNS topic as
                                     --configure-daily-incremental-alarms. This standalone
                                     action never deploys workloads or enables schedules.
+  --configure-fence-monitor-schedule <enable|disable>
+                                    Off-by-default operator control (Ticket 44, change-
+                                    propagation map) for the recurring `mdm check-fence`
+                                    drift check split from Ticket 30's own live incident:
+                                    creates/updates (enable) or removes (disable) one
+                                    EventBridge rule invoking edgartools-<env>-mdm-utility
+                                    with {"mode": "mdm_check_fence"} every 4 hours. Never
+                                    runs as a side effect of an ordinary deploy; run this
+                                    flag alone, after an explicit operator go. Exits
+                                    immediately after configuring.
+  --fence-monitor-scheduler-role-arn <arn>
+                                    IAM role ARN EventBridge assumes to start
+                                    edgartools-<env>-mdm-utility for the fence-monitor
+                                    schedule. Required with --configure-fence-monitor-schedule
+                                    enable. Source: infra/terraform/access/aws/accounts/<env>
+                                    output fence_monitor_scheduler_role_arn.
+  --configure-fence-monitor-alarm <enable|disable>
+                                    Explicitly create/update or remove the two fence-monitor
+                                    alarms (Ticket 44): one on mdm_fence_check_result's
+                                    leak_count, one on its access_gap_count, both firing on
+                                    any nonzero value OR on the check never having run at all
+                                    (treat-missing-data=breaching). Same SNS topic as
+                                    --configure-daily-incremental-alarms. This standalone
+                                    action never deploys workloads or enables schedules.
   -h, --help                        Show this help.
 USAGE
 }
@@ -223,6 +247,9 @@ DAILY_INCREMENTAL_SCHEDULER_ROLE_ARN=""
 CONFIGURE_DAILY_INCREMENTAL_ALARMS=""
 OPERATOR_ALERT_TOPIC_ARN=""
 CONFIGURE_MDM_ENTITY_BACKFILL_ALARM=""
+CONFIGURE_FENCE_MONITOR_SCHEDULE=""
+FENCE_MONITOR_SCHEDULER_ROLE_ARN=""
+CONFIGURE_FENCE_MONITOR_ALARM=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -282,6 +309,9 @@ while [[ $# -gt 0 ]]; do
     --configure-daily-incremental-alarms) CONFIGURE_DAILY_INCREMENTAL_ALARMS="${2:?}"; shift 2 ;;
     --operator-alert-topic-arn) OPERATOR_ALERT_TOPIC_ARN="${2:?}"; shift 2 ;;
     --configure-mdm-entity-backfill-alarm) CONFIGURE_MDM_ENTITY_BACKFILL_ALARM="${2:?}"; shift 2 ;;
+    --configure-fence-monitor-schedule) CONFIGURE_FENCE_MONITOR_SCHEDULE="${2:?}"; shift 2 ;;
+    --fence-monitor-scheduler-role-arn) FENCE_MONITOR_SCHEDULER_ROLE_ARN="${2:?}"; shift 2 ;;
+    --configure-fence-monitor-alarm) CONFIGURE_FENCE_MONITOR_ALARM="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -308,6 +338,15 @@ if ! is_empty "$CONFIGURE_MDM_ENTITY_BACKFILL_ALARM"; then
   esac
   if [[ "$CONFIGURE_MDM_ENTITY_BACKFILL_ALARM" == "enable" ]] && is_empty "$OPERATOR_ALERT_TOPIC_ARN"; then
     fail "--operator-alert-topic-arn is required with --configure-mdm-entity-backfill-alarm enable"
+  fi
+fi
+if ! is_empty "$CONFIGURE_FENCE_MONITOR_ALARM"; then
+  case "$CONFIGURE_FENCE_MONITOR_ALARM" in
+    enable|disable) ;;
+    *) fail "--configure-fence-monitor-alarm must be enable or disable" ;;
+  esac
+  if [[ "$CONFIGURE_FENCE_MONITOR_ALARM" == "enable" ]] && is_empty "$OPERATOR_ALERT_TOPIC_ARN"; then
+    fail "--operator-alert-topic-arn is required with --configure-fence-monitor-alarm enable"
   fi
 fi
 if is_empty "$RUNNER_ROLE_NAME_PREFIX"; then
@@ -339,6 +378,15 @@ if ! is_empty "$CONFIGURE_DAILY_INCREMENTAL_SCHEDULE"; then
   esac
   if [[ "$CONFIGURE_DAILY_INCREMENTAL_SCHEDULE" == "enable" ]] && is_empty "$DAILY_INCREMENTAL_SCHEDULER_ROLE_ARN"; then
     fail "--daily-incremental-scheduler-role-arn is required with --configure-daily-incremental-schedule enable"
+  fi
+fi
+if ! is_empty "$CONFIGURE_FENCE_MONITOR_SCHEDULE"; then
+  case "$CONFIGURE_FENCE_MONITOR_SCHEDULE" in
+    enable|disable) ;;
+    *) fail "--configure-fence-monitor-schedule must be enable or disable" ;;
+  esac
+  if [[ "$CONFIGURE_FENCE_MONITOR_SCHEDULE" == "enable" ]] && is_empty "$FENCE_MONITOR_SCHEDULER_ROLE_ARN"; then
+    fail "--fence-monitor-scheduler-role-arn is required with --configure-fence-monitor-schedule enable"
   fi
 fi
 
@@ -706,6 +754,145 @@ configure_mdm_entity_backfill_alarm() {
 
 if ! is_empty "$CONFIGURE_MDM_ENTITY_BACKFILL_ALARM"; then
   configure_mdm_entity_backfill_alarm "$CONFIGURE_MDM_ENTITY_BACKFILL_ALARM" "$OPERATOR_ALERT_TOPIC_ARN"
+  exit 0
+fi
+
+# Ticket 44 (change-propagation map), split from Ticket 30's own live
+# incident: run `mdm check-fence` (mode mdm_check_fence on the already-
+# consolidated mdm_utility machine, not a bespoke new state machine --
+# see write_mdm_utility_definition's own comment) on a recurring schedule
+# so a future credential rotation reopening Ticket 30's fence -- confirmed
+# live to happen on *any* RESET ACCESS call, not just an unusual one -- gets
+# caught without a human having to remember to check.
+#
+# Sizing rationale for "every 4 hours" (not a placeholder default -- see
+# CLAUDE.md's LOAD_SILVER_LANDING_TASK credit-burn 5-whys for why that
+# matters): the trigger this guards against -- an out-of-band credential
+# rotation run outside bootstrap-prod-mdm.sh's own now-self-healing flow,
+# e.g. manual incident response -- has no observed historical frequency to
+# size a cadence against; it's rare and unscheduled by nature, not a
+# recurring load pattern like LOAD_SILVER_LANDING_TASK's polling problem
+# was. Absent that data, this instead bounds worst-case exposure to
+# comfortably inside a single business day (6 checks/day) while the cost
+# side is negligible regardless of interval: a handful of read-only
+# has_table_privilege/pg_class queries on the mdm-small task profile,
+# seconds of Fargate runtime, no Snowflake-warehouse-resume billing concern
+# (LOAD_SILVER_LANDING_TASK's actual driver) to weigh against. Revisit if a
+# real incident's time-to-detection ever matters enough to want tighter,
+# now that there would be at least one data point to size against.
+configure_fence_monitor_schedule() {
+  local action="$1" role_arn="$2"
+  local state_machine_arn="arn:aws:states:${AWS_REGION_NAME}:${ACCOUNT_ID}:stateMachine:${NAME_PREFIX}-mdm-utility"
+  local rule_name="${NAME_PREFIX}-fence-monitor"
+
+  if [[ "$action" == "disable" ]]; then
+    if aws_cli events describe-rule --name "$rule_name" >/dev/null 2>&1; then
+      aws_cli events remove-targets --rule "$rule_name" --ids fence-monitor-sfn >/dev/null
+      aws_cli events delete-rule --name "$rule_name"
+      log "Deleted EventBridge rule ${rule_name}"
+    else
+      log "EventBridge rule ${rule_name} does not exist -- nothing to disable"
+    fi
+    return 0
+  fi
+
+  local targets_json
+  targets_json="$(python3 - "$state_machine_arn" "$role_arn" <<'PY'
+import json
+import sys
+
+arn, role_arn = sys.argv[1:3]
+print(json.dumps([{
+    "Id": "fence-monitor-sfn",
+    "Arn": arn,
+    "RoleArn": role_arn,
+    "Input": json.dumps({"mode": "mdm_check_fence"}),
+}]))
+PY
+)"
+  aws_cli events put-rule \
+    --name "$rule_name" \
+    --schedule-expression "rate(4 hours)" \
+    --state ENABLED \
+    --description "Ticket 44 (change-propagation map): recurring mdm check-fence drift check" >/dev/null
+  aws_cli events put-targets --rule "$rule_name" --targets "$targets_json" >/dev/null
+  log "EventBridge rule ${rule_name} configured (rate(4 hours))"
+}
+
+if ! is_empty "$CONFIGURE_FENCE_MONITOR_SCHEDULE"; then
+  configure_fence_monitor_schedule "$CONFIGURE_FENCE_MONITOR_SCHEDULE" "$FENCE_MONITOR_SCHEDULER_ROLE_ARN"
+  exit 0
+fi
+
+# Configures one CloudWatch Logs metric filter + one alarm on a single
+# mdm_fence_check_result field. $1=log group, $2=filter name, $3=metric
+# name, $4=JSON path into the log event (e.g. $.leak_count), $5=alarm name,
+# $6=alarm description, $7=SNS topic ARN. treat-missing-data=breaching is
+# load-bearing, not a default: "the check never ran at all" (a schedule
+# silently disabled, an IAM permission broken) is exactly the failure
+# Ticket 44 exists to catch, the same reason ticket-05's mdm-entity-backfill
+# alarm above uses it, not just "it ran and found something."
+put_fence_monitor_metric_and_alarm() {
+  local log_group_name="$1" filter_name="$2" metric_name="$3" json_path="$4"
+  local alarm_name="$5" alarm_description="$6" topic_arn="$7"
+  local metric_namespace="EdgarTools/MDM"
+
+  aws_cli logs put-metric-filter \
+    --log-group-name "$log_group_name" \
+    --filter-name "$filter_name" \
+    --filter-pattern '{ $.event = "mdm_fence_check_result" }' \
+    --metric-transformations \
+      "metricName=${metric_name},metricNamespace=${metric_namespace},metricValue=\$${json_path},defaultValue=0"
+  aws_cli cloudwatch put-metric-alarm \
+    --alarm-name "$alarm_name" \
+    --alarm-description "$alarm_description" \
+    --namespace "$metric_namespace" \
+    --metric-name "$metric_name" \
+    --statistic Sum --period 14400 --evaluation-periods 1 \
+    --threshold 0 --comparison-operator GreaterThanThreshold \
+    --treat-missing-data breaching \
+    --alarm-actions "$topic_arn"
+}
+
+# Two separate metric filters/alarms (not one combined check) mirroring
+# ticket-81/ticket-05's own precedent of one alarm per independent failure
+# signal, rather than a metric-math expression combining both into one --
+# simpler to reason about and to test, at the cost of one extra
+# put-metric-alarm call.
+configure_fence_monitor_alarm() {
+  local action="$1" topic_arn="$2"
+  local log_group_name
+  log_group_name="$(first_nonempty "$LOG_GROUP_NAME" "/aws/ecs/${NAME_PREFIX}-mdm")"
+  local filter_name_leak="${NAME_PREFIX}-fence-monitor-leak-count"
+  local filter_name_gap="${NAME_PREFIX}-fence-monitor-access-gap-count"
+  local alarm_name_leak="${NAME_PREFIX}-fence-monitor-leak-detected"
+  local alarm_name_gap="${NAME_PREFIX}-fence-monitor-access-gap-detected"
+
+  if [[ "$action" == "disable" ]]; then
+    aws_cli cloudwatch delete-alarms --alarm-names "$alarm_name_leak" "$alarm_name_gap"
+    aws_cli logs delete-metric-filter --log-group-name "$log_group_name" --filter-name "$filter_name_leak" 2>/dev/null || true
+    aws_cli logs delete-metric-filter --log-group-name "$log_group_name" --filter-name "$filter_name_gap" 2>/dev/null || true
+    log "Deleted fence-monitor alarms and metric filters"
+    return 0
+  fi
+
+  require_confirmed_operator_alert_topic "$topic_arn"
+
+  put_fence_monitor_metric_and_alarm \
+    "$log_group_name" "$filter_name_leak" "FenceMonitorLeakCount" '.leak_count' \
+    "$alarm_name_leak" \
+    "application/snowflake_write regained access to a Ticket-30-fenced acquisition-ledger/registry table, or the fence-monitor check hasn't run at all (Ticket 44, change-propagation map)" \
+    "$topic_arn"
+  put_fence_monitor_metric_and_alarm \
+    "$log_group_name" "$filter_name_gap" "FenceMonitorAccessGapCount" '.access_gap_count' \
+    "$alarm_name_gap" \
+    "A fenced acquisition-ledger/registry table's own owning role lost its SELECT access, or the fence-monitor check hasn't run at all (Ticket 44, change-propagation map)" \
+    "$topic_arn"
+  log "Configured fence-monitor CloudWatch Logs metric filters and alarms"
+}
+
+if ! is_empty "$CONFIGURE_FENCE_MONITOR_ALARM"; then
+  configure_fence_monitor_alarm "$CONFIGURE_FENCE_MONITOR_ALARM" "$OPERATOR_ALERT_TOPIC_ARN"
   exit 0
 fi
 
@@ -1332,7 +1519,10 @@ task_definition_for_profile() {
 
 task_definition_for_mdm_workflow() {
   case "$1" in
-    mdm_migrate|mdm_check_connectivity|mdm_verify_graph|mdm_counts|mdm_seed_universe) printf '%s\n' "$TASK_DEF_MDM_SMALL_ARN" ;;
+    # mdm_check_fence (Ticket 44, change-propagation map): a handful of
+    # read-only has_table_privilege/pg_class queries -- the same "small" size
+    # every other cheap, non-full-universe MDM command uses.
+    mdm_migrate|mdm_check_connectivity|mdm_check_fence|mdm_verify_graph|mdm_counts|mdm_seed_universe) printf '%s\n' "$TASK_DEF_MDM_SMALL_ARN" ;;
     mdm_run|mdm_backfill_relationships|mdm_sync_graph) printf '%s\n' "$TASK_DEF_MDM_MEDIUM_ARN" ;;
     *) fail "unknown MDM workflow: $1" ;;
   esac
@@ -1475,6 +1665,7 @@ mdm_workflow_command_expression() {
       fi
       ;;
     mdm_verify_graph) printf '%s\n' "States.Array('mdm', 'verify-graph')" ;;
+    mdm_check_fence) printf '%s\n' "States.Array('mdm', 'check-fence')" ;;
     mdm_counts) printf '%s\n' "States.Array('mdm', 'counts')" ;;
     mdm_seed_universe) printf '%s\n' "States.Array('mdm', 'seed-universe', '--tracking-status', '${MDM_SEED_UNIVERSE_TRACKING_STATUS}')" ;;
     *) fail "unknown MDM workflow: $1" ;;
@@ -1946,22 +2137,23 @@ PY
 
 # state-machine-consolidation wayfinder map, ticket 02 (re-grilled 2026-08-10
 # after CONTEXT.md's "MDM Utility Machine" naming was locked): consolidates
-# the 7 genuinely-uniform single-command MDM CLI wrappers -- mdm_migrate,
+# the genuinely-uniform single-command MDM CLI wrappers -- mdm_migrate,
 # mdm_check_connectivity, mdm_run, mdm_backfill_relationships, mdm_sync_graph,
-# mdm_verify_graph, mdm_counts -- into one deployed machine, selected via
-# execution input {"mode": "<workflow>"}. Each mode's override chain (limit /
+# mdm_verify_graph, mdm_counts, and (Ticket 44, change-propagation map)
+# mdm_check_fence -- into one deployed machine, selected via execution input
+# {"mode": "<workflow>"}. Each mode's override chain (limit /
 # relationship_type / limit_per_type) is copied verbatim from
 # write_mdm_workflow_definition's own branching, just with every state name
-# prefixed by the workflow name so all 7 can coexist in one flat States dict.
-# generation_build (a bespoke partition-fan-out pipeline, not a single-command
-# wrapper) and mdm_seed_universe (kept as its own standalone machine per
-# ticket 04) are deliberately excluded -- see CONTEXT.md's "Graph Generation
-# Build Machine" / "MDM Utility Machine" entries.
+# prefixed by the workflow name so all of them can coexist in one flat
+# States dict. generation_build (a bespoke partition-fan-out pipeline, not a
+# single-command wrapper) and mdm_seed_universe (kept as its own standalone
+# machine per ticket 04) are deliberately excluded -- see CONTEXT.md's
+# "Graph Generation Build Machine" / "MDM Utility Machine" entries.
 write_mdm_utility_definition() {
   local output_file="$1"
   local workflows_json="[" first="true" workflow task_arn default_cmd limit_cmd relationship_cmd relationship_limit_cmd limit_per_type_cmd entry
 
-  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts; do
+  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts mdm_check_fence; do
     task_arn="$(task_definition_for_mdm_workflow "$workflow")"
     default_cmd="$(mdm_workflow_command_expression "$workflow")"
     limit_cmd="$(mdm_workflow_limit_command_expression "$workflow")"

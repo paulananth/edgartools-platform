@@ -1,12 +1,15 @@
 """Structural checks on the generated mdm_utility Step Functions definition.
 
 state-machine-consolidation wayfinder map, ticket 02 (re-grilled 2026-08-10):
-collapses the 7 genuinely-uniform single-command MDM CLI wrappers into one
+collapses the genuinely-uniform single-command MDM CLI wrappers into one
 deployed machine, selected via execution input {"mode": "<workflow>"}.
 generation_build and mdm_seed_universe are deliberately excluded -- see
 CONTEXT.md's "MDM Utility Machine" / "Graph Generation Build Machine"
 entries and .scratch/state-machine-consolidation/issues/
-02-decide-consolidation-mechanism-for-shared-mdm-tail.md.
+02-decide-consolidation-mechanism-for-shared-mdm-tail.md. mdm_check_fence
+(Ticket 44, change-propagation map) joined the set later, reusing this same
+consolidated machine instead of a bespoke new one -- see that ticket's
+Answer.
 
 Generates the real JSON by sourcing the actual bash functions (no
 duplicated/hand-maintained copy of the state machine shape), mirroring
@@ -38,6 +41,7 @@ _EXPECTED_MODES = {
     "mdm_sync_graph",
     "mdm_verify_graph",
     "mdm_counts",
+    "mdm_check_fence",
 }
 
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")

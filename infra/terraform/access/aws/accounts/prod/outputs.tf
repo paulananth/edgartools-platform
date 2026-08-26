@@ -58,6 +58,11 @@ output "daily_incremental_scheduler_role_arn" {
   value       = aws_iam_role.daily_incremental_scheduler.arn
 }
 
+output "fence_monitor_scheduler_role_arn" {
+  description = "Prod IAM role ARN EventBridge assumes to start edgartools-prod-mdm-utility in mdm_check_fence mode (Ticket 44, change-propagation map). The rule/target that uses this role is created by deploy-aws-application.sh's off-by-default --configure-fence-monitor-schedule control, not Terraform."
+  value       = aws_iam_role.fence_monitor_scheduler.arn
+}
+
 output "identity_refresh_operator_alert_topic_arn" {
   description = "Existing operator SNS topic used for per-deferral notification and the 18-hour timeout alarm. It must have a confirmed subscription before alarm enablement."
   value       = local.identity_refresh_alert_topic_arn

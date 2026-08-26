@@ -1603,6 +1603,35 @@ before any further action, with the AWS secret rewritten to match. A reminder th
 checking it ran" command against this script's output needs the same discipline as every other
 credential-handling step — there is no safe shortcut for a quick manual peek.
 
+**Update (2026-08-26, Ticket 44): the monitoring follow-up this incident's own writeup deferred is
+now built, live-verified, and already earned its keep.** `mdm check-fence`
+(`edgar_warehouse/mdm/fence_monitor.py`) discovers the fenced-table set live from
+`pg_class`/`pg_roles` rather than hardcoding the 11 objects known at the time — and that design
+choice mattered immediately: a live run against prod found a **third** instance of this exact gap,
+on `source_evidence_conflict` (migration 015, Ticket 25's evidence-conflict/repair table, owned by
+`edgartools_acquisition_owner` same as 013's tables) — it had the identical missing
+`snowflake_write` REVOKE block 013 had before this fix and 014 had before its own sibling fix,
+never independently noticed until the monitor's live discovery surfaced it. Fixed the same way.
+Confirmed live through the ordinary `application` DSN (piped directly from the existing
+`edgartools-prod/mdm/postgres_dsn` secret, no elevated credential) that the check runs clean with
+zero errors, closing this file's own "not yet confirmed" note on that exact question. Full
+writeup: [Ticket 44](.scratch/change-propagation/issues/44-monitor-snowflake-write-privilege-drift.md).
+
+**Second process note, same session, same mistake repeated:** verifying the point directly above
+required reading the `application` DSN secret, and the very first attempt used a standalone
+`aws secretsmanager get-secret-value ... | head -5` to debug a JSON-parsing failure — printing the
+live plaintext password again, the identical failure mode as the note above, caught and fixed the
+same way (immediate re-rotation through the safe piped pattern, secret rewritten). Two occurrences
+of the exact same mistake in one session, both during ad hoc "let me just check this" commands
+written outside the established safe pattern rather than through it — the lesson from the first
+instance evidently wasn't sufficient on its own. **Concrete rule going forward, not just a
+reminder:** never pipe a `snow sql ... RESET ACCESS` or `aws secretsmanager get-secret-value`
+command's output to `head`/`tail`/`cat`/a bare variable capture for ANY reason, including debugging
+a downstream parsing error — always pipe directly into the credential-consuming script and add
+debug output (e.g. `type(pw)`, length, whether a key exists) *inside* that script instead, since
+that's the only way to see what's needed without the credential ever passing through the
+transcript.
+
 ## LOAD_SILVER_LANDING_TASK credit-burn 5-whys (resolved 2026-08-25, widened further 2026-08-26)
 
 **Problem:** `EDGARTOOLS_PROD_REFRESH_WH` went from ~$0/day to ~9 credits/day, sustained every
