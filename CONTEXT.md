@@ -320,6 +320,10 @@ _Avoid_: Coalesce partial publication, coalescing as rollback, stranded producer
 Proof that one Logical Source Revision authoritatively enumerates an entire replacement scope, including a valid scope with zero members.
 _Avoid_: Missing output as empty scope, partial parse as complete, physical deletion as retirement proof
 
+**Silver Landing Retirement Record**:
+The explicit, append-only signal that a business key present in an earlier complete scope is absent from a newer Scope Completion for the same source family; written directly by the source family's own acquisition code into a shared landing companion relation the moment it proves the shrink, never inferred downstream from a missing row's absence.
+_Avoid_: Absence-as-retirement, per-table bespoke retirement columns, inferring retirement at query/refresh time from what a collapse query didn't see
+
 **Change Propagation Run**:
 The immutable unit that binds one selected set of new, modified, or retired source facts to its parser/schema versions, Affected-Key Closure, expected producers, stage outcomes, and aligned publication watermarks.
 _Avoid_: Mutable run ID, full-universe refresh, unbound retry, distributed transaction
