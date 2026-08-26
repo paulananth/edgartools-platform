@@ -224,8 +224,9 @@ migrate` run, and **nothing currently monitors for that drift**. The fix
 inside `bootstrap-prod-mdm.sh` only protects runs that go through that exact
 script end-to-end. A periodic live check (the same `has_table_privilege`
 sweep used to verify this ticket) running on a schedule, alerting if either
-role regains access, is the natural follow-up — not filed as its own ticket
-yet; flagging here for whoever picks this map back up.
+role regains access, is the natural follow-up — filed as
+[44 — Monitor for `snowflake_write` privilege drift on fenced acquisition
+tables](44-monitor-snowflake-write-privilege-drift.md).
 
 **Process note:** while diagnosing this, a `snow sql ... RESET ACCESS FOR
 'application'` command's raw JSON output (containing the new plaintext
