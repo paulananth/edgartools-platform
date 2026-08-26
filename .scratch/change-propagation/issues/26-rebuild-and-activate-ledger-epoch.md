@@ -10,7 +10,11 @@ contract; 10 — Decide baseline, migration, cutover, and rollback sequencing;
 snapshots; 23 — Migrate reference catalogs; 24 — Migrate ADV sources; 25 — Add
 conflict, repair, exclusion, and evidence-import workflows
 
-**Status:** ready-for-agent
+**Status:** blocked — Ticket 10 ("Decide baseline, migration, cutover, and
+rollback sequencing") is still `open`, not resolved (corrected 2026-08-26;
+this file previously said `ready-for-agent`, which was stale — every other
+listed blocker is resolved, but a ticket needs *all* its blockers resolved,
+not most). Not actionable until Ticket 10 is decided.
 
 - [ ] Operator authorization fixes the reason, coverage contract, cutoff,
   deployment cohort, and new Ledger Epoch before rebuild begins.
